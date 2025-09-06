@@ -1,0 +1,5 @@
+[runtime]
+portable = true
+state_dir = "%LOCALAPPDATA%/arw"
+cache_dir = "%LOCALAPPDATA%/arw/cache"
+logs_dir  = "%LOCALAPPDATA%/arw/logs"

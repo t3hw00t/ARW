@@ -1,4 +1,4 @@
-use arw_core::hello_core;
+use arw_core::{hello_core, print_effective_paths};
 use tracing_subscriber::{EnvFilter, fmt};
 
 fn main() {
@@ -8,4 +8,5 @@ fn main() {
 
     println!("arw-cli 0.1.0 — bootstrap");
     hello_core();
+    print_effective_paths();
 }

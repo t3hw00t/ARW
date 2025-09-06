@@ -1,0 +1,16 @@
+[package]
+name = "arw-svc"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+axum = { workspace = true }
+tokio = { workspace = true, features = ["rt-multi-thread","macros","signal"] }
+arw-core = { path = "../../crates/arw-core" }
+arw-events = { path = "../../crates/arw-events" }
+arw-otel = { path = "../../crates/arw-otel", default-features = false }
+tokio-stream = { workspace = true }

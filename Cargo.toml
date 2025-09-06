@@ -3,7 +3,9 @@ members = [
   "crates/arw-protocol",
   "crates/arw-events",
   "crates/arw-core",
-  "apps/arw-cli"
+  "apps/arw-cli",
+  "crates/arw-otel",
+  "apps/arw-svc"
 ]
 resolver = "2"
 
@@ -20,3 +22,9 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "1"
 uuid = { version = "1", features = ["v4"] }
+toml = "0.8"
+regex = "1"
+axum = "0.7"
+tokio = { version = "1", features = ["rt-multi-thread","macros","sync","signal"] }
+chrono = { version = "0.4", features = ["serde"] }
+tokio-stream = { version = "0.1", features = ["sync"] }

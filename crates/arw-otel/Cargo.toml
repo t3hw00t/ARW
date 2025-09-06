@@ -1,0 +1,26 @@
+[package]
+name = "arw-otel"
+version = "0.1.0"
+edition = "2021"
+
+[features]
+default = []
+otlp = ["dep:opentelemetry","dep:opentelemetry-otlp","dep:tracing-opentelemetry"]
+
+[dependencies]
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+
+[dependencies.opentelemetry]
+version = "0.21"
+optional = true
+features = ["trace"]
+
+[dependencies.opentelemetry-otlp]
+version = "0.14"
+optional = true
+features = ["trace"]
+
+[dependencies.tracing-opentelemetry]
+version = "0.23"
+optional = true
