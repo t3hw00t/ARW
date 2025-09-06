@@ -1,0 +1,14 @@
+<Configuration>
+  <VGpu>Enable</VGpu>
+  <Networking>Enable</Networking>
+  <MappedFolders>
+    <MappedFolder>
+      <HostFolder>C:\Users\sp_ca\arw</HostFolder>
+      <ReadOnly>false</ReadOnly>
+      <SandboxFolder>C:\Users\WDAGUtilityAccount\Desktop\arw</SandboxFolder>
+    </MappedFolder>
+  </MappedFolders>
+  <LogonCommand>
+    <Command>cmd /c start powershell -NoProfile -ExecutionPolicy Bypass -Command "cd C:\Users\WDAGUtilityAccount\Desktop\arw; dir"</Command>
+  </LogonCommand>
+</Configuration>

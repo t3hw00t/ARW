@@ -1,0 +1,20 @@
+# Rust
+/target
+**/*.rs.bk
+# Keep Cargo.lock committed for workspace reproducibility
+
+# Node (future)
+/apps/**/node_modules
+/apps/**/dist
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Local backups and logs
+/.backups/
+**/*.bak_*
+*.log
+
+# Dist artifacts
+/dist/
