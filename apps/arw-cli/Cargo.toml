@@ -1,0 +1,10 @@
+[package]
+name = "arw-cli"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true, features = ["env-filter"] }
+arw-core = { path = "../../crates/arw-core" }

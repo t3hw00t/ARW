@@ -1,0 +1,12 @@
+[package]
+name = "arw-core"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tracing = { workspace = true }
+arw-protocol = { path = "../arw-protocol" }
+arw-events = { path = "../arw-events" }
