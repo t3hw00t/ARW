@@ -12,3 +12,6 @@ arw-protocol = { path = "../arw-protocol" }
 arw-events = { path = "../arw-events" }
 toml = { workspace = true }
 regex = { workspace = true }
+
+
+inventory = { workspace = true }

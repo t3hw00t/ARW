@@ -1,5 +1,5 @@
 use arw_core::{hello_core, print_effective_paths};
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_subscriber::{fmt, EnvFilter};
 
 fn main() {
     let _ = fmt()

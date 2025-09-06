@@ -7,13 +7,13 @@ use tokio::sync::broadcast;
 pub struct Envelope {
     pub time: String,
     pub kind: String,
-    pub payload: Value
+    pub payload: Value,
 }
 
 /// A simple broadcast bus for JSON-serializable events.
 #[derive(Clone)]
 pub struct Bus {
-    tx: broadcast::Sender<Envelope>
+    tx: broadcast::Sender<Envelope>,
 }
 
 impl Bus {
@@ -28,7 +28,12 @@ impl Bus {
 
     pub fn publish<T: Serialize>(&self, kind: &str, payload: &T) {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let val = serde_json::to_value(payload).unwrap_or_else(|_| serde_json::json!({"_ser":"error"}));
-        let _ = self.tx.send(Envelope { time: now, kind: kind.to_string(), payload: val });
+        let val =
+            serde_json::to_value(payload).unwrap_or_else(|_| serde_json::json!({"_ser":"error"}));
+        let _ = self.tx.send(Envelope {
+            time: now,
+            kind: kind.to_string(),
+            payload: val,
+        });
     }
 }

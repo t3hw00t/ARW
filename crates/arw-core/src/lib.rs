@@ -1,158 +1,166 @@
-use std::{env, fs, path::{Path, PathBuf}};
-use tracing::info;
-use serde::Deserialize;
-use regex::Regex;
+use serde::Serialize;
+use serde_json::{json, Value};
+use std::collections::HashSet;
 
-#[derive(Deserialize, Default, Debug)]
-struct RuntimeCfg {
-    portable: Option<bool>,
-    state_dir: Option<String>,
-    cache_dir: Option<String>,
-    logs_dir: Option<String>
+/// Public metadata describing a tool that can be registered into the runtime.
+#[derive(Clone, Serialize)]
+pub struct ToolInfo {
+    pub id: &'static str,
+    pub version: &'static str,
+    pub summary: &'static str,
+    pub stability: &'static str,
+    pub capabilities: &'static [&'static str],
 }
 
-#[derive(Deserialize, Default, Debug)]
-struct RootCfg {
-    runtime: Option<RuntimeCfg>
-}
+// Enable global registration/iteration of ToolInfo with the `inventory` crate.
+inventory::collect!(ToolInfo);
 
-/// Holds the effective runtime directories after config/env resolution.
-#[derive(Debug, Clone)]
-pub struct EffectivePaths {
-    pub portable: bool,
-    pub state_dir: PathBuf,
-    pub cache_dir: PathBuf,
-    pub logs_dir: PathBuf
-}
+/// Return all known tools (those submitted via `inventory::submit!`) plus a small
+/// set of built‑in defaults to guarantee baseline functionality.
+pub fn introspect_tools() -> Vec<ToolInfo> {
+    let mut out: Vec<ToolInfo> = Vec::new();
+    let mut seen: HashSet<&'static str> = HashSet::new();
 
-/// Simple env expander for Windows-style %VAR% tokens.
-fn expand_env(input: &str) -> String {
-    let re = Regex::new(r"%([A-Za-z0-9_]+)%").unwrap();
-    re.replace_all(input, |caps: &regex::Captures| {
-        env::var(&caps[1]).unwrap_or_default()
-    }).to_string()
-}
-
-fn resolve_relative(base: &Path, p: &str) -> PathBuf {
-    let s = expand_env(p);
-    let pb = PathBuf::from(s);
-    if pb.is_absolute() { pb } else { base.join(pb) }
-}
-
-fn default_localappdata() -> PathBuf {
-    if let Ok(v) = env::var("LOCALAPPDATA") {
-        return PathBuf::from(v);
-    }
-    if let Ok(u) = env::var("USERPROFILE") {
-        return PathBuf::from(u).join("AppData").join("Local");
-    }
-    env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
-}
-
-fn find_config_file() -> Option<PathBuf> {
-    if let Ok(p) = env::var("ARW_CONFIG") {
-        let pb = PathBuf::from(p);
-        if pb.exists() { return Some(pb); }
-    }
-    let cwd = env::current_dir().ok()?;
-    let a = cwd.join("configs").join("default.toml");
-    if a.exists() { return Some(a); }
-    let b = PathBuf::from(env::var("USERPROFILE").ok()?)
-        .join("arw").join("configs").join("default.toml");
-    if b.exists() { return Some(b); }
-    None
-}
-
-fn load_root_cfg(path: &Path) -> RootCfg {
-    match fs::read_to_string(path) {
-        Ok(s) => toml::from_str::<RootCfg>(&s).unwrap_or_default(),
-        Err(_) => RootCfg::default()
-    }
-}
-
-/// Compute effective runtime paths. Portable defaults to true when config is missing.
-pub fn load_effective_paths() -> EffectivePaths {
-    let cfg_path = find_config_file();
-    let (base_dir, cfg) = if let Some(ref p) = cfg_path {
-        let base = p.parent().unwrap_or_else(|| Path::new("."));
-        (base.to_path_buf(), load_root_cfg(p))
-    } else {
-        (env::current_dir().unwrap_or_else(|_| PathBuf::from(".")), RootCfg::default())
-    };
-
-    let rc = cfg.runtime.unwrap_or_default();
-    let portable = rc.portable.unwrap_or(true);
-
-    let default_state = default_localappdata().join("arw");
-    let state_dir = rc.state_dir
-        .as_deref()
-        .map(|p| resolve_relative(&base_dir, p))
-        .unwrap_or(default_state.clone());
-
-    let cache_dir = rc.cache_dir
-        .as_deref()
-        .map(|p| resolve_relative(&base_dir, p))
-        .unwrap_or(state_dir.join("cache"));
-
-    let logs_dir = rc.logs_dir
-        .as_deref()
-        .map(|p| resolve_relative(&base_dir, p))
-        .unwrap_or(state_dir.join("logs"));
-
-    EffectivePaths { portable, state_dir, cache_dir, logs_dir }
-}
-
-pub fn ensure_dirs(ep: &EffectivePaths) {
-    for d in [&ep.state_dir, &ep.cache_dir, &ep.logs_dir] {
-        if let Err(e) = fs::create_dir_all(d) {
-            eprintln!("warn: failed to create {}: {}", d.display(), e);
+    // Registered tools (from arw-macros #[arw_tool(...)] in other crates)
+    for ti in inventory::iter::<ToolInfo> {
+        if seen.insert(ti.id) {
+            out.push(ti.clone());
         }
     }
-}
 
-pub fn hello_core() {
-    info!("arw-core: hello");
-}
-
-pub fn print_effective_paths() {
-    let ep = load_effective_paths();
-    ensure_dirs(&ep);
-    println!("ARW runtime:");
-    println!("  portable : {}", ep.portable);
-    println!("  state_dir: {}", ep.state_dir.display());
-    println!("  cache_dir: {}", ep.cache_dir.display());
-    println!("  logs_dir : {}", ep.logs_dir.display());
-}
-
-use serde::Serialize;
-
-/// Minimal tool descriptor for introspection.
-#[derive(Debug, Clone, Serialize)]
-pub struct ToolInfo {
-    pub id: String,
-    pub version: String,
-    pub summary: String,
-    pub stability: String,
-    pub capabilities: Vec<String>
-}
-
-/// Return the current catalog of tools (stubbed for now).
-pub fn introspect_tools() -> Vec<ToolInfo> {
-    vec![
+    // Fallback defaults
+    const DEFAULTS: &[ToolInfo] = &[
         ToolInfo {
-            id: "memory.probe".to_string(),
-            version: "1.0.0".to_string(),
-            summary: "Read-only memory probe (shows applied memories and paths)".to_string(),
-            stability: "experimental".to_string(),
-            capabilities: vec!["read-only".to_string()]
+            id: "memory.probe",
+            version: "1.0.0",
+            summary: "Read-only memory probe (shows applied memories and paths)",
+            stability: "experimental",
+            capabilities: &["read-only"],
         },
         ToolInfo {
-            id: "introspect.tools".to_string(),
-            version: "1.0.0".to_string(),
-            summary: "List available tools with metadata".to_string(),
-            stability: "experimental".to_string(),
-            capabilities: vec!["read-only".to_string()]
+            id: "introspect.tools",
+            version: "1.0.0",
+            summary: "List available tools with metadata",
+            stability: "experimental",
+            capabilities: &["read-only"],
+        },
+    ];
+
+    for d in DEFAULTS {
+        if seen.insert(d.id) {
+            out.push(d.clone());
         }
-    ]
+    }
+    out
 }
 
+/// Return a JSON Schema for a known tool id (small hand-authored schemas for now).
+pub fn tool_schema(id: &str) -> Value {
+    match id {
+        // Schema for the /probe output you showed earlier
+        "memory.probe" => json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "ProbeOut",
+            "type": "object",
+            "properties": {
+                "portable":  { "type": "boolean" },
+                "state_dir": { "type": "string"  },
+                "cache_dir": { "type": "string"  },
+                "logs_dir":  { "type": "string"  },
+                "memory": {
+                    "type": "object",
+                    "required": ["ephemeral","episodic","semantic","procedural"],
+                    "properties": {
+                        "ephemeral":  { "type": "array" },
+                        "episodic":   { "type": "array" },
+                        "semantic":   { "type": "array" },
+                        "procedural": { "type": "array" }
+                    }
+                }
+            },
+            "required": ["portable","state_dir","cache_dir","logs_dir","memory"]
+        }),
+
+        // Schema describing the list that /introspect/tools returns
+        "introspect.tools" => json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "ToolInfoList",
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["id","version","summary","stability","capabilities"],
+                "properties": {
+                    "id":           { "type": "string" },
+                    "version":      { "type": "string" },
+                    "summary":      { "type": "string" },
+                    "stability":    { "type": "string" },
+                    "capabilities": { "type": "array", "items": { "type": "string" } }
+                }
+            }
+        }),
+
+        // Unknown tool id — return a minimal placeholder schema
+        _ => json!({
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "title": "Unknown",
+            "type": "object"
+        }),
+    }
+}
+
+/// Simple sanity function for arw-cli.
+pub fn hello_core() -> &'static str {
+    "arw-core ok"
+}
+
+/// Compute effective paths and portability flags (env-based; cross‑platform).
+pub fn load_effective_paths() -> serde_json::Value {
+    let portable = std::env::var("ARW_PORTABLE")
+        .ok()
+        .and_then(|v| v.parse::<bool>().ok())
+        .unwrap_or(false);
+
+    let local = std::env::var("LOCALAPPDATA")
+        .or_else(|_| std::env::var("HOME"))
+        .unwrap_or_else(|_| ".".to_string());
+
+    // Normalize to forward slashes for readability on Windows
+    let norm = |s: String| s.replace('\\', "/");
+
+    let state_dir =
+        std::env::var("ARW_STATE_DIR").unwrap_or_else(|_| norm(format!("{}/arw", local)));
+    let cache_dir =
+        std::env::var("ARW_CACHE_DIR").unwrap_or_else(|_| norm(format!("{}/arw/cache", local)));
+    let logs_dir =
+        std::env::var("ARW_LOGS_DIR").unwrap_or_else(|_| norm(format!("{}/arw/logs", local)));
+
+    serde_json::json!({
+        "portable": portable,
+        "state_dir": state_dir,
+        "cache_dir": cache_dir,
+        "logs_dir": logs_dir,
+        "memory": {
+            "ephemeral": [],
+            "episodic": [],
+            "semantic": [],
+            "procedural": []
+        }
+    })
+}
+
+/// Simple sanity function for arw-cli.
+
+/// Compute effective paths and portability flags (env-based; cross‑platform).
+
+/// Print effective paths to stderr (used by CLI).
+pub fn print_effective_paths() {
+    eprintln!("{}", load_effective_paths());
+}
+
+/// Option wrapper around tool_schema() for the service endpoint.
+pub fn introspect_schema(id: &str) -> Option<serde_json::Value> {
+    match id {
+        "memory.probe" | "introspect.tools" => Some(tool_schema(id)),
+        _ => None,
+    }
+}

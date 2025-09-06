@@ -14,3 +14,5 @@ arw-core = { path = "../../crates/arw-core" }
 arw-events = { path = "../../crates/arw-events" }
 arw-otel = { path = "../../crates/arw-otel", default-features = false }
 tokio-stream = { workspace = true }
+arw-macros = { path = "../../crates/arw-macros" }
+inventory = { workspace = true }
