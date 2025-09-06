@@ -1,9 +1,9 @@
 # Rust
 /target
 **/*.rs.bk
-Cargo.lock
+# Keep Cargo.lock committed for workspace reproducibility
 
-# Node (if later added)
+# Node (future)
 /apps/**/node_modules
 /apps/**/dist
 
@@ -11,12 +11,10 @@ Cargo.lock
 .DS_Store
 Thumbs.db
 
-/target
+# Local backups and logs
 /.backups/
 **/*.bak_*
 *.log
 
-/target
-/.backups/
-**/*.bak_*
-*.log
+# Dist artifacts
+/dist/

@@ -14,6 +14,13 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 use tracing::info;
+use tower_http::trace::TraceLayer;
+use tower_http::compression::CompressionLayer;
+use tower_http::cors::{Any, CorsLayer};
+use std::time::Duration as StdDuration;
+use tower_http::timeout::TimeoutLayer;
+mod ext;
+
 
 #[arw_tool(
     id = "introspect.tools",
@@ -62,6 +69,18 @@ async fn main() {
         .route("/events", get(events))
         .route("/emit/test", get(emit_test))
         .route("/shutdown", get(shutdown))
+        .merge(ext::extra_routes())
+        .layer(
+            TraceLayer::new_for_http()
+        )
+        .layer(CompressionLayer::new())
+        .layer(
+            CorsLayer::new()
+                .allow_origin(Any)
+                .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+                .allow_headers(Any)
+        )
+        .layer(TimeoutLayer::new(StdDuration::from_secs(20)))
         .with_state(state.clone());
 
     let port: u16 = std::env::var("ARW_PORT")
@@ -143,11 +162,17 @@ async fn events(
         .filter_map(|res| res.ok())
         .map(|env| {
             let data = serde_json::to_string(&env).unwrap_or_else(|_| "{}".to_string());
-            Ok::<Event, Infallible>(Event::default().event(env.kind.clone()).data(data))
+            // Use RFC3339 ms timestamp as SSE id for simple replay correlation
+            Ok::<Event, Infallible>(
+                Event::default()
+                    .id(env.time.clone())
+                    .event(env.kind.clone())
+                    .data(data)
+            )
         });
 
     let initial = tokio_stream::once(Ok::<Event, Infallible>(
-        Event::default().event("Service.Connected").data("{}"),
+        Event::default().id("0").event("Service.Connected").data("{}"),
     ));
     let stream = initial.chain(bstream);
 
@@ -157,3 +182,4 @@ async fn events(
             .text("hb"),
     )
 }
+

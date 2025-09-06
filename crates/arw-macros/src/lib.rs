@@ -101,7 +101,17 @@ pub fn arw_tool(attr: TokenStream, item: TokenStream) -> TokenStream {
         .collect();
 
     // IMPORTANT: use only static literals so inventory::submit! is const-friendly.
+    // Basic compile-time validations
+    let mut preamble = proc_macro2::TokenStream::new();
+    if id.as_deref().is_none() || id.as_deref().unwrap().trim().is_empty() {
+        preamble.extend(quote! { compile_error!("#[arw_tool] requires a non-empty id=\"...\""); });
+    } else if let Some(ref s) = id { if !s.contains('.') || s.contains(' ') { preamble.extend(quote! { compile_error!("arw_tool id should include a namespace (e.g., ns.name) and no spaces"); }); } }
+    if version.as_deref().is_none() || version.as_deref().unwrap().trim().is_empty() {
+        preamble.extend(quote! { compile_error!("#[arw_tool] requires a semver version=\"x.y.z\""); });
+    } else if let Some(ref v) = version { if !v.chars().all(|c| c.is_ascii_digit() || c=='.') || v.split('.').count() < 3 { preamble.extend(quote! { compile_error!("arw_tool version should look like x.y.z"); }); } }
+
     let gen = quote! {
+        #preamble
         #input_fn
         inventory::submit! {
             arw_core::ToolInfo {

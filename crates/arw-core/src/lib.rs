@@ -115,30 +115,44 @@ pub fn hello_core() -> &'static str {
 
 /// Compute effective paths and portability flags (env-based; cross‑platform).
 pub fn load_effective_paths() -> serde_json::Value {
+    // Load defaults from config file if present, then overlay env vars
+    let cfg_path = std::env::var("ARW_CONFIG").ok().unwrap_or_else(|| "configs/default.toml".to_string());
+    let cfg = std::fs::read_to_string(&cfg_path).ok().and_then(|s| toml::from_str::<toml::Value>(&s).ok());
+
     let portable = std::env::var("ARW_PORTABLE")
         .ok()
         .and_then(|v| v.parse::<bool>().ok())
+        .or_else(|| cfg.as_ref().and_then(|v| v.get("runtime").and_then(|r| r.get("portable")).and_then(|b| b.as_bool())))
         .unwrap_or(false);
 
-    let local = std::env::var("LOCALAPPDATA")
-        .or_else(|_| std::env::var("HOME"))
-        .unwrap_or_else(|_| ".".to_string());
-
-    // Normalize to forward slashes for readability on Windows
+    let home_like = std::env::var("LOCALAPPDATA").or_else(|_| std::env::var("HOME")).unwrap_or_else(|_| ".".into());
     let norm = |s: String| s.replace('\\', "/");
+    let expand = |mut s: String| {
+        // Very small %VAR% and $VAR expansion for portability
+        for (k, v) in std::env::vars() {
+            let p1 = format!("%{}%", k);
+            let p2 = format!("${}", k);
+            if s.contains(&p1) { s = s.replace(&p1, &v); }
+            if s.contains(&p2) { s = s.replace(&p2, &v); }
+        }
+        norm(s)
+    };
 
-    let state_dir =
-        std::env::var("ARW_STATE_DIR").unwrap_or_else(|_| norm(format!("{}/arw", local)));
-    let cache_dir =
-        std::env::var("ARW_CACHE_DIR").unwrap_or_else(|_| norm(format!("{}/arw/cache", local)));
-    let logs_dir =
-        std::env::var("ARW_LOGS_DIR").unwrap_or_else(|_| norm(format!("{}/arw/logs", local)));
+    let state_dir = std::env::var("ARW_STATE_DIR").ok()
+        .or_else(|| cfg.as_ref().and_then(|v| v.get("runtime").and_then(|r| r.get("state_dir")).and_then(|s| s.as_str()).map(|s| s.to_string())))
+        .unwrap_or_else(|| format!("{}/arw", home_like.clone()));
+    let cache_dir = std::env::var("ARW_CACHE_DIR").ok()
+        .or_else(|| cfg.as_ref().and_then(|v| v.get("runtime").and_then(|r| r.get("cache_dir")).and_then(|s| s.as_str()).map(|s| s.to_string())))
+        .unwrap_or_else(|| format!("{}/arw/cache", home_like.clone()));
+    let logs_dir = std::env::var("ARW_LOGS_DIR").ok()
+        .or_else(|| cfg.as_ref().and_then(|v| v.get("runtime").and_then(|r| r.get("logs_dir")).and_then(|s| s.as_str()).map(|s| s.to_string())))
+        .unwrap_or_else(|| format!("{}/arw/logs", home_like));
 
     serde_json::json!({
         "portable": portable,
-        "state_dir": state_dir,
-        "cache_dir": cache_dir,
-        "logs_dir": logs_dir,
+        "state_dir": expand(state_dir),
+        "cache_dir": expand(cache_dir),
+        "logs_dir": expand(logs_dir),
         "memory": {
             "ephemeral": [],
             "episodic": [],
