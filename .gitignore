@@ -15,3 +15,8 @@ Thumbs.db
 /.backups/
 **/*.bak_*
 *.log
+
+/target
+/.backups/
+**/*.bak_*
+*.log

@@ -4,7 +4,7 @@ use serde::Serialize;
 use serde_json::json;
 use std::net::SocketAddr;
 use std::convert::Infallible;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
 use tracing::info;
