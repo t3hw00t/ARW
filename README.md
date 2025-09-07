@@ -9,9 +9,16 @@ Key goals
 - Clear packaging for sharing/upload
 
 Quickstart
-- Build: `scripts/build.ps1` (Windows) or `scripts/build.sh` (Linux/macOS)
-- Test:  `scripts/test.ps1` or `scripts/test.sh`
-- Package: `scripts/package.ps1` or `scripts/package.sh` (creates `dist/` zip)
+- One‑shot setup (build, docs, package):
+  - Windows: `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1`
+  - Linux/macOS: `bash scripts/setup.sh`
+- Start the service with options:
+  - Windows: `powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -Debug -Port 8090 -DocsUrl https://your-pages -AdminToken secret`
+  - Linux/macOS: `bash scripts/start.sh --debug --port 8090 --docs-url https://your-pages --admin-token secret`
+- Traditional scripts (fine‑grained):
+  - Build: `scripts/build.ps1` (Windows) or `scripts/build.sh` (Linux/macOS)
+  - Test:  `scripts/test.ps1` or `scripts/test.sh`
+  - Package: `scripts/package.ps1` or `scripts/package.sh` (creates `dist/` zip)
 
 Docs
 - Browse the user guide and developer docs with MkDocs.
@@ -24,3 +31,4 @@ Notes
 - Portable state defaults to `%LOCALAPPDATA%/arw` (configurable in `configs/default.toml`).
 - To wire the UI to your hosted docs, set `ARW_DOCS_URL` (e.g., your GitHub Pages URL). The debug page will show mild “?” helps and a Docs button.
 - With `ARW_DEBUG=1`, if a local docs site exists (`docs-site/` or `site/`), it is served at `/docs`.
+- Sensitive endpoints (`/debug`, `/probe`, `/memory*`, `/models*`, `/governor*`, `/introspect*`, `/chat*`, `/feedback*`) are gated. Development: set `ARW_DEBUG=1`. Hardened: set `ARW_ADMIN_TOKEN` and send header `X-ARW-Admin: <token>`.
