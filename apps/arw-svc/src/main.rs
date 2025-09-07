@@ -168,7 +168,18 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
     let ok = if let Some(t) = token {
         if t.is_empty() { debug } else { header_token_matches(req.headers(), &t) }
     } else { debug };
-    if ok { return next.run(req).await; }
+    if ok {
+        if !rate_allow() {
+            let body = serde_json::json!({
+                "type": "about:blank",
+                "title": "Too Many Requests",
+                "status": 429,
+                "detail": "rate limit exceeded for administrative endpoints"
+            });
+            return (SC::TOO_MANY_REQUESTS, axum::Json(body)).into_response();
+        }
+        return next.run(req).await;
+    }
     let body = serde_json::json!({
         "type": "about:blank",
         "title": "Forbidden",
@@ -180,6 +191,26 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
 
 fn header_token_matches(h: &HeaderMap, token: &str) -> bool {
     h.get("x-arw-admin").and_then(|v| v.to_str().ok()).map(|v| v == token).unwrap_or(false)
+}
+
+// ---- global rate limit (fixed window) ----
+struct RateWin { count: u64, start: std::time::Instant }
+static mut RL_START: Option<std::time::Instant> = None;
+static mut RL_COUNT: u64 = 0;
+fn rl_params() -> (u64, u64) {
+    if let Ok(s) = std::env::var("ARW_ADMIN_RL") { if let Some((a,b)) = s.split_once('/') { if let (Ok(l), Ok(w)) = (a.parse::<u64>(), b.parse::<u64>()) { return (l.max(1), w.max(1)); } } }
+    (60, 60)
+}
+fn rate_allow() -> bool {
+    // safe for single-user local use; for multi-threaded strictness, switch to a Mutex/RwLock
+    let (limit, win_secs) = rl_params();
+    let now = std::time::Instant::now();
+    unsafe {
+        if RL_START.is_none() { RL_START = Some(now); RL_COUNT = 0; }
+        if now.duration_since(RL_START.unwrap()).as_secs() >= win_secs { RL_START = Some(now); RL_COUNT = 0; }
+        if RL_COUNT >= limit { return false; }
+        RL_COUNT += 1; true
+    }
 }
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
     state.bus.publish("Service.Health", &json!({"ok": true}));

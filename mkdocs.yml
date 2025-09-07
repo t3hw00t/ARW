@@ -32,6 +32,7 @@ nav:
   - Guide:
       - Overview: docs/index.md
       - Quickstart: docs/guide/quickstart.md
+      - Metrics & Insights: docs/guide/METRICS_AND_INSIGHTS.md
       - Features: docs/FEATURES.md
       - Roadmap: docs/ROADMAP.md
       - Deployment: docs/DEPLOYMENT.md

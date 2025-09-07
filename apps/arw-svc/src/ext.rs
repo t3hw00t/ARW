@@ -31,6 +31,7 @@ fn memory_path() -> PathBuf { state_dir().join("memory.json") }
 fn models_path() -> PathBuf { state_dir().join("models.json") }
 fn orch_path() -> PathBuf { state_dir().join("orchestration.json") }
 fn feedback_path() -> PathBuf { state_dir().join("feedback.json") }
+fn audit_path() -> PathBuf { state_dir().join("audit.log") }
 
 fn load_json_file(p: &Path) -> Option<Value> {
     let s = fs::read_to_string(p).ok()?;
@@ -83,6 +84,19 @@ async fn persist_feedback() {
     let st = { feedback_cell().read().await.clone() };
     let v = serde_json::to_value(st).unwrap_or_else(|_| json!({}));
     let _ = save_json_file_async(&feedback_path(), &v).await;
+}
+
+async fn audit_event(action: &str, details: &Value) {
+    let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let line = serde_json::json!({"time": ts, "action": action, "details": details});
+    let s = serde_json::to_string(&line).unwrap_or_else(|_| "{}".to_string()) + "\n";
+    let p = audit_path();
+    if let Some(parent) = p.parent() { let _ = afs::create_dir_all(parent).await; }
+    use tokio::io::AsyncWriteExt;
+    match afs::OpenOptions::new().create(true).append(true).open(&p).await {
+        Ok(mut f) => { let _ = f.write_all(s.as_bytes()).await; }
+        Err(_) => {}
+    }
 }
 
 // ---------- Global stores ----------
@@ -413,6 +427,7 @@ async fn models_add(State(state): State<AppState>, Json(req): Json<ModelId>) -> 
         v.push(json!({"id": req.id, "provider": req.provider.unwrap_or_else(|| "local".to_string()), "status":"available"}));
         state.bus.publish("Models.Changed", &json!({"op":"add","id": v.last().and_then(|m| m.get("id")).cloned()}));
     }
+    audit_event("models.add", &json!({"id": req.id})).await;
     Json(json!({"ok": true}))
 }
 async fn models_delete(State(state): State<AppState>, Json(req): Json<ModelId>) -> impl IntoResponse {
@@ -420,6 +435,7 @@ async fn models_delete(State(state): State<AppState>, Json(req): Json<ModelId>) 
     let before = v.len();
     v.retain(|m| m.get("id").and_then(|s| s.as_str()) != Some(&req.id));
     if v.len() != before { state.bus.publish("Models.Changed", &json!({"op":"delete","id": req.id})); }
+    audit_event("models.delete", &json!({"id": req.id})).await;
     Json(json!({"ok": true}))
 }
 async fn models_default_get() -> impl IntoResponse {
@@ -434,6 +450,7 @@ async fn models_default_set(State(state): State<AppState>, Json(req): Json<Model
     state.bus.publish("Models.Changed", &json!({"op":"default","id": req.id}));
     let _ = save_json_file_async(&models_path(), &Value::Array(models().read().await.clone())).await;
     persist_orch().await;
+    audit_event("models.default", &json!({"id": req.id})).await;
     Json(json!({"ok": true}))
 }
 
@@ -450,6 +467,7 @@ async fn models_download(State(state): State<AppState>, Json(req): Json<Download
         }
     }
     state.bus.publish("Models.Download", &json!({"id": req.id}));
+    audit_event("models.download", &json!({"id": req.id})).await;
     // simulate progress
     let id = req.id.clone();
     let sp = state.clone();
