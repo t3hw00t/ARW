@@ -20,7 +20,7 @@ $rootToml = Join-Path $PSScriptRoot '..' 'Cargo.toml' | Resolve-Path
 $version = (Get-Content $rootToml | Select-String -Pattern '^version\s*=\s*"([^"]+)"' -Context 0,0 | Select-Object -First 1).Matches.Groups[1].Value
 if (-not $version) { $version = '0.0.0' }
 
-$os   = if ($IsWindows) { 'windows' } elseif ($IsMacOS) { 'macos' } else { 'linux' }
+$os   = if ($env:OS -eq 'Windows_NT') { 'windows' } elseif ($IsMacOS) { 'macos' } else { 'linux' }
 $arch = $env:PROCESSOR_ARCHITECTURE
 if ($arch -match 'ARM') { $arch = 'arm64' } else { $arch = 'x64' }
 $name = "arw-$version-$os-$arch"
@@ -37,7 +37,8 @@ New-Item -ItemType Directory -Force $out | Out-Null
 $binDir = Join-Path $out 'bin'
 New-Item -ItemType Directory -Force $binDir | Out-Null
 
-$exe = $IsWindows ? '.exe' : ''
+$exe = ''
+if ($env:OS -eq 'Windows_NT') { $exe = '.exe' }
 $svcSrc = Join-Path $root "target/release/arw-svc$exe"
 $cliSrc = Join-Path $root "target/release/arw-cli$exe"
 if (-not (Test-Path $svcSrc)) { Die "Missing binary: $svcSrc (did the build succeed?)" }
