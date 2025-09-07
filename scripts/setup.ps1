@@ -55,7 +55,12 @@ if (-not $NoDocs) {
 } else { Info 'Skipping docs site build.' }
 
 Title 'Package portable bundle'
-& (Join-Path $PSScriptRoot 'package.ps1') -NoBuild
+try {
+  & (Join-Path $PSScriptRoot 'package.ps1') -NoBuild
+} catch {
+  Warn "package.ps1 blocked by execution policy; retrying via child PowerShell with Bypass"
+  & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'package.ps1') -NoBuild
+}
 
 Pop-Location
 Info 'Done. See dist/ for portable bundle.'

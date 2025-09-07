@@ -45,7 +45,7 @@ if ($libs.Count -eq 0) {
     $rel = Resolve-Path $l.path | ForEach-Object { $_.Path }
     $rel = $rel -replace [regex]::Escape((Resolve-Path .).Path + [IO.Path]::DirectorySeparatorChar), ''
     $rel = $rel -replace '\\','/'
-    $out += "- **$($l.name)**: $($l.version) — `$rel`"
+    $out += "- **$($l.name)**: $($l.version) — ($rel)"
   }
 }
 $out += ''
@@ -57,7 +57,7 @@ if ($bins.Count -eq 0) {
     $rel = Resolve-Path $b.path | ForEach-Object { $_.Path }
     $rel = $rel -replace [regex]::Escape((Resolve-Path .).Path + [IO.Path]::DirectorySeparatorChar), ''
     $rel = $rel -replace '\\','/'
-    $out += "- **$($b.name)**: $($b.version) — `$rel`"
+    $out += "- **$($b.name)**: $($b.version) — ($rel)"
   }
 }
 
@@ -65,4 +65,3 @@ $dest = Join-Path $PSScriptRoot '..' 'docs' 'developer' 'status.md'
 Info "Writing $dest"
 $out -join "`n" | Set-Content -Path $dest -Encoding utf8
 Info 'Done.'
-

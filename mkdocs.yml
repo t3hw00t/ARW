@@ -30,19 +30,19 @@ plugins:
       fallback_to_build_date: true
 nav:
   - Guide:
-      - Overview: docs/index.md
-      - Quickstart: docs/guide/quickstart.md
-      - Metrics & Insights: docs/guide/METRICS_AND_INSIGHTS.md
-      - Features: docs/FEATURES.md
-      - Roadmap: docs/ROADMAP.md
-      - Deployment: docs/DEPLOYMENT.md
-      - Hardware & Models: docs/HARDWARE_AND_MODELS.md
-      - Memory & Training: docs/MEMORY_AND_TRAINING.md
-      - API & Schema: docs/API_AND_SCHEMA.md
+      - Overview: index.md
+      - Quickstart: guide/quickstart.md
+      - Metrics & Insights: guide/METRICS_AND_INSIGHTS.md
+      - Features: FEATURES.md
+      - Roadmap: ROADMAP.md
+      - Deployment: DEPLOYMENT.md
+      - Hardware & Models: HARDWARE_AND_MODELS.md
+      - Memory & Training: MEMORY_AND_TRAINING.md
+      - API & Schema: API_AND_SCHEMA.md
   - Developer:
-      - Structure: docs/STRUCTURE.md
-      - Developer Guide: docs/developer/index.md
-      - CI & Releases: docs/developer/ci.md
-      - Style & Harmony: docs/developer/style.md
-      - Workspace Status: docs/developer/status.md
-      - Security: docs/developer/SECURITY.md
+      - Structure: STRUCTURE.md
+      - Developer Guide: developer/index.md
+      - CI & Releases: developer/ci.md
+      - Style & Harmony: developer/style.md
+      - Workspace Status: developer/status.md
+      - Security: developer/SECURITY.md
