@@ -39,6 +39,9 @@ exe=''
 
 cp "$root_dir/target/release/arw-svc$exe" "$out/bin/arw-svc$exe"
 cp "$root_dir/target/release/arw-cli$exe" "$out/bin/arw-cli$exe"
+if [[ -f "$root_dir/target/release/arw-tray$exe" ]]; then
+  cp "$root_dir/target/release/arw-tray$exe" "$out/bin/arw-tray$exe"
+fi
 cp "$root_dir/configs/default.toml" "$out/configs/default.toml"
 cp -r "$root_dir/docs" "$out/docs"
 

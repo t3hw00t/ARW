@@ -16,8 +16,9 @@ if (-not $NoBuild) {
 }
 
 # Workspace version from root Cargo.toml
-$rootToml = Join-Path $PSScriptRoot '..' 'Cargo.toml' | Resolve-Path
-$version = (Get-Content $rootToml | Select-String -Pattern '^version\s*=\s*"([^"]+)"' -Context 0,0 | Select-Object -First 1).Matches.Groups[1].Value
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$rootToml = Join-Path $root 'Cargo.toml'
+$version = (Get-Content -Path $rootToml | Select-String -Pattern '^version\s*=\s*"([^"]+)"' -Context 0,0 | Select-Object -First 1).Matches.Groups[1].Value
 if (-not $version) { $version = '0.0.0' }
 
 $os   = if ($env:OS -eq 'Windows_NT') { 'windows' } elseif ($IsMacOS) { 'macos' } else { 'linux' }
@@ -25,7 +26,6 @@ $arch = $env:PROCESSOR_ARCHITECTURE
 if ($arch -match 'ARM') { $arch = 'arm64' } else { $arch = 'x64' }
 $name = "arw-$version-$os-$arch"
 
-$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $dist = Join-Path $root 'dist'
 $out  = Join-Path $dist $name
 
@@ -41,10 +41,12 @@ $exe = ''
 if ($env:OS -eq 'Windows_NT') { $exe = '.exe' }
 $svcSrc = Join-Path $root "target/release/arw-svc$exe"
 $cliSrc = Join-Path $root "target/release/arw-cli$exe"
+$traySrc = Join-Path $root "target/release/arw-tray$exe"
 if (-not (Test-Path $svcSrc)) { Die "Missing binary: $svcSrc (did the build succeed?)" }
 if (-not (Test-Path $cliSrc)) { Die "Missing binary: $cliSrc (did the build succeed?)" }
 Copy-Item $svcSrc -Destination (Join-Path $binDir ("arw-svc$exe"))
 Copy-Item $cliSrc -Destination (Join-Path $binDir ("arw-cli$exe"))
+if (Test-Path $traySrc) { Copy-Item $traySrc -Destination (Join-Path $binDir ("arw-tray$exe")) }
 
 # Configs
 $cfgOut = Join-Path $out 'configs'
@@ -72,7 +74,7 @@ if (Get-Command mkdocs -ErrorAction SilentlyContinue) {
 }
 
 # Sandbox (Windows only)
-if ($IsWindows -and (Test-Path (Join-Path $root 'sandbox/ARW.wsb'))) {
+if ($env:OS -eq 'Windows_NT' -and (Test-Path (Join-Path $root 'sandbox/ARW.wsb'))) {
   New-Item -ItemType Directory -Force (Join-Path $out 'sandbox') | Out-Null
   Copy-Item (Join-Path $root 'sandbox/ARW.wsb') -Destination (Join-Path $out 'sandbox/ARW.wsb') -Force
 }

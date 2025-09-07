@@ -15,6 +15,7 @@ Quickstart
 - Start the service with options:
   - Windows: `powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -Debug -Port 8090 -DocsUrl https://your-pages -AdminToken secret`
   - Linux/macOS: `bash scripts/start.sh --debug --port 8090 --docs-url https://your-pages --admin-token secret`
+- Minimal tray app (optional): run `arw-tray` from `target/release/` or from `dist/.../bin/` to start/stop the service, open the Debug UI, or quit from the system tray.
 - Traditional scripts (fine‑grained):
   - Build: `scripts/build.ps1` (Windows) or `scripts/build.sh` (Linux/macOS)
   - Test:  `scripts/test.ps1` or `scripts/test.sh`

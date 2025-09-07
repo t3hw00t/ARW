@@ -4,7 +4,7 @@ title: Workspace Status
 
 # Workspace Status
 
-Generated: 2025-09-07 01:34 UTC
+Generated: 2025-09-07 02:15 UTC
 
 ## Libraries
 - **arw-core**: 0.1.0 — (crates/arw-core/Cargo.toml)
@@ -16,3 +16,4 @@ Generated: 2025-09-07 01:34 UTC
 ## Binaries
 - **arw-cli**: 0.1.0 — (apps/arw-cli/Cargo.toml)
 - **arw-svc**: 0.1.0 — (apps/arw-svc/Cargo.toml)
+- **arw-tray**: 0.1.0 — (apps/arw-tray/Cargo.toml)

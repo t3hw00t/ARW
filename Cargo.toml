@@ -6,7 +6,8 @@ members = [
   "crates/arw-macros",
   "apps/arw-cli",
   "crates/arw-otel",
-  "apps/arw-svc"
+  "apps/arw-svc",
+  "apps/arw-tray"
 ]
 resolver = "2"
 

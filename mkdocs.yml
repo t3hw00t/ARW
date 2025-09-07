@@ -33,6 +33,7 @@ nav:
       - Overview: index.md
       - Quickstart: guide/quickstart.md
       - Metrics & Insights: guide/METRICS_AND_INSIGHTS.md
+      - Project Instructions: PROJECT_INSTRUCTIONS.md
       - Features: FEATURES.md
       - Roadmap: ROADMAP.md
       - Deployment: DEPLOYMENT.md
