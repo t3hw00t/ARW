@@ -36,6 +36,16 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
+      - name: Rustfmt (check)
+        run: |
+          rustup component add rustfmt
+          cargo fmt --all -- --check
+
+      - name: Clippy (deny warnings)
+        run: |
+          rustup component add clippy
+          cargo clippy --workspace --all-targets -- -D warnings
+
       - name: Package artifact (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
@@ -59,3 +69,25 @@ jobs:
           name: arw-linux-bundle
           path: dist/*.zip
 
+  docs-check:
+    name: Docs Build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Rust (for docgen)
+        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install mkdocs
+        run: |
+          pip install --upgrade pip
+          pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin
+      - name: Install docgen deps (jq)
+        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Generate workspace status page
+        run: bash ./scripts/docgen.sh
+      - name: Build docs (strict)
+        run: mkdocs build --strict

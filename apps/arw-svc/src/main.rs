@@ -19,6 +19,10 @@ use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 use std::time::Duration as StdDuration;
 use tower_http::timeout::TimeoutLayer;
+use tower_http::services::ServeDir;
+use std::path::Path as FsPath;
+use axum::{http::Request, response::Response, middleware::{self, Next}};
+use axum::http::HeaderMap;
 mod ext;
 
 
@@ -56,15 +60,29 @@ async fn main() {
         stop_tx: stop_tx.clone(),
     };
 
+    // Load persisted orchestration/feedback state
+    ext::load_persisted().await;
+
     // Emit a startup event so /events sees something if connected early.
     state
         .bus
         .publish("Service.Start", &json!({"msg":"arw-svc started"}));
 
-    let app = Router::new()
+    // Spawn stats aggregator (subscribes to bus and updates counters)
+    {
+        let mut rx = state.bus.subscribe();
+        tokio::spawn(async move {
+            while let Ok(env) = rx.recv().await {
+                ext::stats_on_event(&env.kind).await;
+            }
+        });
+    }
+
+    let mut app = Router::new()
         .route("/healthz", get(healthz))
         .route("/introspect/tools", get(introspect_tools))
         .route("/introspect/schemas/:id", get(introspect_schema))
+        // Match paths before metrics/security to capture MatchedPath
         .route("/probe", get(probe))
         .route("/events", get(events))
         .route("/emit/test", get(emit_test))
@@ -74,14 +92,29 @@ async fn main() {
             TraceLayer::new_for_http()
         )
         .layer(CompressionLayer::new())
-        .layer(
+        .layer(if std::env::var("ARW_CORS_ANY").ok().as_deref() == Some("1") || std::env::var("ARW_DEBUG").ok().as_deref() == Some("1") {
             CorsLayer::new()
                 .allow_origin(Any)
                 .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
                 .allow_headers(Any)
-        )
-        .layer(TimeoutLayer::new(StdDuration::from_secs(20)))
+        } else { CorsLayer::new() })
+        .layer({
+            let secs = std::env::var("ARW_HTTP_TIMEOUT_SECS").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(20);
+            TimeoutLayer::new(StdDuration::from_secs(secs))
+        })
+        .layer(middleware::from_fn(security_mw))
+        .layer(middleware::from_fn(metrics_mw))
         .with_state(state.clone());
+
+    // Optionally serve local docs at /docs when in debug mode and site exists
+    if std::env::var("ARW_DEBUG").ok().as_deref() == Some("1") {
+        let doc_dir = if FsPath::new("docs-site").exists() {
+            Some("docs-site")
+        } else if FsPath::new("site").exists() {
+            Some("site")
+        } else { None };
+        if let Some(p) = doc_dir { app = app.nest_service("/docs", ServeDir::new(p)); }
+    }
 
     let port: u16 = std::env::var("ARW_PORT")
         .ok()
@@ -90,7 +123,13 @@ async fn main() {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     info!("arw-svc listening on http://{}", addr);
 
-    let listener = tokio::net::TcpListener::bind(addr).await.expect("bind");
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            tracing::error!("failed to bind {}: {}", addr, e);
+            return;
+        }
+    };
     let server = axum::serve(listener, app).with_graceful_shutdown(async move {
         let _ = stop_rx.recv().await;
     });
@@ -99,6 +138,49 @@ async fn main() {
     }
 }
 
+async fn metrics_mw(req: Request<axum::body::Body>, next: Next) -> Response {
+    use axum::extract::MatchedPath;
+    let path = req.extensions().get::<MatchedPath>().map(|m| m.as_str().to_string()).unwrap_or_else(|| req.uri().path().to_string());
+    let t0 = std::time::Instant::now();
+    let res = next.run(req).await;
+    let dt = t0.elapsed().as_millis() as u64;
+    let status = res.status().as_u16();
+    ext::route_obs(&path, status, dt).await;
+    res
+}
+
+async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
+    use axum::http::StatusCode as SC;
+    use axum::response::IntoResponse;
+    let path = req.uri().path();
+    let is_sensitive = path.starts_with("/debug")
+        || path.starts_with("/probe")
+        || path.starts_with("/memory")
+        || path.starts_with("/models")
+        || path.starts_with("/governor")
+        || path.starts_with("/introspect")
+        || path.starts_with("/chat")
+        || path.starts_with("/feedback");
+    if !is_sensitive { return next.run(req).await; }
+
+    let debug = std::env::var("ARW_DEBUG").ok().as_deref() == Some("1");
+    let token = std::env::var("ARW_ADMIN_TOKEN").ok();
+    let ok = if let Some(t) = token {
+        if t.is_empty() { debug } else { header_token_matches(req.headers(), &t) }
+    } else { debug };
+    if ok { return next.run(req).await; }
+    let body = serde_json::json!({
+        "type": "about:blank",
+        "title": "Forbidden",
+        "status": 403,
+        "detail": "administrative endpoint; set ARW_DEBUG=1 or provide X-ARW-Admin token"
+    });
+    (SC::FORBIDDEN, axum::Json(body)).into_response()
+}
+
+fn header_token_matches(h: &HeaderMap, token: &str) -> bool {
+    h.get("x-arw-admin").and_then(|v| v.to_str().ok()).map(|v| v == token).unwrap_or(false)
+}
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
     state.bus.publish("Service.Health", &json!({"ok": true}));
     Json(json!({"ok": true}))
@@ -182,4 +264,3 @@ async fn events(
             .text("hb"),
     )
 }
-

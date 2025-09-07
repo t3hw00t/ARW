@@ -18,3 +18,5 @@ Thumbs.db
 
 # Dist artifacts
 /dist/
+/# MkDocs build output
+/site/

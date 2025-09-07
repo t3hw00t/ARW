@@ -19,6 +19,10 @@ RFC 7807 Problem Details errors.
 
 W3C Trace Context + OpenTelemetry.
 
+UI cross‑reference
+- In the Debug UI (`/debug`, set `ARW_DEBUG=1`), the Tools panel exercises example tools and shows emitted `Tool.Ran` events.
+- Click the small “?” next to Tools for a tip and a link back to this page.
+
 DIRECTORIES
 /spec/
 
@@ -37,6 +41,18 @@ OperationId = "<tool_id>@<semver>" (e.g., memory.probe@1.0.0)
 Each operation declares: Input, Output, Error types; capabilities; stability (stable/experimental/deprecated).
 
 DECLARATION STYLE (Rust)
+
+New endpoints (introspection & feedback)
+- `GET /introspect/stats`: returns event totals and per‑route metrics (hits, errors, EWMA, last/max ms).
+- `POST /feedback/signal`: record a signal `{ kind, target, confidence, severity, note }`.
+- `POST /feedback/analyze`: produce suggestions from signals and stats.
+- `POST /feedback/apply`: apply a suggestion `{ id }` (updates hints/profile/memory limit conservatively).
+- `GET /feedback/state`: feedback state (signals, suggestions, auto_apply).
+- `POST /feedback/auto`: toggle `auto_apply`.
+- `POST /feedback/reset`: clear signals & suggestions.
+
+Security notes
+- Sensitive endpoints are gated; see Developer Security Notes.
 
 #[arw_tool] macro derives Schemas, Tool impl, registry entry, MCP metadata.
 

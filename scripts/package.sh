@@ -41,6 +41,17 @@ cp "$root_dir/target/release/arw-svc$exe" "$out/bin/arw-svc$exe"
 cp "$root_dir/target/release/arw-cli$exe" "$out/bin/arw-cli$exe"
 cp "$root_dir/configs/default.toml" "$out/configs/default.toml"
 cp -r "$root_dir/docs" "$out/docs"
+
+# Optional: build MkDocs site if available
+if command -v mkdocs >/dev/null 2>&1; then
+  echo '[package] Building docs site (MkDocs)'
+  (cd "$root_dir" && mkdocs build --strict)
+  if [[ -d "$root_dir/site" ]]; then
+    cp -r "$root_dir/site" "$out/docs-site"
+  fi
+else
+  echo '[package] MkDocs not found; skipping docs site build'
+fi
 if [[ "$os" == windows && -f "$root_dir/sandbox/ARW.wsb" ]]; then
   mkdir -p "$out/sandbox" && cp "$root_dir/sandbox/ARW.wsb" "$out/sandbox/ARW.wsb"
 fi
@@ -66,5 +77,6 @@ EOF
 mkdir -p "$dist"
 zip -qr "$dist/$name.zip" -j "$out/bin"/* "$out/README.txt"
 zip -qr "$dist/$name.zip" "$out/configs" "$out/docs" $( [[ -d "$out/sandbox" ]] && echo "$out/sandbox" )
+if [[ -d "$out/docs-site" ]]; then zip -qr "$dist/$name.zip" "$out/docs-site"; fi
 
 echo "[package] Wrote $dist/$name.zip"

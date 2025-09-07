@@ -22,3 +22,14 @@ async fn tool_math_add() {
     let body = json!({"id":"math.add","input":{"a":1.5,"b":2.25}});
     assert_eq!(body["id"], "math.add");
 }
+
+#[tokio::test]
+async fn core_introspect_schema_known() {
+    let s = arw_core::introspect_schema("memory.probe");
+    assert!(s.is_some());
+}
+
+#[test]
+fn core_hello_ok() {
+    assert_eq!(arw_core::hello_core(), "arw-core ok");
+}

@@ -17,6 +17,10 @@ Dataset: versioned collection of memory records with provenance & policy tags.
 
 Capsule: reproducible run bundle (prompts, tool calls, versions, events).
 
+UI cross‑reference
+- In the Debug UI (`/debug`, set `ARW_DEBUG=1`), the Memory panel shows current memory and lets you apply, save, and load examples.
+- Click the small “?” help next to Memory for a quick tip and a link back to this page.
+
 LIVE MEMORY FEEDBACK (PROBE)
 
 Surfaces: CLI (--probe), Launcher panel, Debug UI overlay, VS Code peek.

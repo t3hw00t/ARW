@@ -9,6 +9,9 @@ pub struct BusStub;
 impl BusStub {
     pub fn publish<T: serde::Serialize>(&self, _kind: &str, _payload: &T) {}
 }
+// Safe: BusStub holds no data and performs no synchronization.
+unsafe impl Send for BusStub {}
+unsafe impl Sync for BusStub {}
 
 /// Public state type used by ext.rs (for the library target / tests)
 #[derive(Clone, Default)]
@@ -23,5 +26,4 @@ pub fn build_router() -> Router<AppState> {
     let app  = base.merge(ext::extra_routes());
     app.with_state(AppState::default())
 }
-
 

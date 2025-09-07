@@ -1,0 +1,47 @@
+site_name: ARW Docs
+site_description: "Agents Running Wild — user guide and developer docs"
+site_url: ""
+repo_url: ""
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: indigo
+  features:
+    - navigation.instant
+    - navigation.tabs
+    - navigation.sections
+    - content.code.copy
+    - content.tabs.link
+    - toc.integrate
+markdown_extensions:
+  - admonition
+  - toc:
+      permalink: true
+  - footnotes
+  - def_list
+  - tables
+  - attr_list
+  - md_in_html
+plugins:
+  - search
+  - git-revision-date-localized:
+      fallback_to_build_date: true
+nav:
+  - Guide:
+      - Overview: docs/index.md
+      - Quickstart: docs/guide/quickstart.md
+      - Features: docs/FEATURES.md
+      - Roadmap: docs/ROADMAP.md
+      - Deployment: docs/DEPLOYMENT.md
+      - Hardware & Models: docs/HARDWARE_AND_MODELS.md
+      - Memory & Training: docs/MEMORY_AND_TRAINING.md
+      - API & Schema: docs/API_AND_SCHEMA.md
+  - Developer:
+      - Structure: docs/STRUCTURE.md
+      - Developer Guide: docs/developer/index.md
+      - CI & Releases: docs/developer/ci.md
+      - Style & Harmony: docs/developer/style.md
+      - Workspace Status: docs/developer/status.md
+      - Security: docs/developer/SECURITY.md

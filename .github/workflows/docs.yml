@@ -1,0 +1,43 @@
+name: Docs
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-deploy:
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Rust (for docgen)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install docgen deps (jq)
+        run: sudo apt-get update && sudo apt-get install -y jq
+
+      - name: Generate workspace status page
+        run: bash ./scripts/docgen.sh
+
+      - name: Install mkdocs
+        run: |
+          pip install --upgrade pip
+          pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin
+
+      - name: Build docs
+        run: mkdocs build --strict
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./site
+          force_orphan: true
