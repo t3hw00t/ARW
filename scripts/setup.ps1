@@ -13,6 +13,8 @@ function Warn($m){ Write-Warning $m }
 function Pause($m){ if(-not $Yes){ Read-Host $m | Out-Null } }
 
 Title 'Prerequisites'
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+Push-Location $root
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
   Warn 'Rust `cargo` not found.'
   Write-Host 'Install Rust via rustup:' -ForegroundColor Yellow
@@ -43,15 +45,17 @@ if ($RunTests) {
 }
 
 Title 'Generate workspace status page'
-try { & ./scripts/docgen.ps1 } catch { Warn "docgen failed: $($_.Exception.Message)" }
+try { & (Join-Path $PSScriptRoot 'docgen.ps1') } catch { Warn "docgen failed: $($_.Exception.Message)" }
 
-if (-not $NoDocs -and (Get-Command mkdocs -ErrorAction SilentlyContinue)) {
+if (-not $NoDocs) {
   Title 'Build docs site (MkDocs)'
-  & mkdocs build --strict
+  if (Get-Command mkdocs -ErrorAction SilentlyContinue) { & mkdocs build --strict }
+  elseif ($py) { & $py.Path -m mkdocs build --strict }
+  else { Info 'Skipping docs site build (mkdocs/python not found).' }
 } else { Info 'Skipping docs site build.' }
 
 Title 'Package portable bundle'
-& ./scripts/package.ps1 -NoBuild
+& (Join-Path $PSScriptRoot 'package.ps1') -NoBuild
 
+Pop-Location
 Info 'Done. See dist/ for portable bundle.'
-

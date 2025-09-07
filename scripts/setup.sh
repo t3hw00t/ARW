@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$DIR/.." && pwd)"
+
 yes_flag=0
 no_docs=0
 run_tests=0
@@ -39,7 +42,7 @@ if [[ $no_docs -eq 0 && $mkdocs_ok -eq 0 ]]; then
 fi
 
 title "Build workspace (release)"
-cargo build --workspace --release --locked
+(cd "$ROOT" && cargo build --workspace --release --locked)
 
 if [[ $run_tests -eq 1 ]]; then
   title "Run tests (workspace)"
@@ -48,19 +51,18 @@ fi
 
 title "Generate workspace status page"
 if command -v jq >/dev/null 2>&1; then
-  bash ./scripts/docgen.sh || warn "docgen failed"
+  bash "$DIR/docgen.sh" || warn "docgen failed"
 else
   warn "jq not found; skipping docgen page generation (install: apt-get install jq | brew install jq)"
 fi
 
 if [[ $no_docs -eq 0 && $mkdocs_ok -eq 1 ]]; then
   title "Build docs site (MkDocs)"
-  mkdocs build --strict
+  (cd "$ROOT" && mkdocs build --strict)
 else
   info "Skipping docs site build"
 fi
 
 title "Package portable bundle"
-bash ./scripts/package.sh --no-build
+bash "$DIR/package.sh" --no-build
 info "Done. See dist/ for portable bundle."
-

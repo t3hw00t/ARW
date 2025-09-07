@@ -23,6 +23,7 @@ use tower_http::services::ServeDir;
 use std::path::Path as FsPath;
 use axum::{http::Request, response::Response, middleware::{self, Next}};
 use axum::http::HeaderMap;
+use std::sync::{Mutex, OnceLock};
 mod ext;
 
 
@@ -195,22 +196,19 @@ fn header_token_matches(h: &HeaderMap, token: &str) -> bool {
 
 // ---- global rate limit (fixed window) ----
 struct RateWin { count: u64, start: std::time::Instant }
-static mut RL_START: Option<std::time::Instant> = None;
-static mut RL_COUNT: u64 = 0;
+static RL_STATE: OnceLock<Mutex<RateWin>> = OnceLock::new();
 fn rl_params() -> (u64, u64) {
     if let Ok(s) = std::env::var("ARW_ADMIN_RL") { if let Some((a,b)) = s.split_once('/') { if let (Ok(l), Ok(w)) = (a.parse::<u64>(), b.parse::<u64>()) { return (l.max(1), w.max(1)); } } }
     (60, 60)
 }
 fn rate_allow() -> bool {
-    // safe for single-user local use; for multi-threaded strictness, switch to a Mutex/RwLock
     let (limit, win_secs) = rl_params();
     let now = std::time::Instant::now();
-    unsafe {
-        if RL_START.is_none() { RL_START = Some(now); RL_COUNT = 0; }
-        if now.duration_since(RL_START.unwrap()).as_secs() >= win_secs { RL_START = Some(now); RL_COUNT = 0; }
-        if RL_COUNT >= limit { return false; }
-        RL_COUNT += 1; true
-    }
+    let m = RL_STATE.get_or_init(|| Mutex::new(RateWin { count: 0, start: now }));
+    let mut st = m.lock().unwrap();
+    if now.duration_since(st.start).as_secs() >= win_secs { st.start = now; st.count = 0; }
+    if st.count >= limit { return false; }
+    st.count += 1; true
 }
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
     state.bus.publish("Service.Health", &json!({"ok": true}));

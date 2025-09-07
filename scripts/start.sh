@@ -28,20 +28,22 @@ export ARW_HTTP_TIMEOUT_SECS="$timeout_secs"
 [[ -n "$docs_url" ]] && export ARW_DOCS_URL="$docs_url" || true
 [[ -n "$admin_token" ]] && export ARW_ADMIN_TOKEN="$admin_token" || true
 
-exe="arw-svc"; [[ "$OS" == "Windows_NT" ]] && exe+=".exe"
+DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$DIR/.." && pwd)"
+
+exe="arw-svc"; [[ "${OS:-}" == "Windows_NT" ]] && exe+=".exe"
 if [[ $use_dist -eq 1 ]]; then
-  base=$(ls -td dist/arw-* 2>/dev/null | head -n1 || true)
+  base=$(ls -td "$ROOT"/dist/arw-* 2>/dev/null | head -n1 || true)
   svc="$base/bin/$exe"
 else
-  svc="target/release/$exe"
+  svc="$ROOT/target/release/$exe"
 fi
 
 if [[ ! -x "$svc" ]]; then
   echo "[start] Service binary not found ($svc). Building release..."
-  cargo build --release -p arw-svc
-  svc="target/release/$exe"
+  (cd "$ROOT" && cargo build --release -p arw-svc)
+  svc="$ROOT/target/release/$exe"
 fi
 
 echo "[start] Launching $svc on http://127.0.0.1:$ARW_PORT"
 exec "$svc"
-
