@@ -2,6 +2,9 @@ use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashSet;
 
+mod config;
+pub use config::{config_schema_json, load_config, write_schema_file, Config};
+
 /// Public metadata describing a tool that can be registered into the runtime.
 #[derive(Clone, Serialize)]
 pub struct ToolInfo {
@@ -117,12 +120,15 @@ pub fn hello_core() -> &'static str {
 pub fn load_effective_paths() -> serde_json::Value {
     // Load defaults from config file if present, then overlay env vars
     let cfg_path = std::env::var("ARW_CONFIG").ok().unwrap_or_else(|| "configs/default.toml".to_string());
-    let cfg = std::fs::read_to_string(&cfg_path).ok().and_then(|s| toml::from_str::<toml::Value>(&s).ok());
+    let cfg = load_config(&cfg_path).map_err(|e| {
+        tracing::error!("invalid config {}: {}", cfg_path, e);
+        e
+    }).ok();
 
     let portable = std::env::var("ARW_PORTABLE")
         .ok()
         .and_then(|v| v.parse::<bool>().ok())
-        .or_else(|| cfg.as_ref().and_then(|v| v.get("runtime").and_then(|r| r.get("portable")).and_then(|b| b.as_bool())))
+        .or_else(|| cfg.as_ref().and_then(|c| c.runtime.portable))
         .unwrap_or(false);
 
     let home_like = std::env::var("LOCALAPPDATA").or_else(|_| std::env::var("HOME")).unwrap_or_else(|_| ".".into());
@@ -139,13 +145,13 @@ pub fn load_effective_paths() -> serde_json::Value {
     };
 
     let state_dir = std::env::var("ARW_STATE_DIR").ok()
-        .or_else(|| cfg.as_ref().and_then(|v| v.get("runtime").and_then(|r| r.get("state_dir")).and_then(|s| s.as_str()).map(|s| s.to_string())))
+        .or_else(|| cfg.as_ref().and_then(|c| c.runtime.state_dir.clone()))
         .unwrap_or_else(|| format!("{}/arw", home_like.clone()));
     let cache_dir = std::env::var("ARW_CACHE_DIR").ok()
-        .or_else(|| cfg.as_ref().and_then(|v| v.get("runtime").and_then(|r| r.get("cache_dir")).and_then(|s| s.as_str()).map(|s| s.to_string())))
+        .or_else(|| cfg.as_ref().and_then(|c| c.runtime.cache_dir.clone()))
         .unwrap_or_else(|| format!("{}/arw/cache", home_like.clone()));
     let logs_dir = std::env::var("ARW_LOGS_DIR").ok()
-        .or_else(|| cfg.as_ref().and_then(|v| v.get("runtime").and_then(|r| r.get("logs_dir")).and_then(|s| s.as_str()).map(|s| s.to_string())))
+        .or_else(|| cfg.as_ref().and_then(|c| c.runtime.logs_dir.clone()))
         .unwrap_or_else(|| format!("{}/arw/logs", home_like));
 
     serde_json::json!({
