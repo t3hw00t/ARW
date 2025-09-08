@@ -12,20 +12,17 @@ Quickstart
 - One‑shot setup (build, docs, package):
   - Windows: `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1`
   - Linux/macOS: `bash scripts/setup.sh`
-- Start the service with options:
+- Start the service (launches the tray when available) with options:
   - Windows: `powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -Debug -Port 8090 -DocsUrl https://your-pages -AdminToken secret`
   - Linux/macOS: `bash scripts/start.sh --debug --port 8090 --docs-url https://your-pages --admin-token secret`
-- Minimal tray app (optional): run `arw-tray` from `target/release/` or from `dist/.../bin/` to start/stop the service, open the Debug UI, or quit from the system tray.
+- `arw-tray` is bundled and started automatically by the scripts when present. You can also run it manually from `target/release/` or `dist/.../bin/` to start/stop the service, open the Debug UI, or quit from the system tray.
 - Traditional scripts (fine‑grained):
   - Build: `scripts/build.ps1` (Windows) or `scripts/build.sh` (Linux/macOS)
   - Test:  `scripts/test.ps1` or `scripts/test.sh`
   - Package: `scripts/package.ps1` or `scripts/package.sh` (creates `dist/` zip)
 
 Docs
-- Browse the user guide and developer docs with MkDocs.
-  - Local: `pip install mkdocs mkdocs-material` then `mkdocs serve`
-  - CI publishes to GitHub Pages (gh-pages branch) when pushing to `main`.
-  - Source files live in `docs/` and are organized into Guide and Developer sections.
+- Source files live in `docs/`.
 
 Notes
 - Service listens on `http://127.0.0.1:8090` by default. Open `/debug` for a simple UI.
