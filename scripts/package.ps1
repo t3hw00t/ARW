@@ -55,22 +55,8 @@ Copy-Item (Join-Path $root 'configs/default.toml') -Destination (Join-Path $cfgO
 
 # Docs
 Copy-Item (Join-Path $root 'docs') -Destination (Join-Path $out 'docs') -Recurse -Force
-
-# Optional: build MkDocs site if available
-if (Get-Command mkdocs -ErrorAction SilentlyContinue) {
-  Info 'Building docs site (MkDocs)'
-  Push-Location $root
-  try {
-    mkdocs build --strict
-    $siteSrc = Join-Path $root 'site'
-    if (Test-Path $siteSrc) {
-      Copy-Item $siteSrc -Destination (Join-Path $out 'docs-site') -Recurse -Force
-    }
-  } finally {
-    Pop-Location
-  }
-} else {
-  Info 'MkDocs not found; skipping docs site build'
+if (Test-Path (Join-Path $root 'site')) {
+  Copy-Item (Join-Path $root 'site') -Destination (Join-Path $out 'docs-site') -Recurse -Force
 }
 
 # Sandbox (Windows only)

@@ -26,10 +26,10 @@ can experiment without cloud lock‑in.
 - One‑shot setup (build, docs, package):
   - Windows: `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1`
   - Linux/macOS: `bash scripts/setup.sh`
-- Start the service with options:
+- Start the service (launches the tray when available) with options:
   - Windows: `powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -Debug -Port 8090 -DocsUrl https://your-pages -AdminToken secret`
   - Linux/macOS: `bash scripts/start.sh --debug --port 8090 --docs-url https://your-pages --admin-token secret`
-- Minimal tray app (optional): run `arw-tray` from `target/release/` or from `dist/.../bin/` to start/stop the service, open the Debug UI, or quit from the system tray.
+- `arw-tray` is bundled and started automatically by the scripts when present. You can also run it manually from `target/release/` or `dist/.../bin/` to start/stop the service, open the Debug UI, or quit from the system tray.
 - Traditional scripts (fine‑grained):
   - Build: `scripts/build.ps1` (Windows) or `scripts/build.sh` (Linux/macOS)
   - Test:  `scripts/test.ps1` or `scripts/test.sh`
@@ -73,4 +73,7 @@ background and the [FAQ](docs/guide/FAQ.md) for common questions.
 ---
 
 ARW is released under the MIT OR Apache‑2.0 license.
+
+Docs
+- Source files live in `docs/`.
 

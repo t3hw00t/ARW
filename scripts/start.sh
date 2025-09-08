@@ -32,11 +32,14 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/.." && pwd)"
 
 exe="arw-svc"; [[ "${OS:-}" == "Windows_NT" ]] && exe+=".exe"
+tray_exe="arw-tray"; [[ "${OS:-}" == "Windows_NT" ]] && tray_exe+=".exe"
 if [[ $use_dist -eq 1 ]]; then
   base=$(ls -td "$ROOT"/dist/arw-* 2>/dev/null | head -n1 || true)
   svc="$base/bin/$exe"
+  tray="$base/bin/$tray_exe"
 else
   svc="$ROOT/target/release/$exe"
+  tray="$ROOT/target/release/$tray_exe"
 fi
 
 if [[ ! -x "$svc" ]]; then
@@ -45,5 +48,18 @@ if [[ ! -x "$svc" ]]; then
   svc="$ROOT/target/release/$exe"
 fi
 
+if [[ ! -x "$tray" ]]; then
+  echo "[start] Tray binary not found ($tray). Attempting build..."
+  (cd "$ROOT" && cargo build --release -p arw-tray) || true
+  tray="$ROOT/target/release/$tray_exe"
+fi
+
 echo "[start] Launching $svc on http://127.0.0.1:$ARW_PORT"
-exec "$svc"
+"$svc" &
+if [[ -x "$tray" ]]; then
+  echo "[start] Launching tray $tray"
+  exec "$tray"
+else
+  echo "[start] Tray binary not found ($tray); service running in background"
+  wait
+fi

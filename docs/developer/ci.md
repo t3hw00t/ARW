@@ -7,15 +7,13 @@ title: CI & Releases
 Continuous Integration
 - Build and test on Linux and Windows for every push and PR.
 - Lint and format checks keep changes tidy.
-- Docs are built in strict mode to catch broken links or nav.
 
 Artifacts
 - Packaging scripts assemble a portable bundle with binaries and configs.
 - Windows and Linux bundles are uploaded as CI artifacts.
 
 Docs site
-- MkDocs builds the guide and developer docs.
-- GitHub Pages publishes the site from the `gh-pages` branch.
+- Docs are published to GitHub Pages from the `gh-pages` branch.
 
 Local helpers
 ```powershell
