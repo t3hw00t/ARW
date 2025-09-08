@@ -13,8 +13,9 @@ Key ideas
 
 Useful commands
 ```bash
+cargo install cargo-nextest
 cargo build --workspace --all-targets --locked
-cargo test  --workspace --locked
+cargo nextest run --workspace --locked
 ```
 
 Rolling optimizations

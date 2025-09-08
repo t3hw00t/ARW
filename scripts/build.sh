@@ -21,8 +21,8 @@ else
 fi
 
 if [[ $run_tests -eq 1 ]]; then
-  echo "[build] Running tests"
-  cargo test --workspace
+  echo "[build] Running tests (nextest)"
+  cargo nextest run --workspace
 fi
 
 echo "[build] Done."

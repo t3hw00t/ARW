@@ -41,7 +41,7 @@ Title 'Build workspace (release)'
 
 if ($RunTests) {
   Title 'Run tests (workspace)'
-  & cargo test --workspace --locked
+  & cargo nextest run --workspace --locked
 }
 
 Title 'Generate workspace status page'
