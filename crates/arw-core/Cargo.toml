@@ -15,6 +15,9 @@ regex = { workspace = true }
 
 
 inventory = { workspace = true }
+schemars = { workspace = true }
+jsonschema = { workspace = true }
+once_cell = { workspace = true }
 
 # Optional runtime for loading WASM plug‑ins
 wasmtime = { version = "36.0.2", optional = true, features = ["component-model"] }
