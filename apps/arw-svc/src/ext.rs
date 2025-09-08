@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use axum::{
     Router,
     routing::{get, post},
@@ -21,7 +23,6 @@ use std::collections::VecDeque;
 use futures_util::StreamExt;
 
 use crate::AppState;
-use arw_core;
 
 // ---------- state paths & file helpers ----------
 fn state_dir() -> PathBuf {
@@ -38,11 +39,6 @@ fn audit_path() -> PathBuf { state_dir().join("audit.log") }
 fn load_json_file(p: &Path) -> Option<Value> {
     let s = fs::read_to_string(p).ok()?;
     serde_json::from_str(&s).ok()
-}
-fn save_json_file(p: &Path, v: &Value) -> std::io::Result<()> {
-    if let Some(parent) = p.parent() { let _ = fs::create_dir_all(parent); }
-    let s = serde_json::to_string_pretty(v).unwrap_or_else(|_| "{}".to_string());
-    fs::write(p, s.as_bytes())
 }
 
 async fn load_json_file_async(p: &Path) -> Option<Value> {
@@ -95,9 +91,8 @@ async fn audit_event(action: &str, details: &Value) {
     let p = audit_path();
     if let Some(parent) = p.parent() { let _ = afs::create_dir_all(parent).await; }
     use tokio::io::AsyncWriteExt;
-    match afs::OpenOptions::new().create(true).append(true).open(&p).await {
-        Ok(mut f) => { let _ = f.write_all(s.as_bytes()).await; }
-        Err(_) => {}
+    if let Ok(mut f) = afs::OpenOptions::new().create(true).append(true).open(&p).await {
+        let _ = f.write_all(s.as_bytes()).await;
     }
 }
 
@@ -138,7 +133,7 @@ static DEFAULT_MODEL: OnceLock<RwLock<String>> = OnceLock::new();
 fn default_model() -> &'static RwLock<String> {
     DEFAULT_MODEL.get_or_init(|| {
         let initial = default_models()
-            .get(0)
+            .first()
             .and_then(|v| v.get("id").and_then(|s| s.as_str()))
             .unwrap_or("")
             .to_string();
@@ -544,7 +539,7 @@ static CHAT_LOG: OnceLock<RwLock<Vec<Value>>> = OnceLock::new();
 fn chat_log() -> &'static RwLock<Vec<Value>> { CHAT_LOG.get_or_init(|| RwLock::new(Vec::new())) }
 
 #[derive(Deserialize)]
-struct ChatSendReq { message: String, #[serde(default)] model: Option<String>, #[serde(default)] temperature: Option<f64> }
+struct ChatSendReq { message: String, #[serde(default)] model: Option<String> }
 
 fn synth_reply(msg: &str, model: &str) -> String {
     match model.to_ascii_lowercase().as_str() {
@@ -591,7 +586,7 @@ async fn analyze_feedback() {
 
     // Heuristic 2: High error rate -> suggest balanced profile
     let mut high_err = false;
-    for (_p, st) in &routes.by_path { if st.hits>=10 && (st.errors as f64)/(st.hits as f64) > 0.2 { high_err = true; break; } }
+    for st in routes.by_path.values() { if st.hits>=10 && (st.errors as f64)/(st.hits as f64) > 0.2 { high_err = true; break; } }
     if high_err { out.push(Suggestion{ id: next_id(), action: "profile".into(), params: json!({"name":"balanced"}), rationale: "High error rate observed across routes".into(), confidence: 0.55 }); }
 
     // Heuristic 3: Many memory applications -> suggest increasing memory limit modestly
@@ -611,7 +606,7 @@ async fn feedback_state_get() -> impl IntoResponse { let st = feedback_cell().re
 struct FeedbackSignalPost { kind: String, target: String, confidence: f64, severity: u8, note: Option<String> }
 async fn feedback_signal_post(State(state): State<AppState>, Json(req): Json<FeedbackSignalPost>) -> impl IntoResponse {
     let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let sig = FeedbackSignal { id: next_id(), ts, kind: req.kind, target: req.target, confidence: req.confidence.clamp(0.0,1.0), severity: req.severity.min(5).max(1), note: req.note };
+    let sig = FeedbackSignal { id: next_id(), ts, kind: req.kind, target: req.target, confidence: req.confidence.clamp(0.0,1.0), severity: req.severity.clamp(1, 5), note: req.note };
     {
         let mut st = feedback_cell().write().await;
         st.signals.push(sig.clone());

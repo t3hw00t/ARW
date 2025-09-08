@@ -9,8 +9,10 @@ Near‑term (Weeks)
 - Models panel: download stub with progress; checksum verification; safe cancel.
 - Security defaults: document token gating; add minimal rate‑limit for admin endpoints.
 - Docgen: surface route metrics/events in docs and status page.
+- Showcase readiness: polish docs, packaging, and installer paths.
 
 Mid‑term (1–2 Months)
+- UI app to manage various project types.
 - WASI plugin sandbox: capability‑based tools with explicit permissions.
 - Policy engine integration: OPA/Cedar bindings; per‑tool permission manifests.
 - Model orchestration: adapters (llama.cpp, ONNX Runtime) with pooling and profiles.
