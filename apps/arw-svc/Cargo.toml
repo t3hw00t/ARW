@@ -20,6 +20,8 @@ tower-http = { version = "0.5", features = ["trace","compression-br","compressio
 # uuid is available workspace-wide if needed later for ids
 uuid = { workspace = true }
 chrono = { workspace = true }
+reqwest = { workspace = true }
+futures-util = { workspace = true }
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros","rt-multi-thread"] }

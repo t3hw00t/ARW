@@ -13,10 +13,12 @@ use std::sync::OnceLock;
 use tokio::sync::RwLock;
 use std::fs;
 use tokio::fs as afs;
+use tokio::io::AsyncWriteExt;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::collections::VecDeque;
+use futures_util::StreamExt;
 
 use crate::AppState;
 use arw_core;
@@ -455,7 +457,7 @@ async fn models_default_set(State(state): State<AppState>, Json(req): Json<Model
 }
 
 #[derive(Deserialize)]
-struct DownloadReq { id: String, #[serde(default)] provider: Option<String> }
+struct DownloadReq { id: String, url: String, #[serde(default)] provider: Option<String> }
 async fn models_download(State(state): State<AppState>, Json(req): Json<DownloadReq>) -> impl IntoResponse {
     // ensure model exists with status
     {
@@ -468,22 +470,54 @@ async fn models_download(State(state): State<AppState>, Json(req): Json<Download
     }
     state.bus.publish("Models.Download", &json!({"id": req.id}));
     audit_event("models.download", &json!({"id": req.id})).await;
-    // simulate progress
     let id = req.id.clone();
+    let url = req.url.clone();
+    let provider = req.provider.clone().unwrap_or("local".into());
     let sp = state.clone();
     tokio::spawn(async move {
-        for pct in [10,25,45,70,100] {
-            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
-            sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "progress": pct}));
-        }
-        {
-            let mut v = models().write().await;
-            if let Some(m) = v.iter_mut().find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id)) {
-                *m = json!({"id": id, "provider": m.get("provider").and_then(|x| x.as_str()).unwrap_or("local"), "status":"available"});
+        let file_name = url.split('/').last().unwrap_or(&id).to_string();
+        let target = state_dir().join("models").join(&file_name);
+        if let Some(parent) = target.parent() { let _ = afs::create_dir_all(parent).await; }
+        let client = reqwest::Client::new();
+        match client.get(&url).send().await {
+            Ok(resp) => {
+                let total = resp.content_length().unwrap_or(0);
+                match afs::File::create(&target).await {
+                    Ok(mut file) => {
+                        let mut downloaded: u64 = 0;
+                        let mut stream = resp.bytes_stream();
+                        while let Some(chunk) = stream.next().await {
+                            match chunk {
+                                Ok(bytes) => {
+                                    if file.write_all(&bytes).await.is_ok() {
+                                        downloaded += bytes.len() as u64;
+                                        if total > 0 {
+                                            let pct = ((downloaded * 100) / total).min(100);
+                                            sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "progress": pct}));
+                                        }
+                                    } else {
+                                        return;
+                                    }
+                                }
+                                Err(_) => return,
+                            }
+                        }
+                        {
+                            let mut v = models().write().await;
+                            if let Some(m) = v.iter_mut().find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id)) {
+                                *m = json!({"id": id, "provider": provider, "status":"available", "path": target.to_string_lossy()});
+                            }
+                        }
+                        let _ = save_json_file_async(&models_path(), &Value::Array(models().read().await.clone())).await;
+                        sp.bus.publish("Models.Changed", &json!({"op":"downloaded","id": id}));
+                    }
+                    Err(_) => {}
+                }
+            }
+            Err(_) => {
+                sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": "download failed"}));
             }
         }
-        let _ = save_json_file_async(&models_path(), &Value::Array(models().read().await.clone())).await;
-        sp.bus.publish("Models.Changed", &json!({"op":"downloaded","id": id}));
     });
     Json(json!({"ok": true}))
 }
