@@ -1,0 +1,19 @@
+package arw:tool
+
+record tool-info {
+  id: string,
+  version: string,
+  summary: string,
+  stability: string,
+}
+
+interface tool {
+  /// Return metadata describing the tool
+  register: func() -> tool-info
+  /// Invoke the tool with a JSON string and return a JSON result
+  invoke: func(input: string) -> string
+}
+
+world plugin {
+  export tool
+}

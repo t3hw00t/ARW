@@ -15,3 +15,11 @@ regex = { workspace = true }
 
 
 inventory = { workspace = true }
+
+# Optional runtime for loading WASM plug‑ins
+wasmtime = { version = "36.0.2", optional = true, features = ["component-model"] }
+wit-bindgen = { version = "0.45.1", optional = true }
+
+[features]
+default = []
+wasm = ["wasmtime", "wit-bindgen"]
