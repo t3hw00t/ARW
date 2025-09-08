@@ -8,6 +8,12 @@ Key goals
 - Tool registration via macros + inventory
 - Clear packaging for sharing/upload
 
+Download and Install
+- Grab the latest binaries from the GitHub Releases page. Installers are built for Windows, macOS, and Linux using `cargo-dist`.
+- Windows: download the `.msi` and run the installer.
+- macOS: download the `.pkg` or `.tar.xz` archive and install the binary.
+- Linux: download the `.tar.xz` archive, extract it, and place the binaries on your `PATH`.
+
 Quickstart
 - One‑shot setup (build, docs, package):
   - Windows: `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1`
