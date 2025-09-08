@@ -27,3 +27,15 @@ scripts/test.ps1
 scripts/package.ps1
 ```
 
+Additional checks
+```bash
+# Unused dependencies
+rustup toolchain install nightly --profile minimal
+cargo +nightly install cargo-udeps --locked
+cargo +nightly udeps --workspace --all-targets
+
+# Verify MSRV
+cargo install cargo-msrv --locked
+cargo msrv verify
+```
+
