@@ -1,5 +1,6 @@
 Agents Running Wild — Roadmap
 Updated: 2025-09-07
+See [Interface Roadmap](INTERFACE_ROADMAP.md) for user-facing UI and tooling plans.
 
 Near‑term (Weeks)
 - Self‑learning UI polish: apply buttons per suggestion with rationale + confidence.
