@@ -17,6 +17,9 @@ tokio-stream = { workspace = true }
 arw-macros = { path = "../../crates/arw-macros" }
 inventory = { workspace = true }
 tower-http = { version = "0.5", features = ["trace","compression-br","compression-gzip","cors","timeout","fs"] }
+# gRPC service layer
+tonic = { version = "0.11", features = ["transport"] }
+prost = "0.12"
 # uuid is available workspace-wide if needed later for ids
 uuid = { workspace = true }
 chrono = { workspace = true }
@@ -28,3 +31,6 @@ tower = { version = "0.4", features = ["util"] }    # <-- needed for ServiceExt:
 # (optional, can keep for E2E tests)
 reqwest = { version = "0.12", features = ["json"] }
 hyper = { version = "1" }
+
+[build-dependencies]
+tonic-build = "0.11"
