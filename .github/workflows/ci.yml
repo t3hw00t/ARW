@@ -46,6 +46,17 @@ jobs:
           rustup component add clippy
           cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: Unused dependencies (deny)
+        run: |
+          rustup toolchain install nightly --profile minimal --no-self-update
+          cargo +nightly install cargo-udeps --locked
+          cargo +nightly udeps --workspace --all-targets
+
+      - name: MSRV (verify)
+        run: |
+          cargo install cargo-msrv --locked
+          cargo msrv verify
+
       - name: Package artifact (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
