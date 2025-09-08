@@ -1,6 +1,7 @@
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashSet;
+pub mod arrow_ingest;
 
 mod config;
 pub use config::{config_schema_json, load_config, write_schema_file, Config};

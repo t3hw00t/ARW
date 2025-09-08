@@ -38,6 +38,7 @@ proc-macro2 = "1"
 schemars = { version = "0.8", features = ["derive"] }
 jsonschema = "0.17"
 utoipa = { version = "5", features = ["axum_extras","yaml"] }
+arrow2 = { version = "0.18", features = ["io_json"] }
 
 [profile.dev]
 opt-level = 1
