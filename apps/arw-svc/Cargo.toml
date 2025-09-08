@@ -17,8 +17,6 @@ tokio-stream = { workspace = true }
 arw-macros = { path = "../../crates/arw-macros" }
 inventory = { workspace = true }
 tower-http = { version = "0.5", features = ["trace","compression-br","compression-gzip","cors","timeout","fs"] }
-# uuid is available workspace-wide if needed later for ids
-uuid = { workspace = true }
 chrono = { workspace = true }
 
 [dev-dependencies]

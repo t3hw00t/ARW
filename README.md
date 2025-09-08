@@ -1,35 +1,52 @@
-# Agent_Hub (Agents Running Wild - ARW)
+# Agents Running Wild (ARW)
 
-Minimal Rust workspace for a local, user‑mode agent service and CLI.
+Local‑first Rust workspace for building and running personal AI agents. ARW
+bundles a lightweight service, command‑line tools, and optional tray UI so you
+can experiment without cloud lock‑in.
 
-Key goals
-- Unintrusive, per‑user operation (portable mode supported)
-- Simple HTTP service with event stream + debug UI
-- Tool registration via macros + inventory
-- Clear packaging for sharing/upload
+## Highlights
 
-Quickstart
-- One‑shot setup (build, docs, package):
-  - Windows: `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1`
-  - Linux/macOS: `bash scripts/setup.sh`
-- Start the service with options:
-  - Windows: `powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -Debug -Port 8090 -DocsUrl https://your-pages -AdminToken secret`
-  - Linux/macOS: `bash scripts/start.sh --debug --port 8090 --docs-url https://your-pages --admin-token secret`
-- Minimal tray app (optional): run `arw-tray` from `target/release/` or from `dist/.../bin/` to start/stop the service, open the Debug UI, or quit from the system tray.
-- Traditional scripts (fine‑grained):
-  - Build: `scripts/build.ps1` (Windows) or `scripts/build.sh` (Linux/macOS)
-  - Test:  `scripts/test.ps1` or `scripts/test.sh`
-  - Package: `scripts/package.ps1` or `scripts/package.sh` (creates `dist/` zip)
+- **User‑mode service** with HTTP endpoints and a simple debug UI.
+- **Macro‑driven tool registration** with automatic schema generation.
+- **Event stream and tracing** hooks for observability.
+- **Portable packaging** scripts for sharing or deployment.
 
-Docs
-- Browse the user guide and developer docs with MkDocs.
-  - Local: `pip install mkdocs mkdocs-material` then `mkdocs serve`
-  - CI publishes to GitHub Pages (gh-pages branch) when pushing to `main`.
-  - Source files live in `docs/` and are organized into Guide and Developer sections.
+## Component Overview
 
-Notes
-- Service listens on `http://127.0.0.1:8090` by default. Open `/debug` for a simple UI.
-- Portable state defaults to `%LOCALAPPDATA%/arw` (configurable in `configs/default.toml`).
-- To wire the UI to your hosted docs, set `ARW_DOCS_URL` (e.g., your GitHub Pages URL). The debug page will show mild “?” helps and a Docs button.
-- With `ARW_DEBUG=1`, if a local docs site exists (`docs-site/` or `site/`), it is served at `/docs`.
-- Sensitive endpoints (`/debug`, `/probe`, `/memory*`, `/models*`, `/governor*`, `/introspect*`, `/chat*`, `/feedback*`) are gated. Development: set `ARW_DEBUG=1`. Hardened: set `ARW_ADMIN_TOKEN` and send header `X-ARW-Admin: <token>`.
+- **System / Host**: underlying OS, hardware, and runtime paths resolved via environment variables.
+- **Core Project**: crates `arw-core`, `arw-protocol`, `arw-events`, `arw-otel`, and helper macros (`arw-macros`), plus binaries `arw-cli`, `arw-svc`, and optional `arw-tray`.
+- **External Dependencies**: primary third-party crates such as Tokio, Axum, and Serde.
+- **Core Plugins**: none bundled yet; future built-ins will live under `crates/plugins`.
+- **Plugin Extensions**: community adapters and optional integrations may live under `crates/adapters`.
+
+All installers and services compute effective paths at startup and write logs/state under the derived directories, keeping deployments portable across machines.
+
+## Quick Start
+
+```bash
+# build, generate docs, and create a release package
+scripts/setup.sh      # on Linux/macOS (GTK required for arw-tray)
+powershell -File scripts/setup.ps1  # on Windows
+
+# start the local service
+scripts/start.sh --debug --port 8090
+```
+
+The service listens on `http://127.0.0.1:8090`; open `/debug` for a minimal UI.
+
+## Documentation
+
+- [Guide and API docs](docs/)
+- [Roadmap](docs/ROADMAP.md)
+- [Contributing](CONTRIBUTING.md)
+
+## Community & Support
+
+Questions, ideas, or issues? Open a discussion or file an issue in this
+repository. See the [project instructions](docs/PROJECT_INSTRUCTIONS.md) for
+background and the [FAQ](docs/guide/FAQ.md) for common questions.
+
+---
+
+ARW is released under the MIT OR Apache‑2.0 license.
+

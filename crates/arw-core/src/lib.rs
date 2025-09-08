@@ -163,9 +163,9 @@ pub fn load_effective_paths() -> serde_json::Value {
 }
 
 /// Simple sanity function for arw-cli.
-
+///
 /// Compute effective paths and portability flags (env-based; cross‑platform).
-
+///
 /// Print effective paths to stderr (used by CLI).
 pub fn print_effective_paths() {
     eprintln!("{}", load_effective_paths());
