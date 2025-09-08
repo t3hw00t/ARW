@@ -15,6 +15,9 @@ function Pause($m){ if(-not $Yes){ Read-Host $m | Out-Null } }
 Title 'Prerequisites'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 Push-Location $root
+# Record install actions for uninstall.ps1
+$installLog = Join-Path $root '.install.log'
+"# Install log - $(Get-Date)" | Out-File $installLog -Encoding UTF8
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
   Warn 'Rust `cargo` not found.'
   Write-Host 'Install Rust via rustup:' -ForegroundColor Yellow
@@ -32,6 +35,11 @@ if (-not $py) {
       Info 'MkDocs not found. Attempting to install via pip...'
       try { & $py.Path -m pip install --upgrade pip | Out-Null } catch { Warn 'pip upgrade failed (continuing).'}
       try { & $py.Path -m pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin } catch { Warn 'pip install for mkdocs failed. Docs site will be skipped.' }
+      if (Get-Command mkdocs -ErrorAction SilentlyContinue) {
+        foreach($pkg in 'mkdocs','mkdocs-material','mkdocs-git-revision-date-localized-plugin') { Add-Content $installLog "PIP $pkg" }
+      } else {
+        Warn 'MkDocs install failed. Docs site will be skipped.'
+      }
     }
   }
 }
@@ -61,6 +69,8 @@ try {
   Warn "package.ps1 blocked by execution policy; retrying via child PowerShell with Bypass"
   & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'package.ps1') -NoBuild
 }
+'DIR target','DIR dist' | ForEach-Object { Add-Content $installLog $_ }
+if (Test-Path (Join-Path $root 'site')) { Add-Content $installLog 'DIR site' }
 
 Pop-Location
 Info 'Done. See dist/ for portable bundle.'

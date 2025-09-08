@@ -20,6 +20,7 @@ Quickstart
   - Build: `scripts/build.ps1` (Windows) or `scripts/build.sh` (Linux/macOS)
   - Test:  `scripts/test.ps1` or `scripts/test.sh`
   - Package: `scripts/package.ps1` or `scripts/package.sh` (creates `dist/` zip)
+  - Uninstall: `scripts/uninstall.ps1` or `scripts/uninstall.sh` (removes build artifacts and MkDocs packages installed by setup)
 
 Docs
 - Browse the user guide and developer docs with MkDocs.
