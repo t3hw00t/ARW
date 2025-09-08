@@ -7,6 +7,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use utoipa::{OpenApi, ToSchema};
 use serde_json::json;
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -51,9 +52,23 @@ struct AppState {
     stop_tx: tokio::sync::broadcast::Sender<()>,
 }
 
+#[derive(serde::Serialize, ToSchema)]
+struct OkResponse {
+    ok: bool,
+}
+
 #[tokio::main]
 async fn main() {
     arw_otel::init();
+
+    if let Ok(path) = std::env::var("OPENAPI_OUT") {
+        let doc = ApiDoc::openapi();
+        if let Some(parent) = std::path::Path::new(&path).parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        std::fs::write(&path, doc.to_yaml().unwrap()).expect("write openapi spec");
+        return;
+    }
 
     let (stop_tx, mut stop_rx) = tokio::sync::broadcast::channel::<()>(1);
     let state = AppState {
@@ -210,15 +225,34 @@ fn rate_allow() -> bool {
     if st.count >= limit { return false; }
     st.count += 1; true
 }
+#[utoipa::path(
+    get,
+    path = "/healthz",
+    responses((status = 200, description = "Service health", body = OkResponse))
+)]
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
     state.bus.publish("Service.Health", &json!({"ok": true}));
-    Json(json!({"ok": true}))
+    Json(OkResponse { ok: true })
 }
 
+#[utoipa::path(
+    get,
+    path = "/introspect/tools",
+    responses((status = 200, description = "List available tools"))
+)]
 async fn introspect_tools() -> impl IntoResponse {
     Json(serde_json::to_value(arw_core::introspect_tools()).unwrap())
 }
 
+#[utoipa::path(
+    get,
+    path = "/introspect/schemas/{id}",
+    params(("id" = String, Path, description = "Tool id")),
+    responses(
+        (status = 200, description = "Schema JSON"),
+        (status = 404, description = "Unknown tool id"),
+    )
+)]
 async fn introspect_schema(Path(id): Path<String>) -> impl IntoResponse {
     match arw_core::introspect_schema(&id) {
         Some(s) => Json::<serde_json::Value>(s).into_response(),
@@ -235,6 +269,11 @@ async fn introspect_schema(Path(id): Path<String>) -> impl IntoResponse {
 }
 
 // REPLACE your existing probe with this:
+#[utoipa::path(
+    get,
+    path = "/probe",
+    responses((status = 200, description = "Returns effective memory paths"))
+)]
 async fn probe(State(state): State<AppState>) -> impl IntoResponse {
     // Effective paths as JSON (serde_json::Value)
     let ep = arw_core::load_effective_paths();
@@ -246,6 +285,11 @@ async fn probe(State(state): State<AppState>) -> impl IntoResponse {
     Json::<serde_json::Value>(ep)
 }
 
+#[utoipa::path(
+    get,
+    path = "/emit/test",
+    responses((status = 200, description = "Emit test event", body = OkResponse))
+)]
 async fn emit_test(State(state): State<AppState>) -> impl IntoResponse {
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -254,17 +298,27 @@ async fn emit_test(State(state): State<AppState>) -> impl IntoResponse {
     state
         .bus
         .publish("Service.Test", &json!({"msg":"ping","t": now_ms}));
-    Json(json!({"ok": true}))
+    Json(OkResponse { ok: true })
 }
 
+#[utoipa::path(
+    get,
+    path = "/shutdown",
+    responses((status = 200, description = "Shutdown service", body = OkResponse))
+)]
 async fn shutdown(State(state): State<AppState>) -> impl IntoResponse {
     state
         .bus
         .publish("Service.Stop", &json!({"reason":"user request"}));
     let _ = state.stop_tx.send(());
-    Json(json!({"ok": true}))
+    Json(OkResponse { ok: true })
 }
 
+#[utoipa::path(
+    get,
+    path = "/events",
+    responses((status = 200, description = "SSE event stream"))
+)]
 async fn events(
     State(state): State<AppState>,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
@@ -293,3 +347,18 @@ async fn events(
             .text("hb"),
     )
 }
+
+#[derive(OpenApi)]
+#[openapi(
+    paths(
+        healthz,
+        introspect_tools,
+        introspect_schema,
+        probe,
+        emit_test,
+        shutdown,
+        events
+    ),
+    tags((name = "arw-svc"))
+)]
+struct ApiDoc;
