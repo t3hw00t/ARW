@@ -35,6 +35,7 @@ once_cell = "1"
 syn = { version = "2", features = ["full"] }
 quote = "1"
 proc-macro2 = "1"
+arrow2 = { version = "0.18", features = ["io_json"] }
 
 [profile.dev]
 opt-level = 1
