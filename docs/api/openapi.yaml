@@ -1,0 +1,89 @@
+openapi: 3.1.0
+info:
+  title: arw-svc
+  description: ''
+  license:
+    name: ''
+  version: 0.1.0
+paths:
+  /emit/test:
+    get:
+      tags: []
+      operationId: emit_test
+      responses:
+        '200':
+          description: Emit test event
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+  /events:
+    get:
+      tags: []
+      operationId: events
+      responses:
+        '200':
+          description: SSE event stream
+  /healthz:
+    get:
+      tags: []
+      operationId: healthz
+      responses:
+        '200':
+          description: Service health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+  /introspect/schemas/{id}:
+    get:
+      tags: []
+      operationId: introspect_schema
+      parameters:
+      - name: id
+        in: path
+        description: Tool id
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Schema JSON
+        '404':
+          description: Unknown tool id
+  /introspect/tools:
+    get:
+      tags: []
+      operationId: introspect_tools
+      responses:
+        '200':
+          description: List available tools
+  /probe:
+    get:
+      tags: []
+      operationId: probe
+      responses:
+        '200':
+          description: Returns effective memory paths
+  /shutdown:
+    get:
+      tags: []
+      operationId: shutdown
+      responses:
+        '200':
+          description: Shutdown service
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+components:
+  schemas:
+    OkResponse:
+      type: object
+      required:
+      - ok
+      properties:
+        ok:
+          type: boolean
+tags:
+- name: arw-svc

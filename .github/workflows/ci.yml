@@ -36,6 +36,11 @@ jobs:
       - name: Test
         run: cargo test --workspace --locked
 
+      - name: Verify OpenAPI spec
+        run: |
+          OPENAPI_OUT=docs/api/openapi.yaml cargo run --locked -p arw-svc --quiet
+          git diff --exit-code docs/api/openapi.yaml
+
       - name: Rustfmt (check)
         run: |
           rustup component add rustfmt
