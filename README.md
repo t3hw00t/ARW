@@ -15,6 +15,9 @@ Download and Install
 - Linux: download the `.tar.xz` archive, extract it, and place the binaries on your `PATH`.
 
 Quickstart
+- Install [Nix](https://nixos.org/download.html) and use it as the entry point for building, testing, and packaging:
+  - `nix develop` to enter a shell with all dependencies
+  - Run commands directly: `nix develop --command cargo build`, `nix develop --command cargo test`, `nix develop --command scripts/package.sh`, etc.
 - One‑shot setup (build, docs, package):
   - Windows: `powershell -ExecutionPolicy Bypass -File scripts/setup.ps1`
   - Linux/macOS: `bash scripts/setup.sh`
