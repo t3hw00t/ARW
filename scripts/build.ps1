@@ -20,8 +20,8 @@ if (-not $DebugBuild) { $cargoArgs += '--release' }
 & cargo @cargoArgs
 
 if (-not $NoTests) {
-  Info 'Running tests (workspace)'
-  & cargo test --workspace --locked
+  Info 'Running tests (workspace via nextest)'
+  & cargo nextest run --workspace --locked
 }
 
 Info 'Done.'

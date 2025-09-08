@@ -13,6 +13,9 @@ Workflow
 3. Update docs and regenerate the workspace status page.
 4. Keep commits focused and messages descriptive.
 
+Prerequisites
+- Install `cargo-nextest`: `cargo install cargo-nextest`
+
 Commands
 ```bash
 cargo fmt --all -- --check

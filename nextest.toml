@@ -1,0 +1,6 @@
+[profile.default]
+# Use default settings for local runs.
+
+[profile.ci]
+# Run all tests in CI without stopping at the first failure.
+fail-fast = false

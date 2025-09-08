@@ -46,7 +46,7 @@ title "Build workspace (release)"
 
 if [[ $run_tests -eq 1 ]]; then
   title "Run tests (workspace)"
-  cargo test --workspace --locked
+  cargo nextest run --workspace --locked
 fi
 
 title "Generate workspace status page"
