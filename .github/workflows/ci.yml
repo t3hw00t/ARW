@@ -85,6 +85,19 @@ jobs:
           name: arw-linux-bundle
           path: dist/*.zip
 
+  nix-build-test:
+    name: Nix Build and Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+      - name: Build in Nix
+        run: nix develop --command cargo build --workspace --all-targets --locked
+      - name: Test in Nix
+        run: nix develop --command cargo test --workspace --locked
+
   docs-check:
     name: Docs Build
     runs-on: ubuntu-latest
