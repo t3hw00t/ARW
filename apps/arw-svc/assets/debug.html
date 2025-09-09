@@ -435,7 +435,21 @@ function fbRenderList(j){
   });
   el.innerHTML = rows.join('');
 }
-async function fbApplyId(id){ if(!id) return; await req('POST','/feedback/apply',{id},'fbOut','rt-orch'); }
+async function fbApplyId(id){
+  if(!id) return;
+  try{
+    const resp = await fetch(base + '/feedback/apply', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id}) });
+    const txt = await resp.text();
+    try{
+      const j = JSON.parse(txt);
+      if(j && j.ok){ showToast('Applied'); }
+      else { showToast('Apply failed: ' + (j && j.reason || 'unknown')); }
+      document.getElementById('fbOut').textContent = JSON.stringify(j,null,2);
+    }catch{
+      showToast('Apply error');
+    }
+  }catch{ showToast('Network error'); }
+}
 // Docs wiring
 let docsBase = null;
 function docPath(key){

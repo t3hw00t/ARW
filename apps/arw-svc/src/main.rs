@@ -109,6 +109,7 @@ async fn main() {
         .route("/spec/openapi.yaml", get(spec_openapi))
         .route("/spec/asyncapi.yaml", get(spec_asyncapi))
         .route("/spec/mcp-tools.json", get(spec_mcp))
+        .route("/spec", get(spec_index))
         // Match paths before metrics/security to capture MatchedPath
         .route("/probe", get(probe))
         .route("/events", get(events))
@@ -465,4 +466,17 @@ async fn spec_mcp() -> impl IntoResponse {
     } else {
         (StatusCode::NOT_FOUND, "missing spec/mcp-tools.json").into_response()
     }
+}
+
+async fn spec_index() -> impl IntoResponse {
+    let mut list = vec![];
+    for (name, ct) in [
+        ("openapi.yaml", "application/yaml"),
+        ("asyncapi.yaml", "application/yaml"),
+        ("mcp-tools.json", "application/json"),
+    ] {
+        let p = std::path::Path::new("spec").join(name);
+        if p.exists() { list.push(json!({"name": name, "content_type": ct, "url": format!("/spec/{}", name)})); }
+    }
+    Json(json!({"specs": list}))
 }

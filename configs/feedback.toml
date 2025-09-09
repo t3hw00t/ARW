@@ -1,0 +1,14 @@
+# Lightweight feedback engine defaults (override via env vars)
+
+# Engine tick interval in ms (default 500)
+# tick_ms = 500
+
+# Policy: max applies per hour (default 3)
+# apply_per_hour = 3
+
+# Policy bounds
+# http_timeout_min = 5
+# http_timeout_max = 300
+# mem_limit_min = 50
+# mem_limit_max = 2000
+

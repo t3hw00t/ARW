@@ -3,6 +3,7 @@ use crate::AppState;
 use serde_json::{json, Value};
 use std::sync::{OnceLock, atomic::{AtomicU64, Ordering}};
 use tokio::sync::RwLock;
+use serde::Deserialize;
 
 // Lightweight snapshot of current suggestions (reused by API or UI)
 static SNAPSHOT: OnceLock<RwLock<Vec<Value>>> = OnceLock::new();
@@ -15,7 +16,7 @@ fn ver() -> &'static AtomicU64 { VERSION.get_or_init(|| AtomicU64::new(0)) }
 pub fn start_feedback_engine(state: AppState) {
     // Spawn a single actor with short cadence; no blocking on request paths
     tokio::spawn(async move {
-        let tick_ms: u64 = std::env::var("ARW_FEEDBACK_TICK_MS").ok().and_then(|s| s.parse().ok()).unwrap_or(500);
+        let tick_ms: u64 = load_cfg_tick_ms().unwrap_or_else(|| std::env::var("ARW_FEEDBACK_TICK_MS").ok().and_then(|s| s.parse().ok()).unwrap_or(500));
         let mut tick = tokio::time::interval(std::time::Duration::from_millis(tick_ms));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
@@ -83,4 +84,18 @@ pub async fn snapshot() -> (u64, Vec<Value>) {
 pub async fn updates_since(since: u64) -> Option<(u64, Vec<Value>)> {
     let cur = ver().load(Ordering::Relaxed);
     if cur > since { Some((cur, snap().read().await.clone())) } else { None }
+}
+
+// --- Optional config loader (configs/feedback.toml) ---
+#[derive(Deserialize, Default)]
+struct FbCfg { tick_ms: Option<u64> }
+fn load_cfg_tick_ms() -> Option<u64> {
+    static CFG: OnceLock<Option<FbCfg>> = OnceLock::new();
+    let cfg = CFG.get_or_init(|| {
+        let p = std::path::Path::new("configs/feedback.toml");
+        if let Ok(s) = std::fs::read_to_string(p) {
+            toml::from_str::<FbCfg>(&s).ok()
+        } else { None }
+    });
+    cfg.as_ref().and_then(|c| c.tick_ms)
 }
