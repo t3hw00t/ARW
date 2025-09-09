@@ -677,13 +677,9 @@ async fn debug_ui() -> impl IntoResponse {
             (REFERRER_POLICY, "no-referrer"),
             (CACHE_CONTROL, "no-store"),
         ],
-        Html(ASSET_DEBUG_HTML),
+        Html(DEBUG_HTML),
     )
 }
-
-// Debug UI content moved to an asset for maintainability
-#[allow(dead_code)]
-static ASSET_DEBUG_HTML: &str = include_str!("../assets/debug.html");
 
 // === HTML (debug UI with Save/Load, self-tests, tools panel) ===
 static DEBUG_HTML: &str = r##"<!doctype html>
