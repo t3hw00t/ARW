@@ -725,7 +725,7 @@ async fn chat_send(State(state): State<AppState>, Json(req): Json<ChatSendReq>) 
 
 // debug_ui implementation lives in ui.rs
 
-// === HTML (debug UI with Save/Load, self-tests, tools panel) ===
+/* === HTML (debug UI with Save/Load, self-tests, tools panel) ===
 static DEBUG_HTML: &str = r##"<!doctype html>
 <html lang="en">
 <head>
@@ -1202,6 +1202,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   <div id="insights" style="display:none"></div>
 </body>
 </html>
-"##;
+"##; */
 
 // stats moved to stats.rs
