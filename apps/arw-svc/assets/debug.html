@@ -1,5 +1,4 @@
-<!doctype html>
-<html lang="en">
+< !doctype html> 
 <head>
   <meta charset="utf-8">
   <title>ARW Debug</title>
@@ -7,41 +6,470 @@
   <style>
     :root{color-scheme:light dark}
     body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;line-height:1.45}
+    header{display:flex;gap:12px;align-items:center;margin-bottom:16px}
     code,pre{background:#0b0b0c10;padding:2px 4px;border-radius:4px}
     .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+    button,input,select,textarea{font:inherit}
     button{padding:8px 12px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer}
     button:hover{background:#f3f4f6}
+    .iconbtn{padding:6px 8px;font-size:12px}
+    .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+    .box{border:1px solid #e5e7eb;border-radius:6px;padding:12px;background:#fff}
+    #log{max-height:40vh;overflow:auto;border:1px solid #e5e7eb;border-radius:6px;padding:8px;background:#fff}
+    .evt{padding:4px 6px;border-bottom:1px dashed #eee;font-family:ui-monospace,Menlo,Consolas,monospace}
+    .key{color:#6b7280}
+    textarea{width:100%;min-height:100px}
+    .pass{color:#16a34a}.fail{color:#dc2626}
+    a.help{display:inline-block;margin-left:8px;width:18px;height:18px;border-radius:50%;border:1px solid #d1d5db;color:#6b7280;text-align:center;line-height:16px;text-decoration:none;font-weight:600;font-size:12px}
+    a.help:hover{background:#f3f4f6;color:#374151}
+    .tip{position:fixed;z-index:50;max-width:360px;background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,0.08);padding:10px 12px}
+    .tip .t-title{font-weight:600;margin-bottom:4px}
+    .tip .t-more{color:#2563eb;text-decoration:none}
+    .t-hidden{display:none}
+    .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:8px 12px;border-radius:8px;display:none;max-width:70vw}
+    #insights{position:fixed;right:16px;bottom:16px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.08);padding:10px 12px;display:none;min-width:260px;max-width:50vw}
+    #insights .kv{display:flex;justify-content:space-between;color:#374151}
+    #insights h4{margin:4px 0 6px 0;font-size:14px}
+    @media (max-width:900px){ .cols{grid-template-columns:1fr} }
   </style>
 </head>
 <body>
   <header>
-    <h2>ARW Debug</h2>
-    <code id="port"></code>
+    <h1>ARW Debug</h1>
+    <span class="key">port</span><code id="port"></code>
+    <a id="docsLink" class="help" title="Open docs" href="#" target="_blank" style="margin-left:auto;display:none">?</a>
+    <button id="toggleInsights" class="iconbtn" title="Insights" style="display:inline-block">Insights</button>
+    <button id="copyStatsBtn" class="iconbtn" title="Copy stats JSON" style="display:inline-block">Copy stats</button>
+    <button id="copyCurlBtn" class="iconbtn" style="display:none" title="Copy last request as curl">Copy curl</button>
   </header>
+
   <div class="row">
-    <button onclick="ping()">Ping /healthz</button>
-    <button onclick="load('/about')">/about</button>
-    <button onclick="load('/introspect/tools')">/introspect/tools</button>
-    <button onclick="load('/introspect/stats')">/introspect/stats</button>
+    <button onclick="hit('/version')">/version</button>
+    <button onclick="hit('/about')">/about</button>
+    <button onclick="hit('/introspect/tools')">/introspect/tools</button>
+    <button onclick="hit('/probe')">/probe</button>
+    <button onclick="hit('/models')">/models</button>
+    <button onclick="post('/models/refresh')">POST /models/refresh</button>
   </div>
-  <h3>Response</h3>
+
+  <div class="cols">
+    <div class="box">
+      <h3>Chat <a href="#" class="help" data-doc="orchestrator" data-tip="Super simple debug chat; models are stubbed (echo/reverse/time)." title="Chat docs">?</a></h3>
+      <div class="row">
+        <select id="chatModel">
+          <option value="echo">echo</option>
+          <option value="reverse">reverse</option>
+          <option value="time">time</option>
+        </select>
+        <input id="chatTemp" type="number" step="0.1" min="0" max="2" value="0.7" style="width: 80px;">
+      </div>
+      <textarea id="chatInput" placeholder="Say hello"></textarea>
+      <div class="row"><button onclick="chatSend()">Send</button> <button onclick="chatClear()">Clear</button></div>
+      <pre id="chatOut">[]</pre>
+    </div>
+    <div class="box">
+      <h3>Orchestration <a href="#" class="help" data-doc="orchestrator" data-tip="Common actions to manage the local agent service." title="Orchestration docs">?</a></h3>
+      <div class="row">
+        <button onclick="orProbe()">Probe now</button>
+        <button onclick="orEmitTest()">Emit test</button>
+        <button onclick="orRefreshModels()">Refresh models</button>
+        <button onclick="runSelfTests()">Self‑tests</button>
+        <button onclick="orShutdown()">Shutdown</button>
+      </div>
+      <div class="row">
+        <label class="key">profile</label>
+        <select id="profileSel">
+          <option value="performance">performance</option>
+          <option value="balanced" selected>balanced</option>
+          <option value="power-saver">power-saver</option>
+        </select>
+        <button onclick="orProfileApply()">Apply</button>
+        <button onclick="orProfileGet()">Get</button>
+      </div>
+      <div class="row">
+        <label class="key">hints</label>
+        <input id="hintConc" type="number" min="1" placeholder="concurrency" style="width:120px;">
+        <input id="hintBuf" type="number" min="1" placeholder="event buffer" style="width:140px;">
+        <input id="hintTimeout" type="number" min="1" placeholder="http timeout s" style="width:140px;">
+        <button onclick="orHintsApply()">Apply</button>
+        <button onclick="orHintsGet()">Get</button>
+      </div>
+      <div class="row"><span class="key">time</span> <code id="rt-orch">–</code></div>
+    </div>
+    <div class="box">
+      <h3>Memory <a href="#" class="help" data-doc="memory" data-tip="Understand memory kinds and how /memory endpoints work." title="Memory docs">?</a></h3>
+      <div class="row">
+        <button onclick="refreshMemory()">Refresh</button>
+        <button onclick="saveMemory()">Save</button>
+        <button onclick="loadMemory()">Load</button>
+        <select id="memKind">
+          <option value="ephemeral">ephemeral</option>
+          <option value="episodic">episodic</option>
+          <option value="semantic">semantic</option>
+          <option value="procedural">procedural</option>
+        </select>
+        <button onclick="quickApply()">Apply</button>
+      </div>
+      <div class="row"><span class="key">time</span> <code id="rt-mem">–</code></div>
+      <div class="row">
+        <button onclick="getLimit()">Get limit</button>
+        <button onclick="setLimit()">Set limit</button>
+        <input id="limitVal" type="number" min="1" value="200" style="width: 90px;">
+      </div>
+      <textarea id="memBody">{ "msg": "hello from debug UI", "t": Date.now() }</textarea>
+      <div class="row"><button class="iconbtn" id="copyJsonMem" title="Copy JSON">Copy</button></div>
+      <pre id="memOut">{}</pre>
+    </div>
+
+    <div class="box">
+      <h3>Events <a href="#" class="help" data-doc="events" data-tip="Live event stream from /events (SSE)." title="Events docs">?</a></h3>
+      <div class="row">
+        <label><input type="checkbox" id="fService" checked> Service</label>
+        <label><input type="checkbox" id="fMemory" checked> Memory</label>
+        <label><input type="checkbox" id="fModels" checked> Models</label>
+      </div>
+      <div id="log"></div>
+    </div>
+  </div>
+
+  <div class="cols" style="margin-top:16px">
+    <div class="box">
+      <h3>Tools <a href="#" class="help" data-doc="tools" data-tip="Tools, schemas, and how to call them." title="Tools docs">?</a></h3>
+      <div class="row">
+        <select id="toolId">
+          <option value="math.add">math.add</option>
+          <option value="time.now">time.now</option>
+        </select>
+        <button onclick="runTool()">Run tool</button>
+      </div>
+      <div class="row"><span class="key">time</span> <code id="rt-tool">–</code></div>
+      <textarea id="toolBody">{ "a": 1.5, "b": 2.25 }</textarea>
+      <div class="row"><button class="iconbtn" id="copyJsonTool" title="Copy JSON">Copy</button></div>
+      <pre id="toolOut">{}</pre>
+    </div>
+
+    <div class="box">
+      <h3>Self‑tests</h3>
+      <div class="row">
+        <button onclick="runSelfTests()">Run self‑tests</button>
+        <button onclick="clearTests()">Clear</button>
+      </div>
+      <pre id="tests">Ready.</pre>
+    </div>
+    <div class="box">
+      <h3>Self‑Learning <a href="#" class="help" data-doc="orchestrator" data-tip="Signals → suggestions. Gently embedded feedback." title="Self‑Learning docs">?</a></h3>
+      <div class="row">
+        <select id="sigKind">
+          <option value="latency">latency</option>
+          <option value="errors">errors</option>
+          <option value="memory">memory</option>
+          <option value="cpu">cpu</option>
+        </select>
+        <input id="sigTarget" placeholder="target (/path or id)" style="width:220px;">
+        <input id="sigConf" type="number" step="0.05" min="0" max="1" value="0.7" style="width:90px;">
+        <input id="sigSev" type="number" step="1" min="1" max="5" value="2" style="width:70px;">
+      </div>
+      <div class="row">
+        <input id="sigNote" placeholder="note (optional)" style="width:60%">
+        <button onclick="fbSignal()">Signal</button>
+        <button onclick="fbAnalyze()">Analyze now</button>
+        <label><input type="checkbox" id="autoApply"> auto‑apply safe</label>
+        <button onclick="fbAuto()">Set</button>
+      </div>
+      <div class="row">
+        <button onclick="fbState()">Refresh</button>
+        <button onclick="fbReset()">Reset</button>
+        <input id="fbApplyId" placeholder="suggestion id" style="width:160px;">
+        <button onclick="fbApply()">Apply</button>
+      </div>
+      <pre id="fbOut">{"signals":[],"suggestions":[]}</pre>
+    </div>
+    <div class="box">
+      <h3>Models <a href="#" class="help" data-doc="orchestrator" data-tip="Add/delete and set default model. Future: downloads." title="Models docs">?</a></h3>
+      <div class="row">
+        <input id="mId" placeholder="model id" style="width:220px;">
+        <input id="mProv" placeholder="provider (local)" style="width:160px;">
+      </div>
+      <div class="row">
+        <button onclick="modelsList()">List</button>
+        <button onclick="modelsAdd()">Add</button>
+        <button onclick="modelsDelete()">Delete</button>
+        <button onclick="modelsDefaultGet()">Get default</button>
+        <button onclick="modelsDefaultSet()">Set default</button>
+        <button onclick="modelsDownload()">Download</button>
+      </div>
+      <pre id="modelsOut">[]</pre>
+    </div>
+  </div>
+
+  <h3>Response <span class="key">time</span> <code id="rt-main">–</code> <button class="iconbtn" id="copyJsonMain" title="Copy JSON">Copy</button></h3>
   <pre id="out">{}</pre>
-  <script>
-    const base = location.origin;
-    document.getElementById('port').textContent = location.host;
-    async function ping(){
-      try{ const r = await fetch(base + '/healthz');
-            document.getElementById('out').textContent = JSON.stringify({status:r.status}, null, 2);
-      }catch(e){ document.getElementById('out').textContent = String(e); }
+
+<script>
+const base = location.origin;
+document.getElementById('port').textContent = location.host;
+let lastCurl = null;
+function mkcurl(method, url, body){
+  const parts = ["curl -sS", "-X", method, `'${url}'`];
+  if (body != null){ parts.push("-H", `'Content-Type: application/json'`); parts.push("-d", `'${JSON.stringify(body)}'`); }
+  return parts.join(' ');
+}
+function setLastCurl(s){
+  lastCurl = s; const b = document.getElementById('copyCurlBtn'); if (s){ b.style.display='inline-block'; } else { b.style.display='none'; }
+}
+document.getElementById('copyCurlBtn').addEventListener('click', async ()=>{
+  if(!lastCurl) return; try{ await navigator.clipboard.writeText(lastCurl); const b = document.getElementById('copyCurlBtn'); const old = b.textContent; b.textContent='Copied'; setTimeout(()=> b.textContent=old, 900);}catch{}
+});
+async function req(method, path, body, outId, rtId){
+  const url = base + path; const init = { method, headers: {}, body: undefined };
+  if (body != null){ init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
+  setLastCurl(mkcurl(method, url, body));
+  const t0 = performance.now();
+  try{
+    const resp = await fetch(url, init);
+    const txt = await resp.text();
+    const dt = Math.round(performance.now() - t0);
+    if(rtId){ const el = document.getElementById(rtId); if (el) el.textContent = dt + ' ms'; }
+    const out = document.getElementById(outId);
+    try{ out.textContent = JSON.stringify(JSON.parse(txt), null, 2); }catch{ out.textContent = txt; }
+    if(!resp.ok){ showToast('Request failed: ' + resp.status + ' ' + (resp.statusText||'')); }
+    return txt;
+  }catch(e){
+    if(rtId){ const el = document.getElementById(rtId); if (el) el.textContent = 'error'; }
+    showToast('Network error');
+    throw e;
+  }
+}
+async function hit(path){ await req('GET', path, null, 'out', 'rt-main'); }
+async function post(path, body){ await req('POST', path, body, 'out', 'rt-main'); }
+async function refreshMemory(){
+  const txt = await req('GET', '/memory', null, 'memOut', 'rt-mem'); return txt;
+}
+async function saveMemory(){ await post('/memory/save'); await refreshMemory(); }
+async function loadMemory(){ await post('/memory/load'); await refreshMemory(); }
+async function quickApply(){
+  let kind = document.getElementById('memKind').value;
+  let bodyTxt = document.getElementById('memBody').value;
+  let value; try{ value = JSON.parse(bodyTxt); }catch(e){ alert('Invalid JSON'); return; }
+  await req('POST', '/memory/apply', { kind, value }, 'out', 'rt-main');
+  await refreshMemory();
+}
+async function getLimit(){ await req('GET', '/memory/limit', null, 'out', 'rt-main'); }
+async function setLimit(){ const n = parseInt(document.getElementById('limitVal').value||'200',10); await req('POST', '/memory/limit', { limit: n }, 'out', 'rt-main'); await getLimit(); }
+
+// Tools
+async function runTool(){
+  const id = document.getElementById('toolId').value;
+  let bodyTxt = document.getElementById('toolBody').value;
+  let input; try{ input = JSON.parse(bodyTxt); }catch(e){ alert('Invalid JSON'); return; }
+  await req('POST', '/tools/run', { id, input }, 'toolOut', 'rt-tool');
+}
+
+// Orchestration actions
+async function orProbe(){ await req('GET', '/probe', null, 'out', 'rt-orch'); }
+async function orEmitTest(){ await req('GET', '/emit/test', null, 'out', 'rt-orch'); }
+async function orRefreshModels(){ await req('POST', '/models/refresh', null, 'out', 'rt-orch'); }
+async function orShutdown(){ await req('GET', '/shutdown', null, 'out', 'rt-orch'); }
+async function orProfileApply(){ const name = document.getElementById('profileSel').value; await req('POST','/governor/profile',{name},'out','rt-orch'); }
+async function orProfileGet(){ await req('GET','/governor/profile',null,'out','rt-orch'); }
+async function orHintsApply(){ const h={}; const c=document.getElementById('hintConc').value; const b=document.getElementById('hintBuf').value; const t=document.getElementById('hintTimeout').value; if(c) h.max_concurrency=parseInt(c,10); if(b) h.event_buffer=parseInt(b,10); if(t) h.http_timeout_secs=parseInt(t,10); if(Object.keys(h).length===0) return; await req('POST','/governor/hints',h,'out','rt-orch'); }
+async function orHintsGet(){ await req('GET','/governor/hints',null,'out','rt-orch'); }
+
+// Models UI
+async function modelsList(){ await req('GET','/models',null,'modelsOut','rt-orch'); }
+async function modelsAdd(){ const id=document.getElementById('mId').value.trim(); if(!id) return; const provider=(document.getElementById('mProv').value||'local').trim(); await req('POST','/models/add',{id,provider},'modelsOut','rt-orch'); await modelsList(); }
+async function modelsDelete(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await req('POST','/models/delete',{id},'modelsOut','rt-orch'); await modelsList(); }
+async function modelsDefaultGet(){ await req('GET','/models/default',null,'modelsOut','rt-orch'); }
+async function modelsDefaultSet(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await req('POST','/models/default',{id},'modelsOut','rt-orch'); }
+async function modelsDownload(){ const id=document.getElementById('mId').value.trim(); if(!id) return; const provider=(document.getElementById('mProv').value||'local').trim(); await req('POST','/models/download',{id,provider},'modelsOut','rt-orch'); }
+
+// Global EventSource + logger
+const es = new EventSource(base + '/events');
+function allow(kind){
+  const s=document.getElementById('fService').checked;
+  const m=document.getElementById('fMemory').checked;
+  const o=document.getElementById('fModels').checked;
+  if(kind.startsWith('Service.')) return s;
+  if(kind.startsWith('Memory.'))  return m;
+  if(kind.startsWith('Models.'))  return o;
+  return true;
+}
+function pushEvt(kind, data){
+  if(!allow(kind)) return;
+  const div = document.createElement('div');
+  div.className='evt';
+  div.textContent = `[${new Date().toLocaleTimeString()}] ${kind}: ${data}`;
+  const log = document.getElementById('log');
+  log.prepend(div);
+  while (log.childElementCount > 200) log.removeChild(log.lastChild);
+}
+es.onmessage = (e) => pushEvt('message', e.data);
+['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran'].forEach(k => {
+  es.addEventListener(k, (e)=>pushEvt(k, e.data));
+});
+
+// Insights aggregation overlay
+const agg = { total:0, kinds:{} };
+let routesCache = {};
+function renderInsights(){
+  const el = document.getElementById('insights'); if(!el) return;
+  const lines = [ `<h4>Events</h4>`, `<div class='kv'><b>Total</b><span>${agg.total}</span></div>` ];
+  Object.entries(agg.kinds).slice(0,6).forEach(([k,v])=>{ lines.push(`<div class='kv'><span>${k}</span><span>${v}</span></div>`); });
+  const entries = Object.entries(routesCache || {}).map(([p,st])=>({p,st})).sort((a,b)=> (b.st.p95_ms||0)-(a.st.p95_ms||0)).slice(0,3);
+  if(entries.length){
+    lines.push('<h4>Routes</h4>');
+    entries.forEach(({p,st})=>{ lines.push(`<div class='kv'><span>${p}</span><span>p95:${st.p95_ms||0} ms · ewma:${(st.ewma_ms||0).toFixed(0)} ms · e:${st.errors||0}</span></div>`); });
+  }
+  el.innerHTML = lines.join('');
+}
+['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Chat.Message','Governor.Changed'].forEach(k => {
+  es.addEventListener(k, (e)=>{ agg.total++; agg.kinds[k]=(agg.kinds[k]||0)+1; renderInsights(); });
+});
+
+// --- Self-tests (unchanged from last patch; reuses global SSE) ---
+function clearTests(){ document.getElementById('tests').textContent = 'Ready.'; }
+function logT(msg, cls){
+  const el = document.getElementById('tests');
+  if(el.textContent === 'Ready.') el.textContent = '';
+  const line = document.createElement('div');
+  line.textContent = msg; if(cls) line.className = cls;
+  el.appendChild(line);
+}
+async function jget(path){ const r = await fetch(base+path); if(!r.ok) throw new Error(r.status); return r.json(); }
+async function jpost(path, body){ const r = await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}); if(!r.ok) throw new Error(r.status); return r.json(); }
+function extractTestId(obj){
+  try{
+    if (obj?.payload?.payload?.value?.test_id) return obj.payload.payload.value.test_id;
+    if (obj?.payload?.value?.test_id) return obj.payload.value.test_id;
+    if (obj?.value?.test_id) return obj.value.test_id;
+    if (obj?.test_id) return obj.test_id;
+  }catch{}
+  return undefined;
+}
+function waitForMemoryApplied(target, timeoutMs){
+  return new Promise(resolve => {
+    let settled = false;
+    const done = ok => { if(!settled){ settled=true; clearTimeout(timer); es.removeEventListener('Memory.Applied', onNamed); es.removeEventListener('message', onMsg); resolve(ok); } };
+    function maybeResolve(dataText){
+      try{
+        const obj = JSON.parse(dataText || '{}');
+        const kind = obj?.kind;
+        if (kind && kind !== 'Memory.Applied') return;
+        const tid = extractTestId(obj);
+        if (tid && target && tid !== target) return;
+        done(true);
+      }catch{}
     }
-    async function load(path){
-      try{ const r = await fetch(base + path);
-            const t = await r.text();
-            try{ document.getElementById('out').textContent = JSON.stringify(JSON.parse(t), null, 2); }
-            catch{ document.getElementById('out').textContent = t; }
-      }catch(e){ document.getElementById('out').textContent = String(e); }
+    const onNamed = (e)=> maybeResolve(e.data);
+    const onMsg   = (e)=> maybeResolve(e.data);
+    es.addEventListener('Memory.Applied', onNamed);
+    es.addEventListener('message',       onMsg);
+    const timer = setTimeout(()=> done(false), timeoutMs || 3500);
+  });
+}
+async function runSelfTests(){
+  clearTests();
+  const pass = m => logT('✔ ' + m, 'pass');
+  const fail = (m,e) => logT('✘ ' + m + ' — ' + (e && e.message ? e.message : e), 'fail');
+
+  try { const v = await jget('/version'); if(v.service && v.version){ pass('/version'); } else { fail('/version','missing keys'); } } catch(e){ fail('/version',e); }
+  try { const a = await jget('/about'); if(Array.isArray(a.endpoints)){ pass('/about'); } else { fail('/about','missing endpoints'); } } catch(e){ fail('/about',e); }
+  try { const t = await jget('/introspect/tools'); if(Array.isArray(t) && t.length>=2){ pass('/introspect/tools'); } else { fail('/introspect/tools','unexpected'); } } catch(e){ fail('/introspect/tools',e); }
+
+  try { await jpost('/memory/apply',{kind:'ephemeral',value:{ from:'selftest', t: Date.now() }}); const m = await jget('/memory'); if(m && m.ephemeral){ pass('POST /memory/apply + GET /memory'); } else { fail('memory','unexpected'); } } catch(e){ fail('memory',e); }
+
+  try {
+    const target = 'ui_selftest_' + Date.now();
+    const waiter = waitForMemoryApplied(target, 3500);
+    await jpost('/memory/apply',{kind:'ephemeral',value:{ test:'selftest', test_id: target, t: Date.now() }});
+    const ok = await waiter;
+    if(ok){ pass('SSE Memory.Applied'); } else { fail('SSE Memory.Applied','timeout'); }
+  } catch(e){ fail('SSE Memory.Applied',e); }
+
+  logT('Done.');
+}
+// Self-learning fns
+async function fbState(){ await req('GET','/feedback/state',null,'fbOut','rt-orch'); }
+async function fbAnalyze(){ await req('POST','/feedback/analyze',{},'fbOut','rt-orch'); }
+async function fbSignal(){
+  const kind=document.getElementById('sigKind').value;
+  const target=document.getElementById('sigTarget').value||'';
+  const confidence=parseFloat(document.getElementById('sigConf').value||'0.7');
+  const severity=parseInt(document.getElementById('sigSev').value||'2',10);
+  const note=document.getElementById('sigNote').value||undefined;
+  await req('POST','/feedback/signal',{kind,target,confidence,severity,note},'fbOut','rt-orch');
+}
+async function fbAuto(){ const enabled=document.getElementById('autoApply').checked; await req('POST','/feedback/auto',{enabled},'fbOut','rt-orch'); }
+async function fbReset(){ await req('POST','/feedback/reset',{},'fbOut','rt-orch'); }
+async function fbApply(){ const id=(document.getElementById('fbApplyId').value||'').trim(); if(!id){ showToast('Enter suggestion id'); return; } await req('POST','/feedback/apply',{id},'fbOut','rt-orch'); }
+// Docs wiring
+let docsBase = null;
+function docPath(key){
+  switch(key){
+    case 'memory': return '/memory_and_training/';
+    case 'events': return '/guide/quickstart/';
+    case 'tools': return '/api_and_schema/';
+    case 'orchestrator': return '/guide/quickstart/';
+    case 'deployment': return '/deployment/';
+    default: return '/';
+  }
+}
+function positionTip(anchor, el){
+  const r = anchor.getBoundingClientRect();
+  el.style.left = Math.round(r.left + window.scrollX + 22) + 'px';
+  el.style.top  = Math.round(r.top  + window.scrollY - 6) + 'px';
+}
+function showTip(anchor, text, key){
+  const tip = document.createElement('div');
+  tip.className = 'tip';
+  const more = docsBase ? `<a class="t-more" target="_blank" href="${docsBase}${docPath(key)}">Read more →</a>` : '';
+  tip.innerHTML = `<div class="t-title">${key.charAt(0).toUpperCase()+key.slice(1)}</div><div>${text}</div><div style="margin-top:6px">${more}</div>`;
+  document.body.appendChild(tip);
+  positionTip(anchor, tip);
+  const close = () => { tip.remove(); document.removeEventListener('click', onClickAway); window.removeEventListener('resize', onResize); };
+  const onClickAway = (e) => { if(!tip.contains(e.target) && e.target !== anchor) close(); };
+  const onResize = () => positionTip(anchor, tip);
+  setTimeout(()=> document.addEventListener('click', onClickAway), 0);
+  window.addEventListener('resize', onResize);
+}
+async function initDocs(){
+  try{
+    const r = await fetch(base + '/about');
+    const a = await r.json();
+    const port = location.port || '8090';
+    document.getElementById('port').textContent = port;
+    if (a && a.docs_url){
+      docsBase = (a.docs_url || '').replace(/\/$/, '');
+      const link = document.getElementById('docsLink');
+      link.href = docsBase + '/';
+      link.style.display = 'inline-block';
+      link.title = 'Open docs';
     }
-  </script>
+  }catch{}
+  // Bind help icons
+  document.querySelectorAll('a.help[data-doc]').forEach(a => {
+    a.addEventListener('click', (e)=>{
+      e.preventDefault();
+      const key = a.getAttribute('data-doc');
+      const tip = a.getAttribute('data-tip') || '';
+      showTip(a, tip, key);
+    });
+  });
+}
+document.addEventListener('DOMContentLoaded', initDocs);
+</script>
+<div id="toast" class="toast"></div>
+<script>
+function showToast(msg){ const t=document.getElementById('toast'); if(!t) return; t.textContent=msg; t.style.display='block'; clearTimeout(window.__toastTimer); window.__toastTimer = setTimeout(()=>{ t.style.display='none'; }, 2500); }
+// Bind copy buttons and insights toggle after DOM ready
+document.addEventListener('DOMContentLoaded', ()=>{
+  const copyMain=document.getElementById('copyJsonMain'); if(copyMain){ copyMain.addEventListener('click', ()=>{ try{ navigator.clipboard.writeText(document.getElementById('out').textContent||''); }catch{} }); }
+  const copyMem=document.getElementById('copyJsonMem'); if(copyMem){ copyMem.addEventListener('click', ()=>{ try{ navigator.clipboard.writeText(document.getElementById('memOut').textContent||''); }catch{} }); }
+  const copyTool=document.getElementById('copyJsonTool'); if(copyTool){ copyTool.addEventListener('click', ()=>{ try{ navigator.clipboard.writeText(document.getElementById('toolOut').textContent||''); }catch{} }); }
+  const tgl=document.getElementById('toggleInsights'); if (tgl){ tgl.addEventListener('click', ()=>{ const el = document.getElementById('insights'); const on = (el.style.display==='none' || !el.style.display); el.style.display = on ? 'block' : 'none'; if(on){ if(window.__insightsTimer) clearInterval(window.__insightsTimer); const pull=async()=>{ try{ const r=await fetch(base+'/introspect/stats'); const j=await r.json(); routesCache = (j && j.routes && j.routes.by_path) || {}; renderInsights(); }catch{} }; pull(); window.__insightsTimer=setInterval(pull,3000); } else { if(window.__insightsTimer) clearInterval(window.__insightsTimer); } }); }
+  const copyStats=document.getElementById('copyStatsBtn'); if(copyStats){ copyStats.addEventListener('click', async ()=>{ try{ const r=await fetch(base + '/introspect/stats'); const t=await r.text(); await navigator.clipboard.writeText(t); showToast('Stats copied'); }catch{ showToast('Stats copy failed'); } }); }
+});
+</script>
+  <div id="insights" style="display:none"></div>
 </body>
 </html>
-
