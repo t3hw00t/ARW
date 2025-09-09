@@ -242,6 +242,36 @@ pub fn extra_routes() -> Router<AppState> {
     r
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::Json;
+
+    #[tokio::test]
+    async fn memory_limit_and_apply() {
+        std::env::set_var("ARW_STATE_DIR", "target/test-state-unit");
+        // set limit to 2 via API type
+        let _ = super::memory_limit_set(Json(SetLimit{ limit: 2 })).await;
+        // apply 3 values
+        let app = crate::AppState::default();
+        for i in 0..3 {
+            let _ = super::memory_apply(
+                axum::extract::State(app.clone()),
+                Json(ApplyMemory{ kind: "episodic".into(), value: json!({"n": i}), ttl_ms: None })
+            ).await;
+        }
+        let snap = { memory().read().await.clone() };
+        let episodic_len = snap.get("episodic").and_then(|a| a.as_array()).map(|a| a.len()).unwrap_or(0);
+        assert_eq!(episodic_len, 2);
+    }
+
+    #[test]
+    fn tools_math_add() {
+        let out = run_tool_internal("math.add", &json!({"a": 1.0, "b": 2.0})).unwrap();
+        assert_eq!(out.get("sum").and_then(|v| v.as_f64()).unwrap(), 3.0);
+    }
+}
+
 // ---------- Handlers ----------
 async fn version() -> impl IntoResponse {
     Json(json!({
