@@ -20,3 +20,6 @@ Thumbs.db
 /dist/
 /# MkDocs build output
 /site/
+
+# Python virtual envs
+/.venv/
