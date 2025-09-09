@@ -68,3 +68,20 @@ fn load_cfg() -> Option<FbPolicyCfg> {
         } else { None }
     }).clone()
 }
+
+// Public effective policy (for UI/help): merges config + env overrides
+pub fn super_effective_policy() -> serde_json::Value {
+    let cfg = load_cfg();
+    let http_timeout_min = std::env::var("ARW_FEEDBACK_HTTP_TIMEOUT_MIN").ok().and_then(|s| s.parse().ok()).or_else(|| cfg.as_ref().and_then(|c| c.http_timeout_min)).unwrap_or(5u64);
+    let http_timeout_max = std::env::var("ARW_FEEDBACK_HTTP_TIMEOUT_MAX").ok().and_then(|s| s.parse().ok()).or_else(|| cfg.as_ref().and_then(|c| c.http_timeout_max)).unwrap_or(300u64);
+    let mem_limit_min = std::env::var("ARW_FEEDBACK_MEM_LIMIT_MIN").ok().and_then(|s| s.parse().ok()).or_else(|| cfg.as_ref().and_then(|c| c.mem_limit_min)).unwrap_or(50u64);
+    let mem_limit_max = std::env::var("ARW_FEEDBACK_MEM_LIMIT_MAX").ok().and_then(|s| s.parse().ok()).or_else(|| cfg.as_ref().and_then(|c| c.mem_limit_max)).unwrap_or(2000u64);
+    let apply_per_hour = std::env::var("ARW_FEEDBACK_APPLY_PER_HOUR").ok().and_then(|s| s.parse().ok()).or_else(|| cfg.as_ref().and_then(|c| c.apply_per_hour)).unwrap_or(3u32);
+    serde_json::json!({
+        "http_timeout_min": http_timeout_min,
+        "http_timeout_max": http_timeout_max,
+        "mem_limit_min": mem_limit_min,
+        "mem_limit_max": mem_limit_max,
+        "apply_per_hour": apply_per_hour
+    })
+}

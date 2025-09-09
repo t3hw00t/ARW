@@ -106,46 +106,131 @@ channels:
   Service.Start:
     subscribe:
       message:
-        name: Service.Start
+        $ref: '#/components/messages/ServiceStart'
   Service.Health:
     subscribe:
       message:
-        name: Service.Health
+        $ref: '#/components/messages/ServiceHealth'
   Service.Test:
     subscribe:
       message:
-        name: Service.Test
+        $ref: '#/components/messages/ServiceTest'
   Governor.Changed:
     subscribe:
       message:
-        name: Governor.Changed
+        $ref: '#/components/messages/GovernorChanged'
   Memory.Applied:
     subscribe:
       message:
-        name: Memory.Applied
+        $ref: '#/components/messages/MemoryApplied'
   Models.Changed:
     subscribe:
       message:
-        name: Models.Changed
+        $ref: '#/components/messages/ModelsChanged'
   Models.DownloadProgress:
     subscribe:
       message:
-        name: Models.DownloadProgress
+        $ref: '#/components/messages/ModelsDownloadProgress'
   Tool.Ran:
     subscribe:
       message:
-        name: Tool.Ran
+        $ref: '#/components/messages/ToolRan'
   Feedback.Signal:
     subscribe:
       message:
-        name: Feedback.Signal
+        $ref: '#/components/messages/FeedbackSignal'
   Feedback.Suggested:
     subscribe:
       message:
-        name: Feedback.Suggested
+        $ref: '#/components/messages/FeedbackSuggested'
   Feedback.Applied:
     subscribe:
       message:
-        name: Feedback.Applied
+        $ref: '#/components/messages/FeedbackApplied'
+components:
+  messages:
+    ServiceStart:
+      name: Service.Start
+      payload:
+        type: object
+        additionalProperties: true
+    ServiceHealth:
+      name: Service.Health
+      payload:
+        type: object
+        properties:
+          ok: { type: boolean }
+    ServiceTest:
+      name: Service.Test
+      payload:
+        type: object
+        additionalProperties: true
+    GovernorChanged:
+      name: Governor.Changed
+      payload:
+        type: object
+        properties:
+          profile: { type: string }
+    MemoryApplied:
+      name: Memory.Applied
+      payload:
+        type: object
+        additionalProperties: true
+    ModelsChanged:
+      name: Models.Changed
+      payload:
+        type: object
+        additionalProperties: true
+    ModelsDownloadProgress:
+      name: Models.DownloadProgress
+      payload:
+        type: object
+        properties:
+          id: { type: string }
+          progress: { type: integer }
+    ToolRan:
+      name: Tool.Ran
+      payload:
+        type: object
+        properties:
+          id: { type: string }
+          output: { type: object }
+    FeedbackSignal:
+      name: Feedback.Signal
+      payload:
+        type: object
+        properties:
+          signal:
+            type: object
+            properties:
+              id: { type: string }
+              kind: { type: string }
+              target: { type: string }
+              confidence: { type: number }
+              severity: { type: integer }
+    FeedbackSuggested:
+      name: Feedback.Suggested
+      payload:
+        type: object
+        properties:
+          version: { type: integer }
+          suggestions:
+            type: array
+            items:
+              type: object
+              properties:
+                id: { type: string }
+                action: { type: string }
+                params: { type: object }
+                rationale: { type: string }
+                confidence: { type: number }
+    FeedbackApplied:
+      name: Feedback.Applied
+      payload:
+        type: object
+        properties:
+          id: { type: string }
+          action: { type: string }
+          params: { type: object }
 YAML
 info "Wrote $spec_dir/asyncapi.yaml"

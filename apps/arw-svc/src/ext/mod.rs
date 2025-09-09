@@ -206,6 +206,7 @@ pub fn extra_routes() -> Router<AppState> {
         // feedback engine (near-live suggestions)
         .route("/feedback/suggestions", get(feedback_engine_api::feedback_suggestions))
         .route("/feedback/updates", get(feedback_engine_api::feedback_updates))
+        .route("/feedback/policy", get(feedback_engine_api::feedback_policy_get))
         // stats
         .route("/introspect/stats", get(stats::stats_get))
         // memory

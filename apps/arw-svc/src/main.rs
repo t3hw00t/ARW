@@ -50,6 +50,24 @@ fn _register_introspect_tools() {}
 )]
 fn _register_memory_probe() {}
 
+#[arw_tool(
+    id = "feedback.evaluate",
+    version = "1.0.0",
+    summary = "Run heuristic evaluation and emit suggestions",
+    stability = "experimental",
+    capabilities("read-only")
+)]
+fn _register_feedback_evaluate() {}
+
+#[arw_tool(
+    id = "feedback.apply",
+    version = "1.0.0",
+    summary = "Apply a suggestion by id (policy-gated)",
+    stability = "experimental",
+    capabilities("admin")
+)]
+fn _register_feedback_apply() {}
+
 #[derive(Clone)]
 struct AppState {
     bus: arw_events::Bus,

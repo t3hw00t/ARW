@@ -16,3 +16,7 @@ pub async fn feedback_updates(Query(q): Query<UpdatesQs>) -> impl IntoResponse {
     }
 }
 
+pub async fn feedback_policy_get() -> impl IntoResponse {
+    let cfg = super::policy::super_effective_policy();
+    Json(cfg)
+}

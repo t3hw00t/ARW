@@ -183,7 +183,7 @@
         <button onclick="fbApply()">Apply</button>
       </div>
       <pre id="fbOut">{"signals":[],"suggestions":[]}</pre>
-      <h4 style="margin-top:10px">Live Suggestions</h4>
+      <h4 style="margin-top:10px">Live Suggestions <span class="key" id="fbBounds"></span></h4>
       <div class="row">
         <button class="iconbtn" onclick="fbFetchSuggestions()">Refresh</button>
       </div>
@@ -450,6 +450,9 @@ async function fbApplyId(id){
     }
   }catch{ showToast('Network error'); }
 }
+async function fbFetchPolicy(){
+  try{ const r = await fetch(base + '/feedback/policy'); const j = await r.json(); const el=document.getElementById('fbBounds'); if(el){ el.textContent = `caps: ${j.apply_per_hour||3}/h · http_timeout ${j.http_timeout_min||5}..${j.http_timeout_max||300}s · mem_limit ${j.mem_limit_min||50}..${j.mem_limit_max||2000}`; } }catch{}
+}
 // Docs wiring
 let docsBase = null;
 function docPath(key){
@@ -505,6 +508,8 @@ async function initDocs(){
   });
 }
 document.addEventListener('DOMContentLoaded', initDocs);
+// Pull policy bounds for display
+document.addEventListener('DOMContentLoaded', fbFetchPolicy);
 </script>
 <div id="toast" class="toast"></div>
 <script>
