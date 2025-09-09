@@ -21,6 +21,7 @@ use tower_http::cors::{Any, CorsLayer};
 use std::time::Duration as StdDuration;
 use tower_http::timeout::TimeoutLayer;
 use tower_http::services::ServeDir;
+use tower_http::limit::RequestBodyLimitLayer;
 use std::path::Path as FsPath;
 use axum::{http::Request, response::Response, middleware::{self, Next}};
 use axum::http::HeaderMap;
@@ -108,6 +109,7 @@ async fn main() {
             TraceLayer::new_for_http()
         )
         .layer(CompressionLayer::new())
+        .layer(RequestBodyLimitLayer::new(8*1024*1024))
         .layer(if std::env::var("ARW_CORS_ANY").ok().as_deref() == Some("1") || std::env::var("ARW_DEBUG").ok().as_deref() == Some("1") {
             CorsLayer::new()
                 .allow_origin(Any)
