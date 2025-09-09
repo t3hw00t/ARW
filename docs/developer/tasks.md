@@ -4,7 +4,7 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-09 20:41 UTC
+Updated: 2025-09-09 20:56 UTC
 
 
 ## To Do
@@ -18,6 +18,10 @@ Updated: 2025-09-09 20:41 UTC
 ## Paused
 
 ## Done
+- [t-250909225652-0810] Gate arrow ingestion bench code — done (updated: 2025-09-09 20:56:52 UTC)
+- [t-250909225652-5456] Start lightweight feedback engine — done (updated: 2025-09-09 20:56:52 UTC)
+- [t-250909225652-1355] Serve /spec/* endpoints — done (updated: 2025-09-09 20:56:52 UTC)
+- [t-250909225651-0602] Unify tools listing with registry — done (updated: 2025-09-09 20:56:52 UTC)
 - [t-250909203713-3512] Fix workflows permissions + Windows start + CLI help — done (updated: 2025-09-09 18:37:13 UTC)
 - [t-250909203713-1009] Create branch chore/structure-core-fixes — done (updated: 2025-09-09 18:37:13 UTC)
 - [t-250909201532-3510] Tag release v0.1.1 and trigger dist — done (updated: 2025-09-09 18:15:32 UTC)

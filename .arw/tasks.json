@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-09 20:41 UTC",
+  "updated": "2025-09-09 20:56 UTC",
   "tasks": [
     {
       "id": "t-250909170247-9910",
@@ -273,6 +273,42 @@
       "status": "todo",
       "notes": [],
       "updated": "2025-09-09 20:41:03 UTC"
+    },
+    {
+      "id": "t-250909225651-0602",
+      "title": "Unify tools listing with registry",
+      "desc": "ext/tools_api now uses arw_core::introspect_tools()",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 20:56:52 UTC",
+      "done_at": "2025-09-09 20:56:52 UTC"
+    },
+    {
+      "id": "t-250909225652-1355",
+      "title": "Serve /spec/* endpoints",
+      "desc": "OpenAPI/AsyncAPI/MCP files if present under spec/",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 20:56:52 UTC",
+      "done_at": "2025-09-09 20:56:52 UTC"
+    },
+    {
+      "id": "t-250909225652-5456",
+      "title": "Start lightweight feedback engine",
+      "desc": "Actor loop publishes Feedback.Suggested; snapshot held in-memory",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 20:56:52 UTC",
+      "done_at": "2025-09-09 20:56:52 UTC"
+    },
+    {
+      "id": "t-250909225652-0810",
+      "title": "Gate arrow ingestion bench code",
+      "desc": "Move arrow2 to dev-deps; feature arrow-bench for bench",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 20:56:52 UTC",
+      "done_at": "2025-09-09 20:56:52 UTC"
     }
   ]
 }

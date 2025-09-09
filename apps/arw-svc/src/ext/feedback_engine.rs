@@ -1,14 +1,16 @@
 use super::{mem_limit, stats};
 use crate::AppState;
 use serde_json::{json, Value};
-use std::sync::OnceLock;
+use std::sync::{OnceLock, atomic::{AtomicU64, Ordering}};
 use tokio::sync::RwLock;
 
 // Lightweight snapshot of current suggestions (reused by API or UI)
 static SNAPSHOT: OnceLock<RwLock<Vec<Value>>> = OnceLock::new();
+static VERSION: OnceLock<AtomicU64> = OnceLock::new();
 fn snap() -> &'static RwLock<Vec<Value>> {
     SNAPSHOT.get_or_init(|| RwLock::new(Vec::new()))
 }
+fn ver() -> &'static AtomicU64 { VERSION.get_or_init(|| AtomicU64::new(0)) }
 
 pub fn start_feedback_engine(state: AppState) {
     // Spawn a single actor with short cadence; no blocking on request paths
@@ -61,16 +63,23 @@ pub fn start_feedback_engine(state: AppState) {
                 let mut s = snap().write().await;
                 if *s != out {
                     *s = out.clone();
+                    let v = ver().fetch_add(1, Ordering::Relaxed) + 1;
                     state
                         .bus
-                        .publish("Feedback.Suggested", &json!({"suggestions": out}));
+                        .publish("Feedback.Suggested", &json!({"version": v, "suggestions": out}));
                 }
             }
         }
     });
 }
 
-pub async fn snapshot() -> Vec<Value> {
-    snap().read().await.clone()
+pub async fn snapshot() -> (u64, Vec<Value>) {
+    let v = ver().load(Ordering::Relaxed);
+    let s = snap().read().await.clone();
+    (v, s)
 }
 
+pub async fn updates_since(since: u64) -> Option<(u64, Vec<Value>)> {
+    let cur = ver().load(Ordering::Relaxed);
+    if cur > since { Some((cur, snap().read().await.clone())) } else { None }
+}

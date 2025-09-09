@@ -28,6 +28,8 @@ pub mod models_api;
 pub mod stats;
 pub mod tools_api;
 pub mod feedback_engine;
+pub mod feedback_engine_api;
+pub mod policy;
 pub mod ui;
 // internal helpers split into modules
 pub mod io;
@@ -201,6 +203,9 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/feedback/apply", post(feedback_api::feedback_apply_post))
         .route("/feedback/auto", post(feedback_api::feedback_auto_post))
         .route("/feedback/reset", post(feedback_api::feedback_reset_post))
+        // feedback engine (near-live suggestions)
+        .route("/feedback/suggestions", get(feedback_engine_api::feedback_suggestions))
+        .route("/feedback/updates", get(feedback_engine_api::feedback_updates))
         // stats
         .route("/introspect/stats", get(stats::stats_get))
         // memory
@@ -832,7 +837,8 @@ async fn feedback_apply_post(
     State(state): State<AppState>,
     Json(req): Json<ApplyReq>,
 ) -> impl IntoResponse {
-    let sug_opt = {
+    // Look in legacy suggestion store
+    let mut sug_opt = {
         feedback_cell()
             .read()
             .await
@@ -841,8 +847,20 @@ async fn feedback_apply_post(
             .find(|s| s.id == req.id)
             .cloned()
     };
+    // If not found, consult engine snapshot
+    if sug_opt.is_none() {
+        let (_v, list) = feedback_engine::snapshot().await;
+        if let Some(s) = list.into_iter().find_map(|v| {
+            let id = v.get("id").and_then(|x| x.as_str())?;
+            let action = v.get("action").and_then(|x| x.as_str())?.to_string();
+            let params = v.get("params").cloned().unwrap_or_else(|| json!({}));
+            if id == req.id { Some(Suggestion{ id: id.to_string(), action, params, rationale: String::new(), confidence: 0.0 }) } else { None }
+        }) { sug_opt = Some(s); }
+    }
     if let Some(sug) = sug_opt {
-        let ok = apply_suggestion(&sug, &state).await;
+        // Policy-gated apply
+        let allow = policy::allow_apply(&sug.action, &sug.params).await;
+        let ok = if allow { apply_suggestion(&sug, &state).await } else { false };
         if ok {
             state.bus.publish(
                 "Feedback.Applied",

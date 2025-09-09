@@ -183,6 +183,11 @@
         <button onclick="fbApply()">Apply</button>
       </div>
       <pre id="fbOut">{"signals":[],"suggestions":[]}</pre>
+      <h4 style="margin-top:10px">Live Suggestions</h4>
+      <div class="row">
+        <button class="iconbtn" onclick="fbFetchSuggestions()">Refresh</button>
+      </div>
+      <pre id="fbLiveOut">{"version":0,"suggestions":[]}</pre>
     </div>
     <div class="box">
       <h3>Models <a href="#" class="help" data-doc="orchestrator" data-tip="Add/delete and set default model. Future: downloads." title="Models docs">?</a></h3>
@@ -307,6 +312,11 @@ es.onmessage = (e) => pushEvt('message', e.data);
 ['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran'].forEach(k => {
   es.addEventListener(k, (e)=>pushEvt(k, e.data));
 });
+// Feedback live updates
+es.addEventListener('Feedback.Suggested', (e)=>{
+  pushEvt('Feedback.Suggested', e.data);
+  try{ const j=JSON.parse(e.data); document.getElementById('fbLiveOut').textContent = JSON.stringify(j,null,2); }catch{}
+});
 
 // Insights aggregation overlay
 const agg = { total:0, kinds:{} };
@@ -402,6 +412,7 @@ async function fbSignal(){
 async function fbAuto(){ const enabled=document.getElementById('autoApply').checked; await req('POST','/feedback/auto',{enabled},'fbOut','rt-orch'); }
 async function fbReset(){ await req('POST','/feedback/reset',{},'fbOut','rt-orch'); }
 async function fbApply(){ const id=(document.getElementById('fbApplyId').value||'').trim(); if(!id){ showToast('Enter suggestion id'); return; } await req('POST','/feedback/apply',{id},'fbOut','rt-orch'); }
+async function fbFetchSuggestions(){ await req('GET','/feedback/suggestions',null,'fbLiveOut','rt-orch'); }
 // Docs wiring
 let docsBase = null;
 function docPath(key){
