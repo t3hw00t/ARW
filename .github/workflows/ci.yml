@@ -17,6 +17,7 @@ jobs:
           toolchain: stable
           profile: minimal
           override: true
+          components: rustfmt, clippy
 
       - name: Rust cache
         uses: Swatinem/rust-cache@v2
@@ -30,3 +31,7 @@ jobs:
       - name: Tests
         run: cargo test --workspace --locked --all-features
 
+      - name: Security audit (cargo-audit)
+        uses: actions-rs/audit-check@v1
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
