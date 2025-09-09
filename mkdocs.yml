@@ -1,0 +1,27 @@
+site_name: ARW
+repo_url: https://github.com/t3hw00t/Agent_Hub
+theme:
+  name: material
+  features:
+    - navigation.instant
+    - content.code.copy
+docs_dir: docs
+nav:
+  - Home: index.md
+  - Developer:
+      - Overview: developer/index.md
+      - Status: developer/status.md
+      - Tasks: developer/tasks.md
+      - CI: developer/ci.md
+      - Style: developer/style.md
+      - Security: developer/SECURITY.md
+  - Docs:
+      - Roadmap: ROADMAP.md
+      - Structure: STRUCTURE.md
+      - Features: FEATURES.md
+      - API and Schema: API_AND_SCHEMA.md
+      - Deployment: DEPLOYMENT.md
+      - Memory and Training: MEMORY_AND_TRAINING.md
+      - Hardware and Models: HARDWARE_AND_MODELS.md
+      - Arrow Ingestion: arrow_ingestion.md
+

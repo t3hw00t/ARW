@@ -56,7 +56,10 @@ fi
 
 echo "[start] Launching $svc on http://127.0.0.1:$ARW_PORT"
 "$svc" &
-if [[ -x "$tray" ]]; then
+if [[ "${ARW_NO_TRAY:-0}" == "1" ]]; then
+  echo "[start] ARW_NO_TRAY=1; skipping tray; service running in background"
+  wait
+elif [[ -x "$tray" ]]; then
   echo "[start] Launching tray $tray"
   exec "$tray"
 else

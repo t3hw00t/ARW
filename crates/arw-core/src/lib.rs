@@ -123,11 +123,15 @@ pub fn hello_core() -> &'static str {
 /// Compute effective paths and portability flags (env-based; cross‑platform).
 pub fn load_effective_paths() -> serde_json::Value {
     // Load defaults from config file if present, then overlay env vars
-    let cfg_path = std::env::var("ARW_CONFIG").ok().unwrap_or_else(|| "configs/default.toml".to_string());
-    let cfg = load_config(&cfg_path).map_err(|e| {
-        tracing::error!("invalid config {}: {}", cfg_path, e);
-        e
-    }).ok();
+    let cfg_path = std::env::var("ARW_CONFIG")
+        .ok()
+        .unwrap_or_else(|| "configs/default.toml".to_string());
+    let cfg = load_config(&cfg_path)
+        .map_err(|e| {
+            tracing::error!("invalid config {}: {}", cfg_path, e);
+            e
+        })
+        .ok();
 
     let portable = std::env::var("ARW_PORTABLE")
         .ok()
@@ -154,13 +158,16 @@ pub fn load_effective_paths() -> serde_json::Value {
         norm(s)
     };
 
-    let state_dir = std::env::var("ARW_STATE_DIR").ok()
+    let state_dir = std::env::var("ARW_STATE_DIR")
+        .ok()
         .or_else(|| cfg.as_ref().and_then(|c| c.runtime.state_dir.clone()))
         .unwrap_or_else(|| format!("{}/arw", home_like.clone()));
-    let cache_dir = std::env::var("ARW_CACHE_DIR").ok()
+    let cache_dir = std::env::var("ARW_CACHE_DIR")
+        .ok()
         .or_else(|| cfg.as_ref().and_then(|c| c.runtime.cache_dir.clone()))
         .unwrap_or_else(|| format!("{}/arw/cache", home_like.clone()));
-    let logs_dir = std::env::var("ARW_LOGS_DIR").ok()
+    let logs_dir = std::env::var("ARW_LOGS_DIR")
+        .ok()
         .or_else(|| cfg.as_ref().and_then(|c| c.runtime.logs_dir.clone()))
         .unwrap_or_else(|| format!("{}/arw/logs", home_like));
 

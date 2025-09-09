@@ -1,0 +1,150 @@
+{
+  "version": 1,
+  "updated": "2025-09-09 17:49 UTC",
+  "tasks": [
+    {
+      "id": "t-250909170247-9910",
+      "title": "Integrate tasks tracker with docs",
+      "desc": "Add .arw/tasks.json, scripts/tasks.sh, docgen tasks page",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 15:02:47 UTC",
+      "done_at": "2025-09-09 15:02:47 UTC"
+    },
+    {
+      "id": "t-250909170247-6435",
+      "title": "Configure Dependabot",
+      "desc": "Add .github/dependabot.yml for cargo and actions",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 15:02:47 UTC",
+      "done_at": "2025-09-09 15:02:47 UTC"
+    },
+    {
+      "id": "t-250909170247-6008",
+      "title": "Start service and verify /about",
+      "desc": "Run arw-svc locally with ARW_DEBUG=1 and curl /about",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 15:02:47 UTC",
+      "done_at": "2025-09-09 15:02:47 UTC"
+    },
+    {
+      "id": "t-250909170247-1457",
+      "title": "Configure local git identity",
+      "desc": "Set repo-local user.name and user.email",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 15:02:47 UTC",
+      "done_at": "2025-09-09 15:02:47 UTC"
+    },
+    {
+      "id": "t-250909170247-4088",
+      "title": "GitHub CLI login",
+      "desc": "Authenticate gh; requires GH_TOKEN or interactive login",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-09 16:14:14 UTC",
+          "text": "Not required (SSH-only auth to GitHub)"
+        }
+      ],
+      "updated": "2025-09-09 16:14:14 UTC",
+      "done_at": "2025-09-09 16:14:14 UTC"
+    },
+    {
+      "id": "t-250909170248-9575",
+      "title": "Install GTK dev packages + build tray",
+      "desc": "Install libgtk-3-dev and friends; build arw-tray",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-09 16:07:39 UTC",
+          "text": "Attempted tray build; pkg-config missing gdk-3.0 (install libgtk-3-dev, ensure pkg-config finds .pc files)"
+        },
+        {
+          "time": "2025-09-09 16:14:14 UTC",
+          "text": "Linker error: -lxdo not found; install libxdo-dev"
+        },
+        {
+          "time": "2025-09-09 16:17:25 UTC",
+          "text": "Tray built successfully with GTK+xdo"
+        }
+      ],
+      "updated": "2025-09-09 16:17:25 UTC",
+      "done_at": "2025-09-09 16:17:25 UTC"
+    },
+    {
+      "id": "t-250909180730-7880",
+      "title": "Add ARW_NO_TRAY to start.sh",
+      "desc": "Allow skipping tray in CLI-only environments",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 16:07:30 UTC",
+      "done_at": "2025-09-09 16:07:30 UTC"
+    },
+    {
+      "id": "t-250909180808-9579",
+      "title": "Verify SSH git auth to GitHub",
+      "desc": "ssh -T git@github.com and git ls-remote origin",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 16:08:08 UTC",
+      "done_at": "2025-09-09 16:08:08 UTC"
+    },
+    {
+      "id": "t-250909181725-7338",
+      "title": "Create portable dist bundle",
+      "desc": "scripts/package.sh --no-build -> dist/arw-*.zip",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 16:17:25 UTC",
+      "done_at": "2025-09-09 16:17:25 UTC"
+    },
+    {
+      "id": "t-250909193840-5994",
+      "title": "Add mkdocs.yml config",
+      "desc": "Provide minimal site config so docs workflow can build",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 17:38:40 UTC",
+      "done_at": "2025-09-09 17:38:40 UTC"
+    },
+    {
+      "id": "t-250909193840-6168",
+      "title": "Stabilize CI for tray + tests",
+      "desc": "Install GTK/xdo dev libs and drop --all-features in tests",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 17:38:40 UTC",
+      "done_at": "2025-09-09 17:38:40 UTC"
+    },
+    {
+      "id": "t-250909194935-0534",
+      "title": "Refactor svc ext to use io/paths",
+      "desc": "Remove duplicate helpers; call ext::io and ext::paths throughout",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 17:49:35 UTC",
+      "done_at": "2025-09-09 17:49:35 UTC"
+    },
+    {
+      "id": "t-250909194935-6232",
+      "title": "Format codebase (cargo fmt)",
+      "desc": "Run cargo fmt --all to satisfy CI format check",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 17:49:35 UTC",
+      "done_at": "2025-09-09 17:49:35 UTC"
+    },
+    {
+      "id": "t-250909194935-4017",
+      "title": "Lint and tests green",
+      "desc": "cargo clippy -D warnings; cargo test --workspace --locked",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 17:49:35 UTC",
+      "done_at": "2025-09-09 17:49:35 UTC"
+    }
+  ]
+}

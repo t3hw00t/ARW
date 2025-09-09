@@ -1,4 +1,5 @@
 use arw_macros::arw_tool;
+use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::{
@@ -7,27 +8,29 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use utoipa::{OpenApi, ToSchema};
+use axum::{
+    http::Request,
+    middleware::{self, Next},
+    response::Response,
+};
 use serde_json::json;
 use std::convert::Infallible;
 use std::net::SocketAddr;
+use std::path::Path as FsPath;
+use std::sync::{Mutex, OnceLock};
+use std::time::Duration as StdDuration;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::StreamExt;
-use tracing::info;
-use tower_http::trace::TraceLayer;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
-use std::time::Duration as StdDuration;
-use tower_http::timeout::TimeoutLayer;
-use tower_http::services::ServeDir;
 use tower_http::limit::RequestBodyLimitLayer;
-use std::path::Path as FsPath;
-use axum::{http::Request, response::Response, middleware::{self, Next}};
-use axum::http::HeaderMap;
-use std::sync::{Mutex, OnceLock};
+use tower_http::services::ServeDir;
+use tower_http::timeout::TimeoutLayer;
+use tower_http::trace::TraceLayer;
+use tracing::info;
+use utoipa::{OpenApi, ToSchema};
 mod ext;
-
 
 #[arw_tool(
     id = "introspect.tools",
@@ -105,19 +108,26 @@ async fn main() {
         .route("/emit/test", get(emit_test))
         .route("/shutdown", get(shutdown))
         .merge(ext::extra_routes())
-        .layer(
-            TraceLayer::new_for_http()
-        )
+        .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())
-        .layer(RequestBodyLimitLayer::new(8*1024*1024))
-        .layer(if std::env::var("ARW_CORS_ANY").ok().as_deref() == Some("1") || std::env::var("ARW_DEBUG").ok().as_deref() == Some("1") {
-            CorsLayer::new()
-                .allow_origin(Any)
-                .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
-                .allow_headers(Any)
-        } else { CorsLayer::new() })
+        .layer(RequestBodyLimitLayer::new(8 * 1024 * 1024))
+        .layer(
+            if std::env::var("ARW_CORS_ANY").ok().as_deref() == Some("1")
+                || std::env::var("ARW_DEBUG").ok().as_deref() == Some("1")
+            {
+                CorsLayer::new()
+                    .allow_origin(Any)
+                    .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+                    .allow_headers(Any)
+            } else {
+                CorsLayer::new()
+            },
+        )
         .layer({
-            let secs = std::env::var("ARW_HTTP_TIMEOUT_SECS").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(20);
+            let secs = std::env::var("ARW_HTTP_TIMEOUT_SECS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(20);
             TimeoutLayer::new(StdDuration::from_secs(secs))
         })
         .layer(middleware::from_fn(security_mw))
@@ -130,8 +140,12 @@ async fn main() {
             Some("docs-site")
         } else if FsPath::new("site").exists() {
             Some("site")
-        } else { None };
-        if let Some(p) = doc_dir { app = app.nest_service("/docs", ServeDir::new(p)); }
+        } else {
+            None
+        };
+        if let Some(p) = doc_dir {
+            app = app.nest_service("/docs", ServeDir::new(p));
+        }
     }
 
     let port: u16 = std::env::var("ARW_PORT")
@@ -158,7 +172,11 @@ async fn main() {
 
 async fn metrics_mw(req: Request<axum::body::Body>, next: Next) -> Response {
     use axum::extract::MatchedPath;
-    let path = req.extensions().get::<MatchedPath>().map(|m| m.as_str().to_string()).unwrap_or_else(|| req.uri().path().to_string());
+    let path = req
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|m| m.as_str().to_string())
+        .unwrap_or_else(|| req.uri().path().to_string());
     let t0 = std::time::Instant::now();
     let res = next.run(req).await;
     let dt = t0.elapsed().as_millis() as u64;
@@ -179,13 +197,21 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
         || path.starts_with("/introspect")
         || path.starts_with("/chat")
         || path.starts_with("/feedback");
-    if !is_sensitive { return next.run(req).await; }
+    if !is_sensitive {
+        return next.run(req).await;
+    }
 
     let debug = std::env::var("ARW_DEBUG").ok().as_deref() == Some("1");
     let token = std::env::var("ARW_ADMIN_TOKEN").ok();
     let ok = if let Some(t) = token {
-        if t.is_empty() { debug } else { header_token_matches(req.headers(), &t) }
-    } else { debug };
+        if t.is_empty() {
+            debug
+        } else {
+            header_token_matches(req.headers(), &t)
+        }
+    } else {
+        debug
+    };
     if ok {
         if !rate_allow() {
             let body = serde_json::json!({
@@ -216,7 +242,9 @@ fn header_token_matches(h: &HeaderMap, token: &str) -> bool {
 
 #[inline]
 fn ct_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() { return false; }
+    if a.len() != b.len() {
+        return false;
+    }
     let mut diff: u8 = 0;
     for (&x, &y) in a.iter().zip(b.iter()) {
         diff |= x ^ y;
@@ -225,20 +253,40 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
 }
 
 // ---- global rate limit (fixed window) ----
-struct RateWin { count: u64, start: std::time::Instant }
+struct RateWin {
+    count: u64,
+    start: std::time::Instant,
+}
 static RL_STATE: OnceLock<Mutex<RateWin>> = OnceLock::new();
 fn rl_params() -> (u64, u64) {
-    if let Ok(s) = std::env::var("ARW_ADMIN_RL") { if let Some((a,b)) = s.split_once('/') { if let (Ok(l), Ok(w)) = (a.parse::<u64>(), b.parse::<u64>()) { return (l.max(1), w.max(1)); } } }
+    if let Ok(s) = std::env::var("ARW_ADMIN_RL") {
+        if let Some((a, b)) = s.split_once('/') {
+            if let (Ok(l), Ok(w)) = (a.parse::<u64>(), b.parse::<u64>()) {
+                return (l.max(1), w.max(1));
+            }
+        }
+    }
     (60, 60)
 }
 fn rate_allow() -> bool {
     let (limit, win_secs) = rl_params();
     let now = std::time::Instant::now();
-    let m = RL_STATE.get_or_init(|| Mutex::new(RateWin { count: 0, start: now }));
+    let m = RL_STATE.get_or_init(|| {
+        Mutex::new(RateWin {
+            count: 0,
+            start: now,
+        })
+    });
     let mut st = m.lock().unwrap();
-    if now.duration_since(st.start).as_secs() >= win_secs { st.start = now; st.count = 0; }
-    if st.count >= limit { return false; }
-    st.count += 1; true
+    if now.duration_since(st.start).as_secs() >= win_secs {
+        st.start = now;
+        st.count = 0;
+    }
+    if st.count >= limit {
+        return false;
+    }
+    st.count += 1;
+    true
 }
 #[utoipa::path(
     get,
@@ -347,12 +395,15 @@ async fn events(
                 Event::default()
                     .id(env.time.clone())
                     .event(env.kind.clone())
-                    .data(data)
+                    .data(data),
             )
         });
 
     let initial = tokio_stream::once(Ok::<Event, Infallible>(
-        Event::default().id("0").event("Service.Connected").data("{}"),
+        Event::default()
+            .id("0")
+            .event("Service.Connected")
+            .data("{}"),
     ));
     let stream = initial.chain(bstream);
 

@@ -1,8 +1,8 @@
-use schemars::JsonSchema;
-use serde::Deserialize;
+use anyhow::Result;
 use jsonschema::JSONSchema;
 use once_cell::sync::Lazy;
-use anyhow::Result;
+use schemars::JsonSchema;
+use serde::Deserialize;
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
 pub struct RuntimeConfig {

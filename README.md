@@ -29,6 +29,7 @@ can experiment without cloud lock‑in.
 - Start the service (launches the tray when available) with options:
   - Windows: `powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -Debug -Port 8090 -DocsUrl https://your-pages -AdminToken secret`
   - Linux/macOS: `bash scripts/start.sh --debug --port 8090 --docs-url https://your-pages --admin-token secret`
+  - CLI-only (skip tray if present): set `ARW_NO_TRAY=1` before running `scripts/start.sh`
 - `arw-tray` is bundled and started automatically by the scripts when present. You can also run it manually from `target/release/` or `dist/.../bin/` to start/stop the service, open the Debug UI, or quit from the system tray.
 - Traditional scripts (fine‑grained):
   - Build: `scripts/build.ps1` (Windows) or `scripts/build.sh` (Linux/macOS)
@@ -59,6 +60,15 @@ scripts/start.sh --debug --port 8090
 
 The service listens on `http://127.0.0.1:8090`; open `/debug` for a minimal UI.
 
+## Task Tracker (cross-machine)
+
+- Manage a simple repo-tracked task list with `scripts/tasks.sh`.
+- Tasks persist in `.arw/tasks.json` and docs render to `docs/developer/tasks.md` via `scripts/docgen.sh` and CI.
+- Examples:
+  - `scripts/tasks.sh add "Wire up tasks tracker" --desc "Generate docs + helper script"`
+  - `scripts/tasks.sh start <task-id>`; `scripts/tasks.sh note <task-id> "progress..."`; `scripts/tasks.sh done <task-id>`
+- View status in `docs/developer/tasks.md` or your published docs site if enabled.
+
 ## Documentation
 
 - [Guide and API docs](docs/)
@@ -80,7 +90,7 @@ The service listens on `http://127.0.0.1:8090`; open `/debug` for a minimal UI.
 
 Questions, ideas, or issues? Open a discussion or file an issue in this
 repository. See the [project instructions](docs/PROJECT_INSTRUCTIONS.md) for
-background and the [FAQ](docs/guide/FAQ.md) for common questions.
+background and the [Quickstart guide](docs/guide/quickstart.md) for common setup.
 
 ---
 
@@ -88,4 +98,3 @@ ARW is released under the MIT OR Apache‑2.0 license.
 
 Docs
 - Source files live in `docs/`.
-

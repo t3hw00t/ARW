@@ -1,6 +1,6 @@
 use arw_svc::build_router;
-use serde_json::json;
 use axum::Router;
+use serde_json::json;
 
 #[tokio::test]
 async fn healthz_ok() {

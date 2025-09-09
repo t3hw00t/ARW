@@ -1,84 +1,78 @@
 #![allow(dead_code)]
 // ext module: split into submodules (ui, later more)
 
+use axum::http::StatusCode;
 use axum::{
-    Router,
-    routing::{get, post},
     extract::State,
     response::IntoResponse,
-    Json
+    routing::{get, post},
+    Json, Router,
 };
-use axum::http::StatusCode;
+use futures_util::StreamExt;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
-use tokio::sync::RwLock;
-use std::fs;
+use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs as afs;
 use tokio::io::AsyncWriteExt;
-use std::path::{Path, PathBuf};
-use std::time::{SystemTime, UNIX_EPOCH};
-use std::sync::atomic::{AtomicU64, Ordering};
-use futures_util::StreamExt;
+use tokio::sync::RwLock;
 
 use crate::AppState;
-pub mod ui;
-pub mod stats;
-pub mod memory_api;
-pub mod memory;
-pub mod models_api;
-pub mod governor_api;
-pub mod feedback_api;
 pub mod chat_api;
+pub mod feedback_api;
+pub mod governor_api;
+pub mod memory;
+pub mod memory_api;
+pub mod models_api;
+pub mod stats;
 pub mod tools_api;
+pub mod ui;
+// internal helpers split into modules
+pub mod io;
+pub mod paths;
 static ASSET_DEBUG_HTML: &str = include_str!("../../assets/debug.html");
-pub(crate) use memory::{memory, mem_limit, ApplyMemory, SetLimit, memory_get, memory_save, memory_load, memory_limit_get, memory_limit_set, memory_apply};
-
-// ---------- state paths & file helpers ----------
-// ---------- state paths & file helpers ----------
-fn state_dir() -> PathBuf {
-    let v = arw_core::load_effective_paths();
-    let s = v.get("state_dir").and_then(|x| x.as_str()).unwrap_or(".");
-    PathBuf::from(s.replace('\\', "/"))
-}
-fn memory_path() -> PathBuf { state_dir().join("memory.json") }
-fn models_path() -> PathBuf { state_dir().join("models.json") }
-fn orch_path() -> PathBuf { state_dir().join("orchestration.json") }
-fn feedback_path() -> PathBuf { state_dir().join("feedback.json") }
-fn audit_path() -> PathBuf { state_dir().join("audit.log") }
-
-fn load_json_file(p: &Path) -> Option<Value> {
-    let s = fs::read_to_string(p).ok()?;
-    serde_json::from_str(&s).ok()
-}
-
-async fn load_json_file_async(p: &Path) -> Option<Value> {
-    let s = afs::read_to_string(p).await.ok()?;
-    serde_json::from_str(&s).ok()
-}
-async fn save_json_file_async(p: &Path, v: &Value) -> std::io::Result<()> {
-    if let Some(parent) = p.parent() { let _ = afs::create_dir_all(parent).await; }
-    let s = serde_json::to_string_pretty(v).unwrap_or_else(|_| "{}".to_string());
-    afs::write(p, s.as_bytes()).await
-}
+pub(crate) use memory::{
+    mem_limit, memory_apply, memory_get, memory_limit_get, memory_limit_set, memory_load,
+    memory_save, ApplyMemory, SetLimit,
+};
 
 // ---------- persistence bootstrap ----------
 #[derive(serde::Deserialize)]
-struct OrchFile { #[serde(default)] profile: Option<String>, #[serde(default)] hints: Option<Hints>, #[serde(default)] memory_limit: Option<usize> }
+struct OrchFile {
+    #[serde(default)]
+    profile: Option<String>,
+    #[serde(default)]
+    hints: Option<Hints>,
+    #[serde(default)]
+    memory_limit: Option<usize>,
+}
 
 pub async fn load_persisted() {
     // orchestration
-    if let Some(v) = load_json_file(&orch_path()) {
+    if let Some(v) = io::load_json_file(&paths::orch_path()) {
         let of: Result<OrchFile, _> = serde_json::from_value(v);
         if let Ok(of) = of {
-            if let Some(p) = of.profile { let mut g = governor_profile().write().await; *g = p; }
-            if let Some(h) = of.hints { let mut hh = hints().write().await; *hh = h; }
-            if let Some(m) = of.memory_limit { let mut ml = mem_limit().write().await; *ml = m.max(1); }
+            if let Some(p) = of.profile {
+                let mut g = governor_profile().write().await;
+                *g = p;
+            }
+            if let Some(h) = of.hints {
+                let mut hh = hints().write().await;
+                *hh = h;
+            }
+            if let Some(m) = of.memory_limit {
+                let mut ml = mem_limit().write().await;
+                *ml = m.max(1);
+            }
         }
     }
     // feedback
-    if let Some(v) = load_json_file(&feedback_path()) {
-        if let Ok(fb) = serde_json::from_value::<FeedbackState>(v) { let mut st = feedback_cell().write().await; *st = fb; }
+    if let Some(v) = io::load_json_file(&paths::feedback_path()) {
+        if let Ok(fb) = serde_json::from_value::<FeedbackState>(v) {
+            let mut st = feedback_cell().write().await;
+            *st = fb;
+        }
     }
 }
 
@@ -87,25 +81,15 @@ async fn persist_orch() {
     let hints = { hints().read().await.clone() };
     let ml = { *mem_limit().read().await };
     let v = json!({"profile": profile, "hints": hints, "memory_limit": ml});
-    let _ = save_json_file_async(&orch_path(), &v).await;
+    let _ = io::save_json_file_async(&paths::orch_path(), &v).await;
 }
 async fn persist_feedback() {
     let st = { feedback_cell().read().await.clone() };
     let v = serde_json::to_value(st).unwrap_or_else(|_| json!({}));
-    let _ = save_json_file_async(&feedback_path(), &v).await;
+    let _ = io::save_json_file_async(&paths::feedback_path(), &v).await;
 }
 
-async fn audit_event(action: &str, details: &Value) {
-    let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let line = serde_json::json!({"time": ts, "action": action, "details": details});
-    let s = serde_json::to_string(&line).unwrap_or_else(|_| "{}".to_string()) + "\n";
-    let p = audit_path();
-    if let Some(parent) = p.parent() { let _ = afs::create_dir_all(parent).await; }
-    use tokio::io::AsyncWriteExt;
-    if let Ok(mut f) = afs::OpenOptions::new().create(true).append(true).open(&p).await {
-        let _ = f.write_all(s.as_bytes()).await;
-    }
-}
+// audit_event provided by ext::io
 
 // ---------- Global stores ----------
 fn default_memory() -> Value {
@@ -127,7 +111,7 @@ fn default_models() -> Vec<Value> {
 static MODELS: OnceLock<RwLock<Vec<Value>>> = OnceLock::new();
 fn models() -> &'static RwLock<Vec<Value>> {
     MODELS.get_or_init(|| {
-        let initial = load_json_file(&models_path())
+        let initial = io::load_json_file(&paths::models_path())
             .and_then(|v| v.as_array().cloned())
             .unwrap_or_else(default_models);
         RwLock::new(initial)
@@ -162,22 +146,37 @@ fn governor_profile() -> &'static RwLock<String> {
 
 // ---------- Tool runner (minimal builtins) ----------
 static TOOL_LIST: &[(&str, &str)] = &[
-    ("math.add", "Add two numbers: input {\"a\": number, \"b\": number} -> {\"sum\": number}"),
-    ("time.now", "UTC time in ms: input {} -> {\"now_ms\": number}")
+    (
+        "math.add",
+        "Add two numbers: input {\"a\": number, \"b\": number} -> {\"sum\": number}",
+    ),
+    (
+        "time.now",
+        "UTC time in ms: input {} -> {\"now_ms\": number}",
+    ),
 ];
 
 fn run_tool_internal(id: &str, input: &Value) -> Result<Value, String> {
     match id {
         "math.add" => {
-            let a = input.get("a").and_then(|v| v.as_f64()).ok_or("missing or invalid 'a'")?;
-            let b = input.get("b").and_then(|v| v.as_f64()).ok_or("missing or invalid 'b'")?;
+            let a = input
+                .get("a")
+                .and_then(|v| v.as_f64())
+                .ok_or("missing or invalid 'a'")?;
+            let b = input
+                .get("b")
+                .and_then(|v| v.as_f64())
+                .ok_or("missing or invalid 'b'")?;
             Ok(json!({"sum": a + b}))
         }
         "time.now" => {
-            let now = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_millis() as i64;
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map_err(|e| e.to_string())?
+                .as_millis() as i64;
             Ok(json!({"now_ms": now}))
         }
-        _ => Err(format!("unknown tool id: {}", id))
+        _ => Err(format!("unknown tool id: {}", id)),
     }
 }
 
@@ -194,7 +193,10 @@ pub fn extra_routes() -> Router<AppState> {
         // feedback (self-learning)
         .route("/feedback/state", get(feedback_api::feedback_state_get))
         .route("/feedback/signal", post(feedback_api::feedback_signal_post))
-        .route("/feedback/analyze", post(feedback_api::feedback_analyze_post))
+        .route(
+            "/feedback/analyze",
+            post(feedback_api::feedback_analyze_post),
+        )
         .route("/feedback/apply", post(feedback_api::feedback_apply_post))
         .route("/feedback/auto", post(feedback_api::feedback_auto_post))
         .route("/feedback/reset", post(feedback_api::feedback_reset_post))
@@ -235,7 +237,6 @@ pub fn extra_routes() -> Router<AppState> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use axum::Json;
 
     #[test]
     fn tools_math_add() {
@@ -296,32 +297,63 @@ async fn about() -> impl IntoResponse {
 
 // Governor profile
 #[derive(Deserialize)]
-struct SetProfile { name: String }
+struct SetProfile {
+    name: String,
+}
 async fn governor_get() -> impl IntoResponse {
     let p = { governor_profile().read().await.clone() };
     Json(json!({ "profile": p }))
 }
-async fn governor_set(State(state): State<AppState>, Json(req): Json<SetProfile>) -> impl IntoResponse {
+async fn governor_set(
+    State(state): State<AppState>,
+    Json(req): Json<SetProfile>,
+) -> impl IntoResponse {
     {
         let mut g = governor_profile().write().await;
         *g = req.name.clone();
     }
-    state.bus.publish("Governor.Changed", &json!({"profile": req.name.clone()}));
+    state
+        .bus
+        .publish("Governor.Changed", &json!({"profile": req.name.clone()}));
     persist_orch().await;
     Json(json!({ "ok": true }))
 }
 
 #[derive(Deserialize, serde::Serialize, Clone)]
-struct Hints { #[serde(default)] max_concurrency: Option<usize>, #[serde(default)] event_buffer: Option<usize>, #[serde(default)] http_timeout_secs: Option<u64> }
+struct Hints {
+    #[serde(default)]
+    max_concurrency: Option<usize>,
+    #[serde(default)]
+    event_buffer: Option<usize>,
+    #[serde(default)]
+    http_timeout_secs: Option<u64>,
+}
 static HINTS: OnceLock<RwLock<Hints>> = OnceLock::new();
-fn hints() -> &'static RwLock<Hints> { HINTS.get_or_init(|| RwLock::new(Hints{ max_concurrency: None, event_buffer: None, http_timeout_secs: None })) }
-async fn governor_hints_get() -> impl IntoResponse { let h = hints().read().await.clone(); Json(serde_json::to_value(h).unwrap_or(json!({}))) }
+fn hints() -> &'static RwLock<Hints> {
+    HINTS.get_or_init(|| {
+        RwLock::new(Hints {
+            max_concurrency: None,
+            event_buffer: None,
+            http_timeout_secs: None,
+        })
+    })
+}
+async fn governor_hints_get() -> impl IntoResponse {
+    let h = hints().read().await.clone();
+    Json(serde_json::to_value(h).unwrap_or(json!({})))
+}
 async fn governor_hints_set(Json(req): Json<Hints>) -> impl IntoResponse {
     {
         let mut h = hints().write().await;
-        if req.max_concurrency.is_some() { h.max_concurrency = req.max_concurrency; }
-        if req.event_buffer.is_some() { h.event_buffer = req.event_buffer; }
-        if req.http_timeout_secs.is_some() { h.http_timeout_secs = req.http_timeout_secs; }
+        if req.max_concurrency.is_some() {
+            h.max_concurrency = req.max_concurrency;
+        }
+        if req.event_buffer.is_some() {
+            h.event_buffer = req.event_buffer;
+        }
+        if req.http_timeout_secs.is_some() {
+            h.http_timeout_secs = req.http_timeout_secs;
+        }
     }
     persist_orch().await;
     Json(json!({"ok": true})).into_response()
@@ -339,19 +371,28 @@ async fn refresh_models(State(state): State<AppState>) -> impl IntoResponse {
         let mut m = models().write().await;
         *m = new.clone();
     }
-    let _ = save_json_file_async(&models_path(), &Value::Array(new.clone())).await;
-    state.bus.publish("Models.Refreshed", &json!({"count": new.len()}));
+    let _ = io::save_json_file_async(&paths::models_path(), &Value::Array(new.clone())).await;
+    state
+        .bus
+        .publish("Models.Refreshed", &json!({"count": new.len()}));
     Json::<Vec<Value>>(new)
 }
 async fn models_save() -> impl IntoResponse {
     let v = models().read().await.clone();
-    match save_json_file_async(&models_path(), &Value::Array(v)).await {
+    match io::save_json_file_async(&paths::models_path(), &Value::Array(v)).await {
         Ok(_) => Json(json!({"ok": true})).into_response(),
-        Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"ok": false, "error": e.to_string()}))).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": e.to_string()})),
+        )
+            .into_response(),
     }
 }
 async fn models_load() -> impl IntoResponse {
-    match load_json_file_async(&models_path()).await.and_then(|v| v.as_array().cloned()) {
+    match io::load_json_file_async(&paths::models_path())
+        .await
+        .and_then(|v| v.as_array().cloned())
+    {
         Some(arr) => {
             {
                 let mut m = models().write().await;
@@ -359,52 +400,93 @@ async fn models_load() -> impl IntoResponse {
             }
             Json::<Vec<Value>>(arr).into_response()
         }
-        None => (StatusCode::NOT_FOUND, Json(json!({"ok": false, "error":"no models.json"}))).into_response(),
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(json!({"ok": false, "error":"no models.json"})),
+        )
+            .into_response(),
     }
 }
 
 #[derive(Deserialize)]
-pub(crate) struct ModelId { id: String, #[serde(default)] provider: Option<String> }
+pub(crate) struct ModelId {
+    id: String,
+    #[serde(default)]
+    provider: Option<String>,
+}
 async fn models_add(State(state): State<AppState>, Json(req): Json<ModelId>) -> impl IntoResponse {
     let mut v = models().write().await;
-    if !v.iter().any(|m| m.get("id").and_then(|s| s.as_str()) == Some(&req.id)) {
+    if !v
+        .iter()
+        .any(|m| m.get("id").and_then(|s| s.as_str()) == Some(&req.id))
+    {
         v.push(json!({"id": req.id, "provider": req.provider.unwrap_or_else(|| "local".to_string()), "status":"available"}));
-        state.bus.publish("Models.Changed", &json!({"op":"add","id": v.last().and_then(|m| m.get("id")).cloned()}));
+        state.bus.publish(
+            "Models.Changed",
+            &json!({"op":"add","id": v.last().and_then(|m| m.get("id")).cloned()}),
+        );
     }
-    audit_event("models.add", &json!({"id": req.id})).await;
+    io::audit_event("models.add", &json!({"id": req.id})).await;
     Json(json!({"ok": true}))
 }
-async fn models_delete(State(state): State<AppState>, Json(req): Json<ModelId>) -> impl IntoResponse {
+async fn models_delete(
+    State(state): State<AppState>,
+    Json(req): Json<ModelId>,
+) -> impl IntoResponse {
     let mut v = models().write().await;
     let before = v.len();
     v.retain(|m| m.get("id").and_then(|s| s.as_str()) != Some(&req.id));
-    if v.len() != before { state.bus.publish("Models.Changed", &json!({"op":"delete","id": req.id})); }
-    audit_event("models.delete", &json!({"id": req.id})).await;
+    if v.len() != before {
+        state
+            .bus
+            .publish("Models.Changed", &json!({"op":"delete","id": req.id}));
+    }
+    io::audit_event("models.delete", &json!({"id": req.id})).await;
     Json(json!({"ok": true}))
 }
 async fn models_default_get() -> impl IntoResponse {
     let id = { default_model().read().await.clone() };
     Json(json!({"default": id }))
 }
-async fn models_default_set(State(state): State<AppState>, Json(req): Json<ModelId>) -> impl IntoResponse {
+async fn models_default_set(
+    State(state): State<AppState>,
+    Json(req): Json<ModelId>,
+) -> impl IntoResponse {
     {
         let mut d = default_model().write().await;
         *d = req.id.clone();
     }
-    state.bus.publish("Models.Changed", &json!({"op":"default","id": req.id}));
-    let _ = save_json_file_async(&models_path(), &Value::Array(models().read().await.clone())).await;
+    state
+        .bus
+        .publish("Models.Changed", &json!({"op":"default","id": req.id}));
+    let _ = io::save_json_file_async(
+        &paths::models_path(),
+        &Value::Array(models().read().await.clone()),
+    )
+    .await;
     persist_orch().await;
-    audit_event("models.default", &json!({"id": req.id})).await;
+    io::audit_event("models.default", &json!({"id": req.id})).await;
     Json(json!({"ok": true}))
 }
 
 #[derive(Deserialize)]
-pub(crate) struct DownloadReq { id: String, url: String, #[serde(default)] provider: Option<String> }
-async fn models_download(State(state): State<AppState>, Json(req): Json<DownloadReq>) -> impl IntoResponse {
+pub(crate) struct DownloadReq {
+    id: String,
+    url: String,
+    #[serde(default)]
+    provider: Option<String>,
+}
+async fn models_download(
+    State(state): State<AppState>,
+    Json(req): Json<DownloadReq>,
+) -> impl IntoResponse {
     // ensure model exists with status
     {
         let mut v = models().write().await;
-        if let Some(m) = v.iter_mut().find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&req.id)) {
+        if let Some(m) = v
+            .iter_mut()
+            .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&req.id))
+        {
             *m = json!({"id": req.id, "provider": req.provider.clone().unwrap_or("local".into()), "status":"downloading"});
         } else {
             v.push(json!({"id": req.id, "provider": req.provider.clone().unwrap_or("local".into()), "status":"downloading"}));
@@ -412,10 +494,14 @@ async fn models_download(State(state): State<AppState>, Json(req): Json<Download
     }
     // Validate URL scheme (accept http/https only)
     if !(req.url.starts_with("http://") || req.url.starts_with("https://")) {
-        return (StatusCode::BAD_REQUEST, Json(json!({"ok": false, "error": "invalid url scheme"}))).into_response();
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "invalid url scheme"})),
+        )
+            .into_response();
     }
     state.bus.publish("Models.Download", &json!({"id": req.id}));
-    audit_event("models.download", &json!({"id": req.id})).await;
+    io::audit_event("models.download", &json!({"id": req.id})).await;
     let id = req.id.clone();
     let url = req.url.clone();
     let provider = req.provider.clone().unwrap_or("local".into());
@@ -424,11 +510,14 @@ async fn models_download(State(state): State<AppState>, Json(req): Json<Download
         // sanitize filename and compute target paths
         let file_name = url.rsplit('/').next().unwrap_or(&id).to_string();
         let safe_name = file_name.replace(['\\', '/'], "_");
-        let target_dir = state_dir().join("models");
+        let target_dir = paths::state_dir().join("models");
         let target = target_dir.join(&safe_name);
         let tmp = target.with_extension("part");
         if let Err(e) = afs::create_dir_all(&target_dir).await {
-            sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("mkdir failed: {}", e)}));
+            sp.bus.publish(
+                "Models.DownloadProgress",
+                &json!({"id": id, "error": format!("mkdir failed: {}", e)}),
+            );
             return;
         }
         let client = reqwest::Client::builder()
@@ -446,47 +535,73 @@ async fn models_download(State(state): State<AppState>, Json(req): Json<Download
                         while let Some(chunk) = stream.next().await {
                             match chunk {
                                 Ok(bytes) => {
-                                    if let Err(e) = file.write_all(&bytes).await { 
+                                    if let Err(e) = file.write_all(&bytes).await {
                                         sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("write failed: {}", e)}));
                                         return;
                                     }
                                     downloaded += bytes.len() as u64;
                                     if total > 0 {
                                         let pct = ((downloaded * 100) / total).min(100);
-                                        sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "progress": pct}));
+                                        sp.bus.publish(
+                                            "Models.DownloadProgress",
+                                            &json!({"id": id, "progress": pct}),
+                                        );
                                     }
                                 }
                                 Err(e) => {
-                                    sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("read failed: {}", e)}));
+                                    sp.bus.publish(
+                                        "Models.DownloadProgress",
+                                        &json!({"id": id, "error": format!("read failed: {}", e)}),
+                                    );
                                     return;
                                 }
                             }
                         }
                         // flush and rename atomically into place
-                        if let Err(e) = file.flush().await { 
-                            sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("flush failed: {}", e)}));
+                        if let Err(e) = file.flush().await {
+                            sp.bus.publish(
+                                "Models.DownloadProgress",
+                                &json!({"id": id, "error": format!("flush failed: {}", e)}),
+                            );
                             return;
                         }
                         if let Err(e) = afs::rename(&tmp, &target).await {
-                            sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("finalize failed: {}", e)}));
+                            sp.bus.publish(
+                                "Models.DownloadProgress",
+                                &json!({"id": id, "error": format!("finalize failed: {}", e)}),
+                            );
                             return;
                         }
                         {
                             let mut v = models().write().await;
-                            if let Some(m) = v.iter_mut().find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id)) {
+                            if let Some(m) = v
+                                .iter_mut()
+                                .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id))
+                            {
                                 *m = json!({"id": id, "provider": provider, "status":"available", "path": target.to_string_lossy()});
                             }
                         }
-                        let _ = save_json_file_async(&models_path(), &Value::Array(models().read().await.clone())).await;
-                        sp.bus.publish("Models.Changed", &json!({"op":"downloaded","id": id}));
+                        let _ = io::save_json_file_async(
+                            &paths::models_path(),
+                            &Value::Array(models().read().await.clone()),
+                        )
+                        .await;
+                        sp.bus
+                            .publish("Models.Changed", &json!({"op":"downloaded","id": id}));
                     }
                     Err(e) => {
-                        sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("create failed: {}", e)}));
+                        sp.bus.publish(
+                            "Models.DownloadProgress",
+                            &json!({"id": id, "error": format!("create failed: {}", e)}),
+                        );
                     }
                 }
             }
             Err(e) => {
-                sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("request failed: {}", e)}));
+                sp.bus.publish(
+                    "Models.DownloadProgress",
+                    &json!({"id": id, "error": format!("request failed: {}", e)}),
+                );
             }
         }
     });
@@ -495,33 +610,58 @@ async fn models_download(State(state): State<AppState>, Json(req): Json<Download
 
 // ---- Tools ----
 async fn list_tools() -> impl IntoResponse {
-    let out: Vec<Value> = TOOL_LIST.iter().map(|(id, summary)| json!({"id": id, "summary": summary})).collect();
+    let out: Vec<Value> = TOOL_LIST
+        .iter()
+        .map(|(id, summary)| json!({"id": id, "summary": summary}))
+        .collect();
     Json(out)
 }
 #[derive(Deserialize)]
-pub(crate) struct ToolRunReq { id: String, input: Value }
-async fn run_tool_endpoint(State(state): State<AppState>, Json(req): Json<ToolRunReq>) -> impl IntoResponse {
+pub(crate) struct ToolRunReq {
+    id: String,
+    input: Value,
+}
+async fn run_tool_endpoint(
+    State(state): State<AppState>,
+    Json(req): Json<ToolRunReq>,
+) -> impl IntoResponse {
     match run_tool_internal(&req.id, &req.input) {
         Ok(out) => {
-            state.bus.publish("Tool.Ran", &json!({"id": req.id, "output": out}));
+            state
+                .bus
+                .publish("Tool.Ran", &json!({"id": req.id, "output": out}));
             Json(out).into_response()
         }
-        Err(e) => (StatusCode::BAD_REQUEST, Json(json!({"ok": false, "error": e}))).into_response(),
+        Err(e) => (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": e})),
+        )
+            .into_response(),
     }
 }
 
 // ---- Chat ----
 static CHAT_LOG: OnceLock<RwLock<Vec<Value>>> = OnceLock::new();
-fn chat_log() -> &'static RwLock<Vec<Value>> { CHAT_LOG.get_or_init(|| RwLock::new(Vec::new())) }
+fn chat_log() -> &'static RwLock<Vec<Value>> {
+    CHAT_LOG.get_or_init(|| RwLock::new(Vec::new()))
+}
 
 #[derive(Deserialize)]
-pub(crate) struct ChatSendReq { message: String, #[serde(default)] model: Option<String> }
+pub(crate) struct ChatSendReq {
+    message: String,
+    #[serde(default)]
+    model: Option<String>,
+}
 
 fn synth_reply(msg: &str, model: &str) -> String {
     match model.to_ascii_lowercase().as_str() {
         "reverse" => msg.chars().rev().collect(),
         "time" => {
-            let now = SystemTime::now().duration_since(UNIX_EPOCH).ok().map(|d| d.as_secs()).unwrap_or(0);
+            let now = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .ok()
+                .map(|d| d.as_secs())
+                .unwrap_or(0);
             format!("[{}] {}", now, msg)
         }
         _ => format!("You said: {}", msg),
@@ -530,15 +670,40 @@ fn synth_reply(msg: &str, model: &str) -> String {
 
 // ---- Self-learning / Feedback Layer ----
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
-pub(crate) struct FeedbackSignal { id: String, ts: String, kind: String, target: String, confidence: f64, severity: u8, note: Option<String> }
+pub(crate) struct FeedbackSignal {
+    id: String,
+    ts: String,
+    kind: String,
+    target: String,
+    confidence: f64,
+    severity: u8,
+    note: Option<String>,
+}
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
-pub(crate) struct Suggestion { id: String, action: String, params: Value, rationale: String, confidence: f64 }
+pub(crate) struct Suggestion {
+    id: String,
+    action: String,
+    params: Value,
+    rationale: String,
+    confidence: f64,
+}
 #[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
-pub(crate) struct FeedbackState { auto_apply: bool, signals: Vec<FeedbackSignal>, suggestions: Vec<Suggestion> }
+pub(crate) struct FeedbackState {
+    auto_apply: bool,
+    signals: Vec<FeedbackSignal>,
+    suggestions: Vec<Suggestion>,
+}
 static FEEDBACK: OnceLock<RwLock<FeedbackState>> = OnceLock::new();
-fn feedback_cell() -> &'static RwLock<FeedbackState> { FEEDBACK.get_or_init(|| RwLock::new(FeedbackState::default())) }
+fn feedback_cell() -> &'static RwLock<FeedbackState> {
+    FEEDBACK.get_or_init(|| RwLock::new(FeedbackState::default()))
+}
 static SUGG_SEQ: OnceLock<AtomicU64> = OnceLock::new();
-fn next_id() -> String { let s = SUGG_SEQ.get_or_init(|| AtomicU64::new(1)).fetch_add(1, Ordering::Relaxed); format!("sug-{}", s) }
+fn next_id() -> String {
+    let s = SUGG_SEQ
+        .get_or_init(|| AtomicU64::new(1))
+        .fetch_add(1, Ordering::Relaxed);
+    format!("sug-{}", s)
+}
 
 async fn analyze_feedback() {
     let routes_map = stats::routes_for_analysis().await;
@@ -551,76 +716,197 @@ async fn analyze_feedback() {
             worst = Some((p.clone(), *ewma_ms));
         }
     }
-    if let Some((p, ewma_ms)) = worst { if ewma_ms > 800.0 {
-        let desired = (((ewma_ms/1000.0)*2.0)+10.0).clamp(20.0, 180.0) as u64;
-        out.push(Suggestion{
-            id: next_id(), action: "hint".into(), params: json!({"http_timeout_secs": desired}),
-            rationale: format!("High latency on {} (~{:.0} ms); suggest http timeout {}s", p, ewma_ms, desired), confidence: 0.6
-        });
-    } }
+    if let Some((p, ewma_ms)) = worst {
+        if ewma_ms > 800.0 {
+            let desired = (((ewma_ms / 1000.0) * 2.0) + 10.0).clamp(20.0, 180.0) as u64;
+            out.push(Suggestion {
+                id: next_id(),
+                action: "hint".into(),
+                params: json!({"http_timeout_secs": desired}),
+                rationale: format!(
+                    "High latency on {} (~{:.0} ms); suggest http timeout {}s",
+                    p, ewma_ms, desired
+                ),
+                confidence: 0.6,
+            });
+        }
+    }
 
     // Heuristic 2: High error rate -> suggest balanced profile
     let mut high_err = false;
-    for &(_, hits, errors) in routes_map.values() { if hits>=10 && (errors as f64)/(hits as f64) > 0.2 { high_err = true; break; } }
-    if high_err { out.push(Suggestion{ id: next_id(), action: "profile".into(), params: json!({"name":"balanced"}), rationale: "High error rate observed across routes".into(), confidence: 0.55 }); }
+    for &(_, hits, errors) in routes_map.values() {
+        if hits >= 10 && (errors as f64) / (hits as f64) > 0.2 {
+            high_err = true;
+            break;
+        }
+    }
+    if high_err {
+        out.push(Suggestion {
+            id: next_id(),
+            action: "profile".into(),
+            params: json!({"name":"balanced"}),
+            rationale: "High error rate observed across routes".into(),
+            confidence: 0.55,
+        });
+    }
 
     // Heuristic 3: Many memory applications -> suggest increasing memory limit modestly
     let mem_applied = stats::event_kind_count("Memory.Applied").await;
     if mem_applied > 200 {
         let cur = { *mem_limit().read().await } as u64;
-        if cur < 300 { let new = (cur*3/2).clamp(200, 600); out.push(Suggestion{ id: next_id(), action: "mem_limit".into(), params: json!({"limit": new}), rationale: format!("Frequent memory updates ({}); suggest limit {}", mem_applied, new), confidence: 0.5 }); }
+        if cur < 300 {
+            let new = (cur * 3 / 2).clamp(200, 600);
+            out.push(Suggestion {
+                id: next_id(),
+                action: "mem_limit".into(),
+                params: json!({"limit": new}),
+                rationale: format!(
+                    "Frequent memory updates ({}); suggest limit {}",
+                    mem_applied, new
+                ),
+                confidence: 0.5,
+            });
+        }
     }
 
     let mut st = feedback_cell().write().await;
     st.suggestions = out;
 }
 
-async fn feedback_state_get() -> impl IntoResponse { let st = feedback_cell().read().await.clone(); Json(st) }
+async fn feedback_state_get() -> impl IntoResponse {
+    let st = feedback_cell().read().await.clone();
+    Json(st)
+}
 
 #[derive(serde::Deserialize)]
-struct FeedbackSignalPost { kind: String, target: String, confidence: f64, severity: u8, note: Option<String> }
-async fn feedback_signal_post(State(state): State<AppState>, Json(req): Json<FeedbackSignalPost>) -> impl IntoResponse {
+struct FeedbackSignalPost {
+    kind: String,
+    target: String,
+    confidence: f64,
+    severity: u8,
+    note: Option<String>,
+}
+async fn feedback_signal_post(
+    State(state): State<AppState>,
+    Json(req): Json<FeedbackSignalPost>,
+) -> impl IntoResponse {
     let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let sig = FeedbackSignal { id: next_id(), ts, kind: req.kind, target: req.target, confidence: req.confidence.clamp(0.0,1.0), severity: req.severity.clamp(1, 5), note: req.note };
+    let sig = FeedbackSignal {
+        id: next_id(),
+        ts,
+        kind: req.kind,
+        target: req.target,
+        confidence: req.confidence.clamp(0.0, 1.0),
+        severity: req.severity.clamp(1, 5),
+        note: req.note,
+    };
     {
         let mut st = feedback_cell().write().await;
         st.signals.push(sig.clone());
-        if st.signals.len()>200 { st.signals.remove(0); }
+        if st.signals.len() > 200 {
+            st.signals.remove(0);
+        }
     }
-    state.bus.publish("Feedback.Signal", &json!({"signal": sig}));
+    state
+        .bus
+        .publish("Feedback.Signal", &json!({"signal": sig}));
     analyze_feedback().await;
     let st = feedback_cell().read().await.clone();
     persist_feedback().await;
     Json(st)
 }
 
-async fn feedback_analyze_post() -> impl IntoResponse { analyze_feedback().await; let st = feedback_cell().read().await.clone(); persist_feedback().await; Json(st) }
+async fn feedback_analyze_post() -> impl IntoResponse {
+    analyze_feedback().await;
+    let st = feedback_cell().read().await.clone();
+    persist_feedback().await;
+    Json(st)
+}
 
 #[derive(serde::Deserialize)]
-struct ApplyReq { id: String }
-async fn feedback_apply_post(State(state): State<AppState>, Json(req): Json<ApplyReq>) -> impl IntoResponse {
-    let sug_opt = { feedback_cell().read().await.suggestions.iter().find(|s| s.id==req.id).cloned() };
-    if let Some(sug) = sug_opt { let ok = apply_suggestion(&sug, &state).await; if ok { state.bus.publish("Feedback.Applied", &json!({"id": sug.id, "action": sug.action, "params": sug.params})); persist_orch().await; } return Json(json!({"ok": ok})); }
+struct ApplyReq {
+    id: String,
+}
+async fn feedback_apply_post(
+    State(state): State<AppState>,
+    Json(req): Json<ApplyReq>,
+) -> impl IntoResponse {
+    let sug_opt = {
+        feedback_cell()
+            .read()
+            .await
+            .suggestions
+            .iter()
+            .find(|s| s.id == req.id)
+            .cloned()
+    };
+    if let Some(sug) = sug_opt {
+        let ok = apply_suggestion(&sug, &state).await;
+        if ok {
+            state.bus.publish(
+                "Feedback.Applied",
+                &json!({"id": sug.id, "action": sug.action, "params": sug.params}),
+            );
+            persist_orch().await;
+        }
+        return Json(json!({"ok": ok}));
+    }
     Json(json!({"ok": false}))
 }
 
 #[derive(serde::Deserialize)]
-struct AutoReq { enabled: bool }
-async fn feedback_auto_post(Json(req): Json<AutoReq>) -> impl IntoResponse { let mut st = feedback_cell().write().await; st.auto_apply = req.enabled; drop(st); persist_feedback().await; Json(json!({"ok": true})) }
-async fn feedback_reset_post() -> impl IntoResponse { let mut st = feedback_cell().write().await; st.signals.clear(); st.suggestions.clear(); drop(st); persist_feedback().await; Json(json!({"ok": true})) }
+struct AutoReq {
+    enabled: bool,
+}
+async fn feedback_auto_post(Json(req): Json<AutoReq>) -> impl IntoResponse {
+    let mut st = feedback_cell().write().await;
+    st.auto_apply = req.enabled;
+    drop(st);
+    persist_feedback().await;
+    Json(json!({"ok": true}))
+}
+async fn feedback_reset_post() -> impl IntoResponse {
+    let mut st = feedback_cell().write().await;
+    st.signals.clear();
+    st.suggestions.clear();
+    drop(st);
+    persist_feedback().await;
+    Json(json!({"ok": true}))
+}
 
 async fn apply_suggestion(s: &Suggestion, state: &AppState) -> bool {
     match s.action.as_str() {
         "hint" => {
-            if let Some(v) = s.params.get("http_timeout_secs").and_then(|x| x.as_u64()) { let mut h = hints().write().await; h.http_timeout_secs = Some(v); true } else { false }
+            if let Some(v) = s.params.get("http_timeout_secs").and_then(|x| x.as_u64()) {
+                let mut h = hints().write().await;
+                h.http_timeout_secs = Some(v);
+                true
+            } else {
+                false
+            }
         }
         "profile" => {
-            if let Some(name) = s.params.get("name").and_then(|x| x.as_str()) { let mut g = governor_profile().write().await; *g = name.to_string(); state.bus.publish("Governor.Changed", &json!({"profile": name})); true } else { false }
+            if let Some(name) = s.params.get("name").and_then(|x| x.as_str()) {
+                let mut g = governor_profile().write().await;
+                *g = name.to_string();
+                state
+                    .bus
+                    .publish("Governor.Changed", &json!({"profile": name}));
+                true
+            } else {
+                false
+            }
         }
         "mem_limit" => {
-            if let Some(new) = s.params.get("limit").and_then(|x| x.as_u64()) { let mut m = mem_limit().write().await; *m = (new as usize).max(1); true } else { false }
+            if let Some(new) = s.params.get("limit").and_then(|x| x.as_u64()) {
+                let mut m = mem_limit().write().await;
+                *m = (new as usize).max(1);
+                true
+            } else {
+                false
+            }
         }
-        _ => false
+        _ => false,
     }
 }
 async fn chat_get() -> impl IntoResponse {
@@ -631,7 +917,10 @@ async fn chat_clear() -> impl IntoResponse {
     chat_log().write().await.clear();
     Json(json!({"ok": true}))
 }
-async fn chat_send(State(state): State<AppState>, Json(req): Json<ChatSendReq>) -> impl IntoResponse {
+async fn chat_send(
+    State(state): State<AppState>,
+    Json(req): Json<ChatSendReq>,
+) -> impl IntoResponse {
     let model = req.model.clone().unwrap_or_else(|| "echo".to_string());
     let user = json!({"role":"user","content": req.message});
     let reply_txt = synth_reply(&req.message, &model);
@@ -640,10 +929,16 @@ async fn chat_send(State(state): State<AppState>, Json(req): Json<ChatSendReq>) 
         let mut log = chat_log().write().await;
         log.push(user.clone());
         log.push(assist.clone());
-        while log.len() > 200 { log.remove(0); }
+        while log.len() > 200 {
+            log.remove(0);
+        }
     }
-    state.bus.publish("Chat.Message", &json!({"dir":"in","msg": user}));
-    state.bus.publish("Chat.Message", &json!({"dir":"out","msg": assist}));
+    state
+        .bus
+        .publish("Chat.Message", &json!({"dir":"in","msg": user}));
+    state
+        .bus
+        .publish("Chat.Message", &json!({"dir":"out","msg": assist}));
     Json(assist)
 }
 

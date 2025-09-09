@@ -1,5 +1,5 @@
-use axum::response::IntoResponse;
 use axum::response::Html;
+use axum::response::IntoResponse;
 
 pub(crate) async fn debug_ui() -> impl IntoResponse {
     use axum::http::header::{CACHE_CONTROL, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS};
