@@ -69,3 +69,8 @@ pub(crate) async fn routes_for_analysis() -> HashMap<String, (f64, u64, u64)> {
         .map(|(k, v)| (k, (v.ewma_ms, v.hits, v.errors)))
         .collect()
 }
+
+pub(crate) async fn event_kind_count(kind: &str) -> u64 {
+    let s = stats_cell().read().await;
+    s.kinds.get(kind).cloned().unwrap_or(0)
+}

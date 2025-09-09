@@ -614,11 +614,11 @@ async fn analyze_feedback() {
 
     // Heuristic 2: High error rate -> suggest balanced profile
     let mut high_err = false;
-    for (_, (_, hits, errors)) in routes_map.values() { if *hits>=10 && (*errors as f64)/(*hits as f64) > 0.2 { high_err = true; break; } }
+    for &(_, hits, errors) in routes_map.values() { if hits>=10 && (errors as f64)/(hits as f64) > 0.2 { high_err = true; break; } }
     if high_err { out.push(Suggestion{ id: next_id(), action: "profile".into(), params: json!({"name":"balanced"}), rationale: "High error rate observed across routes".into(), confidence: 0.55 }); }
 
     // Heuristic 3: Many memory applications -> suggest increasing memory limit modestly
-    let mem_applied = events.kinds.get("Memory.Applied").cloned().unwrap_or(0);
+    let mem_applied = stats::event_kind_count("Memory.Applied").await;
     if mem_applied > 200 {
         let cur = { *mem_limit().read().await } as u64;
         if cur < 300 { let new = (cur*3/2).clamp(200, 600); out.push(Suggestion{ id: next_id(), action: "mem_limit".into(), params: json!({"limit": new}), rationale: format!("Frequent memory updates ({}); suggest limit {}", mem_applied, new), confidence: 0.5 }); }
