@@ -1,10 +1,11 @@
 #![allow(dead_code)]
+// ext module: split into submodules (ui, later more)
 
 use axum::{
     Router,
     routing::{get, post},
     extract::State,
-    response::{IntoResponse, Html},
+    response::IntoResponse,
     Json
 };
 use axum::http::StatusCode;
@@ -23,6 +24,7 @@ use std::collections::VecDeque;
 use futures_util::StreamExt;
 
 use crate::AppState;
+mod ui;
 
 // ---------- state paths & file helpers ----------
 fn state_dir() -> PathBuf {
@@ -226,7 +228,7 @@ pub fn extra_routes() -> Router<AppState> {
 
     // debug UI gated via ARW_DEBUG=1
     if std::env::var("ARW_DEBUG").ok().as_deref() == Some("1") {
-        r = r.route("/debug", get(debug_ui));
+        r = r.route("/debug", get(ui::debug_ui));
     }
     r
 }
@@ -669,17 +671,7 @@ async fn chat_send(State(state): State<AppState>, Json(req): Json<ChatSendReq>) 
     Json(assist)
 }
 
-async fn debug_ui() -> impl IntoResponse {
-    use axum::http::header::{CACHE_CONTROL, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS};
-    (
-        [
-            (X_CONTENT_TYPE_OPTIONS, "nosniff"),
-            (REFERRER_POLICY, "no-referrer"),
-            (CACHE_CONTROL, "no-store"),
-        ],
-        Html(DEBUG_HTML),
-    )
-}
+// debug_ui implementation lives in ui.rs
 
 // === HTML (debug UI with Save/Load, self-tests, tools panel) ===
 static DEBUG_HTML: &str = r##"<!doctype html>
