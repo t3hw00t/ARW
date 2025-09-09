@@ -66,4 +66,7 @@ pub struct ClusterConfig {
     /// NATS connection URL, e.g. nats://127.0.0.1:4222
     #[serde(default)]
     pub nats_url: Option<String>,
+    /// Optional explicit node id (defaults to hostname)
+    #[serde(default)]
+    pub node_id: Option<String>,
 }

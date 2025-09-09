@@ -72,7 +72,6 @@ impl Bus {
 
 #[cfg(feature = "nats")]
 pub async fn attach_nats_outgoing(bus: &Bus, url: &str) {
-    use async_nats::Client;
     // Connect once and spawn a relay: local bus -> NATS subjects (arw.events.<Kind>)
     match async_nats::connect(url).await {
         Ok(client) => {
@@ -97,3 +96,46 @@ pub async fn attach_nats_outgoing(bus: &Bus, url: &str) {
 pub async fn attach_nats_outgoing(_bus: &Bus, _url: &str) {
     // no-op when not compiled with nats feature
 }
+
+/// Subscribe to NATS subjects and publish into the local bus (aggregator mode).
+/// Uses subject form: `arw.events.node.<node_id>.<Kind>` to avoid loops.
+#[cfg(feature = "nats")]
+pub async fn attach_nats_incoming(bus: &Bus, url: &str, self_node_id: &str) {
+    use futures_util::StreamExt;
+    let self_node = self_node_id.to_string();
+    match async_nats::connect(url).await {
+        Ok(client) => {
+            // Subscribe to node-specific subjects
+            let sub = match client.subscribe("arw.events.node.>").await {
+                Ok(s) => s,
+                Err(e) => {
+                    tracing::warn!("arw-events: subscribe failed: {}", e);
+                    return;
+                }
+            };
+            let bus = bus.clone();
+            tokio::spawn(async move {
+                let mut sub = sub;
+                while let Some(msg) = sub.next().await {
+                    // Subject pattern: arw.events.node.<node>.<Kind>
+                    let subj = msg.subject.clone();
+                    let parts: Vec<&str> = subj.split('.').collect();
+                    if parts.len() >= 5 {
+                        let node = parts[3];
+                        if node == self_node { continue; }
+                    }
+                    if let Ok(env) = serde_json::from_slice::<Envelope>(&msg.payload) {
+                        bus.publish(&env.kind, &env.payload);
+                    }
+                }
+            });
+            tracing::info!("arw-events: ingesting NATS events into local bus from {}", url);
+        }
+        Err(e) => {
+            tracing::warn!("arw-events: failed to connect to NATS at {}: {}", url, e);
+        }
+    }
+}
+
+#[cfg(not(feature = "nats"))]
+pub async fn attach_nats_incoming(_bus: &Bus, _url: &str, _self_node_id: &str) {}

@@ -16,6 +16,7 @@ async fn main() -> anyhow::Result<()> {
         let group = std::env::var("ARW_GROUP").unwrap_or_else(|_| "workers".to_string());
         let q = NatsQueue::connect(&url).await?;
         let nats = async_nats::connect(&url).await?;
+        let node_id = std::env::var("ARW_NODE_ID").unwrap_or_else(|_| "connector".to_string());
         tracing::info!("arw-connector connected to {} as group {}", url, group);
         loop {
             match q.dequeue(&group).await {
@@ -44,9 +45,9 @@ async fn main() -> anyhow::Result<()> {
                         "payload": {"id": t.id, "ok": true, "output": out}
                     });
                     if let Ok(bytes) = serde_json::to_vec(&env) {
-                        let _ = nats
-                            .publish("arw.events.Task.Completed", bytes.into())
-                            .await;
+                        let _ = nats.publish("arw.events.Task.Completed", bytes.clone().into()).await;
+                        let subj = format!("arw.events.node.{}.{}", node_id, "Task.Completed");
+                        let _ = nats.publish(subj, bytes.into()).await;
                     }
                 }
                 Err(e) => {

@@ -138,7 +138,7 @@ async fn main() {
             std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new())
         }
     };
-    // Outgoing event replication when configured
+    // Event replication when configured (ingest from NATS into local bus to avoid loops)
     let use_nats_bus = cfg
         .as_ref()
         .and_then(|c| c.cluster.enabled)
@@ -155,7 +155,10 @@ async fn main() {
                 .as_ref()
                 .and_then(|c| c.cluster.nats_url.clone())
                 .unwrap_or_else(|| "nats://127.0.0.1:4222".to_string());
-            arw_events::attach_nats_outgoing(&bus, &url).await;
+            let node_id = std::env::var("ARW_NODE_ID").ok()
+                .or_else(|| cfg.as_ref().and_then(|c| c.cluster.node_id.clone()))
+                .unwrap_or_else(|| "local".to_string());
+            arw_events::attach_nats_incoming(&bus, &url, &node_id).await;
         }
         #[cfg(not(feature = "nats"))]
         {

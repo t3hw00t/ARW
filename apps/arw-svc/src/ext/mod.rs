@@ -33,6 +33,7 @@ pub mod policy;
 pub mod stats;
 pub mod tools_api;
 pub mod ui;
+pub mod hierarchy_api;
 // internal helpers split into modules
 pub mod io;
 pub mod paths;
@@ -243,6 +244,10 @@ pub fn extra_routes() -> Router<AppState> {
         // tools
         .route("/tools", get(tools_api::list_tools))
         .route("/tools/run", post(tools_api::run_tool_endpoint))
+        // hierarchy negotiation (HTTP scaffolding)
+        .route("/hierarchy/hello", post(hierarchy_api::hello))
+        .route("/hierarchy/offer", post(hierarchy_api::offer))
+        .route("/hierarchy/accept", post(hierarchy_api::accept))
         // orchestration MVP
         .route("/tasks/enqueue", post(tasks_enqueue))
         // chat

@@ -231,6 +231,7 @@ version = "0.1.0"
 dependencies = [
  "async-nats",
  "chrono",
+ "futures-util",
  "serde",
  "serde_json",
  "tokio",
@@ -274,6 +275,7 @@ dependencies = [
  "arw-events",
  "arw-macros",
  "arw-otel",
+ "arw-protocol",
  "axum 0.7.9",
  "chrono",
  "futures-util",
