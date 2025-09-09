@@ -22,40 +22,26 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use futures_util::StreamExt;
 
 use crate::AppState;
-mod ui;
+pub mod ui;
 pub mod stats;
+pub mod paths;
+pub mod io;
+pub mod governor;
+pub mod memory;
+pub mod models;
+pub mod tools;
+pub mod chat;
+pub mod feedback;
 static ASSET_DEBUG_HTML: &str = include_str!("../../assets/debug.html");
 
 // ---------- state paths & file helpers ----------
-fn state_dir() -> PathBuf {
-    let v = arw_core::load_effective_paths();
-    let s = v.get("state_dir").and_then(|x| x.as_str()).unwrap_or(".");
-    PathBuf::from(s.replace('\\', "/"))
-}
-fn memory_path() -> PathBuf { state_dir().join("memory.json") }
-fn models_path() -> PathBuf { state_dir().join("models.json") }
-fn orch_path() -> PathBuf { state_dir().join("orchestration.json") }
-fn feedback_path() -> PathBuf { state_dir().join("feedback.json") }
-fn audit_path() -> PathBuf { state_dir().join("audit.log") }
+use paths::{state_dir, memory_path, models_path, orch_path, feedback_path, audit_path};
 
-fn load_json_file(p: &Path) -> Option<Value> {
-    let s = fs::read_to_string(p).ok()?;
-    serde_json::from_str(&s).ok()
-}
-
-async fn load_json_file_async(p: &Path) -> Option<Value> {
-    let s = afs::read_to_string(p).await.ok()?;
-    serde_json::from_str(&s).ok()
-}
-async fn save_json_file_async(p: &Path, v: &Value) -> std::io::Result<()> {
-    if let Some(parent) = p.parent() { let _ = afs::create_dir_all(parent).await; }
-    let s = serde_json::to_string_pretty(v).unwrap_or_else(|_| "{}".to_string());
-    afs::write(p, s.as_bytes()).await
-}
+use io::{load_json_file, load_json_file_async, save_json_file_async, audit_event};
 
 // ---------- persistence bootstrap ----------
 #[derive(serde::Deserialize)]
-struct OrchFile { #[serde(default)] profile: Option<String>, #[serde(default)] hints: Option<Hints>, #[serde(default)] memory_limit: Option<usize> }
+struct OrchFile { #[serde(default)] profile: Option<String>, #[serde(default)] hints: Option<governor::Hints>, #[serde(default)] memory_limit: Option<usize> }
 
 pub async fn load_persisted() {
     // orchestration
@@ -74,46 +60,22 @@ pub async fn load_persisted() {
 }
 
 async fn persist_orch() {
-    let profile = { governor_profile().read().await.clone() };
-    let hints = { hints().read().await.clone() };
-    let ml = { *mem_limit().read().await };
+    let profile = { governor::governor_profile().read().await.clone() };
+    let hints = { governor::hints().read().await.clone() };
+    let ml = { *memory::mem_limit().read().await };
     let v = json!({"profile": profile, "hints": hints, "memory_limit": ml});
     let _ = save_json_file_async(&orch_path(), &v).await;
 }
 async fn persist_feedback() {
-    let st = { feedback_cell().read().await.clone() };
+    let st = { feedback::feedback_cell().read().await.clone() };
     let v = serde_json::to_value(st).unwrap_or_else(|_| json!({}));
     let _ = save_json_file_async(&feedback_path(), &v).await;
 }
 
-async fn audit_event(action: &str, details: &Value) {
-    let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-    let line = serde_json::json!({"time": ts, "action": action, "details": details});
-    let s = serde_json::to_string(&line).unwrap_or_else(|_| "{}".to_string()) + "\n";
-    let p = audit_path();
-    if let Some(parent) = p.parent() { let _ = afs::create_dir_all(parent).await; }
-    use tokio::io::AsyncWriteExt;
-    if let Ok(mut f) = afs::OpenOptions::new().create(true).append(true).open(&p).await {
-        let _ = f.write_all(s.as_bytes()).await;
-    }
-}
+// audit_event moved to io module
 
 // ---------- Global stores ----------
-fn default_memory() -> Value {
-    json!({
-        "ephemeral":  [],
-        "episodic":   [],
-        "semantic":   [],
-        "procedural": []
-    })
-}
-static MEMORY: OnceLock<RwLock<Value>> = OnceLock::new();
-fn memory() -> &'static RwLock<Value> {
-    MEMORY.get_or_init(|| {
-        let initial = load_json_file(&memory_path()).unwrap_or_else(default_memory);
-        RwLock::new(initial)
-    })
-}
+// memory store moved to memory module
 
 fn default_models() -> Vec<Value> {
     vec![
@@ -121,66 +83,16 @@ fn default_models() -> Vec<Value> {
         json!({"id":"qwen2.5-coder-7b","provider":"local","status":"available"}),
     ]
 }
-static MODELS: OnceLock<RwLock<Vec<Value>>> = OnceLock::new();
-fn models() -> &'static RwLock<Vec<Value>> {
-    MODELS.get_or_init(|| {
-        let initial = load_json_file(&models_path())
-            .and_then(|v| v.as_array().cloned())
-            .unwrap_or_else(default_models);
-        RwLock::new(initial)
-    })
-}
-
-static DEFAULT_MODEL: OnceLock<RwLock<String>> = OnceLock::new();
-fn default_model() -> &'static RwLock<String> {
-    DEFAULT_MODEL.get_or_init(|| {
-        let initial = default_models()
-            .first()
-            .and_then(|v| v.get("id").and_then(|s| s.as_str()))
-            .unwrap_or("")
-            .to_string();
-        RwLock::new(initial)
-    })
-}
+// models store moved to models module
 
 // ---------- governor profile ----------
-static GOV_PROFILE: OnceLock<RwLock<String>> = OnceLock::new();
-fn governor_profile() -> &'static RwLock<String> {
-    GOV_PROFILE.get_or_init(|| {
-        let initial = std::env::var("ARW_PROFILE").unwrap_or_else(|_| "balanced".to_string());
-        RwLock::new(initial)
-    })
-}
+// governor profile moved to governor module
 
 // ---------- memory ring-buffer limit ----------
-static MEM_LIMIT: OnceLock<RwLock<usize>> = OnceLock::new();
-fn initial_mem_limit() -> usize {
-    std::env::var("ARW_MEM_LIMIT").ok().and_then(|s| s.parse::<usize>().ok()).unwrap_or(200)
-}
-fn mem_limit() -> &'static RwLock<usize> {
-    MEM_LIMIT.get_or_init(|| RwLock::new(initial_mem_limit()))
-}
+// mem limit moved to memory module
 
 // ---------- Tool runner (minimal builtins) ----------
-static TOOL_LIST: &[(&str, &str)] = &[
-    ("math.add", "Add two numbers: input {\"a\": number, \"b\": number} -> {\"sum\": number}"),
-    ("time.now", "UTC time in ms: input {} -> {\"now_ms\": number}")
-];
-
-fn run_tool_internal(id: &str, input: &Value) -> Result<Value, String> {
-    match id {
-        "math.add" => {
-            let a = input.get("a").and_then(|v| v.as_f64()).ok_or("missing or invalid 'a'")?;
-            let b = input.get("b").and_then(|v| v.as_f64()).ok_or("missing or invalid 'b'")?;
-            Ok(json!({"sum": a + b}))
-        }
-        "time.now" => {
-            let now = SystemTime::now().duration_since(UNIX_EPOCH).map_err(|e| e.to_string())?.as_millis() as i64;
-            Ok(json!({"now_ms": now}))
-        }
-        _ => Err(format!("unknown tool id: {}", id))
-    }
-}
+// tools moved to tools module
 
 // ---------- Public: mountable routes ----------
 pub fn extra_routes() -> Router<AppState> {
@@ -188,43 +100,43 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/version", get(version))
         .route("/about", get(about))
         // governor
-        .route("/governor/profile", get(governor_get))
-        .route("/governor/profile", post(governor_set))
-        .route("/governor/hints", get(governor_hints_get))
-        .route("/governor/hints", post(governor_hints_set))
+        .route("/governor/profile", get(governor::governor_get))
+        .route("/governor/profile", post(governor::governor_set))
+        .route("/governor/hints", get(governor::governor_hints_get))
+        .route("/governor/hints", post(governor::governor_hints_set))
         // feedback (self-learning)
-        .route("/feedback/state", get(feedback_state_get))
-        .route("/feedback/signal", post(feedback_signal_post))
-        .route("/feedback/analyze", post(feedback_analyze_post))
-        .route("/feedback/apply", post(feedback_apply_post))
-        .route("/feedback/auto", post(feedback_auto_post))
-        .route("/feedback/reset", post(feedback_reset_post))
+        .route("/feedback/state", get(feedback::feedback_state_get))
+        .route("/feedback/signal", post(feedback::feedback_signal_post))
+        .route("/feedback/analyze", post(feedback::feedback_analyze_post))
+        .route("/feedback/apply", post(feedback::feedback_apply_post))
+        .route("/feedback/auto", post(feedback::feedback_auto_post))
+        .route("/feedback/reset", post(feedback::feedback_reset_post))
         // stats
         .route("/introspect/stats", get(stats::stats_get))
         // memory
-        .route("/memory", get(memory_get))
-        .route("/memory/apply", post(memory_apply))
-        .route("/memory/save", post(memory_save))
-        .route("/memory/load", post(memory_load))
-        .route("/memory/limit", get(memory_limit_get))
-        .route("/memory/limit", post(memory_limit_set))
+        .route("/memory", get(memory::memory_get))
+        .route("/memory/apply", post(memory::memory_apply))
+        .route("/memory/save", post(memory::memory_save))
+        .route("/memory/load", post(memory::memory_load))
+        .route("/memory/limit", get(memory::memory_limit_get))
+        .route("/memory/limit", post(memory::memory_limit_set))
         // models
-        .route("/models", get(list_models))
-        .route("/models/refresh", post(refresh_models))
-        .route("/models/save", post(models_save))
-        .route("/models/load", post(models_load))
-        .route("/models/add", post(models_add))
-        .route("/models/delete", post(models_delete))
-        .route("/models/default", get(models_default_get))
-        .route("/models/default", post(models_default_set))
-        .route("/models/download", post(models_download))
+        .route("/models", get(models::list_models))
+        .route("/models/refresh", post(models::refresh_models))
+        .route("/models/save", post(models::models_save))
+        .route("/models/load", post(models::models_load))
+        .route("/models/add", post(models::models_add))
+        .route("/models/delete", post(models::models_delete))
+        .route("/models/default", get(models::models_default_get))
+        .route("/models/default", post(models::models_default_set))
+        .route("/models/download", post(models::models_download))
         // tools
-        .route("/tools", get(list_tools))
-        .route("/tools/run", post(run_tool_endpoint))
+        .route("/tools", get(tools::list_tools))
+        .route("/tools/run", post(tools::run_tool_endpoint))
         // chat
-        .route("/chat", get(chat_get))
-        .route("/chat/send", post(chat_send))
-        .route("/chat/clear", post(chat_clear));
+        .route("/chat", get(chat::chat_get))
+        .route("/chat/send", post(chat::chat_send))
+        .route("/chat/clear", post(chat::chat_clear));
 
     // debug UI gated via ARW_DEBUG=1
     if std::env::var("ARW_DEBUG").ok().as_deref() == Some("1") {
@@ -486,7 +398,11 @@ async fn models_download(State(state): State<AppState>, Json(req): Json<Download
             sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("mkdir failed: {}", e)}));
             return;
         }
-        let client = reqwest::Client::new();
+        let client = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .timeout(std::time::Duration::from_secs(300))
+            .build()
+            .unwrap_or_else(|_| reqwest::Client::new());
         match client.get(&url).send().await {
             Ok(resp) => {
                 let total = resp.content_length().unwrap_or(0);
