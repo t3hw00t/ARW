@@ -11,7 +11,6 @@ use axum::{
 use axum::http::StatusCode;
 use serde::Deserialize;
 use serde_json::{json, Value};
-use std::collections::HashMap;
 use std::sync::OnceLock;
 use tokio::sync::RwLock;
 use std::fs;
@@ -20,13 +19,13 @@ use tokio::io::AsyncWriteExt;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::collections::VecDeque;
 use futures_util::StreamExt;
 
 use crate::AppState;
 mod ui;
 mod stats;
-pub(crate) use stats::{stats_get, stats_on_event, route_obs};
+pub(crate) use stats::{stats_on_event, route_obs};
+static ASSET_DEBUG_HTML: &str = include_str!("../assets/debug.html");
 
 // ---------- state paths & file helpers ----------
 fn state_dir() -> PathBuf {

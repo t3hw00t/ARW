@@ -9,7 +9,6 @@ pub(crate) async fn debug_ui() -> impl IntoResponse {
             (REFERRER_POLICY, "no-referrer"),
             (CACHE_CONTROL, "no-store"),
         ],
-        Html(super::DEBUG_HTML),
+        Html(super::ASSET_DEBUG_HTML),
     )
 }
-
