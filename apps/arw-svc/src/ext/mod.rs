@@ -353,7 +353,7 @@ async fn governor_hints_set(Json(req): Json<Hints>) -> impl IntoResponse {
         if req.http_timeout_secs.is_some() { h.http_timeout_secs = req.http_timeout_secs; }
     }
     persist_orch().await;
-    Json(json!({"ok": true}))
+    Json(json!({"ok": true})).into_response()
 }
 
 async fn memory_apply(State(state): State<AppState>, Json(req): Json<ApplyMemory>) -> impl IntoResponse {
