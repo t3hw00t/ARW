@@ -297,6 +297,7 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
         || path.starts_with("/governor")
         || path.starts_with("/introspect")
         || path.starts_with("/tasks")
+        || path.starts_with("/hierarchy")
         || path.starts_with("/chat")
         || path.starts_with("/feedback");
     if !is_sensitive {
