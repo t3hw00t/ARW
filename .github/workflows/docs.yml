@@ -30,6 +30,11 @@ jobs:
       - name: Generate workspace status page
         run: bash ./scripts/docgen.sh
 
+      - name: Generate OpenAPI spec
+        run: |
+          cargo build -p arw-svc --release --locked
+          OPENAPI_OUT=spec/openapi.yaml ./target/release/arw-svc || true
+
       - name: Install mkdocs
         run: |
           pip install --upgrade pip
