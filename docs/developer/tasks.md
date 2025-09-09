@@ -4,16 +4,22 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-09 18:15 UTC
+Updated: 2025-09-09 20:41 UTC
 
 
 ## To Do
+- [t-250909224103-0211] UI: near-live feedback in /debug — todo (updated: 2025-09-09 20:41:03 UTC)
+- [t-250909224103-5251] Policy: hook feedback auto-apply — todo (updated: 2025-09-09 20:41:03 UTC)
+- [t-250909224102-9629] Spec: AsyncAPI+MCP artifacts + /spec/* — todo (updated: 2025-09-09 20:41:02 UTC)
+- [t-250909224102-8952] Plan: Heuristic engine crate + integration — todo (updated: 2025-09-09 20:41:02 UTC)
 
 ## In Progress
 
 ## Paused
 
 ## Done
+- [t-250909203713-3512] Fix workflows permissions + Windows start + CLI help — done (updated: 2025-09-09 18:37:13 UTC)
+- [t-250909203713-1009] Create branch chore/structure-core-fixes — done (updated: 2025-09-09 18:37:13 UTC)
 - [t-250909201532-3510] Tag release v0.1.1 and trigger dist — done (updated: 2025-09-09 18:15:32 UTC)
     - 2025-09-09 18:15:32 UTC: pushed tag v0.1.1; GH Actions queued
 - [t-250909201215-6424] Tag release v0.1.0 and trigger dist — done (updated: 2025-09-09 18:12:15 UTC)

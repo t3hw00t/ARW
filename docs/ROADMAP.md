@@ -11,6 +11,14 @@ Near‑term (Weeks)
 - Docgen: surface route metrics/events in docs and status page.
 - Showcase readiness: polish docs, packaging, and installer paths.
 
+Heuristic Feedback Engine (Lightweight, Near‑Live)
+- Engine crate: `arw-feedback` (actor + O(1) stats + deltas via bus).
+- Signals: EWMA latency, decayed error rate, tiny P² p95 per route; memory ring pressure; download stalls.
+- Evaluation: 250–500 ms ticks with cooldowns and bounds; suggestions only (manual apply default).
+- State: snapshot published atomically; debounce persistence into `orchestration.json`; audit events.
+- APIs: reuse existing `/feedback/*`; optional `/feedback/updates?since=` delta feed; expose evaluate/apply as tools.
+- Safety: bounded queues/maps; drop/sample on overload; rate‑limit auto‑apply (opt‑in later, policy‑gated).
+
 Mid‑term (1–2 Months)
 - UI app to manage various project types.
 - WASI plugin sandbox: capability‑based tools with explicit permissions.
@@ -19,6 +27,8 @@ Mid‑term (1–2 Months)
 - Capsules: record inputs/outputs/events/hints; export/import; deterministic replay.
 - Dataset & memory lab: local pipelines, tags, audits, and reproducible reports.
 - Tests: feature‑gated HTTP oneshot tests; policy and capability contract tests.
+ - AsyncAPI + MCP artifacts: generate `/spec/asyncapi.yaml` and `/spec/mcp-tools.json` in CI; serve `/spec/*` endpoints.
+ - Policy hooks for feedback auto‑apply decisions (shadow mode → guarded auto).
 
 Long‑term (3–6 Months)
 - Community training interface/simulation:
@@ -37,4 +47,3 @@ Guiding Principles
 - Local‑first, open, privacy‑respecting, and comprehensible.
 - Calm defaults; explicit opt‑in for power features.
 - One truth for schemas; reproducibility over hype.
-

@@ -21,7 +21,7 @@ Reliability: schema validation, structured errors (RFC 7807), CI contract tests,
 
 ARCHITECTURE OVERVIEW
 
-Core: orchestrator, selectors, memory system, event bus, schemas/specs, policy, OTel, governor, hardware probes, connection registry.
+Core: orchestrator, selectors, memory system, event bus, schemas/specs, policy, OTel, governor, hardware probes, connection registry, lightweight feedback engine.
 
 Plugins: optional tools (search, vision, translation, routing, sched, speech, SD/A1111, GitHub, aider, notify, win-palette).
 
@@ -37,7 +37,7 @@ INTERFACES & DOCS
 
 One source of truth: tool functions annotated with macros generate schemas + runtime + docs.
 
-Generated artifacts: /spec/openapi.yaml, /spec/asyncapi.yaml, /spec/mcp-tools.json, /spec/schemas/*.json.
+Generated artifacts: /spec/openapi.yaml, /spec/asyncapi.yaml (event streams including Feedback.*), /spec/mcp-tools.json, /spec/schemas/*.json.
 
 Introspection endpoints expose tool catalogs and schemas at runtime.
 
@@ -63,7 +63,7 @@ arw-autotune benchmarks and writes tuned profiles per device/model.
 
 DEVELOPER WORKFLOW
 
-Define tools with #[arw_tool] (schema, runtime, docs from one function).
+Define tools with #[arw_tool] (schema, runtime, docs from one function). Expose feedback evaluate/apply as tools for MCP/HTTP parity.
 
 Validate inputs → check policy → invoke → emit events → return structured results.
 
