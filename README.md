@@ -65,6 +65,17 @@ The service listens on `http://127.0.0.1:8090`; open `/debug` for a minimal UI.
 - [Roadmap](docs/ROADMAP.md)
 - [Contributing](CONTRIBUTING.md)
 
+## Admin Access
+
+- Sensitive endpoints include: `/debug`, `/probe`, `/memory/*`, `/models/*`, `/governor/*`, `/introspect/*`, `/chat/*`, `/feedback/*`.
+- Access rules:
+  - Set `ARW_DEBUG=1` to allow admin endpoints locally without a token (development only).
+  - Or set an admin token and pass it on requests:
+    - Env: `ARW_ADMIN_TOKEN=your-secret`
+    - Header: `X-ARW-Admin: your-secret`
+  - Rate limiting for admin endpoints: `ARW_ADMIN_RL="limit/window_secs"` (default `60/60`).
+  - HTTP timeout hint can be adjusted dynamically via the debug UI or `/governor/hints`.
+
 ## Community & Support
 
 Questions, ideas, or issues? Open a discussion or file an issue in this
