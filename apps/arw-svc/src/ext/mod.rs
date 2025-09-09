@@ -25,7 +25,7 @@ use crate::AppState;
 mod ui;
 mod stats;
 pub(crate) use stats::{stats_on_event, route_obs};
-static ASSET_DEBUG_HTML: &str = include_str!("../assets/debug.html");
+static ASSET_DEBUG_HTML: &str = include_str!("../../assets/debug.html");
 
 // ---------- state paths & file helpers ----------
 fn state_dir() -> PathBuf {
