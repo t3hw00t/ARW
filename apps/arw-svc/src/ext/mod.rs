@@ -24,6 +24,12 @@ use futures_util::StreamExt;
 use crate::AppState;
 pub mod ui;
 pub mod stats;
+pub mod memory_api;
+pub mod models_api;
+pub mod governor_api;
+pub mod feedback_api;
+pub mod chat_api;
+pub mod tools_api;
 static ASSET_DEBUG_HTML: &str = include_str!("../../assets/debug.html");
 
 // ---------- state paths & file helpers ----------
@@ -191,43 +197,43 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/version", get(version))
         .route("/about", get(about))
         // governor
-        .route("/governor/profile", get(governor_get))
-        .route("/governor/profile", post(governor_set))
-        .route("/governor/hints", get(governor_hints_get))
-        .route("/governor/hints", post(governor_hints_set))
+        .route("/governor/profile", get(governor_api::governor_get))
+        .route("/governor/profile", post(governor_api::governor_set))
+        .route("/governor/hints", get(governor_api::governor_hints_get))
+        .route("/governor/hints", post(governor_api::governor_hints_set))
         // feedback (self-learning)
-        .route("/feedback/state", get(feedback_state_get))
-        .route("/feedback/signal", post(feedback_signal_post))
-        .route("/feedback/analyze", post(feedback_analyze_post))
-        .route("/feedback/apply", post(feedback_apply_post))
-        .route("/feedback/auto", post(feedback_auto_post))
-        .route("/feedback/reset", post(feedback_reset_post))
+        .route("/feedback/state", get(feedback_api::feedback_state_get))
+        .route("/feedback/signal", post(feedback_api::feedback_signal_post))
+        .route("/feedback/analyze", post(feedback_api::feedback_analyze_post))
+        .route("/feedback/apply", post(feedback_api::feedback_apply_post))
+        .route("/feedback/auto", post(feedback_api::feedback_auto_post))
+        .route("/feedback/reset", post(feedback_api::feedback_reset_post))
         // stats
         .route("/introspect/stats", get(stats::stats_get))
         // memory
-        .route("/memory", get(memory_get))
-        .route("/memory/apply", post(memory_apply))
-        .route("/memory/save", post(memory_save))
-        .route("/memory/load", post(memory_load))
-        .route("/memory/limit", get(memory_limit_get))
-        .route("/memory/limit", post(memory_limit_set))
+        .route("/memory", get(memory_api::memory_get))
+        .route("/memory/apply", post(memory_api::memory_apply))
+        .route("/memory/save", post(memory_api::memory_save))
+        .route("/memory/load", post(memory_api::memory_load))
+        .route("/memory/limit", get(memory_api::memory_limit_get))
+        .route("/memory/limit", post(memory_api::memory_limit_set))
         // models
-        .route("/models", get(list_models))
-        .route("/models/refresh", post(refresh_models))
-        .route("/models/save", post(models_save))
-        .route("/models/load", post(models_load))
-        .route("/models/add", post(models_add))
-        .route("/models/delete", post(models_delete))
-        .route("/models/default", get(models_default_get))
-        .route("/models/default", post(models_default_set))
-        .route("/models/download", post(models_download))
+        .route("/models", get(models_api::list_models))
+        .route("/models/refresh", post(models_api::refresh_models))
+        .route("/models/save", post(models_api::models_save))
+        .route("/models/load", post(models_api::models_load))
+        .route("/models/add", post(models_api::models_add))
+        .route("/models/delete", post(models_api::models_delete))
+        .route("/models/default", get(models_api::models_default_get))
+        .route("/models/default", post(models_api::models_default_set))
+        .route("/models/download", post(models_api::models_download))
         // tools
-        .route("/tools", get(list_tools))
-        .route("/tools/run", post(run_tool_endpoint))
+        .route("/tools", get(tools_api::list_tools))
+        .route("/tools/run", post(tools_api::run_tool_endpoint))
         // chat
-        .route("/chat", get(chat_get))
-        .route("/chat/send", post(chat_send))
-        .route("/chat/clear", post(chat_clear));
+        .route("/chat", get(chat_api::chat_get))
+        .route("/chat/send", post(chat_api::chat_send))
+        .route("/chat/clear", post(chat_api::chat_clear));
 
     // debug UI gated via ARW_DEBUG=1
     if std::env::var("ARW_DEBUG").ok().as_deref() == Some("1") {
