@@ -465,6 +465,10 @@ async fn models_download(State(state): State<AppState>, Json(req): Json<Download
             v.push(json!({"id": req.id, "provider": req.provider.clone().unwrap_or("local".into()), "status":"downloading"}));
         }
     }
+    // Validate URL scheme (accept http/https only)
+    if !(req.url.starts_with("http://") || req.url.starts_with("https://")) {
+        return (StatusCode::BAD_REQUEST, Json(json!({"ok": false, "error": "invalid url scheme"}))).into_response();
+    }
     state.bus.publish("Models.Download", &json!({"id": req.id}));
     audit_event("models.download", &json!({"id": req.id})).await;
     let id = req.id.clone();
