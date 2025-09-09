@@ -4,7 +4,7 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-09 17:49 UTC
+Updated: 2025-09-09 18:03 UTC
 
 
 ## To Do
@@ -14,6 +14,12 @@ Updated: 2025-09-09 17:49 UTC
 ## Paused
 
 ## Done
+- [t-250909200355-9261] Publish artifacts on tags — done (updated: 2025-09-09 18:03:55 UTC)
+- [t-250909200354-6386] Add Makefile mirroring Justfile — done (updated: 2025-09-09 18:03:55 UTC)
+- [t-250909200354-9170] Enable wasm feature compile + test — done (updated: 2025-09-09 18:03:54 UTC)
+- [t-250909195456-5087] Commit and push changes to main — done (updated: 2025-09-09 17:54:56 UTC)
+    - 2025-09-09 17:54:56 UTC: HEAD 3cd4819
+- [t-250909195456-7421] Add Justfile for common workflows — done (updated: 2025-09-09 17:54:56 UTC)
 - [t-250909194935-4017] Lint and tests green — done (updated: 2025-09-09 17:49:35 UTC)
 - [t-250909194935-6232] Format codebase (cargo fmt) — done (updated: 2025-09-09 17:49:35 UTC)
 - [t-250909194935-0534] Refactor svc ext to use io/paths — done (updated: 2025-09-09 17:49:35 UTC)

@@ -1,44 +1,65 @@
-//! Helpers for loading WASM plug‑ins implementing the `tool` ABI.
+//! Helpers for WASM plug‑ins (experimental, feature = "wasm").
 #![cfg(feature = "wasm")]
 
-use anyhow::Result;
-use wasmtime::component::{bindgen, Component, Linker};
-use wasmtime::{Engine, Store};
-// Re-export the Engine type for downstream macros/helpers
+use anyhow::{anyhow, Result};
+use wasmtime::component::Component;
+use wasmtime::Store;
+// Re-export the Engine type for downstream helpers
 pub use wasmtime::Engine;
 
-// Generate bindings from the simple tool ABI defined in `wit/tool.wit`.
-bindgen!({ path: "./wit", world: "plugin" });
+/// Minimal tool metadata placeholder (ABI pending)
+#[derive(Debug, Clone)]
+pub struct ToolInfo {
+    pub id: String,
+    pub version: String,
+    pub summary: String,
+    pub stability: String,
+}
 
-/// Runtime wrapper around a compiled WASM plug‑in implementing the `tool` interface.
+/// Minimal runtime wrapper. Note: ABI integration pending.
 pub struct WasmTool {
-    instance: Plugin,
+    #[allow(unused)]
+    component: Component,
     store: Store<()>,
     info: ToolInfo,
 }
 
 impl WasmTool {
-    /// Load a new plug‑in from raw bytes.
+    /// Attempt to load a plug‑in from raw bytes. Returns an error for invalid bytes.
     pub fn from_bytes(engine: &Engine, bytes: &[u8]) -> Result<Self> {
         let component = Component::from_binary(engine, bytes)?;
-        let mut linker = Linker::new(engine);
-        let mut store = Store::new(engine, ());
-        let instance = Plugin::new(&mut store, &component, &linker)?;
-        let info = instance.call_register(&mut store)?;
+        let store = Store::new(engine, ());
         Ok(Self {
-            instance,
+            component,
             store,
-            info,
+            info: ToolInfo {
+                id: "unknown".into(),
+                version: "0.0.0".into(),
+                summary: "WASM tool (placeholder)".into(),
+                stability: "experimental".into(),
+            },
         })
     }
 
-    /// Metadata exposed by the plug‑in.
     pub fn info(&self) -> &ToolInfo {
         &self.info
     }
 
-    /// Invoke the plug‑in with a JSON string.
-    pub fn invoke(&mut self, input: &str) -> Result<String> {
-        self.instance.call_invoke(&mut self.store, input)
+    pub fn invoke(&mut self, _input: &str) -> Result<String> {
+        Err(anyhow!("invoke not implemented (experimental wasm feature)"))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn wasm_engine_compiles_component_or_errors() {
+        let engine = Engine::default();
+        // Passing garbage bytes should return an error but exercise the code path.
+        let bytes = b"not-a-component";
+        let res = WasmTool::from_bytes(&engine, bytes);
+        assert!(res.is_err());
     }
 }

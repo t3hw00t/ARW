@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-09 17:49 UTC",
+  "updated": "2025-09-09 18:03 UTC",
   "tasks": [
     {
       "id": "t-250909170247-9910",
@@ -145,6 +145,56 @@
       "notes": [],
       "updated": "2025-09-09 17:49:35 UTC",
       "done_at": "2025-09-09 17:49:35 UTC"
+    },
+    {
+      "id": "t-250909195456-7421",
+      "title": "Add Justfile for common workflows",
+      "desc": "Build, test, lint, start, docs, tasks",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 17:54:56 UTC",
+      "done_at": "2025-09-09 17:54:56 UTC"
+    },
+    {
+      "id": "t-250909195456-5087",
+      "title": "Commit and push changes to main",
+      "desc": "Pushed via SSH to origin/main",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-09 17:54:56 UTC",
+          "text": "HEAD 3cd4819"
+        }
+      ],
+      "updated": "2025-09-09 17:54:56 UTC",
+      "done_at": "2025-09-09 17:54:56 UTC"
+    },
+    {
+      "id": "t-250909200354-9170",
+      "title": "Enable wasm feature compile + test",
+      "desc": "Stub wasm runtime; add feature build step in CI; add unit test",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 18:03:54 UTC",
+      "done_at": "2025-09-09 18:03:54 UTC"
+    },
+    {
+      "id": "t-250909200354-6386",
+      "title": "Add Makefile mirroring Justfile",
+      "desc": "Make targets: build/test/lint/fmt/package/docs/start",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 18:03:55 UTC",
+      "done_at": "2025-09-09 18:03:55 UTC"
+    },
+    {
+      "id": "t-250909200355-9261",
+      "title": "Publish artifacts on tags",
+      "desc": "Update dist workflow to attach artifacts to GitHub Release",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 18:03:55 UTC",
+      "done_at": "2025-09-09 18:03:55 UTC"
     }
   ]
 }

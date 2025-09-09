@@ -41,6 +41,9 @@ jobs:
       - name: Tests
         run: cargo test --workspace --locked
 
+      - name: Build (arw-core + wasm feature)
+        run: cargo build -p arw-core --features wasm
+
       - name: Security audit (cargo-audit)
         uses: actions-rs/audit-check@v1
         with:
