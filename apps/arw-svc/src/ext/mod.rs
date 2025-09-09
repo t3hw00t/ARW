@@ -1183,8 +1183,3 @@ document.addEventListener('DOMContentLoaded', ()=>{
 "##;
 
 // stats moved to stats.rs
-}
-async fn stats_get() -> impl IntoResponse {
-    // moved to stats module
-    unimplemented!()
-}
