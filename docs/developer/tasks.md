@@ -4,7 +4,7 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-09 18:03 UTC
+Updated: 2025-09-09 18:12 UTC
 
 
 ## To Do
@@ -14,6 +14,8 @@ Updated: 2025-09-09 18:03 UTC
 ## Paused
 
 ## Done
+- [t-250909201215-6424] Tag release v0.1.0 and trigger dist — done (updated: 2025-09-09 18:12:15 UTC)
+    - 2025-09-09 18:12:15 UTC: pushed tag v0.1.0; GH Actions run started
 - [t-250909200355-9261] Publish artifacts on tags — done (updated: 2025-09-09 18:03:55 UTC)
 - [t-250909200354-6386] Add Makefile mirroring Justfile — done (updated: 2025-09-09 18:03:55 UTC)
 - [t-250909200354-9170] Enable wasm feature compile + test — done (updated: 2025-09-09 18:03:54 UTC)
