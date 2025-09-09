@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-09 18:15 UTC",
+  "updated": "2025-09-09 20:41 UTC",
   "tasks": [
     {
       "id": "t-250909170247-9910",
@@ -223,6 +223,56 @@
       ],
       "updated": "2025-09-09 18:15:32 UTC",
       "done_at": "2025-09-09 18:15:32 UTC"
+    },
+    {
+      "id": "t-250909203713-1009",
+      "title": "Create branch chore/structure-core-fixes",
+      "desc": "Fix workflows perms; Windows no-tray; CLI help; core warnings",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 18:37:13 UTC",
+      "done_at": "2025-09-09 18:37:13 UTC"
+    },
+    {
+      "id": "t-250909203713-3512",
+      "title": "Fix workflows permissions + Windows start + CLI help",
+      "desc": "Prepare structure before next release",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-09 18:37:13 UTC",
+      "done_at": "2025-09-09 18:37:13 UTC"
+    },
+    {
+      "id": "t-250909224102-8952",
+      "title": "Plan: Heuristic engine crate + integration",
+      "desc": "Create arw-feedback crate; actor with O(1) stats; bus deltas; snapshot+persistence; wire /feedback/*",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-09 20:41:02 UTC"
+    },
+    {
+      "id": "t-250909224102-9629",
+      "title": "Spec: AsyncAPI+MCP artifacts + /spec/*",
+      "desc": "Generate /spec/asyncapi.yaml and /spec/mcp-tools.json in CI and serve endpoints",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-09 20:41:02 UTC"
+    },
+    {
+      "id": "t-250909224103-5251",
+      "title": "Policy: hook feedback auto-apply",
+      "desc": "Shadow mode default; policy-gated auto-apply with bounds and rate limits",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-09 20:41:03 UTC"
+    },
+    {
+      "id": "t-250909224103-0211",
+      "title": "UI: near-live feedback in /debug",
+      "desc": "Consume Feedback.Suggested via SSE; show deltas with rationale/confidence",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-09 20:41:03 UTC"
     }
   ]
 }

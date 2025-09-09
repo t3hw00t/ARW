@@ -49,12 +49,17 @@ if (-not $tray -or -not (Test-Path $tray)) {
   $tray = Join-Path (Join-Path $root 'target\release') $trayExe
 }
 
-if (Test-Path $tray) {
+# Respect ARW_NO_TRAY=1 for CLI-only environments
+$skipTray = $false
+if ($env:ARW_NO_TRAY -and $env:ARW_NO_TRAY -eq '1') { $skipTray = $true }
+
+if (-not $skipTray -and (Test-Path $tray)) {
   Info "Launching $svc on http://127.0.0.1:$Port"
   Start-Process -FilePath $svc | Out-Null
   Info "Launching tray $tray"
   & $tray
 } else {
-  Info "Launching $svc on http://127.0.0.1:$Port (tray not found)"
+  $msg = if ($skipTray) { '(ARW_NO_TRAY=1)' } else { '(tray not found)' }
+  Info "Launching $svc on http://127.0.0.1:$Port $msg"
   & $svc
 }

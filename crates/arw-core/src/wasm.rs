@@ -20,6 +20,7 @@ pub struct ToolInfo {
 pub struct WasmTool {
     #[allow(unused)]
     component: Component,
+    #[allow(dead_code)]
     store: Store<()>,
     info: ToolInfo,
 }
@@ -46,7 +47,9 @@ impl WasmTool {
     }
 
     pub fn invoke(&mut self, _input: &str) -> Result<String> {
-        Err(anyhow!("invoke not implemented (experimental wasm feature)"))
+        Err(anyhow!(
+            "invoke not implemented (experimental wasm feature)"
+        ))
     }
 }
 
