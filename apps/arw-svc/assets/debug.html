@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>ARW Debug</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    :root{color-scheme:light dark}
+    body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;line-height:1.45}
+    code,pre{background:#0b0b0c10;padding:2px 4px;border-radius:4px}
+    .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+    button{padding:8px 12px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer}
+    button:hover{background:#f3f4f6}
+  </style>
+</head>
+<body>
+  <header>
+    <h2>ARW Debug</h2>
+    <code id="port"></code>
+  </header>
+  <div class="row">
+    <button onclick="ping()">Ping /healthz</button>
+    <button onclick="load('/about')">/about</button>
+    <button onclick="load('/introspect/tools')">/introspect/tools</button>
+    <button onclick="load('/introspect/stats')">/introspect/stats</button>
+  </div>
+  <h3>Response</h3>
+  <pre id="out">{}</pre>
+  <script>
+    const base = location.origin;
+    document.getElementById('port').textContent = location.host;
+    async function ping(){
+      try{ const r = await fetch(base + '/healthz');
+            document.getElementById('out').textContent = JSON.stringify({status:r.status}, null, 2);
+      }catch(e){ document.getElementById('out').textContent = String(e); }
+    }
+    async function load(path){
+      try{ const r = await fetch(base + path);
+            const t = await r.text();
+            try{ document.getElementById('out').textContent = JSON.stringify(JSON.parse(t), null, 2); }
+            catch{ document.getElementById('out').textContent = t; }
+      }catch(e){ document.getElementById('out').textContent = String(e); }
+    }
+  </script>
+</body>
+</html>
+

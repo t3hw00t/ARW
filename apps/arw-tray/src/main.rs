@@ -4,19 +4,18 @@ use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
-use tray_icon::{menu, TrayIconBuilder, TrayIcon};
+use tray_icon::{menu, TrayIconBuilder};
 use tray_icon::menu::MenuEvent;
 
 #[derive(Clone)]
 struct Shared {
     svc: Arc<Mutex<Option<Child>>>,
-    tray: Arc<Mutex<Option<TrayIcon>>>,
     port: u16,
 }
 
 fn main() -> Result<()> {
     let port: u16 = std::env::var("ARW_PORT").ok().and_then(|s| s.parse().ok()).unwrap_or(8090);
-    let shared = Shared { svc: Arc::new(Mutex::new(None)), tray: Arc::new(Mutex::new(None)), port };
+    let shared = Shared { svc: Arc::new(Mutex::new(None)), port };
 
     let menu = menu::Menu::new();
     let m_start = menu::MenuItem::new("Start Service", true, None);
@@ -34,7 +33,7 @@ fn main() -> Result<()> {
     menu.append(&menu::PredefinedMenuItem::separator())?;
     menu.append(&m_quit)?;
 
-    let mut tray = TrayIconBuilder::new()
+    let tray = TrayIconBuilder::new()
         .with_menu(Box::new(menu))
         .with_tooltip("ARW: offline")
         .build()?;
@@ -57,26 +56,13 @@ fn main() -> Result<()> {
         });
     }
 
-    // store tray handle
-    {
-        let mut g = shared.tray.lock().unwrap();
-        *g = Some(tray);
-    }
+    // Keep tray handle alive for process lifetime
+    let _tray_guard = tray;
 
     // Health monitor omitted (keeps tray on main thread only)
 
     // keep running
     loop { thread::sleep(Duration::from_secs(3600)); }
-}
-
-fn check_health(port: u16) -> bool {
-    let url = format!("http://127.0.0.1:{}/healthz", port);
-    let agent = ureq::AgentBuilder::new().timeout_connect(Duration::from_millis(1000)).timeout_read(Duration::from_millis(1000)).build();
-    agent.get(&url).call().ok().map(|r| r.status()==200).unwrap_or(false)
-}
-
-fn start_service(shared: &Shared) -> Result<()> {
-    start_service_inner(&shared.svc, shared.port)
 }
 
 fn start_service_inner(svc: &Arc<Mutex<Option<Child>>>, port: u16) -> Result<()> {
@@ -94,10 +80,6 @@ fn start_service_inner(svc: &Arc<Mutex<Option<Child>>>, port: u16) -> Result<()>
     let child = cmd.spawn()?;
     *svc.lock().unwrap() = Some(child);
     Ok(())
-}
-
-fn stop_service(shared: &Shared) -> Result<()> {
-    stop_service_inner(&shared.svc, shared.port)
 }
 
 fn stop_service_inner(svc: &Arc<Mutex<Option<Child>>>, port: u16) -> Result<()> {

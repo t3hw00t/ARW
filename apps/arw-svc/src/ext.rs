@@ -470,15 +470,14 @@ async fn models_download(State(state): State<AppState>, Json(req): Json<Download
     let provider = req.provider.clone().unwrap_or("local".into());
     let sp = state.clone();
     tokio::spawn(async move {
-        let file_name = url.split('/').last().unwrap_or(&id).to_string();
+        let file_name = url.rsplit('/').next().unwrap_or(&id).to_string();
         let target = state_dir().join("models").join(&file_name);
         if let Some(parent) = target.parent() { let _ = afs::create_dir_all(parent).await; }
         let client = reqwest::Client::new();
         match client.get(&url).send().await {
             Ok(resp) => {
                 let total = resp.content_length().unwrap_or(0);
-                match afs::File::create(&target).await {
-                    Ok(mut file) => {
+                if let Ok(mut file) = afs::File::create(&target).await {
                         let mut downloaded: u64 = 0;
                         let mut stream = resp.bytes_stream();
                         while let Some(chunk) = stream.next().await {
@@ -505,8 +504,6 @@ async fn models_download(State(state): State<AppState>, Json(req): Json<Download
                         }
                         let _ = save_json_file_async(&models_path(), &Value::Array(models().read().await.clone())).await;
                         sp.bus.publish("Models.Changed", &json!({"op":"downloaded","id": id}));
-                    }
-                    Err(_) => {}
                 }
             }
             Err(_) => {
@@ -680,9 +677,13 @@ async fn debug_ui() -> impl IntoResponse {
             (REFERRER_POLICY, "no-referrer"),
             (CACHE_CONTROL, "no-store"),
         ],
-        Html(DEBUG_HTML),
+        Html(ASSET_DEBUG_HTML),
     )
 }
+
+// Debug UI content moved to an asset for maintainability
+#[allow(dead_code)]
+static ASSET_DEBUG_HTML: &str = include_str!("../assets/debug.html");
 
 // === HTML (debug UI with Save/Load, self-tests, tools panel) ===
 static DEBUG_HTML: &str = r##"<!doctype html>

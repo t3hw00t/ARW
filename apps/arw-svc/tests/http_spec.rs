@@ -6,7 +6,7 @@ use axum::Router;
 async fn healthz_ok() {
     let _app: Router<_> = build_router();
     // If we reach here, building the router with all routes/state succeeded.
-    assert!(true);
+    let _ = _app;
 }
 
 #[tokio::test]

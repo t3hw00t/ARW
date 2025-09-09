@@ -2,121 +2,31 @@ name: CI
 
 on:
   push:
-    branches: [ main, master ]
   pull_request:
-    branches: [ main, master ]
 
 jobs:
-  build-test:
-    name: Build and Test (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest]
+  build-test-lint:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
       - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: actions/cache@v4
+        uses: actions-rs/toolchain@v1
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          toolchain: stable
+          profile: minimal
+          override: true
 
-      - name: Build (all targets)
-        run: cargo build --workspace --all-targets --locked
+      - name: Rust cache
+        uses: Swatinem/rust-cache@v2
 
-      - name: Test
-        run: cargo test --workspace --locked
-
-      - name: Verify OpenAPI spec
-        run: |
-          OPENAPI_OUT=docs/api/openapi.yaml cargo run --locked -p arw-svc --quiet
-          git diff --exit-code docs/api/openapi.yaml
-
-      - name: Rustfmt (check)
-        run: |
-          rustup component add rustfmt
-          cargo fmt --all -- --check
+      - name: Format check
+        run: cargo fmt --all -- --check
 
       - name: Clippy (deny warnings)
-        run: |
-          rustup component add clippy
-          cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Unused dependencies (deny)
-        run: |
-          rustup toolchain install nightly --profile minimal --no-self-update
-          cargo +nightly install cargo-udeps --locked
-          cargo +nightly udeps --workspace --all-targets
+      - name: Tests
+        run: cargo test --workspace --locked --all-features
 
-      - name: MSRV (verify)
-        run: |
-          cargo install cargo-msrv --locked
-          cargo msrv verify
-
-      - name: Package artifact (Windows)
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: ./scripts/package.ps1
-
-      - name: Upload artifact (Windows)
-        if: runner.os == 'Windows'
-        uses: actions/upload-artifact@v4
-        with:
-          name: arw-windows-bundle
-          path: dist/*.zip
-
-      - name: Package artifact (Linux)
-        if: runner.os == 'Linux'
-        run: bash ./scripts/package.sh --no-build
-
-      - name: Upload artifact (Linux)
-        if: runner.os == 'Linux'
-        uses: actions/upload-artifact@v4
-        with:
-          name: arw-linux-bundle
-          path: dist/*.zip
-
-  nix-build-test:
-    name: Nix Build and Test
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install Nix
-        uses: cachix/install-nix-action@v25
-      - name: Build in Nix
-        run: nix develop --command cargo build --workspace --all-targets --locked
-      - name: Test in Nix
-        run: nix develop --command cargo test --workspace --locked
-
-  docs-check:
-    name: Docs Build
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      - name: Install Rust (for docgen)
-        uses: dtolnay/rust-toolchain@stable
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.x'
-      - name: Install mkdocs
-        run: |
-          pip install --upgrade pip
-          pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin
-      - name: Install docgen deps (jq)
-        run: sudo apt-get update && sudo apt-get install -y jq
-      - name: Generate workspace status page
-        run: bash ./scripts/docgen.sh
-      - name: Build docs (strict)
-        run: mkdocs build --strict

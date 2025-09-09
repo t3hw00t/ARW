@@ -1,0 +1,12 @@
+* text=auto
+
+# Prefer LF for source files
+*.rs text eol=lf
+*.toml text eol=lf
+*.sh text eol=lf
+*.md text eol=lf
+docs/** text eol=lf
+
+# Windows scripts
+*.ps1 text eol=crlf
+
