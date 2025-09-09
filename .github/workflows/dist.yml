@@ -23,6 +23,15 @@ jobs:
         uses: actions/checkout@v4
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+      - name: Install GTK and tray build deps (Linux)
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential pkg-config \
+            libgtk-3-dev libglib2.0-dev libgdk-pixbuf2.0-dev \
+            libpango1.0-dev libatk1.0-dev libcairo2-dev \
+            libxdo-dev libayatana-appindicator3-dev
       - name: Cache cargo
         uses: actions/cache@v4
         with:

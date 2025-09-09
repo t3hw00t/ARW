@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-09 18:12 UTC",
+  "updated": "2025-09-09 18:15 UTC",
   "tasks": [
     {
       "id": "t-250909170247-9910",
@@ -209,6 +209,20 @@
       ],
       "updated": "2025-09-09 18:12:15 UTC",
       "done_at": "2025-09-09 18:12:15 UTC"
+    },
+    {
+      "id": "t-250909201532-3510",
+      "title": "Tag release v0.1.1 and trigger dist",
+      "desc": "fix release asset path; push v0.1.1",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-09 18:15:32 UTC",
+          "text": "pushed tag v0.1.1; GH Actions queued"
+        }
+      ],
+      "updated": "2025-09-09 18:15:32 UTC",
+      "done_at": "2025-09-09 18:15:32 UTC"
     }
   ]
 }
