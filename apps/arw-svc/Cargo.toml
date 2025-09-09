@@ -16,7 +16,7 @@ arw-otel = { path = "../../crates/arw-otel", default-features = false }
 tokio-stream = { workspace = true }
 arw-macros = { path = "../../crates/arw-macros" }
 inventory = { workspace = true }
-tower-http = { version = "0.5", features = ["trace","compression-br","compression-gzip","cors","timeout","fs"] }
+tower-http = { version = "0.5", features = ["trace","compression-br","compression-gzip","cors","timeout","fs","limit"] }
 chrono = { workspace = true }
 utoipa = { workspace = true }
 reqwest = { workspace = true }
