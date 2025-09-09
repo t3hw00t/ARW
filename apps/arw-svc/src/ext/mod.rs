@@ -265,6 +265,9 @@ async fn about() -> impl IntoResponse {
         "version": env!("CARGO_PKG_VERSION"),
         "docs_url": std::env::var("ARW_DOCS_URL").ok(),
         "endpoints": [
+          "/spec/openapi.yaml",
+          "/spec/asyncapi.yaml",
+          "/spec/mcp-tools.json",
           "/governor/profile",
           "/governor/hints",
           "/healthz",
@@ -858,9 +861,13 @@ async fn feedback_apply_post(
         }) { sug_opt = Some(s); }
     }
     if let Some(sug) = sug_opt {
-        // Policy-gated apply
-        let allow = policy::allow_apply(&sug.action, &sug.params).await;
-        let ok = if allow { apply_suggestion(&sug, &state).await } else { false };
+        // Policy-gated apply with error reason
+        let ok = match policy::allow_apply(&sug.action, &sug.params).await {
+            Ok(()) => apply_suggestion(&sug, &state).await,
+            Err(reason) => {
+                return Json(json!({"ok": false, "reason": reason}));
+            }
+        };
         if ok {
             state.bus.publish(
                 "Feedback.Applied",
@@ -870,7 +877,7 @@ async fn feedback_apply_post(
         }
         return Json(json!({"ok": ok}));
     }
-    Json(json!({"ok": false}))
+    Json(json!({"ok": false, "reason": "unknown suggestion id"}))
 }
 
 #[derive(serde::Deserialize)]

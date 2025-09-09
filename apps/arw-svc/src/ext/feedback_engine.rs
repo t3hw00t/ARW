@@ -15,7 +15,8 @@ fn ver() -> &'static AtomicU64 { VERSION.get_or_init(|| AtomicU64::new(0)) }
 pub fn start_feedback_engine(state: AppState) {
     // Spawn a single actor with short cadence; no blocking on request paths
     tokio::spawn(async move {
-        let mut tick = tokio::time::interval(std::time::Duration::from_millis(500));
+        let tick_ms: u64 = std::env::var("ARW_FEEDBACK_TICK_MS").ok().and_then(|s| s.parse().ok()).unwrap_or(500);
+        let mut tick = tokio::time::interval(std::time::Duration::from_millis(tick_ms));
         tick.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
         loop {
             tick.tick().await;
