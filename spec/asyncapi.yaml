@@ -1,0 +1,50 @@
+asyncapi: 2.6.0
+info:
+  title: "arw-svc events"
+  version: "0.1.0"
+defaultContentType: application/json
+channels:
+  Service.Start:
+    subscribe:
+      message:
+        name: Service.Start
+  Service.Health:
+    subscribe:
+      message:
+        name: Service.Health
+  Service.Test:
+    subscribe:
+      message:
+        name: Service.Test
+  Governor.Changed:
+    subscribe:
+      message:
+        name: Governor.Changed
+  Memory.Applied:
+    subscribe:
+      message:
+        name: Memory.Applied
+  Models.Changed:
+    subscribe:
+      message:
+        name: Models.Changed
+  Models.DownloadProgress:
+    subscribe:
+      message:
+        name: Models.DownloadProgress
+  Tool.Ran:
+    subscribe:
+      message:
+        name: Tool.Ran
+  Feedback.Signal:
+    subscribe:
+      message:
+        name: Feedback.Signal
+  Feedback.Suggested:
+    subscribe:
+      message:
+        name: Feedback.Suggested
+  Feedback.Applied:
+    subscribe:
+      message:
+        name: Feedback.Applied

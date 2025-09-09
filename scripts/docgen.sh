@@ -77,3 +77,75 @@ else
     info "Wrote placeholder $tasks_md"
   fi
 fi
+
+# --- Spec generation: MCP tools and AsyncAPI ---
+info "Generating specs"
+root_dir="$(cd "$(dirname "$0")/.." && pwd)"
+spec_dir="$root_dir/spec"
+mkdir -p "$spec_dir"
+
+# MCP tools via arw-cli
+if cargo build -p arw-cli --release >/dev/null 2>&1; then
+  if "$root_dir/target/release/arw-cli" tools > "$spec_dir/mcp-tools.json" 2>/dev/null; then
+    info "Wrote $spec_dir/mcp-tools.json"
+  else
+    warn "failed to generate mcp-tools.json"
+  fi
+else
+  warn "arw-cli build failed; skipping mcp-tools.json"
+fi
+
+# AsyncAPI (minimal for known events)
+cat > "$spec_dir/asyncapi.yaml" << 'YAML'
+asyncapi: 2.6.0
+info:
+  title: "arw-svc events"
+  version: "0.1.0"
+defaultContentType: application/json
+channels:
+  Service.Start:
+    subscribe:
+      message:
+        name: Service.Start
+  Service.Health:
+    subscribe:
+      message:
+        name: Service.Health
+  Service.Test:
+    subscribe:
+      message:
+        name: Service.Test
+  Governor.Changed:
+    subscribe:
+      message:
+        name: Governor.Changed
+  Memory.Applied:
+    subscribe:
+      message:
+        name: Memory.Applied
+  Models.Changed:
+    subscribe:
+      message:
+        name: Models.Changed
+  Models.DownloadProgress:
+    subscribe:
+      message:
+        name: Models.DownloadProgress
+  Tool.Ran:
+    subscribe:
+      message:
+        name: Tool.Ran
+  Feedback.Signal:
+    subscribe:
+      message:
+        name: Feedback.Signal
+  Feedback.Suggested:
+    subscribe:
+      message:
+        name: Feedback.Suggested
+  Feedback.Applied:
+    subscribe:
+      message:
+        name: Feedback.Applied
+YAML
+info "Wrote $spec_dir/asyncapi.yaml"

@@ -1,0 +1,1 @@
+[{"id":"memory.probe","version":"1.0.0","summary":"Read-only memory probe (shows applied memories and paths)","stability":"experimental","capabilities":["read-only"]},{"id":"introspect.tools","version":"1.0.0","summary":"List available tools with metadata","stability":"experimental","capabilities":["read-only"]}]

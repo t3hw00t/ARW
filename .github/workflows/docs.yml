@@ -43,6 +43,12 @@ jobs:
       - name: Build docs
         run: mkdocs build --strict
 
+      - name: Upload spec artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: spec
+          path: spec/*
+
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v4
         with:

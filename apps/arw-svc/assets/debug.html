@@ -187,7 +187,8 @@
       <div class="row">
         <button class="iconbtn" onclick="fbFetchSuggestions()">Refresh</button>
       </div>
-      <pre id="fbLiveOut">{"version":0,"suggestions":[]}</pre>
+      <div id="fbList"></div>
+      <pre id="fbLiveOut" style="display:none">{"version":0,"suggestions":[]}</pre>
     </div>
     <div class="box">
       <h3>Models <a href="#" class="help" data-doc="orchestrator" data-tip="Add/delete and set default model. Future: downloads." title="Models docs">?</a></h3>
@@ -315,7 +316,7 @@ es.onmessage = (e) => pushEvt('message', e.data);
 // Feedback live updates
 es.addEventListener('Feedback.Suggested', (e)=>{
   pushEvt('Feedback.Suggested', e.data);
-  try{ const j=JSON.parse(e.data); document.getElementById('fbLiveOut').textContent = JSON.stringify(j,null,2); }catch{}
+  try{ const j=JSON.parse(e.data); document.getElementById('fbLiveOut').textContent = JSON.stringify(j,null,2); fbRenderList(j); }catch{}
 });
 
 // Insights aggregation overlay
@@ -413,6 +414,28 @@ async function fbAuto(){ const enabled=document.getElementById('autoApply').chec
 async function fbReset(){ await req('POST','/feedback/reset',{},'fbOut','rt-orch'); }
 async function fbApply(){ const id=(document.getElementById('fbApplyId').value||'').trim(); if(!id){ showToast('Enter suggestion id'); return; } await req('POST','/feedback/apply',{id},'fbOut','rt-orch'); }
 async function fbFetchSuggestions(){ await req('GET','/feedback/suggestions',null,'fbLiveOut','rt-orch'); }
+function fbRenderList(j){
+  const el = document.getElementById('fbList'); if(!el) return;
+  const list = (j && j.suggestions) || [];
+  if(!Array.isArray(list) || list.length===0){ el.innerHTML = '<div class="key">no suggestions</div>'; return; }
+  const rows = list.map(s => {
+    const id = s.id || '(unknown)';
+    const action = s.action || '?';
+    const conf = (typeof s.confidence==='number') ? s.confidence.toFixed(2) : '';
+    const rationale = s.rationale || '';
+    const params = JSON.stringify(s.params||{}, null, 0);
+    return `<div style="display:flex; gap:8px; align-items:center; margin:4px 0">
+      <code style="min-width:120px">${action}</code>
+      <span class="key">id</span><code>${id}</code>
+      <span class="key">conf</span><code>${conf}</code>
+      <button class="iconbtn" onclick="fbApplyId('${id}')">Apply</button>
+      <span class="key">params</span><code>${params}</code>
+      ${rationale ? `<span class="key">why</span><code>${rationale}</code>` : ''}
+    </div>`;
+  });
+  el.innerHTML = rows.join('');
+}
+async function fbApplyId(id){ if(!id) return; await req('POST','/feedback/apply',{id},'fbOut','rt-orch'); }
 // Docs wiring
 let docsBase = null;
 function docPath(key){
