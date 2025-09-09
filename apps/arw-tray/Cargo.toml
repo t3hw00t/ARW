@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 tray-icon = "0.13"
 open = "5"
-ureq = "2"
+ureq = "3"
 serde_json = { workspace = true }
 anyhow = { workspace = true }
 
