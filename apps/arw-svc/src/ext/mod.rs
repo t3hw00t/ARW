@@ -541,7 +541,7 @@ async fn models_download(State(state): State<AppState>, Json(req): Json<Download
             }
         }
     });
-    Json(json!({"ok": true}))
+    Json(json!({"ok": true})).into_response()
 }
 
 // ---- Tools ----
