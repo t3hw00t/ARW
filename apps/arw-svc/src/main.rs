@@ -89,7 +89,7 @@ async fn main() {
         let mut rx = state.bus.subscribe();
         tokio::spawn(async move {
             while let Ok(env) = rx.recv().await {
-                ext::stats_on_event(&env.kind).await;
+                ext::stats::stats_on_event(&env.kind).await;
             }
         });
     }
@@ -161,7 +161,7 @@ async fn metrics_mw(req: Request<axum::body::Body>, next: Next) -> Response {
     let res = next.run(req).await;
     let dt = t0.elapsed().as_millis() as u64;
     let status = res.status().as_u16();
-    ext::route_obs(&path, status, dt).await;
+    ext::stats::route_obs(&path, status, dt).await;
     res
 }
 
