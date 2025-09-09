@@ -472,31 +472,51 @@ async fn models_download(State(state): State<AppState>, Json(req): Json<Download
     let provider = req.provider.clone().unwrap_or("local".into());
     let sp = state.clone();
     tokio::spawn(async move {
+        // sanitize filename and compute target paths
         let file_name = url.rsplit('/').next().unwrap_or(&id).to_string();
-        let target = state_dir().join("models").join(&file_name);
-        if let Some(parent) = target.parent() { let _ = afs::create_dir_all(parent).await; }
+        let safe_name = file_name.replace(['\\', '/'], "_");
+        let target_dir = state_dir().join("models");
+        let target = target_dir.join(&safe_name);
+        let tmp = target.with_extension("part");
+        if let Err(e) = afs::create_dir_all(&target_dir).await {
+            sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("mkdir failed: {}", e)}));
+            return;
+        }
         let client = reqwest::Client::new();
         match client.get(&url).send().await {
             Ok(resp) => {
                 let total = resp.content_length().unwrap_or(0);
-                if let Ok(mut file) = afs::File::create(&target).await {
+                match afs::File::create(&tmp).await {
+                    Ok(mut file) => {
                         let mut downloaded: u64 = 0;
                         let mut stream = resp.bytes_stream();
                         while let Some(chunk) = stream.next().await {
                             match chunk {
                                 Ok(bytes) => {
-                                    if file.write_all(&bytes).await.is_ok() {
-                                        downloaded += bytes.len() as u64;
-                                        if total > 0 {
-                                            let pct = ((downloaded * 100) / total).min(100);
-                                            sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "progress": pct}));
-                                        }
-                                    } else {
+                                    if let Err(e) = file.write_all(&bytes).await { 
+                                        sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("write failed: {}", e)}));
                                         return;
                                     }
+                                    downloaded += bytes.len() as u64;
+                                    if total > 0 {
+                                        let pct = ((downloaded * 100) / total).min(100);
+                                        sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "progress": pct}));
+                                    }
                                 }
-                                Err(_) => return,
+                                Err(e) => {
+                                    sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("read failed: {}", e)}));
+                                    return;
+                                }
                             }
+                        }
+                        // flush and rename atomically into place
+                        if let Err(e) = file.flush().await { 
+                            sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("flush failed: {}", e)}));
+                            return;
+                        }
+                        if let Err(e) = afs::rename(&tmp, &target).await {
+                            sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("finalize failed: {}", e)}));
+                            return;
                         }
                         {
                             let mut v = models().write().await;
@@ -506,10 +526,14 @@ async fn models_download(State(state): State<AppState>, Json(req): Json<Download
                         }
                         let _ = save_json_file_async(&models_path(), &Value::Array(models().read().await.clone())).await;
                         sp.bus.publish("Models.Changed", &json!({"op":"downloaded","id": id}));
+                    }
+                    Err(e) => {
+                        sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("create failed: {}", e)}));
+                    }
                 }
             }
-            Err(_) => {
-                sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": "download failed"}));
+            Err(e) => {
+                sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("request failed: {}", e)}));
             }
         }
     });

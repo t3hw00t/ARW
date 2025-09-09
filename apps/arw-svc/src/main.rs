@@ -206,7 +206,20 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
 }
 
 fn header_token_matches(h: &HeaderMap, token: &str) -> bool {
-    h.get("x-arw-admin").and_then(|v| v.to_str().ok()).map(|v| v == token).unwrap_or(false)
+    h.get("x-arw-admin")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| ct_eq(v.as_bytes(), token.as_bytes()))
+        .unwrap_or(false)
+}
+
+#[inline]
+fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() { return false; }
+    let mut diff: u8 = 0;
+    for (&x, &y) in a.iter().zip(b.iter()) {
+        diff |= x ^ y;
+    }
+    diff == 0
 }
 
 // ---- global rate limit (fixed window) ----
