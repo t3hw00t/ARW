@@ -8,7 +8,7 @@ pub(crate) async fn models_save() -> impl IntoResponse { super::models_save().aw
 pub(crate) async fn models_load() -> impl IntoResponse { super::models_load().await }
 
 #[derive(Deserialize)]
-struct ModelId { id: String, #[serde(default)] provider: Option<String> }
+pub(crate) struct ModelId { id: String, #[serde(default)] provider: Option<String> }
 pub(crate) async fn models_add(State(state): State<AppState>, Json(req): Json<ModelId>) -> impl IntoResponse {
     let req2 = super::ModelId { id: req.id, provider: req.provider };
     super::models_add(State(state), Json(req2)).await
@@ -24,9 +24,8 @@ pub(crate) async fn models_default_set(State(state): State<AppState>, Json(req):
 }
 
 #[derive(Deserialize)]
-struct DownloadReq { id: String, url: String, #[serde(default)] provider: Option<String> }
+pub(crate) struct DownloadReq { id: String, url: String, #[serde(default)] provider: Option<String> }
 pub(crate) async fn models_download(State(state): State<AppState>, Json(req): Json<DownloadReq>) -> impl IntoResponse {
     let req2 = super::DownloadReq { id: req.id, url: req.url, provider: req.provider };
     super::models_download(State(state), Json(req2)).await
 }
-

@@ -289,7 +289,7 @@ async fn about() -> impl IntoResponse {
 }
 
 #[derive(Deserialize)]
-struct ApplyMemory {
+pub(crate) struct ApplyMemory {
     kind: String,        // ephemeral|episodic|semantic|procedural
     value: Value,
     #[serde(default)]
@@ -322,7 +322,7 @@ async fn memory_limit_get() -> impl IntoResponse {
     Json(json!({ "limit": n }))
 }
 #[derive(Deserialize)]
-struct SetLimit { limit: usize }
+pub(crate) struct SetLimit { limit: usize }
 async fn memory_limit_set(Json(req): Json<SetLimit>) -> impl IntoResponse {
     {
         let mut n = mem_limit().write().await;
@@ -428,7 +428,7 @@ async fn models_load() -> impl IntoResponse {
 }
 
 #[derive(Deserialize)]
-struct ModelId { id: String, #[serde(default)] provider: Option<String> }
+pub(crate) struct ModelId { id: String, #[serde(default)] provider: Option<String> }
 async fn models_add(State(state): State<AppState>, Json(req): Json<ModelId>) -> impl IntoResponse {
     let mut v = models().write().await;
     if !v.iter().any(|m| m.get("id").and_then(|s| s.as_str()) == Some(&req.id)) {
@@ -463,7 +463,7 @@ async fn models_default_set(State(state): State<AppState>, Json(req): Json<Model
 }
 
 #[derive(Deserialize)]
-struct DownloadReq { id: String, url: String, #[serde(default)] provider: Option<String> }
+pub(crate) struct DownloadReq { id: String, url: String, #[serde(default)] provider: Option<String> }
 async fn models_download(State(state): State<AppState>, Json(req): Json<DownloadReq>) -> impl IntoResponse {
     // ensure model exists with status
     {
@@ -563,7 +563,7 @@ async fn list_tools() -> impl IntoResponse {
     Json(out)
 }
 #[derive(Deserialize)]
-struct ToolRunReq { id: String, input: Value }
+pub(crate) struct ToolRunReq { id: String, input: Value }
 async fn run_tool_endpoint(State(state): State<AppState>, Json(req): Json<ToolRunReq>) -> impl IntoResponse {
     match run_tool_internal(&req.id, &req.input) {
         Ok(out) => {
@@ -579,7 +579,7 @@ static CHAT_LOG: OnceLock<RwLock<Vec<Value>>> = OnceLock::new();
 fn chat_log() -> &'static RwLock<Vec<Value>> { CHAT_LOG.get_or_init(|| RwLock::new(Vec::new())) }
 
 #[derive(Deserialize)]
-struct ChatSendReq { message: String, #[serde(default)] model: Option<String> }
+pub(crate) struct ChatSendReq { message: String, #[serde(default)] model: Option<String> }
 
 fn synth_reply(msg: &str, model: &str) -> String {
     match model.to_ascii_lowercase().as_str() {
@@ -594,11 +594,11 @@ fn synth_reply(msg: &str, model: &str) -> String {
 
 // ---- Self-learning / Feedback Layer ----
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
-struct FeedbackSignal { id: String, ts: String, kind: String, target: String, confidence: f64, severity: u8, note: Option<String> }
+pub(crate) struct FeedbackSignal { id: String, ts: String, kind: String, target: String, confidence: f64, severity: u8, note: Option<String> }
 #[derive(Clone, serde::Serialize, serde::Deserialize)]
-struct Suggestion { id: String, action: String, params: Value, rationale: String, confidence: f64 }
+pub(crate) struct Suggestion { id: String, action: String, params: Value, rationale: String, confidence: f64 }
 #[derive(Clone, Default, serde::Serialize, serde::Deserialize)]
-struct FeedbackState { auto_apply: bool, signals: Vec<FeedbackSignal>, suggestions: Vec<Suggestion> }
+pub(crate) struct FeedbackState { auto_apply: bool, signals: Vec<FeedbackSignal>, suggestions: Vec<Suggestion> }
 static FEEDBACK: OnceLock<RwLock<FeedbackState>> = OnceLock::new();
 fn feedback_cell() -> &'static RwLock<FeedbackState> { FEEDBACK.get_or_init(|| RwLock::new(FeedbackState::default())) }
 static SUGG_SEQ: OnceLock<AtomicU64> = OnceLock::new();
