@@ -61,3 +61,11 @@ pub(crate) async fn stats_get() -> impl IntoResponse {
     Json(json!({ "events": events, "routes": routes }))
 }
 
+// Lightweight snapshot for analysis: path -> (ewma_ms, hits, errors)
+pub(crate) async fn routes_for_analysis() -> HashMap<String, (f64, u64, u64)> {
+    let rs = route_stats_cell().read().await.clone();
+    rs.by_path
+        .into_iter()
+        .map(|(k, v)| (k, (v.ewma_ms, v.hits, v.errors)))
+        .collect()
+}

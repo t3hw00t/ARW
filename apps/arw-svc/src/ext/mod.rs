@@ -594,28 +594,27 @@ static SUGG_SEQ: OnceLock<AtomicU64> = OnceLock::new();
 fn next_id() -> String { let s = SUGG_SEQ.get_or_init(|| AtomicU64::new(1)).fetch_add(1, Ordering::Relaxed); format!("sug-{}", s) }
 
 async fn analyze_feedback() {
-    let routes = stats::route_stats_cell().read().await.clone();
-    let events = stats_cell().read().await.clone();
+    let routes_map = stats::routes_for_analysis().await;
     let mut out: Vec<Suggestion> = Vec::new();
 
     // Heuristic 1: High route latency -> suggest increasing http timeout hint
-    let mut worst: Option<(&String, &RouteStat)> = None;
-    for (p, st) in &routes.by_path {
-        if worst.as_ref().map(|(_, s)| s.ewma_ms).unwrap_or(0.0) < st.ewma_ms {
-            worst = Some((p, st));
+    let mut worst: Option<(String, f64)> = None;
+    for (p, (ewma_ms, _, _)) in &routes_map {
+        if worst.as_ref().map(|(_, v)| *v).unwrap_or(0.0) < *ewma_ms {
+            worst = Some((p.clone(), *ewma_ms));
         }
     }
-    if let Some((p, st)) = worst { if st.ewma_ms > 800.0 {
-        let desired = (((st.ewma_ms/1000.0)*2.0)+10.0).clamp(20.0, 180.0) as u64;
+    if let Some((p, ewma_ms)) = worst { if ewma_ms > 800.0 {
+        let desired = (((ewma_ms/1000.0)*2.0)+10.0).clamp(20.0, 180.0) as u64;
         out.push(Suggestion{
             id: next_id(), action: "hint".into(), params: json!({"http_timeout_secs": desired}),
-            rationale: format!("High latency on {} (~{:.0} ms); suggest http timeout {}s", p, st.ewma_ms, desired), confidence: 0.6
+            rationale: format!("High latency on {} (~{:.0} ms); suggest http timeout {}s", p, ewma_ms, desired), confidence: 0.6
         });
     } }
 
     // Heuristic 2: High error rate -> suggest balanced profile
     let mut high_err = false;
-    for st in routes.by_path.values() { if st.hits>=10 && (st.errors as f64)/(st.hits as f64) > 0.2 { high_err = true; break; } }
+    for (_, (_, hits, errors)) in routes_map.values() { if *hits>=10 && (*errors as f64)/(*hits as f64) > 0.2 { high_err = true; break; } }
     if high_err { out.push(Suggestion{ id: next_id(), action: "profile".into(), params: json!({"name":"balanced"}), rationale: "High error rate observed across routes".into(), confidence: 0.55 }); }
 
     // Heuristic 3: Many memory applications -> suggest increasing memory limit modestly
