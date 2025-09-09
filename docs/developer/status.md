@@ -4,7 +4,7 @@ title: Workspace Status
 
 # Workspace Status
 
-Generated: 2025-09-09 22:21 UTC
+Generated: 2025-09-09 22:43 UTC
 \n\n## Libraries\n- **arw-protocol**: 0.1.0 — `/home/sevi/dev/github/arw/Agent_Hub/crates/arw-protocol/Cargo.toml`
 - **arw-events**: 0.1.0 — `/home/sevi/dev/github/arw/Agent_Hub/crates/arw-events/Cargo.toml`
 - **arw-core**: 0.1.0 — `/home/sevi/dev/github/arw/Agent_Hub/crates/arw-core/Cargo.toml`

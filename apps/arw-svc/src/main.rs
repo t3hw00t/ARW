@@ -8,6 +8,7 @@ use axum::{
     routing::get,
     Json, Router,
 };
+use axum::extract::Query;
 use axum::{
     http::Request,
     middleware::{self, Next},
@@ -440,6 +441,22 @@ async fn events(
     )
 }
 
+// --- OpenAPI-only wrappers for feedback endpoints (for documentation) ---
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/feedback/suggestions", responses((status=200, description="Versioned suggestions")))]
+async fn feedback_suggestions_doc() -> impl IntoResponse {
+    ext::feedback_engine_api::feedback_suggestions().await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/feedback/updates", params(("since" = Option<u64>, Query, description = "Return updates if newer than this version")), responses((status=200, description="Latest version"),(status=204, description="No change")))]
+async fn feedback_updates_doc(Query(q): Query<ext::feedback_engine_api::UpdatesQs>) -> impl IntoResponse {
+    ext::feedback_engine_api::feedback_updates(Query(q)).await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/feedback/policy", responses((status=200, description="Effective policy caps/bounds")))]
+async fn feedback_policy_doc() -> impl IntoResponse {
+    ext::feedback_engine_api::feedback_policy_get().await
+}
 #[derive(OpenApi)]
 #[openapi(
     paths(
@@ -449,7 +466,10 @@ async fn events(
         probe,
         emit_test,
         shutdown,
-        events
+        events,
+        feedback_suggestions_doc,
+        feedback_updates_doc,
+        feedback_policy_doc
     ),
     tags((name = "arw-svc"))
 )]
@@ -487,14 +507,21 @@ async fn spec_mcp() -> impl IntoResponse {
 }
 
 async fn spec_index() -> impl IntoResponse {
-    let mut list = vec![];
+    let mut links: Vec<(String, &'static str)> = Vec::new();
     for (name, ct) in [
         ("openapi.yaml", "application/yaml"),
         ("asyncapi.yaml", "application/yaml"),
         ("mcp-tools.json", "application/json"),
     ] {
         let p = std::path::Path::new("spec").join(name);
-        if p.exists() { list.push(json!({"name": name, "content_type": ct, "url": format!("/spec/{}", name)})); }
+        if p.exists() { links.push((name.to_string(), ct)); }
     }
-    Json(json!({"specs": list}))
+    let items: String = links.iter()
+        .map(|(n, _ct)| format!("<li><a href=\"/spec/{}\">{}</a></li>", n, n))
+        .collect();
+    let body = format!(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>ARW Specs</title></head><body><h1>Specs</h1><ul>{}</ul></body></html>",
+        items
+    );
+    (StatusCode::OK, [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")], body)
 }

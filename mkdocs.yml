@@ -20,8 +20,8 @@ nav:
       - Structure: STRUCTURE.md
       - Features: FEATURES.md
       - API and Schema: API_AND_SCHEMA.md
+      - Feedback Engine: guide/feedback_engine.md
       - Deployment: DEPLOYMENT.md
       - Memory and Training: MEMORY_AND_TRAINING.md
       - Hardware and Models: HARDWARE_AND_MODELS.md
       - Arrow Ingestion: arrow_ingestion.md
-
