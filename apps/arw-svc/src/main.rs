@@ -98,10 +98,17 @@ async fn main() {
         });
     }
 
+    // Start lightweight feedback engine (near-live suggestions via bus)
+    ext::feedback_engine::start_feedback_engine(state.clone());
+
     let mut app = Router::new()
         .route("/healthz", get(healthz))
         .route("/introspect/tools", get(introspect_tools))
         .route("/introspect/schemas/:id", get(introspect_schema))
+        // Serve generated specs when present
+        .route("/spec/openapi.yaml", get(spec_openapi))
+        .route("/spec/asyncapi.yaml", get(spec_asyncapi))
+        .route("/spec/mcp-tools.json", get(spec_mcp))
         // Match paths before metrics/security to capture MatchedPath
         .route("/probe", get(probe))
         .route("/events", get(events))
@@ -428,3 +435,34 @@ async fn events(
     tags((name = "arw-svc"))
 )]
 struct ApiDoc;
+
+async fn spec_openapi() -> impl IntoResponse {
+    let p = std::path::Path::new("spec/openapi.yaml");
+    if let Ok(bytes) = tokio::fs::read(p).await {
+        let mut h = HeaderMap::new();
+        h.insert(axum::http::header::CONTENT_TYPE, axum::http::HeaderValue::from_static("application/yaml"));
+        (StatusCode::OK, h, bytes).into_response()
+    } else {
+        (StatusCode::NOT_FOUND, "missing spec/openapi.yaml").into_response()
+    }
+}
+async fn spec_asyncapi() -> impl IntoResponse {
+    let p = std::path::Path::new("spec/asyncapi.yaml");
+    if let Ok(bytes) = tokio::fs::read(p).await {
+        let mut h = HeaderMap::new();
+        h.insert(axum::http::header::CONTENT_TYPE, axum::http::HeaderValue::from_static("application/yaml"));
+        (StatusCode::OK, h, bytes).into_response()
+    } else {
+        (StatusCode::NOT_FOUND, "missing spec/asyncapi.yaml").into_response()
+    }
+}
+async fn spec_mcp() -> impl IntoResponse {
+    let p = std::path::Path::new("spec/mcp-tools.json");
+    if let Ok(bytes) = tokio::fs::read(p).await {
+        let mut h = HeaderMap::new();
+        h.insert(axum::http::header::CONTENT_TYPE, axum::http::HeaderValue::from_static("application/json"));
+        (StatusCode::OK, h, bytes).into_response()
+    } else {
+        (StatusCode::NOT_FOUND, "missing spec/mcp-tools.json").into_response()
+    }
+}

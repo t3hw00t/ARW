@@ -27,6 +27,7 @@ pub mod memory_api;
 pub mod models_api;
 pub mod stats;
 pub mod tools_api;
+pub mod feedback_engine;
 pub mod ui;
 // internal helpers split into modules
 pub mod io;

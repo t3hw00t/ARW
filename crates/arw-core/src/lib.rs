@@ -1,6 +1,7 @@
 use serde::Serialize;
 use serde_json::{json, Value};
 use std::collections::HashSet;
+#[cfg(feature = "arrow-bench")]
 pub mod arrow_ingest;
 
 mod config;

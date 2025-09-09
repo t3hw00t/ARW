@@ -2,8 +2,10 @@ use crate::AppState;
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::Deserialize;
 
+// List tools from the single source of truth (inventory + defaults)
 pub(crate) async fn list_tools() -> impl IntoResponse {
-    super::list_tools().await
+    let list = arw_core::introspect_tools();
+    Json(serde_json::to_value(list).unwrap_or(serde_json::json!([])))
 }
 
 #[derive(Deserialize)]
