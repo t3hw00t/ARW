@@ -6,6 +6,10 @@ pub mod arrow_ingest;
 
 mod config;
 pub use config::{config_schema_json, load_config, write_schema_file, Config};
+pub mod hierarchy;
+pub mod orchestrator;
+#[cfg(feature = "nats")]
+pub mod orchestrator_nats;
 
 #[cfg(feature = "wasm")]
 pub mod wasm;

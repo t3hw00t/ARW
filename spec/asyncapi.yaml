@@ -36,6 +36,10 @@ channels:
     subscribe:
       message:
         $ref: '#/components/messages/ToolRan'
+  Task.Completed:
+    subscribe:
+      message:
+        $ref: '#/components/messages/TaskCompleted'
   Feedback.Signal:
     subscribe:
       message:
@@ -48,6 +52,14 @@ channels:
     subscribe:
       message:
         $ref: '#/components/messages/FeedbackApplied'
+  Hierarchy.RoleChanged:
+    subscribe:
+      message:
+        $ref: '#/components/messages/HierarchyRoleChanged'
+  Hierarchy.State:
+    subscribe:
+      message:
+        $ref: '#/components/messages/HierarchyState'
 components:
   messages:
     ServiceStart:
@@ -96,6 +108,16 @@ components:
         properties:
           id: { type: string }
           output: { type: object }
+    TaskCompleted:
+      name: Task.Completed
+      payload:
+        type: object
+        properties:
+          id: { type: string }
+          ok: { type: boolean }
+          latency_ms: { type: integer }
+          error: { type: ["string","null"] }
+          output: { type: object }
     FeedbackSignal:
       name: Feedback.Signal
       payload:
@@ -133,3 +155,15 @@ components:
           id: { type: string }
           action: { type: string }
           params: { type: object }
+    HierarchyRoleChanged:
+      name: Hierarchy.RoleChanged
+      payload:
+        type: object
+        properties:
+          role: { type: string }
+    HierarchyState:
+      name: Hierarchy.State
+      payload:
+        type: object
+        properties:
+          epoch: { type: integer }

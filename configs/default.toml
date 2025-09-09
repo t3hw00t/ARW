@@ -3,3 +3,10 @@ portable = true
 state_dir = "%LOCALAPPDATA%/arw"
 cache_dir = "%LOCALAPPDATA%/arw/cache"
 logs_dir  = "%LOCALAPPDATA%/arw/logs"
+
+[cluster]
+enabled = false
+# In-process defaults; switch to "nats" when deploying a broker
+bus = "local"
+queue = "local"
+# nats_url = "nats://127.0.0.1:4222"

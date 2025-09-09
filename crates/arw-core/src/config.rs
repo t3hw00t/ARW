@@ -20,6 +20,8 @@ pub struct RuntimeConfig {
 pub struct Config {
     #[serde(default)]
     pub runtime: RuntimeConfig,
+    #[serde(default)]
+    pub cluster: ClusterConfig,
 }
 
 static CONFIG_SCHEMA: Lazy<JSONSchema> = Lazy::new(|| {
@@ -48,4 +50,20 @@ pub fn load_config(path: &str) -> Result<Config> {
     }
     let cfg: Config = toml::from_str(&content)?;
     Ok(cfg)
+}
+
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+pub struct ClusterConfig {
+    /// Enable multi-core/connector mode.
+    #[serde(default)]
+    pub enabled: Option<bool>,
+    /// Event bus backend: "local" (default), "nats".
+    #[serde(default)]
+    pub bus: Option<String>,
+    /// Work queue backend: "local" (default), "nats".
+    #[serde(default)]
+    pub queue: Option<String>,
+    /// NATS connection URL, e.g. nats://127.0.0.1:4222
+    #[serde(default)]
+    pub nats_url: Option<String>,
 }

@@ -19,17 +19,19 @@ use tokio::io::AsyncWriteExt;
 use tokio::sync::RwLock;
 
 use crate::AppState;
+use arw_core::hierarchy as hier;
+use arw_core::orchestrator::Task as OrchTask;
 pub mod chat_api;
 pub mod feedback_api;
+pub mod feedback_engine;
+pub mod feedback_engine_api;
 pub mod governor_api;
 pub mod memory;
 pub mod memory_api;
 pub mod models_api;
+pub mod policy;
 pub mod stats;
 pub mod tools_api;
-pub mod feedback_engine;
-pub mod feedback_engine_api;
-pub mod policy;
 pub mod ui;
 // internal helpers split into modules
 pub mod io;
@@ -188,6 +190,9 @@ pub fn extra_routes() -> Router<AppState> {
     let mut r = Router::new()
         .route("/version", get(version))
         .route("/about", get(about))
+        // hierarchy (local view + role change)
+        .route("/hierarchy/state", get(hierarchy_state))
+        .route("/hierarchy/role", post(hierarchy_role_set))
         // governor
         .route("/governor/profile", get(governor_api::governor_get))
         .route("/governor/profile", post(governor_api::governor_set))
@@ -204,9 +209,18 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/feedback/auto", post(feedback_api::feedback_auto_post))
         .route("/feedback/reset", post(feedback_api::feedback_reset_post))
         // feedback engine (near-live suggestions)
-        .route("/feedback/suggestions", get(feedback_engine_api::feedback_suggestions))
-        .route("/feedback/updates", get(feedback_engine_api::feedback_updates))
-        .route("/feedback/policy", get(feedback_engine_api::feedback_policy_get))
+        .route(
+            "/feedback/suggestions",
+            get(feedback_engine_api::feedback_suggestions),
+        )
+        .route(
+            "/feedback/updates",
+            get(feedback_engine_api::feedback_updates),
+        )
+        .route(
+            "/feedback/policy",
+            get(feedback_engine_api::feedback_policy_get),
+        )
         // stats
         .route("/introspect/stats", get(stats::stats_get))
         // memory
@@ -229,6 +243,8 @@ pub fn extra_routes() -> Router<AppState> {
         // tools
         .route("/tools", get(tools_api::list_tools))
         .route("/tools/run", post(tools_api::run_tool_endpoint))
+        // orchestration MVP
+        .route("/tasks/enqueue", post(tasks_enqueue))
         // chat
         .route("/chat", get(chat_api::chat_get))
         .route("/chat/send", post(chat_api::chat_send))
@@ -260,10 +276,70 @@ async fn version() -> impl IntoResponse {
     }))
 }
 
+#[derive(Deserialize)]
+struct EnqueueReq {
+    kind: String,
+    payload: Value,
+    #[serde(default)]
+    shard_key: Option<String>,
+    #[serde(default)]
+    priority: Option<i32>,
+    #[serde(default)]
+    idem_key: Option<String>,
+}
+
+async fn tasks_enqueue(
+    State(state): State<AppState>,
+    Json(req): Json<EnqueueReq>,
+) -> impl IntoResponse {
+    let mut t = OrchTask::new(req.kind, req.payload);
+    t.shard_key = req.shard_key;
+    t.priority = req.priority.unwrap_or(0);
+    t.idem_key = req.idem_key;
+    match state.queue.enqueue(t).await {
+        Ok(id) => Json(json!({"ok": true, "id": id})).into_response(),
+        Err(e) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": e.to_string()})),
+        )
+            .into_response(),
+    }
+}
+
+/// Spawn a simple local task worker that dequeues tasks and runs built-in tools.
+pub fn start_local_task_worker(state: AppState) {
+    let bus = state.bus.clone();
+    let q = state.queue.clone();
+    tokio::spawn(async move {
+        loop {
+            match q.dequeue("workers").await {
+                Ok((t, lease)) => {
+                    let t0 = std::time::Instant::now();
+                    let (ok, out, err) = match run_tool_internal(&t.kind, &t.payload) {
+                        Ok(v) => (true, v, None),
+                        Err(e) => (false, json!({}), Some(e)),
+                    };
+                    let _ = q.ack(lease).await;
+                    let dt = t0.elapsed().as_millis() as u64;
+                    bus.publish(
+                        "Task.Completed",
+                        &json!({"id": t.id, "ok": ok, "latency_ms": dt, "error": err, "output": out}),
+                    );
+                }
+                Err(_e) => {
+                    // backoff a bit on unexpected errors
+                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                }
+            }
+        }
+    });
+}
+
 async fn about() -> impl IntoResponse {
     Json(json!({
         "service": "arw-svc",
         "version": env!("CARGO_PKG_VERSION"),
+        "role": format!("{:?}", hier::get_state().self_node.role),
         "docs_url": std::env::var("ARW_DOCS_URL").ok(),
         "endpoints": [
           "/spec/openapi.yaml",
@@ -276,6 +352,8 @@ async fn about() -> impl IntoResponse {
           "/version",
           "/about",
           "/introspect/stats",
+          "/hierarchy/state",
+          "/hierarchy/role",
           "/introspect/tools",
           "/introspect/schemas/:id",
           "/probe",
@@ -299,6 +377,37 @@ async fn about() -> impl IntoResponse {
           "/debug"
         ]
     }))
+}
+
+async fn hierarchy_state(State(state): State<AppState>) -> impl IntoResponse {
+    let st = hier::get_state();
+    state
+        .bus
+        .publish("Hierarchy.State", &serde_json::json!({"epoch": st.epoch}));
+    Json(st)
+}
+
+#[derive(Deserialize)]
+struct RoleSet {
+    role: String,
+}
+async fn hierarchy_role_set(
+    State(state): State<AppState>,
+    Json(req): Json<RoleSet>,
+) -> impl IntoResponse {
+    let role = match req.role.as_str() {
+        "root" => hier::Role::Root,
+        "regional" => hier::Role::Regional,
+        "edge" => hier::Role::Edge,
+        "connector" => hier::Role::Connector,
+        _ => hier::Role::Observer,
+    };
+    hier::set_role(role);
+    state.bus.publish(
+        "Hierarchy.RoleChanged",
+        &serde_json::json!({"role": req.role}),
+    );
+    Json(json!({"ok": true}))
 }
 
 // moved to memory module
@@ -858,8 +967,20 @@ async fn feedback_apply_post(
             let id = v.get("id").and_then(|x| x.as_str())?;
             let action = v.get("action").and_then(|x| x.as_str())?.to_string();
             let params = v.get("params").cloned().unwrap_or_else(|| json!({}));
-            if id == req.id { Some(Suggestion{ id: id.to_string(), action, params, rationale: String::new(), confidence: 0.0 }) } else { None }
-        }) { sug_opt = Some(s); }
+            if id == req.id {
+                Some(Suggestion {
+                    id: id.to_string(),
+                    action,
+                    params,
+                    rationale: String::new(),
+                    confidence: 0.0,
+                })
+            } else {
+                None
+            }
+        }) {
+            sug_opt = Some(s);
+        }
     }
     if let Some(sug) = sug_opt {
         // Policy-gated apply with error reason

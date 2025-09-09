@@ -1,0 +1,199 @@
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, VecDeque};
+use std::sync::Arc;
+use tokio::sync::{Mutex, Notify};
+use uuid::Uuid;
+
+/// A unit of work submitted to the orchestrator.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Task {
+    pub id: String,
+    /// Sticky routing key; connectors can shard by this.
+    pub shard_key: Option<String>,
+    /// Tool or operation identifier.
+    pub kind: String,
+    /// JSON payload for the operation.
+    pub payload: serde_json::Value,
+    /// Client-supplied idempotency key for exactly-once semantics (best-effort).
+    pub idem_key: Option<String>,
+    /// Priority lane: higher first; implementation may map to subjects/streams.
+    pub priority: i32,
+    /// Attempt count; incremented on re-delivery.
+    pub attempt: u32,
+}
+
+impl Task {
+    pub fn new(kind: impl Into<String>, payload: serde_json::Value) -> Self {
+        Self {
+            id: Uuid::new_v4().to_string(),
+            shard_key: None,
+            kind: kind.into(),
+            payload,
+            idem_key: None,
+            priority: 0,
+            attempt: 0,
+        }
+    }
+}
+
+/// Lease token for in-flight work.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct LeaseToken {
+    pub task_id: String,
+    pub lease_id: String,
+    /// Epoch millis when lease expires.
+    pub expires_at_ms: u64,
+}
+
+/// Result envelope returned by connectors.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TaskResult {
+    pub task_id: String,
+    pub ok: bool,
+    pub output: serde_json::Value,
+    pub error: Option<String>,
+    pub latency_ms: Option<u64>,
+}
+
+/// Queue abstraction for distributing Tasks.
+#[async_trait::async_trait]
+pub trait Queue: Send + Sync {
+    /// Enqueue a task; returns effective task id.
+    async fn enqueue(&self, t: Task) -> anyhow::Result<String>;
+    /// Dequeue next task for this consumer group; returns task and lease token.
+    async fn dequeue(&self, group: &str) -> anyhow::Result<(Task, LeaseToken)>;
+    /// Acknowledge and remove a task using its lease token.
+    async fn ack(&self, lease: LeaseToken) -> anyhow::Result<()>;
+    /// Negative-acknowledge; optionally schedule retry after millis.
+    async fn nack(&self, lease: LeaseToken, retry_after_ms: Option<u64>) -> anyhow::Result<()>;
+}
+
+/// In-memory queue for single-process testing and defaults.
+#[derive(Clone, Default)]
+pub struct LocalQueue {
+    inner: Arc<LocalInner>,
+}
+
+#[derive(Default)]
+struct LocalInner {
+    // simple FIFO per priority; lowest key is highest priority (i.e. -10 runs before 0)
+    queues: Mutex<HashMap<i32, VecDeque<Task>>>,
+    pending: Mutex<HashMap<String, (Task, u64)>>, // lease_id -> (task, expires_at_ms)
+    notify: Notify,
+}
+
+impl LocalQueue {
+    pub fn new() -> Self {
+        Self::default()
+    }
+}
+
+#[async_trait::async_trait]
+impl Queue for LocalQueue {
+    async fn enqueue(&self, mut t: Task) -> anyhow::Result<String> {
+        if t.id.is_empty() {
+            t.id = Uuid::new_v4().to_string();
+        }
+        let id = t.id.clone();
+        let prio = t.priority;
+        let mut map = self.inner.queues.lock().await;
+        let q = map.entry(prio).or_insert_with(VecDeque::new);
+        q.push_back(t);
+        drop(map);
+        self.inner.notify.notify_one();
+        Ok(id)
+    }
+
+    async fn dequeue(&self, _group: &str) -> anyhow::Result<(Task, LeaseToken)> {
+        loop {
+            // pop highest-priority non-empty queue
+            let mut sel: Option<(i32, Task)> = None;
+            {
+                let mut map = self.inner.queues.lock().await;
+                if map.is_empty() {
+                    // park until notify
+                } else {
+                    // iterate priorities sorted ascending
+                    let mut keys: Vec<i32> = map.keys().cloned().collect();
+                    keys.sort();
+                    for k in keys {
+                        if let Some(q) = map.get_mut(&k) {
+                            if let Some(t) = q.pop_front() {
+                                sel = Some((k, t));
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            if let Some((_k, task)) = sel {
+                let lease_id = Uuid::new_v4().to_string();
+                let now_ms = now_millis();
+                let ttl_ms = 30_000; // default 30s lease
+                let exp = now_ms + ttl_ms;
+                {
+                    let mut pend = self.inner.pending.lock().await;
+                    pend.insert(lease_id.clone(), (task.clone(), exp));
+                }
+                return Ok((
+                    task.clone(),
+                    LeaseToken {
+                        task_id: task.id.clone(),
+                        lease_id,
+                        expires_at_ms: exp,
+                    },
+                ));
+            }
+            // nothing ready; wait for a new task
+            self.inner.notify.notified().await;
+        }
+    }
+
+    async fn ack(&self, lease: LeaseToken) -> anyhow::Result<()> {
+        let mut pend = self.inner.pending.lock().await;
+        pend.remove(&lease.lease_id);
+        Ok(())
+    }
+
+    async fn nack(&self, lease: LeaseToken, retry_after_ms: Option<u64>) -> anyhow::Result<()> {
+        let mut pend = self.inner.pending.lock().await;
+        if let Some((mut task, _exp)) = pend.remove(&lease.lease_id) {
+            task.attempt = task.attempt.saturating_add(1);
+            drop(pend);
+            if let Some(delay) = retry_after_ms {
+                let q = self.clone();
+                tokio::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_millis(delay)).await;
+                    let _ = q.enqueue(task).await;
+                });
+            } else {
+                self.enqueue(task).await?;
+            }
+        }
+        Ok(())
+    }
+}
+
+#[inline]
+pub(crate) fn now_millis() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
+
+/// Minimal orchestrator façade keeping placement logic separate from queue impls.
+#[derive(Clone)]
+pub struct Orchestrator<Q: Queue> {
+    queue: Arc<Q>,
+}
+
+impl<Q: Queue> Orchestrator<Q> {
+    pub fn new(queue: Arc<Q>) -> Self {
+        Self { queue }
+    }
+    pub async fn admit(&self, task: Task) -> anyhow::Result<String> {
+        self.queue.enqueue(task).await
+    }
+}

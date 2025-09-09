@@ -1,4 +1,5 @@
 use arw_macros::arw_tool;
+use axum::extract::Query;
 use axum::http::HeaderMap;
 use axum::http::StatusCode;
 use axum::response::sse::{Event, KeepAlive, Sse};
@@ -8,7 +9,6 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use axum::extract::Query;
 use axum::{
     http::Request,
     middleware::{self, Next},
@@ -70,9 +70,11 @@ fn _register_feedback_evaluate() {}
 fn _register_feedback_apply() {}
 
 #[derive(Clone)]
-struct AppState {
-    bus: arw_events::Bus,
-    stop_tx: tokio::sync::broadcast::Sender<()>,
+pub(crate) struct AppState {
+    pub(crate) bus: arw_events::Bus,
+    pub(crate) stop_tx: tokio::sync::broadcast::Sender<()>,
+    // Pluggable queue (Local by default; NATS when enabled)
+    pub(crate) queue: std::sync::Arc<dyn arw_core::orchestrator::Queue>,
 }
 
 #[derive(serde::Serialize, ToSchema)]
@@ -94,9 +96,79 @@ async fn main() {
     }
 
     let (stop_tx, mut stop_rx) = tokio::sync::broadcast::channel::<()>(1);
+    let bus = arw_events::Bus::new(256);
+    let cfg = arw_core::load_config(
+        &std::env::var("ARW_CONFIG").unwrap_or_else(|_| "configs/default.toml".to_string()),
+    )
+    .ok();
+    // Queue selection
+    let queue: std::sync::Arc<dyn arw_core::orchestrator::Queue> = {
+        let use_nats = cfg
+            .as_ref()
+            .and_then(|c| c.cluster.enabled)
+            .unwrap_or(false)
+            && cfg
+                .as_ref()
+                .and_then(|c| c.cluster.queue.as_deref())
+                .unwrap_or("local")
+                .eq_ignore_ascii_case("nats");
+        if use_nats {
+            #[cfg(feature = "nats")]
+            {
+                let url = cfg
+                    .as_ref()
+                    .and_then(|c| c.cluster.nats_url.clone())
+                    .unwrap_or_else(|| "nats://127.0.0.1:4222".to_string());
+                match arw_core::orchestrator_nats::NatsQueue::connect(&url).await {
+                    Ok(nq) => std::sync::Arc::new(nq),
+                    Err(e) => {
+                        tracing::warn!("nats queue unavailable: {} — falling back to local", e);
+                        std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new())
+                    }
+                }
+            }
+            #[cfg(not(feature = "nats"))]
+            {
+                tracing::info!(
+                    "cluster.queue=nats requested but arw-core built without 'nats' feature; using local"
+                );
+                std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new())
+            }
+        } else {
+            std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new())
+        }
+    };
+    // Outgoing event replication when configured
+    let use_nats_bus = cfg
+        .as_ref()
+        .and_then(|c| c.cluster.enabled)
+        .unwrap_or(false)
+        && cfg
+            .as_ref()
+            .and_then(|c| c.cluster.bus.as_deref())
+            .unwrap_or("local")
+            .eq_ignore_ascii_case("nats");
+    if use_nats_bus {
+        #[cfg(feature = "nats")]
+        {
+            let url = cfg
+                .as_ref()
+                .and_then(|c| c.cluster.nats_url.clone())
+                .unwrap_or_else(|| "nats://127.0.0.1:4222".to_string());
+            arw_events::attach_nats_outgoing(&bus, &url).await;
+        }
+        #[cfg(not(feature = "nats"))]
+        {
+            tracing::info!(
+                "cluster.bus=nats requested but arw-events built without 'nats' feature; using local"
+            );
+        }
+    }
+
     let state = AppState {
-        bus: arw_events::Bus::new(256),
+        bus,
         stop_tx: stop_tx.clone(),
+        queue,
     };
 
     // Load persisted orchestration/feedback state
@@ -119,6 +191,8 @@ async fn main() {
 
     // Start lightweight feedback engine (near-live suggestions via bus)
     ext::feedback_engine::start_feedback_engine(state.clone());
+    // Start local task worker to exercise the orchestrator MVP
+    ext::start_local_task_worker(state.clone());
 
     let mut app = Router::new()
         .route("/healthz", get(healthz))
@@ -222,6 +296,7 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
         || path.starts_with("/models")
         || path.starts_with("/governor")
         || path.starts_with("/introspect")
+        || path.starts_with("/tasks")
         || path.starts_with("/chat")
         || path.starts_with("/feedback");
     if !is_sensitive {
@@ -449,7 +524,9 @@ async fn feedback_suggestions_doc() -> impl IntoResponse {
 }
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/feedback/updates", params(("since" = Option<u64>, Query, description = "Return updates if newer than this version")), responses((status=200, description="Latest version"),(status=204, description="No change")))]
-async fn feedback_updates_doc(Query(q): Query<ext::feedback_engine_api::UpdatesQs>) -> impl IntoResponse {
+async fn feedback_updates_doc(
+    Query(q): Query<ext::feedback_engine_api::UpdatesQs>,
+) -> impl IntoResponse {
     ext::feedback_engine_api::feedback_updates(Query(q)).await
 }
 #[allow(dead_code)]
@@ -479,7 +556,10 @@ async fn spec_openapi() -> impl IntoResponse {
     let p = std::path::Path::new("spec/openapi.yaml");
     if let Ok(bytes) = tokio::fs::read(p).await {
         let mut h = HeaderMap::new();
-        h.insert(axum::http::header::CONTENT_TYPE, axum::http::HeaderValue::from_static("application/yaml"));
+        h.insert(
+            axum::http::header::CONTENT_TYPE,
+            axum::http::HeaderValue::from_static("application/yaml"),
+        );
         (StatusCode::OK, h, bytes).into_response()
     } else {
         (StatusCode::NOT_FOUND, "missing spec/openapi.yaml").into_response()
@@ -489,7 +569,10 @@ async fn spec_asyncapi() -> impl IntoResponse {
     let p = std::path::Path::new("spec/asyncapi.yaml");
     if let Ok(bytes) = tokio::fs::read(p).await {
         let mut h = HeaderMap::new();
-        h.insert(axum::http::header::CONTENT_TYPE, axum::http::HeaderValue::from_static("application/yaml"));
+        h.insert(
+            axum::http::header::CONTENT_TYPE,
+            axum::http::HeaderValue::from_static("application/yaml"),
+        );
         (StatusCode::OK, h, bytes).into_response()
     } else {
         (StatusCode::NOT_FOUND, "missing spec/asyncapi.yaml").into_response()
@@ -499,7 +582,10 @@ async fn spec_mcp() -> impl IntoResponse {
     let p = std::path::Path::new("spec/mcp-tools.json");
     if let Ok(bytes) = tokio::fs::read(p).await {
         let mut h = HeaderMap::new();
-        h.insert(axum::http::header::CONTENT_TYPE, axum::http::HeaderValue::from_static("application/json"));
+        h.insert(
+            axum::http::header::CONTENT_TYPE,
+            axum::http::HeaderValue::from_static("application/json"),
+        );
         (StatusCode::OK, h, bytes).into_response()
     } else {
         (StatusCode::NOT_FOUND, "missing spec/mcp-tools.json").into_response()
@@ -514,14 +600,21 @@ async fn spec_index() -> impl IntoResponse {
         ("mcp-tools.json", "application/json"),
     ] {
         let p = std::path::Path::new("spec").join(name);
-        if p.exists() { links.push((name.to_string(), ct)); }
+        if p.exists() {
+            links.push((name.to_string(), ct));
+        }
     }
-    let items: String = links.iter()
+    let items: String = links
+        .iter()
         .map(|(n, _ct)| format!("<li><a href=\"/spec/{}\">{}</a></li>", n, n))
         .collect();
     let body = format!(
         "<!doctype html><html><head><meta charset=\"utf-8\"><title>ARW Specs</title></head><body><h1>Specs</h1><ul>{}</ul></body></html>",
         items
     );
-    (StatusCode::OK, [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")], body)
+    (
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        body,
+    )
 }

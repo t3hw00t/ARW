@@ -9,3 +9,13 @@ serde_json = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 chrono = { workspace = true }
+
+[features]
+default = []
+nats = ["dep:async-nats"]
+
+[dependencies.async-nats]
+version = "0.35"
+optional = true
+default-features = false
+features = ["ring"]

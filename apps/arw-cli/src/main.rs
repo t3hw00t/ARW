@@ -1,4 +1,4 @@
-use arw_core::{hello_core, load_effective_paths, introspect_tools};
+use arw_core::{hello_core, introspect_tools, load_effective_paths};
 use tracing_subscriber::{fmt, EnvFilter};
 
 fn main() {

@@ -23,6 +23,10 @@ reqwest = { workspace = true }
 futures-util = { workspace = true }
 toml = { workspace = true }
 
+[features]
+default = []
+nats = ["arw-core/nats", "arw-events/nats"]
+
 [dev-dependencies]
 tokio = { version = "1", features = ["macros","rt-multi-thread"] }
 http-body-util = "0.1"
