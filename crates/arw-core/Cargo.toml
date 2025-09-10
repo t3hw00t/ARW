@@ -15,7 +15,7 @@ async-trait = "0.1"
 tokio = { workspace = true }
 uuid = { workspace = true }
 futures-util = { workspace = true }
-base64 = "0.21"
+base64 = "0.22"
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 k256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
 
@@ -39,7 +39,7 @@ nats = ["dep:async-nats"]
 workspace = true
 
 [dev-dependencies]
-criterion = "0.5"
+criterion = "0.7"
 
 [[bench]]
 name = "ingest"
@@ -47,7 +47,7 @@ harness = false
 required-features = ["arrow-bench"]
 
 [dependencies.async-nats]
-version = "0.35"
+version = "0.42"
 optional = true
 default-features = false
 features = ["ring"]
