@@ -17,6 +17,12 @@ Capsule Adoption
 - Adoption is ephemeral by default (renegotiated on restart).
 - Bus/Event: Envelope can carry an optional capsule; service does not auto-adopt from events by default.
 
+Trust & Provenance (RPU)
+- Trust store json: `configs/trust_capsules.json` with entries `{id, alg, key_b64}`.
+- Supported alg: `ed25519`, `secp256k1`. Signature is a detached signature over the capsule JSON with `signature` field removed.
+- RPU verifies signature and applies minimal ABAC (TTL > 0, issued_at sane, propagate in {none|children|peers|all}).
+- Future: integrate Cedar for full ABAC policies and Sigstore identities.
+
 Regulatory Provenance Unit (RPU) — Planned
 - Verify capsule signatures (ed25519/secp256k1; Sigstore later) against a trust store.
 - ABAC (Cedar) for adoption decisions (issuer/role/tags/node, TTL, scope).

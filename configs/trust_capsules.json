@@ -1,0 +1,5 @@
+{
+  "issuers": [
+    { "id": "local-admin", "alg": "ed25519", "key_b64": "" }
+  ]
+}
