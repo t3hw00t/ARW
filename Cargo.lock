@@ -179,6 +179,9 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "arw-core",
+ "base64 0.21.7",
+ "ed25519-dalek",
+ "rand",
  "serde_json",
  "tracing",
  "tracing-subscriber",

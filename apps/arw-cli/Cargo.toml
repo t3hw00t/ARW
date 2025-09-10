@@ -9,3 +9,6 @@ tracing = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 arw-core = { path = "../../crates/arw-core" }
 serde_json = { workspace = true }
+base64 = "0.21"
+ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
+rand = "0.8"
