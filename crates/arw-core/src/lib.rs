@@ -11,6 +11,7 @@ pub mod orchestrator;
 #[cfg(feature = "nats")]
 pub mod orchestrator_nats;
 pub mod gating;
+pub mod gating_keys;
 
 #[cfg(feature = "wasm")]
 pub mod wasm;
