@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tray-icon = "0.13"
+tray-icon = "0.21"
 open = "5"
 ureq = "2"
 serde_json = { workspace = true }
