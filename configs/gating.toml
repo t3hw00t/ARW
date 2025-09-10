@@ -1,0 +1,9 @@
+# Immutable gating policy (deny always wins)
+# Keys support trailing * as prefix wildcard.
+# Examples:
+#   "events:*"            deny all events
+#   "task:math.add"       deny specific task kind
+#   "queue:*"             deny all queue operations
+
+deny_user = []
+

@@ -21,6 +21,7 @@ use tokio::sync::RwLock;
 use crate::AppState;
 use arw_core::hierarchy as hier;
 use arw_core::orchestrator::Task as OrchTask;
+use arw_core::gating;
 pub mod chat_api;
 pub mod feedback_api;
 pub mod feedback_engine;
@@ -297,6 +298,14 @@ async fn tasks_enqueue(
     State(state): State<AppState>,
     Json(req): Json<EnqueueReq>,
 ) -> impl IntoResponse {
+    // Gate by task kind and generic queue admission
+    if !gating::allowed(&format!("queue:enqueue")) || !gating::allowed(&format!("task:{}", req.kind)) {
+        return (
+            StatusCode::FORBIDDEN,
+            Json(json!({"ok": false, "error": "gated by policy"})),
+        )
+            .into_response();
+    }
     let mut t = OrchTask::new(req.kind, req.payload);
     t.shard_key = req.shard_key;
     t.priority = req.priority.unwrap_or(0);
@@ -326,10 +335,12 @@ pub fn start_local_task_worker(state: AppState) {
                     };
                     let _ = q.ack(lease).await;
                     let dt = t0.elapsed().as_millis() as u64;
-                    bus.publish(
-                        "Task.Completed",
-                        &json!({"id": t.id, "ok": ok, "latency_ms": dt, "error": err, "output": out}),
-                    );
+                    if gating::allowed("events:Task.Completed") {
+                        bus.publish(
+                            "Task.Completed",
+                            &json!({"id": t.id, "ok": ok, "latency_ms": dt, "error": err, "output": out}),
+                        );
+                    }
                 }
                 Err(_e) => {
                     // backoff a bit on unexpected errors
@@ -408,6 +419,15 @@ async fn hierarchy_role_set(
         _ => hier::Role::Observer,
     };
     hier::set_role(role);
+    // Apply immutable gating defaults for role
+    let gate_role = match role {
+        hier::Role::Root => arw_core::gating::Role::Root,
+        hier::Role::Regional => arw_core::gating::Role::Regional,
+        hier::Role::Edge => arw_core::gating::Role::Edge,
+        hier::Role::Connector => arw_core::gating::Role::Connector,
+        hier::Role::Observer => arw_core::gating::Role::Observer,
+    };
+    arw_core::gating::apply_role_defaults(gate_role);
     state.bus.publish(
         "Hierarchy.RoleChanged",
         &serde_json::json!({"role": req.role}),

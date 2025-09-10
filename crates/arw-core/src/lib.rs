@@ -10,6 +10,7 @@ pub mod hierarchy;
 pub mod orchestrator;
 #[cfg(feature = "nats")]
 pub mod orchestrator_nats;
+pub mod gating;
 
 #[cfg(feature = "wasm")]
 pub mod wasm;

@@ -32,6 +32,7 @@ use tower_http::trace::TraceLayer;
 use tracing::info;
 use utoipa::{OpenApi, ToSchema};
 mod ext;
+use arw_core::gating;
 
 #[arw_tool(
     id = "introspect.tools",
@@ -97,6 +98,8 @@ async fn main() {
 
     let (stop_tx, mut stop_rx) = tokio::sync::broadcast::channel::<()>(1);
     let bus = arw_events::Bus::new(256);
+    // Initialize gating from config/env
+    gating::init_from_config("configs/gating.toml");
     let cfg = arw_core::load_config(
         &std::env::var("ARW_CONFIG").unwrap_or_else(|_| "configs/default.toml".to_string()),
     )
