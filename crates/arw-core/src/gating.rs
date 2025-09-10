@@ -1,5 +1,6 @@
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::RwLock;
@@ -27,8 +28,10 @@ fn contracts_cell() -> &'static RwLock<Vec<Contract>> {
 
 #[derive(Default)]
 struct RuntimeState {
-    // For auto-renew windows and budget counters (future)
+    // Auto-renew override
     expires: HashMap<String, u64>, // contract_id -> valid_to_ms (runtime override)
+    // Budget counters: (contract_id, key) -> (window_start_ms, count)
+    budgets: HashMap<(String, String), (u64, u64)>,
 }
 
 fn runtime_cell() -> &'static RwLock<RuntimeState> {
@@ -43,7 +46,7 @@ struct GatingCfg {
     contracts: Vec<ContractCfg>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Deserialize, Clone, JsonSchema)]
 pub struct ContractCfg {
     id: String,
     #[serde(default)]
@@ -62,6 +65,10 @@ pub struct ContractCfg {
     auto_renew_secs: Option<u64>,
     #[serde(default)]
     immutable: Option<bool>,
+    #[serde(default)]
+    quota_limit: Option<u64>,
+    #[serde(default)]
+    quota_window_secs: Option<u64>,
 }
 
 #[derive(Debug, Clone)]
@@ -75,6 +82,8 @@ pub struct Contract {
     valid_to_ms: Option<u64>,
     auto_renew_secs: Option<u64>,
     immutable: bool,
+    quota_limit: Option<u64>,
+    quota_window_secs: Option<u64>,
 }
 
 fn wildcard_match(pattern: &str, key: &str) -> bool {
@@ -106,6 +115,8 @@ pub fn init_from_config(path: &str) {
                             valid_to_ms: c.valid_to_ms,
                             auto_renew_secs: c.auto_renew_secs,
                             immutable: c.immutable.unwrap_or(true),
+                            quota_limit: c.quota_limit,
+                            quota_window_secs: c.quota_window_secs,
                         });
                     }
                     *contracts_cell().write().unwrap() = out;
@@ -165,7 +176,24 @@ pub fn allowed(key: &str) -> bool {
         let to = runtime.expires.get(&c.id).cloned().or(c.valid_to_ms);
         let active = if let Some(t) = to { now >= from && now <= t } else { now >= from };
         if active {
-            return false; // deny while active
+            // Budget enforcement if configured (deny once exhausted)
+            if let (Some(limit), Some(win)) = (c.quota_limit, c.quota_window_secs) {
+                let ent = runtime
+                    .budgets
+                    .entry((c.id.clone(), key.to_string()))
+                    .or_insert((now, 0));
+                if now.saturating_sub(ent.0) > win * 1000 {
+                    ent.0 = now;
+                    ent.1 = 0;
+                }
+                if ent.1 >= limit {
+                    return false;
+                }
+                // allow this occurrence and increment counter
+                ent.1 += 1;
+                continue;
+            }
+            return false; // plain deny while active
         }
         // Not active (expired) — auto renew?
         if !active {
@@ -250,6 +278,8 @@ pub fn add_contract_cfg(c: ContractCfg) {
         valid_to_ms: c.valid_to_ms,
         auto_renew_secs: c.auto_renew_secs,
         immutable: c.immutable.unwrap_or(true),
+        quota_limit: c.quota_limit,
+        quota_window_secs: c.quota_window_secs,
     };
     if let Some(pos) = list.iter().position(|x| x.id == newc.id) {
         list[pos] = newc;
@@ -278,6 +308,8 @@ pub fn adopt_capsule(cap: &arw_protocol::GatingCapsule) {
             valid_to_ms: c.valid_to_ms,
             auto_renew_secs: c.auto_renew_secs,
             immutable: c.immutable,
+            quota_limit: None,
+            quota_window_secs: None,
         });
     }
 }

@@ -1,0 +1,96 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "ContractCfg",
+  "type": "object",
+  "required": [
+    "id"
+  ],
+  "properties": {
+    "auto_renew_secs": {
+      "default": null,
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "id": {
+      "type": "string"
+    },
+    "immutable": {
+      "default": null,
+      "type": [
+        "boolean",
+        "null"
+      ]
+    },
+    "patterns": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "quota_limit": {
+      "default": null,
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "quota_window_secs": {
+      "default": null,
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "subject_node": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "subject_role": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "tags_any": {
+      "default": null,
+      "type": [
+        "array",
+        "null"
+      ],
+      "items": {
+        "type": "string"
+      }
+    },
+    "valid_from_ms": {
+      "default": null,
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "valid_to_ms": {
+      "default": null,
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0.0
+    }
+  }
+}

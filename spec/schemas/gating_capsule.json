@@ -1,0 +1,145 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GatingCapsule",
+  "type": "object",
+  "required": [
+    "id",
+    "issued_at_ms",
+    "version"
+  ],
+  "properties": {
+    "contracts": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/GatingContract"
+      }
+    },
+    "denies": {
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "hop_ttl": {
+      "default": null,
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint32",
+      "minimum": 0.0
+    },
+    "id": {
+      "type": "string"
+    },
+    "issued_at_ms": {
+      "type": "integer",
+      "format": "uint64",
+      "minimum": 0.0
+    },
+    "issuer": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "propagate": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "signature": {
+      "default": null,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "version": {
+      "type": "string"
+    }
+  },
+  "definitions": {
+    "GatingContract": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "auto_renew_secs": {
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "id": {
+          "type": "string"
+        },
+        "immutable": {
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "patterns": {
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "subject_node": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subject_role": {
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tags_any": {
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "valid_from_ms": {
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "valid_to_ms": {
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    }
+  }
+}

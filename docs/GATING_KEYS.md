@@ -1,0 +1,33 @@
+# Gating Keys
+
+Generated from code.
+
+- `queue:enqueue`
+- `events:Task.Completed`
+- `memory:get`
+- `memory:save`
+- `memory:load`
+- `memory:apply`
+- `memory:limit:get`
+- `memory:limit:set`
+- `models:list`
+- `models:refresh`
+- `models:save`
+- `models:load`
+- `models:add`
+- `models:delete`
+- `models:default:get`
+- `models:default:set`
+- `models:download`
+- `feedback:state`
+- `feedback:signal`
+- `feedback:analyze`
+- `feedback:apply`
+- `feedback:auto`
+- `feedback:reset`
+- `tools:list`
+- `tools:run`
+- `chat:send`
+- `chat:clear`
+- `governor:set`
+- `governor:hints:set`

@@ -93,6 +93,22 @@ async fn main() {
             let _ = std::fs::create_dir_all(parent);
         }
         std::fs::write(&path, doc.to_yaml().unwrap()).expect("write openapi spec");
+        // Also emit gating schemas and keys listing for docs
+        {
+            use schemars::schema_for;
+            let dir = std::path::Path::new("spec/schemas");
+            let _ = std::fs::create_dir_all(dir);
+            let contract_schema = schema_for!(arw_core::gating::ContractCfg);
+            let capsule_schema = schema_for!(arw_protocol::GatingCapsule);
+            std::fs::write(dir.join("gating_contract.json"), serde_json::to_string_pretty(&contract_schema).unwrap()).ok();
+            std::fs::write(dir.join("gating_capsule.json"), serde_json::to_string_pretty(&capsule_schema).unwrap()).ok();
+        }
+        {
+            let keys_path = std::path::Path::new("docs/GATING_KEYS.md");
+            let mut out = String::from("# Gating Keys\n\nGenerated from code.\n\n");
+            for k in arw_core::gating_keys::list() { out.push_str(&format!("- `{}`\n", k)); }
+            let _ = std::fs::write(keys_path, out);
+        }
         return;
     }
 
@@ -162,6 +178,9 @@ async fn main() {
                 .or_else(|| cfg.as_ref().and_then(|c| c.cluster.node_id.clone()))
                 .unwrap_or_else(|| "local".to_string());
             arw_events::attach_nats_incoming(&bus, &url, &node_id).await;
+            if std::env::var("ARW_NATS_OUT").ok().as_deref() == Some("1") {
+                arw_events::attach_nats_outgoing(&bus, &url, &node_id).await;
+            }
         }
         #[cfg(not(feature = "nats"))]
         {

@@ -1,7 +1,8 @@
 use serde::{Deserialize, Serialize};
+use schemars::JsonSchema;
 
 /// RFC7807-style error payload used at service edges.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 pub struct ProblemDetails {
     pub r#type: String,
     pub title: String,
@@ -13,13 +14,13 @@ pub struct ProblemDetails {
 }
 
 /// Opaque cursor pagination envelope.
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 pub struct Page<T> {
     pub items: Vec<T>,
     pub next_cursor: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 pub struct OperationId(pub String);
 
 /// Connector hello/registration message.
@@ -47,7 +48,7 @@ pub struct ConnectorHeartbeat {
 
 // -------- Gating / Policy Capsule (propagatable) --------
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 pub struct GatingContract {
     pub id: String,
     #[serde(default)]
@@ -68,7 +69,7 @@ pub struct GatingContract {
     pub immutable: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
 pub struct GatingCapsule {
     pub id: String,
     pub version: String,

@@ -266,6 +266,7 @@ dependencies = [
 name = "arw-protocol"
 version = "0.1.0"
 dependencies = [
+ "schemars",
  "serde",
  "serde_json",
 ]
@@ -287,6 +288,7 @@ dependencies = [
  "hyper 1.7.0",
  "inventory",
  "reqwest 0.12.23",
+ "schemars",
  "serde",
  "serde_json",
  "tokio",

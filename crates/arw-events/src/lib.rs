@@ -104,15 +104,22 @@ impl Bus {
 // Implementations will wrap a local relay to preserve subscribe() semantics.
 
 #[cfg(feature = "nats")]
-pub async fn attach_nats_outgoing(bus: &Bus, url: &str) {
-    // Connect once and spawn a relay: local bus -> NATS subjects (arw.events.<Kind>)
+pub async fn attach_nats_outgoing(bus: &Bus, url: &str, node_id: &str) {
+    // Connect once and spawn a relay: local bus -> NATS subjects (arw.events.node.<node_id>.<Kind>)
     match async_nats::connect(url).await {
         Ok(client) => {
             let mut rx = bus.subscribe();
+            let node = node_id.to_string();
             tokio::spawn(async move {
                 while let Ok(env) = rx.recv().await {
-                    let subj = format!("arw.events.{}", env.kind.replace(' ', "."));
-                    if let Ok(bytes) = serde_json::to_vec(&env) {
+                    let mut env2 = env.clone();
+                    if let Some(mut cap) = env2.policy.clone() {
+                        if !arw_core::rpu::verify_capsule(&cap) { continue; }
+                        if let Some(ttl) = cap.hop_ttl.as_mut() { if *ttl == 0 { continue; } else { *ttl -= 1; } }
+                        env2.policy = Some(cap);
+                    }
+                    let subj = format!("arw.events.node.{}.{}", node, env2.kind.replace(' ', "."));
+                    if let Ok(bytes) = serde_json::to_vec(&env2) {
                         let _ = client.publish(subj, bytes.into()).await;
                     }
                 }
@@ -126,9 +133,7 @@ pub async fn attach_nats_outgoing(bus: &Bus, url: &str) {
 }
 
 #[cfg(not(feature = "nats"))]
-pub async fn attach_nats_outgoing(_bus: &Bus, _url: &str) {
-    // no-op when not compiled with nats feature
-}
+pub async fn attach_nats_outgoing(_bus: &Bus, _url: &str, _node_id: &str) { }
 
 /// Subscribe to NATS subjects and publish into the local bus (aggregator mode).
 /// Uses subject form: `arw.events.node.<node_id>.<Kind>` to avoid loops.

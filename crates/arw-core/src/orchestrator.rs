@@ -84,7 +84,34 @@ struct LocalInner {
 
 impl LocalQueue {
     pub fn new() -> Self {
-        Self::default()
+        let this = Self::default();
+        // Start lease sweeper to re-enqueue expired leases
+        let inner = this.inner.clone();
+        tokio::spawn(async move {
+            loop {
+                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                let now = crate::orchestrator::now_millis();
+                // collect expired leases
+                let mut expired: Vec<Task> = Vec::new();
+                {
+                    let mut pend = inner.pending.lock().await;
+                    let lids: Vec<String> = pend
+                        .iter()
+                        .filter_map(|(lid, (_t, exp))| if *exp <= now { Some(lid.clone()) } else { None })
+                        .collect();
+                    for lid in lids { if let Some((t, _)) = pend.remove(&lid) { expired.push(t); } }
+                }
+                if !expired.is_empty() {
+                    let mut map = inner.queues.lock().await;
+                    for mut t in expired {
+                        t.attempt = t.attempt.saturating_add(1);
+                        let q = map.entry(t.priority).or_insert_with(VecDeque::new);
+                        q.push_back(t);
+                    }
+                }
+            }
+        });
+        this
     }
 }
 

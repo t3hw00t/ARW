@@ -23,6 +23,7 @@ reqwest = { workspace = true }
 futures-util = { workspace = true }
 toml = { workspace = true }
 arw-protocol = { path = "../../crates/arw-protocol" }
+schemars = { workspace = true }
 
 [features]
 default = []
