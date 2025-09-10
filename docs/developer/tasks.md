@@ -4,7 +4,7 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-09 22:43 UTC
+Updated: 2025-09-10 12:00 UTC
 
 
 ## To Do
@@ -12,6 +12,16 @@ Updated: 2025-09-09 22:43 UTC
 - [t-250909224103-5251] Policy: hook feedback auto-apply — todo (updated: 2025-09-09 20:41:03 UTC)
 - [t-250909224102-9629] Spec: AsyncAPI+MCP artifacts + /spec/* — todo (updated: 2025-09-09 20:41:02 UTC)
 - [t-250909224102-8952] Plan: Heuristic engine crate + integration — todo (updated: 2025-09-09 20:41:02 UTC)
+- [t-250910115900-0001] RPU: Trust store + signature verification for capsules — todo (ed25519/secp256k1; Sigstore later)
+- [t-250910115900-0002] RPU: Cedar ABAC for capsule adoption (issuer/role/tags/TTL/scope) — todo
+- [t-250910115900-0003] RPU: Hop TTL + propagation scope enforcement on relay — todo
+- [t-250910115900-0004] Bus: inbound relay loop-avoidance and filtering + metrics — todo
+- [t-250910115900-0005] Queue: JetStream durable backend (acks/nacks/delay) — todo
+- [t-250910115900-0006] Orchestrator: LocalQueue lease sweeper for expired leases — todo
+- [t-250910115900-0007] Gating: budgets/quotas with persisted counters — todo
+- [t-250910115900-0008] Docgen: gating schema + GATING_KEYS.md from code — todo
+- [t-250910115900-0009] Macro: #[arw_gate("key")] for handlers (enforce + docgen) — todo
+- [t-250910115900-0010] Capsule: signed provenance + optional Bitcoin timestamping (opt-in) — todo
 
 ## In Progress
 
@@ -53,3 +63,9 @@ Updated: 2025-09-09 22:43 UTC
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
 
+# Cluster/Gating/Hiearchy Work (2025‑09‑10)
+- [x] Pluggable queue/bus; NATS queue groups; inbound NATS→local bus aggregator
+- [x] Hierarchy: roles + HTTP hello/offer/accept scaffolding; asyncapi channels
+- [x] Gating Orchestrator: central keys; deny contracts; ingress/egress guards
+- [x] Policy Capsules in protocol; header-based adoption (ephemeral)
+- [x] Apply gating consistently across memory/models/tools/feedback/chat/governor

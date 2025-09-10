@@ -1,5 +1,6 @@
 Agents running wild — Features and Tracks
 Updated: 2025-09-06.
+Revision: 2025-09-10 (cluster/gating/hierarchy updates)
 
 GOALS
 
@@ -11,15 +12,15 @@ CORE
 
 Interop: MCP (client/server), HTTP/WS (OpenAPI 3.1 + AsyncAPI).
 
-Observability: OpenTelemetry traces/logs/metrics; event bus; notification routing.
+Observability: OpenTelemetry traces/logs/metrics; event bus (local + NATS inbound aggregator); notification routing.
 
 Gen‑AI semantic attributes (OTel) are feature‑flagged while the convention evolves.
 
-Security & policy: OPA/Cedar; permission manifests; Sigstore releases; SBOM.
+Security & policy: Gating Orchestrator (central keys + deny contracts with role/node/tags/time/auto-renew), ingress/egress guards, Policy Capsules (propagatable); Regulatory Provenance Unit (planned) for signatures and ABAC adoption; OPA/Cedar; permission manifests; Sigstore releases; SBOM.
 
 Extensibility: Rust static plugins + WASI/WASM dynamic plugins.
 
-Agent runtime: orchestrator; tool protocol/adapters; selector UX/APIs for easy model/tool/profile switching; Run Capsules.
+Agent runtime: orchestrator; pluggable Queue/Bus (local default; NATS queue groups; JetStream planned); tool protocol/adapters; selector UX/APIs for easy model/tool/profile switching; Run Capsules.
 
 Memory: layered design; Memory Lab for dataset complexity/logic/abstraction experiments; Live Probe; conditional training.
 
@@ -30,6 +31,7 @@ Browser module with citations; file loader/saver; logging/metrics.
 Hardware & performance: robust capability discovery; governor w/ presets; CAS + model daemon for multi-actor concurrency.
 
 Connections: central connection registry with link policies, health checks, rate limits, QoS hints, secret binding, tracing, and audit.
+Hierarchy Orchestrator: roles (root/regional/edge/connector/observer), HTTP scaffolding for hello/offer/accept; topology events.
 
 PLUGINS (first‑party, optional)
 

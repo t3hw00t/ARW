@@ -1,5 +1,5 @@
 Hierarchy Orchestrator (Design + MVP)
-Updated: 2025-09-09
+Updated: 2025-09-10
 
 Goals
 - Allow cores to negotiate roles and relationships dynamically (root/regional/edge/connector/observer).
@@ -15,6 +15,14 @@ Negotiation (protocol types in arw-protocol)
 - CoreHello(id, role, capabilities, scope_tags, epoch, nonce)
 - CoreOffer(from_id, proposed_role, parent_hint, shard_ranges, capacity_hint)
 - CoreAccept(child_id, parent_id, role, epoch)
+
+Gating & Policy Capsules
+- All interactions can optionally carry a `GatingCapsule` via HTTP header `X-ARW-Gate`.
+- Capsules propagate immutable denies and deny contracts (role/node/tags/time windows; auto-renew) — ephemeral and renegotiated on restart.
+- Ingress/Egress Guards enforce policy at the beginning and end of action/memory stacks (e.g., `io:ingress:task.kind`, `io:egress:task.kind`).
+
+Regulatory Provenance Unit (planned)
+- Signature verification for capsules, trust store, ABAC policy (Cedar) for adoption, hop TTL and propagation scope, and an ephemeral adoption ledger.
 
 MVP in this repo
 - Local `arw-core::hierarchy` state, with APIs to get/set role and minimal parent/child links.
@@ -32,4 +40,3 @@ Next steps
 Bitcoin alignment
 - Identity: use secp256k1-derived identities for mutual auth (SPIFFE/SPIRE or Noise).
 - Event ingress: ZeroMQ bridge from bitcoind -> NATS subjects; region roots filter/aggregate.
-

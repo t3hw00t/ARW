@@ -1,10 +1,10 @@
 ARW Clustering & Connectors (MVP -> Medium Depth)
-Updated: 2025-09-09
+Updated: 2025-09-10
 
 - Default behavior remains single-process using a local in-memory queue and event bus.
 - Medium-depth scale-out uses a pluggable Queue and Bus abstraction with NATS JetStream as the recommended backend.
 
-Why NATS JetStream
+Why NATS
 - Simple operational model, low latency, at-least-once with durable consumer groups.
 - Built-in discovery and clustering; easy to add nodes (“connect a second”).
 - Good bridgeability to edge environments and compatible with future p2p overlays.
@@ -20,6 +20,7 @@ MVP in this repo
 - `arw-events`: EventBus trait with LocalBus; façade `Bus` keeps existing SSE endpoints working.
 - `arw-protocol`: `ConnectorHello`, `ConnectorHeartbeat` types.
 - `arw-svc`: new `/tasks/enqueue` (debug/admin-gated) and a local background worker to execute minimal built-in tools via the queue.
+- Inbound NATS→local bus aggregator so /events can unify cross-node events without loops.
 
 Config (configs/default.toml)
 ```
@@ -31,8 +32,7 @@ queue = "local" # or "nats" (feature: arw-core/nats)
 ```
 
 Next steps
-- Implement `NatsQueue` (JetStream streams, durable consumer groups, ack/nack/lease semantics).
-- Add `NatsBus` relay to feed local SSE subscribers.
+- Implement JetStream durable queues with consumer groups and ack/nack/delay semantics.
+- Add outbound NATS relay (loop-safe) when needed for cross-node fan-out.
 - Define connector control-plane (gRPC/QUIC) for Hello/Heartbeat/Assignment.
 - Optional ZMQ bridge for Bitcoin Core notifications -> Bus/Queue.
-

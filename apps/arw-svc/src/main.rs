@@ -335,9 +335,7 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
         if let Some(h) = req.headers().get("x-arw-gate") {
             if let Ok(s) = h.to_str() {
                 if s.len() <= 4096 {
-                    if let Ok(cap) = serde_json::from_str::<arw_protocol::GatingCapsule>(s) {
-                        arw_core::gating::adopt_capsule(&cap);
-                    }
+                    let _ = arw_core::rpu::adopt_from_header_json(s);
                 } else {
                     tracing::warn!("x-arw-gate header too large; ignoring");
                 }
