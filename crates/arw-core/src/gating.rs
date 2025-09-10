@@ -15,6 +15,7 @@ pub struct GateState {
 static STATE: OnceCell<RwLock<GateState>> = OnceCell::new();
 static CONTRACTS: OnceCell<RwLock<Vec<Contract>>> = OnceCell::new();
 static RUNTIME: OnceCell<RwLock<RuntimeState>> = OnceCell::new();
+const MAX_CONTRACTS: usize = 2048;
 
 fn cell() -> &'static RwLock<GateState> {
     STATE.get_or_init(|| RwLock::new(GateState::default()))
@@ -238,7 +239,8 @@ fn now_ms() -> u64 {
 /// Add a contract at runtime (immutable within its own window). Id must be unique per source.
 pub fn add_contract_cfg(c: ContractCfg) {
     let mut list = contracts_cell().write().unwrap();
-    list.push(Contract {
+    // Replace if same id exists; otherwise append (bounded by MAX_CONTRACTS)
+    let newc = Contract {
         id: c.id,
         patterns: c.patterns,
         subject_role: c.subject_role,
@@ -248,7 +250,16 @@ pub fn add_contract_cfg(c: ContractCfg) {
         valid_to_ms: c.valid_to_ms,
         auto_renew_secs: c.auto_renew_secs,
         immutable: c.immutable.unwrap_or(true),
-    });
+    };
+    if let Some(pos) = list.iter().position(|x| x.id == newc.id) {
+        list[pos] = newc;
+    } else {
+        if list.len() >= MAX_CONTRACTS {
+            // Drop oldest to keep bounded
+            list.remove(0);
+        }
+        list.push(newc);
+    }
 }
 
 /// Adopt a GatingCapsule from the wire (policy propagation). Trust policy is caller's responsibility.

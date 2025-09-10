@@ -322,14 +322,6 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
         debug
     };
     if ok {
-        // Optional gating capsule via header (JSON in x-arw-gate)
-        if let Some(h) = req.headers().get("x-arw-gate") {
-            if let Ok(s) = h.to_str() {
-                if let Ok(cap) = serde_json::from_str::<arw_protocol::GatingCapsule>(s) {
-                    arw_core::gating::adopt_capsule(&cap);
-                }
-            }
-        }
         if !rate_allow() {
             let body = serde_json::json!({
                 "type": "about:blank",
@@ -338,6 +330,18 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
                 "detail": "rate limit exceeded for administrative endpoints"
             });
             return (SC::TOO_MANY_REQUESTS, axum::Json(body)).into_response();
+        }
+        // Optional gating capsule via header (JSON in x-arw-gate). Apply after rate check.
+        if let Some(h) = req.headers().get("x-arw-gate") {
+            if let Ok(s) = h.to_str() {
+                if s.len() <= 4096 {
+                    if let Ok(cap) = serde_json::from_str::<arw_protocol::GatingCapsule>(s) {
+                        arw_core::gating::adopt_capsule(&cap);
+                    }
+                } else {
+                    tracing::warn!("x-arw-gate header too large; ignoring");
+                }
+            }
         }
         return next.run(req).await;
     }
