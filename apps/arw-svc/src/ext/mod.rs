@@ -329,16 +329,35 @@ pub fn start_local_task_worker(state: AppState) {
             match q.dequeue("workers").await {
                 Ok((t, lease)) => {
                     let t0 = std::time::Instant::now();
+                    // Ingress gating for task execution
+                    let ingress_key = format!("io:ingress:task.{}", t.kind);
+                    if !arw_core::gating::allowed(&ingress_key) {
+                        let _ = q.ack(lease).await;
+                        if arw_core::gating::allowed("events:Task.Completed") {
+                            bus.publish(
+                                "Task.Completed",
+                                &json!({"id": t.id, "ok": false, "error": "gated:ingress"}),
+                            );
+                        }
+                        continue;
+                    }
                     let (ok, out, err) = match run_tool_internal(&t.kind, &t.payload) {
                         Ok(v) => (true, v, None),
                         Err(e) => (false, json!({}), Some(e)),
                     };
                     let _ = q.ack(lease).await;
                     let dt = t0.elapsed().as_millis() as u64;
-                    if gating::allowed("events:Task.Completed") {
+                    // Egress gating for task output (policy-level)
+                    let egress_key = format!("io:egress:task.{}", t.kind);
+                    if gating::allowed("events:Task.Completed") && arw_core::gating::allowed(&egress_key) {
                         bus.publish(
                             "Task.Completed",
                             &json!({"id": t.id, "ok": ok, "latency_ms": dt, "error": err, "output": out}),
+                        );
+                    } else if gating::allowed("events:Task.Completed") {
+                        bus.publish(
+                            "Task.Completed",
+                            &json!({"id": t.id, "ok": false, "latency_ms": dt, "error": "gated:egress"}),
                         );
                     }
                 }

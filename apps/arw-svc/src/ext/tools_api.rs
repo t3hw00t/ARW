@@ -20,9 +20,16 @@ pub(crate) async fn run_tool_endpoint(
     Json(req): Json<ToolRunReq>,
 ) -> impl IntoResponse {
     if !gating::allowed(gk::TOOLS_RUN) { return (axum::http::StatusCode::FORBIDDEN, "gated").into_response(); }
+    let ingress_key = format!("io:ingress:tools.{}", req.id);
+    if !gating::allowed(&ingress_key) { return (axum::http::StatusCode::FORBIDDEN, "gated:ingress").into_response(); }
     let req2 = super::ToolRunReq {
         id: req.id,
         input: req.input,
     };
-    super::run_tool_endpoint(State(state), Json(req2)).await.into_response()
+    let id_for_egress = req2.id.clone();
+    let resp = super::run_tool_endpoint(State(state), Json(req2)).await.into_response();
+    // Egress gate (policy-level)
+    let egress_key = format!("io:egress:tools.{}", id_for_egress);
+    if !gating::allowed(&egress_key) { return (axum::http::StatusCode::FORBIDDEN, "gated:egress").into_response(); }
+    resp
 }

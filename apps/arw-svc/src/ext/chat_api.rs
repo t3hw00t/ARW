@@ -4,7 +4,8 @@ use arw_core::{gating, gating_keys as gk};
 use serde::Deserialize;
 
 pub(crate) async fn chat_get() -> impl IntoResponse {
-    super::chat_get().await
+    if !arw_core::gating::allowed("io:egress:chat") { return (axum::http::StatusCode::FORBIDDEN, "gated").into_response(); }
+    super::chat_get().await.into_response()
 }
 pub(crate) async fn chat_clear() -> impl IntoResponse {
     if !gating::allowed(gk::CHAT_CLEAR) { return (axum::http::StatusCode::FORBIDDEN, "gated").into_response(); }
