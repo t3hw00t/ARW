@@ -8,6 +8,8 @@ pub struct Envelope {
     pub time: String,
     pub kind: String,
     pub payload: Value,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub policy: Option<arw_protocol::GatingCapsule>,
 }
 
 /// Pluggable event bus API. For now subscribe returns a local channel receiver
@@ -16,6 +18,12 @@ pub struct Envelope {
 pub trait EventBus: Send + Sync + Clone + 'static {
     fn subscribe(&self) -> broadcast::Receiver<Envelope>;
     fn publish<T: Serialize>(&self, kind: &str, payload: &T);
+    fn publish_with_policy<T: Serialize>(
+        &self,
+        kind: &str,
+        payload: &T,
+        policy: Option<arw_protocol::GatingCapsule>,
+    );
 }
 
 /// Local in-process bus backed by tokio broadcast channels.
@@ -43,6 +51,23 @@ impl EventBus for LocalBus {
             time: now,
             kind: kind.to_string(),
             payload: val,
+            policy: None,
+        });
+    }
+    fn publish_with_policy<T: Serialize>(
+        &self,
+        kind: &str,
+        payload: &T,
+        policy: Option<arw_protocol::GatingCapsule>,
+    ) {
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let val = serde_json::to_value(payload)
+            .unwrap_or_else(|_| serde_json::json!({ "_ser": "error" }));
+        let _ = self.tx.send(Envelope {
+            time: now,
+            kind: kind.to_string(),
+            payload: val,
+            policy,
         });
     }
 }
@@ -64,6 +89,14 @@ impl Bus {
     }
     pub fn publish<T: Serialize>(&self, kind: &str, payload: &T) {
         self.inner.publish(kind, payload)
+    }
+    pub fn publish_with_policy<T: Serialize>(
+        &self,
+        kind: &str,
+        payload: &T,
+        policy: Option<arw_protocol::GatingCapsule>,
+    ) {
+        self.inner.publish_with_policy(kind, payload, policy)
     }
 }
 

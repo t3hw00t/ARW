@@ -43,7 +43,7 @@ struct GatingCfg {
 }
 
 #[derive(Debug, Deserialize, Clone)]
-struct ContractCfg {
+pub struct ContractCfg {
     id: String,
     #[serde(default)]
     patterns: Vec<String>, // e.g., ["events:*", "task:math.*"]
@@ -64,7 +64,7 @@ struct ContractCfg {
 }
 
 #[derive(Debug, Clone)]
-struct Contract {
+pub struct Contract {
     id: String,
     patterns: Vec<String>,
     subject_role: Option<String>,
@@ -233,4 +233,40 @@ pub fn snapshot() -> serde_json::Value {
 fn now_ms() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
     SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64
+}
+
+/// Add a contract at runtime (immutable within its own window). Id must be unique per source.
+pub fn add_contract_cfg(c: ContractCfg) {
+    let mut list = contracts_cell().write().unwrap();
+    list.push(Contract {
+        id: c.id,
+        patterns: c.patterns,
+        subject_role: c.subject_role,
+        subject_node: c.subject_node,
+        tags_any: c.tags_any,
+        valid_from_ms: c.valid_from_ms,
+        valid_to_ms: c.valid_to_ms,
+        auto_renew_secs: c.auto_renew_secs,
+        immutable: c.immutable.unwrap_or(true),
+    });
+}
+
+/// Adopt a GatingCapsule from the wire (policy propagation). Trust policy is caller's responsibility.
+pub fn adopt_capsule(cap: &arw_protocol::GatingCapsule) {
+    if !cap.denies.is_empty() {
+        deny_hierarchy(cap.denies.clone());
+    }
+    for c in &cap.contracts {
+        add_contract_cfg(ContractCfg {
+            id: format!("{}::{}", cap.id, c.id),
+            patterns: c.patterns.clone(),
+            subject_role: c.subject_role.clone(),
+            subject_node: c.subject_node.clone(),
+            tags_any: c.tags_any.clone(),
+            valid_from_ms: c.valid_from_ms,
+            valid_to_ms: c.valid_to_ms,
+            auto_renew_secs: c.auto_renew_secs,
+            immutable: c.immutable,
+        });
+    }
 }

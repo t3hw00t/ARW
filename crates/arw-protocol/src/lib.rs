@@ -45,6 +45,48 @@ pub struct ConnectorHeartbeat {
     pub load01: f32,
 }
 
+// -------- Gating / Policy Capsule (propagatable) --------
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GatingContract {
+    pub id: String,
+    #[serde(default)]
+    pub patterns: Vec<String>,
+    #[serde(default)]
+    pub subject_role: Option<String>,
+    #[serde(default)]
+    pub subject_node: Option<String>,
+    #[serde(default)]
+    pub tags_any: Option<Vec<String>>,
+    #[serde(default)]
+    pub valid_from_ms: Option<u64>,
+    #[serde(default)]
+    pub valid_to_ms: Option<u64>,
+    #[serde(default)]
+    pub auto_renew_secs: Option<u64>,
+    #[serde(default)]
+    pub immutable: Option<bool>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct GatingCapsule {
+    pub id: String,
+    pub version: String,
+    pub issued_at_ms: u64,
+    #[serde(default)]
+    pub issuer: Option<String>,
+    #[serde(default)]
+    pub hop_ttl: Option<u32>,
+    #[serde(default)]
+    pub propagate: Option<String>, // none|children|peers|all
+    #[serde(default)]
+    pub denies: Vec<String>, // immediate deny patterns
+    #[serde(default)]
+    pub contracts: Vec<GatingContract>,
+    #[serde(default)]
+    pub signature: Option<String>,
+}
+
 // -------- Hierarchy / Core-to-Core negotiation (types only) --------
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

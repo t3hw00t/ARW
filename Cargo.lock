@@ -229,6 +229,7 @@ dependencies = [
 name = "arw-events"
 version = "0.1.0"
 dependencies = [
+ "arw-protocol",
  "async-nats",
  "chrono",
  "futures-util",

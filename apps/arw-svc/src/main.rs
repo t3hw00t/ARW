@@ -322,6 +322,14 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
         debug
     };
     if ok {
+        // Optional gating capsule via header (JSON in x-arw-gate)
+        if let Some(h) = req.headers().get("x-arw-gate") {
+            if let Ok(s) = h.to_str() {
+                if let Ok(cap) = serde_json::from_str::<arw_protocol::GatingCapsule>(s) {
+                    arw_core::gating::adopt_capsule(&cap);
+                }
+            }
+        }
         if !rate_allow() {
             let body = serde_json::json!({
                 "type": "about:blank",
