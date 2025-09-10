@@ -148,3 +148,25 @@ pub fn load_wasm_tool(input: TokenStream) -> TokenStream {
     }};
     gen.into()
 }
+
+/// Gate an axum handler by a central gating key.
+/// Usage: #[arw_gate("tools:run")]
+#[proc_macro_attribute]
+pub fn arw_gate(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let key_lit = parse_macro_input!(attr as LitStr);
+    let mut func = parse_macro_input!(item as ItemFn);
+    let key = key_lit.value();
+    let gate_stmt = quote! {
+        if !arw_core::gating::allowed(#key) {
+            return (axum::http::StatusCode::FORBIDDEN, "gated").into_response();
+        }
+    };
+    // Prepend gate check to the function body
+    let orig_block = func.block;
+    let wrapped = quote! {{
+        #gate_stmt
+        #orig_block
+    }};
+    func.block = Box::new(syn::parse2(wrapped).expect("wrap body"));
+    quote! { #func }.into()
+}

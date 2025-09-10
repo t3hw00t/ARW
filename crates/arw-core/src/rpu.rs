@@ -4,6 +4,7 @@
 use crate::gating;
 use base64::{engine::general_purpose::STANDARD as b64, Engine};
 use once_cell::sync::OnceCell;
+use std::sync::RwLock;
 use serde::Deserialize;
 use std::fs;
 use std::path::Path;
@@ -21,10 +22,10 @@ struct TrustConfig {
     issuers: Vec<TrustEntry>,
 }
 
-static TRUST: OnceCell<TrustConfig> = OnceCell::new();
+static TRUST: OnceCell<RwLock<TrustConfig>> = OnceCell::new();
 
 fn load_trust() -> TrustConfig {
-    if let Some(cfg) = TRUST.get() { return cfg.clone(); }
+    if let Some(cell) = TRUST.get() { return cell.read().unwrap().clone(); }
     let path = std::env::var("ARW_TRUST_CAPSULES")
         .ok()
         .unwrap_or_else(|| "configs/trust_capsules.json".to_string());
@@ -34,8 +35,24 @@ fn load_trust() -> TrustConfig {
             Err(_) => TrustConfig::default(),
         }
     } else { TrustConfig::default() };
-    let _ = TRUST.set(cfg.clone());
+    let _ = TRUST.set(RwLock::new(cfg.clone()));
     cfg
+}
+
+/// Force reload trust store from disk (best-effort)
+pub fn reload_trust() {
+    let path = std::env::var("ARW_TRUST_CAPSULES").ok().unwrap_or_else(|| "configs/trust_capsules.json".to_string());
+    let cfg = if Path::new(&path).exists() {
+        match fs::read_to_string(&path) {
+            Ok(s) => serde_json::from_str::<TrustConfig>(&s).unwrap_or_default(),
+            Err(_) => TrustConfig::default(),
+        }
+    } else { TrustConfig::default() };
+    if let Some(cell) = TRUST.get() {
+        *cell.write().unwrap() = cfg;
+    } else {
+        let _ = TRUST.set(RwLock::new(cfg));
+    }
 }
 
 fn signing_bytes(cap: &arw_protocol::GatingCapsule) -> Vec<u8> {

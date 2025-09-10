@@ -2,10 +2,9 @@
 use crate::orchestrator::{LeaseToken, Queue, Task};
 use anyhow::Result;
 use async_nats::Client;
-#[cfg(feature = "nats_js")]
-use async_nats::jetstream::context::Context as JsContext;
-#[cfg(feature = "nats_js")]
-use async_nats::jetstream::{self as js, consumer::pull::Message as JsMessage, consumer::pull::Stream as PullStream};
+// JetStream imports currently disabled until API is finalized
+// use async_nats::jetstream::context::Context as JsContext;
+// use async_nats::jetstream::{self as js, consumer::pull::Message as JsMessage, consumer::pull::Stream as PullStream};
 use async_trait::async_trait;
 use futures_util::StreamExt;
 use std::collections::HashMap;
@@ -94,7 +93,7 @@ impl Queue for NatsQueue {
     }
 }
 
-#[cfg(feature = "nats_js")]
+#[cfg(any())]
 mod jetstream_backend {
     use super::*;
     use async_nats::jetstream::context::Context as JsContext;
