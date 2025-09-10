@@ -7,3 +7,13 @@
 
 deny_user = []
 
+# Optional complex contracts (deny with conditions; immutable within window; can auto-renew)
+# [[contracts]]
+# id = "night-quiet"
+# patterns = ["events:*"]
+# subject_role = "edge"           # matches local role
+# tags_any = ["lab"]              # optional
+# valid_from_ms = 0               # start now
+# valid_to_ms = 1735776000000     # until a fixed time (ms)
+# auto_renew_secs = 0             # or e.g., 3600 to auto-renew hourly
+# immutable = true                # deny is immutable within window

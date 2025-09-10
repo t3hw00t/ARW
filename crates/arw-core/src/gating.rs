@@ -1,6 +1,6 @@
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::RwLock;
 
@@ -13,15 +13,67 @@ pub struct GateState {
 }
 
 static STATE: OnceCell<RwLock<GateState>> = OnceCell::new();
+static CONTRACTS: OnceCell<RwLock<Vec<Contract>>> = OnceCell::new();
+static RUNTIME: OnceCell<RwLock<RuntimeState>> = OnceCell::new();
 
 fn cell() -> &'static RwLock<GateState> {
     STATE.get_or_init(|| RwLock::new(GateState::default()))
+}
+
+fn contracts_cell() -> &'static RwLock<Vec<Contract>> {
+    CONTRACTS.get_or_init(|| RwLock::new(Vec::new()))
+}
+
+#[derive(Default)]
+struct RuntimeState {
+    // For auto-renew windows and budget counters (future)
+    expires: HashMap<String, u64>, // contract_id -> valid_to_ms (runtime override)
+}
+
+fn runtime_cell() -> &'static RwLock<RuntimeState> {
+    RUNTIME.get_or_init(|| RwLock::new(RuntimeState::default()))
 }
 
 #[derive(Debug, Deserialize)]
 struct GatingCfg {
     #[serde(default)]
     deny_user: Vec<String>,
+    #[serde(default)]
+    contracts: Vec<ContractCfg>,
+}
+
+#[derive(Debug, Deserialize, Clone)]
+struct ContractCfg {
+    id: String,
+    #[serde(default)]
+    patterns: Vec<String>, // e.g., ["events:*", "task:math.*"]
+    #[serde(default)]
+    subject_role: Option<String>,
+    #[serde(default)]
+    subject_node: Option<String>,
+    #[serde(default)]
+    tags_any: Option<Vec<String>>, // match any of these tags
+    #[serde(default)]
+    valid_from_ms: Option<u64>,
+    #[serde(default)]
+    valid_to_ms: Option<u64>,
+    #[serde(default)]
+    auto_renew_secs: Option<u64>,
+    #[serde(default)]
+    immutable: Option<bool>,
+}
+
+#[derive(Debug, Clone)]
+struct Contract {
+    id: String,
+    patterns: Vec<String>,
+    subject_role: Option<String>,
+    subject_node: Option<String>,
+    tags_any: Option<Vec<String>>,
+    valid_from_ms: Option<u64>,
+    valid_to_ms: Option<u64>,
+    auto_renew_secs: Option<u64>,
+    immutable: bool,
 }
 
 fn wildcard_match(pattern: &str, key: &str) -> bool {
@@ -40,6 +92,23 @@ pub fn init_from_config(path: &str) {
         if let Ok(s) = std::fs::read_to_string(path) {
             if let Ok(cfg) = toml::from_str::<GatingCfg>(&s) {
                 for k in cfg.deny_user { denies.insert(k); }
+                if !cfg.contracts.is_empty() {
+                    let mut out: Vec<Contract> = Vec::new();
+                    for c in cfg.contracts.into_iter() {
+                        out.push(Contract {
+                            id: c.id,
+                            patterns: c.patterns,
+                            subject_role: c.subject_role,
+                            subject_node: c.subject_node,
+                            tags_any: c.tags_any,
+                            valid_from_ms: c.valid_from_ms,
+                            valid_to_ms: c.valid_to_ms,
+                            auto_renew_secs: c.auto_renew_secs,
+                            immutable: c.immutable.unwrap_or(true),
+                        });
+                    }
+                    *contracts_cell().write().unwrap() = out;
+                }
             }
         }
     }
@@ -67,9 +136,45 @@ pub fn deny_hierarchy<I: IntoIterator<Item = String>>(keys: I) {
 
 /// Check if a key is allowed (deny wins; patterns with trailing * are supported).
 pub fn allowed(key: &str) -> bool {
-    let st = cell().read().unwrap();
-    for p in &st.deny_user { if wildcard_match(p, key) { return false; } }
-    for p in &st.deny_hier { if wildcard_match(p, key) { return false; } }
+    let now = now_ms();
+    // User/hierarchy immutable sets first
+    {
+        let st = cell().read().unwrap();
+        for p in &st.deny_user { if wildcard_match(p, key) { return false; } }
+        for p in &st.deny_hier { if wildcard_match(p, key) { return false; } }
+    }
+    // Contracts (deny with conditions, auto-renew)
+    let role = crate::hierarchy::get_state().self_node.role;
+    let role_s = format!("{:?}", role).to_lowercase();
+    let node_id = std::env::var("ARW_NODE_ID").unwrap_or_else(|_| "local".into());
+    let tags = crate::hierarchy::get_state().self_node.tags;
+    let mut runtime = runtime_cell().write().unwrap();
+    let list = contracts_cell().read().unwrap().clone();
+    for c in list.iter() {
+        // Match pattern
+        if !c.patterns.iter().any(|p| wildcard_match(p, key)) { continue; }
+        // Subject filters
+        if let Some(r) = &c.subject_role { if r.to_lowercase() != role_s { continue; } }
+        if let Some(n) = &c.subject_node { if n != &node_id { continue; } }
+        if let Some(any) = &c.tags_any {
+            if !any.iter().any(|t| tags.contains(t)) { continue; }
+        }
+        // Window check and renewal
+        let from = c.valid_from_ms.unwrap_or(0);
+        let to = runtime.expires.get(&c.id).cloned().or(c.valid_to_ms);
+        let active = if let Some(t) = to { now >= from && now <= t } else { now >= from };
+        if active {
+            return false; // deny while active
+        }
+        // Not active (expired) — auto renew?
+        if !active {
+            if let Some(renew) = c.auto_renew_secs {
+                let new_to = now.saturating_add(renew * 1000);
+                runtime.expires.insert(c.id.clone(), new_to);
+                return false; // becomes active immediately on first check
+            }
+        }
+    }
     true
 }
 
@@ -108,9 +213,24 @@ pub fn apply_role_defaults(role: Role) {
 /// Snapshot for introspection.
 pub fn snapshot() -> serde_json::Value {
     let st = cell().read().unwrap();
+    let contracts = contracts_cell().read().unwrap();
     serde_json::json!({
         "deny_user": st.deny_user,
         "deny_hierarchy": st.deny_hier,
+        "contracts": contracts.iter().map(|c| {
+            let mut m = serde_json::Map::new();
+            m.insert("id".into(), c.id.clone().into());
+            m.insert("patterns".into(), serde_json::to_value(&c.patterns).unwrap_or(serde_json::json!([])));
+            m.insert("subject_role".into(), c.subject_role.clone().unwrap_or_default().into());
+            m.insert("subject_node".into(), c.subject_node.clone().unwrap_or_default().into());
+            m.insert("auto_renew_secs".into(), c.auto_renew_secs.unwrap_or(0).into());
+            serde_json::Value::Object(m)
+        }).collect::<Vec<_>>()
     })
 }
 
+#[inline]
+fn now_ms() -> u64 {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64
+}
