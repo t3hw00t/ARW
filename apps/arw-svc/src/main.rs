@@ -1,4 +1,4 @@
-use arw_macros::arw_gate;
+use arw_macros::{arw_gate, arw_admin};
 use arw_macros::arw_tool;
 use axum::extract::Query;
 use axum::http::HeaderMap;
@@ -21,7 +21,6 @@ use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::path::Path as FsPath;
 use std::sync::{Mutex, OnceLock};
-use std::time::Duration as StdDuration;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
@@ -29,11 +28,12 @@ use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::services::ServeDir;
-use tower_http::timeout::TimeoutLayer;
+// use tower_http::timeout::TimeoutLayer; // replaced with dynamic timeout layer
 use tower_http::trace::TraceLayer;
 use tracing::info;
 use utoipa::{OpenApi, ToSchema};
 mod ext;
+mod dyn_timeout;
 use arw_core::gating;
 #[cfg(feature = "grpc")]
 mod grpc;
@@ -227,12 +227,13 @@ async fn main() {
         .bus
         .publish("Service.Start", &json!({"msg":"arw-svc started"}));
 
-    // Spawn stats aggregator (subscribes to bus and updates counters)
+    // Spawn stats aggregator and observations read-model updater
     {
         let mut rx = state.bus.subscribe();
         tokio::spawn(async move {
             while let Ok(env) = rx.recv().await {
                 ext::stats::stats_on_event(&env.kind).await;
+                ext::state_api::on_event(&env).await;
             }
         });
     }
@@ -252,21 +253,32 @@ async fn main() {
     }
 
     let mut app = Router::new()
+        // Public endpoints
         .route("/healthz", get(healthz))
-        .route("/introspect/tools", get(introspect_tools))
-        .route("/introspect/schemas/:id", get(introspect_schema))
         .route("/metrics", get(ext::stats::metrics_get))
-        // Serve generated specs when present
+        .route("/version", get(ext::version))
+        .route("/about", get(ext::about))
+        // Serve generated specs when present (public)
         .route("/spec/openapi.yaml", get(spec_openapi))
         .route("/spec/asyncapi.yaml", get(spec_asyncapi))
         .route("/spec/mcp-tools.json", get(spec_mcp))
         .route("/spec", get(spec_index))
-        // Match paths before metrics/security to capture MatchedPath
-        .route("/probe", get(probe))
-        .route("/events", get(events))
-        .route("/emit/test", get(emit_test))
-        .route("/shutdown", get(shutdown))
-        .merge(ext::extra_routes())
+        // Administrative endpoints are nested under /admin
+        .nest(
+            "/admin",
+            Router::new()
+                // Match paths before metrics/security to capture MatchedPath
+                .route("/", get(admin_index_html))
+                .route("/index.json", get(admin_index_json))
+                .route("/probe", get(probe))
+                .route("/events", get(events))
+                .route("/emit/test", get(emit_test))
+                .route("/shutdown", get(shutdown))
+                .route("/introspect/tools", get(introspect_tools))
+                .route("/introspect/schemas/:id", get(introspect_schema))
+                // Bring in extra admin routes (memory/models/tools/etc.)
+                .merge(ext::extra_routes()),
+        )
         .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())
         .layer(RequestBodyLimitLayer::new(8 * 1024 * 1024))
@@ -282,13 +294,7 @@ async fn main() {
                 CorsLayer::new()
             },
         )
-        .layer({
-            let secs = std::env::var("ARW_HTTP_TIMEOUT_SECS")
-                .ok()
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(20);
-            TimeoutLayer::new(StdDuration::from_secs(secs))
-        })
+        .layer(middleware::from_fn(dyn_timeout::dyn_timeout_mw))
         .layer(middleware::from_fn(security_mw))
         .layer(middleware::from_fn(metrics_mw))
         .with_state(state.clone());
@@ -349,22 +355,9 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
     use axum::http::StatusCode as SC;
     use axum::response::IntoResponse;
     let path = req.uri().path();
-    let is_sensitive = path.starts_with("/debug")
-        || path.starts_with("/probe")
-        || path.starts_with("/memory")
-        || path.starts_with("/models")
-        || path.starts_with("/governor")
-        || path.starts_with("/introspect")
-        || path.starts_with("/tasks")
-        || path.starts_with("/hierarchy")
-        || path.starts_with("/chat")
-        || path.starts_with("/projects")
-        || path.starts_with("/feedback")
-        // newly protected endpoints
-        || path.starts_with("/shutdown")
-        || path.starts_with("/emit")
-        || path.starts_with("/events");
-    if !is_sensitive {
+    // Only paths under /admin are considered sensitive and require token/debug access.
+    let is_admin = path.starts_with("/admin/") || path == "/admin";
+    if !is_admin {
         return next.run(req).await;
     }
 
@@ -475,23 +468,31 @@ async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
     Json(OkResponse { ok: true })
 }
 
+#[arw_admin(method="GET", path="/admin/introspect/tools", summary="List available tools" )]
 #[utoipa::path(
     get,
-    path = "/introspect/tools",
-    responses((status = 200, description = "List available tools"))
+    path = "/admin/introspect/tools",
+    tag = "Admin/Introspect",
+    responses(
+        (status = 200, description = "List available tools"),
+        (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
+    )
 )]
 #[arw_gate("introspect:tools")]
 async fn introspect_tools() -> impl IntoResponse {
     Json(serde_json::to_value(arw_core::introspect_tools()).unwrap()).into_response()
 }
 
+#[arw_admin(method="GET", path="/admin/introspect/schemas/{id}", summary="Get tool schema")]
 #[utoipa::path(
     get,
-    path = "/introspect/schemas/{id}",
+    path = "/admin/introspect/schemas/{id}",
+    tag = "Admin/Introspect",
     params(("id" = String, Path, description = "Tool id")),
     responses(
         (status = 200, description = "Schema JSON"),
         (status = 404, description = "Unknown tool id"),
+        (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
     )
 )]
 #[arw_gate("introspect:schema")]
@@ -510,11 +511,15 @@ async fn introspect_schema(Path(id): Path<String>) -> impl IntoResponse {
     }
 }
 
-// REPLACE your existing probe with this:
+#[arw_admin(method="GET", path="/admin/probe", summary="Effective paths and memory" )]
 #[utoipa::path(
     get,
-    path = "/probe",
-    responses((status = 200, description = "Returns effective memory paths"))
+    path = "/admin/probe",
+    tag = "Admin/Introspect",
+    responses(
+        (status = 200, description = "Returns effective memory paths"),
+        (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
+    )
 )]
 #[arw_gate("introspect:probe")]
 async fn probe(State(state): State<AppState>) -> impl IntoResponse {
@@ -528,10 +533,15 @@ async fn probe(State(state): State<AppState>) -> impl IntoResponse {
     Json::<serde_json::Value>(ep).into_response()
 }
 
+#[arw_admin(method="GET", path="/admin/emit/test", summary="Emit test event")]
 #[utoipa::path(
     get,
-    path = "/emit/test",
-    responses((status = 200, description = "Emit test event", body = OkResponse))
+    path = "/admin/emit/test",
+    tag = "Admin/Core",
+    responses(
+        (status = 200, description = "Emit test event", body = OkResponse),
+        (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
+    )
 )]
 #[arw_gate("admin:emit")]
 async fn emit_test(State(state): State<AppState>) -> impl IntoResponse {
@@ -545,10 +555,15 @@ async fn emit_test(State(state): State<AppState>) -> impl IntoResponse {
     Json(OkResponse { ok: true }).into_response()
 }
 
+#[arw_admin(method="GET", path="/admin/shutdown", summary="Shutdown service")]
 #[utoipa::path(
     get,
-    path = "/shutdown",
-    responses((status = 200, description = "Shutdown service", body = OkResponse))
+    path = "/admin/shutdown",
+    tag = "Admin/Core",
+    responses(
+        (status = 200, description = "Shutdown service", body = OkResponse),
+        (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
+    )
 )]
 #[arw_gate("admin:shutdown")]
 async fn shutdown(State(state): State<AppState>) -> impl IntoResponse {
@@ -566,10 +581,15 @@ struct EventsQs {
     #[serde(default)]
     prefix: Vec<String>,
 }
+#[arw_admin(method="GET", path="/admin/events", summary="Server-sent events stream")]
 #[utoipa::path(
     get,
-    path = "/events",
-    responses((status = 200, description = "SSE event stream"))
+    path = "/admin/events",
+    tag = "Admin/Core",
+    responses(
+        (status = 200, description = "SSE event stream"),
+        (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
+    )
 )]
 async fn events(
     State(state): State<AppState>,
@@ -636,19 +656,29 @@ async fn events(
 
 // --- OpenAPI-only wrappers for feedback endpoints (for documentation) ---
 #[allow(dead_code)]
-#[utoipa::path(get, path = "/feedback/suggestions", responses((status=200, description="Versioned suggestions")))]
+#[utoipa::path(get, path = "/admin/feedback/suggestions", tag = "Admin/Feedback", responses(
+    (status=200, description="Versioned suggestions"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
 async fn feedback_suggestions_doc() -> impl IntoResponse {
     ext::feedback_engine_api::feedback_suggestions().await
 }
 #[allow(dead_code)]
-#[utoipa::path(get, path = "/feedback/updates", params(("since" = Option<u64>, Query, description = "Return updates if newer than this version")), responses((status=200, description="Latest version"),(status=204, description="No change")))]
+#[utoipa::path(get, path = "/admin/feedback/updates", tag = "Admin/Feedback", params(("since" = Option<u64>, Query, description = "Return updates if newer than this version")), responses(
+    (status=200, description="Latest version"),
+    (status=204, description="No change"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
 async fn feedback_updates_doc(
     Query(q): Query<ext::feedback_engine_api::UpdatesQs>,
 ) -> impl IntoResponse {
     ext::feedback_engine_api::feedback_updates(Query(q)).await
 }
 #[allow(dead_code)]
-#[utoipa::path(get, path = "/feedback/policy", responses((status=200, description="Effective policy caps/bounds")))]
+#[utoipa::path(get, path = "/admin/feedback/policy", tag = "Admin/Feedback", responses(
+    (status=200, description="Effective policy caps/bounds"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
 async fn feedback_policy_doc() -> impl IntoResponse {
     ext::feedback_engine_api::feedback_policy_get().await
 }
@@ -662,13 +692,451 @@ async fn feedback_policy_doc() -> impl IntoResponse {
         emit_test,
         shutdown,
         events,
+        metrics_doc,
+        spec_openapi_doc,
+        spec_asyncapi_doc,
+        spec_mcp_doc,
+        spec_index_doc,
+        version_doc,
+        about_doc,
         feedback_suggestions_doc,
         feedback_updates_doc,
-        feedback_policy_doc
+        feedback_policy_doc,
+        memory_get_doc,
+        memory_limit_get_doc,
+        memory_save_doc,
+        memory_load_doc,
+        memory_apply_doc,
+        memory_limit_set_doc,
+        models_list_doc,
+        models_default_get_doc,
+        models_refresh_doc,
+        models_save_doc,
+        models_load_doc,
+        models_add_doc,
+        models_delete_doc,
+        models_default_set_doc,
+        models_download_doc,
+        models_download_cancel_doc,
+        tools_list_doc,
+        tools_run_doc,
+        state_observations_doc,
+        state_beliefs_doc,
+        state_intents_doc,
+        state_actions_doc,
+        chat_get_doc,
+        chat_send_doc,
+        chat_clear_doc,
+        governor_profile_get_doc,
+        governor_hints_get_doc,
+        governor_profile_set_doc,
+        governor_hints_set_doc,
+        hierarchy_state_doc,
+        hierarchy_role_set_doc,
+        hierarchy_hello_doc,
+        hierarchy_offer_doc,
+        hierarchy_accept_doc,
+        projects_list_doc,
+        projects_create_doc,
+        projects_notes_set_doc,
+        feedback_state_get_doc,
+        feedback_signal_post_doc,
+        feedback_analyze_post_doc,
+        feedback_apply_post_doc,
+        feedback_auto_post_doc,
+        feedback_reset_post_doc,
+        tasks_enqueue_doc
     ),
     tags((name = "arw-svc"))
 )]
 struct ApiDoc;
+
+// --- OpenAPI-only wrappers for common admin endpoints ---
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/memory", tag = "Admin/Memory", responses(
+    (status=200, description="Memory snapshot"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn memory_get_doc() -> impl IntoResponse {
+    ext::memory_api::memory_get().await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/memory/limit", tag = "Admin/Memory", responses(
+    (status=200, description="Memory limit"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn memory_limit_get_doc() -> impl IntoResponse {
+    ext::memory_api::memory_limit_get().await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/models", tag = "Admin/Models", responses(
+    (status=200, description="Models list"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn models_list_doc() -> impl IntoResponse {
+    ext::models_api::list_models().await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/models/default", tag = "Admin/Models", responses(
+    (status=200, description="Default model"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn models_default_get_doc() -> impl IntoResponse {
+    ext::models_api::models_default_get().await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/tools", tag = "Admin/Tools", responses(
+    (status=200, description="Tools list"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn tools_list_doc() -> impl IntoResponse {
+    ext::tools_api::list_tools().await
+}
+
+// --- POST admin doc wrappers (no-op bodies; for OpenAPI only) ---
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/memory/save", tag = "Admin/Memory", responses(
+    (status=200, description="Saved", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails),
+    (status=500, description="Error", body = arw_protocol::ProblemDetails)
+))]
+async fn memory_save_doc() -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/memory/load", tag = "Admin/Memory", responses(
+    (status=200, description="Loaded"),
+    (status=404, description="Not Found", body = arw_protocol::ProblemDetails),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn memory_load_doc() -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/memory/apply", tag = "Admin/Memory", request_body = ext::ApplyMemory, responses(
+    (status=202, description="Accepted", body = OkResponse),
+    (status=400, description="Bad Request", body = arw_protocol::ProblemDetails),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn memory_apply_doc(Json(_req): Json<ext::ApplyMemory>) -> impl IntoResponse { (StatusCode::ACCEPTED, Json(json!({"ok": true}))).into_response() }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/memory/limit", tag = "Admin/Memory", request_body = ext::SetLimit, responses(
+    (status=200, description="Set", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn memory_limit_set_doc(Json(_req): Json<ext::SetLimit>) -> impl IntoResponse { Json(json!({"ok": true})) }
+
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/models/refresh", tag = "Admin/Models", responses(
+    (status=200, description="Refreshed", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn models_refresh_doc() -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/models/save", tag = "Admin/Models", responses(
+    (status=200, description="Saved", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn models_save_doc() -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/models/load", tag = "Admin/Models", responses(
+    (status=200, description="Loaded", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn models_load_doc() -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/models/add", tag = "Admin/Models", request_body = ext::models_api::ModelId, responses(
+    (status=200, description="Added", body = OkResponse),
+    (status=400, description="Bad Request", body = arw_protocol::ProblemDetails),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn models_add_doc(Json(_req): Json<ext::models_api::ModelId>) -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/models/delete", tag = "Admin/Models", request_body = ext::models_api::ModelId, responses(
+    (status=200, description="Deleted", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn models_delete_doc(Json(_req): Json<ext::models_api::ModelId>) -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/models/default", tag = "Admin/Models", request_body = ext::models_api::ModelId, responses(
+    (status=200, description="Default set", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn models_default_set_doc(Json(_req): Json<ext::models_api::ModelId>) -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/models/download", tag = "Admin/Models", request_body = ext::models_api::DownloadReq, responses(
+    (status=200, description="Started", body = OkResponse),
+    (status=400, description="Bad Request", body = arw_protocol::ProblemDetails),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails),
+    (status=500, description="Error", body = arw_protocol::ProblemDetails)
+))]
+async fn models_download_doc(Json(_req): Json<ext::models_api::DownloadReq>) -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/models/download/cancel", tag = "Admin/Models", request_body = ext::models_api::CancelReq, responses(
+    (status=200, description="Canceled", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn models_download_cancel_doc(Json(_req): Json<ext::models_api::CancelReq>) -> impl IntoResponse { Json(json!({"ok": true})) }
+
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/tools/run", tag = "Admin/Tools", request_body = ext::tools_api::ToolRunReq, responses(
+    (status=200, description="Tool output"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn tools_run_doc(Json(_req): Json<ext::tools_api::ToolRunReq>) -> impl IntoResponse { Json(json!({})) }
+
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/chat/send", tag = "Admin/Chat", request_body = ext::chat_api::ChatSendReq, responses(
+    (status=200, description="Message sent", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn chat_send_doc(Json(_req): Json<ext::chat_api::ChatSendReq>) -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/chat/clear", tag = "Admin/Chat", responses(
+    (status=200, description="Cleared", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn chat_clear_doc() -> impl IntoResponse { Json(json!({"ok": true})) }
+
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/governor/profile", tag = "Admin/Governor", request_body = ext::governor_api::SetProfile, responses(
+    (status=200, description="Set", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn governor_profile_set_doc(Json(_req): Json<ext::governor_api::SetProfile>) -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/governor/hints", tag = "Admin/Governor", request_body = ext::governor_api::Hints, responses(
+    (status=200, description="Set", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn governor_hints_set_doc(Json(_req): Json<ext::governor_api::Hints>) -> impl IntoResponse { Json(json!({"ok": true})) }
+
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+struct RoleSetDoc { role: String }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/hierarchy/role", tag = "Admin/Hierarchy", request_body = RoleSetDoc, responses(
+    (status=200, description="Set", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn hierarchy_role_set_doc(Json(_req): Json<RoleSetDoc>) -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/hierarchy/hello", tag = "Admin/Hierarchy", request_body = arw_protocol::CoreHello, responses(
+    (status=200, description="Hello", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn hierarchy_hello_doc(Json(_req): Json<arw_protocol::CoreHello>) -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/hierarchy/offer", tag = "Admin/Hierarchy", request_body = arw_protocol::CoreOffer, responses(
+    (status=200, description="Offer", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn hierarchy_offer_doc(Json(_req): Json<arw_protocol::CoreOffer>) -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/hierarchy/accept", tag = "Admin/Hierarchy", request_body = arw_protocol::CoreAccept, responses(
+    (status=200, description="Accept", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn hierarchy_accept_doc(Json(_req): Json<arw_protocol::CoreAccept>) -> impl IntoResponse { Json(json!({"ok": true})) }
+
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/projects/create", tag = "Admin/Projects", request_body = ext::projects::ProjCreateReq, responses(
+    (status=200, description="Created", body = OkResponse),
+    (status=400, description="Bad Request", body = arw_protocol::ProblemDetails),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn projects_create_doc(Json(_req): Json<ext::projects::ProjCreateReq>) -> impl IntoResponse { Json(json!({"ok": true})) }
+#[derive(serde::Deserialize, utoipa::ToSchema)]
+struct NotesSetDoc { #[serde(default)] proj: String, #[serde(default)] body: String }
+#[allow(dead_code)]
+#[utoipa::path(
+    post,
+    path = "/admin/projects/notes",
+    tag = "Admin/Projects",
+    params(("proj" = String, Query, description = "Project name")),
+    request_body = String,
+    responses(
+        (status=200, description="Saved", body = OkResponse),
+        (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+    )
+)]
+async fn projects_notes_set_doc() -> impl IntoResponse { Json(json!({"ok": true})) }
+
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/feedback/state", tag = "Admin/Feedback", responses(
+    (status=200, description="Feedback state"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn feedback_state_get_doc() -> impl IntoResponse { ext::feedback_api::feedback_state_get().await }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/feedback/signal", tag = "Admin/Feedback", request_body = ext::feedback_api::FeedbackSignalPost, responses(
+    (status=200, description="OK", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn feedback_signal_post_doc(Json(_req): Json<ext::feedback_api::FeedbackSignalPost>) -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/feedback/analyze", tag = "Admin/Feedback", responses(
+    (status=200, description="OK", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn feedback_analyze_post_doc() -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/feedback/apply", tag = "Admin/Feedback", request_body = ext::feedback_api::ApplyReq, responses(
+    (status=200, description="OK", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn feedback_apply_post_doc(Json(_req): Json<ext::feedback_api::ApplyReq>) -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/feedback/auto", tag = "Admin/Feedback", request_body = ext::feedback_api::AutoReq, responses(
+    (status=200, description="OK", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn feedback_auto_post_doc(Json(_req): Json<ext::feedback_api::AutoReq>) -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/feedback/reset", tag = "Admin/Feedback", responses(
+    (status=200, description="OK", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn feedback_reset_post_doc() -> impl IntoResponse { Json(json!({"ok": true})) }
+
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/tasks/enqueue", tag = "Admin/Tasks", request_body = ext::EnqueueReq, responses(
+    (status=200, description="OK", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn tasks_enqueue_doc(Json(_req): Json<ext::EnqueueReq>) -> impl IntoResponse { Json(json!({"ok": true})) }
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/state/observations", tag = "Admin/State", responses(
+    (status=200, description="Recent observations"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn state_observations_doc() -> impl IntoResponse {
+    ext::state_api::observations_get().await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/state/beliefs", tag = "Admin/State", responses(
+    (status=200, description="Beliefs"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn state_beliefs_doc() -> impl IntoResponse {
+    ext::state_api::beliefs_get().await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/state/intents", tag = "Admin/State", responses(
+    (status=200, description="Intents"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn state_intents_doc() -> impl IntoResponse {
+    ext::state_api::intents_get().await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/state/actions", tag = "Admin/State", responses(
+    (status=200, description="Actions"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn state_actions_doc() -> impl IntoResponse {
+    ext::state_api::actions_get().await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/chat", tag = "Admin/Chat", responses(
+    (status=200, description="Chat history"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn chat_get_doc() -> impl IntoResponse {
+    ext::chat_api::chat_get().await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/governor/profile", tag = "Admin/Governor", responses(
+    (status=200, description="Governor profile"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn governor_profile_get_doc() -> impl IntoResponse {
+    ext::governor_api::governor_get().await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/governor/hints", tag = "Admin/Governor", responses(
+    (status=200, description="Governor hints"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn governor_hints_get_doc() -> impl IntoResponse {
+    ext::governor_api::governor_hints_get().await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/hierarchy/state", tag = "Admin/Hierarchy", responses(
+    (status=200, description="Hierarchy state"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn hierarchy_state_doc() -> impl IntoResponse { Json(json!({})) }
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/projects/list", tag = "Admin/Projects", responses(
+    (status=200, description="Projects list"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn projects_list_doc() -> impl IntoResponse {
+    ext::projects::projects_list().await
+}
+
+#[arw_admin(method="GET", path="/admin", summary="Admin index (HTML)")]
+async fn admin_index_html() -> impl IntoResponse {
+    let items = arw_core::list_admin_endpoints();
+    // Build simple HTML list
+    let mut list = String::new();
+    for e in &items {
+        let line = format!(
+            "<li><code>{}</code> <a href=\"{}\">{}</a> — {}</li>",
+            e.method, e.path, e.path, e.summary
+        );
+        list.push_str(&line);
+    }
+    let body = format!(
+        "<!doctype html><html><head><meta charset=\"utf-8\"><title>Admin Index</title></head><body><h1>Admin Endpoints</h1><ul>{}</ul><p><a href=\"/admin/index.json\">index.json</a></p></body></html>",
+        list
+    );
+    (
+        StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        body,
+    )
+}
+
+#[arw_admin(method="GET", path="/admin/index.json", summary="Admin endpoints (JSON)")]
+async fn admin_index_json() -> impl IntoResponse {
+    let list = arw_core::list_admin_endpoints();
+    Json(serde_json::to_value(list).unwrap_or_else(|_| json!([]))).into_response()
+}
+
+// ---- Public endpoints: metrics & specs ----
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/metrics", tag = "Public", responses((status=200, description="Prometheus metrics")))]
+async fn metrics_doc() -> impl IntoResponse { ext::stats::metrics_get(State(AppState{ bus: arw_events::Bus::new_with_replay(1,1), stop_tx: tokio::sync::broadcast::channel(1).0, queue: std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new()) })).await }
+
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/spec/openapi.yaml", tag = "Public/Specs", responses(
+    (status=200, description="OpenAPI YAML"),
+    (status=404, description="Missing")
+))]
+async fn spec_openapi_doc() -> impl IntoResponse { spec_openapi().await }
+
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/spec/asyncapi.yaml", tag = "Public/Specs", responses(
+    (status=200, description="AsyncAPI YAML"),
+    (status=404, description="Missing")
+))]
+async fn spec_asyncapi_doc() -> impl IntoResponse { spec_asyncapi().await }
+
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/spec/mcp-tools.json", tag = "Public/Specs", responses(
+    (status=200, description="MCP tools JSON"),
+    (status=404, description="Missing")
+))]
+async fn spec_mcp_doc() -> impl IntoResponse { spec_mcp().await }
+
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/spec", tag = "Public/Specs", responses((status=200, description="Spec index")))]
+async fn spec_index_doc() -> impl IntoResponse { spec_index().await }
+
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/version", tag = "Public", responses((status=200, description="Service version")))]
+async fn version_doc() -> impl IntoResponse { ext::version().await }
+
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/about", tag = "Public", responses((status=200, description="About service")))]
+async fn about_doc() -> impl IntoResponse { ext::about().await }
 
 async fn spec_openapi() -> impl IntoResponse {
     let p = std::path::Path::new("spec/openapi.yaml");

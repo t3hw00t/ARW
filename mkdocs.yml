@@ -23,6 +23,7 @@ nav:
       - Roadmap: ROADMAP.md
       - Structure: STRUCTURE.md
       - Features: FEATURES.md
+      - Admin Endpoints: guide/admin_endpoints.md
       - Security Hardening: guide/security_hardening.md
       - API and Schema: API_AND_SCHEMA.md
       - Chat Backends: guide/chat_backends.md

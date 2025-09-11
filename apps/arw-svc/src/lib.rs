@@ -1,5 +1,6 @@
 #![allow(clippy::needless_return)]
 mod ext;
+mod dyn_timeout;
 
 use axum::{routing::get, Router};
 use std::sync::Arc;
@@ -53,6 +54,9 @@ impl Default for AppState {
 /// This is for tests; your runtime binary still uses its own main.rs.
 pub fn build_router() -> Router<AppState> {
     let base = Router::new().route("/healthz", get(|| async { "ok" }));
-    let app = base.merge(ext::extra_routes());
+    let app = base.nest("/admin", ext::extra_routes());
     app.with_state(AppState::default())
 }
+
+/// No-op symbol to force linking this crate in tests when needed.
+pub fn linkme() {}

@@ -1,10 +1,10 @@
 #![allow(dead_code)]
 // ext module: split into submodules (ui, later more)
 
-use arw_macros::arw_gate;
+use arw_macros::{arw_gate, arw_admin};
 use axum::http::StatusCode;
 use axum::{
-    extract::{Query, State},
+    extract::{State},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
@@ -35,11 +35,16 @@ pub mod memory_api;
 pub mod models_api;
 pub mod policy;
 pub mod stats;
+pub mod chat;
 pub mod tools_api;
+pub mod tools_exec;
+pub mod state_api;
+pub mod corr;
 pub mod ui;
 // internal helpers split into modules
 pub mod io;
 pub mod paths;
+pub mod projects;
 static ASSET_DEBUG_HTML: &str = include_str!("../../assets/debug.html");
 pub(crate) use memory::{
     mem_limit, memory_apply, memory_get, memory_limit_get, memory_limit_set, memory_load,
@@ -154,46 +159,13 @@ fn governor_profile() -> &'static RwLock<String> {
 // moved to memory module
 
 // ---------- Tool runner (minimal builtins) ----------
-static TOOL_LIST: &[(&str, &str)] = &[
-    (
-        "math.add",
-        "Add two numbers: input {\"a\": number, \"b\": number} -> {\"sum\": number}",
-    ),
-    (
-        "time.now",
-        "UTC time in ms: input {} -> {\"now_ms\": number}",
-    ),
-];
-
 fn run_tool_internal(id: &str, input: &Value) -> Result<Value, String> {
-    match id {
-        "math.add" => {
-            let a = input
-                .get("a")
-                .and_then(|v| v.as_f64())
-                .ok_or("missing or invalid 'a'")?;
-            let b = input
-                .get("b")
-                .and_then(|v| v.as_f64())
-                .ok_or("missing or invalid 'b'")?;
-            Ok(json!({"sum": a + b}))
-        }
-        "time.now" => {
-            let now = SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map_err(|e| e.to_string())?
-                .as_millis() as i64;
-            Ok(json!({"now_ms": now}))
-        }
-        _ => Err(format!("unknown tool id: {}", id)),
-    }
+    tools_exec::run(id, input)
 }
 
 // ---------- Public: mountable routes ----------
 pub fn extra_routes() -> Router<AppState> {
     let mut r = Router::new()
-        .route("/version", get(version))
-        .route("/about", get(about))
         // hierarchy (local view + role change)
         .route("/hierarchy/state", get(hierarchy_state))
         .route("/hierarchy/role", post(hierarchy_role_set))
@@ -269,12 +241,17 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/chat", get(chat_api::chat_get))
         .route("/chat/send", post(chat_api::chat_send))
         .route("/chat/clear", post(chat_api::chat_clear))
-        .route("/chat/status", get(chat_status))
-        .route("/projects/list", get(projects_list))
-        .route("/projects/create", post(projects_create))
-        .route("/projects/tree", get(projects_tree))
-        .route("/projects/notes", get(projects_notes_get))
-        .route("/projects/notes", post(projects_notes_set));
+        .route("/chat/status", get(chat::chat_status))
+        // state (read-models)
+        .route("/state/observations", get(state_api::observations_get))
+        .route("/state/beliefs", get(state_api::beliefs_get))
+        .route("/state/intents", get(state_api::intents_get))
+        .route("/state/actions", get(state_api::actions_get))
+        .route("/projects/list", get(projects::projects_list))
+        .route("/projects/create", post(projects::projects_create))
+        .route("/projects/tree", get(projects::projects_tree))
+        .route("/projects/notes", get(projects::projects_notes_get))
+        .route("/projects/notes", post(projects::projects_notes_set));
 
     // debug UI gated via ARW_DEBUG=1
     if std::env::var("ARW_DEBUG").ok().as_deref() == Some("1") {
@@ -299,15 +276,15 @@ mod tests {
 }
 
 // ---------- Handlers ----------
-async fn version() -> impl IntoResponse {
+pub async fn version() -> impl IntoResponse {
     Json(json!({
         "service": env!("CARGO_PKG_NAME"),
         "version": env!("CARGO_PKG_VERSION"),
     }))
 }
 
-#[derive(Deserialize)]
-struct EnqueueReq {
+#[derive(Deserialize, utoipa::ToSchema)]
+pub struct EnqueueReq {
     kind: String,
     payload: Value,
     #[serde(default)]
@@ -318,6 +295,7 @@ struct EnqueueReq {
     idem_key: Option<String>,
 }
 
+#[arw_admin(method="POST", path="/admin/tasks/enqueue", summary="Enqueue orchestrator task")]
 #[arw_gate("queue:enqueue")]
 async fn tasks_enqueue(
     State(state): State<AppState>,
@@ -397,7 +375,7 @@ pub fn start_local_task_worker(state: AppState) {
     });
 }
 
-async fn about() -> impl IntoResponse {
+pub async fn about() -> impl IntoResponse {
     Json(json!({
         "service": "arw-svc",
         "version": env!("CARGO_PKG_VERSION"),
@@ -407,40 +385,42 @@ async fn about() -> impl IntoResponse {
           "/spec/openapi.yaml",
           "/spec/asyncapi.yaml",
           "/spec/mcp-tools.json",
-          "/governor/profile",
-          "/governor/hints",
           "/healthz",
-          "/events",
           "/version",
           "/about",
-          "/introspect/stats",
-          "/hierarchy/state",
-          "/hierarchy/role",
-          "/introspect/tools",
-          "/introspect/schemas/:id",
-          "/probe",
-          "/memory",
-          "/memory/apply",
-          "/memory/save",
-          "/memory/load",
-          "/memory/limit",
-          "/models",
-          "/models/refresh",
-          "/models/save",
-          "/models/load",
-          "/models/add",
-          "/models/delete",
-          "/models/default",
-          "/tools",
-          "/tools/run",
-          "/chat",
-          "/chat/send",
-          "/chat/clear",
-          "/debug"
+          // admin endpoints:
+          "/admin/events",
+          "/admin/probe",
+          "/admin/introspect/stats",
+          "/admin/introspect/tools",
+          "/admin/introspect/schemas/:id",
+          "/admin/hierarchy/state",
+          "/admin/hierarchy/role",
+          "/admin/governor/profile",
+          "/admin/governor/hints",
+          "/admin/memory",
+          "/admin/memory/apply",
+          "/admin/memory/save",
+          "/admin/memory/load",
+          "/admin/memory/limit",
+          "/admin/models",
+          "/admin/models/refresh",
+          "/admin/models/save",
+          "/admin/models/load",
+          "/admin/models/add",
+          "/admin/models/delete",
+          "/admin/models/default",
+          "/admin/tools",
+          "/admin/tools/run",
+          "/admin/chat",
+          "/admin/chat/send",
+          "/admin/chat/clear",
+          "/admin/debug"
         ]
     }))
 }
 
+#[arw_admin(method="GET", path="/admin/hierarchy/state", summary="Get hierarchy state")]
 #[arw_macros::arw_gate("hierarchy:state:get")]
 async fn hierarchy_state(State(state): State<AppState>) -> impl IntoResponse {
     let st = hier::get_state();
@@ -450,10 +430,11 @@ async fn hierarchy_state(State(state): State<AppState>) -> impl IntoResponse {
     Json(st).into_response()
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 struct RoleSet {
     role: String,
 }
+#[arw_admin(method="POST", path="/admin/hierarchy/role", summary="Set hierarchy role")]
 #[arw_gate("hierarchy:role:set")]
 async fn hierarchy_role_set(
     State(state): State<AppState>,
@@ -534,7 +515,10 @@ async fn governor_hints_get() -> impl IntoResponse {
     let h = hints().read().await.clone();
     Json(serde_json::to_value(h).unwrap_or(json!({})))
 }
-async fn governor_hints_set(Json(req): Json<Hints>) -> impl IntoResponse {
+async fn governor_hints_set(
+    State(state): State<AppState>,
+    Json(req): Json<Hints>,
+) -> impl IntoResponse {
     {
         let mut h = hints().write().await;
         if req.max_concurrency.is_some() {
@@ -546,6 +530,13 @@ async fn governor_hints_set(Json(req): Json<Hints>) -> impl IntoResponse {
         if req.http_timeout_secs.is_some() {
             h.http_timeout_secs = req.http_timeout_secs;
         }
+    }
+    // Apply dynamic HTTP timeout immediately if provided
+    if let Some(secs) = req.http_timeout_secs {
+        crate::dyn_timeout::set_global_timeout_secs(secs);
+        let mut payload = json!({"action":"hint","params":{"http_timeout_secs": secs},"ok": true});
+        let _cid = crate::ext::corr::ensure_corr(&mut payload);
+        state.bus.publish("Actions.HintApplied", &payload);
     }
     persist_orch().await;
     Json(json!({"ok": true})).into_response()
@@ -934,8 +925,8 @@ async fn models_download_cancel(
 
 // ---- Tools ----
 async fn list_tools() -> impl IntoResponse {
-    let out: Vec<Value> = TOOL_LIST
-        .iter()
+    let out: Vec<Value> = tools_exec::list()
+        .into_iter()
         .map(|(id, summary)| json!({"id": id, "summary": summary}))
         .collect();
     Json(out)
@@ -1264,398 +1255,7 @@ async fn apply_suggestion(s: &Suggestion, state: &AppState) -> bool {
         _ => false,
     }
 }
-async fn chat_get() -> impl IntoResponse {
-    let msgs = chat_log().read().await.clone();
-    Json(json!({"messages": msgs}))
-}
-async fn chat_clear() -> impl IntoResponse {
-    chat_log().write().await.clear();
-    Json(json!({"ok": true}))
-}
-async fn chat_send(
-    State(state): State<AppState>,
-    Json(req): Json<ChatSendReq>,
-) -> impl IntoResponse {
-    let model = req.model.clone().unwrap_or_else(|| "echo".to_string());
-    let user = json!({"role":"user","content": req.message});
-    let reply_txt = if let Some(r) = llama_reply(&req.message, req.temperature).await {
-        r
-    } else if let Some(r) = openai_reply(&req.message, req.temperature).await {
-        r
-    } else {
-        synth_reply(&req.message, &model)
-    };
-    let mut assist = json!({"role":"assistant","content": reply_txt, "model": model});
-    if let Some(t) = req.temperature {
-        if let Some(obj) = assist.as_object_mut() {
-            obj.insert("temperature".into(), json!(t));
-        }
-    }
-    {
-        let mut log = chat_log().write().await;
-        log.push(user.clone());
-        log.push(assist.clone());
-        while log.len() > 200 {
-            log.remove(0);
-        }
-    }
-    state
-        .bus
-        .publish("Chat.Message", &json!({"dir":"in","msg": user}));
-    state
-        .bus
-        .publish("Chat.Message", &json!({"dir":"out","msg": assist}));
-    Json(assist)
-}
-
-#[derive(Deserialize)]
-struct ChatStatusQs {
-    #[serde(default)]
-    probe: Option<bool>,
-}
-async fn chat_status(Query(q): Query<ChatStatusQs>) -> impl IntoResponse {
-    let backend = if std::env::var("ARW_LLAMA_URL")
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .is_some()
-    {
-        "llama"
-    } else if std::env::var("ARW_OPENAI_API_KEY")
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .is_some()
-    {
-        "openai"
-    } else {
-        "synthetic"
-    };
-    if q.probe.unwrap_or(false) {
-        let t0 = std::time::Instant::now();
-        let (ok, err) = match backend {
-            "llama" => {
-                let base = std::env::var("ARW_LLAMA_URL").unwrap_or_default();
-                let url = format!("{}/completion", base.trim_end_matches('/'));
-                let client = reqwest::Client::builder()
-                    .timeout(std::time::Duration::from_secs(5))
-                    .build();
-                match client {
-                    Ok(c) => {
-                        let body = json!({"prompt":"ping","n_predict":1});
-                        match c.post(url).json(&body).send().await {
-                            Ok(r) => (r.status().is_success(), None),
-                            Err(e) => (false, Some(e.to_string())),
-                        }
-                    }
-                    Err(e) => (false, Some(e.to_string())),
-                }
-            }
-            "openai" => {
-                let base = std::env::var("ARW_OPENAI_BASE_URL")
-                    .unwrap_or_else(|_| "https://api.openai.com".to_string());
-                let key = std::env::var("ARW_OPENAI_API_KEY").unwrap_or_default();
-                let model =
-                    std::env::var("ARW_OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
-                let url = format!("{}/v1/chat/completions", base.trim_end_matches('/'));
-                let client = reqwest::Client::builder()
-                    .timeout(std::time::Duration::from_secs(5))
-                    .build();
-                match client {
-                    Ok(c) => {
-                        let body = json!({"model": model, "messages": [{"role":"user","content":"ping"}], "max_tokens":1});
-                        match c.post(url).bearer_auth(key).json(&body).send().await {
-                            Ok(r) => (r.status().is_success(), None),
-                            Err(e) => (false, Some(e.to_string())),
-                        }
-                    }
-                    Err(e) => (false, Some(e.to_string())),
-                }
-            }
-            _ => (true, None),
-        };
-        let dt = t0.elapsed().as_millis() as u64;
-        return Json(json!({"backend": backend, "ok": ok, "latency_ms": dt, "error": err}));
-    }
-    Json(json!({"backend": backend, "ok": true}))
-}
-
-// ---------- Projects ----------
-#[derive(Deserialize)]
-struct ProjCreateReq {
-    name: String,
-}
-
-async fn projects_list() -> impl IntoResponse {
-    let mut out: Vec<String> = Vec::new();
-    let root = paths::projects_dir();
-    if let Ok(mut rd) = afs::read_dir(&root).await {
-        while let Ok(Some(ent)) = rd.next_entry().await {
-            if let Ok(mt) = ent.file_type().await {
-                if mt.is_dir() {
-                    if let Some(s) = ent.file_name().to_str() {
-                        out.push(s.to_string());
-                    }
-                }
-            }
-        }
-        out.sort();
-    }
-    Json(json!({"items": out}))
-}
-
-async fn projects_create(
-    State(state): State<AppState>,
-    Json(req): Json<ProjCreateReq>,
-) -> impl IntoResponse {
-    let Some(safe) = paths::sanitize_project_name(&req.name) else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error":"invalid project name"})),
-        )
-            .into_response();
-    };
-    let root = paths::projects_dir();
-    let dir = root.join(&safe);
-    if let Err(e) = afs::create_dir_all(&dir).await {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": e.to_string()})),
-        )
-            .into_response();
-    }
-    // Create a default NOTES.md if missing
-    let notes = dir.join("NOTES.md");
-    if afs::metadata(&notes).await.is_err() {
-        let ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
-        let body = format!("# {}\n\nCreated: {}\n\n", safe, ts);
-        let _ = io::save_bytes_atomic(&notes, body.as_bytes()).await;
-    }
-    // Emit event for orchestration/agents to react to project lifecycle
-    state
-        .bus
-        .publish("Projects.Created", &json!({"name": safe.clone()}));
-    Json(json!({"ok": true, "name": safe})).into_response()
-}
-
-#[derive(Deserialize)]
-struct TreeQs {
-    proj: Option<String>,
-    path: Option<String>,
-}
-async fn projects_tree(Query(q): Query<TreeQs>) -> impl IntoResponse {
-    let Some(proj) = q.proj.as_deref() else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "missing proj"})),
-        )
-            .into_response();
-    };
-    let Some(root) = paths::project_root(proj) else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "invalid proj"})),
-        )
-            .into_response();
-    };
-    let rel = q.path.unwrap_or_default();
-    // Only allow ascii safe rel components and no leading dots
-    let rel_path = std::path::Path::new(&rel);
-    if rel_path.components().any(|c| {
-        matches!(
-            c,
-            std::path::Component::ParentDir | std::path::Component::RootDir
-        )
-    }) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "invalid path"})),
-        )
-            .into_response();
-    }
-    let abs = root.join(rel_path);
-    // Ensure path exists and is a directory; if file, list parent
-    let target = match afs::metadata(&abs).await {
-        Ok(m) if m.is_dir() => abs.clone(),
-        Ok(_) => abs.parent().unwrap_or(&root).to_path_buf(),
-        Err(_) => abs.clone(),
-    };
-    let mut items = Vec::new();
-    if let Ok(mut rd) = afs::read_dir(&target).await {
-        while let Ok(Some(ent)) = rd.next_entry().await {
-            let name = ent
-                .file_name()
-                .to_str()
-                .map(|s| s.to_string())
-                .unwrap_or_default();
-            if name.starts_with('.') {
-                continue; // hide dotfiles
-            }
-            let ft = ent.file_type().await.ok();
-            let is_dir = ft.as_ref().map(|t| t.is_dir()).unwrap_or(false);
-            let rel_next = if let Ok(p) = ent.path().strip_prefix(&root) {
-                p.to_string_lossy().replace('\\', "/")
-            } else {
-                name.clone()
-            };
-            items.push(json!({"name": name, "dir": is_dir, "rel": rel_next}));
-        }
-        // Folders first, then files; alpha within groups
-        items.sort_by(|a, b| {
-            let ad = a.get("dir").and_then(|v| v.as_bool()).unwrap_or(false);
-            let bd = b.get("dir").and_then(|v| v.as_bool()).unwrap_or(false);
-            match (ad, bd) {
-                (true, false) => std::cmp::Ordering::Less,
-                (false, true) => std::cmp::Ordering::Greater,
-                _ => a
-                    .get("name")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .cmp(b.get("name").and_then(|v| v.as_str()).unwrap_or("")),
-            }
-        });
-    }
-    Json(json!({"items": items})).into_response()
-}
-
-#[derive(Deserialize)]
-struct NotesQs {
-    proj: String,
-}
-async fn projects_notes_get(Query(q): Query<NotesQs>) -> impl IntoResponse {
-    if let Some(p) = paths::project_notes_path(&q.proj) {
-        if let Ok(bytes) = afs::read(&p).await {
-            if let Ok(s) = String::from_utf8(bytes) {
-                return s;
-            }
-        }
-    }
-    String::new()
-}
-
-async fn projects_notes_set(
-    State(state): State<AppState>,
-    Query(q): Query<NotesQs>,
-    body: axum::body::Bytes,
-) -> impl IntoResponse {
-    let Some(p) = paths::project_notes_path(&q.proj) else {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "invalid proj"})),
-        )
-            .into_response();
-    };
-    if let Some(parent) = p.parent() {
-        let _ = afs::create_dir_all(parent).await;
-    }
-    if let Err(e) = io::save_bytes_atomic(&p, &body).await {
-        return (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": e.to_string()})),
-        )
-            .into_response();
-    }
-    state
-        .bus
-        .publish("Projects.NotesSaved", &json!({"name": q.proj}));
-    Json(json!({"ok": true})).into_response()
-}
-
-async fn llama_reply(prompt: &str, temperature: Option<f64>) -> Option<String> {
-    let base = std::env::var("ARW_LLAMA_URL").ok()?; // e.g., http://127.0.0.1:8080
-    if base.trim().is_empty() {
-        return None;
-    }
-    let url = format!("{}/completion", base.trim_end_matches('/'));
-    let timeout_s: u64 = std::env::var("ARW_HTTP_TIMEOUT_SECS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(20);
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(timeout_s))
-        .build()
-        .ok()?;
-    let mut body = serde_json::json!({
-        "prompt": prompt,
-        "n_predict": 128
-    });
-    if let Some(t) = temperature {
-        if let Some(o) = body.as_object_mut() {
-            o.insert("temperature".into(), json!(t));
-        }
-    }
-    match client.post(url).json(&body).send().await {
-        Ok(resp) => {
-            if !resp.status().is_success() {
-                return None;
-            }
-            match resp.json::<serde_json::Value>().await {
-                Ok(v) => {
-                    // Try llama.cpp server shape
-                    if let Some(s) = v.get("content").and_then(|x| x.as_str()) {
-                        return Some(s.to_string());
-                    }
-                    // Fallback: OpenAI-like
-                    if let Some(s) = v
-                        .get("choices")
-                        .and_then(|c| c.get(0))
-                        .and_then(|c0| c0.get("message"))
-                        .and_then(|m| m.get("content"))
-                        .and_then(|x| x.as_str())
-                    {
-                        return Some(s.to_string());
-                    }
-                    None
-                }
-                Err(_) => None,
-            }
-        }
-        Err(_) => None,
-    }
-}
-
-async fn openai_reply(prompt: &str, temperature: Option<f64>) -> Option<String> {
-    let base = std::env::var("ARW_OPENAI_BASE_URL")
-        .unwrap_or_else(|_| "https://api.openai.com".to_string());
-    let key = std::env::var("ARW_OPENAI_API_KEY").ok()?;
-    if key.trim().is_empty() {
-        return None;
-    }
-    let model = std::env::var("ARW_OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
-    let url = format!("{}/v1/chat/completions", base.trim_end_matches('/'));
-    let timeout_s: u64 = std::env::var("ARW_HTTP_TIMEOUT_SECS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(20);
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(timeout_s))
-        .build()
-        .ok()?;
-    let mut body = serde_json::json!({
-        "model": model,
-        "messages": [ {"role":"user", "content": prompt} ]
-    });
-    if let Some(t) = temperature {
-        if let Some(o) = body.as_object_mut() {
-            o.insert("temperature".into(), json!(t));
-        }
-    }
-    let resp = client
-        .post(url)
-        .bearer_auth(key)
-        .json(&body)
-        .send()
-        .await
-        .ok()?;
-    if !resp.status().is_success() {
-        return None;
-    }
-    let v: serde_json::Value = resp.json().await.ok()?;
-    v.get("choices")
-        .and_then(|c| c.get(0))
-        .and_then(|c0| c0.get("message"))
-        .and_then(|m| m.get("content"))
-        .and_then(|x| x.as_str())
-        .map(|s| s.to_string())
-}
+// moved to chat module
 
 // debug_ui implementation lives in ui.rs
 

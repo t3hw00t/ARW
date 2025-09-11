@@ -6,9 +6,74 @@ info:
     name: ''
   version: 0.1.0
 paths:
-  /emit/test:
+  /about:
     get:
-      tags: []
+      tags:
+      - Public
+      operationId: about_doc
+      responses:
+        '200':
+          description: About service
+  /admin/chat:
+    get:
+      tags:
+      - Admin/Chat
+      operationId: chat_get_doc
+      responses:
+        '200':
+          description: Chat history
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/chat/clear:
+    post:
+      tags:
+      - Admin/Chat
+      operationId: chat_clear_doc
+      responses:
+        '200':
+          description: Cleared
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/chat/send:
+    post:
+      tags:
+      - Admin/Chat
+      operationId: chat_send_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChatSendReq'
+        required: true
+      responses:
+        '200':
+          description: Message sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/emit/test:
+    get:
+      tags:
+      - Admin/Core
       operationId: emit_test
       responses:
         '200':
@@ -17,30 +82,180 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OkResponse'
-  /events:
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/events:
     get:
-      tags: []
+      tags:
+      - Admin/Core
       operationId: events
       responses:
         '200':
           description: SSE event stream
-  /feedback/policy:
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/feedback/analyze:
+    post:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_analyze_post_doc
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/feedback/apply:
+    post:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_apply_post_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyReq'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/feedback/auto:
+    post:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_auto_post_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AutoReq'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/feedback/policy:
     get:
-      tags: []
+      tags:
+      - Admin/Feedback
       operationId: feedback_policy_doc
       responses:
         '200':
           description: Effective policy caps/bounds
-  /feedback/suggestions:
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/feedback/reset:
+    post:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_reset_post_doc
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/feedback/signal:
+    post:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_signal_post_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackSignalPost'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/feedback/state:
     get:
-      tags: []
+      tags:
+      - Admin/Feedback
+      operationId: feedback_state_get_doc
+      responses:
+        '200':
+          description: Feedback state
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/feedback/suggestions:
+    get:
+      tags:
+      - Admin/Feedback
       operationId: feedback_suggestions_doc
       responses:
         '200':
           description: Versioned suggestions
-  /feedback/updates:
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/feedback/updates:
     get:
-      tags: []
+      tags:
+      - Admin/Feedback
       operationId: feedback_updates_doc
       parameters:
       - name: since
@@ -56,20 +271,200 @@ paths:
           description: Latest version
         '204':
           description: No change
-  /healthz:
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/governor/hints:
     get:
-      tags: []
-      operationId: healthz
+      tags:
+      - Admin/Governor
+      operationId: governor_hints_get_doc
       responses:
         '200':
-          description: Service health
+          description: Governor hints
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    post:
+      tags:
+      - Admin/Governor
+      operationId: governor_hints_set_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Hints'
+        required: true
+      responses:
+        '200':
+          description: Set
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/OkResponse'
-  /introspect/schemas/{id}:
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/governor/profile:
     get:
-      tags: []
+      tags:
+      - Admin/Governor
+      operationId: governor_profile_get_doc
+      responses:
+        '200':
+          description: Governor profile
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    post:
+      tags:
+      - Admin/Governor
+      operationId: governor_profile_set_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetProfile'
+        required: true
+      responses:
+        '200':
+          description: Set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/hierarchy/accept:
+    post:
+      tags:
+      - Admin/Hierarchy
+      operationId: hierarchy_accept_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoreAccept'
+        required: true
+      responses:
+        '200':
+          description: Accept
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/hierarchy/hello:
+    post:
+      tags:
+      - Admin/Hierarchy
+      operationId: hierarchy_hello_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoreHello'
+        required: true
+      responses:
+        '200':
+          description: Hello
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/hierarchy/offer:
+    post:
+      tags:
+      - Admin/Hierarchy
+      operationId: hierarchy_offer_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoreOffer'
+        required: true
+      responses:
+        '200':
+          description: Offer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/hierarchy/role:
+    post:
+      tags:
+      - Admin/Hierarchy
+      operationId: hierarchy_role_set_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleSetDoc'
+        required: true
+      responses:
+        '200':
+          description: Set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/hierarchy/state:
+    get:
+      tags:
+      - Admin/Hierarchy
+      operationId: hierarchy_state_doc
+      responses:
+        '200':
+          description: Hierarchy state
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/introspect/schemas/{id}:
+    get:
+      tags:
+      - Admin/Introspect
       operationId: introspect_schema
       parameters:
       - name: id
@@ -81,25 +476,465 @@ paths:
       responses:
         '200':
           description: Schema JSON
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
         '404':
           description: Unknown tool id
-  /introspect/tools:
+  /admin/introspect/tools:
     get:
-      tags: []
+      tags:
+      - Admin/Introspect
       operationId: introspect_tools
       responses:
         '200':
           description: List available tools
-  /probe:
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/memory:
     get:
-      tags: []
+      tags:
+      - Admin/Memory
+      operationId: memory_get_doc
+      responses:
+        '200':
+          description: Memory snapshot
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/memory/apply:
+    post:
+      tags:
+      - Admin/Memory
+      operationId: memory_apply_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ApplyMemory'
+        required: true
+      responses:
+        '202':
+          description: Accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/memory/limit:
+    get:
+      tags:
+      - Admin/Memory
+      operationId: memory_limit_get_doc
+      responses:
+        '200':
+          description: Memory limit
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    post:
+      tags:
+      - Admin/Memory
+      operationId: memory_limit_set_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetLimit'
+        required: true
+      responses:
+        '200':
+          description: Set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/memory/load:
+    post:
+      tags:
+      - Admin/Memory
+      operationId: memory_load_doc
+      responses:
+        '200':
+          description: Loaded
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not Found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/memory/save:
+    post:
+      tags:
+      - Admin/Memory
+      operationId: memory_save_doc
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/models:
+    get:
+      tags:
+      - Admin/Models
+      operationId: models_list_doc
+      responses:
+        '200':
+          description: Models list
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/models/add:
+    post:
+      tags:
+      - Admin/Models
+      operationId: models_add_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelId'
+        required: true
+      responses:
+        '200':
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/models/default:
+    get:
+      tags:
+      - Admin/Models
+      operationId: models_default_get_doc
+      responses:
+        '200':
+          description: Default model
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    post:
+      tags:
+      - Admin/Models
+      operationId: models_default_set_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelId'
+        required: true
+      responses:
+        '200':
+          description: Default set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/models/delete:
+    post:
+      tags:
+      - Admin/Models
+      operationId: models_delete_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelId'
+        required: true
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/models/download:
+    post:
+      tags:
+      - Admin/Models
+      operationId: models_download_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DownloadReq'
+        required: true
+      responses:
+        '200':
+          description: Started
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '500':
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/models/download/cancel:
+    post:
+      tags:
+      - Admin/Models
+      operationId: models_download_cancel_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CancelReq'
+        required: true
+      responses:
+        '200':
+          description: Canceled
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/models/load:
+    post:
+      tags:
+      - Admin/Models
+      operationId: models_load_doc
+      responses:
+        '200':
+          description: Loaded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/models/refresh:
+    post:
+      tags:
+      - Admin/Models
+      operationId: models_refresh_doc
+      responses:
+        '200':
+          description: Refreshed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/models/save:
+    post:
+      tags:
+      - Admin/Models
+      operationId: models_save_doc
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/probe:
+    get:
+      tags:
+      - Admin/Introspect
       operationId: probe
       responses:
         '200':
           description: Returns effective memory paths
-  /shutdown:
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/projects/create:
+    post:
+      tags:
+      - Admin/Projects
+      operationId: projects_create_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjCreateReq'
+        required: true
+      responses:
+        '200':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '400':
+          description: Bad Request
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/projects/list:
     get:
-      tags: []
+      tags:
+      - Admin/Projects
+      operationId: projects_list_doc
+      responses:
+        '200':
+          description: Projects list
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/projects/notes:
+    post:
+      tags:
+      - Admin/Projects
+      operationId: projects_notes_set_doc
+      parameters:
+      - name: proj
+        in: query
+        description: Project name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          text/plain:
+            schema:
+              type: string
+        required: true
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/shutdown:
+    get:
+      tags:
+      - Admin/Core
       operationId: shutdown
       responses:
         '200':
@@ -108,8 +943,417 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/state/actions:
+    get:
+      tags:
+      - Admin/State
+      operationId: state_actions_doc
+      responses:
+        '200':
+          description: Actions
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/state/beliefs:
+    get:
+      tags:
+      - Admin/State
+      operationId: state_beliefs_doc
+      responses:
+        '200':
+          description: Beliefs
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/state/intents:
+    get:
+      tags:
+      - Admin/State
+      operationId: state_intents_doc
+      responses:
+        '200':
+          description: Intents
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/state/observations:
+    get:
+      tags:
+      - Admin/State
+      operationId: state_observations_doc
+      responses:
+        '200':
+          description: Recent observations
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/tasks/enqueue:
+    post:
+      tags:
+      - Admin/Tasks
+      operationId: tasks_enqueue_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnqueueReq'
+        required: true
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/tools:
+    get:
+      tags:
+      - Admin/Tools
+      operationId: tools_list_doc
+      responses:
+        '200':
+          description: Tools list
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/tools/run:
+    post:
+      tags:
+      - Admin/Tools
+      operationId: tools_run_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolRunReq'
+        required: true
+      responses:
+        '200':
+          description: Tool output
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /healthz:
+    get:
+      tags: []
+      operationId: healthz
+      responses:
+        '200':
+          description: Service health
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+  /metrics:
+    get:
+      tags:
+      - Public
+      operationId: metrics_doc
+      responses:
+        '200':
+          description: Prometheus metrics
+  /spec:
+    get:
+      tags:
+      - Public/Specs
+      operationId: spec_index_doc
+      responses:
+        '200':
+          description: Spec index
+  /spec/asyncapi.yaml:
+    get:
+      tags:
+      - Public/Specs
+      operationId: spec_asyncapi_doc
+      responses:
+        '200':
+          description: AsyncAPI YAML
+        '404':
+          description: Missing
+  /spec/mcp-tools.json:
+    get:
+      tags:
+      - Public/Specs
+      operationId: spec_mcp_doc
+      responses:
+        '200':
+          description: MCP tools JSON
+        '404':
+          description: Missing
+  /spec/openapi.yaml:
+    get:
+      tags:
+      - Public/Specs
+      operationId: spec_openapi_doc
+      responses:
+        '200':
+          description: OpenAPI YAML
+        '404':
+          description: Missing
+  /version:
+    get:
+      tags:
+      - Public
+      operationId: version_doc
+      responses:
+        '200':
+          description: Service version
 components:
   schemas:
+    ApplyMemory:
+      type: object
+      required:
+      - kind
+      - value
+      properties:
+        kind:
+          type: string
+        ttl_ms:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        value: {}
+    ApplyReq:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
+    AutoReq:
+      type: object
+      required:
+      - enabled
+      properties:
+        enabled:
+          type: boolean
+    CancelReq:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
+    ChatSendReq:
+      type: object
+      required:
+      - message
+      properties:
+        message:
+          type: string
+        model:
+          type:
+          - string
+          - 'null'
+        temperature:
+          type:
+          - number
+          - 'null'
+          format: double
+    CoreAccept:
+      type: object
+      required:
+      - child_id
+      - parent_id
+      - role
+      - epoch
+      properties:
+        child_id:
+          type: string
+        epoch:
+          type: integer
+          format: int64
+          minimum: 0
+        parent_id:
+          type: string
+        role:
+          $ref: '#/components/schemas/CoreRole'
+    CoreHello:
+      type: object
+      required:
+      - id
+      - role
+      - capabilities
+      - scope_tags
+      - epoch
+      - nonce
+      properties:
+        capabilities:
+          type: array
+          items:
+            type: string
+        epoch:
+          type: integer
+          format: int64
+          minimum: 0
+        id:
+          type: string
+        nonce:
+          type: string
+        role:
+          $ref: '#/components/schemas/CoreRole'
+        scope_tags:
+          type: array
+          items:
+            type: string
+    CoreOffer:
+      type: object
+      required:
+      - from_id
+      - proposed_role
+      - shard_ranges
+      properties:
+        capacity_hint:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+        from_id:
+          type: string
+        parent_hint:
+          type:
+          - string
+          - 'null'
+        proposed_role:
+          $ref: '#/components/schemas/CoreRole'
+        shard_ranges:
+          type: array
+          items:
+            type: string
+    CoreRole:
+      type: string
+      enum:
+      - root
+      - regional
+      - edge
+      - connector
+      - observer
+    DownloadReq:
+      type: object
+      required:
+      - id
+      - url
+      properties:
+        id:
+          type: string
+        provider:
+          type:
+          - string
+          - 'null'
+        sha256:
+          type:
+          - string
+          - 'null'
+        url:
+          type: string
+    EnqueueReq:
+      type: object
+      required:
+      - kind
+      - payload
+      properties:
+        idem_key:
+          type:
+          - string
+          - 'null'
+        kind:
+          type: string
+        payload: {}
+        priority:
+          type:
+          - integer
+          - 'null'
+          format: int32
+        shard_key:
+          type:
+          - string
+          - 'null'
+    FeedbackSignalPost:
+      type: object
+      required:
+      - kind
+      - target
+      - confidence
+      - severity
+      properties:
+        confidence:
+          type: number
+          format: double
+        kind:
+          type: string
+        note:
+          type:
+          - string
+          - 'null'
+        severity:
+          type: integer
+          format: int32
+          minimum: 0
+        target:
+          type: string
+    Hints:
+      type: object
+      properties:
+        event_buffer:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        http_timeout_secs:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        max_concurrency:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+    ModelId:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
+        provider:
+          type:
+          - string
+          - 'null'
     OkResponse:
       type: object
       required:
@@ -117,5 +1361,75 @@ components:
       properties:
         ok:
           type: boolean
+    ProblemDetails:
+      type: object
+      description: RFC7807-style error payload used at service edges.
+      required:
+      - type
+      - title
+      - status
+      properties:
+        code:
+          type:
+          - string
+          - 'null'
+        detail:
+          type:
+          - string
+          - 'null'
+        instance:
+          type:
+          - string
+          - 'null'
+        status:
+          type: integer
+          format: int32
+          minimum: 0
+        title:
+          type: string
+        trace_id:
+          type:
+          - string
+          - 'null'
+        type:
+          type: string
+    ProjCreateReq:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+    RoleSetDoc:
+      type: object
+      required:
+      - role
+      properties:
+        role:
+          type: string
+    SetLimit:
+      type: object
+      required:
+      - limit
+      properties:
+        limit:
+          type: integer
+          minimum: 0
+    SetProfile:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+    ToolRunReq:
+      type: object
+      required:
+      - id
+      - input
+      properties:
+        id:
+          type: string
+        input: {}
 tags:
 - name: arw-svc

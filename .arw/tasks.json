@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-11 16:29 UTC",
+  "updated": "2025-09-11 23:16 UTC",
   "tasks": [
     {
       "id": "t-250909170247-9910",
@@ -337,6 +337,151 @@
       ],
       "updated": "2025-09-11 02:08:05 UTC",
       "done_at": "2025-09-11 02:08:05 UTC"
+    },
+    {
+      "id": "t-250911230219-7249",
+      "title": "Refactor: split ext/ by domain & unify AppState",
+      "desc": "Extract models/memory/feedback/chat/tools/projects/orchestrator into modules with their own Router<AppState> builders; unify a single AppState used by tests and runtime (trait-based EventBus+Queue); remove duplicate state and thin lib.rs to use the shared state.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-11 21:02:19 UTC"
+    },
+    {
+      "id": "t-250911230236-6445",
+      "title": "Security: per-route gating layers; slim global admin middleware",
+      "desc": "Attach arw_gate checks (or equivalent) via route-layer middleware; remove wrapper functions and reduce prefix-gated global middleware to just truly global endpoints; add per-route tests for 403/429/OK.",
+      "status": "paused",
+      "notes": [
+        {
+          "time": "2025-09-11 21:03:46 UTC",
+          "text": "Duplicate of t-250911230252-9858; track only the latter."
+        }
+      ],
+      "updated": "2025-09-11 21:03:46 UTC"
+    },
+    {
+      "id": "t-250911230252-9858",
+      "title": "Security: per-route gating layers; slim global admin middleware",
+      "desc": "Attach arw_gate checks (or equivalent) via route-layer middleware; remove wrapper functions and reduce prefix-gated global middleware to just truly global endpoints; add per-route tests for 403/429/OK.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-11 21:02:52 UTC"
+    },
+    {
+      "id": "t-250911230258-1357",
+      "title": "Runtime: dynamic HTTP timeout from governor hints",
+      "desc": "Introduce a live config handle (Arc<AtomicU64>) read by a custom TimeoutLayer; wire updates from /governor/hints into the handle; remove env-only binding; add unit test covering hint update takes effect without restart.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-11 21:10:37 UTC",
+          "text": "Implemented dyn timeout middleware + global handle; wired governor hints + outgoing HTTP; built & tests green for arw-svc."
+        }
+      ],
+      "updated": "2025-09-11 21:10:37 UTC",
+      "done_at": "2025-09-11 21:10:37 UTC"
+    },
+    {
+      "id": "t-250911230302-0138",
+      "title": "Tools: central execution registry unified for /tools and tasks",
+      "desc": "Define ToolExecutor trait and registry keyed by id; arw-macros submit both ToolInfo and an exec fn; route /tools/run and start_local_task_worker both dispatch via registry; remove duplicate run_tool_internal; honor per-tool ingress/egress gates.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-11 21:14:14 UTC",
+          "text": "Added tools_exec registry; unified run path for /tools and task worker; preserved listing via arw_core and local list for debug."
+        }
+      ],
+      "updated": "2025-09-11 21:14:14 UTC",
+      "done_at": "2025-09-11 21:14:14 UTC"
+    },
+    {
+      "id": "t-250911230306-7961",
+      "title": "Introspection: auto-generate /about endpoints from router",
+      "desc": "Wrap Router with a builder that records (method,path) on registration; at startup snapshot the registry and serve via /about; remove static array to prevent drift; add test to ensure a new route appears in /about.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-11 21:03:06 UTC"
+    },
+    {
+      "id": "t-250911230308-0779",
+      "title": "Orchestrator: configurable lease, nack delay, and max in-flight",
+      "desc": "Expose ARW_TASK_LEASE_MS and group max in-flight; implement lease extension and nack(retry_after_ms) paths; add unit tests for lease expiry and re-enqueue; update connector example to honor nack delay.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-11 21:03:08 UTC"
+    },
+    {
+      "id": "t-250911230312-0863",
+      "title": "Admin auth: hashed tokens + per-token/IP sliding rate-limit",
+      "desc": "Support multiple admin tokens (hashed or HMACed), rotate without restart; replace fixed-window RL with sliding window keyed by token/IP; keep constant-time compare where applicable; add tests for lockout and fairness.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-11 21:03:12 UTC"
+    },
+    {
+      "id": "t-250911230316-4765",
+      "title": "NATS: TLS/auth config and reconnect tuning",
+      "desc": "Add creds/jwt/nkey/TLS config to cluster section; implement robust reconnect/backoff; document subject ACLs; update connector + svc to use secure options; extend compose/helm values.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-11 21:03:16 UTC"
+    },
+    {
+      "id": "t-250911230320-8615",
+      "title": "Metrics: structured registry w/ histograms",
+      "desc": "Adopt metrics + prometheus exporters; replace manual string metrics; add request latency histogram, per-endpoint counters; keep ext/stats JSON for UI; wire registry to /metrics.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-11 21:03:20 UTC"
+    },
+    {
+      "id": "t-250911230325-2116",
+      "title": "Tests: end-to-end coverage for endpoints & gating",
+      "desc": "Add ServiceExt::oneshot integration tests for /healthz,/about,/tools,/memory,/models,/chat plus policy branches (403/429/OK); add test fixtures for admin token and x-arw-gate capsule; wire into CI.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-11 21:03:25 UTC"
+    },
+    {
+      "id": "t-250911230329-4722",
+      "title": "CLI: migrate arw-cli to clap",
+      "desc": "Use clap derive for subcommands, --help generation, shell completions; keep existing verbs (paths/tools/gate/capsule) and add JSON output flag; add tests for parsing.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-11 21:03:29 UTC"
+    },
+    {
+      "id": "t-250911230333-9794",
+      "title": "RPU: watch trust store and strengthen verification",
+      "desc": "Add fs-watch for ARW_TRUST_CAPSULES to hot-reload issuers; enrich ABAC checks; expose /introspect/trust for debugging; tests with sample ed25519 and secp256k1 keys/capsules.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-11 21:03:33 UTC"
+    },
+    {
+      "id": "t-250912001055-0044",
+      "title": "Phase 2: Observations read-model + /state/observations",
+      "desc": "Add obs store; fold from bus subscriber; expose GET /state/observations; drive Debug UI off this.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-11 22:10:55 UTC"
+    },
+    {
+      "id": "t-250912001100-3438",
+      "title": "Phase 2: Beliefs/Intents/Actions stores + endpoints",
+      "desc": "Define typed events; add stores for beliefs/intents/actions; add GET /state/{beliefs,intents,actions}; wire feedback engine as belief generator and reconciler to apply intents under policy.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-11 22:11:00 UTC"
+    },
+    {
+      "id": "t-250912001105-7850",
+      "title": "Phase 3: Episodes + Debug UI reactive views",
+      "desc": "Stitch episodes by corr_id; persist episodic summaries; expose GET /state/episodes; update Debug UI to render SSE + /state/* in a single live view (truth window).",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-11 22:11:05 UTC"
     }
   ]
 }

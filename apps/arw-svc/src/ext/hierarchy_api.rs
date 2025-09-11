@@ -1,4 +1,4 @@
-use arw_macros::arw_gate;
+use arw_macros::{arw_gate, arw_admin};
 use axum::{extract::State, response::IntoResponse, Json};
 use serde_json::json;
 
@@ -6,6 +6,7 @@ use crate::AppState;
 use arw_core::hierarchy as hier;
 use arw_protocol::{CoreAccept, CoreHello, CoreOffer};
 
+#[arw_admin(method="POST", path="/admin/hierarchy/hello", summary="Hierarchy hello")]
 #[arw_gate("hierarchy:hello")]
 pub async fn hello(State(state): State<AppState>, Json(req): Json<CoreHello>) -> impl IntoResponse {
     hier::configure_self(req.id.clone(), req.scope_tags.clone());
@@ -20,6 +21,7 @@ pub async fn hello(State(state): State<AppState>, Json(req): Json<CoreHello>) ->
     Json(json!({"ok": true})).into_response()
 }
 
+#[arw_admin(method="POST", path="/admin/hierarchy/offer", summary="Hierarchy offer")]
 #[arw_gate("hierarchy:offer")]
 pub async fn offer(State(state): State<AppState>, Json(req): Json<CoreOffer>) -> impl IntoResponse {
     // For now just emit an event and update parent hint if targeting us
@@ -32,6 +34,7 @@ pub async fn offer(State(state): State<AppState>, Json(req): Json<CoreOffer>) ->
     Json(json!({"ok": true})).into_response()
 }
 
+#[arw_admin(method="POST", path="/admin/hierarchy/accept", summary="Hierarchy accept")]
 #[arw_gate("hierarchy:accept")]
 pub async fn accept(
     State(state): State<AppState>,

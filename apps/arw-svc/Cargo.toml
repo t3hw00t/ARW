@@ -28,6 +28,9 @@ sha2 = "0.10"
 fs2 = { workspace = true }
 tonic = { version = "0.11", optional = true, features = ["transport"] }
 prost = { version = "0.13", optional = true }
+tower = { version = "0.5" }
+once_cell = { workspace = true }
+uuid = { workspace = true }
 
 [features]
 default = []

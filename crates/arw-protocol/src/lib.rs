@@ -1,8 +1,9 @@
 use schemars::JsonSchema;
+use utoipa::ToSchema;
 use serde::{Deserialize, Serialize};
 
 /// RFC7807-style error payload used at service edges.
-#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ToSchema)]
 pub struct ProblemDetails {
     pub r#type: String,
     pub title: String,
@@ -14,13 +15,13 @@ pub struct ProblemDetails {
 }
 
 /// Opaque cursor pagination envelope.
-#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ToSchema)]
 pub struct Page<T> {
     pub items: Vec<T>,
     pub next_cursor: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ToSchema)]
 pub struct OperationId(pub String);
 
 /// Connector hello/registration message.
@@ -48,7 +49,7 @@ pub struct ConnectorHeartbeat {
 
 // -------- Gating / Policy Capsule (propagatable) --------
 
-#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ToSchema)]
 pub struct GatingContract {
     pub id: String,
     #[serde(default)]
@@ -69,7 +70,7 @@ pub struct GatingContract {
     pub immutable: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ToSchema)]
 pub struct GatingCapsule {
     pub id: String,
     pub version: String,
@@ -90,7 +91,7 @@ pub struct GatingCapsule {
 
 // -------- Hierarchy / Core-to-Core negotiation (types only) --------
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum CoreRole {
     Root,
@@ -100,7 +101,7 @@ pub enum CoreRole {
     Observer,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct CoreHello {
     pub id: String,
     pub role: CoreRole,
@@ -110,7 +111,7 @@ pub struct CoreHello {
     pub nonce: String,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct CoreOffer {
     pub from_id: String,
     pub proposed_role: CoreRole,
@@ -119,7 +120,7 @@ pub struct CoreOffer {
     pub capacity_hint: Option<u32>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 pub struct CoreAccept {
     pub child_id: String,
     pub parent_id: String,

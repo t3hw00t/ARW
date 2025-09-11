@@ -294,6 +294,7 @@ dependencies = [
  "schemars 0.8.22",
  "serde",
  "serde_json",
+ "utoipa",
 ]
 
 [[package]]
@@ -313,6 +314,7 @@ dependencies = [
  "http-body-util",
  "hyper 1.7.0",
  "inventory",
+ "once_cell",
  "prost 0.13.5",
  "reqwest 0.12.23",
  "schemars 0.8.22",
@@ -328,6 +330,7 @@ dependencies = [
  "tower-http",
  "tracing",
  "utoipa",
+ "uuid",
 ]
 
 [[package]]

@@ -128,6 +128,30 @@ pub fn hello_core() -> &'static str {
     "arw-core ok"
 }
 
+// ---------------- Administrative Endpoint Registry ----------------
+/// Metadata describing an admin/ops HTTP endpoint served by arw-svc under `/admin`.
+#[derive(Clone, Serialize)]
+pub struct AdminEndpoint {
+    pub method: &'static str,
+    pub path: &'static str,
+    #[serde(default)]
+    pub summary: &'static str,
+}
+
+// Collect admin endpoints registered via `arw-macros::arw_admin` at compile time.
+inventory::collect!(AdminEndpoint);
+
+/// List all registered admin endpoints. Sorted by path+method and deduplicated.
+pub fn list_admin_endpoints() -> Vec<AdminEndpoint> {
+    let mut out: Vec<AdminEndpoint> = inventory::iter::<AdminEndpoint>
+        .into_iter()
+        .cloned()
+        .collect();
+    out.sort_by(|a, b| a.path.cmp(b.path).then(a.method.cmp(b.method)));
+    out.dedup_by(|a, b| a.path == b.path && a.method == b.method);
+    out
+}
+
 /// Compute effective paths and portability flags (env-based; cross‑platform).
 pub fn load_effective_paths() -> serde_json::Value {
     // Load defaults from config file if present, then overlay env vars

@@ -35,7 +35,7 @@ pub(crate) fn mem_limit() -> &'static RwLock<usize> {
     MEM_LIMIT.get_or_init(|| RwLock::new(initial_mem_limit()))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub(crate) struct ApplyMemory {
     pub kind: String,
     pub value: Value,
@@ -43,7 +43,7 @@ pub(crate) struct ApplyMemory {
     pub ttl_ms: Option<u64>,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, utoipa::ToSchema)]
 pub(crate) struct SetLimit {
     pub limit: usize,
 }

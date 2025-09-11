@@ -1,5 +1,5 @@
 use crate::AppState;
-use arw_macros::arw_gate;
+use arw_macros::{arw_gate, arw_admin};
 use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::Json;
@@ -82,6 +82,7 @@ pub(crate) async fn route_obs(path: &str, status: u16, ms: u64) {
         ent.p95_ms = tmp[idx];
     }
 }
+#[arw_admin(method="GET", path="/admin/introspect/stats", summary="Runtime stats and route metrics")]
 #[arw_gate("introspect:stats")]
 pub(crate) async fn stats_get(State(state): State<AppState>) -> impl IntoResponse {
     let events = stats_cell().read().await.clone();

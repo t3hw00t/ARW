@@ -40,3 +40,5 @@ Generated from code.
 - `introspect:schema`
 - `introspect:stats`
 - `introspect:probe`
+- `admin:shutdown`
+- `admin:emit`
