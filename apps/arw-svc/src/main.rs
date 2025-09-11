@@ -359,7 +359,11 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
         || path.starts_with("/hierarchy")
         || path.starts_with("/chat")
         || path.starts_with("/projects")
-        || path.starts_with("/feedback");
+        || path.starts_with("/feedback")
+        // newly protected endpoints
+        || path.starts_with("/shutdown")
+        || path.starts_with("/emit")
+        || path.starts_with("/events");
     if !is_sensitive {
         return next.run(req).await;
     }
@@ -529,6 +533,7 @@ async fn probe(State(state): State<AppState>) -> impl IntoResponse {
     path = "/emit/test",
     responses((status = 200, description = "Emit test event", body = OkResponse))
 )]
+#[arw_gate("admin:emit")]
 async fn emit_test(State(state): State<AppState>) -> impl IntoResponse {
     let now_ms = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -537,7 +542,7 @@ async fn emit_test(State(state): State<AppState>) -> impl IntoResponse {
     state
         .bus
         .publish("Service.Test", &json!({"msg":"ping","t": now_ms}));
-    Json(OkResponse { ok: true })
+    Json(OkResponse { ok: true }).into_response()
 }
 
 #[utoipa::path(
@@ -545,12 +550,13 @@ async fn emit_test(State(state): State<AppState>) -> impl IntoResponse {
     path = "/shutdown",
     responses((status = 200, description = "Shutdown service", body = OkResponse))
 )]
+#[arw_gate("admin:shutdown")]
 async fn shutdown(State(state): State<AppState>) -> impl IntoResponse {
     state
         .bus
         .publish("Service.Stop", &json!({"reason":"user request"}));
     let _ = state.stop_tx.send(());
-    Json(OkResponse { ok: true })
+    Json(OkResponse { ok: true }).into_response()
 }
 
 #[derive(serde::Deserialize)]

@@ -7,7 +7,7 @@ Surface
 - CORS: permissive only if `ARW_DEBUG=1` or `ARW_CORS_ANY=1`; otherwise restrictive.
 
 Endpoints deemed sensitive
-- `/debug`, `/probe`, `/memory*`, `/models*`, `/governor*`, `/introspect*`, `/chat*`, `/feedback*`.
+- `/debug`, `/probe`, `/memory*`, `/models*`, `/governor*`, `/introspect*`, `/chat*`, `/feedback*`, `/events`, `/emit*`, `/shutdown`.
 - Adjust the list conservatively; prefer to over‑protect and open case‑by‑case.
 
 Recommendations
@@ -19,4 +19,3 @@ Recommendations
 Next
 - Rate‑limits for admin endpoints; structured audit events; optional signed capsules.
 - Policy engine (OPA/Cedar) for consistent, verifiable authorization.
-
