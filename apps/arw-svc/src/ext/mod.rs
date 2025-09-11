@@ -490,7 +490,7 @@ async fn hierarchy_role_set(
         "Hierarchy.RoleChanged",
         &serde_json::json!({"role": req.role}),
     );
-    Json(json!({"ok": true})).into_response()
+    ok(json!({})).into_response()
 }
 
 // moved to memory module
@@ -650,7 +650,7 @@ async fn models_delete(
 }
 async fn models_default_get() -> impl IntoResponse {
     let id = { default_model().read().await.clone() };
-    Json(json!({"default": id }))
+    ok(json!({"default": id }))
 }
 async fn models_default_set(
     State(state): State<AppState>,
@@ -670,7 +670,7 @@ async fn models_default_set(
     .await;
     persist_orch().await;
     io::audit_event("models.default", &json!({"id": req.id})).await;
-    Json(json!({"ok": true}))
+    ok(json!({}))
 }
 
 #[derive(Deserialize)]

@@ -11,13 +11,10 @@ fn no_new_ad_hoc_ok_json_in_ext_modules() {
         let entry = entry.unwrap();
         if !entry.file_type().is_file() { continue; }
         let p = entry.path();
-        let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
-        // Allowlist legacy files that still carry ad-hoc payloads; keep them stable
-        let allowlist = ["mod.rs", "projects.rs", "hierarchy_api.rs", "chat.rs"]; // legacy
-        let is_legacy = allowlist.iter().any(|f| name == *f);
+        // No allowlist; all ext modules must use ok() / ApiError
         let content = read(p);
         let needle = "Json(json!({\"ok\"";
-        if content.contains(needle) && !is_legacy {
+        if content.contains(needle) {
             offenders.push(p.display().to_string());
         }
     }
@@ -32,10 +29,7 @@ fn no_new_ad_hoc_error_json_in_ext_modules() {
         let entry = entry.unwrap();
         if !entry.file_type().is_file() { continue; }
         let p = entry.path();
-        let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
-        // Allowlist legacy files
-        let allowlist = ["mod.rs", "projects.rs"]; // legacy
-        let is_legacy = allowlist.iter().any(|f| name == *f);
+        // No allowlist; enforce uniform ProblemDetails everywhere
         let c = read(p);
         // crude detection of StatusCode + ad-hoc error payload
         let has_status = c.contains("StatusCode::BAD_REQUEST")
@@ -43,10 +37,9 @@ fn no_new_ad_hoc_error_json_in_ext_modules() {
             || c.contains("StatusCode::NOT_FOUND")
             || c.contains("StatusCode::FORBIDDEN");
         let has_ad_hoc_err = c.contains("\"error\"") || c.contains("\"reason\"");
-        if has_status && has_ad_hoc_err && !is_legacy {
+        if has_status && has_ad_hoc_err {
             offenders.push(p.display().to_string());
         }
     }
     assert!(offenders.is_empty(), "New ad-hoc error-json detected in: {:?}", offenders);
 }
-

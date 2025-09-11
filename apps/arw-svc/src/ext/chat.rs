@@ -23,11 +23,11 @@ pub(crate) struct ChatSendReq {
 
 pub(crate) async fn chat_get() -> impl IntoResponse {
     let msgs = chat_log().read().await.clone();
-    Json(json!({"messages": msgs}))
+    super::ok(json!({"messages": msgs})).into_response()
 }
 pub(crate) async fn chat_clear() -> impl IntoResponse {
     chat_log().write().await.clear();
-    Json(json!({"ok": true}))
+    super::ok(json!({})).into_response()
 }
 
 fn synth_reply(msg: &str, model: &str) -> String {
