@@ -48,6 +48,54 @@ jobs:
           cd Agent_Hub
           cargo test --workspace --locked
 
+  nix-build-test:
+    name: nix-build-test (ubuntu)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Install Nix
+        uses: cachix/install-nix-action@v25
+      - name: Build in Nix
+        run: |
+          cd Agent_Hub
+          nix develop --command cargo build --workspace --all-targets --locked
+      - name: Test in Nix
+        run: |
+          cd Agent_Hub
+          nix develop --command cargo test --workspace --locked
+
+  lint-extra:
+    name: lint-extra (udeps+msrv)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install cargo-udeps
+        run: |
+          rustup toolchain install nightly --profile minimal --no-self-update
+          cargo +nightly install cargo-udeps --locked
+      - name: Unused dependencies (deny)
+        run: |
+          cd Agent_Hub
+          cargo +nightly udeps --workspace --all-targets
+      - name: Install cargo-msrv
+        run: cargo install cargo-msrv --locked
+      - name: MSRV verify
+        run: |
+          cd Agent_Hub
+          cargo msrv --output-format minimal verify
+
   docs:
     name: docs (ubuntu)
     runs-on: ubuntu-latest

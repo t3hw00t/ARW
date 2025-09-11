@@ -35,6 +35,8 @@ use tracing::info;
 use utoipa::{OpenApi, ToSchema};
 mod ext;
 use arw_core::gating;
+#[cfg(feature = "grpc")]
+mod grpc;
 
 #[arw_tool(
     id = "introspect.tools",
@@ -239,6 +241,15 @@ async fn main() {
     ext::feedback_engine::start_feedback_engine(state.clone());
     // Start local task worker to exercise the orchestrator MVP
     ext::start_local_task_worker(state.clone());
+
+    // Optionally start gRPC service when enabled and requested
+    #[cfg(feature = "grpc")]
+    {
+        if std::env::var("ARW_GRPC").ok().as_deref() == Some("1") {
+            let st = state.clone();
+            tokio::spawn(async move { grpc::serve(st).await });
+        }
+    }
 
     let mut app = Router::new()
         .route("/healthz", get(healthz))

@@ -30,5 +30,7 @@ nav:
       - Feedback Engine: guide/feedback_engine.md
       - Deployment: DEPLOYMENT.md
       - Memory and Training: MEMORY_AND_TRAINING.md
+      - Training Research: training_research.md
+      - Wiki Structure: wiki_structure.md
       - Hardware and Models: HARDWARE_AND_MODELS.md
       - Arrow Ingestion: arrow_ingestion.md
