@@ -131,6 +131,25 @@ Chat backends
 - [Roadmap](docs/ROADMAP.md)
 - [Contributing](CONTRIBUTING.md)
 
+## Containers
+
+We publish `arw-svc` images to GHCR on every push to main and on tags.
+
+Pull and run (amd64/arm64):
+
+```bash
+docker run --rm -p 8090:8090 \
+  -e ARW_PORT=8090 \
+  ghcr.io/${GITHUB_ORG_OR_USER}/arw-svc:latest
+```
+
+Build locally:
+
+```bash
+docker build -f apps/arw-svc/Dockerfile -t arw-svc:dev .
+docker run --rm -p 8090:8090 arw-svc:dev
+```
+
 ## Admin Access
 
 - Sensitive endpoints include: `/debug`, `/probe`, `/memory/*`, `/models/*`, `/governor/*`, `/introspect/*`, `/chat/*`, `/feedback/*`.

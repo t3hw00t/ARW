@@ -162,3 +162,29 @@ jobs:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
           publish_dir: Agent_Hub/site
+
+  link-check:
+    name: link-check (docs+README)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Setup Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+      - name: Build docs
+        run: |
+          pip install --upgrade pip
+          pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin
+          cd Agent_Hub
+          bash scripts/docgen.sh
+          mkdocs build --strict
+      - name: Link check
+        uses: lycheeverse/lychee-action@v1
+        with:
+          args: >-
+            --verbose
+            --accept 200,206,429
+            Agent_Hub/site/**/*.html Agent_Hub/README.md Agent_Hub/docs/**/*.md
+          fail: true
