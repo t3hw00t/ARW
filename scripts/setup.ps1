@@ -26,7 +26,8 @@ if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
   Pause 'Press Enter after installing Rust (or Ctrl+C to abort)'
 }
 
-$py = (Get-Command python -ErrorAction SilentlyContinue) ?? (Get-Command python3 -ErrorAction SilentlyContinue)
+$py = Get-Command python -ErrorAction SilentlyContinue
+if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
 if (-not $py) {
   Warn 'Python not found. Docs/site build and docgen extras may be skipped.'
 } else {

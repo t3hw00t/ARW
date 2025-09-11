@@ -10,7 +10,8 @@ if (-not (Test-Path $log)) {
 }
 $removed = @()
 $left = @()
-$py = (Get-Command python -ErrorAction SilentlyContinue) ?? (Get-Command python3 -ErrorAction SilentlyContinue)
+$py = Get-Command python -ErrorAction SilentlyContinue
+if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
 Get-Content $log | ForEach-Object {
   if ($_ -match '^(#|\s*$)') { return }
   $parts = $_.Split(' ',2)
