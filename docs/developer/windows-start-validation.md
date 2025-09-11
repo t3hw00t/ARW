@@ -12,6 +12,7 @@ Service + tray (default)
 - Expect: no extra console window for the service (runs hidden), tray appears.
 - Check `.arw\run\arw-svc.pid` and `.arw\logs\arw-svc.out.log` exist.
 - Open: `http://127.0.0.1:8090/debug` and `.../spec`.
+  - Tip: The Start menu lets you toggle health wait (and timeout) under “Configure runtime”.
 
 Service only (CLI)
 - Set `ARW_NO_TRAY=1` from the menu (or via environment) and start “service only”.
@@ -38,4 +39,3 @@ Preferences file
 Notes
 - The tray is optional; use CLI-only mode or `ARW_NO_TRAY=1` when GTK or build toolchains are unavailable.
 - For clean logs, delete `./.arw/logs/*` between runs.
-

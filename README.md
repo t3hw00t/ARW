@@ -34,10 +34,10 @@ can experiment without cloud lock‑in.
   - Headless CI-friendly: Linux/macOS `ARW_HEADLESS=1 bash scripts/interactive-setup-linux.sh --headless --package`; Windows `powershell -ExecutionPolicy Bypass -File scripts/interactive-setup-windows.ps1 -Headless -Package`
   - Save preferences in-project via menu; scripts will auto-load `./.arw/env.sh` (Linux/macOS) or `./.arw/env.ps1` (Windows).
 - Start the service (launches the tray when available) with options:
-  - Windows: `powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -Debug -Port 8090 -DocsUrl https://your-pages -AdminToken secret`
+  - Windows: `powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -Debug -Port 8090 -DocsUrl https://your-pages -AdminToken secret -WaitHealth`
   - Linux/macOS: `bash scripts/start.sh --debug --port 8090 --docs-url https://your-pages --admin-token secret`
   - CLI-only (skip tray if present): set `ARW_NO_TRAY=1` before running `scripts/start.sh`
-- `arw-tray` is bundled and started automatically by the scripts when present. You can also run it manually from `target/release/` or `dist/.../bin/` to start/stop the service, open the Debug UI, or quit from the system tray.
+  - `arw-tray` is bundled and started automatically by the scripts when present. You can also run it manually from `target/release/` or `dist/.../bin/` to start/stop the service, open the Debug UI, or quit from the system tray.
 
 Dev convenience
 - Nix dev shell now includes `just` and `cargo-watch`.
@@ -65,6 +65,11 @@ NATS broker
   - Test:  `scripts/test.ps1` or `scripts/test.sh`
   - Package: `scripts/package.ps1` or `scripts/package.sh` (creates `dist/` zip)
   - Uninstall: `scripts/uninstall.ps1` or `scripts/uninstall.sh` (removes build artifacts and MkDocs packages installed by setup)
+
+Windows start flags
+- `-NoBuild`: don’t auto-build if binaries missing; exit with error.
+- `-WaitHealth`: after background start, poll `http://127.0.0.1:<port>/healthz` until ready.
+- `-WaitHealthTimeoutSecs`: timeout for the health poll (default 30 in script; Start menu default 20).
 
 ## Component Overview
 

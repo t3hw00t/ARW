@@ -35,6 +35,9 @@ $DocsUrl = $env:ARW_DOCS_URL
 $AdminToken = $env:ARW_ADMIN_TOKEN
 $UseDist = $false
 $CfgPath = $env:ARW_CONFIG
+# Health wait defaults (configurable via Configure-Runtime)
+$WaitHealth = if ($env:ARW_WAIT_HEALTH -eq '0') { $false } else { $true }
+try { $WaitHealthTimeoutSecs = if ($env:ARW_WAIT_HEALTH_TIMEOUT_SECS) { [int]$env:ARW_WAIT_HEALTH_TIMEOUT_SECS } else { 20 } } catch { $WaitHealthTimeoutSecs = 20 }
 
 function Configure-Runtime {
   Section 'Runtime Settings'
@@ -52,6 +55,8 @@ function Configure-Runtime {
   $ans = Read-Host "Docs URL (optional) [$DocsUrl]"; if ($ans -ne '') { $DocsUrl = $ans }
   $ans = Read-Host "Admin token (optional) [$AdminToken]"; if ($ans -ne '') { $AdminToken = $ans }
   $ans = Read-Host 'Use packaged dist/ bundle when present? (y/N)'; $UseDist = ($ans -match '^[yY]')
+  $ans = Read-Host ("Wait for /healthz after start? (Y/n) [" + (if ($WaitHealth) { 'Y' } else { 'n' }) + "]"); if ($ans) { $WaitHealth = -not ($ans -match '^[nN]') }
+  $ans = Read-Host ("Health wait timeout secs [$WaitHealthTimeoutSecs]"); if ($ans) { try { $WaitHealthTimeoutSecs = [int]$ans } catch { } }
 }
 
 function Pick-Config {
@@ -80,7 +85,7 @@ function Start-ServiceOnly {
   if ($DocsUrl) { $svcArgs += @('-DocsUrl', $DocsUrl) }
   if ($AdminToken) { $svcArgs += @('-AdminToken', $AdminToken) }
   if ($UseDist) { $svcArgs += '-UseDist' }
-  $svcArgs += @('-WaitHealth','-WaitHealthTimeoutSecs', 20)
+  if ($WaitHealth) { $svcArgs += @('-WaitHealth','-WaitHealthTimeoutSecs', $WaitHealthTimeoutSecs) }
   & (Join-Path $PSScriptRoot 'start.ps1') @svcArgs
 }
 
@@ -98,7 +103,7 @@ function Start-TrayPlusService {
   if ($AdminToken) { $svcArgs += @('-AdminToken', $AdminToken) }
   if ($UseDist) { $svcArgs += '-UseDist' }
   if (-not (Security-Preflight)) { Warn 'Start cancelled'; return }
-  $svcArgs += @('-WaitHealth','-WaitHealthTimeoutSecs', 20)
+  if ($WaitHealth) { $svcArgs += @('-WaitHealth','-WaitHealthTimeoutSecs', $WaitHealthTimeoutSecs) }
   & (Join-Path $PSScriptRoot 'start.ps1') @svcArgs
   $tray = Join-Path $root 'target\release\arw-tray.exe'
   if (-not (Test-Path $tray)) {
@@ -211,7 +216,7 @@ function Cli-ToolsMenu {
 
 function Main-Menu {
   while ($true) {
-    Banner 'Start Menu' ("Port=$Port Debug=$Debug Dist=$UseDist")
+  Banner 'Start Menu' ("Port=$Port Debug=$Debug Dist=$UseDist HealthWait=$WaitHealth/$WaitHealthTimeoutSecs s")
     Write-Host @'
   1) Configure runtime (port/docs/token)
   2) Select config file (ARW_CONFIG)
@@ -322,7 +327,9 @@ function Save-Prefs-From-Start {
     "`$env:ARW_PORT = '$Port'",
     "`$env:ARW_DOCS_URL = '$DocsUrl'",
     "`$env:ARW_ADMIN_TOKEN = '$AdminToken'",
-    "`$env:ARW_CONFIG = '$CfgPath'"
+    "`$env:ARW_CONFIG = '$CfgPath'",
+    "`$env:ARW_WAIT_HEALTH = '" + (if ($WaitHealth) { '1' } else { '0' }) + "'",
+    "`$env:ARW_WAIT_HEALTH_TIMEOUT_SECS = '$WaitHealthTimeoutSecs'"
   ) | Set-Content -Path $f -Encoding utf8
   Info ("Saved preferences to " + $f)
 }
