@@ -381,8 +381,10 @@ pub fn __test_reset() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serial_test::serial;
 
     #[test]
+    #[serial]
     fn deny_user_and_wildcard() {
         __test_reset();
         // Exact deny
@@ -398,6 +400,7 @@ mod tests {
     }
 
     #[test]
+    #[serial]
     fn contracts_window_and_auto_renew() {
         __test_reset();
         let now = super::now_ms();

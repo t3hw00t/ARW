@@ -175,6 +175,7 @@ async fn acquire_cross_lock(p: &Path) -> Option<std::fs::File> {
             .create(true)
             .read(true)
             .write(true)
+            .truncate(false)
             .open(&lockp)
             .ok()?;
         // Try a few times

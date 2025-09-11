@@ -185,18 +185,13 @@ impl EventBus for LocalBus {
         let prefs: Vec<String> = prefixes.into_iter().collect();
         let out = tx.clone();
         tokio::spawn(async move {
-            loop {
-                match src.recv().await {
-                    Ok(env) => {
-                        let k = env.kind.as_str();
-                        if prefs.iter().any(|p| k.starts_with(p)) {
-                            let _ = out.send(env);
-                        }
-                        if out.receiver_count() == 0 {
-                            break;
-                        }
-                    }
-                    Err(_) => break,
+            while let Ok(env) = src.recv().await {
+                let k = env.kind.as_str();
+                if prefs.iter().any(|p| k.starts_with(p)) {
+                    let _ = out.send(env);
+                }
+                if out.receiver_count() == 0 {
+                    break;
                 }
             }
         });

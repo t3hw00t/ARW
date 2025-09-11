@@ -575,7 +575,7 @@ async fn events(
             ))
         }
         Err(BroadcastStreamRecvError::Lagged(n)) => {
-            bus_for_lag.note_lag(n as u64);
+            bus_for_lag.note_lag(n);
             let body = format!("{{\"skipped\":{}}}", n);
             tokio_stream::once(Ok::<Event, Infallible>(
                 Event::default().id("gap").event("Bus.Gap").data(body),

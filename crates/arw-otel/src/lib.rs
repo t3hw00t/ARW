@@ -1,5 +1,3 @@
-#[cfg(feature = "otlp")]
-use tracing_subscriber::prelude::*;
 use tracing_subscriber::{fmt, EnvFilter};
 
 /// Initialize tracing. If compiled with feature `otlp` and env ARW_OTEL=1,

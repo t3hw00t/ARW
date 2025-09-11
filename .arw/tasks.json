@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-09 22:43 UTC",
+  "updated": "2025-09-11 02:08 UTC",
   "tasks": [
     {
       "id": "t-250909170247-9910",
@@ -309,6 +309,34 @@
       "notes": [],
       "updated": "2025-09-09 20:56:52 UTC",
       "done_at": "2025-09-09 20:56:52 UTC"
+    },
+    {
+      "id": "t-250911040745-3073",
+      "title": "Tests: stabilize gating contract tests",
+      "desc": "Serialize shared-state tests with serial_test to avoid races",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-11 02:08:04 UTC",
+          "text": "arw-core: gate tests now use #[serial]; fixed nondeterministic failure"
+        }
+      ],
+      "updated": "2025-09-11 02:08:04 UTC",
+      "done_at": "2025-09-11 02:08:04 UTC"
+    },
+    {
+      "id": "t-250911040804-6168",
+      "title": "Clippy: clean workspace with -D warnings",
+      "desc": "Resolve clippy warnings across events, otel, core, connector, svc",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-11 02:08:05 UTC",
+          "text": "events: while-let loop; otel: remove unused prelude import; core: remove duplicated cfg attribute; connector: avoid unreachable tail via ctrl-c guard; svc: explicit OpenOptions + no-op cast"
+        }
+      ],
+      "updated": "2025-09-11 02:08:05 UTC",
+      "done_at": "2025-09-11 02:08:05 UTC"
     }
   ]
 }

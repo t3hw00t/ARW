@@ -1,5 +1,4 @@
 //! Helpers for WASM plug‑ins (experimental, feature = "wasm").
-#![cfg(feature = "wasm")]
 
 use anyhow::{anyhow, Result};
 use wasmtime::component::Component;

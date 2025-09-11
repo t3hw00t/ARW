@@ -4,7 +4,7 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-11 12:00 UTC
+Updated: 2025-09-11 02:08 UTC
 
 
 ## To Do
@@ -12,34 +12,16 @@ Updated: 2025-09-11 12:00 UTC
 - [t-250909224103-5251] Policy: hook feedback auto-apply — todo (updated: 2025-09-09 20:41:03 UTC)
 - [t-250909224102-9629] Spec: AsyncAPI+MCP artifacts + /spec/* — todo (updated: 2025-09-09 20:41:02 UTC)
 - [t-250909224102-8952] Plan: Heuristic engine crate + integration — todo (updated: 2025-09-09 20:41:02 UTC)
-- [t-250910115900-0001] RPU: Trust store + signature verification for capsules — todo (ed25519/secp256k1; Sigstore later)
-- [t-250910115900-0002] RPU: Cedar ABAC for capsule adoption (issuer/role/tags/TTL/scope) — todo
-- [t-250910115900-0003] RPU: Hop TTL + propagation scope enforcement on relay — todo
-- [t-250910115900-0004] Bus: inbound relay loop-avoidance and filtering + metrics — todo
-- [t-250910115900-0005] Queue: JetStream durable backend (acks/nacks/delay) — todo
-- [t-250910115900-0006] Orchestrator: LocalQueue lease sweeper for expired leases — todo
-- [t-250910115900-0007] Gating: budgets/quotas with persisted counters — todo
-- [t-250910115900-0008] Docgen: gating schema + GATING_KEYS.md from code — todo
-- [t-250910115900-0009] Macro: #[arw_gate("key")] for handlers (enforce + docgen) — todo
-- [t-250910115900-0010] Capsule: signed provenance + optional Bitcoin timestamping (opt-in) — todo
- - [t-250911100001-1001] Events: add journal reader endpoint `/events/journal?tail=N` — todo (2025-09-11)
- - [t-250911100002-1002] Metrics: counters for model downloads and journal I/O — todo (2025-09-11)
- - [t-250911100003-1003] Downloads: cross-process lockfile around `.part` — todo (2025-09-11)
- - [t-250911100004-1004] Bus: adopt `subscribe_filtered` in connectors/workers where relevant — todo (2025-09-11)
- - [t-250911100005-1005] Metrics: add process/runtime gauges (uptime, mem) — todo (2025-09-11)
 
 ## In Progress
 
 ## Paused
 
 ## Done
-- [t-250911095900-0001] Persistence: atomic writes, per-path async locks, cross-process advisory locks, audit rotation — done (2025-09-11)
-- [t-250911095900-0002] Event bus: counters + configurable capacity/replay + SSE `Bus.Gap` — done (2025-09-11)
-- [t-250911095900-0003] SSE: replay and prefix filters; debug UI presets — done (2025-09-11)
-- [t-250911095900-0004] Metrics: Prometheus `/metrics` with bus/events/routes/build info — done (2025-09-11)
-- [t-250911095900-0005] Debug UI: metrics link; SSE reconnect control — done (2025-09-11)
-- [t-250911095900-0006] Events: optional persistent JSONL journal with rotation — done (2025-09-11)
-- [t-250911095900-0007] Models: dedupe concurrent downloads per id — done (2025-09-11)
+- [t-250911040804-6168] Clippy: clean workspace with -D warnings — done (updated: 2025-09-11 02:08:05 UTC)
+    - 2025-09-11 02:08:05 UTC: events: while-let loop; otel: remove unused prelude import; core: remove duplicated cfg attribute; connector: avoid unreachable tail via ctrl-c guard; svc: explicit OpenOptions + no-op cast
+- [t-250911040745-3073] Tests: stabilize gating contract tests — done (updated: 2025-09-11 02:08:04 UTC)
+    - 2025-09-11 02:08:04 UTC: arw-core: gate tests now use #[serial]; fixed nondeterministic failure
 - [t-250909225652-0810] Gate arrow ingestion bench code — done (updated: 2025-09-09 20:56:52 UTC)
 - [t-250909225652-5456] Start lightweight feedback engine — done (updated: 2025-09-09 20:56:52 UTC)
 - [t-250909225652-1355] Serve /spec/* endpoints — done (updated: 2025-09-09 20:56:52 UTC)
@@ -75,9 +57,3 @@ Updated: 2025-09-11 12:00 UTC
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
 
-# Cluster/Gating/Hiearchy Work (2025‑09‑10)
-- [x] Pluggable queue/bus; NATS queue groups; inbound NATS→local bus aggregator
-- [x] Hierarchy: roles + HTTP hello/offer/accept scaffolding; asyncapi channels
-- [x] Gating Orchestrator: central keys; deny contracts; ingress/egress guards
-- [x] Policy Capsules in protocol; header-based adoption (ephemeral)
-- [x] Apply gating consistently across memory/models/tools/feedback/chat/governor

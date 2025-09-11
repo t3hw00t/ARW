@@ -6,6 +6,7 @@ Recently Shipped (Sep 2025)
 - Persistence hardening: atomic JSON/bytes writes with per‑path async locks; best‑effort cross‑process advisory locks; audit log rotation.
 - Event bus upgrades: counters (published/delivered/lagged/no_receivers), configurable capacity/replay, lag surfaced as `Bus.Gap`, subscribe‑filtered API, SSE replay and prefix filters, optional persistent JSONL journal with rotation, Prometheus `/metrics`.
 - Debug UI: metrics quick‑link, SSE presets (Replay 50, Models‑only), insights wired to route stats, download progress.
+- Tests + Lint: fixed flaky gating contract tests (serialized shared state); workspace clippy clean with `-D warnings`.
 
 Near‑term (Weeks)
 - Self‑learning UI polish: apply buttons per suggestion with rationale + confidence.
