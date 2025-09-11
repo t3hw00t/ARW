@@ -106,10 +106,10 @@ fn main() {
 fn cmd_gen_ed25519() -> Result<()> {
     use ed25519_dalek::SigningKey;
     use rand::rngs::OsRng;
-    use rand::RngCore;
+    use rand_core::TryRngCore;
     let mut rng = OsRng;
     let mut sk_bytes = [0u8; 32];
-    rng.fill_bytes(&mut sk_bytes);
+    rng.try_fill_bytes(&mut sk_bytes).map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let sk = SigningKey::from_bytes(&sk_bytes);
     let pk = sk.verifying_key();
     let sk_b64 = base64::engine::general_purpose::STANDARD.encode(sk.to_bytes());

@@ -107,10 +107,12 @@ fn start_service_inner(svc: &Arc<Mutex<Option<Child>>>, port: u16) -> Result<()>
 
 fn stop_service_inner(svc: &Arc<Mutex<Option<Child>>>, port: u16) -> Result<()> {
     // try graceful shutdown
-    let agent = ureq::AgentBuilder::new()
-        .timeout_connect(Duration::from_millis(1000))
-        .timeout_read(Duration::from_millis(1000))
-        .build();
+    let agent: ureq::Agent = ureq::Agent::config_builder()
+        .timeout_connect(Some(Duration::from_millis(1000)))
+        .timeout_recv_response(Some(Duration::from_millis(1000)))
+        .timeout_recv_body(Some(Duration::from_millis(1000)))
+        .build()
+        .into();
     let _ = agent
         .get(&format!("http://127.0.0.1:{}/shutdown", port))
         .call();
