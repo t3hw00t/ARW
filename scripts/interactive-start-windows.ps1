@@ -75,12 +75,12 @@ function Start-ServiceOnly {
     Warn 'Service binary missing and Rust not installed. Run Setup → Dependencies → Install Rust.'
   }
   if (-not (Security-Preflight)) { Warn 'Start cancelled'; return }
-  $args = @('-Port', $Port, '-TimeoutSecs', 20)
-  if ($Debug) { $args += '-Debug' }
-  if ($DocsUrl) { $args += @('-DocsUrl', $DocsUrl) }
-  if ($AdminToken) { $args += @('-AdminToken', $AdminToken) }
-  if ($UseDist) { $args += '-UseDist' }
-  & (Join-Path $PSScriptRoot 'start.ps1') @args
+  $svcArgs = @('-Port', $Port, '-TimeoutSecs', 20)
+  if ($Debug) { $svcArgs += '-Debug' }
+  if ($DocsUrl) { $svcArgs += @('-DocsUrl', $DocsUrl) }
+  if ($AdminToken) { $svcArgs += @('-AdminToken', $AdminToken) }
+  if ($UseDist) { $svcArgs += '-UseDist' }
+  & (Join-Path $PSScriptRoot 'start.ps1') @svcArgs
 }
 
 function Start-TrayPlusService {
@@ -91,13 +91,13 @@ function Start-TrayPlusService {
   $env:ARW_PID_FILE = (Join-Path $runDir 'arw-svc.pid')
   $logs = Join-Path $root '.arw\logs'; New-Item -ItemType Directory -Force $logs | Out-Null
   $env:ARW_LOG_FILE = (Join-Path $logs 'arw-svc.out.log')
-  $args = @('-Port', $Port, '-TimeoutSecs', 20)
-  if ($Debug) { $args += '-Debug' }
-  if ($DocsUrl) { $args += @('-DocsUrl', $DocsUrl) }
-  if ($AdminToken) { $args += @('-AdminToken', $AdminToken) }
-  if ($UseDist) { $args += '-UseDist' }
+  $svcArgs = @('-Port', $Port, '-TimeoutSecs', 20)
+  if ($Debug) { $svcArgs += '-Debug' }
+  if ($DocsUrl) { $svcArgs += @('-DocsUrl', $DocsUrl) }
+  if ($AdminToken) { $svcArgs += @('-AdminToken', $AdminToken) }
+  if ($UseDist) { $svcArgs += '-UseDist' }
   if (-not (Security-Preflight)) { Warn 'Start cancelled'; return }
-  & (Join-Path $PSScriptRoot 'start.ps1') @args
+  & (Join-Path $PSScriptRoot 'start.ps1') @svcArgs
   $tray = Join-Path $root 'target\release\arw-tray.exe'
   if (-not (Test-Path $tray)) {
     Warn 'Tray not available. If build failed or toolchains missing, use Setup → Dependencies.'
