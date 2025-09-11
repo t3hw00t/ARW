@@ -4,9 +4,7 @@ use axum::{extract::State, response::IntoResponse, Json};
 use serde::Deserialize;
 
 #[arw_admin(method="GET", path="/admin/governor/profile", summary="Get governor profile")]
-pub(crate) async fn governor_get() -> impl IntoResponse {
-    super::governor_get().await
-}
+pub(crate) async fn governor_get() -> impl IntoResponse { super::governor_get().await }
 #[derive(Deserialize, utoipa::ToSchema)]
 pub(crate) struct SetProfile {
     name: String,

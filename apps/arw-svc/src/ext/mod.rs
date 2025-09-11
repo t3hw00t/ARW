@@ -10,7 +10,7 @@ use axum::{
     Json, Router,
 };
 use futures_util::StreamExt;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::Digest;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -50,6 +50,16 @@ pub(crate) use memory::{
     mem_limit, memory_apply, memory_get, memory_limit_get, memory_limit_set, memory_load,
     memory_save, ApplyMemory, SetLimit,
 };
+
+// ---------- Standard API envelope helpers ----------
+#[derive(Serialize)]
+pub struct ApiEnvelope<T> {
+    ok: bool,
+    data: T,
+}
+pub(crate) fn ok<T: Serialize>(data: T) -> axum::Json<ApiEnvelope<T>> {
+    axum::Json(ApiEnvelope { ok: true, data })
+}
 
 // ---------- persistence bootstrap ----------
 #[derive(serde::Deserialize)]
@@ -546,7 +556,7 @@ async fn governor_hints_set(
 
 async fn list_models() -> impl IntoResponse {
     let v = models().read().await.clone();
-    Json::<Vec<Value>>(v)
+    ok::<Vec<Value>>(v)
 }
 async fn refresh_models(State(state): State<AppState>) -> impl IntoResponse {
     let new = default_models();
@@ -558,7 +568,7 @@ async fn refresh_models(State(state): State<AppState>) -> impl IntoResponse {
     state
         .bus
         .publish("Models.Refreshed", &json!({"count": new.len()}));
-    Json::<Vec<Value>>(new)
+    ok::<Vec<Value>>(new)
 }
 async fn models_save() -> impl IntoResponse {
     let v = models().read().await.clone();
@@ -581,7 +591,7 @@ async fn models_load() -> impl IntoResponse {
                 let mut m = models().write().await;
                 *m = arr.clone();
             }
-            Json::<Vec<Value>>(arr).into_response()
+            ok::<Vec<Value>>(arr).into_response()
         }
         None => (
             StatusCode::NOT_FOUND,

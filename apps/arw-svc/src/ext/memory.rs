@@ -50,7 +50,7 @@ pub(crate) struct SetLimit {
 
 pub(crate) async fn memory_get() -> impl IntoResponse {
     let snap = memory().read().await.clone();
-    Json::<Value>(snap)
+    super::ok::<Value>(snap)
 }
 pub(crate) async fn memory_save() -> impl IntoResponse {
     let snap = memory().read().await.clone();

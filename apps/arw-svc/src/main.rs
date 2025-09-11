@@ -480,7 +480,7 @@ async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
 )]
 #[arw_gate("introspect:tools")]
 async fn introspect_tools() -> impl IntoResponse {
-    Json(serde_json::to_value(arw_core::introspect_tools()).unwrap()).into_response()
+    ext::ok(serde_json::to_value(arw_core::introspect_tools()).unwrap()).into_response()
 }
 
 #[arw_admin(method="GET", path="/admin/introspect/schemas/{id}", summary="Get tool schema")]
@@ -530,7 +530,7 @@ async fn probe(State(state): State<AppState>) -> impl IntoResponse {
     state.bus.publish("Memory.Applied", &ep);
 
     // Return it to the client
-    Json::<serde_json::Value>(ep).into_response()
+    ext::ok::<serde_json::Value>(ep).into_response()
 }
 
 #[arw_admin(method="GET", path="/admin/emit/test", summary="Emit test event")]
@@ -1148,7 +1148,14 @@ async fn spec_openapi() -> impl IntoResponse {
         );
         (StatusCode::OK, h, bytes).into_response()
     } else {
-        (StatusCode::NOT_FOUND, "missing spec/openapi.yaml").into_response()
+        let pd = arw_protocol::ProblemDetails{
+            r#type: "about:blank".into(),
+            title: "Not Found".into(),
+            status: StatusCode::NOT_FOUND.as_u16(),
+            detail: Some("missing spec/openapi.yaml".into()),
+            instance: None, trace_id: None, code: None,
+        };
+        (StatusCode::NOT_FOUND, Json(pd)).into_response()
     }
 }
 async fn spec_asyncapi() -> impl IntoResponse {
@@ -1161,7 +1168,14 @@ async fn spec_asyncapi() -> impl IntoResponse {
         );
         (StatusCode::OK, h, bytes).into_response()
     } else {
-        (StatusCode::NOT_FOUND, "missing spec/asyncapi.yaml").into_response()
+        let pd = arw_protocol::ProblemDetails{
+            r#type: "about:blank".into(),
+            title: "Not Found".into(),
+            status: StatusCode::NOT_FOUND.as_u16(),
+            detail: Some("missing spec/asyncapi.yaml".into()),
+            instance: None, trace_id: None, code: None,
+        };
+        (StatusCode::NOT_FOUND, Json(pd)).into_response()
     }
 }
 async fn spec_mcp() -> impl IntoResponse {
@@ -1174,7 +1188,14 @@ async fn spec_mcp() -> impl IntoResponse {
         );
         (StatusCode::OK, h, bytes).into_response()
     } else {
-        (StatusCode::NOT_FOUND, "missing spec/mcp-tools.json").into_response()
+        let pd = arw_protocol::ProblemDetails{
+            r#type: "about:blank".into(),
+            title: "Not Found".into(),
+            status: StatusCode::NOT_FOUND.as_u16(),
+            detail: Some("missing spec/mcp-tools.json".into()),
+            instance: None, trace_id: None, code: None,
+        };
+        (StatusCode::NOT_FOUND, Json(pd)).into_response()
     }
 }
 

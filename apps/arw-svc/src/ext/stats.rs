@@ -88,7 +88,7 @@ pub(crate) async fn stats_get(State(state): State<AppState>) -> impl IntoRespons
     let events = stats_cell().read().await.clone();
     let routes = route_stats_cell().read().await.clone();
     let bus = state.bus.stats();
-    Json(json!({ "events": events, "routes": routes, "bus": bus })).into_response()
+    super::ok(json!({ "events": events, "routes": routes, "bus": bus })).into_response()
 }
 
 // Simple Prometheus exposition for core counters and route timings

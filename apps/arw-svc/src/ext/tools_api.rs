@@ -9,7 +9,7 @@ use serde::Deserialize;
 #[arw_gate("tools:list")]
 pub(crate) async fn list_tools() -> impl IntoResponse {
     let list = arw_core::introspect_tools();
-    Json(serde_json::to_value(list).unwrap_or(serde_json::json!([]))).into_response()
+    super::ok(serde_json::to_value(list).unwrap_or(serde_json::json!([]))).into_response()
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]

@@ -44,7 +44,7 @@ pub async fn observations_get() -> impl IntoResponse {
     let v = VERSION.load(Ordering::Relaxed);
     let s = store().read().unwrap();
     let items: Vec<Envelope> = s.recent.iter().cloned().collect();
-    Json(json!({
+    super::ok(json!({
         "version": v,
         "items": items,
     }))
@@ -99,15 +99,15 @@ pub async fn on_event(env: &Envelope) {
 pub async fn beliefs_get() -> impl IntoResponse {
     let v = beliefs_ver().load(Ordering::Relaxed);
     let s = beliefs().read().unwrap().clone();
-    Json(json!({"version": v, "items": s}))
+    super::ok(json!({"version": v, "items": s}))
 }
 #[arw_admin(method="GET", path="/admin/state/intents", summary="Recent intents")]
 pub async fn intents_get() -> impl IntoResponse {
     let s: Vec<_> = intents().read().unwrap().iter().cloned().collect();
-    Json(json!({"items": s}))
+    super::ok(json!({"items": s}))
 }
 #[arw_admin(method="GET", path="/admin/state/actions", summary="Recent actions")]
 pub async fn actions_get() -> impl IntoResponse {
     let s: Vec<_> = actions().read().unwrap().iter().cloned().collect();
-    Json(json!({"items": s}))
+    super::ok(json!({"items": s}))
 }
