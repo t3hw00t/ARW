@@ -2,10 +2,14 @@
 param(
   [switch]$Headless,
   [switch]$Package,
-  [switch]$NoDocs
+  [switch]$NoDocs,
+  [switch]$DryRun
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+## Compatibility: PowerShell 5 vs 7 Invoke-WebRequest
+$script:IwrArgs = @{}
+try { if ($PSVersionTable.PSVersion.Major -lt 6) { $script:IwrArgs = @{ UseBasicParsing = $true } } } catch {}
 
 function Banner($title, $subtitle){
   $cols = [Console]::WindowWidth
@@ -32,6 +36,10 @@ if (-not ($env:Path -split ';' | Where-Object { $_ -eq $localRustCargoBin })) { 
 # Load saved preferences if present
 $envFile = Join-Path $root '.arw\env.ps1'
 if (Test-Path $envFile) { . $envFile }
+
+# Setup dry-run mode (session-wide for setup)
+$script:SetupDryRun = $false
+if ($DryRun) { $script:SetupDryRun = $true }
 
 # Install log helper
 function Write-InstallLogDir($rel){
@@ -90,11 +98,15 @@ function Install-MkDocs {
   if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
   if (-not $py) { Warn 'python not found'; return }
   $venv = Join-Path $root '.venv'
-  & $py.Path -m venv $venv | Out-Null
-  & "$venv\Scripts\python.exe" -m pip install --upgrade pip | Out-Null
-  & "$venv\Scripts\python.exe" -m pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin | Out-Null
-  if (Test-Path "$venv\Scripts\mkdocs.exe") { $env:Path = "$($venv)\Scripts;" + $env:Path; Info 'MkDocs installed in local venv' } else { Warn 'MkDocs install may have failed' }
-  Write-InstallLogDir '.venv'
+  if ($script:SetupDryRun) {
+    Info "[dryrun] Would create venv at $venv and install mkdocs + plugins"
+  } else {
+    & $py.Path -m venv $venv | Out-Null
+    & "$venv\Scripts\python.exe" -m pip install --upgrade pip | Out-Null
+    & "$venv\Scripts\python.exe" -m pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin | Out-Null
+    if (Test-Path "$venv\Scripts\mkdocs.exe") { $env:Path = "$($venv)\Scripts;" + $env:Path; Info 'MkDocs installed in local venv' } else { Warn 'MkDocs install may have failed' }
+    Write-InstallLogDir '.venv'
+  }
 }
 
 function Configure-Settings {
@@ -133,10 +145,18 @@ node_id = "$node"
 
 function Do-Build {
   Section 'Build (release)'
-  Push-Location $root
-  cargo build --workspace --release
-  if ($RunTests) { cargo nextest run --workspace }
-  Pop-Location
+  if ($script:SetupDryRun) {
+    Info '[dryrun] Would run: cargo build --workspace --release'
+    if ($RunTests) { Info '[dryrun] Would run: cargo nextest run --workspace' }
+  } else {
+    Push-Location $root
+    cargo build --workspace --release
+    if ($RunTests) {
+      try { cargo nextest --version *> $null; if ($LASTEXITCODE -eq 0) { cargo nextest run --workspace } else { cargo test --workspace } }
+      catch { cargo test --workspace }
+    }
+    Pop-Location
+  }
 }
 
 function Do-Docs {
@@ -144,7 +164,11 @@ function Do-Docs {
     Section 'Docs generation'
     $venvMk = Join-Path $root '.venv\Scripts'
     if (Test-Path (Join-Path $venvMk 'mkdocs.exe')) { $env:Path = "$venvMk;" + $env:Path }
-    & (Join-Path $PSScriptRoot 'docgen.ps1')
+    if ($script:SetupDryRun) {
+      Info '[dryrun] Would run: scripts/docgen.ps1'
+    } else {
+      & (Join-Path $PSScriptRoot 'docgen.ps1')
+    }
   }
 }
 
@@ -153,14 +177,19 @@ function Install-Rustup {
   if (Get-Command cargo -ErrorAction SilentlyContinue) { Info 'Rust already installed'; return }
   Section 'Install Rust (rustup)'
   $rustup = Join-Path $localBin 'rustup-init.exe'
+  if ($script:SetupDryRun) {
+    Info ("[dryrun] Would download rustup-init.exe to " + $rustup)
+    Info '[dryrun] Would set RUSTUP_HOME/CARGO_HOME under .arw\rust and install toolchain'
+  } else {
   try {
-    Invoke-WebRequest -UseBasicParsing 'https://win.rustup.rs/' -OutFile $rustup
+    Invoke-WebRequest @IwrArgs 'https://win.rustup.rs/' -OutFile $rustup
     $env:RUSTUP_HOME = (Join-Path $root '.arw\rust\rustup')
     $env:CARGO_HOME  = (Join-Path $root '.arw\rust\cargo')
     & $rustup -y --default-toolchain stable --no-modify-path | Out-Null
     if (-not ($env:Path -split ';' | Where-Object { $_ -eq $localRustCargoBin })) { $env:Path = "$localRustCargoBin;" + $env:Path }
     Info 'Rust installed (restart shell if cargo not found)'
   } catch { Warn 'Rustup install failed' }
+  }
 }
 
 function Install-Python {
@@ -180,11 +209,15 @@ function Install-Jq {
   if (Get-Command jq -ErrorAction SilentlyContinue) { Info 'jq already installed'; return }
   if (Get-Command winget -ErrorAction SilentlyContinue) { winget install -e --id jqlang.jq --silent; return }
   $jq = Join-Path $localBin 'jq.exe'
+  if ($script:SetupDryRun) {
+    Info ("[dryrun] Would download jq.exe to " + $jq)
+  } else {
   try {
-    Invoke-WebRequest -UseBasicParsing 'https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-windows-amd64.exe' -OutFile $jq
+    Invoke-WebRequest @IwrArgs 'https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-windows-amd64.exe' -OutFile $jq
     Info "Downloaded jq to $jq"
     try { $h = Get-FileHash -Path $jq -Algorithm SHA256; Info ("jq sha256: " + $h.Hash) } catch {}
   } catch { Warn 'jq download failed' }
+  }
 }
 
 function Install-Nextest { if (Get-Command cargo -ErrorAction SilentlyContinue) { cargo install cargo-nextest } else { Warn 'cargo not found' } }
@@ -199,7 +232,7 @@ function Install-NatsLocal {
   New-Item -ItemType Directory -Force (Join-Path $dir 'tmp') | Out-Null
   $zip = Join-Path (Join-Path $dir 'tmp') $asset
   try {
-    Invoke-WebRequest -UseBasicParsing $url -OutFile $zip
+    Invoke-WebRequest @IwrArgs $url -OutFile $zip
   } catch {
     Warn "Download failed: $url"; Write-Host "Fallback: docker run -p 4222:4222 nats:latest"; return
   }
@@ -282,7 +315,11 @@ function Configure-Proxies {
 function Do-Package {
   if ($DoPackage) {
     Section 'Packaging portable bundle'
-    & (Join-Path $PSScriptRoot 'package.ps1')
+    if ($script:SetupDryRun) {
+      Info '[dryrun] Would run: scripts/package.ps1'
+    } else {
+      & (Join-Path $PSScriptRoot 'package.ps1')
+    }
   }
 }
 
@@ -365,7 +402,7 @@ function Support-Bundle {
 
 function Main-Menu {
   while ($true) {
-    Banner 'Setup Menu' 'Choose an action'
+    Banner 'Setup Menu' ("Choose an action — DryRun=" + $script:SetupDryRun)
     Write-Host @'
   1) Check prerequisites
   2) Dependencies (install/fix common requirements)
@@ -380,6 +417,7 @@ function Main-Menu {
   11) Save preferences (./.arw/env.ps1)
   12) First-run wizard (guided)
   13) Create support bundle
+  14) Toggle dry-run mode (now: On/Off)
   0) Exit
 '@
     $pick = Read-Host 'Select'
@@ -397,6 +435,7 @@ function Main-Menu {
       '11' { Save-Preferences }
       '12' { First-Run-Wizard }
       '13' { Support-Bundle }
+      '14' { $script:SetupDryRun = -not $script:SetupDryRun; if ($script:SetupDryRun) { Info 'Dry-run mode enabled' } else { Info 'Dry-run mode disabled' } }
       '0' { break }
       default { }
     }

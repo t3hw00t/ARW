@@ -1,6 +1,11 @@
 #!powershell
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+## Compatibility: PowerShell 5 vs 7 Invoke-WebRequest
+# In PS 5.x, -UseBasicParsing avoids IE dependency; in PS 6+, parameter is removed.
+# Use a splat so calls work on both.
+$script:IwrArgs = @{}
+try { if ($PSVersionTable.PSVersion.Major -lt 6) { $script:IwrArgs = @{ UseBasicParsing = $true } } } catch {}
 
 function Banner($title, $subtitle){
   $cols = [Console]::WindowWidth
@@ -14,6 +19,7 @@ function Banner($title, $subtitle){
 function Section($t){ Write-Host "> $t" -ForegroundColor Magenta }
 function Info($t){ Write-Host "[info] $t" -ForegroundColor DarkCyan }
 function Warn($t){ Write-Host "[warn] $t" -ForegroundColor Yellow }
+function Dry($t){ if ($script:GlobalDryRun) { Write-Host "[dryrun] $t" -ForegroundColor Yellow } }
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 # Add project-local Rust cargo bin to PATH if present (isolated, no admin)
@@ -38,6 +44,9 @@ $CfgPath = $env:ARW_CONFIG
 # Health wait defaults (configurable via Configure-Runtime)
 $WaitHealth = if ($env:ARW_WAIT_HEALTH -eq '0') { $false } else { $true }
 try { $WaitHealthTimeoutSecs = if ($env:ARW_WAIT_HEALTH_TIMEOUT_SECS) { [int]$env:ARW_WAIT_HEALTH_TIMEOUT_SECS } else { 20 } } catch { $WaitHealthTimeoutSecs = 20 }
+
+# Global dry-run toggle for this interactive session
+$script:GlobalDryRun = $false
 
 function Configure-Runtime {
   Section 'Runtime Settings'
@@ -143,8 +152,8 @@ function Open-ProbeMenu {
       '1' { Start-Process -FilePath "$base/debug" | Out-Null }
       '2' { Start-Process -FilePath "$base/spec" | Out-Null }
       '3' { Start-Process -FilePath "$base/introspect/tools" | Out-Null }
-      '4' { try { (Invoke-WebRequest -UseBasicParsing "$base/healthz").Content | Write-Host } catch {} ; Read-Host 'Continue' | Out-Null }
-      '5' { try { (Invoke-WebRequest -UseBasicParsing "$base/emit/test").Content | Write-Host } catch {} ; Read-Host 'Continue' | Out-Null }
+      '4' { try { (Invoke-WebRequest @IwrArgs "$base/healthz").Content | Write-Host } catch {} ; Read-Host 'Continue' | Out-Null }
+      '5' { try { (Invoke-WebRequest @IwrArgs "$base/emit/test").Content | Write-Host } catch {} ; Read-Host 'Continue' | Out-Null }
       '6' { $u = Read-Host 'NATS URL [nats://127.0.0.1:4222]'; if (-not $u) { $u = 'nats://127.0.0.1:4222' }; $rest = $u -replace '^.*?://',''; $parts = $rest.Split(':'); $h=$parts[0]; $p=if ($parts.Length -gt 1) { [int]$parts[1] } else { 4222 }; try { $ok = (Test-NetConnection -ComputerName $h -Port $p -WarningAction SilentlyContinue).TcpTestSucceeded; if ($ok) { Info ("NATS reachable at $($h):$p") } else { Warn ("Cannot reach $($h):$p") } } catch { Warn 'Test failed' }; Read-Host 'Continue' | Out-Null }
       '7' { try { Set-Clipboard -Value "$base/debug"; Info 'Copied Debug URL' } catch { } }
       '8' { try { Set-Clipboard -Value "$base/spec"; Info 'Copied Spec URL' } catch { } }
@@ -183,7 +192,12 @@ function Build-TestMenu {
     switch ($pick) {
       '1' { Push-Location $root; cargo build --workspace --release; Pop-Location }
       '2' { Push-Location $root; cargo build --workspace --release --features nats; Pop-Location }
-      '3' { Push-Location $root; cargo nextest run --workspace; Pop-Location }
+      '3' {
+        Push-Location $root
+        try { cargo nextest --version *> $null; if ($LASTEXITCODE -eq 0) { cargo nextest run --workspace } else { cargo test --workspace } }
+        catch { cargo test --workspace }
+        Pop-Location
+      }
       '4' { & (Join-Path $PSScriptRoot 'docgen.ps1') }
       '5' { & (Join-Path $PSScriptRoot 'package.ps1') }
       '0' { break }
@@ -216,7 +230,7 @@ function Cli-ToolsMenu {
 
 function Main-Menu {
   while ($true) {
-  Banner 'Start Menu' ("Port=$Port Debug=$Debug Dist=$UseDist HealthWait=$WaitHealth/$WaitHealthTimeoutSecs s")
+  Banner 'Start Menu' ("Port=$Port Debug=$Debug Dist=$UseDist HealthWait=$WaitHealth/$WaitHealthTimeoutSecs s DryRun=$script:GlobalDryRun")
     Write-Host @'
   1) Configure runtime (port/docs/token)
   2) Select config file (ARW_CONFIG)
@@ -246,6 +260,12 @@ function Main-Menu {
   26) Start Caddy with selected Caddyfile
   27) Write session summary (./.arw/support)
   28) Stop all (svc/proxy/nats)
+  29) Start (dry-run preview)
+  30) Toggle dry-run mode (now: On/Off)
+  31) Start Caddy reverse proxy (dry-run)
+  32) Stop Caddy reverse proxy (dry-run)
+  33) Generate reverse proxy templates (dry-run)
+  34) TLS wizard (dry-run preview)
   0) Exit
 '@
     $pick = Read-Host 'Select'
@@ -258,7 +278,7 @@ function Main-Menu {
       '6' { Open-ProbeMenu }
       '7' { Build-TestMenu }
       '8' { Cli-ToolsMenu }
-      '9' { try { (Invoke-WebRequest -UseBasicParsing "http://127.0.0.1:$Port/shutdown").Content | Write-Host } catch {}; Read-Host 'Continue' | Out-Null }
+      '9' { try { (Invoke-WebRequest @IwrArgs "http://127.0.0.1:$Port/shutdown").Content | Write-Host } catch {}; Read-Host 'Continue' | Out-Null }
       '10' { Force-Stop }
       '11' { Nats-Menu }
       '12' { Logs-Menu }
@@ -278,6 +298,12 @@ function Main-Menu {
       '26' { Reverse-Proxy-Caddy-Choose-Start }
       '27' { Session-Summary }
       '28' { Stop-All }
+      '29' { Start-DryRun }
+      '30' { $script:GlobalDryRun = -not $script:GlobalDryRun; if ($script:GlobalDryRun) { Info 'Dry-run mode enabled' } else { Info 'Dry-run mode disabled' } }
+      '31' { Reverse-Proxy-Caddy-Start-Preview }
+      '32' { Reverse-Proxy-Caddy-Stop-Preview }
+      '33' { Reverse-Proxy-Templates-Preview }
+      '34' { TLS-Wizard-Preview }
       '0' { break }
       default { }
     }
@@ -296,6 +322,9 @@ function Force-Stop {
     Stop-Process -Name 'arw-svc' -Force -ErrorAction SilentlyContinue
     Warn 'PID file missing; attempted Stop-Process arw-svc'
   }
+  # Also stop optional companion processes
+  try { Stop-Process -Name 'arw-tray' -Force -ErrorAction SilentlyContinue } catch {}
+  try { Stop-Process -Name 'arw-connector' -Force -ErrorAction SilentlyContinue } catch {}
 }
 
 function Logs-Menu {
@@ -319,19 +348,24 @@ function Logs-Menu {
 
 function Save-Prefs-From-Start {
   $envDir = Join-Path $root '.arw'
-  New-Item -ItemType Directory -Force $envDir | Out-Null
-  $f = Join-Path $envDir 'env.ps1'
-  @(
-    "# ARW env (project-local)",
-    "# dot-source this file to apply preferences",
-    "`$env:ARW_PORT = '$Port'",
-    "`$env:ARW_DOCS_URL = '$DocsUrl'",
-    "`$env:ARW_ADMIN_TOKEN = '$AdminToken'",
-    "`$env:ARW_CONFIG = '$CfgPath'",
-    "`$env:ARW_WAIT_HEALTH = '" + (if ($WaitHealth) { '1' } else { '0' }) + "'",
-    "`$env:ARW_WAIT_HEALTH_TIMEOUT_SECS = '$WaitHealthTimeoutSecs'"
-  ) | Set-Content -Path $f -Encoding utf8
-  Info ("Saved preferences to " + $f)
+  if ($script:GlobalDryRun) {
+    $f = Join-Path $envDir 'env.ps1'
+    Dry ("Would write preferences to " + $f)
+  } else {
+    New-Item -ItemType Directory -Force $envDir | Out-Null
+    $f = Join-Path $envDir 'env.ps1'
+    @(
+      "# ARW env (project-local)",
+      "# dot-source this file to apply preferences",
+      "`$env:ARW_PORT = '$Port'",
+      "`$env:ARW_DOCS_URL = '$DocsUrl'",
+      "`$env:ARW_ADMIN_TOKEN = '$AdminToken'",
+      "`$env:ARW_CONFIG = '$CfgPath'",
+      "`$env:ARW_WAIT_HEALTH = '" + (if ($WaitHealth) { '1' } else { '0' }) + "'",
+      "`$env:ARW_WAIT_HEALTH_TIMEOUT_SECS = '$WaitHealthTimeoutSecs'"
+    ) | Set-Content -Path $f -Encoding utf8
+    Info ("Saved preferences to " + $f)
+  }
 }
 
 function Open-Terminal-Here {
@@ -365,16 +399,22 @@ function Security-Preflight {
 
 function Reverse-Proxy-Templates {
   Section 'Reverse proxy templates'
+  Info ("DryRun=" + $script:GlobalDryRun)
   $out = Join-Path $root 'configs\reverse_proxy'
-  New-Item -ItemType Directory -Force (Join-Path $out 'caddy') | Out-Null
-  New-Item -ItemType Directory -Force (Join-Path $out 'nginx') | Out-Null
+  if ($script:GlobalDryRun) {
+    Dry ("Would create directories: " + (Join-Path $out 'caddy') + ', ' + (Join-Path $out 'nginx'))
+  } else {
+    New-Item -ItemType Directory -Force (Join-Path $out 'caddy') | Out-Null
+    New-Item -ItemType Directory -Force (Join-Path $out 'nginx') | Out-Null
+  }
   $caddy = @"
 localhost:8443 {
   tls internal
   reverse_proxy 127.0.0.1:$Port
 }
 "@
-  $caddy | Set-Content -Path (Join-Path $out 'caddy\Caddyfile') -Encoding utf8
+  $caddyOut = Join-Path $out 'caddy\Caddyfile'
+  if ($script:GlobalDryRun) { Dry ("Would write " + $caddyOut) } else { $caddy | Set-Content -Path $caddyOut -Encoding utf8 }
   $ng = @'
 upstream arw_upstream { server 127.0.0.1:__PORT__; }
 server {
@@ -383,8 +423,13 @@ server {
 }
 # TLS block (requires certs); see notes in Linux/macOS templates for generating self-signed certs
 '@
-  $ng | Set-Content -Path (Join-Path $out 'nginx\arw.conf') -Encoding utf8
-  (Get-Content -Path (Join-Path $out 'nginx\arw.conf')) -replace '__PORT__', "$Port" | Set-Content -Path (Join-Path $out 'nginx\arw.conf')
+  $ngOut = Join-Path $out 'nginx\arw.conf'
+  if ($script:GlobalDryRun) {
+    Dry ("Would write " + $ngOut + " (port $Port)")
+  } else {
+    $ng | Set-Content -Path $ngOut -Encoding utf8
+    (Get-Content -Path $ngOut) -replace '__PORT__', "$Port" | Set-Content -Path $ngOut
+  }
   Info ("Caddyfile: " + (Join-Path $out 'caddy\Caddyfile'))
   Info ("Nginx:     " + (Join-Path $out 'nginx\arw.conf'))
   Write-Host "Run Caddy (if installed): caddy run --config `"$(Join-Path $out 'caddy\Caddyfile')`""
@@ -393,12 +438,20 @@ server {
 
 function Reverse-Proxy-Caddy-Start {
   Section 'Start Caddy reverse proxy'
+  Info ("DryRun=" + $script:GlobalDryRun)
   $caddy = Get-Command caddy -ErrorAction SilentlyContinue
   if (-not $caddy) { Warn 'caddy.exe not found in PATH'; return }
   $out = Join-Path $root 'configs\reverse_proxy\caddy\Caddyfile'
-  if (-not (Test-Path $out)) { Reverse-Proxy-Templates }
+  if (-not (Test-Path $out)) { if ($script:GlobalDryRun) { Dry ("Would generate reverse proxy templates in " + (Split-Path $out -Parent)) } else { Reverse-Proxy-Templates } }
   $logs = Join-Path $root '.arw\logs'; New-Item -ItemType Directory -Force $logs | Out-Null
   $run = Join-Path $root '.arw\run'; New-Item -ItemType Directory -Force $run | Out-Null
+  if ($script:GlobalDryRun) {
+    Dry ("Would run: caddy run --config `"$out`"")
+    Dry ("Would log to: " + (Join-Path $logs 'caddy.out.log'))
+    Dry ("Would write PID to: " + (Join-Path $run 'caddy.pid'))
+    Dry 'Would open https://localhost:8443'
+    return
+  }
   $p = Start-Process -FilePath $caddy.Path -ArgumentList @('run','--config',$out) -RedirectStandardOutput (Join-Path $logs 'caddy.out.log') -RedirectStandardError (Join-Path $logs 'caddy.out.log') -PassThru
   ($p.Id) | Out-File -FilePath (Join-Path $run 'caddy.pid') -Encoding ascii -Force
   Info ("Caddy started (pid " + $p.Id + ") — open https://localhost:8443")
@@ -407,13 +460,19 @@ function Reverse-Proxy-Caddy-Start {
 
 function Reverse-Proxy-Caddy-Stop {
   Section 'Stop Caddy'
+  Info ("DryRun=" + $script:GlobalDryRun)
   $run = Join-Path $root '.arw\run\caddy.pid'
-  if (Test-Path $run) { try { $pid = Get-Content $run | Select-Object -First 1; if ($pid) { Stop-Process -Id $pid -Force } } catch { } Remove-Item $run -Force -ErrorAction SilentlyContinue } else { Get-Process caddy -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue }
-  Info 'Stopped Caddy (if running)'
+  if ($script:GlobalDryRun) {
+    Dry ("Would stop Caddy and remove pid file: $run")
+  } else {
+    if (Test-Path $run) { try { $pid = Get-Content $run | Select-Object -First 1; if ($pid) { Stop-Process -Id $pid -Force } } catch { } Remove-Item $run -Force -ErrorAction SilentlyContinue } else { Get-Process caddy -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue }
+    Info 'Stopped Caddy (if running)'
+  }
 }
 
 function Reverse-Proxy-Caddy-Choose-Start {
   Section 'Start Caddy with selected Caddyfile'
+  Info ("DryRun=" + $script:GlobalDryRun)
   $dir = Join-Path $root 'configs\reverse_proxy\caddy'
   if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force $dir | Out-Null }
   $files = Get-ChildItem -Path $dir -Filter 'Caddyfile*' -File -ErrorAction SilentlyContinue
@@ -425,15 +484,22 @@ function Reverse-Proxy-Caddy-Choose-Start {
   $logs = Join-Path $root '.arw\logs'; New-Item -ItemType Directory -Force $logs | Out-Null
   $run = Join-Path $root '.arw\run'; New-Item -ItemType Directory -Force $run | Out-Null
   try { & (Get-Command caddy).Path validate --config $cfg | Out-Null; Info 'Caddyfile valid' } catch { Warn 'Caddyfile validation failed'; $c = Read-Host 'Start anyway? (y/N)'; if (-not ($c -match '^[yY]')) { return } }
-  $p = Start-Process -FilePath (Get-Command caddy).Path -ArgumentList @('run','--config',$cfg) -RedirectStandardOutput (Join-Path $logs 'caddy.out.log') -RedirectStandardError (Join-Path $logs 'caddy.out.log') -PassThru
-  ($p.Id) | Out-File -FilePath (Join-Path $run 'caddy.pid') -Encoding ascii -Force
-  Info ("Caddy started with " + (Split-Path $cfg -Leaf) + ' — https://localhost:8443')
-  Start-Process -FilePath 'https://localhost:8443' | Out-Null
+  if ($script:GlobalDryRun) {
+    Dry ("Would run: caddy run --config `"$cfg`"")
+    Dry ("Would log to: " + (Join-Path $logs 'caddy.out.log'))
+    Dry ("Would write PID to: " + (Join-Path $run 'caddy.pid'))
+    Dry 'Would open https://localhost:8443'
+  } else {
+    $p = Start-Process -FilePath (Get-Command caddy).Path -ArgumentList @('run','--config',$cfg) -RedirectStandardOutput (Join-Path $logs 'caddy.out.log') -RedirectStandardError (Join-Path $logs 'caddy.out.log') -PassThru
+    ($p.Id) | Out-File -FilePath (Join-Path $run 'caddy.pid') -Encoding ascii -Force
+    Info ("Caddy started with " + (Split-Path $cfg -Leaf) + ' — https://localhost:8443')
+    Start-Process -FilePath 'https://localhost:8443' | Out-Null
+  }
 }
 
 function Session-Summary {
   Section 'Session summary'
-  $sup = Join-Path $root '.arw\support'; New-Item -ItemType Directory -Force $sup | Out-Null
+  $sup = Join-Path $root '.arw\support'; if ($script:GlobalDryRun) { Dry ("Would create directory: $sup") } else { New-Item -ItemType Directory -Force $sup | Out-Null }
   $ts = Get-Date -Format yyyyMMdd_HHmmss
   $out = Join-Path $sup ("session_" + $ts + '.md')
   $nOk = $false; try { $nOk = (Test-NetConnection -ComputerName 127.0.0.1 -Port 4222 -WarningAction SilentlyContinue).TcpTestSucceeded } catch {}
@@ -454,15 +520,20 @@ function Session-Summary {
     ("- Debug: http://127.0.0.1:" + $Port + "/debug"),
     ("- Spec:  http://127.0.0.1:" + $Port + "/spec")
   )
-  $txt | Set-Content -Path $out -Encoding utf8
-  Info ("Wrote " + $out)
+  if ($script:GlobalDryRun) { Dry ("Would write " + $out) } else { $txt | Set-Content -Path $out -Encoding utf8; Info ("Wrote " + $out) }
 }
 
 function Stop-All {
-  Force-Stop
-  Reverse-Proxy-Caddy-Stop
-  try { Stop-Process -Name 'nats-server' -Force -ErrorAction SilentlyContinue } catch {}
-  Info 'Stopped svc/proxy/nats'
+  if ($script:GlobalDryRun) {
+    Dry 'Would force-stop arw-svc, arw-tray, arw-connector'
+    Dry 'Would stop Caddy (and remove pid file)'
+    Dry 'Would stop nats-server'
+  } else {
+    Force-Stop
+    Reverse-Proxy-Caddy-Stop
+    try { Stop-Process -Name 'nats-server' -Force -ErrorAction SilentlyContinue } catch {}
+    Info 'Stopped svc/proxy/nats'
+  }
 }
 
 function TLS-Wizard {
@@ -471,7 +542,8 @@ function TLS-Wizard {
   Write-Host '  2) Local dev TLS via mkcert (Caddy)'
   Write-Host '  3) Self-signed (Caddy internal)'
   $t = Read-Host 'Select [1/2/3]'; if (-not $t) { $t = '3' }
-  $outc = Join-Path $root 'configs\reverse_proxy\caddy'; New-Item -ItemType Directory -Force $outc | Out-Null
+  $outc = Join-Path $root 'configs\reverse_proxy\caddy'
+  if ($script:GlobalDryRun) { Dry ("Would create directory: $outc") } else { New-Item -ItemType Directory -Force $outc | Out-Null }
   switch ($t) {
     '1' {
       $d = Read-Host 'Domain (e.g., arw.example.com)'; $e = Read-Host 'Email for ACME (e.g., you@example.com)'
@@ -483,8 +555,7 @@ $d {
 }
 "@
       $cf = Join-Path $outc ("Caddyfile." + $d)
-      $c | Set-Content -Path $cf -Encoding utf8
-      Info ("Wrote " + $cf)
+      if ($script:GlobalDryRun) { Dry ("Would write " + $cf) } else { $c | Set-Content -Path $cf -Encoding utf8; Info ("Wrote " + $cf) }
       Write-Host 'Ensure ports 80/443 are reachable and DNS resolves the domain to this host.'
     }
     '2' {
@@ -492,8 +563,12 @@ $d {
       if (-not $mk) { Warn 'mkcert not found (install via scoop/choco). Falling back to self-signed.'; return }
       $d = Read-Host 'Dev hostname [localhost]'; if (-not $d) { $d = 'localhost' }
       $cert = Join-Path $outc ($d + '.crt'); $key = Join-Path $outc ($d + '.key')
-      try { & $mk.Path -install } catch {}
-      & $mk.Path -cert-file $cert -key-file $key $d
+      if ($script:GlobalDryRun) {
+        Dry ("Would run mkcert -install; then generate cert=`"$cert`" key=`"$key`" for host $d")
+      } else {
+        try { & $mk.Path -install } catch {}
+        & $mk.Path -cert-file $cert -key-file $key $d
+      }
       $c = @"
 $d {
   tls $cert $key
@@ -501,8 +576,7 @@ $d {
 }
 "@
       $cf = Join-Path $outc ("Caddyfile." + $d)
-      $c | Set-Content -Path $cf -Encoding utf8
-      Info ("Wrote " + $cf)
+      if ($script:GlobalDryRun) { Dry ("Would write " + $cf) } else { $c | Set-Content -Path $cf -Encoding utf8; Info ("Wrote " + $cf) }
     }
     default {
       Info 'Self-signed supported via existing Caddyfile with tls internal.'
@@ -524,19 +598,23 @@ bus = "local"
 queue = "local"
 "@
   $cfgPath = Join-Path $cfgDir 'local.toml'
-  $cfg | Set-Content -Path $cfgPath -Encoding utf8
-  $env:ARW_CONFIG = $cfgPath
-  $script:CfgPath = $cfgPath
-  $script:Port = [int]$p
-  Info ("Wrote " + $cfgPath + " and set ARW_CONFIG. Port=" + $p)
+  if ($script:GlobalDryRun) {
+    Dry ("Would write " + $cfgPath + "; set ARW_CONFIG and Port to " + $p)
+  } else {
+    $cfg | Set-Content -Path $cfgPath -Encoding utf8
+    $env:ARW_CONFIG = $cfgPath
+    $script:CfgPath = $cfgPath
+    $script:Port = [int]$p
+    Info ("Wrote " + $cfgPath + " and set ARW_CONFIG. Port=" + $p)
+  }
 }
 
 function Spec-Sync {
   Section 'Spec sync'
   $base = "http://127.0.0.1:$Port"
-  try { (Invoke-WebRequest -UseBasicParsing "$base/spec").StatusCode | Out-Null; Info '/spec ok' } catch { Warn '/spec not reachable' }
-  try { (Invoke-WebRequest -UseBasicParsing "$base/spec/openapi.yaml").StatusCode | Out-Null; Info '/spec/openapi.yaml ok' } catch { Warn 'openapi not found' }
-  try { (Invoke-WebRequest -UseBasicParsing "$base/healthz").StatusCode | Out-Null; Info '/healthz ok' } catch { Warn '/healthz failed' }
+  try { (Invoke-WebRequest @IwrArgs "$base/spec").StatusCode | Out-Null; Info '/spec ok' } catch { Warn '/spec not reachable' }
+  try { (Invoke-WebRequest @IwrArgs "$base/spec/openapi.yaml").StatusCode | Out-Null; Info '/spec/openapi.yaml ok' } catch { Warn 'openapi not found' }
+  try { (Invoke-WebRequest @IwrArgs "$base/healthz").StatusCode | Out-Null; Info '/healthz ok' } catch { Warn '/healthz failed' }
   Start-Process -FilePath "$base/spec" | Out-Null
 }
 
@@ -581,7 +659,7 @@ function Install-NatsLocal {
   $dir = Join-Path $root '.arw\nats'
   New-Item -ItemType Directory -Force (Join-Path $dir 'tmp') | Out-Null
   $zip = Join-Path (Join-Path $dir 'tmp') $asset
-  try { Invoke-WebRequest -UseBasicParsing $url -OutFile $zip } catch { Warn "Download failed: $url"; return }
+  try { Invoke-WebRequest @IwrArgs $url -OutFile $zip } catch { Warn "Download failed: $url"; return }
   try {
     Expand-Archive -Path $zip -DestinationPath (Join-Path $dir 'tmp') -Force
     $exe = Get-ChildItem -Path (Join-Path $dir 'tmp') -Recurse -Filter 'nats-server.exe' | Select-Object -First 1
@@ -591,7 +669,7 @@ function Install-NatsLocal {
 
 function Nats-Menu {
   while ($true) {
-    Banner 'NATS Manager' 'Windows local or WSL-based broker'
+    Banner 'NATS Manager' ("Windows local or WSL-based broker — DryRun=" + $script:GlobalDryRun)
     Write-Host @'
   WINDOWS (local)
     1) Install local NATS (no admin)
@@ -606,6 +684,7 @@ function Nats-Menu {
     10) Open Windows Terminal in WSL
   Utils
     4) Check connectivity (Windows)
+    11) Dry-run start plan (Windows)
     0) Back
 '@
     $pick = Read-Host 'Select'
@@ -615,6 +694,14 @@ function Nats-Menu {
         $dir = Join-Path $root '.arw\nats'
         $exe = Join-Path $dir 'nats-server.exe'
         if (-not (Test-Path $exe)) { Warn 'nats-server.exe not installed'; break }
+        if ($script:GlobalDryRun) {
+          $runDir = Join-Path $root '.arw\\run'
+          $logs = Join-Path $root '.arw\\logs'
+          Info "[dryrun] Would start: $exe -a 127.0.0.1 -p 4222"
+          Info "[dryrun] Would log to: $(Join-Path $logs 'nats-server.out.log') (and err.log)"
+          Info "[dryrun] Would write PID file: $(Join-Path $runDir 'nats-server.pid')"
+          break
+        }
         $runDir = Join-Path $root '.arw\run'; New-Item -ItemType Directory -Force $runDir | Out-Null
         $logs = Join-Path $root '.arw\logs'; New-Item -ItemType Directory -Force $logs | Out-Null
         $p = Start-Process -FilePath $exe -ArgumentList @('-a','127.0.0.1','-p','4222') -PassThru -RedirectStandardOutput (Join-Path $logs 'nats-server.out.log') -RedirectStandardError (Join-Path $logs 'nats-server.err.log')
@@ -626,6 +713,17 @@ function Nats-Menu {
         if (Test-Path $pidFile) { try { $pid = Get-Content $pidFile | Select-Object -First 1; if ($pid) { Stop-Process -Id $pid -Force } } catch {} } else { Stop-Process -Name 'nats-server' -Force -ErrorAction SilentlyContinue }
       }
       '4' { try { $ok = (Test-NetConnection -ComputerName 127.0.0.1 -Port 4222 -WarningAction SilentlyContinue).TcpTestSucceeded; if ($ok) { Info 'NATS reachable' } else { Warn 'NATS not reachable' } } catch { }; Read-Host 'Continue' | Out-Null }
+      '11' {
+        $dir = Join-Path $root '.arw\nats'
+        $exe = Join-Path $dir 'nats-server.exe'
+        $logs = Join-Path $root '.arw\logs'
+        $runDir = Join-Path $root '.arw\run'
+        Info "[dryrun] Would start: $exe -a 127.0.0.1 -p 4222"
+        Info "[dryrun] Would log to: $(Join-Path $logs 'nats-server.out.log') (and err.log)"
+        Info "[dryrun] Would write PID file: $(Join-Path $runDir 'nats-server.pid')"
+        if (-not (Test-Path $exe)) { Warn '[dryrun] nats-server.exe not installed (use: Install local NATS)' }
+        Read-Host 'Continue' | Out-Null
+      }
       '5' { Wsl-Install-Nats }
       '6' { Wsl-Start-Nats }
       '7' { Wsl-Stop-Nats }
@@ -634,6 +732,73 @@ function Nats-Menu {
       '10' { Wsl-Open-Terminal }
       '0' { break }
       default { }
+    }
+  }
+}
+
+function Start-DryRun {
+  Section 'Start: dry-run preview'
+  # Do not set env vars here to avoid side-effects; just pass flags
+  $svcArgs = @('-Port', $Port, '-TimeoutSecs', 20, '-DryRun')
+  if ($Debug) { $svcArgs += '-Debug' }
+  if ($DocsUrl) { $svcArgs += @('-DocsUrl', $DocsUrl) }
+  if ($AdminToken) { $svcArgs += @('-AdminToken', $AdminToken) }
+  if ($UseDist) { $svcArgs += '-UseDist' }
+  if ($WaitHealth) { $svcArgs += @('-WaitHealth','-WaitHealthTimeoutSecs', $WaitHealthTimeoutSecs) }
+  & (Join-Path $PSScriptRoot 'start.ps1') @svcArgs
+}
+
+function Reverse-Proxy-Caddy-Start-Preview {
+  Section 'Caddy start (dry-run preview)'
+  $caddy = Get-Command caddy -ErrorAction SilentlyContinue
+  if (-not $caddy) { Warn 'caddy.exe not found in PATH'; return }
+  $out = Join-Path $root 'configs\reverse_proxy\caddy\Caddyfile'
+  if (-not (Test-Path $out)) { Dry ("Would generate reverse proxy templates in " + (Split-Path $out -Parent)) }
+  $logs = Join-Path $root '.arw\logs'
+  $run = Join-Path $root '.arw\run'
+  Dry ("Would run: caddy run --config `"$out`"")
+  Dry ("Would log to: " + (Join-Path $logs 'caddy.out.log'))
+  Dry ("Would write PID to: " + (Join-Path $run 'caddy.pid'))
+  Dry 'Would open https://localhost:8443'
+}
+
+function Reverse-Proxy-Caddy-Stop-Preview {
+  Section 'Caddy stop (dry-run preview)'
+  $run = Join-Path $root '.arw\run\caddy.pid'
+  Dry ("Would stop Caddy (pid from: $run) or by process name if pid missing")
+}
+
+function Reverse-Proxy-Templates-Preview {
+  Section 'Reverse proxy templates (dry-run preview)'
+  $out = Join-Path $root 'configs\reverse_proxy'
+  Dry ("Would create directories: " + (Join-Path $out 'caddy') + ', ' + (Join-Path $out 'nginx'))
+  Dry ("Would write: " + (Join-Path $out 'caddy\Caddyfile'))
+  Dry ("Would write: " + (Join-Path $out 'nginx\arw.conf') + " (port $Port)")
+}
+
+function TLS-Wizard-Preview {
+  Banner 'TLS Wizard (dry-run preview)' 'Choose a TLS strategy'
+  Write-Host '  1) Public domain with Let''s Encrypt (Caddy)'
+  Write-Host '  2) Local dev TLS via mkcert (Caddy)'
+  Write-Host '  3) Self-signed (Caddy internal)'
+  $t = Read-Host 'Select [1/2/3]'; if (-not $t) { $t = '3' }
+  $outc = Join-Path $root 'configs\reverse_proxy\caddy'
+  switch ($t) {
+    '1' {
+      $d = Read-Host 'Domain (e.g., arw.example.com)'; $e = Read-Host 'Email for ACME (e.g., you@example.com)'
+      if (-not $d -or -not $e) { Warn 'Domain and email required'; return }
+      $cf = Join-Path $outc ("Caddyfile." + $d)
+      Dry ("Would write: " + $cf)
+      Info 'Ensure ports 80/443 are reachable and DNS resolves to this host.'
+    }
+    '2' {
+      $d = Read-Host 'Dev hostname [localhost]'; if (-not $d) { $d = 'localhost' }
+      $cert = Join-Path $outc ($d + '.crt'); $key = Join-Path $outc ($d + '.key')
+      $cf = Join-Path $outc ("Caddyfile." + $d)
+      Dry ("Would run mkcert and write: cert=`"$cert`" key=`"$key`" and Caddyfile=`"$cf`"")
+    }
+    default {
+      Info 'Self-signed supported via existing Caddyfile with tls internal.'
     }
   }
 }
@@ -725,7 +890,8 @@ function Wsl-Open-Terminal {
   $wt = Get-Command wt.exe -ErrorAction SilentlyContinue
   if ($wt) {
     # Open wt in the selected distro, starting in home
-    Start-Process -FilePath wt.exe -ArgumentList @('-w','0','-p',$d,'new-tab') | Out-Null
+    # 'new-tab' must precede its options like '-p'
+    Start-Process -FilePath wt.exe -ArgumentList @('-w','0','new-tab','-p',$d) | Out-Null
     Info ("Opened Windows Terminal in WSL:" + $d)
   } else {
     Start-Process -FilePath wsl.exe -ArgumentList @('-d',$d) | Out-Null
