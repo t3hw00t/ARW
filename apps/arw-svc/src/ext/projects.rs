@@ -1,4 +1,4 @@
-use super::{io, paths};
+use super::{io, paths, ApiError};
 use crate::AppState;
 use arw_macros::arw_admin;
 use axum::{extract::Query, response::IntoResponse, Json};
@@ -27,7 +27,7 @@ pub(crate) async fn projects_list() -> impl IntoResponse {
         }
         out.sort();
     }
-    Json(json!({"items": out}))
+    super::ok(json!({"items": out}))
 }
 
 #[arw_admin(method="POST", path="/admin/projects/create", summary="Create project")]
@@ -36,20 +36,12 @@ pub(crate) async fn projects_create(
     Json(req): Json<ProjCreateReq>,
 ) -> impl IntoResponse {
     let Some(safe) = paths::sanitize_project_name(&req.name) else {
-        return (
-            axum::http::StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error":"invalid project name"})),
-        )
-            .into_response();
+        return ApiError::bad_request("invalid project name").into_response();
     };
     let root = paths::projects_dir();
     let dir = root.join(&safe);
     if let Err(e) = afs::create_dir_all(&dir).await {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": e.to_string()})),
-        )
-            .into_response();
+        return ApiError::internal(&e.to_string()).into_response();
     }
     // Create a default NOTES.md if missing
     let notes = dir.join("NOTES.md");
@@ -62,7 +54,7 @@ pub(crate) async fn projects_create(
     state
         .bus
         .publish("Projects.Created", &json!({"name": safe.clone()}));
-    Json(json!({"ok": true, "name": safe})).into_response()
+    super::ok(json!({"name": safe})).into_response()
 }
 
 #[derive(Deserialize)]
@@ -73,18 +65,10 @@ pub(crate) struct TreeQs {
 #[arw_admin(method="GET", path="/admin/projects/tree", summary="Project tree listing")]
 pub(crate) async fn projects_tree(Query(q): Query<TreeQs>) -> impl IntoResponse {
     let Some(proj) = q.proj.as_deref() else {
-        return (
-            axum::http::StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "missing proj"})),
-        )
-            .into_response();
+        return ApiError::bad_request("missing proj").into_response();
     };
     let Some(root) = paths::project_root(proj) else {
-        return (
-            axum::http::StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "invalid proj"})),
-        )
-            .into_response();
+        return ApiError::bad_request("invalid proj").into_response();
     };
     let rel = q.path.unwrap_or_default();
     // Only allow ascii safe rel components and no leading dots
@@ -95,11 +79,7 @@ pub(crate) async fn projects_tree(Query(q): Query<TreeQs>) -> impl IntoResponse 
             std::path::Component::ParentDir | std::path::Component::RootDir
         )
     }) {
-        return (
-            axum::http::StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "invalid path"})),
-        )
-            .into_response();
+        return ApiError::bad_request("invalid path").into_response();
     }
     let abs = root.join(rel_path);
     // Ensure path exists and is a directory; if file, list parent
@@ -143,7 +123,7 @@ pub(crate) async fn projects_tree(Query(q): Query<TreeQs>) -> impl IntoResponse 
             }
         });
     }
-    Json(json!({"items": items})).into_response()
+    super::ok(json!({"items": items})).into_response()
 }
 
 #[derive(Deserialize)]
@@ -169,24 +149,16 @@ pub(crate) async fn projects_notes_set(
     body: axum::body::Bytes,
 ) -> impl IntoResponse {
     let Some(p) = paths::project_notes_path(&q.proj) else {
-        return (
-            axum::http::StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "invalid proj"})),
-        )
-            .into_response();
+        return ApiError::bad_request("invalid proj").into_response();
     };
     if let Some(parent) = p.parent() {
         let _ = afs::create_dir_all(parent).await;
     }
     if let Err(e) = io::save_bytes_atomic(&p, &body).await {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": e.to_string()})),
-        )
-            .into_response();
+        return ApiError::internal(&e.to_string()).into_response();
     }
     state
         .bus
         .publish("Projects.NotesSaved", &json!({"name": q.proj}));
-    Json(json!({"ok": true})).into_response()
+    super::ok(json!({})).into_response()
 }

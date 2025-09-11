@@ -47,3 +47,4 @@ tower = { version = "0.5", features = ["util"] }    # <-- needed for ServiceExt:
 # (optional, can keep for E2E tests)
 reqwest = { version = "0.12", features = ["json"] }
 hyper = { version = "1" }
+walkdir = "2"

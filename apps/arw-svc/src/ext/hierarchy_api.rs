@@ -18,7 +18,7 @@ pub async fn hello(State(state): State<AppState>, Json(req): Json<CoreHello>) ->
         arw_protocol::CoreRole::Observer => hier::Role::Observer,
     });
     state.bus.publish("Hierarchy.Hello", &req);
-    Json(json!({"ok": true})).into_response()
+    super::ok(serde_json::json!({})).into_response()
 }
 
 #[arw_admin(method="POST", path="/admin/hierarchy/offer", summary="Hierarchy offer")]
@@ -31,7 +31,7 @@ pub async fn offer(State(state): State<AppState>, Json(req): Json<CoreOffer>) ->
         }
     }
     state.bus.publish("Hierarchy.Offer", &req);
-    Json(json!({"ok": true})).into_response()
+    super::ok(serde_json::json!({})).into_response()
 }
 
 #[arw_admin(method="POST", path="/admin/hierarchy/accept", summary="Hierarchy accept")]
@@ -44,5 +44,5 @@ pub async fn accept(
         hier::add_child(req.child_id.clone());
     }
     state.bus.publish("Hierarchy.Accepted", &req);
-    Json(json!({"ok": true})).into_response()
+    super::ok(serde_json::json!({})).into_response()
 }

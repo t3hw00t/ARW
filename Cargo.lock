@@ -331,6 +331,7 @@ dependencies = [
  "tracing",
  "utoipa",
  "uuid",
+ "walkdir",
 ]
 
 [[package]]

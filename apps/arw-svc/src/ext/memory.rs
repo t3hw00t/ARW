@@ -55,12 +55,8 @@ pub(crate) async fn memory_get() -> impl IntoResponse {
 pub(crate) async fn memory_save() -> impl IntoResponse {
     let snap = memory().read().await.clone();
     match save_json_file_async(&memory_path(), &snap).await {
-        Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
-        Err(e) => (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(serde_json::json!({"ok": false, "error": e.to_string()})),
-        )
-            .into_response(),
+        Ok(_) => super::ok(serde_json::json!({})).into_response(),
+        Err(e) => super::ApiError::internal(&e.to_string()).into_response(),
     }
 }
 pub(crate) async fn memory_load() -> impl IntoResponse {
@@ -70,23 +66,19 @@ pub(crate) async fn memory_load() -> impl IntoResponse {
             *m = v.clone();
             Json::<Value>(v).into_response()
         }
-        None => (
-            axum::http::StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"ok": false, "error":"no memory.json"})),
-        )
-            .into_response(),
+        None => super::ApiError::not_found("no memory.json").into_response(),
     }
 }
 pub(crate) async fn memory_limit_get() -> impl IntoResponse {
     let n = { *mem_limit().read().await };
-    Json(serde_json::json!({ "limit": n }))
+    super::ok(serde_json::json!({ "limit": n }))
 }
 pub(crate) async fn memory_limit_set(Json(req): Json<SetLimit>) -> impl IntoResponse {
     {
         let mut n = mem_limit().write().await;
         *n = req.limit.max(1);
     }
-    Json(serde_json::json!({ "ok": true }))
+    super::ok(serde_json::json!({}))
 }
 
 pub(crate) async fn memory_apply(
@@ -112,16 +104,8 @@ pub(crate) async fn memory_apply(
         let _ = save_json_file_async(&memory_path(), &snap).await;
         let evt = serde_json::json!({"kind":"Memory.Applied","payload":{"kind": req.kind, "value": req.value, "ttl_ms": req.ttl_ms}});
         state.bus.publish("Memory.Applied", &evt);
-        (
-            axum::http::StatusCode::ACCEPTED,
-            Json(serde_json::json!({"ok": true})),
-        )
-            .into_response()
+        (axum::http::StatusCode::ACCEPTED, super::ok(serde_json::json!({}))).into_response()
     } else {
-        (
-            axum::http::StatusCode::BAD_REQUEST,
-            Json(serde_json::json!({"ok": false, "error": "invalid kind"})),
-        )
-            .into_response()
+        super::ApiError::bad_request("invalid kind").into_response()
     }
 }

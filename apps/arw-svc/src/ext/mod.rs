@@ -24,6 +24,7 @@ use crate::AppState;
 use arw_core::gating;
 use arw_core::hierarchy as hier;
 use arw_core::orchestrator::Task as OrchTask;
+use arw_protocol::ProblemDetails;
 pub mod chat_api;
 pub mod feedback_api;
 pub mod feedback_engine;
@@ -59,6 +60,32 @@ pub struct ApiEnvelope<T> {
 }
 pub(crate) fn ok<T: Serialize>(data: T) -> axum::Json<ApiEnvelope<T>> {
     axum::Json(ApiEnvelope { ok: true, data })
+}
+
+// Error helper with ProblemDetails (uniform shape)
+pub struct ApiError(pub ProblemDetails);
+impl ApiError {
+    pub fn new(status: axum::http::StatusCode, title: &str, detail: Option<String>) -> Self {
+        ApiError(ProblemDetails {
+            r#type: "about:blank".into(),
+            title: title.into(),
+            status: status.as_u16(),
+            detail,
+            instance: None,
+            trace_id: None,
+            code: None,
+        })
+    }
+    pub fn bad_request(msg: &str) -> Self { Self::new(axum::http::StatusCode::BAD_REQUEST, "Bad Request", Some(msg.into())) }
+    pub fn forbidden(msg: &str) -> Self { Self::new(axum::http::StatusCode::FORBIDDEN, "Forbidden", Some(msg.into())) }
+    pub fn not_found(msg: &str) -> Self { Self::new(axum::http::StatusCode::NOT_FOUND, "Not Found", Some(msg.into())) }
+    pub fn internal(msg: &str) -> Self { Self::new(axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error", Some(msg.into())) }
+}
+impl IntoResponse for ApiError {
+    fn into_response(self) -> axum::response::Response {
+        let status = axum::http::StatusCode::from_u16(self.0.status).unwrap_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+        (status, axum::Json(self.0)).into_response()
+    }
 }
 
 // ---------- persistence bootstrap ----------
@@ -313,23 +340,15 @@ async fn tasks_enqueue(
 ) -> impl IntoResponse {
     // Gate by task kind (in addition to macro-level queue:enqueue gate)
     if !gating::allowed(&format!("task:{}", req.kind)) {
-        return (
-            StatusCode::FORBIDDEN,
-            Json(json!({"ok": false, "error": "gated by policy"})),
-        )
-            .into_response();
+        return ApiError::forbidden("gated by policy").into_response();
     }
     let mut t = OrchTask::new(req.kind, req.payload);
     t.shard_key = req.shard_key;
     t.priority = req.priority.unwrap_or(0);
     t.idem_key = req.idem_key;
     match state.queue.enqueue(t).await {
-        Ok(id) => Json(json!({"ok": true, "id": id})).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": e.to_string()})),
-        )
-            .into_response(),
+        Ok(id) => ok(json!({"id": id})).into_response(),
+        Err(e) => ApiError::internal(&e.to_string()).into_response(),
     }
 }
 
