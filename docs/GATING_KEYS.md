@@ -31,3 +31,12 @@ Generated from code.
 - `chat:clear`
 - `governor:set`
 - `governor:hints:set`
+- `hierarchy:hello`
+- `hierarchy:offer`
+- `hierarchy:accept`
+- `hierarchy:state:get`
+- `hierarchy:role:set`
+- `introspect:tools`
+- `introspect:schema`
+- `introspect:stats`
+- `introspect:probe`
