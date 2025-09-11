@@ -12,3 +12,4 @@ serde_json = { workspace = true }
 base64 = "0.22"
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 rand = "0.9"
+rand_core = "0.9"
