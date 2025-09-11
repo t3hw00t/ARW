@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  arw-svc:
+    build:
+      context: .
+      dockerfile: apps/arw-svc/Dockerfile
+    image: arw-svc:dev
+    environment:
+      - ARW_PORT=8090
+      - ARW_DEBUG=0
+    ports:
+      - "8090:8090"
+    volumes:
+      - ./configs:/app/configs:ro
+    restart: unless-stopped
+

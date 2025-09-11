@@ -150,6 +150,49 @@ docker build -f apps/arw-svc/Dockerfile -t arw-svc:dev .
 docker run --rm -p 8090:8090 arw-svc:dev
 ```
 
+### Docker Compose
+
+Start the service with Compose (builds locally by default):
+
+```bash
+docker compose -f docker-compose.yml up --build -d
+# open http://127.0.0.1:8090/healthz
+```
+
+Stop and remove:
+
+```bash
+docker compose down -v
+```
+
+### Helm (Kubernetes)
+
+Render manifests:
+
+```bash
+helm template arw deploy/charts/arw-svc
+```
+
+Install/upgrade into namespace `arw`:
+
+```bash
+helm upgrade --install arw deploy/charts/arw-svc -n arw --create-namespace
+```
+
+Uninstall:
+
+```bash
+helm uninstall arw -n arw
+```
+
+### Dev Container (VS Code)
+
+The repo includes a devcontainer configured with Nix. Open the `Agent_Hub` folder in VS Code and choose “Reopen in Container”. After creation, run:
+
+```bash
+cargo build --workspace
+```
+
 ## Admin Access
 
 - Sensitive endpoints include: `/debug`, `/probe`, `/memory/*`, `/models/*`, `/governor/*`, `/introspect/*`, `/chat/*`, `/feedback/*`.

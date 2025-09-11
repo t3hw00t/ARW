@@ -40,6 +40,21 @@ docker-build:
 docker-run:
   docker run --rm -p 8090:8090 -e ARW_PORT=8090 arw-svc:dev
 
+compose-up:
+  docker compose up --build -d
+
+compose-down:
+  docker compose down -v
+
+helm-template release="arw" ns="default":
+  helm template {{release}} deploy/charts/arw-svc --namespace {{ns}}
+
+helm-install release="arw" ns="default":
+  helm upgrade --install {{release}} deploy/charts/arw-svc --namespace {{ns}} --create-namespace
+
+helm-uninstall release="arw" ns="default":
+  helm uninstall {{release}} --namespace {{ns}}
+
 # Docs
 docgen:
   bash scripts/docgen.sh
