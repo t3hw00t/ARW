@@ -56,7 +56,8 @@ function Configure-Runtime {
 
 function Pick-Config {
   Section 'Config'
-  Write-Host "Current ARW_CONFIG: $($CfgPath ?? '<default configs/default.toml>')"
+  $cfgDisplay = if ($null -ne $CfgPath -and $CfgPath -ne '') { $CfgPath } else { '<default configs/default.toml>' }
+  Write-Host ("Current ARW_CONFIG: " + $cfgDisplay)
   $ans = Read-Host 'Enter config path (or empty for default)'
   if ($ans -ne '') { $CfgPath = $ans }
 }
@@ -137,7 +138,7 @@ function Open-ProbeMenu {
       '3' { Start-Process -FilePath "$base/introspect/tools" | Out-Null }
       '4' { try { (Invoke-WebRequest -UseBasicParsing "$base/healthz").Content | Write-Host } catch {} ; Read-Host 'Continue' | Out-Null }
       '5' { try { (Invoke-WebRequest -UseBasicParsing "$base/emit/test").Content | Write-Host } catch {} ; Read-Host 'Continue' | Out-Null }
-      '6' { $u = Read-Host 'NATS URL [nats://127.0.0.1:4222]'; if (-not $u) { $u = 'nats://127.0.0.1:4222' }; $rest = $u -replace '^.*?://',''; $parts = $rest.Split(':'); $h=$parts[0]; $p=if ($parts.Length -gt 1) { [int]$parts[1] } else { 4222 }; try { $ok = (Test-NetConnection -ComputerName $h -Port $p -WarningAction SilentlyContinue).TcpTestSucceeded; if ($ok) { Info "NATS reachable at $h:$p" } else { Warn "Cannot reach $h:$p" } } catch { Warn 'Test failed' }; Read-Host 'Continue' | Out-Null }
+      '6' { $u = Read-Host 'NATS URL [nats://127.0.0.1:4222]'; if (-not $u) { $u = 'nats://127.0.0.1:4222' }; $rest = $u -replace '^.*?://',''; $parts = $rest.Split(':'); $h=$parts[0]; $p=if ($parts.Length -gt 1) { [int]$parts[1] } else { 4222 }; try { $ok = (Test-NetConnection -ComputerName $h -Port $p -WarningAction SilentlyContinue).TcpTestSucceeded; if ($ok) { Info ("NATS reachable at $($h):$p") } else { Warn ("Cannot reach $($h):$p") } } catch { Warn 'Test failed' }; Read-Host 'Continue' | Out-Null }
       '7' { try { Set-Clipboard -Value "$base/debug"; Info 'Copied Debug URL' } catch { } }
       '8' { try { Set-Clipboard -Value "$base/spec"; Info 'Copied Spec URL' } catch { } }
       '9' {
@@ -433,7 +434,7 @@ function Session-Summary {
     "# ARW Session Summary ($ts)",
     "- Port: $Port",
     "- Debug: $Debug",
-    "- ARW_CONFIG: $($CfgPath ?? '<default>')",
+    "- ARW_CONFIG: $((if ($null -ne $CfgPath -and $CfgPath -ne '') { $CfgPath } else { '<default>' }))",
     "- Docs URL: $DocsUrl",
     "- Admin token set: $([bool]$env:ARW_ADMIN_TOKEN)",
     "- NATS reachable (nats://127.0.0.1:4222): $nOk",
@@ -466,7 +467,12 @@ function TLS-Wizard {
     '1' {
       $d = Read-Host 'Domain (e.g., arw.example.com)'; $e = Read-Host 'Email for ACME (e.g., you@example.com)'
       if (-not $d -or -not $e) { Warn 'Domain and email required'; return }
-      $c = @"`n$d {`n  tls $e`n  reverse_proxy 127.0.0.1:$Port`n}`n"@
+      $c = @"
+$d {
+  tls $e
+  reverse_proxy 127.0.0.1:$Port
+}
+"@
       $cf = Join-Path $outc ("Caddyfile." + $d)
       $c | Set-Content -Path $cf -Encoding utf8
       Info ("Wrote " + $cf)
@@ -479,7 +485,12 @@ function TLS-Wizard {
       $cert = Join-Path $outc ($d + '.crt'); $key = Join-Path $outc ($d + '.key')
       try { & $mk.Path -install } catch {}
       & $mk.Path -cert-file $cert -key-file $key $d
-      $c = @"`n$d {`n  tls $cert $key`n  reverse_proxy 127.0.0.1:$Port`n}`n"@
+      $c = @"
+$d {
+  tls $cert $key
+  reverse_proxy 127.0.0.1:$Port
+}
+"@
       $cf = Join-Path $outc ("Caddyfile." + $d)
       $c | Set-Content -Path $cf -Encoding utf8
       Info ("Wrote " + $cf)
@@ -690,7 +701,8 @@ function Wsl-Show-Info {
   $ip = (& wsl.exe -d $d -- bash -lc 'hostname -I 2>/dev/null | awk "{print $1}"').Trim()
   Write-Host ("WSL Distro: " + $d)
   if ($wslg) { Write-Host ("WSLg: " + $wslg) } else { Write-Host 'WSLg: not reported (requires Windows 11 + latest WSL)'}
-  Write-Host ("WSL primary IP: " + ($ip ?? 'unknown'))
+  $ipDisplay = if ($null -ne $ip -and $ip -ne '') { $ip } else { 'unknown' }
+  Write-Host ("WSL primary IP: " + $ipDisplay)
   Write-Host 'Windows connect: nats://127.0.0.1:4222 (localhost forwarding)'
   Write-Host 'WSL connect: nats://127.0.0.1:4222 (inside WSL)'
   Write-Host 'GUI note: On Windows 11, WSLg enables Linux GUI apps automatically.'
