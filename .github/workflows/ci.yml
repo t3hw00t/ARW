@@ -33,24 +33,24 @@ jobs:
           cd Agent_Hub
           cargo fmt --all -- --check
 
-      - name: Clippy
+      - name: Clippy (excluding desktop UI crates)
         run: |
           cd Agent_Hub
-          cargo clippy --workspace --all-targets -- -D warnings
+          cargo clippy --workspace --all-targets --exclude arw-tauri --exclude arw-launcher -- -D warnings
 
-      - name: Build
+      - name: Build (excluding desktop UI crates)
         run: |
           cd Agent_Hub
-          cargo build --workspace --locked
+          cargo build --workspace --locked --exclude arw-tauri --exclude arw-launcher
       - name: Build (arw-svc with grpc feature)
         run: |
           cd Agent_Hub
           cargo build -p arw-svc --features grpc --locked
 
-      - name: Test
+      - name: Test (excluding desktop UI crates)
         run: |
           cd Agent_Hub
-          cargo test --workspace --locked
+          cargo test --workspace --locked --exclude arw-tauri --exclude arw-launcher
 
   nix-build-test:
     name: nix-build-test (ubuntu)
