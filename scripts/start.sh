@@ -39,14 +39,14 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/.." && pwd)"
 
 exe="arw-svc"; [[ "${OS:-}" == "Windows_NT" ]] && exe+=".exe"
-tray_exe="arw-tray"; [[ "${OS:-}" == "Windows_NT" ]] && tray_exe+=".exe"
+launcher_exe="arw-launcher"; [[ "${OS:-}" == "Windows_NT" ]] && launcher_exe+=".exe"
 if [[ $use_dist -eq 1 ]]; then
   base=$(ls -td "$ROOT"/dist/arw-* 2>/dev/null | head -n1 || true)
   svc="$base/bin/$exe"
-  tray="$base/bin/$tray_exe"
+  launcher="$base/bin/$launcher_exe"
 else
   svc="$ROOT/target/release/$exe"
-  tray="$ROOT/target/release/$tray_exe"
+  launcher="$ROOT/target/release/$launcher_exe"
 fi
 
 if [[ ! -x "$svc" ]]; then
@@ -59,12 +59,10 @@ if [[ ! -x "$svc" ]]; then
   svc="$ROOT/target/release/$exe"
 fi
 
-if [[ ! -x "$tray" ]]; then
-  if [[ $no_build -eq 0 ]]; then
-    echo "[start] Tray binary not found ($tray). Attempting build..."
-    (cd "$ROOT" && cargo build --release -p arw-tray) || true
-  fi
-  tray="$ROOT/target/release/$tray_exe"
+if [[ ! -x "$launcher" && $no_build -eq 0 ]]; then
+  echo "[start] Launcher binary not found ($launcher). Attempting build..."
+  (cd "$ROOT" && cargo build --release -p arw-launcher) || true
+  launcher="$ROOT/target/release/$launcher_exe"
 fi
 
 echo "[start] Launching $svc on http://127.0.0.1:$ARW_PORT"
@@ -106,12 +104,12 @@ if [[ $wait_health -eq 1 ]]; then
 fi
 
 if [[ "${ARW_NO_TRAY:-0}" == "1" ]]; then
-  echo "[start] ARW_NO_TRAY=1; skipping tray; service running in background"
+  echo "[start] ARW_NO_TRAY=1; skipping launcher; service running in background"
   wait
-elif [[ -x "$tray" ]]; then
-  echo "[start] Launching tray $tray"
-  exec "$tray"
+elif [[ -x "$launcher" ]]; then
+  echo "[start] Launching launcher $launcher"
+  exec "$launcher"
 else
-  echo "[start] Tray binary not found ($tray); service running in background"
+  echo "[start] Launcher binary not found ($launcher); service running in background"
   wait
 fi

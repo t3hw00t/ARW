@@ -6,10 +6,10 @@ Quick pre-reqs
 - Install Rust toolchain (rustup): https://rustup.rs
 - Optional: build once `powershell -ExecutionPolicy Bypass -File scripts\build.ps1`
 
-Service + tray (default)
+Service + launcher (default)
 - Run: `powershell -ExecutionPolicy Bypass -File scripts\interactive-start-windows.ps1`
-- Pick “Start tray + service”.
-- Expect: no extra console window for the service (runs hidden), tray appears.
+- Pick “Start launcher + service”.
+- Expect: no extra console window for the service (runs hidden), launcher appears with a system tray icon.
 - Check `.arw\run\arw-svc.pid` and `.arw\logs\arw-svc.out.log` exist.
 - Open: `http://127.0.0.1:8090/debug` and `.../spec`.
   - Tip: The Start menu lets you toggle health wait (and timeout) under “Configure runtime”.
@@ -37,5 +37,5 @@ Preferences file
 - Verify `./.arw/env.ps1` contains literal lines like `$env:ARW_PORT = '8090'` (not expanded values).
 
 Notes
-- The tray is optional; use CLI-only mode or `ARW_NO_TRAY=1` when GTK or build toolchains are unavailable.
+- The launcher is optional; use CLI-only mode or `ARW_NO_TRAY=1` to skip it.
 - For clean logs, delete `./.arw/logs/*` between runs.

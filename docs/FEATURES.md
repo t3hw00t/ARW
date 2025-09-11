@@ -67,7 +67,7 @@ VS Code extension, Command Palette, aider CLI, GitHub, MCP bridges.
 
 COMPANION APPS (Rust)
 
-Launcher (Tauri): settings, templates, scheduler, tray, notifications.
+Launcher (Tauri): settings, templates, scheduler; system tray; notifications; single‑instance; window state; in‑app windows (Events SSE, Logs/stats) and Debug UI opener; optional OS login autostart.
 
 Debug UI (Tauri): event stream, probe overlays, training console, logs/metrics, graph, capsule replay.
 

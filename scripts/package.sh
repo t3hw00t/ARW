@@ -42,6 +42,9 @@ cp "$root_dir/target/release/arw-cli$exe" "$out/bin/arw-cli$exe"
 if [[ -f "$root_dir/target/release/arw-tray$exe" ]]; then
   cp "$root_dir/target/release/arw-tray$exe" "$out/bin/arw-tray$exe"
 fi
+if [[ -f "$root_dir/target/release/arw-launcher$exe" ]]; then
+  cp "$root_dir/target/release/arw-launcher$exe" "$out/bin/arw-launcher$exe"
+fi
 cp "$root_dir/configs/default.toml" "$out/configs/default.toml"
 cp -r "$root_dir/docs" "$out/docs"
 if [[ -d "$root_dir/site" ]]; then
@@ -55,7 +58,7 @@ cat > "$out/README.txt" << EOF
 ARW portable bundle ($name)
 
 Contents
-- bin/        arw-svc, arw-cli
+- bin/        arw-svc, arw-cli, (optional) arw-launcher
 - configs/    default.toml (portable state paths)
 - docs/       project docs
 - sandbox/    Windows Sandbox config (Windows only)
@@ -64,6 +67,7 @@ Usage
 - Run service: bin/arw-svc$exe
 - Debug UI:    http://127.0.0.1:8090/debug
 - CLI sanity:  bin/arw-cli$exe
+ - Launcher:    bin/arw-launcher$exe (includes tray)
 
 Notes
 - To force portable mode: export ARW_PORTABLE=1

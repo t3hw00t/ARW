@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ARW Launcher</title>
+    <style>
+      html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
+      .wrap { display: flex; height: 100%; align-items: center; justify-content: center; }
+      .card { padding: 24px; border: 1px solid #ddd; border-radius: 12px; max-width: 560px; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+      button { padding: 8px 12px; border-radius: 8px; border: 1px solid #aaa; background: #fafafa; cursor: pointer; }
+      button:hover { background: #f0f0f0; }
+      .ok { color: #0a0; }
+      .bad { color: #a00; }
+    </style>
+  </head>
+  <body>
+    <script src="common.js"></script>
+    <div class="wrap">
+      <div class="card">
+        <h2>ARW Launcher</h2>
+        <p>Use the tray to start/stop the service or open the Debug UI.</p>
+        <div class="row">
+          <label>Port: <input id="port" type="number" min="1" max="65535" value="8090" style="width: 90px"/></label>
+          <label><input id="autostart" type="checkbox"/> Autostart service</label>
+          <label><input id="notif" type="checkbox" checked/> Notify on status change</label>
+          <label><input id="loginstart" type="checkbox"/> Start launcher at login</label>
+        </div>
+        <div class="row">
+          <button id="btn-save">Save</button>
+          <button id="btn-start">Start Service</button>
+          <button id="btn-stop">Stop Service</button>
+          <button id="btn-open">Open Debug UI</button>
+          <button id="btn-open-window">Open in Window</button>
+          <button id="btn-events">Events Window</button>
+          <button id="btn-logs">Logs</button>
+          <button id="btn-models">Models</button>
+          <button id="btn-connections">Connections</button>
+          <button id="btn-health">Check Health</button>
+          <span id="health"></span>
+        </div>
+        <div class="row">
+          <button id="btn-updates">Check Updates</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      // The window.__TAURI__ API is available without bundlers in Tauri 1.
+      const invoke = (cmd, args) => ARW.invoke(cmd, args)
+      const getPort = () => ARW.getPortFromInput('port')
+      async function loadPrefs() {
+        try {
+          const v = await ARW.getPrefs('launcher');
+          if (v && typeof v === 'object') {
+            if (v.port) document.getElementById('port').value = v.port;
+            if (typeof v.autostart === 'boolean') document.getElementById('autostart').checked = v.autostart;
+            if (typeof v.notifyOnStatus === 'boolean') document.getElementById('notif').checked = v.notifyOnStatus;
+          }
+        } catch {}
+        try {
+          const enabled = await invoke('launcher_autostart_status');
+          document.getElementById('loginstart').checked = !!enabled;
+        } catch {}
+      }
+      async function savePrefs() {
+        const port = getPort();
+        const autostart = document.getElementById('autostart').checked;
+        const notifyOnStatus = document.getElementById('notif').checked;
+        await ARW.setPrefs('launcher', { port, autostart, notifyOnStatus });
+      }
+      document.getElementById('btn-open').addEventListener('click', async () => {
+        try { await invoke('open_debug_ui', { port: getPort() }); } catch (e) { console.error(e); }
+      });
+      document.getElementById('btn-health').addEventListener('click', async () => {
+        const el = document.getElementById('health');
+        el.textContent = '…';
+        try {
+          const ok = await invoke('check_service_health', { port: getPort() });
+          el.textContent = ok ? 'Service UP' : 'Service DOWN';
+          el.className = ok ? 'ok' : 'bad';
+        } catch (e) {
+          el.textContent = 'Error';
+          el.className = 'bad';
+        }
+      });
+      document.getElementById('btn-open-window').addEventListener('click', async () => {
+        try { await invoke('open_debug_window', { port: getPort() }); } catch (e) { console.error(e); }
+      });
+      document.getElementById('btn-events').addEventListener('click', async () => {
+        try { await invoke('open_events_window'); } catch (e) { console.error(e); }
+      });
+      document.getElementById('btn-logs').addEventListener('click', async () => {
+        try { await invoke('open_logs_window'); } catch (e) { console.error(e); }
+      });
+      document.getElementById('btn-models').addEventListener('click', async () => {
+        try { await invoke('open_models_window'); } catch (e) { console.error(e); }
+      });
+      document.getElementById('btn-connections').addEventListener('click', async () => {
+        try { await invoke('open_connections_window'); } catch (e) { console.error(e); }
+      });
+      document.getElementById('btn-start').addEventListener('click', async () => {
+        try { await invoke('start_service', { port: getPort() }); } catch (e) { console.error(e); }
+      });
+      document.getElementById('btn-stop').addEventListener('click', async () => {
+        try { await invoke('stop_service', { port: getPort() }); } catch (e) { console.error(e); }
+      });
+      document.getElementById('btn-save').addEventListener('click', async () => {
+        try {
+          await savePrefs();
+          const loginstart = document.getElementById('loginstart').checked;
+          await invoke('set_launcher_autostart', { enabled: loginstart });
+        } catch (e) { console.error(e); }
+      });
+      document.getElementById('btn-updates').addEventListener('click', async () => {
+        try {
+          // Fallback to releases page; real updater config can be added later
+          await invoke('open_url', { url: 'https://github.com/t3hw00t/arw/releases' });
+        } catch (e) { console.error(e); }
+      });
+      loadPrefs();
+    </script>
+  </body>
+  </html>

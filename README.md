@@ -37,18 +37,24 @@ can experiment without cloud lock‑in.
   - Windows: `powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -Debug -Port 8090 -DocsUrl https://your-pages -AdminToken secret -WaitHealth`
   - Linux/macOS: `bash scripts/start.sh --debug --port 8090 --docs-url https://your-pages --admin-token secret --wait-health`
   - CLI-only (skip tray if present): set `ARW_NO_TRAY=1` before running `scripts/start.sh`
-  - `arw-tray` is bundled and started automatically by the scripts when present. You can also run it manually from `target/release/` or `dist/.../bin/` to start/stop the service, open the Debug UI, or quit from the system tray.
+  - The legacy `arw-tray` is deprecated in favor of the Tauri launcher and is no longer built by default.
 
 Dev convenience
 - Nix dev shell now includes `just` and `cargo-watch`.
 - Fast loops:
-  - `just dev` to run `arw-svc` with `ARW_DEBUG=1` (port 8090)
-  - `just dev-watch` to auto-rebuild/restart the service on changes
-  - `just docs-serve` to run MkDocs locally at `127.0.0.1:8000`
-  - `just dev-all` to run service and docs together; the Debug UI picks up docs via `ARW_DOCS_URL`
-  - `just open-debug` to open `http://127.0.0.1:8090/debug` in the browser
-  - `just fmt-check`, `just lint`, `just lint-fix`, `just test-fast`, `just test-watch`
-  - `just hooks-install` to install a pre-commit hook (fmt+clippy+tests)
+- `just dev` to run `arw-svc` with `ARW_DEBUG=1` (port 8090)
+- `just dev-watch` to auto-rebuild/restart the service on changes
+- `just docs-serve` to run MkDocs locally at `127.0.0.1:8000`
+- `just dev-all` to run service and docs together; the Debug UI picks up docs via `ARW_DOCS_URL`
+- `just open-debug` to open `http://127.0.0.1:8090/debug` in the browser
+- `just fmt-check`, `just lint`, `just lint-fix`, `just test-fast`, `just test-watch`
+- `just hooks-install` to install a pre-commit hook (fmt+clippy+tests)
+- Tauri pre‑alpha (Launcher + Tray): `just tauri-launcher-build` then `just tauri-launcher-run`
+  - System tray: Start/Stop/Open Debug, Events, Logs, Models (stub), Connections (stub).
+  - Windows: Debug in-browser or in-app window; Events (SSE), Logs (stats poll), prefs & autostart.
+  - Optional: enable OS login autostart in the UI; toggle status-change notifications.
+  - Icons: generated from project colors; regenerate via `./.venv/bin/python scripts/gen_icons.py`.
+  - Linux deps: `just tauri-deps-linux` or use `nix develop` (devShell includes WebKitGTK 4.1 + libsoup3)
 
 Isolated env defaults
 - Linux/macOS: when available, builds run inside `nix develop` for fully isolated toolchains (no root). Otherwise, scripts install Rust locally under `.arw/rust` and tools under `.arw/bin`; docs live in `.venv`.

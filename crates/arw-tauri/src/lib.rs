@@ -1,0 +1,337 @@
+use anyhow::Result;
+use directories::ProjectDirs;
+use once_cell::sync::OnceCell;
+use serde_json::Value;
+use std::path::PathBuf;
+use std::process::{Child, Command, Stdio};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+/// Shared state holder for managing a spawned `arw-svc` child process.
+#[derive(Clone)]
+pub struct ServiceState {
+    inner: Arc<Mutex<Option<Child>>>,
+}
+
+impl Default for ServiceState {
+    fn default() -> Self {
+        Self {
+            inner: Arc::new(Mutex::new(None)),
+        }
+    }
+}
+
+fn default_port() -> u16 {
+    std::env::var("ARW_PORT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(8090)
+}
+
+fn effective_port(port: Option<u16>) -> u16 {
+    if let Some(p) = port {
+        return p;
+    }
+    // Prefer launcher prefs if set
+    if let Some(prefs) = prefs_path(Some("launcher"))
+        .and_then(|p| std::fs::read(p).ok())
+        .and_then(|b| serde_json::from_slice::<Value>(&b).ok())
+    {
+        if let Some(p) = prefs
+            .get("port")
+            .and_then(|v| v.as_u64())
+            .and_then(|n| u16::try_from(n).ok())
+        {
+            return p;
+        }
+    }
+    default_port()
+}
+
+fn service_url(path: &str, port: Option<u16>) -> String {
+    format!(
+        "http://127.0.0.1:{}/{}",
+        effective_port(port),
+        path.trim_start_matches('/')
+    )
+}
+
+/// Locate the `arw-svc` binary near the app or in the workspace target dir.
+pub fn locate_svc_binary() -> Option<PathBuf> {
+    // 1) next to this exe (packaged dist)
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(dir) = exe.parent() {
+            let candidate = dir.join("arw-svc");
+            let candidate_win = dir.join("arw-svc.exe");
+            if candidate.exists() {
+                return Some(candidate);
+            }
+            if candidate_win.exists() {
+                return Some(candidate_win);
+            }
+            // packaged layout may be bin/ alongside
+            let bin = dir.join("bin");
+            let c2 = bin.join("arw-svc");
+            let c2w = bin.join("arw-svc.exe");
+            if c2.exists() {
+                return Some(c2);
+            }
+            if c2w.exists() {
+                return Some(c2w);
+            }
+        }
+    }
+    // 2) workspace target/release
+    let mut path = std::env::current_dir().ok()?;
+    for _ in 0..3 {
+        let p = path.join("target").join("release").join(if cfg!(windows) {
+            "arw-svc.exe"
+        } else {
+            "arw-svc"
+        });
+        if p.exists() {
+            return Some(p);
+        }
+        path = path.parent()?.to_path_buf();
+    }
+    None
+}
+
+fn prefs_path(namespace: Option<&str>) -> Option<PathBuf> {
+    let proj = ProjectDirs::from("org", "arw", "arw")?;
+    let dir = proj.config_dir();
+    std::fs::create_dir_all(dir).ok()?;
+    let file = match namespace {
+        Some(ns) if !ns.is_empty() => format!("prefs-{}.json", ns),
+        _ => "prefs.json".to_string(),
+    };
+    Some(dir.join(file))
+}
+
+pub fn load_prefs(namespace: Option<&str>) -> Value {
+    if let Some(path) = prefs_path(namespace) {
+        if let Ok(bytes) = std::fs::read(path) {
+            if let Ok(v) = serde_json::from_slice::<Value>(&bytes) {
+                return v;
+            }
+        }
+    }
+    Value::Null
+}
+
+pub fn save_prefs(namespace: Option<&str>, value: &Value) -> Result<()> {
+    if let Some(path) = prefs_path(namespace) {
+        let data = serde_json::to_vec_pretty(value)?;
+        std::fs::write(path, data)?;
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn check_service_health(port: Option<u16>) -> Result<bool, String> {
+    static HTTP: OnceCell<reqwest::Client> = OnceCell::new();
+    let client = HTTP.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(Duration::from_millis(1200))
+            .build()
+            .unwrap()
+    });
+    let url = service_url("healthz", port);
+    match client.get(url).send().await {
+        Ok(resp) => Ok(resp.status().is_success()),
+        Err(err) => Err(format!("health request failed: {}", err)),
+    }
+}
+
+#[tauri::command]
+pub fn open_debug_ui(port: Option<u16>) -> Result<(), String> {
+    let url = service_url("debug", port);
+    open::that(url).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn open_debug_window(app: tauri::AppHandle, port: Option<u16>) -> Result<(), String> {
+    let url = service_url("debug", port);
+    let label = "debug";
+    if app.get_webview_window(label).is_none() {
+        tauri::WebviewWindowBuilder::new(
+            &app,
+            label,
+            tauri::WebviewUrl::External(url.parse().unwrap()),
+        )
+        .title("ARW Debug UI")
+        .inner_size(1000.0, 800.0)
+        .build()
+        .map_err(|e| e.to_string())?;
+    } else if let Some(w) = app.get_webview_window(label) {
+        let _ = w.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn open_events_window(app: tauri::AppHandle) -> Result<(), String> {
+    let label = "events";
+    if app.get_webview_window(label).is_none() {
+        tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App("events.html".into()))
+            .title("ARW Events")
+            .inner_size(900.0, 700.0)
+            .build()
+            .map_err(|e| e.to_string())?;
+    } else if let Some(w) = app.get_webview_window(label) {
+        let _ = w.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn open_logs_window(app: tauri::AppHandle) -> Result<(), String> {
+    let label = "logs";
+    if app.get_webview_window(label).is_none() {
+        tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App("logs.html".into()))
+            .title("ARW Logs")
+            .inner_size(900.0, 700.0)
+            .build()
+            .map_err(|e| e.to_string())?;
+    } else if let Some(w) = app.get_webview_window(label) {
+        let _ = w.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn open_models_window(app: tauri::AppHandle) -> Result<(), String> {
+    let label = "models";
+    if app.get_webview_window(label).is_none() {
+        tauri::WebviewWindowBuilder::new(&app, label, tauri::WebviewUrl::App("models.html".into()))
+            .title("ARW Model Manager")
+            .inner_size(1000.0, 800.0)
+            .build()
+            .map_err(|e| e.to_string())?;
+    } else if let Some(w) = app.get_webview_window(label) {
+        let _ = w.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn open_connections_window(app: tauri::AppHandle) -> Result<(), String> {
+    let label = "connections";
+    if app.get_webview_window(label).is_none() {
+        tauri::WebviewWindowBuilder::new(
+            &app,
+            label,
+            tauri::WebviewUrl::App("connections.html".into()),
+        )
+        .title("ARW Connection Manager")
+        .inner_size(1000.0, 800.0)
+        .build()
+        .map_err(|e| e.to_string())?;
+    } else if let Some(w) = app.get_webview_window(label) {
+        let _ = w.set_focus();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn start_service(
+    state: tauri::State<'_, ServiceState>,
+    port: Option<u16>,
+) -> Result<(), String> {
+    // already running?
+    {
+        let mut guard = state.inner.lock().map_err(|e| e.to_string())?;
+        if let Some(child) = guard.as_mut() {
+            if let Ok(None) = child.try_wait() {
+                return Ok(());
+            }
+        }
+    }
+    let svc_bin = locate_svc_binary().ok_or_else(|| "arw-svc binary not found".to_string())?;
+    let mut cmd = Command::new(svc_bin);
+    cmd.env("ARW_DEBUG", "1")
+        .env("ARW_PORT", format!("{}", effective_port(port)))
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    let child = cmd.spawn().map_err(|e| e.to_string())?;
+    *state.inner.lock().map_err(|e| e.to_string())? = Some(child);
+    Ok(())
+}
+
+#[tauri::command]
+pub fn stop_service(
+    state: tauri::State<'_, ServiceState>,
+    port: Option<u16>,
+) -> Result<(), String> {
+    let url = service_url("shutdown", port);
+    // try graceful shutdown
+    static BLOCK: OnceCell<reqwest::blocking::Client> = OnceCell::new();
+    let client = BLOCK
+        .get_or_try_init(|| {
+            reqwest::blocking::Client::builder()
+                .timeout(Duration::from_millis(900))
+                .build()
+        })
+        .map_err(|e| e.to_string())?;
+    let _ = client.get(url).send();
+    // then kill if needed
+    if let Some(mut child) = state.inner.lock().map_err(|e| e.to_string())?.take() {
+        let _ = child.kill();
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn get_prefs(namespace: Option<String>) -> Result<Value, String> {
+    Ok(load_prefs(namespace.as_deref()))
+}
+
+#[tauri::command]
+pub fn set_prefs(namespace: Option<String>, value: Value) -> Result<(), String> {
+    save_prefs(namespace.as_deref(), &value).map_err(|e| e.to_string())
+}
+
+/// Build and return the Tauri plugin exposing ARW commands.
+pub fn plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
+    tauri::plugin::Builder::new("arw")
+        .invoke_handler(tauri::generate_handler![
+            check_service_health,
+            open_debug_ui,
+            open_debug_window,
+            open_events_window,
+            open_logs_window,
+            open_models_window,
+            open_connections_window,
+            start_service,
+            stop_service,
+            get_prefs,
+            set_prefs,
+            launcher_autostart_status,
+            set_launcher_autostart,
+            open_url
+        ])
+        .build()
+}
+
+#[tauri::command]
+pub fn launcher_autostart_status(app: tauri::AppHandle) -> Result<bool, String> {
+    tauri_plugin_autostart::is_enabled(&app).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_launcher_autostart(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    if enabled {
+        tauri_plugin_autostart::enable(&app).map_err(|e| e.to_string())
+    } else {
+        tauri_plugin_autostart::disable(&app).map_err(|e| e.to_string())
+    }
+}
+
+#[tauri::command]
+pub fn open_url(url: String) -> Result<(), String> {
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err("invalid url".into());
+    }
+    open::that(url).map_err(|e| e.to_string())
+}

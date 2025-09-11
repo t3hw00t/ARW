@@ -39,7 +39,12 @@ open signing (Sigstore), portable plugins (WASI), hardware-first performance, sa
 
 - `apps/arw-cli` – command‑line interface for running and testing tools.
 - `apps/arw-svc` – user‑mode HTTP service with a minimal debug UI.
-- `apps/arw-tray` – optional system tray application (requires GTK on Linux).
+- `apps/arw-launcher/src-tauri` – Tauri-based launcher (tray + windows: Events, Logs, Debug). Preferred cross‑platform companion app.
+- `apps/arw-tray` – legacy Rust tray (deprecated). Keep for reference; not built by default.
+
+## Integration Crates
+
+- `crates/arw-tauri` – shared glue for Tauri apps (service control, prefs, window openers).
 
 ---
 This structure keeps the project portable and highlights where future plugins or

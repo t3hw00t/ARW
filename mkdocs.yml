@@ -18,6 +18,8 @@ nav:
       - Style: developer/style.md
       - Security: developer/SECURITY.md
   - Docs:
+      - Quickstart: guide/quickstart.md
+      - Desktop Launcher: guide/launcher.md
       - Roadmap: ROADMAP.md
       - Structure: STRUCTURE.md
       - Features: FEATURES.md

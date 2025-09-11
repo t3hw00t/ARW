@@ -1,0 +1,19 @@
+[package]
+name = "arw-tauri"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+reqwest = { workspace = true }
+open = "5"
+tauri = { version = "2.4.1", default-features = false }
+directories = "5"
+tauri-plugin-autostart = "2.2"
+once_cell = { workspace = true }
+
+[lib]
+name = "arw_tauri"
+path = "src/lib.rs"

@@ -23,6 +23,12 @@ Run the service
 target/release/arw-svc
 ```
 
+Desktop launcher (optional)
+- Build: `just tauri-launcher-build`
+- Run: `just tauri-launcher-run`
+- Linux build deps (WebKitGTK 4.1 + libsoup3): `just tauri-deps-linux` or use `nix develop`
+- Features: system tray (Start/Stop/Open), Events (SSE), Logs, Debug UI opener, prefs & autostart.
+
 Peek at what’s available
 - Health: `GET /healthz`
 - Events (SSE): `GET /events`

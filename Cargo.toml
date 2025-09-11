@@ -8,7 +8,8 @@ members = [
   "crates/arw-otel",
   "apps/arw-svc",
   "apps/arw-connector",
-  "apps/arw-tray"
+  "crates/arw-tauri",
+  "apps/arw-launcher/src-tauri"
 ]
 resolver = "2"
 

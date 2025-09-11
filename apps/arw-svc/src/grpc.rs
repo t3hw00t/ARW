@@ -46,4 +46,3 @@ pub async fn serve(state: AppState) {
         eprintln!("gRPC server error: {e}");
     }
 }
-

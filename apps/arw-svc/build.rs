@@ -12,4 +12,3 @@ fn main() {
         .compile(&["proto/arw.proto"], &["proto"]) // inputs, includes
         .expect("failed to compile protos");
 }
-

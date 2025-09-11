@@ -109,7 +109,8 @@ fn cmd_gen_ed25519() -> Result<()> {
     use rand_core::TryRngCore;
     let mut rng = OsRng;
     let mut sk_bytes = [0u8; 32];
-    rng.try_fill_bytes(&mut sk_bytes).map_err(|e| anyhow::anyhow!(e.to_string()))?;
+    rng.try_fill_bytes(&mut sk_bytes)
+        .map_err(|e| anyhow::anyhow!(e.to_string()))?;
     let sk = SigningKey::from_bytes(&sk_bytes);
     let pk = sk.verifying_key();
     let sk_b64 = base64::engine::general_purpose::STANDARD.encode(sk.to_bytes());

@@ -31,6 +31,9 @@
           ];
           buildInputs = with pkgs; [
             gtk3
+            webkitgtk_4_1
+            libsoup_3
+            openssl
             xdotool
           ];
         };

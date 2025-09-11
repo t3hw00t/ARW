@@ -11,7 +11,6 @@ What you can expect
 - Tools registered via a macro and discovered at runtime.
 - Clear packaging and portable state for easy sharing.
 
-Start with Quickstart to run the service, then explore the features and deployment notes. When you’re ready to dive deeper, the Developer section explains the workspace and CI.
+Start with Quickstart to run the service, then explore the features and deployment notes. You can also build and run the Desktop Launcher for an integrated tray + windows UI. When you’re ready to dive deeper, the Developer section explains the workspace and CI.
 
 Tip: If you’re just trying ARW, the default paths are portable. You can switch between portable and system mode with a single environment variable.
-

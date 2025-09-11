@@ -7,6 +7,19 @@ build:
 dev-build:
   cargo build --workspace
 
+# Tauri apps
+tauri-launcher-build:
+  cargo build -p arw-launcher
+
+tauri-launcher-run:
+  cargo run -p arw-launcher
+
+tauri-deps-linux:
+  bash scripts/install-tauri-deps.sh
+
+icons-gen:
+  .venv/bin/python scripts/gen_icons.py
+
 # Lint & format
 fmt:
   cargo fmt --all

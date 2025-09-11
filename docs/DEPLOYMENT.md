@@ -57,3 +57,17 @@ You can override with `ARW_PORTABLE=1` env var, or set `state_dir` to a path ins
 
 - Virtualized environments can restrict GPU/NPU access.
 - Some vendor accelerators require host‑level drivers; ARW degrades gracefully to CPU.
+
+## Tauri Launcher (Desktop UI) Prerequisites
+
+Tauri 2 apps use the system webview. On Linux, install these dev packages to build locally:
+
+- Debian/Ubuntu: `sudo apt install -y libgtk-3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev`
+- Fedora: `sudo dnf install -y gtk3-devel webkit2gtk4.1-devel libsoup3-devel`
+- Arch: `sudo pacman -S --needed gtk3 webkit2gtk-4.1 libsoup3`
+
+Alternatively use the project’s Nix dev shell which includes the required libraries:
+
+```bash
+nix develop
+```
