@@ -7,6 +7,9 @@ docs_url=""
 admin_token=""
 timeout_secs=20
 use_dist=0
+no_build=0
+wait_health=0
+wait_health_timeout_secs=30
 pid_file="${ARW_PID_FILE:-}"
 
 while [[ $# -gt 0 ]]; do
@@ -17,8 +20,11 @@ while [[ $# -gt 0 ]]; do
     --admin-token) admin_token="$2"; shift 2;;
     --timeout-secs) timeout_secs="$2"; shift 2;;
     --dist) use_dist=1; shift;;
+    --no-build) no_build=1; shift;;
+    --wait-health) wait_health=1; shift;;
+    --wait-health-timeout-secs) wait_health_timeout_secs="$2"; shift 2;;
     -h|--help)
-      echo "Usage: $0 [--port N] [--debug] [--docs-url URL] [--admin-token TOKEN] [--timeout-secs N] [--dist]"; exit 0;;
+      echo "Usage: $0 [--port N] [--debug] [--docs-url URL] [--admin-token TOKEN] [--timeout-secs N] [--dist] [--no-build] [--wait-health] [--wait-health-timeout-secs N]"; exit 0;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
@@ -44,14 +50,20 @@ else
 fi
 
 if [[ ! -x "$svc" ]]; then
+  if [[ $no_build -eq 1 ]]; then
+    echo "[start] Service binary not found and --no-build specified. Build first or omit --no-build." >&2
+    exit 1
+  fi
   echo "[start] Service binary not found ($svc). Building release..."
   (cd "$ROOT" && cargo build --release -p arw-svc)
   svc="$ROOT/target/release/$exe"
 fi
 
 if [[ ! -x "$tray" ]]; then
-  echo "[start] Tray binary not found ($tray). Attempting build..."
-  (cd "$ROOT" && cargo build --release -p arw-tray) || true
+  if [[ $no_build -eq 0 ]]; then
+    echo "[start] Tray binary not found ($tray). Attempting build..."
+    (cd "$ROOT" && cargo build --release -p arw-tray) || true
+  fi
   tray="$ROOT/target/release/$tray_exe"
 fi
 
@@ -68,6 +80,31 @@ if [[ -n "$pid_file" ]]; then
   mkdir -p "$(dirname "$pid_file")" || true
   echo "$svc_pid" > "$pid_file" || true
 fi
+wait_for_health() {
+  local base="http://127.0.0.1:$ARW_PORT"
+  local deadline=$(( $(date +%s) + wait_health_timeout_secs ))
+  local attempts=0
+  while [[ $(date +%s) -lt $deadline ]]; do
+    attempts=$((attempts+1))
+    if command -v curl >/dev/null 2>&1; then
+      if curl -fsS "$base/healthz" >/dev/null 2>&1; then
+        echo "[start] Health OK after $attempts checks → $base/healthz"; return 0
+      fi
+    elif command -v wget >/dev/null 2>&1; then
+      if wget -qO- "$base/healthz" >/dev/null 2>&1; then
+        echo "[start] Health OK after $attempts checks → $base/healthz"; return 0
+      fi
+    fi
+    sleep 0.5
+  done
+  echo "[start] Health not reachable within ${wait_health_timeout_secs}s → $base/healthz" >&2
+  return 1
+}
+
+if [[ $wait_health -eq 1 ]]; then
+  wait_for_health || true
+fi
+
 if [[ "${ARW_NO_TRAY:-0}" == "1" ]]; then
   echo "[start] ARW_NO_TRAY=1; skipping tray; service running in background"
   wait

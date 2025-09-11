@@ -98,6 +98,8 @@ ic_env_save() { # save known keys to .arw/env.sh
     echo "export ARW_ADMIN_TOKEN=${ARW_ADMIN_TOKEN:-}"
     echo "export ARW_CONFIG=${ARW_CONFIG:-}"
     echo "export ARW_NATS_URL=${ARW_NATS_URL:-}"
+    echo "export ARW_WAIT_HEALTH=${ARW_WAIT_HEALTH:-1}"
+    echo "export ARW_WAIT_HEALTH_TIMEOUT_SECS=${ARW_WAIT_HEALTH_TIMEOUT_SECS:-20}"
   } > "$f"
   ic_info "Saved preferences to $f"
 }

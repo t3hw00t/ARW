@@ -17,6 +17,9 @@ DOCS_URL=${ARW_DOCS_URL:-}
 ADMIN_TOKEN=${ARW_ADMIN_TOKEN:-}
 USE_DIST=0
 CFG_PATH=${ARW_CONFIG:-}
+# Health wait defaults (can be toggled in runtime settings)
+WAIT_HEALTH=${ARW_WAIT_HEALTH:-1}
+WAIT_HEALTH_TIMEOUT_SECS=${ARW_WAIT_HEALTH_TIMEOUT_SECS:-20}
 
 # Load persisted preferences if any
 ic_env_load
@@ -66,6 +69,8 @@ configure_runtime() {
   read -r -p "Docs URL (optional) [${DOCS_URL}]: " ans; DOCS_URL=${ans:-$DOCS_URL}
   read -r -p "Admin token (optional) [${ADMIN_TOKEN}]: " ans; ADMIN_TOKEN=${ans:-$ADMIN_TOKEN}
   read -r -p "Use packaged dist/ bundle when present? (y/N) " ans; [[ "${ans,,}" == y* ]] && USE_DIST=1 || USE_DIST=0
+  read -r -p "Wait for /healthz after start? (Y/n) [$( [[ ${WAIT_HEALTH:-1} -eq 1 ]] && echo Y || echo n)]: " ans; [[ "${ans,,}" == n* ]] && WAIT_HEALTH=0 || WAIT_HEALTH=1
+  read -r -p "Health wait timeout secs [${WAIT_HEALTH_TIMEOUT_SECS}]: " ans; WAIT_HEALTH_TIMEOUT_SECS=${ans:-$WAIT_HEALTH_TIMEOUT_SECS}
 }
 
 env_args() {
@@ -75,6 +80,7 @@ env_args() {
   [[ -n "$DOCS_URL" ]] && a+=(--docs-url "$DOCS_URL")
   [[ -n "$ADMIN_TOKEN" ]] && a+=(--admin-token "$ADMIN_TOKEN")
   [[ $USE_DIST -eq 1 ]] && a+=(--dist)
+  [[ ${WAIT_HEALTH:-1} -eq 1 ]] && a+=(--wait-health --wait-health-timeout-secs "$WAIT_HEALTH_TIMEOUT_SECS")
   printf '%s\n' "${a[@]}"
 }
 
@@ -169,6 +175,16 @@ EOF
       *) : ;;
     esac
   done
+}
+
+save_prefs_from_start() {
+  export ARW_PORT="$PORT"
+  export ARW_DOCS_URL="${DOCS_URL:-}"
+  export ARW_ADMIN_TOKEN="${ADMIN_TOKEN:-}"
+  export ARW_CONFIG="${CFG_PATH:-}"
+  export ARW_WAIT_HEALTH="${WAIT_HEALTH:-1}"
+  export ARW_WAIT_HEALTH_TIMEOUT_SECS="${WAIT_HEALTH_TIMEOUT_SECS:-20}"
+  ic_env_save
 }
 
 security_preflight() {
@@ -266,7 +282,7 @@ EOF
 main_menu() {
   preflight || true
   while true; do
-    ic_banner "Start Menu" "Port=$PORT Debug=$DEBUG Dist=$USE_DIST Nix=${ARW_USE_NIX:-0}"
+    ic_banner "Start Menu" "Port=$PORT Debug=$DEBUG Dist=$USE_DIST HealthWait=$WAIT_HEALTH/${WAIT_HEALTH_TIMEOUT_SECS}s Nix=${ARW_USE_NIX:-0}"
     cat <<EOF
   1) Configure runtime (port/docs/token)
   2) Select config file (ARW_CONFIG)
@@ -321,7 +337,7 @@ EOF
       12) nats_menu ;;
       13) ic_open_terminal_here ;;
       14) logs_menu ;;
-      15) ic_env_save ;;
+      15) save_prefs_from_start ;;
       16) ic_doctor ;;
       17) configure_http_port ;;
       18) spec_sync ;;

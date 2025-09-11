@@ -289,7 +289,7 @@ TOML
   read -r -p "Start service now? (Y/n): " go; if [[ "${go,,}" != n* ]]; then
     ARW_NO_TRAY=$([[ "$prof" == 2 ]] && echo 0 || echo 1) \
     ARW_PORT="$PORT" ARW_CONFIG="$ARW_CONFIG" ARW_DOCS_URL="$DOCS_URL" \
-    ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" bash "$DIR/start.sh" --debug --port "$PORT"
+    ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" bash "$DIR/start.sh" --debug --port "$PORT" --wait-health --wait-health-timeout-secs 20
     ic_open_url "http://127.0.0.1:$PORT/spec"
   fi
 
