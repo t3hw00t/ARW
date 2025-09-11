@@ -1,0 +1,10 @@
+:root{
+  --md-primary-fg-color:        #b87333;  /* copper accent */
+  --md-primary-fg-color--light: #dca777;
+  --md-primary-fg-color--dark:  #915a29;
+  --md-accent-fg-color:         #1bb3a3;  /* muted teal */
+}
+
+.md-typeset code,.md-typeset pre{background:rgba(0,0,0,0.04)}
+.md-typeset .admonition{border-radius:8px}
+.md-nav__link--active{font-weight:600}
