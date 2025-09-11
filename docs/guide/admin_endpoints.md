@@ -7,6 +7,12 @@ ARW exposes a unified admin/ops HTTP namespace under `/admin`. All sensitive rou
 - Index (JSON): `/admin/index.json`
 - Public endpoints (no auth): `/healthz`, `/metrics`, `/spec/*`, `/version`, `/about`
 
+!!! warning "Minimum Secure Setup"
+    - Set `ARW_ADMIN_TOKEN` and require it on all admin calls
+    - Keep the service bound to `127.0.0.1` or place behind TLS proxy
+    - Tune rate limits with `ARW_ADMIN_RL` (e.g., `60/60`)
+    - Avoid `ARW_DEBUG=1` outside local development
+
 ## Authentication
 
 - Header: `X-ARW-Admin: <token>`

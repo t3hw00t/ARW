@@ -78,7 +78,7 @@ pub(crate) async fn chat_send(
     state
         .bus
         .publish("Chat.Message", &json!({"dir":"out","msg": assist}));
-    Json(assist)
+    super::ok(assist).into_response()
 }
 
 #[derive(Deserialize)]
@@ -119,9 +119,9 @@ pub(crate) async fn chat_status(Query(q): Query<ChatStatusQs>) -> impl IntoRespo
             _ => ("synthetic", true, None::<String>),
         };
         let dt = t0.elapsed().as_millis() as u64;
-        return Json(json!({"backend": backend, "ok": ok, "latency_ms": dt, "error": err}));
+        return super::ok(json!({"backend": backend, "probe_ok": ok, "latency_ms": dt, "error": err})).into_response();
     }
-    Json(json!({"backend": backend, "ok": true}))
+    super::ok(json!({"backend": backend})).into_response()
 }
 
 async fn llama_reply(prompt: &str, temperature: Option<f64>) -> Option<String> {

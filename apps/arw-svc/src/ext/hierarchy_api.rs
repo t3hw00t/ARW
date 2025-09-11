@@ -1,6 +1,5 @@
 use arw_macros::{arw_gate, arw_admin};
 use axum::{extract::State, response::IntoResponse, Json};
-use serde_json::json;
 
 use crate::AppState;
 use arw_core::hierarchy as hier;

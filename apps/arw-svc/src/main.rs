@@ -908,6 +908,7 @@ async fn governor_profile_set_doc(Json(_req): Json<ext::governor_api::SetProfile
 async fn governor_hints_set_doc(Json(_req): Json<ext::governor_api::Hints>) -> impl IntoResponse { Json(json!({"ok": true})) }
 
 #[derive(serde::Deserialize, utoipa::ToSchema)]
+#[allow(dead_code)]
 struct RoleSetDoc { role: String }
 #[allow(dead_code)]
 #[utoipa::path(post, path = "/admin/hierarchy/role", tag = "Admin/Hierarchy", request_body = RoleSetDoc, responses(
@@ -942,6 +943,7 @@ async fn hierarchy_accept_doc(Json(_req): Json<arw_protocol::CoreAccept>) -> imp
 ))]
 async fn projects_create_doc(Json(_req): Json<ext::projects::ProjCreateReq>) -> impl IntoResponse { Json(json!({"ok": true})) }
 #[derive(serde::Deserialize, utoipa::ToSchema)]
+#[allow(dead_code)]
 struct NotesSetDoc { #[serde(default)] proj: String, #[serde(default)] body: String }
 #[allow(dead_code)]
 #[utoipa::path(

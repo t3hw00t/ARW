@@ -4,30 +4,59 @@ title: Quickstart
 
 # Quickstart
 
+!!! warning "Minimum Secure Setup"
+    - Set an admin token: `ARW_ADMIN_TOKEN=your-secret`
+    - Don’t enable debug in production: leave `ARW_DEBUG` unset
+    - Keep the service private: bind to `127.0.0.1` or put behind TLS proxy
+    - Send the header on admin calls: `X-ARW-Admin: your-secret`
+
 Prerequisites
 - Rust toolchain (`rustup`): https://rustup.rs
 
 Build and test
+
+=== "Windows"
 ```powershell
 scripts/build.ps1
 scripts/test.ps1
 ```
+
+=== "Linux / macOS"
 ```bash
-./scripts/build.sh
-./scripts/test.sh
+bash scripts/build.sh
+bash scripts/test.sh
 ```
 
 Run the service
+
+=== "Windows"
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
+```
+
+=== "Linux / macOS"
 ```bash
-# Default: http://127.0.0.1:8090
-target/release/arw-svc
+bash scripts/start.sh --wait-health
+```
+
+Verify
+```bash
+curl -sS http://127.0.0.1:8090/healthz
 ```
 
 Desktop launcher (optional)
+
+=== "All"
 - Build: `just tauri-launcher-build`
 - Run: `just tauri-launcher-run`
-- Linux build deps (WebKitGTK 4.1 + libsoup3): `just tauri-deps-linux` or use `nix develop`
 - Features: system tray (Start/Stop/Open), Events (SSE), Logs, Debug UI opener, prefs & autostart.
+
+=== "Linux build deps"
+```bash
+just tauri-deps-linux
+# or
+nix develop
+```
 
 Peek at what’s available
 - Health: `GET /healthz`
@@ -61,3 +90,4 @@ Portable mode
 Next steps
 - Read the Features page to understand the capabilities.
 - See Deployment to package and share a portable bundle.
+- Having issues? See Troubleshooting.

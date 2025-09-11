@@ -29,16 +29,18 @@ fn no_new_ad_hoc_error_json_in_ext_modules() {
         let entry = entry.unwrap();
         if !entry.file_type().is_file() { continue; }
         let p = entry.path();
-        // No allowlist; enforce uniform ProblemDetails everywhere
         let c = read(p);
-        // crude detection of StatusCode + ad-hoc error payload
-        let has_status = c.contains("StatusCode::BAD_REQUEST")
-            || c.contains("StatusCode::INTERNAL_SERVER_ERROR")
-            || c.contains("StatusCode::NOT_FOUND")
-            || c.contains("StatusCode::FORBIDDEN");
-        let has_ad_hoc_err = c.contains("\"error\"") || c.contains("\"reason\"");
-        if has_status && has_ad_hoc_err {
-            offenders.push(p.display().to_string());
+        let needle = "Json(json!({";
+        let mut idx = 0usize;
+        while let Some(pos) = c[idx..].find(needle) {
+            let start = idx + pos;
+            let end = (start + 512).min(c.len());
+            let window = &c[start..end];
+            if window.contains("\"error\"") || window.contains("\"reason\"") {
+                offenders.push(p.display().to_string());
+                break;
+            }
+            idx = start + needle.len();
         }
     }
     assert!(offenders.is_empty(), "New ad-hoc error-json detected in: {:?}", offenders);

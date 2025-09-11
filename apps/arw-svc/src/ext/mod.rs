@@ -2,7 +2,6 @@
 // ext module: split into submodules (ui, later more)
 
 use arw_macros::{arw_gate, arw_admin};
-use axum::http::StatusCode;
 use axum::{
     extract::{State},
     response::IntoResponse,

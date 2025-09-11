@@ -33,6 +33,7 @@ pub fn current_http_timeout_secs() -> u64 {
 }
 
 // Axum middleware version: apply timeout per request; returns a Response on timeout or error.
+#[allow(dead_code)]
 pub async fn dyn_timeout_mw(req: Request<axum::body::Body>, next: Next) -> Response {
     let secs = current_http_timeout_secs().max(1);
     let dur = Duration::from_secs(secs);

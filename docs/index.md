@@ -14,3 +14,9 @@ What you can expect
 Start with Quickstart to run the service, then explore the features and deployment notes. You can also build and run the Desktop Launcher for an integrated tray + windows UI. When you’re ready to dive deeper, the Developer section explains the workspace and CI.
 
 Tip: If you’re just trying ARW, the default paths are portable. You can switch between portable and system mode with a single environment variable.
+
+## Choose Your Path
+
+- Run Locally: Quickstart
+- Operate & Secure: Security Hardening, Deployment, Admin Endpoints
+- Contribute: Developer/Overview

@@ -4,12 +4,51 @@ theme:
   name: material
   features:
     - navigation.instant
+    - navigation.sections
     - content.code.copy
+    - content.tabs.link
 extra_css:
   - css/overrides.css
 docs_dir: docs
+markdown_extensions:
+  - admonition
+  - attr_list
+  - def_list
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.highlight
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
 nav:
   - Home: index.md
+  - User Guide:
+      - Quickstart: guide/quickstart.md
+      - Concepts: guide/concepts.md
+      - Desktop Launcher: guide/launcher.md
+      - Features: FEATURES.md
+      - Models Download: guide/models_download.md
+      - Chat Backends: guide/chat_backends.md
+      - Projects UI: guide/projects_ui.md
+      - Design System: guide/design_system.md
+      - Feedback Engine: guide/feedback_engine.md
+      - Troubleshooting: guide/troubleshooting.md
+  - Admin & Ops:
+      - Security Hardening: guide/security_hardening.md
+      - Deployment: DEPLOYMENT.md
+      - Admin Endpoints: guide/admin_endpoints.md
+      - Clustering: CLUSTERING.md
+  - Reference:
+      - API and Schema: API_AND_SCHEMA.md
+      - Hardware and Models: HARDWARE_AND_MODELS.md
+      - Structure: STRUCTURE.md
+      - Gating Keys: GATING_KEYS.md
+      - Memory and Training: MEMORY_AND_TRAINING.md
+      - Arrow Ingestion: arrow_ingestion.md
   - Developer:
       - Overview: developer/index.md
       - Status: developer/status.md
@@ -17,23 +56,10 @@ nav:
       - CI: developer/ci.md
       - Style: developer/style.md
       - Security: developer/SECURITY.md
-  - Docs:
-      - Quickstart: guide/quickstart.md
-      - Desktop Launcher: guide/launcher.md
+      - Windows Start Validation: developer/windows-start-validation.md
+  - About:
       - Roadmap: ROADMAP.md
-      - Structure: STRUCTURE.md
-      - Features: FEATURES.md
-      - Admin Endpoints: guide/admin_endpoints.md
-      - Security Hardening: guide/security_hardening.md
-      - API and Schema: API_AND_SCHEMA.md
-      - Chat Backends: guide/chat_backends.md
-      - Projects UI: guide/projects_ui.md
-      - Models Download: guide/models_download.md
-      - Design System: guide/design_system.md
-      - Feedback Engine: guide/feedback_engine.md
-      - Deployment: DEPLOYMENT.md
-      - Memory and Training: MEMORY_AND_TRAINING.md
+      - Interface Roadmap: INTERFACE_ROADMAP.md
+      - Policy: POLICY.md
       - Training Research: training_research.md
       - Wiki Structure: wiki_structure.md
-      - Hardware and Models: HARDWARE_AND_MODELS.md
-      - Arrow Ingestion: arrow_ingestion.md

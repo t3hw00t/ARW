@@ -1,0 +1,38 @@
+---
+title: Core Concepts
+---
+
+# Core Concepts
+
+This page orients you to ARW’s moving parts so the rest of the guide makes sense.
+
+Service
+- `arw-svc` is a local HTTP service with a small debug UI. It listens on `127.0.0.1:<port>` by default.
+
+Tools & Schemas
+- Capabilities are exposed as versioned tools with JSON Schemas for inputs/outputs/errors.
+- Tools surface via HTTP, events, and MCP. See: API and Schema.
+
+Event Bus
+- Lightweight in‑process bus publishes events (optionally journaling). SSE at `/events` for live streams and replays.
+
+Connectors, Connections, Links
+- Connectors are providers (HTTP/WS/MCP/local). Connections are configured instances. Links bind connections to services/routes.
+
+Gating & Policy
+- Sensitive routes are gated by a central orchestrator. Use `ARW_ADMIN_TOKEN` for admin paths and policy keys to shape ingress/egress.
+
+Profiles & Governor
+- Runtime profiles like performance/balanced/power‑saver adjust concurrency and resource hints. Change via `/governor/profile`.
+
+State & Portable Mode
+- State, cache, and logs live under derived directories. Set `ARW_PORTABLE=1` to keep everything next to the app folder.
+
+Desktop Launcher (Optional)
+- A Tauri app adds a tray, inspector windows (Events, Logs), and quick actions.
+
+Learn more
+- Quickstart: guide/quickstart.md
+- Admin Endpoints: guide/admin_endpoints.md
+- Security Hardening: guide/security_hardening.md
+- API and Schema: API_AND_SCHEMA.md
