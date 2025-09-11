@@ -34,6 +34,12 @@ test-watch:
 package:
   bash scripts/package.sh --no-build
 
+docker-build:
+  docker build -f apps/arw-svc/Dockerfile -t arw-svc:dev .
+
+docker-run:
+  docker run --rm -p 8090:8090 -e ARW_PORT=8090 arw-svc:dev
+
 # Docs
 docgen:
   bash scripts/docgen.sh

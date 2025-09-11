@@ -1,0 +1,18 @@
+# Ignore Git and VCS
+.git
+
+# Build artifacts
+target
+dist
+site
+
+# IDE and OS
+.DS_Store
+.idea
+.vscode
+
+# Local envs
+.arw
+.venv
+node_modules
+

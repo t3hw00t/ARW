@@ -140,7 +140,7 @@ Pull and run (amd64/arm64):
 ```bash
 docker run --rm -p 8090:8090 \
   -e ARW_PORT=8090 \
-  ghcr.io/${GITHUB_ORG_OR_USER}/arw-svc:latest
+  ghcr.io/t3hw00t/arw-svc:latest
 ```
 
 Build locally:
