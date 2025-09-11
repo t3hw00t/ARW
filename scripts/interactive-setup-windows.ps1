@@ -271,9 +271,9 @@ function Configure-Proxies {
     $f = Join-Path $envDir 'env.ps1'
     @(
       "# Proxies",
-      "$env:HTTP_PROXY = '$hp'",
-      "$env:HTTPS_PROXY = '$sp'",
-      "$env:NO_PROXY = '$np'"
+      "`$env:HTTP_PROXY = '$hp'",
+      "`$env:HTTPS_PROXY = '$sp'",
+      "`$env:NO_PROXY = '$np'"
     ) | Add-Content -Path $f -Encoding utf8
     Info ("Updated proxies in " + $f)
   }
@@ -293,11 +293,11 @@ function Save-Preferences {
   @(
     "# ARW env (project-local)",
     "# dot-source this file to apply preferences",
-    "$env:ARW_USE_NIX = '$($env:ARW_USE_NIX)'",
-    "$env:ARW_ALLOW_SYSTEM_PKGS = '$($env:ARW_ALLOW_SYSTEM_PKGS)'",
-    "$env:ARW_PORT = '$Port'",
-    "$env:ARW_DOCS_URL = '$DocsUrl'",
-    "$env:ARW_ADMIN_TOKEN = '$AdminToken'"
+    "`$env:ARW_USE_NIX = '$($env:ARW_USE_NIX)'",
+    "`$env:ARW_ALLOW_SYSTEM_PKGS = '$($env:ARW_ALLOW_SYSTEM_PKGS)'",
+    "`$env:ARW_PORT = '$Port'",
+    "`$env:ARW_DOCS_URL = '$DocsUrl'",
+    "`$env:ARW_ADMIN_TOKEN = '$AdminToken'"
   ) | Set-Content -Path $f -Encoding utf8
   Info "Saved preferences to $f"
 }
@@ -342,7 +342,7 @@ queue = "local"
   Info ("Wrote " + $cfgPath + ' and set ARW_CONFIG')
   if ($prof -eq '3') { Install-NatsLocal }
   Do-Build
-  $go = Read-Host 'Start service now? (Y/n)'; if (-not ($go -match '^[nN]')) { & (Join-Path $PSScriptRoot 'start.ps1') -Port $Port -Debug; Start-Process -FilePath ("http://127.0.0.1:" + $Port + "/spec") | Out-Null }
+  $go = Read-Host 'Start service now? (Y/n)'; if (-not ($go -match '^[nN]')) { & (Join-Path $PSScriptRoot 'start.ps1') -Port $Port -Debug -WaitHealth -WaitHealthTimeoutSecs 20; Start-Process -FilePath ("http://127.0.0.1:" + $Port + "/spec") | Out-Null }
   $sv = Read-Host 'Save preferences to .arw\env.ps1? (Y/n)'; if (-not ($sv -match '^[nN]')) { Save-Preferences }
 }
 

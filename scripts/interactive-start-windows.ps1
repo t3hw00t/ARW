@@ -80,6 +80,7 @@ function Start-ServiceOnly {
   if ($DocsUrl) { $svcArgs += @('-DocsUrl', $DocsUrl) }
   if ($AdminToken) { $svcArgs += @('-AdminToken', $AdminToken) }
   if ($UseDist) { $svcArgs += '-UseDist' }
+  $svcArgs += @('-WaitHealth','-WaitHealthTimeoutSecs', 20)
   & (Join-Path $PSScriptRoot 'start.ps1') @svcArgs
 }
 
@@ -97,6 +98,7 @@ function Start-TrayPlusService {
   if ($AdminToken) { $svcArgs += @('-AdminToken', $AdminToken) }
   if ($UseDist) { $svcArgs += '-UseDist' }
   if (-not (Security-Preflight)) { Warn 'Start cancelled'; return }
+  $svcArgs += @('-WaitHealth','-WaitHealthTimeoutSecs', 20)
   & (Join-Path $PSScriptRoot 'start.ps1') @svcArgs
   $tray = Join-Path $root 'target\release\arw-tray.exe'
   if (-not (Test-Path $tray)) {
@@ -317,10 +319,10 @@ function Save-Prefs-From-Start {
   @(
     "# ARW env (project-local)",
     "# dot-source this file to apply preferences",
-    "$env:ARW_PORT = '$Port'",
-    "$env:ARW_DOCS_URL = '$DocsUrl'",
-    "$env:ARW_ADMIN_TOKEN = '$AdminToken'",
-    "$env:ARW_CONFIG = '$CfgPath'"
+    "`$env:ARW_PORT = '$Port'",
+    "`$env:ARW_DOCS_URL = '$DocsUrl'",
+    "`$env:ARW_ADMIN_TOKEN = '$AdminToken'",
+    "`$env:ARW_CONFIG = '$CfgPath'"
   ) | Set-Content -Path $f -Encoding utf8
   Info ("Saved preferences to " + $f)
 }

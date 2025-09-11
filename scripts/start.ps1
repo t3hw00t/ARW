@@ -1,11 +1,15 @@
 #!powershell
+[CmdletBinding()]
 param(
   [int]$Port = 8090,
   [switch]$Debug,
   [string]$DocsUrl,
   [string]$AdminToken,
   [int]$TimeoutSecs = 20,
-  [switch]$UseDist
+  [switch]$UseDist,
+  [switch]$NoBuild,
+  [switch]$WaitHealth,
+  [int]$WaitHealthTimeoutSecs = 30
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -30,21 +34,40 @@ $tray = if ($UseDist) {
 } else { Join-Path (Join-Path $root 'target\release') $trayExe }
 
 if (-not $svc -or -not (Test-Path $svc)) {
+  if ($NoBuild) {
+    Write-Error "Service binary not found and -NoBuild specified. Build first or remove -NoBuild."
+    exit 1
+  }
   Write-Warning "Service binary not found ($svc). Building release..."
-  Push-Location $root
-  cargo build --release -p arw-svc
-  Pop-Location
+  try {
+    Push-Location $root
+    if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { throw "Rust 'cargo' not found in PATH. Install Rust from https://rustup.rs" }
+    cargo build --release -p arw-svc
+  } catch {
+    Write-Error ("Failed to build arw-svc: " + $_.Exception.Message)
+    Pop-Location
+    exit 1
+  } finally {
+    if ((Get-Location).Path -ne $root) { try { Pop-Location } catch {} }
+  }
   $svc = Join-Path (Join-Path $root 'target\release') $exe
 }
 
 if (-not $tray -or -not (Test-Path $tray)) {
-  Write-Warning "Tray binary not found ($tray). Attempting build..."
-  try {
-    Push-Location $root
-    cargo build --release -p arw-tray
-    Pop-Location
-  } catch {
-    Pop-Location
+  if (-not $NoBuild) {
+    Write-Warning "Tray binary not found ($tray). Attempting build..."
+    try {
+      Push-Location $root
+      if (Get-Command cargo -ErrorAction SilentlyContinue) {
+        cargo build --release -p arw-tray
+      } else {
+        Write-Warning "Rust 'cargo' not found; skipping tray build."
+      }
+    } catch {
+      Write-Warning "Tray build attempt failed: $($_.Exception.Message)"
+    } finally {
+      try { Pop-Location } catch {}
+    }
   }
   $tray = Join-Path (Join-Path $root 'target\release') $trayExe
 }
@@ -53,18 +76,42 @@ if (-not $tray -or -not (Test-Path $tray)) {
 $skipTray = $false
 if ($env:ARW_NO_TRAY -and $env:ARW_NO_TRAY -eq '1') { $skipTray = $true }
 
+function Ensure-ParentDir($path) {
+  try {
+    $dir = [System.IO.Path]::GetDirectoryName($path)
+    if ($dir -and $dir -ne '') { New-Item -ItemType Directory -Force $dir | Out-Null }
+  } catch {}
+}
+
+function Wait-For-Health($port, $timeoutSecs) {
+  $base = "http://127.0.0.1:$port"
+  $deadline = (Get-Date).AddSeconds([int]$timeoutSecs)
+  $ok = $false
+  $attempts = 0
+  while ((Get-Date) -lt $deadline) {
+    $attempts++
+    try {
+      $resp = Invoke-WebRequest -UseBasicParsing -TimeoutSec 5 -Uri ("$base/healthz")
+      if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) { $ok = $true; break }
+    } catch {}
+    Start-Sleep -Milliseconds 500
+  }
+  if ($ok) { Info ("Health OK after " + $attempts + " checks → $base/healthz") } else { Write-Warning ("Health not reachable within $timeoutSecs seconds → $base/healthz") }
+}
+
 if (-not $skipTray -and (Test-Path $tray)) {
   Info "Launching $svc on http://127.0.0.1:$Port"
   if ($env:ARW_LOG_FILE) {
-    try { New-Item -ItemType Directory -Force ([System.IO.Path]::GetDirectoryName($env:ARW_LOG_FILE)) | Out-Null } catch {}
-    $p = Start-Process -FilePath $svc -RedirectStandardOutput $env:ARW_LOG_FILE -RedirectStandardError $env:ARW_LOG_FILE -PassThru
+    Ensure-ParentDir $env:ARW_LOG_FILE
+    $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $env:ARW_LOG_FILE -RedirectStandardError $env:ARW_LOG_FILE -PassThru
   } else {
-    $p = Start-Process -FilePath $svc -PassThru
+    $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle Hidden -PassThru
   }
   if ($env:ARW_PID_FILE) {
-    try { New-Item -ItemType Directory -Force ([System.IO.Path]::GetDirectoryName($env:ARW_PID_FILE)) | Out-Null } catch {}
+    Ensure-ParentDir $env:ARW_PID_FILE
     try { $p.Id | Out-File -FilePath $env:ARW_PID_FILE -Encoding ascii -Force } catch {}
   }
+  if ($WaitHealth) { Wait-For-Health -port $Port -timeoutSecs $WaitHealthTimeoutSecs }
   Info "Launching tray $tray"
   & $tray
 } else {
@@ -72,13 +119,14 @@ if (-not $skipTray -and (Test-Path $tray)) {
   Info "Launching $svc on http://127.0.0.1:$Port $msg"
   if ($env:ARW_PID_FILE) {
     if ($env:ARW_LOG_FILE) {
-      try { New-Item -ItemType Directory -Force ([System.IO.Path]::GetDirectoryName($env:ARW_LOG_FILE)) | Out-Null } catch {}
-      $p = Start-Process -FilePath $svc -RedirectStandardOutput $env:ARW_LOG_FILE -RedirectStandardError $env:ARW_LOG_FILE -PassThru
+      Ensure-ParentDir $env:ARW_LOG_FILE
+      $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $env:ARW_LOG_FILE -RedirectStandardError $env:ARW_LOG_FILE -PassThru
     } else {
-      $p = Start-Process -FilePath $svc -PassThru
+      $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle Hidden -PassThru
     }
-    try { New-Item -ItemType Directory -Force ([System.IO.Path]::GetDirectoryName($env:ARW_PID_FILE)) | Out-Null } catch {}
+    Ensure-ParentDir $env:ARW_PID_FILE
     try { $p.Id | Out-File -FilePath $env:ARW_PID_FILE -Encoding ascii -Force } catch {}
+    if ($WaitHealth) { Wait-For-Health -port $Port -timeoutSecs $WaitHealthTimeoutSecs }
   } else {
     if ($env:ARW_LOG_FILE) {
       & $svc *> $env:ARW_LOG_FILE
