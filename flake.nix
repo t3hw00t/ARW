@@ -23,6 +23,8 @@
             rust-bin.stable.latest.rustfmt
             rust-bin.stable.latest.clippy
             cargo-nextest
+            cargo-audit
+            cargo-deny
             python3Packages.mkdocs
             python3Packages.mkdocs-material
             python3Packages.mkdocs-git-revision-date-localized-plugin

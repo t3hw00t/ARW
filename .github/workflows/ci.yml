@@ -42,6 +42,10 @@ jobs:
         run: |
           cd Agent_Hub
           cargo build --workspace --locked
+      - name: Build (arw-svc with grpc feature)
+        run: |
+          cd Agent_Hub
+          cargo build -p arw-svc --features grpc --locked
 
       - name: Test
         run: |
@@ -95,6 +99,33 @@ jobs:
         run: |
           cd Agent_Hub
           cargo msrv --output-format minimal verify
+
+  windows-scripts-tests:
+    name: windows-scripts-tests (windows)
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Run Pester tests
+        shell: pwsh
+        run: |
+          Set-Location Agent_Hub
+          ./scripts/tests/Run-WindowsScriptTests.ps1 -VerboseOutput:$false
+
+  security-audit:
+    name: security-audit (cargo-audit)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+      - name: Audit
+        run: |
+          cd Agent_Hub
+          cargo audit --db-urls https://github.com/RustSec/advisory-db
 
   docs:
     name: docs (ubuntu)
