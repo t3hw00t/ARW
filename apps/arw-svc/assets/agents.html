@@ -1,0 +1,27 @@
+<!doctype html><meta charset="utf-8"><title>ARW Agents</title>
+<style>
+  :root{--line:#e5e7eb;--ink:#111827;--muted:#6b7280}
+  body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;color:var(--ink)}
+  .box{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fafaf9;max-width:900px}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+  button,select{font:inherit;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  pre{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:8px;overflow:auto}
+</style>
+<h1>Agents</h1>
+<div class='box'>
+  <div class='row'>
+    <label class='key'>role</label>
+    <select id='roleSel'>
+      <option>root</option><option>regional</option><option selected>edge</option><option>connector</option><option>observer</option>
+    </select>
+    <button onclick='roleApply()'>Apply</button>
+    <button onclick='loadState()'>Refresh</button>
+  </div>
+  <pre id='state'>{}</pre>
+</div>
+<script>
+const base=location.origin;
+async function roleApply(){ const r=document.getElementById('roleSel').value; await fetch(base+'/hierarchy/role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role:r})}); await loadState(); }
+async function loadState(){ const r=await fetch(base+'/hierarchy/state'); const t=await r.text(); try{ document.getElementById('state').textContent=JSON.stringify(JSON.parse(t),null,2);}catch{ document.getElementById('state').textContent=t; } }
+document.addEventListener('DOMContentLoaded', loadState);
+</script>

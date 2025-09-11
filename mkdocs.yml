@@ -5,6 +5,8 @@ theme:
   features:
     - navigation.instant
     - content.code.copy
+extra_css:
+  - css/overrides.css
 docs_dir: docs
 nav:
   - Home: index.md
@@ -19,7 +21,12 @@ nav:
       - Roadmap: ROADMAP.md
       - Structure: STRUCTURE.md
       - Features: FEATURES.md
+      - Security Hardening: guide/security_hardening.md
       - API and Schema: API_AND_SCHEMA.md
+      - Chat Backends: guide/chat_backends.md
+      - Projects UI: guide/projects_ui.md
+      - Models Download: guide/models_download.md
+      - Design System: guide/design_system.md
       - Feedback Engine: guide/feedback_engine.md
       - Deployment: DEPLOYMENT.md
       - Memory and Training: MEMORY_AND_TRAINING.md

@@ -55,11 +55,35 @@ if ($env:ARW_NO_TRAY -and $env:ARW_NO_TRAY -eq '1') { $skipTray = $true }
 
 if (-not $skipTray -and (Test-Path $tray)) {
   Info "Launching $svc on http://127.0.0.1:$Port"
-  Start-Process -FilePath $svc | Out-Null
+  if ($env:ARW_LOG_FILE) {
+    try { New-Item -ItemType Directory -Force ([System.IO.Path]::GetDirectoryName($env:ARW_LOG_FILE)) | Out-Null } catch {}
+    $p = Start-Process -FilePath $svc -RedirectStandardOutput $env:ARW_LOG_FILE -RedirectStandardError $env:ARW_LOG_FILE -PassThru
+  } else {
+    $p = Start-Process -FilePath $svc -PassThru
+  }
+  if ($env:ARW_PID_FILE) {
+    try { New-Item -ItemType Directory -Force ([System.IO.Path]::GetDirectoryName($env:ARW_PID_FILE)) | Out-Null } catch {}
+    try { $p.Id | Out-File -FilePath $env:ARW_PID_FILE -Encoding ascii -Force } catch {}
+  }
   Info "Launching tray $tray"
   & $tray
 } else {
   $msg = if ($skipTray) { '(ARW_NO_TRAY=1)' } else { '(tray not found)' }
   Info "Launching $svc on http://127.0.0.1:$Port $msg"
-  & $svc
+  if ($env:ARW_PID_FILE) {
+    if ($env:ARW_LOG_FILE) {
+      try { New-Item -ItemType Directory -Force ([System.IO.Path]::GetDirectoryName($env:ARW_LOG_FILE)) | Out-Null } catch {}
+      $p = Start-Process -FilePath $svc -RedirectStandardOutput $env:ARW_LOG_FILE -RedirectStandardError $env:ARW_LOG_FILE -PassThru
+    } else {
+      $p = Start-Process -FilePath $svc -PassThru
+    }
+    try { New-Item -ItemType Directory -Force ([System.IO.Path]::GetDirectoryName($env:ARW_PID_FILE)) | Out-Null } catch {}
+    try { $p.Id | Out-File -FilePath $env:ARW_PID_FILE -Encoding ascii -Force } catch {}
+  } else {
+    if ($env:ARW_LOG_FILE) {
+      & $svc *> $env:ARW_LOG_FILE
+    } else {
+      & $svc
+    }
+  }
 }

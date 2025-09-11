@@ -3,30 +3,33 @@
 
 use axum::http::StatusCode;
 use axum::{
-    extract::State,
+    extract::{Query, State},
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
 use futures_util::StreamExt;
+use arw_macros::arw_gate;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use sha2::Digest;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tokio::fs as afs;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::RwLock;
 
 use crate::AppState;
+use arw_core::gating;
 use arw_core::hierarchy as hier;
 use arw_core::orchestrator::Task as OrchTask;
-use arw_core::gating;
 pub mod chat_api;
 pub mod feedback_api;
 pub mod feedback_engine;
 pub mod feedback_engine_api;
 pub mod governor_api;
+pub mod hierarchy_api;
 pub mod memory;
 pub mod memory_api;
 pub mod models_api;
@@ -34,7 +37,6 @@ pub mod policy;
 pub mod stats;
 pub mod tools_api;
 pub mod ui;
-pub mod hierarchy_api;
 // internal helpers split into modules
 pub mod io;
 pub mod paths;
@@ -223,6 +225,14 @@ pub fn extra_routes() -> Router<AppState> {
             "/feedback/policy",
             get(feedback_engine_api::feedback_policy_get),
         )
+        .route(
+            "/feedback/versions",
+            get(feedback_engine_api::feedback_versions),
+        )
+        .route(
+            "/feedback/rollback",
+            post(feedback_engine_api::feedback_rollback),
+        )
         // stats
         .route("/introspect/stats", get(stats::stats_get))
         // memory
@@ -242,6 +252,10 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/models/default", get(models_api::models_default_get))
         .route("/models/default", post(models_api::models_default_set))
         .route("/models/download", post(models_api::models_download))
+        .route(
+            "/models/download/cancel",
+            post(models_api::models_download_cancel),
+        )
         // tools
         .route("/tools", get(tools_api::list_tools))
         .route("/tools/run", post(tools_api::run_tool_endpoint))
@@ -254,11 +268,21 @@ pub fn extra_routes() -> Router<AppState> {
         // chat
         .route("/chat", get(chat_api::chat_get))
         .route("/chat/send", post(chat_api::chat_send))
-        .route("/chat/clear", post(chat_api::chat_clear));
+        .route("/chat/clear", post(chat_api::chat_clear))
+        .route("/chat/status", get(chat_status))
+        .route("/projects/list", get(projects_list))
+        .route("/projects/create", post(projects_create))
+        .route("/projects/tree", get(projects_tree))
+        .route("/projects/notes", get(projects_notes_get))
+        .route("/projects/notes", post(projects_notes_set));
 
     // debug UI gated via ARW_DEBUG=1
     if std::env::var("ARW_DEBUG").ok().as_deref() == Some("1") {
-        r = r.route("/debug", get(ui::debug_ui));
+        r = r
+            .route("/debug", get(ui::debug_ui))
+            .route("/ui/models", get(ui::models_ui))
+            .route("/ui/agents", get(ui::agents_ui))
+            .route("/ui/projects", get(ui::projects_ui));
     }
     r
 }
@@ -294,12 +318,13 @@ struct EnqueueReq {
     idem_key: Option<String>,
 }
 
+#[arw_gate("queue:enqueue")]
 async fn tasks_enqueue(
     State(state): State<AppState>,
     Json(req): Json<EnqueueReq>,
 ) -> impl IntoResponse {
-    // Gate by task kind and generic queue admission
-    if !gating::allowed(&format!("queue:enqueue")) || !gating::allowed(&format!("task:{}", req.kind)) {
+    // Gate by task kind (in addition to macro-level queue:enqueue gate)
+    if !gating::allowed(&format!("task:{}", req.kind)) {
         return (
             StatusCode::FORBIDDEN,
             Json(json!({"ok": false, "error": "gated by policy"})),
@@ -349,7 +374,9 @@ pub fn start_local_task_worker(state: AppState) {
                     let dt = t0.elapsed().as_millis() as u64;
                     // Egress gating for task output (policy-level)
                     let egress_key = format!("io:egress:task.{}", t.kind);
-                    if gating::allowed("events:Task.Completed") && arw_core::gating::allowed(&egress_key) {
+                    if gating::allowed("events:Task.Completed")
+                        && arw_core::gating::allowed(&egress_key)
+                    {
                         bus.publish(
                             "Task.Completed",
                             &json!({"id": t.id, "ok": ok, "latency_ms": dt, "error": err, "output": out}),
@@ -414,18 +441,20 @@ async fn about() -> impl IntoResponse {
     }))
 }
 
+#[arw_macros::arw_gate("hierarchy:state:get")]
 async fn hierarchy_state(State(state): State<AppState>) -> impl IntoResponse {
     let st = hier::get_state();
     state
         .bus
         .publish("Hierarchy.State", &serde_json::json!({"epoch": st.epoch}));
-    Json(st)
+    Json(st).into_response()
 }
 
 #[derive(Deserialize)]
 struct RoleSet {
     role: String,
 }
+#[arw_gate("hierarchy:role:set")]
 async fn hierarchy_role_set(
     State(state): State<AppState>,
     Json(req): Json<RoleSet>,
@@ -451,7 +480,7 @@ async fn hierarchy_role_set(
         "Hierarchy.RoleChanged",
         &serde_json::json!({"role": req.role}),
     );
-    Json(json!({"ok": true}))
+    Json(json!({"ok": true})).into_response()
 }
 
 // moved to memory module
@@ -638,22 +667,39 @@ pub(crate) struct DownloadReq {
     url: String,
     #[serde(default)]
     provider: Option<String>,
+    #[serde(default)]
+    sha256: Option<String>,
 }
 async fn models_download(
     State(state): State<AppState>,
     Json(req): Json<DownloadReq>,
 ) -> impl IntoResponse {
     // ensure model exists with status
+    let mut already_in_progress = false;
     {
         let mut v = models().write().await;
         if let Some(m) = v
             .iter_mut()
             .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&req.id))
         {
-            *m = json!({"id": req.id, "provider": req.provider.clone().unwrap_or("local".into()), "status":"downloading"});
+            let prev = m
+                .get("status")
+                .and_then(|s| s.as_str())
+                .unwrap_or("");
+            if prev.eq_ignore_ascii_case("downloading") {
+                already_in_progress = true;
+            } else {
+                *m = json!({"id": req.id, "provider": req.provider.clone().unwrap_or("local".into()), "status":"downloading"});
+            }
         } else {
             v.push(json!({"id": req.id, "provider": req.provider.clone().unwrap_or("local".into()), "status":"downloading"}));
         }
+    }
+    if already_in_progress {
+        state
+            .bus
+            .publish("Models.DownloadProgress", &json!({"id": req.id, "status":"already-in-progress"}));
+        return Json(json!({"ok": true})).into_response();
     }
     // Validate URL scheme (accept http/https only)
     if !(req.url.starts_with("http://") || req.url.starts_with("https://")) {
@@ -663,11 +709,14 @@ async fn models_download(
         )
             .into_response();
     }
-    state.bus.publish("Models.Download", &json!({"id": req.id}));
+    state
+        .bus
+        .publish("Models.Download", &json!({"id": req.id, "url": req.url}));
     io::audit_event("models.download", &json!({"id": req.id})).await;
     let id = req.id.clone();
     let url = req.url.clone();
     let provider = req.provider.clone().unwrap_or("local".into());
+    let expect_sha = req.sha256.clone().map(|s| s.to_lowercase());
     let sp = state.clone();
     tokio::spawn(async move {
         // sanitize filename and compute target paths
@@ -688,77 +737,159 @@ async fn models_download(
             .timeout(std::time::Duration::from_secs(300))
             .build()
             .unwrap_or_else(|_| reqwest::Client::new());
-        match client.get(&url).send().await {
+        // Try resuming if a partial exists
+        let mut resume_from: u64 = 0;
+        if let Ok(meta) = afs::metadata(&tmp).await {
+            resume_from = meta.len();
+        }
+        let mut reqb = client.get(&url);
+        if resume_from > 0 {
+            reqb = reqb.header(reqwest::header::RANGE, format!("bytes={}-", resume_from));
+        }
+        match reqb.send().await {
             Ok(resp) => {
-                let total = resp.content_length().unwrap_or(0);
-                match afs::File::create(&tmp).await {
-                    Ok(mut file) => {
-                        let mut downloaded: u64 = 0;
-                        let mut stream = resp.bytes_stream();
-                        while let Some(chunk) = stream.next().await {
-                            match chunk {
-                                Ok(bytes) => {
-                                    if let Err(e) = file.write_all(&bytes).await {
-                                        sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": format!("write failed: {}", e)}));
-                                        return;
-                                    }
-                                    downloaded += bytes.len() as u64;
-                                    if total > 0 {
-                                        let pct = ((downloaded * 100) / total).min(100);
-                                        sp.bus.publish(
-                                            "Models.DownloadProgress",
-                                            &json!({"id": id, "progress": pct}),
-                                        );
-                                    }
-                                }
-                                Err(e) => {
-                                    sp.bus.publish(
-                                        "Models.DownloadProgress",
-                                        &json!({"id": id, "error": format!("read failed: {}", e)}),
-                                    );
-                                    return;
-                                }
-                            }
-                        }
-                        // flush and rename atomically into place
-                        if let Err(e) = file.flush().await {
-                            sp.bus.publish(
-                                "Models.DownloadProgress",
-                                &json!({"id": id, "error": format!("flush failed: {}", e)}),
-                            );
-                            return;
-                        }
-                        if let Err(e) = afs::rename(&tmp, &target).await {
-                            sp.bus.publish(
-                                "Models.DownloadProgress",
-                                &json!({"id": id, "error": format!("finalize failed: {}", e)}),
-                            );
-                            return;
-                        }
-                        {
-                            let mut v = models().write().await;
-                            if let Some(m) = v
-                                .iter_mut()
-                                .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id))
-                            {
-                                *m = json!({"id": id, "provider": provider, "status":"available", "path": target.to_string_lossy()});
-                            }
-                        }
-                        let _ = io::save_json_file_async(
-                            &paths::models_path(),
-                            &Value::Array(models().read().await.clone()),
-                        )
-                        .await;
-                        sp.bus
-                            .publish("Models.Changed", &json!({"op":"downloaded","id": id}));
-                    }
-                    Err(e) => {
+                let total_rem = resp.content_length().unwrap_or(0);
+                let status = resp.status();
+                // If server honored Range, recalc overall size
+                let total_all =
+                    if resume_from > 0 && status == axum::http::StatusCode::PARTIAL_CONTENT {
                         sp.bus.publish(
                             "Models.DownloadProgress",
-                            &json!({"id": id, "error": format!("create failed: {}", e)}),
+                            &json!({"id": id, "status":"resumed", "offset": resume_from}),
                         );
+                        resume_from + total_rem
+                    } else {
+                        if resume_from > 0 {
+                            // Server ignored Range; restart from scratch
+                            resume_from = 0;
+                            let _ = afs::remove_file(&tmp).await;
+                        }
+                        total_rem
+                    };
+                // Open partial (append) or fresh file
+                let mut file = if resume_from > 0 {
+                    match afs::OpenOptions::new().append(true).open(&tmp).await {
+                        Ok(f) => f,
+                        Err(e) => {
+                            sp.bus.publish(
+                                "Models.DownloadProgress",
+                                &json!({"id": id, "error": format!("open failed: {}", e)}),
+                            );
+                            return;
+                        }
+                    }
+                } else {
+                    match afs::File::create(&tmp).await {
+                        Ok(f) => f,
+                        Err(e) => {
+                            sp.bus.publish(
+                                "Models.DownloadProgress",
+                                &json!({"id": id, "error": format!("create failed: {}", e)}),
+                            );
+                            return;
+                        }
+                    }
+                };
+                // Stream body
+                let mut downloaded: u64 = 0;
+                let mut stream = resp.bytes_stream();
+                while let Some(chunk) = stream.next().await {
+                    match chunk {
+                        Ok(bytes) => {
+                            if is_cancelled(&id).await {
+                                let _ = afs::remove_file(&tmp).await;
+                                sp.bus.publish(
+                                    "Models.DownloadProgress",
+                                    &json!({"id": id, "status":"canceled"}),
+                                );
+                                clear_cancel(&id).await;
+                                return;
+                            }
+                            if let Err(e) = file.write_all(&bytes).await {
+                                sp.bus.publish(
+                                    "Models.DownloadProgress",
+                                    &json!({"id": id, "error": format!("write failed: {}", e)}),
+                                );
+                                return;
+                            }
+                            downloaded += bytes.len() as u64;
+                            if total_all > 0 {
+                                let pct = (((resume_from + downloaded) * 100) / total_all).min(100);
+                                sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "progress": pct, "downloaded": resume_from + downloaded, "total": total_all}));
+                            }
+                        }
+                        Err(e) => {
+                            sp.bus.publish(
+                                "Models.DownloadProgress",
+                                &json!({"id": id, "error": format!("read failed: {}", e)}),
+                            );
+                            return;
+                        }
                     }
                 }
+                // flush and rename atomically into place
+                if let Err(e) = file.flush().await {
+                    sp.bus.publish(
+                        "Models.DownloadProgress",
+                        &json!({"id": id, "error": format!("flush failed: {}", e)}),
+                    );
+                    return;
+                }
+                if let Err(e) = afs::rename(&tmp, &target).await {
+                    sp.bus.publish(
+                        "Models.DownloadProgress",
+                        &json!({"id": id, "error": format!("finalize failed: {}", e)}),
+                    );
+                    return;
+                }
+                // checksum verification (optional)
+                if let Some(exp) = expect_sha {
+                    // Compute full-file hash to support resume
+                    let mut f = match afs::File::open(&target).await {
+                        Ok(f) => f,
+                        Err(_) => {
+                            return;
+                        }
+                    };
+                    let mut h = sha2::Sha256::new();
+                    let mut buf = vec![0u8; 1024 * 1024];
+                    loop {
+                        match f.read(&mut buf).await {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                use sha2::Digest;
+                                h.update(&buf[..n]);
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                    let actual = format!("{:x}", h.finalize());
+                    if actual != exp {
+                        let _ = afs::remove_file(&target).await;
+                        sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": "checksum mismatch", "expected": exp, "actual": actual}));
+                        return;
+                    }
+                }
+                sp.bus.publish(
+                    "Models.DownloadProgress",
+                    &json!({"id": id, "status":"complete", "file": safe_name, "provider": provider}),
+                );
+                {
+                    let mut v = models().write().await;
+                    if let Some(m) = v
+                        .iter_mut()
+                        .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id))
+                    {
+                        *m = json!({"id": id, "provider": provider, "status":"available", "path": target.to_string_lossy()});
+                    }
+                }
+                let _ = io::save_json_file_async(
+                    &paths::models_path(),
+                    &Value::Array(models().read().await.clone()),
+                )
+                .await;
+                sp.bus
+                    .publish("Models.Changed", &json!({"op":"downloaded","id": id}));
             }
             Err(e) => {
                 sp.bus.publish(
@@ -769,6 +900,38 @@ async fn models_download(
         }
     });
     Json(json!({"ok": true})).into_response()
+}
+
+// ----- download cancel helpers -----
+use std::collections::HashSet;
+static DL_CANCEL: OnceLock<RwLock<HashSet<String>>> = OnceLock::new();
+fn cancel_cell() -> &'static RwLock<HashSet<String>> {
+    DL_CANCEL.get_or_init(|| RwLock::new(HashSet::new()))
+}
+async fn is_cancelled(id: &str) -> bool {
+    cancel_cell().read().await.contains(id)
+}
+async fn clear_cancel(id: &str) {
+    cancel_cell().write().await.remove(id);
+}
+async fn set_cancel(id: &str) {
+    cancel_cell().write().await.insert(id.to_string());
+}
+
+#[derive(Deserialize)]
+pub(crate) struct CancelReq {
+    id: String,
+}
+async fn models_download_cancel(
+    State(state): State<AppState>,
+    Json(req): Json<CancelReq>,
+) -> impl IntoResponse {
+    set_cancel(&req.id).await;
+    state.bus.publish(
+        "Models.DownloadProgress",
+        &json!({"id": req.id, "status":"cancel-requested"}),
+    );
+    Json(json!({"ok": true}))
 }
 
 // ---- Tools ----
@@ -814,6 +977,8 @@ pub(crate) struct ChatSendReq {
     message: String,
     #[serde(default)]
     model: Option<String>,
+    #[serde(default)]
+    temperature: Option<f64>,
 }
 
 fn synth_reply(msg: &str, model: &str) -> String {
@@ -1115,8 +1280,19 @@ async fn chat_send(
 ) -> impl IntoResponse {
     let model = req.model.clone().unwrap_or_else(|| "echo".to_string());
     let user = json!({"role":"user","content": req.message});
-    let reply_txt = synth_reply(&req.message, &model);
-    let assist = json!({"role":"assistant","content": reply_txt, "model": model});
+    let reply_txt = if let Some(r) = llama_reply(&req.message, req.temperature).await {
+        r
+    } else if let Some(r) = openai_reply(&req.message, req.temperature).await {
+        r
+    } else {
+        synth_reply(&req.message, &model)
+    };
+    let mut assist = json!({"role":"assistant","content": reply_txt, "model": model});
+    if let Some(t) = req.temperature {
+        if let Some(obj) = assist.as_object_mut() {
+            obj.insert("temperature".into(), json!(t));
+        }
+    }
     {
         let mut log = chat_log().write().await;
         log.push(user.clone());
@@ -1132,6 +1308,355 @@ async fn chat_send(
         .bus
         .publish("Chat.Message", &json!({"dir":"out","msg": assist}));
     Json(assist)
+}
+
+#[derive(Deserialize)]
+struct ChatStatusQs {
+    #[serde(default)]
+    probe: Option<bool>,
+}
+async fn chat_status(Query(q): Query<ChatStatusQs>) -> impl IntoResponse {
+    let backend = if std::env::var("ARW_LLAMA_URL")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .is_some()
+    {
+        "llama"
+    } else if std::env::var("ARW_OPENAI_API_KEY")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .is_some()
+    {
+        "openai"
+    } else {
+        "synthetic"
+    };
+    if q.probe.unwrap_or(false) {
+        let t0 = std::time::Instant::now();
+        let (ok, err) = match backend {
+            "llama" => {
+                let base = std::env::var("ARW_LLAMA_URL").unwrap_or_default();
+                let url = format!("{}/completion", base.trim_end_matches('/'));
+                let client = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(5))
+                    .build();
+                match client {
+                    Ok(c) => {
+                        let body = json!({"prompt":"ping","n_predict":1});
+                        match c.post(url).json(&body).send().await {
+                            Ok(r) => (r.status().is_success(), None),
+                            Err(e) => (false, Some(e.to_string())),
+                        }
+                    }
+                    Err(e) => (false, Some(e.to_string())),
+                }
+            }
+            "openai" => {
+                let base = std::env::var("ARW_OPENAI_BASE_URL")
+                    .unwrap_or_else(|_| "https://api.openai.com".to_string());
+                let key = std::env::var("ARW_OPENAI_API_KEY").unwrap_or_default();
+                let model =
+                    std::env::var("ARW_OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
+                let url = format!("{}/v1/chat/completions", base.trim_end_matches('/'));
+                let client = reqwest::Client::builder()
+                    .timeout(std::time::Duration::from_secs(5))
+                    .build();
+                match client {
+                    Ok(c) => {
+                        let body = json!({"model": model, "messages": [{"role":"user","content":"ping"}], "max_tokens":1});
+                        match c.post(url).bearer_auth(key).json(&body).send().await {
+                            Ok(r) => (r.status().is_success(), None),
+                            Err(e) => (false, Some(e.to_string())),
+                        }
+                    }
+                    Err(e) => (false, Some(e.to_string())),
+                }
+            }
+            _ => (true, None),
+        };
+        let dt = t0.elapsed().as_millis() as u64;
+        return Json(json!({"backend": backend, "ok": ok, "latency_ms": dt, "error": err}));
+    }
+    Json(json!({"backend": backend, "ok": true}))
+}
+
+// ---------- Projects ----------
+#[derive(Deserialize)]
+struct ProjCreateReq {
+    name: String,
+}
+
+async fn projects_list() -> impl IntoResponse {
+    let mut out: Vec<String> = Vec::new();
+    let root = paths::projects_dir();
+    if let Ok(mut rd) = afs::read_dir(&root).await {
+        while let Ok(Some(ent)) = rd.next_entry().await {
+            if let Ok(mt) = ent.file_type().await {
+                if mt.is_dir() {
+                    if let Some(s) = ent.file_name().to_str() {
+                        out.push(s.to_string());
+                    }
+                }
+            }
+        }
+        out.sort();
+    }
+    Json(json!({"items": out}))
+}
+
+async fn projects_create(
+    State(state): State<AppState>,
+    Json(req): Json<ProjCreateReq>,
+) -> impl IntoResponse {
+    let Some(safe) = paths::sanitize_project_name(&req.name) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error":"invalid project name"})),
+        )
+            .into_response();
+    };
+    let root = paths::projects_dir();
+    let dir = root.join(&safe);
+    if let Err(e) = afs::create_dir_all(&dir).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": e.to_string()})),
+        )
+            .into_response();
+    }
+    // Create a default NOTES.md if missing
+    let notes = dir.join("NOTES.md");
+    if afs::metadata(&notes).await.is_err() {
+        let ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
+        let body = format!("# {}\n\nCreated: {}\n\n", safe, ts);
+        let _ = io::save_bytes_atomic(&notes, body.as_bytes()).await;
+    }
+    // Emit event for orchestration/agents to react to project lifecycle
+    state
+        .bus
+        .publish("Projects.Created", &json!({"name": safe.clone()}));
+    Json(json!({"ok": true, "name": safe})).into_response()
+}
+
+#[derive(Deserialize)]
+struct TreeQs {
+    proj: Option<String>,
+    path: Option<String>,
+}
+async fn projects_tree(Query(q): Query<TreeQs>) -> impl IntoResponse {
+    let Some(proj) = q.proj.as_deref() else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "missing proj"})),
+        )
+            .into_response();
+    };
+    let Some(root) = paths::project_root(proj) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "invalid proj"})),
+        )
+            .into_response();
+    };
+    let rel = q.path.unwrap_or_default();
+    // Only allow ascii safe rel components and no leading dots
+    let rel_path = std::path::Path::new(&rel);
+    if rel_path.components().any(|c| {
+        matches!(
+            c,
+            std::path::Component::ParentDir | std::path::Component::RootDir
+        )
+    }) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "invalid path"})),
+        )
+            .into_response();
+    }
+    let abs = root.join(rel_path);
+    // Ensure path exists and is a directory; if file, list parent
+    let target = match afs::metadata(&abs).await {
+        Ok(m) if m.is_dir() => abs.clone(),
+        Ok(_) => abs.parent().unwrap_or(&root).to_path_buf(),
+        Err(_) => abs.clone(),
+    };
+    let mut items = Vec::new();
+    if let Ok(mut rd) = afs::read_dir(&target).await {
+        while let Ok(Some(ent)) = rd.next_entry().await {
+            let name = ent
+                .file_name()
+                .to_str()
+                .map(|s| s.to_string())
+                .unwrap_or_default();
+            if name.starts_with('.') {
+                continue; // hide dotfiles
+            }
+            let ft = ent.file_type().await.ok();
+            let is_dir = ft.as_ref().map(|t| t.is_dir()).unwrap_or(false);
+            let rel_next = if let Ok(p) = ent.path().strip_prefix(&root) {
+                p.to_string_lossy().replace('\\', "/")
+            } else {
+                name.clone()
+            };
+            items.push(json!({"name": name, "dir": is_dir, "rel": rel_next}));
+        }
+        // Folders first, then files; alpha within groups
+        items.sort_by(|a, b| {
+            let ad = a.get("dir").and_then(|v| v.as_bool()).unwrap_or(false);
+            let bd = b.get("dir").and_then(|v| v.as_bool()).unwrap_or(false);
+            match (ad, bd) {
+                (true, false) => std::cmp::Ordering::Less,
+                (false, true) => std::cmp::Ordering::Greater,
+                _ => a
+                    .get("name")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .cmp(b.get("name").and_then(|v| v.as_str()).unwrap_or("")),
+            }
+        });
+    }
+    Json(json!({"items": items})).into_response()
+}
+
+#[derive(Deserialize)]
+struct NotesQs {
+    proj: String,
+}
+async fn projects_notes_get(Query(q): Query<NotesQs>) -> impl IntoResponse {
+    if let Some(p) = paths::project_notes_path(&q.proj) {
+        if let Ok(bytes) = afs::read(&p).await {
+            if let Ok(s) = String::from_utf8(bytes) {
+                return s;
+            }
+        }
+    }
+    String::new()
+}
+
+async fn projects_notes_set(
+    State(state): State<AppState>,
+    Query(q): Query<NotesQs>,
+    body: axum::body::Bytes,
+) -> impl IntoResponse {
+    let Some(p) = paths::project_notes_path(&q.proj) else {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({"ok": false, "error": "invalid proj"})),
+        )
+            .into_response();
+    };
+    if let Some(parent) = p.parent() {
+        let _ = afs::create_dir_all(parent).await;
+    }
+    if let Err(e) = io::save_bytes_atomic(&p, &body).await {
+        return (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({"ok": false, "error": e.to_string()})),
+        )
+            .into_response();
+    }
+    state
+        .bus
+        .publish("Projects.NotesSaved", &json!({"name": q.proj}));
+    Json(json!({"ok": true})).into_response()
+}
+
+async fn llama_reply(prompt: &str, temperature: Option<f64>) -> Option<String> {
+    let base = std::env::var("ARW_LLAMA_URL").ok()?; // e.g., http://127.0.0.1:8080
+    if base.trim().is_empty() {
+        return None;
+    }
+    let url = format!("{}/completion", base.trim_end_matches('/'));
+    let timeout_s: u64 = std::env::var("ARW_HTTP_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_s))
+        .build()
+        .ok()?;
+    let mut body = serde_json::json!({
+        "prompt": prompt,
+        "n_predict": 128
+    });
+    if let Some(t) = temperature {
+        if let Some(o) = body.as_object_mut() {
+            o.insert("temperature".into(), json!(t));
+        }
+    }
+    match client.post(url).json(&body).send().await {
+        Ok(resp) => {
+            if !resp.status().is_success() {
+                return None;
+            }
+            match resp.json::<serde_json::Value>().await {
+                Ok(v) => {
+                    // Try llama.cpp server shape
+                    if let Some(s) = v.get("content").and_then(|x| x.as_str()) {
+                        return Some(s.to_string());
+                    }
+                    // Fallback: OpenAI-like
+                    if let Some(s) = v
+                        .get("choices")
+                        .and_then(|c| c.get(0))
+                        .and_then(|c0| c0.get("message"))
+                        .and_then(|m| m.get("content"))
+                        .and_then(|x| x.as_str())
+                    {
+                        return Some(s.to_string());
+                    }
+                    None
+                }
+                Err(_) => None,
+            }
+        }
+        Err(_) => None,
+    }
+}
+
+async fn openai_reply(prompt: &str, temperature: Option<f64>) -> Option<String> {
+    let base = std::env::var("ARW_OPENAI_BASE_URL")
+        .unwrap_or_else(|_| "https://api.openai.com".to_string());
+    let key = std::env::var("ARW_OPENAI_API_KEY").ok()?;
+    if key.trim().is_empty() {
+        return None;
+    }
+    let model = std::env::var("ARW_OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
+    let url = format!("{}/v1/chat/completions", base.trim_end_matches('/'));
+    let timeout_s: u64 = std::env::var("ARW_HTTP_TIMEOUT_SECS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(20);
+    let client = reqwest::Client::builder()
+        .timeout(std::time::Duration::from_secs(timeout_s))
+        .build()
+        .ok()?;
+    let mut body = serde_json::json!({
+        "model": model,
+        "messages": [ {"role":"user", "content": prompt} ]
+    });
+    if let Some(t) = temperature {
+        if let Some(o) = body.as_object_mut() {
+            o.insert("temperature".into(), json!(t));
+        }
+    }
+    let resp = client
+        .post(url)
+        .bearer_auth(key)
+        .json(&body)
+        .send()
+        .await
+        .ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let v: serde_json::Value = resp.json().await.ok()?;
+    v.get("choices")
+        .and_then(|c| c.get(0))
+        .and_then(|c0| c0.get("message"))
+        .and_then(|m| m.get("content"))
+        .and_then(|x| x.as_str())
+        .map(|s| s.to_string())
 }
 
 // debug_ui implementation lives in ui.rs
@@ -1170,6 +1695,7 @@ static DEBUG_HTML: &str = r##"<!doctype html>
     #insights{position:fixed;right:16px;bottom:16px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.08);padding:10px 12px;display:none;min-width:260px;max-width:50vw}
     #insights .kv{display:flex;justify-content:space-between;color:#374151}
     #insights h4{margin:4px 0 6px 0;font-size:14px}
+    .chip{display:inline-block;padding:2px 6px;border-radius:10px;background:#e5e7eb;color:#374151;font-size:12px;margin-left:6px}
     @media (max-width:900px){ .cols{grid-template-columns:1fr} }
   </style>
 </head>
@@ -1194,7 +1720,8 @@ static DEBUG_HTML: &str = r##"<!doctype html>
 
   <div class="cols">
     <div class="box">
-      <h3>Chat <a href="#" class="help" data-doc="orchestrator" data-tip="Super simple debug chat; models are stubbed (echo/reverse/time)." title="Chat docs">?</a></h3>
+      <h3>Chat <a href="#" class="help" data-doc="chat" data-tip="Chat UI with echo/reverse/time. Set ARW_LLAMA_URL or ARW_OPENAI_API_KEY for real backends." title="Chat docs">?</a></h3>
+      <div class="row"><span class="key">backend</span> <code id="chatBackend">–</code> <button class="iconbtn" onclick="chatTest()">Test</button></div>
       <div class="row">
         <select id="chatModel">
           <option value="echo">echo</option>
@@ -1297,7 +1824,7 @@ static DEBUG_HTML: &str = r##"<!doctype html>
       <pre id="tests">Ready.</pre>
     </div>
     <div class="box">
-      <h3>Self‑Learning <a href="#" class="help" data-doc="orchestrator" data-tip="Signals → suggestions. Gently embedded feedback." title="Self‑Learning docs">?</a></h3>
+      <h3>Self‑Learning <a href="#" class="help" data-doc="orchestrator" data-tip="Signals → suggestions. Gently embedded feedback." title="Self‑Learning docs">?</a> <span class="key">ver</span> <code id="fbVer">–</code><span id="fbVerChip" class="chip" style="display:none" title="Newer snapshot available"></span></h3>
       <div class="row">
         <select id="sigKind">
           <option value="latency">latency</option>
@@ -1321,14 +1848,26 @@ static DEBUG_HTML: &str = r##"<!doctype html>
         <button onclick="fbReset()">Reset</button>
         <input id="fbApplyId" placeholder="suggestion id" style="width:160px;">
         <button onclick="fbApply()">Apply</button>
+        <button onclick="fbRollback()">Rollback</button>
       </div>
       <pre id="fbOut">{"signals":[],"suggestions":[]}</pre>
+      <h4>Suggestions (live)</h4>
+      <div id="fbSugList"></div>
+      <div class="row">
+        <button onclick="fbVersions()">Refresh versions</button>
+        <select id="fbVerSel" style="min-width:160px"></select>
+        <button onclick="fbRollbackTo()">Rollback to</button>
+      </div>
     </div>
     <div class="box">
-      <h3>Models <a href="#" class="help" data-doc="orchestrator" data-tip="Add/delete and set default model. Future: downloads." title="Models docs">?</a></h3>
+      <h3>Models <a href="#" class="help" data-doc="orchestrator" data-tip="Add/delete, set default, and download models (with optional checksum)." title="Models docs">?</a></h3>
       <div class="row">
         <input id="mId" placeholder="model id" style="width:220px;">
-        <input id="mProv" placeholder="provider (local)" style="width:160px;">
+        <input id="mProv" placeholder="provider (local)" style="width:140px;">
+      </div>
+      <div class="row">
+        <input id="mUrl" placeholder="download url (http/https)" style="width:50%">
+        <input id="mSha" placeholder="sha256 (optional)" style="width:220px;">
       </div>
       <div class="row">
         <button onclick="modelsList()">List</button>
@@ -1337,6 +1876,7 @@ static DEBUG_HTML: &str = r##"<!doctype html>
         <button onclick="modelsDefaultGet()">Get default</button>
         <button onclick="modelsDefaultSet()">Set default</button>
         <button onclick="modelsDownload()">Download</button>
+        <button onclick="modelsCancel()">Cancel</button>
       </div>
       <pre id="modelsOut">[]</pre>
     </div>
@@ -1360,6 +1900,8 @@ function setLastCurl(s){
 document.getElementById('copyCurlBtn').addEventListener('click', async ()=>{
   if(!lastCurl) return; try{ await navigator.clipboard.writeText(lastCurl); const b = document.getElementById('copyCurlBtn'); const old = b.textContent; b.textContent='Copied'; setTimeout(()=> b.textContent=old, 900);}catch{}
 });
+// Initial backend status
+chatStatus(false);
 async function req(method, path, body, outId, rtId){
   const url = base + path; const init = { method, headers: {}, body: undefined };
   if (body != null){ init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
@@ -1421,7 +1963,36 @@ async function modelsAdd(){ const id=document.getElementById('mId').value.trim()
 async function modelsDelete(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await req('POST','/models/delete',{id},'modelsOut','rt-orch'); await modelsList(); }
 async function modelsDefaultGet(){ await req('GET','/models/default',null,'modelsOut','rt-orch'); }
 async function modelsDefaultSet(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await req('POST','/models/default',{id},'modelsOut','rt-orch'); }
-async function modelsDownload(){ const id=document.getElementById('mId').value.trim(); if(!id) return; const provider=(document.getElementById('mProv').value||'local').trim(); await req('POST','/models/download',{id,provider},'modelsOut','rt-orch'); }
+async function modelsDownload(){
+  const id=document.getElementById('mId').value.trim(); if(!id) return;
+  const provider=(document.getElementById('mProv').value||'local').trim();
+  const url=(document.getElementById('mUrl').value||'').trim(); if(!url){ showToast('Enter download url'); return; }
+  const sha=(document.getElementById('mSha').value||'').trim();
+  const body = {id, provider, url}; if(sha) body.sha256 = sha.toLowerCase();
+  await req('POST','/models/download', body, 'modelsOut','rt-orch');
+}
+async function modelsCancel(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await req('POST','/models/download/cancel',{id},'modelsOut','rt-orch'); }
+
+// Chat UI
+async function chatSend(){
+  const message = (document.getElementById('chatInput').value||'').trim();
+  if(!message) return;
+  const model = document.getElementById('chatModel').value || 'echo';
+  const t = parseFloat(document.getElementById('chatTemp').value||'');
+  const body = { message, model };
+  if (!Number.isNaN(t)) body.temperature = t;
+  await req('POST','/chat/send', body, 'chatOut','rt-orch');
+}
+async function chatClear(){ await req('POST','/chat/clear', {}, 'chatOut','rt-orch'); }
+async function chatStatus(probe){
+  try{
+    const r = await fetch(base + '/chat/status' + (probe?'?probe=1':''));
+    const obj = await r.json();
+    const el = document.getElementById('chatBackend'); if (el) el.textContent = (obj.backend || 'synthetic') + (obj.ok? '' : ' (error)');
+    if (probe){ showToast('Chat '+(obj.backend||'synthetic')+': '+(obj.ok?'ok':'fail') + (obj.latency_ms? (' · '+obj.latency_ms+' ms') : '')); }
+  }catch{}
+}
+async function chatTest(){ await chatStatus(true); }
 
 // Global EventSource + logger
 const es = new EventSource(base + '/events');
@@ -1444,8 +2015,13 @@ function pushEvt(kind, data){
   while (log.childElementCount > 200) log.removeChild(log.lastChild);
 }
 es.onmessage = (e) => pushEvt('message', e.data);
-['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran'].forEach(k => {
+['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Models.DownloadProgress','Feedback.Suggested'].forEach(k => {
   es.addEventListener(k, (e)=>pushEvt(k, e.data));
+});
+
+// reflect download progress in Models box
+es.addEventListener('Models.DownloadProgress', (e)=>{
+  try{ document.getElementById('modelsOut').textContent = JSON.stringify(JSON.parse(e.data), null, 2); }catch{}
 });
 
 // Insights aggregation overlay
@@ -1542,6 +2118,46 @@ async function fbSignal(){
 async function fbAuto(){ const enabled=document.getElementById('autoApply').checked; await req('POST','/feedback/auto',{enabled},'fbOut','rt-orch'); }
 async function fbReset(){ await req('POST','/feedback/reset',{},'fbOut','rt-orch'); }
 async function fbApply(){ const id=(document.getElementById('fbApplyId').value||'').trim(); if(!id){ showToast('Enter suggestion id'); return; } await req('POST','/feedback/apply',{id},'fbOut','rt-orch'); }
+async function fbRollback(){ await req('POST','/feedback/rollback',{},'fbOut','rt-orch'); await fbFetchSuggestions(); }
+
+// Live suggestions panel (feedback engine)
+async function fbFetchSuggestions(){
+  try{
+    const r = await fetch(base + '/feedback/suggestions');
+    if(!r.ok) return; const obj = await r.json();
+    // show current version
+    const v = (obj && obj.version) || 0; const vEl = document.getElementById('fbVer'); if (vEl) vEl.textContent = String(v);
+    const list = (obj && obj.suggestions) || [];
+    const el = document.getElementById('fbSugList');
+    const items = list.map(s => {
+      const btn = `<button class=\"iconbtn\" onclick=\"fbApplySingle('${s.id.replace(/'/g,'')}')\">Apply</button>`;
+      return `<div class=\"row\"><code>${s.id}</code> ${btn}<div>${s.action} ${JSON.stringify(s.params)}</div><div style=\"color:#6b7280\">${(s.confidence||0).toFixed(2)} · ${s.rationale||''}</div></div>`;
+    });
+    el.innerHTML = items.join('') || '<div class=\"row\">No suggestions</div>';
+  }catch{}
+}
+async function fbApplySingle(id){ await req('POST','/feedback/apply',{id},'fbOut','rt-orch'); }
+
+// Refresh suggestions when engine publishes updates
+es.addEventListener('Feedback.Suggested', ()=>{ fbFetchSuggestions(); fbVersions(); });
+// Initial fetch
+fbFetchSuggestions();
+fbVersions();
+
+// Versions list and rollback-to
+async function fbVersions(){
+  try{
+    const r = await fetch(base + '/feedback/versions'); if(!r.ok) return;
+    const obj = await r.json(); const list=(obj&&obj.versions)||[];
+    const sel=document.getElementById('fbVerSel');
+    if (sel){ sel.innerHTML=''; list.forEach(v=>{ const opt=document.createElement('option'); opt.value=String(v); opt.textContent=String(v); sel.appendChild(opt); }); }
+    const vCur = parseInt((document.getElementById('fbVer')?.textContent||'0'),10)||0;
+    const latest = list.length ? parseInt(list[0],10)||0 : vCur;
+    const chip = document.getElementById('fbVerChip');
+    if (chip){ if (latest > vCur) { chip.textContent = 'v'+latest; chip.style.display='inline-block'; } else { chip.style.display='none'; } }
+  }catch{}
+}
+async function fbRollbackTo(){ const sel=document.getElementById('fbVerSel'); const val=(sel && sel.value) ? parseInt(sel.value,10) : NaN; if(!val){ showToast('Pick a version'); return; } await req('POST','/feedback/rollback?to='+encodeURIComponent(String(val)),{},'fbOut','rt-orch'); await fbFetchSuggestions(); }
 // Docs wiring
 let docsBase = null;
 function docPath(key){
@@ -1550,6 +2166,7 @@ function docPath(key){
     case 'events': return '/guide/quickstart/';
     case 'tools': return '/api_and_schema/';
     case 'orchestrator': return '/guide/quickstart/';
+    case 'chat': return '/guide/chat_backends/';
     case 'deployment': return '/deployment/';
     default: return '/';
   }

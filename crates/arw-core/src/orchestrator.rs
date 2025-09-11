@@ -97,9 +97,15 @@ impl LocalQueue {
                     let mut pend = inner.pending.lock().await;
                     let lids: Vec<String> = pend
                         .iter()
-                        .filter_map(|(lid, (_t, exp))| if *exp <= now { Some(lid.clone()) } else { None })
+                        .filter_map(
+                            |(lid, (_t, exp))| if *exp <= now { Some(lid.clone()) } else { None },
+                        )
                         .collect();
-                    for lid in lids { if let Some((t, _)) = pend.remove(&lid) { expired.push(t); } }
+                    for lid in lids {
+                        if let Some((t, _)) = pend.remove(&lid) {
+                            expired.push(t);
+                        }
+                    }
                 }
                 if !expired.is_empty() {
                     let mut map = inner.queues.lock().await;

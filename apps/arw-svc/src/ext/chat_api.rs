@@ -1,14 +1,14 @@
 use crate::AppState;
+use arw_macros::arw_gate;
 use axum::{extract::State, response::IntoResponse, Json};
-use arw_core::{gating, gating_keys as gk};
 use serde::Deserialize;
 
+#[arw_gate("io:egress:chat")]
 pub(crate) async fn chat_get() -> impl IntoResponse {
-    if !arw_core::gating::allowed("io:egress:chat") { return (axum::http::StatusCode::FORBIDDEN, "gated").into_response(); }
     super::chat_get().await.into_response()
 }
+#[arw_gate("chat:clear")]
 pub(crate) async fn chat_clear() -> impl IntoResponse {
-    if !gating::allowed(gk::CHAT_CLEAR) { return (axum::http::StatusCode::FORBIDDEN, "gated").into_response(); }
     super::chat_clear().await.into_response()
 }
 
@@ -17,15 +17,20 @@ pub(crate) struct ChatSendReq {
     message: String,
     #[serde(default)]
     model: Option<String>,
+    #[serde(default)]
+    temperature: Option<f64>,
 }
+#[arw_gate("chat:send")]
 pub(crate) async fn chat_send(
     State(state): State<AppState>,
     Json(req): Json<ChatSendReq>,
 ) -> impl IntoResponse {
-    if !gating::allowed(gk::CHAT_SEND) { return (axum::http::StatusCode::FORBIDDEN, "gated").into_response(); }
     let req2 = super::ChatSendReq {
         message: req.message,
         model: req.model,
+        temperature: req.temperature,
     };
-    super::chat_send(State(state), Json(req2)).await.into_response()
+    super::chat_send(State(state), Json(req2))
+        .await
+        .into_response()
 }

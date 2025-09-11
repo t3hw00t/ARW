@@ -16,9 +16,16 @@
         devShells.default = pkgs.mkShell {
           nativeBuildInputs = with pkgs; [
             pkg-config
+            jq
+            just
+            cargo-watch
             rust-bin.stable.latest.default
             rust-bin.stable.latest.rustfmt
             rust-bin.stable.latest.clippy
+            cargo-nextest
+            python3Packages.mkdocs
+            python3Packages.mkdocs-material
+            python3Packages.mkdocs-git-revision-date-localized-plugin
           ];
           buildInputs = with pkgs; [
             gtk3

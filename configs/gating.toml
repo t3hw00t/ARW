@@ -7,6 +7,10 @@
 
 deny_user = []
 
+# Production hardening tip:
+# To disable local introspection endpoints by default, uncomment the next line
+# deny_user = ["introspect:*"]
+
 # Optional complex contracts (deny with conditions; immutable within window; can auto-renew)
 # [[contracts]]
 # id = "night-quiet"

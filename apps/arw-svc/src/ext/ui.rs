@@ -12,3 +12,37 @@ pub(crate) async fn debug_ui() -> impl IntoResponse {
         Html(super::ASSET_DEBUG_HTML),
     )
 }
+
+pub(crate) async fn models_ui() -> impl IntoResponse {
+    use axum::http::header::{CACHE_CONTROL, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS};
+    (
+        [
+            (X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            (REFERRER_POLICY, "no-referrer"),
+            (CACHE_CONTROL, "no-store"),
+        ],
+        Html(include_str!("../../assets/models.html")),
+    )
+}
+pub(crate) async fn agents_ui() -> impl IntoResponse {
+    use axum::http::header::{CACHE_CONTROL, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS};
+    (
+        [
+            (X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            (REFERRER_POLICY, "no-referrer"),
+            (CACHE_CONTROL, "no-store"),
+        ],
+        Html(include_str!("../../assets/agents.html")),
+    )
+}
+pub(crate) async fn projects_ui() -> impl IntoResponse {
+    use axum::http::header::{CACHE_CONTROL, REFERRER_POLICY, X_CONTENT_TYPE_OPTIONS};
+    (
+        [
+            (X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            (REFERRER_POLICY, "no-referrer"),
+            (CACHE_CONTROL, "no-store"),
+        ],
+        Html(include_str!("../../assets/projects.html")),
+    )
+}

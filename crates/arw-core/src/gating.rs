@@ -1,6 +1,6 @@
 use once_cell::sync::OnceCell;
-use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::RwLock;
@@ -81,6 +81,7 @@ pub struct Contract {
     valid_from_ms: Option<u64>,
     valid_to_ms: Option<u64>,
     auto_renew_secs: Option<u64>,
+    #[allow(dead_code)]
     immutable: bool,
     quota_limit: Option<u64>,
     quota_window_secs: Option<u64>,
@@ -101,7 +102,9 @@ pub fn init_from_config(path: &str) {
     if Path::new(path).exists() {
         if let Ok(s) = std::fs::read_to_string(path) {
             if let Ok(cfg) = toml::from_str::<GatingCfg>(&s) {
-                for k in cfg.deny_user { denies.insert(k); }
+                for k in cfg.deny_user {
+                    denies.insert(k);
+                }
                 if !cfg.contracts.is_empty() {
                     let mut out: Vec<Contract> = Vec::new();
                     for c in cfg.contracts.into_iter() {
@@ -126,7 +129,12 @@ pub fn init_from_config(path: &str) {
     }
     // Env: comma-separated
     if let Ok(s) = std::env::var("ARW_GATING_DENY") {
-        for k in s.split(',') { let k = k.trim(); if !k.is_empty() { denies.insert(k.to_string()); } }
+        for k in s.split(',') {
+            let k = k.trim();
+            if !k.is_empty() {
+                denies.insert(k.to_string());
+            }
+        }
     }
     if !denies.is_empty() {
         let mut st = cell().write().unwrap();
@@ -137,13 +145,17 @@ pub fn init_from_config(path: &str) {
 /// Set immutable user policy denies at runtime; adding only.
 pub fn deny_user<I: IntoIterator<Item = String>>(keys: I) {
     let mut st = cell().write().unwrap();
-    for k in keys { st.deny_user.insert(k); }
+    for k in keys {
+        st.deny_user.insert(k);
+    }
 }
 
 /// Set immutable hierarchy denies at runtime; adding only.
 pub fn deny_hierarchy<I: IntoIterator<Item = String>>(keys: I) {
     let mut st = cell().write().unwrap();
-    for k in keys { st.deny_hier.insert(k); }
+    for k in keys {
+        st.deny_hier.insert(k);
+    }
 }
 
 /// Check if a key is allowed (deny wins; patterns with trailing * are supported).
@@ -152,8 +164,16 @@ pub fn allowed(key: &str) -> bool {
     // User/hierarchy immutable sets first
     {
         let st = cell().read().unwrap();
-        for p in &st.deny_user { if wildcard_match(p, key) { return false; } }
-        for p in &st.deny_hier { if wildcard_match(p, key) { return false; } }
+        for p in &st.deny_user {
+            if wildcard_match(p, key) {
+                return false;
+            }
+        }
+        for p in &st.deny_hier {
+            if wildcard_match(p, key) {
+                return false;
+            }
+        }
     }
     // Contracts (deny with conditions, auto-renew)
     let role = crate::hierarchy::get_state().self_node.role;
@@ -164,17 +184,33 @@ pub fn allowed(key: &str) -> bool {
     let list = contracts_cell().read().unwrap().clone();
     for c in list.iter() {
         // Match pattern
-        if !c.patterns.iter().any(|p| wildcard_match(p, key)) { continue; }
+        if !c.patterns.iter().any(|p| wildcard_match(p, key)) {
+            continue;
+        }
         // Subject filters
-        if let Some(r) = &c.subject_role { if r.to_lowercase() != role_s { continue; } }
-        if let Some(n) = &c.subject_node { if n != &node_id { continue; } }
+        if let Some(r) = &c.subject_role {
+            if r.to_lowercase() != role_s {
+                continue;
+            }
+        }
+        if let Some(n) = &c.subject_node {
+            if n != &node_id {
+                continue;
+            }
+        }
         if let Some(any) = &c.tags_any {
-            if !any.iter().any(|t| tags.contains(t)) { continue; }
+            if !any.iter().any(|t| tags.contains(t)) {
+                continue;
+            }
         }
         // Window check and renewal
         let from = c.valid_from_ms.unwrap_or(0);
         let to = runtime.expires.get(&c.id).cloned().or(c.valid_to_ms);
-        let active = if let Some(t) = to { now >= from && now <= t } else { now >= from };
+        let active = if let Some(t) = to {
+            now >= from && now <= t
+        } else {
+            now >= from
+        };
         if active {
             // Budget enforcement if configured (deny once exhausted)
             if let (Some(limit), Some(win)) = (c.quota_limit, c.quota_window_secs) {
@@ -222,13 +258,17 @@ pub fn apply_role_defaults(role: Role) {
     let mut denies: Vec<String> = Vec::new();
     match role {
         Role::Observer => {
-            denies.extend([
-                "queue:*",            // no task movement
-                "task:*",             // no task kinds
-                "tools:*",            // no tool execution
-                "memory:*",           // no memory change
-                "models:*",           // no model operations
-            ].iter().map(|s| s.to_string()));
+            denies.extend(
+                [
+                    "queue:*",  // no task movement
+                    "task:*",   // no task kinds
+                    "tools:*",  // no tool execution
+                    "memory:*", // no memory change
+                    "models:*", // no model operations
+                ]
+                .iter()
+                .map(|s| s.to_string()),
+            );
         }
         Role::Connector => {
             // Connectors may not mutate local models/memory by default
@@ -236,7 +276,9 @@ pub fn apply_role_defaults(role: Role) {
         }
         _ => {}
     }
-    if !denies.is_empty() { deny_hierarchy(denies); }
+    if !denies.is_empty() {
+        deny_hierarchy(denies);
+    }
 }
 
 /// Snapshot for introspection.
@@ -261,7 +303,10 @@ pub fn snapshot() -> serde_json::Value {
 #[inline]
 fn now_ms() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis() as u64
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
 }
 
 /// Add a contract at runtime (immutable within its own window). Id must be unique per source.
@@ -311,5 +356,64 @@ pub fn adopt_capsule(cap: &arw_protocol::GatingCapsule) {
             quota_limit: None,
             quota_window_secs: None,
         });
+    }
+}
+
+#[cfg(test)]
+/// Test-only: reset gating state to a clean slate for isolated tests.
+pub fn __test_reset() {
+    {
+        let mut st = cell().write().unwrap();
+        st.deny_user.clear();
+        st.deny_hier.clear();
+    }
+    {
+        let mut list = contracts_cell().write().unwrap();
+        list.clear();
+    }
+    {
+        let mut rt = runtime_cell().write().unwrap();
+        rt.expires.clear();
+        rt.budgets.clear();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deny_user_and_wildcard() {
+        __test_reset();
+        // Exact deny
+        deny_user(vec!["tools:list".to_string()]);
+        assert!(!allowed("tools:list"));
+        assert!(allowed("tools:run"));
+
+        // Wildcard deny
+        deny_user(vec!["task:math.*".to_string()]);
+        assert!(!allowed("task:math.add"));
+        assert!(!allowed("task:math.sub"));
+        assert!(allowed("task:other"));
+    }
+
+    #[test]
+    fn contracts_window_and_auto_renew() {
+        __test_reset();
+        let now = super::now_ms();
+        add_contract_cfg(ContractCfg {
+            id: "test-contract".into(),
+            patterns: vec!["events:*".into()],
+            subject_role: None,
+            subject_node: None,
+            tags_any: None,
+            valid_from_ms: Some(now.saturating_sub(1000)),
+            valid_to_ms: Some(now.saturating_add(1000)),
+            auto_renew_secs: Some(1),
+            immutable: Some(true),
+            quota_limit: None,
+            quota_window_secs: None,
+        });
+        assert!(!allowed("events:Task.Completed"));
     }
 }

@@ -1,3 +1,4 @@
+use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::Json;
 use serde_json::json;
@@ -5,6 +6,8 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::OnceLock;
 use tokio::sync::RwLock;
+use arw_macros::arw_gate;
+use crate::AppState;
 
 #[derive(Clone, Default, serde::Serialize)]
 struct Stats {
@@ -79,10 +82,72 @@ pub(crate) async fn route_obs(path: &str, status: u16, ms: u64) {
         ent.p95_ms = tmp[idx];
     }
 }
-pub(crate) async fn stats_get() -> impl IntoResponse {
+#[arw_gate("introspect:stats")]
+pub(crate) async fn stats_get(State(state): State<AppState>) -> impl IntoResponse {
     let events = stats_cell().read().await.clone();
     let routes = route_stats_cell().read().await.clone();
-    Json(json!({ "events": events, "routes": routes }))
+    let bus = state.bus.stats();
+    Json(json!({ "events": events, "routes": routes, "bus": bus })).into_response()
+}
+
+// Simple Prometheus exposition for core counters and route timings
+pub(crate) async fn metrics_get(State(state): State<AppState>) -> impl IntoResponse {
+    let events = stats_cell().read().await.clone();
+    let routes = route_stats_cell().read().await.clone();
+    let bus = state.bus.stats();
+    fn esc(s: &str) -> String {
+        s.replace('\\', "\\\\").replace('"', "\\\"")
+    }
+    let mut out = String::new();
+    use std::fmt::Write as _;
+    // Bus
+    out.push_str("# HELP arw_bus_published_total Events published\n# TYPE arw_bus_published_total counter\n");
+    let _ = writeln!(out, "arw_bus_published_total {}", bus.published);
+    out.push_str("# HELP arw_bus_delivered_total Events delivered to receivers\n# TYPE arw_bus_delivered_total counter\n");
+    let _ = writeln!(out, "arw_bus_delivered_total {}", bus.delivered);
+    out.push_str("# HELP arw_bus_lagged_total Lag signals observed\n# TYPE arw_bus_lagged_total counter\n");
+    let _ = writeln!(out, "arw_bus_lagged_total {}", bus.lagged);
+    out.push_str("# HELP arw_bus_no_receivers_total Publishes with no receivers\n# TYPE arw_bus_no_receivers_total counter\n");
+    let _ = writeln!(out, "arw_bus_no_receivers_total {}", bus.no_receivers);
+    out.push_str("# HELP arw_bus_receivers Current receiver count\n# TYPE arw_bus_receivers gauge\n");
+    let _ = writeln!(out, "arw_bus_receivers {}", bus.receivers);
+
+    // Build info
+    out.push_str("# HELP arw_build_info Build info\n# TYPE arw_build_info gauge\n");
+    let name: &'static str = env!("CARGO_PKG_NAME");
+    let ver: &'static str = env!("CARGO_PKG_VERSION");
+    let sha: &str = option_env!("ARW_BUILD_SHA").unwrap_or("unknown");
+    let _ = writeln!(
+        out,
+        "arw_build_info{{service=\"{}\",version=\"{}\",sha=\"{}\"}} 1",
+        name, ver, sha
+    );
+
+    // Events by kind
+    out.push_str("# HELP arw_events_total Total events by kind\n# TYPE arw_events_total counter\n");
+    for (k, v) in events.kinds.iter() {
+        let _ = writeln!(out, "arw_events_total{{kind=\"{}\"}} {}", esc(k), v);
+    }
+
+    // Route stats
+    out.push_str("# HELP arw_http_route_hits_total HTTP hits by route\n# TYPE arw_http_route_hits_total counter\n");
+    out.push_str("# HELP arw_http_route_errors_total HTTP errors by route\n# TYPE arw_http_route_errors_total counter\n");
+    out.push_str("# HELP arw_http_route_ewma_ms EWMA latency ms\n# TYPE arw_http_route_ewma_ms gauge\n");
+    out.push_str("# HELP arw_http_route_p95_ms p95 latency ms\n# TYPE arw_http_route_p95_ms gauge\n");
+    out.push_str("# HELP arw_http_route_max_ms max latency ms\n# TYPE arw_http_route_max_ms gauge\n");
+    for (path, st) in routes.by_path.iter() {
+        let p = esc(path);
+        let _ = writeln!(out, "arw_http_route_hits_total{{path=\"{}\"}} {}", p, st.hits);
+        let _ = writeln!(out, "arw_http_route_errors_total{{path=\"{}\"}} {}", p, st.errors);
+        let _ = writeln!(out, "arw_http_route_ewma_ms{{path=\"{}\"}} {}", p, st.ewma_ms);
+        let _ = writeln!(out, "arw_http_route_p95_ms{{path=\"{}\"}} {}", p, st.p95_ms);
+        let _ = writeln!(out, "arw_http_route_max_ms{{path=\"{}\"}} {}", p, st.max_ms);
+    }
+    (
+        axum::http::StatusCode::OK,
+        [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+        out,
+    )
 }
 
 // Lightweight snapshot for analysis: path -> (ewma_ms, hits, errors)

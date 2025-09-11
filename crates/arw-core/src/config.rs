@@ -14,6 +14,12 @@ pub struct RuntimeConfig {
     pub cache_dir: Option<String>,
     #[serde(default)]
     pub logs_dir: Option<String>,
+    /// Optional HTTP port for the local service
+    #[serde(default)]
+    pub port: Option<u16>,
+    /// Optional external base URL for reverse-proxy (e.g., https://arw.example.com)
+    #[serde(default)]
+    pub external_base_url: Option<String>,
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]

@@ -14,9 +14,21 @@ fmt:
 lint:
   cargo clippy --workspace --all-targets -- -D warnings
 
+fmt-check:
+  cargo fmt --all -- --check
+
+lint-fix:
+  cargo clippy --workspace --all-targets --fix -Z unstable-options --allow-dirty --allow-staged || true
+
 # Test
 test:
   cargo test --workspace --locked
+
+test-fast:
+  if command -v cargo-nextest >/dev/null; then cargo nextest run --workspace; else cargo test --workspace --locked; fi
+
+test-watch:
+  cargo watch -x "test --workspace"
 
 # Package
 package:
@@ -33,6 +45,28 @@ docs-build: docgen
 start port=8090 debug=1:
   ARW_NO_TRAY=1 bash scripts/start.sh {{ if debug == "1" { "--debug" } else { "" } }} --port {{port}}
 
+open-debug host="127.0.0.1" port=8090:
+  bash scripts/open-url.sh http://{{host}}:{{port}}/debug
+
+hooks-install:
+  bash scripts/hooks/install_hooks.sh
+
+# Dev runner (service only)
+dev port=8090:
+  ARW_DEBUG=1 ARW_PORT={{port}} cargo run -p arw-svc
+
+# Dev runner with auto-reload (requires cargo-watch)
+dev-watch port=8090:
+  ARW_DEBUG=1 ARW_PORT={{port}} cargo watch -x "run -p arw-svc"
+
+# Docs dev server
+docs-serve addr="127.0.0.1:8000":
+  mkdocs serve -a {{addr}}
+
+# Run service + docs together (Unix)
+dev-all port=8090 addr="127.0.0.1:8000":
+  ARW_DEBUG=1 ARW_PORT={{port}} ARW_DOCS_URL=http://{{addr}} bash scripts/dev.sh {{port}} {{addr}}
+
 # Tasks
 task-add title desc="":
   bash scripts/tasks.sh add {{title}} {{ if desc != "" { print("--desc \"" + desc + "\"") }}}
@@ -48,4 +82,3 @@ task-done id:
 
 task-note id text:
   bash scripts/tasks.sh note {{id}} {{text}}
-

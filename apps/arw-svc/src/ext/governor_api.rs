@@ -1,6 +1,6 @@
 use crate::AppState;
+use arw_macros::arw_gate;
 use axum::{extract::State, response::IntoResponse, Json};
-use arw_core::{gating, gating_keys as gk};
 use serde::Deserialize;
 
 pub(crate) async fn governor_get() -> impl IntoResponse {
@@ -10,13 +10,15 @@ pub(crate) async fn governor_get() -> impl IntoResponse {
 pub(crate) struct SetProfile {
     name: String,
 }
+#[arw_gate("governor:set")]
 pub(crate) async fn governor_set(
     State(state): State<AppState>,
     Json(req): Json<SetProfile>,
 ) -> impl IntoResponse {
-    if !gating::allowed(gk::GOVERNOR_SET) { return (axum::http::StatusCode::FORBIDDEN, "gated").into_response(); }
     let req2 = super::SetProfile { name: req.name };
-    super::governor_set(State(state), Json(req2)).await.into_response()
+    super::governor_set(State(state), Json(req2))
+        .await
+        .into_response()
 }
 
 pub(crate) async fn governor_hints_get() -> impl IntoResponse {
@@ -31,8 +33,8 @@ pub(crate) struct Hints {
     #[serde(default)]
     http_timeout_secs: Option<u64>,
 }
+#[arw_gate("governor:hints:set")]
 pub(crate) async fn governor_hints_set(Json(req): Json<Hints>) -> impl IntoResponse {
-    if !gating::allowed(gk::GOVERNOR_HINTS_SET) { return (axum::http::StatusCode::FORBIDDEN, "gated").into_response(); }
     let req2 = super::Hints {
         max_concurrency: req.max_concurrency,
         event_buffer: req.event_buffer,

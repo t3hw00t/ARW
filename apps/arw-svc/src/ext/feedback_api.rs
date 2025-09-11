@@ -1,10 +1,10 @@
 use crate::AppState;
+use arw_macros::arw_gate;
 use axum::{extract::State, response::IntoResponse, Json};
-use arw_core::{gating, gating_keys as gk};
 use serde::Deserialize;
 
+#[arw_gate("feedback:state")]
 pub(crate) async fn feedback_state_get() -> impl IntoResponse {
-    if !gating::allowed(gk::FEEDBACK_STATE) { return (axum::http::StatusCode::FORBIDDEN, "gated").into_response(); }
     super::feedback_state_get().await.into_response()
 }
 #[derive(Deserialize)]
@@ -15,11 +15,11 @@ pub(crate) struct FeedbackSignalPost {
     severity: u8,
     note: Option<String>,
 }
+#[arw_gate("feedback:signal")]
 pub(crate) async fn feedback_signal_post(
     State(state): State<AppState>,
     Json(req): Json<FeedbackSignalPost>,
 ) -> impl IntoResponse {
-    if !gating::allowed(gk::FEEDBACK_SIGNAL) { return (axum::http::StatusCode::FORBIDDEN, "gated").into_response(); }
     let req2 = super::FeedbackSignalPost {
         kind: req.kind,
         target: req.target,
@@ -27,36 +27,40 @@ pub(crate) async fn feedback_signal_post(
         severity: req.severity,
         note: req.note,
     };
-    super::feedback_signal_post(State(state), Json(req2)).await.into_response()
+    super::feedback_signal_post(State(state), Json(req2))
+        .await
+        .into_response()
 }
+#[arw_gate("feedback:analyze")]
 pub(crate) async fn feedback_analyze_post() -> impl IntoResponse {
-    if !gating::allowed(gk::FEEDBACK_ANALYZE) { return (axum::http::StatusCode::FORBIDDEN, "gated").into_response(); }
     super::feedback_analyze_post().await.into_response()
 }
 #[derive(Deserialize)]
 pub(crate) struct ApplyReq {
     id: String,
 }
+#[arw_gate("feedback:apply")]
 pub(crate) async fn feedback_apply_post(
     State(state): State<AppState>,
     Json(req): Json<ApplyReq>,
 ) -> impl IntoResponse {
-    if !gating::allowed(gk::FEEDBACK_APPLY) { return (axum::http::StatusCode::FORBIDDEN, "gated").into_response(); }
     let req2 = super::ApplyReq { id: req.id };
-    super::feedback_apply_post(State(state), Json(req2)).await.into_response()
+    super::feedback_apply_post(State(state), Json(req2))
+        .await
+        .into_response()
 }
 #[derive(Deserialize)]
 pub(crate) struct AutoReq {
     enabled: bool,
 }
+#[arw_gate("feedback:auto")]
 pub(crate) async fn feedback_auto_post(Json(req): Json<AutoReq>) -> impl IntoResponse {
-    if !gating::allowed(gk::FEEDBACK_AUTO) { return (axum::http::StatusCode::FORBIDDEN, "gated").into_response(); }
     let req2 = super::AutoReq {
         enabled: req.enabled,
     };
     super::feedback_auto_post(Json(req2)).await.into_response()
 }
+#[arw_gate("feedback:reset")]
 pub(crate) async fn feedback_reset_post() -> impl IntoResponse {
-    if !gating::allowed(gk::FEEDBACK_RESET) { return (axum::http::StatusCode::FORBIDDEN, "gated").into_response(); }
     super::feedback_reset_post().await.into_response()
 }

@@ -1,29 +1,44 @@
-< !doctype html> 
+<!doctype html><html lang="en">
 <head>
   <meta charset="utf-8">
   <title>ARW Debug</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
-    :root{color-scheme:light dark}
-    body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;line-height:1.45}
+    :root{
+      color-scheme:light dark;
+      --bg:#fafaf9;           /* panel bg */
+      --ink:#111827;          /* primary text */
+      --muted:#6b7280;        /* secondary text */
+      --line:#e5e7eb;         /* separators */
+      --accent:#b87333;       /* subtle copper accent */
+      --neon:#1bb3a3;         /* cyberdeck teal (muted) */
+      --ok:#22c55e;           /* status ok */
+      --warn:#f59e0b;         /* status warn */
+      --bad:#ef4444;          /* status bad */
+    }
+    body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;line-height:1.45;color:var(--ink);}
     header{display:flex;gap:12px;align-items:center;margin-bottom:16px}
     code,pre{background:#0b0b0c10;padding:2px 4px;border-radius:4px}
     .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
     button,input,select,textarea{font:inherit}
-    button{padding:8px 12px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer}
-    button:hover{background:#f3f4f6}
+    button{padding:8px 12px;border:1px solid var(--line);background:#fff;border-radius:8px;cursor:pointer}
+    button:hover{background:#f3f4f6;border-color:#d7dce1}
     .iconbtn{padding:6px 8px;font-size:12px}
     .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-    .box{border:1px solid #e5e7eb;border-radius:6px;padding:12px;background:#fff}
-    #log{max-height:40vh;overflow:auto;border:1px solid #e5e7eb;border-radius:6px;padding:8px;background:#fff}
+    .box{border:1px solid var(--line);border-radius:10px;padding:12px;background:var(--bg);box-shadow:inset 0 1px 0 rgba(255,255,255,0.5)}
+    #log{max-height:40vh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px;background:#fff}
     .evt{padding:4px 6px;border-bottom:1px dashed #eee;font-family:ui-monospace,Menlo,Consolas,monospace}
-    .key{color:#6b7280}
+    .key{color:var(--muted)}
     textarea{width:100%;min-height:100px}
-    .pass{color:#16a34a}.fail{color:#dc2626}
-    .badge{display:inline-block;padding:2px 6px;border-radius:10px;font-size:12px;font-weight:600}
-    .good{background:#dcfce7;color:#166534;border:1px solid #bbf7d0}
-    .warn{background:#fef9c3;color:#854d0e;border:1px solid #fde68a}
-    .bad{background:#fee2e2;color:#991b1b;border:1px solid #fecaca}
+    .pass{color:var(--ok)}.fail{color:var(--bad)}
+    .badge{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid var(--line);background:#fff}
+    .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
+    .good{color:#166534;border-color:#bbf7d0;background:#ecfdf5}
+    .good .dot{background:var(--ok)}
+    .warn{color:#854d0e;border-color:#fde68a;background:#fefce8}
+    .warn .dot{background:var(--warn)}
+    .bad{color:#991b1b;border-color:#fecaca;background:#fef2f2}
+    .bad .dot{background:var(--bad)}
     a.help{display:inline-block;margin-left:8px;width:18px;height:18px;border-radius:50%;border:1px solid #d1d5db;color:#6b7280;text-align:center;line-height:16px;text-decoration:none;font-weight:600;font-size:12px}
     a.help:hover{background:#f3f4f6;color:#374151}
     .tip{position:fixed;z-index:50;max-width:360px;background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,0.08);padding:10px 12px}
@@ -34,6 +49,13 @@
     #insights{position:fixed;right:16px;bottom:16px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.08);padding:10px 12px;display:none;min-width:260px;max-width:50vw}
     #insights .kv{display:flex;justify-content:space-between;color:#374151}
     #insights h4{margin:4px 0 6px 0;font-size:14px}
+    .palette{position:fixed;inset:0;background:rgba(0,0,0,0.2);display:none;align-items:flex-start;justify-content:center;padding-top:10vh}
+    .pal-box{background:#fff;color:#111;width:min(680px,90vw);border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 20px 50px rgba(0,0,0,0.15);overflow:hidden}
+    .pal-box input{width:100%;padding:10px 12px;border:none;outline:none;font:inherit}
+    .pal-list{max-height:50vh;overflow:auto}
+    .pal-item{padding:8px 12px;border-top:1px solid #f1f5f9;cursor:pointer;display:flex;justify-content:space-between}
+    .pal-item.sel{background:#eef2ff}
+    .pal-item .hint{color:#6b7280;font-size:12px}
     @media (max-width:900px){ .cols{grid-template-columns:1fr} }
   </style>
 </head>
@@ -41,7 +63,30 @@
   <header>
     <h1>ARW Debug</h1>
     <span class="key">port</span><code id="port"></code>
+    <span id="adminBadge" class="badge warn" title="Administrative endpoints are locked"><span class="dot"></span> Admin: off</span>
+    <span id="sseBadge" class="badge bad" title="SSE connection to /events"><span class="dot"></span> SSE: off</span>
+    <span id="chatBadge" class="badge warn" title="Chat backend"><span class="dot"></span> Chat: synthetic</span>
+    <span id="toolsBadge" class="badge warn" title="Tools activity"><span class="dot"></span> Tools: idle</span>
+    <span id="eventsBadge" class="badge warn" title="Events activity"><span class="dot"></span> Events: 0</span>
+    <span id="modelsBadge" class="badge warn" title="Models activity"><span class="dot"></span> Models: idle</span>
+    <a id="metricsLink" class="help" href="#" title="Open /metrics" style="display:inline-block">M</a>
+    <span id="memBadge" class="badge good" title="Memory limit"><span class="dot"></span> Mem: –</span>
+    <span id="govBadge" class="badge good" title="Governor profile"><span class="dot"></span> Gov: –</span>
+    <button id="chatTestBtn" class="iconbtn" title="Test chat backend">Test</button>
+    <input id="adminToken" placeholder="token" style="width: 120px;" title="X-ARW-Admin header">
+    <button id="useTok" class="iconbtn" title="Use admin token">Use</button>
+    <label class="key" title="Remember token locally"><input type="checkbox" id="rememberTok"> remember</label>
+    <button id="openPalette" class="iconbtn" title="Command palette (Ctrl/Cmd+K)">Palette</button>
+    <label class="key">profile</label>
+    <select id="hdrProfile" title="Governor profile">
+      <option value="performance">performance</option>
+      <option value="balanced" selected>balanced</option>
+      <option value="power-saver">power-saver</option>
+    </select>
+    <button id="openShortcuts" class="iconbtn" title="Show shortcuts (Ctrl+/)">Shortcuts</button>
+    <label class="key" title="Enable keyboard shortcuts"><input type="checkbox" id="shortcutsToggle" checked> shortcuts</label>
     <a id="docsLink" class="help" title="Open docs" href="#" target="_blank" style="margin-left:auto;display:none">?</a>
+    <a id="secLink" class="help" data-doc="security" data-tip="Hardening guidance and recommended deployment settings." title="Security hardening" href="#" style="display:inline-block">!</a>
     <button id="toggleInsights" class="iconbtn" title="Insights" style="display:inline-block">Insights</button>
     <button id="copyStatsBtn" class="iconbtn" title="Copy stats JSON" style="display:inline-block">Copy stats</button>
     <button id="copyCurlBtn" class="iconbtn" style="display:none" title="Copy last request as curl">Copy curl</button>
@@ -101,7 +146,7 @@
       <div class="row"><span class="key">time</span> <code id="rt-orch">–</code></div>
     </div>
     <div class="box">
-      <h3>Memory <a href="#" class="help" data-doc="memory" data-tip="Understand memory kinds and how /memory endpoints work." title="Memory docs">?</a></h3>
+      <h3>Memory <a href="#" class="help" data-doc="memory" data-tip="Understand memory kinds and how /memory endpoints work." title="Memory docs">?</a> <span id="memHdrBadge" class="badge good" style="margin-left:6px"><span class="dot"></span> Mem: –</span></h3>
       <div class="row">
         <button onclick="refreshMemory()">Refresh</button>
         <button onclick="saveMemory()">Save</button>
@@ -131,6 +176,8 @@
         <label><input type="checkbox" id="fService" checked> Service</label>
         <label><input type="checkbox" id="fMemory" checked> Memory</label>
         <label><input type="checkbox" id="fModels" checked> Models</label>
+        <button class="iconbtn" id="sseReplay50" title="Replay last 50">Replay 50</button>
+        <button class="iconbtn" id="sseOnlyModels" title="Filter to Models.*">Models only</button>
       </div>
       <div id="log"></div>
     </div>
@@ -160,7 +207,7 @@
       </div>
       <pre id="tests">Ready.</pre>
     </div>
-    <div class="box">
+  <div class="box">
       <h3>Self‑Learning <a href="#" class="help" data-doc="orchestrator" data-tip="Signals → suggestions. Gently embedded feedback." title="Self‑Learning docs">?</a></h3>
       <div class="row">
         <select id="sigKind">
@@ -187,15 +234,16 @@
         <button onclick="fbApply()">Apply</button>
       </div>
       <pre id="fbOut">{"signals":[],"suggestions":[]}</pre>
-      <h4 style="margin-top:10px">Live Suggestions <a href="#" class="help" data-doc="feedback" data-tip="Near-live heuristic suggestions. Applies are policy-gated." title="Feedback docs">?</a> <span class="key" id="fbBounds"></span></h4>
+      <h4 style="margin-top:10px">Live Suggestions <a href="#" class="help" data-doc="feedback" data-tip="Near-live heuristic suggestions. Applies are policy-gated." title="Feedback docs">?</a> <span class="badge warn" id="fbVerBadge"><span class="dot"></span> v0</span> <span class="key" id="fbBounds"></span></h4>
       <div class="row">
         <button class="iconbtn" onclick="fbFetchSuggestions()">Refresh</button>
+        <label><input type="checkbox" id="fbLive" checked> live</label>
       </div>
       <div id="fbList"></div>
       <pre id="fbLiveOut" style="display:none">{"version":0,"suggestions":[]}</pre>
     </div>
     <div class="box">
-      <h3>Models <a href="#" class="help" data-doc="orchestrator" data-tip="Add/delete and set default model. Future: downloads." title="Models docs">?</a></h3>
+      <h3>Models <a href="#" class="help" data-doc="orchestrator" data-tip="Add/delete and set default model." title="Models docs">?</a> <span id="modelsHdrBadge" class="badge warn" style="margin-left:6px"><span class="dot"></span> 0</span></h3>
       <div class="row">
         <input id="mId" placeholder="model id" style="width:220px;">
         <input id="mProv" placeholder="provider (local)" style="width:160px;">
@@ -219,9 +267,12 @@
 const base = location.origin;
 document.getElementById('port').textContent = location.host;
 let lastCurl = null;
+let __adminOk = false;
+let __adminHeader = '';
 function mkcurl(method, url, body){
   const parts = ["curl -sS", "-X", method, `'${url}'`];
   if (body != null){ parts.push("-H", `'Content-Type: application/json'`); parts.push("-d", `'${JSON.stringify(body)}'`); }
+  if (__adminHeader) { parts.push("-H", `'X-ARW-Admin: ${__adminHeader}'`); }
   return parts.join(' ');
 }
 function setLastCurl(s){
@@ -233,6 +284,7 @@ document.getElementById('copyCurlBtn').addEventListener('click', async ()=>{
 async function req(method, path, body, outId, rtId){
   const url = base + path; const init = { method, headers: {}, body: undefined };
   if (body != null){ init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
+  if (__adminHeader) { init.headers['X-ARW-Admin'] = __adminHeader; }
   setLastCurl(mkcurl(method, url, body));
   const t0 = performance.now();
   try{
@@ -242,7 +294,11 @@ async function req(method, path, body, outId, rtId){
     if(rtId){ const el = document.getElementById(rtId); if (el) el.textContent = dt + ' ms'; }
     const out = document.getElementById(outId);
     try{ out.textContent = JSON.stringify(JSON.parse(txt), null, 2); }catch{ out.textContent = txt; }
-    if(!resp.ok){ showToast('Request failed: ' + resp.status + ' ' + (resp.statusText||'')); }
+    if(!resp.ok){
+      if (resp.status === 403) { showToast('403 Forbidden — admin endpoints locked. Set ARW_DEBUG=1 or use X-ARW-Admin'); setAdmin(false); }
+      else if (resp.status === 429) { showToast('429 Too Many Requests — admin rate limit'); }
+      else { showToast('Request failed: ' + resp.status + ' ' + (resp.statusText||'')); }
+    }
     return txt;
   }catch(e){
     if(rtId){ const el = document.getElementById(rtId); if (el) el.textContent = 'error'; }
@@ -272,7 +328,9 @@ async function runTool(){
   const id = document.getElementById('toolId').value;
   let bodyTxt = document.getElementById('toolBody').value;
   let input; try{ input = JSON.parse(bodyTxt); }catch(e){ alert('Invalid JSON'); return; }
+  const tb=document.getElementById('toolsBadge'); if(tb){ tb.className='badge warn'; tb.innerHTML='<span class=\"dot\"></span> Tools: active'; }
   await req('POST', '/tools/run', { id, input }, 'toolOut', 'rt-tool');
+  if(tb){ tb.className='badge good'; tb.innerHTML='<span class=\"dot\"></span> Tools: done'; setTimeout(()=>{ tb.className='badge warn'; tb.innerHTML='<span class=\"dot\"></span> Tools: idle'; }, 1200); }
 }
 
 // Orchestration actions
@@ -292,9 +350,26 @@ async function modelsDelete(){ const id=document.getElementById('mId').value.tri
 async function modelsDefaultGet(){ await req('GET','/models/default',null,'modelsOut','rt-orch'); }
 async function modelsDefaultSet(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await req('POST','/models/default',{id},'modelsOut','rt-orch'); }
 async function modelsDownload(){ const id=document.getElementById('mId').value.trim(); if(!id) return; const provider=(document.getElementById('mProv').value||'local').trim(); await req('POST','/models/download',{id,provider},'modelsOut','rt-orch'); }
+async function modelsCancel(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await req('POST','/models/download/cancel',{id},'modelsOut','rt-orch'); }
 
 // Global EventSource + logger
-const es = new EventSource(base + '/events');
+let es = null;
+function startSSE(replay, prefixes){
+  try{ es?.close(); }catch{}
+  let url = base + '/events';
+  const qp = [];
+  if (replay && replay > 0) qp.push('replay=' + encodeURIComponent(String(replay)));
+  if (Array.isArray(prefixes)) {
+    prefixes.forEach(p=>{ if(p) qp.push('prefix=' + encodeURIComponent(p)); });
+  }
+  if (qp.length){ url += '?' + qp.join('&'); }
+  es = new EventSource(url);
+  es.onopen = ()=> setSSE(true);
+  es.onerror = ()=> setSSE(false);
+  bindSSEHandlers();
+}
+// default SSE
+document.addEventListener('DOMContentLoaded', ()=> startSSE(0, []));
 function allow(kind){
   const s=document.getElementById('fService').checked;
   const m=document.getElementById('fMemory').checked;
@@ -306,6 +381,7 @@ function allow(kind){
 }
 function pushEvt(kind, data){
   if(!allow(kind)) return;
+  try{ const eb=document.getElementById('eventsBadge'); if(eb){ const n=parseInt(eb.getAttribute('data-n')||'0',10)+1; eb.setAttribute('data-n', String(n)); eb.className='badge good'; eb.innerHTML='<span class="dot"></span> Events: '+n; } }catch{}
   const div = document.createElement('div');
   div.className='evt';
   div.textContent = `[${new Date().toLocaleTimeString()}] ${kind}: ${data}`;
@@ -313,8 +389,22 @@ function pushEvt(kind, data){
   log.prepend(div);
   while (log.childElementCount > 200) log.removeChild(log.lastChild);
 }
+// Track model download progress into a header badge
+function bindSSEHandlers(){
+es.addEventListener('Models.DownloadProgress', (e)=>{
+  try{
+    const obj = JSON.parse(e.data||'{}');
+    const b = document.getElementById('modelsBadge'); if(!b) return;
+    if (obj.error){ b.className='badge bad'; b.innerHTML = '<span class="dot"></span> Models: error'; return; }
+    if (obj.status === 'canceled'){ b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: canceled'; return; }
+    if (obj.status === 'complete'){ b.className='badge good'; b.innerHTML = '<span class="dot"></span> Models: complete'; return; }
+    const pct = (obj.progress!=null)? obj.progress : null;
+    if (pct!=null){ b.className='badge good'; b.innerHTML = '<span class="dot"></span> Models: ' + pct + '%'; }
+    else { b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: active'; }
+  }catch{}
+});
 es.onmessage = (e) => pushEvt('message', e.data);
-['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran'].forEach(k => {
+['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Bus.Gap'].forEach(k => {
   es.addEventListener(k, (e)=>pushEvt(k, e.data));
 });
 // Feedback live updates
@@ -337,9 +427,10 @@ function renderInsights(){
   }
   el.innerHTML = lines.join('');
 }
-['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Chat.Message','Governor.Changed'].forEach(k => {
+['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Chat.Message','Governor.Changed','Bus.Gap'].forEach(k => {
   es.addEventListener(k, (e)=>{ agg.total++; agg.kinds[k]=(agg.kinds[k]||0)+1; renderInsights(); });
 });
+}
 
 // --- Self-tests (unchanged from last patch; reuses global SSE) ---
 function clearTests(){ document.getElementById('tests').textContent = 'Ready.'; }
@@ -417,10 +508,12 @@ async function fbSignal(){
 async function fbAuto(){ const enabled=document.getElementById('autoApply').checked; await req('POST','/feedback/auto',{enabled},'fbOut','rt-orch'); }
 async function fbReset(){ await req('POST','/feedback/reset',{},'fbOut','rt-orch'); }
 async function fbApply(){ const id=(document.getElementById('fbApplyId').value||'').trim(); if(!id){ showToast('Enter suggestion id'); return; } await req('POST','/feedback/apply',{id},'fbOut','rt-orch'); }
+async function fbFetchSuggestions(){ const txt = await req('GET','/feedback/suggestions',null,'fbLiveOut','rt-orch'); try{ const j=JSON.parse(txt); fbRenderList(j); __fbVersion = (j && j.version) || 0; }catch{} }
 async function fbFetchSuggestions(){ await req('GET','/feedback/suggestions',null,'fbLiveOut','rt-orch'); }
 function fbRenderList(j){
   const el = document.getElementById('fbList'); if(!el) return;
   const list = (j && j.suggestions) || [];
+  const vb = document.getElementById('fbVerBadge'); if(vb){ const v=(j&&j.version)||0; vb.className='badge ' + (v>0?'good':'warn'); vb.innerHTML='<span class="dot"></span> v'+v; }
   if(!Array.isArray(list) || list.length===0){ el.innerHTML = '<div class="key">no suggestions</div>'; return; }
   const cls = (c)=> c>=0.8? 'good' : (c>=0.5? 'warn' : 'bad');
   const rows = list.map(s => {
@@ -459,6 +552,15 @@ async function fbApplyId(id){
 async function fbFetchPolicy(){
   try{ const r = await fetch(base + '/feedback/policy'); const j = await r.json(); const el=document.getElementById('fbBounds'); if(el){ el.textContent = `caps: ${j.apply_per_hour||3}/h · http_timeout ${j.http_timeout_min||5}..${j.http_timeout_max||300}s · mem_limit ${j.mem_limit_min||50}..${j.mem_limit_max||2000}`; } }catch{}
 }
+let __fbVersion = 0;
+let __fbTimer = null;
+async function fbLiveTick(){
+  try{
+    const r = await fetch(base + '/feedback/updates?since=' + (__fbVersion||0));
+    if(r.status === 200){ const j = await r.json(); __fbVersion = j.version || 0; fbRenderList(j); const out=document.getElementById('fbLiveOut'); if(out){ out.textContent = JSON.stringify(j,null,2);} }
+  }catch{}
+}
+function fbLiveSet(on){ if(__fbTimer){ clearInterval(__fbTimer); __fbTimer = null; } if(on){ fbLiveTick(); __fbTimer = setInterval(fbLiveTick, 3000); } }
 // Docs wiring
 let docsBase = null;
 function docPath(key){
@@ -467,6 +569,9 @@ function docPath(key){
     case 'events': return '/guide/quickstart/';
     case 'tools': return '/api_and_schema/';
     case 'orchestrator': return '/guide/quickstart/';
+    case 'chat': return '/guide/chat_backends/';
+    case 'models': return '/guide/models_download/';
+    case 'security': return '/guide/security_hardening/';
     case 'deployment': return '/deployment/';
     default: return '/';
   }
@@ -514,8 +619,141 @@ async function initDocs(){
   });
 }
 document.addEventListener('DOMContentLoaded', initDocs);
+// Metrics link
+document.addEventListener('DOMContentLoaded', ()=>{
+  const a=document.getElementById('metricsLink'); if(!a) return; a.href = base + '/metrics'; a.target='_blank'; a.title='Open Prometheus metrics';
+});
+function setAdmin(on){ __adminOk = !!on; const b=document.getElementById('adminBadge'); if(!b) return; b.className = 'badge ' + (on ? 'good' : 'warn'); b.innerHTML = '<span class="dot"></span> Admin: ' + (on ? 'on' : 'off'); }
+function setSSE(on){ const b=document.getElementById('sseBadge'); if(!b) return; b.className = 'badge ' + (on ? 'good' : 'bad'); b.innerHTML = '<span class="dot"></span> SSE: ' + (on ? 'live' : 'off'); }
+function setChat(name, ok){ const b=document.getElementById('chatBadge'); if(!b) return; const cls = ok ? (name==='synthetic'?'warn':'good') : 'bad'; b.className = 'badge ' + cls; b.innerHTML = '<span class="dot"></span> Chat: ' + name; }
+async function chatProbe(){ try{ const r=await fetch(base + '/chat/status?probe=1'); const j=await r.json(); setChat(j.backend||'synthetic', !!j.ok); showToast('Chat ' + (j.backend||'synthetic') + ': ' + (j.ok?'ok':'fail') + (j.latency_ms?(' · '+j.latency_ms+' ms') : '')); }catch{ setChat('synthetic', false); showToast('Chat probe failed'); } }
+async function chatInit(){ try{ const r=await fetch(base + '/chat/status'); const j=await r.json(); setChat(j.backend||'synthetic', !!j.ok); }catch{ setChat('synthetic', false); } }
+async function probeAdmin(){ try{ const r = await fetch(base + '/introspect/tools'); setAdmin(r.ok); }catch{ setAdmin(false); } }
+document.addEventListener('DOMContentLoaded', probeAdmin);
+document.addEventListener('DOMContentLoaded', ()=>{ var b=document.getElementById('chatTestBtn'); if(b){ b.addEventListener('click', chatProbe); } chatInit(); });
+document.addEventListener('DOMContentLoaded', ()=>{ try{ initBadges(); }catch(e){} });
 // Pull policy bounds for display
 document.addEventListener('DOMContentLoaded', fbFetchPolicy);
+// Start live suggestions if enabled
+document.addEventListener('DOMContentLoaded', ()=>{ const cb=document.getElementById('fbLive'); if(cb){ fbLiveSet(cb.checked); cb.addEventListener('change', ()=> fbLiveSet(cb.checked)); } });
+// SSE presets
+document.addEventListener('DOMContentLoaded', ()=>{
+  const b1=document.getElementById('sseReplay50'); if(b1){ b1.addEventListener('click', ()=>{ startSSE(50, []); showToast('Replaying last 50'); }); }
+  const b2=document.getElementById('sseOnlyModels'); if(b2){ b2.addEventListener('click', ()=>{ startSSE(0, ['Models.']); showToast('Filtering to Models.*'); }); }
+});
+
+// --- Persist common inputs ---
+function prefKey(k){ return 'arw.' + k; }
+function savePref(k,v){ try{ localStorage.setItem(prefKey(k), JSON.stringify(v)); }catch{} }
+function loadPref(k,def){ try{ const v = localStorage.getItem(prefKey(k)); return v ? JSON.parse(v) : def; }catch{ return def; } }
+function bindPersist(id, key, isCheckbox){ const el=document.getElementById(id); if(!el) return; const val = loadPref(key, isCheckbox ? false : ''); if(val !== undefined && val !== null){ if(isCheckbox) el.checked = !!val; else if(val !== '') el.value = val; }
+  el.addEventListener('change', ()=>{ const v = isCheckbox ? !!el.checked : el.value; savePref(key, v); }); }
+document.addEventListener('DOMContentLoaded', ()=>{
+  [['chatModel',false],['memKind',false],['profileSel',false],['hintConc',false],['hintBuf',false],['hintTimeout',false],['autoApply',true],['fbLive',true],['memBody',false],['toolBody',false],['mId',false],['mProv',false]].forEach(([id,isCb])=> bindPersist(id, id, isCb));
+  const remember = loadPref('admin.remember', false); const tok = loadPref('admin.token', '');
+  const cb=document.getElementById('rememberTok'); const t=document.getElementById('adminToken'); if(cb) cb.checked = !!remember; if(t && remember && tok){ t.value = tok; __adminHeader = tok; setAdmin(true); }
+});
+document.addEventListener('DOMContentLoaded', ()=>{
+  const btn=document.getElementById('useTok'); if(!btn) return; btn.addEventListener('click', ()=>{
+    const t=document.getElementById('adminToken').value.trim(); __adminHeader = t; setAdmin(!!t);
+    const remember = document.getElementById('rememberTok').checked; savePref('admin.remember', !!remember); if(remember){ savePref('admin.token', t); } else { try{ localStorage.removeItem(prefKey('admin.token')); }catch{} }
+  });
+});
+document.addEventListener('DOMContentLoaded', ()=>{
+  const sel=document.getElementById('hdrProfile'); if(sel){ sel.addEventListener('change', async ()=>{ try{ await fetch(base+'/governor/profile',{method:'POST',headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: sel.value})}); const b=document.getElementById('govBadge'); if(b){ b.className='badge good'; b.innerHTML='<span class=\"dot\"></span> Gov: '+sel.value; } showToast('Profile set to '+sel.value); }catch{ showToast('Profile change failed'); } }); }
+});
+
+// --- Command palette ---
+function ensurePalette(){
+  if(document.getElementById('pal')) return;
+  const wrap=document.createElement('div'); wrap.className='palette'; wrap.id='pal';
+  wrap.innerHTML = `<div class="pal-box"><input id="palQuery" placeholder="Type a command... (Esc to close)"><div id="palList" class="pal-list"></div></div>`;
+  document.body.appendChild(wrap);
+}
+const palette = {
+  open(){ ensurePalette(); const el=document.getElementById('pal'); el.style.display='flex'; this.render(''); const inp=document.getElementById('palQuery'); inp.value=''; inp.focus(); this.sel=0; },
+  close(){ const el=document.getElementById('pal'); if(el) el.style.display='none'; },
+  list:[
+    {t:'Open /version', h:'GET', f:()=>hit('/version')},
+    {t:'Open /about', h:'GET', f:()=>hit('/about')},
+    {t:'List tools', h:'GET', f:()=>hit('/introspect/tools')},
+    {t:'Probe now', h:'Action', f:()=>orProbe()},
+    {t:'Refresh models', h:'Action', f:()=>orRefreshModels()},
+    {t:'Run self-tests', h:'Action', f:()=>runSelfTests()},
+    {t:'Toggle insights', h:'UI', f:()=>document.getElementById('toggleInsights').click()},
+    {t:'Copy stats JSON', h:'UI', f:()=>copyStatsNow()},
+    {t:'Open docs', h:'UI', f:()=>{ const l=document.getElementById('docsLink'); if(l && l.href) window.open(l.href,'_blank'); }},
+    {t:'Shutdown service', h:'Danger', f:()=>orShutdown()},
+  ],
+  items:[], sel:0,
+  render(q){ const list=document.getElementById('palList'); const qq=(q||'').toLowerCase(); this.items = this.list.filter(x=> x.t.toLowerCase().includes(qq)); if(this.items.length===0){ list.innerHTML = '<div class="pal-item"><span>No matches</span></div>'; return; }
+    list.innerHTML = this.items.map((x,i)=> `<div class="pal-item ${i===0?'sel':''}" data-idx="${i}"><span>${x.t}</span><span class="hint">${x.h}</span></div>`).join(''); this.sel=0; },
+  move(d){ if(!this.items.length) return; const list=document.getElementById('palList'); const max=this.items.length; const prev=this.sel; this.sel = (this.sel + d + max) % max; const rows=list.querySelectorAll('.pal-item'); if(rows[prev]) rows[prev].classList.remove('sel'); if(rows[this.sel]) rows[this.sel].classList.add('sel'); rows[this.sel]?.scrollIntoView({block:'nearest'}); },
+  run(){ if(!this.items.length) return; const x=this.items[this.sel]; this.close(); try{ x.f(); }catch(e){ showToast('Command error'); } }
+};
+document.addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('openPalette')?.addEventListener('click', ()=> palette.open());
+  document.addEventListener('input', (e)=>{ if(e.target && e.target.id==='palQuery'){ palette.render(e.target.value||''); }});
+  document.addEventListener('click', (e)=>{ const pal=document.getElementById('pal'); if(!pal || pal.style.display==='none') return; if(!pal.contains(e.target)){ /* click outside */ } });
+});
+
+// --- Shortcuts manager (centralized bindings + global toggle) ---
+const Shortcuts = {
+  enabled: true,
+  binds: [],
+  normalize(e){
+    const parts = [];
+    if (e.ctrlKey || e.metaKey) parts.push('Ctrl');
+    if (e.altKey) parts.push('Alt');
+    if (e.shiftKey && !['?',':'].includes(e.key)) parts.push('Shift');
+    let k = e.key;
+    if (k.length === 1) { k = k.toUpperCase(); }
+    return parts.concat([k]).join('+');
+  },
+  inEditable(e){
+    const t = e.target;
+    if (!t) return false;
+    const el = t.closest ? t.closest('input,textarea,select,[contenteditable="true"]') : null;
+    return !!el;
+  },
+  register(seq, desc, fn, opts){ this.binds.push({ seq, desc, fn, when: (opts && opts.when) || (()=>true), inInputs: !!(opts && opts.captureInInputs) }); },
+  setEnabled(on){ this.enabled = !!on; savePref('shortcuts.enabled', this.enabled); const cb=document.getElementById('shortcutsToggle'); if(cb) cb.checked = this.enabled; },
+  list(){ return this.binds.map(b => ({ seq: b.seq, desc: b.desc })).filter((v,i,a)=> a.findIndex(x=> x.seq===v.seq && x.desc===v.desc)===i); },
+  ensureHelp(){ if(document.getElementById('scut')) return; const wrap=document.createElement('div'); wrap.className='palette'; wrap.id='scut';
+    wrap.innerHTML = `<div class="pal-box"><div style="padding:10px 12px;display:flex;align-items:center;gap:8px"><b>Shortcuts</b><span class="key" style="margin-left:auto">enable</span><input type="checkbox" id="shortcutsToggle2"></div><div id="scutList" class="pal-list"></div></div>`; document.body.appendChild(wrap);
+    document.getElementById('shortcutsToggle2').addEventListener('change', (e)=> this.setEnabled(e.target.checked));
+  },
+  showHelp(){ this.ensureHelp(); const el=document.getElementById('scut'); const list=document.getElementById('scutList'); const rows=this.list().map(x=> `<div class="pal-item"><span>${x.desc}</span><span class="hint">${x.seq}</span></div>`).join(''); list.innerHTML = rows || '<div class="pal-item"><span>No shortcuts</span></div>'; el.style.display='flex'; document.getElementById('shortcutsToggle2').checked = this.enabled; },
+  hideHelp(){ const el=document.getElementById('scut'); if(el) el.style.display='none'; },
+  hookOnce(){ if (this._hooked) return; this._hooked=true; document.addEventListener('keydown', (e)=>{
+      if(!this.enabled) return;
+      const seq = this.normalize(e);
+      const inEdit = this.inEditable(e);
+      for(const b of this.binds){ if (b.seq === seq && b.when() && (b.inInputs || !inEdit)) { e.preventDefault(); try{ b.fn(e); }catch{} return; } }
+      // Special case: Esc closes overlays
+      if (e.key === 'Escape'){ const pal=document.getElementById('pal'); const sc=document.getElementById('scut'); if(pal && pal.style.display!=='none'){ palette.close(); e.preventDefault(); return; } if(sc && sc.style.display!=='none'){ this.hideHelp(); e.preventDefault(); return; } }
+    }); }
+};
+document.addEventListener('DOMContentLoaded', ()=>{
+  Shortcuts.setEnabled(loadPref('shortcuts.enabled', true));
+  Shortcuts.hookOnce();
+  const cb=document.getElementById('shortcutsToggle'); if(cb){ cb.checked = Shortcuts.enabled; cb.addEventListener('change', ()=> Shortcuts.setEnabled(cb.checked)); }
+  document.getElementById('openShortcuts')?.addEventListener('click', ()=> Shortcuts.showHelp());
+});
+
+// Register default shortcuts
+function paletteOpen(){ palette.open(); }
+function insightsToggle(){ const el = document.getElementById('insights'); const on = (el.style.display==='none' || !el.style.display); el.style.display = on ? 'block' : 'none'; if(on){ if(window.__insightsTimer) clearInterval(window.__insightsTimer); const pull=async()=>{ try{ const r=await fetch(base+'/introspect/stats'); const j=await r.json(); routesCache = (j && j.routes && j.routes.by_path) || {}; renderInsights(); }catch{} }; pull(); window.__insightsTimer=setInterval(pull,3000); } else { if(window.__insightsTimer) clearInterval(window.__insightsTimer); } }
+function paletteVisible(){ const el=document.getElementById('pal'); return !!el && el.style.display!=='none'; }
+Shortcuts.register('Ctrl+K', 'Open palette', paletteOpen, { when: ()=> true });
+Shortcuts.register('Ctrl+/', 'Show shortcuts', ()=> Shortcuts.showHelp(), { when: ()=> true });
+Shortcuts.register('Ctrl+I', 'Toggle insights', insightsToggle, { when: ()=> true });
+Shortcuts.register('ArrowDown', 'Palette: next', ()=> palette.move(1), { when: paletteVisible, captureInInputs: true });
+Shortcuts.register('ArrowUp', 'Palette: prev', ()=> palette.move(-1), { when: paletteVisible, captureInInputs: true });
+Shortcuts.register('Enter', 'Palette: run', ()=> palette.run(), { when: paletteVisible, captureInInputs: true });
+
+// helper to copy stats
+async function copyStatsNow(){ try{ const r=await fetch(base + '/introspect/stats'); const t=await r.text(); await navigator.clipboard.writeText(t); showToast('Stats copied'); }catch{ showToast('Stats copy failed'); } }
 </script>
 <div id="toast" class="toast"></div>
 <script>
@@ -525,7 +763,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const copyMain=document.getElementById('copyJsonMain'); if(copyMain){ copyMain.addEventListener('click', ()=>{ try{ navigator.clipboard.writeText(document.getElementById('out').textContent||''); }catch{} }); }
   const copyMem=document.getElementById('copyJsonMem'); if(copyMem){ copyMem.addEventListener('click', ()=>{ try{ navigator.clipboard.writeText(document.getElementById('memOut').textContent||''); }catch{} }); }
   const copyTool=document.getElementById('copyJsonTool'); if(copyTool){ copyTool.addEventListener('click', ()=>{ try{ navigator.clipboard.writeText(document.getElementById('toolOut').textContent||''); }catch{} }); }
-  const tgl=document.getElementById('toggleInsights'); if (tgl){ tgl.addEventListener('click', ()=>{ const el = document.getElementById('insights'); const on = (el.style.display==='none' || !el.style.display); el.style.display = on ? 'block' : 'none'; if(on){ if(window.__insightsTimer) clearInterval(window.__insightsTimer); const pull=async()=>{ try{ const r=await fetch(base+'/introspect/stats'); const j=await r.json(); routesCache = (j && j.routes && j.routes.by_path) || {}; renderInsights(); }catch{} }; pull(); window.__insightsTimer=setInterval(pull,3000); } else { if(window.__insightsTimer) clearInterval(window.__insightsTimer); } }); }
+  const tgl=document.getElementById('toggleInsights'); if (tgl){ tgl.addEventListener('click', insightsToggle); }
   const copyStats=document.getElementById('copyStatsBtn'); if(copyStats){ copyStats.addEventListener('click', async ()=>{ try{ const r=await fetch(base + '/introspect/stats'); const t=await r.text(); await navigator.clipboard.writeText(t); showToast('Stats copied'); }catch{ showToast('Stats copy failed'); } }); }
 });
 </script>

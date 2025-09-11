@@ -6,12 +6,12 @@ pub mod arrow_ingest;
 
 mod config;
 pub use config::{config_schema_json, load_config, write_schema_file, Config};
+pub mod gating;
+pub mod gating_keys;
 pub mod hierarchy;
 pub mod orchestrator;
 #[cfg(feature = "nats")]
 pub mod orchestrator_nats;
-pub mod gating;
-pub mod gating_keys;
 pub mod rpu;
 
 #[cfg(feature = "wasm")]

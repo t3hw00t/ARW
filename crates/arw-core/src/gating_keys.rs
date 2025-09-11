@@ -41,14 +41,59 @@ pub const CHAT_CLEAR: &str = "chat:clear";
 pub const GOVERNOR_SET: &str = "governor:set";
 pub const GOVERNOR_HINTS_SET: &str = "governor:hints:set";
 
+// Hierarchy
+pub const HIERARCHY_HELLO: &str = "hierarchy:hello";
+pub const HIERARCHY_OFFER: &str = "hierarchy:offer";
+pub const HIERARCHY_ACCEPT: &str = "hierarchy:accept";
+pub const HIERARCHY_STATE_GET: &str = "hierarchy:state:get";
+pub const HIERARCHY_ROLE_SET: &str = "hierarchy:role:set";
+
+// Introspection
+pub const INTROSPECT_TOOLS: &str = "introspect:tools";
+pub const INTROSPECT_SCHEMA: &str = "introspect:schema";
+pub const INTROSPECT_STATS: &str = "introspect:stats";
+pub const INTROSPECT_PROBE: &str = "introspect:probe";
+
 /// Return all known static keys (dynamic keys like task:<id> are omitted).
-pub fn list() -> Vec<&'static str> { vec![
-    QUEUE_ENQUEUE,
-    EVENTS_TASK_COMPLETED,
-    MEMORY_GET, MEMORY_SAVE, MEMORY_LOAD, MEMORY_APPLY, MEMORY_LIMIT_GET, MEMORY_LIMIT_SET,
-    MODELS_LIST, MODELS_REFRESH, MODELS_SAVE, MODELS_LOAD, MODELS_ADD, MODELS_DELETE, MODELS_DEFAULT_GET, MODELS_DEFAULT_SET, MODELS_DOWNLOAD,
-    FEEDBACK_STATE, FEEDBACK_SIGNAL, FEEDBACK_ANALYZE, FEEDBACK_APPLY, FEEDBACK_AUTO, FEEDBACK_RESET,
-    TOOLS_LIST, TOOLS_RUN,
-    CHAT_SEND, CHAT_CLEAR,
-    GOVERNOR_SET, GOVERNOR_HINTS_SET,
-]}
+pub fn list() -> Vec<&'static str> {
+    vec![
+        QUEUE_ENQUEUE,
+        EVENTS_TASK_COMPLETED,
+        MEMORY_GET,
+        MEMORY_SAVE,
+        MEMORY_LOAD,
+        MEMORY_APPLY,
+        MEMORY_LIMIT_GET,
+        MEMORY_LIMIT_SET,
+        MODELS_LIST,
+        MODELS_REFRESH,
+        MODELS_SAVE,
+        MODELS_LOAD,
+        MODELS_ADD,
+        MODELS_DELETE,
+        MODELS_DEFAULT_GET,
+        MODELS_DEFAULT_SET,
+        MODELS_DOWNLOAD,
+        FEEDBACK_STATE,
+        FEEDBACK_SIGNAL,
+        FEEDBACK_ANALYZE,
+        FEEDBACK_APPLY,
+        FEEDBACK_AUTO,
+        FEEDBACK_RESET,
+        TOOLS_LIST,
+        TOOLS_RUN,
+        CHAT_SEND,
+        CHAT_CLEAR,
+        GOVERNOR_SET,
+        GOVERNOR_HINTS_SET,
+        HIERARCHY_HELLO,
+        HIERARCHY_OFFER,
+        HIERARCHY_ACCEPT,
+        HIERARCHY_STATE_GET,
+        HIERARCHY_ROLE_SET,
+        INTROSPECT_TOOLS,
+        INTROSPECT_SCHEMA,
+        INTROSPECT_STATS,
+        INTROSPECT_PROBE,
+    ]
+}

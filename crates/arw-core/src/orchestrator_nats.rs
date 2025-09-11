@@ -1,4 +1,3 @@
-#![cfg(feature = "nats")]
 use crate::orchestrator::{LeaseToken, Queue, Task};
 use anyhow::Result;
 use async_nats::Client;
@@ -97,7 +96,9 @@ impl Queue for NatsQueue {
 mod jetstream_backend {
     use super::*;
     use async_nats::jetstream::context::Context as JsContext;
-    use async_nats::jetstream::{consumer::pull::Message as JsMessage, consumer::pull::Stream as PullStream};
+    use async_nats::jetstream::{
+        consumer::pull::Message as JsMessage, consumer::pull::Stream as PullStream,
+    };
     use std::collections::HashMap;
     use std::sync::Arc;
     use tokio::sync::Mutex;
@@ -115,11 +116,13 @@ mod jetstream_backend {
         pub async fn connect(url: &str, stream: &str, subject: &str) -> Result<Self> {
             let client = async_nats::connect(url).await?;
             let js = async_nats::jetstream::new(client.clone());
-            let _ = js.get_or_create_stream(async_nats::jetstream::stream::Config {
-                name: stream.to_string(),
-                subjects: vec![subject.to_string()],
-                ..Default::default()
-            }).await?;
+            let _ = js
+                .get_or_create_stream(async_nats::jetstream::stream::Config {
+                    name: stream.to_string(),
+                    subjects: vec![subject.to_string()],
+                    ..Default::default()
+                })
+                .await?;
             Ok(Self {
                 _client: client,
                 js,
@@ -133,9 +136,15 @@ mod jetstream_backend {
     #[async_trait]
     impl Queue for JetStreamQueue {
         async fn enqueue(&self, t: Task) -> Result<String> {
-            let id = if t.id.is_empty() { Uuid::new_v4().to_string() } else { t.id.clone() };
+            let id = if t.id.is_empty() {
+                Uuid::new_v4().to_string()
+            } else {
+                t.id.clone()
+            };
             let mut t2 = t.clone();
-            if t2.id.is_empty() { t2.id = id.clone(); }
+            if t2.id.is_empty() {
+                t2.id = id.clone();
+            }
             let bytes = serde_json::to_vec(&t2)?;
             self.js.publish(self.subject.clone(), bytes.into()).await?;
             Ok(id)
@@ -156,7 +165,10 @@ mod jetstream_backend {
                 )
                 .await?;
             let mut messages: PullStream = consumer.messages().await?;
-            let msg = messages.next().await.ok_or_else(|| anyhow::anyhow!("no message"))?;
+            let msg = messages
+                .next()
+                .await
+                .ok_or_else(|| anyhow::anyhow!("no message"))?;
             let task: Task = serde_json::from_slice(&msg.message.payload)?;
             let lease_id = Uuid::new_v4().to_string();
             {
@@ -183,7 +195,8 @@ mod jetstream_backend {
         async fn nack(&self, lease: LeaseToken, retry_after_ms: Option<u64>) -> Result<()> {
             if let Some(msg) = self.pending.lock().await.remove(&lease.lease_id) {
                 if let Some(delay) = retry_after_ms {
-                    msg.nak_with_delay(std::time::Duration::from_millis(delay)).await?;
+                    msg.nak_with_delay(std::time::Duration::from_millis(delay))
+                        .await?;
                 } else {
                     msg.nak(None).await?;
                 }

@@ -22,7 +22,8 @@ use std::sync::{Mutex, OnceLock};
 use std::time::Duration as StdDuration;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio_stream::wrappers::BroadcastStream;
-use tokio_stream::StreamExt;
+use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
+use futures_util::StreamExt as _; // for flat_map on streams
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
@@ -31,6 +32,7 @@ use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 use utoipa::{OpenApi, ToSchema};
+use arw_macros::arw_gate;
 mod ext;
 use arw_core::gating;
 
@@ -100,20 +102,38 @@ async fn main() {
             let _ = std::fs::create_dir_all(dir);
             let contract_schema = schema_for!(arw_core::gating::ContractCfg);
             let capsule_schema = schema_for!(arw_protocol::GatingCapsule);
-            std::fs::write(dir.join("gating_contract.json"), serde_json::to_string_pretty(&contract_schema).unwrap()).ok();
-            std::fs::write(dir.join("gating_capsule.json"), serde_json::to_string_pretty(&capsule_schema).unwrap()).ok();
+            std::fs::write(
+                dir.join("gating_contract.json"),
+                serde_json::to_string_pretty(&contract_schema).unwrap(),
+            )
+            .ok();
+            std::fs::write(
+                dir.join("gating_capsule.json"),
+                serde_json::to_string_pretty(&capsule_schema).unwrap(),
+            )
+            .ok();
         }
         {
             let keys_path = std::path::Path::new("docs/GATING_KEYS.md");
             let mut out = String::from("# Gating Keys\n\nGenerated from code.\n\n");
-            for k in arw_core::gating_keys::list() { out.push_str(&format!("- `{}`\n", k)); }
+            for k in arw_core::gating_keys::list() {
+                out.push_str(&format!("- `{}`\n", k));
+            }
             let _ = std::fs::write(keys_path, out);
         }
         return;
     }
 
     let (stop_tx, mut stop_rx) = tokio::sync::broadcast::channel::<()>(1);
-    let bus = arw_events::Bus::new(256);
+    let bus_cap: usize = std::env::var("ARW_BUS_CAP")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(256);
+    let bus_replay: usize = std::env::var("ARW_BUS_REPLAY")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(256);
+    let bus = arw_events::Bus::new_with_replay(bus_cap, bus_replay);
     // Initialize gating from config/env
     gating::init_from_config("configs/gating.toml");
     let cfg = arw_core::load_config(
@@ -174,7 +194,8 @@ async fn main() {
                 .as_ref()
                 .and_then(|c| c.cluster.nats_url.clone())
                 .unwrap_or_else(|| "nats://127.0.0.1:4222".to_string());
-            let node_id = std::env::var("ARW_NODE_ID").ok()
+            let node_id = std::env::var("ARW_NODE_ID")
+                .ok()
                 .or_else(|| cfg.as_ref().and_then(|c| c.cluster.node_id.clone()))
                 .unwrap_or_else(|| "local".to_string());
             arw_events::attach_nats_incoming(&bus, &url, &node_id).await;
@@ -223,6 +244,7 @@ async fn main() {
         .route("/healthz", get(healthz))
         .route("/introspect/tools", get(introspect_tools))
         .route("/introspect/schemas/:id", get(introspect_schema))
+        .route("/metrics", get(ext::stats::metrics_get))
         // Serve generated specs when present
         .route("/spec/openapi.yaml", get(spec_openapi))
         .route("/spec/asyncapi.yaml", get(spec_asyncapi))
@@ -274,9 +296,10 @@ async fn main() {
         }
     }
 
-    let port: u16 = std::env::var("ARW_PORT")
-        .ok()
-        .and_then(|s| s.parse().ok())
+    let port: u16 = cfg
+        .as_ref()
+        .and_then(|c| c.runtime.port)
+        .or_else(|| std::env::var("ARW_PORT").ok().and_then(|s| s.parse().ok()))
         .unwrap_or(8090);
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     info!("arw-svc listening on http://{}", addr);
@@ -324,6 +347,7 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
         || path.starts_with("/tasks")
         || path.starts_with("/hierarchy")
         || path.starts_with("/chat")
+        || path.starts_with("/projects")
         || path.starts_with("/feedback");
     if !is_sensitive {
         return next.run(req).await;
@@ -441,8 +465,9 @@ async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
     path = "/introspect/tools",
     responses((status = 200, description = "List available tools"))
 )]
+#[arw_gate("introspect:tools")]
 async fn introspect_tools() -> impl IntoResponse {
-    Json(serde_json::to_value(arw_core::introspect_tools()).unwrap())
+    Json(serde_json::to_value(arw_core::introspect_tools()).unwrap()).into_response()
 }
 
 #[utoipa::path(
@@ -454,6 +479,7 @@ async fn introspect_tools() -> impl IntoResponse {
         (status = 404, description = "Unknown tool id"),
     )
 )]
+#[arw_gate("introspect:schema")]
 async fn introspect_schema(Path(id): Path<String>) -> impl IntoResponse {
     match arw_core::introspect_schema(&id) {
         Some(s) => Json::<serde_json::Value>(s).into_response(),
@@ -475,6 +501,7 @@ async fn introspect_schema(Path(id): Path<String>) -> impl IntoResponse {
     path = "/probe",
     responses((status = 200, description = "Returns effective memory paths"))
 )]
+#[arw_gate("introspect:probe")]
 async fn probe(State(state): State<AppState>) -> impl IntoResponse {
     // Effective paths as JSON (serde_json::Value)
     let ep = arw_core::load_effective_paths();
@@ -483,7 +510,7 @@ async fn probe(State(state): State<AppState>) -> impl IntoResponse {
     state.bus.publish("Memory.Applied", &ep);
 
     // Return it to the client
-    Json::<serde_json::Value>(ep)
+    Json::<serde_json::Value>(ep).into_response()
 }
 
 #[utoipa::path(
@@ -515,6 +542,13 @@ async fn shutdown(State(state): State<AppState>) -> impl IntoResponse {
     Json(OkResponse { ok: true })
 }
 
+#[derive(serde::Deserialize)]
+struct EventsQs {
+    #[serde(default)]
+    replay: Option<usize>,
+    #[serde(default)]
+    prefix: Vec<String>,
+}
 #[utoipa::path(
     get,
     path = "/events",
@@ -522,20 +556,49 @@ async fn shutdown(State(state): State<AppState>) -> impl IntoResponse {
 )]
 async fn events(
     State(state): State<AppState>,
+    Query(q): Query<EventsQs>,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
-    let rx = state.bus.subscribe();
-    let bstream = BroadcastStream::new(rx)
-        .filter_map(|res| res.ok())
-        .map(|env| {
+    let rx = if !q.prefix.is_empty() {
+        state.bus.subscribe_filtered(q.prefix.clone(), None)
+    } else {
+        state.bus.subscribe()
+    };
+    let bus_for_lag = state.bus.clone();
+    let bstream = BroadcastStream::new(rx).flat_map(move |res| match res {
+        Ok(env) => {
             let data = serde_json::to_string(&env).unwrap_or_else(|_| "{}".to_string());
-            // Use RFC3339 ms timestamp as SSE id for simple replay correlation
-            Ok::<Event, Infallible>(
+            tokio_stream::once(Ok::<Event, Infallible>(
                 Event::default()
                     .id(env.time.clone())
                     .event(env.kind.clone())
                     .data(data),
-            )
-        });
+            ))
+        }
+        Err(BroadcastStreamRecvError::Lagged(n)) => {
+            bus_for_lag.note_lag(n as u64);
+            let body = format!("{{\"skipped\":{}}}", n);
+            tokio_stream::once(Ok::<Event, Infallible>(
+                Event::default().id("gap").event("Bus.Gap").data(body),
+            ))
+        }
+    });
+
+    // optional replay of last N bus events (best-effort)
+    let rcount = q.replay.unwrap_or(0).min(1000);
+    let replay_items = if rcount > 0 {
+        state.bus.replay(rcount)
+    } else {
+        Vec::new()
+    };
+    let replay_stream = tokio_stream::iter(replay_items.into_iter().map(|env| {
+        let data = serde_json::to_string(&env).unwrap_or_else(|_| "{}".to_string());
+        Ok::<Event, Infallible>(
+            Event::default()
+                .id(env.time.clone())
+                .event(env.kind.clone())
+                .data(data),
+        )
+    }));
 
     let initial = tokio_stream::once(Ok::<Event, Infallible>(
         Event::default()
@@ -543,7 +606,9 @@ async fn events(
             .event("Service.Connected")
             .data("{}"),
     ));
-    let stream = initial.chain(bstream);
+    // merge: connected -> replay -> live
+    let stream = tokio_stream::StreamExt::chain(initial, replay_stream);
+    let stream = tokio_stream::StreamExt::chain(stream, bstream);
 
     Sse::new(stream).keep_alive(
         KeepAlive::new()

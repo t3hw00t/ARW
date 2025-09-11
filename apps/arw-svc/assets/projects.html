@@ -1,0 +1,51 @@
+<!doctype html><meta charset="utf-8"><title>ARW Projects</title>
+<style>
+  :root{--line:#e5e7eb;--ink:#111827;--muted:#6b7280}
+  body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;color:var(--ink)}
+  .grid{display:grid;grid-template-columns:260px 1fr;gap:16px}
+  .box{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fafaf9}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+  button,input{font:inherit;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  ul{list-style:none;padding:0;margin:0}
+  li{padding:4px 6px;cursor:pointer;border-radius:6px}
+  li:hover{background:#f3f4f6}
+  pre,textarea{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:8px;overflow:auto}
+  textarea{width:100%;min-height:180px}
+</style>
+<h1>Projects</h1>
+<div class='grid'>
+  <div class='box'>
+    <div class='row'>
+      <input id='projName' placeholder='project name' style='width: 160px;'>
+      <button onclick='createProj()'>Create</button>
+    </div>
+    <ul id='projList'></ul>
+  </div>
+  <div class='box'>
+    <div class='row'><span class='key'>project</span><code id='curProj'>–</code></div>
+    <div class='row'>
+      <div style='flex:1'>
+        <h3>Notes</h3>
+        <textarea id='notes' placeholder='Project notes...'></textarea>
+        <div class='row'><button onclick='saveNotes()'>Save Notes</button> <button onclick='loadNotes()'>Reload</button></div>
+      </div>
+      <div style='flex:1'>
+        <h3>Files</h3>
+        <div id='tree' class='box' style='background:#fff; max-height:260px; overflow:auto'></div>
+      </div>
+    </div>
+    <pre id='out'>{}</pre>
+  </div>
+</div>
+<script>
+const base=location.origin;
+let current=null;
+function setProj(n){ current=n; document.getElementById('curProj').textContent = n||'–'; if(n){ loadNotes(); loadTree(''); } }
+async function listProjs(){ const r=await fetch(base+'/projects/list'); const j=await r.json().catch(()=>[]); const ul=document.getElementById('projList'); ul.innerHTML=''; (j.items||[]).forEach(n=>{ const li=document.createElement('li'); li.textContent=n; li.onclick=()=>setProj(n); ul.appendChild(li); }); }
+async function createProj(){ const n=document.getElementById('projName').value.trim(); if(!n) return; await fetch(base+'/projects/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:n})}); await listProjs(); setProj(n); }
+async function loadNotes(){ if(!current) return; const r=await fetch(base+'/projects/notes?proj='+encodeURIComponent(current)); const t=await r.text(); document.getElementById('notes').value=t; }
+async function saveNotes(){ if(!current) return; const t=document.getElementById('notes').value||''; await fetch(base+'/projects/notes?proj='+encodeURIComponent(current),{method:'POST',headers:{'Content-Type':'text/plain'},body:t+'\n'}); show('saved'); }
+function show(s){ document.getElementById('out').textContent=s; setTimeout(()=>{ document.getElementById('out').textContent='{}'; },1200); }
+async function loadTree(p){ if(!current) return; const r=await fetch(base+'/projects/tree?proj='+encodeURIComponent(current)+'&path='+encodeURIComponent(p||'')); const j=await r.json().catch(()=>({items:[]})); const el=document.getElementById('tree'); el.innerHTML=''; (j.items||[]).forEach(it=>{ const d=document.createElement('div'); d.textContent = (it.dir?'📁 ':'📄 ')+it.name; d.style.cursor='pointer'; d.onclick=()=>{ if(it.dir) loadTree(it.rel); }; el.appendChild(d); }); }
+document.addEventListener('DOMContentLoaded', listProjs);
+</script>

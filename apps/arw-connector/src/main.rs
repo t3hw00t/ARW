@@ -45,7 +45,9 @@ async fn main() -> anyhow::Result<()> {
                         "payload": {"id": t.id, "ok": true, "output": out}
                     });
                     if let Ok(bytes) = serde_json::to_vec(&env) {
-                        let _ = nats.publish("arw.events.Task.Completed", bytes.clone().into()).await;
+                        let _ = nats
+                            .publish("arw.events.Task.Completed", bytes.clone().into())
+                            .await;
                         let subj = format!("arw.events.node.{}.{}", node_id, "Task.Completed");
                         let _ = nats.publish(subj, bytes.into()).await;
                     }

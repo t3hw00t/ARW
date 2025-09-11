@@ -108,6 +108,7 @@ pub(crate) async fn memory_apply(
             arr.remove(0);
         }
         let snap = mem.clone();
+        drop(mem); // release write lock before performing async I/O
         let _ = save_json_file_async(&memory_path(), &snap).await;
         let evt = serde_json::json!({"kind":"Memory.Applied","payload":{"kind": req.kind, "value": req.value, "ttl_ms": req.ttl_ms}});
         state.bus.publish("Memory.Applied", &evt);

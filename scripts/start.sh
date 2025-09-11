@@ -7,6 +7,7 @@ docs_url=""
 admin_token=""
 timeout_secs=20
 use_dist=0
+pid_file="${ARW_PID_FILE:-}"
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -55,7 +56,18 @@ if [[ ! -x "$tray" ]]; then
 fi
 
 echo "[start] Launching $svc on http://127.0.0.1:$ARW_PORT"
-"$svc" &
+if [[ -n "${ARW_LOG_FILE:-}" ]]; then
+  mkdir -p "$(dirname "$ARW_LOG_FILE")" || true
+  echo "[start] Logging service output to $ARW_LOG_FILE"
+  "$svc" >>"$ARW_LOG_FILE" 2>&1 &
+else
+  "$svc" &
+fi
+svc_pid=$!
+if [[ -n "$pid_file" ]]; then
+  mkdir -p "$(dirname "$pid_file")" || true
+  echo "$svc_pid" > "$pid_file" || true
+fi
 if [[ "${ARW_NO_TRAY:-0}" == "1" ]]; then
   echo "[start] ARW_NO_TRAY=1; skipping tray; service running in background"
   wait

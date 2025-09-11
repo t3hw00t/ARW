@@ -1,0 +1,31 @@
+<!doctype html><meta charset="utf-8"><title>ARW Models</title>
+<style>
+  :root{--line:#e5e7eb;--ink:#111827;--muted:#6b7280;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444}
+  body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;color:var(--ink)}
+  h1{margin:0 0 10px 0}
+  .box{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fafaf9}
+  .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+  button,input{font:inherit;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:#fff}
+  pre{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:8px;overflow:auto}
+  .badge{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid var(--line);background:#fff}
+  .dot{width:8px;height:8px;border-radius:50%}
+  .good{color:#166534;border-color:#bbf7d0;background:#ecfdf5}.good .dot{background:var(--ok)}
+  .warn{color:#854d0e;border-color:#fde68a;background:#fefce8}.warn .dot{background:var(--warn)}
+  .bad{color:#991b1b;border-color:#fecaca;background:#fef2f2}.bad .dot{background:var(--bad)}
+</style>
+<h1>Models <span id="mdlBadge" class="badge warn"><span class="dot"></span> 0</span></h1>
+<div class="box">
+  <div class="row"><input id="mId" placeholder="model id" style="width:240px"><input id="mProv" placeholder="provider (local)" style="width:160px"></div>
+  <div class="row"><button onclick="listM()">List</button><button onclick="addM()">Add</button><button onclick="delM()">Delete</button><button onclick="defGet()">Get default</button><button onclick="defSet()">Set default</button></div>
+  <pre id="out">[]</pre>
+</div>
+<script>
+const base = location.origin;
+async function call(method,path,body){ const r=await fetch(base+path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined}); const t=await r.text(); try{ return JSON.parse(t);}catch{ return t; } }
+async function listM(){ const j=await call('GET','/models'); const b=document.getElementById('mdlBadge'); if(Array.isArray(j)&&b){ b.className='badge good'; b.innerHTML='<span class="dot"></span> '+j.length; } document.getElementById('out').textContent=JSON.stringify(j,null,2); }
+async function addM(){ const id=document.getElementById('mId').value.trim(); if(!id) return; const provider=(document.getElementById('mProv').value||'local').trim(); await call('POST','/models/add',{id,provider}); await listM(); }
+async function delM(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await call('POST','/models/delete',{id}); await listM(); }
+async function defGet(){ const j=await call('GET','/models/default'); document.getElementById('out').textContent=JSON.stringify(j,null,2); }
+async function defSet(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await call('POST','/models/default',{id}); await listM(); }
+document.addEventListener('DOMContentLoaded', listM);
+</script>

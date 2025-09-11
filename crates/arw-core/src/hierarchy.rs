@@ -4,20 +4,15 @@ use std::collections::{BTreeSet, HashMap};
 use std::sync::RwLock;
 
 /// Logical role of a core within a hierarchy.
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum Role {
     Root,
     Regional,
+    #[default]
     Edge,
     Connector,
     Observer,
-}
-
-impl Default for Role {
-    fn default() -> Self {
-        Role::Edge
-    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]

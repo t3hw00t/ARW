@@ -1,7 +1,7 @@
-use arw_core::{gating_keys, hello_core, introspect_tools, load_effective_paths};
-use tracing_subscriber::{fmt, EnvFilter};
 use anyhow::Result;
+use arw_core::{gating_keys, hello_core, introspect_tools, load_effective_paths};
 use base64::Engine;
+use tracing_subscriber::{fmt, EnvFilter};
 
 fn help() {
     println!(
@@ -35,7 +35,9 @@ fn main() {
             "gate" => {
                 let sub = args.next().unwrap_or_default();
                 if sub == "keys" {
-                    for k in gating_keys::list() { println!("{}", k); }
+                    for k in gating_keys::list() {
+                        println!("{}", k);
+                    }
                     return;
                 }
                 eprintln!("unknown 'gate' subcommand");
@@ -45,7 +47,10 @@ fn main() {
                 let sub = args.next().unwrap_or_default();
                 match sub.as_str() {
                     "template" => {
-                        let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+                        let now = std::time::SystemTime::now()
+                            .duration_since(std::time::UNIX_EPOCH)
+                            .unwrap()
+                            .as_millis() as u64;
                         let tpl = serde_json::json!({
                           "id":"example",
                           "version":"1",
@@ -62,17 +67,31 @@ fn main() {
                         return;
                     }
                     "gen-ed25519" => {
-                        if let Err(e) = cmd_gen_ed25519() { eprintln!("{}", e); std::process::exit(1); }
+                        if let Err(e) = cmd_gen_ed25519() {
+                            eprintln!("{}", e);
+                            std::process::exit(1);
+                        }
                         return;
                     }
                     "sign-ed25519" => {
                         let sk_b64 = args.next().unwrap_or_default();
                         let file = args.next().unwrap_or_default();
-                        if sk_b64.is_empty() || file.is_empty() { eprintln!("usage: arw-cli capsule sign-ed25519 <sk_b64> <capsule.json>"); std::process::exit(2);} 
-                        if let Err(e) = cmd_sign_ed25519(&sk_b64, &file) { eprintln!("{}", e); std::process::exit(1);} 
+                        if sk_b64.is_empty() || file.is_empty() {
+                            eprintln!(
+                                "usage: arw-cli capsule sign-ed25519 <sk_b64> <capsule.json>"
+                            );
+                            std::process::exit(2);
+                        }
+                        if let Err(e) = cmd_sign_ed25519(&sk_b64, &file) {
+                            eprintln!("{}", e);
+                            std::process::exit(1);
+                        }
                         return;
                     }
-                    _ => { eprintln!("unknown 'capsule' subcommand"); std::process::exit(2); }
+                    _ => {
+                        eprintln!("unknown 'capsule' subcommand");
+                        std::process::exit(2);
+                    }
                 }
             }
             _ => {}
@@ -95,17 +114,22 @@ fn cmd_gen_ed25519() -> Result<()> {
     let pk = sk.verifying_key();
     let sk_b64 = base64::engine::general_purpose::STANDARD.encode(sk.to_bytes());
     let pk_b64 = base64::engine::general_purpose::STANDARD.encode(pk.to_bytes());
-    println!("issuer=local-admin\nalg=ed25519\npubkey_b64={}\nprivkey_b64={}", pk_b64, sk_b64);
+    println!(
+        "issuer=local-admin\nalg=ed25519\npubkey_b64={}\nprivkey_b64={}",
+        pk_b64, sk_b64
+    );
     eprintln!("Note: store private key securely; add pubkey to configs/trust_capsules.json");
     Ok(())
 }
 
 fn cmd_sign_ed25519(sk_b64: &str, capsule_file: &str) -> Result<()> {
-    use ed25519_dalek::{SigningKey, Signer};
+    use ed25519_dalek::{Signer, SigningKey};
     let sk_bytes = base64::engine::general_purpose::STANDARD.decode(sk_b64)?;
     let sk = SigningKey::from_bytes(&sk_bytes.as_slice().try_into()?);
     let mut cap: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(capsule_file)?)?;
-    if let Some(obj) = cap.as_object_mut() { obj.remove("signature"); }
+    if let Some(obj) = cap.as_object_mut() {
+        obj.remove("signature");
+    }
     let msg = serde_json::to_vec(&cap)?;
     let sig = sk.sign(&msg);
     let sig_b64 = base64::engine::general_purpose::STANDARD.encode(sig.to_bytes());

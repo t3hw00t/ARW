@@ -1,13 +1,25 @@
 Agents Running Wild — Roadmap
-Updated: 2025-09-10
+Updated: 2025-09-11
 See [Interface Roadmap](INTERFACE_ROADMAP.md) for user-facing UI and tooling plans.
+
+Recently Shipped (Sep 2025)
+- Persistence hardening: atomic JSON/bytes writes with per‑path async locks; best‑effort cross‑process advisory locks; audit log rotation.
+- Event bus upgrades: counters (published/delivered/lagged/no_receivers), configurable capacity/replay, lag surfaced as `Bus.Gap`, subscribe‑filtered API, SSE replay and prefix filters, optional persistent JSONL journal with rotation, Prometheus `/metrics`.
+- Debug UI: metrics quick‑link, SSE presets (Replay 50, Models‑only), insights wired to route stats, download progress.
 
 Near‑term (Weeks)
 - Self‑learning UI polish: apply buttons per suggestion with rationale + confidence.
 - Persist hints/profile/suggestions to state; reload at startup; simple rollback.
-- Metrics polish: add p95 per route (light sliding window); highlight outliers in Insights.
-- Models panel: download stub with progress; checksum verification; safe cancel.
-- Security defaults: document token gating; add minimal rate‑limit for admin endpoints.
+- Metrics polish: add p95 per route (light sliding window); highlight outliers in Insights. (done)
+- Models panel: download with progress; checksum verification; safe cancel; resume via HTTP Range. (done)
+- Security defaults: document token gating; add minimal rate‑limit for admin endpoints. (done)
+- Event journal reader endpoint (tail N); topic‑filtered consumers across workers/connectors. (next)
+- Remote access & TLS (planning):
+  - Caddy production profile with Let's Encrypt (HTTP‑01/DNS‑01) for public domains.
+  - Dev TLS profiles: mkcert‑backed and internal (self‑signed) for localhost.
+  - Reverse‑proxy templates (nginx/caddy) with quick run/stop helpers (in progress for local).
+  - Secrets handling: persist admin tokens only to local env files by default; avoid committing to configs.
+  - UX: wizards to pick domain/email, validate DNS reachability, and dry‑run cert issuance.
 - Cluster MVP (done): pluggable Queue/Bus with local default; NATS queue groups; inbound NATS→local bus aggregator.
 - Hierarchy foundation (done): local role/state + HTTP scaffolding for hello/offer/accept.
 - Gating Orchestrator (done): central keys, deny contracts (role/node/tags, time windows, auto-renew), ingress/egress guards.
@@ -20,7 +32,7 @@ Heuristic Feedback Engine (Lightweight, Near‑Live)
 - Engine crate: `arw-feedback` (actor + O(1) stats + deltas via bus).
 - Signals: EWMA latency, decayed error rate, tiny P² p95 per route; memory ring pressure; download stalls.
 - Evaluation: 250–500 ms ticks with cooldowns and bounds; suggestions only (manual apply default).
-- State: snapshot published atomically; debounce persistence into `orchestration.json`; audit events.
+- State: snapshot published atomically; debounce persistence into `orchestration.json`; audit events. (done)
 - APIs: reuse existing `/feedback/*`; optional `/feedback/updates?since=` delta feed; expose evaluate/apply as tools.
 - Safety: bounded queues/maps; drop/sample on overload; rate‑limit auto‑apply (opt‑in later, policy‑gated).
 
@@ -36,6 +48,10 @@ Mid‑term (1–2 Months)
 - Policy hooks for feedback auto‑apply decisions (shadow mode → guarded auto).
 - Regulatory Provenance Unit (RPU): trust store, signature verification, Cedar ABAC for capsule adoption, hop TTL/propagation, adoption ledger (ephemeral by default).
 - JetStream durable queue backend with acks, delay/nack, and subject mapping (keep core NATS for fast lane).
+- Remote core connections (secure multi‑node):
+  - mTLS between nodes/connectors and a remote coordinator; certificate rotation strategy.
+  - NATS TLS profiles and client auth options for WAN clusters; local default remains plaintext loopback.
+  - Policy‑gated remote admin surface; proxy headers validation; optional IP allowlists.
 - Budgets/Quotas: optional allow-with-budgets with per-window counters persisted to state; deny precedence.
 
 Long‑term (3–6 Months)

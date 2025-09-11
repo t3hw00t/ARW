@@ -1,11 +1,12 @@
 use axum::{extract::State, response::IntoResponse, Json};
-use serde::Deserialize;
+use arw_macros::arw_gate;
 use serde_json::json;
 
 use crate::AppState;
-use arw_protocol::{CoreAccept, CoreHello, CoreOffer};
 use arw_core::hierarchy as hier;
+use arw_protocol::{CoreAccept, CoreHello, CoreOffer};
 
+#[arw_gate("hierarchy:hello")]
 pub async fn hello(State(state): State<AppState>, Json(req): Json<CoreHello>) -> impl IntoResponse {
     hier::configure_self(req.id.clone(), req.scope_tags.clone());
     hier::set_role(match req.role {
@@ -16,9 +17,10 @@ pub async fn hello(State(state): State<AppState>, Json(req): Json<CoreHello>) ->
         arw_protocol::CoreRole::Observer => hier::Role::Observer,
     });
     state.bus.publish("Hierarchy.Hello", &req);
-    Json(json!({"ok": true}))
+    Json(json!({"ok": true})).into_response()
 }
 
+#[arw_gate("hierarchy:offer")]
 pub async fn offer(State(state): State<AppState>, Json(req): Json<CoreOffer>) -> impl IntoResponse {
     // For now just emit an event and update parent hint if targeting us
     if let Some(parent) = &req.parent_hint {
@@ -27,14 +29,17 @@ pub async fn offer(State(state): State<AppState>, Json(req): Json<CoreOffer>) ->
         }
     }
     state.bus.publish("Hierarchy.Offer", &req);
-    Json(json!({"ok": true}))
+    Json(json!({"ok": true})).into_response()
 }
 
-pub async fn accept(State(state): State<AppState>, Json(req): Json<CoreAccept>) -> impl IntoResponse {
+#[arw_gate("hierarchy:accept")]
+pub async fn accept(
+    State(state): State<AppState>,
+    Json(req): Json<CoreAccept>,
+) -> impl IntoResponse {
     if req.parent_id == hier::get_state().self_node.id {
         hier::add_child(req.child_id.clone());
     }
     state.bus.publish("Hierarchy.Accepted", &req);
-    Json(json!({"ok": true}))
+    Json(json!({"ok": true})).into_response()
 }
-

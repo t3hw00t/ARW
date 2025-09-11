@@ -1,5 +1,5 @@
-use serde::{Deserialize, Serialize};
 use schemars::JsonSchema;
+use serde::{Deserialize, Serialize};
 
 /// RFC7807-style error payload used at service edges.
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema)]

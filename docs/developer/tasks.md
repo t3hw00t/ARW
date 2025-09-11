@@ -4,7 +4,7 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-10 12:00 UTC
+Updated: 2025-09-11 12:00 UTC
 
 
 ## To Do
@@ -22,12 +22,24 @@ Updated: 2025-09-10 12:00 UTC
 - [t-250910115900-0008] Docgen: gating schema + GATING_KEYS.md from code — todo
 - [t-250910115900-0009] Macro: #[arw_gate("key")] for handlers (enforce + docgen) — todo
 - [t-250910115900-0010] Capsule: signed provenance + optional Bitcoin timestamping (opt-in) — todo
+ - [t-250911100001-1001] Events: add journal reader endpoint `/events/journal?tail=N` — todo (2025-09-11)
+ - [t-250911100002-1002] Metrics: counters for model downloads and journal I/O — todo (2025-09-11)
+ - [t-250911100003-1003] Downloads: cross-process lockfile around `.part` — todo (2025-09-11)
+ - [t-250911100004-1004] Bus: adopt `subscribe_filtered` in connectors/workers where relevant — todo (2025-09-11)
+ - [t-250911100005-1005] Metrics: add process/runtime gauges (uptime, mem) — todo (2025-09-11)
 
 ## In Progress
 
 ## Paused
 
 ## Done
+- [t-250911095900-0001] Persistence: atomic writes, per-path async locks, cross-process advisory locks, audit rotation — done (2025-09-11)
+- [t-250911095900-0002] Event bus: counters + configurable capacity/replay + SSE `Bus.Gap` — done (2025-09-11)
+- [t-250911095900-0003] SSE: replay and prefix filters; debug UI presets — done (2025-09-11)
+- [t-250911095900-0004] Metrics: Prometheus `/metrics` with bus/events/routes/build info — done (2025-09-11)
+- [t-250911095900-0005] Debug UI: metrics link; SSE reconnect control — done (2025-09-11)
+- [t-250911095900-0006] Events: optional persistent JSONL journal with rotation — done (2025-09-11)
+- [t-250911095900-0007] Models: dedupe concurrent downloads per id — done (2025-09-11)
 - [t-250909225652-0810] Gate arrow ingestion bench code — done (updated: 2025-09-09 20:56:52 UTC)
 - [t-250909225652-5456] Start lightweight feedback engine — done (updated: 2025-09-09 20:56:52 UTC)
 - [t-250909225652-1355] Serve /spec/* endpoints — done (updated: 2025-09-09 20:56:52 UTC)
