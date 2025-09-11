@@ -16,7 +16,7 @@ arw-otel = { path = "../../crates/arw-otel", default-features = false }
 tokio-stream = { workspace = true }
 arw-macros = { path = "../../crates/arw-macros" }
 inventory = { workspace = true }
-tower-http = { version = "0.5", features = ["trace","compression-br","compression-gzip","cors","timeout","fs","limit"] }
+tower-http = { version = "0.6", features = ["trace","compression-br","compression-gzip","cors","timeout","fs","limit"] }
 chrono = { workspace = true }
 utoipa = { workspace = true }
 reqwest = { workspace = true }
@@ -34,7 +34,7 @@ nats = ["arw-core/nats", "arw-events/nats"]
 [dev-dependencies]
 tokio = { version = "1", features = ["macros","rt-multi-thread"] }
 http-body-util = "0.1"
-tower = { version = "0.4", features = ["util"] }    # <-- needed for ServiceExt::oneshot()
+tower = { version = "0.5", features = ["util"] }    # <-- needed for ServiceExt::oneshot()
 # (optional, can keep for E2E tests)
 reqwest = { version = "0.12", features = ["json"] }
 hyper = { version = "1" }
