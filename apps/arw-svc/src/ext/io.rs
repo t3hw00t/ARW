@@ -1,3 +1,4 @@
+use fs2::FileExt;
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs;
@@ -5,7 +6,6 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, OnceLock};
 use tokio::fs as afs;
 use tokio::io::AsyncWriteExt;
-use fs2::FileExt;
 
 // In-process per-path async lock registry to serialize writers.
 // Prevents concurrent writers from interleaving/truncating files.

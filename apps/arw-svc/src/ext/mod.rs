@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 // ext module: split into submodules (ui, later more)
 
+use arw_macros::arw_gate;
 use axum::http::StatusCode;
 use axum::{
     extract::{Query, State},
@@ -9,7 +10,6 @@ use axum::{
     Json, Router,
 };
 use futures_util::StreamExt;
-use arw_macros::arw_gate;
 use serde::Deserialize;
 use serde_json::{json, Value};
 use sha2::Digest;
@@ -682,10 +682,7 @@ async fn models_download(
             .iter_mut()
             .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&req.id))
         {
-            let prev = m
-                .get("status")
-                .and_then(|s| s.as_str())
-                .unwrap_or("");
+            let prev = m.get("status").and_then(|s| s.as_str()).unwrap_or("");
             if prev.eq_ignore_ascii_case("downloading") {
                 already_in_progress = true;
             } else {
@@ -696,9 +693,10 @@ async fn models_download(
         }
     }
     if already_in_progress {
-        state
-            .bus
-            .publish("Models.DownloadProgress", &json!({"id": req.id, "status":"already-in-progress"}));
+        state.bus.publish(
+            "Models.DownloadProgress",
+            &json!({"id": req.id, "status":"already-in-progress"}),
+        );
         return Json(json!({"ok": true})).into_response();
     }
     // Validate URL scheme (accept http/https only)

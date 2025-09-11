@@ -1,3 +1,4 @@
+use arw_macros::arw_gate;
 use arw_macros::arw_tool;
 use axum::extract::Query;
 use axum::http::HeaderMap;
@@ -14,6 +15,7 @@ use axum::{
     middleware::{self, Next},
     response::Response,
 };
+use futures_util::StreamExt as _; // for flat_map on streams
 use serde_json::json;
 use std::convert::Infallible;
 use std::net::SocketAddr;
@@ -21,9 +23,8 @@ use std::path::Path as FsPath;
 use std::sync::{Mutex, OnceLock};
 use std::time::Duration as StdDuration;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
-use futures_util::StreamExt as _; // for flat_map on streams
+use tokio_stream::wrappers::BroadcastStream;
 use tower_http::compression::CompressionLayer;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
@@ -32,7 +33,6 @@ use tower_http::timeout::TimeoutLayer;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 use utoipa::{OpenApi, ToSchema};
-use arw_macros::arw_gate;
 mod ext;
 use arw_core::gating;
 

@@ -1,3 +1,5 @@
+use crate::AppState;
+use arw_macros::arw_gate;
 use axum::extract::State;
 use axum::response::IntoResponse;
 use axum::Json;
@@ -6,8 +8,6 @@ use std::collections::HashMap;
 use std::collections::VecDeque;
 use std::sync::OnceLock;
 use tokio::sync::RwLock;
-use arw_macros::arw_gate;
-use crate::AppState;
 
 #[derive(Clone, Default, serde::Serialize)]
 struct Stats {
@@ -101,15 +101,21 @@ pub(crate) async fn metrics_get(State(state): State<AppState>) -> impl IntoRespo
     let mut out = String::new();
     use std::fmt::Write as _;
     // Bus
-    out.push_str("# HELP arw_bus_published_total Events published\n# TYPE arw_bus_published_total counter\n");
+    out.push_str(
+        "# HELP arw_bus_published_total Events published\n# TYPE arw_bus_published_total counter\n",
+    );
     let _ = writeln!(out, "arw_bus_published_total {}", bus.published);
     out.push_str("# HELP arw_bus_delivered_total Events delivered to receivers\n# TYPE arw_bus_delivered_total counter\n");
     let _ = writeln!(out, "arw_bus_delivered_total {}", bus.delivered);
-    out.push_str("# HELP arw_bus_lagged_total Lag signals observed\n# TYPE arw_bus_lagged_total counter\n");
+    out.push_str(
+        "# HELP arw_bus_lagged_total Lag signals observed\n# TYPE arw_bus_lagged_total counter\n",
+    );
     let _ = writeln!(out, "arw_bus_lagged_total {}", bus.lagged);
     out.push_str("# HELP arw_bus_no_receivers_total Publishes with no receivers\n# TYPE arw_bus_no_receivers_total counter\n");
     let _ = writeln!(out, "arw_bus_no_receivers_total {}", bus.no_receivers);
-    out.push_str("# HELP arw_bus_receivers Current receiver count\n# TYPE arw_bus_receivers gauge\n");
+    out.push_str(
+        "# HELP arw_bus_receivers Current receiver count\n# TYPE arw_bus_receivers gauge\n",
+    );
     let _ = writeln!(out, "arw_bus_receivers {}", bus.receivers);
 
     // Build info
@@ -132,20 +138,41 @@ pub(crate) async fn metrics_get(State(state): State<AppState>) -> impl IntoRespo
     // Route stats
     out.push_str("# HELP arw_http_route_hits_total HTTP hits by route\n# TYPE arw_http_route_hits_total counter\n");
     out.push_str("# HELP arw_http_route_errors_total HTTP errors by route\n# TYPE arw_http_route_errors_total counter\n");
-    out.push_str("# HELP arw_http_route_ewma_ms EWMA latency ms\n# TYPE arw_http_route_ewma_ms gauge\n");
-    out.push_str("# HELP arw_http_route_p95_ms p95 latency ms\n# TYPE arw_http_route_p95_ms gauge\n");
-    out.push_str("# HELP arw_http_route_max_ms max latency ms\n# TYPE arw_http_route_max_ms gauge\n");
+    out.push_str(
+        "# HELP arw_http_route_ewma_ms EWMA latency ms\n# TYPE arw_http_route_ewma_ms gauge\n",
+    );
+    out.push_str(
+        "# HELP arw_http_route_p95_ms p95 latency ms\n# TYPE arw_http_route_p95_ms gauge\n",
+    );
+    out.push_str(
+        "# HELP arw_http_route_max_ms max latency ms\n# TYPE arw_http_route_max_ms gauge\n",
+    );
     for (path, st) in routes.by_path.iter() {
         let p = esc(path);
-        let _ = writeln!(out, "arw_http_route_hits_total{{path=\"{}\"}} {}", p, st.hits);
-        let _ = writeln!(out, "arw_http_route_errors_total{{path=\"{}\"}} {}", p, st.errors);
-        let _ = writeln!(out, "arw_http_route_ewma_ms{{path=\"{}\"}} {}", p, st.ewma_ms);
+        let _ = writeln!(
+            out,
+            "arw_http_route_hits_total{{path=\"{}\"}} {}",
+            p, st.hits
+        );
+        let _ = writeln!(
+            out,
+            "arw_http_route_errors_total{{path=\"{}\"}} {}",
+            p, st.errors
+        );
+        let _ = writeln!(
+            out,
+            "arw_http_route_ewma_ms{{path=\"{}\"}} {}",
+            p, st.ewma_ms
+        );
         let _ = writeln!(out, "arw_http_route_p95_ms{{path=\"{}\"}} {}", p, st.p95_ms);
         let _ = writeln!(out, "arw_http_route_max_ms{{path=\"{}\"}} {}", p, st.max_ms);
     }
     (
         axum::http::StatusCode::OK,
-        [(axum::http::header::CONTENT_TYPE, "text/plain; version=0.0.4")],
+        [(
+            axum::http::header::CONTENT_TYPE,
+            "text/plain; version=0.0.4",
+        )],
         out,
     )
 }

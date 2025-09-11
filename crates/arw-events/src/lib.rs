@@ -75,7 +75,7 @@ impl LocalBus {
         Self {
             tx,
             counters: Arc::new(Counters::default()),
-            replay: Arc::new(Mutex::new(VecDeque::with_capacity(replay_cap)) ),
+            replay: Arc::new(Mutex::new(VecDeque::with_capacity(replay_cap))),
             replay_cap,
             journal,
             journal_lock: Arc::new(Mutex::new(())),
@@ -97,10 +97,7 @@ impl LocalBus {
         let rb = self.replay.lock().unwrap();
         let len = rb.len();
         let take = n.min(len);
-        rb.iter()
-            .skip(len.saturating_sub(take))
-            .cloned()
-            .collect()
+        rb.iter().skip(len.saturating_sub(take)).cloned().collect()
     }
 }
 
@@ -126,9 +123,7 @@ impl EventBus for LocalBus {
                     .fetch_add(n as u64, Ordering::Relaxed);
             }
             Err(_e) => {
-                self.counters
-                    .no_receivers
-                    .fetch_add(1, Ordering::Relaxed);
+                self.counters.no_receivers.fetch_add(1, Ordering::Relaxed);
             }
         }
         // Optional journal
@@ -163,9 +158,7 @@ impl EventBus for LocalBus {
                     .fetch_add(n as u64, Ordering::Relaxed);
             }
             Err(_e) => {
-                self.counters
-                    .no_receivers
-                    .fetch_add(1, Ordering::Relaxed);
+                self.counters.no_receivers.fetch_add(1, Ordering::Relaxed);
             }
         }
         self.maybe_journal_env(&env);
@@ -201,10 +194,16 @@ impl EventBus for LocalBus {
 
 impl LocalBus {
     fn maybe_journal_env(&self, env: &Envelope) {
-        let path = match &self.journal { Some(p) => p.clone(), None => return };
+        let path = match &self.journal {
+            Some(p) => p.clone(),
+            None => return,
+        };
         let lk = self.journal_lock.clone();
         let line = match serde_json::to_string(env) {
-            Ok(mut s) => { s.push('\n'); s },
+            Ok(mut s) => {
+                s.push('\n');
+                s
+            }
             Err(_) => return,
         };
         tokio::task::spawn_blocking(move || {
@@ -220,12 +219,22 @@ impl LocalBus {
                     let p2 = path.with_extension("log.2");
                     let p3 = path.with_extension("log.3");
                     let _ = std::fs::remove_file(&p3);
-                    if p2.exists() { let _ = std::fs::rename(&p2, &p3); }
-                    if p1.exists() { let _ = std::fs::rename(&p1, &p2); }
-                    if path.exists() { let _ = std::fs::rename(&path, &p1); }
+                    if p2.exists() {
+                        let _ = std::fs::rename(&p2, &p3);
+                    }
+                    if p1.exists() {
+                        let _ = std::fs::rename(&p1, &p2);
+                    }
+                    if path.exists() {
+                        let _ = std::fs::rename(&path, &p1);
+                    }
                 }
             }
-            if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(&path) {
+            if let Ok(mut f) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+            {
                 use std::io::Write as _;
                 let _ = f.write_all(line.as_bytes());
             }

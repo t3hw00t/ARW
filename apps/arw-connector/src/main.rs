@@ -27,15 +27,18 @@ async fn main() -> anyhow::Result<()> {
                         Ok((t, lease)) => {
                             let out = match t.kind.as_str() {
                                 "math.add" => {
-                                    let a = t.payload.get("a").and_then(|v| v.as_f64()).unwrap_or(0.0);
-                                    let b = t.payload.get("b").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                                    let a =
+                                        t.payload.get("a").and_then(|v| v.as_f64()).unwrap_or(0.0);
+                                    let b =
+                                        t.payload.get("b").and_then(|v| v.as_f64()).unwrap_or(0.0);
                                     json!({"sum": a + b})
                                 }
                                 "time.now" => {
                                     let now = std::time::SystemTime::now()
                                         .duration_since(std::time::UNIX_EPOCH)
                                         .unwrap_or_default()
-                                        .as_millis() as i64;
+                                        .as_millis()
+                                        as i64;
                                     json!({"now_ms": now})
                                 }
                                 _ => json!({"error":"unknown tool", "id": t.kind}),
@@ -52,7 +55,8 @@ async fn main() -> anyhow::Result<()> {
                                 let _ = nats
                                     .publish("arw.events.Task.Completed", bytes.clone().into())
                                     .await;
-                                let subj = format!("arw.events.node.{}.{}", node_id, "Task.Completed");
+                                let subj =
+                                    format!("arw.events.node.{}.{}", node_id, "Task.Completed");
                                 let _ = nats.publish(subj, bytes.into()).await;
                             }
                         }
@@ -73,5 +77,5 @@ async fn main() -> anyhow::Result<()> {
     {
         eprintln!("arw-connector built without 'nats' feature; rebuild with features to connect to a broker");
     }
-    
+    Ok(())
 }
