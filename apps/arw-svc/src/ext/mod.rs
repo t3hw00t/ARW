@@ -314,7 +314,7 @@ mod tests {
 
 // ---------- Handlers ----------
 pub async fn version() -> impl IntoResponse {
-    Json(json!({
+    ok(json!({
         "service": env!("CARGO_PKG_NAME"),
         "version": env!("CARGO_PKG_VERSION"),
     }))
@@ -504,7 +504,7 @@ struct SetProfile {
 }
 async fn governor_get() -> impl IntoResponse {
     let p = { governor_profile().read().await.clone() };
-    Json(json!({ "profile": p }))
+    ok(json!({ "profile": p }))
 }
 async fn governor_set(
     State(state): State<AppState>,
@@ -518,7 +518,7 @@ async fn governor_set(
         .bus
         .publish("Governor.Changed", &json!({"profile": req.name.clone()}));
     persist_orch().await;
-    Json(json!({ "ok": true }))
+    ok(json!({}))
 }
 
 #[derive(Deserialize, serde::Serialize, Clone)]
@@ -542,7 +542,7 @@ fn hints() -> &'static RwLock<Hints> {
 }
 async fn governor_hints_get() -> impl IntoResponse {
     let h = hints().read().await.clone();
-    Json(serde_json::to_value(h).unwrap_or(json!({})))
+    ok(serde_json::to_value(h).unwrap_or(json!({})))
 }
 async fn governor_hints_set(
     State(state): State<AppState>,
@@ -568,7 +568,7 @@ async fn governor_hints_set(
         state.bus.publish("Actions.HintApplied", &payload);
     }
     persist_orch().await;
-    Json(json!({"ok": true})).into_response()
+    ok(json!({})).into_response()
 }
 
 // moved to memory module
@@ -592,12 +592,8 @@ async fn refresh_models(State(state): State<AppState>) -> impl IntoResponse {
 async fn models_save() -> impl IntoResponse {
     let v = models().read().await.clone();
     match io::save_json_file_async(&paths::models_path(), &Value::Array(v)).await {
-        Ok(_) => Json(json!({"ok": true})).into_response(),
-        Err(e) => (
-            StatusCode::INTERNAL_SERVER_ERROR,
-            Json(json!({"ok": false, "error": e.to_string()})),
-        )
-            .into_response(),
+        Ok(_) => ok(json!({})).into_response(),
+        Err(e) => ApiError::internal(&e.to_string()).into_response(),
     }
 }
 async fn models_load() -> impl IntoResponse {
@@ -612,11 +608,7 @@ async fn models_load() -> impl IntoResponse {
             }
             ok::<Vec<Value>>(arr).into_response()
         }
-        None => (
-            StatusCode::NOT_FOUND,
-            Json(json!({"ok": false, "error":"no models.json"})),
-        )
-            .into_response(),
+        None => ApiError::not_found("no models.json").into_response(),
     }
 }
 
@@ -639,7 +631,7 @@ async fn models_add(State(state): State<AppState>, Json(req): Json<ModelId>) -> 
         );
     }
     io::audit_event("models.add", &json!({"id": req.id})).await;
-    Json(json!({"ok": true}))
+    ok(json!({}))
 }
 async fn models_delete(
     State(state): State<AppState>,
@@ -654,7 +646,7 @@ async fn models_delete(
             .publish("Models.Changed", &json!({"op":"delete","id": req.id}));
     }
     io::audit_event("models.delete", &json!({"id": req.id})).await;
-    Json(json!({"ok": true}))
+    ok(json!({}))
 }
 async fn models_default_get() -> impl IntoResponse {
     let id = { default_model().read().await.clone() };
@@ -717,15 +709,11 @@ async fn models_download(
             "Models.DownloadProgress",
             &json!({"id": req.id, "status":"already-in-progress"}),
         );
-        return Json(json!({"ok": true})).into_response();
+        return ok(json!({})).into_response();
     }
     // Validate URL scheme (accept http/https only)
     if !(req.url.starts_with("http://") || req.url.starts_with("https://")) {
-        return (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": "invalid url scheme"})),
-        )
-            .into_response();
+        return ApiError::bad_request("invalid url scheme").into_response();
     }
     state
         .bus
@@ -917,7 +905,7 @@ async fn models_download(
             }
         }
     });
-    Json(json!({"ok": true})).into_response()
+    ok(json!({})).into_response()
 }
 
 // ----- download cancel helpers -----
@@ -949,7 +937,7 @@ async fn models_download_cancel(
         "Models.DownloadProgress",
         &json!({"id": req.id, "status":"cancel-requested"}),
     );
-    Json(json!({"ok": true}))
+    ok(json!({}))
 }
 
 // ---- Tools ----
@@ -958,7 +946,7 @@ async fn list_tools() -> impl IntoResponse {
         .into_iter()
         .map(|(id, summary)| json!({"id": id, "summary": summary}))
         .collect();
-    Json(out)
+    ok(out)
 }
 #[derive(Deserialize)]
 pub(crate) struct ToolRunReq {
@@ -976,11 +964,7 @@ async fn run_tool_endpoint(
                 .publish("Tool.Ran", &json!({"id": req.id, "output": out}));
             Json(out).into_response()
         }
-        Err(e) => (
-            StatusCode::BAD_REQUEST,
-            Json(json!({"ok": false, "error": e})),
-        )
-            .into_response(),
+        Err(e) => ApiError::bad_request(&e).into_response(),
     }
 }
 
@@ -1211,22 +1195,22 @@ async fn feedback_apply_post(
     }
     if let Some(sug) = sug_opt {
         // Policy-gated apply with error reason
-        let ok = match policy::allow_apply(&sug.action, &sug.params).await {
+        let applied_ok = match policy::allow_apply(&sug.action, &sug.params).await {
             Ok(()) => apply_suggestion(&sug, &state).await,
             Err(reason) => {
-                return Json(json!({"ok": false, "reason": reason}));
+                return ApiError::forbidden(&reason).into_response();
             }
         };
-        if ok {
+        if applied_ok {
             state.bus.publish(
                 "Feedback.Applied",
                 &json!({"id": sug.id, "action": sug.action, "params": sug.params}),
             );
             persist_orch().await;
         }
-        return Json(json!({"ok": ok}));
+        return ok(json!({"ok": applied_ok})).into_response();
     }
-    Json(json!({"ok": false, "reason": "unknown suggestion id"}))
+    ApiError::not_found("unknown suggestion id").into_response()
 }
 
 #[derive(serde::Deserialize)]
@@ -1238,7 +1222,7 @@ async fn feedback_auto_post(Json(req): Json<AutoReq>) -> impl IntoResponse {
     st.auto_apply = req.enabled;
     drop(st);
     persist_feedback().await;
-    Json(json!({"ok": true}))
+    ok(json!({}))
 }
 async fn feedback_reset_post() -> impl IntoResponse {
     let mut st = feedback_cell().write().await;
@@ -1246,7 +1230,7 @@ async fn feedback_reset_post() -> impl IntoResponse {
     st.suggestions.clear();
     drop(st);
     persist_feedback().await;
-    Json(json!({"ok": true}))
+    ok(json!({}))
 }
 
 async fn apply_suggestion(s: &Suggestion, state: &AppState) -> bool {
