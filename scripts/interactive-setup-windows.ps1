@@ -76,7 +76,8 @@ function Ensure-Prereqs {
   Section 'Prerequisites'
   $hasCargo = Get-Command cargo -ErrorAction SilentlyContinue
   if ($hasCargo) { Info (cargo --version) } else { Warn "Rust 'cargo' not found. Install via https://rustup.rs" }
-  $py = (Get-Command python -ErrorAction SilentlyContinue) ?? (Get-Command python3 -ErrorAction SilentlyContinue)
+  $py = Get-Command python -ErrorAction SilentlyContinue
+  if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
   if ($py) { Info "python: $($py.Path)" } else { Warn 'python not found (docs optional)' }
   $mk = Get-Command mkdocs -ErrorAction SilentlyContinue
   if ($mk) { Info (mkdocs --version) } else { Warn 'mkdocs not found (docs optional)' }
@@ -85,7 +86,8 @@ function Ensure-Prereqs {
 
 function Install-MkDocs {
   Section 'Install MkDocs (optional)'
-  $py = (Get-Command python -ErrorAction SilentlyContinue) ?? (Get-Command python3 -ErrorAction SilentlyContinue)
+  $py = Get-Command python -ErrorAction SilentlyContinue
+  if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
   if (-not $py) { Warn 'python not found'; return }
   $venv = Join-Path $root '.venv'
   & $py.Path -m venv $venv | Out-Null
@@ -253,9 +255,12 @@ function Install-WSL-Elevated {
 
 function Configure-Proxies {
   Section 'Configure HTTP(S) proxy'
-  $hp = Read-Host ("HTTP_PROXY [" + ($env:HTTP_PROXY ?? '') + "]"); if (-not $hp) { $hp = $env:HTTP_PROXY }
-  $sp = Read-Host ("HTTPS_PROXY [" + ($env:HTTPS_PROXY ?? '') + "]"); if (-not $sp) { $sp = $env:HTTPS_PROXY }
-  $np = Read-Host ("NO_PROXY [" + ($env:NO_PROXY ?? '') + "]"); if (-not $np) { $np = $env:NO_PROXY }
+  $hp0 = if ($env:HTTP_PROXY) { $env:HTTP_PROXY } else { '' }
+  $sp0 = if ($env:HTTPS_PROXY) { $env:HTTPS_PROXY } else { '' }
+  $np0 = if ($env:NO_PROXY) { $env:NO_PROXY } else { '' }
+  $hp = Read-Host ("HTTP_PROXY [" + $hp0 + "]"); if (-not $hp) { $hp = $env:HTTP_PROXY }
+  $sp = Read-Host ("HTTPS_PROXY [" + $sp0 + "]"); if (-not $sp) { $sp = $env:HTTPS_PROXY }
+  $np = Read-Host ("NO_PROXY [" + $np0 + "]"); if (-not $np) { $np = $env:NO_PROXY }
   if ($hp) { $env:HTTP_PROXY = $hp; $env:http_proxy = $hp }
   if ($sp) { $env:HTTPS_PROXY = $sp; $env:https_proxy = $sp }
   if ($np) { $env:NO_PROXY = $np; $env:no_proxy = $np }
