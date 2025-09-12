@@ -108,6 +108,23 @@ async fn emit_error(
 mod tests_early_placeholder {}
 
 impl ModelsService {
+    // Track desired concurrency at runtime (defaults from env on first access)
+    fn concurrency_cfg_cell() -> &'static RwLock<usize> {
+        static CFG: OnceCell<RwLock<usize>> = OnceCell::new();
+        CFG.get_or_init(|| RwLock::new(Self::max_concurrency()))
+    }
+    // Held permits to simulate shrinking concurrency (cannot reduce Semaphore capacity directly)
+    fn held_permits_cell() -> &'static RwLock<Vec<tokio::sync::OwnedSemaphorePermit>> {
+        static HELD: OnceCell<RwLock<Vec<tokio::sync::OwnedSemaphorePermit>>> = OnceCell::new();
+        HELD.get_or_init(|| RwLock::new(Vec::new()))
+    }
+    // Optional hard upper bound from env (ARW_MODELS_MAX_CONC_HARD)
+    fn hard_max_concurrency() -> Option<usize> {
+        std::env::var("ARW_MODELS_MAX_CONC_HARD")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .filter(|v| *v >= 1)
+    }
     // Lightweight snapshot of downloader state for admin/ops
     pub async fn jobs_status(&self) -> Value {
         let active_map = Self::active_jobs_cell().read().await.clone();
@@ -115,16 +132,125 @@ impl ModelsService {
         for (k, v) in active_map.into_iter() {
             active.push(json!({"model_id": k, "job_id": v}));
         }
-        let inflight: Vec<String> = Self::inflight_hash_cell().read().await.iter().cloned().collect();
+        let inflight: Vec<String> = Self::inflight_hash_cell()
+            .read()
+            .await
+            .iter()
+            .cloned()
+            .collect();
+        let desired = *Self::concurrency_cfg_cell().read().await as u64;
+        let held_cnt = Self::held_permits_cell().read().await.len() as u64;
         let conc = json!({
-            "configured_max": Self::max_concurrency() as u64,
+            "configured_max": desired,
             "available_permits": Self::concurrency_sem().available_permits() as u64,
+            "held_permits": held_cnt,
         });
         json!({
             "active": active,
             "inflight_hashes": inflight,
             "concurrency": conc,
         })
+    }
+    // Read current concurrency settings and limits
+    pub async fn concurrency_get(&self) -> Value {
+        let desired = *Self::concurrency_cfg_cell().read().await as u64;
+        let held_cnt = Self::held_permits_cell().read().await.len() as u64;
+        let avail = Self::concurrency_sem().available_permits() as u64;
+        let hard = Self::hard_max_concurrency().map(|v| v as u64);
+        json!({
+            "configured_max": desired,
+            "available_permits": avail,
+            "held_permits": held_cnt,
+            "hard_cap": hard,
+        })
+    }
+    // Change the effective max concurrency at runtime.
+    // Increasing uses add_permits and/or releases held permits.
+    // Decreasing acquires and holds permits to reduce availability, waiting for in-flight tasks.
+    pub async fn concurrency_set(
+        &self,
+        state: &AppState,
+        new_max: usize,
+        block: bool,
+    ) -> Result<serde_json::Value, String> {
+        let sem = Self::concurrency_sem().clone();
+        let mut cfg = Self::concurrency_cfg_cell().write().await;
+        let mut held = Self::held_permits_cell().write().await;
+        let old = *cfg;
+        let target = new_max.max(1);
+        if let Some(hard) = Self::hard_max_concurrency() {
+            if target > hard {
+                return Err(format!(
+                    "requested max {} exceeds hard cap {} (ARW_MODELS_MAX_CONC_HARD)",
+                    target, hard
+                ));
+            }
+        }
+        if target == old {
+            return Ok(json!({"old": old, "new": old, "changed": false}));
+        }
+        let mut held_released = 0usize;
+        let mut held_acquired = 0usize;
+        let mut pending_shrink = 0usize;
+        if target > old {
+            let mut need = target - old;
+            // First, release held permits if any (fast path to grow)
+            while need > 0 {
+                if let Some(_p) = held.pop() {
+                    // dropping releases one permit
+                    need -= 1;
+                    held_released += 1;
+                } else {
+                    break;
+                }
+            }
+            if need > 0 {
+                sem.add_permits(need);
+            }
+        } else {
+            let shrink = old - target;
+            if block {
+                // Acquire and hold 'shrink' permits (wait until available)
+                for _ in 0..shrink {
+                    match sem.acquire_owned().await {
+                        Ok(p) => {
+                            held.push(p);
+                            held_acquired += 1;
+                        }
+                        Err(_) => return Err("concurrency semaphore closed".into()),
+                    }
+                }
+            } else {
+                // Non-blocking shrink: grab as many permits as available and report pending
+                for _ in 0..shrink {
+                    match sem.try_acquire_owned() {
+                        Ok(p) => {
+                            held.push(p);
+                            held_acquired += 1;
+                        }
+                        Err(_) => {
+                            pending_shrink = shrink - held_acquired;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+        *cfg = target;
+        let payload = json!({
+            "old": old,
+            "new": target,
+            "changed": true,
+            "block": block,
+            "held_released": held_released,
+            "held_acquired": held_acquired,
+            "pending_shrink": pending_shrink,
+            "available_permits": sem.available_permits(),
+        });
+        // Publish and audit change (best-effort)
+        state.bus.publish("Models.ConcurrencyChanged", &payload);
+        crate::ext::io::audit_event("models.concurrency.set", &payload).await;
+        Ok(payload)
     }
     pub fn new() -> Self {
         Self

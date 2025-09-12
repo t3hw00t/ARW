@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC1091
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -89,7 +90,7 @@ start_service_only() {
   if ! security_preflight; then ic_warn "Start canceled"; return; fi
   ARW_NO_TRAY=1 ARW_PORT="$PORT" ARW_DOCS_URL="$DOCS_URL" ARW_ADMIN_TOKEN="$ADMIN_TOKEN" \
   ARW_CONFIG="$CFG_PATH" ARW_PID_FILE="$PID_FILE" ARW_LOG_FILE="$LOGS_DIR/arw-svc.out.log" \
-  bash "$DIR/start.sh" $(env_args | xargs) || true
+  readarray -t _ARGS < <(env_args); bash "$DIR/start.sh" "${_ARGS[@]}" || true
 }
 
 start_tray_plus_service() {
@@ -97,7 +98,7 @@ start_tray_plus_service() {
   if ! security_preflight; then ic_warn "Start canceled"; return; fi
   ARW_PORT="$PORT" ARW_DOCS_URL="$DOCS_URL" ARW_ADMIN_TOKEN="$ADMIN_TOKEN" \
   ARW_CONFIG="$CFG_PATH" ARW_PID_FILE="$PID_FILE" ARW_LOG_FILE="$LOGS_DIR/arw-svc.out.log" \
-  bash "$DIR/start.sh" $(env_args | xargs) || true
+  readarray -t _ARGS < <(env_args); bash "$DIR/start.sh" "${_ARGS[@]}" || true
   # If tray still unavailable, hint dependencies
   local tray
   tray=$(ic_detect_bin arw-tray)
@@ -446,9 +447,9 @@ TOML
 spec_sync() {
   ic_section "Spec sync"
   local base="http://127.0.0.1:$PORT"
-  http_get "$base/spec" >/dev/null 2>&1 && ic_info "/spec ok" || ic_warn "/spec not reachable"
-  http_get "$base/spec/openapi.yaml" >/dev/null 2>&1 && ic_info "/spec/openapi.yaml ok" || ic_warn "openapi not found"
-  http_get "$base/healthz" >/dev/null 2>&1 && ic_info "/healthz ok" || ic_warn "/healthz failed"
+  if http_get "$base/spec" >/dev/null 2>&1; then ic_info "/spec ok"; else ic_warn "/spec not reachable"; fi
+  if http_get "$base/spec/openapi.yaml" >/dev/null 2>&1; then ic_info "/spec/openapi.yaml ok"; else ic_warn "openapi not found"; fi
+  if http_get "$base/healthz" >/dev/null 2>&1; then ic_info "/healthz ok"; else ic_warn "/healthz failed"; fi
   ic_open_url "$base/spec"
 }
 
@@ -462,12 +463,12 @@ tray_build_check() {
   ic_section "Tray build check"
   if ! command -v pkg-config >/dev/null 2>&1; then ic_warn "pkg-config not found. Enable in Dependencies"; fi
   if command -v pkg-config >/dev/null 2>&1; then
-    pkg-config --exists gtk+-3.0 && ic_info "GTK3 detected" || ic_warn "GTK3 not detected"
+    if pkg-config --exists gtk+-3.0; then ic_info "GTK3 detected"; else ic_warn "GTK3 not detected"; fi
   fi
   local log="$ROOT/.arw/logs/tray-build.log"; mkdir -p "$(dirname "$log")"
   (cd "$ROOT" && ic_cargo build --release -p arw-tray) &>"$log" || true
   tail -n 40 "$log" 2>/dev/null || true
-  local exe="$ROOT/target/release/arw-tray"; [[ -x "$exe" ]] && ic_info "Tray built at $exe" || ic_warn "Tray build did not produce binary (see log)"
+  local exe="$ROOT/target/release/arw-tray"; if [[ -x "$exe" ]]; then ic_info "Tray built at $exe"; else ic_warn "Tray build did not produce binary (see log)"; fi
   ic_press_enter
 }
 
@@ -506,9 +507,9 @@ logs_menu() {
   echo "  0) Back"
   read -r -p "Select: " pick || true
   case "$pick" in
-    1) ARW_LOG_FILE="$svc_log" ARW_NO_TRAY=1 ARW_PORT="$PORT" bash -lc true >/dev/null 2>&1; [[ -f "$svc_log" ]] && tail -n 200 -f "$svc_log" || { ic_warn "No service log yet. It will appear after next start with logging."; ic_press_enter; } ;;
-    2) [[ -f "$nats_out" ]] && tail -n 200 -f "$nats_out" || { ic_warn "No nats out log"; ic_press_enter; } ;;
-    3) [[ -f "$nats_err" ]] && tail -n 200 -f "$nats_err" || { ic_warn "No nats err log"; ic_press_enter; } ;;
+    1) ARW_LOG_FILE="$svc_log" ARW_NO_TRAY=1 ARW_PORT="$PORT" bash -lc true >/dev/null 2>&1; if [[ -f "$svc_log" ]]; then tail -n 200 -f "$svc_log"; else { ic_warn "No service log yet. It will appear after next start with logging."; ic_press_enter; }; fi ;;
+    2) if [[ -f "$nats_out" ]]; then tail -n 200 -f "$nats_out"; else { ic_warn "No nats out log"; ic_press_enter; }; fi ;;
+    3) if [[ -f "$nats_err" ]]; then tail -n 200 -f "$nats_err"; else { ic_warn "No nats err log"; ic_press_enter; }; fi ;;
     *) : ;;
   esac
 }
@@ -537,10 +538,42 @@ security_preflight() {
 reverse_proxy_templates() {
   ic_section "Reverse proxy templates"
   local out="$ROOT/configs/reverse_proxy"; mkdir -p "$out/nginx" "$out/caddy"
+  # Caddyfile
   cat > "$out/caddy/Caddyfile" <<CADDY
 localhost:8443 {
   tls internal
   reverse_proxy 127.0.0.1:$PORT
+}
+CADDY
+  # Nginx config (HTTP and optional HTTPS with self-signed)
+  cat > "$out/nginx/arw.conf" <<NGINX
+upstream arw_upstream { server 127.0.0.1:$PORT; }
+server {
+  listen 8080;
+  location / { proxy_pass http://arw_upstream; proxy_set_header Host \$host; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; }
+}
+# To enable TLS locally, generate a self-signed cert and enable the block below
+# server {
+#   listen 8443 ssl;
+#   ssl_certificate     $out/nginx/certs/arw.local.crt;
+#   ssl_certificate_key $out/nginx/certs/arw.local.key;
+#   location / { proxy_pass http://arw_upstream; proxy_set_header Host \$host; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; }
+# }
+NGINX
+  # Offer to generate self-signed certs
+  if command -v openssl >/dev/null 2>&1; then
+    read -r -p "Generate self-signed cert for nginx? (y/N): " yn
+    if [[ "${yn,,}" == y* ]]; then
+      mkdir -p "$out/nginx/certs"
+      openssl req -x509 -newkey rsa:2048 -nodes -keyout "$out/nginx/certs/arw.local.key" -out "$out/nginx/certs/arw.local.crt" -subj "/CN=localhost" -days 365 2>/dev/null || true
+      ic_info "Wrote self-signed certs under $out/nginx/certs"
+    fi
+  fi
+  ic_info "Caddyfile: $out/caddy/Caddyfile"
+  ic_info "Nginx:     $out/nginx/arw.conf"
+  echo "Run Caddy (if installed): caddy run --config $out/caddy/Caddyfile"
+  echo "Run nginx (if installed): sudo nginx -c $out/nginx/arw.conf (may need to merge into nginx.conf)"
+  ic_press_enter
 }
 
 reverse_proxy_caddy_start() {
@@ -725,35 +758,6 @@ CADDY
       ic_info "Self-signed is supported: use Caddyfile with 'tls internal' (already generated)."
       ;;
   esac
-}
-CADDY
-  cat > "$out/nginx/arw.conf" <<NGINX
-upstream arw_upstream { server 127.0.0.1:$PORT; }
-server {
-  listen 8080;
-  location / { proxy_pass http://arw_upstream; proxy_set_header Host \$host; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; }
-}
-# To enable TLS locally, generate a self-signed cert and enable the block below
-# server {
-#   listen 8443 ssl;
-#   ssl_certificate     $out/nginx/certs/arw.local.crt;
-#   ssl_certificate_key $out/nginx/certs/arw.local.key;
-#   location / { proxy_pass http://arw_upstream; proxy_set_header Host \$host; proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for; }
-# }
-NGINX
-  if command -v openssl >/dev/null 2>&1; then
-    read -r -p "Generate self-signed cert for nginx? (y/N): " yn
-    if [[ "${yn,,}" == y* ]]; then
-      mkdir -p "$out/nginx/certs"
-      openssl req -x509 -newkey rsa:2048 -nodes -keyout "$out/nginx/certs/arw.local.key" -out "$out/nginx/certs/arw.local.crt" -subj "/CN=localhost" -days 365 2>/dev/null || true
-      ic_info "Wrote self-signed certs under $out/nginx/certs"
-    fi
-  fi
-  ic_info "Caddyfile: $out/caddy/Caddyfile"
-  ic_info "Nginx:     $out/nginx/arw.conf"
-  echo "Run Caddy (if installed): caddy run --config $out/caddy/Caddyfile"
-  echo "Run nginx (if installed): sudo nginx -c $out/nginx/arw.conf (may need to merge into nginx.conf)"
-  ic_press_enter
 }
 
 main_menu

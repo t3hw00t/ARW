@@ -41,7 +41,11 @@ ARW_NODE_ID=worker-1 ARW_NATS_URL=$NATS_URL \
 
 echo "Demo running. Service: http://127.0.0.1:$PORT"
 echo "Logs in $logdir"
-echo "Try: curl -s -X POST -H 'content-type: application/json' http://127.0.0.1:$PORT/tasks/enqueue -d '{"kind":"math.add","payload":{"a":1,"b":2}}'"
+cat <<CMD
+Try: curl -s -X POST -H 'content-type: application/json' \
+  "http://127.0.0.1:${PORT}/tasks/enqueue" \
+  -d '{"kind":"math.add","payload":{"a":1,"b":2}}'
+CMD
 echo "Press Ctrl-C to stop."
 wait
 

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2034,SC2015
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/.." && pwd)"
-# shellcheck source=lib/interactive_common.sh
+# shellcheck source=scripts/lib/interactive_common.sh
 . "$DIR/lib/interactive_common.sh"
 
 ic_banner "ARW — Interactive Setup (Linux)" "Portable, local-first agent workspace"

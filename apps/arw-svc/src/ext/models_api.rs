@@ -400,3 +400,72 @@ pub(crate) async fn models_downloads_metrics(State(state): State<AppState>) -> i
     let v = svc.downloads_metrics().await;
     Json(v).into_response()
 }
+
+#[derive(Deserialize, utoipa::ToSchema)]
+pub(crate) struct ConcurrencySetReq {
+    max: usize,
+    #[serde(default)]
+    block: Option<bool>,
+}
+/// Set download concurrency at runtime
+#[arw_admin(
+    method = "POST",
+    path = "/admin/models/concurrency",
+    summary = "Set models download concurrency"
+)]
+#[arw_gate("models:concurrency:set")]
+pub(crate) async fn models_concurrency_set(
+    State(state): State<AppState>,
+    Json(req): Json<ConcurrencySetReq>,
+) -> impl IntoResponse {
+    let Some(svc) = state.resources.get::<ModelsService>() else {
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "ModelsService missing",
+        )
+            .into_response();
+    };
+    let block = req.block.unwrap_or(true);
+    match svc.concurrency_set(&state, req.max, block).await {
+        Ok(v) => super::ok(v).into_response(),
+        Err(e) => super::ApiError::internal(&e).into_response(),
+    }
+}
+
+/// Get current models download concurrency settings
+#[arw_admin(
+    method = "GET",
+    path = "/admin/models/concurrency",
+    summary = "Get models download concurrency"
+)]
+#[arw_gate("models:concurrency:get")]
+pub(crate) async fn models_concurrency_get(State(state): State<AppState>) -> impl IntoResponse {
+    let Some(svc) = state.resources.get::<ModelsService>() else {
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "ModelsService missing",
+        )
+            .into_response();
+    };
+    let v = svc.concurrency_get().await;
+    Json(v).into_response()
+}
+
+/// Admin: snapshot of active download jobs and inflight hashes
+#[arw_admin(
+    method = "GET",
+    path = "/admin/models/jobs",
+    summary = "List active jobs and inflight hashes"
+)]
+#[arw_gate("models:jobs")]
+pub(crate) async fn models_jobs(State(state): State<AppState>) -> impl IntoResponse {
+    let Some(svc) = state.resources.get::<ModelsService>() else {
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "ModelsService missing",
+        )
+            .into_response();
+    };
+    let v = svc.jobs_status().await;
+    Json(v).into_response()
+}

@@ -1,4 +1,5 @@
 #!/usr/bin/env bash
+# shellcheck disable=SC2015,SC2155,SC2012,SC2034,SC1091
 set -euo pipefail
 
 # Shared helpers for interactive scripts (Linux/macOS)

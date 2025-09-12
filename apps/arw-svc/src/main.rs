@@ -1621,6 +1621,9 @@ async fn feedback_policy_doc() -> impl IntoResponse {
         models_default_set_doc,
         models_download_doc,
         models_download_cancel_doc,
+        models_jobs_doc,
+        models_concurrency_get_doc,
+        models_concurrency_set_doc,
         tools_list_doc,
         tools_run_doc,
         state_observations_doc,
@@ -1851,6 +1854,46 @@ async fn models_download_doc(Json(_req): Json<ext::models_api::DownloadReq>) -> 
 ))]
 async fn models_download_cancel_doc(
     Json(_req): Json<ext::models_api::CancelReq>,
+) -> impl IntoResponse {
+    Json(json!({"ok": true}))
+}
+
+// --- OpenAPI-only wrappers for models jobs/concurrency ---
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/models/jobs", tag = "Admin/Models", responses(
+    (status=200, description="Jobs status"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn models_jobs_doc() -> impl IntoResponse {
+    ext::models_api::models_jobs(State(AppState {
+        bus: arw_events::Bus::new_with_replay(1, 1),
+        stop_tx: None,
+        queue: std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new()),
+        resources: Resources::new(),
+    }))
+    .await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/models/concurrency", tag = "Admin/Models", responses(
+    (status=200, description="Concurrency settings"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn models_concurrency_get_doc() -> impl IntoResponse {
+    ext::models_api::models_concurrency_get(State(AppState {
+        bus: arw_events::Bus::new_with_replay(1, 1),
+        stop_tx: None,
+        queue: std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new()),
+        resources: Resources::new(),
+    }))
+    .await
+}
+#[allow(dead_code)]
+#[utoipa::path(post, path = "/admin/models/concurrency", tag = "Admin/Models", request_body = ext::models_api::ConcurrencySetReq, responses(
+    (status=200, description="Set", body = OkResponse),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn models_concurrency_set_doc(
+    Json(_req): Json<ext::models_api::ConcurrencySetReq>,
 ) -> impl IntoResponse {
     Json(json!({"ok": true}))
 }

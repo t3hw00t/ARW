@@ -13,7 +13,9 @@ CAP_JSON=${CAP_JSON:-/tmp/arw-capsule.json}
 
 echo "Generating ed25519 keypair..."
 readarray -t LINES < <(cargo run -q -p arw-cli -- capsule gen-ed25519)
+# shellcheck disable=SC2001  # simpler to read than parameter expansion here
 PUB=$(echo "${LINES[2]}" | sed 's/^pubkey_b64=//')
+# shellcheck disable=SC2001
 PRV=$(echo "${LINES[3]}" | sed 's/^privkey_b64=//')
 echo "PUB=$PUB"
 
@@ -34,7 +36,6 @@ echo "Signature: $SIG"
 
 echo "Sending capsule in header to /healthz (admin-gated routes recommended)..."
 HDR=$(jq -c --arg sig "$SIG" '.signature=$sig' "$CAP_JSON")
-curl -s -H "X-ARW-Gate: $HDR" http://127.0.0.1:$PORT/healthz || true
+curl -s -H "X-ARW-Gate: $HDR" "http://127.0.0.1:${PORT}/healthz" || true
 echo
 echo "Done. Capsule adopted ephemerally until restart."
-

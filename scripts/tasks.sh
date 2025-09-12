@@ -80,7 +80,7 @@ case "${1:-}" in
   add) shift; add "$@" ;;
   start) shift; set_status "${1:-}" in_progress ;;
   pause) shift; set_status "${1:-}" paused ;;
-  done) shift; set_status "${1:-}" done ;;
+  done) shift; set_status "${1:-}" "done" ;;
   todo) shift; set_status "${1:-}" todo ;;
   note) shift; note "${1:-}" "${2:-}" ;;
   *)

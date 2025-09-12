@@ -108,7 +108,11 @@ EOF
 
 mkdir -p "$dist"
 zip -qr "$dist/$name.zip" -j "$out/bin"/* "$out/README.txt"
-zip -qr "$dist/$name.zip" "$out/configs" "$out/docs" $( [[ -d "$out/sandbox" ]] && echo "$out/sandbox" )
+if [[ -d "$out/sandbox" ]]; then
+  zip -qr "$dist/$name.zip" "$out/configs" "$out/docs" "$out/sandbox"
+else
+  zip -qr "$dist/$name.zip" "$out/configs" "$out/docs"
+fi
 if [[ -d "$out/docs-site" ]]; then zip -qr "$dist/$name.zip" "$out/docs-site"; fi
 
 echo "[package] Wrote $dist/$name.zip"

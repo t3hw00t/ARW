@@ -376,6 +376,15 @@ pub fn extra_routes() -> Router<AppState> {
             "/models/download/cancel",
             post(models_api::models_download_cancel),
         )
+        .route("/models/jobs", get(models_api::models_jobs))
+        .route(
+            "/models/concurrency",
+            get(models_api::models_concurrency_get),
+        )
+        .route(
+            "/models/concurrency",
+            post(models_api::models_concurrency_set),
+        )
         .route("/models/cas_gc", post(models_api::models_cas_gc))
         // tools
         .route("/tools", get(tools_api::list_tools))

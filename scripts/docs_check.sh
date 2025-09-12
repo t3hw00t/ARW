@@ -29,7 +29,7 @@ mapfile -t files < <(find "$docs_dir" -type f -name "*.md" | sort)
 
 # Simple heading/title checks and Updated line
 for f in "${files[@]}"; do
-  rel="${f#$docs_dir/}"
+  rel="${f#"$docs_dir"/}"
   # Extract front-matter title if present
   fm_title=""
   if head -n 1 "$f" | grep -q '^---$'; then
@@ -104,4 +104,3 @@ if [[ ${errors} -gt 0 ]]; then
   exit 1
 fi
 exit 0
-

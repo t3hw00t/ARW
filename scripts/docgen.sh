@@ -67,7 +67,7 @@ Updated: '"$now_ts"'
     make_sec todo "To Do"; echo
     make_sec in_progress "In Progress"; echo
     make_sec paused "Paused"; echo
-    make_sec done "Done"; echo
+    make_sec "done" "Done"; echo
   } > "$tasks_md"
   info "Wrote $tasks_md"
 else
