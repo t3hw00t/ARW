@@ -1,0 +1,21 @@
+{
+  "$id": "https://arw/spec/schemas/dns_anomaly_event.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DNS Anomaly Event",
+  "description": "Alert for unusual DNS activity (e.g., high-entropy domain bursts).",
+  "type": "object",
+  "properties": {
+    "time": { "type": "string", "format": "date-time" },
+    "project_id": { "type": "string" },
+    "episode_id": { "type": "string" },
+    "node_id": { "type": "string" },
+    "process": { "type": "object", "properties": { "pid": { "type": "integer" }, "exe": { "type": "string" } }, "additionalProperties": true },
+    "reason": { "type": "string", "enum": ["qps_spike", "entropy_burst", "suspicious_tld", "blocked_doh"] },
+    "qps": { "type": "number", "minimum": 0 },
+    "samples": { "type": "array", "items": { "type": "string" } },
+    "severity": { "type": "string", "enum": ["info", "warn", "error"] }
+  },
+  "required": ["time", "reason"],
+  "additionalProperties": false
+}
+

@@ -58,6 +58,25 @@ The enhanced downloader path is always enabled; the legacy `ARW_DL_NEW` flag has
 ## CORS & Networking
 - `ARW_CORS_ANY`: `1` to relax CORS during development only.
 
+### Network Posture & Egress (Planned)
+These options are planned for the policy‑backed egress gateway; names may evolve during implementation.
+- `ARW_NET_POSTURE`: network posture per project: `off|public|allowlist|custom`.
+- `ARW_EGRESS_PROXY_ENABLE`: `1` to enable a host‑local egress proxy per node.
+- `ARW_EGRESS_PROXY_PORT`: listen port for the local proxy (default `9080`).
+- `ARW_EGRESS_BLOCK_IP_LITERALS`: `1` to disallow IP‑literal CONNECTs (require named hosts).
+- `ARW_DNS_GUARD_ENABLE`: `1` to force tool DNS through a local resolver; block UDP/53 and DoH/DoT from tools.
+- `ARW_DISABLE_HTTP3`: `1` to disable HTTP/3 for headless scrapers, ensuring proxy enforcement.
+- `ARW_EGRESS_LEDGER`: path to append‑only egress ledger (default `state://egress.jsonl`).
+
+### Security Posture & Mitigations (Planned)
+- `ARW_SECURITY_POSTURE`: per‑project preset `relaxed|standard|strict`.
+- `ARW_BROWSER_DISABLE_SW`: `1` to disable service workers in headless browsing tools.
+- `ARW_BROWSER_SAME_ORIGIN`: `1` to enforce same‑origin fetches by default (allowlists widen).
+- `ARW_ARCHIVE_MAX_DEPTH`: max allowed nested archive depth (default `2`).
+- `ARW_ARCHIVE_MAX_BYTES`: max total uncompressed bytes per extraction (default `512 MiB`).
+- `ARW_DNS_RATE_LIMIT`: max DNS QPS per tool/process (default tuned for local dev).
+- `ARW_GPU_ZERO_ON_RELEASE`: `1` to zero VRAM/workspace buffers between jobs when supported.
+
 ## Launcher & CLI
 - `ARW_NO_TRAY`: `1` to skip launching the tray/launcher when starting the service.
 - `ARW_HEADLESS`: `1` for headless setup flows in CI.

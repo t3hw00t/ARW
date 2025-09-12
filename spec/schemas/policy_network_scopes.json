@@ -1,0 +1,87 @@
+{
+  "$id": "https://arw/spec/schemas/policy_network_scopes.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ARW Policy: Network Scopes & Leases",
+  "description": "Project-level posture with enforceable network scopes (allow/deny) and time‑boxed leases for temporary widenings.",
+  "type": "object",
+  "properties": {
+    "version": { "type": "string", "description": "Schema/config version tag (semver or '0')." },
+    "project_id": { "type": "string", "description": "Project identifier this policy applies to." },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "posture": {
+      "type": "string",
+      "enum": ["off", "public", "allowlist", "custom"],
+      "description": "Network posture preset for this project."
+    },
+    "scopes": {
+      "type": "array",
+      "description": "Static network scopes (allow or deny). Deny wins.",
+      "items": { "$ref": "#/$defs/NetworkScope" }
+    },
+    "leases": {
+      "type": "array",
+      "description": "Time‑boxed leases that grant or narrow network access for this project.",
+      "items": { "$ref": "#/$defs/NetworkLease" }
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "NetworkScope": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Scope identifier (UUID recommended)." },
+        "action": { "type": "string", "enum": ["allow", "deny"], "default": "allow" },
+        "host": { "type": "string", "description": "DNS name (exact)" },
+        "host_glob": { "type": "string", "description": "Glob over DNS names (e.g., '*.example.com')." },
+        "ip": { "type": "string", "format": "ipv4", "description": "Single IPv4 literal (for ipv6 use cidr for now)." },
+        "cidr": { "type": "string", "description": "CIDR range (IPv4/IPv6)." },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "ports": { "type": "array", "items": { "type": "integer", "minimum": 1, "maximum": 65535 } },
+        "protocols": {
+          "type": "array",
+          "items": { "type": "string", "enum": ["tcp", "udp", "http", "https", "ws", "wss", "ssh"] }
+        },
+        "note": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": false,
+      "anyOf": [
+        { "required": ["host"] },
+        { "required": ["host_glob"] },
+        { "required": ["ip"] },
+        { "required": ["cidr"] }
+      ]
+    },
+    "NetworkLease": {
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "description": "Lease identifier (UUID recommended)." },
+        "issued_at": { "type": "string", "format": "date-time" },
+        "expires_at": { "type": "string", "format": "date-time" },
+        "issued_by": { "type": "string", "description": "Issuer (user/system)." },
+        "reason": { "type": "string" },
+        "scope_ref": { "type": "string", "description": "Reference to NetworkScope.id when leasing an existing scope." },
+        "scope_inline": { "$ref": "#/$defs/NetworkScope" }
+      },
+      "additionalProperties": false,
+      "oneOf": [ { "required": ["scope_ref"] }, { "required": ["scope_inline"] } ]
+    }
+  },
+  "examples": [
+    {
+      "version": "0",
+      "project_id": "proj-demo",
+      "posture": "public",
+      "updated_at": "2025-09-12T12:00:00Z",
+      "scopes": [
+        {"id":"s1","action":"allow","host":"pypi.org","ports":[443],"protocols":["https"]},
+        {"id":"s2","action":"allow","host_glob":"*.githubusercontent.com","ports":[443],"protocols":["https"]},
+        {"id":"s3","action":"deny","cidr":"10.0.0.0/8","protocols":["tcp","udp"],"note":"block private nets"}
+      ],
+      "leases": [
+        {"id":"l1","issued_at":"2025-09-12T12:10:00Z","expires_at":"2025-09-12T12:30:00Z","issued_by":"admin","reason":"temporary docs access","scope_inline":{"action":"allow","host":"example.com","ports":[443],"protocols":["https"]}}
+      ]
+    }
+  ]
+}
+

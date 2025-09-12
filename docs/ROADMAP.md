@@ -28,6 +28,8 @@ Roadmap highlights themes and timelines; Backlog tracks actionable items.
 - Stabilization window: limit to bug fixes, docs, tests, and internal cleanups; additive API changes only.
 - Observability & Eventing: event journal tail/readers and metrics/docgen polish — see Backlog → Now.
 - Security & Remote Access: hashed tokens, per‑route gating, TLS profiles, proxy templates — see Backlog → Now.
+- Egress Firewall (plan): add policy network scopes + TTL leases; per‑node loopback proxy + DNS guard; route containerized scrapers first; egress ledger and pre‑offload preview; default posture “Public only.”
+- Lightweight mitigations (plan): memory quarantine; project isolation; belief‑diff review queue; hardened headless browsing (disable SW/H3; same‑origin); safe archive jail; DNS guard with anomaly alerts; secrets redaction; security posture presets.
 - State & Episodes: observations/beliefs/intents/actions stores; episodes with reactive UI — see Backlog → Now.
 - Services & Orchestration: hierarchy/governor services; queue leases and nack behavior — see Backlog → Now.
 - Specs & Interop: AsyncAPI + MCP artifacts and /spec/* serving — see Backlog → Now.
@@ -53,6 +55,7 @@ See Backlog → Now → Feedback Engine for concrete work items.
 - Tests: feature‑gated HTTP oneshot tests; policy and capability contract tests.
 - AsyncAPI + MCP artifacts: generate `/spec/asyncapi.yaml` and `/spec/mcp-tools.json` in CI; serve `/spec/*` endpoints.
 - Policy hooks for feedback auto‑apply decisions (shadow mode → guarded auto).
+- Cluster trust (plan): node manifest pinning; mTLS; event sequencing and dedupe keys; scheduler targets only trusted manifests.
 - Regulatory Provenance Unit (RPU): trust store, signature verification, Cedar ABAC for capsule adoption, hop TTL/propagation, adoption ledger (ephemeral by default).
 - JetStream durable queue backend with acks, delay/nack, and subject mapping (keep core NATS for fast lane).
 - Remote core connections (secure multi‑node):

@@ -84,3 +84,6 @@ These flags are planned to control posture and gateway behavior. Names may evolv
 
 See also: Guide → Network Posture, Policy, Security Hardening, Clustering.
 
+## Schemas (Preview)
+- Policy: Network Scopes & Leases — see `spec/schemas/policy_network_scopes.json`
+- Egress Ledger Entry — see `spec/schemas/egress_ledger.json`

@@ -18,3 +18,6 @@ Components
 
 See also: Permissions & Policies, Threat Model, Human‑in‑the‑Loop.
 
+Network & IO hardening (planned)
+- Pair the harness with the Egress Firewall for enforceable least‑privilege at the network boundary.
+- Filesystem scoping and sensor leases (mic/cam) become policy‑visible capabilities with TTL.

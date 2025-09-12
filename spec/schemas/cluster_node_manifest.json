@@ -1,0 +1,89 @@
+{
+  "$id": "https://arw/spec/schemas/cluster_node_manifest.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Cluster Node Manifest",
+  "description": "Signed manifest describing a node's tools, models, sandbox profiles, and build/runtime info for attestation and pinning.",
+  "type": "object",
+  "properties": {
+    "node_id": { "type": "string" },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "version": { "type": "string", "description": "Manifest schema/version tag." },
+    "runtime": {
+      "type": "object",
+      "properties": {
+        "os": { "type": "string" },
+        "arch": { "type": "string" },
+        "kernel": { "type": "string" },
+        "arw_version": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "version": { "type": "string" },
+          "digest": { "type": "string" }
+        },
+        "required": ["id", "version"],
+        "additionalProperties": false
+      }
+    },
+    "models": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "sha256": { "type": "string", "pattern": "^[A-Fa-f0-9]{64}$" },
+          "size_bytes": { "type": "integer", "minimum": 0 }
+        },
+        "required": ["name", "sha256"],
+        "additionalProperties": false
+      }
+    },
+    "sandboxes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "kind": { "type": "string" },
+          "profile": { "type": "string" },
+          "caps": { "type": "array", "items": { "type": "string" } }
+        },
+        "required": ["kind", "profile"],
+        "additionalProperties": false
+      }
+    },
+    "signatures": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "alg": { "type": "string", "enum": ["ed25519", "secp256k1"] },
+          "key_id": { "type": "string" },
+          "sig_b64": { "type": "string" }
+        },
+        "required": ["alg", "sig_b64"],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": ["node_id", "issued_at", "tools", "models"],
+  "additionalProperties": false,
+  "examples": [
+    {
+      "node_id": "home-node",
+      "issued_at": "2025-09-12T12:00:00Z",
+      "version": "0",
+      "runtime": { "os": "linux", "arch": "x86_64", "arw_version": "0.1.1" },
+      "tools": [{"id":"search.web@1.0.0","version":"1.0.0"}],
+      "models": [{"name":"llama-3.1-8b-q4","sha256":"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"}],
+      "sandboxes": [{"kind":"wasi","profile":"strict","caps":["fs.read"]}],
+      "signatures": [{"alg":"ed25519","key_id":"issuer-1","sig_b64":"..."}]
+    }
+  ]
+}
+

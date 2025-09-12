@@ -61,6 +61,17 @@ pub(crate) fn audit_path() -> PathBuf {
     state_dir().join("audit.log")
 }
 
+// --- Egress & Review paths ---
+pub(crate) fn egress_ledger_path() -> PathBuf {
+    state_dir().join("egress.jsonl")
+}
+pub(crate) fn memory_quarantine_path() -> PathBuf {
+    state_dir().join("memory.quarantine.json")
+}
+pub(crate) fn world_diffs_review_path() -> PathBuf {
+    state_dir().join("world.diffs.review.json")
+}
+
 // --- World model paths ---
 pub(crate) fn world_dir() -> PathBuf {
     state_dir().join("world")

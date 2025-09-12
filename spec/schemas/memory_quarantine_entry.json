@@ -1,0 +1,35 @@
+{
+  "$id": "https://arw/spec/schemas/memory_quarantine_entry.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Memory Quarantine Entry",
+  "description": "Pending item awaiting review before admission to long‑term memory.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "project_id": { "type": "string" },
+    "episode_id": { "type": "string" },
+    "corr_id": { "type": "string" },
+    "time": { "type": "string", "format": "date-time" },
+    "source": { "type": "string", "description": "tool|ingest|world_diff|manual" },
+    "provenance": { "type": "string", "description": "URI or description of origin." },
+    "content_type": { "type": "string", "description": "text/plain, text/html, application/json, ..." },
+    "content_preview": { "type": "string", "description": "short preview for UI." },
+    "evidence_score": { "type": "number", "minimum": -1, "maximum": 1 },
+    "risk_markers": { "type": "array", "items": { "type": "string" } },
+    "extractor": { "type": "string", "description": "Extractor used or suggested (e.g., dom-to-text@1)." },
+    "state": { "type": "string", "enum": ["queued", "needs_extractor", "rejected", "admitted"] },
+    "review": {
+      "type": "object",
+      "properties": {
+        "by": { "type": "string" },
+        "time": { "type": "string", "format": "date-time" },
+        "decision": { "type": "string", "enum": ["admit", "reject", "extract_again"] },
+        "note": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["id", "project_id", "time", "content_type", "state"],
+  "additionalProperties": false
+}
+

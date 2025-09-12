@@ -32,6 +32,7 @@ docker run --rm -p 8090:8090 ghcr.io/t3hw00t/arw-svc:latest
 - Observability: tracing/logging/metrics and event journal (optional)
 - Packaging: portable installs and per‑user state by default
  - Clustering (design): single Home Node with invited Workers under strict policy and egress control; live sharing and pooled compute remain opt‑in. See `docs/architecture/cluster_federation.md`.
+ - Egress Firewall (plan): policy‑backed, per‑node loopback proxy + DNS guard with project‑level network posture (Off/Public/Allowlist/Custom), egress ledger, and pre‑offload previews. See `docs/architecture/egress_firewall.md`.
 
 Three primary perspectives
 - Project Hub: the center of real‑world work (files/notes/agents/data/runs)
@@ -57,6 +58,7 @@ Universal sidecar (always on)
 - Desktop Launcher: `docs/guide/launcher.md`
 - Admin Endpoints: `docs/guide/admin_endpoints.md`
 - Security Hardening: `docs/guide/security_hardening.md`
+ - Network Posture: `docs/guide/network_posture.md`
 - Roadmap: `docs/ROADMAP.md`
  - Clustering blueprint: `docs/architecture/cluster_federation.md`
 

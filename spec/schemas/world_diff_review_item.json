@@ -1,0 +1,30 @@
+{
+  "$id": "https://arw/spec/schemas/world_diff_review_item.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "World Diff Review Item",
+  "description": "An incoming world diff from collaborators awaiting review/merge.",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "project_id": { "type": "string" },
+    "from_node": { "type": "string" },
+    "issued_at": { "type": "string", "format": "date-time" },
+    "conflicts": { "type": "array", "items": { "type": "string" } },
+    "summary": { "type": "string" },
+    "changes": { "type": "array", "items": { "type": "object", "additionalProperties": true } },
+    "state": { "type": "string", "enum": ["queued", "conflict", "applied", "rejected"] },
+    "review": {
+      "type": "object",
+      "properties": {
+        "by": { "type": "string" },
+        "time": { "type": "string", "format": "date-time" },
+        "decision": { "type": "string", "enum": ["apply", "reject", "defer"] },
+        "note": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  },
+  "required": ["id", "project_id", "issued_at", "state"],
+  "additionalProperties": false
+}
+

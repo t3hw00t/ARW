@@ -115,3 +115,21 @@ Checklist
 - [ ] Trust store configured; capsules signed and verified when used
 - [ ] Reverse proxy/TLS if remote
 - [ ] Logs/State directories scoped and monitored
+
+## Network Posture & Egress Firewall (Plan)
+- Add a host‑local egress gateway (loopback proxy) plus a DNS guard for agent/tool traffic.
+- Route containers and headless browsers through the proxy; block direct egress.
+- Enforce allow/deny by domain/port without TLS MITM; record to an egress ledger.
+- Postures: Off, Public only, Allowlist, Custom; leases provide temporary widenings.
+- See: Architecture → Egress Firewall; Guide → Network Posture.
+
+## Additional Lightweight Mitigations (Plan)
+- Memory quarantine: retrieved content is untrusted until reviewed/scored; admit only with provenance + positive evidence score.
+- Headless browsing: disable service workers and HTTP/3; same‑origin by default; extraction drops scripts/styles.
+- Safe archives: extract in temp jails; canonicalize paths; cap size/time; limit nesting.
+- Project isolation: per‑project caches/embeddings/indexes; no cross‑project mounts; “export views” are read‑only and revocable.
+- Secrets: project vault only; redaction on snapshots and egress previews; periodic secret‑scan for artifacts.
+- DNS guard: force local resolver; block raw UDP/53 and DoH/DoT from tools; rate‑limit lookups; alert on anomalies.
+- Accelerator hygiene: zero VRAM/buffers; avoid persistence mode; prefer per‑job processes.
+- Event integrity: mTLS, per‑episode nonces, monotonic sequence numbers; reject duplicates/out‑of‑order.
+- Security posture: Relaxed/Standard/Strict presets per project.

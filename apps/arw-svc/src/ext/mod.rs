@@ -36,6 +36,8 @@ pub mod hierarchy_api;
 pub mod memory;
 pub mod memory_api;
 pub mod models_api;
+pub mod egress_api;
+pub mod review_api;
 pub mod self_model;
 pub mod self_model_api;
 pub mod logic_units_api;
@@ -343,6 +345,7 @@ pub fn extra_routes() -> Router<AppState> {
             "/models/download/cancel",
             post(models_api::models_download_cancel),
         )
+        .route("/models/cas_gc", post(models_api::models_cas_gc))
         // tools
         .route("/tools", get(tools_api::list_tools))
         .route("/tools/run", post(tools_api::run_tool_endpoint))
@@ -382,6 +385,12 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/state/experiments", get(state_api::experiments_get))
         .route("/state/runtime_matrix", get(state_api::runtime_matrix_get))
         .route("/state/models_hashes", get(models_api::models_hashes_get))
+        .route("/state/egress/ledger", get(egress_api::egress_ledger_get))
+        .route(
+            "/state/memory/quarantine",
+            get(review_api::memory_quarantine_get),
+        )
+        .route("/state/world_diffs", get(review_api::world_diffs_get))
         .route(
             "/state/episode/:id/snapshot",
             get(|State(state), axum::extract::Path(id)| async move {

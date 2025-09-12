@@ -36,6 +36,17 @@ curl -sS "$BASE/spec/mcp-tools.json" | jq 'keys'
 
 # Self‑Model JSON Schema (static)
 cat spec/schemas/self_model.json | jq '.title,.description'
+
+# Egress schemas (planned)
+cat spec/schemas/policy_network_scopes.json | jq '.title,.description'
+cat spec/schemas/egress_ledger.json | jq '.title,.description'
+
+# Memory & World schemas (planned)
+cat spec/schemas/memory_quarantine_entry.json | jq '.title,.description'
+cat spec/schemas/world_diff_review_item.json | jq '.title,.description'
+cat spec/schemas/secrets_redaction_rule.json | jq '.title,.description'
+cat spec/schemas/archive_unpack_policy.json | jq '.title,.description'
+cat spec/schemas/dns_anomaly_event.json | jq '.title,.description'
 ```
 
 Events (SSE)

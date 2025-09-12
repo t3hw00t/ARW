@@ -19,6 +19,12 @@ Canonical categories
  - Cluster: `Cluster.Node.Advertise`, `Cluster.Node.Heartbeat`, `Cluster.Node.Changed`
  - Jobs (offload): `Job.Assigned`, `Job.Progress`, `Job.Completed`, `Job.Error`
  - Sessions (sharing): `Session.Invited`, `Session.RoleChanged`, `Session.EventRelayed`
+ - Egress (planned): `Egress.Decision` (allow/deny + reason), `Egress.Preview` (pre‑offload summary), `Egress.Ledger.Appended`
+ - Memory (planned): `Memory.Quarantined`, `Memory.Admitted`
+ - World diffs (planned): `WorldDiff.Queued`, `WorldDiff.Conflict`, `WorldDiff.Applied`
+ - Cluster trust (planned): `Cluster.ManifestPublished`, `Cluster.ManifestTrusted`, `Cluster.ManifestRejected`, `Cluster.EventRejected`
+ - Archives (planned): `Archive.Unpacked`, `Archive.Blocked`
+ - DNS (planned): `Dns.Anomaly`
 
 Minimal event envelope
 ```
@@ -34,6 +40,9 @@ Mapping from existing ARW events
 - `Models.DownloadProgress` supports `{ id, status|error, code, budget?, disk? }` — see `resources/models_service.rs`.
 - Cluster events are additive and off by default. When enabled, Workers publish `Cluster.Node.Advertise` (capabilities, health), periodic `Cluster.Node.Heartbeat`, and receive `Job.*` assignments. The Home Node merges remote `Job.*` and `Session.*` events into the unified timeline by `corr_id`.
 - World model (read‑model) materializes from existing events like `Feedback.Suggested` / `Beliefs.Updated`, `Projects.FileWritten`, `Actions.HintApplied`, `Runtime.Health`, and `Models.DownloadProgress`. A compact `World.Updated` event is emitted with counts and version for UI/SSE.
+- Egress firewall emits planned events for previews and decisions; an append‑only ledger records normalized entries with episode/project/node attribution.
+ - Memory quarantine emits planned events; a compact review queue materializes under `/state/memory/quarantine`.
+ - Cluster trust uses planned manifest events; scheduler logs pin/deny reasons as codes.
 - Tools registered via `#[arw_tool]` already emit `Tool.Ran` with inputs/outputs summary.
 - Self‑Model endpoints emit compact events: `SelfModel.Proposed` (agent, proposal_id, rationale, widens_scope?) and `SelfModel.Updated` (agent, proposal_id). Read‑models available at `/state/self` and `/state/self/{agent}`.
 

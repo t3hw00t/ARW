@@ -25,3 +25,4 @@ Updated: 2025-09-07
 ## Next
 - Rate‑limits for admin endpoints; structured audit events; optional signed capsules.
 - Policy engine (OPA/Cedar) for consistent, verifiable authorization.
+- Egress gateway (plan): host‑local proxy + DNS guard with policy network scopes and TTL leases; default posture "Public only" for projects.

@@ -1,0 +1,22 @@
+{
+  "$id": "https://arw/spec/schemas/archive_unpack_policy.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Archive Unpack Policy",
+  "description": "Limits and rules for safely unpacking archives (zip/tar/7z).",
+  "type": "object",
+  "properties": {
+    "max_depth": { "type": "integer", "minimum": 0, "default": 2 },
+    "max_total_bytes": { "type": "integer", "minimum": 0, "default": 536870912 },
+    "max_entries": { "type": "integer", "minimum": 0, "default": 20000 },
+    "timeout_ms": { "type": "integer", "minimum": 0, "default": 30000 },
+    "strip_components": { "type": "integer", "minimum": 0, "default": 0 },
+    "allow_dotdot": { "type": "boolean", "default": false },
+    "allow_abs_paths": { "type": "boolean", "default": false },
+    "jail_path": { "type": "string", "description": "Absolute temp dir for extraction." }
+  },
+  "additionalProperties": false,
+  "examples": [
+    { "max_depth": 2, "max_total_bytes": 268435456, "timeout_ms": 20000, "jail_path": "/tmp/arw_unpack" }
+  ]
+}
+

@@ -42,6 +42,33 @@ Security & Admin
 - Admin auth hardening — hashed tokens + per‑token/IP sliding rate‑limit [t-250911230312-0863]
 - Per‑route gating layers; slim global admin middleware [t-250911230252-9858]
 
+Egress Firewall & Posture (Plan)
+- Policy: add network scopes (domain/IP/CIDR, port, protocol) and TTL leases; surface in UI.
+- Gateway: per‑node loopback proxy (HTTP(S)/WS CONNECT; optional SOCKS5) with allow/deny by SNI/Host and port; deny IP‑literals by default; no TLS MITM.
+- DNS Guard: force resolver, block UDP/53/DoH/DoT from tools; short TTLs; log lookups.
+- Routing: containers via proxy env + blocked direct egress; host processes with OS firewall rules (allow 127.0.0.1:proxy only for agent PIDs).
+- Ledger: append‑only egress ledger with episode/project/node attribution and bytes/$ estimates; pre‑offload preview dialog in UI.
+- Posture: Off/Public/Allowlist/Custom per project; default to Public.
+- Filesystem & Sensors: sandbox write scopes (project://) and leased mic/cam sidecar access with TTL + audits.
+- Cluster: replicate gateway+DNS guard per Worker; propagate policies from Home over mTLS; Workers cannot widen scope.
+
+Lightweight Mitigations (Plan)
+- Memory quarantine: add review queue and `Memory.Quarantined`/`Memory.Admitted` events; admit only with provenance + evidence score.
+- Project isolation: enforce per‑project namespaces for caches/embeddings/indexes; “export views” only; imports read‑only and revocable.
+- Belief‑graph ingest: queue world diffs; surface conflicts; require accept/apply with audit events.
+- Cluster manifest pinning: define signed manifest schema; publish/verify; scheduler filters to trusted manifests.
+- Secrets hygiene: vault‑only; redaction pass on snapshots/egress previews; secret‑scanner job for artifacts.
+- Hardened headless browsing: disable service workers/HTTP3; same‑origin fetches; DOM‑to‑text extractor; route via proxy.
+- Safe archive handling: temp jail extraction with path canonicalization; size/time caps; nested depth limit.
+- DNS guard + anomaly: rate‑limit lookups; alert on high‑entropy domain bursts.
+- Accelerator hygiene: zero VRAM/buffers between jobs; disable persistence mode where possible; prefer per‑job processes.
+- Co‑drive role separation: roles view/suggest/drive; “drive” cannot widen scope or approve leases; tag remote actions.
+- Event integrity: mTLS; nonces; monotonic sequence numbers; idempotent actions; reject out‑of‑order/duplicates.
+- Context rehydration guard: redaction/classification before reuse in prompts; badge “potentially exportable”; require egress lease if offloaded.
+- Operational guardrails: per‑project security posture (Relaxed/Standard/Strict); egress ledger retention + daily review UI; one‑click revoke.
+- Hygiene cadence: quarterly key rotation & re‑sign; monthly dependency sweep with golden tests & snapshot diffs.
+- Seeded red‑team tests in CI: prompt‑injection, zip‑slip, SSRF, secrets‑in‑logs detector.
+
 Remote Access & TLS
 - Dev TLS profiles (mkcert + self‑signed) for localhost
 - Caddy production profile with Let's Encrypt (HTTP‑01/DNS‑01) for public domains

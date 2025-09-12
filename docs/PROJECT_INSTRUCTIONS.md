@@ -56,6 +56,8 @@ Policy-first (OPA/Rego or Cedar): governs tools, data, network, training, govern
 
 Permission manifests per tool. Signed releases (cosign). SBOM (SPDX/CycloneDX).
 
+Network posture (planned): per‑project egress firewall + DNS guard with allowlists and leases; see Architecture → Egress Firewall and Guide → Network Posture.
+
 ## Memory & Training
 
 Layered memory (ephemeral/episodic/semantic/procedural), pluggable stores.

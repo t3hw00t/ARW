@@ -8,6 +8,7 @@ title: Policy, Gating, and Capsules
 Updated: 2025-09-10
 
 See also: [Security Hardening](guide/security_hardening.md), [Gating Keys](GATING_KEYS.md), [Configuration](CONFIGURATION.md)
+Related: [Egress Firewall](architecture/egress_firewall.md), [Network Posture](guide/network_posture.md)
 
 Single Source of Truth
 - Gate keys: `arw-core::gating_keys` — constants for all actions/streams; used across endpoints for enforcement and docgen.
@@ -19,6 +20,10 @@ Ingress/Egress Guards
   - Ingress: `io:ingress:task.<kind>`, `io:ingress:tools.<id>`
   - Egress: `io:egress:task.<kind>`, `io:egress:tools.<id>`, `io:egress:chat`
 - Purpose: personality safeguard — prevent disallowed info from entering context and prevent sensitive outputs from leaving.
+
+Network Scopes (Planned)
+- Extend permission model with network scopes (domains, IP/CIDR, ports, protocols) and TTL leases.
+- Enforce via host‑local egress gateway + DNS guard; decisions go to an egress ledger.
 
 Capsule Adoption
 - Adopt via HTTP header `X-ARW-Gate: <json>` after passing admin rate-limit; header size limited (≤4 KiB).

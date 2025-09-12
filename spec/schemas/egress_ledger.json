@@ -1,0 +1,77 @@
+{
+  "$id": "https://arw/spec/schemas/egress_ledger.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ARW Egress Ledger Entry",
+  "description": "Normalized, append-only record of egress decisions and traffic attribution (episode, project, node).",
+  "type": "object",
+  "properties": {
+    "time": { "type": "string", "format": "date-time" },
+    "decision": { "type": "string", "enum": ["allow", "deny"] },
+    "reason_code": { "type": "string", "description": "Stable short code (e.g., policy_allow, policy_deny, ip_literal_blocked, lease_granted)." },
+    "posture": { "type": "string", "enum": ["off", "public", "allowlist", "custom"] },
+    "project_id": { "type": "string" },
+    "episode_id": { "type": "string" },
+    "corr_id": { "type": "string", "description": "Correlation id to stitch with the event stream." },
+    "node_id": { "type": "string" },
+    "tool_id": { "type": "string", "description": "Logical tool id if known (e.g., search.web@1.0.0)." },
+    "process": {
+      "type": "object",
+      "properties": {
+        "pid": { "type": "integer", "minimum": 0 },
+        "exe": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "dest": {
+      "type": "object",
+      "properties": {
+        "host": { "type": "string" },
+        "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "protocol": { "type": "string", "enum": ["http", "https", "ws", "wss", "tcp", "udp", "ssh"] },
+        "ip": { "type": "string" },
+        "sni": { "type": "string" }
+      },
+      "required": ["port", "protocol"],
+      "additionalProperties": false
+    },
+    "bytes_out": { "type": "integer", "minimum": 0 },
+    "bytes_in": { "type": "integer", "minimum": 0 },
+    "duration_ms": { "type": "integer", "minimum": 0 },
+    "est_cost_usd": { "type": "number", "minimum": 0 },
+    "scope_id": { "type": "string", "description": "Matched NetworkScope.id if any." },
+    "lease_id": { "type": "string", "description": "Applied lease id if any." },
+    "error": { "type": "string", "description": "Error detail for denies." },
+    "notes": { "type": "string" }
+  },
+  "required": ["time", "decision", "posture", "project_id", "dest"],
+  "additionalProperties": false,
+  "examples": [
+    {
+      "time": "2025-09-12T12:15:05Z",
+      "decision": "allow",
+      "reason_code": "policy_allow",
+      "posture": "public",
+      "project_id": "proj-demo",
+      "episode_id": "ep-1234",
+      "corr_id": "8b52ff0b-1f63-4d2e-a4f8-1c9d9e8d9a10",
+      "node_id": "home-node",
+      "tool_id": "models.download@1.0.0",
+      "dest": { "host": "pypi.org", "port": 443, "protocol": "https" },
+      "bytes_out": 1024,
+      "bytes_in": 3145728,
+      "duration_ms": 620,
+      "est_cost_usd": 0.0001,
+      "scope_id": "s1"
+    },
+    {
+      "time": "2025-09-12T12:17:42Z",
+      "decision": "deny",
+      "reason_code": "ip_literal_blocked",
+      "posture": "allowlist",
+      "project_id": "proj-demo",
+      "dest": { "ip": "203.0.113.7", "port": 443, "protocol": "tcp" },
+      "error": "IP-literal CONNECTs require a named host"
+    }
+  ]
+}
+

@@ -342,6 +342,8 @@
         <button onclick="modelsDefaultGet()">Get default</button>
         <button onclick="modelsDefaultSet()">Set default</button>
         <button onclick="modelsDownload()">Download</button>
+        <input id="gcTtl" type="number" min="1" value="7" style="width:80px" title="ttl days">
+        <button onclick="modelsGc()" title="GC CAS blobs older than ttl">GC</button>
       </div>
       <pre id="modelsOut">[]</pre>
     </div>
@@ -1125,6 +1127,17 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const tgl=document.getElementById('toggleInsights'); if (tgl){ tgl.addEventListener('click', insightsToggle); }
   const copyStats=document.getElementById('copyStatsBtn'); if(copyStats){ copyStats.addEventListener('click', async ()=>{ try{ const r=await fetch(base + '/introspect/stats'); const t=await r.text(); await navigator.clipboard.writeText(t); showToast('Stats copied'); }catch{ showToast('Stats copy failed'); } }); }
 });
+
+// Models helpers (extended)
+async function modelsGc(){
+  const ttl = parseInt(document.getElementById('gcTtl')?.value||'7',10) || 7;
+  try{
+    const r = await fetch(base + '/admin/models/cas_gc', { method:'POST', headers:{'Content-Type':'application/json','X-ARW-Admin': __adminHeader||''}, body: JSON.stringify({ ttl_days: ttl }) });
+    const t = await r.text();
+    try{ JSON.parse(t); }catch{}
+    showToast(r.ok ? 'GC started' : 'GC failed');
+  }catch{ showToast('GC error'); }
+}
 </script>
   <div id="insights" style="display:none"></div>
   <script>

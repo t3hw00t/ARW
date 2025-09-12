@@ -14,6 +14,8 @@ Updated: 2025-09-12
 - POST `/admin/models/download/cancel` — Cancel an in‑flight download.
 - GET  `/admin/events` — Listen for `Models.DownloadProgress` events (SSE; supports `?replay=N` and repeated `prefix=` filters).
 - GET  `/state/models` — Public, read‑only models list (no admin token required).
+- POST `/admin/models/cas_gc` — Run a one‑off CAS GC sweep; deletes unreferenced blobs older than `ttl_days`.
+- GET  `/state/models_hashes` — Public summary of installed model hashes and sizes.
 
 ## Request
 
@@ -111,3 +113,13 @@ Resume:
 - Idle safety: when no hard budget is set, `ARW_DL_IDLE_TIMEOUT_SECS` applies an idle timeout to avoid hung transfers.
 
 Security note: all `/admin/*` endpoints require either debug mode (`ARW_DEBUG=1`) or an admin token. Set `ARW_ADMIN_TOKEN` on the service and send it as `Authorization: Bearer <token>` or `X-ARW-Admin: <token>`.
+GC unused blobs:
+
+```bash
+curl -sS -X POST "$BASE/admin/models/cas_gc" \
+  -H 'Content-Type: application/json' \
+  -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
+  -d '{"ttl_days":14}'
+```
+
+GC emits a compact `Models.CasGc` event with `{scanned, kept, deleted, deleted_bytes, ttl_days}`.

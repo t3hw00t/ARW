@@ -12,6 +12,10 @@ See also: [Roadmap](ROADMAP.md)
 - Default behavior remains single-process using a local in-memory queue and event bus.
 - Medium-depth scale-out uses a pluggable Queue and Bus abstraction with NATS JetStream as the recommended backend.
 
+Egress posture (planned)
+- Each Worker runs a host‑local egress proxy and DNS guard; policies are pushed from the Home Node and enforced locally.
+- Offload requests carry project/policy context over mTLS; Workers cannot widen scope; all decisions are recorded in an egress ledger.
+
 ## Why NATS
 - Simple operational model, low latency, at-least-once with durable consumer groups.
 - Built-in discovery and clustering; easy to add nodes (“connect a second”).

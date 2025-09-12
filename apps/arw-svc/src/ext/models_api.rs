@@ -247,6 +247,25 @@ pub(crate) async fn models_download_cancel(
     super::ok(serde_json::json!({})).into_response()
 }
 
+#[derive(Deserialize, utoipa::ToSchema)]
+pub(crate) struct CasGcReq {
+    #[serde(default = "CasGcReq::default_ttl")] 
+    ttl_days: u64,
+}
+impl CasGcReq { fn default_ttl() -> u64 { 7 } }
+
+/// Run a one-off GC of models/by-hash, removing unreferenced blobs older than ttl_days.
+#[arw_admin(
+    method = "POST",
+    path = "/admin/models/cas_gc",
+    summary = "Run CAS GC once (delete stale blobs)"
+)]
+#[arw_gate("models:cas_gc")]
+pub(crate) async fn models_cas_gc(State(state): State<AppState>, Json(req): Json<CasGcReq>) -> impl IntoResponse {
+    ModelsService::cas_gc_once(&state.bus, req.ttl_days).await;
+    super::ok(serde_json::json!({"started": true, "ttl_days": req.ttl_days})).into_response()
+}
+
 // Public read-model: summarize installed model hashes for clustering/ads.
 #[arw_gate("state:models_hashes:get")]
 pub(crate) async fn models_hashes_get(State(_state): State<AppState>) -> impl IntoResponse {
