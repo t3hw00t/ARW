@@ -1,6 +1,6 @@
 use super::{default_model, hints, ok};
 use arw_macros::arw_admin;
-use axum::{extract::{Query, State}, response::IntoResponse, Json};
+use axum::{extract::{Query, State, Path}, response::IntoResponse, Json};
 use crate::AppState;
 use serde::Deserialize;
 use serde_json::json;
@@ -252,6 +252,11 @@ pub async fn rehydrate_post(State(state): State<AppState>, Json(req): Json<Rehyd
                 }
             }
             super::ApiError::not_found("belief not found").into_response()
+        }
+        "episode" => {
+            let cid = match req.ptr.get("corr_id").and_then(|v| v.as_str()) { Some(s) => s.to_string(), None => return super::ApiError::bad_request("missing corr_id").into_response() };
+            // Delegate to episode snapshot endpoint
+            return super::state_api::episode_snapshot_get(State(state), Path(cid)).await.into_response();
         }
         "file" => {
             // Gate file rehydrate via policy key; deny by default
