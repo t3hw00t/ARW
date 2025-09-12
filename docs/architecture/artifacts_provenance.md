@@ -12,11 +12,11 @@ Provenance edges
 - `{ inputs[] → tool/model/policy/context → artifact }` captured as events and persisted to a graph store.
 - Snapshots bundle effective config (prompts, recipes, policies, versions) for deterministic replay.
 
-Built‑ins
-- `artifact.created`, `artifact.linked`, `artifact.deleted` events; `POST /artifacts/export` for bundles.
+Built‑ins (planned)
+- Reserved events: `artifact.created`, `artifact.linked`, `artifact.deleted`.
+- Endpoint sketch: `POST /artifacts/export` for bundles.
 
 UI
 - Show “Evidence” links for risky actions (open the provenance graph slice).
 
 See also: Replay & Time Travel, Versioning & Migration, Data Governance.
-

@@ -930,7 +930,7 @@ async fn models_download(
                     sp.bus.publish("Models.DownloadProgress", &p);
                     return;
                 }
-                // checksum verification (optional)
+                // checksum verification (required when provided by UI; service path requires it)
                 if let Some(exp) = expect_sha {
                     // Compute full-file hash to support resume
                     let mut f = match afs::File::open(&target).await {
@@ -1585,14 +1585,14 @@ static DEBUG_HTML: &str = r##"<!doctype html>
       </div>
     </div>
     <div class="box">
-      <h3>Models <a href="#" class="help" data-doc="orchestrator" data-tip="Add/delete, set default, and download models (with optional checksum)." title="Models docs">?</a></h3>
+      <h3>Models <a href="#" class="help" data-doc="orchestrator" data-tip="Add/delete, set default, and download models (sha256 required)." title="Models docs">?</a></h3>
       <div class="row">
         <input id="mId" placeholder="model id" style="width:220px;">
         <input id="mProv" placeholder="provider (local)" style="width:140px;">
       </div>
       <div class="row">
         <input id="mUrl" placeholder="download url (http/https)" style="width:50%">
-        <input id="mSha" placeholder="sha256 (optional)" style="width:220px;">
+        <input id="mSha" placeholder="sha256 (required)" style="width:220px;">
       </div>
       <div class="row">
         <button onclick="modelsList()">List</button>

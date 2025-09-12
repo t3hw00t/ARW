@@ -13,7 +13,7 @@ Model
 - Denials and escalations are first‑class events.
 
 Storage
-- Journaled locally; summarized under `/state/policy` with active leases per principal.
+- Journaled locally; summarized for UI. Planned endpoint: `/state/policy` with active leases per principal.
 
 UI
 - Inline prompts in the sidecar; history visible per episode and per project.
@@ -22,4 +22,3 @@ Tauri mapping
 - Expose Tauri v2 capabilities only when a matching ARW lease is active.
 
 See also: Permissions & Policies, Identity & Tenancy, Threat Model.
-
