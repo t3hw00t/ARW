@@ -662,6 +662,8 @@ async fn probe_hw(State(state): State<AppState>) -> impl IntoResponse {
 
     // GPUs (best-effort)
     let gpus = probe_gpus_best_effort();
+    // NPUs (best-effort)
+    let npus = probe_npus_best_effort();
     #[cfg(feature = "gpu_wgpu")]
     let gpus_wgpu = probe_gpus_wgpu();
     #[cfg(not(feature = "gpu_wgpu"))]
@@ -916,6 +918,8 @@ async fn probe_metrics(State(state): State<AppState>) -> impl IntoResponse {
     let total_mem = sys.total_memory();
     let avail_mem = sys.available_memory();
     let used_mem = total_mem.saturating_sub(avail_mem);
+    let swap_total = sys.total_swap();
+    let swap_used = sys.used_swap();
 
     let sdir = crate::ext::paths::state_dir();
     let (disk_total, disk_avail) = (
@@ -924,12 +928,14 @@ async fn probe_metrics(State(state): State<AppState>) -> impl IntoResponse {
     );
 
     let gpus = probe_gpu_metrics_best_effort();
+    let npus = probe_npus_best_effort();
 
     let out = serde_json::json!({
         "cpu": {"avg": avg, "per_core": per_core},
-        "memory": {"total": total_mem, "used": used_mem, "available": avail_mem},
+        "memory": {"total": total_mem, "used": used_mem, "available": avail_mem, "swap_total": swap_total, "swap_used": swap_used},
         "disk": {"state_dir": sdir, "total": disk_total, "available": disk_avail},
         "gpus": gpus,
+        "npus": npus,
     });
     state.bus.publish(
         "Probe.Metrics",
@@ -993,6 +999,74 @@ fn probe_gpu_metrics_best_effort() -> Vec<serde_json::Value> {
 }
 #[cfg(not(target_os = "linux"))]
 fn probe_gpu_metrics_best_effort() -> Vec<serde_json::Value> {
+    Vec::new()
+}
+
+// ---- NPU probes (best-effort) ----
+#[cfg(target_os = "linux")]
+fn probe_npus_best_effort() -> Vec<serde_json::Value> {
+    use std::fs;
+    use std::path::Path;
+    let mut out: Vec<serde_json::Value> = Vec::new();
+    let accel = Path::new("/sys/class/accel");
+    if let Ok(entries) = fs::read_dir(accel) {
+        for ent in entries.flatten() {
+            let name = ent.file_name().to_string_lossy().into_owned();
+            let dev = ent.path().join("device");
+            let vendor = fs::read_to_string(dev.join("vendor")).unwrap_or_default();
+            let device = fs::read_to_string(dev.join("device")).unwrap_or_default();
+            let vendor = vendor.trim().to_string();
+            let device = device.trim().to_string();
+            let mut driver = String::new();
+            if let Ok(link) = fs::read_link(dev.join("driver")) {
+                if let Some(b) = link.file_name() {
+                    driver = b.to_string_lossy().to_string();
+                }
+            }
+            let mut pci_bus = String::new();
+            if let Ok(ue) = fs::read_to_string(dev.join("uevent")) {
+                for line in ue.lines() {
+                    if let Some(val) = line.strip_prefix("PCI_SLOT_NAME=") {
+                        pci_bus = val.trim().to_string();
+                        break;
+                    }
+                }
+            }
+            out.push(serde_json::json!({
+                "index": name,
+                "vendor_id": vendor,
+                "device_id": device,
+                "driver": driver,
+                "pci_bus": pci_bus,
+            }));
+        }
+    }
+    // Kernel module hints
+    if let Ok(mods) = std::fs::read_to_string("/proc/modules") {
+        let has_intel_vpu = mods.lines().any(|l| l.starts_with("intel_vpu "));
+        let has_amd_xdna = mods.lines().any(|l| l.starts_with("amdxdna "));
+        if has_intel_vpu || has_amd_xdna {
+            out.push(serde_json::json!({"modules": {"intel_vpu": has_intel_vpu, "amdxdna": has_amd_xdna}}));
+        }
+    }
+    out
+}
+
+#[cfg(target_os = "macos")]
+fn probe_npus_best_effort() -> Vec<serde_json::Value> {
+    let mut out = Vec::new();
+    if std::env::consts::ARCH == "aarch64" {
+        out.push(serde_json::json!({
+            "vendor": "Apple",
+            "name": "Neural Engine",
+            "present": true
+        }));
+    }
+    out
+}
+
+#[cfg(not(any(target_os = "linux", target_os = "macos")))]
+fn probe_npus_best_effort() -> Vec<serde_json::Value> {
     Vec::new()
 }
 
