@@ -62,6 +62,7 @@ Universal sidecar (always on)
 - World Model: `docs/WORLD_MODEL.md`
 - Desktop Launcher: `docs/guide/launcher.md`
 - Admin Endpoints: `docs/guide/admin_endpoints.md`
+ - Models Download: `docs/guide/models_download.md`
 - Security Hardening: `docs/guide/security_hardening.md`
  - Network Posture: `docs/guide/network_posture.md`
 - Roadmap: `docs/ROADMAP.md`

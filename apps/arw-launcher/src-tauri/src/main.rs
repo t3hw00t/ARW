@@ -4,8 +4,7 @@ use tauri::{Manager, Runtime};
 
 #[cfg(all(desktop, not(test)))]
 fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
-    use tauri::menu::Menu;
-    use tauri::menu::MenuItem;
+    use tauri::menu::{Menu, MenuItem};
     use tauri::tray::TrayIconBuilder;
 
     let start_i = MenuItem::with_id(app, "start", "Start Service", true, None::<&str>)?;
@@ -29,14 +28,12 @@ fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "start" => {
-                let _ = app
-                    .state::<ServiceState>()
-                    .map(|st| arw_tauri::start_service(st, None));
+                let st = app.state::<ServiceState>();
+                let _ = arw_tauri::start_service(st, None);
             }
             "stop" => {
-                let _ = app
-                    .state::<ServiceState>()
-                    .map(|st| arw_tauri::stop_service(st, None));
+                let st = app.state::<ServiceState>();
+                let _ = arw_tauri::stop_service(st, None);
             }
             "open-debug" => {
                 let _ = arw_tauri::open_debug_ui(None);
@@ -115,7 +112,7 @@ fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
                 let next = delay.as_secs().saturating_mul(2).min(16);
                 delay = Duration::from_secs(next);
             }
-            tauri::async_runtime::sleep(delay).await;
+            tokio::time::sleep(delay).await;
         }
     });
 
@@ -123,27 +120,32 @@ fn create_tray<R: Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
 }
 
 fn main() {
-    tauri::Builder::default()
-        .plugin(tauri_plugin_window_state::Builder::default().build())
+    tauri::Builder::<tauri::Wry>::default()
+        .plugin(tauri_plugin_window_state::Builder::default().build::<tauri::Wry>())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None::<Vec<&'static str>>,
         ))
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_single_instance::init(|_app, _argv, _cwd| {
             // Focus the existing window on second-instance attempt
             #[allow(unused)]
-            if let Some(w) = _app.get_window("main") {
+            if let Some(w) = _app.get_webview_window("main") {
                 let _ = w.set_focus();
             }
         }))
-        .plugin(arw_plugin())
+        .plugin(arw_plugin::<tauri::Wry>())
         .manage(ServiceState::default())
         .setup(|app| {
             // Create a minimal window; tray does most of the work for now
-            tauri::WindowBuilder::new(app, "main", tauri::WindowUrl::App("index.html".into()))
-                .title("ARW Launcher")
-                .inner_size(480.0, 320.0)
-                .build()?;
+            tauri::WebviewWindowBuilder::new(
+                app,
+                "main",
+                tauri::WebviewUrl::App("index.html".into()),
+            )
+            .title("ARW Launcher")
+            .inner_size(480.0, 320.0)
+            .build()?;
             #[cfg(all(desktop, not(test)))]
             {
                 create_tray(&app.handle())?;
@@ -159,16 +161,15 @@ fn main() {
                 .and_then(|v| v.as_bool())
                 .unwrap_or(false);
             if auto_env || auto_pref {
-                let _ = app
-                    .state::<ServiceState>()
-                    .map(|st| arw_tauri::start_service(st, None));
+                let st = app.state::<ServiceState>();
+                let _ = arw_tauri::start_service(st, None);
             }
             // Optionally, register updater plugin (no-op without config)
             #[cfg(all(desktop, not(test)))]
             {
                 let _ = app
                     .handle()
-                    .plugin(tauri_plugin_updater::Builder::new().build());
+                    .plugin(tauri_plugin_updater::Builder::new().build::<tauri::Wry>());
             }
             Ok(())
         })

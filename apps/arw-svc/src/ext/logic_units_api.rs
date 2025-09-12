@@ -40,7 +40,10 @@ pub struct RevertReq {
     summary = "Install logic unit"
 )]
 #[arw_gate("logic_units:install")]
-pub async fn install(State(state): State<AppState>, Json(req): Json<InstallReq>) -> impl IntoResponse {
+pub async fn install(
+    State(state): State<AppState>,
+    Json(req): Json<InstallReq>,
+) -> impl IntoResponse {
     let id = req
         .manifest
         .get("id")
@@ -85,7 +88,10 @@ pub async fn apply(State(state): State<AppState>, Json(req): Json<ApplyReq>) -> 
     summary = "Revert logic unit"
 )]
 #[arw_gate("logic_units:revert")]
-pub async fn revert(State(state): State<AppState>, Json(req): Json<RevertReq>) -> impl IntoResponse {
+pub async fn revert(
+    State(state): State<AppState>,
+    Json(req): Json<RevertReq>,
+) -> impl IntoResponse {
     let mut payload = json!({
         "unit_id": req.unit_id,
         "snapshot_id": req.snapshot_id,

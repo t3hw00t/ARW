@@ -26,7 +26,7 @@ use serde_json::json;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::path::Path as FsPath;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
@@ -391,8 +391,14 @@ async fn main() {
         .route("/about", get(ext::about))
         .route("/state/models", get(ext::state_api::models_state_get))
         .route("/state/self", get(ext::self_model_api::self_state_list))
-        .route("/state/self/:agent", get(ext::self_model_api::self_state_get))
-        .route("/state/models_hashes", get(ext::models_api::models_hashes_get))
+        .route(
+            "/state/self/:agent",
+            get(ext::self_model_api::self_state_get),
+        )
+        .route(
+            "/state/models_hashes",
+            get(ext::models_api::models_hashes_get),
+        )
         // Serve generated specs when present (public)
         .route("/spec/openapi.yaml", get(spec_openapi))
         .route("/spec/asyncapi.yaml", get(spec_asyncapi))
@@ -411,8 +417,14 @@ async fn main() {
                 .route("/events", get(events))
                 .route("/emit/test", get(emit_test))
                 .route("/shutdown", get(shutdown))
-                .route("/self_model/propose", axum::routing::post(ext::self_model_api::self_model_propose))
-                .route("/self_model/apply", axum::routing::post(ext::self_model_api::self_model_apply))
+                .route(
+                    "/self_model/propose",
+                    axum::routing::post(ext::self_model_api::self_model_propose),
+                )
+                .route(
+                    "/self_model/apply",
+                    axum::routing::post(ext::self_model_api::self_model_apply),
+                )
                 .route("/introspect/tools", get(introspect_tools))
                 .route("/introspect/schemas/:id", get(introspect_schema))
                 // Bring in extra admin routes (memory/models/tools/etc.)
@@ -512,7 +524,7 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
         debug
     };
     if ok {
-        if !rate_allow() {
+        if !rate_allow().await {
             let body = serde_json::json!({
                 "type": "about:blank",
                 "title": "Too Many Requests",
@@ -583,7 +595,7 @@ struct RateWin {
     count: u64,
     start: std::time::Instant,
 }
-static RL_STATE: OnceLock<Mutex<RateWin>> = OnceLock::new();
+static RL_STATE: OnceLock<tokio::sync::Mutex<RateWin>> = OnceLock::new();
 fn rl_params() -> (u64, u64) {
     if let Ok(s) = std::env::var("ARW_ADMIN_RL") {
         if let Some((a, b)) = s.split_once('/') {
@@ -594,16 +606,16 @@ fn rl_params() -> (u64, u64) {
     }
     (60, 60)
 }
-fn rate_allow() -> bool {
+async fn rate_allow() -> bool {
     let (limit, win_secs) = rl_params();
     let now = std::time::Instant::now();
     let m = RL_STATE.get_or_init(|| {
-        Mutex::new(RateWin {
+        tokio::sync::Mutex::new(RateWin {
             count: 0,
             start: now,
         })
     });
-    let mut st = m.lock().unwrap();
+    let mut st = m.lock().await;
     if now.duration_since(st.start).as_secs() >= win_secs {
         st.start = now;
         st.count = 0;
@@ -726,7 +738,7 @@ async fn probe_hw(State(state): State<AppState>) -> impl IntoResponse {
     let cpus_physical = sys.physical_core_count().unwrap_or(0) as u64;
     let cpu_brand = sys
         .cpus()
-        .get(0)
+        .first()
         .map(|c| c.brand().to_string())
         .unwrap_or_default();
 
@@ -2050,7 +2062,12 @@ async fn state_world_doc() -> impl IntoResponse {
     (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
 ))]
 async fn state_world_select_doc() -> impl IntoResponse {
-    ext::world::world_select_get(axum::extract::Query(ext::world::WorldSelectQs { proj: None, q: None, k: Some(8) })).await
+    ext::world::world_select_get(axum::extract::Query(ext::world::WorldSelectQs {
+        proj: None,
+        q: None,
+        k: Some(8),
+    }))
+    .await
 }
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/admin/context/assemble", tag = "Admin/Context", responses(

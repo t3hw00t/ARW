@@ -55,6 +55,17 @@
     .ico.bad{ color:#ef4444 }
     .ico.info{ color:#6b7280 }
     .ico.accent{ color: var(--neon) }
+    /* Subtle hint block */
+    .hint{ font-size:12px; color:#374151; background:#f8fafc; border:1px solid #e5e7eb; border-left:3px solid #1bb3a3; padding:8px 10px; border-radius:8px; margin:6px 0 }
+    .hint .dismiss{ float:right; text-decoration:none; color:#6b7280; font-weight:600 }
+    /* Downloads list */
+    .dlrow{ display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px dashed #eee }
+    .dlid{ font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:600; min-width:140px }
+    .dlstat{ font-size:12px; color:var(--muted); min-width:90px }
+    .dlmeta{ font-size:12px; color:var(--muted) }
+    .pbar{ width:180px; height:8px; background:#e5e7eb; border-radius:999px; overflow:hidden; box-shadow:inset 0 1px 0 rgba(255,255,255,0.6) }
+    .pfill{ height:100%; background:linear-gradient(90deg, var(--neon), #22c55e); width:0% }
+    .ghost{ padding:6px 10px; border:1px dashed #cfd6de; background:#fff; border-radius:6px; cursor:pointer }
     a.help{display:inline-block;margin-left:8px;width:18px;height:18px;border-radius:50%;border:1px solid #d1d5db;color:#6b7280;text-align:center;line-height:16px;text-decoration:none;font-weight:600;font-size:12px}
     a.help:hover{background:#f3f4f6;color:#374151}
     .tip{position:fixed;z-index:50;max-width:360px;background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,0.14);padding:10px 12px}
@@ -353,9 +364,21 @@
     </div>
     <div class="box">
       <h3>Models <a href="#" class="help" data-doc="orchestrator" data-tip="Add/delete and set default model." title="Models docs">?</a> <span id="modelsHdrBadge" class="badge warn" style="margin-left:6px"><span class="dot"></span> 0</span></h3>
+      <div id="modelsHint" class="hint" style="display:none">
+        <a href="#" class="dismiss" title="dismiss" onclick="modelsHintDismiss(); return false;">×</a>
+        <b>Get started:</b>
+        <span class="key">1)</span> Add a model id
+        <span class="key">2)</span> Paste file URL + SHA256
+        <span class="key">3)</span> Click Download
+        <a href="#" onclick="modelsPrefillSample(); return false;" style="margin-left:10px; color:#2563eb; text-decoration:underline">prefill sample</a>
+      </div>
       <div class="row">
         <input id="mId" placeholder="model id" style="width:220px;">
         <input id="mProv" placeholder="provider (local)" style="width:160px;">
+      </div>
+      <div class="row">
+        <input id="mUrl" placeholder="download url (https://...)" style="flex:1; min-width:320px;">
+        <input id="mSha" placeholder="sha256 (64 hex)" style="width:360px;">
       </div>
       <div class="row">
         <button onclick="modelsList()">List</button>
@@ -364,10 +387,15 @@
         <button onclick="modelsDefaultGet()">Get default</button>
         <button onclick="modelsDefaultSet()">Set default</button>
         <button onclick="modelsDownload()">Download</button>
+        <button onclick="modelsCancel()">Cancel</button>
         <input id="gcTtl" type="number" min="1" value="7" style="width:80px" title="ttl days">
         <button onclick="modelsGc()" title="GC CAS blobs older than ttl">GC</button>
       </div>
       <pre id="modelsOut">[]</pre>
+    </div>
+    <div class="box" id="dlBox">
+      <h3>Downloads <span id="dlCount" class="badge warn" style="margin-left:6px"><span class="dot"></span> 0</span></h3>
+      <div id="dlRows"></div>
     </div>
     <div class="box" data-collapsed="1">
       <h3>Agent Card <a href="#" class="help" data-doc="events" data-tip="Self‑model: capabilities, competence, calibration, costs, failure modes." title="Self‑Model docs">?</a> <span id="selfHdrBadge" class="badge warn" style="margin-left:6px"><span class="dot"></span> 0</span></h3>
@@ -487,8 +515,131 @@ async function modelsAdd(){ const id=document.getElementById('mId').value.trim()
 async function modelsDelete(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await req('POST','/models/delete',{id},'modelsOut','rt-orch'); await modelsList(); }
 async function modelsDefaultGet(){ await req('GET','/models/default',null,'modelsOut','rt-orch'); }
 async function modelsDefaultSet(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await req('POST','/models/default',{id},'modelsOut','rt-orch'); }
-async function modelsDownload(){ const id=document.getElementById('mId').value.trim(); if(!id) return; const provider=(document.getElementById('mProv').value||'local').trim(); await req('POST','/models/download',{id,provider},'modelsOut','rt-orch'); }
+async function modelsDownload(){
+  const id=(document.getElementById('mId')?.value||'').trim();
+  const provider=(document.getElementById('mProv')?.value||'local').trim();
+  const url=(document.getElementById('mUrl')?.value||'').trim();
+  const sha256=(document.getElementById('mSha')?.value||'').trim();
+  if(!id){ showToast('model id required'); return; }
+  if(!url){ showToast('url required'); return; }
+  if(!/^https?:\/\//i.test(url)){ showToast('invalid url (http/https)'); return; }
+  if(!(sha256 && /^[0-9a-fA-F]{64}$/.test(sha256))){ showToast('sha256 (64 hex) required'); return; }
+  await req('POST','/models/download',{ id, url, provider, sha256 },'modelsOut','rt-orch');
+}
 async function modelsCancel(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await req('POST','/models/download/cancel',{id},'modelsOut','rt-orch'); }
+async function modelsCancelId(id){ if(!id) return; await req('POST','/models/download/cancel',{id},'out','rt-orch'); }
+
+function modelsPrefillSample(){
+  const id = 'example-model';
+  const provider = 'local';
+  const url = 'https://example.com/models/example-model.bin';
+  const sha = '0000000000000000000000000000000000000000000000000000000000000000';
+  const set = (elId, val)=>{ const el=document.getElementById(elId); if(el){ el.value = val; try{ savePref(elId, val); }catch{} } };
+  set('mId', id);
+  set('mProv', provider);
+  set('mUrl', url);
+  set('mSha', sha);
+  showToast('Sample values filled');
+}
+
+// --- Download Manager ---
+const downloads = Object.create(null); // id -> entry
+function nowMs(){ return (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now(); }
+function msHuman(ms){ if(!ms && ms!==0) return '–'; const s=Math.max(0, Math.round(ms/1000)); const m=Math.floor(s/60); const ss=(s%60).toString().padStart(2,'0'); return (m>0? m+':':'0:')+ss; }
+function codeExplain(code, extra){
+  switch(String(code||'')){
+    case 'cached': return 'using cached file';
+    case 'already-in-progress':
+    case 'already-in-progress-hash': return 'duplicate request';
+    case 'admission_denied': return 'insufficient time budget';
+    case 'hard_exhausted': return 'time budget exhausted';
+    case 'size_limit':
+    case 'size_limit_stream': return 'size exceeds limit';
+    case 'disk_insufficient':
+    case 'disk_insufficient_stream': {
+      const need = extra?.need || extra?.downloaded || 0, av = extra?.available || 0, res = extra?.reserve || 0;
+      return `disk low; need ${bytesHuman(need)}, free ${bytesHuman(av)} (reserve ${bytesHuman(res)})`;
+    }
+    case 'resume_http_status':
+    case 'downstream_http_status': return 'server http status';
+    case 'checksum_mismatch': return 'checksum mismatch';
+    case 'request_failed': return 'request failed';
+    default: return code ? String(code) : '';
+  }
+}
+function updateDlEntry(obj){
+  const id = obj.id; if(!id) return;
+  const e = downloads[id] || { id, first_ts: nowMs(), last_ts: 0, last_bytes: 0, finished: false };
+  // Merge fields
+  if(obj.status) e.status = obj.status;
+  if(obj.code != null) e.code = obj.code;
+  if(obj.progress != null) e.progress = obj.progress;
+  if(obj.downloaded != null) e.downloaded = obj.downloaded;
+  if(obj.total != null) e.total = obj.total;
+  if(obj.disk != null) e.disk = obj.disk;
+  if(obj.budget != null) e.budget = obj.budget;
+  if(obj.error != null) e.error = obj.error;
+  // Speed calc
+  const t = nowMs();
+  if(typeof e.downloaded === 'number'){
+    if(e.last_ts){ const dt = (t - e.last_ts) / 1000.0; const db = Math.max(0, e.downloaded - (e.last_bytes||0)); e.speed_bps = dt>0 ? db/dt : e.speed_bps; }
+    e.last_bytes = e.downloaded;
+  }
+  e.last_ts = t;
+  // Finished?
+  if(e.status === 'complete' || e.status === 'canceled' || e.error){ e.finished = true; }
+  downloads[id] = e;
+  renderDownloads();
+}
+function renderDownloads(){
+  const el = document.getElementById('dlRows'); if(!el) return;
+  const ids = Object.keys(downloads);
+  // Update count badge
+  const b = document.getElementById('dlCount');
+  if(b){ b.className = 'badge ' + (ids.length? 'good':'warn'); b.innerHTML = '<span class="dot"></span> ' + ids.length; }
+  const lines = [];
+  ids.sort();
+  ids.forEach(id => {
+    const d = downloads[id] || {};
+    const pct = (typeof d.progress === 'number') ? Math.max(0, Math.min(100, d.progress)) : null;
+    const downloaded = d.downloaded || 0; const total = d.total || 0;
+    const spd = d.speed_bps ? (d.speed_bps / (1024*1024)) : null;
+    const etaMs = (pct!=null && pct>0 && pct<100 && spd>0 && total>0) ? Math.round(((total - downloaded) / (spd*1024*1024)) * 1000) : null;
+    const status = d.error ? 'error' : (d.status || '');
+    const code = d.code; const note = d.error || codeExplain(code, d);
+    const disk = d.disk; const diskTxt = (disk && typeof disk.available==='number') ? ` · disk ${bytesHuman(disk.available)} free` : '';
+    const cancelBtn = (!d.finished) ? `<button class="ghost" onclick="modelsCancelId('${id.replace(/'/g,"%27")}')">Cancel</button>` : '';
+    const pbar = (pct!=null) ? `<div class="pbar"><div class="pfill" style="width:${pct}%"></div></div>` : `<div class="pbar"><div class="pfill" style="width:0%"></div></div>`;
+    const metaL = (total>0) ? `${bytesHuman(downloaded)} / ${bytesHuman(total)}` : `${bytesHuman(downloaded)} / ?`;
+    const metaR = `${(spd!=null? spd.toFixed(2)+' MB/s' : '–')} · ETA ${etaMs!=null? msHuman(etaMs): '–'}`;
+    lines.push(`<div class="dlrow">
+      <div class="dlid" title="model id">${id}</div>
+      <div class="dlstat">${status}${code? ' ('+code+')':''}</div>
+      ${pbar}
+      <div class="dlmeta" title="bytes/speed/eta">${metaL} · ${metaR}${diskTxt}</div>
+      <div style="margin-left:auto; display:flex; gap:8px; align-items:center">${cancelBtn}</div>
+    </div>
+    ${note? `<div class="dlmeta" style="margin:-4px 0 4px 150px">${note}</div>`:''}`);
+  });
+  el.innerHTML = lines.join('');
+}
+
+// --- Subtle Models hint ---
+function modelsHintDismiss(){ try{ localStorage.setItem('arw.models.hint.dismissed','1'); const el=document.getElementById('modelsHint'); if(el) el.style.display='none'; }catch{} }
+async function modelsMaybeShowHint(force){
+  try{
+    const dismissed = localStorage.getItem('arw.models.hint.dismissed') === '1';
+    if(dismissed && !force) return;
+    const r = await fetch(base + '/admin/models', { headers: { 'X-ARW-Admin': __adminHeader || '' } });
+    if(!r.ok) return;
+    const list = await r.json();
+    const count = Array.isArray(list) ? list.length : (Array.isArray(list?.data) ? list.data.length : 0);
+    const activeDl = Object.keys(downloads||{}).length;
+    const show = (count === 0) && (activeDl === 0);
+    const el = document.getElementById('modelsHint'); if(!el) return;
+    el.style.display = show ? 'block' : 'none';
+  }catch{}
+}
 
 // Global EventSource + logger
 let es = null;
@@ -537,11 +688,16 @@ function iconsFor(kind, obj){
   if (kind === 'Models.DownloadProgress'){
     const s = obj.status; const c = obj.code;
     if (s === 'complete') return svgIcon('check','ok');
+    if (s === 'queued') return svgIcon('timer','info');
+    if (s === 'admitted') return svgIcon('download','accent');
     if (s === 'resumed' || s === 'resync') return svgIcon('refresh','accent');
     if (s === 'started' || s === 'downloading') return svgIcon('download','accent');
     if (s === 'degraded') return svgIcon('timer','warn');
     if (s === 'canceled') return svgIcon('stop','info');
     switch(String(c||'')){
+      case 'cached': return svgIcon('check','ok') + svgIcon('hash','info');
+      case 'already-in-progress':
+      case 'already-in-progress-hash': return svgIcon('download','warn');
       case 'admission_denied': return svgIcon('lock','bad') + svgIcon('timer','warn');
       case 'hard_exhausted':   return svgIcon('timer','bad');
       case 'size_limit':
@@ -578,20 +734,41 @@ function pushEvt(kind, data){
   log.prepend(div);
   while (log.childElementCount > 200) log.removeChild(log.lastChild);
 }
+// Update Models header count via /admin/models
+async function updateModelsCount(){
+  try{
+    const r = await fetch(base + '/admin/models', { headers: { 'X-ARW-Admin': __adminHeader || '' } });
+    if(!r.ok) return;
+    const j = await r.json();
+    const n = Array.isArray(j) ? j.length : (Array.isArray(j?.data) ? j.data.length : 0);
+    const b = document.getElementById('modelsHdrBadge');
+    if(b){ b.className = 'badge ' + (n>0 ? 'good' : 'warn'); b.innerHTML = '<span class="dot"></span> ' + n; }
+  }catch{}
+}
 // Track model download progress into a header badge
 function bindSSEHandlers(){
 es.addEventListener('Models.DownloadProgress', (e)=>{
   try{
     const obj = JSON.parse(e.data||'{}');
+    // Update Download Manager
+    try{ updateDlEntry(obj); }catch{}
     const b = document.getElementById('modelsBadge'); if(!b) return;
     if (obj.error){ b.className='badge bad'; b.innerHTML = '<span class="dot"></span> Models: error'; return; }
     if (obj.status === 'canceled'){ b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: canceled'; return; }
     if (obj.status === 'complete'){ b.className='badge good'; b.innerHTML = '<span class="dot"></span> Models: complete'; return; }
+    if ((obj.code||'') === 'cached'){ b.className='badge good'; b.innerHTML = '<span class="dot"></span> Models: cached'; return; }
+    if (obj.status === 'queued'){ b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: queued'; return; }
+    if (obj.status === 'admitted'){ b.className='badge good'; b.innerHTML = '<span class="dot"></span> Models: admitted'; return; }
+    if (obj.status === 'degraded'){ b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: degraded'; return; }
+    if (obj.status === 'already-in-progress'){ b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: duplicate'; return; }
     const pct = (obj.progress!=null)? obj.progress : null;
     if (pct!=null){ b.className='badge good'; b.innerHTML = '<span class="dot"></span> Models: ' + pct + '%'; }
     else { b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: active'; }
   }catch{}
 });
+// Start event + model changes
+es.addEventListener('Models.Download', (e)=>{ pushEvt('Models.Download', e.data); try{ const j=JSON.parse(e.data||'{}'); updateDlEntry({ id: j.id, status:'started'}); if(j && j.id){ showToast('Downloading '+ j.id +'…'); } }catch{} });
+es.addEventListener('Models.Changed', (e)=>{ pushEvt('Models.Changed', e.data); try{ updateModelsCount(); const j=JSON.parse(e.data||'{}'); if(j && j.op==='downloaded' && j.id){ updateDlEntry({ id:j.id, status:'complete'}); } modelsMaybeShowHint(true); }catch{} });
 // Pre‑offload preview (egress)
 es.addEventListener('Egress.Preview', (e)=>{
   pushEvt('Egress.Preview', e.data);
@@ -873,6 +1050,9 @@ async function probeAdmin(){ try{ const r = await fetch(base + '/introspect/tool
 document.addEventListener('DOMContentLoaded', probeAdmin);
 document.addEventListener('DOMContentLoaded', ()=>{ var b=document.getElementById('chatTestBtn'); if(b){ b.addEventListener('click', chatProbe); } chatInit(); });
 document.addEventListener('DOMContentLoaded', ()=>{ try{ initBadges(); }catch(e){} });
+document.addEventListener('DOMContentLoaded', ()=>{ try{ updateModelsCount(); }catch(e){} });
+document.addEventListener('DOMContentLoaded', ()=>{ try{ renderDownloads(); }catch(e){} });
+document.addEventListener('DOMContentLoaded', ()=>{ try{ modelsMaybeShowHint(false); }catch(e){} });
 // Pull policy bounds for display
 document.addEventListener('DOMContentLoaded', fbFetchPolicy);
 // Start live suggestions if enabled
@@ -890,7 +1070,7 @@ function loadPref(k,def){ try{ const v = localStorage.getItem(prefKey(k)); retur
 function bindPersist(id, key, isCheckbox){ const el=document.getElementById(id); if(!el) return; const val = loadPref(key, isCheckbox ? false : ''); if(val !== undefined && val !== null){ if(isCheckbox) el.checked = !!val; else if(val !== '') el.value = val; }
   el.addEventListener('change', ()=>{ const v = isCheckbox ? !!el.checked : el.value; savePref(key, v); }); }
 document.addEventListener('DOMContentLoaded', ()=>{
-  [['chatModel',false],['memKind',false],['profileSel',false],['hintConc',false],['hintBuf',false],['hintTimeout',false],['autoApply',true],['fbLive',true],['memBody',false],['toolBody',false],['mId',false],['mProv',false]].forEach(([id,isCb])=> bindPersist(id, id, isCb));
+  [['chatModel',false],['memKind',false],['profileSel',false],['hintConc',false],['hintBuf',false],['hintTimeout',false],['autoApply',true],['fbLive',true],['memBody',false],['toolBody',false],['mId',false],['mProv',false],['mUrl',false],['mSha',false]].forEach(([id,isCb])=> bindPersist(id, id, isCb));
   const remember = loadPref('admin.remember', false); const tok = loadPref('admin.token', '');
   const cb=document.getElementById('rememberTok'); const t=document.getElementById('adminToken'); if(cb) cb.checked = !!remember; if(t && remember && tok){ t.value = tok; __adminHeader = tok; setAdmin(true); }
 });

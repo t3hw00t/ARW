@@ -44,6 +44,9 @@ cat spec/schemas/egress_ledger.json | jq '.title,.description'
 # Memory & World schemas (planned)
 cat spec/schemas/memory_quarantine_entry.json | jq '.title,.description'
 cat spec/schemas/world_diff_review_item.json | jq '.title,.description'
+ 
+# Models manifest (CAS)
+cat spec/schemas/model_manifest.json | jq '.title,.required'
 cat spec/schemas/secrets_redaction_rule.json | jq '.title,.description'
 cat spec/schemas/archive_unpack_policy.json | jq '.title,.description'
 cat spec/schemas/dns_anomaly_event.json | jq '.title,.description'
@@ -222,3 +225,18 @@ GET /state/runtime_matrix
 GET /state/episode/{id}/snapshot
 
 GET /state/policy
+### Models Admin Endpoints
+
+See the Admin Endpoints guide for details and examples. Summary:
+
+- POST `/admin/models/download` — start/resume a download `{id,url,sha256,provider?,budget?}`.
+- POST `/admin/models/download/cancel` — cancel an in‑flight download for `{id}`.
+- POST `/admin/models/cas_gc` — CAS GC once `{ttl_days}`; emits `Models.CasGc`.
+- GET  `/admin/models/by-hash/:sha256` — serve a CAS blob by sha256 (egress‑gated).
+- GET  `/admin/state/models_hashes` — list installed model hashes and sizes.
+- GET  `/admin/models/downloads_metrics` — `{ ewma_mbps }` throughput estimate.
+
+Events (AsyncAPI)
+- `Models.DownloadProgress`: standardized progress/errors with optional `budget` and `disk`.
+- `Models.ManifestWritten`, `Models.CasGc`, `Models.Changed`, `Models.Refreshed`.
+- Egress: `Egress.Preview`, `Egress.Ledger.Appended`.

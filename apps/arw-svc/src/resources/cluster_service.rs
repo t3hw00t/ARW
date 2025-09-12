@@ -53,9 +53,8 @@ impl ClusterService {
     // Publish a local advertise (MVP placeholder; safe to call at startup later)
     #[allow(dead_code)]
     pub async fn advertise_local(&self, state: &AppState) {
-        let id = std::env::var("ARW_NODE_ID").unwrap_or_else(|_| {
-            sysinfo::System::host_name().unwrap_or_else(|| "local".into())
-        });
+        let id = std::env::var("ARW_NODE_ID")
+            .unwrap_or_else(|_| sysinfo::System::host_name().unwrap_or_else(|| "local".into()));
         let role = format!("{:?}", arw_core::hierarchy::get_state().self_node.role);
         let mut caps = HashMap::new();
         // Minimal capability hints; extend with models/tools later
@@ -68,7 +67,9 @@ impl ClusterService {
             let mut hs: HashSet<String> = HashSet::new();
             for m in list.into_iter() {
                 if let Some(s) = m.get("sha256").and_then(|v| v.as_str()) {
-                    if s.len() == 64 { hs.insert(s.to_string()); }
+                    if s.len() == 64 {
+                        hs.insert(s.to_string());
+                    }
                 }
             }
             let mut hashes: Vec<String> = hs.into_iter().collect();

@@ -65,14 +65,15 @@ pub(crate) async fn chat_send(
     let model = req.model.clone().unwrap_or_else(|| "echo".to_string());
     let user = json!({"role":"user","content": req.message});
     // Self-consistency (vote-k) if gated and requested
-    let mut reply_txt: String;
+    let reply_txt: String;
     if vote_k > 1 && arw_core::gating::allowed(arw_core::gating_keys::CHAT_SELF_CONSISTENCY) {
         let n = vote_k as usize;
         let mut votes: Vec<String> = Vec::with_capacity(n);
         for _i in 0..n {
             if let Some(r) = llama_reply(&req.message, req.temperature.or(Some(0.8))).await {
                 votes.push(r);
-            } else if let Some(r) = openai_reply(&req.message, req.temperature.or(Some(0.8))).await {
+            } else if let Some(r) = openai_reply(&req.message, req.temperature.or(Some(0.8))).await
+            {
                 votes.push(r);
             } else {
                 votes.push(synth_reply(&req.message, &model));
@@ -87,7 +88,9 @@ pub(crate) async fn chat_send(
         }
         let mut best: (&String, usize) = (&votes[0], 1);
         for (k, c) in counts.iter() {
-            if *c > best.1 { best = (k, *c); }
+            if *c > best.1 {
+                best = (k, *c);
+            }
         }
         reply_txt = best.0.clone();
     } else {
@@ -110,7 +113,11 @@ pub(crate) async fn chat_send(
     // Optional verifier pass (gated)
     if verify_pass && arw_core::gating::allowed(arw_core::gating_keys::CHAT_VERIFY) {
         let question = req.message.clone();
-        let answer = assist.get("content").and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let answer = assist
+            .get("content")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
         if let Some(obj) = assist.as_object_mut() {
             let (status, note) = verify_with_backend(&question, &answer, req.temperature).await;
             obj.insert("verify".into(), json!({"status": status, "note": note}));
@@ -142,7 +149,8 @@ pub(crate) async fn chat_send(
     state.bus.publish("Chat.Message", &in_evt);
     state.bus.publish("Chat.Message", &out_evt);
     // Emit a lightweight planner hint event for UI/recipes
-    let mut hint_evt = json!({"mode": mode, "verify_pass": verify_pass, "consistency": {"vote_k": vote_k}});
+    let mut hint_evt =
+        json!({"mode": mode, "verify_pass": verify_pass, "consistency": {"vote_k": vote_k}});
     crate::ext::corr::ensure_corr(&mut hint_evt);
     state.bus.publish("Chat.Planner", &hint_evt);
     super::ok(assist).into_response()
@@ -298,14 +306,20 @@ async fn openai_reply(prompt: &str, temperature: Option<f64>) -> Option<String> 
 }
 
 // Simple verifier: prompt the backend to judge the answer; returns (status, note)
-async fn verify_with_backend(question: &str, answer: &str, temperature: Option<f64>) -> (String, String) {
+async fn verify_with_backend(
+    question: &str,
+    answer: &str,
+    temperature: Option<f64>,
+) -> (String, String) {
     let prompt = format!("Verifier:\nQ: {}\nA: {}\nInstructions: Evaluate the answer for factuality and relevance. Respond with one of:\n- OK: <short reason>\n- NEEDS_REVIEW: <short reason>\n", question, answer);
     let resp = if let Some(r) = llama_reply(&prompt, temperature.or(Some(0.0))).await {
         Some(r)
-    } else if let Some(r) = openai_reply(&format!("You are a verifier. {}", prompt), temperature.or(Some(0.0))).await {
-        Some(r)
     } else {
-        None
+        openai_reply(
+            &format!("You are a verifier. {}", prompt),
+            temperature.or(Some(0.0)),
+        )
+        .await
     };
     if let Some(s) = resp {
         let up = s.to_ascii_uppercase();

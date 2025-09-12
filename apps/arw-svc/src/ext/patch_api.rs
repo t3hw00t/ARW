@@ -52,7 +52,10 @@ pub async fn dry_run(Json(req): Json<DryRunReq>) -> impl IntoResponse {
     summary = "Apply patch set"
 )]
 #[arw_gate("patch:apply")]
-pub async fn apply(State(state): State<AppState>, Json(req): Json<ApplyPatchReq>) -> impl IntoResponse {
+pub async fn apply(
+    State(state): State<AppState>,
+    Json(req): Json<ApplyPatchReq>,
+) -> impl IntoResponse {
     // Load current config (object)
     let cfg_path = crate::ext::paths::config_path();
     let mut cfg = crate::ext::io::load_json_file_async(&cfg_path)
@@ -78,7 +81,9 @@ pub async fn apply(State(state): State<AppState>, Json(req): Json<ApplyPatchReq>
         }
     }
     // Ensure root.targets exists
-    let targets = cfg.entry("targets").or_insert(Value::Object(Default::default()));
+    let targets = cfg
+        .entry("targets")
+        .or_insert(Value::Object(Default::default()));
     // Apply patches (merge only)
     for p in &req.patches {
         let target = p.get("target").and_then(|s| s.as_str()).unwrap_or("");
@@ -93,7 +98,9 @@ pub async fn apply(State(state): State<AppState>, Json(req): Json<ApplyPatchReq>
         }
         // Get or init target object
         let tgt_entry = match targets.as_object_mut() {
-            Some(map) => map.entry(target.to_string()).or_insert(Value::Object(Default::default())),
+            Some(map) => map
+                .entry(target.to_string())
+                .or_insert(Value::Object(Default::default())),
             None => targets,
         };
         merge(tgt_entry, &val);
@@ -129,17 +136,18 @@ pub async fn apply(State(state): State<AppState>, Json(req): Json<ApplyPatchReq>
     summary = "Revert patch set"
 )]
 #[arw_gate("patch:revert")]
-pub async fn revert(State(state): State<AppState>, Json(req): Json<RevertPatchReq>) -> impl IntoResponse {
+pub async fn revert(
+    State(state): State<AppState>,
+    Json(req): Json<RevertPatchReq>,
+) -> impl IntoResponse {
     // Revert from snapshot if provided
     if let Some(id) = &req.snapshot_id {
         let path = crate::ext::paths::snapshots_dir().join(format!("{}.json", id));
         if let Some(v) = crate::ext::io::load_json_file_async(&path).await {
             if let Some(prev) = v.get("prev_config") {
-                let _ = crate::ext::io::save_json_file_async(
-                    &crate::ext::paths::config_path(),
-                    prev,
-                )
-                .await;
+                let _ =
+                    crate::ext::io::save_json_file_async(&crate::ext::paths::config_path(), prev)
+                        .await;
             }
         }
     }

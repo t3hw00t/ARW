@@ -21,7 +21,7 @@ pub async fn egress_ledger_get(
     Query(q): Query<LedgerQuery>,
 ) -> impl IntoResponse {
     let path = super::paths::egress_ledger_path();
-    let limit = q.limit.unwrap_or(200).max(1).min(10_000);
+    let limit = q.limit.unwrap_or(200).clamp(1, 10_000);
     let mut entries: Vec<serde_json::Value> = Vec::new();
     if let Ok(bytes) = tokio::fs::read(&path).await {
         // Split by lines and parse each line; keep last N

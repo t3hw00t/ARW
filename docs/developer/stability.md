@@ -9,7 +9,7 @@ adding new features.
 - CI: build/test, clippy, audit, deny, docs+link-check
 - Docs: generated specs, guides, and nav
 
-Desktop UI crates (`arw-tauri`, `arw-launcher`) are kept out of Linux CI builds
+Desktop UI crates (`arw-tauri`, `arw-launcher`) are kept out of Linux CI builds.
 and can evolve independently while core stabilizes.
 
 ## Invariants
@@ -24,6 +24,12 @@ and can evolve independently while core stabilizes.
 - Lint: `cargo clippy -p arw-protocol -p arw-events -p arw-core -p arw-macros -p arw-cli -p arw-otel -p arw-svc -p arw-connector --all-targets -- -D warnings`
 - Build: `cargo build --workspace --locked --exclude arw-tauri --exclude arw-launcher`
 - Test: `cargo test --workspace --locked --exclude arw-tauri --exclude arw-launcher`
+
+Notes for Tauri 2
+- The launcher uses Tauri 2’s capabilities + permissions model. Custom app commands must be explicitly allowed.
+- Capability file: `apps/arw-launcher/src-tauri/capabilities/main.json`.
+- App permissions: `apps/arw-launcher/src-tauri/permissions/arw.json` (contains allowlist of ARW commands).
+- To add new app commands, update the allow list and rebuild. With `build.removeUnusedCommands: true`, commands not allowed are stripped.
 - Security: `cargo audit`; `cargo deny check advisories bans sources licenses`
 - Spec: `OPENAPI_OUT=spec/openapi.yaml cargo run -p arw-svc`
 - Docs: `bash scripts/docgen.sh && mkdocs build --strict`
@@ -45,4 +51,3 @@ and can evolve independently while core stabilizes.
 - CI is green on multiple runs
 - Recent changes sit without regressions for a few days
 - Docs published and verified (links OK)
-

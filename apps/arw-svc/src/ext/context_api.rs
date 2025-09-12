@@ -1,7 +1,11 @@
 use super::{default_model, hints, ok};
-use arw_macros::arw_admin;
-use axum::{extract::{Query, State, Path}, response::IntoResponse, Json};
 use crate::AppState;
+use arw_macros::arw_admin;
+use axum::{
+    extract::{Path, Query, State},
+    response::IntoResponse,
+    Json,
+};
 use serde::Deserialize;
 use serde_json::json;
 
@@ -15,11 +19,11 @@ pub struct AssembleQs {
     // Diversity knob for beliefs selection (0..1). Optional.
     pub div: Option<f64>,
     // Slot budgets (token ceilings); passthrough for UI/planner; server echoes them.
-    pub s_inst: Option<usize>, // instructions
-    pub s_plan: Option<usize>, // plan
+    pub s_inst: Option<usize>,   // instructions
+    pub s_plan: Option<usize>,   // plan
     pub s_policy: Option<usize>, // safety/policy
-    pub s_evid: Option<usize>, // evidence
-    pub s_nice: Option<usize>, // nice-to-have
+    pub s_evid: Option<usize>,   // evidence
+    pub s_nice: Option<usize>,   // nice-to-have
     // Optional per-lane caps for recents (tokens)
     pub s_intents: Option<usize>,
     pub s_actions: Option<usize>,
@@ -33,7 +37,10 @@ pub struct AssembleQs {
     path = "/admin/context/assemble",
     summary = "Assemble minimal context: top‑K beliefs + policy/model hints"
 )]
-pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<AssembleQs>) -> impl IntoResponse {
+pub async fn assemble_get(
+    State(state): State<AppState>,
+    Query(q): Query<AssembleQs>,
+) -> impl IntoResponse {
     let proj_opt = q.proj.as_deref();
     // Read current policy hints (may include mode/slo_ms)
     let policy_hints = { hints().read().await.clone() };
@@ -60,22 +67,19 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
         None => mode_div,
     };
     // Estimate pool size for coverage metrics (top-50 as proxy)
-    let pool: Vec<serde_json::Value> = super::world::select_top_claims(
-        proj_opt,
-        q.q.as_deref().unwrap_or(""),
-        50,
-    )
-    .await;
+    let pool: Vec<serde_json::Value> =
+        super::world::select_top_claims(proj_opt, q.q.as_deref().unwrap_or(""), 50).await;
     // Beliefs: use diversity-aware selection when requested or defaulted by mode
     let items_initial = if let Some(div) = div_used {
-        super::world::select_top_claims_diverse(proj_opt, q.q.as_deref().unwrap_or(""), evid_k, div).await
+        super::world::select_top_claims_diverse(proj_opt, q.q.as_deref().unwrap_or(""), evid_k, div)
+            .await
     } else {
         super::world::select_top_claims(proj_opt, q.q.as_deref().unwrap_or(""), evid_k).await
     };
     // Evidence slot budget: approximate tokens and cap selection
     fn est_tokens_value(v: &serde_json::Value) -> u64 {
         match v {
-            serde_json::Value::String(s) => ((s.len() as u64) + 3) / 4, // ~4 chars/token
+            serde_json::Value::String(s) => (s.len() as u64).div_ceil(4), // ~4 chars/token
             serde_json::Value::Number(_) => 1,
             serde_json::Value::Bool(_) => 1,
             serde_json::Value::Array(a) => a.iter().map(est_tokens_value).sum(),
@@ -85,11 +89,21 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
     }
     fn est_tokens_belief(v: &serde_json::Value) -> u64 {
         let mut t = 6; // overhead
-        if let Some(id) = v.get("id").and_then(|x| x.as_str()) { t += ((id.len() as u64)+3)/4; }
-        if let Some(props) = v.get("props") { t += est_tokens_value(props); }
-        if let Some(name) = v.get("name") { t += est_tokens_value(name); }
-        if let Some(text) = v.get("text") { t += est_tokens_value(text); }
-        if let Some(trace) = v.get("trace") { t += est_tokens_value(trace); }
+        if let Some(id) = v.get("id").and_then(|x| x.as_str()) {
+            t += (id.len() as u64).div_ceil(4);
+        }
+        if let Some(props) = v.get("props") {
+            t += est_tokens_value(props);
+        }
+        if let Some(name) = v.get("name") {
+            t += est_tokens_value(name);
+        }
+        if let Some(text) = v.get("text") {
+            t += est_tokens_value(text);
+        }
+        if let Some(trace) = v.get("trace") {
+            t += est_tokens_value(trace);
+        }
         t.min(512) // cap per item
     }
     let mut used_tokens: u64 = 0;
@@ -98,7 +112,9 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
     for it in items_initial.into_iter() {
         let est = est_tokens_belief(&it);
         if let Some(b) = budget_tokens {
-            if used_tokens.saturating_add(est) > b { break; }
+            if used_tokens.saturating_add(est) > b {
+                break;
+            }
         }
         used_tokens = used_tokens.saturating_add(est);
         items.push(it);
@@ -108,7 +124,7 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
     let proj = proj_opt.map(|s| s.to_string());
     let notes_path = proj
         .as_deref()
-        .and_then(|p| super::paths::project_notes_path(p))
+        .and_then(super::paths::project_notes_path)
         .map(|p| p.to_string_lossy().to_string());
     // Recent files (from world model entities)
     let mut files = super::world::select_recent_files(proj_opt, 20).await;
@@ -117,28 +133,60 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
     let mut actions = super::state_api::actions_snapshot().await;
     if let Some(p) = proj_opt {
         let pv = serde_json::Value::String(p.to_string());
-        intents.retain(|it| it.get("payload").and_then(|v| v.get("proj")).unwrap_or(&serde_json::Value::Null) == &pv);
-        actions.retain(|it| it.get("payload").and_then(|v| v.get("proj")).unwrap_or(&serde_json::Value::Null) == &pv);
+        intents.retain(|it| {
+            it.get("payload")
+                .and_then(|v| v.get("proj"))
+                .unwrap_or(&serde_json::Value::Null)
+                == &pv
+        });
+        actions.retain(|it| {
+            it.get("payload")
+                .and_then(|v| v.get("proj"))
+                .unwrap_or(&serde_json::Value::Null)
+                == &pv
+        });
     }
     // Keep most recent 20 each
-    if intents.len() > 20 { intents = intents[intents.len()-20..].to_vec(); }
-    if actions.len() > 20 { actions = actions[actions.len()-20..].to_vec(); }
+    if intents.len() > 20 {
+        intents = intents[intents.len() - 20..].to_vec();
+    }
+    if actions.len() > 20 {
+        actions = actions[actions.len() - 20..].to_vec();
+    }
     // Estimate tokens for recents and apply optional per-lane caps before attaching ptrs
     fn est_tokens_event(ev: &serde_json::Value) -> u64 {
         let mut t = 4;
-        if let Some(k) = ev.get("kind") { t += est_tokens_value(k); }
-        if let Some(p) = ev.get("payload") { t += est_tokens_value(p); }
-        if let Some(ts) = ev.get("time") { t += est_tokens_value(ts); }
+        if let Some(k) = ev.get("kind") {
+            t += est_tokens_value(k);
+        }
+        if let Some(p) = ev.get("payload") {
+            t += est_tokens_value(p);
+        }
+        if let Some(ts) = ev.get("time") {
+            t += est_tokens_value(ts);
+        }
         t.min(1024)
     }
     fn est_tokens_file(f: &serde_json::Value) -> u64 {
         let mut t = 2;
-        if let Some(p) = f.get("path") { t += est_tokens_value(p); }
-        if let Some(id) = f.get("id") { t += est_tokens_value(id); }
+        if let Some(p) = f.get("path") {
+            t += est_tokens_value(p);
+        }
+        if let Some(id) = f.get("id") {
+            t += est_tokens_value(id);
+        }
         t.min(256)
     }
-    fn cap_by_tokens(mut items: Vec<serde_json::Value>, budget: Option<u64>, est: fn(&serde_json::Value) -> u64) -> (Vec<serde_json::Value>, u64) {
-        if let Some(b) = budget { if b == 0 { return (Vec::new(), 0); } }
+    fn cap_by_tokens(
+        mut items: Vec<serde_json::Value>,
+        budget: Option<u64>,
+        est: fn(&serde_json::Value) -> u64,
+    ) -> (Vec<serde_json::Value>, u64) {
+        if let Some(b) = budget {
+            if b == 0 {
+                return (Vec::new(), 0);
+            }
+        }
         let Some(b) = budget else {
             let used = items.iter().map(est).sum();
             return (items, used);
@@ -147,7 +195,9 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
         let mut used: u64 = 0;
         for it in items.drain(..) {
             let t = est(&it);
-            if used.saturating_add(t) > b { break; }
+            if used.saturating_add(t) > b {
+                break;
+            }
             used = used.saturating_add(t);
             out.push(it);
         }
@@ -163,7 +213,10 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
     let (new_files, files_tokens) = cap_by_tokens(files, files_budget, est_tokens_file);
     files = new_files;
     // Attach stable pointers alongside included items
-    fn with_ptrs_beliefs(mut v: Vec<serde_json::Value>, proj: Option<&str>) -> Vec<serde_json::Value> {
+    fn with_ptrs_beliefs(
+        mut v: Vec<serde_json::Value>,
+        proj: Option<&str>,
+    ) -> Vec<serde_json::Value> {
         for it in v.iter_mut() {
             if let Some(id) = it.get("id").and_then(|x| x.as_str()) {
                 it["ptr"] = json!({
@@ -191,7 +244,8 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
                 .and_then(|p| p.get("corr_id"))
                 .and_then(|x| x.as_str());
             if let Some(c) = cid {
-                it["ptr"] = json!({"kind": "episode", "corr_id": c, "source": "/admin/state/episodes"});
+                it["ptr"] =
+                    json!({"kind": "episode", "corr_id": c, "source": "/admin/state/episodes"});
             } else if let (Some(t), Some(k)) = (it.get("time"), it.get("kind")) {
                 it["ptr"] = json!({"kind": "event", "time": t, "code": k});
             }
@@ -264,46 +318,73 @@ pub struct RehydrateReq {
     path = "/admin/context/rehydrate",
     summary = "Rehydrate a pointer (belief/file) into full content"
 )]
-pub async fn rehydrate_post(State(state): State<AppState>, Json(req): Json<RehydrateReq>) -> impl IntoResponse {
+pub async fn rehydrate_post(
+    State(state): State<AppState>,
+    Json(req): Json<RehydrateReq>,
+) -> impl IntoResponse {
     use tokio::fs as afs;
     let kind = req.ptr.get("kind").and_then(|v| v.as_str()).unwrap_or("");
     match kind {
         "world_belief" => {
-            let id = match req.ptr.get("id").and_then(|v| v.as_str()) { Some(s) => s, None => return super::ApiError::bad_request("missing id").into_response() };
+            let id = match req.ptr.get("id").and_then(|v| v.as_str()) {
+                Some(s) => s,
+                None => return super::ApiError::bad_request("missing id").into_response(),
+            };
             let proj = req.ptr.get("proj").and_then(|v| v.as_str());
             if let Some(node) = super::world::get_belief_node(proj, id) {
-                let v = serde_json::to_value(&node).unwrap_or_else(|_| serde_json::json!({"id": id}));
+                let v =
+                    serde_json::to_value(&node).unwrap_or_else(|_| serde_json::json!({"id": id}));
                 return ok(serde_json::json!({"ptr": req.ptr, "belief": v})).into_response();
             }
             super::ApiError::not_found("belief not found").into_response()
         }
         "episode" => {
-            let cid = match req.ptr.get("corr_id").and_then(|v| v.as_str()) { Some(s) => s.to_string(), None => return super::ApiError::bad_request("missing corr_id").into_response() };
+            let cid = match req.ptr.get("corr_id").and_then(|v| v.as_str()) {
+                Some(s) => s.to_string(),
+                None => return super::ApiError::bad_request("missing corr_id").into_response(),
+            };
             // Delegate to episode snapshot endpoint
-            return super::state_api::episode_snapshot_get(State(state), Path(cid)).await.into_response();
+            super::state_api::episode_snapshot_get(State(state), Path(cid))
+                .await
+                .into_response()
         }
         "file" => {
             // Gate file rehydrate via policy key; deny by default
             if !arw_core::gating::allowed("context:rehydrate:file") {
                 return super::ApiError::forbidden("gated").into_response();
             }
-            let path = match req.ptr.get("path").and_then(|v| v.as_str()) { Some(s) => std::path::PathBuf::from(s), None => return super::ApiError::bad_request("missing path").into_response() };
+            let path = match req.ptr.get("path").and_then(|v| v.as_str()) {
+                Some(s) => std::path::PathBuf::from(s),
+                None => return super::ApiError::bad_request("missing path").into_response(),
+            };
             // Best-effort safeguard: limit to reasonably-sized files and return head only
-            let meta = match afs::metadata(&path).await { Ok(m) => m, Err(_) => return super::ApiError::not_found("file not found").into_response() };
-            if !meta.is_file() { return super::ApiError::bad_request("not a file").into_response(); }
+            let meta = match afs::metadata(&path).await {
+                Ok(m) => m,
+                Err(_) => return super::ApiError::not_found("file not found").into_response(),
+            };
+            if !meta.is_file() {
+                return super::ApiError::bad_request("not a file").into_response();
+            }
             let size = meta.len();
-            let cap: u64 = std::env::var("ARW_REHYDRATE_FILE_HEAD_KB").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(64) * 1024;
+            let cap: u64 = std::env::var("ARW_REHYDRATE_FILE_HEAD_KB")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(64)
+                * 1024;
             let take = size.min(cap);
-            let mut f = match afs::File::open(&path).await { Ok(f) => f, Err(_) => return super::ApiError::not_found("file open failed").into_response() };
+            let mut f = match afs::File::open(&path).await {
+                Ok(f) => f,
+                Err(_) => return super::ApiError::not_found("file open failed").into_response(),
+            };
             let mut buf = vec![0u8; take as usize];
             use tokio::io::AsyncReadExt;
-            let n = match f.read(&mut buf).await { Ok(n) => n, Err(_) => 0 };
+            let n: usize = f.read(&mut buf).await.unwrap_or_default();
             let content = String::from_utf8_lossy(&buf[..n]).to_string();
-            return ok(serde_json::json!({
+            ok(serde_json::json!({
                 "ptr": req.ptr,
                 "file": {"path": path.to_string_lossy(), "size": size, "head_bytes": n as u64, "truncated": size > n as u64 },
                 "content": content
-            })).into_response();
+            })).into_response()
         }
         _ => super::ApiError::bad_request("unsupported ptr kind").into_response(),
     }

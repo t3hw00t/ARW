@@ -50,17 +50,22 @@ impl GovernorService {
             if http_timeout_secs.is_some() {
                 h.http_timeout_secs = http_timeout_secs;
             }
-            if mode.is_some() { h.mode = mode.clone(); }
-            if slo_ms.is_some() { h.slo_ms = slo_ms; }
+            if mode.is_some() {
+                h.mode = mode.clone();
+            }
+            if slo_ms.is_some() {
+                h.slo_ms = slo_ms;
+            }
         }
         // Apply dynamic HTTP timeout: prefer explicit, else derive from SLO
         let applied = if let Some(secs) = http_timeout_secs {
             Some(secs)
-        } else if let Some(ms) = slo_ms { Some(((ms + 999) / 1000).max(1)) } else { None };
+        } else {
+            slo_ms.map(|ms| ms.div_ceil(1000).max(1))
+        };
         if let Some(secs) = applied {
             crate::dyn_timeout::set_global_timeout_secs(secs);
-            let mut payload =
-                json!({"action":"hint","params":{"http_timeout_secs": secs, "source": "slo|mode"},"ok": true});
+            let mut payload = json!({"action":"hint","params":{"http_timeout_secs": secs, "source": "slo|mode"},"ok": true});
             crate::ext::corr::ensure_corr(&mut payload);
             state.bus.publish("Actions.HintApplied", &payload);
         }

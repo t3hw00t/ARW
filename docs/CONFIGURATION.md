@@ -39,6 +39,7 @@ Defaults
 - `ARW_MODELS_MAX_MB`: hard cap for single model download size in MiB (default `4096`).
 - `ARW_MODELS_DISK_RESERVE_MB`: reserve free space during downloads in MiB (default `256`).
 - `ARW_MODELS_MAX_CONC`: max concurrent model downloads (default `2`; `0` or `<1` treated as `1`).
+- `ARW_MODELS_QUOTA_MB`: optional total on‑disk quota for all models stored in CAS (sum of `state/models/by-hash/*`) in MiB. When set, downloads are denied if projected total would exceed the quota.
 
 ### Downloads & Budgets
 - `ARW_BUDGET_DOWNLOAD_SOFT_MS`: soft budget window in ms (0 = unbounded).
@@ -49,6 +50,9 @@ Defaults
 - `ARW_DL_STREAM_RETRIES`: stream read retries (resume with Range) before failing (default `2`).
 - `ARW_DL_IDLE_TIMEOUT_SECS`: idle fallback timeout when no hard budget is set (default `300`; set `0` to disable).
 - `ARW_DL_EWMA_ALPHA`: smoothing factor for throughput EWMA used in admission decisions (default `0.3`).
+- `ARW_DL_PREFLIGHT`: when `1`, perform a HEAD preflight to capture `Content-Length` and resume validators (ETag/Last-Modified). Enables early enforcement of `ARW_MODELS_MAX_MB` and `ARW_MODELS_QUOTA_MB` before starting the transfer.
+- `ARW_DL_PROGRESS_INCLUDE_BUDGET`: when `1`, include a `budget` snapshot in `Models.DownloadProgress` events.
+- `ARW_DL_PROGRESS_INCLUDE_DISK`: when `1`, include a `disk` snapshot `{available,total,reserve}` in progress events.
 The enhanced downloader path is always enabled; the legacy `ARW_DL_NEW` flag has been removed to reduce maintenance overhead.
 
 ## Hardware Probes & Metrics

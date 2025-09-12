@@ -55,6 +55,15 @@ arw-modeld: centralized model loading; pooling, batching, leasing, QoS hints; HT
 
 arw-cas: content-addressable, mmapped read-only artifacts; atomic swaps; GC for unreferenced blobs.
 
+### CAS Layout & Manifest
+- Store path: `{state_dir}/models/by-hash/<sha256>[.<ext>]` (extension kept when available, name canonically starts with the SHA‑256).
+- Manifest: `{state_dir}/models/<id>.json` containing `file` (canonical CAS filename), optional `name` (display/original filename), `path` (full path), `url`, `sha256`, `bytes`, `provider`, `cas`, and `verified`.
+- Short‑circuit: if a requested SHA already exists in CAS, downloads finish immediately with a `cached` completion event.
+- GC: `POST /admin/models/cas_gc` deletes unreferenced blobs older than `ttl_days`; emits `Models.CasGc`.
+- Quota (optional): `ARW_MODELS_QUOTA_MB` caps total CAS size. With `ARW_DL_PREFLIGHT=1`, the downloader denies requests whose projected total would exceed the quota.
+ - Legacy migration: on startup, ARW best‑effort migrates legacy model files with known `sha256` into the CAS layout.
+ - Downloads metrics: `{state_dir}/downloads.metrics.json` stores `ewma_mbps`; `GET /admin/models/downloads_metrics` exposes it for UI/ops.
+
 ## Interoperability (arw-model-manifest)
 
 ModelManifest: name, version, license, arch, ctx window, tokenizer, formats (GGUF/ONNX/safetensors), quantizations, adapter compatibility, recommended presets.

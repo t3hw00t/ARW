@@ -18,8 +18,12 @@ pub async fn self_state_list() -> impl IntoResponse {
 #[utoipa::path(get, path = "/state/self/{agent}", tag = "Public/State", params(("agent" = String, Path, description = "Agent id")), responses(
     (status=200, description="Self-model for agent")
 ))]
-pub async fn self_state_get(axum::extract::Path(agent): axum::extract::Path<String>) -> impl IntoResponse {
-    let v = crate::ext::self_model::load(&agent).await.unwrap_or_else(|| json!({}));
+pub async fn self_state_get(
+    axum::extract::Path(agent): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    let v = crate::ext::self_model::load(&agent)
+        .await
+        .unwrap_or_else(|| json!({}));
     super::ok(v)
 }
 
@@ -32,9 +36,22 @@ pub struct ProposeReq {
     pub rationale: Option<String>,
 }
 
-#[arw_macros::arw_admin(method = "POST", path = "/admin/self_model/propose", summary = "Propose a self-model update")]
-pub async fn self_model_propose(State(state): State<AppState>, Json(req): Json<ProposeReq>) -> impl IntoResponse {
-    let Ok(env) = crate::ext::self_model::propose_update(&req.agent, req.patch.clone(), req.rationale.clone()).await else {
+#[arw_macros::arw_admin(
+    method = "POST",
+    path = "/admin/self_model/propose",
+    summary = "Propose a self-model update"
+)]
+pub async fn self_model_propose(
+    State(state): State<AppState>,
+    Json(req): Json<ProposeReq>,
+) -> impl IntoResponse {
+    let Ok(env) = crate::ext::self_model::propose_update(
+        &req.agent,
+        req.patch.clone(),
+        req.rationale.clone(),
+    )
+    .await
+    else {
         return super::ApiError::bad_request("invalid proposal").into_response();
     };
     let mut payload = json!({
@@ -54,8 +71,15 @@ pub struct ApplyReq {
     pub proposal_id: String,
 }
 
-#[arw_macros::arw_admin(method = "POST", path = "/admin/self_model/apply", summary = "Apply a self-model proposal")]
-pub async fn self_model_apply(State(state): State<AppState>, Json(req): Json<ApplyReq>) -> impl IntoResponse {
+#[arw_macros::arw_admin(
+    method = "POST",
+    path = "/admin/self_model/apply",
+    summary = "Apply a self-model proposal"
+)]
+pub async fn self_model_apply(
+    State(state): State<AppState>,
+    Json(req): Json<ApplyReq>,
+) -> impl IntoResponse {
     match crate::ext::self_model::apply_proposal(&req.proposal_id).await {
         Ok(res) => {
             let mut payload = json!({

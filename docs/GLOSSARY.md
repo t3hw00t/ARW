@@ -28,7 +28,18 @@ Tool
 - A versioned capability with JSON Schemas for input/output/error, exposed across HTTP, events, and MCP. See: API and Schema (API_AND_SCHEMA.md).
 
 CAS (Content‑Addressable Store)
-- Storage for immutable artifacts (e.g., models) addressed by content hash; supports atomic swaps and GC. See: Hardware and Models (HARDWARE_AND_MODELS.md).
+- Storage for immutable artifacts (e.g., models) addressed by content hash; supports atomic swaps and GC.
+- Layout for models: `{state_dir}/models/by-hash/<sha256>[.<ext>]` with a per‑ID manifest `{state_dir}/models/<id>.json` describing `file`, `path`, `sha256`, `bytes`, `provider`, and `verified`.
+- Optional quota: set `ARW_MODELS_QUOTA_MB` to cap total CAS size (enforced during preflight when enabled). See: Hardware and Models (HARDWARE_AND_MODELS.md).
+
+Downloads Metrics (EWMA)
+- A persisted moving average of observed download throughput used to make admission decisions under hard budgets.
+- Stored in `{state_dir}/downloads.metrics.json` as `{ ewma_mbps }`.
+- Read via `GET /admin/models/downloads_metrics` for UI/status displays.
+
+Resume Validators
+- Metadata captured from remote responses (`ETag`, `Last-Modified`) and stored alongside partial files.
+- Used with `If-Range` to ensure a resumed range request still matches the original content.
 
 Model Daemon
 - Centralized model loader/pooler enabling concurrent safe access, leasing, and QoS hints. See: Hardware and Models (HARDWARE_AND_MODELS.md).

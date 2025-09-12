@@ -1,10 +1,14 @@
-use axum::{extract::State, response::IntoResponse, Json};
 use arw_macros::{arw_admin, arw_gate};
+use axum::{extract::State, response::IntoResponse, Json};
 
 use crate::AppState;
 
 // Return memory quarantine entries (planned). If file absent, return [].
-#[arw_admin(method = "GET", path = "/admin/state/memory/quarantine", summary = "Get memory quarantine entries")]
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/memory/quarantine",
+    summary = "Get memory quarantine entries"
+)]
 #[arw_gate("state:memory_quarantine:get")]
 pub async fn memory_quarantine_get(_state: State<AppState>) -> impl IntoResponse {
     let path = super::paths::memory_quarantine_path();
@@ -17,7 +21,11 @@ pub async fn memory_quarantine_get(_state: State<AppState>) -> impl IntoResponse
 }
 
 // Return world diff review items (planned). If file absent, return [].
-#[arw_admin(method = "GET", path = "/admin/state/world_diffs", summary = "Get world diffs for review")]
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/world_diffs",
+    summary = "Get world diffs for review"
+)]
 #[arw_gate("state:world_diffs:get")]
 pub async fn world_diffs_get(_state: State<AppState>) -> impl IntoResponse {
     let path = super::paths::world_diffs_review_path();
@@ -50,8 +58,12 @@ pub struct QuarantineEntry {
 }
 
 // Admin: add an entry to the memory quarantine list (planned shape; stored as array)
-#[arw_admin(method = "POST", path = "/admin/memory/quarantine", summary = "Quarantine memory item")]
-#[arw_gate("memory:quarantine")] 
+#[arw_admin(
+    method = "POST",
+    path = "/admin/memory/quarantine",
+    summary = "Quarantine memory item"
+)]
+#[arw_gate("memory:quarantine")]
 pub async fn memory_quarantine_add(
     State(state): State<AppState>,
     Json(req): Json<QuarantineEntry>,
@@ -60,12 +72,14 @@ pub async fn memory_quarantine_add(
     let mut arr = super::io::load_json_file_async(&p)
         .await
         .and_then(|v| v.as_array().cloned())
-        .unwrap_or_else(|| Vec::new());
-    let id = req.id.unwrap_or_else(|| super::corr::new_corr_id());
+        .unwrap_or_else(Vec::new);
+    let id = req.id.unwrap_or_else(super::corr::new_corr_id);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     // Trim preview and enforce simple bounds
     let mut preview = req.content_preview.unwrap_or_default();
-    if preview.len() > 2048 { preview.truncate(2048); }
+    if preview.len() > 2048 {
+        preview.truncate(2048);
+    }
     let score = req.evidence_score.unwrap_or(0.0);
     let entry = serde_json::json!({
         "id": id,
@@ -89,11 +103,17 @@ pub async fn memory_quarantine_add(
 }
 
 #[derive(serde::Deserialize)]
-pub struct AdmitReq { pub id: String }
+pub struct AdmitReq {
+    pub id: String,
+}
 
 // Admin: admit (remove) an entry from the memory quarantine list by id
-#[arw_admin(method = "POST", path = "/admin/memory/quarantine/admit", summary = "Admit quarantined item")]
-#[arw_gate("memory:admit")] 
+#[arw_admin(
+    method = "POST",
+    path = "/admin/memory/quarantine/admit",
+    summary = "Admit quarantined item"
+)]
+#[arw_gate("memory:admit")]
 pub async fn memory_quarantine_admit(
     State(state): State<AppState>,
     Json(req): Json<AdmitReq>,
@@ -102,7 +122,7 @@ pub async fn memory_quarantine_admit(
     let mut arr = super::io::load_json_file_async(&p)
         .await
         .and_then(|v| v.as_array().cloned())
-        .unwrap_or_else(|| Vec::new());
+        .unwrap_or_else(Vec::new);
     let before = arr.len();
     arr.retain(|v| v.get("id").and_then(|x| x.as_str()) != Some(req.id.as_str()));
     let _ = super::io::save_json_file_async(&p, &serde_json::Value::Array(arr)).await;
@@ -133,8 +153,12 @@ pub struct WorldDiffQueueReq {
     pub changes: Option<serde_json::Value>,
 }
 
-#[arw_admin(method = "POST", path = "/admin/world_diffs/queue", summary = "Queue world diff for review")]
-#[arw_gate("world_diffs:queue")] 
+#[arw_admin(
+    method = "POST",
+    path = "/admin/world_diffs/queue",
+    summary = "Queue world diff for review"
+)]
+#[arw_gate("world_diffs:queue")]
 pub async fn world_diffs_queue(
     State(state): State<AppState>,
     Json(req): Json<WorldDiffQueueReq>,
@@ -143,8 +167,8 @@ pub async fn world_diffs_queue(
     let mut arr = super::io::load_json_file_async(&p)
         .await
         .and_then(|v| v.as_array().cloned())
-        .unwrap_or_else(|| Vec::new());
-    let id = req.id.unwrap_or_else(|| super::corr::new_corr_id());
+        .unwrap_or_else(Vec::new);
+    let id = req.id.unwrap_or_else(super::corr::new_corr_id);
     let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
     let entry = serde_json::json!({
         "id": id,
@@ -172,8 +196,12 @@ pub struct WorldDiffDecisionReq {
     pub note: Option<String>,
 }
 
-#[arw_admin(method = "POST", path = "/admin/world_diffs/decision", summary = "Decide world diff")]
-#[arw_gate("world_diffs:decide")] 
+#[arw_admin(
+    method = "POST",
+    path = "/admin/world_diffs/decision",
+    summary = "Decide world diff"
+)]
+#[arw_gate("world_diffs:decide")]
 pub async fn world_diffs_decision(
     State(state): State<AppState>,
     Json(req): Json<WorldDiffDecisionReq>,
@@ -182,14 +210,20 @@ pub async fn world_diffs_decision(
     let mut arr = super::io::load_json_file_async(&p)
         .await
         .and_then(|v| v.as_array().cloned())
-        .unwrap_or_else(|| Vec::new());
+        .unwrap_or_else(Vec::new);
     let mut found = None;
     for it in arr.iter_mut() {
         if it.get("id").and_then(|x| x.as_str()) == Some(req.id.as_str()) {
-            let state_str = match req.decision.as_str() { "apply" => "applied", "reject" => "rejected", _ => "queued" };
+            let state_str = match req.decision.as_str() {
+                "apply" => "applied",
+                "reject" => "rejected",
+                _ => "queued",
+            };
             if let Some(obj) = it.as_object_mut() {
                 obj.insert("state".into(), serde_json::Value::String(state_str.into()));
-                if let Some(n) = &req.note { obj.insert("note".into(), serde_json::Value::String(n.clone())); }
+                if let Some(n) = &req.note {
+                    obj.insert("note".into(), serde_json::Value::String(n.clone()));
+                }
             }
             found = Some(it.clone());
             break;

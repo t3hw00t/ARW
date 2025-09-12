@@ -1,12 +1,12 @@
 use super::super::resources::models_service::ModelsService;
-use arw_core::gating;
 use crate::AppState;
+use arw_core::gating;
 use arw_macros::{arw_admin, arw_gate};
+use axum::extract::Path;
+use axum::http::{HeaderMap, HeaderValue};
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::Deserialize;
 use serde_json::json;
-use axum::extract::Path;
-use axum::http::{HeaderMap, HeaderValue};
 
 #[arw_admin(method = "GET", path = "/admin/models", summary = "List models")]
 #[arw_gate("models:list")]
@@ -254,10 +254,14 @@ pub(crate) async fn models_download_cancel(
 
 #[derive(Deserialize, utoipa::ToSchema)]
 pub(crate) struct CasGcReq {
-    #[serde(default = "CasGcReq::default_ttl")] 
+    #[serde(default = "CasGcReq::default_ttl")]
     ttl_days: u64,
 }
-impl CasGcReq { fn default_ttl() -> u64 { 7 } }
+impl CasGcReq {
+    fn default_ttl() -> u64 {
+        7
+    }
+}
 
 /// Run a one-off GC of models/by-hash, removing unreferenced blobs older than ttl_days.
 #[arw_admin(
@@ -266,7 +270,10 @@ impl CasGcReq { fn default_ttl() -> u64 { 7 } }
     summary = "Run CAS GC once (delete stale blobs)"
 )]
 #[arw_gate("models:cas_gc")]
-pub(crate) async fn models_cas_gc(State(state): State<AppState>, Json(req): Json<CasGcReq>) -> impl IntoResponse {
+pub(crate) async fn models_cas_gc(
+    State(state): State<AppState>,
+    Json(req): Json<CasGcReq>,
+) -> impl IntoResponse {
     ModelsService::cas_gc_once(&state.bus, req.ttl_days).await;
     super::ok(serde_json::json!({"started": true, "ttl_days": req.ttl_days})).into_response()
 }
@@ -292,10 +299,7 @@ pub(crate) async fn models_hashes_get(State(_state): State<AppState>) -> impl In
             .and_then(|v| v.as_str())
             .unwrap_or("")
             .to_string();
-        let bytes = m
-            .get("bytes")
-            .and_then(|v| v.as_u64())
-            .unwrap_or(0u64);
+        let bytes = m.get("bytes").and_then(|v| v.as_u64()).unwrap_or(0u64);
         let prov = m
             .get("provider")
             .and_then(|v| v.as_str())
@@ -338,7 +342,9 @@ pub(crate) async fn models_blob_get(Path(sha256): Path<String>) -> impl IntoResp
         return (axum::http::StatusCode::BAD_REQUEST, "invalid sha256").into_response();
     }
     // Find matching CAS file in models/by-hash (sha256 or sha256.ext)
-    let dir = crate::ext::paths::state_dir().join("models").join("by-hash");
+    let dir = crate::ext::paths::state_dir()
+        .join("models")
+        .join("by-hash");
     let mut found: Option<std::path::PathBuf> = None;
     if let Ok(mut rd) = tokio::fs::read_dir(&dir).await {
         while let Ok(Some(ent)) = rd.next_entry().await {
@@ -366,11 +372,31 @@ pub(crate) async fn models_blob_get(Path(sha256): Path<String>) -> impl IntoResp
             if let Some(m) = meta {
                 headers.insert(
                     axum::http::header::CONTENT_LENGTH,
-                    HeaderValue::from_str(&m.len().to_string()).unwrap_or(HeaderValue::from_static("0")),
+                    HeaderValue::from_str(&m.len().to_string())
+                        .unwrap_or(HeaderValue::from_static("0")),
                 );
             }
             (headers, body).into_response()
         }
         Err(_) => axum::http::StatusCode::NOT_FOUND.into_response(),
     }
+}
+
+/// Lightweight downloads metrics (throughput EWMA for admission checks)
+#[arw_admin(
+    method = "GET",
+    path = "/admin/models/downloads_metrics",
+    summary = "Get downloads metrics (EWMA MB/s)"
+)]
+#[arw_gate("state:downloads_metrics:get")]
+pub(crate) async fn models_downloads_metrics(State(state): State<AppState>) -> impl IntoResponse {
+    let Some(svc) = state.resources.get::<ModelsService>() else {
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "ModelsService missing",
+        )
+            .into_response();
+    };
+    let v = svc.downloads_metrics().await;
+    Json(v).into_response()
 }

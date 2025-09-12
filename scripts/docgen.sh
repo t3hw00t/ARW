@@ -131,6 +131,22 @@ channels:
     subscribe:
       message:
         $ref: '#/components/messages/ModelsDownloadProgress'
+  Models.ManifestWritten:
+    subscribe:
+      message:
+        $ref: '#/components/messages/ModelsManifestWritten'
+  Models.CasGc:
+    subscribe:
+      message:
+        $ref: '#/components/messages/ModelsCasGc'
+  Egress.Preview:
+    subscribe:
+      message:
+        $ref: '#/components/messages/EgressPreview'
+  Egress.Ledger.Appended:
+    subscribe:
+      message:
+        $ref: '#/components/messages/EgressLedgerAppended'
   Tool.Ran:
     subscribe:
       message:
@@ -187,7 +203,87 @@ components:
         type: object
         properties:
           id: { type: string }
+          status: { type: string }
+          code: { type: string }
+          error: { type: string }
           progress: { type: integer }
+          downloaded: { type: integer }
+          total: { type: integer }
+          file: { type: string }
+          provider: { type: string }
+          cas_file: { type: string }
+          budget:
+            type: object
+            properties:
+              soft_ms: { type: integer }
+              hard_ms: { type: integer }
+              spent_ms: { type: integer }
+              remaining_soft_ms: { type: integer }
+              remaining_hard_ms: { type: integer }
+          disk:
+            type: object
+            properties:
+              available: { type: integer }
+              total: { type: integer }
+              reserve: { type: integer }
+        additionalProperties: true
+    ModelsManifestWritten:
+      name: Models.ManifestWritten
+      payload:
+        type: object
+        properties:
+          id: { type: string }
+          manifest_path: { type: string }
+          sha256: { type: ["string","null"] }
+          cas: { type: ["string","null"] }
+    ModelsCasGc:
+      name: Models.CasGc
+      payload:
+        type: object
+        properties:
+          scanned: { type: integer }
+          kept: { type: integer }
+          deleted: { type: integer }
+          deleted_bytes: { type: integer }
+          ttl_days: { type: integer }
+    EgressPreview:
+      name: Egress.Preview
+      payload:
+        type: object
+        properties:
+          id: { type: string }
+          url: { type: string }
+          dest:
+            type: object
+            properties:
+              host: { type: string }
+              port: { type: integer }
+              protocol: { type: string }
+          provider: { type: string }
+          corr_id: { type: string }
+        additionalProperties: true
+    EgressLedgerAppended:
+      name: Egress.Ledger.Appended
+      payload:
+        type: object
+        properties:
+          decision: { type: string }
+          reason_code: { type: string }
+          posture: { type: string }
+          project_id: { type: string }
+          episode_id: { type: ["string","null"] }
+          corr_id: { type: string }
+          node_id: { type: ["string","null"] }
+          tool_id: { type: string }
+          dest:
+            type: object
+            properties:
+              host: { type: string }
+              port: { type: integer }
+              protocol: { type: string }
+          bytes_out: { type: integer }
+          bytes_in: { type: integer }
+          duration_ms: { type: integer }
     ToolRan:
       name: Tool.Ran
       payload:

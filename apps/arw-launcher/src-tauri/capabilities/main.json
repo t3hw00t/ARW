@@ -3,7 +3,42 @@
   "identifier": "main",
   "description": "Main capabilities for ARW Launcher",
   "permissions": [
-    "notification:default"
+    "notification:default",
+    "autostart:default",
+    "window-state:default",
+    {
+      "identifier": "arw-commands",
+      "description": "Allow invoking ARW launcher commands from the UI.",
+      "commands": {
+        "allow": [
+          "check_service_health",
+          "open_debug_ui",
+          "open_debug_window",
+          "open_events_window",
+          "open_logs_window",
+          "open_models_window",
+          "open_connections_window",
+          "models_list",
+          "models_refresh",
+          "models_save",
+          "models_load",
+          "models_add",
+          "models_delete",
+          "models_default_get",
+          "models_default_set",
+          "models_download",
+          "models_download_cancel",
+          "start_service",
+          "stop_service",
+          "get_prefs",
+          "set_prefs",
+          "launcher_autostart_status",
+          "set_launcher_autostart",
+          "open_url",
+          "open_path"
+        ],
+        "deny": []
+      }
+    }
   ]
 }
-

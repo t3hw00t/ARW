@@ -4,16 +4,22 @@ use serde_json::{json, Value};
 // Placement: <state>/self/{agent}.json and proposals under <state>/self/_proposals/{id}.json
 
 pub async fn load(agent: &str) -> Option<Value> {
-    let Some(p) = crate::ext::paths::self_model_path(agent) else { return None; };
+    let p = crate::ext::paths::self_model_path(agent)?;
     crate::ext::io::load_json_file_async(&p).await
 }
 
 pub async fn save(agent: &str, model: &Value) -> Result<(), String> {
     use tokio::fs as afs;
     let dir = crate::ext::paths::self_dir();
-    if let Err(e) = afs::create_dir_all(&dir).await { return Err(e.to_string()); }
-    let Some(p) = crate::ext::paths::self_model_path(agent) else { return Err("invalid agent id".into()); };
-    crate::ext::io::save_json_file_async(&p, model).await.map_err(|e| e.to_string())
+    if let Err(e) = afs::create_dir_all(&dir).await {
+        return Err(e.to_string());
+    }
+    let Some(p) = crate::ext::paths::self_model_path(agent) else {
+        return Err("invalid agent id".into());
+    };
+    crate::ext::io::save_json_file_async(&p, model)
+        .await
+        .map_err(|e| e.to_string())
 }
 
 pub async fn list() -> Vec<(String, Value)> {
@@ -77,8 +83,13 @@ pub async fn propose_update(
         "proposed": proposed,
     });
     let dir = crate::ext::paths::self_proposals_dir();
-    if let Err(e) = afs::create_dir_all(&dir).await { return Err(e.to_string()); }
-    let path = dir.join(format!("{}.json", envelope["id"].as_str().unwrap_or("proposal")));
+    if let Err(e) = afs::create_dir_all(&dir).await {
+        return Err(e.to_string());
+    }
+    let path = dir.join(format!(
+        "{}.json",
+        envelope["id"].as_str().unwrap_or("proposal")
+    ));
     let _ = crate::ext::io::save_json_file_async(&path, &envelope).await;
     Ok(envelope)
 }
@@ -86,10 +97,17 @@ pub async fn propose_update(
 pub async fn apply_proposal(prop_id: &str) -> Result<Value, String> {
     // Load the proposal, write proposed -> model path, emit compact response
     let path = crate::ext::paths::self_proposals_dir().join(format!("{}.json", prop_id));
-    let Some(v) = crate::ext::io::load_json_file_async(&path).await else { return Err("proposal_not_found".into()); };
-    let agent = v.get("agent").and_then(|s| s.as_str()).ok_or_else(|| "bad_proposal".to_string())?;
-    let proposed = v.get("proposed").ok_or_else(|| "bad_proposal".to_string())?.clone();
+    let Some(v) = crate::ext::io::load_json_file_async(&path).await else {
+        return Err("proposal_not_found".into());
+    };
+    let agent = v
+        .get("agent")
+        .and_then(|s| s.as_str())
+        .ok_or_else(|| "bad_proposal".to_string())?;
+    let proposed = v
+        .get("proposed")
+        .ok_or_else(|| "bad_proposal".to_string())?
+        .clone();
     save(agent, &proposed).await?;
     Ok(json!({"id": prop_id, "agent": agent, "applied": true}))
 }
-

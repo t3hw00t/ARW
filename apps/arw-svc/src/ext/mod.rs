@@ -27,31 +27,31 @@ use arw_protocol::ProblemDetails;
 pub mod budget;
 pub mod chat;
 pub mod chat_api;
+pub mod context_api;
 pub mod corr;
+pub mod egress_api;
+pub mod experiments_api;
 pub mod feedback_api;
 pub mod feedback_engine;
 pub mod feedback_engine_api;
 pub mod governor_api;
 pub mod hierarchy_api;
+pub mod logic_units_api;
 pub mod memory;
 pub mod memory_api;
 pub mod models_api;
-pub mod egress_api;
-pub mod review_api;
-pub mod self_model;
-pub mod self_model_api;
-pub mod self_model_agg;
-pub mod logic_units_api;
-pub mod experiments_api;
 pub mod patch_api;
 pub mod policy;
+pub mod review_api;
+pub mod self_model;
+pub mod self_model_agg;
+pub mod self_model_api;
 pub mod state_api;
 pub mod stats;
 pub mod tools_api;
 pub mod tools_exec;
 pub mod ui;
 pub mod world;
-pub mod context_api;
 // internal helpers split into modules
 pub mod io;
 pub mod paths;
@@ -63,13 +63,25 @@ pub(crate) use memory::{
 };
 
 // Internal helper for self-model updates with a closure merge
-pub async fn self_model_update_merge<F: FnOnce(&mut serde_json::Value)>(agent: &str, f: F) -> Result<(), String> {
-    let mut v = super::ext::self_model::load(agent).await.unwrap_or_else(|| serde_json::json!({}));
-    if !v.is_object() { v = serde_json::json!({}); }
+pub async fn self_model_update_merge<F: FnOnce(&mut serde_json::Value)>(
+    agent: &str,
+    f: F,
+) -> Result<(), String> {
+    let mut v = super::ext::self_model::load(agent)
+        .await
+        .unwrap_or_else(|| serde_json::json!({}));
+    if !v.is_object() {
+        v = serde_json::json!({});
+    }
     f(&mut v);
     // Touch updated_at
     if let Some(o) = v.as_object_mut() {
-        o.insert("updated_at".into(), serde_json::Value::String(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)));
+        o.insert(
+            "updated_at".into(),
+            serde_json::Value::String(
+                chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            ),
+        );
     }
     super::ext::self_model::save(agent, &v).await
 }
@@ -184,13 +196,19 @@ pub async fn load_persisted() {
         if let Ok(mut rd) = afs::read_dir(&dir).await {
             while let Ok(Some(ent)) = rd.next_entry().await {
                 if let Some(name) = ent.file_name().to_str() {
-                    if name.ends_with('.' .to_string().as_str()) { /* improbable */ }
-                    if name.ends_with(".json") { has_any = true; break; }
+                    if name.ends_with('.'.to_string().as_str()) { /* improbable */ }
+                    if name.ends_with(".json") {
+                        has_any = true;
+                        break;
+                    }
                 }
             }
         }
         if !has_any {
-            let agent = std::env::var("ARW_SELF_SEED_ID").ok().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| "dev-assistant".to_string());
+            let agent = std::env::var("ARW_SELF_SEED_ID")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+                .unwrap_or_else(|| "dev-assistant".to_string());
             let family = default_model().read().await.clone();
             let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
             let seed = json!({
@@ -450,17 +468,6 @@ pub fn extra_routes() -> Router<AppState> {
     r
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn tools_math_add() {
-        let out = run_tool_internal("math.add", &json!({"a": 1.0, "b": 2.0})).unwrap();
-        assert_eq!(out.get("sum").and_then(|v| v.as_f64()).unwrap(), 3.0);
-    }
-}
-
 // ---------- Handlers ----------
 pub async fn version() -> impl IntoResponse {
     ok(json!({
@@ -553,6 +560,18 @@ pub fn start_local_task_worker(state: AppState) {
             }
         }
     });
+}
+
+// ---- Tests (moved to end) ----
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tools_math_add() {
+        let out = run_tool_internal("math.add", &json!({"a": 1.0, "b": 2.0})).unwrap();
+        assert_eq!(out.get("sum").and_then(|v| v.as_f64()).unwrap(), 3.0);
+    }
 }
 
 pub async fn about() -> impl IntoResponse {
@@ -739,8 +758,12 @@ async fn governor_hints_set(
         if req.http_timeout_secs.is_some() {
             h.http_timeout_secs = req.http_timeout_secs;
         }
-        if req.mode.is_some() { h.mode = req.mode.clone(); }
-        if req.slo_ms.is_some() { h.slo_ms = req.slo_ms; }
+        if req.mode.is_some() {
+            h.mode = req.mode.clone();
+        }
+        if req.slo_ms.is_some() {
+            h.slo_ms = req.slo_ms;
+        }
     }
     // Apply dynamic HTTP timeout immediately if provided
     let mut applied_timeout: Option<u64> = None;
@@ -749,7 +772,7 @@ async fn governor_hints_set(
         applied_timeout = Some(secs);
     } else if let Some(ms) = req.slo_ms {
         // Derive a sane HTTP timeout from SLO (round up to nearest second, min 1s)
-        let secs = ((ms + 999) / 1000).max(1);
+        let secs = ms.div_ceil(1000).max(1);
         crate::dyn_timeout::set_global_timeout_secs(secs);
         applied_timeout = Some(secs);
     }
@@ -899,7 +922,7 @@ async fn models_download(
     State(state): State<AppState>,
     Json(req): Json<DownloadReq>,
 ) -> impl IntoResponse {
-    // Delegate to ModelsService when available (consolidated path)
+    // Delegate to ModelsService; if unavailable, return 501 to avoid unsafe fallback.
     if let Some(svc) = state
         .resources
         .get::<crate::resources::models_service::ModelsService>()
@@ -912,79 +935,89 @@ async fn models_download(
             Err(e) => return ApiError::bad_request(&e).into_response(),
         }
     }
-    // ensure model exists with status
-    let mut already_in_progress = false;
+    return (
+        axum::http::StatusCode::NOT_IMPLEMENTED,
+        "download service unavailable",
+    )
+        .into_response();
+
+    // Unreachable (kept for context if re-enabled later)
+    #[allow(unreachable_code)]
     {
-        let mut v = models().write().await;
-        if let Some(m) = v
-            .iter_mut()
-            .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&req.id))
+        // ensure model exists with status
+        let mut already_in_progress = false;
         {
-            let prev = m.get("status").and_then(|s| s.as_str()).unwrap_or("");
-            if prev.eq_ignore_ascii_case("downloading") {
-                already_in_progress = true;
+            let mut v = models().write().await;
+            if let Some(m) = v
+                .iter_mut()
+                .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&req.id))
+            {
+                let prev = m.get("status").and_then(|s| s.as_str()).unwrap_or("");
+                if prev.eq_ignore_ascii_case("downloading") {
+                    already_in_progress = true;
+                } else {
+                    *m = json!({"id": req.id, "provider": req.provider.clone().unwrap_or("local".into()), "status":"downloading"});
+                }
             } else {
-                *m = json!({"id": req.id, "provider": req.provider.clone().unwrap_or("local".into()), "status":"downloading"});
+                v.push(json!({"id": req.id, "provider": req.provider.clone().unwrap_or("local".into()), "status":"downloading"}));
             }
-        } else {
-            v.push(json!({"id": req.id, "provider": req.provider.clone().unwrap_or("local".into()), "status":"downloading"}));
         }
-    }
-    if already_in_progress {
-        let mut p = json!({"id": req.id, "status":"already-in-progress"});
-        crate::ext::corr::ensure_corr(&mut p);
-        state.bus.publish("Models.DownloadProgress", &p);
-        return ok(json!({})).into_response();
-    }
-    // Validate URL scheme (accept http/https only)
-    if !(req.url.starts_with("http://") || req.url.starts_with("https://")) {
-        return ApiError::bad_request("invalid url scheme").into_response();
-    }
-    {
-        let mut p = json!({"id": req.id, "url": req.url});
-        crate::ext::corr::ensure_corr(&mut p);
-        state.bus.publish("Models.Download", &p);
-    }
-    io::audit_event("models.download", &json!({"id": req.id})).await;
-    let id = req.id.clone();
-    let url = req.url.clone();
-    let provider = req.provider.clone().unwrap_or("local".into());
-    let expect_sha = req.sha256.clone().map(|s| s.to_lowercase());
-    let sp = state.clone();
-    tokio::spawn(async move {
-        // sanitize filename and compute target paths
-        let file_name = url.rsplit('/').next().unwrap_or(&id).to_string();
-        let safe_name = file_name.replace(['\\', '/'], "_");
-        let target_dir = paths::state_dir().join("models");
-        let target = target_dir.join(&safe_name);
-        let tmp = target.with_extension("part");
-        if let Err(e) = afs::create_dir_all(&target_dir).await {
-            let mut p = json!({"id": id, "error": format!("mkdir failed: {}", e)});
+        if already_in_progress {
+            let mut p = json!({"id": req.id, "status":"already-in-progress"});
             crate::ext::corr::ensure_corr(&mut p);
-            sp.bus.publish("Models.DownloadProgress", &p);
-            return;
+            state.bus.publish("Models.DownloadProgress", &p);
+            return ok(json!({})).into_response();
         }
-        let client = reqwest::Client::builder()
-            .connect_timeout(std::time::Duration::from_secs(10))
-            .timeout(std::time::Duration::from_secs(300))
-            .build()
-            .unwrap_or_else(|_| reqwest::Client::new());
-        // Try resuming if a partial exists
-        let mut resume_from: u64 = 0;
-        if let Ok(meta) = afs::metadata(&tmp).await {
-            resume_from = meta.len();
+        // Validate URL scheme (accept http/https only)
+        if !(req.url.starts_with("http://") || req.url.starts_with("https://")) {
+            return ApiError::bad_request("invalid url scheme").into_response();
         }
-        let mut reqb = client.get(&url);
-        if resume_from > 0 {
-            reqb = reqb.header(reqwest::header::RANGE, format!("bytes={}-", resume_from));
+        {
+            let mut p = json!({"id": req.id, "url": req.url});
+            crate::ext::corr::ensure_corr(&mut p);
+            state.bus.publish("Models.Download", &p);
         }
-        match reqb.send().await {
-            Ok(resp) => {
-                let total_rem = resp.content_length().unwrap_or(0);
-                let status = resp.status();
-                // If server honored Range, recalc overall size
-                let total_all =
-                    if resume_from > 0 && status == axum::http::StatusCode::PARTIAL_CONTENT {
+        io::audit_event("models.download", &json!({"id": req.id})).await;
+        let id = req.id.clone();
+        let url = req.url.clone();
+        let provider = req.provider.clone().unwrap_or("local".into());
+        let expect_sha = req.sha256.clone().map(|s| s.to_lowercase());
+        let sp = state.clone();
+        tokio::spawn(async move {
+            // sanitize filename and compute target paths
+            let file_name = url.rsplit('/').next().unwrap_or(&id).to_string();
+            let safe_name = file_name.replace(['\\', '/'], "_");
+            let target_dir = paths::state_dir().join("models");
+            let target = target_dir.join(&safe_name);
+            let tmp = target.with_extension("part");
+            if let Err(e) = afs::create_dir_all(&target_dir).await {
+                let mut p = json!({"id": id, "error": format!("mkdir failed: {}", e)});
+                crate::ext::corr::ensure_corr(&mut p);
+                sp.bus.publish("Models.DownloadProgress", &p);
+                return;
+            }
+            let client = reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .timeout(std::time::Duration::from_secs(300))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new());
+            // Try resuming if a partial exists
+            let mut resume_from: u64 = 0;
+            if let Ok(meta) = afs::metadata(&tmp).await {
+                resume_from = meta.len();
+            }
+            let mut reqb = client.get(&url);
+            if resume_from > 0 {
+                reqb = reqb.header(reqwest::header::RANGE, format!("bytes={}-", resume_from));
+            }
+            match reqb.send().await {
+                Ok(resp) => {
+                    let total_rem = resp.content_length().unwrap_or(0);
+                    let status = resp.status();
+                    // If server honored Range, recalc overall size
+                    let total_all = if resume_from > 0
+                        && status == axum::http::StatusCode::PARTIAL_CONTENT
+                    {
                         let mut p = json!({"id": id, "status":"resumed", "offset": resume_from});
                         crate::ext::corr::ensure_corr(&mut p);
                         sp.bus.publish("Models.DownloadProgress", &p);
@@ -997,137 +1030,141 @@ async fn models_download(
                         }
                         total_rem
                     };
-                // Open partial (append) or fresh file
-                let mut file = if resume_from > 0 {
-                    match afs::OpenOptions::new().append(true).open(&tmp).await {
-                        Ok(f) => f,
-                        Err(e) => {
-                            let mut p = json!({"id": id, "error": format!("open failed: {}", e)});
-                            crate::ext::corr::ensure_corr(&mut p);
-                            sp.bus.publish("Models.DownloadProgress", &p);
-                            return;
-                        }
-                    }
-                } else {
-                    match afs::File::create(&tmp).await {
-                        Ok(f) => f,
-                        Err(e) => {
-                            let mut p = json!({"id": id, "error": format!("create failed: {}", e)});
-                            crate::ext::corr::ensure_corr(&mut p);
-                            sp.bus.publish("Models.DownloadProgress", &p);
-                            return;
-                        }
-                    }
-                };
-                // Stream body
-                let mut downloaded: u64 = 0;
-                let mut stream = resp.bytes_stream();
-                while let Some(chunk) = stream.next().await {
-                    match chunk {
-                        Ok(bytes) => {
-                            if is_canceled(&id).await {
-                                let _ = afs::remove_file(&tmp).await;
-                                let mut p = json!({"id": id, "status":"canceled"});
-                                crate::ext::corr::ensure_corr(&mut p);
-                                sp.bus.publish("Models.DownloadProgress", &p);
-                                clear_cancel(&id).await;
-                                return;
-                            }
-                            if let Err(e) = file.write_all(&bytes).await {
+                    // Open partial (append) or fresh file
+                    let mut file = if resume_from > 0 {
+                        match afs::OpenOptions::new().append(true).open(&tmp).await {
+                            Ok(f) => f,
+                            Err(e) => {
                                 let mut p =
-                                    json!({"id": id, "error": format!("write failed: {}", e)});
+                                    json!({"id": id, "error": format!("open failed: {}", e)});
                                 crate::ext::corr::ensure_corr(&mut p);
                                 sp.bus.publish("Models.DownloadProgress", &p);
                                 return;
                             }
-                            downloaded += bytes.len() as u64;
-                            if total_all > 0 {
-                                let pct = (((resume_from + downloaded) * 100) / total_all).min(100);
-                                let mut p = json!({"id": id, "progress": pct, "downloaded": resume_from + downloaded, "total": total_all});
+                        }
+                    } else {
+                        match afs::File::create(&tmp).await {
+                            Ok(f) => f,
+                            Err(e) => {
+                                let mut p =
+                                    json!({"id": id, "error": format!("create failed: {}", e)});
                                 crate::ext::corr::ensure_corr(&mut p);
                                 sp.bus.publish("Models.DownloadProgress", &p);
+                                return;
                             }
-                        }
-                        Err(e) => {
-                            let mut p = json!({"id": id, "error": format!("read failed: {}", e)});
-                            crate::ext::corr::ensure_corr(&mut p);
-                            sp.bus.publish("Models.DownloadProgress", &p);
-                            return;
-                        }
-                    }
-                }
-                // flush and rename atomically into place
-                if let Err(e) = file.flush().await {
-                    let mut p = json!({"id": id, "error": format!("flush failed: {}", e)});
-                    crate::ext::corr::ensure_corr(&mut p);
-                    sp.bus.publish("Models.DownloadProgress", &p);
-                    return;
-                }
-                if let Err(e) = afs::rename(&tmp, &target).await {
-                    let mut p = json!({"id": id, "error": format!("finalize failed: {}", e)});
-                    crate::ext::corr::ensure_corr(&mut p);
-                    sp.bus.publish("Models.DownloadProgress", &p);
-                    return;
-                }
-                // checksum verification (required when provided by UI; service path requires it)
-                if let Some(exp) = expect_sha {
-                    // Compute full-file hash to support resume
-                    let mut f = match afs::File::open(&target).await {
-                        Ok(f) => f,
-                        Err(_) => {
-                            return;
                         }
                     };
-                    let mut h = sha2::Sha256::new();
-                    let mut buf = vec![0u8; 1024 * 1024];
-                    loop {
-                        match f.read(&mut buf).await {
-                            Ok(0) => break,
-                            Ok(n) => {
-                                use sha2::Digest;
-                                h.update(&buf[..n]);
+                    // Stream body
+                    let mut downloaded: u64 = 0;
+                    let mut stream = resp.bytes_stream();
+                    while let Some(chunk) = stream.next().await {
+                        match chunk {
+                            Ok(bytes) => {
+                                if is_canceled(&id).await {
+                                    let _ = afs::remove_file(&tmp).await;
+                                    let mut p = json!({"id": id, "status":"canceled"});
+                                    crate::ext::corr::ensure_corr(&mut p);
+                                    sp.bus.publish("Models.DownloadProgress", &p);
+                                    clear_cancel(&id).await;
+                                    return;
+                                }
+                                if let Err(e) = file.write_all(&bytes).await {
+                                    let mut p =
+                                        json!({"id": id, "error": format!("write failed: {}", e)});
+                                    crate::ext::corr::ensure_corr(&mut p);
+                                    sp.bus.publish("Models.DownloadProgress", &p);
+                                    return;
+                                }
+                                downloaded += bytes.len() as u64;
+                                if total_all > 0 {
+                                    let pct =
+                                        (((resume_from + downloaded) * 100) / total_all).min(100);
+                                    let mut p = json!({"id": id, "progress": pct, "downloaded": resume_from + downloaded, "total": total_all});
+                                    crate::ext::corr::ensure_corr(&mut p);
+                                    sp.bus.publish("Models.DownloadProgress", &p);
+                                }
                             }
-                            Err(_) => break,
+                            Err(e) => {
+                                let mut p =
+                                    json!({"id": id, "error": format!("read failed: {}", e)});
+                                crate::ext::corr::ensure_corr(&mut p);
+                                sp.bus.publish("Models.DownloadProgress", &p);
+                                return;
+                            }
                         }
                     }
-                    let actual = format!("{:x}", h.finalize());
-                    if actual != exp {
-                        let _ = afs::remove_file(&target).await;
-                        let mut p = json!({"id": id, "error": "checksum mismatch", "expected": exp, "actual": actual});
+                    // flush and rename atomically into place
+                    if let Err(e) = file.flush().await {
+                        let mut p = json!({"id": id, "error": format!("flush failed: {}", e)});
                         crate::ext::corr::ensure_corr(&mut p);
                         sp.bus.publish("Models.DownloadProgress", &p);
                         return;
                     }
-                }
-                let mut p =
-                    json!({"id": id, "status":"complete", "file": safe_name, "provider": provider});
-                crate::ext::corr::ensure_corr(&mut p);
-                sp.bus.publish("Models.DownloadProgress", &p);
-                {
-                    let mut v = models().write().await;
-                    if let Some(m) = v
-                        .iter_mut()
-                        .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id))
-                    {
-                        *m = json!({"id": id, "provider": provider, "status":"available", "path": target.to_string_lossy()});
+                    if let Err(e) = afs::rename(&tmp, &target).await {
+                        let mut p = json!({"id": id, "error": format!("finalize failed: {}", e)});
+                        crate::ext::corr::ensure_corr(&mut p);
+                        sp.bus.publish("Models.DownloadProgress", &p);
+                        return;
                     }
+                    // checksum verification (required when provided by UI; service path requires it)
+                    if let Some(exp) = expect_sha {
+                        // Compute full-file hash to support resume
+                        let mut f = match afs::File::open(&target).await {
+                            Ok(f) => f,
+                            Err(_) => {
+                                return;
+                            }
+                        };
+                        let mut h = sha2::Sha256::new();
+                        let mut buf = vec![0u8; 1024 * 1024];
+                        loop {
+                            match f.read(&mut buf).await {
+                                Ok(0) => break,
+                                Ok(n) => {
+                                    use sha2::Digest;
+                                    h.update(&buf[..n]);
+                                }
+                                Err(_) => break,
+                            }
+                        }
+                        let actual = format!("{:x}", h.finalize());
+                        if actual != exp {
+                            let _ = afs::remove_file(&target).await;
+                            let mut p = json!({"id": id, "error": "checksum mismatch", "expected": exp, "actual": actual});
+                            crate::ext::corr::ensure_corr(&mut p);
+                            sp.bus.publish("Models.DownloadProgress", &p);
+                            return;
+                        }
+                    }
+                    let mut p = json!({"id": id, "status":"complete", "file": safe_name, "provider": provider});
+                    crate::ext::corr::ensure_corr(&mut p);
+                    sp.bus.publish("Models.DownloadProgress", &p);
+                    {
+                        let mut v = models().write().await;
+                        if let Some(m) = v
+                            .iter_mut()
+                            .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id))
+                        {
+                            *m = json!({"id": id, "provider": provider, "status":"available", "path": target.to_string_lossy()});
+                        }
+                    }
+                    let _ = io::save_json_file_async(
+                        &paths::models_path(),
+                        &Value::Array(models().read().await.clone()),
+                    )
+                    .await;
+                    sp.bus
+                        .publish("Models.Changed", &json!({"op":"downloaded","id": id}));
                 }
-                let _ = io::save_json_file_async(
-                    &paths::models_path(),
-                    &Value::Array(models().read().await.clone()),
-                )
-                .await;
-                sp.bus
-                    .publish("Models.Changed", &json!({"op":"downloaded","id": id}));
+                Err(e) => {
+                    let mut p = json!({"id": id, "error": format!("request failed: {}", e)});
+                    crate::ext::corr::ensure_corr(&mut p);
+                    sp.bus.publish("Models.DownloadProgress", &p);
+                }
             }
-            Err(e) => {
-                let mut p = json!({"id": id, "error": format!("request failed: {}", e)});
-                crate::ext::corr::ensure_corr(&mut p);
-                sp.bus.publish("Models.DownloadProgress", &p);
-            }
-        }
-    });
-    ok(json!({})).into_response()
+        });
+        ok(json!({})).into_response()
+    }
 }
 
 // ----- download cancel helpers -----

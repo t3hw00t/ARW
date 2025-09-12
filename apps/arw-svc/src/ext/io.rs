@@ -196,10 +196,7 @@ async fn acquire_cross_lock(p: &Path) -> Option<std::fs::File> {
 static EGRESS_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
 
 fn truthy_env(v: &str) -> bool {
-    matches!(
-        v,
-        "1" | "true" | "TRUE" | "yes" | "on" | "On" | "ON"
-    )
+    matches!(v, "1" | "true" | "TRUE" | "yes" | "on" | "On" | "ON")
 }
 
 pub(crate) async fn egress_ledger_append(entry: &Value) {

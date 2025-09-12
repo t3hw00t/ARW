@@ -13,14 +13,15 @@ Canonical categories
 - Tooling: `Tool.Invoked`, `Tool.Ran`, `Tool.Error`
 - Policy: `Policy.Prompt`, `Policy.Allow`, `Policy.Deny`
 - Runtime: `Runtime.Health`, `Runtime.ProfileChanged`
-- Models: `Models.DownloadProgress`, `Models.Changed`
-  - Models.DownloadProgress statuses may include: `started`, `queued`, `admitted`, `resumed`, `downloading`, `degraded` (soft budget), `complete`, `error`, `canceled`.
+- Models: `Models.DownloadProgress`, `Models.Changed`, `Models.CasGc`, `Models.ManifestWritten`, `Models.Refreshed`
+  - Models.DownloadProgress statuses may include: `started`, `queued`, `admitted`, `resumed`, `downloading`, `degraded` (soft budget), `cancel-requested`, `complete`, `error`, `canceled`.
 - Self‑Model: `SelfModel.Proposed`, `SelfModel.Updated`
 - Logic Units: `LogicUnit.Suggested`, `LogicUnit.Installed`, `LogicUnit.Applied`, `LogicUnit.Reverted`, `LogicUnit.Promoted`
  - Cluster: `Cluster.Node.Advertise`, `Cluster.Node.Heartbeat`, `Cluster.Node.Changed`
  - Jobs (offload): `Job.Assigned`, `Job.Progress`, `Job.Completed`, `Job.Error`
  - Sessions (sharing): `Session.Invited`, `Session.RoleChanged`, `Session.EventRelayed`
- - Egress (planned): `Egress.Decision` (allow/deny + reason), `Egress.Preview` (pre‑offload summary), `Egress.Ledger.Appended`
+- Egress: `Egress.Preview` (pre‑offload summary), `Egress.Ledger.Appended` (append‑only record)
+  - `Egress.Decision` remains planned; today we emit previews and ledger appends for downloads and select offloads.
  - Memory (planned): `Memory.Quarantined`, `Memory.Admitted`
  - World diffs (planned): `WorldDiff.Queued`, `WorldDiff.Conflict`, `WorldDiff.Applied`
  - Cluster trust (planned): `Cluster.ManifestPublished`, `Cluster.ManifestTrusted`, `Cluster.ManifestRejected`, `Cluster.EventRejected`
@@ -39,9 +40,15 @@ Notes
 Mapping from existing ARW events
 - Observations/Beliefs/Intents/Actions are already exposed under `/state/*` and emitted in debug builds; clients can mirror or subscribe.
 - `Models.DownloadProgress` supports `{ id, status|error, code, budget?, disk? }` — see `resources/models_service.rs`.
+  - Common `code` values: `admission_denied`, `hard_exhausted`, `disk_insufficient(_stream)`, `size_limit(_stream)`, `checksum_mismatch`, `canceled_by_user`, `already-in-progress-hash`, `quota_exceeded`, `cached`, `resync`.
+- A compatibility `Models.Download` event is emitted at start with `{id,url,budget}`.
+- `Models.ManifestWritten` is emitted after a successful write of `<state>/models/<id>.json`.
+- `Models.CasGc` emits `{scanned, kept, deleted, deleted_bytes, ttl_days}` after a GC sweep.
+- `Models.Changed` publishes ops like `add`, `delete`, `default`, `downloaded`, `canceled`, `error`.
+- `Models.Refreshed` publishes a count after resetting the models list to defaults.
 - Cluster events are additive and off by default. When enabled, Workers publish `Cluster.Node.Advertise` (capabilities, health), periodic `Cluster.Node.Heartbeat`, and receive `Job.*` assignments. The Home Node merges remote `Job.*` and `Session.*` events into the unified timeline by `corr_id`.
 - World model (read‑model) materializes from existing events like `Feedback.Suggested` / `Beliefs.Updated`, `Projects.FileWritten`, `Actions.HintApplied`, `Runtime.Health`, and `Models.DownloadProgress`. A compact `World.Updated` event is emitted with counts and version for UI/SSE.
-- Egress firewall emits planned events for previews and decisions; an append‑only ledger records normalized entries with episode/project/node attribution.
+- Egress firewall emits previews and ledger appends today. An append‑only ledger records normalized entries with episode/project/node attribution. Decisions remain planned.
  - Model downloads emit progress heartbeats and budget/disk hints; when enabled, egress ledger entries are appended for `allow` and `deny` decisions around downloads.
  - Memory quarantine emits planned events; a compact review queue materializes under `/state/memory/quarantine`.
  - Cluster trust uses planned manifest events; scheduler logs pin/deny reasons as codes.

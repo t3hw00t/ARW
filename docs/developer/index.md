@@ -20,6 +20,11 @@ cargo build --workspace --all-targets --locked
 cargo nextest run --workspace --locked
 ```
 
+## Desktop UI (Tauri 2)
+- Launcher app: `apps/arw-launcher/src-tauri`.
+- Integration plugin: `crates/arw-tauri`.
+- See `docs/guide/launcher.md` for Tauri 2 capabilities/permissions and how to allow new commands.
+
 ## Rolling Optimizations
 - Clippy- and fmt-gated CI keeps code quality high.
 - Release profiles enable thin LTO and tuned codegen units.

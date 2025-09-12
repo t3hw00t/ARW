@@ -106,9 +106,46 @@ curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
 curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?replay=10"
 ```
 
+### Event Examples
+
+- Models.DownloadProgress (progress)
+```
+{ "id": "qwen2.5-coder-7b", "status": "downloading", "code": "progress", "progress": 42, "downloaded": 12582912, "total": 30000000 }
+```
+
+- Models.DownloadProgress (complete)
+```
+{ "id": "qwen2.5-coder-7b", "status": "complete", "code": "complete", "file": "qwen.gguf", "provider": "local", "cas_file": "<sha256>.gguf" }
+```
+
+- Models.DownloadProgress (error)
+```
+{ "id": "qwen2.5-coder-7b", "error": "checksum mismatch", "code": "checksum_mismatch", "expected": "<hex>", "actual": "<hex>" }
+```
+
+- Models.DownloadProgress (canceled)
+```
+{ "id": "qwen2.5-coder-7b", "status": "canceled", "code": "canceled_by_user" }
+```
+
+- Models.CasGc (summary)
+```
+{ "scanned": 12, "kept": 9, "deleted": 3, "deleted_bytes": 8796093022, "ttl_days": 14 }
+```
+
+- Egress.Preview (pre-offload)
+```
+{ "id": "qwen2.5-coder-7b", "url": "https://example/model.gguf", "dest": { "host": "example", "port": 443, "protocol": "https" }, "provider": "local", "corr_id": "..." }
+```
+
+- Egress.Ledger.Appended (allow)
+```
+{ "decision": "allow", "reason_code": "models.download", "posture": "off", "project_id": "default", "episode_id": null, "corr_id": "...", "node_id": null, "tool_id": "models.download", "dest": { "host": "example", "port": 443, "protocol": "https" }, "bytes_out": 0, "bytes_in": 1048576, "duration_ms": 1200 }
+```
+
 ## OpenAPI
 
-- `/spec/openapi.yaml` provides an OpenAPI document for many admin endpoints.
+- `/spec/openapi.yaml` provides an OpenAPI document for many admin endpoints (includes Models admin routes).
 - The `/admin` index is the authoritative, live source of admin paths from the running binary.
 
 ## Security Guidance
@@ -137,3 +174,42 @@ curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
   -d '{"id":"<id-from-queue>","decision":"apply","note":"looks good"}' \
   -X POST "$BASE/admin/world_diffs/decision" | jq
 ```
+### Models
+
+- `POST /admin/models/download` — Start or resume a model download.
+  - Body: `{id,url,sha256,provider?,budget?}` where `budget` can override `{soft_ms,hard_ms,class}` for this request.
+  - Requires a 64‑char hex `sha256`.
+  - Emits `Models.Download` (compat) and standardized `Models.DownloadProgress` events.
+- `POST /admin/models/download/cancel` — Cancel an in‑flight download for `{id}`. Emits `cancel-requested` then `canceled` when complete (or `no-active-job`).
+- `POST /admin/models/cas_gc` — Run a one‑off CAS GC sweep: `{ttl_days}`. Emits `Models.CasGc`.
+- `GET  /state/models` — Public, read‑only models list.
+- `GET  /admin/state/models_hashes` — Admin summary of installed hashes and sizes.
+- `GET  /admin/models/by-hash/:sha256` — Serve a CAS blob by hash (egress‑gated; `io:egress:models.peer`).
+- `GET  /admin/models/downloads_metrics` — Lightweight downloads metrics used for admission checks; returns `{ ewma_mbps: number|null }`.
+
+#### Models Manifest
+
+After a successful download and verification, ARW writes a per‑ID manifest next to the CAS store: `{state_dir}/models/<id>.json`.
+
+Example:
+```
+{
+  "id": "qwen2.5-coder-7b",
+  "file": "<sha256>.gguf",
+  "name": "original_name.gguf",
+  "path": "/path/to/state/models/by-hash/<sha256>.gguf",
+  "url": "https://example.com/model.gguf",
+  "sha256": "<64-hex>",
+  "cas": "sha256",
+  "bytes": 123456789,
+  "provider": "local",
+  "verified": true
+}
+```
+
+Schema: see `spec/schemas/model_manifest.json`.
+
+Notes
+- Downloads promote into CAS under `{state_dir}/models/by-hash/<sha256>[.<ext>]` and write a per‑ID manifest `{state_dir}/models/<id>.json`.
+- When `ARW_DL_PREFLIGHT=1`, a HEAD preflight enforces `ARW_MODELS_MAX_MB` and optional `ARW_MODELS_QUOTA_MB` before transfer.
+- See Guide → Models Download for event schema, budgets, progress, and error codes.

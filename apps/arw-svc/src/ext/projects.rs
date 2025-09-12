@@ -275,7 +275,7 @@ pub(crate) async fn projects_file_set(
     };
     let abs = root.join(rel);
     let maxb = max_file_bytes();
-    if (body.content.as_bytes().len() as u64) > maxb {
+    if (body.content.len() as u64) > maxb {
         return ApiError::bad_request("content too large").into_response();
     }
     if let Some(expected) = body.prev_sha256.as_deref() {

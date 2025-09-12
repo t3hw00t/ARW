@@ -73,9 +73,245 @@ paths:
         '200':
           description: Shutdown service
           content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/OkResponse'
+  /admin/models:
+    get:
+      tags: [models]
+      operationId: models_list
+      responses:
+        '200':
+          description: List models
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+  /admin/models/refresh:
+    post:
+      tags: [models]
+      operationId: models_refresh
+      responses:
+        '200':
+          description: Refreshed models list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+  /admin/models/save:
+    post:
+      tags: [models]
+      operationId: models_save
+      responses:
+        '200':
+          description: Saved
+          content:
             application/json:
               schema:
                 $ref: '#/components/schemas/OkResponse'
+  /admin/models/load:
+    post:
+      tags: [models]
+      operationId: models_load
+      responses:
+        '200':
+          description: Loaded models list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+        '404':
+          description: Not found
+  /admin/models/add:
+    post:
+      tags: [models]
+      operationId: models_add
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelId'
+      responses:
+        '200':
+          description: Added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+  /admin/models/delete:
+    post:
+      tags: [models]
+      operationId: models_delete
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelId'
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+  /admin/models/default:
+    get:
+      tags: [models]
+      operationId: models_default_get
+      responses:
+        '200':
+          description: Default model id
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  default:
+                    type: string
+    post:
+      tags: [models]
+      operationId: models_default_set
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelId'
+      responses:
+        '200':
+          description: Set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+  /admin/models/download:
+    post:
+      tags: [models]
+      operationId: models_download
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DownloadReq'
+      responses:
+        '200':
+          description: Started or resumed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+  /admin/models/download/cancel:
+    post:
+      tags: [models]
+      operationId: models_download_cancel
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [id]
+              properties:
+                id:
+                  type: string
+      responses:
+        '200':
+          description: Cancel requested
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+  /admin/models/cas_gc:
+    post:
+      tags: [models]
+      operationId: models_cas_gc_once
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                ttl_days:
+                  type: integer
+                  default: 7
+      responses:
+        '200':
+          description: GC started
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  started:
+                    type: boolean
+                  ttl_days:
+                    type: integer
+  /admin/state/models_hashes:
+    get:
+      tags: [models]
+      operationId: models_hashes
+      responses:
+        '200':
+          description: Installed model hashes
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      type: object
+  /admin/models/by-hash/{sha256}:
+    get:
+      tags: [models]
+      operationId: models_blob_get
+      parameters:
+      - name: sha256
+        in: path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Model blob
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '404':
+          description: Not found
+  /admin/models/downloads_metrics:
+    get:
+      tags: [models]
+      operationId: models_downloads_metrics
+      responses:
+        '200':
+          description: Downloads metrics (EWMA)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ewma_mbps:
+                    type: number
+                    nullable: true
 components:
   schemas:
     OkResponse:
@@ -85,5 +321,33 @@ components:
       properties:
         ok:
           type: boolean
+    ModelId:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        provider:
+          type: string
+          nullable: true
+    BudgetOverride:
+      type: object
+      properties:
+        soft_ms: { type: integer }
+        hard_ms: { type: integer }
+        class: { type: string }
+    DownloadReq:
+      type: object
+      required: [id, url, sha256]
+      properties:
+        id: { type: string }
+        url: { type: string }
+        provider:
+          type: string
+          nullable: true
+        sha256: { type: string }
+        budget:
+          $ref: '#/components/schemas/BudgetOverride'
 tags:
 - name: arw-svc
+- name: models

@@ -17,6 +17,11 @@ Runtime dependencies (Tauri/WebView2)
 - WebView2 Evergreen Runtime present check and bootstrapper: use `scripts/webview2.ps1` or Interactive Start → “WebView2 runtime (check/install)”. On Windows 11 it’s in‑box; Windows 10/Server requires Evergreen.
 - Tauri bundling: `tauri.conf.json` includes Windows `webviewInstallMode: "downloadBootstrapper"`.
 
+Tauri 2 migration
+- The launcher is on Tauri 2 and relies on capabilities/permissions to expose commands to the UI.
+- See `apps/arw-launcher/src-tauri/capabilities/main.json` and `apps/arw-launcher/src-tauri/permissions/`.
+- When adding commands to the `arw-tauri` plugin, mirror them in the `permissions/arw.json` allowlist so they remain callable from the frontend.
+
 Auto-audit tools (optional to strict)
 - WACK (Windows App Certification Kit): validate desktop/MSIX packages. Run locally or in a gated self‑hosted agent. Store report.
 - MSIX Packaging/Validation + PSF: if adopting MSIX, validate and use shims for runtime quirks.

@@ -23,3 +23,5 @@ Thumbs.db
 
 # Python virtual envs
 /.venv/
+%LOCALAPPDATA%/
+apps/arw-launcher/src-tauri/gen/

@@ -116,7 +116,11 @@ fn ensure_graph<'a>(ws: &'a mut WorldStore, proj: Option<&str>) -> &'a mut Belie
 // Public helper for read-only lookup of a belief node by id with optional project scoping.
 pub fn get_belief_node(proj: Option<&str>, id: &str) -> Option<Node> {
     let ws = store().read().unwrap();
-    let g_opt = if let Some(p) = proj { ws.proj_graphs.get(p) } else { Some(&ws.default_graph) };
+    let g_opt = if let Some(p) = proj {
+        ws.proj_graphs.get(p)
+    } else {
+        Some(&ws.default_graph)
+    };
     g_opt.and_then(|g| g.nodes.get(id)).cloned()
 }
 
@@ -219,158 +223,163 @@ pub async fn on_event(bus: &arw_events::Bus, env: &Envelope) {
         let now = now_iso();
 
         match env.kind.as_str() {
-        // Feedback suggestions -> claims with confidence + provenance
-        "Feedback.Suggested" => {
-            let list: Vec<Value> = env
-                .payload
-                .get("suggestions")
-                .and_then(|a| a.as_array())
-                .cloned()
-                .unwrap_or_else(|| vec![env.payload.clone()]);
-            let cid = env.payload.get("corr_id").and_then(|v| v.as_str()).map(|s| s.to_string());
-            for it in list {
-                let id = it
-                    .get("id")
+            // Feedback suggestions -> claims with confidence + provenance
+            "Feedback.Suggested" => {
+                let list: Vec<Value> = env
+                    .payload
+                    .get("suggestions")
+                    .and_then(|a| a.as_array())
+                    .cloned()
+                    .unwrap_or_else(|| vec![env.payload.clone()]);
+                let cid = env
+                    .payload
+                    .get("corr_id")
                     .and_then(|v| v.as_str())
-                    .unwrap_or("claim")
-                    .to_string();
-                let nid = format!("claim:{}", id);
+                    .map(|s| s.to_string());
+                for it in list {
+                    let id = it
+                        .get("id")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("claim")
+                        .to_string();
+                    let nid = format!("claim:{}", id);
+                    let n = upsert_node(g, &nid, NodeKind::Claim);
+                    n.props = it.as_object().cloned().unwrap_or_default();
+                    n.confidence = it.get("confidence").and_then(|v| v.as_f64());
+                    n.last_observed = Some(now.clone());
+                    n.provenance.push(Provenance {
+                        kind: env.kind.clone(),
+                        observed_at: env.time.clone(),
+                        corr_id: cid.clone(),
+                        sources: vec![],
+                    });
+                }
+                touched = true;
+            }
+            _ if env.kind.starts_with("Beliefs.") => {
+                let cid = env
+                    .payload
+                    .get("corr_id")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let nid = format!("claim:{}", env.kind.replace('.', ":"));
                 let n = upsert_node(g, &nid, NodeKind::Claim);
-                n.props = it.as_object().cloned().unwrap_or_default();
-                n.confidence = it.get("confidence").and_then(|v| v.as_f64());
+                n.props = env.payload.as_object().cloned().unwrap_or_default();
                 n.last_observed = Some(now.clone());
                 n.provenance.push(Provenance {
                     kind: env.kind.clone(),
                     observed_at: env.time.clone(),
-                    corr_id: cid.clone(),
+                    corr_id: cid,
                     sources: vec![],
                 });
+                touched = true;
             }
-            touched = true;
-        }
-        _ if env.kind.starts_with("Beliefs.") => {
-            let cid = env
-                .payload
-                .get("corr_id")
-                .and_then(|v| v.as_str())
-                .map(|s| s.to_string());
-            let nid = format!("claim:{}", env.kind.replace('.', ":"));
-            let n = upsert_node(g, &nid, NodeKind::Claim);
-            n.props = env.payload.as_object().cloned().unwrap_or_default();
-            n.last_observed = Some(now.clone());
-            n.provenance.push(Provenance {
-                kind: env.kind.clone(),
-                observed_at: env.time.clone(),
-                corr_id: cid,
-                sources: vec![],
-            });
-            touched = true;
-        }
-        // Project file writes -> entities and observed_at edges
-        "Projects.FileWritten" => {
-            let proj = env
-                .payload
-                .get("proj")
-                .and_then(|v| v.as_str())
-                .unwrap_or("proj");
-            let path = env
-                .payload
-                .get("path")
-                .and_then(|v| v.as_str())
-                .unwrap_or("");
-            if !path.is_empty() {
-                let ent_id = format!("file:{}/{}", proj, path);
-                let n = upsert_node(g, &ent_id, NodeKind::Entity);
-                n.props.insert("proj".into(), Value::String(proj.to_string()));
-                n.props.insert("path".into(), Value::String(path.to_string()));
-                n.last_observed = Some(now.clone());
-                n.provenance.push(Provenance {
-                    kind: env.kind.clone(),
-                    observed_at: env.time.clone(),
-                    corr_id: env
+            // Project file writes -> entities and observed_at edges
+            "Projects.FileWritten" => {
+                let proj = env
+                    .payload
+                    .get("proj")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("proj");
+                let path = env
+                    .payload
+                    .get("path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("");
+                if !path.is_empty() {
+                    let ent_id = format!("file:{}/{}", proj, path);
+                    let n = upsert_node(g, &ent_id, NodeKind::Entity);
+                    n.props
+                        .insert("proj".into(), Value::String(proj.to_string()));
+                    n.props
+                        .insert("path".into(), Value::String(path.to_string()));
+                    n.last_observed = Some(now.clone());
+                    n.provenance.push(Provenance {
+                        kind: env.kind.clone(),
+                        observed_at: env.time.clone(),
+                        corr_id: env
+                            .payload
+                            .get("corr_id")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        sources: vec![json!({"type":"file","proj": proj, "path": path})],
+                    });
+                    // observed_at edge from entity to a synthetic observation node
+                    let obs_id = format!("obs:{}", env.time);
+                    let _o = upsert_node(g, &obs_id, NodeKind::Entity);
+                    let mut props = Map::new();
+                    props.insert("time".into(), Value::String(env.time.clone()));
+                    add_edge(g, &ent_id, &obs_id, EdgeKind::ObservedAt, props);
+                }
+                touched = true;
+            }
+            // Model download progress -> entities and budget nodes
+            "Models.DownloadProgress" => {
+                if let Some(id) = env.payload.get("id").and_then(|v| v.as_str()) {
+                    let status = env
                         .payload
-                        .get("corr_id")
+                        .get("status")
                         .and_then(|v| v.as_str())
-                        .map(|s| s.to_string()),
-                    sources: vec![json!({"type":"file","proj": proj, "path": path})],
-                });
-                // observed_at edge from entity to a synthetic observation node
-                let obs_id = format!("obs:{}", env.time);
-                let _o = upsert_node(g, &obs_id, NodeKind::Entity);
-                let mut props = Map::new();
-                props.insert("time".into(), Value::String(env.time.clone()));
-                add_edge(g, &ent_id, &obs_id, EdgeKind::ObservedAt, props);
-            }
-            touched = true;
-        }
-        // Model download progress -> entities and budget nodes
-        k if k == "Models.DownloadProgress" => {
-            if let Some(id) = env.payload.get("id").and_then(|v| v.as_str()) {
-                let status = env
-                    .payload
-                    .get("status")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let ent_id = format!("model:{}", id);
-                let n = upsert_node(g, &ent_id, NodeKind::Entity);
-                n.props.insert("status".into(), Value::String(status.to_string()));
-                if let Some(b) = env.payload.get("budget") {
-                    n.props.insert("budget".into(), b.clone());
+                        .unwrap_or("");
+                    let ent_id = format!("model:{}", id);
+                    let n = upsert_node(g, &ent_id, NodeKind::Entity);
+                    n.props
+                        .insert("status".into(), Value::String(status.to_string()));
+                    if let Some(b) = env.payload.get("budget") {
+                        n.props.insert("budget".into(), b.clone());
+                    }
+                    n.last_observed = Some(now.clone());
+                    touched = true;
                 }
-                n.last_observed = Some(now.clone());
-                touched = true;
             }
-        }
-        // Model lifecycle changes
-        "Models.Changed" => {
-            if let Some(id) = env.payload.get("id").and_then(|v| v.as_str()) {
-                let op = env
-                    .payload
-                    .get("op")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let ent_id = format!("model:{}", id);
-                let n = upsert_node(g, &ent_id, NodeKind::Entity);
-                let status = match op {
-                    "downloaded" => "available",
-                    "delete" => "deleted",
-                    other => other,
-                };
-                n.props.insert("status".into(), Value::String(status.to_string()));
-                if let Some(p) = env.payload.get("path").and_then(|v| v.as_str()) {
-                    n.props.insert("path".into(), Value::String(p.to_string()));
+            // Model lifecycle changes
+            "Models.Changed" => {
+                if let Some(id) = env.payload.get("id").and_then(|v| v.as_str()) {
+                    let op = env.payload.get("op").and_then(|v| v.as_str()).unwrap_or("");
+                    let ent_id = format!("model:{}", id);
+                    let n = upsert_node(g, &ent_id, NodeKind::Entity);
+                    let status = match op {
+                        "downloaded" => "available",
+                        "delete" => "deleted",
+                        other => other,
+                    };
+                    n.props
+                        .insert("status".into(), Value::String(status.to_string()));
+                    if let Some(p) = env.payload.get("path").and_then(|v| v.as_str()) {
+                        n.props.insert("path".into(), Value::String(p.to_string()));
+                    }
+                    n.last_observed = Some(now.clone());
+                    touched = true;
                 }
+            }
+            // Project lifecycle
+            "Projects.Created" => {
+                if let Some(name) = env.payload.get("name").and_then(|v| v.as_str()) {
+                    let ent_id = format!("proj:{}", name);
+                    let n = upsert_node(g, &ent_id, NodeKind::Entity);
+                    n.props
+                        .insert("created".into(), Value::String(env.time.clone()));
+                    n.last_observed = Some(now.clone());
+                    touched = true;
+                }
+            }
+            // Runtime health -> entity runtime with metrics
+            "Service.Health" | "Probe.Metrics" | "Runtime.Health" => {
+                let ent_id = "runtime";
+                let n = upsert_node(g, ent_id, NodeKind::Entity);
+                n.props.insert("last".into(), env.payload.clone());
                 n.last_observed = Some(now.clone());
                 touched = true;
             }
-        }
-        // Project lifecycle
-        "Projects.Created" => {
-            if let Some(name) = env.payload.get("name").and_then(|v| v.as_str()) {
-                let ent_id = format!("proj:{}", name);
-                let n = upsert_node(g, &ent_id, NodeKind::Entity);
-                n.props.insert("created".into(), Value::String(env.time.clone()));
+            // Policy hints applied -> policy node
+            "Actions.HintApplied" => {
+                let pol_id = "policy:hints";
+                let n = upsert_node(g, pol_id, NodeKind::Policy);
+                n.props.insert("last".into(), env.payload.clone());
                 n.last_observed = Some(now.clone());
                 touched = true;
             }
-        }
-        // Runtime health -> entity runtime with metrics
-        "Service.Health" | "Probe.Metrics" | "Runtime.Health" => {
-            let ent_id = "runtime";
-            let n = upsert_node(g, ent_id, NodeKind::Entity);
-            n.props.insert("last".into(), env.payload.clone());
-            n.last_observed = Some(now.clone());
-            touched = true;
-        }
-        // Policy hints applied -> policy node
-        "Actions.HintApplied" => {
-            let pol_id = "policy:hints";
-            let n = upsert_node(g, pol_id, NodeKind::Policy);
-            n.props.insert("last".into(), env.payload.clone());
-            n.last_observed = Some(now.clone());
-            touched = true;
-        }
-        _ => {}
+            _ => {}
         }
 
         if touched {
@@ -413,12 +422,13 @@ pub async fn on_event(bus: &arw_events::Bus, env: &Envelope) {
                 let cutoff = chrono::Utc::now() - chrono::Duration::hours(1);
                 gx.nodes
                     .values()
-                    .filter(|n| n
-                        .last_observed
-                        .as_deref()
-                        .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
-                        .map(|t| t.with_timezone(&chrono::Utc) < cutoff)
-                        .unwrap_or(false))
+                    .filter(|n| {
+                        n.last_observed
+                            .as_deref()
+                            .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
+                            .map(|t| t.with_timezone(&chrono::Utc) < cutoff)
+                            .unwrap_or(false)
+                    })
                     .count()
             };
             let mut payload = json!({
@@ -466,13 +476,20 @@ fn snapshot_project_map(ws: &WorldStore, project: Option<&str>) -> ProjectMap {
     if let Some(g) = g {
         last_ver = g.version;
         for n in g.nodes.values() {
-            let kind_s = match n.kind { NodeKind::Entity => "entity", NodeKind::Claim => "claim", NodeKind::Task => "task", NodeKind::Policy => "policy", NodeKind::Budget => "budget" };
+            let kind_s = match n.kind {
+                NodeKind::Entity => "entity",
+                NodeKind::Claim => "claim",
+                NodeKind::Task => "task",
+                NodeKind::Policy => "policy",
+                NodeKind::Budget => "budget",
+            };
             *kinds.entry(kind_s.to_string()).or_insert(0) += 1;
             match n.kind {
                 NodeKind::Entity => {
                     ents_seen += 1;
                     if entities.len() < 50 {
-                        entities.push(json!({"id": n.id, "props": n.props, "last": n.last_observed}));
+                        entities
+                            .push(json!({"id": n.id, "props": n.props, "last": n.last_observed}));
                     }
                 }
                 NodeKind::Claim => {
@@ -489,11 +506,19 @@ fn snapshot_project_map(ws: &WorldStore, project: Option<&str>) -> ProjectMap {
             let cb = b.get("confidence").and_then(|v| v.as_f64()).unwrap_or(0.0);
             cb.partial_cmp(&ca).unwrap_or(std::cmp::Ordering::Equal)
         });
-        if claims.len() > 20 { claims.truncate(20); }
+        if claims.len() > 20 {
+            claims.truncate(20);
+        }
         // Derive contradictions from edges
-        for e in g.edges.iter().filter(|e| matches!(e.kind, EdgeKind::Contradicts)) {
+        for e in g
+            .edges
+            .iter()
+            .filter(|e| matches!(e.kind, EdgeKind::Contradicts))
+        {
             contradictions.push(json!({"src": e.src, "dst": e.dst, "props": e.props}));
-            if contradictions.len() >= 20 { break; }
+            if contradictions.len() >= 20 {
+                break;
+            }
         }
         // Stale: entities not observed in > 1 hour
         let cutoff = chrono::Utc::now() - chrono::Duration::hours(1);
@@ -502,7 +527,9 @@ fn snapshot_project_map(ws: &WorldStore, project: Option<&str>) -> ProjectMap {
                 if let Ok(t) = chrono::DateTime::parse_from_rfc3339(ts) {
                     if t.with_timezone(&chrono::Utc) < cutoff {
                         stale.push(json!({"id": n.id, "last": ts}));
-                        if stale.len() >= 20 { break; }
+                        if stale.len() >= 20 {
+                            break;
+                        }
                     }
                 }
             }
@@ -559,13 +586,21 @@ fn flatten_value(v: &Value, cap: usize) -> String {
         Value::String(s) => s.chars().take(cap).collect(),
         Value::Number(n) => n.to_string(),
         Value::Bool(b) => {
-            if *b { "true".into() } else { "false".into() }
+            if *b {
+                "true".into()
+            } else {
+                "false".into()
+            }
         }
         Value::Array(a) => {
             let mut out = String::new();
             for (i, it) in a.iter().enumerate() {
-                if out.len() >= cap { break; }
-                if i > 0 { out.push(' '); }
+                if out.len() >= cap {
+                    break;
+                }
+                if i > 0 {
+                    out.push(' ');
+                }
                 out.push_str(&flatten_value(it, cap - out.len()));
             }
             out
@@ -573,8 +608,12 @@ fn flatten_value(v: &Value, cap: usize) -> String {
         Value::Object(m) => {
             let mut out = String::new();
             for (k, v) in m.iter() {
-                if out.len() >= cap { break; }
-                if !out.is_empty() { out.push(' '); }
+                if out.len() >= cap {
+                    break;
+                }
+                if !out.is_empty() {
+                    out.push(' ');
+                }
                 out.push_str(k);
                 out.push(' ');
                 out.push_str(&flatten_value(v, cap - out.len()));
@@ -587,15 +626,21 @@ fn flatten_value(v: &Value, cap: usize) -> String {
 
 fn score_claim(n: &Node, query: &str) -> (f64, serde_json::Value) {
     let q = query.trim();
-    if q.is_empty() { return (n.confidence.unwrap_or(0.0), json!({"conf": n.confidence})); }
+    if q.is_empty() {
+        return (n.confidence.unwrap_or(0.0), json!({"conf": n.confidence}));
+    }
     let qtok = tokens(q);
     let id_text = n.id.to_ascii_lowercase();
     let props_text = flatten_value(&Value::Object(n.props.clone()), 2048).to_ascii_lowercase();
     let mut hits_id = 0u64;
     let mut hits_props = 0u64;
     for t in qtok.iter() {
-        if id_text.contains(t) { hits_id += 1; }
-        if props_text.contains(t) { hits_props += 1; }
+        if id_text.contains(t) {
+            hits_id += 1;
+        }
+        if props_text.contains(t) {
+            hits_props += 1;
+        }
     }
     let conf = n.confidence.unwrap_or(0.5);
     // Recency: half-life 6h (configurable later)
@@ -604,13 +649,18 @@ fn score_claim(n: &Node, query: &str) -> (f64, serde_json::Value) {
         .as_deref()
         .and_then(|ts| chrono::DateTime::parse_from_rfc3339(ts).ok())
         .map(|t| {
-            let age_s = (chrono::Utc::now() - t.with_timezone(&chrono::Utc)).num_seconds().max(0) as f64;
+            let age_s = (chrono::Utc::now() - t.with_timezone(&chrono::Utc))
+                .num_seconds()
+                .max(0) as f64;
             let half = 6.0 * 3600.0; // 6 hours
             (0.5f64).powf(age_s / half)
         })
         .unwrap_or(1.0);
     let score = (2.0 * hits_id as f64 + 1.0 * hits_props as f64) * 0.5 + conf * 1.0 + rec * 0.5;
-    (score, json!({"hits_id": hits_id, "hits_props": hits_props, "conf": conf, "recency": rec}))
+    (
+        score,
+        json!({"hits_id": hits_id, "hits_props": hits_props, "conf": conf, "recency": rec}),
+    )
 }
 
 #[arw_admin(
@@ -628,7 +678,9 @@ pub async fn world_select_get(Query(q): Query<WorldSelectQs>) -> impl IntoRespon
     let mut scored: Vec<(f64, Value)> = Vec::new();
     if let Some(g) = g {
         for n in g.nodes.values() {
-            if !matches!(n.kind, NodeKind::Claim) { continue; }
+            if !matches!(n.kind, NodeKind::Claim) {
+                continue;
+            }
             let (s, tr) = score_claim(n, q.q.as_deref().unwrap_or(""));
             let mut item = json!({
                 "id": n.id,
@@ -654,11 +706,17 @@ pub async fn world_select_get(Query(q): Query<WorldSelectQs>) -> impl IntoRespon
 // Public helper for context assembly
 pub async fn select_top_claims(proj: Option<&str>, q: &str, k: usize) -> Vec<Value> {
     let ws = store().read().unwrap();
-    let g = if let Some(p) = proj { ws.proj_graphs.get(p) } else { Some(&ws.default_graph) };
+    let g = if let Some(p) = proj {
+        ws.proj_graphs.get(p)
+    } else {
+        Some(&ws.default_graph)
+    };
     let mut scored: Vec<(f64, Value)> = Vec::new();
     if let Some(g) = g {
         for n in g.nodes.values() {
-            if !matches!(n.kind, NodeKind::Claim) { continue; }
+            if !matches!(n.kind, NodeKind::Claim) {
+                continue;
+            }
             let (s, tr) = score_claim(n, q);
             let mut item = json!({
                 "id": n.id,
@@ -690,14 +748,24 @@ pub async fn select_top_claims_diverse(
 ) -> Vec<Value> {
     // Clamp params
     let k = k.clamp(1, 50);
-    let lambda = if !(0.0..=1.0).contains(&lambda) { 0.5 } else { lambda };
+    let lambda = if !(0.0..=1.0).contains(&lambda) {
+        0.5
+    } else {
+        lambda
+    };
     // Build scored list using existing scorer
     let ws = store().read().unwrap();
-    let g = if let Some(p) = proj { ws.proj_graphs.get(p) } else { Some(&ws.default_graph) };
+    let g = if let Some(p) = proj {
+        ws.proj_graphs.get(p)
+    } else {
+        Some(&ws.default_graph)
+    };
     let mut scored: Vec<(f64, Value)> = Vec::new();
     if let Some(g) = g {
         for n in g.nodes.values() {
-            if !matches!(n.kind, NodeKind::Claim) { continue; }
+            if !matches!(n.kind, NodeKind::Claim) {
+                continue;
+            }
             let (s, tr) = score_claim(n, q);
             let mut item = json!({
                 "id": n.id,
@@ -716,10 +784,16 @@ pub async fn select_top_claims_diverse(
     // Tokenize helper
     fn tokenize(v: &Value) -> std::collections::HashSet<String> {
         let mut s = String::new();
-        if let Some(id) = v.get("id").and_then(|x| x.as_str()) { s.push_str(id); s.push(' '); }
+        if let Some(id) = v.get("id").and_then(|x| x.as_str()) {
+            s.push_str(id);
+            s.push(' ');
+        }
         if let Some(props) = v.get("props").and_then(|x| x.as_object()) {
             for (_k, vv) in props.iter() {
-                if let Some(t) = vv.as_str() { s.push_str(t); s.push(' '); }
+                if let Some(t) = vv.as_str() {
+                    s.push_str(t);
+                    s.push(' ');
+                }
             }
         }
         s.split(|c: char| !c.is_alphanumeric())
@@ -727,11 +801,20 @@ pub async fn select_top_claims_diverse(
             .map(|t| t.to_ascii_lowercase())
             .collect()
     }
-    fn jaccard(a: &std::collections::HashSet<String>, b: &std::collections::HashSet<String>) -> f64 {
-        if a.is_empty() || b.is_empty() { return 0.0; }
+    fn jaccard(
+        a: &std::collections::HashSet<String>,
+        b: &std::collections::HashSet<String>,
+    ) -> f64 {
+        if a.is_empty() || b.is_empty() {
+            return 0.0;
+        }
         let inter = a.intersection(b).count() as f64;
         let uni = a.union(b).count() as f64;
-        if uni == 0.0 { 0.0 } else { inter / uni }
+        if uni == 0.0 {
+            0.0
+        } else {
+            inter / uni
+        }
     }
     // Precompute tokens for scored list
     let mut items: Vec<(f64, Value, std::collections::HashSet<String>)> = scored
@@ -746,15 +829,20 @@ pub async fn select_top_claims_diverse(
     while selected.len() < k && !items.is_empty() {
         let mut best_idx: usize = 0;
         let mut best_score: f64 = f64::NEG_INFINITY;
-        for (i, (rel, v, toks)) in items.iter().enumerate() {
+        for (i, (rel, _v, toks)) in items.iter().enumerate() {
             // max similarity to already selected
             let mut max_sim = 0.0;
             for (_r2, _v2, t2) in selected.iter() {
                 let sim = jaccard(toks, t2);
-                if sim > max_sim { max_sim = sim; }
+                if sim > max_sim {
+                    max_sim = sim;
+                }
             }
             let mmr = lambda * *rel - (1.0 - lambda) * max_sim;
-            if mmr > best_score { best_score = mmr; best_idx = i; }
+            if mmr > best_score {
+                best_score = mmr;
+                best_idx = i;
+            }
         }
         let picked = items.remove(best_idx);
         selected.push(picked);
@@ -765,15 +853,25 @@ pub async fn select_top_claims_diverse(
 // Recent file entities (by last_observed), optionally scoped to project
 pub async fn select_recent_files(proj: Option<&str>, k: usize) -> Vec<Value> {
     let ws = store().read().unwrap();
-    let g = if let Some(p) = proj { ws.proj_graphs.get(p) } else { Some(&ws.default_graph) };
+    let g = if let Some(p) = proj {
+        ws.proj_graphs.get(p)
+    } else {
+        Some(&ws.default_graph)
+    };
     let mut items: Vec<(i64, Value)> = Vec::new();
     if let Some(g) = g {
         for n in g.nodes.values() {
-            if !matches!(n.kind, NodeKind::Entity) { continue; }
+            if !matches!(n.kind, NodeKind::Entity) {
+                continue;
+            }
             // File entities carry a 'path' prop; keep only those
-            if !n.props.contains_key("path") { continue; }
+            if !n.props.contains_key("path") {
+                continue;
+            }
             if let Some(p) = proj {
-                if n.props.get("proj").and_then(|v| v.as_str()) != Some(p) { continue; }
+                if n.props.get("proj").and_then(|v| v.as_str()) != Some(p) {
+                    continue;
+                }
             }
             let ts = n.last_observed.clone().unwrap_or_default();
             let ts_ms = chrono::DateTime::parse_from_rfc3339(&ts)

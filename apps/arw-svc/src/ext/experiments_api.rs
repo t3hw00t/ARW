@@ -67,7 +67,10 @@ pub async fn stop(State(state): State<AppState>, Json(req): Json<StopReq>) -> im
     summary = "Assign experiment variant"
 )]
 #[arw_gate("experiments:assign")]
-pub async fn assign(State(state): State<AppState>, Json(req): Json<AssignReq>) -> impl IntoResponse {
+pub async fn assign(
+    State(state): State<AppState>,
+    Json(req): Json<AssignReq>,
+) -> impl IntoResponse {
     let mut payload = json!({ "id": req.id, "variant": req.variant, "agent": req.agent });
     super::corr::ensure_corr(&mut payload);
     state.bus.publish("Experiment.VariantChosen", &payload);
