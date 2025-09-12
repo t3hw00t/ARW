@@ -108,6 +108,24 @@ async fn emit_error(
 mod tests_early_placeholder {}
 
 impl ModelsService {
+    // Lightweight snapshot of downloader state for admin/ops
+    pub async fn jobs_status(&self) -> Value {
+        let active_map = Self::active_jobs_cell().read().await.clone();
+        let mut active = Vec::with_capacity(active_map.len());
+        for (k, v) in active_map.into_iter() {
+            active.push(json!({"model_id": k, "job_id": v}));
+        }
+        let inflight: Vec<String> = Self::inflight_hash_cell().read().await.iter().cloned().collect();
+        let conc = json!({
+            "configured_max": Self::max_concurrency() as u64,
+            "available_permits": Self::concurrency_sem().available_permits() as u64,
+        });
+        json!({
+            "active": active,
+            "inflight_hashes": inflight,
+            "concurrency": conc,
+        })
+    }
     pub fn new() -> Self {
         Self
     }
@@ -946,9 +964,9 @@ impl ModelsService {
                     );
                     manifest.insert("provider".into(), Value::String(provider.clone()));
                     manifest.insert("verified".into(), Value::Bool(true));
-                    let _ = tokio::fs::write(
+                    let _ = crate::ext::io::save_json_file_async(
                         &manifest_path,
-                        serde_json::to_vec(&Value::Object(manifest)).unwrap_or_default(),
+                        &Value::Object(manifest),
                     )
                     .await;
                     // Update models list
@@ -1176,12 +1194,33 @@ impl ModelsService {
             let safe_name = Self::sanitize_file_name(base);
             let target_dir = crate::ext::paths::state_dir().join("models");
             let mut final_name = safe_name.clone();
-            // tmp is always based on initial name; final target may differ later
-            let tmp = target_dir.join(&safe_name).with_extension("part");
+            // Use a dedicated tmp directory and prefer sha256-based filenames to avoid collisions across jobs.
+            // This also enables resumption across restarts by stable tmp path per hash.
+            let tmp_dir = target_dir.join("tmp");
+            // tmp is primarily keyed by expected sha256 when available (always required), else fall back to job+name.
+            let tmp = if let Some(ref exp) = expect_sha {
+                tmp_dir.join(format!("{}.part", exp))
+            } else {
+                tmp_dir.join(format!("{}-{}.part", job, safe_name))
+            };
             let mut target = target_dir.join(&final_name);
             // sidecar metadata path for resume validation
             let meta_path = tmp.with_extension("part.meta");
             if let Err(e) = afs::create_dir_all(&target_dir).await {
+                emit_error(
+                    &sp.bus,
+                    &id,
+                    "mkdir_failed",
+                    &format!("mkdir failed: {}", e),
+                    Some(&budget),
+                    None,
+                    Some(&corr_id),
+                )
+                .await;
+                return;
+            }
+            // Ensure tmp directory exists as well
+            if let Err(e) = afs::create_dir_all(&tmp_dir).await {
                 emit_error(
                     &sp.bus,
                     &id,
@@ -1450,6 +1489,64 @@ impl ModelsService {
                                 final_name = cand;
                                 target = target_dir.join(&final_name);
                             }
+                        }
+                    }
+                    // If resuming, validate Content-Range consistency with our offset.
+                    if resume_from > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT {
+                        if let Some(cr) = resp
+                            .headers()
+                            .get(reqwest::header::CONTENT_RANGE)
+                            .and_then(|v| v.to_str().ok())
+                        {
+                            // Expect formats like: bytes <start>-<end>/<total> or bytes <start>-<end>/*
+                            let mut ok_range = false;
+                            let s = cr.trim();
+                            if let Some(rest) = s.strip_prefix("bytes ") {
+                                let parts: Vec<&str> = rest.split('/').collect();
+                                if let Some(range) = parts.get(0) {
+                                    let mut it = range.split('-');
+                                    if let (Some(start_s), Some(_end_s)) = (it.next(), it.next()) {
+                                        if let Ok(start_off) = start_s.parse::<u64>() {
+                                            ok_range = start_off == resume_from;
+                                        }
+                                    }
+                                }
+                            }
+                            if !ok_range {
+                                // Upstream changed or server returned an unexpected range: abort safely.
+                                let _ = afs::remove_file(&tmp).await;
+                                let _ = afs::remove_file(&meta_path).await;
+                                let extra = json!({
+                                    "expected_offset": resume_from,
+                                    "content_range": s,
+                                });
+                                emit_error(
+                                    &sp.bus,
+                                    &id,
+                                    "upstream_changed",
+                                    "content-range does not match resume offset",
+                                    Some(&budget),
+                                    Some(extra),
+                                    Some(&corr_id),
+                                )
+                                .await;
+                                return;
+                            }
+                        } else {
+                            // No Content-Range header on 206 response while resuming. Abort.
+                            let _ = afs::remove_file(&tmp).await;
+                            let _ = afs::remove_file(&meta_path).await;
+                            emit_error(
+                                &sp.bus,
+                                &id,
+                                "resume_no_content_range",
+                                "missing Content-Range on partial content",
+                                Some(&budget),
+                                None,
+                                Some(&corr_id),
+                            )
+                            .await;
+                            return;
                         }
                     }
                     let total_all = if resume_from > 0
@@ -2617,6 +2714,10 @@ impl ModelsService {
                         }
                         cas_file_name = final_name.clone();
                     }
+                    // fsync finalized CAS/target file for durability
+                    if let Ok(f) = afs::File::open(&target).await {
+                        let _ = f.sync_all().await;
+                    }
                     // cleanup sidecar meta on success
                     let _ = afs::remove_file(&meta_path).await;
                     // Write a sidecar manifest <id>.json alongside the model
@@ -2652,9 +2753,9 @@ impl ModelsService {
                     );
                     manifest.insert("provider".into(), Value::String(provider.clone()));
                     manifest.insert("verified".into(), Value::Bool(true));
-                    let _ = afs::write(
+                    let _ = crate::ext::io::save_json_file_async(
                         &manifest_path,
-                        serde_json::to_vec(&Value::Object(manifest)).unwrap_or_default(),
+                        &Value::Object(manifest),
                     )
                     .await;
                     // Update EWMA throughput based on observed bytes/time
