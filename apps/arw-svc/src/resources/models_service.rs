@@ -212,7 +212,7 @@ impl ModelsService {
             if block {
                 // Acquire and hold 'shrink' permits (wait until available)
                 for _ in 0..shrink {
-                    match sem.acquire_owned().await {
+                    match sem.clone().acquire_owned().await {
                         Ok(p) => {
                             held.push(p);
                             held_acquired += 1;
@@ -223,7 +223,7 @@ impl ModelsService {
             } else {
                 // Non-blocking shrink: grab as many permits as available and report pending
                 for _ in 0..shrink {
-                    match sem.try_acquire_owned() {
+                    match sem.clone().try_acquire_owned() {
                         Ok(p) => {
                             held.push(p);
                             held_acquired += 1;
@@ -1629,7 +1629,7 @@ impl ModelsService {
                             let s = cr.trim();
                             if let Some(rest) = s.strip_prefix("bytes ") {
                                 let parts: Vec<&str> = rest.split('/').collect();
-                                if let Some(range) = parts.get(0) {
+                                if let Some(range) = parts.first() {
                                     let mut it = range.split('-');
                                     if let (Some(start_s), Some(_end_s)) = (it.next(), it.next()) {
                                         if let Ok(start_off) = start_s.parse::<u64>() {

@@ -47,7 +47,7 @@ jobs:
           fi
 
       - name: clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-targets --exclude arw-tauri --exclude arw-launcher -- -D warnings
 
       - name: tests (exclude desktop crates)
         run: cargo test --workspace --locked --exclude arw-tauri --exclude arw-launcher

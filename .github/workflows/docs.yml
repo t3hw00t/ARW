@@ -2,6 +2,8 @@ name: Docs
 
 permissions:
   contents: write
+  pages: write
+  id-token: write
 
 on:
   push:
@@ -16,7 +18,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build-and-commit-site:
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -49,17 +51,36 @@ jobs:
       - name: Build docs (into ./site)
         run: mkdocs build --strict
 
-      - name: Commit updated site and spec to main
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Commit updated spec to main
         env:
           GIT_AUTHOR_NAME: github-actions[bot]
           GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
-          git add -f site spec || true
+          git add spec || true
           if ! git diff --cached --quiet; then
-            git commit -m "docs(site): update generated site and spec"
+            git commit -m "docs(spec): update generated spec"
             git push origin HEAD:main
           else
-            echo "No changes to commit"
+            echo "No spec changes to commit"
           fi
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
