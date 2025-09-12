@@ -6,8 +6,8 @@ title: Roadmap
 
 Updated: 2025-09-12
 
-See also: [Interface Roadmap](INTERFACE_ROADMAP.md)
-See [Interface Roadmap](INTERFACE_ROADMAP.md) for user-facing UI and tooling plans.
+See also: [Backlog](BACKLOG.md) and [Interface Roadmap](INTERFACE_ROADMAP.md).
+Roadmap highlights themes and timelines; Backlog tracks actionable items.
 
 ## Recently Shipped (Sep 2025)
 - Stability baseline (v0.1.0-beta): consolidation freeze, clippy-clean core, docs freeze checklist, CHANGELOG + release script.
@@ -26,35 +26,18 @@ See [Interface Roadmap](INTERFACE_ROADMAP.md) for user-facing UI and tooling pla
 
 ## Near‑Term (Weeks)
 - Stabilization window: limit to bug fixes, docs, tests, and internal cleanups; additive API changes only.
-- Self‑learning UI polish: apply buttons per suggestion with rationale + confidence; inline from Episodes.
-- ModelsService: migrate download worker into typed service (resume/cancel/checksum) with corr_id events. (done)
-- Resources: wrap policy/gating and models download lifecycle; move more subsystems behind typed services.
-- Persist hints/profile/suggestions to state; reload at startup; simple rollback.
-- Metrics polish: add p95 per route (light sliding window); highlight outliers in Insights. (done)
-- Models panel: download with progress; checksum verification; safe cancel; resume via HTTP Range. (done)
-- Security defaults: document token gating; add minimal rate‑limit for admin endpoints. (done)
-- Event journal reader endpoint (tail N); topic‑filtered consumers across workers/connectors. (next)
-- Remote access & TLS (planning):
-  - Caddy production profile with Let's Encrypt (HTTP‑01/DNS‑01) for public domains.
-  - Dev TLS profiles: mkcert‑backed and internal (self‑signed) for localhost.
-  - Reverse‑proxy templates (nginx/caddy) with quick run/stop helpers (in progress for local).
-  - Secrets handling: persist admin tokens only to local env files by default; avoid committing to configs.
-  - UX: wizards to pick domain/email, validate DNS reachability, and dry‑run cert issuance.
-- Cluster MVP (done): pluggable Queue/Bus with local default; NATS queue groups; inbound NATS→local bus aggregator.
-- Hierarchy foundation (done): local role/state + HTTP scaffolding for hello/offer/accept.
-- Gating Orchestrator (done): central keys, deny contracts (role/node/tags, time windows, auto-renew), ingress/egress guards.
-- Policy Capsules (done): wire format + header-based adoption (ephemeral, renegotiated on restart).
-- Docgen: gating keys listing + config schema and examples.
-- Docgen: surface route metrics/events in docs and status page.
-- Showcase readiness: polish docs, packaging, and installer paths.
+- Observability & Eventing: event journal tail/readers and metrics/docgen polish — see Backlog → Now.
+- Security & Remote Access: hashed tokens, per‑route gating, TLS profiles, proxy templates — see Backlog → Now.
+- State & Episodes: observations/beliefs/intents/actions stores; episodes with reactive UI — see Backlog → Now.
+- Services & Orchestration: hierarchy/governor services; queue leases and nack behavior — see Backlog → Now.
+- Specs & Interop: AsyncAPI + MCP artifacts and /spec/* serving — see Backlog → Now.
+- Docs & Showcase: gating keys docgen; packaging and installer polish — see Backlog → Next.
+ - UI coherence: universal right‑sidecar across Hub/Chat/Training; command palette
+ - Recipes MVP: schema + gallery + runner (local‑first, default‑deny permissions)
 
-Heuristic Feedback Engine (Lightweight, Near‑Live)
-- Engine crate: `arw-feedback` (actor + O(1) stats + deltas via bus).
-- Signals: EWMA latency, decayed error rate, tiny P² p95 per route; memory ring pressure; download stalls.
-- Evaluation: 250–500 ms ticks with cooldowns and bounds; suggestions only (manual apply default).
-- State: snapshot published atomically; debounce persistence into `orchestration.json`; audit events. (done)
-- APIs: reuse existing `/feedback/*`; optional `/feedback/updates?since=` delta feed; expose evaluate/apply as tools.
-- Safety: bounded queues/maps; drop/sample on overload; rate‑limit auto‑apply (opt‑in later, policy‑gated).
+## Heuristic Feedback Engine
+Scope: Lightweight, near‑live suggestions with guardrails.
+See Backlog → Now → Feedback Engine for concrete work items.
 
 ## Mid‑Term (1–2 Months)
 - UI app to manage various project types.
@@ -63,6 +46,7 @@ Heuristic Feedback Engine (Lightweight, Near‑Live)
 - Model orchestration: adapters (llama.cpp, ONNX Runtime) with pooling and profiles.
 - Capsules: record inputs/outputs/events/hints; export/import; deterministic replay.
 - Dataset & memory lab: local pipelines, tags, audits, and reproducible reports.
+ - Commons Kit: ship 5 public‑goods recipes with signed index and exportable memories.
 - Tests: feature‑gated HTTP oneshot tests; policy and capability contract tests.
 - AsyncAPI + MCP artifacts: generate `/spec/asyncapi.yaml` and `/spec/mcp-tools.json` in CI; serve `/spec/*` endpoints.
 - Policy hooks for feedback auto‑apply decisions (shadow mode → guarded auto).

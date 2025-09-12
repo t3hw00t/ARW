@@ -17,6 +17,22 @@ Updated: 2025-09-12
 - OS login autostart toggle
 - Single‑instance, window‑state persistence, notifications on service status changes
 
+## Where Tauri Fits
+
+- Local‑first control plane: a thin, cross‑platform shell that talks to the local ARW service over HTTP + SSE (or WS).
+- Unified eventing: use the service’s SSE as the source of truth for episodes/metrics; use Tauri’s event bridge for UI‑level progress/toasts only.
+- Security posture: adopt Tauri v2 capabilities/permissions to mirror ARW’s default‑deny policy model (fs/net/mic/cam/gpu/sandbox scopes).
+- Plugins for app plumbing: prefer official plugins (SQL, Store, Updater, WebSocket, Single‑Instance, Deep‑Link) to keep footprint small.
+
+Recommended approach
+- Keep business logic in the service; keep UI and small local caches in the Tauri app.
+- If SSE is unreliable on a platform/proxy, switch to the WebSocket plugin for the event stream.
+- Gate all OS integrations (tray, deep links, notifications, file pickers) behind explicit ARW policy prompts with TTL leases; reflect decisions in the sidecar.
+
+Known caveats (and patterns)
+- Camera/mic: WebView permission prompts can be sticky on Windows (WebView2). For hard guarantees and auditable leases, capture via a sidecar (ffmpeg/gstreamer) under ARW policy rather than in‑page getUserMedia.
+- Security model changes from v1 → v2: adopt capabilities/permissions from day one; avoid the deprecated v1 allowlist idioms.
+
 ## Build & Run
 
 ```bash
@@ -46,3 +62,11 @@ Using Nix: `nix develop` (devShell includes required libraries).
 - The legacy Rust tray (`apps/arw-tray`) is deprecated and not built by default; the launcher replaces it.
 - The launcher reads preferences from the user config dir (e.g., `~/.config/arw/prefs-launcher.json`).
 - Windows: on Windows 11, WebView2 Runtime is in-box; on Windows 10/Server you must install the Evergreen Runtime. Use `scripts/webview2.ps1` or Interactive Start → “WebView2 runtime (check/install)”. Server Core lacks desktop features; prefer “Server with Desktop Experience” for UI.
+
+## Hardening Checklist (Tauri)
+
+- Enforce a strict CSP; never load remote content.
+- Whitelist only the local service origin (host/port) for HTTP.
+- Define Tauri v2 capabilities/permissions to expose only required APIs; group them into named sets that mirror ARW policies.
+- Ship Single‑Instance and Updater; keep backend updates on their own cadence.
+- Persist only small UI caches via Store/SQL; keep authority in the service’s `/state/*` read‑models.

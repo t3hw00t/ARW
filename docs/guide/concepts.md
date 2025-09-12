@@ -19,6 +19,9 @@ Updated: 2025-09-12
 ## Event Bus
 - Lightweight in‑process bus publishes events (optionally journaling). SSE at `/events` for live streams and replays.
 
+Unified model
+- Treat ARW as a shared object graph (entities + relations) plus a single event stream. UIs (Project Hub, Chat, Training Park, Managers) are lenses on the same truth.
+
 ## Connectors, Connections, Links
 - Connectors are providers (HTTP/WS/MCP/local). Connections are configured instances. Links bind connections to services/routes.
 

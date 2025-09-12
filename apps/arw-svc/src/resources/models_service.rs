@@ -1,11 +1,10 @@
 use serde_json::{json, Value};
 
 use crate::app_state::AppState;
-use fs2;
 use futures_util::StreamExt;
 use once_cell::sync::OnceCell;
 use std::collections::{HashMap, HashSet};
-use tokio::sync::RwLock; // for available_space
+use tokio::sync::RwLock; // for cancel/active job tracking
 
 #[derive(Default)]
 pub struct ModelsService;
@@ -72,6 +71,24 @@ async fn emit_error(
     crate::ext::corr::ensure_corr(&mut payload);
     bus.publish("Models.DownloadProgress", &payload);
     crate::ext::io::audit_event("models.download.error", &payload).await;
+
+    // Reflect error status into models list to avoid "downloading" getting stuck.
+    {
+        let mut v = crate::ext::models().write().await;
+        if let Some(m) = v.iter_mut().find(|m| m.get("id").and_then(|s| s.as_str()) == Some(id)) {
+            if let Some(obj) = m.as_object_mut() {
+                obj.insert("status".into(), Value::String("error".into()));
+                obj.insert("error_code".into(), Value::String(code.to_string()));
+            }
+        }
+        // Persist models and notify change
+        let _ = crate::ext::io::save_json_file_async(
+            &crate::ext::paths::models_path(),
+            &Value::Array(v.clone()),
+        )
+        .await;
+    }
+    bus.publish("Models.Changed", &json!({"op":"error","id": id}));
 }
 
 #[cfg(test)]
@@ -126,6 +143,16 @@ mod tests {
     }
 
     #[test]
+    fn sanitize_file_name_long_extension_caps_length() {
+        // Extension longer than MAX_LEN should still be capped overall
+        let ext = "a".repeat(300);
+        let input = format!("name.{}", ext);
+        let s = ModelsService::sanitize_file_name(&input);
+        assert!(s.len() <= 120);
+        assert!(s.starts_with("name."));
+    }
+
+    #[test]
     fn filename_from_content_disposition() {
         assert_eq!(
             ModelsService::filename_from_content_disposition("attachment; filename=foo.bin"),
@@ -159,6 +186,22 @@ mod tests {
 impl ModelsService {
     pub fn new() -> Self {
         Self
+    }
+
+    // Whether to include budget snapshot in progress events (opt-in for compatibility).
+    fn progress_include_budget() -> bool {
+        matches!(
+            std::env::var("ARW_DL_PROGRESS_INCLUDE_BUDGET").ok().as_deref(),
+            Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("on")
+        )
+    }
+
+    // Whether to include disk stats in progress events (opt-in for compatibility).
+    fn progress_include_disk() -> bool {
+        matches!(
+            std::env::var("ARW_DL_PROGRESS_INCLUDE_DISK").ok().as_deref(),
+            Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("on")
+        )
     }
 
     fn idle_timeout_duration() -> Option<std::time::Duration> {
@@ -197,6 +240,34 @@ impl ModelsService {
             Some(v) => v.get("ewma_mbps").and_then(|x| x.as_f64()),
             None => None,
         }
+    }
+
+    // Write resume validators (ETag/Last-Modified) to sidecar for future resumption.
+    async fn save_resume_validators(
+        meta_path: &std::path::Path,
+        headers: &reqwest::header::HeaderMap,
+    ) {
+        use tokio::fs as afs;
+        let etag_val = headers
+            .get(reqwest::header::ETAG)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let lm_val = headers
+            .get(reqwest::header::LAST_MODIFIED)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        if etag_val.is_none() && lm_val.is_none() {
+            return;
+        }
+        let mut obj = serde_json::Map::new();
+        if let Some(e) = &etag_val {
+            obj.insert("etag".into(), Value::String(e.clone()));
+        }
+        if let Some(lm) = &lm_val {
+            obj.insert("last_modified".into(), Value::String(lm.clone()));
+        }
+        let _ = afs::write(meta_path, serde_json::to_vec(&Value::Object(obj)).unwrap_or_default())
+            .await;
     }
 
     async fn update_ewma_mbps(sample_mbps: f64) {
@@ -269,10 +340,24 @@ impl ModelsService {
         const MAX_LEN: usize = 120; // conservative to fit various filesystems
         if s.len() > MAX_LEN {
             if let Some(dot) = s.rfind('.') {
-                let (base, ext) = s.split_at(dot);
-                let keep_base = MAX_LEN.saturating_sub(ext.len());
-                let base_trunc = base.chars().take(keep_base).collect::<String>();
-                s = format!("{}{}", base_trunc, ext);
+                let (base, ext_with_dot) = s.split_at(dot);
+                let ext_no_dot = &ext_with_dot[1..];
+                // If the extension (without dot) is too long to fit,
+                // keep as much base as possible, then '.' and a truncated extension.
+                if 1 + ext_no_dot.chars().count() >= MAX_LEN {
+                    let base_keep = base.chars().count().min(MAX_LEN.saturating_sub(1));
+                    let ext_keep = MAX_LEN.saturating_sub(base_keep + 1);
+                    let base_trunc = base.chars().take(base_keep).collect::<String>();
+                    let ext_trunc = ext_no_dot.chars().take(ext_keep).collect::<String>();
+                    s = format!("{}.{}", base_trunc, ext_trunc);
+                } else {
+                    let keep_base = MAX_LEN.saturating_sub(ext_with_dot.len());
+                    let base_trunc = base.chars().take(keep_base).collect::<String>();
+                    s = format!("{}{}", base_trunc, ext_with_dot);
+                }
+                if s.len() > MAX_LEN {
+                    s = s.chars().take(MAX_LEN).collect();
+                }
             } else {
                 s = s.chars().take(MAX_LEN).collect();
             }
@@ -470,7 +555,7 @@ impl ModelsService {
         static DL_CANCEL: OnceCell<RwLock<HashSet<String>>> = OnceCell::new();
         DL_CANCEL.get_or_init(|| RwLock::new(HashSet::new()))
     }
-    async fn is_cancelled(job_id: &str) -> bool {
+    async fn is_canceled(job_id: &str) -> bool {
         Self::cancel_cell().read().await.contains(job_id)
     }
     async fn clear_cancel(job_id: &str) {
@@ -502,15 +587,27 @@ impl ModelsService {
         // Resolve current job for this model id; if present, cancel that job only
         if let Some(job) = Self::current_job_id(&id).await {
             Self::set_cancel(&job).await;
-            let mut p = json!({"id": id, "status":"cancel-requested"});
-            crate::ext::corr::ensure_corr(&mut p);
-            state.bus.publish("Models.DownloadProgress", &p);
+            let p = json!({"id": id, "status":"cancel-requested"});
+            emit_progress(
+                &state.bus,
+                &id,
+                Some("cancel-requested"),
+                Some("cancel-requested"),
+                None,
+                None,
+            );
             super::super::ext::io::audit_event("models.download.cancel", &p).await;
             return;
         }
-        let mut p = json!({"id": id, "status":"no-active-job"});
-        crate::ext::corr::ensure_corr(&mut p);
-        state.bus.publish("Models.DownloadProgress", &p);
+        let p = json!({"id": id, "status":"no-active-job"});
+        emit_progress(
+            &state.bus,
+            &id,
+            Some("no-active-job"),
+            Some("no-active-job"),
+            None,
+            None,
+        );
         super::super::ext::io::audit_event("models.download.cancel", &p).await;
     }
 
@@ -556,9 +653,15 @@ impl ModelsService {
             }
         }
         if already_in_progress {
-            let mut p = json!({"id": id_in, "status":"already-in-progress"});
-            crate::ext::corr::ensure_corr(&mut p);
-            state.bus.publish("Models.DownloadProgress", &p);
+            let p = json!({"id": id_in, "status":"already-in-progress"});
+            emit_progress(
+                &state.bus,
+                &id_in,
+                Some("already-in-progress"),
+                Some("already-in-progress"),
+                None,
+                None,
+            );
             return Ok(());
         }
         // Inputs validated above; proceed.
@@ -590,7 +693,7 @@ impl ModelsService {
                 &id_in,
                 Some("started"),
                 Some("started"),
-                Some(&dl_budget),
+                if Self::progress_include_budget() { Some(&dl_budget) } else { None },
                 None,
             );
         }
@@ -607,12 +710,7 @@ impl ModelsService {
         let max_bytes = Self::max_download_bytes();
         let sp = state.clone();
         let budget = dl_budget.clone();
-        let use_new = std::env::var("ARW_DL_NEW")
-            .map(|v| {
-                let s = v.to_ascii_lowercase();
-                s == "1" || s == "true" || s == "yes"
-            })
-            .unwrap_or(true);
+        // Always use the enhanced downloader path; legacy flag removed.
         // Guard to ensure bookkeeping cleanup on every exit path
         struct ActiveJobGuard {
             model_id: String,
@@ -651,8 +749,8 @@ impl ModelsService {
             // tmp is always based on initial name; final target may differ later
             let tmp = target_dir.join(&safe_name).with_extension("part");
             let mut target = target_dir.join(&final_name);
-            // sidecar metadata for resume validation
-            let meta = tmp.with_extension("part.meta");
+            // sidecar metadata path for resume validation
+            let meta_path = tmp.with_extension("part.meta");
             if let Err(e) = afs::create_dir_all(&target_dir).await {
                 emit_error(
                     &sp.bus,
@@ -675,12 +773,10 @@ impl ModelsService {
                 .build()
                 .unwrap_or_else(|_| reqwest::Client::new());
             let mut resume_from: u64 = 0;
-            if let Ok(meta) = afs::metadata(&tmp).await {
-                resume_from = meta.len();
+            if let Ok(md) = afs::metadata(&tmp).await {
+                resume_from = md.len();
             }
-            if !use_new {
-                resume_from = 0;
-            }
+            // resume_from is set from existing .part size when present
             // Initial send with small, budget-aware retry/backoff
             let max_attempts: u32 = std::env::var("ARW_DL_SEND_RETRIES")
                 .ok()
@@ -690,23 +786,18 @@ impl ModelsService {
             let resp_result = loop {
                 // Build a fresh request each attempt so we don't reuse a moved builder
                 let mut rq = client.get(&url);
-                if use_new {
-                    // Apply budget headers and per-request timeout from remaining hard budget.
-                    rq = budget.apply_to_request(rq);
-                    // If no hard budget configured, apply an idle timeout fallback
-                    if budget.hard_ms == 0 {
-                        if let Some(d) = Self::idle_timeout_duration() {
-                            rq = rq.timeout(d);
-                        }
+                // Apply budget headers and per-request timeout from remaining hard budget.
+                rq = budget.apply_to_request(rq);
+                // If no hard budget configured, apply an idle timeout fallback
+                if budget.hard_ms == 0 {
+                    if let Some(d) = Self::idle_timeout_duration() {
+                        rq = rq.timeout(d);
                     }
-                } else {
-                    // Legacy-ish default timeout
-                    rq = rq.timeout(std::time::Duration::from_secs(300));
                 }
                 if resume_from > 0 {
                     rq = rq.header(reqwest::header::RANGE, format!("bytes={}-", resume_from));
                     // Try If-Range with stored ETag/Last-Modified
-                    if let Ok(bytes) = afs::read(&meta).await {
+                    if let Ok(bytes) = afs::read(&meta_path).await {
                         if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&bytes) {
                             if let Some(etag) = val.get("etag").and_then(|v| v.as_str()) {
                                 rq = rq.header(reqwest::header::IF_RANGE, etag.to_string());
@@ -741,7 +832,7 @@ impl ModelsService {
                     let status = resp.status();
                     // Validate acceptable HTTP status for initial or ranged request
                     let ok_status = status.is_success()
-                        || (resume_from > 0 && status == axum::http::StatusCode::PARTIAL_CONTENT);
+                        || (resume_from > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT);
                     if !ok_status {
                         let extra = json!({"status": status.as_str()});
                         emit_error(
@@ -756,30 +847,7 @@ impl ModelsService {
                         return;
                     }
                     // capture validators for future resumes and parse Content-Disposition filename
-                    let etag_val = resp
-                        .headers()
-                        .get(reqwest::header::ETAG)
-                        .and_then(|v| v.to_str().ok())
-                        .map(|s| s.to_string());
-                    let lm_val = resp
-                        .headers()
-                        .get(reqwest::header::LAST_MODIFIED)
-                        .and_then(|v| v.to_str().ok())
-                        .map(|s| s.to_string());
-                    if etag_val.is_some() || lm_val.is_some() {
-                        let mut obj = serde_json::Map::new();
-                        if let Some(e) = &etag_val {
-                            obj.insert("etag".into(), Value::String(e.clone()));
-                        }
-                        if let Some(lm) = &lm_val {
-                            obj.insert("last_modified".into(), Value::String(lm.clone()));
-                        }
-                        let _ = afs::write(
-                            &meta,
-                            serde_json::to_vec(&Value::Object(obj)).unwrap_or_default(),
-                        )
-                        .await;
-                    }
+                    Self::save_resume_validators(&meta_path, resp.headers()).await;
                     if let Some(cd) = resp
                         .headers()
                         .get(reqwest::header::CONTENT_DISPOSITION)
@@ -794,21 +862,22 @@ impl ModelsService {
                         }
                     }
                     let total_all =
-                        if resume_from > 0 && status == axum::http::StatusCode::PARTIAL_CONTENT {
+                        if resume_from > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT {
                             let mut p = json!({"offset": resume_from});
-                            if let (Ok(av), Ok(tt)) = (
-                                fs2::available_space(&target_dir),
-                                fs2::total_space(&target_dir),
-                            ) {
-                                p["disk"] =
-                                    json!({"available": av, "total": tt, "reserve": reserve_bytes});
+                            if Self::progress_include_disk() {
+                                if let (Ok(av), Ok(tt)) = (
+                                    fs2::available_space(&target_dir),
+                                    fs2::total_space(&target_dir),
+                                ) {
+                                    p["disk"] = json!({"available": av, "total": tt, "reserve": reserve_bytes});
+                                }
                             }
                             emit_progress(
                                 &sp.bus,
                                 &id,
                                 Some("resumed"),
                                 Some("resumed"),
-                                Some(&budget),
+                                if Self::progress_include_budget() { Some(&budget) } else { None },
                                 Some(p),
                             );
                             resume_from + total_rem
@@ -970,26 +1039,40 @@ impl ModelsService {
                                             &id,
                                             Some("degraded"),
                                             Some("soft_exhausted"),
-                                            Some(&budget),
+                                            if Self::progress_include_budget() { Some(&budget) } else { None },
                                             Some(p),
                                         );
                                     }
                                 }
-                                if Self::is_cancelled(&job).await {
+                                if Self::is_canceled(&job).await {
                                     let _ = afs::remove_file(&tmp).await;
-                                    let _ = afs::remove_file(&meta).await;
+                                    let _ = afs::remove_file(&meta_path).await;
                                     emit_progress(
                                         &sp.bus,
                                         &id,
                                         Some("canceled"),
-                                        Some("cancelled_by_user"),
-                                        Some(&budget),
+                                        Some("canceled_by_user"),
+                                        if Self::progress_include_budget() { Some(&budget) } else { None },
                                         None,
                                     );
                                     let p2 = json!({"id": id, "status": "canceled"});
                                     crate::ext::io::audit_event("models.download.canceled", &p2)
                                         .await;
-                                    Self::clear_cancel(&job).await;
+                                    // Update models list to reflect cancellation
+                                    {
+                                        let mut v = crate::ext::models().write().await;
+                                        if let Some(m) = v.iter_mut().find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id)) {
+                                            if let Some(obj) = m.as_object_mut() {
+                                                obj.insert("status".into(), Value::String("canceled".into()));
+                                            }
+                                        }
+                                        let _ = crate::ext::io::save_json_file_async(
+                                            &crate::ext::paths::models_path(),
+                                            &Value::Array(v.clone()),
+                                        )
+                                        .await;
+                                    }
+                                    sp.bus.publish("Models.Changed", &json!({"op":"canceled","id": id}));
                                     return;
                                 }
                                 if let Err(e) = file.write_all(&bytes).await {
@@ -1011,7 +1094,7 @@ impl ModelsService {
                                 // Enforce max size during stream when total unknown
                                 if max_bytes > 0 && resume_from + downloaded > max_bytes {
                                     let _ = afs::remove_file(&tmp).await;
-                                    let _ = afs::remove_file(&meta).await;
+                                    let _ = afs::remove_file(&meta_path).await;
                                     let extra = json!({"downloaded": resume_from + downloaded, "max_bytes": max_bytes});
                                     emit_error(
                                         &sp.bus,
@@ -1031,7 +1114,7 @@ impl ModelsService {
                                     if let Ok(avail) = fs2::available_space(&target_dir) {
                                         if avail <= reserve_bytes.saturating_add(8 * 1024 * 1024) {
                                             let _ = afs::remove_file(&tmp).await;
-                                            let _ = afs::remove_file(&meta).await;
+                                            let _ = afs::remove_file(&meta_path).await;
                                             let extra = json!({"downloaded": resume_from + downloaded, "available": avail, "reserve": reserve_bytes});
                                             emit_error(
                                                 &sp.bus,
@@ -1044,27 +1127,47 @@ impl ModelsService {
                                             .await;
                                             return;
                                         }
-                                        // Emit lightweight heartbeat when total unknown
-                                        let mut p = json!({"id": id, "status":"downloading", "downloaded": resume_from + downloaded});
-                                        if let Ok(total) = fs2::total_space(&target_dir) {
-                                            p["disk"] = json!({"available": avail, "total": total, "reserve": reserve_bytes});
+                                        // Emit standardized heartbeat when total unknown
+                                        let mut extra = json!({"downloaded": resume_from + downloaded});
+                                        if Self::progress_include_disk() {
+                                            if let Ok(total) = fs2::total_space(&target_dir) {
+                                                extra["disk"] = json!({"available": avail, "total": total, "reserve": reserve_bytes});
+                                            }
                                         }
-                                        crate::ext::corr::ensure_corr(&mut p);
-                                        sp.bus.publish("Models.DownloadProgress", &p);
+                                        emit_progress(
+                                            &sp.bus,
+                                            &id,
+                                            Some("downloading"),
+                                            Some("downloading"),
+                                            if Self::progress_include_budget() { Some(&budget) } else { None },
+                                            Some(extra),
+                                        );
                                     }
                                 }
                                 if total_all > 0 {
                                     let pct =
                                         (((resume_from + downloaded) * 100) / total_all).min(100);
-                                    let mut p = json!({"id": id, "progress": pct, "downloaded": resume_from + downloaded, "total": total_all});
-                                    if let (Ok(av), Ok(tt)) = (
-                                        fs2::available_space(&target_dir),
-                                        fs2::total_space(&target_dir),
-                                    ) {
-                                        p["disk"] = json!({"available": av, "total": tt, "reserve": reserve_bytes});
+                                    let mut extra = json!({
+                                        "progress": pct,
+                                        "downloaded": resume_from + downloaded,
+                                        "total": total_all
+                                    });
+                                    if Self::progress_include_disk() {
+                                        if let (Ok(av), Ok(tt)) = (
+                                            fs2::available_space(&target_dir),
+                                            fs2::total_space(&target_dir),
+                                        ) {
+                                            extra["disk"] = json!({"available": av, "total": tt, "reserve": reserve_bytes});
+                                        }
                                     }
-                                    crate::ext::corr::ensure_corr(&mut p);
-                                    sp.bus.publish("Models.DownloadProgress", &p);
+                                    emit_progress(
+                                        &sp.bus,
+                                        &id,
+                                        Some("downloading"),
+                                        Some("progress"),
+                                        if Self::progress_include_budget() { Some(&budget) } else { None },
+                                        Some(extra),
+                                    );
                                 }
                             }
                             Err(e) => {
@@ -1086,7 +1189,7 @@ impl ModelsService {
                                         reqwest::header::RANGE,
                                         format!("bytes={}-", resume_from),
                                     );
-                                    if let Ok(bytes) = afs::read(&meta).await {
+                                    if let Ok(bytes) = afs::read(&meta_path).await {
                                         if let Ok(val) =
                                             serde_json::from_slice::<serde_json::Value>(&bytes)
                                         {
@@ -1110,23 +1213,73 @@ impl ModelsService {
                                     match rq.send().await {
                                         Ok(r2) => {
                                             let st = r2.status();
-                                            if st == axum::http::StatusCode::PARTIAL_CONTENT {
+                                            if st == reqwest::StatusCode::PARTIAL_CONTENT {
+                                                // Update resume validators from new response
+                                                let etag_val = r2
+                                                    .headers()
+                                                    .get(reqwest::header::ETAG)
+                                                    .and_then(|v| v.to_str().ok())
+                                                    .map(|s| s.to_string());
+                                                let lm_val = r2
+                                                    .headers()
+                                                    .get(reqwest::header::LAST_MODIFIED)
+                                                    .and_then(|v| v.to_str().ok())
+                                                    .map(|s| s.to_string());
+                                                if etag_val.is_some() || lm_val.is_some() {
+                                                    let mut obj = serde_json::Map::new();
+                                                    if let Some(e) = &etag_val {
+                                                        obj.insert("etag".into(), Value::String(e.clone()));
+                                                    }
+                                                    if let Some(lm) = &lm_val {
+                                                        obj.insert("last_modified".into(), Value::String(lm.clone()));
+                                                    }
+                                                    let _ = afs::write(
+                                                        &meta_path,
+                                                        serde_json::to_vec(&Value::Object(obj)).unwrap_or_default(),
+                                                    )
+                                                    .await;
+                                                }
                                                 let p = json!({"offset": resume_from});
                                                 emit_progress(
                                                     &sp.bus,
                                                     &id,
                                                     Some("resumed"),
                                                     Some("resumed"),
-                                                    Some(&budget),
+                                                    if Self::progress_include_budget() { Some(&budget) } else { None },
                                                     Some(p),
                                                 );
                                                 stream = r2.bytes_stream();
                                                 continue;
-                                            } else if st == axum::http::StatusCode::OK {
+                                            } else if st == reqwest::StatusCode::OK {
                                                 // Server ignored range; safest is to restart from zero
                                                 // Remove tmp and start fresh (but only if allowed by budget)
                                                 let _ = afs::remove_file(&tmp).await;
-                                                let _ = afs::remove_file(&meta).await; // meta no longer valid
+                                                let _ = afs::remove_file(&meta_path).await; // meta no longer valid
+                                                // Refresh validators from this new full response
+                                                let etag_val = r2
+                                                    .headers()
+                                                    .get(reqwest::header::ETAG)
+                                                    .and_then(|v| v.to_str().ok())
+                                                    .map(|s| s.to_string());
+                                                let lm_val = r2
+                                                    .headers()
+                                                    .get(reqwest::header::LAST_MODIFIED)
+                                                    .and_then(|v| v.to_str().ok())
+                                                    .map(|s| s.to_string());
+                                                if etag_val.is_some() || lm_val.is_some() {
+                                                    let mut obj = serde_json::Map::new();
+                                                    if let Some(e) = &etag_val {
+                                                        obj.insert("etag".into(), Value::String(e.clone()));
+                                                    }
+                                                    if let Some(lm) = &lm_val {
+                                                        obj.insert("last_modified".into(), Value::String(lm.clone()));
+                                                    }
+                                                    let _ = afs::write(
+                                                        &meta_path,
+                                                        serde_json::to_vec(&Value::Object(obj)).unwrap_or_default(),
+                                                    )
+                                                    .await;
+                                                }
                                                 match afs::File::create(&tmp).await {
                                                     Ok(f) => {
                                                         file = BufWriter::with_capacity(1 << 20, f);
@@ -1141,7 +1294,7 @@ impl ModelsService {
                                                             &id,
                                                             Some("resync"),
                                                             Some("resync"),
-                                                            Some(&budget),
+                                                            if Self::progress_include_budget() { Some(&budget) } else { None },
                                                             None,
                                                         );
                                                         stream = r2.bytes_stream();
@@ -1223,7 +1376,19 @@ impl ModelsService {
                             // resumed: compute from file on disk
                             let mut f = match afs::File::open(&tmp).await {
                                 Ok(f) => f,
-                                Err(_) => {
+                                Err(e) => {
+                                    // Could not open temp file to verify checksum
+                                    let _ = afs::remove_file(&tmp).await;
+                                    let _ = afs::remove_file(&meta_path).await;
+                                    emit_error(
+                                        &sp.bus,
+                                        &id,
+                                        "verify_open_failed",
+                                        &format!("verify open failed: {}", e),
+                                        Some(&budget),
+                                        None,
+                                    )
+                                    .await;
                                     return;
                                 }
                             };
@@ -1233,7 +1398,21 @@ impl ModelsService {
                                 match tokio::io::AsyncReadExt::read(&mut f, &mut buf).await {
                                     Ok(0) => break,
                                     Ok(n) => h.update(&buf[..n]),
-                                    Err(_) => break,
+                                    Err(e) => {
+                                        // Read failed during verification; abort and clean up
+                                        let _ = afs::remove_file(&tmp).await;
+                                        let _ = afs::remove_file(&meta_path).await;
+                                        emit_error(
+                                            &sp.bus,
+                                            &id,
+                                            "verify_read_failed",
+                                            &format!("verify read failed: {}", e),
+                                            Some(&budget),
+                                            None,
+                                        )
+                                        .await;
+                                        return;
+                                    }
                                 }
                             }
                             format!("{:x}", h.finalize())
@@ -1291,7 +1470,7 @@ impl ModelsService {
                         }
                     }
                     // cleanup sidecar meta on success
-                    let _ = afs::remove_file(&meta).await;
+                    let _ = afs::remove_file(&meta_path).await;
                     // Write a sidecar manifest <id>.json alongside the model
                     let manifest_path =
                         target_dir.join(format!("{}.json", Self::sanitize_file_name(&id)));
@@ -1331,14 +1510,30 @@ impl ModelsService {
                         }
                     }
                     let mut p = json!({"id": id, "status":"complete", "file": final_name, "provider": provider});
-                    if let (Ok(av), Ok(tt)) = (
-                        fs2::available_space(&target_dir),
-                        fs2::total_space(&target_dir),
-                    ) {
-                        p["disk"] = json!({"available": av, "total": tt, "reserve": reserve_bytes});
+                    if Self::progress_include_disk() {
+                        if let (Ok(av), Ok(tt)) = (
+                            fs2::available_space(&target_dir),
+                            fs2::total_space(&target_dir),
+                        ) {
+                            p["disk"] = json!({"available": av, "total": tt, "reserve": reserve_bytes});
+                        }
                     }
-                    crate::ext::corr::ensure_corr(&mut p);
-                    sp.bus.publish("Models.DownloadProgress", &p);
+                    // Emit standardized completion event
+                    let mut extra = p.clone();
+                    // extra already contains id/status/file/provider and maybe disk; remove id/status to avoid duplication in payload
+                    if let Some(obj) = extra.as_object_mut() {
+                        obj.remove("id");
+                        obj.remove("status");
+                    }
+                    emit_progress(
+                        &sp.bus,
+                        &id,
+                        Some("complete"),
+                        Some("complete"),
+                        if Self::progress_include_budget() { Some(&budget) } else { None },
+                        Some(extra),
+                    );
+                    // Audit completion with full object
                     crate::ext::io::audit_event("models.download.complete", &p).await;
                     {
                         let mut v = crate::ext::models().write().await;

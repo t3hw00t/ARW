@@ -77,12 +77,12 @@ try {
     Write-Host 'On Windows 11 it is in-box. You can install the Evergreen Runtime now.' -ForegroundColor Yellow
     if ($Yes) {
       $ok = Install-WebView2Runtime -Silent
-      if ($ok) { Info 'WebView2 installed.' } else { Warn 'WebView2 install failed or was cancelled.' }
+      if ($ok) { Info 'WebView2 installed.' } else { Warn 'WebView2 install failed or was canceled.' }
     } else {
       $ans = Read-Host 'Install WebView2 Runtime now? (y/N)'
       if ($ans -match '^[yY]') {
         $ok = Install-WebView2Runtime
-        if ($ok) { Info 'WebView2 installed.' } else { Warn 'WebView2 install failed or was cancelled.' }
+        if ($ok) { Info 'WebView2 installed.' } else { Warn 'WebView2 install failed or was canceled.' }
       }
     }
   }

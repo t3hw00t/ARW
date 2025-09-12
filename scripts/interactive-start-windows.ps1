@@ -91,7 +91,7 @@ function Start-ServiceOnly {
   if (-not (Test-Path $svc) -and -not (Get-Command cargo -ErrorAction SilentlyContinue)) {
     Warn 'Service binary missing and Rust not installed. Run Setup → Dependencies → Install Rust.'
   }
-  if (-not (Security-Preflight)) { Warn 'Start cancelled'; return }
+  if (-not (Security-Preflight)) { Warn 'Start canceled'; return }
   $svcArgs = @('-Port', $Port, '-TimeoutSecs', 20)
   if ($Debug) { $svcArgs += '-Debug' }
   if ($DocsUrl) { $svcArgs += @('-DocsUrl', $DocsUrl) }
@@ -114,7 +114,7 @@ function Start-TrayPlusService {
   if ($DocsUrl) { $svcArgs += @('-DocsUrl', $DocsUrl) }
   if ($AdminToken) { $svcArgs += @('-AdminToken', $AdminToken) }
   if ($UseDist) { $svcArgs += '-UseDist' }
-  if (-not (Security-Preflight)) { Warn 'Start cancelled'; return }
+  if (-not (Security-Preflight)) { Warn 'Start canceled'; return }
   if ($WaitHealth) { $svcArgs += @('-WaitHealth','-WaitHealthTimeoutSecs', $WaitHealthTimeoutSecs) }
   & (Join-Path $PSScriptRoot 'start.ps1') @svcArgs
   $tray = Join-Path $root 'target\release\arw-tray.exe'

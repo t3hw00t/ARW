@@ -86,7 +86,7 @@ env_args() {
 
 start_service_only() {
   ic_section "Start: service only"
-  if ! security_preflight; then ic_warn "Start cancelled"; return; fi
+  if ! security_preflight; then ic_warn "Start canceled"; return; fi
   ARW_NO_TRAY=1 ARW_PORT="$PORT" ARW_DOCS_URL="$DOCS_URL" ARW_ADMIN_TOKEN="$ADMIN_TOKEN" \
   ARW_CONFIG="$CFG_PATH" ARW_PID_FILE="$PID_FILE" ARW_LOG_FILE="$LOGS_DIR/arw-svc.out.log" \
   bash "$DIR/start.sh" $(env_args | xargs) || true
@@ -94,7 +94,7 @@ start_service_only() {
 
 start_tray_plus_service() {
   ic_section "Start: tray + service"
-  if ! security_preflight; then ic_warn "Start cancelled"; return; fi
+  if ! security_preflight; then ic_warn "Start canceled"; return; fi
   ARW_PORT="$PORT" ARW_DOCS_URL="$DOCS_URL" ARW_ADMIN_TOKEN="$ADMIN_TOKEN" \
   ARW_CONFIG="$CFG_PATH" ARW_PID_FILE="$PID_FILE" ARW_LOG_FILE="$LOGS_DIR/arw-svc.out.log" \
   bash "$DIR/start.sh" $(env_args | xargs) || true

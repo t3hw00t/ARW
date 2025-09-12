@@ -886,7 +886,7 @@ async fn models_download(
                 while let Some(chunk) = stream.next().await {
                     match chunk {
                         Ok(bytes) => {
-                            if is_cancelled(&id).await {
+                            if is_canceled(&id).await {
                                 let _ = afs::remove_file(&tmp).await;
                                 let mut p = json!({"id": id, "status":"canceled"});
                                 crate::ext::corr::ensure_corr(&mut p);
@@ -997,7 +997,7 @@ static DL_CANCEL: OnceLock<RwLock<HashSet<String>>> = OnceLock::new();
 fn cancel_cell() -> &'static RwLock<HashSet<String>> {
     DL_CANCEL.get_or_init(|| RwLock::new(HashSet::new()))
 }
-async fn is_cancelled(id: &str) -> bool {
+async fn is_canceled(id: &str) -> bool {
     cancel_cell().read().await.contains(id)
 }
 async fn clear_cancel(id: &str) {

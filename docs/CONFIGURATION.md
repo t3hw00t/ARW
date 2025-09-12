@@ -48,7 +48,7 @@ Defaults
 - `ARW_DL_STREAM_RETRIES`: stream read retries (resume with Range) before failing (default `2`).
 - `ARW_DL_IDLE_TIMEOUT_SECS`: idle fallback timeout when no hard budget is set (default `300`; set `0` to disable).
 - `ARW_DL_EWMA_ALPHA`: smoothing factor for throughput EWMA used in admission decisions (default `0.3`).
-- `ARW_DL_NEW`: feature flag for the enhanced downloader path (`1/true/yes` enable; default enabled).
+The enhanced downloader path is always enabled; the legacy `ARW_DL_NEW` flag has been removed to reduce maintenance overhead.
 
 ## Hardware Probes & Metrics
 - `ARW_ROCM_SMI`: `1` enables ROCm SMI enrichment for AMD GPU metrics on Linux (best‑effort).

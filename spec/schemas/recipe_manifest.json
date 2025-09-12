@@ -1,0 +1,91 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/t3hw00t/Agent_Hub/spec/schemas/recipe_manifest.json",
+  "title": "AgentRecipeManifest",
+  "type": "object",
+  "required": ["id", "name", "version", "prompts", "tools", "permissions"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9-_.]+$" },
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "type": "string" },
+    "model": {
+      "type": "object",
+      "properties": {
+        "preferred": { "type": "string" },
+        "fallback": { "type": ["string", "null"], "default": null }
+      },
+      "additionalProperties": false,
+      "required": ["preferred"]
+    },
+    "permissions": {
+      "type": "object",
+      "additionalProperties": {
+        "type": ["string", "object"],
+        "oneOf": [
+          { "enum": ["ask", "allow", "never"] },
+          {
+            "type": "object",
+            "properties": {
+              "mode": { "enum": ["ask", "allow", "never"] },
+              "ttl_secs": { "type": "integer", "minimum": 0 }
+            },
+            "required": ["mode"],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "form_from_schema": { "type": "boolean", "default": true },
+        "review_required": { "type": "boolean", "default": true }
+      },
+      "additionalProperties": false
+    },
+    "prompts": {
+      "type": "object",
+      "properties": {
+        "system": { "type": "string" },
+        "user_template": { "type": ["string", "null"], "default": null }
+      },
+      "required": ["system"],
+      "additionalProperties": false
+    },
+    "tools": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": { "type": "string" },
+          "params": { "type": ["object", "null"], "default": null }
+        },
+        "required": ["id"],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    },
+    "workflows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "step": { "type": "string" },
+          "tool": { "type": "string" },
+          "params": { "type": ["object", "null"], "default": null }
+        },
+        "required": ["step", "tool"],
+        "additionalProperties": false
+      },
+      "default": []
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "notes": { "type": ["string", "null"], "default": null }
+  },
+  "additionalProperties": false
+}
+

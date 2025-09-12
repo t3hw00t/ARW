@@ -62,7 +62,7 @@ Schema notes (best effort):
 - Always includes: `id`.
 - Progress: `progress` (0–100), `downloaded`, `total` (optional).
 - Status: `status` (e.g., started, resumed, downloading, degraded, complete, canceled).
-- Codes: `code` provides a stable machine hint for complex statuses (e.g., `admission_denied`, `hard_exhausted`, `disk_insufficient`, `size_limit(_stream)`, `checksum_mismatch`).
+- Codes: `code` provides a stable machine hint for complex statuses (e.g., `admission_denied`, `hard_exhausted`, `disk_insufficient`, `size_limit(_stream)`, `checksum_mismatch`, `canceled_by_user`).
 - Budget snapshot: `budget` object with `soft_ms`, `hard_ms`, `spent_ms`, `remaining_*` when available.
 - Disk snapshot: `disk` object `{available,total,reserve}` when available.
 

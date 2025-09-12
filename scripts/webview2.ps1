@@ -59,7 +59,7 @@ function WebView2-Menu {
     '1' {
       try {
         $ok = Install-WebView2Runtime
-        if ($ok) { Write-Host '[webview2] Installed.' -ForegroundColor DarkCyan } else { Write-Warning 'Install failed or cancelled.' }
+        if ($ok) { Write-Host '[webview2] Installed.' -ForegroundColor DarkCyan } else { Write-Warning 'Install failed or canceled.' }
       } catch { Write-Warning 'Install failed' }
     }
     default { }

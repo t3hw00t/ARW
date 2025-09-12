@@ -45,6 +45,7 @@ Docs style
 - User docs: short, friendly, mildly technical.
 - Developer docs: precise, with file paths and commands.
 - Use callouts sparingly and let whitespace breathe.
+ - Language: Use US English (American). Examples: canceled (not cancelled), color (not colour), disk (not disc).
 
 Docs lint checklist
 - Front‑matter `title:` set and a single `#` H1 matching it.

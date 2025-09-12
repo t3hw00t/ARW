@@ -1,0 +1,29 @@
+id: paperwork-helper
+name: Paperwork Helper
+version: 1.0.0
+model:
+  preferred: "local:llama-3.1-8B-instruct"
+  fallback: "remote:gpt-4o-mini"
+permissions:
+  file.read: ask
+  file.write: ask
+  net.http: never
+  shell.exec: never
+ui:
+  form_from_schema: true
+  review_required: true
+prompts:
+  system: |
+    You assist with form-filling. Never submit anything. Show a diff for every change.
+tools:
+  - id: ocr_pdf
+  - id: fill_pdf_form
+  - id: summarize_text
+workflows:
+  - step: "Extract text"
+    tool: ocr_pdf
+  - step: "Propose filled form"
+    tool: fill_pdf_form
+  - step: "Summarize differences for review"
+    tool: summarize_text
+
