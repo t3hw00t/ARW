@@ -11,7 +11,11 @@ on:
 jobs:
   analyze:
     name: Analyze (CodeQL)
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, ubuntu-24.04]
     permissions:
       actions: read
       contents: read
