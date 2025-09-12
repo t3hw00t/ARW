@@ -1159,6 +1159,25 @@ components:
       properties:
         enabled:
           type: boolean
+    BudgetOverrideReq:
+      type: object
+      properties:
+        class:
+          type:
+          - string
+          - 'null'
+        hard_ms:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        soft_ms:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
     CancelReq:
       type: object
       required:
@@ -1266,7 +1285,12 @@ components:
       required:
       - id
       - url
+      - sha256
       properties:
+        budget:
+          oneOf:
+          - type: 'null'
+          - $ref: '#/components/schemas/BudgetOverrideReq'
         id:
           type: string
         provider:
@@ -1274,9 +1298,7 @@ components:
           - string
           - 'null'
         sha256:
-          type:
-          - string
-          - 'null'
+          type: string
         url:
           type: string
     EnqueueReq:
@@ -1342,6 +1364,16 @@ components:
           type:
           - integer
           - 'null'
+          minimum: 0
+        mode:
+          type:
+          - string
+          - 'null'
+        slo_ms:
+          type:
+          - integer
+          - 'null'
+          format: int64
           minimum: 0
     ModelId:
       type: object
