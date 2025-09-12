@@ -93,6 +93,33 @@ pub async fn on_event(env: &Envelope) {
         }
         beliefs_ver().fetch_add(1, Ordering::Relaxed);
     }
+    // Logic Units: rolling list of unit events
+    if env.kind.starts_with("LogicUnit.") {
+        let mut q = logic_units().write().unwrap();
+        if q.len() == q.capacity() {
+            let _ = q.pop_front();
+        }
+        q.push_back(json!({"time": env.time, "kind": env.kind, "payload": env.payload}));
+    }
+    // Experiments: rolling list of experiment events
+    if env.kind.starts_with("Experiment.") {
+        let mut q = experiments().write().unwrap();
+        if q.len() == q.capacity() {
+            let _ = q.pop_front();
+        }
+        q.push_back(json!({"time": env.time, "kind": env.kind, "payload": env.payload}));
+    }
+    // Runtime matrix: keep last health per target/id when provided
+    if env.kind == "Runtime.Health" {
+        let mut m = runtime_matrix().write().unwrap();
+        let key = env
+            .payload
+            .get("target")
+            .and_then(|v| v.as_str())
+            .unwrap_or("runtime")
+            .to_string();
+        m.insert(key, env.payload.clone());
+    }
     // Intents: rolling list of generic Intents.* events
     if env.kind.starts_with("Intents.") {
         let mut q = intents().write().unwrap();
@@ -219,4 +246,92 @@ pub async fn episodes_get() -> impl IntoResponse {
         }
     }
     super::ok(json!({"items": items}))
+}
+
+// -------- Logic Units / Experiments / Runtime Matrix / Policy leases --------
+
+static LOGIC_UNITS: OnceCell<RwLock<VecDeque<serde_json::Value>>> = OnceCell::new();
+fn logic_units() -> &'static RwLock<VecDeque<serde_json::Value>> {
+    LOGIC_UNITS.get_or_init(|| RwLock::new(VecDeque::with_capacity(128)))
+}
+
+static EXPERIMENTS: OnceCell<RwLock<VecDeque<serde_json::Value>>> = OnceCell::new();
+fn experiments() -> &'static RwLock<VecDeque<serde_json::Value>> {
+    EXPERIMENTS.get_or_init(|| RwLock::new(VecDeque::with_capacity(128)))
+}
+
+static RUNTIME_MATRIX: OnceCell<RwLock<HashMap<String, serde_json::Value>>> = OnceCell::new();
+fn runtime_matrix() -> &'static RwLock<HashMap<String, serde_json::Value>> {
+    RUNTIME_MATRIX.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+static POLICY_LEASES: OnceCell<RwLock<Vec<serde_json::Value>>> = OnceCell::new();
+fn policy_leases() -> &'static RwLock<Vec<serde_json::Value>> {
+    POLICY_LEASES.get_or_init(|| RwLock::new(Vec::new()))
+}
+
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/logic_units",
+    summary = "Recent Logic Unit events"
+)]
+pub async fn logic_units_get() -> impl IntoResponse {
+    let s: Vec<_> = logic_units().read().unwrap().iter().cloned().collect();
+    super::ok(json!({"items": s}))
+}
+
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/experiments",
+    summary = "Recent experiment events"
+)]
+pub async fn experiments_get() -> impl IntoResponse {
+    let s: Vec<_> = experiments().read().unwrap().iter().cloned().collect();
+    super::ok(json!({"items": s}))
+}
+
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/runtime_matrix",
+    summary = "Current runtime matrix snapshot"
+)]
+pub async fn runtime_matrix_get() -> impl IntoResponse {
+    let s = runtime_matrix().read().unwrap().clone();
+    super::ok(json!({"items": s}))
+}
+
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/policy",
+    summary = "Active policy leases (capabilities)"
+)]
+pub async fn policy_state_get() -> impl IntoResponse {
+    let s = policy_leases().read().unwrap().clone();
+    super::ok(json!({"leases": s}))
+}
+
+// Snapshot of an episode (by corr_id)
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/episode/:id/snapshot",
+    summary = "Episode snapshot for reproducibility"
+)]
+pub async fn episode_snapshot_get(axum::extract::Path(id): axum::extract::Path<String>) -> impl IntoResponse {
+    let map = episodes_map().read().unwrap();
+    if let Some(ep) = map.get(&id) {
+        // Build a minimal snapshot; future: include effective config/model hashes, active units, etc.
+        let first_ts = ep.items.first().map(|e| e.time.clone()).unwrap_or_default();
+        let last_ts = ep.items.last().map(|e| e.time.clone()).unwrap_or_default();
+        return super::ok(json!({
+            "id": ep.id,
+            "started": first_ts,
+            "ended": last_ts,
+            "items": ep.items,
+            "effective_config": {
+                "logic_units": [],
+                "notes": "snapshot schema will evolve; this is a stub"
+            }
+        }));
+    }
+    super::ok(json!({"error": "not_found"}))
 }

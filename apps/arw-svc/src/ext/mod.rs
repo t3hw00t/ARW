@@ -310,6 +310,14 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/state/intents", get(state_api::intents_get))
         .route("/state/actions", get(state_api::actions_get))
         .route("/state/episodes", get(state_api::episodes_get))
+        .route("/state/logic_units", get(state_api::logic_units_get))
+        .route("/state/experiments", get(state_api::experiments_get))
+        .route("/state/runtime_matrix", get(state_api::runtime_matrix_get))
+        .route(
+            "/state/episode/:id/snapshot",
+            get(state_api::episode_snapshot_get),
+        )
+        .route("/state/policy", get(state_api::policy_state_get))
         .route("/projects/list", get(projects::projects_list))
         .route("/projects/create", post(projects::projects_create))
         .route("/projects/tree", get(projects::projects_tree))

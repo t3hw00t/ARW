@@ -1,0 +1,14 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "EpisodeSnapshot",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "started": { "type": "string", "format": "date-time" },
+    "ended": { "type": "string", "format": "date-time" },
+    "items": { "type": "array" },
+    "effective_config": { "type": "object", "additionalProperties": true }
+  },
+  "additionalProperties": true
+}
+

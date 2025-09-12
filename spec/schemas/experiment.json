@@ -1,0 +1,18 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Experiment",
+  "type": "object",
+  "properties": {
+    "id": { "type": "string" },
+    "name": { "type": "string" },
+    "variants": {
+      "type": "array",
+      "items": { "type": "string" },
+      "default": []
+    },
+    "status": { "type": "string", "enum": ["planned", "running", "completed", "error"] },
+    "metrics": { "type": "object", "additionalProperties": true }
+  },
+  "additionalProperties": true
+}
+

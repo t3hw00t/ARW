@@ -28,6 +28,16 @@ Logic Units (High Priority)
 - A/B dry‑run pipeline wired to Evaluation Harness; per‑unit metrics panel
 - Research Watcher: ingest feeds; draft config‑only units; Suggested tab source
 
+Last‑mile Structures
+- Config Patch Engine: dry‑run/apply/revert endpoints; schema validation; audited permission widening
+- Experiment Orchestrator: start/stop/assign; emit Experiment.*; fold to `/state/experiments`
+- Provenance/Snapshots: enrich `/state/episode/{id}/snapshot` with effective config (units, params, model hash, policies)
+- AppSec Harness: seed tests; surface violations as `Policy.Decision` events; block unsafe tool I/O
+- Observability (OTel): map timeline to traces (corr_id as trace); correlate metrics/logs
+- Compliance Mode: workspace switch; record‑keeping + approvals; UI status widget
+- Supply‑Chain Trust: signed manifests, SBOMs, sandbox defaults; align desktop capabilities with policies
+- Scheduler/Governor: fair queues, preemption, backpressure, kill‑switch; policy‑aware
+
 Security & Admin
 - Admin auth hardening — hashed tokens + per‑token/IP sliding rate‑limit [t-250911230312-0863]
 - Per‑route gating layers; slim global admin middleware [t-250911230252-9858]

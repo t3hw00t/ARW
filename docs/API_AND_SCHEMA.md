@@ -197,3 +197,14 @@ stability=deprecated; maintain ≥2 minor releases; emit Deprecation header with
 ## Extensibility
 
 Third-party plugins (Rust or WASI) use #[arw_tool]; once linked, they appear in all surfaces (policy-gated).
+## Read‑Models (New)
+
+GET /state/logic_units
+
+GET /state/experiments
+
+GET /state/runtime_matrix
+
+GET /state/episode/{id}/snapshot
+
+GET /state/policy

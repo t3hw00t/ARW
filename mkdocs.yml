@@ -30,6 +30,14 @@ nav:
       - Unified Object Graph: architecture/object_graph.md
       - Events Vocabulary: architecture/events_vocabulary.md
       - Logic Units: architecture/logic_units.md
+      - Config Patch Engine: architecture/config_patch_engine.md
+      - Experiment Orchestrator: architecture/experiment_orchestrator.md
+      - Observability (OTel): architecture/observability_otel.md
+      - AppSec Harness: architecture/appsec_harness.md
+      - Compliance Mode: architecture/compliance_mode.md
+      - Supply‑Chain Trust: architecture/supply_chain_trust.md
+      - Scheduler & Governor: architecture/scheduler_governor.md
+      - Durability & Offline: architecture/durability.md
       - Identity & Tenancy: architecture/identity_tenancy.md
       - Capability & Consent Ledger: architecture/capability_consent_ledger.md
       - Artifacts & Provenance: architecture/artifacts_provenance.md

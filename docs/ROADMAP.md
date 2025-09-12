@@ -79,3 +79,9 @@ See Backlog → Now → Feedback Engine for concrete work items.
 - Local‑first, open, privacy‑respecting, and comprehensible.
 - Calm defaults; explicit opt‑in for power features.
 - One truth for schemas & keys (central registry); reproducibility over hype.
+
+## MVP Acceptance Checks
+- Logic Units: install/apply/revert with diff preview; events visible; snapshot records active units.
+- Read‑models: `/state/logic_units`, `/state/experiments`, `/state/runtime_matrix`, `/state/episode/{id}/snapshot` respond.
+- Evaluation: A/B dry‑run flow produces metrics and renders in UI.
+- Policy: permission prompts surface as leases; visible in sidecar and `/state/policy`.
