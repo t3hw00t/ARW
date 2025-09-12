@@ -65,6 +65,7 @@
           <button id="btn-cancel">Cancel</button>
         </div>
         <div id="dlprog" class="mono dim"></div>
+        <div id="dlbars"></div>
       </div>
 
       <div>
@@ -161,6 +162,18 @@
         if (!id) return;
         await ivk('models_download_cancel', { id, port: port() });
       }
+      function ensureBar(id){
+        const bars = document.getElementById('dlbars');
+        let row = bars.querySelector(`[data-row="${id}"]`);
+        if(!row){
+          row = document.createElement('div');
+          row.setAttribute('data-row', id);
+          row.innerHTML = `<div class="mono">${id}</div><div class="bar"><i data-bar></i></div><div class="mono dim" data-text></div>`;
+          bars.appendChild(row);
+        }
+        return row;
+      }
+      function removeBar(id){ const bars=document.getElementById('dlbars'); const row=bars.querySelector(`[data-row="${id}"]`); if(row) bars.removeChild(row); }
       function sse() {
         const p = port() || 8090;
         const es = new EventSource(ARW.base(p) + '/events?prefixes=Models.');
@@ -169,7 +182,10 @@
             const j = JSON.parse(ev.data);
             if (j.kind && j.kind.startsWith('Models.')) {
               if (j.kind === 'Models.DownloadProgress') {
-                document.getElementById('dlprog').textContent = JSON.stringify(j.payload, null, 2);
+                const pl = j.payload || {};
+                document.getElementById('dlprog').textContent = JSON.stringify(pl, null, 2);
+                const id = pl.id || '';
+                if (id){ const row=ensureBar(id); const bar=row.querySelector('[data-bar]'); const txt=row.querySelector('[data-text]'); const pct=pl.progress||0; if(bar) bar.style.width=(pct||0)+'%'; if(txt) txt.textContent = pct? `${pl.downloaded||0}/${pl.total||0} (${pct}%)` : (pl.status||''); if(pl.status==='complete'){ setTimeout(async()=>{ await refresh(); const list=await ivk('models_list',{port:port()}); const found=(list||[]).find(mm=>mm.id===id); if(found&&found.path){ try{ await ivk('open_path',{path:found.path}); }catch(e){} } removeBar(id); }, 250);} }
                 try{
                   const pl = j.payload || {};
                   if (pl.status === 'complete' && pl.id) {

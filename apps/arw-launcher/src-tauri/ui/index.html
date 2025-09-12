@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ARW Launcher</title>
     <style>
+      :root{ --copper:#b87333; --teal:#1bb3a3; --line:#ddd }
       html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
       .wrap { display: flex; height: 100%; align-items: center; justify-content: center; }
       .card { padding: 24px; border: 1px solid #ddd; border-radius: 12px; max-width: 560px; }
@@ -13,13 +14,17 @@
       button:hover { background: #f0f0f0; }
       .ok { color: #0a0; }
       .bad { color: #a00; }
+      .badge { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid var(--line); border-radius:999px; font-size:12px; }
+      .dot { width:8px; height:8px; border-radius:999px; background:#aaa; display:inline-block }
+      .dot.ok{ background: var(--teal) }
+      .dot.bad{ background: #a00 }
     </style>
   </head>
   <body>
     <script src="common.js"></script>
     <div class="wrap">
       <div class="card">
-        <h2>ARW Launcher</h2>
+        <h2>ARW Launcher <span class="badge"><span class="dot" id="svc-dot"></span><span id="svc-text">unknown</span></span></h2>
         <p>Use the tray to start/stop the service or open the Debug UI.</p>
         <div class="row">
           <label>Port: <input id="port" type="number" min="1" max="65535" value="8090" style="width: 90px"/></label>
@@ -84,6 +89,23 @@
           el.className = 'bad';
         }
       });
+      async function pollHealth(){
+        const dot = document.getElementById('svc-dot');
+        const txt = document.getElementById('svc-text');
+        const start = document.getElementById('btn-start');
+        const stop = document.getElementById('btn-stop');
+        try{
+          const up = await invoke('check_service_health', { port: getPort() });
+          txt.textContent = up ? 'online' : 'offline';
+          dot.className = 'dot ' + (up?'ok':'bad');
+          if (start) start.disabled = up; if (stop) stop.disabled = !up;
+        }catch{
+          txt.textContent = 'unknown'; dot.className = 'dot';
+          if (start) start.disabled = false; if (stop) stop.disabled = true;
+        }
+      }
+      setInterval(pollHealth, 3000);
+      pollHealth();
       document.getElementById('btn-open-window').addEventListener('click', async () => {
         try { await invoke('open_debug_window', { port: getPort() }); } catch (e) { console.error(e); }
       });

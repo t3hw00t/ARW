@@ -662,6 +662,14 @@ async fn probe_hw(State(state): State<AppState>) -> impl IntoResponse {
 
     // GPUs (best-effort)
     let gpus = probe_gpus_best_effort();
+    #[cfg(feature = "gpu_wgpu")]
+    let gpus_wgpu = probe_gpus_wgpu();
+    #[cfg(not(feature = "gpu_wgpu"))]
+    let gpus_wgpu: Vec<serde_json::Value> = Vec::new();
+    #[cfg(feature = "gpu_nvml")]
+    let gpus_nvml = probe_gpu_nvml();
+    #[cfg(not(feature = "gpu_nvml"))]
+    let gpus_nvml: Vec<serde_json::Value> = Vec::new();
 
     let out = serde_json::json!({
         "cpu": {"brand": cpu_brand, "logical": cpus_logical, "physical": cpus_physical, "features": cpu_features()},
@@ -674,6 +682,8 @@ async fn probe_hw(State(state): State<AppState>) -> impl IntoResponse {
         "wsl": wsl,
         "env": env,
         "gpus": gpus,
+        "gpus_wgpu": gpus_wgpu,
+        "gpus_nvml": gpus_nvml,
     });
     // Publish minimal event for observability
     state.bus.publish("Probe.HW", &serde_json::json!({"cpus": cpus_logical, "gpus": out["gpus"].as_array().map(|a| a.len()).unwrap_or(0)}));

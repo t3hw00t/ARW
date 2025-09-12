@@ -12,6 +12,9 @@
       th, td { border-bottom: 1px solid #eee; padding: 6px 8px; text-align: left; }
       th { color: #555; font-weight: 600; }
       .dim { color: #666; }
+      .dot{ width:8px; height:8px; border-radius:999px; display:inline-block; background:#aaa; margin-right:6px }
+      .dot.ok{ background:#1bb3a3 }
+      .dot.bad{ background:#a00 }
       .ok { color: #0a0; }
       .bad { color: #a00; }
       input[type=text], input[type=url] { padding: 6px 8px; border: 1px solid #ccc; border-radius: 8px; }
@@ -65,9 +68,9 @@
         try{
           const url = (c.base||'').replace(/\/$/,'') + '/healthz';
           const r = await fetch(url, { method: 'GET' });
-          if (r.ok) { st.textContent = 'online'; st.className='ok'; }
-          else { st.textContent = 'error'; st.className='bad'; }
-        }catch(e){ if (st) { st.textContent = 'offline'; st.className='bad'; } }
+          if (r.ok) { st.innerHTML = '<span class="dot ok"></span> online'; st.className='ok'; }
+          else { st.innerHTML = '<span class="dot bad"></span> error'; st.className='bad'; }
+        }catch(e){ if (st) { st.innerHTML = '<span class="dot bad"></span> offline'; st.className='bad'; } }
       }
       document.getElementById('btn-add').addEventListener('click', async ()=>{
         const name = document.getElementById('cname').value.trim();

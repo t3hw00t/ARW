@@ -33,11 +33,15 @@ prost = { version = "0.13", optional = true }
 tower = { version = "0.5" }
 once_cell = { workspace = true }
 uuid = { workspace = true }
+nvml-wrapper = { version = "0.9", optional = true }
+wgpu = { version = "0.19", optional = true }
 
 [features]
 default = []
 nats = ["arw-core/nats", "arw-events/nats"]
 grpc = ["dep:tonic", "dep:prost"]
+gpu_nvml = ["dep:nvml-wrapper"]
+gpu_wgpu = ["dep:wgpu"]
 
 [build-dependencies]
 tonic-build = { version = "0.11" }
