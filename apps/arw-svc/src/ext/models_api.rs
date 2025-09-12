@@ -8,7 +8,11 @@ use serde::Deserialize;
 #[arw_gate("models:list")]
 pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
     let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "ModelsService missing").into_response();
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "ModelsService missing",
+        )
+            .into_response();
     };
     let list: Vec<serde_json::Value> = svc.list().await;
     Json::<Vec<serde_json::Value>>(list).into_response()
@@ -21,7 +25,11 @@ pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoRespo
 #[arw_gate("models:refresh")]
 pub(crate) async fn refresh_models(State(state): State<AppState>) -> impl IntoResponse {
     let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "ModelsService missing").into_response();
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "ModelsService missing",
+        )
+            .into_response();
     };
     let list: Vec<serde_json::Value> = svc.refresh(&state).await;
     Json::<Vec<serde_json::Value>>(list).into_response()
@@ -81,7 +89,11 @@ pub(crate) async fn models_add(
     Json(req): Json<ModelId>,
 ) -> impl IntoResponse {
     let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "ModelsService missing").into_response();
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "ModelsService missing",
+        )
+            .into_response();
     };
     svc.add(&state, req.id, req.provider).await;
     Json(serde_json::json!({"ok": true})).into_response()
@@ -97,7 +109,11 @@ pub(crate) async fn models_delete(
     Json(req): Json<ModelId>,
 ) -> impl IntoResponse {
     let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "ModelsService missing").into_response();
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "ModelsService missing",
+        )
+            .into_response();
     };
     svc.delete(&state, req.id).await;
     Json(serde_json::json!({"ok": true})).into_response()
@@ -110,7 +126,11 @@ pub(crate) async fn models_delete(
 #[arw_gate("models:default:get")]
 pub(crate) async fn models_default_get(State(state): State<AppState>) -> impl IntoResponse {
     let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "ModelsService missing").into_response();
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "ModelsService missing",
+        )
+            .into_response();
     };
     let id = svc.default_get().await;
     Json(serde_json::json!({"default": id})).into_response()
@@ -126,7 +146,11 @@ pub(crate) async fn models_default_set(
     Json(req): Json<ModelId>,
 ) -> impl IntoResponse {
     let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "ModelsService missing").into_response();
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "ModelsService missing",
+        )
+            .into_response();
     };
     let ok = svc.default_set(&state, req.id).await.is_ok();
     Json(serde_json::json!({"ok": ok})).into_response()
@@ -164,15 +188,29 @@ pub(crate) async fn models_download(
     Json(req): Json<DownloadReq>,
 ) -> impl IntoResponse {
     let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "ModelsService missing").into_response();
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "ModelsService missing",
+        )
+            .into_response();
     };
-    let budget_override = req.budget.map(|b| crate::resources::models_service::DownloadBudgetOverride {
-            soft_ms: b.soft_ms,
-            hard_ms: b.hard_ms,
-            class: b.class,
-    });
+    let budget_override =
+        req.budget.map(
+            |b| crate::resources::models_service::DownloadBudgetOverride {
+                soft_ms: b.soft_ms,
+                hard_ms: b.hard_ms,
+                class: b.class,
+            },
+        );
     match svc
-        .download_with_budget(&state, req.id, req.url, req.provider, Some(req.sha256), budget_override)
+        .download_with_budget(
+            &state,
+            req.id,
+            req.url,
+            req.provider,
+            Some(req.sha256),
+            budget_override,
+        )
         .await
     {
         Ok(()) => super::ok(serde_json::json!({})).into_response(),
@@ -196,7 +234,11 @@ pub(crate) async fn models_download_cancel(
     Json(req): Json<CancelReq>,
 ) -> impl IntoResponse {
     let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, "ModelsService missing").into_response();
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "ModelsService missing",
+        )
+            .into_response();
     };
     svc.cancel_download(&state, req.id).await;
     super::ok(serde_json::json!({})).into_response()

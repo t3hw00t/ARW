@@ -216,7 +216,12 @@ fn sha256_hex(bytes: &[u8]) -> String {
 fn validate_rel_path(rel: &str) -> Option<std::path::PathBuf> {
     // Disallow parent/root components
     let p = std::path::Path::new(rel);
-    if p.components().any(|c| matches!(c, std::path::Component::ParentDir | std::path::Component::RootDir)) {
+    if p.components().any(|c| {
+        matches!(
+            c,
+            std::path::Component::ParentDir | std::path::Component::RootDir
+        )
+    }) {
         return None;
     }
     Some(p.to_path_buf())
@@ -323,6 +328,11 @@ pub(crate) async fn projects_file_patch(
         return ApiError::bad_request("unsupported mode").into_response();
     }
     // delegate to file_set semantics
-    let body = FileWriteBody { content: req.content, prev_sha256: req.prev_sha256 };
-    projects_file_set(axum::extract::State(state), Query(q), Json(body)).await.into_response()
+    let body = FileWriteBody {
+        content: req.content,
+        prev_sha256: req.prev_sha256,
+    };
+    projects_file_set(axum::extract::State(state), Query(q), Json(body))
+        .await
+        .into_response()
 }

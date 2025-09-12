@@ -54,9 +54,13 @@ mod win_npu_dxcore {
     pub fn probe() -> Vec<serde_json::Value> {
         unsafe {
             let mut out: Vec<serde_json::Value> = Vec::new();
-            let Ok(factory) = CreateDXCoreAdapterFactory() else { return out };
+            let Ok(factory) = CreateDXCoreAdapterFactory() else {
+                return out;
+            };
             let attrs = [DXCORE_ADAPTER_ATTRIBUTE_D3D12_CORE_COMPUTE];
-            let Ok(list) = factory.CreateAdapterList(&attrs) else { return out };
+            let Ok(list) = factory.CreateAdapterList(&attrs) else {
+                return out;
+            };
             let count = list.GetAdapterCount();
             for i in 0..count {
                 if let Ok(adapter) = list.GetAdapter(i) {
@@ -66,9 +70,20 @@ mod win_npu_dxcore {
                         let mut dev = 0u32;
                         let mut sz: usize = 0;
                         if adapter.IsPropertySupported(DXCoreAdapterProperty::HardwareID) {
-                            if adapter.GetPropertySize(DXCoreAdapterProperty::HardwareID, &mut sz).is_ok() && sz >= core::mem::size_of::<DXCoreHardwareID>() {
+                            if adapter
+                                .GetPropertySize(DXCoreAdapterProperty::HardwareID, &mut sz)
+                                .is_ok()
+                                && sz >= core::mem::size_of::<DXCoreHardwareID>()
+                            {
                                 let mut hwid: DXCoreHardwareID = core::mem::zeroed();
-                                if adapter.GetProperty(DXCoreAdapterProperty::HardwareID, &mut hwid as *mut _ as *mut core::ffi::c_void, core::mem::size_of::<DXCoreHardwareID>()).is_ok() {
+                                if adapter
+                                    .GetProperty(
+                                        DXCoreAdapterProperty::HardwareID,
+                                        &mut hwid as *mut _ as *mut core::ffi::c_void,
+                                        core::mem::size_of::<DXCoreHardwareID>(),
+                                    )
+                                    .is_ok()
+                                {
                                     ven = hwid.VendorID;
                                     dev = hwid.DeviceID;
                                 }
@@ -500,7 +515,10 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
 
 fn header_token_matches(h: &HeaderMap, token: &str) -> bool {
     // Prefer Authorization: Bearer <token>
-    if let Some(v) = h.get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()) {
+    if let Some(v) = h
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|v| v.to_str().ok())
+    {
         if let Some(bearer) = v.strip_prefix("Bearer ") {
             if ct_eq(bearer.as_bytes(), token.as_bytes()) {
                 return true;
@@ -1106,14 +1124,21 @@ async fn collect_metrics_snapshot() -> serde_json::Value {
     tokio::time::sleep(std::time::Duration::from_millis(180)).await;
     sys.refresh_cpu();
     let per_core: Vec<f64> = sys.cpus().iter().map(|c| c.cpu_usage() as f64).collect();
-    let avg = if per_core.is_empty() { 0.0 } else { per_core.iter().sum::<f64>() / (per_core.len() as f64) };
+    let avg = if per_core.is_empty() {
+        0.0
+    } else {
+        per_core.iter().sum::<f64>() / (per_core.len() as f64)
+    };
     let total_mem = sys.total_memory();
     let avail_mem = sys.available_memory();
     let used_mem = total_mem.saturating_sub(avail_mem);
     let swap_total = sys.total_swap();
     let swap_used = sys.used_swap();
     let sdir = crate::ext::paths::state_dir();
-    let (disk_total, disk_avail) = (fs2::total_space(&sdir).unwrap_or(0), fs2::available_space(&sdir).unwrap_or(0));
+    let (disk_total, disk_avail) = (
+        fs2::total_space(&sdir).unwrap_or(0),
+        fs2::available_space(&sdir).unwrap_or(0),
+    );
     let gpus = probe_gpu_metrics_best_effort_async().await;
     let npus = probe_npus_best_effort();
     serde_json::json!({
@@ -1191,17 +1216,32 @@ async fn probe_gpu_metrics_best_effort_async() -> Vec<serde_json::Value> {
         if let Some(extra) = rocm_smi_json().await {
             if let Some(obj) = extra.as_object() {
                 for (k, v) in obj.iter() {
-                    if !k.starts_with("card") { continue; }
+                    if !k.starts_with("card") {
+                        continue;
+                    }
                     if let Some(gpu) = base.iter_mut().find(|g| g["index"].as_str() == Some(k)) {
                         if let Some(map) = v.as_object() {
                             if gpu["busy_percent"].is_null() {
-                                if let Some(bp) = pick_number(map, &["GPU use (%)","GPU Utilization (%)","GPU_Util"]) { gpu["busy_percent"] = serde_json::json!(bp as u64); }
+                                if let Some(bp) = pick_number(
+                                    map,
+                                    &["GPU use (%)", "GPU Utilization (%)", "GPU_Util"],
+                                ) {
+                                    gpu["busy_percent"] = serde_json::json!(bp as u64);
+                                }
                             }
                             if gpu["mem_total"].is_null() {
-                                if let Some(mt) = pick_number(map, &["VRAM Total (B)","VRAM_Total_Bytes"]) { gpu["mem_total"] = serde_json::json!(mt as u64); }
+                                if let Some(mt) =
+                                    pick_number(map, &["VRAM Total (B)", "VRAM_Total_Bytes"])
+                                {
+                                    gpu["mem_total"] = serde_json::json!(mt as u64);
+                                }
                             }
                             if gpu["mem_used"].is_null() {
-                                if let Some(mu) = pick_number(map, &["VRAM Used (B)","VRAM_Used_Bytes"]) { gpu["mem_used"] = serde_json::json!(mu as u64); }
+                                if let Some(mu) =
+                                    pick_number(map, &["VRAM Used (B)", "VRAM_Used_Bytes"])
+                                {
+                                    gpu["mem_used"] = serde_json::json!(mu as u64);
+                                }
                             }
                             gpu["extra"]["rocm_smi"] = v.clone();
                         }
@@ -1215,14 +1255,22 @@ async fn probe_gpu_metrics_best_effort_async() -> Vec<serde_json::Value> {
     base
 }
 #[cfg(not(target_os = "linux"))]
-async fn probe_gpu_metrics_best_effort_async() -> Vec<serde_json::Value> { probe_gpu_metrics_best_effort() }
+async fn probe_gpu_metrics_best_effort_async() -> Vec<serde_json::Value> {
+    probe_gpu_metrics_best_effort()
+}
 
 #[cfg(target_os = "linux")]
 async fn rocm_smi_json() -> Option<serde_json::Value> {
     use tokio::process::Command;
     use tokio::time::{timeout, Duration};
     let mut cmd = Command::new("rocm-smi");
-    cmd.arg("--showuse").arg("--showmeminfo").arg("vram").arg("--showtemp").arg("--showclocks").arg("--showpower").arg("--json");
+    cmd.arg("--showuse")
+        .arg("--showmeminfo")
+        .arg("vram")
+        .arg("--showtemp")
+        .arg("--showclocks")
+        .arg("--showpower")
+        .arg("--json");
     match timeout(Duration::from_millis(1200), cmd.output()).await {
         Ok(Ok(out)) if out.status.success() => {
             let txt = String::from_utf8_lossy(&out.stdout);
@@ -1235,10 +1283,14 @@ async fn rocm_smi_json() -> Option<serde_json::Value> {
 fn pick_number(map: &serde_json::Map<String, serde_json::Value>, keys: &[&str]) -> Option<f64> {
     for k in keys {
         if let Some(v) = map.get(*k) {
-            if v.is_number() { return v.as_f64(); }
+            if v.is_number() {
+                return v.as_f64();
+            }
             if let Some(s) = v.as_str() {
                 let s = s.trim_end_matches('%');
-                if let Ok(x) = s.parse::<f64>() { return Some(x); }
+                if let Ok(x) = s.parse::<f64>() {
+                    return Some(x);
+                }
             }
         }
     }
