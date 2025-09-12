@@ -322,6 +322,10 @@ pub async fn episode_snapshot_get(axum::extract::Path(id): axum::extract::Path<S
         // Build a minimal snapshot; future: include effective config/model hashes, active units, etc.
         let first_ts = ep.items.first().map(|e| e.time.clone()).unwrap_or_default();
         let last_ts = ep.items.last().map(|e| e.time.clone()).unwrap_or_default();
+        // Load current config for effective config enrichment (best-effort)
+        let cfg = crate::ext::io::load_json_file_async(&crate::ext::paths::config_path())
+            .await
+            .unwrap_or_else(|| json!({}));
         return super::ok(json!({
             "id": ep.id,
             "started": first_ts,
@@ -329,7 +333,7 @@ pub async fn episode_snapshot_get(axum::extract::Path(id): axum::extract::Path<S
             "items": ep.items,
             "effective_config": {
                 "logic_units": [],
-                "notes": "snapshot schema will evolve; this is a stub"
+                "config": cfg
             }
         }));
     }

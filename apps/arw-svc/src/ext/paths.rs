@@ -21,6 +21,12 @@ pub(crate) fn orch_path() -> PathBuf {
 pub(crate) fn feedback_path() -> PathBuf {
     state_dir().join("feedback.json")
 }
+pub(crate) fn config_path() -> PathBuf {
+    state_dir().join("config.json")
+}
+pub(crate) fn snapshots_dir() -> PathBuf {
+    state_dir().join("snapshots")
+}
 pub(crate) fn audit_path() -> PathBuf {
     state_dir().join("audit.log")
 }
