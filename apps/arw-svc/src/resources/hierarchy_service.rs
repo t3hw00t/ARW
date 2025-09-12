@@ -8,7 +8,9 @@ use crate::app_state::AppState;
 pub struct HierarchyService;
 
 impl HierarchyService {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     pub async fn hello(&self, state: &AppState, req: CoreHello) {
         hier::configure_self(req.id.clone(), req.scope_tags.clone());

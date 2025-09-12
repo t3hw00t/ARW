@@ -1,9 +1,9 @@
 #![allow(dead_code)]
 // ext module: split into submodules (ui, later more)
 
-use arw_macros::{arw_gate, arw_admin};
+use arw_macros::{arw_admin, arw_gate};
 use axum::{
-    extract::{State},
+    extract::State,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
@@ -24,7 +24,9 @@ use arw_core::gating;
 use arw_core::hierarchy as hier;
 use arw_core::orchestrator::Task as OrchTask;
 use arw_protocol::ProblemDetails;
+pub mod chat;
 pub mod chat_api;
+pub mod corr;
 pub mod feedback_api;
 pub mod feedback_engine;
 pub mod feedback_engine_api;
@@ -34,12 +36,10 @@ pub mod memory;
 pub mod memory_api;
 pub mod models_api;
 pub mod policy;
+pub mod state_api;
 pub mod stats;
-pub mod chat;
 pub mod tools_api;
 pub mod tools_exec;
-pub mod state_api;
-pub mod corr;
 pub mod ui;
 // internal helpers split into modules
 pub mod io;
@@ -75,14 +75,39 @@ impl ApiError {
             code: None,
         })
     }
-    pub fn bad_request(msg: &str) -> Self { Self::new(axum::http::StatusCode::BAD_REQUEST, "Bad Request", Some(msg.into())) }
-    pub fn forbidden(msg: &str) -> Self { Self::new(axum::http::StatusCode::FORBIDDEN, "Forbidden", Some(msg.into())) }
-    pub fn not_found(msg: &str) -> Self { Self::new(axum::http::StatusCode::NOT_FOUND, "Not Found", Some(msg.into())) }
-    pub fn internal(msg: &str) -> Self { Self::new(axum::http::StatusCode::INTERNAL_SERVER_ERROR, "Internal Server Error", Some(msg.into())) }
+    pub fn bad_request(msg: &str) -> Self {
+        Self::new(
+            axum::http::StatusCode::BAD_REQUEST,
+            "Bad Request",
+            Some(msg.into()),
+        )
+    }
+    pub fn forbidden(msg: &str) -> Self {
+        Self::new(
+            axum::http::StatusCode::FORBIDDEN,
+            "Forbidden",
+            Some(msg.into()),
+        )
+    }
+    pub fn not_found(msg: &str) -> Self {
+        Self::new(
+            axum::http::StatusCode::NOT_FOUND,
+            "Not Found",
+            Some(msg.into()),
+        )
+    }
+    pub fn internal(msg: &str) -> Self {
+        Self::new(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Internal Server Error",
+            Some(msg.into()),
+        )
+    }
 }
 impl IntoResponse for ApiError {
     fn into_response(self) -> axum::response::Response {
-        let status = axum::http::StatusCode::from_u16(self.0.status).unwrap_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
+        let status = axum::http::StatusCode::from_u16(self.0.status)
+            .unwrap_or(axum::http::StatusCode::INTERNAL_SERVER_ERROR);
         (status, axum::Json(self.0)).into_response()
     }
 }
@@ -332,7 +357,11 @@ pub struct EnqueueReq {
     idem_key: Option<String>,
 }
 
-#[arw_admin(method="POST", path="/admin/tasks/enqueue", summary="Enqueue orchestrator task")]
+#[arw_admin(
+    method = "POST",
+    path = "/admin/tasks/enqueue",
+    summary = "Enqueue orchestrator task"
+)]
 #[arw_gate("queue:enqueue")]
 async fn tasks_enqueue(
     State(state): State<AppState>,
@@ -447,10 +476,17 @@ pub async fn about() -> impl IntoResponse {
     }))
 }
 
-#[arw_admin(method="GET", path="/admin/hierarchy/state", summary="Get hierarchy state")]
+#[arw_admin(
+    method = "GET",
+    path = "/admin/hierarchy/state",
+    summary = "Get hierarchy state"
+)]
 #[arw_macros::arw_gate("hierarchy:state:get")]
 async fn hierarchy_state(State(state): State<AppState>) -> impl IntoResponse {
-    if let Some(svc) = state.resources.get::<crate::resources::hierarchy_service::HierarchyService>() {
+    if let Some(svc) = state
+        .resources
+        .get::<crate::resources::hierarchy_service::HierarchyService>()
+    {
         let st: arw_core::hierarchy::HierarchyState = svc.state_event(&state).await;
         return Json::<arw_core::hierarchy::HierarchyState>(st).into_response();
     }
@@ -465,13 +501,20 @@ async fn hierarchy_state(State(state): State<AppState>) -> impl IntoResponse {
 struct RoleSet {
     role: String,
 }
-#[arw_admin(method="POST", path="/admin/hierarchy/role", summary="Set hierarchy role")]
+#[arw_admin(
+    method = "POST",
+    path = "/admin/hierarchy/role",
+    summary = "Set hierarchy role"
+)]
 #[arw_gate("hierarchy:role:set")]
 async fn hierarchy_role_set(
     State(state): State<AppState>,
     Json(req): Json<RoleSet>,
 ) -> impl IntoResponse {
-    if let Some(svc) = state.resources.get::<crate::resources::hierarchy_service::HierarchyService>() {
+    if let Some(svc) = state
+        .resources
+        .get::<crate::resources::hierarchy_service::HierarchyService>()
+    {
         svc.role_set(&state, &req.role).await;
         return ok(json!({})).into_response();
     }
@@ -812,7 +855,8 @@ async fn models_download(
                                 return;
                             }
                             if let Err(e) = file.write_all(&bytes).await {
-                                let mut p = json!({"id": id, "error": format!("write failed: {}", e)});
+                                let mut p =
+                                    json!({"id": id, "error": format!("write failed: {}", e)});
                                 crate::ext::corr::ensure_corr(&mut p);
                                 sp.bus.publish("Models.DownloadProgress", &p);
                                 return;
@@ -876,7 +920,8 @@ async fn models_download(
                         return;
                     }
                 }
-                let mut p = json!({"id": id, "status":"complete", "file": safe_name, "provider": provider});
+                let mut p =
+                    json!({"id": id, "status":"complete", "file": safe_name, "provider": provider});
                 crate::ext::corr::ensure_corr(&mut p);
                 sp.bus.publish("Models.DownloadProgress", &p);
                 {
@@ -897,9 +942,9 @@ async fn models_download(
                     .publish("Models.Changed", &json!({"op":"downloaded","id": id}));
             }
             Err(e) => {
-            let mut p = json!({"id": id, "error": format!("request failed: {}", e)});
-            crate::ext::corr::ensure_corr(&mut p);
-            sp.bus.publish("Models.DownloadProgress", &p);
+                let mut p = json!({"id": id, "error": format!("request failed: {}", e)});
+                crate::ext::corr::ensure_corr(&mut p);
+                sp.bus.publish("Models.DownloadProgress", &p);
             }
         }
     });

@@ -17,7 +17,9 @@ fn all_ext_routes_have_admin_registry_entries() {
             if let Some(j) = rest.find('\"') {
                 let p = &rest[..j];
                 // Skip empty or clearly non-admin placeholders
-                if p.is_empty() { continue; }
+                if p.is_empty() {
+                    continue;
+                }
                 // We build under /admin, so prefix for registry lookup
                 let full = if p.starts_with('/') {
                     format!("/admin{}", p)
@@ -41,7 +43,10 @@ fn all_ext_routes_have_admin_registry_entries() {
 
     // Ensure every ext route appears in registry
     for p in paths {
-        assert!(have.contains(&p), "missing #[arw_admin] registry entry for: {}", p);
+        assert!(
+            have.contains(&p),
+            "missing #[arw_admin] registry entry for: {}",
+            p
+        );
     }
 }
-

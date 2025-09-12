@@ -18,7 +18,8 @@ fn reg() -> &'static RwLock<HashMap<&'static str, Entry>> {
         map.insert(
             "math.add",
             Entry {
-                summary: "Add two numbers: input {\"a\": number, \"b\": number} -> {\"sum\": number}",
+                summary:
+                    "Add two numbers: input {\"a\": number, \"b\": number} -> {\"sum\": number}",
                 exec: |input| {
                     let a = input
                         .get("a")
@@ -62,4 +63,3 @@ pub fn list() -> Vec<(&'static str, &'static str)> {
     let map = reg().read().unwrap();
     map.iter().map(|(k, v)| (*k, v.summary)).collect()
 }
-

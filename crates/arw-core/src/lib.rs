@@ -188,7 +188,12 @@ pub fn load_effective_paths() -> serde_json::Value {
         .unwrap_or_else(|| format!("{}/arw/cache", default_state.clone()));
     let default_logs: String = proj_dirs
         .as_ref()
-        .map(|p| p.data_local_dir().join("logs").to_string_lossy().to_string())
+        .map(|p| {
+            p.data_local_dir()
+                .join("logs")
+                .to_string_lossy()
+                .to_string()
+        })
         .unwrap_or_else(|| format!("{}/arw/logs", default_state.clone()));
 
     let norm = |s: String| s.replace('\\', "/");

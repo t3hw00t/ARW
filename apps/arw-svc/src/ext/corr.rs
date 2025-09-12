@@ -1,5 +1,5 @@
-use uuid::Uuid;
 use serde_json::Value;
+use uuid::Uuid;
 
 pub fn new_corr_id() -> String {
     Uuid::new_v4().to_string()
@@ -19,4 +19,3 @@ pub fn ensure_corr(v: &mut Value) -> String {
         id
     }
 }
-

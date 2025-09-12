@@ -186,48 +186,45 @@ pub fn arw_admin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let mut summary: Option<String> = None;
 
     for m in metas {
-        match m {
-            Meta::NameValue(nv) => {
-                let key = nv.path.get_ident().map(|i| i.to_string());
-                if let Some(k) = key {
-                    match (k.as_str(), &nv.value) {
-                        (
-                            "method",
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(s), ..
-                            }),
-                        ) => method = Some(s.value()),
-                        (
-                            "path",
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(s), ..
-                            }),
-                        ) => path = Some(s.value()),
-                        (
-                            "summary",
-                            Expr::Lit(ExprLit {
-                                lit: Lit::Str(s), ..
-                            }),
-                        ) => summary = Some(s.value()),
-                        _ => {}
-                    }
+        if let Meta::NameValue(nv) = m {
+            let key = nv.path.get_ident().map(|i| i.to_string());
+            if let Some(k) = key {
+                match (k.as_str(), &nv.value) {
+                    (
+                        "method",
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Str(s), ..
+                        }),
+                    ) => method = Some(s.value()),
+                    (
+                        "path",
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Str(s), ..
+                        }),
+                    ) => path = Some(s.value()),
+                    (
+                        "summary",
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Str(s), ..
+                        }),
+                    ) => summary = Some(s.value()),
+                    _ => {}
                 }
             }
-            _ => {}
         }
     }
 
     let method_s = method.unwrap_or_else(|| "GET".to_string());
     let path_s = path.unwrap_or_else(|| "/admin".to_string());
-    let summary_s = summary.unwrap_or_else(|| "".to_string());
+    let summary_s: String = summary.unwrap_or_default();
 
     // Minimal compile-time validations
     let mut preamble = proc_macro2::TokenStream::new();
-    let valid_methods = [
-        "GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD",
-    ];
+    let valid_methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"];
     if !valid_methods.iter().any(|m| *m == method_s) {
-        preamble.extend(quote! { compile_error!("arw_admin: method must be an HTTP verb like GET/POST"); });
+        preamble.extend(
+            quote! { compile_error!("arw_admin: method must be an HTTP verb like GET/POST"); },
+        );
     }
     if !path_s.starts_with("/admin") {
         preamble.extend(quote! { compile_error!("arw_admin: path must start with '/admin'"); });

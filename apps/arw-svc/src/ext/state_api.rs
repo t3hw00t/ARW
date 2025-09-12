@@ -1,9 +1,9 @@
 use arw_events::Envelope;
-use axum::response::IntoResponse;
 use arw_macros::arw_admin;
+use axum::response::IntoResponse;
+use chrono::{DateTime, Utc};
 use once_cell::sync::OnceCell;
 use serde::Serialize;
-use chrono::{DateTime, Utc};
 use serde_json::json;
 use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -39,7 +39,11 @@ struct ObsSnapshot<'a> {
     items: &'a [Envelope],
 }
 
-#[arw_admin(method="GET", path="/admin/state/observations", summary="Recent event observations")]
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/observations",
+    summary = "Recent event observations"
+)]
 pub async fn observations_get() -> impl IntoResponse {
     let v = VERSION.load(Ordering::Relaxed);
     let s = store().read().unwrap();
@@ -54,14 +58,22 @@ pub async fn observations_get() -> impl IntoResponse {
 
 static BELIEFS_VER: OnceCell<AtomicU64> = OnceCell::new();
 static BELIEFS: OnceCell<RwLock<Vec<serde_json::Value>>> = OnceCell::new();
-fn beliefs_ver() -> &'static AtomicU64 { BELIEFS_VER.get_or_init(|| AtomicU64::new(0)) }
-fn beliefs() -> &'static RwLock<Vec<serde_json::Value>> { BELIEFS.get_or_init(|| RwLock::new(Vec::new())) }
+fn beliefs_ver() -> &'static AtomicU64 {
+    BELIEFS_VER.get_or_init(|| AtomicU64::new(0))
+}
+fn beliefs() -> &'static RwLock<Vec<serde_json::Value>> {
+    BELIEFS.get_or_init(|| RwLock::new(Vec::new()))
+}
 
 static INTENTS: OnceCell<RwLock<VecDeque<serde_json::Value>>> = OnceCell::new();
-fn intents() -> &'static RwLock<VecDeque<serde_json::Value>> { INTENTS.get_or_init(|| RwLock::new(VecDeque::with_capacity(256))) }
+fn intents() -> &'static RwLock<VecDeque<serde_json::Value>> {
+    INTENTS.get_or_init(|| RwLock::new(VecDeque::with_capacity(256)))
+}
 
 static ACTIONS: OnceCell<RwLock<VecDeque<serde_json::Value>>> = OnceCell::new();
-fn actions() -> &'static RwLock<VecDeque<serde_json::Value>> { ACTIONS.get_or_init(|| RwLock::new(VecDeque::with_capacity(256))) }
+fn actions() -> &'static RwLock<VecDeque<serde_json::Value>> {
+    ACTIONS.get_or_init(|| RwLock::new(VecDeque::with_capacity(256)))
+}
 
 pub async fn on_event(env: &Envelope) {
     // Always keep observations current
@@ -84,13 +96,17 @@ pub async fn on_event(env: &Envelope) {
     // Intents: rolling list of generic Intents.* events
     if env.kind.starts_with("Intents.") {
         let mut q = intents().write().unwrap();
-        if q.len() == q.capacity() { let _ = q.pop_front(); }
+        if q.len() == q.capacity() {
+            let _ = q.pop_front();
+        }
         q.push_back(json!({"time": env.time, "kind": env.kind, "payload": env.payload}));
     }
     // Actions: rolling list of generic Actions.* events
     if env.kind.starts_with("Actions.") {
         let mut q = actions().write().unwrap();
-        if q.len() == q.capacity() { let _ = q.pop_front(); }
+        if q.len() == q.capacity() {
+            let _ = q.pop_front();
+        }
         q.push_back(json!({"time": env.time, "kind": env.kind, "payload": env.payload}));
     }
     // Episodes stitching by corr_id
@@ -106,24 +122,38 @@ pub async fn on_event(env: &Envelope) {
         drop(map);
         let mut order = ep_order().write().unwrap();
         if !order.contains(&cid.to_string()) {
-            if order.len() == order.capacity() { let _ = order.pop_front(); }
+            if order.len() == order.capacity() {
+                let _ = order.pop_front();
+            }
             order.push_back(cid.to_string());
         }
     }
 }
 
-#[arw_admin(method="GET", path="/admin/state/beliefs", summary="Current beliefs snapshot")]
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/beliefs",
+    summary = "Current beliefs snapshot"
+)]
 pub async fn beliefs_get() -> impl IntoResponse {
     let v = beliefs_ver().load(Ordering::Relaxed);
     let s = beliefs().read().unwrap().clone();
     super::ok(json!({"version": v, "items": s}))
 }
-#[arw_admin(method="GET", path="/admin/state/intents", summary="Recent intents")]
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/intents",
+    summary = "Recent intents"
+)]
 pub async fn intents_get() -> impl IntoResponse {
     let s: Vec<_> = intents().read().unwrap().iter().cloned().collect();
     super::ok(json!({"items": s}))
 }
-#[arw_admin(method="GET", path="/admin/state/actions", summary="Recent actions")]
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/actions",
+    summary = "Recent actions"
+)]
 pub async fn actions_get() -> impl IntoResponse {
     let s: Vec<_> = actions().read().unwrap().iter().cloned().collect();
     super::ok(json!({"items": s}))
@@ -140,10 +170,18 @@ struct Episode {
 
 static EPISODES: OnceCell<RwLock<HashMap<String, Episode>>> = OnceCell::new();
 static EP_ORDER: OnceCell<RwLock<VecDeque<String>>> = OnceCell::new();
-fn episodes_map() -> &'static RwLock<HashMap<String, Episode>> { EPISODES.get_or_init(|| RwLock::new(HashMap::new())) }
-fn ep_order() -> &'static RwLock<VecDeque<String>> { EP_ORDER.get_or_init(|| RwLock::new(VecDeque::with_capacity(64))) }
+fn episodes_map() -> &'static RwLock<HashMap<String, Episode>> {
+    EPISODES.get_or_init(|| RwLock::new(HashMap::new()))
+}
+fn ep_order() -> &'static RwLock<VecDeque<String>> {
+    EP_ORDER.get_or_init(|| RwLock::new(VecDeque::with_capacity(64)))
+}
 
-#[arw_admin(method="GET", path="/admin/state/episodes", summary="Recent episodes stitched by corr_id")]
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/episodes",
+    summary = "Recent episodes stitched by corr_id"
+)]
 pub async fn episodes_get() -> impl IntoResponse {
     let order = ep_order().read().unwrap();
     let map = episodes_map().read().unwrap();
@@ -154,15 +192,22 @@ pub async fn episodes_get() -> impl IntoResponse {
             let count = ep.items.len() as u64;
             let first_ts = ep.items.first().map(|e| e.time.as_str()).unwrap_or("");
             let last_ts = ep.items.last().map(|e| e.time.as_str()).unwrap_or("");
-            let duration_ms = match (DateTime::parse_from_rfc3339(first_ts), DateTime::parse_from_rfc3339(last_ts)) {
+            let duration_ms = match (
+                DateTime::parse_from_rfc3339(first_ts),
+                DateTime::parse_from_rfc3339(last_ts),
+            ) {
                 (Ok(a), Ok(b)) => {
                     let am = a.with_timezone(&Utc).timestamp_millis();
                     let bm = b.with_timezone(&Utc).timestamp_millis();
                     bm.saturating_sub(am) as u64
                 }
-                _ => 0
+                _ => 0,
             };
-            let errors = ep.items.iter().filter(|e| e.payload.get("error").is_some()).count() as u64;
+            let errors = ep
+                .items
+                .iter()
+                .filter(|e| e.payload.get("error").is_some())
+                .count() as u64;
             items.push(json!({
                 "id": ep.id,
                 "last": ep.last,

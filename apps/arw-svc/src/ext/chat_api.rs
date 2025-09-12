@@ -1,14 +1,18 @@
 use crate::AppState;
-use arw_macros::{arw_gate, arw_admin};
+use arw_macros::{arw_admin, arw_gate};
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::Deserialize;
 
-#[arw_admin(method="GET", path="/admin/chat", summary="Get chat history")]
+#[arw_admin(method = "GET", path = "/admin/chat", summary = "Get chat history")]
 #[arw_gate("io:egress:chat")]
 pub(crate) async fn chat_get() -> impl IntoResponse {
     super::chat::chat_get().await.into_response()
 }
-#[arw_admin(method="POST", path="/admin/chat/clear", summary="Clear chat history")]
+#[arw_admin(
+    method = "POST",
+    path = "/admin/chat/clear",
+    summary = "Clear chat history"
+)]
 #[arw_gate("chat:clear")]
 pub(crate) async fn chat_clear() -> impl IntoResponse {
     super::chat::chat_clear().await.into_response()
@@ -22,7 +26,11 @@ pub(crate) struct ChatSendReq {
     #[serde(default)]
     temperature: Option<f64>,
 }
-#[arw_admin(method="POST", path="/admin/chat/send", summary="Send chat message")]
+#[arw_admin(
+    method = "POST",
+    path = "/admin/chat/send",
+    summary = "Send chat message"
+)]
 #[arw_gate("chat:send")]
 pub(crate) async fn chat_send(
     State(state): State<AppState>,

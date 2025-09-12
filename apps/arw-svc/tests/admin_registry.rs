@@ -51,5 +51,11 @@ fn admin_registry_baseline() {
         "/admin/chat/status",
     ];
 
-    for p in expect { assert!(have.contains(p), "missing admin endpoint in registry: {}", p); }
+    for p in expect {
+        assert!(
+            have.contains(p),
+            "missing admin endpoint in registry: {}",
+            p
+        );
+    }
 }

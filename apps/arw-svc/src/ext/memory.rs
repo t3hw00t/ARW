@@ -102,10 +102,15 @@ pub(crate) async fn memory_apply(
         let snap = mem.clone();
         drop(mem); // release write lock before performing async I/O
         let _ = save_json_file_async(&memory_path(), &snap).await;
-        let mut payload = serde_json::json!({"kind": req.kind, "value": req.value, "ttl_ms": req.ttl_ms});
+        let mut payload =
+            serde_json::json!({"kind": req.kind, "value": req.value, "ttl_ms": req.ttl_ms});
         crate::ext::corr::ensure_corr(&mut payload);
         state.bus.publish("Memory.Applied", &payload);
-        (axum::http::StatusCode::ACCEPTED, super::ok(serde_json::json!({}))).into_response()
+        (
+            axum::http::StatusCode::ACCEPTED,
+            super::ok(serde_json::json!({})),
+        )
+            .into_response()
     } else {
         super::ApiError::bad_request("invalid kind").into_response()
     }

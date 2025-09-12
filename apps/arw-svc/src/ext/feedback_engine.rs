@@ -90,13 +90,15 @@ pub fn start_feedback_engine(state: AppState) {
                     *s = out.clone();
                     let v = ver().fetch_add(1, Ordering::Relaxed) + 1;
                     let _ = persist_snapshot(v, &out).await;
-                    state
-                        .bus
-                        .publish("Feedback.Suggested", &json!({"version": v, "suggestions": out}));
+                    state.bus.publish(
+                        "Feedback.Suggested",
+                        &json!({"version": v, "suggestions": out}),
+                    );
                     // Also emit a beliefs update for read-model consumers
-                    state
-                        .bus
-                        .publish("Beliefs.Updated", &json!({"version": v, "suggestions": out}));
+                    state.bus.publish(
+                        "Beliefs.Updated",
+                        &json!({"version": v, "suggestions": out}),
+                    );
                     // Emit Intents for each suggestion (proposed)
                     for s in out.iter() {
                         // Expect shape: {id, action, params, rationale, confidence}

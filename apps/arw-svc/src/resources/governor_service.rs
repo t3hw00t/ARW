@@ -6,7 +6,9 @@ use crate::app_state::AppState;
 pub struct GovernorService;
 
 impl GovernorService {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     pub async fn profile_get(&self) -> String {
         crate::ext::governor_profile().read().await.clone()
@@ -17,7 +19,9 @@ impl GovernorService {
             let mut g = crate::ext::governor_profile().write().await;
             *g = name.clone();
         }
-        state.bus.publish("Governor.Changed", &json!({"profile": name}));
+        state
+            .bus
+            .publish("Governor.Changed", &json!({"profile": name}));
         crate::ext::persist_orch().await;
     }
 
@@ -35,13 +39,20 @@ impl GovernorService {
     ) {
         {
             let mut h = crate::ext::hints().write().await;
-            if max_concurrency.is_some() { h.max_concurrency = max_concurrency; }
-            if event_buffer.is_some() { h.event_buffer = event_buffer; }
-            if http_timeout_secs.is_some() { h.http_timeout_secs = http_timeout_secs; }
+            if max_concurrency.is_some() {
+                h.max_concurrency = max_concurrency;
+            }
+            if event_buffer.is_some() {
+                h.event_buffer = event_buffer;
+            }
+            if http_timeout_secs.is_some() {
+                h.http_timeout_secs = http_timeout_secs;
+            }
         }
         if let Some(secs) = http_timeout_secs {
             crate::dyn_timeout::set_global_timeout_secs(secs);
-            let mut payload = json!({"action":"hint","params":{"http_timeout_secs": secs},"ok": true});
+            let mut payload =
+                json!({"action":"hint","params":{"http_timeout_secs": secs},"ok": true});
             crate::ext::corr::ensure_corr(&mut payload);
             state.bus.publish("Actions.HintApplied", &payload);
         }

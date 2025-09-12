@@ -1,0 +1,47 @@
+name: windows-advanced-gate
+
+on:
+  workflow_dispatch:
+    inputs:
+      strict_sign:
+        description: "Fail if unsigned binaries/installers are found"
+        required: false
+        default: "false"
+  release:
+    types: [published]
+
+jobs:
+  advanced-gate:
+    name: advanced-gate (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            Agent_Hub
+
+      - name: Build arw-svc (release)
+        shell: pwsh
+        run: |
+          Set-Location Agent_Hub
+          cargo build --release -p arw-svc --locked
+
+      - name: Run Windows Advanced Gate (informational by default)
+        shell: pwsh
+        env:
+          ARW_STRICT_SIGN_VERIFY: ${{ inputs.strict_sign }}
+        run: |
+          Set-Location Agent_Hub
+          ./scripts/windows-advanced-gate.ps1
+

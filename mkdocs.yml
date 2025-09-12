@@ -58,6 +58,7 @@ nav:
       - Overview: developer/index.md
       - Status: developer/status.md
       - Tasks: developer/tasks.md
+      - Stability Freeze: developer/stability.md
       - CI: developer/ci.md
       - Style: developer/style.md
       - Security: developer/SECURITY.md

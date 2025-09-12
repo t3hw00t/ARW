@@ -1,11 +1,11 @@
 #![allow(clippy::needless_return)]
-mod ext;
-mod dyn_timeout;
 pub mod app_state;
+mod dyn_timeout;
+mod ext;
 pub mod resources;
 
-use axum::{routing::get, Router};
 pub use app_state::AppState;
+use axum::{routing::get, Router};
 
 /// Build an axum Router with a simple /healthz and all extra routes from ext.rs.
 /// This is for tests; your runtime binary still uses its own main.rs.

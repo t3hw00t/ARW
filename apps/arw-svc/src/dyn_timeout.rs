@@ -3,8 +3,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use axum::http::Request;
-use axum::response::{IntoResponse, Response};
 use axum::middleware::Next;
+use axum::response::{IntoResponse, Response};
 use once_cell::sync::OnceCell;
 
 // Global handle for dynamic HTTP timeout seconds. Shared across the crate

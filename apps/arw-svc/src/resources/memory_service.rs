@@ -6,7 +6,9 @@ use crate::app_state::AppState;
 pub struct MemoryService;
 
 impl MemoryService {
-    pub fn new() -> Self { Self }
+    pub fn new() -> Self {
+        Self
+    }
 
     pub async fn snapshot(&self) -> Value {
         crate::ext::memory::memory().read().await.clone()
@@ -57,10 +59,13 @@ impl MemoryService {
         if let Some(arr) = lane {
             arr.push(value.clone());
             let cap = { *crate::ext::memory::mem_limit().read().await };
-            while arr.len() > cap { arr.remove(0); }
+            while arr.len() > cap {
+                arr.remove(0);
+            }
             let snap = mem.clone();
             drop(mem);
-            let _ = crate::ext::io::save_json_file_async(&crate::ext::paths::memory_path(), &snap).await;
+            let _ = crate::ext::io::save_json_file_async(&crate::ext::paths::memory_path(), &snap)
+                .await;
             let mut payload = json!({"kind": kind, "value": value, "ttl_ms": ttl_ms});
             crate::ext::corr::ensure_corr(&mut payload);
             state.bus.publish("Memory.Applied", &payload);

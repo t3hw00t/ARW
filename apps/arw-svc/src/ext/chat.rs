@@ -4,8 +4,8 @@ use axum::{extract::Query, extract::State, response::IntoResponse, Json};
 use serde::Deserialize;
 use serde_json::json;
 use std::sync::OnceLock;
-use tokio::sync::RwLock;
 use std::time::{SystemTime, UNIX_EPOCH};
+use tokio::sync::RwLock;
 
 static CHAT_LOG: OnceLock<RwLock<Vec<serde_json::Value>>> = OnceLock::new();
 fn chat_log() -> &'static RwLock<Vec<serde_json::Value>> {
@@ -76,7 +76,12 @@ pub(crate) async fn chat_send(
     let mut in_evt = json!({"dir":"in","msg": user});
     crate::ext::corr::ensure_corr(&mut in_evt);
     let mut out_evt = json!({"dir":"out","msg": assist});
-    if let Some(cid) = in_evt.get("corr_id").cloned() { out_evt.as_object_mut().unwrap().insert("corr_id".into(), cid); }
+    if let Some(cid) = in_evt.get("corr_id").cloned() {
+        out_evt
+            .as_object_mut()
+            .unwrap()
+            .insert("corr_id".into(), cid);
+    }
     state.bus.publish("Chat.Message", &in_evt);
     state.bus.publish("Chat.Message", &out_evt);
     super::ok(assist).into_response()
@@ -87,8 +92,15 @@ pub(crate) struct ChatStatusQs {
     #[serde(default)]
     pub probe: Option<bool>,
 }
-#[arw_admin(method="GET", path="/admin/chat/status", summary="Chat backend status")]
-pub(crate) async fn chat_status(State(state): State<AppState>, Query(q): Query<ChatStatusQs>) -> impl IntoResponse {
+#[arw_admin(
+    method = "GET",
+    path = "/admin/chat/status",
+    summary = "Chat backend status"
+)]
+pub(crate) async fn chat_status(
+    State(state): State<AppState>,
+    Query(q): Query<ChatStatusQs>,
+) -> impl IntoResponse {
     let backend = if std::env::var("ARW_LLAMA_URL")
         .ok()
         .filter(|s| !s.trim().is_empty())
@@ -111,16 +123,15 @@ pub(crate) async fn chat_status(State(state): State<AppState>, Query(q): Query<C
                 Some(_) => ("llama", true, None::<String>),
                 None => ("llama", false, Some("no reply".into())),
             },
-            "openai" => {
-                match openai_reply("ping", None).await {
-                    Some(_) => ("openai", true, None::<String>),
-                    None => ("openai", false, Some("no reply".into())),
-                }
-            }
+            "openai" => match openai_reply("ping", None).await {
+                Some(_) => ("openai", true, None::<String>),
+                None => ("openai", false, Some("no reply".into())),
+            },
             _ => ("synthetic", true, None::<String>),
         };
         let dt = t0.elapsed().as_millis() as u64;
-        let mut payload = json!({"backend": backend, "probe_ok": ok, "latency_ms": dt, "error": err});
+        let mut payload =
+            json!({"backend": backend, "probe_ok": ok, "latency_ms": dt, "error": err});
         crate::ext::corr::ensure_corr(&mut payload);
         state.bus.publish("Chat.Probe", &payload);
         return super::ok(payload).into_response();

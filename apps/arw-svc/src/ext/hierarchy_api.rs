@@ -1,12 +1,16 @@
-use arw_macros::{arw_gate, arw_admin};
+use arw_macros::{arw_admin, arw_gate};
 use axum::{extract::State, response::IntoResponse, Json};
 
+use crate::resources::hierarchy_service::HierarchyService;
 use crate::AppState;
 use arw_core::hierarchy as hier;
-use crate::resources::hierarchy_service::HierarchyService;
 use arw_protocol::{CoreAccept, CoreHello, CoreOffer};
 
-#[arw_admin(method="POST", path="/admin/hierarchy/hello", summary="Hierarchy hello")]
+#[arw_admin(
+    method = "POST",
+    path = "/admin/hierarchy/hello",
+    summary = "Hierarchy hello"
+)]
 #[arw_gate("hierarchy:hello")]
 pub async fn hello(State(state): State<AppState>, Json(req): Json<CoreHello>) -> impl IntoResponse {
     if let Some(svc) = state.resources.get::<HierarchyService>() {
@@ -25,7 +29,11 @@ pub async fn hello(State(state): State<AppState>, Json(req): Json<CoreHello>) ->
     super::ok(serde_json::json!({})).into_response()
 }
 
-#[arw_admin(method="POST", path="/admin/hierarchy/offer", summary="Hierarchy offer")]
+#[arw_admin(
+    method = "POST",
+    path = "/admin/hierarchy/offer",
+    summary = "Hierarchy offer"
+)]
 #[arw_gate("hierarchy:offer")]
 pub async fn offer(State(state): State<AppState>, Json(req): Json<CoreOffer>) -> impl IntoResponse {
     if let Some(svc) = state.resources.get::<HierarchyService>() {
@@ -41,7 +49,11 @@ pub async fn offer(State(state): State<AppState>, Json(req): Json<CoreOffer>) ->
     super::ok(serde_json::json!({})).into_response()
 }
 
-#[arw_admin(method="POST", path="/admin/hierarchy/accept", summary="Hierarchy accept")]
+#[arw_admin(
+    method = "POST",
+    path = "/admin/hierarchy/accept",
+    summary = "Hierarchy accept"
+)]
 #[arw_gate("hierarchy:accept")]
 pub async fn accept(
     State(state): State<AppState>,

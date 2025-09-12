@@ -11,7 +11,11 @@ pub(crate) struct ProjCreateReq {
     pub name: String,
 }
 
-#[arw_admin(method="GET", path="/admin/projects/list", summary="List projects")]
+#[arw_admin(
+    method = "GET",
+    path = "/admin/projects/list",
+    summary = "List projects"
+)]
 pub(crate) async fn projects_list() -> impl IntoResponse {
     let mut out: Vec<String> = Vec::new();
     let root = paths::projects_dir();
@@ -30,7 +34,11 @@ pub(crate) async fn projects_list() -> impl IntoResponse {
     super::ok(json!({"items": out}))
 }
 
-#[arw_admin(method="POST", path="/admin/projects/create", summary="Create project")]
+#[arw_admin(
+    method = "POST",
+    path = "/admin/projects/create",
+    summary = "Create project"
+)]
 pub(crate) async fn projects_create(
     axum::extract::State(state): axum::extract::State<AppState>,
     Json(req): Json<ProjCreateReq>,
@@ -62,7 +70,11 @@ pub(crate) struct TreeQs {
     pub proj: Option<String>,
     pub path: Option<String>,
 }
-#[arw_admin(method="GET", path="/admin/projects/tree", summary="Project tree listing")]
+#[arw_admin(
+    method = "GET",
+    path = "/admin/projects/tree",
+    summary = "Project tree listing"
+)]
 pub(crate) async fn projects_tree(Query(q): Query<TreeQs>) -> impl IntoResponse {
     let Some(proj) = q.proj.as_deref() else {
         return ApiError::bad_request("missing proj").into_response();
@@ -130,7 +142,11 @@ pub(crate) async fn projects_tree(Query(q): Query<TreeQs>) -> impl IntoResponse 
 pub(crate) struct NotesQs {
     pub proj: String,
 }
-#[arw_admin(method="GET", path="/admin/projects/notes", summary="Get project notes")]
+#[arw_admin(
+    method = "GET",
+    path = "/admin/projects/notes",
+    summary = "Get project notes"
+)]
 pub(crate) async fn projects_notes_get(Query(q): Query<NotesQs>) -> impl IntoResponse {
     if let Some(p) = paths::project_notes_path(&q.proj) {
         if let Ok(bytes) = afs::read(&p).await {
@@ -142,7 +158,11 @@ pub(crate) async fn projects_notes_get(Query(q): Query<NotesQs>) -> impl IntoRes
     String::new()
 }
 
-#[arw_admin(method="POST", path="/admin/projects/notes", summary="Set project notes")]
+#[arw_admin(
+    method = "POST",
+    path = "/admin/projects/notes",
+    summary = "Set project notes"
+)]
 pub(crate) async fn projects_notes_set(
     axum::extract::State(state): axum::extract::State<AppState>,
     Query(q): Query<NotesQs>,

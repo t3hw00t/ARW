@@ -1,6 +1,6 @@
 use schemars::JsonSchema;
-use utoipa::ToSchema;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 /// RFC7807-style error payload used at service edges.
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ToSchema)]
