@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ARW Model Manager</title>
     <style>
+      :root{ --teal:#1bb3a3; --line:#ddd }
       html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
       .wrap { padding: 16px; display: grid; gap: 16px; }
       .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -18,6 +19,8 @@
       .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
       .ok { color: #0a0; }
       .bad { color: #a00; }
+      .bar{ height:8px; border:1px solid var(--line); border-radius:8px; overflow:hidden; margin:4px 0 }
+      .bar>i{ display:block; height:8px; width:0%; background: var(--teal) }
     </style>
   </head>
   <body>

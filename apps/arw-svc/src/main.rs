@@ -601,21 +601,8 @@ async fn probe_hw(State(state): State<AppState>) -> impl IntoResponse {
     let kernel = sysinfo::System::kernel_version().unwrap_or_default();
     let arch = std::env::consts::ARCH.to_string();
 
-    // Disks (subset: state_dir and root free/total, best-effort)
-    let state_dir = std::path::Path::new(".");
-    let disks: Vec<serde_json::Value> = {
-        let mut v = Vec::new();
-        if let Ok(av) = fs2::available_space(state_dir) {
-            if let Ok(md) = std::fs::metadata(state_dir) {
-                if let Ok(dev) = nix_dev_from_md(&md) {
-                    v.push(serde_json::json!({"mount": state_dir, "available": av, "dev": dev}));
-                } else {
-                    v.push(serde_json::json!({"mount": state_dir, "available": av}));
-                }
-            }
-        }
-        v
-    };
+    // Disks (system view, not just app paths)
+    let disks: Vec<serde_json::Value> = probe_disks_best_effort();
 
     // Boot/virt/container hints (Linux-only paths are best-effort)
     let mut boot = serde_json::Map::new();
@@ -884,6 +871,111 @@ fn nix_dev_from_md(_md: &std::fs::Metadata) -> std::io::Result<u64> {
         std::io::ErrorKind::Other,
         "unsupported",
     ))
+}
+
+// ---- Disk probes (best-effort) ----
+fn probe_disks_best_effort() -> Vec<serde_json::Value> {
+    #[cfg(target_os = "linux")]
+    {
+        return probe_disks_linux();
+    }
+    #[cfg(target_os = "macos")]
+    {
+        return probe_disks_macos();
+    }
+    #[cfg(target_os = "windows")]
+    {
+        return probe_disks_windows();
+    }
+    #[allow(unreachable_code)]
+    {
+        Vec::new()
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn probe_disks_linux() -> Vec<serde_json::Value> {
+    use std::collections::HashSet;
+    let mounts = std::fs::read_to_string("/proc/mounts").unwrap_or_default();
+    let mut out: Vec<serde_json::Value> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    let allowed_fs: HashSet<&str> = [
+        "ext4", "ext3", "ext2", "xfs", "btrfs", "zfs", "f2fs", "reiserfs", "ntfs", "vfat", "exfat",
+        "overlay",
+    ]
+    .into_iter()
+    .collect();
+    for line in mounts.lines() {
+        let parts: Vec<&str> = line.split_whitespace().collect();
+        if parts.len() < 3 {
+            continue;
+        }
+        let mount = parts[1];
+        let fstype = parts[2];
+        if !allowed_fs.contains(fstype) && mount != "/" {
+            continue;
+        }
+        if seen.contains(mount) {
+            continue;
+        }
+        seen.insert(mount.to_string());
+        let p = std::path::Path::new(mount);
+        let (total, avail) = (
+            fs2::total_space(p).unwrap_or(0),
+            fs2::available_space(p).unwrap_or(0),
+        );
+        out.push(
+            serde_json::json!({"mount": mount, "fs": fstype, "total": total, "available": avail}),
+        );
+    }
+    // Prefer a small set sorted by mount path length then name
+    out.sort_by(|a, b| {
+        a["mount"]
+            .as_str()
+            .unwrap_or("")
+            .cmp(b["mount"].as_str().unwrap_or(""))
+    });
+    out
+}
+
+#[cfg(target_os = "macos")]
+fn probe_disks_macos() -> Vec<serde_json::Value> {
+    let mut paths: Vec<std::path::PathBuf> = vec![std::path::PathBuf::from("/")];
+    // Add volumes
+    if let Ok(rd) = std::fs::read_dir("/Volumes") {
+        for ent in rd.flatten() {
+            let p = ent.path();
+            if p.is_dir() {
+                paths.push(p);
+            }
+        }
+    }
+    let mut out = Vec::new();
+    for p in paths {
+        let (total, avail) = (
+            fs2::total_space(&p).unwrap_or(0),
+            fs2::available_space(&p).unwrap_or(0),
+        );
+        out.push(serde_json::json!({"mount": p, "total": total, "available": avail}));
+    }
+    out
+}
+
+#[cfg(target_os = "windows")]
+fn probe_disks_windows() -> Vec<serde_json::Value> {
+    let mut out = Vec::new();
+    for letter in b'A'..=b'Z' {
+        let root = format!("{}:\\", letter as char);
+        let p = std::path::Path::new(&root);
+        if let Ok(md) = std::fs::metadata(&p) {
+            let total = fs2::total_space(&p).unwrap_or(0);
+            let avail = fs2::available_space(&p).unwrap_or(0);
+            if total > 0 {
+                out.push(serde_json::json!({"mount": root, "total": total, "available": avail}));
+            }
+        }
+    }
+    out
 }
 
 #[arw_admin(

@@ -14,6 +14,8 @@
       button:hover { background: #f0f0f0; }
       .ok { color: #0a0; }
       .bad { color: #a00; }
+      .toast-wrap{ position:fixed; right:16px; bottom:16px; display:flex; flex-direction:column; gap:8px; z-index: 9999 }
+      .toast{ background:#111; color:#fff; padding:8px 12px; border-radius:8px; opacity:.9 }
       .badge { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid var(--line); border-radius:999px; font-size:12px; }
       .dot { width:8px; height:8px; border-radius:999px; background:#aaa; display:inline-block }
       .dot.ok{ background: var(--teal) }
@@ -74,6 +76,7 @@
         const notifyOnStatus = document.getElementById('notif').checked;
         await ARW.setPrefs('launcher', { port, autostart, notifyOnStatus });
       }
+      (function(){ const wrap=document.createElement('div'); wrap.className='toast-wrap'; document.body.appendChild(wrap); window.__toast=(msg)=>{ const d=document.createElement('div'); d.className='toast'; d.textContent=msg; wrap.appendChild(d); setTimeout(()=>{ wrap.removeChild(d); }, 2500); }; })();
       document.getElementById('btn-open').addEventListener('click', async () => {
         try { await invoke('open_debug_ui', { port: getPort() }); } catch (e) { console.error(e); }
       });
@@ -122,14 +125,14 @@
         try { await invoke('open_connections_window'); } catch (e) { console.error(e); }
       });
       document.getElementById('btn-start').addEventListener('click', async () => {
-        try { await invoke('start_service', { port: getPort() }); } catch (e) { console.error(e); }
+        try { await invoke('start_service', { port: getPort() }); __toast('Service starting'); } catch (e) { console.error(e); }
       });
       document.getElementById('btn-stop').addEventListener('click', async () => {
-        try { await invoke('stop_service', { port: getPort() }); } catch (e) { console.error(e); }
+        try { await invoke('stop_service', { port: getPort() }); __toast('Service stop requested'); } catch (e) { console.error(e); }
       });
       document.getElementById('btn-save').addEventListener('click', async () => {
         try {
-          await savePrefs();
+          await savePrefs(); __toast('Preferences saved');
           const loginstart = document.getElementById('loginstart').checked;
           await invoke('set_launcher_autostart', { enabled: loginstart });
         } catch (e) { console.error(e); }
