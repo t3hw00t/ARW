@@ -126,7 +126,7 @@ pub async fn load_persisted() {
     }
 }
 
-async fn persist_orch() {
+pub(crate) async fn persist_orch() {
     let profile = { governor_profile().read().await.clone() };
     let hints = { hints().read().await.clone() };
     let ml = { *mem_limit().read().await };
@@ -152,14 +152,14 @@ fn default_memory() -> Value {
 }
 // moved to memory module
 
-fn default_models() -> Vec<Value> {
+pub(crate) fn default_models() -> Vec<Value> {
     vec![
         json!({"id":"llama-3.1-8b-instruct","provider":"local","status":"available"}),
         json!({"id":"qwen2.5-coder-7b","provider":"local","status":"available"}),
     ]
 }
 static MODELS: OnceLock<RwLock<Vec<Value>>> = OnceLock::new();
-fn models() -> &'static RwLock<Vec<Value>> {
+pub(crate) fn models() -> &'static RwLock<Vec<Value>> {
     MODELS.get_or_init(|| {
         let initial = io::load_json_file(&paths::models_path())
             .and_then(|v| v.as_array().cloned())
@@ -169,7 +169,7 @@ fn models() -> &'static RwLock<Vec<Value>> {
 }
 
 static DEFAULT_MODEL: OnceLock<RwLock<String>> = OnceLock::new();
-fn default_model() -> &'static RwLock<String> {
+pub(crate) fn default_model() -> &'static RwLock<String> {
     DEFAULT_MODEL.get_or_init(|| {
         let initial = default_models()
             .first()
@@ -182,7 +182,7 @@ fn default_model() -> &'static RwLock<String> {
 
 // ---------- governor profile ----------
 static GOV_PROFILE: OnceLock<RwLock<String>> = OnceLock::new();
-fn governor_profile() -> &'static RwLock<String> {
+pub(crate) fn governor_profile() -> &'static RwLock<String> {
     GOV_PROFILE.get_or_init(|| {
         let initial = std::env::var("ARW_PROFILE").unwrap_or_else(|_| "balanced".to_string());
         RwLock::new(initial)
@@ -283,6 +283,7 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/state/beliefs", get(state_api::beliefs_get))
         .route("/state/intents", get(state_api::intents_get))
         .route("/state/actions", get(state_api::actions_get))
+        .route("/state/episodes", get(state_api::episodes_get))
         .route("/projects/list", get(projects::projects_list))
         .route("/projects/create", post(projects::projects_create))
         .route("/projects/tree", get(projects::projects_tree))
@@ -383,15 +384,13 @@ pub fn start_local_task_worker(state: AppState) {
                     if gating::allowed("events:Task.Completed")
                         && arw_core::gating::allowed(&egress_key)
                     {
-                        bus.publish(
-                            "Task.Completed",
-                            &json!({"id": t.id, "ok": ok, "latency_ms": dt, "error": err, "output": out}),
-                        );
+                        let mut payload = json!({"id": t.id, "ok": ok, "latency_ms": dt, "error": err, "output": out});
+                        crate::ext::corr::ensure_corr(&mut payload);
+                        bus.publish("Task.Completed", &payload);
                     } else if gating::allowed("events:Task.Completed") {
-                        bus.publish(
-                            "Task.Completed",
-                            &json!({"id": t.id, "ok": false, "latency_ms": dt, "error": "gated:egress"}),
-                        );
+                        let mut payload = json!({"id": t.id, "ok": false, "latency_ms": dt, "error": "gated:egress"});
+                        crate::ext::corr::ensure_corr(&mut payload);
+                        bus.publish("Task.Completed", &payload);
                     }
                 }
                 Err(_e) => {
@@ -451,10 +450,14 @@ pub async fn about() -> impl IntoResponse {
 #[arw_admin(method="GET", path="/admin/hierarchy/state", summary="Get hierarchy state")]
 #[arw_macros::arw_gate("hierarchy:state:get")]
 async fn hierarchy_state(State(state): State<AppState>) -> impl IntoResponse {
+    if let Some(svc) = state.resources.get::<crate::resources::hierarchy_service::HierarchyService>() {
+        let st: arw_core::hierarchy::HierarchyState = svc.state_event(&state).await;
+        return Json::<arw_core::hierarchy::HierarchyState>(st).into_response();
+    }
     let st = hier::get_state();
-    state
-        .bus
-        .publish("Hierarchy.State", &serde_json::json!({"epoch": st.epoch}));
+    let mut p = serde_json::json!({"epoch": st.epoch});
+    crate::ext::corr::ensure_corr(&mut p);
+    state.bus.publish("Hierarchy.State", &p);
     Json(st).into_response()
 }
 
@@ -468,6 +471,10 @@ async fn hierarchy_role_set(
     State(state): State<AppState>,
     Json(req): Json<RoleSet>,
 ) -> impl IntoResponse {
+    if let Some(svc) = state.resources.get::<crate::resources::hierarchy_service::HierarchyService>() {
+        svc.role_set(&state, &req.role).await;
+        return ok(json!({})).into_response();
+    }
     let role = match req.role.as_str() {
         "root" => hier::Role::Root,
         "regional" => hier::Role::Regional,
@@ -476,7 +483,6 @@ async fn hierarchy_role_set(
         _ => hier::Role::Observer,
     };
     hier::set_role(role);
-    // Apply immutable gating defaults for role
     let gate_role = match role {
         hier::Role::Root => arw_core::gating::Role::Root,
         hier::Role::Regional => arw_core::gating::Role::Regional,
@@ -485,10 +491,9 @@ async fn hierarchy_role_set(
         hier::Role::Observer => arw_core::gating::Role::Observer,
     };
     arw_core::gating::apply_role_defaults(gate_role);
-    state.bus.publish(
-        "Hierarchy.RoleChanged",
-        &serde_json::json!({"role": req.role}),
-    );
+    let mut p = serde_json::json!({"role": req.role});
+    crate::ext::corr::ensure_corr(&mut p);
+    state.bus.publish("Hierarchy.RoleChanged", &p);
     ok(json!({})).into_response()
 }
 
@@ -521,16 +526,16 @@ async fn governor_set(
 }
 
 #[derive(Deserialize, serde::Serialize, Clone)]
-struct Hints {
+pub(crate) struct Hints {
     #[serde(default)]
-    max_concurrency: Option<usize>,
+    pub(crate) max_concurrency: Option<usize>,
     #[serde(default)]
-    event_buffer: Option<usize>,
+    pub(crate) event_buffer: Option<usize>,
     #[serde(default)]
-    http_timeout_secs: Option<u64>,
+    pub(crate) http_timeout_secs: Option<u64>,
 }
 static HINTS: OnceLock<RwLock<Hints>> = OnceLock::new();
-fn hints() -> &'static RwLock<Hints> {
+pub(crate) fn hints() -> &'static RwLock<Hints> {
     HINTS.get_or_init(|| {
         RwLock::new(Hints {
             max_concurrency: None,
@@ -704,19 +709,20 @@ async fn models_download(
         }
     }
     if already_in_progress {
-        state.bus.publish(
-            "Models.DownloadProgress",
-            &json!({"id": req.id, "status":"already-in-progress"}),
-        );
+        let mut p = json!({"id": req.id, "status":"already-in-progress"});
+        crate::ext::corr::ensure_corr(&mut p);
+        state.bus.publish("Models.DownloadProgress", &p);
         return ok(json!({})).into_response();
     }
     // Validate URL scheme (accept http/https only)
     if !(req.url.starts_with("http://") || req.url.starts_with("https://")) {
         return ApiError::bad_request("invalid url scheme").into_response();
     }
-    state
-        .bus
-        .publish("Models.Download", &json!({"id": req.id, "url": req.url}));
+    {
+        let mut p = json!({"id": req.id, "url": req.url});
+        crate::ext::corr::ensure_corr(&mut p);
+        state.bus.publish("Models.Download", &p);
+    }
     io::audit_event("models.download", &json!({"id": req.id})).await;
     let id = req.id.clone();
     let url = req.url.clone();
@@ -731,10 +737,9 @@ async fn models_download(
         let target = target_dir.join(&safe_name);
         let tmp = target.with_extension("part");
         if let Err(e) = afs::create_dir_all(&target_dir).await {
-            sp.bus.publish(
-                "Models.DownloadProgress",
-                &json!({"id": id, "error": format!("mkdir failed: {}", e)}),
-            );
+            let mut p = json!({"id": id, "error": format!("mkdir failed: {}", e)});
+            crate::ext::corr::ensure_corr(&mut p);
+            sp.bus.publish("Models.DownloadProgress", &p);
             return;
         }
         let client = reqwest::Client::builder()
@@ -758,10 +763,9 @@ async fn models_download(
                 // If server honored Range, recalc overall size
                 let total_all =
                     if resume_from > 0 && status == axum::http::StatusCode::PARTIAL_CONTENT {
-                        sp.bus.publish(
-                            "Models.DownloadProgress",
-                            &json!({"id": id, "status":"resumed", "offset": resume_from}),
-                        );
+                        let mut p = json!({"id": id, "status":"resumed", "offset": resume_from});
+                        crate::ext::corr::ensure_corr(&mut p);
+                        sp.bus.publish("Models.DownloadProgress", &p);
                         resume_from + total_rem
                     } else {
                         if resume_from > 0 {
@@ -776,10 +780,9 @@ async fn models_download(
                     match afs::OpenOptions::new().append(true).open(&tmp).await {
                         Ok(f) => f,
                         Err(e) => {
-                            sp.bus.publish(
-                                "Models.DownloadProgress",
-                                &json!({"id": id, "error": format!("open failed: {}", e)}),
-                            );
+                            let mut p = json!({"id": id, "error": format!("open failed: {}", e)});
+                            crate::ext::corr::ensure_corr(&mut p);
+                            sp.bus.publish("Models.DownloadProgress", &p);
                             return;
                         }
                     }
@@ -787,10 +790,9 @@ async fn models_download(
                     match afs::File::create(&tmp).await {
                         Ok(f) => f,
                         Err(e) => {
-                            sp.bus.publish(
-                                "Models.DownloadProgress",
-                                &json!({"id": id, "error": format!("create failed: {}", e)}),
-                            );
+                            let mut p = json!({"id": id, "error": format!("create failed: {}", e)});
+                            crate::ext::corr::ensure_corr(&mut p);
+                            sp.bus.publish("Models.DownloadProgress", &p);
                             return;
                         }
                     }
@@ -803,48 +805,45 @@ async fn models_download(
                         Ok(bytes) => {
                             if is_cancelled(&id).await {
                                 let _ = afs::remove_file(&tmp).await;
-                                sp.bus.publish(
-                                    "Models.DownloadProgress",
-                                    &json!({"id": id, "status":"canceled"}),
-                                );
+                                let mut p = json!({"id": id, "status":"canceled"});
+                                crate::ext::corr::ensure_corr(&mut p);
+                                sp.bus.publish("Models.DownloadProgress", &p);
                                 clear_cancel(&id).await;
                                 return;
                             }
                             if let Err(e) = file.write_all(&bytes).await {
-                                sp.bus.publish(
-                                    "Models.DownloadProgress",
-                                    &json!({"id": id, "error": format!("write failed: {}", e)}),
-                                );
+                                let mut p = json!({"id": id, "error": format!("write failed: {}", e)});
+                                crate::ext::corr::ensure_corr(&mut p);
+                                sp.bus.publish("Models.DownloadProgress", &p);
                                 return;
                             }
                             downloaded += bytes.len() as u64;
                             if total_all > 0 {
                                 let pct = (((resume_from + downloaded) * 100) / total_all).min(100);
-                                sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "progress": pct, "downloaded": resume_from + downloaded, "total": total_all}));
+                                let mut p = json!({"id": id, "progress": pct, "downloaded": resume_from + downloaded, "total": total_all});
+                                crate::ext::corr::ensure_corr(&mut p);
+                                sp.bus.publish("Models.DownloadProgress", &p);
                             }
                         }
                         Err(e) => {
-                            sp.bus.publish(
-                                "Models.DownloadProgress",
-                                &json!({"id": id, "error": format!("read failed: {}", e)}),
-                            );
+                            let mut p = json!({"id": id, "error": format!("read failed: {}", e)});
+                            crate::ext::corr::ensure_corr(&mut p);
+                            sp.bus.publish("Models.DownloadProgress", &p);
                             return;
                         }
                     }
                 }
                 // flush and rename atomically into place
                 if let Err(e) = file.flush().await {
-                    sp.bus.publish(
-                        "Models.DownloadProgress",
-                        &json!({"id": id, "error": format!("flush failed: {}", e)}),
-                    );
+                    let mut p = json!({"id": id, "error": format!("flush failed: {}", e)});
+                    crate::ext::corr::ensure_corr(&mut p);
+                    sp.bus.publish("Models.DownloadProgress", &p);
                     return;
                 }
                 if let Err(e) = afs::rename(&tmp, &target).await {
-                    sp.bus.publish(
-                        "Models.DownloadProgress",
-                        &json!({"id": id, "error": format!("finalize failed: {}", e)}),
-                    );
+                    let mut p = json!({"id": id, "error": format!("finalize failed: {}", e)});
+                    crate::ext::corr::ensure_corr(&mut p);
+                    sp.bus.publish("Models.DownloadProgress", &p);
                     return;
                 }
                 // checksum verification (optional)
@@ -871,14 +870,15 @@ async fn models_download(
                     let actual = format!("{:x}", h.finalize());
                     if actual != exp {
                         let _ = afs::remove_file(&target).await;
-                        sp.bus.publish("Models.DownloadProgress", &json!({"id": id, "error": "checksum mismatch", "expected": exp, "actual": actual}));
+                        let mut p = json!({"id": id, "error": "checksum mismatch", "expected": exp, "actual": actual});
+                        crate::ext::corr::ensure_corr(&mut p);
+                        sp.bus.publish("Models.DownloadProgress", &p);
                         return;
                     }
                 }
-                sp.bus.publish(
-                    "Models.DownloadProgress",
-                    &json!({"id": id, "status":"complete", "file": safe_name, "provider": provider}),
-                );
+                let mut p = json!({"id": id, "status":"complete", "file": safe_name, "provider": provider});
+                crate::ext::corr::ensure_corr(&mut p);
+                sp.bus.publish("Models.DownloadProgress", &p);
                 {
                     let mut v = models().write().await;
                     if let Some(m) = v
@@ -897,10 +897,9 @@ async fn models_download(
                     .publish("Models.Changed", &json!({"op":"downloaded","id": id}));
             }
             Err(e) => {
-                sp.bus.publish(
-                    "Models.DownloadProgress",
-                    &json!({"id": id, "error": format!("request failed: {}", e)}),
-                );
+            let mut p = json!({"id": id, "error": format!("request failed: {}", e)});
+            crate::ext::corr::ensure_corr(&mut p);
+            sp.bus.publish("Models.DownloadProgress", &p);
             }
         }
     });
@@ -958,10 +957,10 @@ async fn run_tool_endpoint(
 ) -> impl IntoResponse {
     match run_tool_internal(&req.id, &req.input) {
         Ok(out) => {
-            state
-                .bus
-                .publish("Tool.Ran", &json!({"id": req.id, "output": out}));
-            Json(out).into_response()
+            let mut payload = json!({"id": req.id, "output": out});
+            crate::ext::corr::ensure_corr(&mut payload);
+            state.bus.publish("Tool.Ran", &payload);
+            Json(payload.get("output").cloned().unwrap_or_else(|| json!({}))).into_response()
         }
         Err(e) => ApiError::bad_request(&e).into_response(),
     }
@@ -1193,11 +1192,26 @@ async fn feedback_apply_post(
         }
     }
     if let Some(sug) = sug_opt {
-        // Policy-gated apply with error reason
+        // Policy-gated apply with intents events
         let applied_ok = match policy::allow_apply(&sug.action, &sug.params).await {
-            Ok(()) => apply_suggestion(&sug, &state).await,
+            Ok(()) => {
+                let mut intent = json!({
+                    "status": "approved",
+                    "suggestion": {"id": sug.id, "action": sug.action, "params": sug.params}
+                });
+                crate::ext::corr::ensure_corr(&mut intent);
+                state.bus.publish("Intents.Approved", &intent);
+                apply_suggestion(&sug, &state).await
+            }
             Err(reason) => {
-                return ApiError::forbidden(&reason).into_response();
+                let mut intent = json!({
+                    "status": "rejected",
+                    "reason": reason,
+                    "suggestion": {"id": sug.id, "action": sug.action, "params": sug.params}
+                });
+                crate::ext::corr::ensure_corr(&mut intent);
+                state.bus.publish("Intents.Rejected", &intent);
+                return ApiError::forbidden("gated by policy").into_response();
             }
         };
         if applied_ok {
@@ -1205,6 +1219,14 @@ async fn feedback_apply_post(
                 "Feedback.Applied",
                 &json!({"id": sug.id, "action": sug.action, "params": sug.params}),
             );
+            // Also emit a generic Actions event for episodes
+            let mut payload = json!({
+                "ok": true,
+                "source": "feedback.apply",
+                "suggestion": {"id": sug.id, "action": sug.action, "params": sug.params}
+            });
+            crate::ext::corr::ensure_corr(&mut payload);
+            state.bus.publish("Actions.Applied", &payload);
             persist_orch().await;
         }
         return ok(json!({"ok": applied_ok})).into_response();

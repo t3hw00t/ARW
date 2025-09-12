@@ -72,12 +72,13 @@ pub(crate) async fn chat_send(
             log.remove(0);
         }
     }
-    state
-        .bus
-        .publish("Chat.Message", &json!({"dir":"in","msg": user}));
-    state
-        .bus
-        .publish("Chat.Message", &json!({"dir":"out","msg": assist}));
+    // Use a single corr_id for user+assistant pair
+    let mut in_evt = json!({"dir":"in","msg": user});
+    crate::ext::corr::ensure_corr(&mut in_evt);
+    let mut out_evt = json!({"dir":"out","msg": assist});
+    if let Some(cid) = in_evt.get("corr_id").cloned() { out_evt.as_object_mut().unwrap().insert("corr_id".into(), cid); }
+    state.bus.publish("Chat.Message", &in_evt);
+    state.bus.publish("Chat.Message", &out_evt);
     super::ok(assist).into_response()
 }
 
@@ -87,7 +88,7 @@ pub(crate) struct ChatStatusQs {
     pub probe: Option<bool>,
 }
 #[arw_admin(method="GET", path="/admin/chat/status", summary="Chat backend status")]
-pub(crate) async fn chat_status(Query(q): Query<ChatStatusQs>) -> impl IntoResponse {
+pub(crate) async fn chat_status(State(state): State<AppState>, Query(q): Query<ChatStatusQs>) -> impl IntoResponse {
     let backend = if std::env::var("ARW_LLAMA_URL")
         .ok()
         .filter(|s| !s.trim().is_empty())
@@ -119,7 +120,10 @@ pub(crate) async fn chat_status(Query(q): Query<ChatStatusQs>) -> impl IntoRespo
             _ => ("synthetic", true, None::<String>),
         };
         let dt = t0.elapsed().as_millis() as u64;
-        return super::ok(json!({"backend": backend, "probe_ok": ok, "latency_ms": dt, "error": err})).into_response();
+        let mut payload = json!({"backend": backend, "probe_ok": ok, "latency_ms": dt, "error": err});
+        crate::ext::corr::ensure_corr(&mut payload);
+        state.bus.publish("Chat.Probe", &payload);
+        return super::ok(payload).into_response();
     }
     super::ok(json!({"backend": backend})).into_response()
 }

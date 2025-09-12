@@ -3,8 +3,9 @@ use axum::response::IntoResponse;
 use arw_macros::arw_admin;
 use once_cell::sync::OnceCell;
 use serde::Serialize;
+use chrono::{DateTime, Utc};
 use serde_json::json;
-use std::collections::VecDeque;
+use std::collections::{HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
 
@@ -92,6 +93,23 @@ pub async fn on_event(env: &Envelope) {
         if q.len() == q.capacity() { let _ = q.pop_front(); }
         q.push_back(json!({"time": env.time, "kind": env.kind, "payload": env.payload}));
     }
+    // Episodes stitching by corr_id
+    if let Some(cid) = env.payload.get("corr_id").and_then(|x| x.as_str()) {
+        let mut map = episodes_map().write().unwrap();
+        let ep = map.entry(cid.to_string()).or_insert_with(|| Episode {
+            id: cid.to_string(),
+            last: env.time.clone(),
+            items: Vec::new(),
+        });
+        ep.last = env.time.clone();
+        ep.items.push(env.clone());
+        drop(map);
+        let mut order = ep_order().write().unwrap();
+        if !order.contains(&cid.to_string()) {
+            if order.len() == order.capacity() { let _ = order.pop_front(); }
+            order.push_back(cid.to_string());
+        }
+    }
 }
 
 #[arw_admin(method="GET", path="/admin/state/beliefs", summary="Current beliefs snapshot")]
@@ -109,4 +127,51 @@ pub async fn intents_get() -> impl IntoResponse {
 pub async fn actions_get() -> impl IntoResponse {
     let s: Vec<_> = actions().read().unwrap().iter().cloned().collect();
     super::ok(json!({"items": s}))
+}
+
+// -------- Episodes (stitched by corr_id) --------
+
+#[derive(Clone, Serialize)]
+struct Episode {
+    id: String,
+    last: String,
+    items: Vec<Envelope>,
+}
+
+static EPISODES: OnceCell<RwLock<HashMap<String, Episode>>> = OnceCell::new();
+static EP_ORDER: OnceCell<RwLock<VecDeque<String>>> = OnceCell::new();
+fn episodes_map() -> &'static RwLock<HashMap<String, Episode>> { EPISODES.get_or_init(|| RwLock::new(HashMap::new())) }
+fn ep_order() -> &'static RwLock<VecDeque<String>> { EP_ORDER.get_or_init(|| RwLock::new(VecDeque::with_capacity(64))) }
+
+#[arw_admin(method="GET", path="/admin/state/episodes", summary="Recent episodes stitched by corr_id")]
+pub async fn episodes_get() -> impl IntoResponse {
+    let order = ep_order().read().unwrap();
+    let map = episodes_map().read().unwrap();
+    let mut items: Vec<serde_json::Value> = Vec::new();
+    for id in order.iter() {
+        if let Some(ep) = map.get(id) {
+            // Compute simple rollup: count, duration_ms, errors
+            let count = ep.items.len() as u64;
+            let first_ts = ep.items.first().map(|e| e.time.as_str()).unwrap_or("");
+            let last_ts = ep.items.last().map(|e| e.time.as_str()).unwrap_or("");
+            let duration_ms = match (DateTime::parse_from_rfc3339(first_ts), DateTime::parse_from_rfc3339(last_ts)) {
+                (Ok(a), Ok(b)) => {
+                    let am = a.with_timezone(&Utc).timestamp_millis();
+                    let bm = b.with_timezone(&Utc).timestamp_millis();
+                    bm.saturating_sub(am) as u64
+                }
+                _ => 0
+            };
+            let errors = ep.items.iter().filter(|e| e.payload.get("error").is_some()).count() as u64;
+            items.push(json!({
+                "id": ep.id,
+                "last": ep.last,
+                "count": count,
+                "duration_ms": duration_ms,
+                "errors": errors,
+                "items": ep.items,
+            }));
+        }
+    }
+    super::ok(json!({"items": items}))
 }

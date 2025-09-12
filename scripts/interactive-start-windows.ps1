@@ -7,6 +7,9 @@ $ErrorActionPreference = 'Stop'
 $script:IwrArgs = @{}
 try { if ($PSVersionTable.PSVersion.Major -lt 6) { $script:IwrArgs = @{ UseBasicParsing = $true } } } catch {}
 
+# Optional: WebView2 runtime helpers (for Tauri-based launcher)
+try { . (Join-Path $PSScriptRoot 'webview2.ps1') } catch { }
+
 function Banner($title, $subtitle){
   $cols = [Console]::WindowWidth
   if (-not $cols -or $cols -lt 40) { $cols = 80 }
@@ -266,6 +269,7 @@ function Main-Menu {
   32) Stop Caddy reverse proxy (dry-run)
   33) Generate reverse proxy templates (dry-run)
   34) TLS wizard (dry-run preview)
+  35) WebView2 runtime (check/install)
   0) Exit
 '@
     $pick = Read-Host 'Select'
@@ -304,6 +308,7 @@ function Main-Menu {
       '32' { Reverse-Proxy-Caddy-Stop-Preview }
       '33' { Reverse-Proxy-Templates-Preview }
       '34' { TLS-Wizard-Preview }
+      '35' { WebView2-Menu }
       '0' { break }
       default { }
     }

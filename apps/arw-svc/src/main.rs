@@ -1,5 +1,11 @@
 use arw_macros::{arw_gate, arw_admin};
 use arw_macros::arw_tool;
+pub use arw_svc::resources as resources;
+use arw_svc::resources::Resources;
+use arw_svc::resources::models_service::ModelsService;
+use arw_svc::resources::memory_service::MemoryService;
+use arw_svc::resources::governor_service::GovernorService;
+use arw_svc::resources::hierarchy_service::HierarchyService;
 use axum::extract::Query;
 use axum::http::HeaderMap;
 use axum::http::StatusCode;
@@ -74,13 +80,7 @@ fn _register_feedback_evaluate() {}
 )]
 fn _register_feedback_apply() {}
 
-#[derive(Clone)]
-pub(crate) struct AppState {
-    pub(crate) bus: arw_events::Bus,
-    pub(crate) stop_tx: tokio::sync::broadcast::Sender<()>,
-    // Pluggable queue (Local by default; NATS when enabled)
-    pub(crate) queue: std::sync::Arc<dyn arw_core::orchestrator::Queue>,
-}
+pub(crate) use arw_svc::app_state::AppState;
 
 #[derive(serde::Serialize, ToSchema)]
 struct OkResponse {
@@ -213,11 +213,12 @@ async fn main() {
         }
     }
 
-    let state = AppState {
-        bus,
-        stop_tx: stop_tx.clone(),
-        queue,
-    };
+    let state = AppState { bus, stop_tx: Some(stop_tx.clone()), queue, resources: Resources::new() };
+    // Register typed services
+    state.resources.insert(std::sync::Arc::new(ModelsService::new()));
+    state.resources.insert(std::sync::Arc::new(MemoryService::new()));
+    state.resources.insert(std::sync::Arc::new(GovernorService::new()));
+    state.resources.insert(std::sync::Arc::new(HierarchyService::new()));
 
     // Load persisted orchestration/feedback state
     ext::load_persisted().await;
@@ -570,7 +571,7 @@ async fn shutdown(State(state): State<AppState>) -> impl IntoResponse {
     state
         .bus
         .publish("Service.Stop", &json!({"reason":"user request"}));
-    let _ = state.stop_tx.send(());
+    if let Some(tx) = &state.stop_tx { let _ = tx.send(()); }
     Json(OkResponse { ok: true }).into_response()
 }
 
@@ -758,7 +759,7 @@ struct ApiDoc;
     (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
 ))]
 async fn memory_get_doc() -> impl IntoResponse {
-    ext::memory_api::memory_get().await
+    ext::memory_api::memory_get(State(AppState{ bus: arw_events::Bus::new_with_replay(1,1), stop_tx: None, queue: std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new()), resources: Resources::new() })).await
 }
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/admin/memory/limit", tag = "Admin/Memory", responses(
@@ -766,7 +767,7 @@ async fn memory_get_doc() -> impl IntoResponse {
     (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
 ))]
 async fn memory_limit_get_doc() -> impl IntoResponse {
-    ext::memory_api::memory_limit_get().await
+    ext::memory_api::memory_limit_get(State(AppState{ bus: arw_events::Bus::new_with_replay(1,1), stop_tx: None, queue: std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new()), resources: Resources::new() })).await
 }
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/admin/models", tag = "Admin/Models", responses(
@@ -774,7 +775,7 @@ async fn memory_limit_get_doc() -> impl IntoResponse {
     (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
 ))]
 async fn models_list_doc() -> impl IntoResponse {
-    ext::models_api::list_models().await
+    ext::models_api::list_models(State(AppState{ bus: arw_events::Bus::new_with_replay(1,1), stop_tx: None, queue: std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new()), resources: Resources::new() })).await
 }
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/admin/models/default", tag = "Admin/Models", responses(
@@ -782,7 +783,23 @@ async fn models_list_doc() -> impl IntoResponse {
     (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
 ))]
 async fn models_default_get_doc() -> impl IntoResponse {
-    ext::models_api::models_default_get().await
+    ext::models_api::models_default_get(State(AppState{ bus: arw_events::Bus::new_with_replay(1,1), stop_tx: None, queue: std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new()), resources: Resources::new() })).await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/governor/profile", tag = "Admin/Governor", responses(
+    (status=200, description="Governor profile"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn governor_profile_get_doc() -> impl IntoResponse {
+    ext::governor_api::governor_get(State(AppState{ bus: arw_events::Bus::new_with_replay(1,1), stop_tx: None, queue: std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new()), resources: Resources::new() })).await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/governor/hints", tag = "Admin/Governor", responses(
+    (status=200, description="Governor hints"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn governor_hints_get_doc() -> impl IntoResponse {
+    ext::governor_api::governor_hints_get(State(AppState{ bus: arw_events::Bus::new_with_replay(1,1), stop_tx: None, queue: std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new()), resources: Resources::new() })).await
 }
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/admin/tools", tag = "Admin/Tools", responses(
@@ -1042,22 +1059,7 @@ async fn state_actions_doc() -> impl IntoResponse {
 async fn chat_get_doc() -> impl IntoResponse {
     ext::chat_api::chat_get().await
 }
-#[allow(dead_code)]
-#[utoipa::path(get, path = "/admin/governor/profile", tag = "Admin/Governor", responses(
-    (status=200, description="Governor profile"),
-    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
-))]
-async fn governor_profile_get_doc() -> impl IntoResponse {
-    ext::governor_api::governor_get().await
-}
-#[allow(dead_code)]
-#[utoipa::path(get, path = "/admin/governor/hints", tag = "Admin/Governor", responses(
-    (status=200, description="Governor hints"),
-    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
-))]
-async fn governor_hints_get_doc() -> impl IntoResponse {
-    ext::governor_api::governor_hints_get().await
-}
+// (moved doc wrappers earlier)
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/admin/hierarchy/state", tag = "Admin/Hierarchy", responses(
     (status=200, description="Hierarchy state"),
@@ -1105,7 +1107,7 @@ async fn admin_index_json() -> impl IntoResponse {
 // ---- Public endpoints: metrics & specs ----
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/metrics", tag = "Public", responses((status=200, description="Prometheus metrics")))]
-async fn metrics_doc() -> impl IntoResponse { ext::stats::metrics_get(State(AppState{ bus: arw_events::Bus::new_with_replay(1,1), stop_tx: tokio::sync::broadcast::channel(1).0, queue: std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new()) })).await }
+async fn metrics_doc() -> impl IntoResponse { ext::stats::metrics_get(State(AppState{ bus: arw_events::Bus::new_with_replay(1,1), stop_tx: Some(tokio::sync::broadcast::channel(1).0), queue: std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new()), resources: Resources::new() })).await }
 
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/spec/openapi.yaml", tag = "Public/Specs", responses(

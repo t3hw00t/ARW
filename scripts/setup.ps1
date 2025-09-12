@@ -66,6 +66,30 @@ try {
 'DIR target','DIR dist' | ForEach-Object { Add-Content $installLog $_ }
 if (Test-Path (Join-Path $root 'site')) { Add-Content $installLog 'DIR site' }
 
+Title 'Windows runtime check (WebView2 for Launcher)'
+try {
+  . (Join-Path $PSScriptRoot 'webview2.ps1')
+  $hasWV2 = Test-WebView2Runtime
+  if ($hasWV2) {
+    Info 'WebView2 Evergreen Runtime detected.'
+  } else {
+    Write-Host 'WebView2 Runtime not found. Required for the Tauri-based Desktop Launcher on Windows 10/Server.' -ForegroundColor Yellow
+    Write-Host 'On Windows 11 it is in-box. You can install the Evergreen Runtime now.' -ForegroundColor Yellow
+    if ($Yes) {
+      $ok = Install-WebView2Runtime -Silent
+      if ($ok) { Info 'WebView2 installed.' } else { Warn 'WebView2 install failed or was cancelled.' }
+    } else {
+      $ans = Read-Host 'Install WebView2 Runtime now? (y/N)'
+      if ($ans -match '^[yY]') {
+        $ok = Install-WebView2Runtime
+        if ($ok) { Info 'WebView2 installed.' } else { Warn 'WebView2 install failed or was cancelled.' }
+      }
+    }
+  }
+} catch {
+  Warn "WebView2 check failed: $($_.Exception.Message)"
+}
+
 Pop-Location
 if ($warnings.Count -gt 0) {
   Title 'Warnings'

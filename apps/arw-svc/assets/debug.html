@@ -207,6 +207,27 @@
       </div>
       <pre id="tests">Ready.</pre>
     </div>
+    <div class="box">
+      <h3>Episodes <a href="#" class="help" data-doc="events" data-tip="Stitched by corr_id from live events." title="Episodes docs">?</a></h3>
+      <div class="row">
+        <button onclick="episodesRefresh()">Refresh</button>
+        <label><input type="checkbox" id="epLive"> live</label>
+        <label><input type="checkbox" id="epErrOnly"> errors only</label>
+        <input id="epFilter" placeholder="filter id/kind/substr" style="flex:1;min-width:200px">
+      </div>
+      <div id="epList" style="max-height:36vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
+    </div>
+    <div class="box">
+      <h3>State Snapshots</h3>
+      <div class="row">
+        <button onclick="pullState('observations')">Observations</button>
+        <button onclick="pullState('beliefs')">Beliefs</button>
+        <button onclick="pullState('intents')">Intents</button>
+        <button onclick="pullState('actions')">Actions</button>
+        <button onclick="pullState('episodes')">Episodes</button>
+      </div>
+      <pre id="stateOut">{}</pre>
+    </div>
   <div class="box">
       <h3>Self‑Learning <a href="#" class="help" data-doc="orchestrator" data-tip="Signals → suggestions. Gently embedded feedback." title="Self‑Learning docs">?</a></h3>
       <div class="row">
@@ -263,7 +284,7 @@
   <h3>Response <span class="key">time</span> <code id="rt-main">–</code> <button class="iconbtn" id="copyJsonMain" title="Copy JSON">Copy</button></h3>
   <pre id="out">{}</pre>
 
-<script>
+  <script>
 const base = location.origin;
 document.getElementById('port').textContent = location.host;
 let lastCurl = null;
@@ -404,13 +425,17 @@ es.addEventListener('Models.DownloadProgress', (e)=>{
   }catch{}
 });
 es.onmessage = (e) => pushEvt('message', e.data);
-['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Bus.Gap'].forEach(k => {
+['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Bus.Gap','Beliefs.Updated','Intents.Proposed','Intents.Approved','Intents.Rejected','Actions.Applied','Actions.HintApplied','Chat.Message'].forEach(k => {
   es.addEventListener(k, (e)=>pushEvt(k, e.data));
 });
 // Feedback live updates
 es.addEventListener('Feedback.Suggested', (e)=>{
   pushEvt('Feedback.Suggested', e.data);
   try{ const j=JSON.parse(e.data); document.getElementById('fbLiveOut').textContent = JSON.stringify(j,null,2); fbRenderList(j); }catch{}
+});
+// Show probe events
+es.addEventListener('Chat.Probe', (e)=>{
+  pushEvt('Chat.Probe', e.data);
 });
 
 // Insights aggregation overlay
@@ -427,7 +452,7 @@ function renderInsights(){
   }
   el.innerHTML = lines.join('');
 }
-['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Chat.Message','Governor.Changed','Bus.Gap'].forEach(k => {
+['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Chat.Message','Governor.Changed','Bus.Gap','Beliefs.Updated','Intents.Proposed','Intents.Approved','Intents.Rejected','Actions.Applied','Actions.HintApplied'].forEach(k => {
   es.addEventListener(k, (e)=>{ agg.total++; agg.kinds[k]=(agg.kinds[k]||0)+1; renderInsights(); });
 });
 }
@@ -758,6 +783,52 @@ async function copyStatsNow(){ try{ const r=await fetch(base + '/introspect/stat
 <div id="toast" class="toast"></div>
 <script>
 function showToast(msg){ const t=document.getElementById('toast'); if(!t) return; t.textContent=msg; t.style.display='block'; clearTimeout(window.__toastTimer); window.__toastTimer = setTimeout(()=>{ t.style.display='none'; }, 2500); }
+async function pullState(kind){ try{ const r=await fetch(base + '/state/' + kind); const j=await r.json(); document.getElementById('stateOut').textContent = JSON.stringify(j,null,2); }catch(e){ showToast('state fetch failed'); } }
+// Episodes UI
+let __epTimer = null;
+function episodesRender(j){ try{
+  const el = document.getElementById('epList'); if(!el) return;
+  const items = (j && j.items) || [];
+  const errOnly = !!document.getElementById('epErrOnly')?.checked;
+  const filt = (document.getElementById('epFilter')?.value||'').toLowerCase();
+  const matches = (ep)=>{
+    if (errOnly && !(ep.errors>0)) return false;
+    if (!filt) return true;
+    const id = (ep.id||'').toLowerCase();
+    if (id.includes(filt)) return true;
+    const arr = ep.items||[];
+    for (let i=0;i<arr.length;i++){ const k = (arr[i].kind||'').toLowerCase(); if(k.includes(filt)) return true; try{ const p = JSON.stringify(arr[i].payload||{}).toLowerCase(); if(p.includes(filt)) return true; }catch{} }
+    return false;
+  };
+  const list = items.filter(matches);
+  if(list.length === 0){ el.innerHTML = '<div class="evt">(no episodes)</div>'; return; }
+  const html = list.slice().reverse().map((ep,idx)=>{
+    const count = (ep.items||[]).length;
+    const last = ep.last || '';
+    const dur = ep.duration_ms!=null ? ` · ${ep.duration_ms} ms` : '';
+    const errs = ep.errors||0;
+    const badge = errs>0 ? `<span class="badge bad" style="margin-left:6px"><span class="dot"></span> ${errs} err</span>` : `<span class="badge good" style="margin-left:6px"><span class="dot"></span> OK</span>`;
+    const eid = `epd-${(ep.id||String(idx)).replace(/[^a-zA-Z0-9_-]/g,'_')}`;
+    const head = `<div style="font-weight:600;display:flex;justify-content:space-between;align-items:center"><span>${ep.id} <span style="color:var(--muted);font-weight:400"> · ${count} events${dur} · ${last}</span>${badge}</span><button class="iconbtn" onclick="const d=document.getElementById('${eid}'); d.style.display = (d.style.display==='none'||!d.style.display)?'block':'none';">Details</button></div>`;
+    const bodyAll = (ep.items||[]).map(ev=>{
+      const k = ev.kind || '';
+      const t = ev.time || '';
+      const p = ev.payload ? JSON.stringify(ev.payload) : '{}';
+      return `<div class="evt">[${t}] ${k}: ${p}</div>`;
+    }).join('');
+    return `<div class="box" style="border:1px dashed #e5e7eb;margin:6px 0;padding:6px">${head}<div id="${eid}" style="display:none">${bodyAll}</div></div>`;
+  }).join('');
+  el.innerHTML = html;
+}catch{}}
+async function episodesRefresh(){ try{ const r=await fetch(base + '/state/episodes'); const j=await r.json(); episodesRender(j); }catch(e){ showToast('episodes fetch failed'); } }
+document.addEventListener('DOMContentLoaded', ()=>{
+  const cb = document.getElementById('epLive'); if(!cb) return;
+  const tick = async ()=>{ await episodesRefresh(); };
+  cb.addEventListener('change', ()=>{
+    if(cb.checked){ tick(); __epTimer = setInterval(tick, 3000); }
+    else { if(__epTimer) { clearInterval(__epTimer); __epTimer=null; } }
+  });
+});
 // Bind copy buttons and insights toggle after DOM ready
 document.addEventListener('DOMContentLoaded', ()=>{
   const copyMain=document.getElementById('copyJsonMain'); if(copyMain){ copyMain.addEventListener('click', ()=>{ try{ navigator.clipboard.writeText(document.getElementById('out').textContent||''); }catch{} }); }

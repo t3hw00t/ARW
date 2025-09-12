@@ -171,9 +171,26 @@ pub fn load_effective_paths() -> serde_json::Value {
         .or_else(|| cfg.as_ref().and_then(|c| c.runtime.portable))
         .unwrap_or(false);
 
-    let home_like = std::env::var("LOCALAPPDATA")
-        .or_else(|_| std::env::var("HOME"))
-        .unwrap_or_else(|_| ".".into());
+    // Compute sensible OS-specific defaults (Windows Known Folders, XDG, etc.)
+    // Use directories::ProjectDirs to anchor per-user app paths consistently.
+    // Fallback to envs if directories can't be resolved.
+    let proj_dirs = directories::ProjectDirs::from("org", "arw", "arw");
+    let default_state: String = proj_dirs
+        .as_ref()
+        .map(|p| p.data_local_dir().to_string_lossy().to_string())
+        // Fallbacks preserve previous behavior: prefer LOCALAPPDATA on Windows, HOME elsewhere
+        .or_else(|| std::env::var("LOCALAPPDATA").ok())
+        .or_else(|| std::env::var("HOME").ok())
+        .unwrap_or_else(|| ".".into());
+    let default_cache: String = proj_dirs
+        .as_ref()
+        .map(|p| p.cache_dir().to_string_lossy().to_string())
+        .unwrap_or_else(|| format!("{}/arw/cache", default_state.clone()));
+    let default_logs: String = proj_dirs
+        .as_ref()
+        .map(|p| p.data_local_dir().join("logs").to_string_lossy().to_string())
+        .unwrap_or_else(|| format!("{}/arw/logs", default_state.clone()));
+
     let norm = |s: String| s.replace('\\', "/");
     let expand = |mut s: String| {
         // Very small %VAR% and $VAR expansion for portability
@@ -193,15 +210,15 @@ pub fn load_effective_paths() -> serde_json::Value {
     let state_dir = std::env::var("ARW_STATE_DIR")
         .ok()
         .or_else(|| cfg.as_ref().and_then(|c| c.runtime.state_dir.clone()))
-        .unwrap_or_else(|| format!("{}/arw", home_like.clone()));
+        .unwrap_or_else(|| default_state.clone());
     let cache_dir = std::env::var("ARW_CACHE_DIR")
         .ok()
         .or_else(|| cfg.as_ref().and_then(|c| c.runtime.cache_dir.clone()))
-        .unwrap_or_else(|| format!("{}/arw/cache", home_like.clone()));
+        .unwrap_or_else(|| default_cache.clone());
     let logs_dir = std::env::var("ARW_LOGS_DIR")
         .ok()
         .or_else(|| cfg.as_ref().and_then(|c| c.runtime.logs_dir.clone()))
-        .unwrap_or_else(|| format!("{}/arw/logs", home_like));
+        .unwrap_or_else(|| default_logs.clone());
 
     serde_json::json!({
         "portable": portable,

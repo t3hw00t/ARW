@@ -1,4 +1,4 @@
-use super::{io, paths, ApiError};
+use super::{corr, io, paths, ApiError};
 use crate::AppState;
 use arw_macros::arw_admin;
 use axum::{extract::Query, response::IntoResponse, Json};
@@ -51,9 +51,9 @@ pub(crate) async fn projects_create(
         let _ = io::save_bytes_atomic(&notes, body.as_bytes()).await;
     }
     // Emit event for orchestration/agents to react to project lifecycle
-    state
-        .bus
-        .publish("Projects.Created", &json!({"name": safe.clone()}));
+    let mut p = json!({"name": safe.clone()});
+    corr::ensure_corr(&mut p);
+    state.bus.publish("Projects.Created", &p);
     super::ok(json!({"name": safe})).into_response()
 }
 
@@ -157,8 +157,8 @@ pub(crate) async fn projects_notes_set(
     if let Err(e) = io::save_bytes_atomic(&p, &body).await {
         return ApiError::internal(&e.to_string()).into_response();
     }
-    state
-        .bus
-        .publish("Projects.NotesSaved", &json!({"name": q.proj}));
+    let mut p = json!({"name": q.proj});
+    corr::ensure_corr(&mut p);
+    state.bus.publish("Projects.NotesSaved", &p);
     super::ok(json!({})).into_response()
 }

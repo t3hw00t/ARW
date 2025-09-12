@@ -97,6 +97,16 @@ pub fn start_feedback_engine(state: AppState) {
                     state
                         .bus
                         .publish("Beliefs.Updated", &json!({"version": v, "suggestions": out}));
+                    // Emit Intents for each suggestion (proposed)
+                    for s in out.iter() {
+                        // Expect shape: {id, action, params, rationale, confidence}
+                        let mut intent = json!({
+                            "status": "proposed",
+                            "suggestion": s,
+                        });
+                        crate::ext::corr::ensure_corr(&mut intent);
+                        state.bus.publish("Intents.Proposed", &intent);
+                    }
                 }
             }
         }

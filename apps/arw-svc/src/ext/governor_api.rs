@@ -1,10 +1,17 @@
 use crate::AppState;
+use crate::resources::governor_service::GovernorService;
 use arw_macros::{arw_gate, arw_admin};
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::Deserialize;
 
 #[arw_admin(method="GET", path="/admin/governor/profile", summary="Get governor profile")]
-pub(crate) async fn governor_get() -> impl IntoResponse { super::governor_get().await }
+pub(crate) async fn governor_get(State(state): State<AppState>) -> impl IntoResponse {
+    if let Some(svc) = state.resources.get::<GovernorService>() {
+        let p = svc.profile_get().await;
+        return super::ok(serde_json::json!({"profile": p})).into_response();
+    }
+    super::governor_get().await.into_response()
+}
 #[derive(Deserialize, utoipa::ToSchema)]
 pub(crate) struct SetProfile {
     name: String,
@@ -15,15 +22,21 @@ pub(crate) async fn governor_set(
     State(state): State<AppState>,
     Json(req): Json<SetProfile>,
 ) -> impl IntoResponse {
+    if let Some(svc) = state.resources.get::<GovernorService>() {
+        svc.profile_set(&state, req.name).await;
+        return super::ok(serde_json::json!({})).into_response();
+    }
     let req2 = super::SetProfile { name: req.name };
-    super::governor_set(State(state), Json(req2))
-        .await
-        .into_response()
+    super::governor_set(State(state), Json(req2)).await.into_response()
 }
 
 #[arw_admin(method="GET", path="/admin/governor/hints", summary="Get governor hints")]
-pub(crate) async fn governor_hints_get() -> impl IntoResponse {
-    super::governor_hints_get().await
+pub(crate) async fn governor_hints_get(State(state): State<AppState>) -> impl IntoResponse {
+    if let Some(svc) = state.resources.get::<GovernorService>() {
+        let v = svc.hints_get().await;
+        return super::ok(v).into_response();
+    }
+    super::governor_hints_get().await.into_response()
 }
 #[derive(Deserialize, utoipa::ToSchema)]
 pub(crate) struct Hints {
@@ -40,12 +53,10 @@ pub(crate) async fn governor_hints_set(
     State(state): State<AppState>,
     Json(req): Json<Hints>,
 ) -> impl IntoResponse {
-    let req2 = super::Hints {
-        max_concurrency: req.max_concurrency,
-        event_buffer: req.event_buffer,
-        http_timeout_secs: req.http_timeout_secs,
-    };
-    super::governor_hints_set(State(state), Json(req2))
-        .await
-        .into_response()
+    if let Some(svc) = state.resources.get::<GovernorService>() {
+        svc.hints_set_values(&state, req.max_concurrency, req.event_buffer, req.http_timeout_secs).await;
+        return super::ok(serde_json::json!({})).into_response();
+    }
+    let req2 = super::Hints { max_concurrency: req.max_concurrency, event_buffer: req.event_buffer, http_timeout_secs: req.http_timeout_secs };
+    super::governor_hints_set(State(state), Json(req2)).await.into_response()
 }
