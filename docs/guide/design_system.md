@@ -6,6 +6,8 @@ title: Design System
 
 This documents the subtle visual language used across ARW UIs: calm, instrument-panel inspired, with copper/teal accents.
 
+Updated: 2025-09-12
+
 ## Tokens
 
 - Colors
@@ -33,4 +35,3 @@ This documents the subtle visual language used across ARW UIs: calm, instrument-
 
 - Header badges showing SSE, Admin, Chat, Models, Memory, Governor.
 - Box headers may include a minimal badge for local context (e.g., Memory limit).
-

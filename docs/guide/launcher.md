@@ -6,6 +6,8 @@ title: Desktop Launcher (Tauri)
 
 The ARW Launcher is a Tauri 2 desktop app that provides:
 
+Updated: 2025-09-12
+
 - System tray with Start/Stop Service, Open Debug UI, Events, Logs, Models (stub), Connections (stub).
 - In‑app windows:
   - Events: streams `/events` via SSE (Replay 50, optional filter)

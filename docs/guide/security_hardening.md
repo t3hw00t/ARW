@@ -6,6 +6,8 @@ title: Security Hardening
 
 This guide summarizes recommended steps to run ARW more securely beyond the local‑dev defaults.
 
+Updated: 2025-09-12
+
 Baseline
 - Bind: the service binds to `127.0.0.1` by default. Keep it private or put it behind a reverse proxy.
 - Admin endpoints: set an admin token and require it on sensitive routes.

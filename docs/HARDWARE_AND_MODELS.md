@@ -1,7 +1,14 @@
-Agents running wild — Hardware, Models & Performance
+---
+title: Hardware and Models
+---
+
+# Hardware and Models
+
 Updated: 2025-09-06.
 
-OBJECTIVES
+See also: [Configuration](CONFIGURATION.md), [Glossary](GLOSSARY.md)
+
+## Objectives
 
 Robust accelerator access (CPU/GPU/NPU) through open stacks.
 
@@ -13,13 +20,13 @@ Model interoperability and automatic performance optimization.
 
 Dedicated Model Manager app for model lifecycle.
 
-HARDWARE CAPABILITIES (arw-hw)
+## Hardware Capabilities (arw-hw)
 
 Probe devices, RAM/VRAM/bandwidth, dtypes (fp32/16/bf16/int8/4), driver/runtime versions, features.
 
 Emit normalized HwReport, publish to event bus, expose /hw/report + MCP tool hw.probe.
 
-ADAPTERS
+## Adapters
 
 llama.cpp: GGUF models; configurable offload; KV cache strategies.
 
@@ -29,7 +36,7 @@ Vendor shims optional (e.g., TensorRT*) if installed.
 
 If any accelerator path fails, the runtime must degrade to CPU and emit FallbackApplied events.
 
-GOVERNOR & PRESETS (arw-governor)
+## Governor & Presets (arw-governor)
 
 Profiles: performance, balanced, power-saver, custom.
 
@@ -41,19 +48,19 @@ Policy-bindable: e.g., deny high-power after 20:00.
 
 Note: where supported by the OS, network/disk IO priorities also apply to connectors/links managed by the Connection Manager.
 
-CONCURRENCY (arw-modeld + arw-cas)
+## Concurrency (arw-modeld + arw-cas)
 
 arw-modeld: centralized model loading; pooling, batching, leasing, QoS hints; HTTP/IPC control.
 
 arw-cas: content-addressable, mmapped read-only artifacts; atomic swaps; GC for unreferenced blobs.
 
-INTEROPERABILITY (arw-model-manifest)
+## Interoperability (arw-model-manifest)
 
 ModelManifest: name, version, license, arch, ctx window, tokenizer, formats (GGUF/ONNX/safetensors), quantizations, adapter compatibility, recommended presets.
 
 Compatibility solver selects best runtime given hardware; proposes fallbacks.
 
-MODEL MANAGER APP
+## Model Manager App
 
 Discover/download with checksums & resume; CAS import; manifest generation.
 
@@ -63,19 +70,19 @@ Apply profile (dry-run validation); detect conflicts and suggest alternatives.
 
 Export/import bundles for portability.
 
-AUTO-TUNE (arw-autotune)
+## Auto-Tune (arw-autotune)
 
 Bench representative tasks; search over threads/batch/kv/offload/quant/speculative decoding.
 
 Persist tuned profiles per device/model under /configs/presets/*.toml.
 
-SAFETY & FALLBACKS
+## Safety & Fallbacks
 
 Policy-gated hardware actions, timeouts/circuit-breakers.
 
 Graceful degradation to next-best adapter; events emitted for visibility.
 
-APIS & EVENTS
+## APIs & Events
 
 HTTP: /hw/report, /models, /models/{id}/manifest, /governor/profile; POST /models/{id}/load|apply-profile|convert|quantize; POST /autotune/run
 

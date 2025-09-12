@@ -1,7 +1,12 @@
-Agents running wild — Project Instructions
+---
+title: Project Instructions
+---
+
+# Project Instructions
+
 Updated: 2025-09-06.
 
-MISSION
+## Mission
 
 Build a free & open, universal interface/runtime for intelligent agents.
 
@@ -9,7 +14,7 @@ Favor robust, open, widely available standards over bespoke mechanisms.
 
 Keep low-level implementations and high-level features in harmony via single-source schemas.
 
-PRINCIPLES
+## Principles
 
 Openness: MCP (Model Context Protocol), OpenAPI 3.1, AsyncAPI, OpenTelemetry, OPA/Cedar policy, Sigstore, WASI.
 
@@ -19,7 +24,7 @@ Extensibility: static Rust plugins + dynamic WASI plugins; clear permission mani
 
 Reliability: schema validation, structured errors (RFC 7807), CI contract tests, signed releases.
 
-ARCHITECTURE OVERVIEW
+## Architecture Overview
 
 Core: orchestrator, selectors, memory system, event bus, schemas/specs, policy, OTel, governor, hardware probes, connection registry, lightweight feedback engine.
 
@@ -33,7 +38,7 @@ Integrations: VS Code extension, GitHub webhooks, MCP client/server examples.
 
 Projects/Workstreams: live under /projects; do not couple to core.
 
-INTERFACES & DOCS
+## Interfaces & Docs
 
 One source of truth: tool functions annotated with macros generate schemas + runtime + docs.
 
@@ -41,19 +46,19 @@ Generated artifacts: /spec/openapi.yaml, /spec/asyncapi.yaml (event streams incl
 
 Introspection endpoints expose tool catalogs and schemas at runtime.
 
-SECURITY & POLICY
+## Security & Policy
 
 Policy-first (OPA/Rego or Cedar): governs tools, data, network, training, governor profiles, and connection/link permissions.
 
 Permission manifests per tool. Signed releases (cosign). SBOM (SPDX/CycloneDX).
 
-MEMORY & TRAINING
+## Memory & Training
 
 Layered memory (ephemeral/episodic/semantic/procedural), pluggable stores.
 
 Live Memory Probe (visibility), conditional training with approvals, reproducible “Run Capsules”.
 
-HARDWARE & PERFORMANCE
+## Hardware & Performance
 
 arw-hw probes CPU/GPU/NPU + drivers/features; arw-governor applies performance/balanced/power-saver presets.
 
@@ -61,7 +66,7 @@ arw-modeld provides pooled, concurrent model serving; arw-cas provides mmapped, 
 
 arw-autotune benchmarks and writes tuned profiles per device/model.
 
-DEVELOPER WORKFLOW
+## Developer Workflow
 
 Define tools with #[arw_tool] (schema, runtime, docs from one function). Expose feedback evaluate/apply as tools for MCP/HTTP parity.
 
@@ -69,7 +74,7 @@ Validate inputs → check policy → invoke → emit events → return structure
 
 Keep semver discipline on operation schemas; docs and clients are generated in CI.
 
-CONNECTION MANAGER (new companion app)
+## Connection Manager (New Companion App)
 
 Purpose: discover, create, tune, and control connections/links between services (HTTP, WebSocket, MCP, local tools).
 

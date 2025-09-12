@@ -4,7 +4,7 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-11 23:22 UTC
+Updated: 2025-09-12 00:05 UTC
 
 
 ## To Do
@@ -33,6 +33,8 @@ Updated: 2025-09-11 23:22 UTC
     - 2025-09-11 21:03:46 UTC: Duplicate of t-250911230252-9858; track only the latter.
 
 ## Done
+- [t-250912020516-8533] Phase 1: AppState builder + unified struct — done (updated: 2025-09-12 00:05:22 UTC)
+    - 2025-09-12 00:05:22 UTC: Unified AppState in app_state.rs; main/lib migrated; added Resources container; built+tests green for arw-svc.
 - [t-250911230302-0138] Tools: central execution registry unified for /tools and tasks — done (updated: 2025-09-11 21:14:14 UTC)
     - 2025-09-11 21:14:14 UTC: Added tools_exec registry; unified run path for /tools and task worker; preserved listing via arw_core and local list for debug.
 - [t-250911230258-1357] Runtime: dynamic HTTP timeout from governor hints — done (updated: 2025-09-11 21:10:37 UTC)

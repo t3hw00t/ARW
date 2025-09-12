@@ -31,6 +31,7 @@ nav:
       - Concepts: guide/concepts.md
       - Desktop Launcher: guide/launcher.md
       - Features: FEATURES.md
+      - Metrics & Insights: guide/METRICS_AND_INSIGHTS.md
       - Models Download: guide/models_download.md
       - Chat Backends: guide/chat_backends.md
       - Projects UI: guide/projects_ui.md
@@ -44,8 +45,11 @@ nav:
       - Clustering: CLUSTERING.md
   - Reference:
       - API and Schema: API_AND_SCHEMA.md
+      - Hierarchy: HIERARCHY.md
       - Hardware and Models: HARDWARE_AND_MODELS.md
+      - Configuration: CONFIGURATION.md
       - Structure: STRUCTURE.md
+      - Glossary: GLOSSARY.md
       - Gating Keys: GATING_KEYS.md
       - Memory and Training: MEMORY_AND_TRAINING.md
       - Arrow Ingestion: arrow_ingestion.md
@@ -61,5 +65,6 @@ nav:
       - Roadmap: ROADMAP.md
       - Interface Roadmap: INTERFACE_ROADMAP.md
       - Policy: POLICY.md
+      - Project Instructions: PROJECT_INSTRUCTIONS.md
       - Training Research: training_research.md
       - Wiki Structure: wiki_structure.md

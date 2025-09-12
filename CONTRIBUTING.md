@@ -22,6 +22,7 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 scripts/test.ps1   # or ./scripts/test.sh
 scripts/docgen.ps1 # or ./scripts/docgen.sh
+just docs-check    # quick docs lint (links/headings), optional
 ```
 
 Rolling optimization checklist
@@ -36,3 +37,13 @@ Docs style
 - Developer docs: precise, with file paths and commands.
 - Use callouts sparingly and let whitespace breathe.
 
+Docs lint checklist
+- Front‑matter `title:` set and a single `#` H1 matching it.
+- “Updated: YYYY‑MM‑DD” present near the top when meaningful.
+- Headings use Title Case; bullets use sentence case.
+- Use OS tabs for multi‑platform commands (“Windows” and “Linux / macOS”).
+- Add a short “See also:” block for adjacent pages.
+- Prefer relative links within `docs/`; avoid duplicating content between README and docs.
+- Link canonical pages: Quickstart, Deployment, Configuration, Admin Endpoints.
+- Ensure page is included in `mkdocs.yml` nav.
+- Run `just docs-check` and ensure `mkdocs build --strict` passes.

@@ -6,7 +6,9 @@ title: Chat Backends
 
 The ARW debug Chat UI can use simple synthetic replies (echo/reverse/time) or call real model backends when configured.
 
-## Synthetic (default)
+Updated: 2025-09-12
+
+## Synthetic (Default)
 
 Without configuration the Chat panel replies with:
 - echo — repeats your message
@@ -15,7 +17,7 @@ Without configuration the Chat panel replies with:
 
 This mode is useful for verifying the UI flow and events.
 
-## llama.cpp server
+## Llama.cpp Server
 
 Run a local llama.cpp server and point ARW to it:
 
@@ -32,7 +34,7 @@ The service will POST to `ARW_LLAMA_URL/completion` with:
 
 If the server returns `{ "content": "..." }`, ARW uses it. It also supports an OpenAI-like `{ choices[0].message.content }` fallback shape.
 
-## OpenAI-compatible API
+## OpenAI-Compatible API
 
 If llama.cpp is not available, ARW can use an OpenAI-compatible Chat Completions API.
 
@@ -66,4 +68,3 @@ Requests are sent to `POST {ARW_OPENAI_BASE_URL}/v1/chat/completions` with a bod
 ## UI
 
 Open `/debug`, select a model (echo/reverse/time), set Temperature if desired, and Send. When a backend is configured, the response content comes from the backend; otherwise the synthetic reply is used.
-

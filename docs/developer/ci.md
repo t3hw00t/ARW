@@ -4,18 +4,20 @@ title: CI & Releases
 
 # CI & Releases
 
-Continuous Integration
+Updated: 2025-09-12
+
+## Continuous Integration
 - Build and test on Linux and Windows for every push and PR.
 - Lint and format checks keep changes tidy.
 
-Artifacts
+## Artifacts
 - Packaging scripts assemble a portable bundle with binaries and configs.
 - Windows and Linux bundles are uploaded as CI artifacts.
 
-Docs site
+## Docs Site
 - Docs are published to GitHub Pages from the `gh-pages` branch.
 
-Local helpers
+## Local Helpers
 ```powershell
 # Build & test
 scripts/build.ps1
@@ -25,7 +27,7 @@ scripts/test.ps1
 scripts/package.ps1
 ```
 
-Additional checks
+## Additional Checks
 ```bash
 # Unused dependencies
 rustup toolchain install nightly --profile minimal
@@ -36,4 +38,3 @@ cargo +nightly udeps --workspace --all-targets
 cargo install cargo-msrv --locked
 cargo msrv verify
 ```
-

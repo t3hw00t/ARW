@@ -1,28 +1,35 @@
-ARW Clustering & Connectors (MVP -> Medium Depth)
+---
+title: Clustering & Connectors
+---
+
+# Clustering & Connectors
+
 Updated: 2025-09-10
+
+See also: [Roadmap](ROADMAP.md)
 
 - Default behavior remains single-process using a local in-memory queue and event bus.
 - Medium-depth scale-out uses a pluggable Queue and Bus abstraction with NATS JetStream as the recommended backend.
 
-Why NATS
+## Why NATS
 - Simple operational model, low latency, at-least-once with durable consumer groups.
 - Built-in discovery and clustering; easy to add nodes (“connect a second”).
 - Good bridgeability to edge environments and compatible with future p2p overlays.
 - Can co-exist with Bitcoin ecosystem tooling; we can bridge ZMQ publishers from `bitcoind` into NATS subjects for event-driven workflows.
 
-Bitcoin/Blockchain alignment
+## Bitcoin/Blockchain Alignment
 - Identity: leverage secp256k1 keys (Lightning/Bitcoin-style) for mTLS/Noise handshakes between cores and connectors.
 - Event ingress: optional ZeroMQ adapter to consume `bitcoind` notifications, republish into Bus/Queue.
 - Provenance: sign connector binaries/plugins with Sigstore; attestments can be anchored or mirrored alongside Bitcoin timestamping services if desired.
 
-MVP in this repo
+## MVP in This Repo
 - `arw-core::orchestrator`: Task model, LocalQueue with leases, and Orchestrator façade.
 - `arw-events`: EventBus trait with LocalBus; façade `Bus` keeps existing SSE endpoints working.
 - `arw-protocol`: `ConnectorHello`, `ConnectorHeartbeat` types.
 - `arw-svc`: new `/tasks/enqueue` (debug/admin-gated) and a local background worker to execute minimal built-in tools via the queue.
 - Inbound NATS→local bus aggregator so /events can unify cross-node events without loops.
 
-Config (configs/default.toml)
+## Config (configs/default.toml)
 ```
 [cluster]
 enabled = false
@@ -31,7 +38,7 @@ queue = "local" # or "nats" (feature: arw-core/nats)
 # nats_url = "nats://127.0.0.1:4222"
 ```
 
-Next steps
+## Next Steps
 - Implement JetStream durable queues with consumer groups and ack/nack/delay semantics.
 - Add outbound NATS relay (loop-safe) when needed for cross-node fan-out.
 - Define connector control-plane (gRPC/QUIC) for Hello/Heartbeat/Assignment.

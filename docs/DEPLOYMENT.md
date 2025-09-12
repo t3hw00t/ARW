@@ -1,5 +1,11 @@
-# ARW Deployment & Isolation Guide
+---
+title: Deployment & Isolation
+---
+
+# Deployment & Isolation
 Updated: 2025-09-06
+
+See also: [Security Hardening](guide/security_hardening.md), [Configuration](CONFIGURATION.md)
 
 ## Goals
 Run ARW as **unintrusively** as possible:
@@ -70,4 +76,56 @@ Alternatively use the project’s Nix dev shell which includes the required libr
 
 ```bash
 nix develop
+```
+
+## Containers
+
+Run a published image (amd64/arm64):
+
+```bash
+docker run --rm -p 8090:8090 \
+  -e ARW_PORT=8090 \
+  ghcr.io/t3hw00t/arw-svc:latest
+```
+
+Build locally and run:
+
+```bash
+docker build -f apps/arw-svc/Dockerfile -t arw-svc:dev .
+docker run --rm -p 8090:8090 arw-svc:dev
+```
+
+### Docker Compose
+
+Start the service with Compose (builds locally by default):
+
+```bash
+docker compose -f docker-compose.yml up --build -d
+# open http://127.0.0.1:8090/healthz
+```
+
+Stop and remove:
+
+```bash
+docker compose down -v
+```
+
+### Helm (Kubernetes)
+
+Render manifests:
+
+```bash
+helm template arw deploy/charts/arw-svc
+```
+
+Install/upgrade into namespace `arw`:
+
+```bash
+helm upgrade --install arw deploy/charts/arw-svc -n arw --create-namespace
+```
+
+Uninstall:
+
+```bash
+helm uninstall arw -n arw
 ```

@@ -75,6 +75,10 @@ docgen:
 docs-build: docgen
   mkdocs build --strict
 
+# Docs lint (headings/links/build)
+docs-check:
+  bash scripts/docs_check.sh
+
 # Service
 start port=8090 debug=1:
   ARW_NO_TRAY=1 bash scripts/start.sh {{ if debug == "1" { "--debug" } else { "" } }} --port {{port}}

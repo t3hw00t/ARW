@@ -1,12 +1,14 @@
 ---
-title: Welcome
+title: Agents Running Wild (ARW)
 ---
 
 # Agents Running Wild (ARW)
 
 ARW is a lightweight, local agent service and CLI. It focuses on beauty, harmony, and safe performance: clean lines, subtle interactions, and responsive behavior.
 
-What you can expect
+Updated: 2025-09-12
+
+## What You Can Expect
 - Simple, local-first service with a small, friendly UI.
 - Tools registered via a macro and discovered at runtime.
 - Clear packaging and portable state for easy sharing.

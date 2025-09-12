@@ -1,14 +1,21 @@
-Agents Running Wild — Roadmap
+---
+title: Roadmap
+---
+
+# Roadmap
+
 Updated: 2025-09-11
+
+See also: [Interface Roadmap](INTERFACE_ROADMAP.md)
 See [Interface Roadmap](INTERFACE_ROADMAP.md) for user-facing UI and tooling plans.
 
-Recently Shipped (Sep 2025)
+## Recently Shipped (Sep 2025)
 - Persistence hardening: atomic JSON/bytes writes with per‑path async locks; best‑effort cross‑process advisory locks; audit log rotation.
 - Event bus upgrades: counters (published/delivered/lagged/no_receivers), configurable capacity/replay, lag surfaced as `Bus.Gap`, subscribe‑filtered API, SSE replay and prefix filters, optional persistent JSONL journal with rotation, Prometheus `/metrics`.
 - Debug UI: metrics quick‑link, SSE presets (Replay 50, Models‑only), insights wired to route stats, download progress.
 - Tests + Lint: fixed flaky gating contract tests (serialized shared state); workspace clippy clean with `-D warnings`.
 
-Near‑term (Weeks)
+## Near‑Term (Weeks)
 - Self‑learning UI polish: apply buttons per suggestion with rationale + confidence.
 - Persist hints/profile/suggestions to state; reload at startup; simple rollback.
 - Metrics polish: add p95 per route (light sliding window); highlight outliers in Insights. (done)
@@ -37,7 +44,7 @@ Heuristic Feedback Engine (Lightweight, Near‑Live)
 - APIs: reuse existing `/feedback/*`; optional `/feedback/updates?since=` delta feed; expose evaluate/apply as tools.
 - Safety: bounded queues/maps; drop/sample on overload; rate‑limit auto‑apply (opt‑in later, policy‑gated).
 
-Mid‑term (1–2 Months)
+## Mid‑Term (1–2 Months)
 - UI app to manage various project types.
 - WASI plugin sandbox: capability‑based tools with explicit permissions.
 - Policy engine integration: Cedar bindings; per‑tool permission manifests.
@@ -55,7 +62,7 @@ Mid‑term (1–2 Months)
   - Policy‑gated remote admin surface; proxy headers validation; optional IP allowlists.
 - Budgets/Quotas: optional allow-with-budgets with per-window counters persisted to state; deny precedence.
 
-Long‑term (3–6 Months)
+## Long‑Term (3–6 Months)
 - Community training interface/simulation:
   - Online opt‑in interface; privacy‑preserving local preprocessing.
   - Metrics for “interaction quality” (clarity, helpfulness, faithfulness, novelty).
@@ -69,7 +76,7 @@ Long‑term (3–6 Months)
   - Artifact signing/verification, SBOMs, and dependency audits.
   - Signed policy capsules with Sigstore; optional Bitcoin anchoring for timestamping (opt‑in; renegotiation on restart remains default).
 
-Guiding Principles
+## Guiding Principles
 - Local‑first, open, privacy‑respecting, and comprehensible.
 - Calm defaults; explicit opt‑in for power features.
 - One truth for schemas & keys (central registry); reproducibility over hype.

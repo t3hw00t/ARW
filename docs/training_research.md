@@ -1,6 +1,12 @@
+---
+title: Training Research Directions
+---
+
 # Training Research Directions
 
 This document outlines initial high-level training options and research ideas for the Agent Hub project.
+
+Updated: 2025-09-12
 
 ## Goals
 - Explore hardware-conscious training strategies.

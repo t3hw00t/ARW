@@ -1,6 +1,12 @@
+---
+title: Admin Endpoints
+---
+
 # Admin Endpoints
 
 ARW exposes a unified admin/ops HTTP namespace under `/admin`. All sensitive routes live here so updates can’t miss gating.
+
+Updated: 2025-09-12
 
 - Base: `/admin`
 - Index (HTML): `/admin`

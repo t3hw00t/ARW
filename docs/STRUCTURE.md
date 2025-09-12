@@ -1,5 +1,12 @@
-Agents Running Wild — Repository & Workspace Structure
+---
+title: Repository & Workspace Structure
+---
+
+# Repository & Workspace Structure
+
 Updated: 2025-09-07
+
+See also: [Glossary](GLOSSARY.md)
 
 ## Principles
 

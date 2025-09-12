@@ -1,6 +1,12 @@
+---
+title: Wiki Structure Plan
+---
+
 # Wiki Structure Plan
 
 This file proposes an initial structure for the GitHub wiki.
+
+Updated: 2025-09-12
 
 ## Suggested Pages
 - Home: Overview and project goals.

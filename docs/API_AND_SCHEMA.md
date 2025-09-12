@@ -1,7 +1,48 @@
-Agents running wild — API, Schema & Structured Function Calls
+---
+title: API and Schema
+---
+
+# API and Schema
+
 Updated: 2025-09-06.
 
-GOALS
+See also: [Glossary](GLOSSARY.md), [Configuration](CONFIGURATION.md)
+
+Explore the API
+Set a base URL and (optionally) an admin token for gated endpoints.
+
+```bash
+export BASE=http://127.0.0.1:8090
+export ARW_ADMIN_TOKEN=secret   # if set on the server
+H() { curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$@"; }
+```
+
+Quick checks
+```bash
+curl -sS "$BASE/healthz"
+H "$BASE/introspect/tools" | jq '.[0:5]'
+```
+
+Schemas and specs
+```bash
+# A specific tool schema (example id)
+H "$BASE/introspect/schemas/memory.probe@1.0.0" | jq
+
+# OpenAPI / AsyncAPI / MCP tool catalog
+curl -sS "$BASE/spec/openapi.yaml" | head -n 20
+curl -sS "$BASE/spec/asyncapi.yaml" | head -n 20
+curl -sS "$BASE/spec/mcp-tools.json" | jq 'keys'
+```
+
+Events (SSE)
+```bash
+curl -N "$BASE/events?replay=10"
+```
+
+!!! warning "Security"
+    Many `introspect/*`, `feedback/*`, `tools/*`, and related endpoints are gated. In production, set `ARW_ADMIN_TOKEN` on the service and include `X-ARW-Admin` in requests. See: guide/security_hardening.md
+
+## Goals
 
 Single source of truth for operations (tools), HTTP/WS APIs, MCP tools and docs.
 
@@ -11,7 +52,7 @@ Auto-generation of OpenAPI 3.1 (HTTP), AsyncAPI 2.x (events), MCP tool catalogs.
 
 Backward-compatible evolution, RFC 7807 error taxonomy, doc-tests.
 
-FOUNDATIONS
+## Foundations
 
 JSON Schema 2020-12; OpenAPI 3.1; AsyncAPI 2.x.
 
@@ -19,11 +60,11 @@ RFC 7807 Problem Details errors.
 
 W3C Trace Context + OpenTelemetry.
 
-UI cross‑reference
+## UI Cross‑Reference
 - In the Debug UI (`/debug`, set `ARW_DEBUG=1`), the Tools panel exercises example tools and shows emitted `Tool.Ran` events.
 - Click the small “?” next to Tools for a tip and a link back to this page.
 
-DIRECTORIES
+## Directories
 /spec/
 
 openapi.yaml
@@ -34,13 +75,13 @@ mcp-tools.json
 
 schemas/ (per operation & model, generated)
 
-OPERATIONS
+## Operations
 
 OperationId = "<tool_id>@<semver>" (e.g., memory.probe@1.0.0)
 
 Each operation declares: Input, Output, Error types; capabilities; stability (stable/experimental/deprecated).
 
-DECLARATION STYLE (Rust)
+## Declaration Style (Rust)
 
 New endpoints (introspection & feedback)
 - `GET /introspect/stats`: returns event totals and per‑route metrics (hits, errors, EWMA, last/max ms).
@@ -51,14 +92,14 @@ New endpoints (introspection & feedback)
 - `POST /feedback/auto`: toggle `auto_apply`.
 - `POST /feedback/reset`: clear signals & suggestions.
 
-Security notes
+## Security Notes
 - Sensitive endpoints are gated; see Developer Security Notes.
 
 #[arw_tool] macro derives Schemas, Tool impl, registry entry, MCP metadata.
 
 Validate input → policy check → invoke → emit events → return.
 
-HTTP & WS SURFACE
+## HTTP & WS Surface
 
 GET /introspect/tools
 
@@ -76,7 +117,7 @@ GET /spec/asyncapi.yaml
 
 GET /spec/mcp-tools.json
 
-CONNECTIONS (new)
+## Connections (New)
 
 GET /connectors — list available connector types/providers
 
@@ -106,7 +147,7 @@ POST /links — create a link (policy checked), optional auto-enable
 
 DELETE /links/{id}
 
-EVENTS (AsyncAPI)
+## Events (AsyncAPI)
 
 Versioned event types; include time, task_id, span_id, severity.
 
@@ -114,23 +155,23 @@ Connections: ConnectionAdded, ConnectionUpdated, ConnectionRemoved, ConnectionPo
 
 Links: LinkUp, LinkDown, LinkHealthChanged, RateLimitHit, BackoffApplied
 
-MCP BRIDGE
+## MCP Bridge
 
 All registered tools appear to MCP clients with the same ids and schemas.
 
 Admin MCP tools for connections: conn.list, conn.create, conn.update, conn.toggle, conn.test.
 
-PAGINATION & IDS
+## Pagination & IDs
 
 UUID v4 ids; cursors are base64url tokens. Consistent Page<T> helpers in arw-protocol.
 
-ERRORS (Problem Details)
+## Errors (Problem Details)
 
 { type, title, status, detail, instance, trace_id, code }
 
 Codes include: validation_failed, policy_denied, timeout, not_found, conflict, unavailable, rate_limited, internal_error.
 
-SCHEMAS (high level)
+## Schemas (High Level)
 
 Connector: { id, kind (http|ws|mcp|local), name, capabilities[], version }
 
@@ -138,7 +179,7 @@ Connection: { id, connectorId, target, status (disabled|enabled|error|healthy|de
 
 Link: { id, connectionId, serviceId, status, health { ok, latencyMs, errors[] }, createdAt, updatedAt }
 
-DOC PIPELINE (CI)
+## Doc Pipeline (CI)
 
 arw-docgen aggregates registries → generates /spec artifacts.
 
@@ -148,10 +189,10 @@ Schema compatibility guard enforces semver bumps on breaking changes.
 
 Generated specs are authoritative; sample clients from OpenAPI must compile and pass doc‑tests in CI.
 
-DEPRECATION
+## Deprecation
 
 stability=deprecated; maintain ≥2 minor releases; emit Deprecation header with link.
 
-EXTENSIBILITY
+## Extensibility
 
 Third-party plugins (Rust or WASI) use #[arw_tool]; once linked, they appear in all surfaces (policy-gated).

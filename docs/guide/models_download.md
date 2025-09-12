@@ -1,10 +1,12 @@
 ---
-title: Models Download
+title: Models Download (HTTP)
 ---
 
 # Models Download (HTTP)
 
 ARW provides HTTP endpoints to manage local models with streaming downloads, live progress via SSE, safe cancel, resume (HTTP Range), and optional SHA‑256 verification.
+
+Updated: 2025-09-12
 
 ## Endpoints
 
@@ -80,4 +82,3 @@ Resume:
 - When `total` is unknown, events may omit it and include only `downloaded`.
 - Errors surface in progress events; model list isn’t updated on failure.
 - State directory is shown in `GET /probe`.
-

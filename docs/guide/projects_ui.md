@@ -1,12 +1,18 @@
+---
+title: Projects UI
+---
+
 # Projects UI
 
 The Projects UI gives you a simple, secure place to:
+
+Updated: 2025-09-12
 
 - Create projects under a local folder.
 - Take free‑form notes per project (`NOTES.md`).
 - Browse each project’s folder tree (folders only; dotfiles hidden).
 
-## Enable and open
+## Enable and Open
 
 - Set `ARW_DEBUG=1` (or provide `X-ARW-Admin` when running in locked mode).
 - Start `arw-svc` and open:
@@ -32,7 +38,7 @@ Notes
 - Names are sanitized: letters, numbers, space, `-`, `_`, `.`; no leading dot.
 - Tree listing hides dotfiles and directories outside the project root.
 
-## Events for agents
+## Events for Agents
 
 To harmonize with orchestration and autonomous workers, the service emits:
 
@@ -40,4 +46,3 @@ To harmonize with orchestration and autonomous workers, the service emits:
 - `Projects.NotesSaved` with `{ name }`
 
 Agents can subscribe to `/events` and react to project lifecycle to train, plan, scaffold, or run checks.
-

@@ -1,5 +1,12 @@
-Policy, Gating, and Capsules
+---
+title: Policy, Gating, and Capsules
+---
+
+# Policy, Gating, and Capsules
+
 Updated: 2025-09-10
+
+See also: [Security Hardening](guide/security_hardening.md), [Gating Keys](GATING_KEYS.md), [Configuration](CONFIGURATION.md)
 
 Single Source of Truth
 - Gate keys: `arw-core::gating_keys` — constants for all actions/streams; used across endpoints for enforcement and docgen.

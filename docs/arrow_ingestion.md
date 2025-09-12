@@ -1,6 +1,12 @@
-# Arrow2 Ingestion Prototype
+---
+title: Arrow Ingestion Prototype
+---
+
+# Arrow Ingestion Prototype
 
 A prototype module was added to `arw-core` demonstrating JSON ingestion with the [`arrow2`](https://crates.io/crates/arrow2) crate. Two paths were compared:
+
+Updated: 2025-09-12
 
 - `serde_json` parsing into native structs
 - `arrow2` conversion into columnar arrays
