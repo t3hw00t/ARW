@@ -4,7 +4,7 @@ title: Roadmap
 
 # Roadmap
 
-Updated: 2025-09-11
+Updated: 2025-09-12
 
 See also: [Interface Roadmap](INTERFACE_ROADMAP.md)
 See [Interface Roadmap](INTERFACE_ROADMAP.md) for user-facing UI and tooling plans.
@@ -27,7 +27,7 @@ See [Interface Roadmap](INTERFACE_ROADMAP.md) for user-facing UI and tooling pla
 ## Near‑Term (Weeks)
 - Stabilization window: limit to bug fixes, docs, tests, and internal cleanups; additive API changes only.
 - Self‑learning UI polish: apply buttons per suggestion with rationale + confidence; inline from Episodes.
-- ModelsService: migrate download worker into typed service (resume/cancel/checksum) with corr_id events.
+- ModelsService: migrate download worker into typed service (resume/cancel/checksum) with corr_id events. (done)
 - Resources: wrap policy/gating and models download lifecycle; move more subsystems behind typed services.
 - Persist hints/profile/suggestions to state; reload at startup; simple rollback.
 - Metrics polish: add p95 per route (light sliding window); highlight outliers in Insights. (done)

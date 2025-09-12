@@ -58,6 +58,11 @@ pub const INTROSPECT_PROBE: &str = "introspect:probe";
 pub const ADMIN_SHUTDOWN: &str = "admin:shutdown";
 pub const ADMIN_EMIT: &str = "admin:emit";
 
+// Projects (file ops)
+pub const PROJECTS_FILE_GET: &str = "projects:file:get";
+pub const PROJECTS_FILE_SET: &str = "projects:file:set";
+pub const PROJECTS_FILE_PATCH: &str = "projects:file:patch";
+
 /// Return all known static keys (dynamic keys like task:<id> are omitted).
 pub fn list() -> Vec<&'static str> {
     vec![
@@ -101,5 +106,8 @@ pub fn list() -> Vec<&'static str> {
         INTROSPECT_PROBE,
         ADMIN_SHUTDOWN,
         ADMIN_EMIT,
+        PROJECTS_FILE_GET,
+        PROJECTS_FILE_SET,
+        PROJECTS_FILE_PATCH,
     ]
 }

@@ -3,8 +3,194 @@
   --md-primary-fg-color--light: #dca777;
   --md-primary-fg-color--dark:  #915a29;
   --md-accent-fg-color:         #1bb3a3;  /* muted teal */
+  /* RGB variants for alpha control in gradient markers */
+  --md-primary-rgb:             184,115,51;
+  --md-primary-dark-rgb:        145,90,41;
+  --md-accent-rgb:              27,179,163;
+  --md-accent-light-rgb:        99,211,201;
+  /* Default strengths (0..1) for topic trio */
+  --topic-exp-default:          .66;
+  --topic-complex-default:      .66;
+  --topic-complicated-default:  .66;
+  /* Surfaces */
+  --surface:                    #ffffff;
+  --surface-muted:              #fafaf9;
+  --ink:                        #111827;
+  --muted:                      #6b7280;
+  --line:                       #e5e7eb;
+  /* Subtle noise overlay (SVG fractalNoise) */
+  --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0.035'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 .md-typeset code,.md-typeset pre{background:rgba(0,0,0,0.04)}
 .md-typeset .admonition{border-radius:8px}
 .md-nav__link--active{font-weight:600}
+
+/* Layout framing and depth */
+body{color:var(--ink)}
+.md-header{
+  box-shadow: 0 2px 10px rgba(0,0,0,.06);
+  border-bottom: 1px solid rgba(0,0,0,0.06);
+  backdrop-filter: saturate(140%) blur(6px);
+}
+.md-main{background: linear-gradient(180deg, #ffffff, #fbfbfb)}
+.md-main__inner{background: none}
+.md-content{
+  position: relative;
+}
+.md-content__inner{
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  box-shadow:
+    0 10px 30px rgba(0,0,0,0.04),
+    0 1px 0 rgba(255,255,255,0.7) inset;
+  padding: 0.2px; /* create a new stacking context for overlay */
+}
+.md-content__inner::before{
+  content: "";
+  position: absolute; inset: 0; pointer-events: none;
+  background-image: var(--noise);
+  opacity: .6; mix-blend-mode: soft-light;
+  border-radius: 12px;
+}
+.md-sidebar--primary,.md-sidebar--secondary{
+  background: var(--surface-muted);
+  border-right: 1px solid var(--line);
+}
+.md-footer{
+  border-top: 1px solid var(--line);
+  background: linear-gradient(180deg, #fafafa, #f1f5f9);
+}
+
+/* Dark mode tuning */
+@media (prefers-color-scheme: dark){
+  .md-header{ box-shadow: 0 2px 10px rgba(0,0,0,.35); border-bottom-color: rgba(255,255,255,0.06) }
+  .md-footer{ background: linear-gradient(180deg, #0f1115, #0b0d11); border-top-color: rgba(255,255,255,0.06) }
+  .md-content__inner{ background:#0f1115; border-color:#1f232a; box-shadow: 0 10px 30px rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.05) }
+  .md-content__inner::before{ opacity: .25 }
+  .md-sidebar--primary,.md-sidebar--secondary{ background:#0b0d11; border-right-color:#1f232a }
+  .md-typeset .md-button,
+  .md-clipboard,
+  .md-search__input,
+  .md-typeset button{ border-color: rgba(255,255,255,0.08); box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 1px 6px rgba(0,0,0,0.3) }
+}
+
+/* Interactive elements: subtle textured look */
+.md-typeset a,
+.md-typeset .md-button,
+.md-clipboard,
+.md-search__input,
+.md-typeset button{
+  background-image: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(249,250,251,0.85)), var(--noise);
+  background-blend-mode: overlay, normal;
+  border: 1px solid rgba(0,0,0,0.08);
+  border-radius: 8px;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.7) inset, 0 1px 6px rgba(0,0,0,0.04);
+}
+.md-typeset .md-button--primary{ 
+  background-image: linear-gradient(180deg, var(--md-primary-fg-color), var(--md-primary-fg-color--dark)), var(--noise);
+  color:#fff; border-color: rgba(0,0,0,0.15);
+}
+.md-typeset .md-button:hover,
+.md-clipboard:hover{
+  transform: translateY(-0.5px);
+  box-shadow: 0 1px 0 rgba(255,255,255,0.8) inset, 0 6px 18px rgba(0,0,0,0.08);
+}
+.md-search__input{
+  border-radius: 10px;
+}
+.md-typeset input,
+.md-typeset select,
+.md-typeset textarea{
+  background: #ffffff;
+  border:1px solid var(--line);
+  border-radius:8px;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.7) inset;
+}
+
+/* Topic markers (legacy single badges) */
+.md-typeset h1.topic-expansive::after,
+.md-typeset h2.topic-expansive::after,
+.md-typeset h3.topic-expansive::after,
+.md-typeset h4.topic-expansive::after {
+  content: "expansive topic";
+  display: inline-block;
+  margin-left: .6rem;
+  padding: .2em .6em;
+  font-weight: 600;
+  font-size: .65em;
+  line-height: 1;
+  color: #ffffff;
+  background: linear-gradient(90deg, var(--md-accent-fg-color), #63d3c9);
+  border-radius: 9999px;
+  vertical-align: middle;
+}
+
+.md-typeset h1.topic-complex::after,
+.md-typeset h2.topic-complex::after,
+.md-typeset h3.topic-complex::after,
+.md-typeset h4.topic-complex::after {
+  content: "complex topic";
+  display: inline-block;
+  margin-left: .6rem;
+  padding: .2em .6em;
+  font-weight: 600;
+  font-size: .65em;
+  line-height: 1;
+  color: #ffffff;
+  background: linear-gradient(90deg, var(--md-primary-fg-color--dark), var(--md-primary-fg-color));
+  border-radius: 9999px;
+  vertical-align: middle;
+}
+
+.md-typeset h1.topic-complicated::after,
+.md-typeset h2.topic-complicated::after,
+.md-typeset h3.topic-complicated::after,
+.md-typeset h4.topic-complicated::after {
+  content: "complicated topic";
+  display: inline-block;
+  margin-left: .6rem;
+  padding: .2em .6em;
+  font-weight: 600;
+  font-size: .65em;
+  line-height: 1;
+  color: #ffffff;
+  background: linear-gradient(90deg, var(--md-primary-fg-color), var(--md-accent-fg-color));
+  border-radius: 9999px;
+  vertical-align: middle;
+}
+
+/* Topic trio — always show all three markers together
+   Set per-heading strengths with CSS variables on the element:
+   { .topic-trio style="--exp:.9; --complex:.7; --complicated:.3" }
+*/
+.md-typeset h1.topic-trio::after,
+.md-typeset h2.topic-trio::after,
+.md-typeset h3.topic-trio::after,
+.md-typeset h4.topic-trio::after {
+  /* Labels with per-topic values */
+  content: "expansive " attr(data-exp) "  •  "
+           "complex " attr(data-complex) "  •  "
+           "complicated " attr(data-complicated);
+  display: inline-block;
+  margin-left: .6rem;
+  padding: .25em .6em;
+  border-radius: 10px;
+  font-size: .62em;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: .01em;
+  color: #ffffff;
+  vertical-align: .15em;
+  /* three segment backgrounds */
+  background-image:
+    linear-gradient(90deg, rgba(var(--md-accent-rgb), var(--exp, var(--topic-exp-default))), rgba(var(--md-accent-light-rgb), var(--exp, var(--topic-exp-default)))),
+    linear-gradient(90deg, rgba(var(--md-primary-dark-rgb), var(--complex, var(--topic-complex-default))), rgba(var(--md-primary-rgb), var(--complex, var(--topic-complex-default)))),
+    linear-gradient(90deg, rgba(var(--md-primary-rgb), var(--complicated, var(--topic-complicated-default))), rgba(var(--md-accent-rgb), var(--complicated, var(--topic-complicated-default))));
+  background-size: calc(100%/3) 100%, calc(100%/3) 100%, calc(100%/3) 100%;
+  background-position: left center, center center, right center;
+  background-repeat: no-repeat;
+  box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 1px 0 rgba(0,0,0,0.05);
+  text-shadow: 0 1px 0 rgba(0,0,0,0.25);
+}

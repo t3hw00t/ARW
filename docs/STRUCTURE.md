@@ -3,6 +3,7 @@ title: Repository & Workspace Structure
 ---
 
 # Repository & Workspace Structure
+{ .topic-trio style="--exp:.8; --complex:.4; --complicated:.3" data-exp=".8" data-complex=".4" data-complicated=".3" }
 
 Updated: 2025-09-07
 

@@ -3,6 +3,7 @@ title: Windows Compatibility Gate
 ---
 
 # Windows Compatibility Gate
+{ .topic-trio style="--exp:.3; --complex:.6; --complicated:.8" data-exp=".3" data-complex=".6" data-complicated=".8" }
 
 Updated: 2025-09-12
 
@@ -47,4 +48,3 @@ Quick commands
 Automation
 - Script: `scripts/windows-advanced-gate.ps1` runs SignTool verify, attempts MSI ICE (if tools installed), and surfaces AppVerifier/WACK hints. Set `ARW_STRICT_SIGN_VERIFY=1` to fail unsigned artifacts.
 - Workflow: `windows-advanced-gate` (manual or on release). Use the workflow_dispatch input `strict_sign=true` to enforce signing.
-

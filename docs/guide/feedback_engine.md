@@ -3,6 +3,7 @@ title: Feedback Engine (Lightweight, Near‑Live)
 ---
 
 # Feedback Engine (Lightweight, Near‑Live)
+{ .topic-trio style="--exp:.5; --complex:.7; --complicated:.6" data-exp=".5" data-complex=".7" data-complicated=".6" }
 
 The feedback engine observes service events and route metrics to propose gentle tuning suggestions (e.g., HTTP timeout hints, memory ring size), without blocking request paths.
 

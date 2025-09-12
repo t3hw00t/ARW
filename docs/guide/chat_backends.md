@@ -3,6 +3,7 @@ title: Chat Backends
 ---
 
 # Chat Backends
+{ .topic-trio style="--exp:.6; --complex:.6; --complicated:.5" data-exp=".6" data-complex=".6" data-complicated=".5" }
 
 The ARW debug Chat UI can use simple synthetic replies (echo/reverse/time) or call real model backends when configured.
 

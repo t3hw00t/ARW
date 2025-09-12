@@ -3,6 +3,7 @@ title: Core Concepts
 ---
 
 # Core Concepts
+{ .topic-trio style="--exp:.9; --complex:.5; --complicated:.3" data-exp=".9" data-complex=".5" data-complicated=".3" }
 
 This page orients you to ARW’s moving parts so the rest of the guide makes sense.
 

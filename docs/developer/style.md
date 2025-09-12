@@ -39,3 +39,19 @@ Guidelines
 - Security: surface a “Minimum Secure Setup” box on Quickstart/Admin pages.
 - Terms: prefer glossary terms; add new ones to `docs/GLOSSARY.md`.
 - Formatting: keep sections short; prefer 80–100 char lines but don’t force awkward wraps.
+
+## UI Conventions (Apps & Debug)
+
+- Tokens: use spacing vars (`--sp2/3/4/5`) and shared radii; avoid one‑off paddings.
+- Buttons: `.primary` for primary CTAs; `.ghost` for low‑emphasis actions; default for normal actions.
+- Collapsibles: dashboard sections can collapse; persist state per heading; add “Expand/Collapse all” if there are many panels.
+- Density: optional “Density” toggle; compact reduces gaps and radii and is device‑friendly.
+- Iconography: simple states → single icon; complex states → subtle icon set (e.g., `hdd+warn`).
+- Status tones: ok (green), warn (amber), bad (red), accent (teal), info (muted).
+- Dark mode: honor `prefers-color-scheme`; keep shadows light and overlays subtle.
+
+## Docs Conventions (Visual)
+
+- Topic markers: use `.topic-trio` with strengths and mirrored `data-*` labels to convey scope.
+- Admonitions: prefer `tip`/`note` for guidance; `warning` for security/irreversible actions.
+- Screenshots/figures: strive for same density and spacing rhythm as the app; avoid artificial zoom.

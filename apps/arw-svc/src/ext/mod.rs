@@ -34,6 +34,7 @@ pub mod governor_api;
 pub mod hierarchy_api;
 pub mod memory;
 pub mod memory_api;
+pub mod budget;
 pub mod models_api;
 pub mod policy;
 pub mod state_api;
@@ -313,7 +314,11 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/projects/create", post(projects::projects_create))
         .route("/projects/tree", get(projects::projects_tree))
         .route("/projects/notes", get(projects::projects_notes_get))
-        .route("/projects/notes", post(projects::projects_notes_set));
+        .route("/projects/notes", post(projects::projects_notes_set))
+        // project file ops (safe, gated)
+        .route("/projects/file", get(projects::projects_file_get))
+        .route("/projects/file", post(projects::projects_file_set))
+        .route("/projects/patch", post(projects::projects_file_patch));
 
     // debug UI gated via ARW_DEBUG=1
     if std::env::var("ARW_DEBUG").ok().as_deref() == Some("1") {
@@ -666,6 +671,13 @@ pub(crate) struct ModelId {
     provider: Option<String>,
 }
 async fn models_add(State(state): State<AppState>, Json(req): Json<ModelId>) -> impl IntoResponse {
+    if let Some(svc) = state
+        .resources
+        .get::<crate::resources::models_service::ModelsService>()
+    {
+        svc.add(&state, req.id, req.provider).await;
+        return ok(json!({})).into_response();
+    }
     let mut v = models().write().await;
     if !v
         .iter()
@@ -678,12 +690,19 @@ async fn models_add(State(state): State<AppState>, Json(req): Json<ModelId>) -> 
         );
     }
     io::audit_event("models.add", &json!({"id": req.id})).await;
-    ok(json!({}))
+    ok(json!({})).into_response()
 }
 async fn models_delete(
     State(state): State<AppState>,
     Json(req): Json<ModelId>,
 ) -> impl IntoResponse {
+    if let Some(svc) = state
+        .resources
+        .get::<crate::resources::models_service::ModelsService>()
+    {
+        svc.delete(&state, req.id).await;
+        return ok(json!({})).into_response();
+    }
     let mut v = models().write().await;
     let before = v.len();
     v.retain(|m| m.get("id").and_then(|s| s.as_str()) != Some(&req.id));
@@ -693,9 +712,10 @@ async fn models_delete(
             .publish("Models.Changed", &json!({"op":"delete","id": req.id}));
     }
     io::audit_event("models.delete", &json!({"id": req.id})).await;
-    ok(json!({}))
+    ok(json!({})).into_response()
 }
 async fn models_default_get() -> impl IntoResponse {
+    // No state here; fall back to ext default
     let id = { default_model().read().await.clone() };
     ok(json!({"default": id }))
 }
@@ -703,6 +723,13 @@ async fn models_default_set(
     State(state): State<AppState>,
     Json(req): Json<ModelId>,
 ) -> impl IntoResponse {
+    if let Some(svc) = state
+        .resources
+        .get::<crate::resources::models_service::ModelsService>()
+    {
+        let _ = svc.default_set(&state, req.id).await;
+        return ok(json!({})).into_response();
+    }
     {
         let mut d = default_model().write().await;
         *d = req.id.clone();
@@ -717,7 +744,7 @@ async fn models_default_set(
     .await;
     persist_orch().await;
     io::audit_event("models.default", &json!({"id": req.id})).await;
-    ok(json!({}))
+    ok(json!({})).into_response()
 }
 
 #[derive(Deserialize)]
@@ -733,6 +760,19 @@ async fn models_download(
     State(state): State<AppState>,
     Json(req): Json<DownloadReq>,
 ) -> impl IntoResponse {
+    // Delegate to ModelsService when available (consolidated path)
+    if let Some(svc) = state
+        .resources
+        .get::<crate::resources::models_service::ModelsService>()
+    {
+        match svc
+            .download(&state, req.id, req.url, req.provider, req.sha256)
+            .await
+        {
+            Ok(()) => return ok(json!({})).into_response(),
+            Err(e) => return ApiError::bad_request(&e).into_response(),
+        }
+    }
     // ensure model exists with status
     let mut already_in_progress = false;
     {
@@ -975,12 +1015,20 @@ async fn models_download_cancel(
     State(state): State<AppState>,
     Json(req): Json<CancelReq>,
 ) -> impl IntoResponse {
+    // Delegate to ModelsService when available (consolidated path)
+    if let Some(svc) = state
+        .resources
+        .get::<crate::resources::models_service::ModelsService>()
+    {
+        svc.cancel_download(&state, req.id).await;
+        return ok(json!({})).into_response();
+    }
     set_cancel(&req.id).await;
     state.bus.publish(
         "Models.DownloadProgress",
         &json!({"id": req.id, "status":"cancel-requested"}),
     );
-    ok(json!({}))
+    ok(json!({})).into_response()
 }
 
 // ---- Tools ----

@@ -12,6 +12,9 @@ pub(crate) fn memory_path() -> PathBuf {
 pub(crate) fn models_path() -> PathBuf {
     state_dir().join("models.json")
 }
+pub(crate) fn downloads_metrics_path() -> PathBuf {
+    state_dir().join("downloads.metrics.json")
+}
 pub(crate) fn orch_path() -> PathBuf {
     state_dir().join("orchestration.json")
 }

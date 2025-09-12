@@ -32,8 +32,10 @@ Body:
 Behavior:
 - Creates a temporary file `{state_dir}/models/<name>.part` and appends chunks.
 - On completion, atomically renames to the final filename.
+- Honors `Content-Disposition: attachment; filename=...` to pick a server-provided filename (sanitized cross‑platform).
 - When `sha256` is provided, verifies the file and removes it on mismatch.
 - If a `.part` exists and the server supports HTTP Range, ARW resumes from the saved offset.
+  - Uses `If-Range` with previously observed `ETag`/`Last-Modified` to avoid corrupt resumes when the remote file changed.
 
 ## Cancel
 
@@ -55,6 +57,18 @@ Subscribe to `GET /events` and filter `Models.DownloadProgress` events. Examples
 { "id": "qwen2.5-coder-7b", "status": "complete", "file": "qwen.gguf", "provider": "local" }
 { "id": "qwen2.5-coder-7b", "error": "checksum mismatch", "expected": "...", "actual": "..." }
 { "id": "qwen2.5-coder-7b", "status": "canceled" }
+
+Schema notes (best effort):
+- Always includes: `id`.
+- Progress: `progress` (0–100), `downloaded`, `total` (optional).
+- Status: `status` (e.g., started, resumed, downloading, degraded, complete, canceled).
+- Codes: `code` provides a stable machine hint for complex statuses (e.g., `admission_denied`, `hard_exhausted`, `disk_insufficient`, `size_limit(_stream)`, `checksum_mismatch`).
+- Budget snapshot: `budget` object with `soft_ms`, `hard_ms`, `spent_ms`, `remaining_*` when available.
+- Disk snapshot: `disk` object `{available,total,reserve}` when available.
+
+UI guidance:
+- Simple statuses (started/downloading/resumed/complete/canceled) should use compact single icons.
+- Complex codes can show a small, subtle icon set (e.g., `lock+timer` for `admission_denied`).
 ```
 
 ## Examples
@@ -83,4 +97,8 @@ Resume:
 - Errors surface in progress events; model list isn’t updated on failure.
 - State directory is shown in `GET /probe`.
 - Disk safety: the downloader reserves space to avoid filling the disk. Set `ARW_MODELS_DISK_RESERVE_MB` (default 256) to control the reserved free‑space buffer. If there isn’t enough free space for the download, it aborts with an error event.
+- Size caps: set `ARW_MODELS_MAX_MB` (default 4096) to cap the maximum allowed size per download. The cap is enforced using the `Content-Length` when available and during streaming when it isn’t.
 - Checksum: when `sha256` is provided, it must be a 64‑char hex string; invalid values are rejected up front.
+- Budgets: soft/hard budgets can be configured via `ARW_BUDGET_DOWNLOAD_*`; UI may display a budget snapshot alongside progress.
+- Admission checks: when `total` is known, the downloader estimates if it can finish within the remaining hard budget using a throughput baseline `ARW_DL_MIN_MBPS` and a persisted EWMA. If not, it emits `code: "admission_denied"`.
+- Idle safety: when no hard budget is set, `ARW_DL_IDLE_TIMEOUT_SECS` applies an idle timeout to avoid hung transfers.

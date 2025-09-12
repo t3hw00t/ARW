@@ -24,6 +24,7 @@
   </head>
   <body>
     <script src="common.js"></script>
+    <link rel="stylesheet" href="common.css" />
     <div class="wrap">
       <div class="row">
         <input id="cname" type="text" placeholder="name" style="width: 180px">
@@ -78,10 +79,10 @@
         if (!name || !base) return;
         const conns = await load();
         if (!conns.find(x => x.name === name)) conns.push({ name, base });
-        await save(conns); document.getElementById('stat').textContent = 'Saved'; refresh();
+        await save(conns); document.getElementById('stat').textContent = 'Saved'; ARW.toast('Connection added'); refresh();
       });
       document.getElementById('btn-save').addEventListener('click', async ()=>{
-        const conns = await load(); await save(conns); document.getElementById('stat').textContent = 'Saved';
+        const conns = await load(); await save(conns); document.getElementById('stat').textContent = 'Saved'; ARW.toast('Connections saved');
       });
       (async ()=>{ await refresh(); setInterval(refresh, 10000) })();
     </script>

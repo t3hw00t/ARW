@@ -1,11 +1,19 @@
 <!doctype html><meta charset="utf-8"><title>ARW Agents</title>
 <style>
-  :root{--line:#e5e7eb;--ink:#111827;--muted:#6b7280}
-  body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;color:var(--ink)}
-  .box{border:1px solid var(--line);border-radius:10px;padding:12px;background:#fafaf9;max-width:900px}
+  :root{--line:#e5e7eb;--ink:#111827;--muted:#6b7280;--noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0.04'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+  body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;color:var(--ink);background: radial-gradient(1000px 500px at 15% -10%, #ffffff, #f7f7f9 55%, #f1f5f9)}
+  .box{border:1px solid var(--line);border-radius:12px;padding:12px;background:linear-gradient(180deg,#ffffff,#fafafa);max-width:900px;box-shadow:0 12px 30px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.65);position:relative}
+  .box::before{content:"";position:absolute;inset:0;background-image:var(--noise);opacity:.5;border-radius:12px;pointer-events:none}
   .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
-  button,select{font:inherit;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background:#fff}
-  pre{background:#f8fafc;border:1px solid var(--line);border-radius:10px;padding:8px;overflow:auto}
+  button,select{font:inherit;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background-image:linear-gradient(180deg,#ffffff,#f3f4f6), var(--noise);background-blend-mode:overlay,normal;box-shadow:0 1px 0 rgba(255,255,255,0.9) inset, 0 8px 18px rgba(0,0,0,0.06)}
+  pre{background:linear-gradient(180deg,#ffffff,#fafafa);border:1px solid var(--line);border-radius:12px;padding:8px;overflow:auto;box-shadow:inset 0 1px 0 rgba(255,255,255,0.6)}
+  @media (prefers-color-scheme: dark){
+    body{ background: radial-gradient(1000px 500px at 15% -10%, #0f1117, #0b0d12 55%, #090b10); color:#e5e7eb }
+    .box{ background: linear-gradient(180deg,#12161f,#0f141a); border-color:#1f232a; box-shadow: 0 12px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06) }
+    .box::before{ opacity: .25 }
+    button,select{ color:#e5e7eb; background-image:linear-gradient(180deg,#1a202b,#131822), var(--noise); border-color:#2a2f37; box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 8px 18px rgba(0,0,0,0.35) }
+    pre{ background: linear-gradient(180deg,#12161f,#0f141a); border-color:#1f232a; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06) }
+  }
 </style>
 <h1>Agents</h1>
 <div class='box'>

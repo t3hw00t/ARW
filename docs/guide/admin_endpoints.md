@@ -3,6 +3,7 @@ title: Admin Endpoints
 ---
 
 # Admin Endpoints
+{ .topic-trio style="--exp:.5; --complex:.7; --complicated:.6" data-exp=".5" data-complex=".7" data-complicated=".6" }
 
 ARW exposes a unified admin/ops HTTP namespace under `/admin`. All sensitive routes live here so updates can’t miss gating.
 

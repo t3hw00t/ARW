@@ -3,6 +3,7 @@ title: Security Hardening
 ---
 
 # Security Hardening
+{ .topic-trio style="--exp:.4; --complex:.6; --complicated:.9" data-exp=".4" data-complex=".6" data-complicated=".9" }
 
 This guide summarizes recommended steps to run ARW more securely beyond the local‑dev defaults.
 

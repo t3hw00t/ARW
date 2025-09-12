@@ -4,11 +4,11 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-12 01:20 UTC
+Updated: 2025-09-12 03:20 UTC
 
 
 ## To Do
-- [t-250912024851-8114] Models: move download worker into ModelsService — todo (updated: 2025-09-12 00:48:51 UTC)
+// (moved) [t-250912024851-8114] Models: move download worker into ModelsService — now done; see Done section.
 - [t-250912024843-7597] Resources: Hierarchy/Governor services — todo (updated: 2025-09-12 00:48:43 UTC)
 - [t-250912024838-4137] UI: Episodes filters + details toggle — todo (updated: 2025-09-12 00:48:38 UTC)
 - [t-250912001105-7850] Phase 3: Episodes + Debug UI reactive views — todo (updated: 2025-09-11 22:11:05 UTC)
@@ -36,6 +36,8 @@ Updated: 2025-09-12 01:20 UTC
     - 2025-09-11 21:03:46 UTC: Duplicate of t-250911230252-9858; track only the latter.
 
 ## Done
+- [t-250912024851-8114] Models: move download worker into ModelsService — done (updated: 2025-09-12 03:20:00 UTC)
+    - 2025-09-12 03:20:00 UTC: Consolidated download worker into ModelsService with: cancel/resume, checksum, size caps (ARW_MODELS_MAX_MB), disk reserve (ARW_MODELS_DISK_RESERVE_MB), Content-Disposition filename, If-Range with ETag/Last-Modified, cross-platform filename sanitation, Windows-safe finalize. SSE progress and audit events retained.
 - [t-250912020516-8533] Phase 1: AppState builder + unified struct — done (updated: 2025-09-12 00:05:22 UTC)
     - 2025-09-12 00:05:22 UTC: Unified AppState in app_state.rs; main/lib migrated; added Resources container; built+tests green for arw-svc.
 - [t-250911230302-0138] Tools: central execution registry unified for /tools and tasks — done (updated: 2025-09-11 21:14:14 UTC)
@@ -80,4 +82,3 @@ Updated: 2025-09-12 01:20 UTC
 - [t-250909170247-6008] Start service and verify /about — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
-

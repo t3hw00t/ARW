@@ -5,18 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ARW Launcher</title>
     <style>
-      :root{ --copper:#b87333; --teal:#1bb3a3; --line:#ddd }
-      html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
-      .wrap { display: flex; height: 100%; align-items: center; justify-content: center; }
-      .card { padding: 24px; border: 1px solid #ddd; border-radius: 12px; max-width: 560px; }
+      :root{ --copper:#b87333; --teal:#1bb3a3; --line:#dde1e6; --noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0.04'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
+      html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; background: radial-gradient(1200px 600px at 30% -10%, #ffffff, #f7f7f9 55%, #f1f5f9); }
+      .wrap { display: flex; height: 100%; align-items: center; justify-content: center; position:relative }
+      .wrap::before{ content:""; position:absolute; inset:0; background-image:var(--noise); opacity:.5; mix-blend-mode: soft-light; pointer-events:none }
+      .card { padding: 24px; border: 1px solid var(--line); border-radius: 12px; max-width: 560px; background: linear-gradient(180deg,#ffffff,#fafafa); box-shadow: 0 12px 30px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8) }
       .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-      button { padding: 8px 12px; border-radius: 8px; border: 1px solid #aaa; background: #fafafa; cursor: pointer; }
-      button:hover { background: #f0f0f0; }
+      button { padding: 8px 12px; border-radius: 8px; border: 1px solid #cfd6de; background-image: linear-gradient(180deg,#ffffff,#f3f4f6), var(--noise); background-blend-mode: overlay, normal; cursor: pointer; box-shadow: 0 1px 0 rgba(255,255,255,0.9) inset, 0 8px 18px rgba(0,0,0,0.06) }
+      button:hover { transform: translateY(-0.5px); box-shadow: 0 1px 0 rgba(255,255,255,0.95) inset, 0 14px 28px rgba(0,0,0,0.08) }
       .ok { color: #0a0; }
       .bad { color: #a00; }
       .toast-wrap{ position:fixed; right:16px; bottom:16px; display:flex; flex-direction:column; gap:8px; z-index: 9999 }
-      .toast{ background:#111; color:#fff; padding:8px 12px; border-radius:8px; opacity:.9 }
-      .badge { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid var(--line); border-radius:999px; font-size:12px; }
+      .toast{ background:#0f172a; color:#fff; padding:8px 12px; border-radius:10px; opacity:.95; box-shadow: 0 14px 34px rgba(0,0,0,0.22) }
+      .badge { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid var(--line); border-radius:999px; font-size:12px; background:#fff; box-shadow: 0 1px 0 rgba(255,255,255,0.9) inset }
       .dot { width:8px; height:8px; border-radius:999px; background:#aaa; display:inline-block }
       .dot.ok{ background: var(--teal) }
       .dot.bad{ background: #a00 }
@@ -24,6 +25,7 @@
   </head>
   <body>
     <script src="common.js"></script>
+    <link rel="stylesheet" href="common.css" />
     <div class="wrap">
       <div class="card">
         <h2>ARW Launcher <span class="badge"><span class="dot" id="svc-dot"></span><span id="svc-text">unknown</span></span></h2>
@@ -35,14 +37,14 @@
           <label><input id="loginstart" type="checkbox"/> Start launcher at login</label>
         </div>
         <div class="row">
-          <button id="btn-save">Save</button>
-          <button id="btn-start">Start Service</button>
-          <button id="btn-stop">Stop Service</button>
-          <button id="btn-open">Open Debug UI</button>
-          <button id="btn-open-window">Open in Window</button>
-          <button id="btn-events">Events Window</button>
-          <button id="btn-logs">Logs</button>
-          <button id="btn-models">Models</button>
+          <button id="btn-save" class="ghost">Save</button>
+          <button id="btn-start" class="primary">Start Service</button>
+          <button id="btn-stop" class="ghost">Stop Service</button>
+          <button id="btn-open" class="primary">Open Debug UI</button>
+          <button id="btn-open-window" class="ghost">Open in Window</button>
+          <button id="btn-events" class="ghost">Events Window</button>
+          <button id="btn-logs" class="ghost">Logs</button>
+          <button id="btn-models" class="ghost">Models</button>
           <button id="btn-connections">Connections</button>
           <button id="btn-health">Check Health</button>
           <span id="health"></span>
@@ -50,6 +52,7 @@
         <div class="row">
           <button id="btn-updates">Check Updates</button>
         </div>
+        <div class="row" id="dlmini"></div>
       </div>
     </div>
     <script>
@@ -76,7 +79,6 @@
         const notifyOnStatus = document.getElementById('notif').checked;
         await ARW.setPrefs('launcher', { port, autostart, notifyOnStatus });
       }
-      (function(){ const wrap=document.createElement('div'); wrap.className='toast-wrap'; document.body.appendChild(wrap); window.__toast=(msg)=>{ const d=document.createElement('div'); d.className='toast'; d.textContent=msg; wrap.appendChild(d); setTimeout(()=>{ wrap.removeChild(d); }, 2500); }; })();
       document.getElementById('btn-open').addEventListener('click', async () => {
         try { await invoke('open_debug_ui', { port: getPort() }); } catch (e) { console.error(e); }
       });
@@ -109,6 +111,27 @@
       }
       setInterval(pollHealth, 3000);
       pollHealth();
+      // Mini downloads widget (Models.*)
+      (function(){
+        try{
+          const box = document.getElementById('dlmini'); if(!box) return;
+          const last = {};
+          const es = new EventSource(ARW.base(getPort()) + '/events?prefixes=Models.');
+          const mk = (id)=>{ let el = document.getElementById('dl_'+id); if(!el){ el = document.createElement('div'); el.id='dl_'+id; el.className='badge'; el.style.marginTop='6px'; box.appendChild(el); } return el; };
+          es.addEventListener('Models.DownloadProgress', (ev)=>{
+            try{
+              const j = JSON.parse(ev.data||'{}'); const id = j.id||''; if(!id) return; const el = mk(id);
+              if(j.status==='complete'){ el.className='badge'; el.innerHTML = '<span class="dot"></span> '+id+' complete'; setTimeout(()=>{ if(el&&el.parentNode) el.parentNode.removeChild(el); }, 1500); return; }
+              if(j.error || j.code){ el.className='badge'; el.innerHTML = '<span class="dot bad"></span> '+id+' '+(j.code||'error'); return; }
+              const pct = j.progress!=null? (j.progress+'%') : (j.status||'…');
+              // speed estimate
+              const now = Date.now(); let tail=''; const prev=last[id]; last[id] = { t: now, b: (j.downloaded||0) };
+              if (prev && j.downloaded>=prev.b){ const dt=(now-prev.t)/1000; const db=j.downloaded-prev.b; const mbps = db/(1024*1024)/Math.max(0.001,dt); if(mbps>0.05) tail = ' · '+mbps.toFixed(2)+' MiB/s'; }
+              el.className='badge'; el.innerHTML = '<span class="dot"></span> '+id+' '+pct+tail;
+            }catch{}
+          });
+        }catch{}
+      })();
       document.getElementById('btn-open-window').addEventListener('click', async () => {
         try { await invoke('open_debug_window', { port: getPort() }); } catch (e) { console.error(e); }
       });
@@ -125,14 +148,14 @@
         try { await invoke('open_connections_window'); } catch (e) { console.error(e); }
       });
       document.getElementById('btn-start').addEventListener('click', async () => {
-        try { await invoke('start_service', { port: getPort() }); __toast('Service starting'); } catch (e) { console.error(e); }
+        try { await invoke('start_service', { port: getPort() }); ARW.toast('Service starting'); } catch (e) { console.error(e); }
       });
       document.getElementById('btn-stop').addEventListener('click', async () => {
-        try { await invoke('stop_service', { port: getPort() }); __toast('Service stop requested'); } catch (e) { console.error(e); }
+        try { await invoke('stop_service', { port: getPort() }); ARW.toast('Service stop requested'); } catch (e) { console.error(e); }
       });
       document.getElementById('btn-save').addEventListener('click', async () => {
         try {
-          await savePrefs(); __toast('Preferences saved');
+          await savePrefs(); ARW.toast('Preferences saved');
           const loginstart = document.getElementById('loginstart').checked;
           await invoke('set_launcher_autostart', { enabled: loginstart });
         } catch (e) { console.error(e); }

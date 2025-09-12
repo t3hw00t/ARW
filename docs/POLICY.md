@@ -3,6 +3,7 @@ title: Policy, Gating, and Capsules
 ---
 
 # Policy, Gating, and Capsules
+{ .topic-trio style="--exp:.5; --complex:.7; --complicated:.7" data-exp=".5" data-complex=".7" data-complicated=".7" }
 
 Updated: 2025-09-10
 

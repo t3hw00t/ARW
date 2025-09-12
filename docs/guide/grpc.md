@@ -1,4 +1,5 @@
 # gRPC (optional)
+{ .topic-trio style="--exp:.5; --complex:.7; --complicated:.5" data-exp=".5" data-complex=".7" data-complicated=".5" }
 
 ARW exposes an optional gRPC server in `arw-svc` behind the `grpc` feature.
 
@@ -47,4 +48,3 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 - The gRPC server publishes a `Service.Health` event on each `healthz` call.
 - gRPC is opt-in and not required for core HTTP functionality.
-

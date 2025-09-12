@@ -3,6 +3,7 @@ title: Memory, Live Feedback & Conditional Training
 ---
 
 # Memory, Live Feedback & Conditional Training
+{ .topic-trio style="--exp:.7; --complex:.8; --complicated:.7" data-exp=".7" data-complex=".8" data-complicated=".7" }
 
 Updated: 2025-09-06.
 

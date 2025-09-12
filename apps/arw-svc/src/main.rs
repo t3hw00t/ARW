@@ -44,6 +44,53 @@ use arw_core::gating;
 #[cfg(feature = "grpc")]
 mod grpc;
 
+// Optional Windows DXCore interop for NPU detection (opt-in)
+#[cfg(all(target_os = "windows", feature = "npu_dxcore"))]
+mod win_npu_dxcore {
+    #![allow(non_snake_case, non_camel_case_types, non_upper_case_globals)]
+    use serde_json::json;
+    use windows::Win32::Graphics::DxCore::*;
+
+    pub fn probe() -> Vec<serde_json::Value> {
+        unsafe {
+            let mut out: Vec<serde_json::Value> = Vec::new();
+            let Ok(factory) = CreateDXCoreAdapterFactory() else { return out };
+            let attrs = [DXCORE_ADAPTER_ATTRIBUTE_D3D12_CORE_COMPUTE];
+            let Ok(list) = factory.CreateAdapterList(&attrs) else { return out };
+            let count = list.GetAdapterCount();
+            for i in 0..count {
+                if let Ok(adapter) = list.GetAdapter(i) {
+                    if adapter.IsAttributeSupported(&DXCORE_ADAPTER_ATTRIBUTE_D3D12_CORE_COMPUTE) {
+                        // vendor/device ids when available
+                        let mut ven = 0u32;
+                        let mut dev = 0u32;
+                        let mut sz: usize = 0;
+                        if adapter.IsPropertySupported(DXCoreAdapterProperty::HardwareID) {
+                            if adapter.GetPropertySize(DXCoreAdapterProperty::HardwareID, &mut sz).is_ok() && sz >= core::mem::size_of::<DXCoreHardwareID>() {
+                                let mut hwid: DXCoreHardwareID = core::mem::zeroed();
+                                if adapter.GetProperty(DXCoreAdapterProperty::HardwareID, &mut hwid as *mut _ as *mut core::ffi::c_void, core::mem::size_of::<DXCoreHardwareID>()).is_ok() {
+                                    ven = hwid.VendorID;
+                                    dev = hwid.DeviceID;
+                                }
+                            }
+                        }
+                        let vendor_hex = format!("0x{:04x}", ven);
+                        // description is optional; omit to keep code small/safe
+                        let is_amd = ven == 0x1002;
+                        out.push(json!({
+                            "vendor_id": vendor_hex,
+                            "device_id": format!("0x{:04x}", dev),
+                            "dxcore": true,
+                            "is_amd": is_amd,
+                        }));
+                    }
+                }
+            }
+            out
+        }
+    }
+}
+
 #[arw_tool(
     id = "introspect.tools",
     version = "1.0.0",
@@ -257,6 +304,33 @@ async fn main() {
     // Start local task worker to exercise the orchestrator MVP
     ext::start_local_task_worker(state.clone());
 
+    // Background metrics emitter to SSE (low-frequency; avoids dashboard polling)
+    {
+        let st = state.clone();
+        tokio::spawn(async move {
+            let secs = std::env::var("ARW_METRICS_INTERVAL_SECS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(10)
+                .max(2);
+            let mut intv = tokio::time::interval(std::time::Duration::from_secs(secs));
+            loop {
+                intv.tick().await;
+                let snap = collect_metrics_snapshot().await;
+                st.bus.publish(
+                    "Probe.Metrics",
+                    &serde_json::json!({
+                        "cpu": snap["cpu"]["avg"],
+                        "mem": {"used": snap["memory"]["used"], "total": snap["memory"]["total"]},
+                        "disk": snap["disk"],
+                        "gpus": snap["gpus"],
+                        "npus": snap["npus"],
+                    }),
+                );
+            }
+        });
+    }
+
     // Optionally start gRPC service when enabled and requested
     #[cfg(feature = "grpc")]
     {
@@ -410,16 +484,30 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
         }
         return next.run(req).await;
     }
+    // Unauthorized: advertise Bearer to guide clients
     let body = serde_json::json!({
         "type": "about:blank",
-        "title": "Forbidden",
-        "status": 403,
-        "detail": "administrative endpoint; set ARW_DEBUG=1 or provide X-ARW-Admin token"
+        "title": "Unauthorized",
+        "status": 401,
+        "detail": "administrative endpoint; provide Bearer token or X-ARW-Admin"
     });
-    (SC::FORBIDDEN, axum::Json(body)).into_response()
+    (
+        [(axum::http::header::WWW_AUTHENTICATE, "Bearer")],
+        (SC::UNAUTHORIZED, axum::Json(body)),
+    )
+        .into_response()
 }
 
 fn header_token_matches(h: &HeaderMap, token: &str) -> bool {
+    // Prefer Authorization: Bearer <token>
+    if let Some(v) = h.get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()) {
+        if let Some(bearer) = v.strip_prefix("Bearer ") {
+            if ct_eq(bearer.as_bytes(), token.as_bytes()) {
+                return true;
+            }
+        }
+    }
+    // Back-compat: X-ARW-Admin: <token>
     h.get("x-arw-admin")
         .and_then(|v| v.to_str().ok())
         .map(|v| ct_eq(v.as_bytes(), token.as_bytes()))
@@ -994,6 +1082,23 @@ fn probe_disks_windows() -> Vec<serde_json::Value> {
 )]
 #[arw_gate("introspect:probe")]
 async fn probe_metrics(State(state): State<AppState>) -> impl IntoResponse {
+    let out = collect_metrics_snapshot().await;
+    // publish a compact event for dashboards (no polling needed)
+    state.bus.publish(
+        "Probe.Metrics",
+        &serde_json::json!({
+            "cpu": out["cpu"]["avg"],
+            "mem": {"used": out["memory"]["used"], "total": out["memory"]["total"]},
+            "disk": out["disk"],
+            "gpus": out["gpus"],
+            "npus": out["npus"],
+        }),
+    );
+    ext::ok::<serde_json::Value>(out).into_response()
+}
+
+// Shared collector used by HTTP and background emitter
+async fn collect_metrics_snapshot() -> serde_json::Value {
     use sysinfo::System;
     let mut sys = System::new();
     sys.refresh_memory();
@@ -1001,39 +1106,23 @@ async fn probe_metrics(State(state): State<AppState>) -> impl IntoResponse {
     tokio::time::sleep(std::time::Duration::from_millis(180)).await;
     sys.refresh_cpu();
     let per_core: Vec<f64> = sys.cpus().iter().map(|c| c.cpu_usage() as f64).collect();
-    let avg = if per_core.is_empty() {
-        0.0
-    } else {
-        per_core.iter().sum::<f64>() / (per_core.len() as f64)
-    };
-
+    let avg = if per_core.is_empty() { 0.0 } else { per_core.iter().sum::<f64>() / (per_core.len() as f64) };
     let total_mem = sys.total_memory();
     let avail_mem = sys.available_memory();
     let used_mem = total_mem.saturating_sub(avail_mem);
     let swap_total = sys.total_swap();
     let swap_used = sys.used_swap();
-
     let sdir = crate::ext::paths::state_dir();
-    let (disk_total, disk_avail) = (
-        fs2::total_space(&sdir).unwrap_or(0),
-        fs2::available_space(&sdir).unwrap_or(0),
-    );
-
-    let gpus = probe_gpu_metrics_best_effort();
+    let (disk_total, disk_avail) = (fs2::total_space(&sdir).unwrap_or(0), fs2::available_space(&sdir).unwrap_or(0));
+    let gpus = probe_gpu_metrics_best_effort_async().await;
     let npus = probe_npus_best_effort();
-
-    let out = serde_json::json!({
+    serde_json::json!({
         "cpu": {"avg": avg, "per_core": per_core},
         "memory": {"total": total_mem, "used": used_mem, "available": avail_mem, "swap_total": swap_total, "swap_used": swap_used},
         "disk": {"state_dir": sdir, "total": disk_total, "available": disk_avail},
         "gpus": gpus,
         "npus": npus,
-    });
-    state.bus.publish(
-        "Probe.Metrics",
-        &serde_json::json!({"cpu_avg": avg, "mem_used": used_mem}),
-    );
-    ext::ok::<serde_json::Value>(out).into_response()
+    })
 }
 
 #[cfg(target_os = "linux")]
@@ -1092,6 +1181,68 @@ fn probe_gpu_metrics_best_effort() -> Vec<serde_json::Value> {
 #[cfg(not(target_os = "linux"))]
 fn probe_gpu_metrics_best_effort() -> Vec<serde_json::Value> {
     Vec::new()
+}
+
+// Async facade (Linux optionally uses ROCm SMI)
+#[cfg(target_os = "linux")]
+async fn probe_gpu_metrics_best_effort_async() -> Vec<serde_json::Value> {
+    let mut base = probe_gpu_metrics_best_effort();
+    if std::env::var("ARW_ROCM_SMI").ok().as_deref() == Some("1") {
+        if let Some(extra) = rocm_smi_json().await {
+            if let Some(obj) = extra.as_object() {
+                for (k, v) in obj.iter() {
+                    if !k.starts_with("card") { continue; }
+                    if let Some(gpu) = base.iter_mut().find(|g| g["index"].as_str() == Some(k)) {
+                        if let Some(map) = v.as_object() {
+                            if gpu["busy_percent"].is_null() {
+                                if let Some(bp) = pick_number(map, &["GPU use (%)","GPU Utilization (%)","GPU_Util"]) { gpu["busy_percent"] = serde_json::json!(bp as u64); }
+                            }
+                            if gpu["mem_total"].is_null() {
+                                if let Some(mt) = pick_number(map, &["VRAM Total (B)","VRAM_Total_Bytes"]) { gpu["mem_total"] = serde_json::json!(mt as u64); }
+                            }
+                            if gpu["mem_used"].is_null() {
+                                if let Some(mu) = pick_number(map, &["VRAM Used (B)","VRAM_Used_Bytes"]) { gpu["mem_used"] = serde_json::json!(mu as u64); }
+                            }
+                            gpu["extra"]["rocm_smi"] = v.clone();
+                        }
+                    } else {
+                        base.push(serde_json::json!({"index": k, "vendor":"AMD","vendor_id":"0x1002","extra": {"rocm_smi": v}}));
+                    }
+                }
+            }
+        }
+    }
+    base
+}
+#[cfg(not(target_os = "linux"))]
+async fn probe_gpu_metrics_best_effort_async() -> Vec<serde_json::Value> { probe_gpu_metrics_best_effort() }
+
+#[cfg(target_os = "linux")]
+async fn rocm_smi_json() -> Option<serde_json::Value> {
+    use tokio::process::Command;
+    use tokio::time::{timeout, Duration};
+    let mut cmd = Command::new("rocm-smi");
+    cmd.arg("--showuse").arg("--showmeminfo").arg("vram").arg("--showtemp").arg("--showclocks").arg("--showpower").arg("--json");
+    match timeout(Duration::from_millis(1200), cmd.output()).await {
+        Ok(Ok(out)) if out.status.success() => {
+            let txt = String::from_utf8_lossy(&out.stdout);
+            serde_json::from_str::<serde_json::Value>(&txt).ok()
+        }
+        _ => None,
+    }
+}
+#[cfg(target_os = "linux")]
+fn pick_number(map: &serde_json::Map<String, serde_json::Value>, keys: &[&str]) -> Option<f64> {
+    for k in keys {
+        if let Some(v) = map.get(*k) {
+            if v.is_number() { return v.as_f64(); }
+            if let Some(s) = v.as_str() {
+                let s = s.trim_end_matches('%');
+                if let Ok(x) = s.parse::<f64>() { return Some(x); }
+            }
+        }
+    }
+    None
 }
 
 // ---- NPU probes (best-effort) ----
@@ -1159,6 +1310,12 @@ fn probe_npus_best_effort() -> Vec<serde_json::Value> {
 
 #[cfg(not(any(target_os = "linux", target_os = "macos")))]
 fn probe_npus_best_effort() -> Vec<serde_json::Value> {
+    #[cfg(all(target_os = "windows", feature = "npu_dxcore"))]
+    {
+        if std::env::var("ARW_DXCORE_NPU").ok().as_deref() == Some("1") {
+            return crate::win_npu_dxcore::probe();
+        }
+    }
     Vec::new()
 }
 
@@ -1181,6 +1338,8 @@ async fn emit_test(State(state): State<AppState>) -> impl IntoResponse {
     state
         .bus
         .publish("Service.Test", &json!({"msg":"ping","t": now_ms}));
+    // audit
+    crate::ext::io::audit_event("admin.emit.test", &json!({"t": now_ms})).await;
     Json(OkResponse { ok: true }).into_response()
 }
 
@@ -1199,6 +1358,8 @@ async fn shutdown(State(state): State<AppState>) -> impl IntoResponse {
     state
         .bus
         .publish("Service.Stop", &json!({"reason":"user request"}));
+    // audit
+    crate::ext::io::audit_event("admin.shutdown", &json!({"reason": "user request"})).await;
     if let Some(tx) = &state.stop_tx {
         let _ = tx.send(());
     }
@@ -1230,6 +1391,12 @@ async fn events(
     State(state): State<AppState>,
     Query(q): Query<EventsQs>,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
+    // audit subscription
+    crate::ext::io::audit_event(
+        "admin.events.subscribe",
+        &json!({"prefix": q.prefix, "replay": q.replay.unwrap_or(0)}),
+    )
+    .await;
     let rx = if !q.prefix.is_empty() {
         state.bus.subscribe_filtered(q.prefix.clone(), None)
     } else {
