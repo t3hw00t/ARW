@@ -102,6 +102,7 @@ Resume:
 - When `total` is unknown, events may omit it and include only `downloaded`.
 - On failure, the model list is updated to `status: "error"` with `error_code` to avoid stuck "downloading" states.
 - State directory is shown in `GET /admin/probe`.
+- Concurrency: set `ARW_MODELS_MAX_CONC` (default 2) to limit simultaneous downloads. When saturated, a download emits `status: "queued"` and then `"admitted"` once it starts.
 - Disk safety: the downloader reserves space to avoid filling the disk. Set `ARW_MODELS_DISK_RESERVE_MB` (default 256) to control the reserved free‑space buffer. If there isn’t enough free space for the download, it aborts with an error event.
 - Size caps: set `ARW_MODELS_MAX_MB` (default 4096) to cap the maximum allowed size per download. The cap is enforced using the `Content-Length` when available and during streaming when it isn’t.
 - Checksum: when `sha256` is provided, it must be a 64‑char hex string; invalid values are rejected up front.
@@ -111,6 +112,11 @@ Resume:
   Related tuning knobs: `ARW_MODELS_MAX_MB`, `ARW_MODELS_DISK_RESERVE_MB`, `ARW_DL_MIN_MBPS`, `ARW_DL_EWMA_ALPHA`, `ARW_DL_SEND_RETRIES`, `ARW_DL_STREAM_RETRIES`, `ARW_DL_IDLE_TIMEOUT_SECS`, `ARW_BUDGET_SOFT_DEGRADE_PCT`.
 - Admission checks: when `total` is known, the downloader estimates if it can finish within the remaining hard budget using a throughput baseline `ARW_DL_MIN_MBPS` and a persisted EWMA. If not, it emits `code: "admission_denied"`.
 - Idle safety: when no hard budget is set, `ARW_DL_IDLE_TIMEOUT_SECS` applies an idle timeout to avoid hung transfers.
+
+### Policy & Egress
+
+- The admin endpoint is gated by capability and egress policy: the request must satisfy `io:egress:models.download`.
+- Optional egress ledger entries are appended for download attempts (success/failure) when enabled in your build; see “Egress & Provenance” docs.
 
 Security note: all `/admin/*` endpoints require either debug mode (`ARW_DEBUG=1`) or an admin token. Set `ARW_ADMIN_TOKEN` on the service and send it as `Authorization: Bearer <token>` or `X-ARW-Admin: <token>`.
 GC unused blobs:

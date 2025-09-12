@@ -4,7 +4,7 @@ use crate::app_state::AppState;
 use futures_util::StreamExt;
 use once_cell::sync::OnceCell;
 use std::collections::{HashMap, HashSet};
-use tokio::sync::RwLock; // for cancel/active job tracking
+use tokio::sync::{RwLock, Semaphore}; // for cancel/active job tracking
 
 #[derive(Default)]
 pub struct ModelsService;
@@ -186,6 +186,21 @@ mod tests {
 impl ModelsService {
     pub fn new() -> Self {
         Self
+    }
+
+    // Global concurrency limiter for downloads (permits per concurrent job).
+    fn max_concurrency() -> usize {
+        std::env::var("ARW_MODELS_MAX_CONC")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(2)
+    }
+    fn concurrency_sem() -> &'static std::sync::Arc<Semaphore> {
+        static SEM: OnceCell<std::sync::Arc<Semaphore>> = OnceCell::new();
+        SEM.get_or_init(|| {
+            let cap = Self::max_concurrency().max(1);
+            std::sync::Arc::new(Semaphore::new(cap))
+        })
     }
 
     // Track in-flight downloads by sha256 to avoid duplicate concurrent fetches
@@ -993,6 +1008,47 @@ impl ModelsService {
         }
         tokio::spawn(async move {
             let _guard = ActiveJobGuard::new(&id, &job);
+            // Acquire concurrency permit if limited (>0). Emit queued if needed.
+            let mut _permit: Option<tokio::sync::OwnedSemaphorePermit> = None;
+            let conc = Self::max_concurrency();
+            if conc > 0 {
+                let sem = Self::concurrency_sem().clone();
+                if sem.available_permits() == 0 {
+                    emit_progress(
+                        &sp.bus,
+                        &id,
+                        Some("queued"),
+                        Some("queued"),
+                        if Self::progress_include_budget() { Some(&budget) } else { None },
+                        None,
+                    );
+                }
+                match sem.acquire_owned().await {
+                    Ok(p) => {
+                        _permit = Some(p);
+                        emit_progress(
+                            &sp.bus,
+                            &id,
+                            Some("admitted"),
+                            Some("admitted"),
+                            if Self::progress_include_budget() { Some(&budget) } else { None },
+                            None,
+                        );
+                    }
+                    Err(_) => {
+                        emit_error(
+                            &sp.bus,
+                            &id,
+                            "concurrency_closed",
+                            "download concurrency limiter unavailable",
+                            Some(&budget),
+                            None,
+                        )
+                        .await;
+                        return;
+                    }
+                }
+            }
             // Prepare destination tuple for ledger/events
             let (dest_host, dest_port, dest_proto) = (|| {
                 if let Ok(u) = reqwest::Url::parse(&url) {

@@ -1,4 +1,5 @@
 use super::super::resources::models_service::ModelsService;
+use arw_core::gating;
 use crate::AppState;
 use arw_macros::{arw_admin, arw_gate};
 use axum::{extract::State, response::IntoResponse, Json};
@@ -190,6 +191,10 @@ pub(crate) async fn models_download(
     State(state): State<AppState>,
     Json(req): Json<DownloadReq>,
 ) -> impl IntoResponse {
+    // Egress policy gate (coarse). Deny if not allowed.
+    if !gating::allowed("io:egress:models.download") {
+        return super::ApiError::forbidden("gated:egress").into_response();
+    }
     let Some(svc) = state.resources.get::<ModelsService>() else {
         return (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
