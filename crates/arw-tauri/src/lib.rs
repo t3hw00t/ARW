@@ -1,6 +1,7 @@
 use anyhow::Result;
 use directories::ProjectDirs;
 use once_cell::sync::OnceCell;
+use reqwest::header::{HeaderMap, HeaderValue};
 use serde_json::Value;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
@@ -54,6 +55,26 @@ fn service_url(path: &str, port: Option<u16>) -> String {
         effective_port(port),
         path.trim_start_matches('/')
     )
+}
+
+fn admin_token() -> Option<String> {
+    if let Ok(t) = std::env::var("ARW_ADMIN_TOKEN") {
+        if !t.is_empty() {
+            return Some(t);
+        }
+    }
+    if let Some(path) = prefs_path(Some("launcher")) {
+        if let Ok(bytes) = std::fs::read(path) {
+            if let Ok(v) = serde_json::from_slice::<Value>(&bytes) {
+                if let Some(s) = v.get("adminToken").and_then(|x| x.as_str()) {
+                    if !s.is_empty() {
+                        return Some(s.to_string());
+                    }
+                }
+            }
+        }
+    }
+    None
 }
 
 /// Locate the `arw-svc` binary near the app or in the workspace target dir.
@@ -303,6 +324,16 @@ pub fn plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             open_logs_window,
             open_models_window,
             open_connections_window,
+            models_list,
+            models_refresh,
+            models_save,
+            models_load,
+            models_add,
+            models_delete,
+            models_default_get,
+            models_default_set,
+            models_download,
+            models_download_cancel,
             start_service,
             stop_service,
             get_prefs,
@@ -334,4 +365,139 @@ pub fn open_url(url: String) -> Result<(), String> {
         return Err("invalid url".into());
     }
     open::that(url).map_err(|e| e.to_string())
+}
+
+// ---- Models (admin) ----
+async fn admin_get(path: &str, port: Option<u16>) -> Result<reqwest::Response, String> {
+    static HTTP: OnceCell<reqwest::Client> = OnceCell::new();
+    let mut headers = HeaderMap::new();
+    if let Some(tok) = admin_token() {
+        if let Ok(h) = HeaderValue::from_str(&tok) {
+            headers.insert("X-ARW-Admin", h);
+        }
+    }
+    let client = HTTP.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(5))
+            .build()
+            .unwrap()
+    });
+    client
+        .get(service_url(path, port))
+        .headers(headers)
+        .send()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+async fn admin_post_json(
+    path: &str,
+    body: Value,
+    port: Option<u16>,
+) -> Result<reqwest::Response, String> {
+    static HTTP: OnceCell<reqwest::Client> = OnceCell::new();
+    let mut headers = HeaderMap::new();
+    if let Some(tok) = admin_token() {
+        if let Ok(h) = HeaderValue::from_str(&tok) {
+            headers.insert("X-ARW-Admin", h);
+        }
+    }
+    let client = HTTP.get_or_init(|| {
+        reqwest::Client::builder()
+            .timeout(Duration::from_secs(15))
+            .build()
+            .unwrap()
+    });
+    client
+        .post(service_url(path, port))
+        .headers(headers)
+        .json(&body)
+        .send()
+        .await
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn models_list(port: Option<u16>) -> Result<Value, String> {
+    let resp = admin_get("admin/models", port).await?;
+    let v = resp.json::<Value>().await.map_err(|e| e.to_string())?;
+    Ok(v)
+}
+
+#[tauri::command]
+pub async fn models_refresh(port: Option<u16>) -> Result<Value, String> {
+    let resp = admin_post_json("admin/models/refresh", Value::Null, port).await?;
+    let v = resp.json::<Value>().await.map_err(|e| e.to_string())?;
+    Ok(v)
+}
+
+#[tauri::command]
+pub async fn models_save(port: Option<u16>) -> Result<(), String> {
+    let _ = admin_post_json("admin/models/save", Value::Null, port).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn models_load(port: Option<u16>) -> Result<Value, String> {
+    let resp = admin_post_json("admin/models/load", Value::Null, port).await?;
+    let v = resp.json::<Value>().await.map_err(|e| e.to_string())?;
+    Ok(v)
+}
+
+#[tauri::command]
+pub async fn models_add(
+    id: String,
+    provider: Option<String>,
+    port: Option<u16>,
+) -> Result<(), String> {
+    let body = serde_json::json!({"id": id, "provider": provider});
+    let _ = admin_post_json("admin/models/add", body, port).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn models_delete(id: String, port: Option<u16>) -> Result<(), String> {
+    let body = serde_json::json!({"id": id});
+    let _ = admin_post_json("admin/models/delete", body, port).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn models_default_get(port: Option<u16>) -> Result<String, String> {
+    let resp = admin_get("admin/models/default", port).await?;
+    let v = resp.json::<Value>().await.map_err(|e| e.to_string())?;
+    Ok(v.get("default")
+        .and_then(|x| x.as_str())
+        .unwrap_or("")
+        .to_string())
+}
+
+#[tauri::command]
+pub async fn models_default_set(id: String, port: Option<u16>) -> Result<(), String> {
+    let body = serde_json::json!({"id": id});
+    let _ = admin_post_json("admin/models/default", body, port).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn models_download(
+    id: String,
+    url: String,
+    provider: Option<String>,
+    sha256: Option<String>,
+    port: Option<u16>,
+) -> Result<(), String> {
+    if !(url.starts_with("http://") || url.starts_with("https://")) {
+        return Err("invalid url".into());
+    }
+    let body = serde_json::json!({"id": id, "url": url, "provider": provider, "sha256": sha256});
+    let _ = admin_post_json("admin/models/download", body, port).await?;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn models_download_cancel(id: String, port: Option<u16>) -> Result<(), String> {
+    let body = serde_json::json!({"id": id});
+    let _ = admin_post_json("admin/models/download/cancel", body, port).await?;
+    Ok(())
 }

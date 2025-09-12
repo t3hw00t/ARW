@@ -1,33 +1,66 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+target_triple=""
 nobuild=0
-if [[ ${1:-} == '--no-build' ]]; then nobuild=1; fi
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --no-build) nobuild=1; shift;;
+    --target) target_triple="$2"; shift 2;;
+    -h|--help)
+      echo "Usage: $0 [--no-build] [--target <triple>]"; exit 0;;
+    *) echo "Unknown option: $1"; exit 1;;
+  esac
+done
 
 command -v cargo >/dev/null || { echo 'cargo not found'; exit 1; }
 
 if [[ $nobuild -eq 0 ]]; then
   echo '[package] Building (release)'
-  cargo build --workspace --release --locked
+  if [[ -n "$target_triple" ]]; then
+    cargo build --release --locked --target "$target_triple" -p arw-svc -p arw-cli || true
+    # Try launcher too, but don't fail the packaging if it doesn't build
+    cargo build --release --locked --target "$target_triple" -p arw-launcher || true
+  else
+    cargo build --workspace --release --locked || true
+  fi
 fi
 
 root_dir=$(cd "$(dirname "$0")/.." && pwd)
 version=$(grep -m1 '^version\s*=\s*"' "$root_dir/Cargo.toml" | sed -E 's/.*"([^"]+)".*/\1/')
 version=${version:-0.0.0}
 
-uname_s=$(uname -s | tr '[:upper:]' '[:lower:]')
-uname_m=$(uname -m)
-case "$uname_s" in
-  darwin) os=macos;;
-  linux)  os=linux;;
-  msys*|mingw*|cygwin*) os=windows;;
-  *) os=$uname_s;;
-esac
-case "$uname_m" in
-  x86_64|amd64) arch=x64;;
-  arm64|aarch64) arch=arm64;;
-  *) arch=$uname_m;;
-esac
+# Derive OS/arch from target triple when provided; else from host
+if [[ -n "$target_triple" ]]; then
+  case "$target_triple" in
+    *-unknown-linux-gnu) os=linux;;
+    *-apple-darwin)      os=macos;;
+    *-pc-windows-msvc)   os=windows;;
+    *) os=$(uname -s | tr '[:upper:]' '[:lower:]');;
+  esac
+  case "$target_triple" in
+    aarch64-*) arch=arm64;;
+    x86_64-*)  arch=x64;;
+    *) arch=$(uname -m);; 
+  esac
+  bin_dir="$root_dir/target/$target_triple/release"
+else
+  uname_s=$(uname -s | tr '[:upper:]' '[:lower:]')
+  uname_m=$(uname -m)
+  case "$uname_s" in
+    darwin) os=macos;;
+    linux)  os=linux;;
+    msys*|mingw*|cygwin*) os=windows;;
+    *) os=$uname_s;;
+  esac
+  case "$uname_m" in
+    x86_64|amd64) arch=x64;;
+    arm64|aarch64) arch=arm64;;
+    *) arch=$uname_m;;
+  esac
+  bin_dir="$root_dir/target/release"
+fi
 
 name="arw-$version-$os-$arch"
 dist="$root_dir/dist"
@@ -37,13 +70,13 @@ rm -rf "$out" && mkdir -p "$out/bin" "$out/configs"
 exe=''
 [[ "$os" == windows ]] && exe='.exe'
 
-cp "$root_dir/target/release/arw-svc$exe" "$out/bin/arw-svc$exe"
-cp "$root_dir/target/release/arw-cli$exe" "$out/bin/arw-cli$exe"
-if [[ -f "$root_dir/target/release/arw-tray$exe" ]]; then
-  cp "$root_dir/target/release/arw-tray$exe" "$out/bin/arw-tray$exe"
+cp "$bin_dir/arw-svc$exe" "$out/bin/arw-svc$exe"
+cp "$bin_dir/arw-cli$exe" "$out/bin/arw-cli$exe" 2>/dev/null || true
+if [[ -f "$bin_dir/arw-tray$exe" ]]; then
+  cp "$bin_dir/arw-tray$exe" "$out/bin/arw-tray$exe"
 fi
-if [[ -f "$root_dir/target/release/arw-launcher$exe" ]]; then
-  cp "$root_dir/target/release/arw-launcher$exe" "$out/bin/arw-launcher$exe"
+if [[ -f "$bin_dir/arw-launcher$exe" ]]; then
+  cp "$bin_dir/arw-launcher$exe" "$out/bin/arw-launcher$exe"
 fi
 cp "$root_dir/configs/default.toml" "$out/configs/default.toml"
 cp -r "$root_dir/docs" "$out/docs"

@@ -1,11 +1,11 @@
 use serde_json::{json, Value};
 
 use crate::app_state::AppState;
+use fs2;
 use futures_util::StreamExt;
 use once_cell::sync::OnceCell;
 use std::collections::HashSet;
-use tokio::sync::RwLock;
-use fs2; // for available_space
+use tokio::sync::RwLock; // for available_space
 
 #[derive(Default)]
 pub struct ModelsService;
@@ -82,7 +82,11 @@ impl ModelsService {
                 &json!({"op":"add","id": v.last().and_then(|m| m.get("id")).cloned()}),
             );
             // audit
-            super::super::ext::io::audit_event("models.add", &json!({"id": v.last().and_then(|m| m.get("id")).cloned() })).await;
+            super::super::ext::io::audit_event(
+                "models.add",
+                &json!({"id": v.last().and_then(|m| m.get("id")).cloned() }),
+            )
+            .await;
         }
     }
 
@@ -303,7 +307,8 @@ impl ModelsService {
                                     let mut p = json!({"id": id, "status":"canceled"});
                                     crate::ext::corr::ensure_corr(&mut p);
                                     sp.bus.publish("Models.DownloadProgress", &p);
-                                    crate::ext::io::audit_event("models.download.canceled", &p).await;
+                                    crate::ext::io::audit_event("models.download.canceled", &p)
+                                        .await;
                                     Self::clear_cancel(&id).await;
                                     return;
                                 }
@@ -332,7 +337,11 @@ impl ModelsService {
                                             });
                                             crate::ext::corr::ensure_corr(&mut p);
                                             sp.bus.publish("Models.DownloadProgress", &p);
-                                            crate::ext::io::audit_event("models.download.error", &p).await;
+                                            crate::ext::io::audit_event(
+                                                "models.download.error",
+                                                &p,
+                                            )
+                                            .await;
                                             return;
                                         }
                                     }
@@ -393,7 +402,7 @@ impl ModelsService {
                             let mut p = json!({"id": id, "error": "checksum mismatch", "expected": exp, "actual": actual});
                             crate::ext::corr::ensure_corr(&mut p);
                             sp.bus.publish("Models.DownloadProgress", &p);
-                             crate::ext::io::audit_event("models.download.error", &p).await;
+                            crate::ext::io::audit_event("models.download.error", &p).await;
                             return;
                         }
                     }

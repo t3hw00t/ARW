@@ -80,7 +80,7 @@ nix develop
 
 ## Containers
 
-Run a published image (amd64/arm64):
+Run a published image (amd64/arm64). Native binaries are provided for Windows (x64/ARM64), macOS (x64/ARM64), and Linux (x64/ARM64):
 
 ```bash
 docker run --rm -p 8090:8090 \

@@ -34,9 +34,11 @@ function Find-Tool($names){
 # Collect candidate artifacts
 $distDir = Join-Path $root 'dist'
 $targetExe = Join-Path $root 'target\release\arw-svc.exe'
+$targetExeArm = Join-Path $root 'target\aarch64-pc-windows-msvc\release\arw-svc.exe'
 $artifacts = @()
 if (Test-Path $distDir) { $artifacts += Get-ChildItem -Path $distDir -Recurse -Include *.exe,*.msi -File -ErrorAction SilentlyContinue }
 if (Test-Path $targetExe) { $artifacts += Get-Item $targetExe }
+if (Test-Path $targetExeArm) { $artifacts += Get-Item $targetExeArm }
 $artifacts = $artifacts | Sort-Object FullName -Unique
 
 if (-not $artifacts -or $artifacts.Count -eq 0) { Warn 'No artifacts found (dist/ or target/release). Sign/ICE checks may be skipped.' }
@@ -123,4 +125,3 @@ if ($appcert) {
 
 Info 'Windows Advanced Gate finished.'
 exit 0
-

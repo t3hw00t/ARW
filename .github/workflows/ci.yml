@@ -47,6 +47,37 @@ jobs:
           cd Agent_Hub
           cargo build -p arw-svc --features grpc --locked
 
+      - name: Install Linux ARM64 cross toolchain
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Install Linux ARM64 Rust target
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          rustup target add aarch64-unknown-linux-gnu
+
+      - name: Cross-build arw-svc (aarch64-unknown-linux-gnu)
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+        run: |
+          cd Agent_Hub
+          cargo build -p arw-svc --target aarch64-unknown-linux-gnu --locked
+
+      - name: Install Windows ARM64 Rust target
+        if: matrix.os == 'windows-latest'
+        run: |
+          rustup target add aarch64-pc-windows-msvc
+
+      - name: Cross-build arw-svc (aarch64-pc-windows-msvc)
+        if: matrix.os == 'windows-latest'
+        run: |
+          cd Agent_Hub
+          cargo build -p arw-svc --target aarch64-pc-windows-msvc --locked
+
       - name: Test (excluding desktop UI crates)
         run: |
           cd Agent_Hub

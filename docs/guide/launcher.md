@@ -37,6 +37,7 @@ Using Nix: `nix develop` (devShell includes required libraries).
 - App: `apps/arw-launcher/src-tauri`
 - Shared glue: `crates/arw-tauri`
 - UI: `apps/arw-launcher/src-tauri/ui/` (`index.html`, `events.html`, `logs.html`)
+  - Model Manager UI: `models.html` (list/add/delete/default, download with progress)
 - Icons: `apps/arw-launcher/src-tauri/icons/` (placeholder PNGs; replace with your branding)
   - Regenerate icons following project colors: `./.venv/bin/python scripts/gen_icons.py`
 

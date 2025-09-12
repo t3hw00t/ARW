@@ -18,7 +18,7 @@ bash scripts/start.sh --wait-health
 
 Open http://127.0.0.1:8090 and visit `/debug` (set `ARW_DEBUG=1` for local dev). The Debug UI includes an Episodes panel (stitched by `corr_id`) and live state snapshots; server read‑models are exposed under `/state/*` (observations, beliefs, intents, actions, episodes).
 
-Docker (amd64/arm64)
+Docker (amd64/arm64); Native binaries: Windows (x64/ARM64), macOS (x64/ARM64), Linux (x64/ARM64)
 ```bash
 docker run --rm -p 8090:8090 ghcr.io/t3hw00t/arw-svc:latest
 ```

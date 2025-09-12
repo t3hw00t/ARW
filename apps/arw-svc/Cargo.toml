@@ -26,6 +26,8 @@ arw-protocol = { path = "../../crates/arw-protocol" }
 schemars = { workspace = true }
 sha2 = "0.10"
 fs2 = { workspace = true }
+sysinfo = { workspace = true }
+os_info = { workspace = true }
 tonic = { version = "0.11", optional = true, features = ["transport"] }
 prost = { version = "0.13", optional = true }
 tower = { version = "0.5" }

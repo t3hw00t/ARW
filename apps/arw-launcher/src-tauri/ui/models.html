@@ -6,15 +6,157 @@
     <title>ARW Model Manager</title>
     <style>
       html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
-      .wrap { padding: 16px; }
+      .wrap { padding: 16px; display: grid; gap: 16px; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      table { width: 100%; border-collapse: collapse; }
+      th, td { border-bottom: 1px solid #eee; padding: 6px 8px; text-align: left; }
+      th { color: #555; font-weight: 600; }
       .dim { color: #666; }
+      input[type=text], input[type=url], input[type=number] { padding: 6px 8px; border: 1px solid #ccc; border-radius: 8px; }
+      button { padding: 8px 12px; border: 1px solid #aaa; border-radius: 8px; background: #fafafa; cursor: pointer; }
+      button:hover { background: #f0f0f0; }
+      .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
+      .ok { color: #0a0; }
+      .bad { color: #a00; }
     </style>
   </head>
   <body>
+    <script src="common.js"></script>
     <div class="wrap">
-      <h2>Model Manager (stub)</h2>
-      <p class="dim">Browse/download/manage/convert/quantize models; profiles & compatibility checks. Coming soon.</p>
+      <div class="row">
+        <label>Port: <input id="port" type="number" min="1" max="65535" value="8090" style="width: 90px"></label>
+        <label>Admin Token: <input id="admintok" type="text" placeholder="optional" style="width: 240px"></label>
+        <button id="btn-save-prefs">Save Prefs</button>
+        <button id="btn-refresh">Refresh</button>
+        <button id="btn-load">Load</button>
+        <button id="btn-save">Save</button>
+        <span id="stat" class="dim"></span>
+      </div>
+
+      <div>
+        <h3>Models</h3>
+        <table>
+          <thead>
+            <tr><th>Id</th><th>Provider</th><th>Status</th><th>Path</th><th>Default</th><th>Actions</th></tr>
+          </thead>
+          <tbody id="models"></tbody>
+        </table>
+      </div>
+
+      <div>
+        <h3>Add / Delete / Default</h3>
+        <div class="row">
+          <input id="mid" type="text" placeholder="model id" class="mono" style="width: 260px">
+          <input id="mpr" type="text" placeholder="provider (optional)" style="width: 180px">
+          <button id="btn-add">Add</button>
+          <button id="btn-del">Delete</button>
+          <button id="btn-setdef">Set Default</button>
+          <span id="def" class="dim"></span>
+        </div>
+      </div>
+
+      <div>
+        <h3>Download</h3>
+        <div class="row">
+          <input id="did" type="text" placeholder="model id" class="mono" style="width: 220px">
+          <input id="durl" type="url" placeholder="https://..." style="width: 380px">
+          <input id="dsha" type="text" placeholder="sha256 (optional)" class="mono" style="width: 260px">
+          <button id="btn-dl">Download</button>
+          <button id="btn-cancel">Cancel</button>
+        </div>
+        <div id="dlprog" class="mono dim"></div>
+      </div>
     </div>
+    <script>
+      const ivk = (cmd, args) => ARW.invoke(cmd, args)
+      const port = () => ARW.getPortFromInput('port')
+      async function loadPrefs() {
+        await ARW.applyPortFromPrefs('port');
+        const v = await ARW.getPrefs('launcher');
+        if (v && v.adminToken) document.getElementById('admintok').value = v.adminToken;
+      }
+      async function savePrefs() {
+        const v = await ARW.getPrefs('launcher') || {};
+        v.port = port();
+        v.adminToken = document.getElementById('admintok').value || '';
+        await ARW.setPrefs('launcher', v);
+        document.getElementById('stat').textContent = 'Saved prefs';
+      }
+      async function refresh() {
+        document.getElementById('stat').textContent = 'Loading...';
+        const list = await ivk('models_list', { port: port() });
+        const def = await ivk('models_default_get', { port: port() });
+        document.getElementById('def').textContent = `Default: ${def || '(none)'}`;
+        const tb = document.getElementById('models'); tb.innerHTML='';
+        (list||[]).forEach(m => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td class="mono">${m.id||''}</td><td>${m.provider||''}</td><td>${m.status||''}</td><td class="mono">${m.path||''}</td><td>${(m.id===def)?'★':''}</td><td><button data-id="${m.id}">Make Default</button></td>`;
+          tr.querySelector('button').addEventListener('click', async (e)=>{
+            await ivk('models_default_set', { id: e.target.getAttribute('data-id'), port: port() });
+            refresh();
+          });
+          tb.appendChild(tr);
+        });
+        document.getElementById('stat').textContent = 'OK';
+      }
+      async function add() {
+        const id = document.getElementById('mid').value.trim();
+        const pr = document.getElementById('mpr').value.trim() || null;
+        if (!id) return;
+        await ivk('models_add', { id, provider: pr, port: port() });
+        refresh();
+      }
+      async function del() {
+        const id = document.getElementById('mid').value.trim();
+        if (!id) return;
+        await ivk('models_delete', { id, port: port() });
+        refresh();
+      }
+      async function setdef() {
+        const id = document.getElementById('mid').value.trim();
+        if (!id) return;
+        await ivk('models_default_set', { id, port: port() });
+        refresh();
+      }
+      async function dl() {
+        const id = document.getElementById('did').value.trim();
+        const url= document.getElementById('durl').value.trim();
+        const sha= (document.getElementById('dsha').value.trim()||null);
+        if (!id || !url) return;
+        await ivk('models_download', { id, url, provider: null, sha256: sha, port: port() });
+      }
+      async function cancel() {
+        const id = document.getElementById('did').value.trim();
+        if (!id) return;
+        await ivk('models_download_cancel', { id, port: port() });
+      }
+      function sse() {
+        const p = port() || 8090;
+        const es = new EventSource(ARW.base(p) + '/events?prefixes=Models.');
+        es.onmessage = (ev) => {
+          try {
+            const j = JSON.parse(ev.data);
+            if (j.kind && j.kind.startsWith('Models.')) {
+              if (j.kind === 'Models.DownloadProgress') {
+                document.getElementById('dlprog').textContent = JSON.stringify(j.payload, null, 2);
+              }
+              if (j.kind === 'Models.Changed' || j.kind === 'Models.Refreshed') {
+                refresh();
+              }
+            }
+          } catch {}
+        };
+      }
+      document.getElementById('btn-refresh').addEventListener('click', refresh);
+      document.getElementById('btn-load').addEventListener('click', async ()=>{ await ivk('models_load', { port: port() }); refresh(); });
+      document.getElementById('btn-save').addEventListener('click', async ()=>{ await ivk('models_save', { port: port() }); document.getElementById('stat').textContent='Saved'; });
+      document.getElementById('btn-add').addEventListener('click', add);
+      document.getElementById('btn-del').addEventListener('click', del);
+      document.getElementById('btn-setdef').addEventListener('click', setdef);
+      document.getElementById('btn-dl').addEventListener('click', dl);
+      document.getElementById('btn-cancel').addEventListener('click', cancel);
+      document.getElementById('btn-save-prefs').addEventListener('click', savePrefs);
+      (async ()=>{ await loadPrefs(); await refresh(); sse(); })();
+    </script>
   </body>
   </html>
-

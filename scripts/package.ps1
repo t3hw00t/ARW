@@ -1,6 +1,7 @@
 #!powershell
 param(
-  [switch]$NoBuild
+  [switch]$NoBuild,
+  [string]$Target
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -11,8 +12,15 @@ function Die($msg){ Write-Error $msg; exit 1 }
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { Die 'Rust `cargo` not found in PATH. Install Rust: https://rustup.rs' }
 
 if (-not $NoBuild) {
-  Info 'Building workspace (release)'
-  cargo build --workspace --release --locked
+  if ($Target) {
+    Info "Building (release) for target $Target"
+    cargo build --release --locked --target $Target -p arw-svc -p arw-cli | Out-Null
+    # Try launcher too; ignore failures
+    try { cargo build --release --locked --target $Target -p arw-launcher | Out-Null } catch {}
+  } else {
+    Info 'Building workspace (release)'
+    cargo build --workspace --release --locked | Out-Null
+  }
 }
 
 # Workspace version from root Cargo.toml
@@ -21,9 +29,21 @@ $rootToml = Join-Path $root 'Cargo.toml'
 $version = (Get-Content -Path $rootToml | Select-String -Pattern '^version\s*=\s*"([^"]+)"' -Context 0,0 | Select-Object -First 1).Matches.Groups[1].Value
 if (-not $version) { $version = '0.0.0' }
 
-$os   = if ($env:OS -eq 'Windows_NT') { 'windows' } elseif ($IsMacOS) { 'macos' } else { 'linux' }
-$arch = $env:PROCESSOR_ARCHITECTURE
-if ($arch -match 'ARM') { $arch = 'arm64' } else { $arch = 'x64' }
+$isWindows = $env:OS -eq 'Windows_NT'
+if ($Target) {
+  if ($Target -like '*-pc-windows-msvc') { $os = 'windows' }
+  elseif ($Target -like '*-apple-darwin') { $os = 'macos' }
+  elseif ($Target -like '*-unknown-linux-gnu') { $os = 'linux' }
+  else { $os = if ($isWindows) { 'windows' } elseif ($IsMacOS) { 'macos' } else { 'linux' } }
+  if ($Target -like 'aarch64-*') { $arch = 'arm64' }
+  elseif ($Target -like 'x86_64-*') { $arch = 'x64' }
+  else { $arch = if ($env:PROCESSOR_ARCHITECTURE -match 'ARM') { 'arm64' } else { 'x64' } }
+  $binRoot = Join-Path $root ("target/$Target/release")
+} else {
+  $os   = if ($isWindows) { 'windows' } elseif ($IsMacOS) { 'macos' } else { 'linux' }
+  $arch = if ($env:PROCESSOR_ARCHITECTURE -match 'ARM') { 'arm64' } else { 'x64' }
+  $binRoot = Join-Path $root 'target/release'
+}
 $name = "arw-$version-$os-$arch"
 
 $dist = Join-Path $root 'dist'
@@ -38,10 +58,10 @@ $binDir = Join-Path $out 'bin'
 New-Item -ItemType Directory -Force $binDir | Out-Null
 
 $exe = ''
-if ($env:OS -eq 'Windows_NT') { $exe = '.exe' }
-$svcSrc = Join-Path $root "target/release/arw-svc$exe"
-$cliSrc = Join-Path $root "target/release/arw-cli$exe"
-$traySrc = Join-Path $root "target/release/arw-tray$exe"
+if ($isWindows) { $exe = '.exe' }
+$svcSrc = Join-Path $binRoot "arw-svc$exe"
+$cliSrc = Join-Path $binRoot "arw-cli$exe"
+$traySrc = Join-Path $binRoot "arw-tray$exe"
 if (-not (Test-Path $svcSrc)) { Die "Missing binary: $svcSrc (did the build succeed?)" }
 if (-not (Test-Path $cliSrc)) { Die "Missing binary: $cliSrc (did the build succeed?)" }
 Copy-Item $svcSrc -Destination (Join-Path $binDir ("arw-svc$exe"))

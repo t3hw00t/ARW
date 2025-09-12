@@ -285,6 +285,7 @@ async fn main() {
                 .route("/", get(admin_index_html))
                 .route("/index.json", get(admin_index_json))
                 .route("/probe", get(probe))
+                .route("/probe/hw", get(probe_hw))
                 .route("/events", get(events))
                 .route("/emit/test", get(emit_test))
                 .route("/shutdown", get(shutdown))
@@ -557,6 +558,146 @@ async fn probe(State(state): State<AppState>) -> impl IntoResponse {
 
     // Return it to the client
     ext::ok::<serde_json::Value>(ep).into_response()
+}
+
+#[arw_admin(
+    method = "GET",
+    path = "/admin/probe/hw",
+    summary = "Hardware/Software probe (CPU/OS/Disks/GPUs)"
+)]
+#[utoipa::path(
+    get,
+    path = "/admin/probe/hw",
+    tag = "Admin/Introspect",
+    responses(
+        (status = 200, description = "Hardware and software info (best-effort)"),
+        (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
+    )
+)]
+#[arw_gate("introspect:probe")]
+async fn probe_hw(State(state): State<AppState>) -> impl IntoResponse {
+    use sysinfo::System;
+    let mut sys = System::new_all();
+    sys.refresh_all();
+
+    // CPU
+    let cpus_logical = sys.cpus().len() as u64;
+    let cpus_physical = sys.physical_core_count().unwrap_or(0) as u64;
+    let cpu_brand = sys
+        .cpus()
+        .get(0)
+        .map(|c| c.brand().to_string())
+        .unwrap_or_default();
+
+    // Memory (bytes)
+    let total_mem = sys.total_memory();
+    let avail_mem = sys.available_memory();
+
+    // OS
+    let info = os_info::get();
+    let os_name = info.os_type().to_string();
+    let os_version = info.version().to_string();
+    let kernel = sysinfo::System::kernel_version().unwrap_or_default();
+    let arch = std::env::consts::ARCH.to_string();
+
+    // Disks (omitted for portability in this probe; add later if needed)
+    let disks: Vec<serde_json::Value> = Vec::new();
+
+    // Env hints
+    let mut env = serde_json::Map::new();
+    for k in [
+        "CUDA_VISIBLE_DEVICES",
+        "NVIDIA_VISIBLE_DEVICES",
+        "ROCR_VISIBLE_DEVICES",
+        "HSA_VISIBLE_DEVICES",
+    ] {
+        if let Ok(v) = std::env::var(k) {
+            env.insert(k.to_string(), serde_json::Value::String(v));
+        }
+    }
+
+    // GPUs (best-effort)
+    let gpus = probe_gpus_best_effort();
+
+    let out = serde_json::json!({
+        "cpu": {"brand": cpu_brand, "logical": cpus_logical, "physical": cpus_physical},
+        "memory": {"total": total_mem, "available": avail_mem},
+        "os": {"name": os_name, "version": os_version, "kernel": kernel, "arch": arch},
+        "disks": disks,
+        "env": env,
+        "gpus": gpus,
+    });
+    // Publish minimal event for observability
+    state.bus.publish("Probe.HW", &serde_json::json!({"cpus": cpus_logical, "gpus": out["gpus"].as_array().map(|a| a.len()).unwrap_or(0)}));
+    ext::ok::<serde_json::Value>(out).into_response()
+}
+
+fn probe_gpus_best_effort() -> Vec<serde_json::Value> {
+    #[cfg(target_os = "linux")]
+    {
+        return probe_gpus_linux();
+    }
+    #[allow(unused_mut)]
+    let mut out: Vec<serde_json::Value> = Vec::new();
+    // TODO: add Windows/macOS probes in future iterations (DXGI/Metal)
+    out
+}
+
+#[cfg(target_os = "linux")]
+fn probe_gpus_linux() -> Vec<serde_json::Value> {
+    use std::fs;
+    use std::path::Path;
+    let mut out: Vec<serde_json::Value> = Vec::new();
+    let drm = Path::new("/sys/class/drm");
+    if let Ok(entries) = fs::read_dir(drm) {
+        for ent in entries.flatten() {
+            let name = ent.file_name().to_string_lossy().into_owned();
+            if !name.starts_with("card") || name.contains('-') {
+                continue; // skip renderD* and control* symlinks
+            }
+            let path = ent.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let dev = path.join("device");
+            let vendor = fs::read_to_string(dev.join("vendor")).unwrap_or_default();
+            let device = fs::read_to_string(dev.join("device")).unwrap_or_default();
+            let vendor = vendor.trim().to_string();
+            let device = device.trim().to_string();
+            let vendor_name = match vendor.as_str() {
+                "0x10de" => "NVIDIA",
+                "0x1002" => "AMD",
+                "0x8086" => "Intel",
+                _ => "Unknown",
+            };
+            // PCI bus id from uevent
+            let mut pci_bus = String::new();
+            if let Ok(ue) = fs::read_to_string(dev.join("uevent")) {
+                for line in ue.lines() {
+                    if let Some(val) = line.strip_prefix("PCI_SLOT_NAME=") {
+                        pci_bus = val.trim().to_string();
+                        break;
+                    }
+                }
+            }
+            // driver name
+            let mut driver = String::new();
+            if let Ok(link) = fs::read_link(dev.join("driver")) {
+                if let Some(b) = link.file_name() {
+                    driver = b.to_string_lossy().to_string();
+                }
+            }
+            out.push(serde_json::json!({
+                "index": name,
+                "vendor_id": vendor,
+                "vendor": vendor_name,
+                "device_id": device,
+                "pci_bus": pci_bus,
+                "driver": driver,
+            }));
+        }
+    }
+    out
 }
 
 #[arw_admin(method = "GET", path = "/admin/emit/test", summary = "Emit test event")]
