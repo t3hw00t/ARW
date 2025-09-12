@@ -40,11 +40,11 @@ jobs:
 
       - name: rustfmt
         run: |
+          set +e
           cargo fmt -- --version || true
-          cargo fmt --all -- --check || {
-            echo "Rustfmt found differences (treating as advisory for now)";
-            exit 0;
-          }
+          if ! cargo fmt --all -- --check; then
+            echo "Rustfmt found differences (advisory)"
+          fi
 
       - name: clippy
         run: cargo clippy --workspace --all-targets -- -D warnings
