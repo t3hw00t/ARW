@@ -34,6 +34,8 @@ Roadmap highlights themes and timelines; Backlog tracks actionable items.
 - Docs & Showcase: gating keys docgen; packaging and installer polish — see Backlog → Next.
  - UI coherence: universal right‑sidecar across Hub/Chat/Training; command palette
  - Recipes MVP: schema + gallery + runner (local‑first, default‑deny permissions)
+ - Logic Units (config‑first): manifest/schema, Library UI with diff preview, apply/revert/promote, initial sample units
+ - Research Watcher (read‑only): draft Suggested units from curated feeds; human review flow
 
 ## Heuristic Feedback Engine
 Scope: Lightweight, near‑live suggestions with guardrails.
@@ -47,6 +49,7 @@ See Backlog → Now → Feedback Engine for concrete work items.
 - Capsules: record inputs/outputs/events/hints; export/import; deterministic replay.
 - Dataset & memory lab: local pipelines, tags, audits, and reproducible reports.
  - Commons Kit: ship 5 public‑goods recipes with signed index and exportable memories.
+ - Logic Units v2: scripted transforms (sandboxed) and plugin units (with contract tests); policy‑gated installation; compatibility matrix
 - Tests: feature‑gated HTTP oneshot tests; policy and capability contract tests.
 - AsyncAPI + MCP artifacts: generate `/spec/asyncapi.yaml` and `/spec/mcp-tools.json` in CI; serve `/spec/*` endpoints.
 - Policy hooks for feedback auto‑apply decisions (shadow mode → guarded auto).

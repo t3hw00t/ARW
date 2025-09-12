@@ -37,6 +37,11 @@ Three primary perspectives
 - Chat: an episode viewer/controller bound to project+agent with a live sidecar
 - Training Park: impressionistic dials for instincts/priorities, retrieval diversity, tool success, hallucination risk
 
+Logic Units (config‑first strategy packs)
+- Installable “strategy packs” that reconfigure agents safely (config‑only preferred).
+- Library UI with tabs (Installed/Experimental/Suggested/Archived), diff preview, A/B try, apply/revert/promote.
+- Pairs with a Research Watcher that drafts suggested units from frontier work.
+
 Universal sidecar (always on)
 - Episode timeline (obs → belief → intent → action), streaming tokens
 - Policy prompts/decisions and runtime/memory meters

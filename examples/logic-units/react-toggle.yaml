@@ -1,0 +1,17 @@
+id: reasoning-react-toggle
+name: Reasoning: ReAct vs CoT
+version: 1.0.0
+category: reasoning
+kind: config
+parameters:
+  mode: ReAct   # ReAct | CoT
+patches:
+  - target: agent://recipes/reasoning
+    op: merge
+    value:
+      mode: ${mode}
+      tool_use: ${mode == 'ReAct'}
+metrics:
+  expected_effect: better tool selection on complex tasks
+  counters: [solve.rate, tool.success]
+

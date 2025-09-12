@@ -21,6 +21,13 @@ Recipes MVP
 - Gallery UI: install (copy folder), inspect manifest, launch, capture Episodes
 - Permission prompts (ask/allow/never) with TTL leases; audit decisions as `Policy.*` events
 
+Logic Units (High Priority)
+- Manifest and schema (`spec/schemas/logic_unit_manifest.json`); example units under `examples/logic-units/`
+- Library UI: tabs (Installed/Experimental/Suggested/Archived), diff preview, apply/revert/promote
+- Agent Profile slots + compatibility checks (design + stubs)
+- A/B dry‑run pipeline wired to Evaluation Harness; per‑unit metrics panel
+- Research Watcher: ingest feeds; draft config‑only units; Suggested tab source
+
 Security & Admin
 - Admin auth hardening — hashed tokens + per‑token/IP sliding rate‑limit [t-250911230312-0863]
 - Per‑route gating layers; slim global admin middleware [t-250911230252-9858]

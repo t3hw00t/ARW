@@ -5,7 +5,7 @@ title: UI Architecture
 # UI Architecture
 
 Layout
-- Left rail: Projects, Chat, Training, Agents, Models, Tools, Memories, Data, Runtimes, Policies, Containers, Hardware, Settings, Plugins, Docs
+- Left rail: Projects, Chat, Training, Agents, Models, Tools, Logic Units, Memories, Data, Runtimes, Policies, Containers, Hardware, Settings, Plugins, Docs
 - Center canvas: the active perspective (a project board, chat thread, or training scene)
 - Right sidecar (always on): per‑episode timeline (obs → belief → intent → action), streaming tokens, policy prompts/decisions, runtime/memory meters
 

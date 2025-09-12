@@ -7,10 +7,10 @@ title: Unified Object Graph
 Core idea: treat the system as two things — a shared object graph (entities + relations) and a single event stream. Every surface (Project Hub, Chat, Training Park, Managers) is just a lens on that graph, driven by the same live events (SSE). This drastically reduces drift and keeps the experience coherent.
 
 Global scope (inventories)
-- Models, Tools, Policies, Hardware targets, Sandboxes/Containers, Plugins/Extensions
+- Models, Tools, Policies, Hardware targets, Sandboxes/Containers, Plugins/Extensions, Logic Units
 
 Project scope (bindings and use)
-- Projects, Agent Profiles (definitions), Agent Instances (profile + runtime + policy), Data Sources, Memory Mounts (vector/graph/kv/doc indexes), Context Recipes (how to assemble the enhanced context)
+- Projects, Agent Profiles (definitions), Agent Instances (profile + runtime + policy), Data Sources, Memory Mounts (vector/graph/kv/doc indexes), Context Recipes (how to assemble the enhanced context), Logic Unit bindings (slots)
 
 Design principle: managers edit inventories; Projects and Agents only reference those inventories. Duplicate data and hidden state are anti‑patterns.
 
@@ -21,6 +21,7 @@ Read‑models and state
 Relationships (examples)
 - Project ↔ Files/Notes/Artifacts
 - Agent Profile ↔ Tools/Policies/Runtime Preferences
+- Agent Profile ↔ Logic Unit Slots (Retrieval, Reasoning, Sampling, Policy, Memory, Evaluation)
 - Agent Instance ↔ Project, Model, Hardware/Sandbox
 - Memory Mounts ↔ Indexes and Datasets, referenced by Context Recipes
 
@@ -29,4 +30,3 @@ Extensibility
 - Plugins install tools and may contribute optional UI panels/commands.
 
 See also: Events Vocabulary, UI Architecture, Recipes, Context Recipes.
-

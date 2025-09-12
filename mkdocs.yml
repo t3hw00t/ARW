@@ -29,6 +29,7 @@ nav:
   - Architecture:
       - Unified Object Graph: architecture/object_graph.md
       - Events Vocabulary: architecture/events_vocabulary.md
+      - Logic Units: architecture/logic_units.md
       - Identity & Tenancy: architecture/identity_tenancy.md
       - Capability & Consent Ledger: architecture/capability_consent_ledger.md
       - Artifacts & Provenance: architecture/artifacts_provenance.md
@@ -45,6 +46,8 @@ nav:
       - Quickstart: guide/quickstart.md
       - Concepts: guide/concepts.md
       - UI Architecture: guide/ui_architecture.md
+      - Logic Units Library: guide/logic_units_library.md
+      - Research Watcher: guide/research_watcher.md
       - Desktop Launcher: guide/launcher.md
       - Compatibility: guide/compatibility.md
       - Features: FEATURES.md

@@ -1,0 +1,97 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/t3hw00t/Agent_Hub/spec/schemas/logic_unit_manifest.json",
+  "title": "LogicUnitManifest",
+  "type": "object",
+  "required": ["id", "name", "version", "category", "patches"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-z0-9-_.]+$" },
+    "name": { "type": "string" },
+    "version": { "type": "string" },
+    "authors": { "type": "array", "items": { "type": "string" }, "default": [] },
+    "license": { "type": ["string", "null"], "default": null },
+    "provenance": { "type": ["string", "null"], "default": null },
+    "category": {
+      "type": "string",
+      "enum": [
+        "retrieval",
+        "reasoning",
+        "sampling",
+        "policy",
+        "memory",
+        "evaluation"
+      ]
+    },
+    "slots": { "type": "array", "items": { "type": "string" }, "default": [] },
+    "compat": {
+      "type": "object",
+      "properties": {
+        "requires_models": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "min_context": { "type": ["integer", "null"], "default": null },
+        "conflicts_with": { "type": "array", "items": { "type": "string" }, "default": [] }
+      },
+      "additionalProperties": false
+    },
+    "permissions": {
+      "type": "object",
+      "description": "Requested capabilities as leases (fs/net/etc.)",
+      "additionalProperties": {
+        "type": ["string", "object"],
+        "oneOf": [
+          { "enum": ["ask", "allow", "never"] },
+          {
+            "type": "object",
+            "properties": {
+              "mode": { "enum": ["ask", "allow", "never"] },
+              "ttl_secs": { "type": "integer", "minimum": 0 }
+            },
+            "required": ["mode"],
+            "additionalProperties": false
+          }
+        ]
+      }
+    },
+    "parameters": { "type": "object", "additionalProperties": true, "default": {} },
+    "patches": {
+      "type": "array",
+      "description": "Declarative edits (JSON merge/patch) to agents/recipes/flows/policies/evaluators",
+      "items": {
+        "type": "object",
+        "properties": {
+          "target": { "type": "string" },
+          "op": { "type": "string", "enum": ["merge", "jsonpatch"] },
+          "value": {}
+        },
+        "required": ["target", "op", "value"],
+        "additionalProperties": false
+      }
+    },
+    "metrics": {
+      "type": "object",
+      "properties": {
+        "expected_effect": { "type": ["string", "null"], "default": null },
+        "counters": { "type": "array", "items": { "type": "string" }, "default": [] }
+      },
+      "additionalProperties": false
+    },
+    "ui": {
+      "type": "object",
+      "properties": {
+        "explainer": { "type": ["string", "null"], "default": null },
+        "controls": { "type": "array", "items": { "type": "string" }, "default": [] }
+      },
+      "additionalProperties": false
+    },
+    "tests": {
+      "type": "object",
+      "properties": {
+        "golden": { "type": "array", "items": { "type": "string" }, "default": [] },
+        "eval_recipe": { "type": ["string", "null"], "default": null }
+      },
+      "additionalProperties": false
+    },
+    "kind": { "type": "string", "enum": ["config", "transform", "plugin"], "default": "config" }
+  },
+  "additionalProperties": false
+}
+

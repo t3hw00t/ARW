@@ -1,0 +1,27 @@
+id: budget-policy
+name: Budget Policy: Token/Time/Cost Caps
+version: 1.0.0
+category: policy
+kind: config
+parameters:
+  soft_tokens: 8000
+  hard_tokens: 12000
+  soft_ms: 15000
+  hard_ms: 30000
+  max_usd: 0.50
+patches:
+  - target: agent://policies/budget
+    op: merge
+    value:
+      tokens:
+        soft: ${soft_tokens}
+        hard: ${hard_tokens}
+      time_ms:
+        soft: ${soft_ms}
+        hard: ${hard_ms}
+      cost_usd:
+        max: ${max_usd}
+metrics:
+  expected_effect: predictable spend with graceful degrade
+  counters: [budget.spent.tokens, budget.spent.ms, budget.degraded.rate]
+

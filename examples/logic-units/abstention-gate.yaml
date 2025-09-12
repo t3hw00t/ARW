@@ -1,0 +1,19 @@
+id: policy-abstention-gate
+name: Conformal Abstention Gate
+version: 1.0.0
+category: policy
+kind: config
+parameters:
+  abstain_threshold: 0.2
+  escalate_to: human
+patches:
+  - target: agent://policies/runtime
+    op: merge
+    value:
+      abstention:
+        threshold: ${abstain_threshold}
+        on_abstain: ${escalate_to}
+metrics:
+  expected_effect: reduce risky actions; increase ask/approve rate
+  counters: [policy.abstain.rate, policy.escalate.count]
+

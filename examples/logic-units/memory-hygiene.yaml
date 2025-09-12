@@ -1,0 +1,20 @@
+id: memory-hygiene
+name: Memory Hygiene: Summarize & Dedup
+version: 1.0.0
+category: memory
+kind: config
+parameters:
+  summarize_every_n: 8
+  dedup_keys: ["hash", "title"]
+  retention_days: 30
+patches:
+  - target: agent://memory/mounts/chat-history
+    op: merge
+    value:
+      summarize_every_n: ${summarize_every_n}
+      dedup_keys: ${dedup_keys}
+      retention_days: ${retention_days}
+metrics:
+  expected_effect: smaller long-tail; better retrieval quality
+  counters: [memory.distilled.count, memory.dedup.rate]
+

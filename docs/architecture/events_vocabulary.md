@@ -14,6 +14,7 @@ Canonical categories
 - Policy: `Policy.Prompt`, `Policy.Allow`, `Policy.Deny`
 - Runtime: `Runtime.Health`, `Runtime.ProfileChanged`
 - Models: `Models.DownloadProgress`, `Models.Changed`
+- Logic Units: `LogicUnit.Suggested`, `LogicUnit.Installed`, `LogicUnit.Applied`, `LogicUnit.Reverted`, `LogicUnit.Promoted`
 
 Minimal event envelope
 ```
@@ -34,4 +35,3 @@ Replay and filtering
 
 UI routing
 - The universal sidecar subscribes once and filters by `corr_id`/scope to render a live, consistent timeline.
-

@@ -1,0 +1,20 @@
+id: sampling-self-consistency
+name: Self-Consistency Vote-k
+version: 1.0.0
+category: sampling
+kind: config
+parameters:
+  k: 5
+  temperature: 0.8
+patches:
+  - target: agent://recipes/decoding
+    op: merge
+    value:
+      self_consistency:
+        k: ${k}
+        temperature: ${temperature}
+        max_cost_usd: 0.10
+metrics:
+  expected_effect: higher solve-rate on reasoning tasks at modest cost
+  counters: [solve.rate, tokens.out, cost.usd]
+

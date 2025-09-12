@@ -1,0 +1,25 @@
+id: retrieval-mmr-rrf
+name: Retrieval MMR+RRF
+version: 1.0.0
+category: retrieval
+kind: config
+parameters:
+  mmr_lambda: 0.5
+  rrf_k: 60
+patches:
+  - target: agent://recipes/retrieval
+    op: merge
+    value:
+      strategies:
+        - kind: bm25
+        - kind: dense
+      fusion:
+        kind: rrf
+        k: 60
+      re_rank:
+        kind: mmr
+        lambda: 0.5
+metrics:
+  expected_effect: improve diversity and coverage
+  counters: [retrieval.diversity, retrieval.coverage]
+
