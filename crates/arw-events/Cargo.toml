@@ -11,7 +11,7 @@ tracing = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 chrono = { workspace = true }
 futures-util = { workspace = true }
-arw-protocol = { path = "../arw-protocol" }
+arw-protocol = { path = "../arw-protocol", version = "0.1.0" }
 
 [features]
 default = []
