@@ -26,6 +26,10 @@ Centralized reference for ARW environment variables and common flags. Defaults f
 - `ARW_STATE_DIR`: override state directory.
 - `ARW_LOGS_DIR`: override logs directory.
 
+Defaults
+- Windows: per-user Known Folders via `directories` (e.g., LocalAppData for data/logs, Roaming for config). No writes to Program Files/HKLM by default.
+- Unix: XDG‑compatible locations (e.g., `~/.local/share`, `~/.cache`, `~/.config`).
+
 ## Chat & Models
 - `ARW_LLAMA_URL`: llama.cpp server endpoint (e.g., `http://127.0.0.1:8080`).
 - `ARW_OPENAI_API_KEY`: OpenAI‑compatible API key.

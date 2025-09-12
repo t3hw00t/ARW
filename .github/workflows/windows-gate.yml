@@ -1,0 +1,32 @@
+name: windows-compat-gate
+
+on:
+  pull_request:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  pssa:
+    name: psscriptanalyzer (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, windows-2022]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Install PSScriptAnalyzer
+        shell: pwsh
+        run: |
+          Set-PSRepository -Name 'PSGallery' -InstallationPolicy Trusted
+          Install-Module PSScriptAnalyzer -Scope CurrentUser -Force
+      - name: Analyze PowerShell scripts (informational)
+        shell: pwsh
+        continue-on-error: true
+        run: |
+          Set-Location Agent_Hub
+          $res = Invoke-ScriptAnalyzer -Path scripts -Recurse -ReportSummary -Severity Warning,Error
+          $res | Format-Table -AutoSize | Out-String | Write-Host
+          if ($res | Where-Object { $_.Severity -eq 'Error' }) { Write-Host 'Errors found.' -ForegroundColor Red }

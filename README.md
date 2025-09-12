@@ -16,7 +16,7 @@ bash scripts/setup.sh
 bash scripts/start.sh --wait-health
 ```
 
-Open http://127.0.0.1:8090 and visit `/debug` (set `ARW_DEBUG=1` for local dev).
+Open http://127.0.0.1:8090 and visit `/debug` (set `ARW_DEBUG=1` for local dev). The Debug UI includes an Episodes panel (stitched by `corr_id`) and live state snapshots; server read‑models are exposed under `/state/*` (observations, beliefs, intents, actions, episodes).
 
 Docker (amd64/arm64)
 ```bash

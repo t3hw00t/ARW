@@ -44,3 +44,24 @@ function Install-WebView2Runtime {
   return (Test-WebView2Runtime)
 }
 
+function WebView2-Menu {
+  Banner 'WebView2 Runtime' 'Required for Tauri Launcher (Win10/Server)'
+  try {
+    $has = if (Get-Command Test-WebView2Runtime -ErrorAction SilentlyContinue) { Test-WebView2Runtime } else { $false }
+  } catch { $has = $false }
+  if ($has) { Write-Host ' Status: installed' -ForegroundColor DarkCyan } else { Write-Host ' Status: not installed' -ForegroundColor Yellow }
+  Write-Host @'
+  1) Install Evergreen Runtime (user/machine)
+  0) Back
+'@
+  $pick = Read-Host 'Select'
+  switch ($pick) {
+    '1' {
+      try {
+        $ok = Install-WebView2Runtime
+        if ($ok) { Write-Host '[webview2] Installed.' -ForegroundColor DarkCyan } else { Write-Warning 'Install failed or cancelled.' }
+      } catch { Write-Warning 'Install failed' }
+    }
+    default { }
+  }
+}

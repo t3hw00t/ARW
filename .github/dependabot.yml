@@ -1,20 +1,16 @@
 version: 2
 updates:
   - package-ecosystem: "cargo"
-    directory: "/"
+    directory: "/Agent_Hub"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
-    groups:
-      minor-and-patch:
-        update-types: ["minor", "patch"]
+    open-pull-requests-limit: 5
     commit-message:
-      prefix: "deps(cargo)"
+      prefix: "deps"
   - package-ecosystem: "github-actions"
-    directory: "/"
+    directory: "/Agent_Hub"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 10
+    open-pull-requests-limit: 5
     commit-message:
-      prefix: "deps(actions)"
-
+      prefix: "ci"

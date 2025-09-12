@@ -13,10 +13,14 @@ See [Interface Roadmap](INTERFACE_ROADMAP.md) for user-facing UI and tooling pla
 - Persistence hardening: atomic JSON/bytes writes with per‑path async locks; best‑effort cross‑process advisory locks; audit log rotation.
 - Event bus upgrades: counters (published/delivered/lagged/no_receivers), configurable capacity/replay, lag surfaced as `Bus.Gap`, subscribe‑filtered API, SSE replay and prefix filters, optional persistent JSONL journal with rotation, Prometheus `/metrics`.
 - Debug UI: metrics quick‑link, SSE presets (Replay 50, Models‑only), insights wired to route stats, download progress.
+- Episodes & State: live read‑models under `/state/*` (observations, beliefs, intents, actions, episodes) with corr_id stitching, duration and error rollups; Episodes panel with filters and details in Debug UI.
+- Resources pattern: unified AppState with typed `Resources`; moved Governor/Hierarchy/Memory/Models logic behind services; endpoints prefer services while preserving behavior.
 - Tests + Lint: fixed flaky gating contract tests (serialized shared state); workspace clippy clean with `-D warnings`.
 
 ## Near‑Term (Weeks)
-- Self‑learning UI polish: apply buttons per suggestion with rationale + confidence.
+- Self‑learning UI polish: apply buttons per suggestion with rationale + confidence; inline from Episodes.
+- ModelsService: migrate download worker into typed service (resume/cancel/checksum) with corr_id events.
+- Resources: wrap policy/gating and models download lifecycle; move more subsystems behind typed services.
 - Persist hints/profile/suggestions to state; reload at startup; simple rollback.
 - Metrics polish: add p95 per route (light sliding window); highlight outliers in Insights. (done)
 - Models panel: download with progress; checksum verification; safe cancel; resume via HTTP Range. (done)

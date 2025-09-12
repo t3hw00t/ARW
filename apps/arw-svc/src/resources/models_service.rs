@@ -1,4 +1,3 @@
-use std::sync::Arc;
 use serde_json::{json, Value};
 
 use crate::app_state::AppState;
@@ -76,4 +75,3 @@ impl ModelsService {
             .map_err(|e| e.to_string())
     }
 }
-

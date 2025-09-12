@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-12 00:05 UTC",
+  "updated": "2025-09-12 00:48 UTC",
   "tasks": [
     {
       "id": "t-250909170247-9910",
@@ -496,6 +496,30 @@
       ],
       "updated": "2025-09-12 00:05:22 UTC",
       "done_at": "2025-09-12 00:05:22 UTC"
+    },
+    {
+      "id": "t-250912024838-4137",
+      "title": "UI: Episodes filters + details toggle",
+      "desc": "Add errors-only checkbox and free-text filter; expand/collapse details per episode with duration and badge.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-12 00:48:38 UTC"
+    },
+    {
+      "id": "t-250912024843-7597",
+      "title": "Resources: Hierarchy/Governor services",
+      "desc": "Encapsulate hierarchy (hello/offer/accept/state/role_set) and governor (profile/hints) into typed services; endpoints prefer services; publish corr_id events; persist orchestration.\n",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-12 00:48:43 UTC"
+    },
+    {
+      "id": "t-250912024851-8114",
+      "title": "Models: move download worker into ModelsService",
+      "desc": "Refactor /models/download + progress/cancel to live in a typed service; endpoints call service; preserve resume/cancel/checksum, publish corr_id progress events.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-12 00:48:51 UTC"
     }
   ]
 }

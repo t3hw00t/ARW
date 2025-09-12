@@ -60,6 +60,7 @@ nav:
       - CI: developer/ci.md
       - Style: developer/style.md
       - Security: developer/SECURITY.md
+      - Windows Compatibility Gate: developer/windows-compat-gate.md
       - Windows Start Validation: developer/windows-start-validation.md
   - About:
       - Roadmap: ROADMAP.md

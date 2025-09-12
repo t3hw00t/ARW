@@ -1,5 +1,4 @@
 use serde_json::{json, Value};
-use std::sync::Arc;
 
 use crate::app_state::AppState;
 
@@ -71,4 +70,3 @@ impl MemoryService {
         }
     }
 }
-

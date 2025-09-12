@@ -44,3 +44,4 @@ Using Nix: `nix develop` (devShell includes required libraries).
 
 - The legacy Rust tray (`apps/arw-tray`) is deprecated and not built by default; the launcher replaces it.
 - The launcher reads preferences from the user config dir (e.g., `~/.config/arw/prefs-launcher.json`).
+- Windows: on Windows 11, WebView2 Runtime is in-box; on Windows 10/Server you must install the Evergreen Runtime. Use `scripts/webview2.ps1` or Interactive Start → “WebView2 runtime (check/install)”. Server Core lacks desktop features; prefer “Server with Desktop Experience” for UI.

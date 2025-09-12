@@ -4,10 +4,13 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-12 00:46 UTC
+Updated: 2025-09-12 00:48 UTC
 
 
 ## To Do
+- [t-250912024851-8114] Models: move download worker into ModelsService — todo (updated: 2025-09-12 00:48:51 UTC)
+- [t-250912024843-7597] Resources: Hierarchy/Governor services — todo (updated: 2025-09-12 00:48:43 UTC)
+- [t-250912024838-4137] UI: Episodes filters + details toggle — todo (updated: 2025-09-12 00:48:38 UTC)
 - [t-250912001105-7850] Phase 3: Episodes + Debug UI reactive views — todo (updated: 2025-09-11 22:11:05 UTC)
 - [t-250912001100-3438] Phase 2: Beliefs/Intents/Actions stores + endpoints — todo (updated: 2025-09-11 22:11:00 UTC)
 - [t-250912001055-0044] Phase 2: Observations read-model + /state/observations — todo (updated: 2025-09-11 22:10:55 UTC)

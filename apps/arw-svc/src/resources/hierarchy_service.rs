@@ -1,6 +1,6 @@
 use arw_core::hierarchy as hier;
 use arw_protocol::{CoreAccept, CoreHello, CoreOffer, CoreRole};
-use serde_json::json;
+// use serde_json::json; // not used directly; using serde_json::json! fully qualified
 
 use crate::app_state::AppState;
 
