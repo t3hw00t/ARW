@@ -1,11 +1,6 @@
----
-title: Gating Keys
----
-
 # Gating Keys
 
 Generated from code.
-Updated: 2025-09-12
 
 - `queue:enqueue`
 - `events:Task.Completed`
