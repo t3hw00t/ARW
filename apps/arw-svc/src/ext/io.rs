@@ -191,3 +191,60 @@ async fn acquire_cross_lock(p: &Path) -> Option<std::fs::File> {
     .ok()
     .flatten()
 }
+
+// ------------- Egress ledger (append-only JSONL) -------------
+static EGRESS_LOCK: OnceLock<tokio::sync::Mutex<()>> = OnceLock::new();
+
+fn truthy_env(v: &str) -> bool {
+    matches!(
+        v,
+        "1" | "true" | "TRUE" | "yes" | "on" | "On" | "ON"
+    )
+}
+
+pub(crate) async fn egress_ledger_append(entry: &Value) {
+    // Opt-in: only if enabled
+    let enabled = std::env::var("ARW_EGRESS_LEDGER_ENABLE")
+        .map(|s| truthy_env(&s))
+        .unwrap_or(false);
+    if !enabled {
+        return;
+    }
+    let mut line_obj = match entry.as_object() {
+        Some(map) => map.clone(),
+        None => {
+            let mut m = serde_json::Map::new();
+            m.insert("value".into(), entry.clone());
+            m
+        }
+    };
+    // Ensure time set
+    if !line_obj.contains_key("time") {
+        let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        line_obj.insert("time".into(), Value::String(ts));
+    }
+    // Fill posture from env if missing
+    if !line_obj.contains_key("posture") {
+        if let Ok(p) = std::env::var("ARW_NET_POSTURE") {
+            if !p.is_empty() {
+                line_obj.insert("posture".into(), Value::String(p));
+            }
+        }
+    }
+    let v = Value::Object(line_obj);
+    let s = serde_json::to_string(&v).unwrap_or_else(|_| "{}".to_string()) + "\n";
+    let p = crate::ext::paths::egress_ledger_path();
+    if let Some(parent) = p.parent() {
+        let _ = afs::create_dir_all(parent).await;
+    }
+    let lk = EGRESS_LOCK.get_or_init(|| tokio::sync::Mutex::new(()));
+    let _g = lk.lock().await;
+    if let Ok(mut f) = afs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&p)
+        .await
+    {
+        let _ = f.write_all(s.as_bytes()).await;
+    }
+}

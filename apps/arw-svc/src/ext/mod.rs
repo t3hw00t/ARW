@@ -40,6 +40,7 @@ pub mod egress_api;
 pub mod review_api;
 pub mod self_model;
 pub mod self_model_api;
+pub mod self_model_agg;
 pub mod logic_units_api;
 pub mod experiments_api;
 pub mod patch_api;
@@ -60,6 +61,18 @@ pub(crate) use memory::{
     mem_limit, memory_apply, memory_get, memory_limit_get, memory_limit_set, memory_load,
     memory_save, ApplyMemory, SetLimit,
 };
+
+// Internal helper for self-model updates with a closure merge
+pub async fn self_model_update_merge<F: FnOnce(&mut serde_json::Value)>(agent: &str, f: F) -> Result<(), String> {
+    let mut v = super::ext::self_model::load(agent).await.unwrap_or_else(|| serde_json::json!({}));
+    if !v.is_object() { v = serde_json::json!({}); }
+    f(&mut v);
+    // Touch updated_at
+    if let Some(o) = v.as_object_mut() {
+        o.insert("updated_at".into(), serde_json::Value::String(chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true)));
+    }
+    super::ext::self_model::save(agent, &v).await
+}
 
 // ---------- Standard API envelope helpers ----------
 #[derive(Serialize)]

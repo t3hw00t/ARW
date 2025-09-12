@@ -313,6 +313,8 @@ async fn main() {
                 ext::state_api::on_event(&env).await;
                 // Materialize world model (belief graph) from events
                 ext::world::on_event(&bus, &env).await;
+                // Update self‑model aggregates (competence, forecasts)
+                ext::self_model_agg::on_event(&env).await;
             }
         });
     }
@@ -368,6 +370,9 @@ async fn main() {
             }
         });
     }
+
+    // Start periodic self‑model aggregator (resource forecasts, etc.)
+    tokio::spawn(async move { ext::self_model_agg::start_periodic().await });
 
     // Optionally start gRPC service when enabled and requested
     #[cfg(feature = "grpc")]

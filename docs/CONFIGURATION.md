@@ -67,6 +67,7 @@ These options are planned for the policy‑backed egress gateway; names may evol
 - `ARW_DNS_GUARD_ENABLE`: `1` to force tool DNS through a local resolver; block UDP/53 and DoH/DoT from tools.
 - `ARW_DISABLE_HTTP3`: `1` to disable HTTP/3 for headless scrapers, ensuring proxy enforcement.
 - `ARW_EGRESS_LEDGER`: path to append‑only egress ledger (default `state://egress.jsonl`).
+- `ARW_EGRESS_LEDGER_ENABLE`: `1` to append entries to the egress ledger (opt‑in).
 
 ### Security Posture & Mitigations (Planned)
 - `ARW_SECURITY_POSTURE`: per‑project preset `relaxed|standard|strict`.
