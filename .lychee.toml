@@ -4,5 +4,7 @@ retry_wait_time = 2
 user_agent = "lychee/0.15 (ARW docs)"
 exclude = [
   "https://github.com/t3hw00t/Agent_Hub/pull/", # PR links may be transient
+  "^http://127\\.0\\.0\\.1(:\\d+)?(/.*)?$", # local dev links
+  "^https://ghcr\\.io/.*$",                  # GHCR landing URLs may 404
 ]
 headers = []

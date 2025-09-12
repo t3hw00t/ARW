@@ -1,10 +1,6 @@
 [advisories]
-vulnerability = "deny"
-unmaintained = "warn"
-yanked = "warn"
-unsound = "deny"
-informational_warnings = []
-severity_threshold = "low"
+# cargo-deny defaults to denying advisories; scope unmaintained to direct deps
+unmaintained = "workspace"
 
 [licenses]
 allow = [
@@ -32,4 +28,3 @@ unknown-registry = "deny"
 unknown-git = "deny"
 allow-registry = ["https://github.com/rust-lang/crates.io-index"]
 allow-git = ["https://github.com/*"]
-
