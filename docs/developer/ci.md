@@ -27,6 +27,36 @@ scripts/test.ps1
 scripts/package.ps1
 ```
 
+## Local CI Mirror
+Run the same checks as CI locally:
+
+```bash
+# In repo root
+cd Agent_Hub
+
+# 1) Build, lint, test
+cargo build --workspace --all-targets --locked
+cargo clippy --workspace --all-targets -- -D warnings
+cargo test --workspace
+
+# 2) Supply-chain checks (advisories/licenses/sources/bans)
+cargo install cargo-deny --locked # once
+cargo deny check advisories bans sources licenses || true
+
+# 3) Links (README + docs)
+cargo install lychee --locked # once
+lychee --no-progress --config .lychee.toml README.md docs/**
+
+# 4) Docs build
+python3 -m venv .venv && . .venv/bin/activate
+pip install mkdocs-material mkdocs mkdocs-git-revision-date-localized-plugin
+mkdocs build --strict
+```
+
+Tips
+- Set `GITHUB_TOKEN` when running `lychee` to reduce GitHub rate limits.
+- On Debian/Ubuntu, use a virtualenv to avoid PEP 668 errors when installing MkDocs.
+
 ## Additional Checks
 ```bash
 # Unused dependencies
