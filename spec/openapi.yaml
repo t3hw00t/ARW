@@ -667,6 +667,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
+  /admin/models/concurrency:
+    get:
+      tags:
+      - Admin/Models
+      operationId: models_concurrency_get_doc
+      responses:
+        '200':
+          description: Concurrency settings
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+    post:
+      tags:
+      - Admin/Models
+      operationId: models_concurrency_set_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConcurrencySetReq'
+        required: true
+      responses:
+        '200':
+          description: Set
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
   /admin/models/default:
     get:
       tags:
@@ -782,6 +819,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OkResponse'
+        '403':
+          description: Forbidden
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+  /admin/models/jobs:
+    get:
+      tags:
+      - Admin/Models
+      operationId: models_jobs_doc
+      responses:
+        '200':
+          description: Jobs status
         '403':
           description: Forbidden
           content:
@@ -1201,6 +1252,18 @@ components:
           - number
           - 'null'
           format: double
+    ConcurrencySetReq:
+      type: object
+      required:
+      - max
+      properties:
+        block:
+          type:
+          - boolean
+          - 'null'
+        max:
+          type: integer
+          minimum: 0
     CoreAccept:
       type: object
       required:
