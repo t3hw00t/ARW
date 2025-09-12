@@ -2076,6 +2076,10 @@ async fn context_assemble_doc() -> impl IntoResponse {
             s_policy: None,
             s_evid: None,
             s_nice: None,
+            s_intents: None,
+            s_actions: None,
+            s_files: None,
+            s_total: None,
         }),
     )
     .await

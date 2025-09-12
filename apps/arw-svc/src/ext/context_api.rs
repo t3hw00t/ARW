@@ -3,7 +3,6 @@ use arw_macros::arw_admin;
 use axum::{extract::{Query, State}, response::IntoResponse, Json};
 use crate::AppState;
 use serde::Deserialize;
-use serde::Deserialize;
 use serde_json::json;
 
 #[derive(Deserialize)]
@@ -21,6 +20,12 @@ pub struct AssembleQs {
     pub s_policy: Option<usize>, // safety/policy
     pub s_evid: Option<usize>, // evidence
     pub s_nice: Option<usize>, // nice-to-have
+    // Optional per-lane caps for recents (tokens)
+    pub s_intents: Option<usize>,
+    pub s_actions: Option<usize>,
+    pub s_files: Option<usize>,
+    // Optional total prompt budget (tokens), informational
+    pub s_total: Option<usize>,
 }
 
 #[arw_admin(
@@ -85,7 +90,7 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
         .and_then(|p| super::paths::project_notes_path(p))
         .map(|p| p.to_string_lossy().to_string());
     // Recent files (from world model entities)
-    let files = super::world::select_recent_files(proj_opt, 20).await;
+    let mut files = super::world::select_recent_files(proj_opt, 20).await;
     // Include recent intents/actions (size-bounded), optionally filtered by proj when present
     let mut intents = super::state_api::intents_snapshot().await;
     let mut actions = super::state_api::actions_snapshot().await;
@@ -97,7 +102,7 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
     // Keep most recent 20 each
     if intents.len() > 20 { intents = intents[intents.len()-20..].to_vec(); }
     if actions.len() > 20 { actions = actions[actions.len()-20..].to_vec(); }
-    // Estimate tokens for recents before attaching ptrs
+    // Estimate tokens for recents and apply optional per-lane caps before attaching ptrs
     fn est_tokens_event(ev: &serde_json::Value) -> u64 {
         let mut t = 4;
         if let Some(k) = ev.get("kind") { t += est_tokens_value(k); }
@@ -111,9 +116,31 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
         if let Some(id) = f.get("id") { t += est_tokens_value(id); }
         t.min(256)
     }
-    let intents_tokens: u64 = intents.iter().map(est_tokens_event).sum();
-    let actions_tokens: u64 = actions.iter().map(est_tokens_event).sum();
-    let files_tokens: u64 = files.iter().map(est_tokens_file).sum();
+    fn cap_by_tokens(mut items: Vec<serde_json::Value>, budget: Option<u64>, est: fn(&serde_json::Value) -> u64) -> (Vec<serde_json::Value>, u64) {
+        if let Some(b) = budget { if b == 0 { return (Vec::new(), 0); } }
+        let Some(b) = budget else {
+            let used = items.iter().map(est).sum();
+            return (items, used);
+        };
+        let mut out: Vec<serde_json::Value> = Vec::with_capacity(items.len());
+        let mut used: u64 = 0;
+        for it in items.drain(..) {
+            let t = est(&it);
+            if used.saturating_add(t) > b { break; }
+            used = used.saturating_add(t);
+            out.push(it);
+        }
+        (out, used)
+    }
+    let intents_budget = q.s_intents.map(|x| x as u64).filter(|x| *x > 0);
+    let actions_budget = q.s_actions.map(|x| x as u64).filter(|x| *x > 0);
+    let files_budget = q.s_files.map(|x| x as u64).filter(|x| *x > 0);
+    let (new_intents, intents_tokens) = cap_by_tokens(intents, intents_budget, est_tokens_event);
+    intents = new_intents;
+    let (new_actions, actions_tokens) = cap_by_tokens(actions, actions_budget, est_tokens_event);
+    actions = new_actions;
+    let (new_files, files_tokens) = cap_by_tokens(files, files_budget, est_tokens_file);
+    files = new_files;
     // Attach stable pointers alongside included items
     fn with_ptrs_beliefs(mut v: Vec<serde_json::Value>, proj: Option<&str>) -> Vec<serde_json::Value> {
         for it in v.iter_mut() {
@@ -159,6 +186,7 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
     let coverage_omitted = coverage_pool.saturating_sub(coverage_selected);
     // Emit assembly summary event
     {
+        let total_tokens_used: u64 = used_tokens + intents_tokens + actions_tokens + files_tokens;
         let mut ev = json!({
             "proj": proj,
             "query": q.q,
@@ -167,7 +195,7 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
             "diversity": q.div,
             "counts": {"beliefs": coverage_selected, "files": files.len(), "intents": intents.len(), "actions": actions.len()},
             "coverage": {"pool": coverage_pool, "omitted": coverage_omitted, "recall_risk": coverage_omitted > 0},
-            "usage": {"evidence_tokens": used_tokens, "evidence_budget": budget_tokens, "recent_intents_tokens": intents_tokens, "recent_actions_tokens": actions_tokens, "recent_files_tokens": files_tokens},
+            "usage": {"evidence_tokens": used_tokens, "evidence_budget": budget_tokens, "recent_intents_tokens": intents_tokens, "recent_actions_tokens": actions_tokens, "recent_files_tokens": files_tokens, "total_tokens": total_tokens_used},
         });
         crate::ext::corr::ensure_corr(&mut ev);
         state.bus.publish("Context.Assembled", &ev);
@@ -188,9 +216,9 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
         "policy": { "hints": policy_hints },
         "model": { "default": model_default },
         "project": { "name": proj, "notes": notes_path },
-        "budget": { "slots": { "instructions": q.s_inst, "plan": q.s_plan, "policy": q.s_policy, "evidence": q.s_evid, "nice": q.s_nice },
+        "budget": { "slots": { "instructions": q.s_inst, "plan": q.s_plan, "policy": q.s_policy, "evidence": q.s_evid, "nice": q.s_nice, "intents": q.s_intents, "actions": q.s_actions, "files": q.s_files, "total": q.s_total },
                      "requested": { "k": k_default, "evidence_k": evid_k, "diversity": q.div },
-                     "usage": { "evidence_tokens": used_tokens, "recent_intents_tokens": intents_tokens, "recent_actions_tokens": actions_tokens, "recent_files_tokens": files_tokens } },
+                     "usage": { "evidence_tokens": used_tokens, "recent_intents_tokens": intents_tokens, "recent_actions_tokens": actions_tokens, "recent_files_tokens": files_tokens, "total_tokens": used_tokens + intents_tokens + actions_tokens + files_tokens } },
         "coverage": { "pool": coverage_pool, "selected": coverage_selected, "omitted": coverage_omitted, "recall_risk": coverage_omitted > 0, "evidence_tokens_used": used_tokens, "evidence_tokens_budget": budget_tokens },
         "params": { "proj": q.proj, "q": q.q, "k": k_default, "evidence_k": evid_k, "div": q.div, "s_inst": q.s_inst, "s_plan": q.s_plan, "s_policy": q.s_policy, "s_evid": q.s_evid, "s_nice": q.s_nice }
     }))
