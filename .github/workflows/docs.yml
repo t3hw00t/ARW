@@ -1,21 +1,22 @@
 name: Docs
 
 permissions:
-  contents: read
-  pages: write
-  id-token: write
+  contents: write
 
 on:
   push:
     branches: [ main ]
+    paths-ignore:
+      - 'site/**'
+      - 'spec/**'
   workflow_dispatch:
 
 concurrency:
-  group: "pages"
+  group: "docs-site"
   cancel-in-progress: true
 
 jobs:
-  build:
+  build-and-commit-site:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -45,27 +46,20 @@ jobs:
           pip install --upgrade pip
           pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin
 
-      - name: Build docs
+      - name: Build docs (into ./site)
         run: mkdocs build --strict
 
-      - name: Upload spec artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: spec
-          path: spec/*
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Commit updated site and spec to main
+        env:
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          git add site spec || true
+          if ! git diff --cached --quiet; then
+            git commit -m "docs(site): update generated site and spec"
+            git push origin HEAD:main
+          else
+            echo "No changes to commit"
+          fi
