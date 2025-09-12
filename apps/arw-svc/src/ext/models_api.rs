@@ -105,15 +105,14 @@ pub(crate) async fn models_download(
     State(state): State<AppState>,
     Json(req): Json<DownloadReq>,
 ) -> impl IntoResponse {
-    let req2 = super::DownloadReq {
-        id: req.id,
-        url: req.url,
-        provider: req.provider,
-        sha256: req.sha256,
-    };
-    super::models_download(State(state), Json(req2))
-        .await
-        .into_response()
+    if let Some(svc) = state.resources.get::<ModelsService>() {
+        match svc.download(&state, req.id, req.url, req.provider, req.sha256).await {
+            Ok(()) => return super::ok(serde_json::json!({})).into_response(),
+            Err(e) => return super::ApiError::bad_request(&e).into_response(),
+        }
+    }
+    let req2 = super::DownloadReq { id: req.id, url: req.url, provider: req.provider, sha256: req.sha256 };
+    super::models_download(State(state), Json(req2)).await.into_response()
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -127,8 +126,10 @@ pub(crate) async fn models_download_cancel(
     State(state): State<AppState>,
     Json(req): Json<CancelReq>,
 ) -> impl IntoResponse {
+    if let Some(svc) = state.resources.get::<ModelsService>() {
+        svc.cancel_download(&state, req.id).await;
+        return super::ok(serde_json::json!({})).into_response();
+    }
     let req2 = super::CancelReq { id: req.id };
-    super::models_download_cancel(State(state), Json(req2))
-        .await
-        .into_response()
+    super::models_download_cancel(State(state), Json(req2)).await.into_response()
 }

@@ -14,6 +14,24 @@ env:
 
 resources: {}
 
+securityContext:
+  enabled: true
+  pod:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+  container:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+
+state:
+  enabled: false
+  mountPath: /app/state
+  size: 1Gi
+
 ingress:
   enabled: false
   className: ""
@@ -24,4 +42,3 @@ ingress:
         - path: /
           pathType: Prefix
   tls: []
-

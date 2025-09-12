@@ -814,7 +814,10 @@ function episodesRender(j){ try{
       const k = ev.kind || '';
       const t = ev.time || '';
       const p = ev.payload ? JSON.stringify(ev.payload) : '{}';
-      return `<div class="evt">[${t}] ${k}: ${p}</div>`;
+      // Inline apply button when suggestion id present
+      let applyBtn = '';
+      try{ const sid = ev?.payload?.suggestion?.id; if (sid){ applyBtn = ` <button class="iconbtn" onclick="epApply('${sid}')">Apply</button>`; } }catch{}
+      return `<div class="evt">[${t}] ${k}: ${p}${applyBtn}</div>`;
     }).join('');
     return `<div class="box" style="border:1px dashed #e5e7eb;margin:6px 0;padding:6px">${head}<div id="${eid}" style="display:none">${bodyAll}</div></div>`;
   }).join('');
@@ -829,6 +832,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
     else { if(__epTimer) { clearInterval(__epTimer); __epTimer=null; } }
   });
 });
+async function epApply(id){ try{ const r=await fetch(base + '/feedback/apply', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id})}); if(r.ok){ showToast('Applied '+id); } else { showToast('Apply failed ('+r.status+')'); } }catch{ showToast('Apply failed'); } }
 // Bind copy buttons and insights toggle after DOM ready
 document.addEventListener('DOMContentLoaded', ()=>{
   const copyMain=document.getElementById('copyJsonMain'); if(copyMain){ copyMain.addEventListener('click', ()=>{ try{ navigator.clipboard.writeText(document.getElementById('out').textContent||''); }catch{} }); }

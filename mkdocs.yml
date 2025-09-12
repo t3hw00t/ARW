@@ -34,6 +34,7 @@ nav:
       - Metrics & Insights: guide/METRICS_AND_INSIGHTS.md
       - Models Download: guide/models_download.md
       - Chat Backends: guide/chat_backends.md
+      - gRPC: guide/grpc.md
       - Projects UI: guide/projects_ui.md
       - Design System: guide/design_system.md
       - Feedback Engine: guide/feedback_engine.md

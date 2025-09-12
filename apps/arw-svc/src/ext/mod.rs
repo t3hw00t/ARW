@@ -679,12 +679,12 @@ async fn models_default_set(
 
 #[derive(Deserialize)]
 pub(crate) struct DownloadReq {
-    id: String,
-    url: String,
+    pub(crate) id: String,
+    pub(crate) url: String,
     #[serde(default)]
-    provider: Option<String>,
+    pub(crate) provider: Option<String>,
     #[serde(default)]
-    sha256: Option<String>,
+    pub(crate) sha256: Option<String>,
 }
 async fn models_download(
     State(state): State<AppState>,

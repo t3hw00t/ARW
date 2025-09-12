@@ -1,0 +1,8 @@
+accept = [200, 206, 429]
+max_retries = 2
+retry_wait_time = 2
+user_agent = "lychee/0.15 (ARW docs)"
+exclude = [
+  "https://github.com/t3hw00t/Agent_Hub/pull/", # PR links may be transient
+]
+headers = []

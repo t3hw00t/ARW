@@ -1,6 +1,10 @@
 use serde_json::{json, Value};
 
 use crate::app_state::AppState;
+use tokio::sync::RwLock;
+use once_cell::sync::OnceCell;
+use std::collections::HashSet;
+use futures_util::StreamExt;
 
 #[derive(Default)]
 pub struct ModelsService;
@@ -73,5 +77,206 @@ impl ModelsService {
         super::super::ext::io::save_json_file_async(&super::super::ext::paths::models_path(), &Value::Array(crate::ext::models().read().await.clone()))
             .await
             .map_err(|e| e.to_string())
+    }
+
+    // ---- Download worker ----
+    fn cancel_cell() -> &'static RwLock<HashSet<String>> {
+        static DL_CANCEL: OnceCell<RwLock<HashSet<String>>> = OnceCell::new();
+        DL_CANCEL.get_or_init(|| RwLock::new(HashSet::new()))
+    }
+    async fn is_cancelled(id: &str) -> bool {
+        Self::cancel_cell().read().await.contains(id)
+    }
+    async fn clear_cancel(id: &str) {
+        Self::cancel_cell().write().await.remove(id);
+    }
+    async fn set_cancel(id: &str) {
+        Self::cancel_cell().write().await.insert(id.to_string());
+    }
+
+    pub async fn cancel_download(&self, state: &AppState, id: String) {
+        Self::set_cancel(&id).await;
+        let mut p = json!({"id": id, "status":"cancel-requested"});
+        crate::ext::corr::ensure_corr(&mut p);
+        state.bus.publish("Models.DownloadProgress", &p);
+    }
+
+    pub async fn download(
+        &self,
+        state: &AppState,
+        id_in: String,
+        url_in: String,
+        provider_in: Option<String>,
+        sha256_in: Option<String>,
+    ) -> Result<(), String> {
+        // ensure model exists with status
+        let mut already_in_progress = false;
+        {
+            let mut v = crate::ext::models().write().await;
+            if let Some(m) = v.iter_mut().find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id_in)) {
+                let prev = m.get("status").and_then(|s| s.as_str()).unwrap_or("");
+                if prev.eq_ignore_ascii_case("downloading") { already_in_progress = true; }
+                else { *m = json!({"id": id_in, "provider": provider_in.clone().unwrap_or("local".into()), "status":"downloading"}); }
+            } else {
+                v.push(json!({"id": id_in, "provider": provider_in.clone().unwrap_or("local".into()), "status":"downloading"}));
+            }
+        }
+        if already_in_progress {
+            let mut p = json!({"id": id_in, "status":"already-in-progress"});
+            crate::ext::corr::ensure_corr(&mut p);
+            state.bus.publish("Models.DownloadProgress", &p);
+            return Ok(());
+        }
+        // Validate URL scheme
+        if !(url_in.starts_with("http://") || url_in.starts_with("https://")) {
+            return Err("invalid url scheme".into());
+        }
+        // Publish start
+        {
+            let mut p = json!({"id": id_in, "url": url_in});
+            crate::ext::corr::ensure_corr(&mut p);
+            state.bus.publish("Models.Download", &p);
+        }
+        // Spawn worker
+        let id = id_in.clone();
+        let url = url_in.clone();
+        let provider = provider_in.clone().unwrap_or("local".into());
+        let expect_sha = sha256_in.clone().map(|s| s.to_lowercase());
+        let sp = state.clone();
+        tokio::spawn(async move {
+            use tokio::fs as afs;
+            use tokio::io::AsyncWriteExt;
+            use sha2::Digest;
+            // sanitize filename and compute target paths
+            let file_name = url.rsplit('/').next().unwrap_or(&id).to_string();
+            let safe_name = file_name.replace(['\\', '/'], "_");
+            let target_dir = crate::ext::paths::state_dir().join("models");
+            let target = target_dir.join(&safe_name);
+            let tmp = target.with_extension("part");
+            if let Err(e) = afs::create_dir_all(&target_dir).await {
+                let mut p = json!({"id": id, "error": format!("mkdir failed: {}", e)});
+                crate::ext::corr::ensure_corr(&mut p);
+                sp.bus.publish("Models.DownloadProgress", &p);
+                return;
+            }
+            let client = reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .timeout(std::time::Duration::from_secs(300))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new());
+            let mut resume_from: u64 = 0;
+            if let Ok(meta) = afs::metadata(&tmp).await { resume_from = meta.len(); }
+            let mut reqb = client.get(&url);
+            if resume_from > 0 { reqb = reqb.header(reqwest::header::RANGE, format!("bytes={}-", resume_from)); }
+            match reqb.send().await {
+                Ok(resp) => {
+                    let total_rem = resp.content_length().unwrap_or(0);
+                    let status = resp.status();
+                    let total_all = if resume_from > 0 && status == axum::http::StatusCode::PARTIAL_CONTENT {
+                        let mut p = json!({"id": id, "status":"resumed", "offset": resume_from});
+                        crate::ext::corr::ensure_corr(&mut p);
+                        sp.bus.publish("Models.DownloadProgress", &p);
+                        resume_from + total_rem
+                    } else {
+                        if resume_from > 0 { let _ = afs::remove_file(&tmp).await; resume_from = 0; }
+                        total_rem
+                    };
+                    let mut file = if resume_from > 0 {
+                        match afs::OpenOptions::new().append(true).open(&tmp).await { Ok(f) => f, Err(e) => {
+                            let mut p = json!({"id": id, "error": format!("open failed: {}", e)});
+                            crate::ext::corr::ensure_corr(&mut p);
+                            sp.bus.publish("Models.DownloadProgress", &p);
+                            return; } }
+                    } else {
+                        match afs::File::create(&tmp).await { Ok(f) => f, Err(e) => {
+                            let mut p = json!({"id": id, "error": format!("create failed: {}", e)});
+                            crate::ext::corr::ensure_corr(&mut p);
+                            sp.bus.publish("Models.DownloadProgress", &p);
+                            return; } }
+                    };
+                    let mut downloaded: u64 = 0;
+                    let mut stream = resp.bytes_stream();
+                    while let Some(chunk) = stream.next().await {
+                        match chunk {
+                            Ok(bytes) => {
+                                if Self::is_cancelled(&id).await {
+                                    let _ = afs::remove_file(&tmp).await;
+                                    let mut p = json!({"id": id, "status":"canceled"});
+                                    crate::ext::corr::ensure_corr(&mut p);
+                                    sp.bus.publish("Models.DownloadProgress", &p);
+                                    Self::clear_cancel(&id).await; return;
+                                }
+                                if let Err(e) = file.write_all(&bytes).await {
+                                    let mut p = json!({"id": id, "error": format!("write failed: {}", e)});
+                                    crate::ext::corr::ensure_corr(&mut p);
+                                    sp.bus.publish("Models.DownloadProgress", &p);
+                                    return;
+                                }
+                                downloaded += bytes.len() as u64;
+                                if total_all > 0 {
+                                    let pct = (((resume_from + downloaded) * 100) / total_all).min(100);
+                                    let mut p = json!({"id": id, "progress": pct, "downloaded": resume_from + downloaded, "total": total_all});
+                                    crate::ext::corr::ensure_corr(&mut p);
+                                    sp.bus.publish("Models.DownloadProgress", &p);
+                                }
+                            }
+                            Err(e) => {
+                                let mut p = json!({"id": id, "error": format!("read failed: {}", e)});
+                                crate::ext::corr::ensure_corr(&mut p);
+                                sp.bus.publish("Models.DownloadProgress", &p);
+                                return;
+                            }
+                        }
+                    }
+                    if let Err(e) = file.flush().await {
+                        let mut p = json!({"id": id, "error": format!("flush failed: {}", e)});
+                        crate::ext::corr::ensure_corr(&mut p);
+                        sp.bus.publish("Models.DownloadProgress", &p);
+                        return;
+                    }
+                    if let Err(e) = afs::rename(&tmp, &target).await {
+                        let mut p = json!({"id": id, "error": format!("finalize failed: {}", e)});
+                        crate::ext::corr::ensure_corr(&mut p);
+                        sp.bus.publish("Models.DownloadProgress", &p);
+                        return;
+                    }
+                    if let Some(exp) = expect_sha {
+                        let mut f = match afs::File::open(&target).await { Ok(f) => f, Err(_) => { return; } };
+                        let mut h = sha2::Sha256::new();
+                        let mut buf = vec![0u8; 1024 * 1024];
+                        loop {
+                            match tokio::io::AsyncReadExt::read(&mut f, &mut buf).await {
+                                Ok(0) => break,
+                                Ok(n) => { h.update(&buf[..n]); }
+                                Err(_) => break,
+                            }
+                        }
+                        let actual = format!("{:x}", h.finalize());
+                        if actual != exp {
+                            let _ = afs::remove_file(&target).await;
+                            let mut p = json!({"id": id, "error": "checksum mismatch", "expected": exp, "actual": actual});
+                            crate::ext::corr::ensure_corr(&mut p);
+                            sp.bus.publish("Models.DownloadProgress", &p);
+                            return;
+                        }
+                    }
+                    let mut p = json!({"id": id, "status":"complete", "file": safe_name, "provider": provider});
+                    crate::ext::corr::ensure_corr(&mut p);
+                    sp.bus.publish("Models.DownloadProgress", &p);
+                    {
+                        let mut v = crate::ext::models().write().await;
+                        if let Some(m) = v.iter_mut().find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id)) { *m = json!({"id": id, "provider": provider, "status":"available", "path": target.to_string_lossy()}); }
+                    }
+                    let _ = crate::ext::io::save_json_file_async(&crate::ext::paths::models_path(), &Value::Array(crate::ext::models().read().await.clone())).await;
+                    sp.bus.publish("Models.Changed", &json!({"op":"downloaded","id": id}));
+                }
+                Err(e) => {
+                    let mut p = json!({"id": id, "error": format!("request failed: {}", e)});
+                    crate::ext::corr::ensure_corr(&mut p);
+                    sp.bus.publish("Models.DownloadProgress", &p);
+                }
+            }
+        });
+        Ok(())
     }
 }

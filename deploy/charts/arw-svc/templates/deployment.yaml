@@ -14,6 +14,10 @@ spec:
       labels:
         {{- include "arw-svc.selectorLabels" . | nindent 8 }}
     spec:
+      {{- if .Values.securityContext.enabled }}
+      securityContext:
+        {{- toYaml .Values.securityContext.pod | nindent 8 }}
+      {{- end }}
       containers:
         - name: arw-svc
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -21,6 +25,10 @@ spec:
           ports:
             - name: http
               containerPort: {{ .Values.service.port }}
+          {{- if .Values.securityContext.enabled }}
+          securityContext:
+            {{- toYaml .Values.securityContext.container | nindent 12 }}
+          {{- end }}
           env:
             - name: ARW_PORT
               value: "{{ .Values.env.ARW_PORT }}"
@@ -43,4 +51,14 @@ spec:
             periodSeconds: 10
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-
+          {{- if .Values.state.enabled }}
+          volumeMounts:
+            - name: state
+              mountPath: {{ .Values.state.mountPath | quote }}
+          {{- end }}
+      {{- if .Values.state.enabled }}
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ include "arw-svc.fullname" . }}-state
+      {{- end }}

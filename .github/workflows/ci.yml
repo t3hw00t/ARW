@@ -185,6 +185,9 @@ jobs:
         with:
           args: >-
             --verbose
-            --accept 200,206,429
+            --config Agent_Hub/.lychee.toml
             Agent_Hub/site/**/*.html Agent_Hub/README.md Agent_Hub/docs/**/*.md
           fail: true
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
