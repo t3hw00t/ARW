@@ -97,6 +97,23 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
     // Keep most recent 20 each
     if intents.len() > 20 { intents = intents[intents.len()-20..].to_vec(); }
     if actions.len() > 20 { actions = actions[actions.len()-20..].to_vec(); }
+    // Estimate tokens for recents before attaching ptrs
+    fn est_tokens_event(ev: &serde_json::Value) -> u64 {
+        let mut t = 4;
+        if let Some(k) = ev.get("kind") { t += est_tokens_value(k); }
+        if let Some(p) = ev.get("payload") { t += est_tokens_value(p); }
+        if let Some(ts) = ev.get("time") { t += est_tokens_value(ts); }
+        t.min(1024)
+    }
+    fn est_tokens_file(f: &serde_json::Value) -> u64 {
+        let mut t = 2;
+        if let Some(p) = f.get("path") { t += est_tokens_value(p); }
+        if let Some(id) = f.get("id") { t += est_tokens_value(id); }
+        t.min(256)
+    }
+    let intents_tokens: u64 = intents.iter().map(est_tokens_event).sum();
+    let actions_tokens: u64 = actions.iter().map(est_tokens_event).sum();
+    let files_tokens: u64 = files.iter().map(est_tokens_file).sum();
     // Attach stable pointers alongside included items
     fn with_ptrs_beliefs(mut v: Vec<serde_json::Value>, proj: Option<&str>) -> Vec<serde_json::Value> {
         for it in v.iter_mut() {
@@ -150,7 +167,7 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
             "diversity": q.div,
             "counts": {"beliefs": coverage_selected, "files": files.len(), "intents": intents.len(), "actions": actions.len()},
             "coverage": {"pool": coverage_pool, "omitted": coverage_omitted, "recall_risk": coverage_omitted > 0},
-            "usage": {"evidence_tokens": used_tokens, "evidence_budget": budget_tokens},
+            "usage": {"evidence_tokens": used_tokens, "evidence_budget": budget_tokens, "recent_intents_tokens": intents_tokens, "recent_actions_tokens": actions_tokens, "recent_files_tokens": files_tokens},
         });
         crate::ext::corr::ensure_corr(&mut ev);
         state.bus.publish("Context.Assembled", &ev);
@@ -173,7 +190,7 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
         "project": { "name": proj, "notes": notes_path },
         "budget": { "slots": { "instructions": q.s_inst, "plan": q.s_plan, "policy": q.s_policy, "evidence": q.s_evid, "nice": q.s_nice },
                      "requested": { "k": k_default, "evidence_k": evid_k, "diversity": q.div },
-                     "usage": { "evidence_tokens": used_tokens } },
+                     "usage": { "evidence_tokens": used_tokens, "recent_intents_tokens": intents_tokens, "recent_actions_tokens": actions_tokens, "recent_files_tokens": files_tokens } },
         "coverage": { "pool": coverage_pool, "selected": coverage_selected, "omitted": coverage_omitted, "recall_risk": coverage_omitted > 0, "evidence_tokens_used": used_tokens, "evidence_tokens_budget": budget_tokens },
         "params": { "proj": q.proj, "q": q.q, "k": k_default, "evidence_k": evid_k, "div": q.div, "s_inst": q.s_inst, "s_plan": q.s_plan, "s_policy": q.s_policy, "s_evid": q.s_evid, "s_nice": q.s_nice }
     }))
