@@ -14,6 +14,14 @@ impl ModelsService {
         Self
     }
 
+    fn max_download_bytes() -> u64 {
+        std::env::var("ARW_MODELS_MAX_MB")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(4096)
+            .saturating_mul(1024 * 1024)
+    }
+
     pub async fn list(&self) -> Vec<Value> {
         crate::ext::models().read().await.clone()
     }
@@ -184,6 +192,13 @@ impl ModelsService {
         let url = url_in.clone();
         let provider = provider_in.clone().unwrap_or("local".into());
         let expect_sha = sha256_in.clone().map(|s| s.to_lowercase());
+        if let Some(ref sh) = expect_sha {
+            let valid = sh.len() == 64 && sh.chars().all(|c| c.is_ascii_hexdigit());
+            if !valid {
+                return Err("invalid sha256".into());
+            }
+        }
+        let max_bytes = Self::max_download_bytes();
         let sp = state.clone();
         tokio::spawn(async move {
             use sha2::Digest;
@@ -232,6 +247,19 @@ impl ModelsService {
                         }
                         total_rem
                     };
+                    // Hard cap by expected total when known
+                    if total_all > 0 && total_all > max_bytes {
+                        let mut p = json!({
+                          "id": id,
+                          "error": "size exceeds limit",
+                          "total": total_all,
+                          "max_bytes": max_bytes
+                        });
+                        crate::ext::corr::ensure_corr(&mut p);
+                        sp.bus.publish("Models.DownloadProgress", &p);
+                        crate::ext::io::audit_event("models.download.error", &p).await;
+                        return;
+                    }
                     let mut file = if resume_from > 0 {
                         match afs::OpenOptions::new().append(true).open(&tmp).await {
                             Ok(f) => f,
@@ -240,6 +268,7 @@ impl ModelsService {
                                     json!({"id": id, "error": format!("open failed: {}", e)});
                                 crate::ext::corr::ensure_corr(&mut p);
                                 sp.bus.publish("Models.DownloadProgress", &p);
+                                crate::ext::io::audit_event("models.download.error", &p).await;
                                 return;
                             }
                         }
@@ -251,6 +280,7 @@ impl ModelsService {
                                     json!({"id": id, "error": format!("create failed: {}", e)});
                                 crate::ext::corr::ensure_corr(&mut p);
                                 sp.bus.publish("Models.DownloadProgress", &p);
+                                crate::ext::io::audit_event("models.download.error", &p).await;
                                 return;
                             }
                         }
@@ -265,6 +295,7 @@ impl ModelsService {
                                     let mut p = json!({"id": id, "status":"canceled"});
                                     crate::ext::corr::ensure_corr(&mut p);
                                     sp.bus.publish("Models.DownloadProgress", &p);
+                                    crate::ext::io::audit_event("models.download.canceled", &p).await;
                                     Self::clear_cancel(&id).await;
                                     return;
                                 }
@@ -273,9 +304,24 @@ impl ModelsService {
                                         json!({"id": id, "error": format!("write failed: {}", e)});
                                     crate::ext::corr::ensure_corr(&mut p);
                                     sp.bus.publish("Models.DownloadProgress", &p);
+                                    crate::ext::io::audit_event("models.download.error", &p).await;
                                     return;
                                 }
                                 downloaded += bytes.len() as u64;
+                                // streaming cap enforcement when total is unknown
+                                if max_bytes > 0 && resume_from + downloaded > max_bytes {
+                                    let _ = afs::remove_file(&tmp).await;
+                                    let mut p = json!({
+                                      "id": id,
+                                      "error": "size exceeds limit (stream)",
+                                      "downloaded": resume_from + downloaded,
+                                      "max_bytes": max_bytes
+                                    });
+                                    crate::ext::corr::ensure_corr(&mut p);
+                                    sp.bus.publish("Models.DownloadProgress", &p);
+                                    crate::ext::io::audit_event("models.download.error", &p).await;
+                                    return;
+                                }
                                 if total_all > 0 {
                                     let pct =
                                         (((resume_from + downloaded) * 100) / total_all).min(100);
@@ -289,6 +335,7 @@ impl ModelsService {
                                     json!({"id": id, "error": format!("read failed: {}", e)});
                                 crate::ext::corr::ensure_corr(&mut p);
                                 sp.bus.publish("Models.DownloadProgress", &p);
+                                crate::ext::io::audit_event("models.download.error", &p).await;
                                 return;
                             }
                         }
@@ -297,12 +344,14 @@ impl ModelsService {
                         let mut p = json!({"id": id, "error": format!("flush failed: {}", e)});
                         crate::ext::corr::ensure_corr(&mut p);
                         sp.bus.publish("Models.DownloadProgress", &p);
+                        crate::ext::io::audit_event("models.download.error", &p).await;
                         return;
                     }
                     if let Err(e) = afs::rename(&tmp, &target).await {
                         let mut p = json!({"id": id, "error": format!("finalize failed: {}", e)});
                         crate::ext::corr::ensure_corr(&mut p);
                         sp.bus.publish("Models.DownloadProgress", &p);
+                        crate::ext::io::audit_event("models.download.error", &p).await;
                         return;
                     }
                     if let Some(exp) = expect_sha {
@@ -329,12 +378,14 @@ impl ModelsService {
                             let mut p = json!({"id": id, "error": "checksum mismatch", "expected": exp, "actual": actual});
                             crate::ext::corr::ensure_corr(&mut p);
                             sp.bus.publish("Models.DownloadProgress", &p);
+                             crate::ext::io::audit_event("models.download.error", &p).await;
                             return;
                         }
                     }
                     let mut p = json!({"id": id, "status":"complete", "file": safe_name, "provider": provider});
                     crate::ext::corr::ensure_corr(&mut p);
                     sp.bus.publish("Models.DownloadProgress", &p);
+                    crate::ext::io::audit_event("models.download.complete", &p).await;
                     {
                         let mut v = crate::ext::models().write().await;
                         if let Some(m) = v
@@ -356,6 +407,7 @@ impl ModelsService {
                     let mut p = json!({"id": id, "error": format!("request failed: {}", e)});
                     crate::ext::corr::ensure_corr(&mut p);
                     sp.bus.publish("Models.DownloadProgress", &p);
+                    crate::ext::io::audit_event("models.download.error", &p).await;
                 }
             }
         });

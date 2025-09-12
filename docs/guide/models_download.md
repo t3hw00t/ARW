@@ -82,3 +82,5 @@ Resume:
 - When `total` is unknown, events may omit it and include only `downloaded`.
 - Errors surface in progress events; model list isn’t updated on failure.
 - State directory is shown in `GET /probe`.
+- Size limits: set `ARW_MODELS_MAX_MB` (default 4096) to cap downloads. If the expected total size exceeds this limit (or the streamed bytes exceed the cap when `Content-Length` is unknown), the download aborts with an error event.
+- Checksum: when `sha256` is provided, it must be a 64‑char hex string. Invalid checksums are rejected up front.
