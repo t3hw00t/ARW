@@ -21,23 +21,26 @@ H() { curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$@"; }
 Quick checks
 ```bash
 curl -sS "$BASE/healthz"
-H "$BASE/introspect/tools" | jq '.[0:5]'
+H "$BASE/admin/introspect/tools" | jq '.[0:5]'
 ```
 
 Schemas and specs
 ```bash
 # A specific tool schema (example id)
-H "$BASE/introspect/schemas/memory.probe@1.0.0" | jq
+H "$BASE/admin/introspect/schemas/memory.probe@1.0.0" | jq
 
 # OpenAPI / AsyncAPI / MCP tool catalog
 curl -sS "$BASE/spec/openapi.yaml" | head -n 20
 curl -sS "$BASE/spec/asyncapi.yaml" | head -n 20
 curl -sS "$BASE/spec/mcp-tools.json" | jq 'keys'
+
+# Self‑Model JSON Schema (static)
+cat spec/schemas/self_model.json | jq '.title,.description'
 ```
 
 Events (SSE)
 ```bash
-curl -N "$BASE/events?replay=10"
+curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?replay=10"
 ```
 
 !!! warning "Security"
@@ -102,15 +105,15 @@ Validate input → policy check → invoke → emit events → return.
 
 ## HTTP & WS Surface
 
-GET /introspect/tools
+GET /admin/introspect/tools
 
-GET /introspect/schemas/{tool_id}
+GET /admin/introspect/schemas/{tool_id}
 
 POST /tools/{tool_id}:invoke
 
-GET /probe?task_id=...&step=...
+GET /admin/probe?task_id=...&step=...
 
-SSE /events
+SSE /admin/events
 
 GET /spec/openapi.yaml
 

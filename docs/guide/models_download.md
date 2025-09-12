@@ -4,19 +4,20 @@ title: Models Download (HTTP)
 
 # Models Download (HTTP)
 
-ARW provides HTTP endpoints to manage local models with streaming downloads, live progress via SSE, safe cancel, resume (HTTP Range), and optional SHA‑256 verification.
+ARW provides HTTP endpoints (admin‑gated) to manage local models with streaming downloads, live progress via SSE, safe cancel, resume (HTTP Range), and mandatory SHA‑256 verification.
 
 Updated: 2025-09-12
 
 ## Endpoints
 
-- POST `/models/download` — Start or resume a download.
-- POST `/models/download/cancel` — Cancel an in‑flight download.
-- GET  `/events` — Listen for `Models.DownloadProgress` events.
+- POST `/admin/models/download` — Start or resume a download.
+- POST `/admin/models/download/cancel` — Cancel an in‑flight download.
+- GET  `/admin/events` — Listen for `Models.DownloadProgress` events (SSE; supports `?replay=N` and repeated `prefix=` filters).
+- GET  `/state/models` — Public, read‑only models list (no admin token required).
 
 ## Request
 
-POST /models/download
+POST /admin/models/download
 
 Body:
 
@@ -39,7 +40,7 @@ Behavior:
 
 ## Cancel
 
-POST /models/download/cancel
+POST /admin/models/download/cancel
 
 ```
 { "id": "<model-id>" }
@@ -49,7 +50,7 @@ Cancels the active download and removes the partial `.part` file.
 
 ## Progress (SSE)
 
-Subscribe to `GET /events` and filter `Models.DownloadProgress` events. Examples:
+Subscribe to `GET /admin/events` and filter `Models.DownloadProgress` events. Examples:
 
 ```
 { "id": "qwen2.5-coder-7b", "progress": 42, "downloaded": 12345678, "total": 30000000 }
@@ -76,26 +77,29 @@ UI guidance:
 Start a download (with checksum):
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8090/models/download \
+BASE=http://127.0.0.1:8090
+curl -sS -X POST "$BASE/admin/models/download" \
   -H 'Content-Type: application/json' \
+  -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
   -d '{"id":"qwen2.5-coder-7b","url":"https://example.com/qwen.gguf","sha256":"<hex>"}'
 ```
 
 Cancel:
 
 ```bash
-curl -sS -X POST http://127.0.0.1:8090/models/download/cancel \
+curl -sS -X POST "$BASE/admin/models/download/cancel" \
   -H 'Content-Type: application/json' \
+  -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
   -d '{"id":"qwen2.5-coder-7b"}'
 ```
 
 Resume:
-- Re-issue the same `POST /models/download` request. If the server honors `Range: bytes=<offset>-`, ARW resumes from the existing `.part` file.
+- Re-issue the same `POST /admin/models/download` request. If the server honors `Range: bytes=<offset>-`, ARW resumes from the existing `.part` file.
 
 ## Notes
 - When `total` is unknown, events may omit it and include only `downloaded`.
 - On failure, the model list is updated to `status: "error"` with `error_code` to avoid stuck "downloading" states.
-- State directory is shown in `GET /probe`.
+- State directory is shown in `GET /admin/probe`.
 - Disk safety: the downloader reserves space to avoid filling the disk. Set `ARW_MODELS_DISK_RESERVE_MB` (default 256) to control the reserved free‑space buffer. If there isn’t enough free space for the download, it aborts with an error event.
 - Size caps: set `ARW_MODELS_MAX_MB` (default 4096) to cap the maximum allowed size per download. The cap is enforced using the `Content-Length` when available and during streaming when it isn’t.
 - Checksum: when `sha256` is provided, it must be a 64‑char hex string; invalid values are rejected up front.
@@ -105,3 +109,5 @@ Resume:
   Related tuning knobs: `ARW_MODELS_MAX_MB`, `ARW_MODELS_DISK_RESERVE_MB`, `ARW_DL_MIN_MBPS`, `ARW_DL_EWMA_ALPHA`, `ARW_DL_SEND_RETRIES`, `ARW_DL_STREAM_RETRIES`, `ARW_DL_IDLE_TIMEOUT_SECS`, `ARW_BUDGET_SOFT_DEGRADE_PCT`.
 - Admission checks: when `total` is known, the downloader estimates if it can finish within the remaining hard budget using a throughput baseline `ARW_DL_MIN_MBPS` and a persisted EWMA. If not, it emits `code: "admission_denied"`.
 - Idle safety: when no hard budget is set, `ARW_DL_IDLE_TIMEOUT_SECS` applies an idle timeout to avoid hung transfers.
+
+Security note: all `/admin/*` endpoints require either debug mode (`ARW_DEBUG=1`) or an admin token. Set `ARW_ADMIN_TOKEN` on the service and send it as `Authorization: Bearer <token>` or `X-ARW-Admin: <token>`.

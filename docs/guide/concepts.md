@@ -17,7 +17,7 @@ Updated: 2025-09-12
 - Tools surface via HTTP, events, and MCP. See: API and Schema.
 
 ## Event Bus
-- Lightweight in‑process bus publishes events (optionally journaling). SSE at `/events` for live streams and replays.
+- Lightweight in‑process bus publishes events (optionally journaling). SSE at `/admin/events` for live streams and replays (admin‑gated).
 
 Unified model
 - Treat ARW as a shared object graph (entities + relations) plus a single event stream. UIs (Project Hub, Chat, Training Park, Managers) are lenses on the same truth.

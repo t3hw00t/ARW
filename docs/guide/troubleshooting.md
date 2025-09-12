@@ -38,7 +38,7 @@ Port already in use
 - Symptom: `curl` returns headers but shows no lines.
 - Fix: use `curl -N`, disable proxy buffering, try `?replay=10`.
   ```bash
-  curl -N http://127.0.0.1:8090/events?replay=10
+  curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" http://127.0.0.1:8090/admin/events?replay=10
   ```
 
 ## Launcher Build on Linux Fails

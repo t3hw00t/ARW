@@ -17,7 +17,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OkResponse'
-  /events:
+  /admin/events:
     get:
       tags: []
       operationId: events
@@ -35,7 +35,7 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/OkResponse'
-  /introspect/schemas/{id}:
+  /admin/introspect/schemas/{id}:
     get:
       tags: []
       operationId: introspect_schema
@@ -51,14 +51,14 @@ paths:
           description: Schema JSON
         '404':
           description: Unknown tool id
-  /introspect/tools:
+  /admin/introspect/tools:
     get:
       tags: []
       operationId: introspect_tools
       responses:
         '200':
           description: List available tools
-  /probe:
+  /admin/probe:
     get:
       tags: []
       operationId: probe

@@ -8,12 +8,15 @@ The ARW Launcher is a Tauri 2 desktop app that provides:
 
 Updated: 2025-09-12
 
-- System tray with Start/Stop Service, Open Debug UI, Events, Logs, Models (stub), Connections (stub).
+- System tray with Start/Stop Service, Open Debug UI, Events, Logs, Models, Connections.
 - In‑app windows:
-  - Events: streams `/events` via SSE (Replay 50, optional filter)
+  - Events: streams `/admin/events` via SSE (Replay 50, optional filter)
   - Logs: polls `/introspect/stats` and shows counters + raw JSON
+  - Models: list/add/delete/default, start/cancel downloads, progress bars with speed/ETA, optional budget/disk info
+  - Connections: add/ping/open Debug UI for multiple local/remote ARW services
   - Debug UI opener: browser or embedded window
-- Preferences: port, autostart service
+- Home card includes a mini downloads widget (Models.* SSE) showing live progress and speed
+- Preferences: port, admin token, autostart service, notifications on status changes
 - OS login autostart toggle
 - Single‑instance, window‑state persistence, notifications on service status changes
 
@@ -52,20 +55,21 @@ Using Nix: `nix develop` (devShell includes required libraries).
 
 - App: `apps/arw-launcher/src-tauri`
 - Shared glue: `crates/arw-tauri`
-- UI: `apps/arw-launcher/src-tauri/ui/` (`index.html`, `events.html`, `logs.html`)
-  - Model Manager UI: `models.html` (list/add/delete/default, download with progress)
+- UI: `apps/arw-launcher/src-tauri/ui/` (`index.html`, `events.html`, `logs.html`, `models.html`, `connections.html`)
+  - Models UI: manage inventory and downloads (start/cancel; speed/ETA)
+  - Connections UI: saved endpoints, ping, and quick‑open Debug UI
 - Icons: `apps/arw-launcher/src-tauri/icons/` (placeholder PNGs; replace with your branding)
   - Regenerate icons following project colors: `./.venv/bin/python scripts/gen_icons.py`
 
 ## Notes
 
 - The legacy Rust tray (`apps/arw-tray`) is deprecated and not built by default; the launcher replaces it.
-- The launcher reads preferences from the user config dir (e.g., `~/.config/arw/prefs-launcher.json`).
+- The launcher reads preferences from the user config dir (e.g., `~/.config/arw/prefs-launcher.json`). Admin token is optional and used for `/admin/*` endpoints.
 - Windows: on Windows 11, WebView2 Runtime is in-box; on Windows 10/Server you must install the Evergreen Runtime. Use `scripts/webview2.ps1` or Interactive Start → “WebView2 runtime (check/install)”. Server Core lacks desktop features; prefer “Server with Desktop Experience” for UI.
 
 ## Hardening Checklist (Tauri)
 
-- Enforce a strict CSP; never load remote content.
+- Enforce a strict CSP; never load remote content. Default‑deny (`default-src 'none'`) with explicit `script-src`, `style-src`, `img-src`, `connect-src`, `frame-src`, and `object-src 'none'`.
 - Whitelist only the local service origin (host/port) for HTTP.
 - Define Tauri v2 capabilities/permissions to expose only required APIs; group them into named sets that mirror ARW policies.
 - Ship Single‑Instance and Updater; keep backend updates on their own cadence.

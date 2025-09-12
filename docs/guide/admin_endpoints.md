@@ -41,7 +41,12 @@ Rate limiting:
 - `/admin/models[/*]`: list/save/load/add/delete/default/download
 - `/admin/tools[/*]`: list and run tools
 - `/admin/feedback[/*]`: feedback engine state & policy
-- `/admin/state/*`: observations, beliefs, intents, actions
+- `/admin/self_model/propose` (POST): propose a self‑model update; emits `SelfModel.Proposed`
+- `/admin/self_model/apply` (POST): apply a proposal; emits `SelfModel.Updated`
+- `/admin/state/*`: observations, beliefs, world, intents, actions
+  - `/admin/state/world`: Project Map snapshot (scoped belief graph)
+  - `/admin/state/world/select`: top‑K beliefs (claims) with trace
+  - `/admin/context/assemble`: minimal context assembly (beliefs + policy/model)
 - `/admin/governor/*`: governor profile & hints
 - `/admin/hierarchy/*`: negotiation & role/state helpers
 - `/admin/projects/*`: project list/tree/notes

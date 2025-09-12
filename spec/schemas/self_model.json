@@ -1,0 +1,148 @@
+{
+  "$id": "https://arw/spec/schemas/self_model.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ARW Self-Model",
+  "description": "Scoped, evaluable self-model for an agent: capabilities, competence, calibration, resource forecast, failure modes, and interaction contract.",
+  "type": "object",
+  "properties": {
+    "version": { "type": "string", "description": "Schema/version tag for the self-model (semver or '0')." },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "identity": {
+      "type": "object",
+      "properties": {
+        "model_family": { "type": "string" },
+        "model_hash": { "type": "string" },
+        "logic_units": { "type": "array", "items": { "type": "string" } },
+        "policies": { "type": "array", "items": { "type": "string" } },
+        "leases": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "scope": { "type": "string" },
+              "expires_at": { "type": "string", "format": "date-time" }
+            },
+            "additionalProperties": true
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "capability_map": {
+      "type": "object",
+      "properties": {
+        "tools": { "type": "array", "items": { "type": "string" } },
+        "modalities": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "competence_map": {
+      "type": "object",
+      "description": "Measured competence per domain/tool.",
+      "patternProperties": {
+        ".*": {
+          "type": "object",
+          "properties": {
+            "success_rate": { "type": "number", "minimum": 0, "maximum": 1 },
+            "count": { "type": "integer", "minimum": 0 },
+            "last": { "type": "string", "format": "date-time" }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "calibration": {
+      "type": "object",
+      "properties": {
+        "ece": { "type": "number", "minimum": 0 },
+        "brier": { "type": "number", "minimum": 0 },
+        "bias": { "type": "string", "enum": ["over", "under", "ok"] },
+        "bins": {
+          "type": "array",
+          "description": "Calibration bins: predicted vs observed and sample size.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "p": { "type": "number", "minimum": 0, "maximum": 1 },
+              "o": { "type": "number", "minimum": 0, "maximum": 1 },
+              "n": { "type": "integer", "minimum": 0 }
+            },
+            "required": ["p", "o", "n"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "resource_curve": {
+      "type": "object",
+      "properties": {
+        "recipes": {
+          "type": "object",
+          "description": "Per-recipe forecasts for tokens/latency/cost.",
+          "patternProperties": {
+            ".*": {
+              "type": "object",
+              "properties": {
+                "tokens_mean": { "type": "number", "minimum": 0 },
+                "tokens_p95": { "type": "number", "minimum": 0 },
+                "latency_ms_mean": { "type": "number", "minimum": 0 },
+                "latency_ms_p95": { "type": "number", "minimum": 0 },
+                "cost_usd_mean": { "type": "number", "minimum": 0 },
+                "cost_usd_p95": { "type": "number", "minimum": 0 }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "failure_modes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string" },
+          "hint": { "type": "string" },
+          "route": { "type": "string" },
+          "red_flags": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": true
+      }
+    },
+    "interaction_contract": {
+      "type": "object",
+      "properties": {
+        "style": { "type": "string" },
+        "constraints": { "type": "array", "items": { "type": "string" } }
+      },
+      "additionalProperties": true
+    },
+    "notes": { "type": "string" }
+  },
+  "additionalProperties": true,
+  "examples": [
+    {
+      "version": "0",
+      "updated_at": "2025-09-12T12:00:00Z",
+      "identity": {
+        "model_family": "llama-3.1-8b-instruct",
+        "model_hash": "sha256:abc...",
+        "logic_units": ["metacognition", "abstain-gate"],
+        "policies": ["default"],
+        "leases": [{"id":"fs.read","scope":"/projects/demo","expires_at":"2025-09-13T00:00:00Z"}]
+      },
+      "capability_map": {"tools":["search","math.add"],"modalities":["text"]},
+      "competence_map": {"code.edit":{"success_rate":0.78,"count":90}},
+      "calibration": {"ece":0.08,"brier":0.19,"bias":"ok"},
+      "resource_curve": {"recipes":{"chat":{"tokens_mean":900,"latency_ms_mean":2200}}},
+      "failure_modes": [{"name":"ocr-tables","hint":"route to structured-OCR"}],
+      "interaction_contract": {"style":"concise","constraints":["cite sources","never write fs without lease"]}
+    }
+  ]
+}
+

@@ -28,6 +28,12 @@ Object Graph placement
 Events (vocabulary)
 - `LogicUnit.Suggested`, `LogicUnit.Installed`, `LogicUnit.Applied`, `LogicUnit.Reverted`, `LogicUnit.Promoted`.
 
+Good defaults to ship
+- Metacognition: enable confidence estimates and simple calibration.
+- Abstain/Escalate Gate: target risk–coverage and abstain when risk is high.
+- Resource Forecaster: predict tokens/latency/$ for chosen recipes and feed budgets.
+- Failure Modes Router: route fragile tasks (e.g., OCR tables, JS‑heavy sites) to safer plans.
+
 Endpoints (planned)
 - `GET /logic-units` (list installed/experimental/suggested)
 - `POST /logic-units/install` (config‑only by default)
@@ -50,4 +56,3 @@ Schemas
 - See `spec/schemas/logic_unit_manifest.json` for the manifest.
 
 See also: Evaluation Harness, Permissions & Policies, Events Vocabulary, Replay & Time Travel.
-

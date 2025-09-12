@@ -28,7 +28,7 @@ See also: [Roadmap](ROADMAP.md)
 - `arw-events`: EventBus trait with LocalBus; façade `Bus` keeps existing SSE endpoints working.
 - `arw-protocol`: `ConnectorHello`, `ConnectorHeartbeat` types.
 - `arw-svc`: new `/tasks/enqueue` (debug/admin-gated) and a local background worker to execute minimal built-in tools via the queue.
-- Inbound NATS→local bus aggregator so /events can unify cross-node events without loops.
+- Inbound NATS→local bus aggregator so `/admin/events` can unify cross-node events without loops.
 
 ## Config (configs/default.toml)
 ```

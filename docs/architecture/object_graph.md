@@ -15,7 +15,7 @@ Project scope (bindings and use)
 Design principle: managers edit inventories; Projects and Agents only reference those inventories. Duplicate data and hidden state are anti‑patterns.
 
 Read‑models and state
-- Server exposes `/state/*` read‑models (observations, beliefs, intents, actions, episodes). These are the source of truth for UI and clients.
+- Server exposes `/state/*` read‑models (observations, beliefs, world, intents, actions, episodes, self/{agent}). These are the source of truth for UI and clients. The `world` view is a scoped, typed belief graph (Project Map) built from the event stream; the `self/{agent}` view is the agent’s metacognitive profile (capabilities, competence, calibration, resource curve, failure modes, interaction contract).
 - Use correlation id (`corr_id`) to stitch events into episodes.
 
 Relationships (examples)

@@ -29,6 +29,7 @@ nav:
   - Architecture:
       - Unified Object Graph: architecture/object_graph.md
       - Events Vocabulary: architecture/events_vocabulary.md
+      - Self‑Model (Metacognition): architecture/self_model.md
       - Logic Units: architecture/logic_units.md
       - Config Patch Engine: architecture/config_patch_engine.md
       - Experiment Orchestrator: architecture/experiment_orchestrator.md

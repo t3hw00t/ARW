@@ -4,57 +4,17 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ARW Logs</title>
-    <style>
-      html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; background: radial-gradient(1200px 600px at 30% -10%, #ffffff, #f7f7f9 55%, #f1f5f9); }
-      .toolbar { display: flex; gap: 8px; padding: 8px; border-bottom: 1px solid #e5e7eb; position: sticky; top: 0; background: rgba(250,250,250,0.85); backdrop-filter: saturate(140%) blur(6px); box-shadow: 0 8px 20px rgba(0,0,0,0.06) }
-      #out { padding: 12px; overflow: auto; height: calc(100% - 44px); }
-      pre { background: linear-gradient(180deg,#ffffff,#fafafa); border: 1px solid #dde1e6; border-radius: 12px; padding: 12px; box-shadow: 0 12px 30px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8) }
-      .kv { display: grid; grid-template-columns: 240px 1fr; gap: 4px 12px; }
-      .k { color: #555; }
-    </style>
   </head>
   <body>
-    <script src="common.js"></script>
     <link rel="stylesheet" href="common.css" />
+    <link rel="stylesheet" href="logs.css" />
+    <script src="common.js" defer></script>
     <div class="toolbar">
-      <label>Port: <input id="port" type="number" min="1" max="65535" value="8090" style="width: 90px"></label>
+      <label>Port: <input id="port" type="number" min="1" max="65535" value="8090"></label>
       <button id="btn-refresh" class="primary">Refresh</button>
       <span id="stat"></span>
     </div>
     <div id="out"></div>
-    <script>
-      const base = (port) => ARW.base(port)
-      async function loadStats() {
-        const out = document.getElementById('out');
-        out.innerHTML = '';
-        const port = ARW.getPortFromInput('port') || 8090;
-        const url = ARW.base(port) + '/introspect/stats';
-        document.getElementById('stat').textContent = 'Loading...';
-        try {
-          const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
-          if (!resp.ok) throw new Error('HTTP ' + resp.status);
-          const j = await resp.json();
-          const wrap = document.createElement('div');
-          wrap.innerHTML = `<h3>Counters</h3><div class="kv">
-            <div class="k">Routes</div><div>${(j.routes||[]).length}</div>
-            <div class="k">Events kinds</div><div>${Object.keys((j.events&&j.events.kinds)||{}).length}</div>
-            <div class="k">Bus published</div><div>${(j.bus&&j.bus.published)||0}</div>
-            <div class="k">Bus delivered</div><div>${(j.bus&&j.bus.delivered)||0}</div>
-          </div>`;
-          const pre = document.createElement('pre');
-          pre.textContent = JSON.stringify(j, null, 2);
-          out.appendChild(wrap);
-          out.appendChild(pre);
-          document.getElementById('stat').textContent = 'OK';
-        } catch (e) {
-          document.getElementById('stat').textContent = 'Error';
-          const pre = document.createElement('pre');
-          pre.textContent = String(e);
-          out.appendChild(pre);
-        }
-      }
-      document.getElementById('btn-refresh').addEventListener('click', loadStats);
-      (async () => { await ARW.applyPortFromPrefs('port'); loadStats(); setInterval(loadStats, 5000) })();
-    </script>
+    <script src="logs.js" defer></script>
   </body>
   </html>

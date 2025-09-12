@@ -133,10 +133,10 @@
   <div class="row">
     <button onclick="hit('/version')">/version</button>
     <button onclick="hit('/about')">/about</button>
-    <button onclick="hit('/introspect/tools')">/introspect/tools</button>
-    <button onclick="hit('/probe')">/probe</button>
-    <button onclick="hit('/models')">/models</button>
-    <button onclick="post('/models/refresh')">POST /models/refresh</button>
+    <button onclick="hit('/admin/introspect/tools')">/admin/introspect/tools</button>
+    <button onclick="hit('/admin/probe')">/admin/probe</button>
+    <button onclick="hit('/admin/models')">/admin/models</button>
+    <button onclick="post('/admin/models/refresh')">POST /admin/models/refresh</button>
   </div>
 
   <div class="cols">
@@ -273,11 +273,26 @@
       <div class="row">
         <button onclick="pullState('observations')">Observations</button>
         <button onclick="pullState('beliefs')">Beliefs</button>
+        <button onclick="pullState('world')">World</button>
         <button onclick="pullState('intents')">Intents</button>
         <button onclick="pullState('actions')">Actions</button>
         <button onclick="pullState('episodes')">Episodes</button>
       </div>
+      <div class="row">
+        <input id="worldQ" placeholder="world: query" style="flex:1;min-width:200px">
+        <input id="worldK" type="number" min="1" max="50" step="1" value="8" style="width:70px">
+        <button class="ghost" onclick="worldSelect()">Select</button>
+        <button class="primary" onclick="contextAssemble()">Assemble</button>
+      </div>
       <pre id="stateOut">{}</pre>
+    </div>
+    <div class="box" data-collapsed="1">
+      <h3>Project Map</h3>
+      <div class="row">
+        <button class="ghost" onclick="worldMapRefresh()">Refresh</button>
+        <label><input type="checkbox" id="wmLive"> live</label>
+      </div>
+      <div id="worldMap" style="max-height:28vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
     </div>
   <div class="box" data-collapsed="1">
       <h3>Self‑Learning <a href="#" class="help" data-doc="orchestrator" data-tip="Signals → suggestions. Gently embedded feedback." title="Self‑Learning docs">?</a></h3>
@@ -330,6 +345,27 @@
       </div>
       <pre id="modelsOut">[]</pre>
     </div>
+    <div class="box" data-collapsed="1">
+      <h3>Agent Card <a href="#" class="help" data-doc="events" data-tip="Self‑model: capabilities, competence, calibration, costs, failure modes." title="Self‑Model docs">?</a> <span id="selfHdrBadge" class="badge warn" style="margin-left:6px"><span class="dot"></span> 0</span></h3>
+      <div class="row">
+        <button class="iconbtn" onclick="selfRefreshList()">Refresh</button>
+        <select id="selfAgentSel" style="min-width:180px"></select>
+        <input id="selfAgentId" placeholder="or type agent id" style="width:200px">
+        <button class="primary" onclick="selfView()">View</button>
+      </div>
+      <div id="selfSummary" class="row" style="flex-direction:column;gap:6px"></div>
+      <div class="row"><button class="iconbtn" id="copyJsonSelf" title="Copy JSON">Copy</button></div>
+      <pre id="selfOut">{}</pre>
+      <h4 style="margin-top:10px">Propose update <span class="key">(admin)</span></h4>
+      <div class="row">
+        <input id="selfWhy" placeholder="rationale" style="flex:1;min-width:200px">
+        <button class="ghost" onclick="selfPropose()">Propose</button>
+        <input id="selfApplyId" placeholder="proposal id" style="width:200px">
+        <button class="ghost" onclick="selfApply()">Apply</button>
+      </div>
+      <textarea id="selfPatch">{}</textarea>
+      <pre id="selfAdminOut">{}</pre>
+    </div>
   </div>
 
   <h3>Response <span class="key">time</span> <code id="rt-main">–</code> <button class="iconbtn" id="copyJsonMain" title="Copy JSON">Copy</button></h3>
@@ -354,7 +390,12 @@ document.getElementById('copyCurlBtn').addEventListener('click', async ()=>{
   if(!lastCurl) return; try{ await navigator.clipboard.writeText(lastCurl); const b = document.getElementById('copyCurlBtn'); const old = b.textContent; b.textContent='Copied'; setTimeout(()=> b.textContent=old, 900);}catch{}
 });
 async function req(method, path, body, outId, rtId){
-  const url = base + path; const init = { method, headers: {}, body: undefined };
+  let p = path;
+  // Auto-prefix admin for sensitive paths unless explicitly public
+  if (!(p.startsWith('/admin') || p.startsWith('/metrics') || p.startsWith('/version') || p.startsWith('/about') || p.startsWith('/spec'))) {
+    p = '/admin' + p;
+  }
+  const url = base + p; const init = { method, headers: {}, body: undefined };
   if (body != null){ init.headers['Content-Type'] = 'application/json'; init.body = JSON.stringify(body); }
   if (__adminHeader) { init.headers['X-ARW-Admin'] = __adminHeader; }
   setLastCurl(mkcurl(method, url, body));
@@ -428,7 +469,7 @@ async function modelsCancel(){ const id=document.getElementById('mId').value.tri
 let es = null;
 function startSSE(replay, prefixes){
   try{ es?.close(); }catch{}
-  let url = base + '/events';
+  let url = base + '/admin/events';
   const qp = [];
   if (replay && replay > 0) qp.push('replay=' + encodeURIComponent(String(replay)));
   if (Array.isArray(prefixes)) {
@@ -527,14 +568,20 @@ es.addEventListener('Models.DownloadProgress', (e)=>{
   }catch{}
 });
 es.onmessage = (e) => pushEvt('message', e.data);
-['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Bus.Gap','Beliefs.Updated','Intents.Proposed','Intents.Approved','Intents.Rejected','Actions.Applied','Actions.HintApplied','Chat.Message'].forEach(k => {
+['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Bus.Gap','Beliefs.Updated','Intents.Proposed','Intents.Approved','Intents.Rejected','Actions.Applied','Actions.HintApplied','Chat.Message','World.Updated'].forEach(k => {
   es.addEventListener(k, (e)=>pushEvt(k, e.data));
 });
 // Feedback live updates
-es.addEventListener('Feedback.Suggested', (e)=>{
-  pushEvt('Feedback.Suggested', e.data);
-  try{ const j=JSON.parse(e.data); document.getElementById('fbLiveOut').textContent = JSON.stringify(j,null,2); fbRenderList(j); }catch{}
-});
+  es.addEventListener('Feedback.Suggested', (e)=>{
+    pushEvt('Feedback.Suggested', e.data);
+    try{ const j=JSON.parse(e.data); document.getElementById('fbLiveOut').textContent = JSON.stringify(j,null,2); fbRenderList(j); }catch{}
+  });
+  // Auto-refresh Project Map on World updates
+  es.addEventListener('World.Updated', async (e)=>{
+    pushEvt('World.Updated', e.data);
+    const live = document.getElementById('wmLive');
+    if (live && live.checked){ try{ await worldMapRefresh(); }catch{} }
+  });
 // Show probe events
 es.addEventListener('Chat.Probe', (e)=>{
   pushEvt('Chat.Probe', e.data);
@@ -554,7 +601,7 @@ function renderInsights(){
   }
   el.innerHTML = lines.join('');
 }
-  ['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Chat.Message','Governor.Changed','Bus.Gap','Beliefs.Updated','Intents.Proposed','Intents.Approved','Intents.Rejected','Actions.Applied','Actions.HintApplied'].forEach(k => {
+  ['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Chat.Message','Governor.Changed','Bus.Gap','Beliefs.Updated','Intents.Proposed','Intents.Approved','Intents.Rejected','Actions.Applied','Actions.HintApplied','World.Updated'].forEach(k => {
     es.addEventListener(k, (e)=>{ agg.total++; agg.kinds[k]=(agg.kinds[k]||0)+1; renderInsights(); });
   });
   // System metrics (low-frequency)
@@ -905,7 +952,47 @@ async function copyStatsNow(){ try{ const r=await fetch(base + '/introspect/stat
 <div id="toast" class="toast"></div>
 <script>
 function showToast(msg){ const t=document.getElementById('toast'); if(!t) return; t.textContent=msg; t.style.display='block'; clearTimeout(window.__toastTimer); window.__toastTimer = setTimeout(()=>{ t.style.display='none'; }, 2500); }
-async function pullState(kind){ try{ const r=await fetch(base + '/state/' + kind); const j=await r.json(); document.getElementById('stateOut').textContent = JSON.stringify(j,null,2); }catch(e){ showToast('state fetch failed'); } }
+async function pullState(kind){ try{ const r=await fetch(base + '/admin/state/' + kind, { headers: { 'X-ARW-Admin': __adminHeader || '' } }); const j=await r.json(); document.getElementById('stateOut').textContent = JSON.stringify(j,null,2); }catch(e){ showToast('state fetch failed'); } }
+async function worldSelect(){
+  try {
+    const q = encodeURIComponent(document.getElementById('worldQ').value||'');
+    const k = encodeURIComponent(document.getElementById('worldK').value||'8');
+    const r = await fetch(base + '/admin/state/world/select?q=' + q + '&k=' + k, { headers: { 'X-ARW-Admin': __adminHeader || '' } });
+    const j = await r.json();
+    document.getElementById('stateOut').textContent = JSON.stringify(j,null,2);
+  } catch(e){ showToast('world select failed'); }
+}
+async function worldMapRefresh(){
+  try {
+    const r = await fetch(base + '/admin/state/world', { headers: { 'X-ARW-Admin': __adminHeader || '' } });
+    const j = await r.json();
+    const data = j?.data || j;
+    const el = document.getElementById('worldMap'); if(!el) return;
+    const cov = data?.coverage || {};
+    const hdr = `<div class='kv'><b>Version</b><span>${data?.version ?? '–'}</span></div>`+
+                `<div class='kv'><b>Entities</b><span>${cov.entities ?? 0}</span></div>`+
+                `<div class='kv'><b>Claims</b><span>${cov.claims ?? 0}</span></div>`+
+                `<div class='kv'><b>Contradictions</b><span>${data?.contradictions ?? 0}</span></div>`+
+                `<div class='kv'><b>Stale</b><span>${data?.stale ?? 0}</span></div>`;
+    // Top claims (by confidence)
+    const claims = (data?.claims || []).slice(0, 5);
+    const claimLines = claims.map(c => {
+      const conf = (c?.confidence ?? 0).toFixed ? (c.confidence).toFixed(2) : (c?.confidence ?? 0);
+      const id = (c?.id || '').toString().slice(0, 80);
+      return `<div class='kv'><span>${id}</span><span>conf: ${conf}</span></div>`;
+    }).join('');
+    el.innerHTML = [`<h4>Summary</h4>`, hdr, `<h4>Top Claims</h4>`, claimLines || '<em>none</em>'].join('');
+  } catch(e){ showToast('world map refresh failed'); }
+}
+async function contextAssemble(){
+  try {
+    const q = encodeURIComponent(document.getElementById('worldQ').value||'');
+    const k = encodeURIComponent(document.getElementById('worldK').value||'8');
+    const r = await fetch(base + '/admin/context/assemble?q=' + q + '&k=' + k, { headers: { 'X-ARW-Admin': __adminHeader || '' } });
+    const j = await r.json();
+    document.getElementById('stateOut').textContent = JSON.stringify(j,null,2);
+  } catch(e){ showToast('assemble failed'); }
+}
 // Episodes UI
 let __epTimer = null;
 function episodesRender(j){ try{
@@ -953,6 +1040,81 @@ document.addEventListener('DOMContentLoaded', ()=>{
     if(cb.checked){ tick(); __epTimer = setInterval(tick, 3000); }
     else { if(__epTimer) { clearInterval(__epTimer); __epTimer=null; } }
   });
+});
+// ---- Self‑Model panel ----
+async function selfRefreshList(){
+  try{
+    const r = await fetch(base + '/state/self');
+    const j = await r.json();
+    const items = (j && j.data && j.data.items) || [];
+    const sel = document.getElementById('selfAgentSel');
+    if(sel){ sel.innerHTML = ''; items.forEach(it => { const o=document.createElement('option'); o.value = it.agent || ''; o.textContent = it.agent || '(unnamed)'; sel.appendChild(o); }); }
+    const badge = document.getElementById('selfHdrBadge');
+    if (badge){ badge.className = 'badge ' + (items.length ? 'good' : 'warn'); badge.innerHTML = '<span class="dot"></span> ' + items.length; }
+  }catch(e){ showToast('self list failed'); }
+}
+function _fmtPct(x){ if(typeof x !== 'number' || !isFinite(x)) return '–'; return Math.round(x*1000)/10 + '%'; }
+function _kv(k,v){ return `<div><span class="key">${k}</span> <code>${v}</code></div>`; }
+function selfRenderSummary(m){
+  const el = document.getElementById('selfSummary'); if(!el) return;
+  if(!m || typeof m !== 'object'){ el.innerHTML = ''; return; }
+  const id = m.identity || {};
+  const cap = m.capability_map || {};
+  const calib = m.calibration || {};
+  const comp = m.competence_map || {};
+  const fm = Array.isArray(m.failure_modes) ? m.failure_modes : [];
+  const lu = Array.isArray(id.logic_units) ? id.logic_units.length : 0;
+  const leases = Array.isArray(id.leases) ? id.leases.length : 0;
+  const tools = Array.isArray(cap.tools) ? cap.tools.length : 0;
+  const modalities = Array.isArray(cap.modalities) ? cap.modalities.length : 0;
+  const compRows = Object.entries(comp).map(([k,v])=>({k, n: (v && v.count) || 0, s: (v && v.success_rate) || 0})).sort((a,b)=>b.n-a.n).slice(0,3).map(x=> `${x.k}:${_fmtPct(x.s)}(${x.n})`).join('  ');
+  const rows = [ _kv('family', id.model_family || '–'), _kv('hash', id.model_hash || '–'), _kv('units', lu), _kv('leases', leases), _kv('tools', tools), _kv('modal', modalities), _kv('ECE', (typeof calib.ece === 'number') ? (Math.round(calib.ece*1000)/1000) : '–'), _kv('Brier', (typeof calib.brier === 'number') ? (Math.round(calib.brier*1000)/1000) : '–'), _kv('competence', compRows || '–'), _kv('fail modes', fm.length) ];
+  el.innerHTML = `<div class="row">${rows.join('')}</div>`;
+}
+async function selfView(){
+  let id = (document.getElementById('selfAgentSel')?.value || '').trim();
+  const typed = (document.getElementById('selfAgentId')?.value || '').trim();
+  if(!id && typed) id = typed;
+  if(!id){ showToast('Choose or type an agent id'); return; }
+  try{
+    const r = await fetch(base + '/state/self/' + encodeURIComponent(id));
+    const j = await r.json();
+    const model = (j && j.data) || j || {};
+    const out = document.getElementById('selfOut'); if(out) out.textContent = JSON.stringify(model, null, 2);
+    selfRenderSummary(model);
+  }catch(e){ showToast('self fetch failed'); }
+}
+async function selfPropose(){
+  const agentSel = document.getElementById('selfAgentSel');
+  const agentInp = document.getElementById('selfAgentId');
+  const agent = (agentSel?.value || agentInp?.value || '').trim();
+  if(!agent){ showToast('Agent id required'); return; }
+  let patchTxt = (document.getElementById('selfPatch')?.value || '{}');
+  let patch; try{ patch = JSON.parse(patchTxt); }catch{ showToast('Invalid patch JSON'); return; }
+  const rationale = (document.getElementById('selfWhy')?.value || '').trim();
+  try{
+    const resp = await fetch(base + '/admin/self_model/propose', { method:'POST', headers:{ 'Content-Type':'application/json', 'X-ARW-Admin': __adminHeader || '' }, body: JSON.stringify({ agent, patch, rationale }) });
+    const txt = await resp.text();
+    const out = document.getElementById('selfAdminOut'); if(out) out.textContent = txt;
+    if(resp.ok){ showToast('Proposal created'); try{ const j = JSON.parse(txt); document.getElementById('selfApplyId').value = j?.data?.id || j?.id || ''; }catch{} }
+    else if(resp.status === 403){ showToast('403 Forbidden — admin token required'); }
+  }catch{ showToast('Network error'); }
+}
+async function selfApply(){
+  const proposal_id = (document.getElementById('selfApplyId')?.value || '').trim();
+  if(!proposal_id){ showToast('proposal id required'); return; }
+  try{
+    const resp = await fetch(base + '/admin/self_model/apply', { method:'POST', headers:{ 'Content-Type':'application/json', 'X-ARW-Admin': __adminHeader || '' }, body: JSON.stringify({ proposal_id }) });
+    const txt = await resp.text();
+    const out = document.getElementById('selfAdminOut'); if(out) out.textContent = txt;
+    if(resp.ok){ showToast('Applied'); }
+    else if(resp.status === 403){ showToast('403 Forbidden — admin token required'); }
+  }catch{ showToast('Network error'); }
+}
+document.addEventListener('DOMContentLoaded', ()=>{
+  const btn = document.getElementById('copyJsonSelf');
+  if(btn){ btn.addEventListener('click', async ()=>{ try{ const s = document.getElementById('selfOut').textContent; await navigator.clipboard.writeText(s); showToast('Copied'); }catch{} }); }
+  selfRefreshList();
 });
 async function epApply(id){ try{ const r=await fetch(base + '/feedback/apply', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({id})}); if(r.ok){ showToast('Applied '+id); } else { showToast('Apply failed ('+r.status+')'); } }catch{ showToast('Apply failed'); } }
 // Bind copy buttons and insights toggle after DOM ready

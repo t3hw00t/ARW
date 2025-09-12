@@ -62,9 +62,9 @@ nix develop
 
 ## Peek at What's Available
 - Health: `GET /healthz`
-- Events (SSE): `GET /events`
-- Tools: `GET /introspect/tools`
-- Schemas: `GET /introspect/schemas/{id}`
+- Events (SSE): `GET /admin/events` (send `X-ARW-Admin` or Bearer)
+- Tools: `GET /admin/introspect/tools`
+- Schemas: `GET /admin/introspect/schemas/{id}`
 - Debug UI: open `/debug` (if provided by your build)
 
 ## Debug UI Tips
@@ -82,13 +82,13 @@ nix develop
 - The Insights overlay shows live event totals and the top 3 routes by EWMA latency.
 
 ## Security
-- Sensitive endpoints (`/debug`, `/probe`, `/memory*`, `/models*`, `/governor*`, `/introspect*`, `/chat*`, `/feedback*`) are gated.
+- Sensitive endpoints (`/admin/*` surfaces, incl. `/admin/probe`, `/admin/models*`, `/admin/introspect*`, `/admin/chat*`, `/admin/feedback*`) are gated.
 - Development: set `ARW_DEBUG=1`. Hardened: set `ARW_ADMIN_TOKEN` and send header `X-ARW-Admin: <token>`.
  - Full list of environment variables: see Configuration.
 
 ## Portable Mode
 - Set `ARW_PORTABLE=1` to keep state near the app bundle.
-- Paths and memory layout are reported by `GET /probe`.
+- Paths and memory layout are reported by `GET /admin/probe`.
 
 ## Next Steps
 - Read the Features page to understand the capabilities.

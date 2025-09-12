@@ -18,7 +18,7 @@ bash scripts/setup.sh
 bash scripts/start.sh --wait-health
 ```
 
-Open http://127.0.0.1:8090 and visit `/debug` (set `ARW_DEBUG=1` for local dev). The Debug UI includes an Episodes panel (stitched by `corr_id`) and live state snapshots; server read‑models are exposed under `/state/*` (observations, beliefs, intents, actions, episodes).
+Open http://127.0.0.1:8090 and visit `/debug` (set `ARW_DEBUG=1` for local dev). The Debug UI includes an Episodes panel (stitched by `corr_id`) and live state snapshots; server read‑models are exposed under `/state/*` (observations, beliefs, world, intents, actions, episodes, self/{agent}).
 
 Docker (amd64/arm64); Native binaries: Windows (x64/ARM64), macOS (x64/ARM64), Linux (x64/ARM64)
 ```bash
@@ -31,11 +31,13 @@ docker run --rm -p 8090:8090 ghcr.io/t3hw00t/arw-svc:latest
 - Tools: macro‑driven registration with generated JSON Schemas
 - Observability: tracing/logging/metrics and event journal (optional)
 - Packaging: portable installs and per‑user state by default
+ - Clustering (design): single Home Node with invited Workers under strict policy and egress control; live sharing and pooled compute remain opt‑in. See `docs/architecture/cluster_federation.md`.
 
 Three primary perspectives
 - Project Hub: the center of real‑world work (files/notes/agents/data/runs)
 - Chat: an episode viewer/controller bound to project+agent with a live sidecar
 - Training Park: impressionistic dials for instincts/priorities, retrieval diversity, tool success, hallucination risk
+ - Agent Card: compact self‑model (confidence, competence, costs, active leases) with reliability mini‑chart
 
 Logic Units (config‑first strategy packs)
 - Installable “strategy packs” that reconfigure agents safely (config‑only preferred).
@@ -51,10 +53,12 @@ Universal sidecar (always on)
 
 - Quickstart guide: `docs/guide/quickstart.md`
 - Architecture: `docs/architecture/object_graph.md` and `docs/architecture/events_vocabulary.md`
+- World Model: `docs/WORLD_MODEL.md`
 - Desktop Launcher: `docs/guide/launcher.md`
 - Admin Endpoints: `docs/guide/admin_endpoints.md`
 - Security Hardening: `docs/guide/security_hardening.md`
 - Roadmap: `docs/ROADMAP.md`
+ - Clustering blueprint: `docs/architecture/cluster_federation.md`
 
 Commons Kit (what we ship on top)
 - One‑click “agent recipes”: manifest bundles of prompts + tools + guardrails + minimal UI. Install by dropping a folder into `recipes/` and launching. See `docs/guide/recipes.md` and schema under `spec/schemas/recipe_manifest.json`.

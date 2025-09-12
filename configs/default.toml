@@ -6,8 +6,22 @@ logs_dir  = "%LOCALAPPDATA%/arw/logs"
 
 [cluster]
 enabled = false
-# In-process defaults; switch to "nats" when deploying a broker
+# Role and identity (documented; not all fields are wired yet)
+# role = "home"            # other: "worker" (default: home)
+# node_id = "hostname-or-uuid"
+
+# Bus/Queue defaults; switch to "nats" when deploying a broker
 bus = "local"
 queue = "local"
 # nats_url = "nats://127.0.0.1:4222"
-# node_id = "hostname-or-uuid"
+
+# Egress policy preview & ledger (planned)
+# egress_preview = true
+# egress_ledger   = true
+
+# Session sharing (planned; roles: view/suggest/drive)
+# share_sessions = false
+
+# Admission and budgets for offload (planned defaults)
+# min_mbps = 2.0
+# soft_budget_degrade_pct = 80

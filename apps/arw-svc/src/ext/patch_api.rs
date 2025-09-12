@@ -36,7 +36,7 @@ pub async fn dry_run(Json(req): Json<DryRunReq>) -> impl IntoResponse {
             .filter_map(|p| p.get("target").and_then(|s| s.as_str()))
             .collect::<Vec<_>>()
     });
-    super::ok(json!({ "diff": summary, "warnings": [] as [Value;0] }))
+    super::ok(json!({ "diff": summary, "warnings": Vec::<Value>::new() }))
 }
 
 pub async fn apply(State(state): State<AppState>, Json(req): Json<ApplyPatchReq>) -> impl IntoResponse {
@@ -65,7 +65,7 @@ pub async fn apply(State(state): State<AppState>, Json(req): Json<ApplyPatchReq>
         }
     }
     // Ensure root.targets exists
-    let targets = cfg.entry("targets".into()).or_insert(Value::Object(Default::default()));
+    let targets = cfg.entry("targets").or_insert(Value::Object(Default::default()));
     // Apply patches (merge only)
     for p in &req.patches {
         let target = p.get("target").and_then(|s| s.as_str()).unwrap_or("");

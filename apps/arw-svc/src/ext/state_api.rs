@@ -75,6 +75,14 @@ fn actions() -> &'static RwLock<VecDeque<serde_json::Value>> {
     ACTIONS.get_or_init(|| RwLock::new(VecDeque::with_capacity(256)))
 }
 
+// Public snapshots (for internal assembly)
+pub async fn intents_snapshot() -> Vec<serde_json::Value> {
+    intents().read().unwrap().iter().cloned().collect()
+}
+pub async fn actions_snapshot() -> Vec<serde_json::Value> {
+    actions().read().unwrap().iter().cloned().collect()
+}
+
 pub async fn on_event(env: &Envelope) {
     // Always keep observations current
     obs_on_event(env).await;
@@ -310,19 +318,32 @@ pub async fn policy_state_get() -> impl IntoResponse {
     super::ok(json!({"leases": s}))
 }
 
+// Public read-model: current models list (read-only)
+#[utoipa::path(get, path = "/state/models", tag = "Public/State", responses(
+    (status=200, description="Models list")
+))]
+pub async fn models_state_get() -> impl IntoResponse {
+    let list = crate::ext::models().read().await.clone();
+    super::ok(serde_json::Value::Array(list))
+}
+
 // Snapshot of an episode (by corr_id)
 #[arw_admin(
     method = "GET",
     path = "/admin/state/episode/:id/snapshot",
     summary = "Episode snapshot for reproducibility"
 )]
-pub async fn episode_snapshot_get(axum::extract::Path(id): axum::extract::Path<String>) -> impl IntoResponse {
-    let map = episodes_map().read().unwrap();
-    if let Some(ep) = map.get(&id) {
-        // Build a minimal snapshot; future: include effective config/model hashes, active units, etc.
+pub async fn episode_snapshot_get(
+    axum::extract::State(_state): axum::extract::State<crate::AppState>,
+    axum::extract::Path(id): axum::extract::Path<String>,
+) -> impl IntoResponse {
+    let ep_opt = {
+        let map = episodes_map().read().unwrap();
+        map.get(&id).cloned()
+    };
+    if let Some(ep) = ep_opt {
         let first_ts = ep.items.first().map(|e| e.time.clone()).unwrap_or_default();
         let last_ts = ep.items.last().map(|e| e.time.clone()).unwrap_or_default();
-        // Load current config for effective config enrichment (best-effort)
         let cfg = crate::ext::io::load_json_file_async(&crate::ext::paths::config_path())
             .await
             .unwrap_or_else(|| json!({}));
@@ -331,10 +352,7 @@ pub async fn episode_snapshot_get(axum::extract::Path(id): axum::extract::Path<S
             "started": first_ts,
             "ended": last_ts,
             "items": ep.items,
-            "effective_config": {
-                "logic_units": [],
-                "config": cfg
-            }
+            "effective_config": { "logic_units": [], "config": cfg }
         }));
     }
     super::ok(json!({"error": "not_found"}))

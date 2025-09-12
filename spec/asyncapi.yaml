@@ -48,6 +48,10 @@ channels:
     subscribe:
       message:
         $ref: '#/components/messages/FeedbackApplied'
+  World.Updated:
+    subscribe:
+      message:
+        $ref: '#/components/messages/WorldUpdated'
 components:
   messages:
     ServiceStart:
@@ -133,3 +137,14 @@ components:
           id: { type: string }
           action: { type: string }
           params: { type: object }
+    WorldUpdated:
+      name: World.Updated
+      payload:
+        type: object
+        properties:
+          version: { type: integer }
+          graph_version: { type: integer }
+          proj: { type: ["string","null"] }
+          nodes: { type: integer }
+          edges: { type: integer }
+          claims: { type: integer }

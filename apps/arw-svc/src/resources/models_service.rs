@@ -188,6 +188,24 @@ impl ModelsService {
         Self
     }
 
+    // Track in-flight downloads by sha256 to avoid duplicate concurrent fetches
+    fn inflight_hash_cell() -> &'static RwLock<HashSet<String>> {
+        static INFLIGHT: OnceCell<RwLock<HashSet<String>>> = OnceCell::new();
+        INFLIGHT.get_or_init(|| RwLock::new(HashSet::new()))
+    }
+    async fn inflight_contains(hash: &str) -> bool {
+        Self::inflight_hash_cell().read().await.contains(hash)
+    }
+    async fn inflight_add(hash: &str) {
+        Self::inflight_hash_cell()
+            .write()
+            .await
+            .insert(hash.to_string());
+    }
+    async fn inflight_remove(hash: &str) {
+        Self::inflight_hash_cell().write().await.remove(hash);
+    }
+
     // Whether to include budget snapshot in progress events (opt-in for compatibility).
     fn progress_include_budget() -> bool {
         matches!(
@@ -287,6 +305,13 @@ impl ModelsService {
             .and_then(|s| s.parse::<u64>().ok())
             .unwrap_or(4096)
             .saturating_mul(1024 * 1024)
+    }
+
+    fn models_quota_bytes() -> Option<u64> {
+        std::env::var("ARW_MODELS_QUOTA_MB")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .map(|mb| mb.saturating_mul(1024 * 1024))
     }
 
     // Produce a cross-platform safe filename (Windows/macOS/Linux).
@@ -447,8 +472,174 @@ impl ModelsService {
         filename_star.or(filename_plain)
     }
 
+    // Locate an existing CAS blob by sha256; returns (path, file_name)
+    async fn find_cas_by_hash(sha256: &str) -> Option<(std::path::PathBuf, String)> {
+        let dir = crate::ext::paths::state_dir().join("models").join("by-hash");
+        if let Ok(mut rd) = tokio::fs::read_dir(&dir).await {
+            while let Ok(Some(ent)) = rd.next_entry().await {
+                let name = ent.file_name().to_string_lossy().to_string();
+                if name == sha256 || name.starts_with(&format!("{}.", sha256)) {
+                    return Some((ent.path(), name));
+                }
+            }
+        }
+        None
+    }
+
     pub async fn list(&self) -> Vec<Value> {
         crate::ext::models().read().await.clone()
+    }
+
+    // Run a single CAS GC sweep. Deletes unreferenced blobs older than ttl_days.
+    // Publishes a compact summary event on success.
+    pub async fn cas_gc_once(bus: &arw_events::Bus, ttl_days: u64) {
+        use tokio::fs as afs;
+        let state_dir = crate::ext::paths::state_dir();
+        let models_dir = state_dir.join("models");
+        let cas_dir = models_dir.join("by-hash");
+        let ttl = std::time::Duration::from_secs(ttl_days.saturating_mul(24 * 3600));
+        let now = std::time::SystemTime::now();
+
+        // Collect referenced paths from current models list
+        let mut refs: std::collections::HashSet<String> = std::collections::HashSet::new();
+        for m in crate::ext::models().read().await.iter() {
+            if let Some(p) = m.get("path").and_then(|v| v.as_str()) {
+                refs.insert(p.to_string());
+            }
+        }
+        // Collect referenced paths from manifests under models/*.json
+        if let Ok(mut rd) = afs::read_dir(&models_dir).await {
+            while let Ok(Some(ent)) = rd.next_entry().await {
+                let p = ent.path();
+                if p.extension().and_then(|s| s.to_str()).unwrap_or("") != "json" {
+                    continue;
+                }
+                if let Ok(bytes) = afs::read(&p).await {
+                    if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                        if let Some(s) = v.get("path").and_then(|x| x.as_str()) {
+                            refs.insert(s.to_string());
+                        }
+                    }
+                }
+            }
+        }
+        let mut scanned: u64 = 0;
+        let mut kept: u64 = 0;
+        let mut deleted: u64 = 0;
+        let mut deleted_bytes: u64 = 0;
+        if let Ok(mut rd) = afs::read_dir(&cas_dir).await {
+            while let Ok(Some(ent)) = rd.next_entry().await {
+                let path = ent.path();
+                let Ok(md) = ent.metadata().await else { continue };
+                if !md.is_file() { continue; }
+                scanned += 1;
+                let path_str = path.to_string_lossy().to_string();
+                if refs.contains(&path_str) {
+                    kept += 1;
+                    continue;
+                }
+                // Age check
+                let old_enough = match md.modified() {
+                    Ok(m) => now.duration_since(m).unwrap_or_default() >= ttl,
+                    Err(_) => false,
+                };
+                if old_enough {
+                    deleted_bytes = deleted_bytes.saturating_add(md.len());
+                    let _ = afs::remove_file(&path).await;
+                    deleted += 1;
+                } else {
+                    kept += 1;
+                }
+            }
+        }
+        let mut payload = json!({
+            "scanned": scanned,
+            "kept": kept,
+            "deleted": deleted,
+            "deleted_bytes": deleted_bytes,
+            "ttl_days": ttl_days
+        });
+        crate::ext::corr::ensure_corr(&mut payload);
+        bus.publish("Models.CasGc", &payload);
+    }
+
+    // Best-effort migration: move legacy model files to CAS layout if sha256 is present.
+    pub async fn migrate_legacy_to_cas() {
+        use tokio::fs as afs;
+        let dir = crate::ext::paths::state_dir().join("models");
+        let cas_dir = dir.join("by-hash");
+        let _ = afs::create_dir_all(&cas_dir).await;
+        let mut changed = false;
+        let mut list = crate::ext::models().read().await.clone();
+        for m in list.iter_mut() {
+            let sh = match m.get("sha256").and_then(|v| v.as_str()) {
+                Some(s) if s.len() == 64 => s.to_string(),
+                _ => continue,
+            };
+            let path = match m.get("path").and_then(|v| v.as_str()) {
+                Some(p) => std::path::PathBuf::from(p),
+                None => continue,
+            };
+            // Skip if already under by-hash
+            if let Some(parent) = path.parent() {
+                if parent.ends_with("by-hash") {
+                    continue;
+                }
+            }
+            // Move into CAS layout if file exists
+            if afs::metadata(&path).await.is_ok() {
+                let ext = path
+                    .extension()
+                    .and_then(|s| s.to_str())
+                    .map(|s| s.to_string());
+                let cas_file = match ext {
+                    Some(ex) if !ex.is_empty() => format!("{}.{}", sh, ex),
+                    _ => sh.clone(),
+                };
+                let cas_path = cas_dir.join(&cas_file);
+                if afs::metadata(&cas_path).await.is_err() {
+                    let _ = afs::rename(&path, &cas_path).await;
+                }
+                // Update model entry
+                if let Some(obj) = m.as_object_mut() {
+                    obj.insert(
+                        "path".into(),
+                        Value::String(cas_path.to_string_lossy().to_string()),
+                    );
+                    obj.insert("cas".into(), Value::String("sha256".into()));
+                    obj.insert("file".into(), Value::String(cas_file.clone()));
+                }
+                // Update manifest if present
+                if let Some(id) = m.get("id").and_then(|v| v.as_str()) {
+                    let manifest_path =
+                        dir.join(format!("{}.json", Self::sanitize_file_name(id)));
+                    if let Some(mut man) = crate::ext::io::load_json_file_async(&manifest_path)
+                        .await
+                        .and_then(|v| v.as_object().cloned())
+                    {
+                        man.insert(
+                            "path".into(),
+                            Value::String(cas_path.to_string_lossy().to_string()),
+                        );
+                        man.insert("file".into(), Value::String(cas_file));
+                        man.insert("cas".into(), Value::String("sha256".into()));
+                        let _ = afs::write(
+                            &manifest_path,
+                            serde_json::to_vec(&Value::Object(man)).unwrap_or_default(),
+                        )
+                        .await;
+                    }
+                }
+                changed = true;
+            }
+        }
+        if changed {
+            let _ = crate::ext::io::save_json_file_async(
+                &crate::ext::paths::models_path(),
+                &Value::Array(list),
+            )
+            .await;
+        }
     }
 
     pub async fn refresh(&self, state: &AppState) -> Vec<Value> {
@@ -653,7 +844,7 @@ impl ModelsService {
             }
         }
         if already_in_progress {
-            let p = json!({"id": id_in, "status":"already-in-progress"});
+            let _p = json!({"id": id_in, "status":"already-in-progress"});
             emit_progress(
                 &state.bus,
                 &id_in,
@@ -665,6 +856,71 @@ impl ModelsService {
             return Ok(());
         }
         // Inputs validated above; proceed.
+        // If we already have the CAS blob, short-circuit to completion
+        if let Some(ref sh) = expect_sha_pre {
+            if let Some((existing_path, cas_file_name)) = Self::find_cas_by_hash(sh).await {
+                let target_dir = crate::ext::paths::state_dir().join("models");
+                let provider = provider_in.clone().unwrap_or("local".into());
+                let bytes = tokio::fs::metadata(&existing_path).await.map(|m| m.len()).unwrap_or(0);
+                // Write manifest
+                let manifest_path =
+                    target_dir.join(format!("{}.json", Self::sanitize_file_name(&id_in)));
+                let mut manifest = serde_json::Map::new();
+                manifest.insert("id".into(), Value::String(id_in.clone()));
+                manifest.insert("file".into(), Value::String(cas_file_name.clone()));
+                manifest.insert(
+                    "path".into(),
+                    Value::String(existing_path.to_string_lossy().to_string()),
+                );
+                manifest.insert("url".into(), Value::String(url_in.clone()));
+                manifest.insert("sha256".into(), Value::String(sh.clone()));
+                manifest.insert("cas".into(), Value::String("sha256".into()));
+                manifest.insert(
+                    "bytes".into(),
+                    Value::Number(serde_json::Number::from(bytes)),
+                );
+                manifest.insert("provider".into(), Value::String(provider.clone()));
+                manifest.insert("verified".into(), Value::Bool(true));
+                let _ = tokio::fs::write(
+                    &manifest_path,
+                    serde_json::to_vec(&Value::Object(manifest)).unwrap_or_default(),
+                )
+                .await;
+                // Update models list
+                {
+                    let mut v = crate::ext::models().write().await;
+                    if let Some(m) = v
+                        .iter_mut()
+                        .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id_in))
+                    {
+                        if let Some(obj) = m.as_object_mut() {
+                            obj.insert("status".into(), Value::String("available".into()));
+                            obj.insert(
+                                "path".into(),
+                                Value::String(existing_path.to_string_lossy().to_string()),
+                            );
+                            obj.insert("sha256".into(), Value::String(sh.clone()));
+                            obj.insert("cas".into(), Value::String("sha256".into()));
+                            obj.insert("file".into(), Value::String(cas_file_name.clone()));
+                            obj.insert("bytes".into(), Value::Number(serde_json::Number::from(bytes)));
+                        }
+                    }
+                }
+                let _ = crate::ext::io::save_json_file_async(
+                    &crate::ext::paths::models_path(),
+                    &Value::Array(crate::ext::models().read().await.clone()),
+                )
+                .await;
+                // Publish completion as cached
+                let mut p = json!({"id": id_in, "status":"complete", "file": cas_file_name, "provider": provider, "code":"cached"});
+                crate::ext::corr::ensure_corr(&mut p);
+                state.bus.publish("Models.DownloadProgress", &p);
+                state
+                    .bus
+                    .publish("Models.Changed", &json!({"op":"downloaded","id": id_in}));
+                return Ok(());
+            }
+        }
         // Publish start (include initial budget snapshot)
         let mut dl_budget = crate::ext::budget::Budget::for_download();
         if let Some(ov) = budget_override.clone() {
@@ -736,6 +992,15 @@ impl ModelsService {
         }
         tokio::spawn(async move {
             let _guard = ActiveJobGuard::new(&id, &job);
+            // Guard inflight hash entry
+            struct HashGuard(Option<String>);
+            impl Drop for HashGuard {
+                fn drop(&mut self) {
+                    if let Some(h) = self.0.take() {
+                        tokio::spawn(async move { ModelsService::inflight_remove(&h).await });
+                    }
+                }
+            }
             use sha2::Digest;
             use tokio::fs as afs;
             use tokio::io::{AsyncWriteExt, BufWriter};
@@ -776,6 +1041,25 @@ impl ModelsService {
             if let Ok(md) = afs::metadata(&tmp).await {
                 resume_from = md.len();
             }
+            // Mark inflight by hash (if any)
+            let _hash_guard = if let Some(ref sh) = expect_sha {
+                if ModelsService::inflight_contains(sh).await {
+                    // Another job is already fetching this hash; inform and exit
+                    emit_progress(
+                        &sp.bus,
+                        &id,
+                        Some("already-in-progress"),
+                        Some("already-in-progress-hash"),
+                        if Self::progress_include_budget() { Some(&budget) } else { None },
+                        None,
+                    );
+                    return;
+                }
+                ModelsService::inflight_add(sh).await;
+                HashGuard(Some(sh.clone()))
+            } else {
+                HashGuard(None)
+            };
             // resume_from is set from existing .part size when present
             // Initial send with small, budget-aware retry/backoff
             let max_attempts: u32 = std::env::var("ARW_DL_SEND_RETRIES")
@@ -783,6 +1067,63 @@ impl ModelsService {
                 .and_then(|s| s.parse::<u32>().ok())
                 .unwrap_or(2);
             let mut attempt: u32 = 0;
+            // Optional preflight HEAD to check size and validators
+            if std::env::var("ARW_DL_PREFLIGHT").ok().as_deref() == Some("1") {
+                let mut rq = client.head(&url);
+                rq = budget.apply_to_request(rq);
+                if budget.hard_ms == 0 {
+                    if let Some(d) = Self::idle_timeout_duration() {
+                        rq = rq.timeout(d);
+                    }
+                }
+                if let Ok(head) = rq.send().await {
+                    if let Some(total) = head.content_length() {
+                        // Quota check: CAS dir size + total must not exceed quota
+                        if let Some(quota) = Self::models_quota_bytes() {
+                            // compute CAS total
+                            let cas_dir = crate::ext::paths::state_dir().join("models").join("by-hash");
+                            let mut cas_total: u64 = 0;
+                            if let Ok(mut rd) = afs::read_dir(&cas_dir).await {
+                                while let Ok(Some(ent)) = rd.next_entry().await {
+                                    if let Ok(md) = ent.metadata().await {
+                                        if md.is_file() { cas_total = cas_total.saturating_add(md.len()); }
+                                    }
+                                }
+                            }
+                            if cas_total.saturating_add(total) > quota {
+                                let extra = json!({"quota": quota, "cas_total": cas_total, "need": total});
+                                emit_error(
+                                    &sp.bus,
+                                    &id,
+                                    "quota_exceeded",
+                                    "models quota exceeded",
+                                    Some(&budget),
+                                    Some(extra),
+                                )
+                                .await;
+                                return;
+                            }
+                        }
+                        // Also respect max_bytes
+                        if Self::max_download_bytes() > 0 && total > Self::max_download_bytes() {
+                            let extra = json!({"total": total, "max_bytes": Self::max_download_bytes()});
+                            emit_error(
+                                &sp.bus,
+                                &id,
+                                "size_limit",
+                                "size exceeds limit",
+                                Some(&budget),
+                                Some(extra),
+                            )
+                            .await;
+                            return;
+                        }
+                    }
+                    // Save validators if present
+                    Self::save_resume_validators(&meta_path, head.headers()).await;
+                }
+            }
+
             let resp_result = loop {
                 // Build a fresh request each attempt so we don't reuse a moved builder
                 let mut rq = client.get(&url);
@@ -1419,6 +1760,7 @@ impl ModelsService {
                         };
                         if actual != *exp {
                             let _ = afs::remove_file(&tmp).await;
+                            let _ = afs::remove_file(&meta_path).await;
                             let extra = json!({"expected": exp.clone(), "actual": actual});
                             emit_error(
                                 &sp.bus,
@@ -1437,6 +1779,7 @@ impl ModelsService {
                         if let Ok(md) = afs::metadata(&tmp).await {
                             if md.len() != total_all {
                                 let _ = afs::remove_file(&tmp).await;
+                                let _ = afs::remove_file(&meta_path).await;
                                 let extra =
                                     json!({"expected_bytes": total_all, "actual_bytes": md.len()});
                                 emit_error(
@@ -1452,35 +1795,90 @@ impl ModelsService {
                             }
                         }
                     }
-                    // Promote tmp to final target path now that verification passed
-                    if let Err(_e) = afs::rename(&tmp, &target).await {
-                        // On Windows, rename fails if target exists; try removing existing then rename again.
-                        let _ = afs::remove_file(&target).await;
-                        if let Err(e2) = afs::rename(&tmp, &target).await {
+                    // Promote tmp to a content-addressed target path now that verification passed
+                    // Layout: <state>/models/by-hash/<sha256>[.<ext>]
+                    let cas_file_name: String;
+                    if let Some(ref exp) = expect_sha {
+                        let cas_dir = target_dir.join("by-hash");
+                        if let Err(e) = afs::create_dir_all(&cas_dir).await {
                             emit_error(
                                 &sp.bus,
                                 &id,
-                                "finalize_failed",
-                                &format!("finalize failed: {}", e2),
+                                "mkdir_failed",
+                                &format!("mkdir failed: {}", e),
                                 Some(&budget),
                                 None,
                             )
                             .await;
                             return;
                         }
+                        // Derive a canonical filename using the hash and the original extension (if any)
+                        let ext = final_name.rsplit('.').next().filter(|s| *s != final_name);
+                        cas_file_name = match ext {
+                            Some(ex) if !ex.is_empty() => format!("{}.{}", exp, ex),
+                            _ => exp.clone(),
+                        };
+                        let cas_target = cas_dir.join(&cas_file_name);
+                        if afs::metadata(&cas_target).await.is_ok() {
+                            // Already have this blob; discard temp
+                            let _ = afs::remove_file(&tmp).await;
+                        } else if let Err(_e) = afs::rename(&tmp, &cas_target).await {
+                            // On Windows, rename fails if target exists or is locked; try removing existing then rename again.
+                            let _ = afs::remove_file(&cas_target).await;
+                            if let Err(e2) = afs::rename(&tmp, &cas_target).await {
+                                emit_error(
+                                    &sp.bus,
+                                    &id,
+                                    "finalize_failed",
+                                    &format!("finalize failed: {}", e2),
+                                    Some(&budget),
+                                    None,
+                                )
+                                .await;
+                                return;
+                            }
+                        }
+                        // update target to the content-addressed path
+                        target = cas_target.clone();
+                    } else {
+                        // Fallback (should not happen since we require sha256): keep original target path
+                        if let Err(_e) = afs::rename(&tmp, &target).await {
+                            let _ = afs::remove_file(&target).await;
+                            if let Err(e2) = afs::rename(&tmp, &target).await {
+                                emit_error(
+                                    &sp.bus,
+                                    &id,
+                                    "finalize_failed",
+                                    &format!("finalize failed: {}", e2),
+                                    Some(&budget),
+                                    None,
+                                )
+                                .await;
+                                return;
+                            }
+                        }
+                        cas_file_name = final_name.clone();
                     }
                     // cleanup sidecar meta on success
                     let _ = afs::remove_file(&meta_path).await;
                     // Write a sidecar manifest <id>.json alongside the model
                     let manifest_path =
                         target_dir.join(format!("{}.json", Self::sanitize_file_name(&id)));
+                    // Emit manifest written event
+                    let mut ev = json!({"id": id, "manifest_path": manifest_path.to_string_lossy(), "sha256": expect_sha.clone(), "cas": "sha256"});
+                    crate::ext::corr::ensure_corr(&mut ev);
+                    sp.bus.publish("Models.ManifestWritten", &ev);
                     let bytes = match afs::metadata(&target).await {
                         Ok(md) => md.len(),
                         Err(_) => 0,
                     };
                     let mut manifest = serde_json::Map::new();
                     manifest.insert("id".into(), Value::String(id.clone()));
-                    manifest.insert("file".into(), Value::String(final_name.clone()));
+                    // file: canonical content-addressed filename; name: original display filename (if different)
+                    manifest.insert("file".into(), Value::String(cas_file_name.clone()));
+                    if cas_file_name != final_name {
+                        manifest.insert("name".into(), Value::String(final_name.clone()));
+                    }
                     manifest.insert(
                         "path".into(),
                         Value::String(target.to_string_lossy().to_string()),
@@ -1488,6 +1886,7 @@ impl ModelsService {
                     manifest.insert("url".into(), Value::String(url.clone()));
                     if let Some(exp) = expect_sha.clone() {
                         manifest.insert("sha256".into(), Value::String(exp));
+                        manifest.insert("cas".into(), Value::String("sha256".into()));
                     }
                     manifest.insert(
                         "bytes".into(),
@@ -1509,7 +1908,7 @@ impl ModelsService {
                             Self::update_ewma_mbps(mbps).await;
                         }
                     }
-                    let mut p = json!({"id": id, "status":"complete", "file": final_name, "provider": provider});
+                    let mut p = json!({"id": id, "status":"complete", "file": final_name, "provider": provider, "cas_file": cas_file_name});
                     if Self::progress_include_disk() {
                         if let (Ok(av), Ok(tt)) = (
                             fs2::available_space(&target_dir),
@@ -1551,6 +1950,8 @@ impl ModelsService {
                             );
                             if let Some(ref sh) = expect_sha {
                                 obj.insert("sha256".into(), Value::String(sh.clone()));
+                                obj.insert("cas".into(), Value::String("sha256".into()));
+                                obj.insert("file".into(), Value::String(cas_file_name.clone()));
                             }
                             if let Ok(md) = afs::metadata(&target).await {
                                 obj.insert(

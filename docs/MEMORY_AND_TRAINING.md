@@ -59,7 +59,7 @@ MemoryRecord schema (JSON); TrainingRequest schema; versioned events (see /spec)
 
 ## APIs
 
-Probe: GET /probe; SSE /events (subscribe to Memory*).
+Probe: GET /admin/probe; SSE /admin/events (subscribe to Memory*).
 
 Training: POST /training/requests; /approve; /commit; /revert.
 

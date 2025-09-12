@@ -494,13 +494,17 @@ pub async fn models_download(
     id: String,
     url: String,
     provider: Option<String>,
-    sha256: Option<String>,
+    sha256: String,
     port: Option<u16>,
 ) -> Result<(), String> {
     if !(url.starts_with("http://") || url.starts_with("https://")) {
         return Err("invalid url".into());
     }
-    let body = serde_json::json!({"id": id, "url": url, "provider": provider, "sha256": sha256});
+    let sh = sha256.trim().to_lowercase();
+    if sh.len() != 64 || !sh.chars().all(|c| c.is_ascii_hexdigit()) {
+        return Err("invalid sha256".into());
+    }
+    let body = serde_json::json!({"id": id, "url": url, "provider": provider, "sha256": sh});
     let _ = admin_post_json("admin/models/download", body, port).await?;
     Ok(())
 }

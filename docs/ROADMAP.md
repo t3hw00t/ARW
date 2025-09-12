@@ -20,7 +20,7 @@ Roadmap highlights themes and timelines; Backlog tracks actionable items.
 - Persistence hardening: atomic JSON/bytes writes with per‑path async locks; best‑effort cross‑process advisory locks; audit log rotation.
 - Event bus upgrades: counters (published/delivered/lagged/no_receivers), configurable capacity/replay, lag surfaced as `Bus.Gap`, subscribe‑filtered API, SSE replay and prefix filters, optional persistent JSONL journal with rotation, Prometheus `/metrics`.
 - Debug UI: metrics quick‑link, SSE presets (Replay 50, Models‑only), insights wired to route stats, download progress.
-- Episodes & State: live read‑models under `/state/*` (observations, beliefs, intents, actions, episodes) with corr_id stitching, duration and error rollups; Episodes panel with filters and details in Debug UI.
+- Episodes & State: live read‑models under `/state/*` (observations, beliefs, world, intents, actions, episodes) with corr_id stitching, duration and error rollups; Episodes panel with filters and details in Debug UI. The `world` view is a scoped belief graph (Project Map) built from the event stream with a selector endpoint for top‑K beliefs.
 - Resources pattern: unified AppState with typed `Resources`; moved Governor/Hierarchy/Memory/Models logic behind services; endpoints prefer services while preserving behavior.
 - Tests + Lint: fixed flaky gating contract tests (serialized shared state); workspace clippy clean with `-D warnings`.
 
@@ -60,6 +60,16 @@ See Backlog → Now → Feedback Engine for concrete work items.
   - NATS TLS profiles and client auth options for WAN clusters; local default remains plaintext loopback.
   - Policy‑gated remote admin surface; proxy headers validation; optional IP allowlists.
 - Budgets/Quotas: optional allow-with-budgets with per-window counters persisted to state; deny precedence.
+
+### Federated Clustering (MVP Path)
+- Remote runner (one extra box): register Worker, accept jobs, stream results; enforce policies/budgets at Home.
+- Cluster Matrix + scheduler: show nodes; route simple offloads (long‑context inference, heavy tools); per‑node queues.
+- Live session sharing: invite guest with roles (view/suggest/drive); staging approvals remain on Home.
+- Egress ledger + previews: show payload summary/cost before offload; record to ledger.
+- Content‑addressed models: Workers announce hashes; Home instructs fetch from allowed peers or registry; verify on load.
+- World diffs: export “public beliefs” with provenance; review conflicts on import.
+- Contribution meter + revenue ledger: track contributions per node; settlement report (CSV) with clear math.
+- Minimal broker (optional): tiny relay/directory for NAT‑tricky cases; stateless/replaceable.
 
 ## Long‑Term (3–6 Months)
 - Community training interface/simulation:

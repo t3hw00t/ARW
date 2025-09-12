@@ -15,6 +15,36 @@ pub(crate) fn models_path() -> PathBuf {
 pub(crate) fn downloads_metrics_path() -> PathBuf {
     state_dir().join("downloads.metrics.json")
 }
+// --- Self model paths ---
+pub(crate) fn self_dir() -> PathBuf {
+    state_dir().join("self")
+}
+
+// Sanitize a user-provided agent id/name to a safe filename stem
+pub(crate) fn sanitize_agent_id(name: &str) -> Option<String> {
+    let trimmed = name.trim();
+    if trimmed.is_empty() || trimmed.len() > 120 {
+        return None;
+    }
+    // Allow letters, numbers, space, dash, underscore and dot
+    let ok = trimmed
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == ' ' || c == '-' || c == '_' || c == '.');
+    if !ok {
+        return None;
+    }
+    if trimmed.starts_with('.') {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+pub(crate) fn self_model_path(agent: &str) -> Option<PathBuf> {
+    sanitize_agent_id(agent).map(|s| self_dir().join(format!("{}.json", s)))
+}
+pub(crate) fn self_proposals_dir() -> PathBuf {
+    self_dir().join("_proposals")
+}
 pub(crate) fn orch_path() -> PathBuf {
     state_dir().join("orchestration.json")
 }
@@ -29,6 +59,17 @@ pub(crate) fn snapshots_dir() -> PathBuf {
 }
 pub(crate) fn audit_path() -> PathBuf {
     state_dir().join("audit.log")
+}
+
+// --- World model paths ---
+pub(crate) fn world_dir() -> PathBuf {
+    state_dir().join("world")
+}
+pub(crate) fn world_path() -> PathBuf {
+    world_dir().join("world.json")
+}
+pub(crate) fn world_versions_dir() -> PathBuf {
+    world_dir().join("versions")
 }
 
 // --- Projects paths ---

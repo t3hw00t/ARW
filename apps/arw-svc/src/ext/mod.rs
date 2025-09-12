@@ -36,6 +36,8 @@ pub mod hierarchy_api;
 pub mod memory;
 pub mod memory_api;
 pub mod models_api;
+pub mod self_model;
+pub mod self_model_api;
 pub mod logic_units_api;
 pub mod experiments_api;
 pub mod patch_api;
@@ -45,6 +47,8 @@ pub mod stats;
 pub mod tools_api;
 pub mod tools_exec;
 pub mod ui;
+pub mod world;
+pub mod context_api;
 // internal helpers split into modules
 pub mod io;
 pub mod paths;
@@ -153,6 +157,52 @@ pub async fn load_persisted() {
             *st = fb;
         }
     }
+    // world model (best-effort)
+    world::load_persisted().await;
+
+    // Seed a default self‑model if none exist yet (best‑effort)
+    {
+        use tokio::fs as afs;
+        let dir = paths::self_dir();
+        let _ = afs::create_dir_all(&dir).await;
+        let mut has_any = false;
+        if let Ok(mut rd) = afs::read_dir(&dir).await {
+            while let Ok(Some(ent)) = rd.next_entry().await {
+                if let Some(name) = ent.file_name().to_str() {
+                    if name.ends_with('.' .to_string().as_str()) { /* improbable */ }
+                    if name.ends_with(".json") { has_any = true; break; }
+                }
+            }
+        }
+        if !has_any {
+            let agent = std::env::var("ARW_SELF_SEED_ID").ok().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| "dev-assistant".to_string());
+            let family = default_model().read().await.clone();
+            let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            let seed = json!({
+                "version": "0",
+                "updated_at": now,
+                "identity": {
+                    "model_family": family,
+                    "model_hash": null,
+                    "logic_units": ["metacognition","abstain-gate","resource-forecaster"],
+                    "policies": ["default"],
+                    "leases": []
+                },
+                "capability_map": { "tools": ["introspect.tools","memory.probe"], "modalities": ["text"] },
+                "competence_map": {},
+                "calibration": { "ece": 0.15, "brier": 0.25, "bias": "ok" },
+                "resource_curve": { "recipes": { "chat": { "tokens_mean": 800, "latency_ms_mean": 2000 } } },
+                "failure_modes": [ { "name": "ocr-tables", "hint": "route to structured-OCR" } ],
+                "interaction_contract": { "style": "concise", "constraints": ["cite sources", "never write fs without lease"] }
+            });
+            let _ = self_model::save(&agent, &seed).await;
+        }
+    }
+
+    // Migrate legacy model files into CAS layout (best-effort, non-blocking)
+    tokio::spawn(async move {
+        crate::resources::models_service::ModelsService::migrate_legacy_to_cas().await;
+    });
 }
 
 pub(crate) async fn persist_orch() {
@@ -296,6 +346,8 @@ pub fn extra_routes() -> Router<AppState> {
         // tools
         .route("/tools", get(tools_api::list_tools))
         .route("/tools/run", post(tools_api::run_tool_endpoint))
+        // context assembly
+        .route("/context/assemble", get(context_api::assemble_get))
         // logic units & patch engine (MVP stubs)
         .route("/logic-units/install", post(logic_units_api::install))
         .route("/logic-units/apply", post(logic_units_api::apply))
@@ -321,15 +373,20 @@ pub fn extra_routes() -> Router<AppState> {
         // state (read-models)
         .route("/state/observations", get(state_api::observations_get))
         .route("/state/beliefs", get(state_api::beliefs_get))
+        .route("/state/world", get(world::world_get))
+        .route("/state/world/select", get(world::world_select_get))
         .route("/state/intents", get(state_api::intents_get))
         .route("/state/actions", get(state_api::actions_get))
         .route("/state/episodes", get(state_api::episodes_get))
         .route("/state/logic_units", get(state_api::logic_units_get))
         .route("/state/experiments", get(state_api::experiments_get))
         .route("/state/runtime_matrix", get(state_api::runtime_matrix_get))
+        .route("/state/models_hashes", get(models_api::models_hashes_get))
         .route(
             "/state/episode/:id/snapshot",
-            get(state_api::episode_snapshot_get),
+            get(|State(state), axum::extract::Path(id)| async move {
+                state_api::episode_snapshot_get(State(state), axum::extract::Path(id)).await
+            }),
         )
         .route("/state/policy", get(state_api::policy_state_get))
         .route("/projects/list", get(projects::projects_list))

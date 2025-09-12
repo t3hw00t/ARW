@@ -13,7 +13,7 @@ Status: unless noted, items are todo. Items that have task IDs link to the track
 ## Now (Weeks)
 
 UI Coherence
-- Universal right‑sidecar across Hub/Chat/Training; subscribe once to `/events` with `corr_id` filters
+- Universal right‑sidecar across Hub/Chat/Training; subscribe once to `/admin/events` with `corr_id` filters
 - Command Palette: global search + actions; attach agent to project; grant scoped permissions with TTL
 
 Recipes MVP

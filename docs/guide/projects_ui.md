@@ -45,4 +45,4 @@ To harmonize with orchestration and autonomous workers, the service emits:
 - `Projects.Created` with `{ name }`
 - `Projects.NotesSaved` with `{ name }`
 
-Agents can subscribe to `/events` and react to project lifecycle to train, plan, scaffold, or run checks.
+Agents can subscribe to `/admin/events` and react to project lifecycle to train, plan, scaffold, or run checks (admin‑gated SSE).

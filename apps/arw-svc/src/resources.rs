@@ -25,3 +25,4 @@ pub mod governor_service;
 pub mod hierarchy_service;
 pub mod memory_service;
 pub mod models_service;
+pub mod cluster_service;

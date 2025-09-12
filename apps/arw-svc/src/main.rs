@@ -306,10 +306,13 @@ async fn main() {
     // Spawn stats aggregator and observations read-model updater
     {
         let mut rx = state.bus.subscribe();
+        let bus = state.bus.clone();
         tokio::spawn(async move {
             while let Ok(env) = rx.recv().await {
                 ext::stats::stats_on_event(&env.kind).await;
                 ext::state_api::on_event(&env).await;
+                // Materialize world model (belief graph) from events
+                ext::world::on_event(&bus, &env).await;
             }
         });
     }
@@ -318,6 +321,26 @@ async fn main() {
     ext::feedback_engine::start_feedback_engine(state.clone());
     // Start local task worker to exercise the orchestrator MVP
     ext::start_local_task_worker(state.clone());
+
+    // Optional: CAS GC loop (models/by-hash) — off by default
+    if std::env::var("ARW_MODELS_GC_ENABLE").ok().as_deref() == Some("1") {
+        let bus = state.bus.clone();
+        let ttl_days: u64 = std::env::var("ARW_MODELS_GC_TTL_DAYS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(30);
+        let interval_secs: u64 = std::env::var("ARW_MODELS_GC_INTERVAL_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(3600);
+        tokio::spawn(async move {
+            loop {
+                arw_svc::resources::models_service::ModelsService::cas_gc_once(&bus, ttl_days)
+                    .await;
+                tokio::time::sleep(std::time::Duration::from_secs(interval_secs)).await;
+            }
+        });
+    }
 
     // Background metrics emitter to SSE (low-frequency; avoids dashboard polling)
     {
@@ -361,6 +384,10 @@ async fn main() {
         .route("/metrics", get(ext::stats::metrics_get))
         .route("/version", get(ext::version))
         .route("/about", get(ext::about))
+        .route("/state/models", get(ext::state_api::models_state_get))
+        .route("/state/self", get(ext::self_model_api::self_state_list))
+        .route("/state/self/:agent", get(ext::self_model_api::self_state_get))
+        .route("/state/models_hashes", get(ext::models_api::models_hashes_get))
         // Serve generated specs when present (public)
         .route("/spec/openapi.yaml", get(spec_openapi))
         .route("/spec/asyncapi.yaml", get(spec_asyncapi))
@@ -379,6 +406,8 @@ async fn main() {
                 .route("/events", get(events))
                 .route("/emit/test", get(emit_test))
                 .route("/shutdown", get(shutdown))
+                .route("/self_model/propose", axum::routing::post(ext::self_model_api::self_model_propose))
+                .route("/self_model/apply", axum::routing::post(ext::self_model_api::self_model_apply))
                 .route("/introspect/tools", get(introspect_tools))
                 .route("/introspect/schemas/:id", get(introspect_schema))
                 // Bring in extra admin routes (memory/models/tools/etc.)
@@ -779,6 +808,7 @@ async fn probe_hw(State(state): State<AppState>) -> impl IntoResponse {
         "gpus": gpus,
         "gpus_wgpu": gpus_wgpu,
         "gpus_nvml": gpus_nvml,
+        "npus": npus,
     });
     // Publish minimal event for observability
     state.bus.publish("Probe.HW", &serde_json::json!({"cpus": cpus_logical, "gpus": out["gpus"].as_array().map(|a| a.len()).unwrap_or(0)}));
@@ -967,11 +997,13 @@ fn cpu_features() -> Vec<String> {
 }
 
 #[cfg(unix)]
+#[allow(dead_code)]
 fn nix_dev_from_md(md: &std::fs::Metadata) -> std::io::Result<u64> {
     use std::os::unix::fs::MetadataExt as _;
     Ok(md.dev())
 }
 #[cfg(not(unix))]
+#[allow(dead_code)]
 fn nix_dev_from_md(_md: &std::fs::Metadata) -> std::io::Result<u64> {
     Err(std::io::Error::new(
         std::io::ErrorKind::Other,
@@ -1998,6 +2030,30 @@ async fn state_observations_doc() -> impl IntoResponse {
 ))]
 async fn state_beliefs_doc() -> impl IntoResponse {
     ext::state_api::beliefs_get().await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/state/world", tag = "Admin/State", responses(
+    (status=200, description="Scoped world model (Project Map)"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn state_world_doc() -> impl IntoResponse {
+    ext::world::world_get(axum::extract::Query(ext::world::WorldQs { proj: None })).await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/state/world/select", tag = "Admin/State", responses(
+    (status=200, description="Top‑K beliefs"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn state_world_select_doc() -> impl IntoResponse {
+    ext::world::world_select_get(axum::extract::Query(ext::world::WorldSelectQs { proj: None, q: None, k: Some(8) })).await
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/context/assemble", tag = "Admin/Context", responses(
+    (status=200, description="Assembled context"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn context_assemble_doc() -> impl IntoResponse {
+    ext::context_api::assemble_get(axum::extract::Query(ext::context_api::AssembleQs { proj: None, q: None, k: Some(8) })).await
 }
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/admin/state/intents", tag = "Admin/State", responses(

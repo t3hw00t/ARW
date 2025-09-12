@@ -3,6 +3,9 @@ use crate::AppState;
 use arw_macros::{arw_admin, arw_gate};
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::Deserialize;
+use serde_json::json;
+use axum::extract::Path;
+use axum::http::{HeaderMap, HeaderValue};
 
 #[arw_admin(method = "GET", path = "/admin/models", summary = "List models")]
 #[arw_gate("models:list")]
@@ -242,4 +245,103 @@ pub(crate) async fn models_download_cancel(
     };
     svc.cancel_download(&state, req.id).await;
     super::ok(serde_json::json!({})).into_response()
+}
+
+// Public read-model: summarize installed model hashes for clustering/ads.
+#[arw_gate("state:models_hashes:get")]
+pub(crate) async fn models_hashes_get(State(_state): State<AppState>) -> impl IntoResponse {
+    use std::collections::{HashMap, HashSet};
+    let models = crate::ext::models().read().await.clone();
+    let mut by_hash: HashMap<String, (u64, String, HashSet<String>)> = HashMap::new();
+    for m in models.into_iter() {
+        let sh = match m.get("sha256").and_then(|v| v.as_str()) {
+            Some(s) if s.len() == 64 => s.to_string(),
+            _ => continue,
+        };
+        let path = m
+            .get("path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        let bytes = m
+            .get("bytes")
+            .and_then(|v| v.as_u64())
+            .unwrap_or(0u64);
+        let prov = m
+            .get("provider")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_string();
+        let entry = by_hash
+            .entry(sh)
+            .or_insert((bytes, path.clone(), HashSet::new()));
+        if entry.0 == 0 && bytes > 0 {
+            entry.0 = bytes;
+        }
+        if entry.1.is_empty() && !path.is_empty() {
+            entry.1 = path;
+        }
+        entry.2.insert(prov);
+    }
+    let mut items = Vec::with_capacity(by_hash.len());
+    for (sha256, (bytes, path, providers)) in by_hash.into_iter() {
+        items.push(json!({
+            "sha256": sha256,
+            "bytes": bytes,
+            "path": path,
+            "providers": providers.into_iter().collect::<Vec<_>>()
+        }));
+    }
+    Json(json!({"count": items.len(), "items": items})).into_response()
+}
+
+// Admin: serve a CAS blob by hash (gated). Intended for invited peers.
+#[arw_admin(
+    method = "GET",
+    path = "/admin/models/by-hash/:sha256",
+    summary = "Serve model blob by sha256 (egress gated)"
+)]
+#[arw_gate("io:egress:models.peer")]
+pub(crate) async fn models_blob_get(Path(sha256): Path<String>) -> impl IntoResponse {
+    // Validate hash
+    let ok = sha256.len() == 64 && sha256.chars().all(|c| c.is_ascii_hexdigit());
+    if !ok {
+        return (axum::http::StatusCode::BAD_REQUEST, "invalid sha256").into_response();
+    }
+    // Find matching CAS file in models/by-hash (sha256 or sha256.ext)
+    let dir = crate::ext::paths::state_dir().join("models").join("by-hash");
+    let mut found: Option<std::path::PathBuf> = None;
+    if let Ok(mut rd) = tokio::fs::read_dir(&dir).await {
+        while let Ok(Some(ent)) = rd.next_entry().await {
+            let f = ent.file_name();
+            let name = f.to_string_lossy();
+            if name == sha256 || name.starts_with(&format!("{}.", sha256)) {
+                found = Some(ent.path());
+                break;
+            }
+        }
+    }
+    let Some(path) = found else {
+        return axum::http::StatusCode::NOT_FOUND.into_response();
+    };
+    match tokio::fs::File::open(&path).await {
+        Ok(file) => {
+            let meta = tokio::fs::metadata(&path).await.ok();
+            let stream = tokio_util::io::ReaderStream::new(file);
+            let body = axum::body::Body::from_stream(stream);
+            let mut headers = HeaderMap::new();
+            headers.insert(
+                axum::http::header::CONTENT_TYPE,
+                HeaderValue::from_static("application/octet-stream"),
+            );
+            if let Some(m) = meta {
+                headers.insert(
+                    axum::http::header::CONTENT_LENGTH,
+                    HeaderValue::from_str(&m.len().to_string()).unwrap_or(HeaderValue::from_static("0")),
+                );
+            }
+            (headers, body).into_response()
+        }
+        Err(_) => axum::http::StatusCode::NOT_FOUND.into_response(),
+    }
 }

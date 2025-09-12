@@ -85,7 +85,7 @@ Graceful degradation to next-best adapter; events emitted for visibility.
 
 ## APIs & Events
 
-HTTP: /hw/report, /models, /models/{id}/manifest, /governor/profile; POST /models/{id}/load|apply-profile|convert|quantize; POST /autotune/run
+HTTP (admin): /admin/hw/report, /admin/models, /admin/models/{id}/manifest, /admin/governor/profile; POST /admin/models/{id}/load|apply-profile|convert|quantize; POST /admin/autotune/run
 
 MCP tools: hw.probe, model.list, model.applyProfile, model.convert, model.load
 

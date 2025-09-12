@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t3hw00t/Agent_Hub/spec/schemas/model_manifest.json",
+  "title": "Model Manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string" },
+    "file": { "type": "string", "description": "CAS filename (sha256[.ext])" },
+    "name": { "type": "string", "description": "Original display filename", "nullable": true },
+    "path": { "type": "string" },
+    "url": { "type": "string", "format": "uri" },
+    "sha256": { "type": "string", "pattern": "^[a-fA-F0-9]{64}$" },
+    "cas": { "type": "string", "enum": ["sha256"] },
+    "bytes": { "type": "integer", "minimum": 0 },
+    "provider": { "type": "string" },
+    "verified": { "type": "boolean" }
+  },
+  "required": ["id", "file", "path", "sha256", "cas", "bytes", "provider", "verified"]
+}
+

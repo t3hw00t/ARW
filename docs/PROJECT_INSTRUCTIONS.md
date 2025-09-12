@@ -23,10 +23,12 @@ Performance with safety: Rust-first core, policy-gated capabilities, reproducibl
 Extensibility: static Rust plugins + dynamic WASI plugins; clear permission manifests.
 
 Reliability: schema validation, structured errors (RFC 7807), CI contract tests, signed releases.
+Metacognition: scoped, evaluable self‑model per agent (capabilities, competence, calibration, resource curve, failure modes) with proposals/approvals.
 
 ## Architecture Overview
 
 Core: orchestrator, selectors, memory system, event bus, schemas/specs, policy, OTel, governor, hardware probes, connection registry, lightweight feedback engine.
+Self‑model read‑model and API: `/state/self/{agent}`, proposal/apply endpoints, UI Agent Card.
 
 Plugins: optional tools (search, vision, translation, routing, sched, speech, SD/A1111, GitHub, aider, notify, win-palette).
 
@@ -37,6 +39,8 @@ Apps: CLI, Launcher (Tauri), Debug UI (Tauri), Model Manager (Tauri), Connection
 Integrations: VS Code extension, GitHub webhooks, MCP client/server examples.
 
 Projects/Workstreams: live under /projects; do not couple to core.
+
+Clustering & Sharing: See `docs/architecture/cluster_federation.md` for the federated blueprint (Home Node + invited Workers, live session sharing, pooled compute, egress previews, and contribution/revenue ledgers). Defaults remain single‑node and fast‑path.
 
 ## Interfaces & Docs
 

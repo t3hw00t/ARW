@@ -4,34 +4,17 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ARW Launcher</title>
-    <style>
-      :root{ --copper:#b87333; --teal:#1bb3a3; --line:#dde1e6; --noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0.04'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
-      html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; background: radial-gradient(1200px 600px at 30% -10%, #ffffff, #f7f7f9 55%, #f1f5f9); }
-      .wrap { display: flex; height: 100%; align-items: center; justify-content: center; position:relative }
-      .wrap::before{ content:""; position:absolute; inset:0; background-image:var(--noise); opacity:.5; mix-blend-mode: soft-light; pointer-events:none }
-      .card { padding: 24px; border: 1px solid var(--line); border-radius: 12px; max-width: 560px; background: linear-gradient(180deg,#ffffff,#fafafa); box-shadow: 0 12px 30px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.8) }
-      .row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
-      button { padding: 8px 12px; border-radius: 8px; border: 1px solid #cfd6de; background-image: linear-gradient(180deg,#ffffff,#f3f4f6), var(--noise); background-blend-mode: overlay, normal; cursor: pointer; box-shadow: 0 1px 0 rgba(255,255,255,0.9) inset, 0 8px 18px rgba(0,0,0,0.06) }
-      button:hover { transform: translateY(-0.5px); box-shadow: 0 1px 0 rgba(255,255,255,0.95) inset, 0 14px 28px rgba(0,0,0,0.08) }
-      .ok { color: #0a0; }
-      .bad { color: #a00; }
-      .toast-wrap{ position:fixed; right:16px; bottom:16px; display:flex; flex-direction:column; gap:8px; z-index: 9999 }
-      .toast{ background:#0f172a; color:#fff; padding:8px 12px; border-radius:10px; opacity:.95; box-shadow: 0 14px 34px rgba(0,0,0,0.22) }
-      .badge { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid var(--line); border-radius:999px; font-size:12px; background:#fff; box-shadow: 0 1px 0 rgba(255,255,255,0.9) inset }
-      .dot { width:8px; height:8px; border-radius:999px; background:#aaa; display:inline-block }
-      .dot.ok{ background: var(--teal) }
-      .dot.bad{ background: #a00 }
-    </style>
   </head>
   <body>
-    <script src="common.js"></script>
     <link rel="stylesheet" href="common.css" />
+    <link rel="stylesheet" href="index.css" />
+    <script src="common.js" defer></script>
     <div class="wrap">
       <div class="card">
         <h2>ARW Launcher <span class="badge"><span class="dot" id="svc-dot"></span><span id="svc-text">unknown</span></span></h2>
         <p>Use the tray to start/stop the service or open the Debug UI.</p>
         <div class="row">
-          <label>Port: <input id="port" type="number" min="1" max="65535" value="8090" style="width: 90px"/></label>
+          <label>Port: <input id="port" type="number" min="1" max="65535" value="8090"/></label>
           <label><input id="autostart" type="checkbox"/> Autostart service</label>
           <label><input id="notif" type="checkbox" checked/> Notify on status change</label>
           <label><input id="loginstart" type="checkbox"/> Start launcher at login</label>
@@ -55,7 +38,7 @@
         <div class="row" id="dlmini"></div>
       </div>
     </div>
-    <script>
+    <script src="index.js" defer></script>
       // The window.__TAURI__ API is available without bundlers in Tauri 1.
       const invoke = (cmd, args) => ARW.invoke(cmd, args)
       const getPort = () => ARW.getPortFromInput('port')
@@ -166,7 +149,6 @@
           await invoke('open_url', { url: 'https://github.com/t3hw00t/arw/releases' });
         } catch (e) { console.error(e); }
       });
-      loadPrefs();
-    </script>
+    
   </body>
   </html>

@@ -1,0 +1,294 @@
+const ivk = (cmd, args) => ARW.invoke(cmd, args);
+const port = () => ARW.getPortFromInput('port');
+
+function svgIcon(kind, tone){
+  const cls = `ico ${tone||'info'}`;
+  switch(kind){
+    case 'download':
+      return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 3v10m0 0l4-4m-4 4L8 9M4 17h16" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    case 'check':
+      return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 6l-11 11-5-5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    case 'refresh':
+      return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M20 12a8 8 0 10-2.34 5.66M20 12V6m0 6h-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    case 'timer':
+      return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 8v5l3 3M9 3h6M12 21a8 8 0 100-16 8 8 0 000 16z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    case 'warn':
+      return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 9v4m0 4h.01M10.29 3.86l-8 14A2 2 0 004 21h16a2 2 0 001.71-3.14l-8-14a2 2 0 00-3.42 0z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    case 'stop':
+      return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="6" y="6" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/></svg>`;
+    case 'hdd':
+      return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="3" y="7" width="18" height="10" rx="2" stroke="currentColor" stroke-width="2"/><path d="M7 11h.01M11 11h.01M15 11h2" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+    case 'cloud':
+      return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M17.5 19a4.5 4.5 0 100-9 5.5 5.5 0 10-10.8 1.5A3.5 3.5 0 007 19h10.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    case 'hash':
+      return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M5 9h14M5 15h14M9 5L7 19M17 5l-2 14" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    case 'lock':
+      return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><rect x="5" y="11" width="14" height="9" rx="2" stroke="currentColor" stroke-width="2"/><path d="M9 11V8a3 3 0 116 0v3" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>`;
+    default:
+      return `<svg class="${cls}" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><circle cx="12" cy="12" r="4" stroke="currentColor" stroke-width="2"/></svg>`;
+  }
+}
+
+function iconsFor(status, code){
+  if (status === 'complete') return svgIcon('check','ok');
+  if (status === 'resumed') return svgIcon('refresh','accent');
+  if (status === 'started' || status === 'downloading') return svgIcon('download','accent');
+  if (status === 'degraded') return svgIcon('timer','warn');
+  if (status === 'canceled') return svgIcon('stop','info');
+  switch(String(code||'')){
+    case 'admission_denied':
+      return svgIcon('lock','bad') + svgIcon('timer','warn');
+    case 'hard_exhausted':
+      return svgIcon('timer','bad');
+    case 'size_limit':
+    case 'size_limit_stream':
+      return svgIcon('stop','bad');
+    case 'disk_insufficient':
+    case 'disk_insufficient_stream':
+      return svgIcon('hdd','bad') + svgIcon('warn','warn');
+    case 'checksum_mismatch':
+      return svgIcon('hash','bad') + svgIcon('stop','bad');
+    case 'request_failed':
+      return svgIcon('cloud','bad') + svgIcon('stop','bad');
+    case 'resume_http_status':
+    case 'downstream_http_status':
+      return svgIcon('cloud','warn') + svgIcon('warn','warn');
+    case 'resync':
+      return svgIcon('refresh','warn');
+    default:
+      return '';
+  }
+}
+
+async function loadPrefs() {
+  await ARW.applyPortFromPrefs('port');
+  const v = await ARW.getPrefs('launcher');
+  if (v && v.adminToken) document.getElementById('admintok').value = v.adminToken;
+}
+async function savePrefs() {
+  const v = await ARW.getPrefs('launcher') || {};
+  v.port = port();
+  v.adminToken = document.getElementById('admintok').value || '';
+  await ARW.setPrefs('launcher', v);
+  document.getElementById('stat').textContent = 'Saved prefs';
+}
+
+async function refresh() {
+  document.getElementById('stat').textContent = 'Loading...';
+  const list = await ivk('models_list', { port: port() });
+  const def = await ivk('models_default_get', { port: port() });
+  document.getElementById('def').textContent = `Default: ${def || '(none)'}`;
+  const tb = document.getElementById('models'); tb.innerHTML='';
+  (list||[]).forEach(m => {
+    const tr = document.createElement('tr');
+    const pbtn = (m.path? `<button data-open="${m.path}">Open</button>` : '');
+    tr.innerHTML = `<td class="mono">${m.id||''}</td><td>${m.provider||''}</td><td>${m.status||''}</td><td class="mono">${m.path||''} ${pbtn}</td><td>${(m.id===def)?'★':''}</td><td><button data-id="${m.id}">Make Default</button></td>`;
+    const defbtn = tr.querySelector('button[data-id]');
+    if (defbtn) defbtn.addEventListener('click', async (e)=>{
+      await ivk('models_default_set', { id: e.target.getAttribute('data-id'), port: port() });
+      refresh();
+    });
+    try {
+      if ((String(m.status||'').toLowerCase()) === 'downloading'){
+        const tds = tr.querySelectorAll('td');
+        const actions = tds[tds.length-1];
+        const btn = document.createElement('button');
+        btn.textContent = 'Cancel';
+        btn.addEventListener('click', async ()=>{ await ivk('models_download_cancel', { id: m.id, port: port() }); });
+        actions.appendChild(document.createTextNode(' '));
+        actions.appendChild(btn);
+      }
+    } catch {}
+    const op = tr.querySelector('[data-open]');
+    if (op) op.addEventListener('click', async (e)=>{ await ivk('open_path', { path: e.target.getAttribute('data-open') }); });
+    tb.appendChild(tr);
+  });
+  document.getElementById('stat').textContent = 'OK';
+}
+
+async function add() {
+  const id = document.getElementById('mid').value.trim();
+  const pr = document.getElementById('mpr').value.trim() || null;
+  if (!id) return;
+  await ivk('models_add', { id, provider: pr, port: port() });
+  refresh();
+}
+async function del() {
+  const id = document.getElementById('mid').value.trim();
+  if (!id) return;
+  await ivk('models_delete', { id, port: port() });
+  refresh();
+}
+async function setdef() {
+  const id = document.getElementById('mid').value.trim();
+  if (!id) return;
+  await ivk('models_default_set', { id, port: port() });
+  refresh();
+}
+async function dl() {
+  const id = document.getElementById('did').value.trim();
+  let url= document.getElementById('durl').value.trim();
+  const q = document.getElementById('dquant').value.trim(); if (q) url = ARW.quantReplace(url, q);
+  const sha= (document.getElementById('dsha').value.trim()||null);
+  if (!id || !url) return;
+  await ivk('models_download', { id, url, provider: null, sha256: sha, port: port() });
+  ARW.toast('Download started');
+}
+async function cancel() {
+  const id = document.getElementById('did').value.trim();
+  if (!id) return;
+  await ivk('models_download_cancel', { id, port: port() });
+}
+
+function ensureBar(id){
+  const bars = document.getElementById('dlbars');
+  let row = bars.querySelector(`[data-row="${id}"]`);
+  if(!row){
+    row = document.createElement('div');
+    row.setAttribute('data-row', id);
+    row.innerHTML = `<div class="mono">${id}</div><div class="bar"><i data-bar></i></div><div class="mono dim" data-text></div>`;
+    bars.appendChild(row);
+  }
+  return row;
+}
+function removeBar(id){ const bars=document.getElementById('dlbars'); const row=bars.querySelector(`[data-row="${id}"]`); if(row) bars.removeChild(row); }
+function bytesHuman(n){ if(!n && n!==0) return '–'; const kb=1024, mb=kb*1024, gb=mb*1024, tb=gb*1024; if(n>=tb) return (n/tb).toFixed(2)+' TiB'; if(n>=gb) return (n/gb).toFixed(2)+' GiB'; if(n>=mb) return (n/mb).toFixed(1)+' MiB'; if(n>=kb) return (n/kb).toFixed(1)+' KiB'; return n+' B'; }
+
+function sse() {
+  const p = port() || 8090;
+  const es = new EventSource(ARW.base(p) + '/admin/events?prefix=Models.');
+  const last = {}; // id -> { t: ms, bytes: number }
+  es.onmessage = (ev) => {
+    try {
+      const j = JSON.parse(ev.data);
+      if (j.kind && j.kind.startsWith('Models.')) {
+        if (j.kind === 'Models.DownloadProgress') {
+          const pl = j.payload || {};
+          document.getElementById('dlprog').textContent = JSON.stringify(pl, null, 2);
+          const id = pl.id || '';
+          if (id){
+            const row=ensureBar(id);
+            const bar=row.querySelector('[data-bar]');
+            const txt=row.querySelector('[data-text]');
+            const pct=pl.progress||0;
+            if(bar) bar.style.width=(pct||0)+'%';
+            const dled=pl.downloaded||0;
+            const dledTxt=bytesHuman(dled);
+            const tot=pl.total? bytesHuman(pl.total) : null;
+            const now = Date.now();
+            let tail = '';
+            try{
+              const prev = last[id];
+              last[id] = { t: now, bytes: dled };
+              if (prev && dled >= prev.bytes){
+                const dt = Math.max(1, now - prev.t) / 1000;
+                const db = dled - prev.bytes;
+                const rate = db / dt;
+                const mpers = rate / (1024*1024);
+                if (mpers > 0.01){
+                  tail += ` · speed: ${mpers.toFixed(2)} MiB/s`;
+                  if (pl.total && dled < pl.total){
+                    const rem = pl.total - dled;
+                    const etaSec = Math.max(0, Math.floor(rem / Math.max(1, rate)));
+                    const mm = Math.floor(etaSec/60).toString().padStart(2,'0');
+                    const ss = (etaSec%60).toString().padStart(2,'0');
+                    tail += ` · ETA: ${mm}:${ss}`;
+                  }
+                }
+              }
+            }catch{}
+            if (pl.budget && (pl.budget.spent_ms!=null || pl.budget.remaining_hard_ms!=null)){
+              const spent = pl.budget.spent_ms||0;
+              const rem = pl.budget.remaining_hard_ms;
+              const spentS = (spent/1000).toFixed(1);
+              const remS = (typeof rem==='number') ? (rem/1000).toFixed(1) : '∞';
+              tail += ` · budget: ${spentS}s/${remS}s`;
+            }
+            const baseTxt = pl.total? `${dledTxt}/${tot} (${pct}%)` : (pl.status||'');
+            const disk = pl.disk? ` · Disk: ${bytesHuman(pl.disk.available)} free / ${bytesHuman(pl.disk.total)} total` : '';
+            const iconHtml = iconsFor(pl.status, pl.code);
+            if(txt) txt.innerHTML = (iconHtml ? `<span class="icons">${iconHtml}</span>` : '') + baseTxt + tail + disk;
+            if(pl.disk){
+              const el=document.getElementById('disk');
+              if(el) el.textContent = `Disk: ${bytesHuman(pl.disk.available)} free / ${bytesHuman(pl.disk.total)} total`;
+            }
+            if(pl.status==='complete'){
+              setTimeout(async()=>{
+                await refresh();
+                const list=await ivk('models_list',{port:port()});
+                const found=(list||[]).find(mm=>mm.id===id);
+                if(found&&found.path){ try{ await ivk('open_path',{path:found.path}); }catch(e){} }
+                removeBar(id);
+              }, 250);
+            }
+          }
+          try{
+            const pl = j.payload || {};
+            if (pl.status === 'complete' && pl.id) {
+              (async ()=>{
+                await refresh();
+                const list2 = await ivk('models_list', { port: port() });
+                const found = (list2||[]).find(mm => mm.id === pl.id);
+                if (found && found.path) { try { await ivk('open_path', { path: found.path }); } catch(e){} }
+              })();
+            }
+          }catch{}
+        }
+        if (j.kind === 'Models.Changed' || j.kind === 'Models.Refreshed') {
+          refresh();
+        }
+      }
+    } catch {}
+  };
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('btn-refresh').addEventListener('click', refresh);
+  document.getElementById('btn-load').addEventListener('click', async ()=>{ await ivk('models_load', { port: port() }); refresh(); });
+  document.getElementById('btn-save').addEventListener('click', async ()=>{ await ivk('models_save', { port: port() }); document.getElementById('stat').textContent='Saved'; });
+  document.getElementById('btn-add').addEventListener('click', add);
+  document.getElementById('btn-del').addEventListener('click', del);
+  document.getElementById('btn-setdef').addEventListener('click', setdef);
+  document.getElementById('btn-dl').addEventListener('click', dl);
+  document.getElementById('btn-cancel').addEventListener('click', cancel);
+  document.getElementById('btn-save-prefs').addEventListener('click', async ()=>{ await savePrefs(); ARW.toast('Preferences saved'); });
+  document.getElementById('btn-load-local').addEventListener('click', async ()=>{
+    try{
+      const resp = await fetch('models_catalog.json');
+      const arr = await resp.json();
+      renderCatalog(arr);
+    }catch(e){ console.error(e); }
+  });
+  document.getElementById('btn-load-remote').addEventListener('click', async ()=>{
+    const u = document.getElementById('caturl').value.trim(); if(!u) return;
+    try{
+      const resp = await fetch(u, { headers: { 'Accept': 'application/json' }});
+      const arr = await resp.json();
+      renderCatalog(arr);
+    }catch(e){ console.error(e); }
+  });
+  document.getElementById('btn-copy-sha').addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(document.getElementById('dsha').value||''); }catch(e){} });
+  document.getElementById('btn-paste-sha').addEventListener('click', async ()=>{ try{ const t=await navigator.clipboard.readText(); if(t) document.getElementById('dsha').value = t.trim(); }catch(e){} });
+  (async ()=>{ await loadPrefs(); await refresh(); sse(); })();
+});
+
+function renderCatalog(arr){
+  const tb = document.getElementById('catalog'); tb.innerHTML='';
+  (arr||[]).forEach(item => {
+    const tr = document.createElement('tr');
+    const id = item.id || '';
+    const prov = item.provider || 'local';
+    const url = item.url || '';
+    const sha = item.sha256 || '';
+    const notes = item.notes || '';
+    tr.innerHTML = `<td class="mono">${id}</td><td>${prov}</td><td class="mono">${url}</td><td class="mono">${sha}</td><td>${notes}</td><td><button data-id="${id}">Queue</button></td>`;
+    tr.querySelector('button').addEventListener('click', async ()=>{
+      document.getElementById('did').value = id;
+      document.getElementById('durl').value = url;
+      document.getElementById('dsha').value = sha;
+      await dl();
+    });
+    tb.appendChild(tr);
+  });
+}
+

@@ -4,7 +4,7 @@ title: Events Vocabulary
 
 # Events Vocabulary
 
-Normalize ARW events into a small internal vocabulary. Drive all live UI from this stream via `GET /events` (SSE). Use `corr_id` to stitch episodes.
+Normalize ARW events into a small internal vocabulary. Drive all live UI from this stream via `GET /admin/events` (SSE; admin‑gated). Use `corr_id` to stitch episodes.
 
 Canonical categories
 - Episode lifecycle: `Episode.Started`, `Episode.Completed`, `Episode.Canceled`, `Episode.Error`
@@ -14,7 +14,11 @@ Canonical categories
 - Policy: `Policy.Prompt`, `Policy.Allow`, `Policy.Deny`
 - Runtime: `Runtime.Health`, `Runtime.ProfileChanged`
 - Models: `Models.DownloadProgress`, `Models.Changed`
+- Self‑Model: `SelfModel.Proposed`, `SelfModel.Updated`
 - Logic Units: `LogicUnit.Suggested`, `LogicUnit.Installed`, `LogicUnit.Applied`, `LogicUnit.Reverted`, `LogicUnit.Promoted`
+ - Cluster: `Cluster.Node.Advertise`, `Cluster.Node.Heartbeat`, `Cluster.Node.Changed`
+ - Jobs (offload): `Job.Assigned`, `Job.Progress`, `Job.Completed`, `Job.Error`
+ - Sessions (sharing): `Session.Invited`, `Session.RoleChanged`, `Session.EventRelayed`
 
 Minimal event envelope
 ```
@@ -28,7 +32,10 @@ Notes
 Mapping from existing ARW events
 - Observations/Beliefs/Intents/Actions are already exposed under `/state/*` and emitted in debug builds; clients can mirror or subscribe.
 - `Models.DownloadProgress` supports `{ id, status|error, code, budget?, disk? }` — see `resources/models_service.rs`.
+- Cluster events are additive and off by default. When enabled, Workers publish `Cluster.Node.Advertise` (capabilities, health), periodic `Cluster.Node.Heartbeat`, and receive `Job.*` assignments. The Home Node merges remote `Job.*` and `Session.*` events into the unified timeline by `corr_id`.
+- World model (read‑model) materializes from existing events like `Feedback.Suggested` / `Beliefs.Updated`, `Projects.FileWritten`, `Actions.HintApplied`, `Runtime.Health`, and `Models.DownloadProgress`. A compact `World.Updated` event is emitted with counts and version for UI/SSE.
 - Tools registered via `#[arw_tool]` already emit `Tool.Ran` with inputs/outputs summary.
+- Self‑Model endpoints emit compact events: `SelfModel.Proposed` (agent, proposal_id, rationale, widens_scope?) and `SelfModel.Updated` (agent, proposal_id). Read‑models available at `/state/self` and `/state/self/{agent}`.
 
 Replay and filtering
 - SSE supports `?replay=N` and lightweight prefix filters (`?prefix=Models.`) for scoped dashboards.
