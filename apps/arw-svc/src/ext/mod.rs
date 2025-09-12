@@ -36,6 +36,9 @@ pub mod hierarchy_api;
 pub mod memory;
 pub mod memory_api;
 pub mod models_api;
+pub mod logic_units_api;
+pub mod experiments_api;
+pub mod patch_api;
 pub mod policy;
 pub mod state_api;
 pub mod stats;
@@ -293,6 +296,17 @@ pub fn extra_routes() -> Router<AppState> {
         // tools
         .route("/tools", get(tools_api::list_tools))
         .route("/tools/run", post(tools_api::run_tool_endpoint))
+        // logic units & patch engine (MVP stubs)
+        .route("/logic-units/install", post(logic_units_api::install))
+        .route("/logic-units/apply", post(logic_units_api::apply))
+        .route("/logic-units/revert", post(logic_units_api::revert))
+        .route("/patch/dry-run", post(patch_api::dry_run))
+        .route("/patch/apply", post(patch_api::apply))
+        .route("/patch/revert", post(patch_api::revert))
+        // experiments (MVP stubs)
+        .route("/experiments/start", post(experiments_api::start))
+        .route("/experiments/stop", post(experiments_api::stop))
+        .route("/experiments/assign", post(experiments_api::assign))
         // hierarchy negotiation (HTTP scaffolding)
         .route("/hierarchy/hello", post(hierarchy_api::hello))
         .route("/hierarchy/offer", post(hierarchy_api::offer))
