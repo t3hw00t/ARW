@@ -45,6 +45,10 @@ Logic Units (config‑first strategy packs)
 - Library UI with tabs (Installed/Experimental/Suggested/Archived), diff preview, A/B try, apply/revert/promote.
 - Pairs with a Research Watcher that drafts suggested units from frontier work.
 
+Context Working Set (Never‑Out‑Of‑Context)
+- Treat context as a just‑in‑time working set built from layered memories with fixed slot budgets, diversity, and on‑demand rehydration.
+- Docs: `docs/architecture/context_working_set.md`; see also Context Recipes and Budgets & Context.
+
 Universal sidecar (always on)
 - Episode timeline (obs → belief → intent → action), streaming tokens
 - Policy prompts/decisions and runtime/memory meters

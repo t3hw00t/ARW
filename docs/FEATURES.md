@@ -15,6 +15,7 @@ Updated: 2025-09-10 (cluster/gating/hierarchy updates)
 - Security & Policy: Central gating keys and deny contracts; ingress/egress guards; Policy Capsules; roadmap RPU for signatures/ABAC. See: Security Hardening (guide/security_hardening.md), Policy (POLICY.md).
 - Egress control (planned): policy‑backed, per‑node egress gateway + DNS guard with project‑level network posture and an egress ledger. See: Architecture → Egress Firewall; Guide → Network Posture.
  - Lightweight mitigations (planned): memory quarantine; project isolation; belief‑diff review; cluster manifest pinning; hardened headless browsing; safe archive handling; DNS anomaly guard; accelerator zeroing; event sequencing; context rehydration check. See: Architecture → Lightweight Mitigations.
+ - Models: enhanced downloader with resume, checksum, EWMA admission, disk reserve checks, content‑disposition filenames, cross‑platform finalize, and a simple concurrency limiter (`ARW_MODELS_MAX_CONC`).
 - Extensibility: Static Rust plugins and dynamic WASI/WASM plugins; unified tool registry with JSON Schemas.
 - Runtime & Memory: Orchestrator, pluggable Queue/Bus (local; NATS groups; JetStream planned), Run Capsules; layered memory and Memory Lab. See: Memory and Training (MEMORY_AND_TRAINING.md).
 - Safety & Profiles: Sandboxed file/network allowlists; profiles (performance/balanced/power‑saver/custom); secrets and hints.

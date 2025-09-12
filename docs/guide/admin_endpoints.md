@@ -38,6 +38,9 @@ Rate limiting:
 - `/admin/events`: SSE event stream
 - `/admin/probe`: effective paths & memory snapshot (read‑only)
 - `/admin/memory[/*]`: memory get/apply/save/load/limit
+- Quarantine review (planned MVP):
+  - `POST /admin/memory/quarantine` — add a quarantined item (provenance, risk markers, evidence score, extractor)
+  - `POST /admin/memory/quarantine/admit` — admit (remove) a quarantined item by id
 - `/admin/models[/*]`: list/save/load/add/delete/default/download
 - `/admin/tools[/*]`: list and run tools
 - `/admin/feedback[/*]`: feedback engine state & policy
@@ -49,6 +52,9 @@ Rate limiting:
   - `/admin/context/assemble`: minimal context assembly (beliefs + policy/model)
 - `/admin/governor/*`: governor profile & hints
 - `/admin/hierarchy/*`: negotiation & role/state helpers
+- World diffs review (planned MVP):
+  - `POST /admin/world_diffs/queue` — queue a world diff from collaborators for review
+  - `POST /admin/world_diffs/decision` — decide queued diff {apply|reject|defer}
 - `/admin/projects/*`: project list/tree/notes
 - `/admin/chat[/*]`: chat inspection and send/clear
 - `/admin/emit/test`: emit a test event
@@ -111,3 +117,23 @@ curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?replay=10"
 - Avoid `ARW_DEBUG=1` outside local dev.
 - Place ARW behind a reverse proxy with TLS and IP allowlists where possible.
 - Consider additional auth at the proxy (mTLS, OIDC) for defense in depth.
+Quarantine an item (example)
+```bash
+curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"project_id":"demo","content_type":"text/html","content_preview":"<html>...</html>","provenance":"https://example.com","risk_markers":["html","script"],"evidence_score":0.3}' \
+  -X POST "$BASE/admin/memory/quarantine" | jq
+```
+
+World diff queue/decision (example)
+```bash
+curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"project_id":"demo","from_node":"peer-1","summary":"update beliefs","changes":[{"op":"add","path":"/beliefs/x","value":1}]}' \
+  -X POST "$BASE/admin/world_diffs/queue" | jq
+
+curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -d '{"id":"<id-from-queue>","decision":"apply","note":"looks good"}' \
+  -X POST "$BASE/admin/world_diffs/decision" | jq
+```

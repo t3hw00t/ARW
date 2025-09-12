@@ -33,6 +33,7 @@ Good defaults to ship
 - Abstain/Escalate Gate: target risk–coverage and abstain when risk is high.
 - Resource Forecaster: predict tokens/latency/$ for chosen recipes and feed budgets.
 - Failure Modes Router: route fragile tasks (e.g., OCR tables, JS‑heavy sites) to safer plans.
+- Never‑Out‑Of‑Context: config‑only unit that enforces slot budgets, diversity floor, and on‑demand rehydration for context assembly.
 
 Endpoints (planned)
 - `GET /logic-units` (list installed/experimental/suggested)

@@ -64,6 +64,10 @@ Layered memory (ephemeral/episodic/semantic/procedural), pluggable stores.
 
 Live Memory Probe (visibility), conditional training with approvals, reproducible “Run Capsules”.
 
+Never‑Out‑Of‑Context (priority)
+- Treat context as a just‑in‑time working set assembled from layered memories with fixed slot budgets and on‑demand rehydration.
+- Ship defaults as a config‑only Logic Unit; see Architecture → Context Working Set.
+
 ## Hardware & Performance
 
 arw-hw probes CPU/GPU/NPU + drivers/features; arw-governor applies performance/balanced/power-saver presets.

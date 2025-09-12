@@ -15,6 +15,8 @@ Updated: 2025-09-12
 
 Start with Quickstart to run the service, then explore Features and the new Architecture pages (Object Graph, Events Vocabulary). You can also build and run the Desktop Launcher for an integrated tray + windows UI. When you’re ready to dive deeper, the Developer section explains the workspace and CI.
 
+Context tip: ARW treats context as a just‑in‑time working set assembled from layered memories. See Architecture → Context Working Set for how we avoid running out of context while keeping prompts small and explainable.
+
 Tip: If you’re just trying ARW, the default paths are portable. You can switch between portable and system mode with a single environment variable.
 
 ## Choose Your Path

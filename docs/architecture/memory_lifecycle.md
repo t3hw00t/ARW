@@ -15,5 +15,4 @@ Policies
 Quality
 - Retrieval diversity and coverage meters in Training Park; A/B recipes for recall/precision.
 
-See also: Data Governance, Context Recipes, Training Park.
-
+See also: Context Working Set, Data Governance, Context Recipes, Training Park.

@@ -12,6 +12,17 @@ Status: unless noted, items are todo. Items that have task IDs link to the track
 
 ## Now (Weeks)
 
+Never‑Out‑Of‑Context (High Priority)
+- [t-250912143001-0001] Context Working Set doc + mkdocs nav — done (this change)
+- [t-250912143005-0002] Context API: allow slot budgets and return stable pointers (IDs) for all included items — todo
+- [t-250912143009-0003] Retrieval: add MMR‑style selector across vector/graph mounts and world beliefs — todo
+- [t-250912143013-0004] Compression cascade: summarize episodes (extract→abstract→outline) into mounts with provenance — todo
+- [t-250912143017-0005] Failure detectors: emit Context.RecallRisk and Context.Coverage with meters in UI — todo
+- [t-250912143021-0006] Memory hygiene: per‑lane caps + TTL + janitor job with rollups and evictions — todo
+- [t-250912143025-0007] Logic Unit: ship config‑only Never‑Out‑Of‑Context defaults (budgets, diversity, rehydrate rules) — todo
+- [t-250912143029-0008] UI: Project Hub panel “What’s in context now” with artifact pointers and rehydrate actions — todo
+- [t-250912143033-0009] Training Park: dials for diversity/recency/compression; recall‑risk and coverage meters — todo
+
 UI Coherence
 - Universal right‑sidecar across Hub/Chat/Training; subscribe once to `/admin/events` with `corr_id` filters
 - Command Palette: global search + actions; attach agent to project; grant scoped permissions with TTL

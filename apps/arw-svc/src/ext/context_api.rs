@@ -1,6 +1,8 @@
 use super::{default_model, hints, ok};
 use arw_macros::arw_admin;
-use axum::{extract::Query, response::IntoResponse};
+use axum::{extract::{Query, State}, response::IntoResponse, Json};
+use crate::AppState;
+use serde::Deserialize;
 use serde::Deserialize;
 use serde_json::json;
 
@@ -9,6 +11,16 @@ pub struct AssembleQs {
     pub proj: Option<String>,
     pub q: Option<String>,
     pub k: Option<usize>,
+    // Evidence budget (number of belief items). Defaults to k
+    pub evidence_k: Option<usize>,
+    // Diversity knob for beliefs selection (0..1). Optional.
+    pub div: Option<f64>,
+    // Slot budgets (token ceilings); passthrough for UI/planner; server echoes them.
+    pub s_inst: Option<usize>, // instructions
+    pub s_plan: Option<usize>, // plan
+    pub s_policy: Option<usize>, // safety/policy
+    pub s_evid: Option<usize>, // evidence
+    pub s_nice: Option<usize>, // nice-to-have
 }
 
 #[arw_admin(
@@ -16,9 +28,54 @@ pub struct AssembleQs {
     path = "/admin/context/assemble",
     summary = "Assemble minimal context: top‑K beliefs + policy/model hints"
 )]
-pub async fn assemble_get(Query(q): Query<AssembleQs>) -> impl IntoResponse {
+pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<AssembleQs>) -> impl IntoResponse {
     let proj_opt = q.proj.as_deref();
-    let items = super::world::select_top_claims(proj_opt, q.q.as_deref().unwrap_or(""), q.k.unwrap_or(8)).await;
+    let k_default = q.k.unwrap_or(8);
+    let evid_k = q.evidence_k.unwrap_or(k_default);
+    // Estimate pool size for coverage metrics (top-50 as proxy)
+    let pool: Vec<serde_json::Value> = super::world::select_top_claims(
+        proj_opt,
+        q.q.as_deref().unwrap_or(""),
+        50,
+    )
+    .await;
+    // Beliefs: use diversity-aware selection when requested
+    let items_initial = if let Some(div) = q.div {
+        super::world::select_top_claims_diverse(proj_opt, q.q.as_deref().unwrap_or(""), evid_k, div).await
+    } else {
+        super::world::select_top_claims(proj_opt, q.q.as_deref().unwrap_or(""), evid_k).await
+    };
+    // Evidence slot budget: approximate tokens and cap selection
+    fn est_tokens_value(v: &serde_json::Value) -> u64 {
+        match v {
+            serde_json::Value::String(s) => ((s.len() as u64) + 3) / 4, // ~4 chars/token
+            serde_json::Value::Number(_) => 1,
+            serde_json::Value::Bool(_) => 1,
+            serde_json::Value::Array(a) => a.iter().map(est_tokens_value).sum(),
+            serde_json::Value::Object(o) => o.values().map(est_tokens_value).sum(),
+            _ => 0,
+        }
+    }
+    fn est_tokens_belief(v: &serde_json::Value) -> u64 {
+        let mut t = 6; // overhead
+        if let Some(id) = v.get("id").and_then(|x| x.as_str()) { t += ((id.len() as u64)+3)/4; }
+        if let Some(props) = v.get("props") { t += est_tokens_value(props); }
+        if let Some(name) = v.get("name") { t += est_tokens_value(name); }
+        if let Some(text) = v.get("text") { t += est_tokens_value(text); }
+        if let Some(trace) = v.get("trace") { t += est_tokens_value(trace); }
+        t.min(512) // cap per item
+    }
+    let mut used_tokens: u64 = 0;
+    let budget_tokens: Option<u64> = q.s_evid.map(|n| n as u64).filter(|n| *n > 0);
+    let mut items: Vec<serde_json::Value> = Vec::new();
+    for it in items_initial.into_iter() {
+        let est = est_tokens_belief(&it);
+        if let Some(b) = budget_tokens {
+            if used_tokens.saturating_add(est) > b { break; }
+        }
+        used_tokens = used_tokens.saturating_add(est);
+        items.push(it);
+    }
     // Include minimal policy + model context
     let policy_hints = { hints().read().await.clone() };
     let model_default = { default_model().read().await.clone() };
@@ -40,12 +97,140 @@ pub async fn assemble_get(Query(q): Query<AssembleQs>) -> impl IntoResponse {
     // Keep most recent 20 each
     if intents.len() > 20 { intents = intents[intents.len()-20..].to_vec(); }
     if actions.len() > 20 { actions = actions[actions.len()-20..].to_vec(); }
+    // Attach stable pointers alongside included items
+    fn with_ptrs_beliefs(mut v: Vec<serde_json::Value>, proj: Option<&str>) -> Vec<serde_json::Value> {
+        for it in v.iter_mut() {
+            if let Some(id) = it.get("id").and_then(|x| x.as_str()) {
+                it["ptr"] = json!({
+                    "kind": "world_belief",
+                    "id": id,
+                    "source": "/admin/state/world",
+                    "proj": proj,
+                });
+            }
+        }
+        v
+    }
+    fn with_ptrs_files(mut v: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+        for it in v.iter_mut() {
+            if let Some(path) = it.get("path").and_then(|x| x.as_str()) {
+                it["ptr"] = json!({"kind": "file", "path": path});
+            }
+        }
+        v
+    }
+    fn with_ptrs_events(mut v: Vec<serde_json::Value>) -> Vec<serde_json::Value> {
+        for it in v.iter_mut() {
+            let cid = it
+                .get("payload")
+                .and_then(|p| p.get("corr_id"))
+                .and_then(|x| x.as_str());
+            if let Some(c) = cid {
+                it["ptr"] = json!({"kind": "episode", "corr_id": c, "source": "/admin/state/episodes"});
+            } else if let (Some(t), Some(k)) = (it.get("time"), it.get("kind")) {
+                it["ptr"] = json!({"kind": "event", "time": t, "code": k});
+            }
+        }
+        v
+    }
+    let beliefs = with_ptrs_beliefs(items, proj_opt);
+    let files = with_ptrs_files(files);
+    let intents = with_ptrs_events(intents);
+    let actions = with_ptrs_events(actions);
+    let coverage_pool = pool.len();
+    let coverage_selected = beliefs.len();
+    let coverage_omitted = coverage_pool.saturating_sub(coverage_selected);
+    // Emit assembly summary event
+    {
+        let mut ev = json!({
+            "proj": proj,
+            "query": q.q,
+            "k": k_default,
+            "evidence_k": evid_k,
+            "diversity": q.div,
+            "counts": {"beliefs": coverage_selected, "files": files.len(), "intents": intents.len(), "actions": actions.len()},
+            "coverage": {"pool": coverage_pool, "omitted": coverage_omitted, "recall_risk": coverage_omitted > 0},
+            "usage": {"evidence_tokens": used_tokens, "evidence_budget": budget_tokens},
+        });
+        crate::ext::corr::ensure_corr(&mut ev);
+        state.bus.publish("Context.Assembled", &ev);
+        if coverage_omitted > 0 {
+            let mut ev2 = json!({
+                "proj": ev["proj"].clone(),
+                "query": ev["query"].clone(),
+                "pool": coverage_pool,
+                "omitted": coverage_omitted,
+            });
+            crate::ext::corr::ensure_corr(&mut ev2);
+            state.bus.publish("Context.Coverage", &ev2);
+        }
+    }
     ok(json!({
-        "beliefs": items,
+        "beliefs": beliefs,
         "recent": { "intents": intents, "actions": actions, "files": files },
         "policy": { "hints": policy_hints },
         "model": { "default": model_default },
         "project": { "name": proj, "notes": notes_path },
-        "params": { "proj": q.proj, "q": q.q, "k": q.k.unwrap_or(8) }
+        "budget": { "slots": { "instructions": q.s_inst, "plan": q.s_plan, "policy": q.s_policy, "evidence": q.s_evid, "nice": q.s_nice },
+                     "requested": { "k": k_default, "evidence_k": evid_k, "diversity": q.div },
+                     "usage": { "evidence_tokens": used_tokens } },
+        "coverage": { "pool": coverage_pool, "selected": coverage_selected, "omitted": coverage_omitted, "recall_risk": coverage_omitted > 0, "evidence_tokens_used": used_tokens, "evidence_tokens_budget": budget_tokens },
+        "params": { "proj": q.proj, "q": q.q, "k": k_default, "evidence_k": evid_k, "div": q.div, "s_inst": q.s_inst, "s_plan": q.s_plan, "s_policy": q.s_policy, "s_evid": q.s_evid, "s_nice": q.s_nice }
     }))
+}
+
+// ------------- Rehydrate API -------------
+
+#[derive(Deserialize, utoipa::ToSchema)]
+pub struct RehydrateReq {
+    ptr: serde_json::Value,
+}
+
+#[arw_admin(
+    method = "POST",
+    path = "/admin/context/rehydrate",
+    summary = "Rehydrate a pointer (belief/file) into full content"
+)]
+pub async fn rehydrate_post(State(state): State<AppState>, Json(req): Json<RehydrateReq>) -> impl IntoResponse {
+    use tokio::fs as afs;
+    let kind = req.ptr.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+    match kind {
+        "world_belief" => {
+            let id = match req.ptr.get("id").and_then(|v| v.as_str()) { Some(s) => s, None => return super::ApiError::bad_request("missing id").into_response() };
+            let proj = req.ptr.get("proj").and_then(|v| v.as_str());
+            let ws = super::world::store().read().unwrap();
+            let g = if let Some(p) = proj { ws.proj_graphs.get(p) } else { Some(&ws.default_graph) };
+            if let Some(g) = g {
+                if let Some(n) = g.nodes.get(id) {
+                    let v = serde_json::to_value(n).unwrap_or_else(|_| serde_json::json!({"id": id}));
+                    return ok(serde_json::json!({"ptr": req.ptr, "belief": v, "version": g.version})).into_response();
+                }
+            }
+            super::ApiError::not_found("belief not found").into_response()
+        }
+        "file" => {
+            // Gate file rehydrate via policy key; deny by default
+            if !arw_core::gating::allowed("context:rehydrate:file") {
+                return super::ApiError::forbidden("gated").into_response();
+            }
+            let path = match req.ptr.get("path").and_then(|v| v.as_str()) { Some(s) => std::path::PathBuf::from(s), None => return super::ApiError::bad_request("missing path").into_response() };
+            // Best-effort safeguard: limit to reasonably-sized files and return head only
+            let meta = match afs::metadata(&path).await { Ok(m) => m, Err(_) => return super::ApiError::not_found("file not found").into_response() };
+            if !meta.is_file() { return super::ApiError::bad_request("not a file").into_response(); }
+            let size = meta.len();
+            let cap: u64 = std::env::var("ARW_REHYDRATE_FILE_HEAD_KB").ok().and_then(|s| s.parse::<u64>().ok()).unwrap_or(64) * 1024;
+            let take = size.min(cap);
+            let mut f = match afs::File::open(&path).await { Ok(f) => f, Err(_) => return super::ApiError::not_found("file open failed").into_response() };
+            let mut buf = vec![0u8; take as usize];
+            use tokio::io::AsyncReadExt;
+            let n = match f.read(&mut buf).await { Ok(n) => n, Err(_) => 0 };
+            let content = String::from_utf8_lossy(&buf[..n]).to_string();
+            return ok(serde_json::json!({
+                "ptr": req.ptr,
+                "file": {"path": path.to_string_lossy(), "size": size, "head_bytes": n as u64, "truncated": size > n as u64 },
+                "content": content
+            })).into_response();
+        }
+        _ => super::ApiError::bad_request("unsupported ptr kind").into_response(),
+    }
 }

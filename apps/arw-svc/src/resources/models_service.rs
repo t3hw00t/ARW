@@ -1532,6 +1532,24 @@ impl ModelsService {
                                         Some(extra),
                                     )
                                     .await;
+                                    // Ledger: deny (budget hard exhausted)
+                                    let mut entry = json!({
+                                        "decision": "deny",
+                                        "reason_code": "hard_exhausted",
+                                        "posture": std::env::var("ARW_NET_POSTURE").unwrap_or_else(|_| "off".into()),
+                                        "project_id": std::env::var("ARW_PROJECT_ID").unwrap_or_else(|_| "default".into()),
+                                        "episode_id": null,
+                                        "corr_id": corr_id,
+                                        "node_id": null,
+                                        "tool_id": "models.download",
+                                        "dest": {"host": dest_host, "port": dest_port as u64, "protocol": dest_proto},
+                                        "bytes_out": 0u64,
+                                        "bytes_in": resume_from + downloaded,
+                                        "duration_ms": t0.elapsed().as_millis() as u64,
+                                    });
+                                    crate::ext::corr::ensure_corr(&mut entry);
+                                    super::super::ext::io::egress_ledger_append(&entry).await;
+                                    sp.bus.publish("Egress.Ledger.Appended", &entry);
                                     return;
                                 }
                                 // Fire a one-time degrade notification when soft budget crosses threshold
@@ -1613,6 +1631,24 @@ impl ModelsService {
                                         Some(extra),
                                     )
                                     .await;
+                                    // Ledger: deny
+                                    let mut entry = json!({
+                                        "decision": "deny",
+                                        "reason_code": "size_limit_stream",
+                                        "posture": std::env::var("ARW_NET_POSTURE").unwrap_or_else(|_| "off".into()),
+                                        "project_id": std::env::var("ARW_PROJECT_ID").unwrap_or_else(|_| "default".into()),
+                                        "episode_id": null,
+                                        "corr_id": corr_id,
+                                        "node_id": null,
+                                        "tool_id": "models.download",
+                                        "dest": {"host": dest_host, "port": dest_port as u64, "protocol": dest_proto},
+                                        "bytes_out": 0u64,
+                                        "bytes_in": resume_from + downloaded,
+                                        "duration_ms": t0.elapsed().as_millis() as u64,
+                                    });
+                                    crate::ext::corr::ensure_corr(&mut entry);
+                                    super::super::ext::io::egress_ledger_append(&entry).await;
+                                    sp.bus.publish("Egress.Ledger.Appended", &entry);
                                     return;
                                 }
                                 // For unknown total, periodically ensure we keep reserve free space
@@ -1633,6 +1669,24 @@ impl ModelsService {
                                                 Some(extra),
                                             )
                                             .await;
+                                            // Ledger: deny
+                                            let mut entry = json!({
+                                                "decision": "deny",
+                                                "reason_code": "disk_insufficient_stream",
+                                                "posture": std::env::var("ARW_NET_POSTURE").unwrap_or_else(|_| "off".into()),
+                                                "project_id": std::env::var("ARW_PROJECT_ID").unwrap_or_else(|_| "default".into()),
+                                                "episode_id": null,
+                                                "corr_id": corr_id,
+                                                "node_id": null,
+                                                "tool_id": "models.download",
+                                                "dest": {"host": dest_host, "port": dest_port as u64, "protocol": dest_proto},
+                                                "bytes_out": 0u64,
+                                                "bytes_in": resume_from + downloaded,
+                                                "duration_ms": t0.elapsed().as_millis() as u64,
+                                            });
+                                            crate::ext::corr::ensure_corr(&mut entry);
+                                            super::super::ext::io::egress_ledger_append(&entry).await;
+                                            sp.bus.publish("Egress.Ledger.Appended", &entry);
                                             return;
                                         }
                                         // Emit standardized heartbeat when total unknown

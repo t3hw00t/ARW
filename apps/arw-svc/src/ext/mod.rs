@@ -364,6 +364,7 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/tools/run", post(tools_api::run_tool_endpoint))
         // context assembly
         .route("/context/assemble", get(context_api::assemble_get))
+        .route("/context/rehydrate", post(context_api::rehydrate_post))
         // logic units & patch engine (MVP stubs)
         .route("/logic-units/install", post(logic_units_api::install))
         .route("/logic-units/apply", post(logic_units_api::apply))
@@ -412,6 +413,14 @@ pub fn extra_routes() -> Router<AppState> {
         .route(
             "/admin/memory/quarantine/admit",
             post(review_api::memory_quarantine_admit),
+        )
+        .route(
+            "/admin/world_diffs/queue",
+            post(review_api::world_diffs_queue),
+        )
+        .route(
+            "/admin/world_diffs/decision",
+            post(review_api::world_diffs_decision),
         )
         .route(
             "/state/episode/:id/snapshot",

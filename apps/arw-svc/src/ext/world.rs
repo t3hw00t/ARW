@@ -672,6 +672,89 @@ pub async fn select_top_claims(proj: Option<&str>, q: &str, k: usize) -> Vec<Val
     scored.into_iter().take(kk).map(|(_, v)| v).collect()
 }
 
+// Diversity-aware selection (MMR-style): greedily selects items maximizing
+// lambda * relevance - (1-lambda) * similarity_to_selected.
+// Similarity is a cheap Jaccard over token sets from id + string props.
+pub async fn select_top_claims_diverse(
+    proj: Option<&str>,
+    q: &str,
+    k: usize,
+    lambda: f64,
+) -> Vec<Value> {
+    // Clamp params
+    let k = k.clamp(1, 50);
+    let lambda = if !(0.0..=1.0).contains(&lambda) { 0.5 } else { lambda };
+    // Build scored list using existing scorer
+    let ws = store().read().unwrap();
+    let g = if let Some(p) = proj { ws.proj_graphs.get(p) } else { Some(&ws.default_graph) };
+    let mut scored: Vec<(f64, Value)> = Vec::new();
+    if let Some(g) = g {
+        for n in g.nodes.values() {
+            if !matches!(n.kind, NodeKind::Claim) { continue; }
+            let (s, tr) = score_claim(n, q);
+            let mut item = json!({
+                "id": n.id,
+                "kind": "claim",
+                "confidence": n.confidence,
+                "props": n.props,
+                "last": n.last_observed,
+                "trace": tr,
+            });
+            if !n.provenance.is_empty() {
+                item["provenance"] = json!(n.provenance.iter().take(3).collect::<Vec<_>>());
+            }
+            scored.push((s, item));
+        }
+    }
+    // Tokenize helper
+    fn tokenize(v: &Value) -> std::collections::HashSet<String> {
+        let mut s = String::new();
+        if let Some(id) = v.get("id").and_then(|x| x.as_str()) { s.push_str(id); s.push(' '); }
+        if let Some(props) = v.get("props").and_then(|x| x.as_object()) {
+            for (_k, vv) in props.iter() {
+                if let Some(t) = vv.as_str() { s.push_str(t); s.push(' '); }
+            }
+        }
+        s.split(|c: char| !c.is_alphanumeric())
+            .filter(|t| !t.is_empty())
+            .map(|t| t.to_ascii_lowercase())
+            .collect()
+    }
+    fn jaccard(a: &std::collections::HashSet<String>, b: &std::collections::HashSet<String>) -> f64 {
+        if a.is_empty() || b.is_empty() { return 0.0; }
+        let inter = a.intersection(b).count() as f64;
+        let uni = a.union(b).count() as f64;
+        if uni == 0.0 { 0.0 } else { inter / uni }
+    }
+    // Precompute tokens for scored list
+    let mut items: Vec<(f64, Value, std::collections::HashSet<String>)> = scored
+        .into_iter()
+        .map(|(s, v)| {
+            let toks = tokenize(&v);
+            (s, v, toks)
+        })
+        .collect();
+    // Greedy MMR selection
+    let mut selected: Vec<(f64, Value, std::collections::HashSet<String>)> = Vec::new();
+    while selected.len() < k && !items.is_empty() {
+        let mut best_idx: usize = 0;
+        let mut best_score: f64 = f64::NEG_INFINITY;
+        for (i, (rel, v, toks)) in items.iter().enumerate() {
+            // max similarity to already selected
+            let mut max_sim = 0.0;
+            for (_r2, _v2, t2) in selected.iter() {
+                let sim = jaccard(toks, t2);
+                if sim > max_sim { max_sim = sim; }
+            }
+            let mmr = lambda * *rel - (1.0 - lambda) * max_sim;
+            if mmr > best_score { best_score = mmr; best_idx = i; }
+        }
+        let picked = items.remove(best_idx);
+        selected.push(picked);
+    }
+    selected.into_iter().map(|(_s, v, _t)| v).collect()
+}
+
 // Recent file entities (by last_observed), optionally scoped to project
 pub async fn select_recent_files(proj: Option<&str>, k: usize) -> Vec<Value> {
     let ws = store().read().unwrap();

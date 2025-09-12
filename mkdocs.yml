@@ -47,6 +47,7 @@ nav:
       - Artifacts & Provenance: architecture/artifacts_provenance.md
       - Budgets & Context: architecture/budgets_context.md
       - Memory Lifecycle: architecture/memory_lifecycle.md
+      - Context Working Set: architecture/context_working_set.md
       - Error & Event Taxonomy: architecture/error_taxonomy.md
       - Versioning & Migration: architecture/versioning_migration.md
       - Scheduling & Backpressure: architecture/scheduling_backpressure.md

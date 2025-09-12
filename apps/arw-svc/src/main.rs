@@ -2058,7 +2058,27 @@ async fn state_world_select_doc() -> impl IntoResponse {
     (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
 ))]
 async fn context_assemble_doc() -> impl IntoResponse {
-    ext::context_api::assemble_get(axum::extract::Query(ext::context_api::AssembleQs { proj: None, q: None, k: Some(8) })).await
+    ext::context_api::assemble_get(
+        axum::extract::State(AppState {
+            bus: arw_events::Bus::new_with_replay(1, 1),
+            stop_tx: None,
+            queue: std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new()),
+            resources: Resources::new(),
+        }),
+        axum::extract::Query(ext::context_api::AssembleQs {
+            proj: None,
+            q: None,
+            k: Some(8),
+            evidence_k: None,
+            div: None,
+            s_inst: None,
+            s_plan: None,
+            s_policy: None,
+            s_evid: None,
+            s_nice: None,
+        }),
+    )
+    .await
 }
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/admin/state/intents", tag = "Admin/State", responses(

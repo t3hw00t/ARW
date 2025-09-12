@@ -11,6 +11,10 @@ Treat context assembly as a readable pipeline (“recipe”) of pipes:
 - Notes with tags
 - Tool docs and examples
 
+Pointers and rehydration
+- Include stable IDs alongside any excerpt so the agent can request more by ID.
+- Rehydrate on demand: when detail is insufficient, fetch the next most useful slices instead of dumping history.
+
 What the UI shows
 - Live preview of what made it into the prompt
 - Token budget gauge
@@ -23,9 +27,11 @@ Authoring
 Runtime
 - The recipe builder produces a structured context plan, which is emitted as an event and stored in episodes
 - Policy checks run before reading any resource; denials become inline prompts
+ - Slot budgets: fixed ceilings for instructions, plan, safety/policy, and evidence ensure you never blow the window.
 
 Tips
 - Prefer small, specific globs and query constraints
 - Use tags in notes to control inclusion
 - Cap tokens per pipe; monitor the gauge as you tweak
 
+See also: Architecture → Context Working Set

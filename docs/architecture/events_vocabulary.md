@@ -14,6 +14,7 @@ Canonical categories
 - Policy: `Policy.Prompt`, `Policy.Allow`, `Policy.Deny`
 - Runtime: `Runtime.Health`, `Runtime.ProfileChanged`
 - Models: `Models.DownloadProgress`, `Models.Changed`
+  - Models.DownloadProgress statuses may include: `started`, `queued`, `admitted`, `resumed`, `downloading`, `degraded` (soft budget), `complete`, `error`, `canceled`.
 - Self‑Model: `SelfModel.Proposed`, `SelfModel.Updated`
 - Logic Units: `LogicUnit.Suggested`, `LogicUnit.Installed`, `LogicUnit.Applied`, `LogicUnit.Reverted`, `LogicUnit.Promoted`
  - Cluster: `Cluster.Node.Advertise`, `Cluster.Node.Heartbeat`, `Cluster.Node.Changed`
@@ -41,6 +42,7 @@ Mapping from existing ARW events
 - Cluster events are additive and off by default. When enabled, Workers publish `Cluster.Node.Advertise` (capabilities, health), periodic `Cluster.Node.Heartbeat`, and receive `Job.*` assignments. The Home Node merges remote `Job.*` and `Session.*` events into the unified timeline by `corr_id`.
 - World model (read‑model) materializes from existing events like `Feedback.Suggested` / `Beliefs.Updated`, `Projects.FileWritten`, `Actions.HintApplied`, `Runtime.Health`, and `Models.DownloadProgress`. A compact `World.Updated` event is emitted with counts and version for UI/SSE.
 - Egress firewall emits planned events for previews and decisions; an append‑only ledger records normalized entries with episode/project/node attribution.
+ - Model downloads emit progress heartbeats and budget/disk hints; when enabled, egress ledger entries are appended for `allow` and `deny` decisions around downloads.
  - Memory quarantine emits planned events; a compact review queue materializes under `/state/memory/quarantine`.
  - Cluster trust uses planned manifest events; scheduler logs pin/deny reasons as codes.
 - Tools registered via `#[arw_tool]` already emit `Tool.Ran` with inputs/outputs summary.

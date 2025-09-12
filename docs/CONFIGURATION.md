@@ -38,6 +38,7 @@ Defaults
 - `ARW_OPENAI_MODEL`: default model name when using OpenAI‑compatible backend.
 - `ARW_MODELS_MAX_MB`: hard cap for single model download size in MiB (default `4096`).
 - `ARW_MODELS_DISK_RESERVE_MB`: reserve free space during downloads in MiB (default `256`).
+- `ARW_MODELS_MAX_CONC`: max concurrent model downloads (default `2`; `0` or `<1` treated as `1`).
 
 ### Downloads & Budgets
 - `ARW_BUDGET_DOWNLOAD_SOFT_MS`: soft budget window in ms (0 = unbounded).
