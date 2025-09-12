@@ -25,7 +25,7 @@ Body:
   "id": "<model-id>",
   "url": "https://.../model.gguf",
   "provider": "local",  // optional
-  "sha256": "<hex>"      // optional
+  "sha256": "<hex>"      // required (fail-closed)
 }
 ```
 
@@ -33,7 +33,7 @@ Behavior:
 - Creates a temporary file `{state_dir}/models/<name>.part` and appends chunks.
 - On completion, atomically renames to the final filename.
 - Honors `Content-Disposition: attachment; filename=...` to pick a server-provided filename (sanitized cross‑platform).
-- When `sha256` is provided, verifies the file and removes it on mismatch.
+- Verifies the file against `sha256` and removes it on mismatch.
 - If a `.part` exists and the server supports HTTP Range, ARW resumes from the saved offset.
   - Uses `If-Range` with previously observed `ETag`/`Last-Modified` to avoid corrupt resumes when the remote file changed.
 
@@ -94,11 +94,14 @@ Resume:
 
 ## Notes
 - When `total` is unknown, events may omit it and include only `downloaded`.
-- Errors surface in progress events; model list isn’t updated on failure.
+- On failure, the model list is updated to `status: "error"` with `error_code` to avoid stuck "downloading" states.
 - State directory is shown in `GET /probe`.
 - Disk safety: the downloader reserves space to avoid filling the disk. Set `ARW_MODELS_DISK_RESERVE_MB` (default 256) to control the reserved free‑space buffer. If there isn’t enough free space for the download, it aborts with an error event.
 - Size caps: set `ARW_MODELS_MAX_MB` (default 4096) to cap the maximum allowed size per download. The cap is enforced using the `Content-Length` when available and during streaming when it isn’t.
 - Checksum: when `sha256` is provided, it must be a 64‑char hex string; invalid values are rejected up front.
-- Budgets: soft/hard budgets can be configured via `ARW_BUDGET_DOWNLOAD_*`; UI may display a budget snapshot alongside progress.
+- Progress payloads can include a budget snapshot (`budget`) and disk info (`disk`) when enabled via env:
+  - `ARW_DL_PROGRESS_INCLUDE_BUDGET=1`
+  - `ARW_DL_PROGRESS_INCLUDE_DISK=1`
+  Related tuning knobs: `ARW_MODELS_MAX_MB`, `ARW_MODELS_DISK_RESERVE_MB`, `ARW_DL_MIN_MBPS`, `ARW_DL_EWMA_ALPHA`, `ARW_DL_SEND_RETRIES`, `ARW_DL_STREAM_RETRIES`, `ARW_DL_IDLE_TIMEOUT_SECS`, `ARW_BUDGET_SOFT_DEGRADE_PCT`.
 - Admission checks: when `total` is known, the downloader estimates if it can finish within the remaining hard budget using a throughput baseline `ARW_DL_MIN_MBPS` and a persisted EWMA. If not, it emits `code: "admission_denied"`.
 - Idle safety: when no hard budget is set, `ARW_DL_IDLE_TIMEOUT_SECS` applies an idle timeout to avoid hung transfers.

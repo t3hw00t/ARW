@@ -35,6 +35,7 @@ nav:
       - Budgets & Context: architecture/budgets_context.md
       - Memory Lifecycle: architecture/memory_lifecycle.md
       - Error & Event Taxonomy: architecture/error_taxonomy.md
+      - Versioning & Migration: architecture/versioning_migration.md
       - Scheduling & Backpressure: architecture/scheduling_backpressure.md
       - Data Governance & Privacy: architecture/data_governance.md
       - Replay & Time Travel: architecture/replay_time_travel.md

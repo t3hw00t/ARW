@@ -110,7 +110,7 @@ POST /tools/{tool_id}:invoke
 
 GET /probe?task_id=...&step=...
 
-WS /events
+SSE /events
 
 GET /spec/openapi.yaml
 
