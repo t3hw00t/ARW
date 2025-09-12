@@ -72,6 +72,8 @@ impl ModelsService {
                 "Models.Changed",
                 &json!({"op":"add","id": v.last().and_then(|m| m.get("id")).cloned()}),
             );
+            // audit
+            super::super::ext::io::audit_event("models.add", &json!({"id": v.last().and_then(|m| m.get("id")).cloned() })).await;
         }
     }
 
@@ -83,6 +85,7 @@ impl ModelsService {
             state
                 .bus
                 .publish("Models.Changed", &json!({"op":"delete","id": id}));
+            super::super::ext::io::audit_event("models.delete", &json!({"id": id})).await;
         }
     }
 
@@ -98,12 +101,16 @@ impl ModelsService {
         state
             .bus
             .publish("Models.Changed", &json!({"op":"default","id": id}));
-        super::super::ext::io::save_json_file_async(
+        let res = super::super::ext::io::save_json_file_async(
             &super::super::ext::paths::models_path(),
             &Value::Array(crate::ext::models().read().await.clone()),
         )
         .await
-        .map_err(|e| e.to_string())
+        .map_err(|e| e.to_string());
+        if res.is_ok() {
+            super::super::ext::io::audit_event("models.default", &json!({"id": id})).await;
+        }
+        res
     }
 
     // ---- Download worker ----
@@ -126,6 +133,7 @@ impl ModelsService {
         let mut p = json!({"id": id, "status":"cancel-requested"});
         crate::ext::corr::ensure_corr(&mut p);
         state.bus.publish("Models.DownloadProgress", &p);
+        super::super::ext::io::audit_event("models.download.cancel", &p).await;
     }
 
     pub async fn download(
@@ -169,6 +177,7 @@ impl ModelsService {
             let mut p = json!({"id": id_in, "url": url_in});
             crate::ext::corr::ensure_corr(&mut p);
             state.bus.publish("Models.Download", &p);
+            super::super::ext::io::audit_event("models.download", &p).await;
         }
         // Spawn worker
         let id = id_in.clone();
