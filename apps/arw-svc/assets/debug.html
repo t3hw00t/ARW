@@ -354,6 +354,7 @@
         <select id="selfAgentSel" style="min-width:180px"></select>
         <input id="selfAgentId" placeholder="or type agent id" style="width:200px">
         <button class="primary" onclick="selfView()">View</button>
+        <label><input type="checkbox" id="selfLive"> live</label>
       </div>
       <div id="selfSummary" class="row" style="flex-direction:column;gap:6px"></div>
       <div class="row"><button class="iconbtn" id="copyJsonSelf" title="Copy JSON">Copy</button></div>
@@ -610,6 +611,9 @@ function renderInsights(){
   es.addEventListener('Probe.Metrics', (e)=>{
     try{ const j=JSON.parse(e.data||'{}'); updateSystemFromMetrics(j); }catch{}
   });
+  // Self‑model live refresh on related events
+  es.addEventListener('Tool.Ran', ()=>{ try{ const cb=document.getElementById('selfLive'); if(cb && cb.checked){ selfView(); } }catch{} });
+  es.addEventListener('SelfModel.Updated', ()=>{ try{ const cb=document.getElementById('selfLive'); if(cb && cb.checked){ selfView(); } }catch{} });
 }
 
 // --- System/HW helpers ---

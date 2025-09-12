@@ -404,6 +404,15 @@ pub fn extra_routes() -> Router<AppState> {
             get(review_api::memory_quarantine_get),
         )
         .route("/state/world_diffs", get(review_api::world_diffs_get))
+        // admin: quarantine review operations
+        .route(
+            "/admin/memory/quarantine",
+            post(review_api::memory_quarantine_add),
+        )
+        .route(
+            "/admin/memory/quarantine/admit",
+            post(review_api::memory_quarantine_admit),
+        )
         .route(
             "/state/episode/:id/snapshot",
             get(|State(state), axum::extract::Path(id)| async move {

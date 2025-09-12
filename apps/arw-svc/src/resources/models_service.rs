@@ -1122,6 +1122,24 @@ impl ModelsService {
                                     Some(extra),
                                 )
                                 .await;
+                                // Ledger: deny
+                                let mut entry = json!({
+                                    "decision": "deny",
+                                    "reason_code": "quota_exceeded",
+                                    "posture": std::env::var("ARW_NET_POSTURE").unwrap_or_else(|_| "off".into()),
+                                    "project_id": std::env::var("ARW_PROJECT_ID").unwrap_or_else(|_| "default".into()),
+                                    "episode_id": null,
+                                    "corr_id": corr_id,
+                                    "node_id": null,
+                                    "tool_id": "models.download",
+                                    "dest": {"host": dest_host, "port": dest_port as u64, "protocol": dest_proto},
+                                    "bytes_out": 0u64,
+                                    "bytes_in": 0u64,
+                                    "duration_ms": 0u64,
+                                });
+                                crate::ext::corr::ensure_corr(&mut entry);
+                                super::super::ext::io::egress_ledger_append(&entry).await;
+                                sp.bus.publish("Egress.Ledger.Appended", &entry);
                                 return;
                             }
                         }
@@ -1137,6 +1155,24 @@ impl ModelsService {
                                 Some(extra),
                             )
                             .await;
+                            // Ledger: deny
+                            let mut entry = json!({
+                                "decision": "deny",
+                                "reason_code": "size_limit",
+                                "posture": std::env::var("ARW_NET_POSTURE").unwrap_or_else(|_| "off".into()),
+                                "project_id": std::env::var("ARW_PROJECT_ID").unwrap_or_else(|_| "default".into()),
+                                "episode_id": null,
+                                "corr_id": corr_id,
+                                "node_id": null,
+                                "tool_id": "models.download",
+                                "dest": {"host": dest_host, "port": dest_port as u64, "protocol": dest_proto},
+                                "bytes_out": 0u64,
+                                "bytes_in": 0u64,
+                                "duration_ms": 0u64,
+                            });
+                            crate::ext::corr::ensure_corr(&mut entry);
+                            super::super::ext::io::egress_ledger_append(&entry).await;
+                            sp.bus.publish("Egress.Ledger.Appended", &entry);
                             return;
                         }
                     }
@@ -1262,6 +1298,24 @@ impl ModelsService {
                             Some(extra),
                         )
                         .await;
+                        // Ledger: deny
+                        let mut entry = json!({
+                            "decision": "deny",
+                            "reason_code": "size_limit",
+                            "posture": std::env::var("ARW_NET_POSTURE").unwrap_or_else(|_| "off".into()),
+                            "project_id": std::env::var("ARW_PROJECT_ID").unwrap_or_else(|_| "default".into()),
+                            "episode_id": null,
+                            "corr_id": corr_id,
+                            "node_id": null,
+                            "tool_id": "models.download",
+                            "dest": {"host": dest_host, "port": dest_port as u64, "protocol": dest_proto},
+                            "bytes_out": 0u64,
+                            "bytes_in": 0u64,
+                            "duration_ms": 0u64,
+                        });
+                        crate::ext::corr::ensure_corr(&mut entry);
+                        super::super::ext::io::egress_ledger_append(&entry).await;
+                        sp.bus.publish("Egress.Ledger.Appended", &entry);
                         return;
                     }
                     // Admission: if hard budget configured and we know total bytes, ensure we can plausibly finish
@@ -1288,6 +1342,24 @@ impl ModelsService {
                                 Some(extra),
                             )
                             .await;
+                            // Ledger: deny
+                            let mut entry = json!({
+                                "decision": "deny",
+                                "reason_code": "admission_denied",
+                                "posture": std::env::var("ARW_NET_POSTURE").unwrap_or_else(|_| "off".into()),
+                                "project_id": std::env::var("ARW_PROJECT_ID").unwrap_or_else(|_| "default".into()),
+                                "episode_id": null,
+                                "corr_id": corr_id,
+                                "node_id": null,
+                                "tool_id": "models.download",
+                                "dest": {"host": dest_host, "port": dest_port as u64, "protocol": dest_proto},
+                                "bytes_out": 0u64,
+                                "bytes_in": 0u64,
+                                "duration_ms": 0u64,
+                            });
+                            crate::ext::corr::ensure_corr(&mut entry);
+                            super::super::ext::io::egress_ledger_append(&entry).await;
+                            sp.bus.publish("Egress.Ledger.Appended", &entry);
                             return;
                         }
                     }
@@ -1306,6 +1378,24 @@ impl ModelsService {
                                     Some(extra),
                                 )
                                 .await;
+                                // Ledger: deny
+                                let mut entry = json!({
+                                    "decision": "deny",
+                                    "reason_code": "disk_insufficient",
+                                    "posture": std::env::var("ARW_NET_POSTURE").unwrap_or_else(|_| "off".into()),
+                                    "project_id": std::env::var("ARW_PROJECT_ID").unwrap_or_else(|_| "default".into()),
+                                    "episode_id": null,
+                                    "corr_id": corr_id,
+                                    "node_id": null,
+                                    "tool_id": "models.download",
+                                    "dest": {"host": dest_host, "port": dest_port as u64, "protocol": dest_proto},
+                                    "bytes_out": 0u64,
+                                    "bytes_in": 0u64,
+                                    "duration_ms": 0u64,
+                                });
+                                crate::ext::corr::ensure_corr(&mut entry);
+                                super::super::ext::io::egress_ledger_append(&entry).await;
+                                sp.bus.publish("Egress.Ledger.Appended", &entry);
                                 return;
                             }
                         }
