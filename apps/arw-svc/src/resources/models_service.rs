@@ -5,6 +5,7 @@ use futures_util::StreamExt;
 use once_cell::sync::OnceCell;
 use std::collections::HashSet;
 use tokio::sync::RwLock;
+use fs2; // for available_space
 
 #[derive(Default)]
 pub struct ModelsService;
@@ -14,11 +15,11 @@ impl ModelsService {
         Self
     }
 
-    fn max_download_bytes() -> u64 {
-        std::env::var("ARW_MODELS_MAX_MB")
+    fn disk_reserve_bytes() -> u64 {
+        std::env::var("ARW_MODELS_DISK_RESERVE_MB")
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(4096)
+            .unwrap_or(256)
             .saturating_mul(1024 * 1024)
     }
 
@@ -198,7 +199,7 @@ impl ModelsService {
                 return Err("invalid sha256".into());
             }
         }
-        let max_bytes = Self::max_download_bytes();
+        let reserve_bytes = Self::disk_reserve_bytes();
         let sp = state.clone();
         tokio::spawn(async move {
             use sha2::Digest;
@@ -247,18 +248,24 @@ impl ModelsService {
                         }
                         total_rem
                     };
-                    // Hard cap by expected total when known
-                    if total_all > 0 && total_all > max_bytes {
-                        let mut p = json!({
-                          "id": id,
-                          "error": "size exceeds limit",
-                          "total": total_all,
-                          "max_bytes": max_bytes
-                        });
-                        crate::ext::corr::ensure_corr(&mut p);
-                        sp.bus.publish("Models.DownloadProgress", &p);
-                        crate::ext::io::audit_event("models.download.error", &p).await;
-                        return;
+                    // Pre-check free space if total size known
+                    if total_all > 0 {
+                        if let Ok(avail) = fs2::available_space(&target_dir) {
+                            let need = total_all.saturating_sub(resume_from);
+                            if avail <= reserve_bytes.saturating_add(need) {
+                                let mut p = json!({
+                                  "id": id,
+                                  "error": "insufficient disk space",
+                                  "need": need,
+                                  "available": avail,
+                                  "reserve": reserve_bytes
+                                });
+                                crate::ext::corr::ensure_corr(&mut p);
+                                sp.bus.publish("Models.DownloadProgress", &p);
+                                crate::ext::io::audit_event("models.download.error", &p).await;
+                                return;
+                            }
+                        }
                     }
                     let mut file = if resume_from > 0 {
                         match afs::OpenOptions::new().append(true).open(&tmp).await {
@@ -286,6 +293,7 @@ impl ModelsService {
                         }
                     };
                     let mut downloaded: u64 = 0;
+                    let mut since_check: u64 = 0;
                     let mut stream = resp.bytes_stream();
                     while let Some(chunk) = stream.next().await {
                         match chunk {
@@ -308,19 +316,26 @@ impl ModelsService {
                                     return;
                                 }
                                 downloaded += bytes.len() as u64;
-                                // streaming cap enforcement when total is unknown
-                                if max_bytes > 0 && resume_from + downloaded > max_bytes {
-                                    let _ = afs::remove_file(&tmp).await;
-                                    let mut p = json!({
-                                      "id": id,
-                                      "error": "size exceeds limit (stream)",
-                                      "downloaded": resume_from + downloaded,
-                                      "max_bytes": max_bytes
-                                    });
-                                    crate::ext::corr::ensure_corr(&mut p);
-                                    sp.bus.publish("Models.DownloadProgress", &p);
-                                    crate::ext::io::audit_event("models.download.error", &p).await;
-                                    return;
+                                // For unknown total, periodically ensure we keep reserve free space
+                                since_check = since_check.saturating_add(bytes.len() as u64);
+                                if total_all == 0 && since_check >= 8 * 1024 * 1024 {
+                                    since_check = 0;
+                                    if let Ok(avail) = fs2::available_space(&target_dir) {
+                                        if avail <= reserve_bytes.saturating_add(8 * 1024 * 1024) {
+                                            let _ = afs::remove_file(&tmp).await;
+                                            let mut p = json!({
+                                              "id": id,
+                                              "error": "insufficient disk space (stream)",
+                                              "downloaded": resume_from + downloaded,
+                                              "available": avail,
+                                              "reserve": reserve_bytes
+                                            });
+                                            crate::ext::corr::ensure_corr(&mut p);
+                                            sp.bus.publish("Models.DownloadProgress", &p);
+                                            crate::ext::io::audit_event("models.download.error", &p).await;
+                                            return;
+                                        }
+                                    }
                                 }
                                 if total_all > 0 {
                                     let pct =
