@@ -43,6 +43,12 @@ Roadmap highlights themes and timelines; Backlog tracks actionable items.
 Scope: Lightweight, near‑live suggestions with guardrails.
 See Backlog → Now → Feedback Engine for concrete work items.
 
+## Complexity Collapse Initiative
+- Collapse surfaces to one API (`/state`, `/events`, `/actions`), one SQLite journal + content-addressed blobs, one job scheduler, one plugin ABI, and a shared UI sidecar/form builder.
+- Schema-first patches for Project/AgentProfile/Policy/etc. with a documented event taxonomy; flows and errors modeled as data.
+- Unified engines: retrieval pipeline, memory abstraction, runtime/cluster matrix, and capability/lease security.
+- Goal: keep the kernel tiny; push features into declarative packs and reusable executors.
+
 ## Mid‑Term (1–2 Months)
 - UI app to manage various project types.
 - WASI plugin sandbox: capability‑based tools with explicit permissions.
