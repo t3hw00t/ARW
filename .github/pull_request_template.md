@@ -17,4 +17,4 @@ Describe the change and why it’s needed.
 - [ ] Clippy clean (`cargo clippy --workspace --all-targets`)
 - [ ] Formatted (`cargo fmt --all`)
 - [ ] CI passes
-
+- [ ] Stability window respected (no breaking HTTP/SSE changes; docs/specs updated)

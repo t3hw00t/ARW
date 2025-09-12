@@ -23,6 +23,15 @@ cargo clippy --workspace --all-targets -- -D warnings
 scripts/test.ps1   # or ./scripts/test.sh
 scripts/docgen.ps1 # or ./scripts/docgen.sh
 just docs-check    # quick docs lint (links/headings), optional
+
+## Stability window
+We are currently in a short stability/consolidation phase. Please:
+- Favor bug fixes, tests, docs, and internal cleanups over new features
+- Keep HTTP/SSE surfaces backward compatible (additive changes only)
+- Ensure clippy clean builds (`-D warnings`) for core crates
+- Regenerate specs and docs on changes touching APIs/tools
+
+See `docs/developer/stability.md` for the freeze checklist.
 ```
 
 Rolling optimization checklist
