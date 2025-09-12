@@ -600,8 +600,51 @@ async fn probe_hw(State(state): State<AppState>) -> impl IntoResponse {
     let kernel = sysinfo::System::kernel_version().unwrap_or_default();
     let arch = std::env::consts::ARCH.to_string();
 
-    // Disks (omitted for portability in this probe; add later if needed)
-    let disks: Vec<serde_json::Value> = Vec::new();
+    // Disks (subset: state_dir and root free/total, best-effort)
+    let state_dir = std::path::Path::new(".");
+    let disks: Vec<serde_json::Value> = {
+        let mut v = Vec::new();
+        if let Ok(av) = fs2::available_space(state_dir) {
+            if let Ok(md) = std::fs::metadata(state_dir) {
+                if let Ok(dev) = nix_dev_from_md(&md) {
+                    v.push(serde_json::json!({"mount": state_dir, "available": av, "dev": dev}));
+                } else {
+                    v.push(serde_json::json!({"mount": state_dir, "available": av}));
+                }
+            }
+        }
+        v
+    };
+
+    // Boot/virt/container hints (Linux-only paths are best-effort)
+    let mut boot = serde_json::Map::new();
+    boot.insert(
+        "uefi".into(),
+        serde_json::Value::Bool(std::path::Path::new("/sys/firmware/efi").exists()),
+    );
+    let mut virt = serde_json::Map::new();
+    virt.insert(
+        "hypervisor_flag".into(),
+        serde_json::Value::Bool(read_cpuinfo_has_flag("hypervisor")),
+    );
+    if let Some(pname) = read_small("/sys/devices/virtual/dmi/id/product_name") {
+        virt.insert("product_name".into(), serde_json::Value::String(pname));
+    }
+    let mut container = serde_json::Map::new();
+    container.insert(
+        "dockerenv".into(),
+        serde_json::Value::Bool(std::path::Path::new("/.dockerenv").exists()),
+    );
+    container.insert(
+        "containerenv".into(),
+        serde_json::Value::Bool(std::path::Path::new("/run/.containerenv").exists()),
+    );
+    if let Ok(v) = std::env::var("container") {
+        container.insert("env".into(), serde_json::Value::String(v));
+    }
+    let wsl = read_small("/proc/sys/kernel/osrelease")
+        .map(|s| s.to_ascii_lowercase().contains("microsoft"))
+        .unwrap_or(false);
 
     // Env hints
     let mut env = serde_json::Map::new();
@@ -624,6 +667,10 @@ async fn probe_hw(State(state): State<AppState>) -> impl IntoResponse {
         "memory": {"total": total_mem, "available": avail_mem},
         "os": {"name": os_name, "version": os_version, "kernel": kernel, "arch": arch},
         "disks": disks,
+        "boot": boot,
+        "virt": virt,
+        "container": container,
+        "wsl": wsl,
         "env": env,
         "gpus": gpus,
     });
@@ -632,15 +679,14 @@ async fn probe_hw(State(state): State<AppState>) -> impl IntoResponse {
     ext::ok::<serde_json::Value>(out).into_response()
 }
 
+#[cfg(target_os = "linux")]
 fn probe_gpus_best_effort() -> Vec<serde_json::Value> {
-    #[cfg(target_os = "linux")]
-    {
-        return probe_gpus_linux();
-    }
-    #[allow(unused_mut)]
-    let mut out: Vec<serde_json::Value> = Vec::new();
+    probe_gpus_linux()
+}
+#[cfg(not(target_os = "linux"))]
+fn probe_gpus_best_effort() -> Vec<serde_json::Value> {
     // TODO: add Windows/macOS probes in future iterations (DXGI/Metal)
-    out
+    Vec::new()
 }
 
 #[cfg(target_os = "linux")]
@@ -687,6 +733,53 @@ fn probe_gpus_linux() -> Vec<serde_json::Value> {
                     driver = b.to_string_lossy().to_string();
                 }
             }
+            // Extra per-vendor hints
+            let mut model = String::new();
+            let mut vram_total: Option<u64> = None;
+            // NVIDIA: parse /proc/driver/nvidia/gpus/<pci>/information
+            if vendor == "0x10de" && !pci_bus.is_empty() {
+                let info_path = format!("/proc/driver/nvidia/gpus/{}/information", pci_bus);
+                if let Ok(body) = fs::read_to_string(&info_path) {
+                    for line in body.lines() {
+                        if let Some(val) = line.strip_prefix("Model:") {
+                            model = val.trim().to_string();
+                        }
+                        if let Some(val) = line.strip_prefix("FB Memory Total:") {
+                            // e.g., " 16384 MiB"
+                            let txt = val.trim();
+                            let parts: Vec<&str> = txt.split_whitespace().collect();
+                            if parts.len() >= 2 {
+                                if let Ok(num) = parts[0].parse::<u64>() {
+                                    let bytes = match parts[1].to_ascii_lowercase().as_str() {
+                                        "mib" => num * 1024 * 1024,
+                                        "gib" => num * 1024 * 1024 * 1024,
+                                        _ => 0,
+                                    };
+                                    if bytes > 0 {
+                                        vram_total = Some(bytes);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            // AMD: try mem_info_vram_total
+            if vendor == "0x1002" {
+                let vpath = dev.join("mem_info_vram_total");
+                if let Ok(s) = fs::read_to_string(&vpath) {
+                    if let Ok(num) = s.trim().parse::<u64>() {
+                        vram_total = Some(num);
+                    }
+                }
+                // Expose product name when available
+                let name_path = dev.join("product_name");
+                if model.is_empty() {
+                    if let Ok(s) = fs::read_to_string(&name_path) {
+                        model = s.trim().to_string();
+                    }
+                }
+            }
             out.push(serde_json::json!({
                 "index": name,
                 "vendor_id": vendor,
@@ -694,10 +787,44 @@ fn probe_gpus_linux() -> Vec<serde_json::Value> {
                 "device_id": device,
                 "pci_bus": pci_bus,
                 "driver": driver,
+                "model": model,
+                "vram_total": vram_total,
             }));
         }
     }
     out
+}
+
+fn read_small(p: &str) -> Option<String> {
+    std::fs::read_to_string(p)
+        .ok()
+        .map(|s| s.trim().to_string())
+}
+
+fn read_cpuinfo_has_flag(flag: &str) -> bool {
+    if let Ok(body) = std::fs::read_to_string("/proc/cpuinfo") {
+        for line in body.lines() {
+            if let Some(rest) = line.strip_prefix("flags") {
+                if rest.contains(flag) {
+                    return true;
+                }
+            }
+        }
+    }
+    false
+}
+
+#[cfg(unix)]
+fn nix_dev_from_md(md: &std::fs::Metadata) -> std::io::Result<u64> {
+    use std::os::unix::fs::MetadataExt as _;
+    Ok(md.dev())
+}
+#[cfg(not(unix))]
+fn nix_dev_from_md(_md: &std::fs::Metadata) -> std::io::Result<u64> {
+    Err(std::io::Error::new(
+        std::io::ErrorKind::Other,
+        "unsupported",
+    ))
 }
 
 #[arw_admin(method = "GET", path = "/admin/emit/test", summary = "Emit test event")]

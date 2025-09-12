@@ -30,6 +30,7 @@ nav:
       - Quickstart: guide/quickstart.md
       - Concepts: guide/concepts.md
       - Desktop Launcher: guide/launcher.md
+      - Compatibility: guide/compatibility.md
       - Features: FEATURES.md
       - Metrics & Insights: guide/METRICS_AND_INSIGHTS.md
       - Models Download: guide/models_download.md

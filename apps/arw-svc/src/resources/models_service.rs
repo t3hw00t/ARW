@@ -23,6 +23,55 @@ impl ModelsService {
             .saturating_mul(1024 * 1024)
     }
 
+    // Produce a cross-platform safe filename (Windows/macOS/Linux).
+    // - Replaces reserved characters with '_'
+    // - Trims trailing dots/spaces (Windows quirk)
+    // - Avoids reserved device names (CON, PRN, AUX, NUL, COM1..9, LPT1..9)
+    // - Caps length to a reasonable limit while preserving extension
+    fn sanitize_file_name(input: &str) -> String {
+        fn is_allowed(c: char) -> bool {
+            // Allow common safe set; disallow control chars and reserved ones.
+            matches!(c,
+                'a'..='z' | 'A'..='Z' | '0'..='9' | '-' | '_' | '.' | ' ')
+        }
+        // Replace disallowed characters.
+        let mut s: String = input
+            .chars()
+            .map(|c| if is_allowed(c) { c } else { '_' })
+            .collect();
+        // Collapse repeated underscores.
+        while s.contains("__") {
+            s = s.replace("__", "_");
+        }
+        // Trim spaces/dots from ends (Windows doesn't like trailing dot/space in file names).
+        s = s.trim_matches(|c: char| c == ' ' || c == '.').to_string();
+        if s.is_empty() {
+            s = "file".to_string();
+        }
+        // Avoid reserved device names (case-insensitive) exactly.
+        let lower = s.to_ascii_lowercase();
+        let reserved = [
+            "con", "prn", "aux", "nul", "com1", "com2", "com3", "com4", "com5", "com6", "com7",
+            "com8", "com9", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
+        ];
+        if reserved.iter().any(|&r| r == lower) {
+            s.push('_');
+        }
+        // Enforce a length cap (keep extension when present).
+        const MAX_LEN: usize = 120; // conservative to fit various filesystems
+        if s.len() > MAX_LEN {
+            if let Some(dot) = s.rfind('.') {
+                let (base, ext) = s.split_at(dot);
+                let keep_base = MAX_LEN.saturating_sub(ext.len());
+                let base_trunc = base.chars().take(keep_base).collect::<String>();
+                s = format!("{}{}", base_trunc, ext);
+            } else {
+                s = s.chars().take(MAX_LEN).collect();
+            }
+        }
+        s
+    }
+
     pub async fn list(&self) -> Vec<Value> {
         crate::ext::models().read().await.clone()
     }
@@ -210,8 +259,8 @@ impl ModelsService {
             use tokio::fs as afs;
             use tokio::io::AsyncWriteExt;
             // sanitize filename and compute target paths
-            let file_name = url.rsplit('/').next().unwrap_or(&id).to_string();
-            let safe_name = file_name.replace(['\\', '/'], "_");
+            let file_name = url.rsplit('/').next().unwrap_or(&id);
+            let safe_name = Self::sanitize_file_name(file_name);
             let target_dir = crate::ext::paths::state_dir().join("models");
             let target = target_dir.join(&safe_name);
             let tmp = target.with_extension("part");
@@ -224,6 +273,10 @@ impl ModelsService {
             let client = reqwest::Client::builder()
                 .connect_timeout(std::time::Duration::from_secs(10))
                 .timeout(std::time::Duration::from_secs(300))
+                .user_agent(format!(
+                    "arw-svc/{} (+https://github.com/t3hw00t/arw)",
+                    env!("CARGO_PKG_VERSION")
+                ))
                 .build()
                 .unwrap_or_else(|_| reqwest::Client::new());
             let mut resume_from: u64 = 0;
@@ -372,11 +425,16 @@ impl ModelsService {
                         return;
                     }
                     if let Err(e) = afs::rename(&tmp, &target).await {
-                        let mut p = json!({"id": id, "error": format!("finalize failed: {}", e)});
-                        crate::ext::corr::ensure_corr(&mut p);
-                        sp.bus.publish("Models.DownloadProgress", &p);
-                        crate::ext::io::audit_event("models.download.error", &p).await;
-                        return;
+                        // On Windows, rename fails if target exists; try removing existing then rename again.
+                        let _ = afs::remove_file(&target).await;
+                        if let Err(e2) = afs::rename(&tmp, &target).await {
+                            let mut p =
+                                json!({"id": id, "error": format!("finalize failed: {}", e2)});
+                            crate::ext::corr::ensure_corr(&mut p);
+                            sp.bus.publish("Models.DownloadProgress", &p);
+                            crate::ext::io::audit_event("models.download.error", &p).await;
+                            return;
+                        }
                     }
                     if let Some(exp) = expect_sha {
                         let mut f = match afs::File::open(&target).await {
