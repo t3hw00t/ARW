@@ -27,3 +27,9 @@ Updated: 2025-09-07
 - Use p95 to find outliers; EWMA helps watch short‑term drift.
 - Send a “latency” signal in the Self‑Learning panel targeting a hot route; Analyze; consider applying the suggested `http_timeout_secs`.
 - Consider switching to the “balanced” profile during high error periods.
+
+## Observability Discipline
+- Four golden signals: latency, traffic, errors, saturation — at tool/model/runtime granularity.
+- Per‑episode timelines: obs → belief → intent → action; include streamed tokens and tool I/O.
+- Per‑project aggregates: success rates, retrieval diversity, cost, and error classes over time.
+- Exportable traces: correlation id and spans attach to problem details and event envelopes.

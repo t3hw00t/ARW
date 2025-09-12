@@ -29,6 +29,17 @@ nav:
   - Architecture:
       - Unified Object Graph: architecture/object_graph.md
       - Events Vocabulary: architecture/events_vocabulary.md
+      - Identity & Tenancy: architecture/identity_tenancy.md
+      - Capability & Consent Ledger: architecture/capability_consent_ledger.md
+      - Artifacts & Provenance: architecture/artifacts_provenance.md
+      - Budgets & Context: architecture/budgets_context.md
+      - Memory Lifecycle: architecture/memory_lifecycle.md
+      - Error & Event Taxonomy: architecture/error_taxonomy.md
+      - Scheduling & Backpressure: architecture/scheduling_backpressure.md
+      - Data Governance & Privacy: architecture/data_governance.md
+      - Replay & Time Travel: architecture/replay_time_travel.md
+      - Naming & IDs: architecture/naming_ids.md
+      - UX Invariants: architecture/ux_invariants.md
   - User Guide:
       - Quickstart: guide/quickstart.md
       - Concepts: guide/concepts.md
@@ -48,6 +59,11 @@ nav:
       - Training Park: guide/training_park.md
       - Plugins & Extensions: guide/plugins.md
       - Permissions & Policies: guide/policy_permissions.md
+      - Evaluation Harness: guide/eval_harness.md
+      - Human‑in‑the‑Loop: guide/human_in_loop.md
+      - Cost & Quotas: guide/cost_quota.md
+      - Offline & Sync: guide/offline_sync.md
+      - Threat Model: guide/threat_model.md
       - Feedback Engine: guide/feedback_engine.md
       - Troubleshooting: guide/troubleshooting.md
   - Admin & Ops:
@@ -75,6 +91,8 @@ nav:
       - Security: developer/SECURITY.md
       - Windows Compatibility Gate: developer/windows-compat-gate.md
       - Windows Start Validation: developer/windows-start-validation.md
+      - Plugin ABI & Trust: developer/plugin_abi_trust.md
+      - Contract Tests: developer/contract_tests.md
   - About:
       - Commons Kit: about/commons_kit.md
       - Backlog: BACKLOG.md
