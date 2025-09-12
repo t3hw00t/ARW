@@ -2,7 +2,7 @@ use arw_tauri::{plugin as arw_plugin, ServiceState};
 use tauri::Manager;
 
 #[cfg(all(desktop, not(test)))]
-fn create_tray<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<()> {
+fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     use std::time::Duration;
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::TrayIconBuilder;
@@ -29,11 +29,11 @@ fn create_tray<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> tauri::Result<()>
         .on_menu_event(|app, event| match event.id.as_ref() {
             "start" => {
                 let st = app.state::<ServiceState>();
-                tauri::async_runtime::spawn(arw_tauri::start_service(st, None));
+                let _ = arw_tauri::start_service(st, None);
             }
             "stop" => {
                 let st = app.state::<ServiceState>();
-                tauri::async_runtime::spawn(arw_tauri::stop_service(st, None));
+                let _ = arw_tauri::stop_service(st, None);
             }
             "open-debug" => {
                 let _ = arw_tauri::open_debug_ui(None);
