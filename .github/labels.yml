@@ -43,5 +43,3 @@
 - name: help-wanted
   color: 128A0C
   description: Maintainers would appreciate help
-# No-op change to trigger labels workflow for verification
-# Another no-op line to validate PR target run
