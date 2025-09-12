@@ -286,6 +286,7 @@ async fn main() {
                 .route("/index.json", get(admin_index_json))
                 .route("/probe", get(probe))
                 .route("/probe/hw", get(probe_hw))
+                .route("/probe/metrics", get(probe_metrics))
                 .route("/events", get(events))
                 .route("/emit/test", get(emit_test))
                 .route("/shutdown", get(shutdown))
@@ -825,6 +826,118 @@ fn nix_dev_from_md(_md: &std::fs::Metadata) -> std::io::Result<u64> {
         std::io::ErrorKind::Other,
         "unsupported",
     ))
+}
+
+#[arw_admin(
+    method = "GET",
+    path = "/admin/probe/metrics",
+    summary = "System metrics snapshot (CPU/mem/disk/GPU)"
+)]
+#[utoipa::path(
+    get,
+    path = "/admin/probe/metrics",
+    tag = "Admin/Introspect",
+    responses(
+        (status = 200, description = "System metrics"),
+        (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
+    )
+)]
+#[arw_gate("introspect:probe")]
+async fn probe_metrics(State(state): State<AppState>) -> impl IntoResponse {
+    use sysinfo::System;
+    let mut sys = System::new();
+    sys.refresh_memory();
+    sys.refresh_cpu();
+    tokio::time::sleep(std::time::Duration::from_millis(180)).await;
+    sys.refresh_cpu();
+    let per_core: Vec<f64> = sys.cpus().iter().map(|c| c.cpu_usage() as f64).collect();
+    let avg = if per_core.is_empty() {
+        0.0
+    } else {
+        per_core.iter().sum::<f64>() / (per_core.len() as f64)
+    };
+
+    let total_mem = sys.total_memory();
+    let avail_mem = sys.available_memory();
+    let used_mem = total_mem.saturating_sub(avail_mem);
+
+    let sdir = crate::ext::paths::state_dir();
+    let (disk_total, disk_avail) = (
+        fs2::total_space(&sdir).unwrap_or(0),
+        fs2::available_space(&sdir).unwrap_or(0),
+    );
+
+    let gpus = probe_gpu_metrics_best_effort();
+
+    let out = serde_json::json!({
+        "cpu": {"avg": avg, "per_core": per_core},
+        "memory": {"total": total_mem, "used": used_mem, "available": avail_mem},
+        "disk": {"state_dir": sdir, "total": disk_total, "available": disk_avail},
+        "gpus": gpus,
+    });
+    state.bus.publish(
+        "Probe.Metrics",
+        &serde_json::json!({"cpu_avg": avg, "mem_used": used_mem}),
+    );
+    ext::ok::<serde_json::Value>(out).into_response()
+}
+
+#[cfg(target_os = "linux")]
+fn probe_gpu_metrics_best_effort() -> Vec<serde_json::Value> {
+    use std::fs;
+    use std::path::Path;
+    let mut out: Vec<serde_json::Value> = Vec::new();
+    let drm = Path::new("/sys/class/drm");
+    if let Ok(entries) = fs::read_dir(drm) {
+        for ent in entries.flatten() {
+            let name = ent.file_name().to_string_lossy().into_owned();
+            if !name.starts_with("card") || name.contains('-') {
+                continue;
+            }
+            let dev = ent.path().join("device");
+            let vendor = fs::read_to_string(dev.join("vendor")).unwrap_or_default();
+            let vendor = vendor.trim().to_string();
+            let vendor_name = match vendor.as_str() {
+                "0x10de" => "NVIDIA",
+                "0x1002" => "AMD",
+                "0x8086" => "Intel",
+                _ => "Unknown",
+            };
+            let mut mem_used = None;
+            let mut mem_total = None;
+            let mut busy = None;
+            if vendor == "0x1002" {
+                if let Ok(s) = fs::read_to_string(dev.join("mem_info_vram_used")) {
+                    if let Ok(n) = s.trim().parse::<u64>() {
+                        mem_used = Some(n);
+                    }
+                }
+                if let Ok(s) = fs::read_to_string(dev.join("mem_info_vram_total")) {
+                    if let Ok(n) = s.trim().parse::<u64>() {
+                        mem_total = Some(n);
+                    }
+                }
+                if let Ok(s) = fs::read_to_string(dev.join("gpu_busy_percent")) {
+                    if let Ok(n) = s.trim().parse::<u64>() {
+                        busy = Some(n);
+                    }
+                }
+            }
+            out.push(serde_json::json!({
+                "index": name,
+                "vendor": vendor_name,
+                "vendor_id": vendor,
+                "mem_used": mem_used,
+                "mem_total": mem_total,
+                "busy_percent": busy,
+            }));
+        }
+    }
+    out
+}
+#[cfg(not(target_os = "linux"))]
+fn probe_gpu_metrics_best_effort() -> Vec<serde_json::Value> {
+    Vec::new()
 }
 
 #[arw_admin(method = "GET", path = "/admin/emit/test", summary = "Emit test event")]

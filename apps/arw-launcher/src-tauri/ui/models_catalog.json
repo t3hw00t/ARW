@@ -1,0 +1,17 @@
+[
+  {
+    "id": "llama-3.1-8b-instruct",
+    "provider": "local",
+    "url": "https://example.com/models/llama-3.1-8b-instruct.q4_k_m.gguf",
+    "sha256": "",
+    "notes": "Example entry. Replace URL/sha256 with a trusted source."
+  },
+  {
+    "id": "qwen2.5-coder-7b",
+    "provider": "local",
+    "url": "https://example.com/models/qwen2.5-coder-7b.q4_k_m.gguf",
+    "sha256": "",
+    "notes": "Coder model example."
+  }
+]
+

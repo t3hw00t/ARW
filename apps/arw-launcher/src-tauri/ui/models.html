@@ -66,6 +66,21 @@
         </div>
         <div id="dlprog" class="mono dim"></div>
       </div>
+
+      <div>
+        <h3>Catalog</h3>
+        <div class="row">
+          <button id="btn-load-local">Load Built-in Catalog</button>
+          <input id="caturl" type="url" placeholder="https://.../models_catalog.json" style="width: 420px">
+          <button id="btn-load-remote">Load Remote Catalog</button>
+        </div>
+        <table>
+          <thead>
+            <tr><th>Id</th><th>Provider</th><th>URL</th><th>Checksum</th><th>Notes</th><th>Action</th></tr>
+          </thead>
+          <tbody id="catalog"></tbody>
+        </table>
+      </div>
     </div>
     <script>
       const ivk = (cmd, args) => ARW.invoke(cmd, args)
@@ -90,11 +105,15 @@
         const tb = document.getElementById('models'); tb.innerHTML='';
         (list||[]).forEach(m => {
           const tr = document.createElement('tr');
-          tr.innerHTML = `<td class="mono">${m.id||''}</td><td>${m.provider||''}</td><td>${m.status||''}</td><td class="mono">${m.path||''}</td><td>${(m.id===def)?'★':''}</td><td><button data-id="${m.id}">Make Default</button></td>`;
-          tr.querySelector('button').addEventListener('click', async (e)=>{
+          const pbtn = (m.path? `<button data-open="${m.path}">Open</button>` : '');
+          tr.innerHTML = `<td class="mono">${m.id||''}</td><td>${m.provider||''}</td><td>${m.status||''}</td><td class="mono">${m.path||''} ${pbtn}</td><td>${(m.id===def)?'★':''}</td><td><button data-id="${m.id}">Make Default</button></td>`;
+          const defbtn = tr.querySelector('button[data-id]');
+          if (defbtn) defbtn.addEventListener('click', async (e)=>{
             await ivk('models_default_set', { id: e.target.getAttribute('data-id'), port: port() });
             refresh();
           });
+          const op = tr.querySelector('[data-open]');
+          if (op) op.addEventListener('click', async (e)=>{ await ivk('open_path', { path: e.target.getAttribute('data-open') }); });
           tb.appendChild(tr);
         });
         document.getElementById('stat').textContent = 'OK';
@@ -156,6 +175,40 @@
       document.getElementById('btn-dl').addEventListener('click', dl);
       document.getElementById('btn-cancel').addEventListener('click', cancel);
       document.getElementById('btn-save-prefs').addEventListener('click', savePrefs);
+      document.getElementById('btn-load-local').addEventListener('click', async ()=>{
+        try{
+          const resp = await fetch('models_catalog.json');
+          const arr = await resp.json();
+          renderCatalog(arr);
+        }catch(e){ console.error(e); }
+      });
+      document.getElementById('btn-load-remote').addEventListener('click', async ()=>{
+        const u = document.getElementById('caturl').value.trim(); if(!u) return;
+        try{
+          const resp = await fetch(u, { headers: { 'Accept': 'application/json' }});
+          const arr = await resp.json();
+          renderCatalog(arr);
+        }catch(e){ console.error(e); }
+      });
+      function renderCatalog(arr){
+        const tb = document.getElementById('catalog'); tb.innerHTML='';
+        (arr||[]).forEach(item => {
+          const tr = document.createElement('tr');
+          const id = item.id || '';
+          const prov = item.provider || 'local';
+          const url = item.url || '';
+          const sha = item.sha256 || '';
+          const notes = item.notes || '';
+          tr.innerHTML = `<td class="mono">${id}</td><td>${prov}</td><td class="mono">${url}</td><td class="mono">${sha}</td><td>${notes}</td><td><button data-id="${id}">Queue</button></td>`;
+          tr.querySelector('button').addEventListener('click', async (e)=>{
+            document.getElementById('did').value = id;
+            document.getElementById('durl').value = url;
+            document.getElementById('dsha').value = sha;
+            await dl();
+          });
+          tb.appendChild(tr);
+        });
+      }
       (async ()=>{ await loadPrefs(); await refresh(); sse(); })();
     </script>
   </body>

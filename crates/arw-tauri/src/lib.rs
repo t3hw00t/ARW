@@ -340,7 +340,8 @@ pub fn plugin<R: tauri::Runtime>() -> tauri::plugin::TauriPlugin<R> {
             set_prefs,
             launcher_autostart_status,
             set_launcher_autostart,
-            open_url
+            open_url,
+            open_path
         ])
         .build()
 }
@@ -365,6 +366,15 @@ pub fn open_url(url: String) -> Result<(), String> {
         return Err("invalid url".into());
     }
     open::that(url).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn open_path(path: String) -> Result<(), String> {
+    // best-effort guard: reject very long or control characters
+    if path.len() > 4096 || path.chars().any(|c| c.is_control()) {
+        return Err("invalid path".into());
+    }
+    open::that(path).map_err(|e| e.to_string())
 }
 
 // ---- Models (admin) ----
