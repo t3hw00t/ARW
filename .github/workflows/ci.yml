@@ -20,7 +20,7 @@ jobs:
         os: [ubuntu-latest, macos-latest]
     defaults:
       run:
-        working-directory: .
+        working-directory: Agent_Hub
     steps:
       - uses: actions/checkout@v4
 
@@ -35,8 +35,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+            Agent_Hub/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Agent_Hub/Cargo.lock') }}
 
       - name: rustfmt
         run: |
@@ -58,7 +58,7 @@ jobs:
     needs: [lint_and_test]
     defaults:
       run:
-        working-directory: .
+        working-directory: Agent_Hub
     steps:
       - uses: actions/checkout@v4
 
@@ -71,8 +71,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+            Agent_Hub/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Agent_Hub/Cargo.lock') }}
 
       - name: Install cargo-audit and cargo-deny
         run: |
@@ -121,7 +121,7 @@ jobs:
     needs: [lint_and_test]
     defaults:
       run:
-        working-directory: .
+        working-directory: Agent_Hub
     steps:
       - uses: actions/checkout@v4
 
@@ -145,7 +145,7 @@ jobs:
     needs: [lint_and_test]
     defaults:
       run:
-        working-directory: .
+        working-directory: Agent_Hub
     steps:
       - uses: actions/checkout@v4
 
@@ -165,8 +165,8 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('Cargo.lock') }}
+            Agent_Hub/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('Agent_Hub/Cargo.lock') }}
 
       - name: Build launcher (compile-only)
         run: cargo build -p arw-launcher --locked

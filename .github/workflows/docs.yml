@@ -56,7 +56,7 @@ jobs:
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
-          git add site spec || true
+          git add -f site spec || true
           if ! git diff --cached --quiet; then
             git commit -m "docs(site): update generated site and spec"
             git push origin HEAD:main
