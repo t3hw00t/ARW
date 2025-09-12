@@ -1,4 +1,5 @@
 use crate::AppState;
+use arw_macros::{arw_admin, arw_gate};
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -33,6 +34,12 @@ pub struct RevertReq {
     pub scope: Option<String>,
 }
 
+#[arw_admin(
+    method = "POST",
+    path = "/admin/logic-units/install",
+    summary = "Install logic unit"
+)]
+#[arw_gate("logic_units:install")]
 pub async fn install(State(state): State<AppState>, Json(req): Json<InstallReq>) -> impl IntoResponse {
     let id = req
         .manifest
@@ -43,9 +50,15 @@ pub async fn install(State(state): State<AppState>, Json(req): Json<InstallReq>)
     let mut payload = json!({ "id": id, "manifest": req.manifest });
     super::corr::ensure_corr(&mut payload);
     state.bus.publish("LogicUnit.Installed", &payload);
-    super::ok(json!({ "installed": true, "id": id }))
+    super::ok(json!({ "installed": true, "id": id })).into_response()
 }
 
+#[arw_admin(
+    method = "POST",
+    path = "/admin/logic-units/apply",
+    summary = "Apply logic unit"
+)]
+#[arw_gate("logic_units:apply")]
 pub async fn apply(State(state): State<AppState>, Json(req): Json<ApplyReq>) -> impl IntoResponse {
     if req.dry_run.unwrap_or(false) {
         let diff = json!({
@@ -53,7 +66,7 @@ pub async fn apply(State(state): State<AppState>, Json(req): Json<ApplyReq>) -> 
             "scope": req.scope,
             "unit_id": req.unit_id,
         });
-        return super::ok(json!({ "dry_run": true, "diff": diff }));
+        return super::ok(json!({ "dry_run": true, "diff": diff })).into_response();
     }
     let mut payload = json!({
         "unit_id": req.unit_id,
@@ -63,9 +76,15 @@ pub async fn apply(State(state): State<AppState>, Json(req): Json<ApplyReq>) -> 
     });
     super::corr::ensure_corr(&mut payload);
     state.bus.publish("LogicUnit.Applied", &payload);
-    super::ok(json!({ "applied": true }))
+    super::ok(json!({ "applied": true })).into_response()
 }
 
+#[arw_admin(
+    method = "POST",
+    path = "/admin/logic-units/revert",
+    summary = "Revert logic unit"
+)]
+#[arw_gate("logic_units:revert")]
 pub async fn revert(State(state): State<AppState>, Json(req): Json<RevertReq>) -> impl IntoResponse {
     let mut payload = json!({
         "unit_id": req.unit_id,
@@ -74,6 +93,5 @@ pub async fn revert(State(state): State<AppState>, Json(req): Json<RevertReq>) -
     });
     super::corr::ensure_corr(&mut payload);
     state.bus.publish("LogicUnit.Reverted", &payload);
-    super::ok(json!({ "reverted": true }))
+    super::ok(json!({ "reverted": true })).into_response()
 }
-

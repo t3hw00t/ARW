@@ -25,6 +25,8 @@ Extensibility: static Rust plugins + dynamic WASI plugins; clear permission mani
 Reliability: schema validation, structured errors (RFC 7807), CI contract tests, signed releases.
 Metacognition: scoped, evaluable self‑model per agent (capabilities, competence, calibration, resource curve, failure modes) with proposals/approvals.
 
+Performance & Reasoning: ship clear modes (Quick/Balanced/Deep/Verified), context budgets, gated self‑consistency, and verifier passes where risk demands. See Guide → Performance & Reasoning Playbook.
+
 ## Architecture Overview
 
 Core: orchestrator, selectors, memory system, event bus, schemas/specs, policy, OTel, governor, hardware probes, connection registry, lightweight feedback engine.

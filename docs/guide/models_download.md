@@ -8,6 +8,8 @@ ARW provides HTTP endpoints (admin‑gated) to manage local models with streamin
 
 Updated: 2025-09-12
 
+See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*).
+
 ## Endpoints
 
 - POST `/admin/models/download` — Start or resume a download.

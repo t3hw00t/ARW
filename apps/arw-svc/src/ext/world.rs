@@ -113,6 +113,13 @@ fn ensure_graph<'a>(ws: &'a mut WorldStore, proj: Option<&str>) -> &'a mut Belie
     }
 }
 
+// Public helper for read-only lookup of a belief node by id with optional project scoping.
+pub fn get_belief_node(proj: Option<&str>, id: &str) -> Option<Node> {
+    let ws = store().read().unwrap();
+    let g_opt = if let Some(p) = proj { ws.proj_graphs.get(p) } else { Some(&ws.default_graph) };
+    g_opt.and_then(|g| g.nodes.get(id)).cloned()
+}
+
 fn upsert_node<'a>(g: &'a mut BeliefGraph, id: &'a str, kind: NodeKind) -> &'a mut Node {
     if !g.nodes.contains_key(id) {
         g.nodes.insert(

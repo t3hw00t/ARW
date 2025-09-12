@@ -57,6 +57,7 @@ Universal sidecar (always on)
 ## Next Steps
 
 - Quickstart guide: `docs/guide/quickstart.md`
+- Performance & Reasoning Playbook: `docs/guide/performance_reasoning_playbook.md`
 - Architecture: `docs/architecture/object_graph.md` and `docs/architecture/events_vocabulary.md`
 - World Model: `docs/WORLD_MODEL.md`
 - Desktop Launcher: `docs/guide/launcher.md`

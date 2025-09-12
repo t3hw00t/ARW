@@ -595,6 +595,9 @@ pub async fn about() -> impl IntoResponse {
           "/admin/chat",
           "/admin/chat/send",
           "/admin/chat/clear",
+          "/admin/experiments/start",
+          "/admin/experiments/stop",
+          "/admin/experiments/assign",
           "/admin/debug"
         ]
     }))
@@ -700,6 +703,10 @@ pub(crate) struct Hints {
     pub(crate) event_buffer: Option<usize>,
     #[serde(default)]
     pub(crate) http_timeout_secs: Option<u64>,
+    #[serde(default)]
+    pub(crate) mode: Option<String>,
+    #[serde(default)]
+    pub(crate) slo_ms: Option<u64>,
 }
 static HINTS: OnceLock<RwLock<Hints>> = OnceLock::new();
 pub(crate) fn hints() -> &'static RwLock<Hints> {
@@ -708,6 +715,8 @@ pub(crate) fn hints() -> &'static RwLock<Hints> {
             max_concurrency: None,
             event_buffer: None,
             http_timeout_secs: None,
+            mode: None,
+            slo_ms: None,
         })
     })
 }
@@ -730,11 +739,22 @@ async fn governor_hints_set(
         if req.http_timeout_secs.is_some() {
             h.http_timeout_secs = req.http_timeout_secs;
         }
+        if req.mode.is_some() { h.mode = req.mode.clone(); }
+        if req.slo_ms.is_some() { h.slo_ms = req.slo_ms; }
     }
     // Apply dynamic HTTP timeout immediately if provided
+    let mut applied_timeout: Option<u64> = None;
     if let Some(secs) = req.http_timeout_secs {
         crate::dyn_timeout::set_global_timeout_secs(secs);
-        let mut payload = json!({"action":"hint","params":{"http_timeout_secs": secs},"ok": true});
+        applied_timeout = Some(secs);
+    } else if let Some(ms) = req.slo_ms {
+        // Derive a sane HTTP timeout from SLO (round up to nearest second, min 1s)
+        let secs = ((ms + 999) / 1000).max(1);
+        crate::dyn_timeout::set_global_timeout_secs(secs);
+        applied_timeout = Some(secs);
+    }
+    if let Some(secs) = applied_timeout {
+        let mut payload = json!({"action":"hint","params":{"http_timeout_secs": secs, "source": "slo|mode"},"ok": true});
         let _cid = crate::ext::corr::ensure_corr(&mut payload);
         state.bus.publish("Actions.HintApplied", &payload);
     }

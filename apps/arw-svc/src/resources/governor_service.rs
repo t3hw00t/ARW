@@ -36,6 +36,8 @@ impl GovernorService {
         max_concurrency: Option<usize>,
         event_buffer: Option<usize>,
         http_timeout_secs: Option<u64>,
+        mode: Option<String>,
+        slo_ms: Option<u64>,
     ) {
         {
             let mut h = crate::ext::hints().write().await;
@@ -48,13 +50,25 @@ impl GovernorService {
             if http_timeout_secs.is_some() {
                 h.http_timeout_secs = http_timeout_secs;
             }
+            if mode.is_some() { h.mode = mode.clone(); }
+            if slo_ms.is_some() { h.slo_ms = slo_ms; }
         }
-        if let Some(secs) = http_timeout_secs {
+        // Apply dynamic HTTP timeout: prefer explicit, else derive from SLO
+        let applied = if let Some(secs) = http_timeout_secs {
+            Some(secs)
+        } else if let Some(ms) = slo_ms { Some(((ms + 999) / 1000).max(1)) } else { None };
+        if let Some(secs) = applied {
             crate::dyn_timeout::set_global_timeout_secs(secs);
             let mut payload =
-                json!({"action":"hint","params":{"http_timeout_secs": secs},"ok": true});
+                json!({"action":"hint","params":{"http_timeout_secs": secs, "source": "slo|mode"},"ok": true});
             crate::ext::corr::ensure_corr(&mut payload);
             state.bus.publish("Actions.HintApplied", &payload);
+        }
+        // Optional mode-policy side effects (light-touch): expose as event for UI/recipes
+        if let Some(m) = mode {
+            let mut payload = json!({"action":"mode","mode": m});
+            crate::ext::corr::ensure_corr(&mut payload);
+            state.bus.publish("Governor.Changed", &payload);
         }
         crate::ext::persist_orch().await;
     }

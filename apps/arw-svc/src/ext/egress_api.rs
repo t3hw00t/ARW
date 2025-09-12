@@ -1,3 +1,4 @@
+use arw_macros::{arw_admin, arw_gate};
 use axum::{extract::Query, response::IntoResponse};
 
 use crate::AppState;
@@ -9,6 +10,12 @@ pub struct LedgerQuery {
 }
 
 // Read a JSONL egress ledger and return the last N entries (best-effort).
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/egress/ledger",
+    summary = "Get egress ledger entries"
+)]
+#[arw_gate("state:egress_ledger:get")]
 pub async fn egress_ledger_get(
     _state: axum::extract::State<AppState>,
     Query(q): Query<LedgerQuery>,
@@ -32,4 +39,3 @@ pub async fn egress_ledger_get(
     }
     super::ok(serde_json::Value::Array(entries)).into_response()
 }
-

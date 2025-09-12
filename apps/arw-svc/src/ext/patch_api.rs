@@ -1,4 +1,5 @@
 use crate::AppState;
+use arw_macros::{arw_admin, arw_gate};
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -27,6 +28,12 @@ pub struct RevertPatchReq {
     pub snapshot_id: Option<String>,
 }
 
+#[arw_admin(
+    method = "POST",
+    path = "/admin/patch/dry-run",
+    summary = "Patch engine dry-run"
+)]
+#[arw_gate("patch:dry_run")]
 pub async fn dry_run(Json(req): Json<DryRunReq>) -> impl IntoResponse {
     let summary = json!({
         "patch_count": req.patches.len(),
@@ -36,9 +43,15 @@ pub async fn dry_run(Json(req): Json<DryRunReq>) -> impl IntoResponse {
             .filter_map(|p| p.get("target").and_then(|s| s.as_str()))
             .collect::<Vec<_>>()
     });
-    super::ok(json!({ "diff": summary, "warnings": Vec::<Value>::new() }))
+    super::ok(json!({ "diff": summary, "warnings": Vec::<Value>::new() })).into_response()
 }
 
+#[arw_admin(
+    method = "POST",
+    path = "/admin/patch/apply",
+    summary = "Apply patch set"
+)]
+#[arw_gate("patch:apply")]
 pub async fn apply(State(state): State<AppState>, Json(req): Json<ApplyPatchReq>) -> impl IntoResponse {
     // Load current config (object)
     let cfg_path = crate::ext::paths::config_path();
@@ -107,9 +120,15 @@ pub async fn apply(State(state): State<AppState>, Json(req): Json<ApplyPatchReq>
     });
     super::corr::ensure_corr(&mut payload);
     state.bus.publish("LogicUnit.Applied", &payload);
-    super::ok(json!({ "applied": true, "snapshot_id": payload.get("snapshot_id") }))
+    super::ok(json!({ "applied": true, "snapshot_id": payload.get("snapshot_id") })).into_response()
 }
 
+#[arw_admin(
+    method = "POST",
+    path = "/admin/patch/revert",
+    summary = "Revert patch set"
+)]
+#[arw_gate("patch:revert")]
 pub async fn revert(State(state): State<AppState>, Json(req): Json<RevertPatchReq>) -> impl IntoResponse {
     // Revert from snapshot if provided
     if let Some(id) = &req.snapshot_id {
@@ -127,5 +146,5 @@ pub async fn revert(State(state): State<AppState>, Json(req): Json<RevertPatchRe
     let mut payload = json!({ "unit_id": req.unit_id, "snapshot_id": req.snapshot_id });
     super::corr::ensure_corr(&mut payload);
     state.bus.publish("LogicUnit.Reverted", &payload);
-    super::ok(json!({ "reverted": true }))
+    super::ok(json!({ "reverted": true })).into_response()
 }

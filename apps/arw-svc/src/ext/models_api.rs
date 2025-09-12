@@ -272,6 +272,11 @@ pub(crate) async fn models_cas_gc(State(state): State<AppState>, Json(req): Json
 }
 
 // Public read-model: summarize installed model hashes for clustering/ads.
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/models_hashes",
+    summary = "List installed model hashes"
+)]
 #[arw_gate("state:models_hashes:get")]
 pub(crate) async fn models_hashes_get(State(_state): State<AppState>) -> impl IntoResponse {
     use std::collections::{HashMap, HashSet};

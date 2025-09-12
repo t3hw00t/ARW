@@ -35,8 +35,30 @@ pub struct AssembleQs {
 )]
 pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<AssembleQs>) -> impl IntoResponse {
     let proj_opt = q.proj.as_deref();
-    let k_default = q.k.unwrap_or(8);
+    // Read current policy hints (may include mode/slo_ms)
+    let policy_hints = { hints().read().await.clone() };
+    // Mode-driven defaults for retrieval and reasoning gates
+    let mode_s = policy_hints
+        .mode
+        .as_deref()
+        .unwrap_or("balanced")
+        .to_ascii_lowercase();
+    let (mode_k, mode_div, verify_pass, vote_k) = match mode_s.as_str() {
+        // Quick: smaller k, diversity on, no verify, no self-consistency
+        "quick" => (6usize, Some(0.3f64), false, 0u8),
+        // Deep: larger k and enable heavier self-consistency
+        "deep" => (20usize, Some(0.3f64), false, 5u8),
+        // Verified: larger k and a verifier pass flag
+        "verified" => (20usize, Some(0.3f64), true, 3u8),
+        // Balanced: default k=12, diversity on, light self-consistency
+        _ => (12usize, Some(0.3f64), false, 3u8),
+    };
+    let k_default = q.k.unwrap_or(mode_k);
     let evid_k = q.evidence_k.unwrap_or(k_default);
+    let div_used: Option<f64> = match q.div {
+        Some(d) => Some(d),
+        None => mode_div,
+    };
     // Estimate pool size for coverage metrics (top-50 as proxy)
     let pool: Vec<serde_json::Value> = super::world::select_top_claims(
         proj_opt,
@@ -44,8 +66,8 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
         50,
     )
     .await;
-    // Beliefs: use diversity-aware selection when requested
-    let items_initial = if let Some(div) = q.div {
+    // Beliefs: use diversity-aware selection when requested or defaulted by mode
+    let items_initial = if let Some(div) = div_used {
         super::world::select_top_claims_diverse(proj_opt, q.q.as_deref().unwrap_or(""), evid_k, div).await
     } else {
         super::world::select_top_claims(proj_opt, q.q.as_deref().unwrap_or(""), evid_k).await
@@ -81,8 +103,7 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
         used_tokens = used_tokens.saturating_add(est);
         items.push(it);
     }
-    // Include minimal policy + model context
-    let policy_hints = { hints().read().await.clone() };
+    // Include minimal policy + model context (policy_hints already loaded)
     let model_default = { default_model().read().await.clone() };
     let proj = proj_opt.map(|s| s.to_string());
     let notes_path = proj
@@ -192,7 +213,7 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
             "query": q.q,
             "k": k_default,
             "evidence_k": evid_k,
-            "diversity": q.div,
+            "diversity": div_used,
             "counts": {"beliefs": coverage_selected, "files": files.len(), "intents": intents.len(), "actions": actions.len()},
             "coverage": {"pool": coverage_pool, "omitted": coverage_omitted, "recall_risk": coverage_omitted > 0},
             "usage": {"evidence_tokens": used_tokens, "evidence_budget": budget_tokens, "recent_intents_tokens": intents_tokens, "recent_actions_tokens": actions_tokens, "recent_files_tokens": files_tokens, "total_tokens": total_tokens_used},
@@ -210,17 +231,24 @@ pub async fn assemble_get(State(state): State<AppState>, Query(q): Query<Assembl
             state.bus.publish("Context.Coverage", &ev2);
         }
     }
+    // Planner meta (mode-driven suggestions for downstream agents)
+    let planner_meta = json!({
+        "mode": mode_s,
+        "verify_pass": verify_pass,
+        "consistency": { "vote_k": vote_k },
+        "retrieval": { "k": k_default, "evidence_k": evid_k, "div": div_used }
+    });
     ok(json!({
         "beliefs": beliefs,
         "recent": { "intents": intents, "actions": actions, "files": files },
-        "policy": { "hints": policy_hints },
+        "policy": { "hints": policy_hints, "planner": planner_meta },
         "model": { "default": model_default },
         "project": { "name": proj, "notes": notes_path },
         "budget": { "slots": { "instructions": q.s_inst, "plan": q.s_plan, "policy": q.s_policy, "evidence": q.s_evid, "nice": q.s_nice, "intents": q.s_intents, "actions": q.s_actions, "files": q.s_files, "total": q.s_total },
-                     "requested": { "k": k_default, "evidence_k": evid_k, "diversity": q.div },
+                     "requested": { "k": k_default, "evidence_k": evid_k, "diversity": div_used },
                      "usage": { "evidence_tokens": used_tokens, "recent_intents_tokens": intents_tokens, "recent_actions_tokens": actions_tokens, "recent_files_tokens": files_tokens, "total_tokens": used_tokens + intents_tokens + actions_tokens + files_tokens } },
         "coverage": { "pool": coverage_pool, "selected": coverage_selected, "omitted": coverage_omitted, "recall_risk": coverage_omitted > 0, "evidence_tokens_used": used_tokens, "evidence_tokens_budget": budget_tokens },
-        "params": { "proj": q.proj, "q": q.q, "k": k_default, "evidence_k": evid_k, "div": q.div, "s_inst": q.s_inst, "s_plan": q.s_plan, "s_policy": q.s_policy, "s_evid": q.s_evid, "s_nice": q.s_nice }
+        "params": { "proj": q.proj, "q": q.q, "k": k_default, "evidence_k": evid_k, "div": div_used, "s_inst": q.s_inst, "s_plan": q.s_plan, "s_policy": q.s_policy, "s_evid": q.s_evid, "s_nice": q.s_nice }
     }))
 }
 
@@ -243,13 +271,9 @@ pub async fn rehydrate_post(State(state): State<AppState>, Json(req): Json<Rehyd
         "world_belief" => {
             let id = match req.ptr.get("id").and_then(|v| v.as_str()) { Some(s) => s, None => return super::ApiError::bad_request("missing id").into_response() };
             let proj = req.ptr.get("proj").and_then(|v| v.as_str());
-            let ws = super::world::store().read().unwrap();
-            let g = if let Some(p) = proj { ws.proj_graphs.get(p) } else { Some(&ws.default_graph) };
-            if let Some(g) = g {
-                if let Some(n) = g.nodes.get(id) {
-                    let v = serde_json::to_value(n).unwrap_or_else(|_| serde_json::json!({"id": id}));
-                    return ok(serde_json::json!({"ptr": req.ptr, "belief": v, "version": g.version})).into_response();
-                }
+            if let Some(node) = super::world::get_belief_node(proj, id) {
+                let v = serde_json::to_value(&node).unwrap_or_else(|_| serde_json::json!({"id": id}));
+                return ok(serde_json::json!({"ptr": req.ptr, "belief": v})).into_response();
             }
             super::ApiError::not_found("belief not found").into_response()
         }

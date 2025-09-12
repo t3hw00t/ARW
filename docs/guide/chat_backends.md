@@ -69,3 +69,16 @@ Requests are sent to `POST {ARW_OPENAI_BASE_URL}/v1/chat/completions` with a bod
 ## UI
 
 Open `/debug`, select a model (echo/reverse/time), set Temperature if desired, and Send. When a backend is configured, the response content comes from the backend; otherwise the synthetic reply is used.
+## Modes, Self‑Consistency, and Verifier (gated)
+
+- Mode controls planner hints and optional execution:
+  - Quick: no self‑consistency or verifier
+  - Balanced: self‑consistency vote‑k=3
+  - Deep: self‑consistency vote‑k=5
+  - Verified: self‑consistency vote‑k=3 + verifier pass
+
+- Gates (policy‑controlled):
+  - `chat:self_consistency` — allow running vote‑k sampling
+  - `chat:verify` — allow running a verifier pass
+
+If a gate is denied, behavior degrades gracefully to a single pass. Planner metadata is returned regardless, under `assistant.planner` and also emitted on `Chat.Planner` events.

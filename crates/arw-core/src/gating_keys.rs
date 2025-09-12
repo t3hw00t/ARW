@@ -36,6 +36,8 @@ pub const TOOLS_RUN: &str = "tools:run";
 // Chat
 pub const CHAT_SEND: &str = "chat:send";
 pub const CHAT_CLEAR: &str = "chat:clear";
+pub const CHAT_SELF_CONSISTENCY: &str = "chat:self_consistency";
+pub const CHAT_VERIFY: &str = "chat:verify";
 
 // Governor
 pub const GOVERNOR_SET: &str = "governor:set";
@@ -93,6 +95,8 @@ pub fn list() -> Vec<&'static str> {
         TOOLS_RUN,
         CHAT_SEND,
         CHAT_CLEAR,
+        CHAT_SELF_CONSISTENCY,
+        CHAT_VERIFY,
         GOVERNOR_SET,
         GOVERNOR_HINTS_SET,
         HIERARCHY_HELLO,

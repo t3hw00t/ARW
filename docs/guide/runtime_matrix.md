@@ -24,3 +24,4 @@ Backends
 Policy
 - Capabilities per cell (gpu, sandbox:<kind>) with TTL leases
 
+See also: Performance & Reasoning Playbook for how the scheduler selects Quick/Balanced/Deep/Verified against SLOs and budgets.

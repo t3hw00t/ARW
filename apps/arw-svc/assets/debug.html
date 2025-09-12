@@ -110,6 +110,9 @@
     <button class="iconbtn" id="btnDensity" title="Toggle density">Density</button>
     <span id="memBadge" class="badge good" title="Memory usage"><span class="dot"></span> Mem: –</span>
     <span id="govBadge" class="badge good" title="Governor profile"><span class="dot"></span> Gov: –</span>
+    <span id="modeBadge" class="badge good" title="Run mode"><span class="dot"></span> Mode: balanced</span>
+    <span id="sloBadge" class="badge warn" title="Interactive SLO (P95)"><span class="dot"></span> SLO: 1500 ms</span>
+    <span id="egressBadge" class="badge warn" title="Pre‑offload preview"><span class="dot"></span> Egress: idle</span>
     <button id="chatTestBtn" class="iconbtn" title="Test chat backend">Test</button>
     <input id="adminToken" placeholder="token" style="width: 120px;" title="X-ARW-Admin header">
     <button id="useTok" class="iconbtn" title="Use admin token">Use</button>
@@ -121,6 +124,17 @@
       <option value="balanced" selected>balanced</option>
       <option value="power-saver">power-saver</option>
     </select>
+    <label class="key" title="Run mode">mode</label>
+    <select id="hdrMode" title="Run mode (Quick/Balanced/Deep/Verified)">
+      <option value="quick">quick</option>
+      <option value="balanced" selected>balanced</option>
+      <option value="deep">deep</option>
+      <option value="verified">verified</option>
+    </select>
+    <a href="#" class="help" data-doc="playbook" data-tip="Modes: Quick/Balanced/Deep/Verified; SLO‑aware scheduling and previews." title="Performance & Reasoning">?</a>
+    <label class="key" title="Interactive latency target (P95)">SLO ms</label>
+    <input id="hdrSlo" type="number" min="100" step="50" value="1500" style="width: 90px;" title="Interactive SLO (P95) in ms">
+    <button id="applyModeSlo" class="iconbtn" title="Apply mode/SLO">Apply</button>
     <button id="openShortcuts" class="iconbtn" title="Show shortcuts (Ctrl+/)">Shortcuts</button>
     <label class="key" title="Enable keyboard shortcuts"><input type="checkbox" id="shortcutsToggle" checked> shortcuts</label>
     <a id="docsLink" class="help" title="Open docs" href="#" target="_blank" style="margin-left:auto;display:none">?</a>
@@ -220,6 +234,13 @@
       <div id="log"></div>
     </div>
     <div class="box" data-collapsed="1">
+      <h3>Egress Preview <a href="#" class="help" data-doc="deployment" data-tip="Pre‑offload preview: where data would go and why." title="Egress preview">?</a></h3>
+      <div class="row">
+        <button class="iconbtn" id="egClear">Clear</button>
+      </div>
+      <div id="egOut" style="max-height:28vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
+    </div>
+    <div class="box" data-collapsed="1">
       <h3>System <a href="#" class="help" data-doc="events" data-tip="Live metrics via SSE (Probe.Metrics)." title="System metrics">?</a></h3>
       <div class="row">
         <div><span class="key">CPU</span> <code id="sysCpu">–</code></div>
@@ -284,6 +305,7 @@
         <button class="ghost" onclick="worldSelect()">Select</button>
         <button class="primary" onclick="contextAssemble()">Assemble</button>
       </div>
+      <div class="row" id="plannerMeta" style="display:none"></div>
       <pre id="stateOut">{}</pre>
     </div>
     <div class="box" data-collapsed="1">
@@ -570,9 +592,27 @@ es.addEventListener('Models.DownloadProgress', (e)=>{
     else { b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: active'; }
   }catch{}
 });
+// Pre‑offload preview (egress)
+es.addEventListener('Egress.Preview', (e)=>{
+  pushEvt('Egress.Preview', e.data);
+  try{
+    const j = JSON.parse(e.data||'{}');
+    const host = (j && j.dest && j.dest.host) || '';
+    const port = (j && j.dest && j.dest.port) || '';
+    const proto = (j && j.dest && j.dest.protocol) || '';
+    const b = document.getElementById('egressBadge');
+    if (b){ b.className='badge good'; b.innerHTML = '<span class="dot"></span> Egress: ' + (proto||'http') + '://' + host + (port?(':'+port):''); setTimeout(()=>{ b.className='badge warn'; b.innerHTML='<span class="dot"></span> Egress: idle'; }, 4000); }
+    const out = document.getElementById('egOut');
+    if(out){ const row=document.createElement('div'); row.className='evt'; const url = (j && j.url) || ''; row.textContent = `${proto||'http'}://${host}${port?':'+port:''} ← ${url}`; out.prepend(row); while(out.childElementCount>100) out.removeChild(out.lastChild); }
+  }catch{}
+});
 es.onmessage = (e) => pushEvt('message', e.data);
-['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Bus.Gap','Beliefs.Updated','Intents.Proposed','Intents.Approved','Intents.Rejected','Actions.Applied','Actions.HintApplied','Chat.Message','World.Updated'].forEach(k => {
+['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Bus.Gap','Beliefs.Updated','Intents.Proposed','Intents.Approved','Intents.Rejected','Actions.Applied','Actions.HintApplied','Chat.Message','World.Updated','Egress.Preview'].forEach(k => {
   es.addEventListener(k, (e)=>pushEvt(k, e.data));
+});
+// Planner hint
+es.addEventListener('Chat.Planner', (e)=>{
+  pushEvt('Chat.Planner', e.data);
 });
 // Feedback live updates
   es.addEventListener('Feedback.Suggested', (e)=>{
@@ -604,7 +644,7 @@ function renderInsights(){
   }
   el.innerHTML = lines.join('');
 }
-  ['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Chat.Message','Governor.Changed','Bus.Gap','Beliefs.Updated','Intents.Proposed','Intents.Approved','Intents.Rejected','Actions.Applied','Actions.HintApplied','World.Updated'].forEach(k => {
+  ['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Chat.Message','Governor.Changed','Bus.Gap','Beliefs.Updated','Intents.Proposed','Intents.Approved','Intents.Rejected','Actions.Applied','Actions.HintApplied','World.Updated','Egress.Preview'].forEach(k => {
     es.addEventListener(k, (e)=>{ agg.total++; agg.kinds[k]=(agg.kinds[k]||0)+1; renderInsights(); });
   });
   // System metrics (low-frequency)
@@ -773,6 +813,7 @@ function docPath(key){
     case 'models': return '/guide/models_download/';
     case 'security': return '/guide/security_hardening/';
     case 'deployment': return '/deployment/';
+    case 'playbook': return '/guide/performance_reasoning_playbook/';
     default: return '/';
   }
 }
@@ -862,6 +903,49 @@ document.addEventListener('DOMContentLoaded', ()=>{
 document.addEventListener('DOMContentLoaded', ()=>{
   const sel=document.getElementById('hdrProfile'); if(sel){ sel.addEventListener('change', async ()=>{ try{ await fetch(base+'/governor/profile',{method:'POST',headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: sel.value})}); const b=document.getElementById('govBadge'); if(b){ b.className='badge good'; b.innerHTML='<span class=\"dot\"></span> Gov: '+sel.value; } showToast('Profile set to '+sel.value); }catch{ showToast('Profile change failed'); } }); }
 });
+// Mode/SLO header wiring
+document.addEventListener('DOMContentLoaded', ()=>{
+  // Persist + initialize
+  bindPersist('hdrMode','hdrMode',false);
+  bindPersist('hdrSlo','hdrSlo',false);
+  const modeSel = document.getElementById('hdrMode');
+  const sloInp = document.getElementById('hdrSlo');
+  const modeBadge = document.getElementById('modeBadge');
+  const sloBadge = document.getElementById('sloBadge');
+  const applyBtn = document.getElementById('applyModeSlo');
+  const updateBadges = ()=>{
+    const m = (modeSel && modeSel.value) || 'balanced';
+    const s = (sloInp && sloInp.value) || '1500';
+    if(modeBadge){ modeBadge.className='badge good'; modeBadge.innerHTML = '<span class="dot"></span> Mode: ' + m; }
+    if(sloBadge){ sloBadge.className='badge ' + (parseInt(s,10)<=1500? 'good':'warn'); sloBadge.innerHTML = '<span class="dot"></span> SLO: ' + s + ' ms'; }
+  };
+  if(modeSel){ modeSel.addEventListener('change', ()=>{ savePref('hdrMode', modeSel.value); updateBadges(); }); }
+  if(applyBtn){ applyBtn.addEventListener('click', async ()=>{
+    try{
+      const mode = (modeSel && modeSel.value) || 'balanced';
+      const sloMs = parseInt((sloInp && sloInp.value) || '1500', 10);
+      if(sloInp){ savePref('hdrSlo', String(sloMs)); }
+      // Derive http_timeout_secs from SLO (ceil seconds, min 1)
+      const http_timeout_secs = Math.max(1, Math.ceil(sloMs/1000));
+      const body = { mode, slo_ms: sloMs, http_timeout_secs };
+      const resp = await fetch(base + '/admin/governor/hints', { method:'POST', headers: { 'Content-Type':'application/json', 'X-ARW-Admin': __adminHeader || '' }, body: JSON.stringify(body) });
+      if(resp.ok){ updateBadges(); showToast('Applied mode/SLO'); }
+      else { showToast('Apply failed ('+resp.status+')'); }
+    }catch{ showToast('Apply error'); }
+  }); }
+  updateBadges();
+  const clr=document.getElementById('egClear'); if(clr){ clr.addEventListener('click', ()=>{ const out=document.getElementById('egOut'); if(out){ out.innerHTML=''; } }); }
+});
+
+// Initialize header badges on load
+function initBadges(){
+  try{
+    const prof = document.getElementById('hdrProfile')?.value || 'balanced';
+    const gb = document.getElementById('govBadge'); if(gb){ gb.className='badge good'; gb.innerHTML='<span class="dot"></span> Gov: '+prof; }
+    const modeSel = document.getElementById('hdrMode'); const m = (modeSel && modeSel.value) || 'balanced'; const mb=document.getElementById('modeBadge'); if(mb){ mb.className='badge good'; mb.innerHTML='<span class="dot"></span> Mode: '+m; }
+    const s = document.getElementById('hdrSlo')?.value || '1500'; const sb=document.getElementById('sloBadge'); if(sb){ sb.className='badge ' + (parseInt(s,10)<=1500? 'good':'warn'); sb.innerHTML='<span class="dot"></span> SLO: '+s+' ms'; }
+  }catch{}
+}
 
 // --- Command palette ---
 function ensurePalette(){
@@ -997,6 +1081,19 @@ async function contextAssemble(){
     const r = await fetch(base + '/admin/context/assemble?q=' + q + '&k=' + k, { headers: { 'X-ARW-Admin': __adminHeader || '' } });
     const j = await r.json();
     document.getElementById('stateOut').textContent = JSON.stringify(j,null,2);
+    try {
+      const planner = (j && j.policy && j.policy.planner) || null;
+      const row = document.getElementById('plannerMeta');
+      if (planner && row){
+        const mode = planner.mode || 'balanced';
+        const verify = planner.verify_pass ? '<span class="badge good"><span class="dot"></span> verify</span>' : '<span class="badge warn"><span class="dot"></span> verify off</span>';
+        const vote = (planner.consistency && planner.consistency.vote_k!=null) ? planner.consistency.vote_k : '–';
+        const k2 = (planner.retrieval && planner.retrieval.k!=null) ? planner.retrieval.k : '–';
+        const div = (planner.retrieval && planner.retrieval.div!=null) ? planner.retrieval.div : '–';
+        row.innerHTML = `<span class="key">planner</span> <code>mode=${mode}</code> ${verify} <span class="key">vote_k</span> <code>${vote}</code> <span class="key">k</span> <code>${k2}</code> <span class="key">div</span> <code>${div}</code>`;
+        row.style.display = 'flex';
+      } else if (row){ row.style.display='none'; row.innerHTML=''; }
+    }catch{}
   } catch(e){ showToast('assemble failed'); }
 }
 // Episodes UI

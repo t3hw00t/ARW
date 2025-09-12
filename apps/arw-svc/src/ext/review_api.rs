@@ -4,6 +4,8 @@ use arw_macros::{arw_admin, arw_gate};
 use crate::AppState;
 
 // Return memory quarantine entries (planned). If file absent, return [].
+#[arw_admin(method = "GET", path = "/admin/state/memory/quarantine", summary = "Get memory quarantine entries")]
+#[arw_gate("state:memory_quarantine:get")]
 pub async fn memory_quarantine_get(_state: State<AppState>) -> impl IntoResponse {
     let path = super::paths::memory_quarantine_path();
     let v = match tokio::fs::read(&path).await {
@@ -15,6 +17,8 @@ pub async fn memory_quarantine_get(_state: State<AppState>) -> impl IntoResponse
 }
 
 // Return world diff review items (planned). If file absent, return [].
+#[arw_admin(method = "GET", path = "/admin/state/world_diffs", summary = "Get world diffs for review")]
+#[arw_gate("state:world_diffs:get")]
 pub async fn world_diffs_get(_state: State<AppState>) -> impl IntoResponse {
     let path = super::paths::world_diffs_review_path();
     let v = match tokio::fs::read(&path).await {

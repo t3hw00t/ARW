@@ -17,6 +17,8 @@ Start with Quickstart to run the service, then explore Features and the new Arch
 
 Context tip: ARW treats context as a just‑in‑time working set assembled from layered memories. See Architecture → Context Working Set for how we avoid running out of context while keeping prompts small and explainable.
 
+Strategy tip: For predictable speed vs depth, see the Performance & Reasoning Playbook (Quick/Balanced/Deep/Verified) in the User Guide.
+
 Tip: If you’re just trying ARW, the default paths are portable. You can switch between portable and system mode with a single environment variable.
 
 ## Choose Your Path

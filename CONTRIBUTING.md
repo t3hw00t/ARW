@@ -41,6 +41,12 @@ Rolling optimization checklist
 - Data shapes: reuse types across API/schema/runtime when possible.
 - Build profile: prefer thin LTO; keep codegen-units low for release.
 
+Reasoning quality checklist
+- Follow the Performance & Reasoning Playbook (Quick/Balanced/Deep/Verified) for new features.
+- Prefer gated self‑consistency and verifier passes over always‑on ensembles.
+- Add quality contracts to docs for new output types (claims ↔ sources, metrics, limits).
+- Wire changes into the Evaluation Harness with small goldens; avoid regressions.
+
 Docs style
 - User docs: short, friendly, mildly technical.
 - Developer docs: precise, with file paths and commands.
