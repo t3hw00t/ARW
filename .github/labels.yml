@@ -1,0 +1,45 @@
+- name: type/bug
+  color: d73a4a
+  description: Bug fix
+- name: type/feat
+  color: a2eeef
+  description: New feature
+- name: type/docs
+  color: 0075ca
+  description: Documentation
+- name: type/task
+  color: 0e8a16
+  description: Small, iterative task for assisted coding
+- name: type/refactor
+  color: cfd3d7
+  description: Refactor or cleanup
+- name: type/chore
+  color: c5def5
+  description: CI/build/infra
+- name: area/ui
+  color: e4e669
+  description: UI / Debug UI
+- name: area/cli
+  color: fbca04
+  description: CLI
+- name: area/service
+  color: 1d76db
+  description: Service (arw-svc)
+- name: area/docs
+  color: 0e8a16
+  description: Docs and site
+- name: area/recipes
+  color: b60205
+  description: Recipes/Tools/Schemas
+- name: area/schemas
+  color: 5319e7
+  description: JSON Schemas/specs
+- name: breaking
+  color: 000000
+  description: Breaking change / upgrade notes required
+- name: good-first-issue
+  color: 7057ff
+  description: Good first issue
+- name: help-wanted
+  color: 128A0C
+  description: Maintainers would appreciate help

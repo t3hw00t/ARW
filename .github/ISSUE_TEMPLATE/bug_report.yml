@@ -1,7 +1,17 @@
-name: Bug Report
+name: "🐛 Bug report"
 description: Report a reproducible problem
-labels: [bug]
+labels: ["type/bug"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out a bug report!
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `arw-svc --version` and OS/arch
+      placeholder: e.g., 0.1.0-beta, Linux/arm64
   - type: textarea
     id: description
     attributes:
@@ -10,32 +20,24 @@ body:
     validations:
       required: true
   - type: textarea
-    id: repro
+    id: steps
     attributes:
-      label: Reproduction Steps
-      description: Minimal steps to reproduce the issue
+      label: Reproduction steps
+      description: Copy‑pasteable steps to reproduce, including commands and config
       placeholder: |
         1. ...
         2. ...
-        3. ...
-    validations:
-      required: true
-  - type: input
-    id: version
-    attributes:
-      label: Version/Commit
-      description: Output of `git rev-parse --short HEAD`
-  - type: dropdown
-    id: os
-    attributes:
-      label: OS
-      options:
-        - Linux
-        - macOS
-        - Windows
   - type: textarea
     id: logs
     attributes:
-      label: Logs
-      description: Relevant logs or stack traces (if any)
+      label: Logs / Screenshots
+      description: Paste relevant logs (redact secrets) or screenshots
       render: shell
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I confirmed docs links are up‑to‑date
+        - label: I tried the latest release or `main`
+

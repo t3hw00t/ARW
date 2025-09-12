@@ -307,6 +307,62 @@ impl ModelsService {
         })
     }
 
+    // Shared HTTP client with connection pooling and stable UA.
+    fn http_client() -> &'static reqwest::Client {
+        static CLIENT: OnceCell<reqwest::Client> = OnceCell::new();
+        CLIENT.get_or_init(|| {
+            reqwest::Client::builder()
+                .connect_timeout(std::time::Duration::from_secs(10))
+                .tcp_keepalive(Self::http_keepalive())
+                .pool_idle_timeout(Self::http_pool_idle_timeout())
+                .pool_max_idle_per_host(Self::http_pool_max_idle_per_host())
+                .user_agent(format!(
+                    "arw-svc/{} (+https://github.com/t3hw00t/Agent_Hub)",
+                    env!("CARGO_PKG_VERSION")
+                ))
+                .redirect(reqwest::redirect::Policy::limited(10))
+                .build()
+                .unwrap_or_else(|_| reqwest::Client::new())
+        })
+    }
+
+    // HTTP client tuning (env-overridable)
+    // ARW_DL_HTTP_KEEPALIVE_SECS: u64 seconds; 0 disables explicit keepalive (use OS default). Default 60.
+    fn http_keepalive() -> Option<std::time::Duration> {
+        use std::time::Duration;
+        static VAL: OnceCell<Option<Duration>> = OnceCell::new();
+        VAL.get_or_init(|| {
+            let secs = std::env::var("ARW_DL_HTTP_KEEPALIVE_SECS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(60);
+            if secs == 0 { None } else { Some(Duration::from_secs(secs)) }
+        }).clone()
+    }
+    // ARW_DL_HTTP_POOL_IDLE_SECS: u64 seconds; 0 disables explicit idle timeout. Default 90.
+    fn http_pool_idle_timeout() -> Option<std::time::Duration> {
+        use std::time::Duration;
+        static VAL: OnceCell<Option<Duration>> = OnceCell::new();
+        VAL.get_or_init(|| {
+            let secs = std::env::var("ARW_DL_HTTP_POOL_IDLE_SECS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(90);
+            if secs == 0 { None } else { Some(Duration::from_secs(secs)) }
+        }).clone()
+    }
+    // ARW_DL_HTTP_POOL_MAX_IDLE_PER_HOST: usize; pool slots per host. Default 8, minimum 1.
+    fn http_pool_max_idle_per_host() -> usize {
+        static VAL: OnceCell<usize> = OnceCell::new();
+        *VAL.get_or_init(|| {
+            std::env::var("ARW_DL_HTTP_POOL_MAX_IDLE_PER_HOST")
+                .ok()
+                .and_then(|s| s.parse::<usize>().ok())
+                .filter(|&n| n >= 1)
+                .unwrap_or(8)
+        })
+    }
+
     // Track in-flight downloads by sha256 to avoid duplicate concurrent fetches
     fn inflight_hash_cell() -> &'static RwLock<HashSet<String>> {
         static INFLIGHT: OnceCell<RwLock<HashSet<String>>> = OnceCell::new();
@@ -330,52 +386,67 @@ impl ModelsService {
 
     // Whether to include budget snapshot in progress events (opt-in for compatibility).
     fn progress_include_budget() -> bool {
-        matches!(
-            std::env::var("ARW_DL_PROGRESS_INCLUDE_BUDGET")
-                .ok()
-                .as_deref(),
-            Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("on")
-        )
+        static FLAG: OnceCell<bool> = OnceCell::new();
+        *FLAG.get_or_init(|| {
+            matches!(
+                std::env::var("ARW_DL_PROGRESS_INCLUDE_BUDGET")
+                    .ok()
+                    .as_deref(),
+                Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("on")
+            )
+        })
     }
 
     // Whether to include disk stats in progress events (opt-in for compatibility).
     fn progress_include_disk() -> bool {
-        matches!(
-            std::env::var("ARW_DL_PROGRESS_INCLUDE_DISK")
-                .ok()
-                .as_deref(),
-            Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("on")
-        )
+        static FLAG: OnceCell<bool> = OnceCell::new();
+        *FLAG.get_or_init(|| {
+            matches!(
+                std::env::var("ARW_DL_PROGRESS_INCLUDE_DISK")
+                    .ok()
+                    .as_deref(),
+                Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("on")
+            )
+        })
     }
 
     fn idle_timeout_duration() -> Option<std::time::Duration> {
         // Safety net when hard budget is 0 to avoid hung downloads.
         // Set ARW_DL_IDLE_TIMEOUT_SECS=0 to disable (no idle timeout).
-        let secs = std::env::var("ARW_DL_IDLE_TIMEOUT_SECS")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(300);
-        if secs == 0 {
-            None
-        } else {
-            Some(std::time::Duration::from_secs(secs))
-        }
+        static DUR: OnceCell<Option<std::time::Duration>> = OnceCell::new();
+        DUR.get_or_init(|| {
+            let secs = std::env::var("ARW_DL_IDLE_TIMEOUT_SECS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(300);
+            if secs == 0 {
+                None
+            } else {
+                Some(std::time::Duration::from_secs(secs))
+            }
+        }).clone()
     }
 
     fn disk_reserve_bytes() -> u64 {
-        std::env::var("ARW_MODELS_DISK_RESERVE_MB")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(256)
-            .saturating_mul(1024 * 1024)
+        static BYTES: OnceCell<u64> = OnceCell::new();
+        *BYTES.get_or_init(|| {
+            std::env::var("ARW_MODELS_DISK_RESERVE_MB")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(256)
+                .saturating_mul(1024 * 1024)
+        })
     }
 
     fn ewma_alpha() -> f64 {
-        std::env::var("ARW_DL_EWMA_ALPHA")
-            .ok()
-            .and_then(|s| s.parse::<f64>().ok())
-            .filter(|a| *a > 0.0 && *a < 1.0)
-            .unwrap_or(0.3)
+        static ALPHA: OnceCell<f64> = OnceCell::new();
+        *ALPHA.get_or_init(|| {
+            std::env::var("ARW_DL_EWMA_ALPHA")
+                .ok()
+                .and_then(|s| s.parse::<f64>().ok())
+                .filter(|a| *a > 0.0 && *a < 1.0)
+                .unwrap_or(0.3)
+        })
     }
 
     async fn load_ewma_mbps() -> Option<f64> {
@@ -429,11 +500,14 @@ impl ModelsService {
     }
 
     fn max_download_bytes() -> u64 {
-        std::env::var("ARW_MODELS_MAX_MB")
-            .ok()
-            .and_then(|s| s.parse::<u64>().ok())
-            .unwrap_or(4096)
-            .saturating_mul(1024 * 1024)
+        static BYTES: OnceCell<u64> = OnceCell::new();
+        *BYTES.get_or_init(|| {
+            std::env::var("ARW_MODELS_MAX_MB")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(4096)
+                .saturating_mul(1024 * 1024)
+        })
     }
 
     fn models_quota_bytes() -> Option<u64> {
@@ -606,6 +680,13 @@ impl ModelsService {
         let dir = crate::ext::paths::state_dir()
             .join("models")
             .join("by-hash");
+        // Fast path: exact file name without extension
+        let exact = dir.join(sha256);
+        if let Ok(md) = tokio::fs::metadata(&exact).await {
+            if md.is_file() {
+                return Some((exact, sha256.to_string()));
+            }
+        }
         if let Ok(mut rd) = tokio::fs::read_dir(&dir).await {
             while let Ok(Some(ent)) = rd.next_entry().await {
                 let name = ent.file_name().to_string_lossy().to_string();
@@ -1359,15 +1440,7 @@ impl ModelsService {
                 .await;
                 return;
             }
-            let client = reqwest::Client::builder()
-                .connect_timeout(std::time::Duration::from_secs(10))
-                .user_agent(format!(
-                    "arw-svc/{} (+https://github.com/t3hw00t/arw)",
-                    env!("CARGO_PKG_VERSION")
-                ))
-                .redirect(reqwest::redirect::Policy::limited(10))
-                .build()
-                .unwrap_or_else(|_| reqwest::Client::new());
+            let client = Self::http_client().clone();
             let mut resume_from: u64 = 0;
             if let Ok(md) = afs::metadata(&tmp).await {
                 resume_from = md.len();

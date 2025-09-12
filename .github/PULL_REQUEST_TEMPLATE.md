@@ -1,16 +1,19 @@
-## Summary
+Title: <type>(scope): <short summary>
 
-Briefly describe the change. Keep it focused and clear.
+Microsummary
+- What changed and why in 2–3 lines.
 
-## Checks
+Plan (final)
+- Files touched, risks, user impact.
 
-- [ ] cargo fmt --all -- --check
-- [ ] cargo clippy --workspace --all-targets -- -D warnings
-- [ ] scripts/test.ps1 or ./scripts/test.sh
-- [ ] scripts/docgen.ps1 or ./scripts/docgen.sh
-- [ ] Docs updated (mkdocs nav, guide/dev pages)
+Test results
+- Local checks (fmt, clippy -D warnings, nextest) and any output summaries.
 
-## Notes
+Docs impact
+- Pages updated/added; link to sections.
 
-Anything reviewers should pay extra attention to.
+Scope guard
+- Out-of-scope work that was intentionally left out.
 
+Breaking changes
+- N/A or list with upgrade notes.

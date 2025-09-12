@@ -1,25 +1,17 @@
-name: CI
+name: Link check (docs + README)
 
 on:
   pull_request:
   push:
     branches: [ main, master ]
+    paths:
+      - 'docs/**'
+      - 'README.md'
+      - '.lychee.toml'
+  workflow_dispatch: {}
 
 jobs:
-  rust:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Cache cargo
-        uses: Swatinem/rust-cache@v2
-      - name: Build
-        run: |
-          cargo build --workspace --all-targets --locked
-      - name: Clippy
-        run: |
-          cargo clippy --workspace --all-targets -- -D warnings
-  docs-links:
+  lychee:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -32,3 +24,4 @@ jobs:
             README.md docs/**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

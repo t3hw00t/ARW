@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+This project follows Keep a Changelog and Semantic Versioning. All notable changes are recorded here.
 
 ## [0.1.0-beta] - 2025-09-11
 
@@ -27,4 +27,3 @@ Stability baseline. Consolidated features, CI hardening, docs, and ops.
 ### Security
 - Added CodeQL analysis and cargo-audit.
 - Helm securityContext defaults; non-root Docker image.
-

@@ -1,8 +1,29 @@
 # Agents Running Wild (ARW)
 
-Local‑first Rust workspace for building and running personal AI agents. ARW bundles a lightweight service, CLI, and optional desktop UI so you can experiment without cloud lock‑in.
+<div align="left">
+
+[![CI](https://github.com/t3hw00t/Agent_Hub/actions/workflows/ci.yml/badge.svg)](https://github.com/t3hw00t/Agent_Hub/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-material%20for%20mkdocs-blue)](https://t3hw00t.github.io/Agent_Hub/)
+[![Container](https://img.shields.io/badge/ghcr-arw--svc-blue?logo=docker)](https://ghcr.io/t3hw00t/arw-svc)
+[![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-informational)](#licensing)
+[![Release](https://img.shields.io/github/v/release/t3hw00t/Agent_Hub?display_name=tag)](https://github.com/t3hw00t/Agent_Hub/releases)
+
+</div>
+
+10‑second pitch: local‑first agents with a unified object graph and a single live event stream (SSE). One service powers the Debug UI, CLI, and Recipes — all looking at the same state with strong observability.
 
 General direction: a unified object graph + single event stream. Every surface—Project Hub, Chat, Training Park, Managers (Agents/Models/Hardware/Permissions/Containers/Plugins)—is just a different lens on the same shared objects, driven by the same live events (SSE). This keeps the system coherent, inspectable, and easy to extend.
+
+Full documentation → https://t3hw00t.github.io/Agent_Hub/
+
+## Highlights
+
+- Local‑first: runs offline by default; portable, per‑user state. See `docs/guide/offline_sync.md`.
+- Unified object graph: consistent state across Hub, Chat, and Training. See `docs/architecture/object_graph.md`.
+- Live events (SSE): one stream drives UIs and tools. See `docs/architecture/events_vocabulary.md`.
+- Debug UI: inspect episodes, state snapshots, and traces. See `docs/guide/troubleshooting.md`.
+- Recipes + Schemas: installable strategy packs with JSON Schemas. See `docs/guide/recipes.md` and `spec/schemas/`.
+- Observability: tracing/logging/metrics and journal. See `docs/architecture/observability_otel.md`.
 
 ## Try ARW in 2 Minutes
 
@@ -24,6 +45,24 @@ Docker (amd64/arm64); Native binaries: Windows (x64/ARM64), macOS (x64/ARM64), L
 ```bash
 docker run --rm -p 8090:8090 ghcr.io/t3hw00t/arw-svc:latest
 ```
+
+## Architecture at a Glance
+
+```
+┌──────────────┐    SSE (events)    ┌──────────────┐
+│  arw-svc     │ ─────────────────▶ │  Debug UI    │
+│  HTTP + SSE  │ ◀───────────────── │  (Browser)   │
+└─────┬────────┘    state reads     └─────┬────────┘
+      │                                   │
+      │ CLI (REST/gRPC)                   │ Recipes + Tools
+      ▼                                   ▼
+┌──────────────┐                    ┌──────────────┐
+│  arw-cli     │                    │  Schemas     │
+│  automation  │                    │  JSON Schema │
+└──────────────┘                    └──────────────┘
+```
+
+<i>Screenshot:</i> see the Debug UI at `/debug` (add `ARW_DEBUG=1`).
 
 ## What’s Inside
 
@@ -75,6 +114,12 @@ Commons Kit (what we ship on top)
 
 ## Developers
 
+### Assisted, Iterative Coding
+
+If you use an AI pair‑programmer, start here:
+- Working Agreement, Repo Map, and Plan template: `docs/ai/`
+- Open a small “AI Task” issue → follow the PLAN → submit a tight PR.
+
 - Enter Nix dev shell: `nix develop`
 - Fast loop: `just dev` (runs `arw-svc` with `ARW_DEBUG=1`)
 - Docs locally: `just docs-serve` → http://127.0.0.1:8000
@@ -106,4 +151,22 @@ See `CONTRIBUTING.md`. Please open issues/PRs and discussions on GitHub.
 
 —
 
-ARW is dual‑licensed under MIT or Apache‑2.0.
+## Who Is It For?
+
+- Builders who want local‑first agents with strong observability.
+- Teams exploring recipes/tools with explicit trust boundaries.
+- Researchers comparing context and retrieval strategies with live feedback.
+
+## Non‑Goals
+
+- Not a hosted cloud platform; no hidden network egress by default.
+- Not a monolithic “one‑true‑agent” — compose via recipes and tools.
+
+## API and Schemas
+
+- OpenAPI (preview): `docs/static/openapi.json` — describes HTTP service and auth.
+- Schemas: `spec/schemas/` for recipes, tools, and events.
+
+## Licensing
+
+ARW is dual‑licensed under MIT or Apache‑2.0. See `LICENSE-MIT` and `LICENSE-APACHE`.

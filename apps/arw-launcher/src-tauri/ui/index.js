@@ -92,7 +92,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   document.getElementById('btn-updates').addEventListener('click', async () => {
     try {
-      await invoke('open_url', { url: 'https://github.com/t3hw00t/arw/releases' });
+      await invoke('open_url', { url: 'https://github.com/t3hw00t/Agent_Hub/releases' });
     } catch (e) { console.error(e); }
   });
   // Service health polling
@@ -101,4 +101,3 @@ document.addEventListener('DOMContentLoaded', () => {
   loadPrefs();
   miniDownloads();
 });
-

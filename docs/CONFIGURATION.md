@@ -53,6 +53,11 @@ Defaults
 - `ARW_DL_PREFLIGHT`: when `1`, perform a HEAD preflight to capture `Content-Length` and resume validators (ETag/Last-Modified). Enables early enforcement of `ARW_MODELS_MAX_MB` and `ARW_MODELS_QUOTA_MB` before starting the transfer.
 - `ARW_DL_PROGRESS_INCLUDE_BUDGET`: when `1`, include a `budget` snapshot in `Models.DownloadProgress` events.
 - `ARW_DL_PROGRESS_INCLUDE_DISK`: when `1`, include a `disk` snapshot `{available,total,reserve}` in progress events.
+ 
+HTTP client (downloads)
+- `ARW_DL_HTTP_KEEPALIVE_SECS`: TCP keepalive seconds for the download client pool (default `60`; `0` = unset/OS default).
+- `ARW_DL_HTTP_POOL_IDLE_SECS`: idle timeout seconds for pooled connections (default `90`; `0` = unset/disable explicit idle timeout).
+- `ARW_DL_HTTP_POOL_MAX_IDLE_PER_HOST`: max idle connections per host (default `8`, min `1`).
 The enhanced downloader path is always enabled; the legacy `ARW_DL_NEW` flag has been removed to reduce maintenance overhead.
 
 ## Hardware Probes & Metrics

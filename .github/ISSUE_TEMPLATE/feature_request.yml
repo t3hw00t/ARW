@@ -1,21 +1,36 @@
-name: Feature Request
-description: Propose an idea or enhancement
-labels: [enhancement]
+name: "✨ Feature request"
+description: Suggest an idea or improvement
+labels: ["type/feat"]
 body:
   - type: textarea
-    id: summary
+    id: problem
     attributes:
-      label: Summary
-      description: What problem would this feature solve?
-    validations:
-      required: true
+      label: Problem
+      description: What’s the user problem or job‑to‑be‑done?
   - type: textarea
     id: proposal
     attributes:
-      label: Proposed Solution
-      description: How should it work? Any alternatives?
+      label: Proposal
+      description: Describe the change at a high level
   - type: textarea
-    id: context
+    id: alternatives
     attributes:
-      label: Additional Context
-      description: Links, mockups, or references
+      label: Alternatives considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - area/ui
+        - area/cli
+        - area/service
+        - area/docs
+        - area/recipes
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: Adds/impacts docs (Tutorial/How‑to/Reference/Explanation)
+        - label: Has a minimal, testable slice
+

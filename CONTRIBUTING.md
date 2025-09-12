@@ -48,6 +48,7 @@ Reasoning quality checklist
 - Wire changes into the Evaluation Harness with small goldens; avoid regressions.
 
 Docs style
+- We follow the Diátaxis model: Tutorials, How‑to, Reference, Explanations. See `docs/developer/docs_style.md`.
 - User docs: short, friendly, mildly technical.
 - Developer docs: precise, with file paths and commands.
 - Use callouts sparingly and let whitespace breathe.
@@ -63,3 +64,9 @@ Docs lint checklist
 - Link canonical pages: Quickstart, Deployment, Configuration, Admin Endpoints.
 - Ensure page is included in `mkdocs.yml` nav.
 - Run `just docs-check` and ensure `mkdocs build --strict` passes.
+
+PR acceptance checklist
+- User‑visible docs updated when behavior changes
+- Schemas/examples refreshed as needed
+- Changelog entry included
+- Labels applied (type/*, area/*)

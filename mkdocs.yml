@@ -10,6 +10,13 @@ theme:
 extra_css:
   - css/overrides.css
 docs_dir: docs
+plugins:
+  - search
+  - git-revision-date-localized:
+      fallback_to_build_date: true
+extra:
+  version:
+    provider: mike
 markdown_extensions:
   - admonition
   - attr_list
@@ -26,7 +33,29 @@ markdown_extensions:
   - pymdownx.snippets
 nav:
   - Home: index.md
-  - Architecture:
+  - Tutorials:
+      - Try ARW in 2 Minutes: guide/quickstart.md
+  - How‑to:
+      - Models Download: guide/models_download.md
+      - Security Hardening: guide/security_hardening.md
+      - Network Posture: guide/network_posture.md
+      - Desktop Launcher: guide/launcher.md
+      - Admin Endpoints: guide/admin_endpoints.md
+      - Troubleshooting: guide/troubleshooting.md
+  - Reference:
+      - API Reference: reference/api.md
+      - Configuration: CONFIGURATION.md
+      - CLI Reference: reference/cli.md
+      - Schemas:
+          - API and Schema: API_AND_SCHEMA.md
+          - Egress Schemas: api/egress_schemas.md
+          - Cluster Schemas: api/cluster_schemas.md
+          - Memory & World Schemas: api/memory_world_schemas.md
+      - Support Matrix: reference/support_matrix.md
+      - Telemetry & Privacy: reference/telemetry_privacy.md
+      - Trust Boundaries: reference/trust_boundaries.md
+      - Glossary: GLOSSARY.md
+  - Explanations:
       - Unified Object Graph: architecture/object_graph.md
       - Events Vocabulary: architecture/events_vocabulary.md
       - Self‑Model (Metacognition): architecture/self_model.md
@@ -55,57 +84,9 @@ nav:
       - Replay & Time Travel: architecture/replay_time_travel.md
       - Naming & IDs: architecture/naming_ids.md
       - UX Invariants: architecture/ux_invariants.md
-  - User Guide:
-      - Quickstart: guide/quickstart.md
-      - Concepts: guide/concepts.md
-      - UI Architecture: guide/ui_architecture.md
-      - Performance & Reasoning: guide/performance_reasoning_playbook.md
-      - Logic Units Library: guide/logic_units_library.md
-      - Network Posture: guide/network_posture.md
-      - Security Posture: guide/security_posture.md
-      - Research Watcher: guide/research_watcher.md
-      - Desktop Launcher: guide/launcher.md
-      - Compatibility: guide/compatibility.md
-      - Features: FEATURES.md
-      - Metrics & Insights: guide/METRICS_AND_INSIGHTS.md
-      - Models Download: guide/models_download.md
-      - Chat Backends: guide/chat_backends.md
-      - gRPC: guide/grpc.md
-      - Projects UI: guide/projects_ui.md
-      - Design System: guide/design_system.md
-      - Agent Recipes: guide/recipes.md
-      - Context Recipes: guide/context_recipes.md
-      - Runtime Matrix: guide/runtime_matrix.md
-      - Training Park: guide/training_park.md
-      - Plugins & Extensions: guide/plugins.md
-      - Permissions & Policies: guide/policy_permissions.md
-      - Evaluation Harness: guide/eval_harness.md
-      - Human‑in‑the‑Loop: guide/human_in_loop.md
-      - Cost & Quotas: guide/cost_quota.md
-      - Offline & Sync: guide/offline_sync.md
-      - Threat Model: guide/threat_model.md
-      - Feedback Engine: guide/feedback_engine.md
-      - Troubleshooting: guide/troubleshooting.md
-  - Admin & Ops:
-      - Security Hardening: guide/security_hardening.md
-      - Deployment: DEPLOYMENT.md
-      - Admin Endpoints: guide/admin_endpoints.md
-      - Clustering: CLUSTERING.md
-  - Reference:
-      - API and Schema: API_AND_SCHEMA.md
-      - Egress Schemas: api/egress_schemas.md
-      - Cluster Schemas: api/cluster_schemas.md
-      - Memory & World Schemas: api/memory_world_schemas.md
-      - Hierarchy: HIERARCHY.md
-      - Hardware and Models: HARDWARE_AND_MODELS.md
-      - Configuration: CONFIGURATION.md
-      - Structure: STRUCTURE.md
-      - Glossary: GLOSSARY.md
-      - Gating Keys: GATING_KEYS.md
-      - Memory and Training: MEMORY_AND_TRAINING.md
-      - Arrow Ingestion: arrow_ingestion.md
-  - Developer:
+  - Contribute:
       - Overview: developer/index.md
+      - Docs Style (Diátaxis): developer/docs_style.md
       - Status: developer/status.md
       - Tasks: developer/tasks.md
       - Stability Freeze: developer/stability.md
@@ -116,12 +97,16 @@ nav:
       - Windows Start Validation: developer/windows-start-validation.md
       - Plugin ABI & Trust: developer/plugin_abi_trust.md
       - Contract Tests: developer/contract_tests.md
-  - About:
-      - Commons Kit: about/commons_kit.md
-      - Backlog: BACKLOG.md
+      - Assisted Coding:
+          - Working Agreement: ai/ASSISTED_DEV_GUIDE.md
+          - Repo Map: ai/REPO_MAP.md
+          - Change Plan Template: ai/CHANGE_PLAN_TEMPLATE.md
+  - AI:
+      - Assistants Index: ai/ai_index.md
+      - Contracts: ai/ai_contracts.md
+      - Prompts Policy: ai/ai_prompts.md
+  - Release notes:
+      - Release Notes: release_notes.md
       - Roadmap: ROADMAP.md
       - Interface Roadmap: INTERFACE_ROADMAP.md
-      - Policy: POLICY.md
-      - Project Instructions: PROJECT_INSTRUCTIONS.md
-      - Training Research: training_research.md
-      - Wiki Structure: wiki_structure.md
+      - Backlog: BACKLOG.md

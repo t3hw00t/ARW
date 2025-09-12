@@ -1,0 +1,34 @@
+name: AI Task (small, iterative)
+description: Plan-first, testable task for assisted coding
+labels: ["type/task", "good-first-issue"]
+body:
+  - type: input
+    id: goal
+    attributes:
+      label: Goal (one sentence)
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context & links
+      description: Link to relevant docs (README sections, /docs pages, schema files).
+  - type: textarea
+    id: plan
+    attributes:
+      label: Initial PLAN (use CHANGE_PLAN_TEMPLATE)
+      description: List intended files, changes, risks, and test/docs updates.
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope & constraints
+      options:
+        - label: No refactors outside scope
+        - label: No new dependencies without approval
+        - label: No network/file writes unless specified
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criteria
+      description: What must be true to merge?
+

@@ -584,11 +584,14 @@ mod tests {
 }
 
 pub async fn about() -> impl IntoResponse {
+    let docs_url = std::env::var("ARW_DOCS_URL")
+        .ok()
+        .or(Some("https://t3hw00t.github.io/Agent_Hub/".to_string()));
     Json(json!({
         "service": "arw-svc",
         "version": env!("CARGO_PKG_VERSION"),
         "role": format!("{:?}", hier::get_state().self_node.role),
-        "docs_url": std::env::var("ARW_DOCS_URL").ok(),
+        "docs_url": docs_url,
         "endpoints": [
           "/spec/openapi.yaml",
           "/spec/asyncapi.yaml",
