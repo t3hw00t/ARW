@@ -664,7 +664,7 @@ async fn probe_hw(State(state): State<AppState>) -> impl IntoResponse {
     let gpus = probe_gpus_best_effort();
 
     let out = serde_json::json!({
-        "cpu": {"brand": cpu_brand, "logical": cpus_logical, "physical": cpus_physical},
+        "cpu": {"brand": cpu_brand, "logical": cpus_logical, "physical": cpus_physical, "features": cpu_features()},
         "memory": {"total": total_mem, "available": avail_mem},
         "os": {"name": os_name, "version": os_version, "kernel": kernel, "arch": arch},
         "disks": disks,
@@ -813,6 +813,52 @@ fn read_cpuinfo_has_flag(flag: &str) -> bool {
         }
     }
     false
+}
+
+fn cpu_features() -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    // x86_64 common features
+    #[cfg(target_arch = "x86_64")]
+    {
+        if std::is_x86_feature_detected!("sse4.2") {
+            out.push("sse4.2".into());
+        }
+        if std::is_x86_feature_detected!("avx") {
+            out.push("avx".into());
+        }
+        if std::is_x86_feature_detected!("avx2") {
+            out.push("avx2".into());
+        }
+        if std::is_x86_feature_detected!("fma") {
+            out.push("fma".into());
+        }
+        if std::is_x86_feature_detected!("aes") {
+            out.push("aes".into());
+        }
+    }
+    // aarch64 common features
+    #[cfg(target_arch = "aarch64")]
+    {
+        if std::arch::is_aarch64_feature_detected!("neon") {
+            out.push("neon".into());
+        }
+        if std::arch::is_aarch64_feature_detected!("asimd") {
+            out.push("asimd".into());
+        }
+        if std::arch::is_aarch64_feature_detected!("pmull") {
+            out.push("pmull".into());
+        }
+        if std::arch::is_aarch64_feature_detected!("aes") {
+            out.push("aes".into());
+        }
+        if std::arch::is_aarch64_feature_detected!("sha2") {
+            out.push("sha2".into());
+        }
+        if std::arch::is_aarch64_feature_detected!("sha3") {
+            out.push("sha3".into());
+        }
+    }
+    out
 }
 
 #[cfg(unix)]

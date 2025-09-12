@@ -424,7 +424,7 @@ impl ModelsService {
                         crate::ext::io::audit_event("models.download.error", &p).await;
                         return;
                     }
-                    if let Err(e) = afs::rename(&tmp, &target).await {
+                    if let Err(_e) = afs::rename(&tmp, &target).await {
                         // On Windows, rename fails if target exists; try removing existing then rename again.
                         let _ = afs::remove_file(&target).await;
                         if let Err(e2) = afs::rename(&tmp, &target).await {

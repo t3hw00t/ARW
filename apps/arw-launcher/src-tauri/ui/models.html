@@ -112,6 +112,18 @@
             await ivk('models_default_set', { id: e.target.getAttribute('data-id'), port: port() });
             refresh();
           });
+          // If downloading, add a Cancel button in the actions cell
+          try {
+            if ((String(m.status||'').toLowerCase()) === 'downloading'){
+              const tds = tr.querySelectorAll('td');
+              const actions = tds[tds.length-1];
+              const btn = document.createElement('button');
+              btn.textContent = 'Cancel';
+              btn.addEventListener('click', async ()=>{ await ivk('models_download_cancel', { id: m.id, port: port() }); });
+              actions.appendChild(document.createTextNode(' '));
+              actions.appendChild(btn);
+            }
+          } catch {}
           const op = tr.querySelector('[data-open]');
           if (op) op.addEventListener('click', async (e)=>{ await ivk('open_path', { path: e.target.getAttribute('data-open') }); });
           tb.appendChild(tr);
@@ -158,6 +170,17 @@
             if (j.kind && j.kind.startsWith('Models.')) {
               if (j.kind === 'Models.DownloadProgress') {
                 document.getElementById('dlprog').textContent = JSON.stringify(j.payload, null, 2);
+                try{
+                  const pl = j.payload || {};
+                  if (pl.status === 'complete' && pl.id) {
+                    (async ()=>{
+                      await refresh();
+                      const list2 = await ivk('models_list', { port: port() });
+                      const found = (list2||[]).find(mm => mm.id === pl.id);
+                      if (found && found.path) { try { await ivk('open_path', { path: found.path }); } catch(e){} }
+                    })();
+                  }
+                }catch{}
               }
               if (j.kind === 'Models.Changed' || j.kind === 'Models.Refreshed') {
                 refresh();
