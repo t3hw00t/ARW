@@ -12,6 +12,17 @@ Status: unless noted, items are todo. Items that have task IDs link to the track
 
 ## Now (Weeks)
 
+Complexity Collapse (Cross-cutting)
+- One service API surface (`/state`, `/events`, `/actions`) with no side channels
+- Single SQLite journal with content-addressed blobs; derive read-models and caches
+- Job model & scheduler as the only execution path; unify local and remote runners
+- Patch engine for all writes with diff preview and rollback
+- Documented event taxonomy; views/read-models subscribe to the event stream
+- Flows as DAG data executed by a single flow-runner; tools are schema-defined nodes
+- Unified retrieval pipeline and memory abstraction (vector/graph/kv/doc) with shared CRUD/stats and index hygiene
+- Capability/lease system with node-local egress proxy; remove per-tool allowlists
+- UI: shared right-sidecar, schema-generated forms, and global command palette
+
 Never‑Out‑Of‑Context (High Priority)
 - [t-250912143001-0001] Context Working Set doc + mkdocs nav — done (this change)
 - [t-250912143005-0002] Context API: allow slot budgets and return stable pointers (IDs) for all included items — todo
