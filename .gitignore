@@ -25,3 +25,5 @@ Thumbs.db
 /.venv/
 %LOCALAPPDATA%/
 apps/arw-launcher/src-tauri/gen/
+__pycache__/
+*.pyc
