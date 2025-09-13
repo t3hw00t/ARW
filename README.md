@@ -68,6 +68,8 @@ docker run --rm -p 8090:8090 ghcr.io/t3hw00t/arw-svc:latest
 
 <i>Screenshot:</i> see the Debug UI at `/debug` (add `ARW_DEBUG=1`).
 
+Screenshots → https://t3hw00t.github.io/Agent_Hub/guide/screenshots/
+
 ## What’s Inside
 
 - Service: user‑mode HTTP with debug UI and SSE events. “Snappy by Default” budgets prioritize first feedback within 50 ms and first partial ≤150 ms; see `docs/ethics/SNAPPY_CHARTER.md`.
