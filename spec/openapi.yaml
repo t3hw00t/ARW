@@ -732,6 +732,39 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ModelsSummary'
+              examples:
+                basic:
+                  summary: Typical models summary
+                  value:
+                    items:
+                      - id: llama3:8b
+                        provider: ollama
+                        path: /models/llama3/8b.bin
+                        sha256: 0123abcd...
+                        bytes: 5347737600
+                        status: ready
+                      - id: qwen2:7b
+                        provider: hf
+                        path: /models/qwen2/7b.bin
+                        sha256: 89ab0123...
+                        bytes: 4855592960
+                        status: downloading
+                    concurrency:
+                      configured_max: 2
+                      available_permits: 2
+                      held_permits: 0
+                      hard_cap: null
+                    metrics:
+                      started: 4
+                      queued: 1
+                      admitted: 3
+                      resumed: 0
+                      canceled: 0
+                      completed: 2
+                      completed_cached: 0
+                      errors: 0
+                      bytes_total: 10245591040
+                      ewma_mbps: 18.2
       description: 'Models: GET /admin/models/summary.'
   /admin/models/add:
     post:
@@ -1340,6 +1373,11 @@ components:
           type: [integer, 'null']
           format: int64
           minimum: 0
+      example:
+        configured_max: 2
+        available_permits: 2
+        held_permits: 0
+        hard_cap: null
     ModelsMetrics:
       type: object
       required: [started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total]
@@ -1357,6 +1395,17 @@ components:
           type: [number, 'null']
           format: double
           minimum: 0
+      example:
+        started: 4
+        queued: 1
+        admitted: 3
+        resumed: 0
+        canceled: 0
+        completed: 2
+        completed_cached: 0
+        errors: 0
+        bytes_total: 10245591040
+        ewma_mbps: 18.2
     ModelsSummary:
       type: object
       required: [items, concurrency, metrics]
@@ -1371,6 +1420,7 @@ components:
           $ref: '#/components/schemas/ModelsConcurrency'
         metrics:
           $ref: '#/components/schemas/ModelsMetrics'
+      # example omitted due to tooling quirks with a property named "default"
     ModelItem:
       type: object
       required: [id]
@@ -1382,6 +1432,13 @@ components:
         bytes: { type: [integer, 'null'], format: int64, minimum: 0 }
         status: { type: [string, 'null'] }
         error_code: { type: [string, 'null'] }
+      example:
+        id: llama3:8b
+        provider: ollama
+        path: /models/llama3/8b.bin
+        sha256: 0123abcd...
+        bytes: 5347737600
+        status: ready
     About:
       type: object
       description: Service and branding information.

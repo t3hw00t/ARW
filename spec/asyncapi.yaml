@@ -9,62 +9,92 @@ tags:
 channels:
   Service.Start:
     subscribe:
+      operationId: service_start
+      description: Service emitted start event
       message:
         $ref: '#/components/messages/ServiceStart'
   Service.Health:
     subscribe:
+      operationId: service_health
+      description: Periodic health heartbeat
       message:
         $ref: '#/components/messages/ServiceHealth'
   Service.Test:
     subscribe:
+      operationId: service_test
+      description: Test event emission
       message:
         $ref: '#/components/messages/ServiceTest'
   Governor.Changed:
     subscribe:
+      operationId: governor_changed
+      description: Governor profile changed
       message:
         $ref: '#/components/messages/GovernorChanged'
   Memory.Applied:
     subscribe:
+      operationId: memory_applied
+      description: Memory applied to working set
       message:
         $ref: '#/components/messages/MemoryApplied'
   Models.Changed:
     subscribe:
+      operationId: models_changed
+      description: Models list/default changed
       message:
         $ref: '#/components/messages/ModelsChanged'
   Models.DownloadProgress:
     subscribe:
+      operationId: models_download_progress
+      description: Download progress, status codes, metrics snapshots
       message:
         $ref: '#/components/messages/ModelsDownloadProgress'
   Models.ManifestWritten:
     subscribe:
+      operationId: models_manifest_written
+      description: A model manifest has been written
       message:
         $ref: '#/components/messages/ModelsManifestWritten'
   Models.CasGc:
     subscribe:
+      operationId: models_cas_gc
+      description: CAS GC run summary
       message:
         $ref: '#/components/messages/ModelsCasGc'
   Egress.Preview:
     subscribe:
+      operationId: egress_preview
+      description: Egress preflight summary
       message:
         $ref: '#/components/messages/EgressPreview'
   Egress.Ledger.Appended:
     subscribe:
+      operationId: egress_ledger_appended
+      description: Egress decision appended to ledger
       message:
         $ref: '#/components/messages/EgressLedgerAppended'
   Tool.Ran:
     subscribe:
+      operationId: tool_ran
+      description: Tool execution completed
       message:
         $ref: '#/components/messages/ToolRan'
   Feedback.Signal:
     subscribe:
+      operationId: feedback_signal
+      description: Feedback signal recorded
       message:
         $ref: '#/components/messages/FeedbackSignal'
   Feedback.Suggested:
     subscribe:
+      operationId: feedback_suggested
+      description: Feedback suggestion produced
       message:
         $ref: '#/components/messages/FeedbackSuggested'
   Feedback.Applied:
     subscribe:
+      operationId: feedback_applied
+      description: Feedback suggestion applied
       message:
         $ref: '#/components/messages/FeedbackApplied'
 components:
@@ -188,6 +218,41 @@ components:
           bytes_out: { type: integer }
           bytes_in: { type: integer }
           duration_ms: { type: integer }
+    ToolRan:
+      name: Tool.Ran
+      payload:
+        type: object
+        properties:
+          tool_id: { type: string }
+          ok: { type: boolean }
+          duration_ms: { type: integer }
+          output: {}
+    FeedbackSignal:
+      name: Feedback.Signal
+      payload:
+        type: object
+        properties:
+          kind: { type: string }
+          target: { type: string }
+          confidence: { type: number }
+          severity: { type: integer }
+          note: { type: ["string","null"] }
+    FeedbackSuggested:
+      name: Feedback.Suggested
+      payload:
+        type: object
+        properties:
+          id: { type: string }
+          summary: { type: string }
+          confidence: { type: number }
+    FeedbackApplied:
+      name: Feedback.Applied
+      payload:
+        type: object
+        properties:
+          id: { type: string }
+          action: { type: string }
+          ok: { type: boolean }
   schemas:
     EventEnvelope:
       type: object

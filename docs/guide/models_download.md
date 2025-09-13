@@ -16,6 +16,7 @@ See also: Guide → Performance & Reasoning Playbook (budgets/admission), Refere
 - POST `/admin/models/download/cancel` — Cancel an in‑flight download.
 - GET  `/admin/events` — Listen for `Models.DownloadProgress` events (SSE; supports `?replay=N` and repeated `prefix=` filters).
 - GET  `/state/models` — Public, read‑only models list (no admin token required).
+- GET  `/admin/models/summary` — Aggregated summary for UIs: `{ items, default, concurrency, metrics }`.
 - POST `/admin/models/cas_gc` — Run a one‑off CAS GC sweep; deletes unreferenced blobs older than `ttl_days`.
 - GET  `/admin/state/models_hashes` — Admin summary of installed model hashes and sizes.
 - GET  `/admin/models/by-hash/:sha256` — Serve a CAS blob by hash (egress‑gated; `io:egress:models.peer`).
@@ -194,3 +195,26 @@ curl -sS -X POST "$BASE/admin/models/cas_gc" \
 ```
 
 GC emits a compact `Models.CasGc` event with `{scanned, kept, deleted, deleted_bytes, ttl_days}`.
+Get a summary suitable for dashboards:
+
+```bash
+curl -sS "$BASE/admin/models/summary" \
+  -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" | jq .
+```
+
+Example response (wrapped in `{ ok, data }`):
+
+```
+{
+  "ok": true,
+  "data": {
+    "items": [
+      {"id":"llama3:8b","provider":"ollama","bytes":5347737600,"status":"ready"},
+      {"id":"qwen2:7b","provider":"hf","bytes":4855592960,"status":"downloading"}
+    ],
+    "default": "llama3:8b",
+    "concurrency": {"configured_max": 2, "available_permits": 2, "held_permits": 0},
+    "metrics": {"started": 4, "queued": 1, "admitted": 3, "completed": 2, "bytes_total": 10245591040, "ewma_mbps": 18.2}
+  }
+}
+```
