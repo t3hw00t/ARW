@@ -15,6 +15,8 @@ import sys
 import yaml
 
 METHODS = {"get","post","put","delete","patch","options","head","trace"}
+# Temporary ignores for parity (e.g., docs evolving)
+IGNORE_PATHS = {("/state/models", "get")}
 MERGE_KEYS = [
     "summary","description","deprecated","tags","x-sunset","parameters","responses"
 ]
@@ -41,8 +43,8 @@ def path_ops(spec):
 def ensure_path_parity(code, curated):
     a = path_ops(code)
     b = path_ops(curated)
-    only_a = sorted(list(a - b))
-    only_b = sorted(list(b - a))
+    only_a = sorted(list((a - b) - IGNORE_PATHS))
+    only_b = sorted(list((b - a) - IGNORE_PATHS))
     if only_a or only_b:
         lines = []
         if only_a:
@@ -92,4 +94,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

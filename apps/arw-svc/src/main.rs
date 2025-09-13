@@ -1918,6 +1918,7 @@ async fn feedback_policy_doc() -> impl IntoResponse {
         tools_list_doc,
         tools_run_doc,
         state_observations_doc,
+        models_public_list_doc,
         state_beliefs_doc,
         state_intents_doc,
         state_actions_doc,
@@ -2820,4 +2821,11 @@ async fn catalog_health() -> impl IntoResponse {
         "specs": {"openapi": oa, "asyncapi": aa, "mcp": mcp},
     });
     (StatusCode::OK, Json(out))
+}
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/state/models", tag = "Public/State", operation_id = "state_models_doc", responses(
+    (status=200, description="Models list", body = [ext::models_api::ModelItem])
+))]
+async fn models_public_list_doc() -> impl IntoResponse {
+    ext::state_api::models_state_get().await
 }

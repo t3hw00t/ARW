@@ -39,6 +39,8 @@ tags:
   description: Public endpoints
 - name: Public/Specs
   description: Public/Specs endpoints
+- name: Public/State
+  description: Public read-models and state
 paths:
   /about:
     get:
@@ -713,6 +715,24 @@ paths:
       responses:
         '200':
           description: Models list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ModelItem'
+              examples:
+                basic:
+                  summary: Two models
+                  value:
+                    - id: llama3:8b
+                      provider: ollama
+                      bytes: 5347737600
+                      status: ready
+                    - id: qwen2:7b
+                      provider: hf
+                      bytes: 4855592960
+                      status: downloading
         '403':
           description: Forbidden
           content:
@@ -805,6 +825,17 @@ paths:
       responses:
         '200':
           description: Concurrency settings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelsConcurrency'
+              examples:
+                typical:
+                  value:
+                    configured_max: 2
+                    available_permits: 2
+                    held_permits: 0
+                    hard_cap: null
         '403':
           description: Forbidden
           content:
@@ -1360,6 +1391,7 @@ paths:
         '200':
           description: Service version
       description: 'Public: GET /version.'
+  # (no additional entries)
 components:
   schemas:
     ModelsConcurrency:
@@ -1818,3 +1850,4 @@ components:
         id:
           type: string
         input: {}
+  #
