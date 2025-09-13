@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ARW — Supply-chain and code audit helper
+# Agent Hub (ARW) — Supply-chain and code audit helper
 # Runs cargo-audit and cargo-deny with a simple interactive mode.
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -126,7 +126,7 @@ summary_and_exit() {
 interactive_menu() {
   while true; do
     echo ""
-    echo "ARW — Audit Menu"
+    echo "Agent Hub (ARW) — Audit Menu"
     echo "  Root: $ROOT"
     echo "  Tools: cargo-audit=$(command -v cargo-audit >/dev/null 2>&1 && echo ok || echo missing), cargo-deny=$(command -v cargo-deny >/dev/null 2>&1 && echo ok || echo missing)"
     echo "  Checks: audit=$RUN_AUDIT deny=$RUN_DENY strict=$STRICT"

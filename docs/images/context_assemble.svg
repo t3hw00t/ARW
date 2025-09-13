@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#f8fafc"/>
+  <rect x="20" y="20" width="920" height="60" fill="#e5e7eb" rx="8"/>
+  <text x="40" y="58" font-family="sans-serif" font-size="22" fill="#111827">Context Assemble — Preview & KPIs (placeholder)</text>
+  <rect x="20" y="100" width="920" height="160" fill="#ffffff" stroke="#e5e7eb" rx="8"/>
+  <text x="40" y="135" font-family="sans-serif" font-size="16" fill="#374151">KPIs: k=12 · λ=0.35 · compression=0.3 · tokens 420 → 280</text>
+  <text x="40" y="165" font-family="monospace" font-size="14" fill="#374151">- [claim-1] Example evidence line…</text>
+  <text x="40" y="190" font-family="monospace" font-size="14" fill="#374151">- [claim-2] Another evidence line…</text>
+  <text x="40" y="215" font-family="monospace" font-size="14" fill="#374151">- [claim-3] …</text>
+  <rect x="20" y="280" width="920" height="220" fill="#ffffff" stroke="#e5e7eb" rx="8"/>
+  <text x="40" y="310" font-family="sans-serif" font-size="16" fill="#374151">JSON response (truncated)</text>
+  <text x="40" y="340" font-family="monospace" font-size="13" fill="#6b7280">{ "beliefs": […], "context_preview": "…", "aux": { "context": { "before_tokens": 420, "after_tokens": 280 } } }</text>
+</svg>

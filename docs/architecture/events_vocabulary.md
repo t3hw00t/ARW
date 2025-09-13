@@ -22,6 +22,7 @@ Canonical categories
  - Sessions (sharing): `Session.Invited`, `Session.RoleChanged`, `Session.EventRelayed`
 - Egress: `Egress.Preview` (pre‑offload summary), `Egress.Ledger.Appended` (append‑only record)
   - `Egress.Decision` remains planned; today we emit previews and ledger appends for downloads and select offloads.
+  - See also: Developer → [Egress Ledger Helper (Builder)](../developer/style.md#egress-ledger-helper-builder)
  - Memory (planned): `Memory.Quarantined`, `Memory.Admitted`
  - World diffs (planned): `WorldDiff.Queued`, `WorldDiff.Conflict`, `WorldDiff.Applied`
  - Cluster trust (planned): `Cluster.ManifestPublished`, `Cluster.ManifestTrusted`, `Cluster.ManifestRejected`, `Cluster.EventRejected`

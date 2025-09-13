@@ -188,7 +188,7 @@ mod cmds {
                 label,
                 tauri::WebviewUrl::External(url.parse().unwrap()),
             )
-            .title("ARW Debug UI")
+            .title("Agent Hub (ARW) — Debug UI")
             .inner_size(1000.0, 800.0)
             .build()
             .map_err(|e| e.to_string())?;
@@ -207,7 +207,7 @@ mod cmds {
                 label,
                 tauri::WebviewUrl::App("events.html".into()),
             )
-            .title("ARW Events")
+            .title("Agent Hub (ARW) — Events")
             .inner_size(900.0, 700.0)
             .build()
             .map_err(|e| e.to_string())?;
@@ -226,7 +226,7 @@ mod cmds {
                 label,
                 tauri::WebviewUrl::App("logs.html".into()),
             )
-            .title("ARW Logs")
+            .title("Agent Hub (ARW) — Logs")
             .inner_size(900.0, 700.0)
             .build()
             .map_err(|e| e.to_string())?;
@@ -245,7 +245,7 @@ mod cmds {
                 label,
                 tauri::WebviewUrl::App("models.html".into()),
             )
-            .title("ARW Model Manager")
+            .title("Agent Hub (ARW) — Model Manager")
             .inner_size(1000.0, 800.0)
             .build()
             .map_err(|e| e.to_string())?;
@@ -266,7 +266,7 @@ mod cmds {
                 label,
                 tauri::WebviewUrl::App("connections.html".into()),
             )
-            .title("ARW Connection Manager")
+            .title("Agent Hub (ARW) — Connection Manager")
             .inner_size(1000.0, 800.0)
             .build()
             .map_err(|e| e.to_string())?;

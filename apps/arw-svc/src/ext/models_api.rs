@@ -288,9 +288,9 @@ pub(crate) struct ModelsHashesQs {
     #[serde(default)]
     provider: Option<String>,
     #[serde(default)]
-    sort: Option<String>,   // bytes | sha256 | path | providers_count
+    sort: Option<String>, // bytes | sha256 | path | providers_count
     #[serde(default)]
-    order: Option<String>,  // asc | desc
+    order: Option<String>, // asc | desc
 }
 
 #[arw_admin(
@@ -345,7 +345,12 @@ pub(crate) async fn models_hashes_get(
     // Optional provider filter
     if let Some(p) = q.provider.as_deref() {
         let prov = p.to_string();
-        items.retain(|it| it["providers"].as_array().map(|arr| arr.iter().any(|v| v.as_str()==Some(prov.as_str()))).unwrap_or(false));
+        items.retain(|it| {
+            it["providers"]
+                .as_array()
+                .map(|arr| arr.iter().any(|v| v.as_str() == Some(prov.as_str())))
+                .unwrap_or(false)
+        });
     }
     // Sorting
     let sort_key = q
@@ -353,25 +358,28 @@ pub(crate) async fn models_hashes_get(
         .as_deref()
         .map(|s| s.to_ascii_lowercase())
         .unwrap_or_else(|| "bytes".to_string());
-    let mut desc_default = sort_key == "bytes"; // default desc for bytes, asc otherwise
-    let order_s = q
-        .order
-        .as_deref()
-        .map(|s| s.to_ascii_lowercase());
+    let desc_default = sort_key == "bytes"; // default desc for bytes, asc otherwise
+    let order_s = q.order.as_deref().map(|s| s.to_ascii_lowercase());
     let desc = match order_s.as_deref() {
         Some("asc") => false,
         Some("desc") => true,
         _ => desc_default,
     };
     items.sort_by(|a, b| {
-        use std::cmp::Ordering;
         let ord = match sort_key.as_str() {
             "sha256" => a["sha256"].as_str().cmp(&b["sha256"].as_str()),
             "path" => a["path"].as_str().cmp(&b["path"].as_str()),
-            "providers_count" => a["providers"].as_array().map(|x| x.len()).cmp(&b["providers"].as_array().map(|x| x.len())),
+            "providers_count" => a["providers"]
+                .as_array()
+                .map(|x| x.len())
+                .cmp(&b["providers"].as_array().map(|x| x.len())),
             _ => a["bytes"].as_u64().cmp(&b["bytes"].as_u64()),
         };
-        if desc { ord.reverse() } else { ord }
+        if desc {
+            ord.reverse()
+        } else {
+            ord
+        }
     });
     // Pagination
     let total = items.len();
@@ -491,6 +499,60 @@ pub(crate) async fn models_downloads_metrics(State(state): State<AppState>) -> i
     };
     let v = svc.downloads_metrics().await;
     Json(v).into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::models_downloads_metrics;
+    use crate::AppState;
+    use axum::{http::Request, routing::get, Router};
+    use http_body_util::BodyExt; // for collecting body
+    use tower::ServiceExt; // for `oneshot`
+
+    #[tokio::test]
+    async fn http_downloads_metrics_shape() {
+        // Build minimal app with the handler and a state containing ModelsService
+        let state = {
+            let st = AppState::default();
+            st.resources.insert(std::sync::Arc::new(
+                crate::resources::models_service::ModelsService::new(),
+            ));
+            st
+        };
+        let app = Router::new()
+            .route(
+                "/admin/models/downloads_metrics",
+                get(models_downloads_metrics),
+            )
+            .with_state(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/admin/models/downloads_metrics")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(resp.status().is_success());
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        // Verify shape contains ewma and counters
+        assert!(v.get("ewma_mbps").is_some());
+        for k in [
+            "started",
+            "queued",
+            "admitted",
+            "resumed",
+            "canceled",
+            "completed",
+            "completed_cached",
+            "errors",
+            "bytes_total",
+        ] {
+            assert!(v.get(k).is_some(), "missing key: {}", k);
+        }
+    }
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]

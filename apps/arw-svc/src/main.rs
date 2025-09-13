@@ -35,6 +35,9 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::limit::RequestBodyLimitLayer;
 use tower_http::services::ServeDir;
 // use tower_http::timeout::TimeoutLayer; // replaced with dynamic timeout layer
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::RwLock as StdRwLock;
 use tower_http::trace::TraceLayer;
 use tracing::info;
 use utoipa::{OpenApi, ToSchema};
@@ -198,12 +201,19 @@ async fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(256);
     let bus = arw_events::Bus::new_with_replay(bus_cap, bus_replay);
-    // Initialize gating from config/env
-    gating::init_from_config("configs/gating.toml");
-    let cfg = arw_core::load_config(
-        &std::env::var("ARW_CONFIG").unwrap_or_else(|_| "configs/default.toml".to_string()),
-    )
-    .ok();
+    // Initialize gating from config/env using resolved path (CWD-independent)
+    if let Some(p) = arw_core::resolve_config_path("configs/gating.toml") {
+        gating::init_from_config(p.to_string_lossy().as_ref());
+    }
+    let cfg = {
+        if let Ok(p) = std::env::var("ARW_CONFIG") {
+            arw_core::load_config(&p).ok()
+        } else if let Some(p) = arw_core::resolve_config_path("configs/default.toml") {
+            arw_core::load_config(p.to_string_lossy().as_ref()).ok()
+        } else {
+            None
+        }
+    };
     // Queue selection
     let queue: std::sync::Arc<dyn arw_core::orchestrator::Queue> = {
         let use_nats = cfg
@@ -323,6 +333,8 @@ async fn main() {
 
     // Start lightweight feedback engine (near-live suggestions via bus)
     ext::feedback_engine::start_feedback_engine(state.clone());
+    // Start nightly distillation job (beliefs/playbooks/index hygiene)
+    ext::distill::start_nightly(state.clone());
     // Start local task worker to exercise the orchestrator MVP
     ext::start_local_task_worker(state.clone());
 
@@ -373,6 +385,68 @@ async fn main() {
         });
     }
 
+    // Interface catalog watcher -> publish Catalog.Updated on changes
+    {
+        let bus = state.bus.clone();
+        tokio::spawn(async move {
+            use sha2::{Digest as _, Sha256};
+            use tokio::fs as afs;
+            let files = [
+                "interfaces/index.yaml",
+                "spec/openapi.yaml",
+                "spec/asyncapi.yaml",
+                "spec/mcp-tools.json",
+            ];
+            let mut last_digest = String::new();
+            let mut intv = tokio::time::interval(std::time::Duration::from_secs(10));
+            loop {
+                intv.tick().await;
+                let mut any = false;
+                let mut hasher = Sha256::new();
+                for f in files.iter() {
+                    if let Ok(bytes) = afs::read(f).await {
+                        hasher.update(f.as_bytes());
+                        hasher.update(&bytes);
+                        any = true;
+                    }
+                }
+                if !any {
+                    continue;
+                }
+                let digest = format!("{:x}", hasher.finalize());
+                if digest != last_digest {
+                    last_digest = digest.clone();
+                    let payload = serde_json::json!({ "digest": digest, "files": files });
+                    bus.publish("Catalog.Updated", &payload);
+                    // bump catalog generation to refresh deprecation caches lazily
+                    catalog_gen().fetch_add(1, Ordering::Relaxed);
+                }
+            }
+        });
+    }
+
+    // Subscribe to Catalog.Updated to refresh deprecation caches immediately
+    {
+        let bus = state.bus.clone();
+        tokio::spawn(async move {
+            let mut rx = bus.subscribe();
+            loop {
+                match rx.recv().await {
+                    Ok(env) => {
+                        if env.kind == "Catalog.Updated" {
+                            refresh_dep_cache();
+                            // align seen_gen with current generation
+                            dep_cache()
+                                .seen_gen
+                                .store(catalog_gen().load(Ordering::Relaxed), Ordering::Relaxed);
+                        }
+                    }
+                    Err(_) => break,
+                }
+            }
+        });
+    }
+
     // Start periodic self‑model aggregator (resource forecasts, etc.)
     tokio::spawn(async move { ext::self_model_agg::start_periodic().await });
 
@@ -391,6 +465,9 @@ async fn main() {
         .route("/metrics", get(ext::stats::metrics_get))
         .route("/version", get(ext::version))
         .route("/about", get(ext::about))
+        // Interface catalog (index + health)
+        .route("/catalog/index", get(catalog_index))
+        .route("/catalog/health", get(catalog_health))
         .route("/state/models", get(ext::state_api::models_state_get))
         .route("/state/self", get(ext::self_model_api::self_state_list))
         .route(
@@ -448,6 +525,7 @@ async fn main() {
             },
         )
         .layer(middleware::from_fn(dyn_timeout::dyn_timeout_mw))
+        .layer(middleware::from_fn(deprecation_headers_mw))
         .layer(middleware::from_fn(security_mw))
         .layer(middleware::from_fn(metrics_mw))
         .with_state(state.clone());
@@ -581,6 +659,163 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
         .into_response()
 }
 
+// ---- Deprecation/Sunset headers middleware ----
+// If the OpenAPI marks an operation as deprecated, emit Deprecation: true.
+// If the interface descriptor has a sunset date, also emit Sunset and Link: rel="deprecation".
+async fn deprecation_headers_mw(req: Request<axum::body::Body>, next: Next) -> Response {
+    use axum::extract::MatchedPath;
+    let method = req.method().clone();
+    let path_pat = req
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|m| m.as_str().to_string())
+        .unwrap_or_else(|| req.uri().path().to_string());
+    let mut res = next.run(req).await;
+    if is_deprecated_operation(method.as_str(), &path_pat) {
+        let h = res.headers_mut();
+        h.insert("Deprecation", axum::http::HeaderValue::from_static("true"));
+        if let Some(sunset) = spec_sunset_for(method.as_str(), &path_pat).or_else(descriptor_sunset)
+        {
+            if let Ok(v) = axum::http::HeaderValue::from_str(&sunset) {
+                h.insert("Sunset", v);
+            }
+        }
+        if let Some(doc) = descriptor_docs_url() {
+            if let Ok(v) =
+                axum::http::HeaderValue::from_str(&format!("<{}>; rel=\"deprecation\"", doc))
+            {
+                h.append("Link", v);
+            }
+        }
+    }
+    res
+}
+
+// ---- Catalog generation & deprecation caches (refreshable) ----
+fn catalog_gen() -> &'static AtomicU64 {
+    static GEN: once_cell::sync::OnceCell<AtomicU64> = once_cell::sync::OnceCell::new();
+    GEN.get_or_init(|| AtomicU64::new(1))
+}
+
+struct DepCache {
+    seen_gen: AtomicU64,
+    deprecated: StdRwLock<HashSet<(String, String)>>,
+    sunsets: StdRwLock<HashMap<(String, String), String>>,
+    desc_sunset: StdRwLock<Option<String>>,
+    doc_url: StdRwLock<Option<String>>,
+}
+
+fn dep_cache() -> &'static DepCache {
+    static CACHE: once_cell::sync::OnceCell<DepCache> = once_cell::sync::OnceCell::new();
+    CACHE.get_or_init(|| DepCache {
+        seen_gen: AtomicU64::new(0),
+        deprecated: StdRwLock::new(HashSet::new()),
+        sunsets: StdRwLock::new(HashMap::new()),
+        desc_sunset: StdRwLock::new(None),
+        doc_url: StdRwLock::new(None),
+    })
+}
+
+fn refresh_dep_cache() {
+    use serde_yaml as yaml;
+    // OpenAPI: deprecated + x-sunset
+    let mut dep: HashSet<(String, String)> = HashSet::new();
+    let mut suns: HashMap<(String, String), String> = HashMap::new();
+    if let Ok(bytes) = std::fs::read("spec/openapi.yaml") {
+        if let Ok(doc) = yaml::from_slice::<yaml::Value>(&bytes) {
+            if let Some(paths) = doc.get("paths").and_then(|v| v.as_mapping()) {
+                for (pkey, pval) in paths.iter() {
+                    let pstr = pkey.as_str().unwrap_or_default().to_string();
+                    if let Some(ops) = pval.as_mapping() {
+                        for (mkey, oval) in ops.iter() {
+                            let m = mkey.as_str().unwrap_or_default().to_lowercase();
+                            if [
+                                "get", "post", "put", "delete", "patch", "options", "head", "trace",
+                            ]
+                            .contains(&m.as_str())
+                            {
+                                let deprecated = oval
+                                    .get("deprecated")
+                                    .and_then(|v| v.as_bool())
+                                    .unwrap_or(false);
+                                if deprecated {
+                                    dep.insert((m.to_uppercase(), pstr.clone()));
+                                }
+                                if let Some(s) = oval.get("x-sunset").and_then(|v| v.as_str()) {
+                                    suns.insert((m.to_uppercase(), pstr.clone()), s.to_string());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let cache = dep_cache();
+    if let Ok(mut w) = cache.deprecated.write() {
+        *w = dep;
+    }
+    if let Ok(mut w) = cache.sunsets.write() {
+        *w = suns;
+    }
+    // Descriptor sunset/docs
+    #[derive(serde::Deserialize)]
+    struct Docs {
+        human: Option<String>,
+    }
+    #[derive(serde::Deserialize)]
+    struct Desc {
+        sunset: Option<String>,
+        docs: Option<Docs>,
+    }
+    if let Ok(s) = std::fs::read_to_string("interfaces/http/arw-svc/descriptor.yaml") {
+        if let Ok(d) = serde_yaml::from_str::<Desc>(&s) {
+            if let Ok(mut w) = cache.desc_sunset.write() {
+                *w = d.sunset;
+            }
+            if let Ok(mut w) = cache.doc_url.write() {
+                *w = d.docs.and_then(|dd| dd.human);
+            }
+        }
+    }
+}
+
+fn refresh_dep_cache_if_needed() {
+    let gen = catalog_gen().load(Ordering::Relaxed);
+    let cache = dep_cache();
+    if cache.seen_gen.load(Ordering::Relaxed) != gen {
+        refresh_dep_cache();
+        cache.seen_gen.store(gen, Ordering::Relaxed);
+    }
+}
+
+fn is_deprecated_operation(method: &str, path_pat: &str) -> bool {
+    refresh_dep_cache_if_needed();
+    dep_cache()
+        .deprecated
+        .read()
+        .map(|m| m.contains(&(method.to_uppercase(), path_pat.to_string())))
+        .unwrap_or(false)
+}
+
+fn descriptor_sunset() -> Option<String> {
+    refresh_dep_cache_if_needed();
+    dep_cache().desc_sunset.read().ok().and_then(|o| o.clone())
+}
+
+fn descriptor_docs_url() -> Option<String> {
+    refresh_dep_cache_if_needed();
+    dep_cache().doc_url.read().ok().and_then(|o| o.clone())
+}
+
+fn spec_sunset_for(method: &str, path_pat: &str) -> Option<String> {
+    refresh_dep_cache_if_needed();
+    dep_cache().sunsets.read().ok().and_then(|m| {
+        m.get(&(method.to_uppercase(), path_pat.to_string()))
+            .cloned()
+    })
+}
+
 fn header_token_matches(h: &HeaderMap, token: &str) -> bool {
     // Prefer Authorization: Bearer <token>
     if let Some(v) = h
@@ -651,6 +886,7 @@ async fn rate_allow() -> bool {
 #[utoipa::path(
     get,
     path = "/healthz",
+    operation_id = "healthz_doc",
     responses((status = 200, description = "Service health", body = OkResponse))
 )]
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
@@ -667,6 +903,7 @@ async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
     get,
     path = "/admin/introspect/tools",
     tag = "Admin/Introspect",
+    operation_id = "introspect_tools_doc",
     responses(
         (status = 200, description = "List available tools"),
         (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
@@ -686,6 +923,7 @@ async fn introspect_tools() -> impl IntoResponse {
     get,
     path = "/admin/introspect/schemas/{id}",
     tag = "Admin/Introspect",
+    operation_id = "introspect_schema_doc",
     params(("id" = String, Path, description = "Tool id")),
     responses(
         (status = 200, description = "Schema JSON"),
@@ -718,6 +956,7 @@ async fn introspect_schema(Path(id): Path<String>) -> impl IntoResponse {
     get,
     path = "/admin/probe",
     tag = "Admin/Introspect",
+    operation_id = "probe_doc",
     responses(
         (status = 200, description = "Returns effective memory paths"),
         (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
@@ -1447,6 +1686,7 @@ fn probe_npus_best_effort() -> Vec<serde_json::Value> {
     get,
     path = "/admin/emit/test",
     tag = "Admin/Core",
+    operation_id = "emit_test_doc",
     responses(
         (status = 200, description = "Emit test event", body = OkResponse),
         (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
@@ -1471,6 +1711,7 @@ async fn emit_test(State(state): State<AppState>) -> impl IntoResponse {
     get,
     path = "/admin/shutdown",
     tag = "Admin/Core",
+    operation_id = "shutdown_doc",
     responses(
         (status = 200, description = "Shutdown service", body = OkResponse),
         (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
@@ -1505,6 +1746,7 @@ struct EventsQs {
     get,
     path = "/admin/events",
     tag = "Admin/Core",
+    operation_id = "events_doc",
     responses(
         (status = 200, description = "SSE event stream"),
         (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
@@ -1631,6 +1873,8 @@ async fn feedback_policy_doc() -> impl IntoResponse {
         spec_asyncapi_doc,
         spec_mcp_doc,
         spec_index_doc,
+        catalog_index_doc,
+        catalog_health_doc,
         version_doc,
         about_doc,
         feedback_suggestions_doc,
@@ -2200,6 +2444,14 @@ async fn context_assemble_doc() -> impl IntoResponse {
             s_actions: None,
             s_files: None,
             s_total: None,
+            context_format: None,
+            include_provenance: None,
+            context_item_template: None,
+            context_header: None,
+            context_footer: None,
+            joiner: None,
+            context_budget_tokens: None,
+            context_item_budget_tokens: None,
         }),
     )
     .await
@@ -2248,7 +2500,7 @@ async fn tools_cache_stats_doc() -> impl IntoResponse {
     ext::tools_api::tools_cache_stats().await
 }
 #[allow(dead_code)]
-#[utoipa::path(get, path = "/admin/chat", tag = "Admin/Chat", responses(
+#[utoipa::path(get, path = "/admin/chat", tag = "Admin/Chat", summary = "Deprecated: Chat history", responses(
     (status=200, description="Chat history"),
     (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
 ))]
@@ -2456,4 +2708,60 @@ async fn spec_index() -> impl IntoResponse {
         [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
         body,
     )
+}
+
+// ---- Interface catalog (debug) ----
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/catalog/index", tag = "Public/Specs", responses(
+    (status=200, description="Interface catalog index (YAML)"),
+    (status=404, description="Missing")
+))]
+async fn catalog_index_doc() -> impl IntoResponse {
+    catalog_index().await
+}
+
+async fn catalog_index() -> impl IntoResponse {
+    let p = std::path::Path::new("interfaces/index.yaml");
+    if let Ok(bytes) = tokio::fs::read(p).await {
+        let mut h = HeaderMap::new();
+        h.insert(
+            axum::http::header::CONTENT_TYPE,
+            axum::http::HeaderValue::from_static("application/yaml"),
+        );
+        (StatusCode::OK, h, bytes).into_response()
+    } else {
+        let pd = arw_protocol::ProblemDetails {
+            r#type: "about:blank".into(),
+            title: "Not Found".into(),
+            status: StatusCode::NOT_FOUND.as_u16(),
+            detail: Some("missing interfaces/index.yaml".into()),
+            instance: None,
+            trace_id: None,
+            code: None,
+        };
+        (StatusCode::NOT_FOUND, Json(pd)).into_response()
+    }
+}
+
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/catalog/health", tag = "Public/Specs", responses((status=200, description="Catalog health")))]
+async fn catalog_health_doc() -> impl IntoResponse {
+    catalog_health().await
+}
+
+async fn catalog_health() -> impl IntoResponse {
+    use tokio::fs as afs;
+    let (idx_m, oa_m, aa_m, mcp_m) = tokio::join!(
+        afs::metadata("interfaces/index.yaml"),
+        afs::metadata("spec/openapi.yaml"),
+        afs::metadata("spec/asyncapi.yaml"),
+        afs::metadata("spec/mcp-tools.json"),
+    );
+    let (idx, oa, aa, mcp) = (idx_m.is_ok(), oa_m.is_ok(), aa_m.is_ok(), mcp_m.is_ok());
+    let out = serde_json::json!({
+        "ok": idx && oa,
+        "index_present": idx,
+        "specs": {"openapi": oa, "asyncapi": aa, "mcp": mcp},
+    });
+    (StatusCode::OK, Json(out))
 }

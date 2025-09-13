@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>ARW Launcher</title>
+    <title>Agent Hub (ARW) Launcher</title>
   </head>
   <body>
     <link rel="stylesheet" href="common.css" />
@@ -11,7 +11,7 @@
     <script src="common.js" defer></script>
     <div class="wrap">
       <div class="card">
-        <h2>ARW Launcher <span class="badge"><span class="dot" id="svc-dot"></span><span id="svc-text">unknown</span></span></h2>
+        <h2>Agent Hub (ARW) Launcher <span class="badge"><span class="dot" id="svc-dot"></span><span id="svc-text">unknown</span></span></h2>
         <p>Use the tray to start/stop the service or open the Debug UI.</p>
         <div class="row">
           <label>Port: <input id="port" type="number" min="1" max="65535" value="8090"/></label>
@@ -146,7 +146,7 @@
       document.getElementById('btn-updates').addEventListener('click', async () => {
         try {
           // Fallback to releases page; real updater config can be added later
-          await invoke('open_url', { url: 'https://github.com/t3hw00t/Agent_Hub/releases' });
+          await invoke('open_url', { url: 'https://github.com/t3hw00t/ARW/releases' });
         } catch (e) { console.error(e); }
       });
     

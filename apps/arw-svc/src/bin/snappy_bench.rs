@@ -14,7 +14,10 @@ struct Budgets {
 
 fn budgets_from_env() -> Budgets {
     let get = |k: &str, d: u64| -> u64 {
-        std::env::var(k).ok().and_then(|s| s.parse().ok()).unwrap_or(d)
+        std::env::var(k)
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(d)
     };
     Budgets {
         i2f_p95_ms: get("ARW_SNAPPY_I2F_P95_MS", 50),
@@ -27,18 +30,25 @@ fn budgets_from_env() -> Budgets {
 #[derive(Debug, Clone)]
 struct Evt {
     kind: String,
+    #[allow(dead_code)]
     data: String,
     t: Instant,
 }
 
-async fn sse_connect(base: &str, admin: Option<&str>, prefixes: &[&str]) -> Result<(reqwest::Response, tokio::sync::mpsc::Receiver<Evt>)> {
+async fn sse_connect(
+    base: &str,
+    admin: Option<&str>,
+    prefixes: &[&str],
+) -> Result<(reqwest::Response, tokio::sync::mpsc::Receiver<Evt>)> {
     let url = if prefixes.is_empty() {
         format!("{}/admin/events", base.trim_end_matches('/'))
     } else {
         let mut u = format!("{}/admin/events?", base.trim_end_matches('/'));
         let mut first = true;
         for p in prefixes.iter() {
-            if !first { u.push('&'); }
+            if !first {
+                u.push('&');
+            }
             first = false;
             u.push_str(&format!("prefix={}", p));
         }
@@ -68,13 +78,19 @@ async fn sse_connect(base: &str, admin: Option<&str>, prefixes: &[&str]) -> Resu
                 buf.push(b);
                 if b == b'\n' {
                     // process one line
-                    let line = String::from_utf8_lossy(&buf).trim_end_matches('\n').to_string();
+                    let line = String::from_utf8_lossy(&buf)
+                        .trim_end_matches('\n')
+                        .to_string();
                     buf.clear();
                     if line.is_empty() {
                         // dispatch
                         if let Some(kind) = cur_event.take() {
                             let data = cur_data.join("\n");
-                            let _ = tx.try_send(Evt { kind, data, t: Instant::now() });
+                            let _ = tx.try_send(Evt {
+                                kind,
+                                data,
+                                t: Instant::now(),
+                            });
                         }
                         cur_data.clear();
                         continue;
@@ -89,19 +105,24 @@ async fn sse_connect(base: &str, admin: Option<&str>, prefixes: &[&str]) -> Resu
                 }
             }
             // Safety: in case event ends without trailing blank line, flush on small idle
-            if buf.len() > 8192 { buf.clear(); }
+            if buf.len() > 8192 {
+                buf.clear();
+            }
             let _ = t0; // keep
         }
     });
     // We cannot return resp by value after spawned borrowing, so refetch
-    let resp2 = reqwest::Client::new().get(&url).header(ACCEPT, "text/event-stream").send().await?; // placeholder (unused)
+    let resp2 = reqwest::Client::new()
+        .get(&url)
+        .header(ACCEPT, "text/event-stream")
+        .send()
+        .await?; // placeholder (unused)
     Ok((resp2, rx))
 }
 
 async fn cold_start(base: &str, admin: Option<&str>, exe: &str) -> Result<u64> {
-    use tokio::process::Command;
-    use tokio::io::AsyncReadExt;
     use std::process::Stdio;
+    use tokio::process::Command;
     // Derive port from base URL if present; fallback to 8097
     let port: u16 = url_port_from_base(base).unwrap_or(8097);
     let t0 = Instant::now();
@@ -118,8 +139,13 @@ async fn cold_start(base: &str, admin: Option<&str>, exe: &str) -> Result<u64> {
     let mut rx_opt = None;
     while Instant::now() < deadline {
         match sse_connect(base, admin, &["Service."]).await {
-            Ok((_r, rx)) => { rx_opt = Some(rx); break; }
-            Err(_) => { tokio::time::sleep(Duration::from_millis(25)).await; }
+            Ok((_r, rx)) => {
+                rx_opt = Some(rx);
+                break;
+            }
+            Err(_) => {
+                tokio::time::sleep(Duration::from_millis(25)).await;
+            }
         }
     }
     let mut rx = rx_opt.ok_or_else(|| anyhow!("sse connect did not succeed within deadline"))?;
@@ -138,13 +164,18 @@ fn url_port_from_base(base: &str) -> Option<u16> {
         return u.port_u16();
     }
     if let Ok(u) = reqwest::Url::parse(base) {
-        return Some(u.port().unwrap_or(if u.scheme()=="https" {443} else {80}));
+        return Some(
+            u.port()
+                .unwrap_or(if u.scheme() == "https" { 443 } else { 80 }),
+        );
     }
     None
 }
 
 fn p95(mut v: Vec<u64>) -> u64 {
-    if v.is_empty() { return 0; }
+    if v.is_empty() {
+        return 0;
+    }
     v.sort_unstable();
     let idx = ((v.len() as f64) * 0.95).ceil() as usize;
     let idx = idx.saturating_sub(1).min(v.len() - 1);
@@ -153,17 +184,25 @@ fn p95(mut v: Vec<u64>) -> u64 {
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let base = std::env::var("ARW_BENCH_BASE").unwrap_or_else(|_| "http://127.0.0.1:8090".to_string());
+    let base =
+        std::env::var("ARW_BENCH_BASE").unwrap_or_else(|_| "http://127.0.0.1:8090".to_string());
     let admin = std::env::var("ARW_ADMIN_TOKEN").ok();
     let budgets = budgets_from_env();
 
     // Optional cold-start mode: spawn service and measure time to first event
     if std::env::var("ARW_BENCH_COLD").ok().as_deref() == Some("1") {
-        let exe = std::env::var("ARW_BENCH_EXE").map_err(|_| anyhow!("ARW_BENCH_EXE (path to arw-svc) is required for cold-start bench"))?;
+        let exe = std::env::var("ARW_BENCH_EXE").map_err(|_| {
+            anyhow!("ARW_BENCH_EXE (path to arw-svc) is required for cold-start bench")
+        })?;
         let cold_ms = cold_start(&base, admin.as_deref(), &exe).await?;
         println!("cold_start_ms={}", cold_ms);
-        if cold_ms > budgets.cold_start_ms && std::env::var("ARW_BENCH_STRICT").ok().as_deref() == Some("1") {
-            eprintln!("FAIL: cold_start {}ms > budget {}ms", cold_ms, budgets.cold_start_ms);
+        if cold_ms > budgets.cold_start_ms
+            && std::env::var("ARW_BENCH_STRICT").ok().as_deref() == Some("1")
+        {
+            eprintln!(
+                "FAIL: cold_start {}ms > budget {}ms",
+                cold_ms, budgets.cold_start_ms
+            );
             std::process::exit(1);
         }
         return Ok(());
@@ -181,7 +220,9 @@ async fn main() -> Result<()> {
     let client = reqwest::Client::new();
     let url_emit = format!("{}/admin/emit/test", base.trim_end_matches('/'));
     let mut req = client.get(&url_emit);
-    if let Some(tok) = &admin { req = req.header(AUTHORIZATION, format!("Bearer {}", tok)); }
+    if let Some(tok) = &admin {
+        req = req.header(AUTHORIZATION, format!("Bearer {}", tok));
+    }
     let t1 = Instant::now();
     let _ = req.send().await;
     let mut first_partial_ms: u64 = 2_000;
@@ -197,28 +238,55 @@ async fn main() -> Result<()> {
     }
 
     // Cadence: emit N events and collect inter-arrival deltas
-    let n = std::env::var("ARW_BENCH_EVENTS").ok().and_then(|s| s.parse().ok()).unwrap_or(10);
+    let n = std::env::var("ARW_BENCH_EVENTS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(10);
     let mut times: Vec<Instant> = Vec::new();
     let mut deltas_ms: Vec<u64> = Vec::new();
     for _ in 0..n {
         let mut req = client.get(&url_emit);
-        if let Some(tok) = &admin { req = req.header(AUTHORIZATION, format!("Bearer {}", tok)); }
+        if let Some(tok) = &admin {
+            req = req.header(AUTHORIZATION, format!("Bearer {}", tok));
+        }
         let _ = req.send().await;
         if let Ok(Some(ev)) = tokio::time::timeout(Duration::from_millis(1000), rx.recv()).await {
-            if ev.kind == "Service.Test" { times.push(ev.t); }
+            if ev.kind == "Service.Test" {
+                times.push(ev.t);
+            }
         }
         tokio::time::sleep(Duration::from_millis(30)).await;
     }
     for w in times.windows(2) {
-        if let [a, b] = w { deltas_ms.push(b.duration_since(*a).as_millis() as u64); }
+        if let [a, b] = w {
+            deltas_ms.push(b.duration_since(*a).as_millis() as u64);
+        }
     }
     let cadence_p95 = p95(deltas_ms);
 
-    println!("i2f_ms={} first_partial_ms={} cadence_p95_ms={}", i2f_ms, first_partial_ms, cadence_p95);
+    println!(
+        "i2f_ms={} first_partial_ms={} cadence_p95_ms={}",
+        i2f_ms, first_partial_ms, cadence_p95
+    );
     let mut ok = true;
-    if i2f_ms > budgets.i2f_p95_ms { ok = false; eprintln!("FAIL: i2f {}ms > budget {}ms", i2f_ms, budgets.i2f_p95_ms); }
-    if first_partial_ms > budgets.first_partial_p95_ms { ok = false; eprintln!("FAIL: first_partial {}ms > budget {}ms", first_partial_ms, budgets.first_partial_p95_ms); }
-    if cadence_p95 > budgets.cadence_ms { ok = false; eprintln!("FAIL: cadence_p95 {}ms > budget {}ms", cadence_p95, budgets.cadence_ms); }
+    if i2f_ms > budgets.i2f_p95_ms {
+        ok = false;
+        eprintln!("FAIL: i2f {}ms > budget {}ms", i2f_ms, budgets.i2f_p95_ms);
+    }
+    if first_partial_ms > budgets.first_partial_p95_ms {
+        ok = false;
+        eprintln!(
+            "FAIL: first_partial {}ms > budget {}ms",
+            first_partial_ms, budgets.first_partial_p95_ms
+        );
+    }
+    if cadence_p95 > budgets.cadence_ms {
+        ok = false;
+        eprintln!(
+            "FAIL: cadence_p95 {}ms > budget {}ms",
+            cadence_p95, budgets.cadence_ms
+        );
+    }
     if !ok && std::env::var("ARW_BENCH_STRICT").ok().as_deref() == Some("1") {
         std::process::exit(1);
     }

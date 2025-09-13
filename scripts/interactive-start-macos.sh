@@ -7,7 +7,7 @@ ROOT="$(cd "$DIR/.." && pwd)"
 # shellcheck source=lib/interactive_common.sh
 . "$DIR/lib/interactive_common.sh"
 
-ic_banner "ARW — Start Menu (macOS)" "Start services, tools, and debugging"
+ic_banner "Agent Hub (ARW) — Start Menu (macOS)" "Start services, tools, and debugging"
 ic_project_overview
 ic_feature_matrix
 ic_host_summary

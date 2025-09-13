@@ -126,6 +126,8 @@
     <span id="eventsBadge" class="badge warn" title="Events activity"><span class="dot"></span> Events: 0</span>
     <span id="modelsBadge" class="badge warn" title="Models activity"><span class="dot"></span> Models: idle</span>
     <a id="metricsLink" class="help" href="#" title="Open /metrics" style="display:inline-block">M</a>
+    <a id="catalogLink" class="help" href="#" title="Open Interface Catalog (/catalog/index)" style="display:inline-block">C</a>
+    <span id="catalogBadge" class="badge warn" title="Interface Catalog status"><span class="dot"></span> Catalog: …</span>
     <button class="iconbtn" id="btnExpandAll" title="Expand all">Expand</button>
     <button class="iconbtn" id="btnCollapseAll" title="Collapse all">Collapse</button>
     <button class="iconbtn" id="btnDensity" title="Toggle density">Density</button>
@@ -213,8 +215,31 @@
         <input id="hintConc" type="number" min="1" placeholder="concurrency" style="width:120px;">
         <input id="hintBuf" type="number" min="1" placeholder="event buffer" style="width:140px;">
         <input id="hintTimeout" type="number" min="1" placeholder="http timeout s" style="width:140px;">
+        <input id="hintRetrK" type="number" min="1" placeholder="retrieval k" style="width:120px;">
+        <input id="hintDiv" type="number" step="0.05" min="0" max="1" placeholder="diversity/λ" style="width:120px;">
+        <input id="hintLambda" type="number" step="0.05" min="0" max="1" placeholder="mmr λ" style="width:120px;">
+        <input id="hintCompr" type="number" step="0.1" min="0" max="1" placeholder="compression" style="width:120px;">
+        <input id="hintVoteK" type="number" min="0" max="9" placeholder="vote-k" style="width:100px;">
+        <input id="hintCtxBudget" type="number" min="0" placeholder="ctx tokens" style="width:110px;">
+        <input id="hintCtxPer" type="number" min="0" placeholder="per-item tokens" style="width:140px;">
+        <select id="hintCtxFmt" title="context format" style="width:120px;">
+          <option value="">format</option>
+          <option value="bullets">bullets</option>
+          <option value="jsonl">jsonl</option>
+          <option value="inline">inline</option>
+          <option value="custom">custom</option>
+        </select>
+        <label class="key"><input type="checkbox" id="hintProv"> provenance</label>
         <button onclick="orHintsApply()">Apply</button>
         <button onclick="orHintsGet()">Get</button>
+      </div>
+      <div class="row">
+        <input id="hintCtxHeader" placeholder="header" style="flex:1;min-width:180px">
+        <input id="hintCtxFooter" placeholder="footer" style="flex:1;min-width:180px">
+      </div>
+      <div class="row">
+        <input id="hintCtxTpl" placeholder="custom item template (for format=custom)" style="flex:1;min-width:280px">
+        <input id="hintJoiner" placeholder="joiner (e.g., \n)" style="width:140px">
       </div>
       <div class="row"><span class="key">time</span> <code id="rt-orch">–</code></div>
     </div>
@@ -278,6 +303,18 @@
 
   <div class="cols" style="margin-top:16px">
     <div class="box" data-collapsed="1">
+      <h3>Experiments (Live) <a href="#" class="help" data-doc="testing" data-tip="Recent experiment activity and quick scoreboard." title="Experiments">?</a></h3>
+      <div class="row">
+        <button class="iconbtn" onclick="expDefs()">Refresh defs</button>
+        <label><input type="checkbox" id="expLive" checked> live</label>
+        <button class="iconbtn" onclick="expClear()">Clear board</button>
+        <button class="iconbtn" onclick="expExportCSV()">Export CSV</button>
+        <button class="iconbtn" onclick="expCopyJSON()">Copy JSON</button>
+      </div>
+      <div id="expDefs" style="max-height:20vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
+      <div id="expBoard" style="max-height:28vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px;margin-top:8px"></div>
+    </div>
+    <div class="box" data-collapsed="1">
       <h3>Models Metrics <a href="#" class="help" data-doc="events" data-tip="Live counters and EWMA for model downloads." title="Models metrics">?</a></h3>
       <div class="row">
         <button class="iconbtn" onclick="modelsMetricsRefresh()">Refresh</button>
@@ -314,6 +351,27 @@
     </div>
 
     <div class="box">
+      <h3>Goldens / Experiments <a href="#" class="help" data-doc="testing" data-tip="Run goldens and A/B variants offline; activate a live variant by applying hints." title="Goldens/Experiments">?</a></h3>
+      <div class="row">
+        <input id="goldProj" placeholder="project" value="default" style="width: 160px;">
+        <button class="iconbtn" onclick="goldList()">List</button>
+        <button class="iconbtn" onclick="goldRun()">Run</button>
+        <label class="key">vote‑k</label>
+        <input id="goldVoteK" type="number" min="1" max="9" value="3" style="width: 60px;">
+      </div>
+      <div class="row">
+        <input id="expId" placeholder="exp id" style="width: 180px;">
+        <input id="expVar" placeholder="variants (A,B)" value="A,B" style="width: 160px;">
+        <button class="iconbtn" onclick="expDefine()">Define</button>
+        <button class="iconbtn" onclick="expRun()">Run A/B</button>
+        <button class="iconbtn" onclick="expActivate()" title="Apply selected variant hints">Activate</button>
+      </div>
+      <div class="row" id="expKpis" style="display:none"></div>
+      <div class="row"><span class="key">solve rate</span> <code id="goldSolve">–</code> <span class="key">avg ms</span> <code id="goldLat">–</code></div>
+      <pre id="goldOut">{}</pre>
+    </div>
+
+    <div class="box">
       <h3>Self‑tests</h3>
       <div class="row">
         <button class="primary" onclick="runSelfTests()">Run self‑tests</button>
@@ -345,9 +403,13 @@
         <input id="worldQ" placeholder="world: query" style="flex:1;min-width:200px">
         <input id="worldK" type="number" min="1" max="50" step="1" value="8" style="width:70px">
         <button class="ghost" onclick="worldSelect()">Select</button>
+        <label class="key"><input type="checkbox" id="asmOverride"> overrides</label>
         <button class="primary" onclick="contextAssemble()">Assemble</button>
       </div>
       <div class="row" id="plannerMeta" style="display:none"></div>
+      <div class="row" id="ctxKpis" style="display:none"></div>
+      <div class="row"><span class="key">context preview</span></div>
+      <pre id="ctxPreview" style="white-space:pre-wrap">(assemble to render)</pre>
       <pre id="stateOut">{}</pre>
     </div>
     <div class="box" data-collapsed="1">
@@ -553,7 +615,16 @@ async function orRefreshModels(){ await req('POST', '/models/refresh', null, 'ou
 async function orShutdown(){ await req('GET', '/shutdown', null, 'out', 'rt-orch'); }
 async function orProfileApply(){ const name = document.getElementById('profileSel').value; await req('POST','/governor/profile',{name},'out','rt-orch'); }
 async function orProfileGet(){ await req('GET','/governor/profile',null,'out','rt-orch'); }
-async function orHintsApply(){ const h={}; const c=document.getElementById('hintConc').value; const b=document.getElementById('hintBuf').value; const t=document.getElementById('hintTimeout').value; if(c) h.max_concurrency=parseInt(c,10); if(b) h.event_buffer=parseInt(b,10); if(t) h.http_timeout_secs=parseInt(t,10); if(Object.keys(h).length===0) return; await req('POST','/governor/hints',h,'out','rt-orch'); }
+async function orHintsApply(){ const h={};
+  const c=document.getElementById('hintConc').value; const b=document.getElementById('hintBuf').value; const t=document.getElementById('hintTimeout').value;
+  const rk=document.getElementById('hintRetrK').value; const dv=document.getElementById('hintDiv').value; const lam=document.getElementById('hintLambda').value; const cg=document.getElementById('hintCompr').value; const vk=document.getElementById('hintVoteK').value;
+  const cb=document.getElementById('hintCtxBudget').value; const pi=document.getElementById('hintCtxPer').value; const fmt=document.getElementById('hintCtxFmt').value; const prov=document.getElementById('hintProv').checked;
+  const hdr=document.getElementById('hintCtxHeader').value; const ftr=document.getElementById('hintCtxFooter').value; const tpl=document.getElementById('hintCtxTpl').value; const jn=document.getElementById('hintJoiner').value;
+  if(c) h.max_concurrency=parseInt(c,10); if(b) h.event_buffer=parseInt(b,10); if(t) h.http_timeout_secs=parseInt(t,10);
+  if(rk) h.retrieval_k=parseInt(rk,10); if(dv) h.retrieval_div=parseFloat(dv); if(lam) h.mmr_lambda=parseFloat(lam); if(cg) h.compression_aggr=parseFloat(cg); if(vk) h.vote_k=parseInt(vk,10);
+  if(cb) h.context_budget_tokens=parseInt(cb,10); if(pi) h.context_item_budget_tokens=parseInt(pi,10);
+  if(fmt) h.context_format=fmt; if(prov) h.include_provenance=!!prov; if(hdr) h.context_header=hdr; if(ftr) h.context_footer=ftr; if(tpl) h.context_item_template=tpl; if(jn) h.joiner=jn;
+  if(Object.keys(h).length===0) return; await req('POST','/governor/hints',h,'out','rt-orch'); }
 async function orHintsGet(){ await req('GET','/governor/hints',null,'out','rt-orch'); }
 
 // Models UI
@@ -874,6 +945,178 @@ es.onmessage = (e) => pushEvt('message', e.data);
 ['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Bus.Gap','Beliefs.Updated','Intents.Proposed','Intents.Approved','Intents.Rejected','Actions.Applied','Actions.HintApplied','Chat.Message','World.Updated','Egress.Preview'].forEach(k => {
   es.addEventListener(k, (e)=>pushEvt(k, e.data));
 });
+// Goldens + Experiments KPIs
+es.addEventListener('Goldens.Evaluated', (e)=>{
+  pushEvt('Goldens.Evaluated', e.data);
+  try{
+    const j = JSON.parse(e.data||'{}');
+    const total = Number(j.total||0), passed = Number(j.passed||0);
+    const rate = total>0 ? ((passed*100/total).toFixed(1)+'%') : '–';
+    const lat = Number(j.avg_latency_ms||0).toFixed(0)+' ms';
+    const sr = document.getElementById('goldSolve'); if(sr) sr.textContent = rate;
+    const la = document.getElementById('goldLat'); if(la) la.textContent = lat;
+  }catch{}
+});
+// Experiments KPIs (per-variant)
+window.__expResults = window.__expResults || {}; // key: exp_id:variant -> {passed,total,avg_ms,winner}
+function expKey(exp_id, variant){ return (exp_id||'') + ':' + (variant||''); }
+function renderExpKpis(){
+  const el = document.getElementById('expKpis'); if(!el) return;
+  const entries = Object.entries(window.__expResults||{});
+  if(entries.length===0){ el.style.display='none'; el.innerHTML=''; return; }
+  // Group by exp_id -> variants
+  const byExp = {};
+  entries.forEach(([k,v])=>{ const [id,variant] = k.split(':'); if(!byExp[id]) byExp[id] = []; byExp[id].push({variant, ...v}); });
+  const blocks = Object.entries(byExp).map(([id, arr])=>{
+    arr.sort((a,b)=> (b.passed||0)-(a.passed||0));
+    const chips = arr.map(it=>{
+      const rate = (it.total>0)? ((it.passed*100/it.total).toFixed(1)+'%') : '–';
+      const cls = it.winner? 'badge good' : 'badge';
+      return `<span class="${cls}" title="${id}/${it.variant}"><span class="dot"></span> ${it.variant}: ${rate} · ${it.avg_ms||0} ms</span>`;
+    }).join(' ');
+    return `<div class="kv"><b>${id}</b><span>${chips}</span></div>`;
+  });
+  el.innerHTML = blocks.join('');
+  el.style.display = 'flex';
+}
+function expDefs(){ (async()=>{ try{
+  const r = await fetch(base + '/admin/experiments/list', { headers: { 'X-ARW-Admin': __adminHeader || '' } });
+  const j = await r.json();
+  const items = (j && (j.data?.items || j.items)) || [];
+  const el = document.getElementById('expDefs'); if(!el) return;
+  const rows = items.map(it=>{
+    const vkeys = Object.keys(it.variants||{});
+    const vs = vkeys.join(', ');
+    const varsCsv = vkeys.join(',');
+    const safeId = String(it.id||'').replace(/'/g, "%27");
+    const safeVars = String(varsCsv).replace(/'/g, "%27");
+    const btnRun = vkeys.length ? `<button class="ghost" onclick="expRunFromDef('${safeId}','${safeVars}')">Run A/B</button>` : '';
+    const btnAct = vkeys.length ? `<button class="ghost" onclick="expActivateWinner('${safeId}')">Activate Winner</button>` : '';
+    return `<div class="dlrow"><code>${it.id||''}</code> <span class="key">name</span><code>${it.name||''}</code> <span class="key">variants</span><code>${vs||'<em>none</em>'}</code> <span style="margin-left:auto">${btnRun} ${btnAct}</span></div>`;
+  });
+  el.innerHTML = rows.join('') || '<div class="key">no defs</div>';
+}catch{ showToast('defs fetch failed'); } })(); }
+function expClear(){ try{ window.__expResults = {}; const el=document.getElementById('expBoard'); if(el) el.innerHTML=''; renderExpKpis(); }catch{} }
+function renderExpBoard(){
+  const board = document.getElementById('expBoard'); if(!board) return;
+  const entries = Object.entries(window.__expResults||{});
+  if(entries.length===0){ board.innerHTML='<div class="key">no results</div>'; return; }
+  // Group by exp id
+  const byExp = {};
+  entries.forEach(([k,v])=>{ const [id,variant]=k.split(':'); (byExp[id]=byExp[id]||[]).push({variant,...v}); });
+  const blocks = Object.entries(byExp).map(([id, arr])=>{
+    arr.sort((a,b)=> (b.passed||0)-(a.passed||0));
+    const lines = arr.map(it=>{
+      const rate = (it.total>0)? ((it.passed*100/it.total).toFixed(1)+'%') : '–';
+      const star = it.winner? '★' : '';
+      return `<div class="kv"><span>${it.variant}</span><span>${rate} · ${(it.avg_ms||0)} ms ${star}</span></div>`;
+    }).join('');
+    return `<div class="box-lite"><div class="row"><b>${id}</b></div>${lines}</div>`;
+  });
+  board.innerHTML = blocks.join('');
+}
+
+async function expRunFromDef(id, varsCsv){
+  try{
+    const proj = document.getElementById('goldProj')?.value?.trim() || 'default';
+    const vars = (varsCsv||'').split(',').map(s=>s.trim()).filter(Boolean);
+    if(!id){ showToast('missing exp id'); return; }
+    if(vars.length===0){ showToast('no variants'); return; }
+    const body = { id, proj, variants: vars };
+    const r = await fetch(base + '/admin/experiments/run', { method:'POST', headers:{ 'Content-Type':'application/json', 'X-ARW-Admin': __adminHeader || '' }, body: JSON.stringify(body) });
+    if(!r.ok){ showToast('run failed ('+r.status+')'); return; }
+    const j = await r.json();
+    const data = j?.data || j;
+    const el = document.getElementById('goldOut'); if(el){ el.textContent = JSON.stringify(data, null, 2); }
+    showToast('A/B started for '+id+' ('+vars.join(', ')+')');
+  }catch{ showToast('run failed'); }
+}
+
+async function expActivateWinner(id){
+  try{
+    // Try persisted winners first
+    let chosen = null;
+    try{
+      const r = await fetch(base + '/admin/experiments/winners', { headers: { 'X-ARW-Admin': __adminHeader || '' } });
+      const j = await r.json();
+      const items = (j && (j.data?.items || j.items)) || [];
+      const win = items.find(w=> (w.exp_id||'')===id);
+      if(win && win.variant){ chosen = { variant: win.variant, passed: win.passed, total: win.total, avg_ms: win.avg_latency_ms, winner: true }; }
+    }catch{}
+    const entries = Object.entries(window.__expResults||{}).filter(([k,_])=> k.startsWith(id+':'));
+    if(entries.length===0 && !chosen){ showToast('no results for '+id); return; }
+    for(const [k,v] of entries){ if(v && v.winner){ chosen = { variant: k.split(':')[1], ...v }; break; } }
+    if(!chosen){
+      for(const [k,v] of entries){
+        const varName = k.split(':')[1];
+        if(!chosen || (v.passed||0) > (chosen.passed||0) || ((v.passed||0)===(chosen.passed||0) && (v.avg_ms||1e18) < (chosen.avg_ms||1e18))){
+          chosen = { variant: varName, ...v };
+        }
+      }
+    }
+    if(!chosen || !chosen.variant){ showToast('no winner found for '+id); return; }
+    const body = { id, variant: chosen.variant };
+    const r = await fetch(base + '/admin/experiments/activate', { method:'POST', headers:{ 'Content-Type':'application/json', 'X-ARW-Admin': __adminHeader || '' }, body: JSON.stringify(body) });
+    if(!r.ok){ showToast('activate failed ('+r.status+')'); return; }
+    showToast('Activated '+id+'/'+chosen.variant);
+  }catch{ showToast('activate failed'); }
+}
+
+async function expFetchBoardAndWinners(){
+  const sb = await (await fetch(base + '/admin/experiments/scoreboard', { headers: { 'X-ARW-Admin': __adminHeader || '' } })).json();
+  const board = (sb && (sb.data?.items || sb.items)) || [];
+  const wins = await (await fetch(base + '/admin/experiments/winners', { headers: { 'X-ARW-Admin': __adminHeader || '' } })).json();
+  const winners = (wins && (wins.data?.items || wins.items)) || [];
+  return { board, winners };
+}
+
+async function expCopyJSON(){ try{
+  const { board, winners } = await expFetchBoardAndWinners();
+  const payload = { scoreboard: board, winners };
+  await navigator.clipboard.writeText(JSON.stringify(payload, null, 2));
+  showToast('Scoreboard JSON copied');
+}catch{ showToast('copy failed'); } }
+
+async function expExportCSV(){ try{
+  const { board, winners } = await expFetchBoardAndWinners();
+  const winMap = Object.create(null);
+  winners.forEach(w=>{ winMap[(w.exp_id||'')+':' + (w.variant||'')] = true; });
+  const rows = [ ['exp_id','proj','variant','passed','total','failed','avg_latency_ms','avg_ctx_tokens','avg_ctx_items','time','winner'] ];
+  board.forEach(r=>{
+    const k = (r.exp_id||'')+':' + (r.variant||'');
+    const sc = r.score || {};
+    rows.push([ r.exp_id||'', r.proj||'', r.variant||'', sc.passed||0, sc.total||0, sc.failed||0, sc.avg_latency_ms||0, sc.avg_ctx_tokens||0, sc.avg_ctx_items||0, sc.time||'', winMap[k] ? '1':'0' ]);
+  });
+  const csv = rows.map(row=> row.map(v=>{
+    const s = String(v);
+    return (s.includes(',')||s.includes('"')||s.includes('\n')) ? '"'+s.replace(/"/g,'""')+'"' : s;
+  }).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'experiments_scoreboard.csv';
+  document.body.appendChild(a); a.click(); a.remove();
+  showToast('Scoreboard exported');
+}catch{ showToast('export failed'); } }
+es.addEventListener('Experiment.Result', (e)=>{ pushEvt('Experiment.Result', e.data); try{
+  const j = JSON.parse(e.data||'{}');
+  const id = j.exp_id || (document.getElementById('expId')?.value||'');
+  const key = expKey(id, j.variant||'');
+  window.__expResults[key] = { passed: j.passed||0, total: j.total||0, avg_ms: j.avg_latency_ms||0, avg_ctx_tokens: j.avg_ctx_tokens||0, avg_ctx_items: j.avg_ctx_items||0, winner: false };
+  renderExpKpis();
+  try{ if(document.getElementById('expLive')?.checked){ renderExpBoard(); } }catch{}
+}catch{} });
+es.addEventListener('Experiment.Winner', (e)=>{ pushEvt('Experiment.Winner', e.data); try{
+  const j = JSON.parse(e.data||'{}');
+  const id = j.exp_id || (document.getElementById('expId')?.value||'');
+  const w = j.winner || '';
+  // reset winners for this exp
+  Object.keys(window.__expResults||{}).forEach(k=>{ if(k.startsWith(id+':')) window.__expResults[k].winner = false; });
+  const key = expKey(id, w);
+  if(window.__expResults[key]) window.__expResults[key].winner = true;
+  renderExpKpis();
+  try{ if(document.getElementById('expLive')?.checked){ renderExpBoard(); } }catch{}
+}catch{} });
 // Planner hint
 es.addEventListener('Chat.Planner', (e)=>{
   pushEvt('Chat.Planner', e.data);
@@ -1163,6 +1406,13 @@ document.addEventListener('DOMContentLoaded', ()=>{
 async function refreshMetrics(){ try{ const r = await fetch(base + '/admin/probe/metrics', { headers: { 'X-ARW-Admin': __adminHeader || '' } }); const j = await r.json(); if(j && j.ok){ updateSystemFromMetrics(j.data); } }catch(e){} }
 async function refreshHW(){ try{ const r = await fetch(base + '/admin/probe/hw', { headers: { 'X-ARW-Admin': __adminHeader || '' } }); const j = await r.json(); const out = document.getElementById('sysOut'); if(out){ out.textContent = JSON.stringify(j?.data || j, null, 2); } }catch(e){} }
 
+// --- Goldens/Experiments panel ---
+async function goldList(){ try{ const proj = document.getElementById('goldProj').value.trim() || 'default'; const r = await fetch(base + '/admin/goldens/list?proj=' + encodeURIComponent(proj), { headers: { 'X-ARW-Admin': __adminHeader || '' } }); const j = await r.json(); const el = document.getElementById('goldOut'); if(el){ el.textContent = JSON.stringify(j?.data || j, null, 2); } }catch{ showToast('goldens list failed'); } }
+async function goldRun(){ try{ const proj = document.getElementById('goldProj').value.trim() || 'default'; const vote_k = parseInt(document.getElementById('goldVoteK').value||'3',10)||3; const body = { proj, vote_k }; const r = await fetch(base + '/admin/goldens/run', { method:'POST', headers:{ 'Content-Type':'application/json','X-ARW-Admin': __adminHeader || '' }, body: JSON.stringify(body) }); const j = await r.json(); const data = j?.data || j; const el = document.getElementById('goldOut'); if(el){ el.textContent = JSON.stringify(data, null, 2); } const total = Number(data.total||0), passed = Number(data.passed||0); const rate = total>0 ? ((passed*100/total).toFixed(1)+'%') : '–'; document.getElementById('goldSolve').textContent = rate; document.getElementById('goldLat').textContent = String(data.avg_latency_ms||0)+' ms'; }catch{ showToast('goldens run failed'); } }
+async function expDefine(){ try{ const id = (document.getElementById('expId').value||'exp').trim() || 'exp'; const body = { id, name: id, variants: { "A": { vote_k: 1, retrieval_k: 8, retrieval_div: 0.3 }, "B": { vote_k: 5, retrieval_k: 20, retrieval_div: 0.3 } } }; const r = await fetch(base + '/admin/experiments/define', { method:'POST', headers:{ 'Content-Type':'application/json', 'X-ARW-Admin': __adminHeader || '' }, body: JSON.stringify(body) }); if(r.ok){ showToast('Experiment defined'); } else { showToast('Define failed ('+r.status+')'); } }catch{ showToast('define failed'); } }
+async function expRun(){ try{ const id = (document.getElementById('expId').value||'exp').trim() || 'exp'; const proj = document.getElementById('goldProj').value.trim() || 'default'; const vars = (document.getElementById('expVar').value||'A,B').split(',').map(s=>s.trim()).filter(Boolean); const body = { id, proj, variants: vars }; const r = await fetch(base + '/admin/experiments/run', { method:'POST', headers:{ 'Content-Type':'application/json', 'X-ARW-Admin': __adminHeader || '' }, body: JSON.stringify(body) }); const j = await r.json(); const data = j?.data || j; const el = document.getElementById('goldOut'); if(el){ el.textContent = JSON.stringify(data, null, 2); } }catch{ showToast('run failed'); } }
+async function expActivate(){ try{ const id = (document.getElementById('expId').value||'exp').trim() || 'exp'; const varStr = (document.getElementById('expVar').value||'A').split(',')[0].trim() || 'A'; const body = { id, variant: varStr }; const r = await fetch(base + '/admin/experiments/activate', { method:'POST', headers:{ 'Content-Type':'application/json', 'X-ARW-Admin': __adminHeader || '' }, body: JSON.stringify(body) }); if(r.ok){ showToast('Activated '+id+'/'+varStr); } else { showToast('activate failed ('+r.status+')'); } }catch{ showToast('activate failed'); } }
+
 // --- Self-tests (unchanged from last patch; reuses global SSE) ---
 function clearTests(){ document.getElementById('tests').textContent = 'Ready.'; }
 function logT(msg, cls){
@@ -1354,6 +1604,12 @@ document.addEventListener('DOMContentLoaded', initDocs);
 // Metrics link
 document.addEventListener('DOMContentLoaded', ()=>{
   const a=document.getElementById('metricsLink'); if(!a) return; a.href = base + '/metrics'; a.target='_blank'; a.title='Open Prometheus metrics';
+  // Catalog link + health badge
+  const cl=document.getElementById('catalogLink'); if(cl){ cl.href = base + '/catalog/index'; cl.target='_blank'; cl.title='Open Interface Catalog'; }
+  (async()=>{ try{
+    const r = await fetch(base + '/catalog/health');
+    if(r.ok){ const j = await r.json(); const cb=document.getElementById('catalogBadge'); if(cb){ cb.className = 'badge ' + (j.ok? 'good':'warn'); cb.innerHTML = '<span class="dot"></span> Catalog: ' + (j.ok? 'ok':'warn'); } }
+  }catch{} })();
 });
 function setAdmin(on){ __adminOk = !!on; const b=document.getElementById('adminBadge'); if(!b) return; b.className = 'badge ' + (on ? 'good' : 'warn'); b.innerHTML = '<span class="dot"></span> Admin: ' + (on ? 'on' : 'off'); }
 function setSSE(on){ const b=document.getElementById('sseBadge'); if(!b) return; b.className = 'badge ' + (on ? 'good' : 'bad'); b.innerHTML = '<span class="dot"></span> SSE: ' + (on ? 'live' : 'off'); }
@@ -1384,7 +1640,8 @@ function loadPref(k,def){ try{ const v = localStorage.getItem(prefKey(k)); retur
 function bindPersist(id, key, isCheckbox){ const el=document.getElementById(id); if(!el) return; const val = loadPref(key, isCheckbox ? false : ''); if(val !== undefined && val !== null){ if(isCheckbox) el.checked = !!val; else if(val !== '') el.value = val; }
   el.addEventListener('change', ()=>{ const v = isCheckbox ? !!el.checked : el.value; savePref(key, v); }); }
 document.addEventListener('DOMContentLoaded', ()=>{
-  [['chatModel',false],['memKind',false],['profileSel',false],['hintConc',false],['hintBuf',false],['hintTimeout',false],['autoApply',true],['fbLive',true],['memBody',false],['toolBody',false],['mId',false],['mProv',false],['mUrl',false],['mSha',false]].forEach(([id,isCb])=> bindPersist(id, id, isCb));
+  [['chatModel',false],['memKind',false],['profileSel',false],['hintConc',false],['hintBuf',false],['hintTimeout',false],['hintRetrK',false],['hintDiv',false],['hintLambda',false],['hintCompr',false],['hintVoteK',false],['hintCtxBudget',false],['hintCtxPer',false],['hintCtxFmt',false],['hintProv',true],['hintCtxHeader',false],['hintCtxFooter',false],['hintCtxTpl',false],['hintJoiner',false],['autoApply',true],['fbLive',true],['memBody',false],['toolBody',false],['mId',false],['mProv',false],['mUrl',false],['mSha',false],['goldProj',false],['expId',false],['expVar',false]].forEach(([id,isCb])=> bindPersist(id, id, isCb));
+  bindPersist('asmOverride', true, true);
   const remember = loadPref('admin.remember', false); const tok = loadPref('admin.token', '');
   const cb=document.getElementById('rememberTok'); const t=document.getElementById('adminToken'); if(cb) cb.checked = !!remember; if(t && remember && tok){ t.value = tok; __adminHeader = tok; setAdmin(true); }
 });
@@ -1572,11 +1829,53 @@ async function contextAssemble(){
   try {
     const q = encodeURIComponent(document.getElementById('worldQ').value||'');
     const k = encodeURIComponent(document.getElementById('worldK').value||'8');
-    const r = await fetch(base + '/admin/context/assemble?q=' + q + '&k=' + k, { headers: { 'X-ARW-Admin': __adminHeader || '' } });
+    let url = base + '/admin/context/assemble?q=' + q + '&k=' + k;
+    // Apply per-call overrides when toggled (reuses hints inputs)
+    try{
+      const on = !!document.getElementById('asmOverride')?.checked;
+      if (on){
+        const fmt=document.getElementById('hintCtxFmt')?.value||''; if(fmt) url += '&context_format=' + encodeURIComponent(fmt);
+        const prov=document.getElementById('hintProv')?.checked; if(prov) url += '&include_provenance=true';
+        const cb=document.getElementById('hintCtxBudget')?.value||''; if(cb) url += '&context_budget_tokens=' + encodeURIComponent(cb);
+        const pi=document.getElementById('hintCtxPer')?.value||''; if(pi) url += '&context_item_budget_tokens=' + encodeURIComponent(pi);
+        const hdr=document.getElementById('hintCtxHeader')?.value||''; if(hdr) url += '&context_header=' + encodeURIComponent(hdr);
+        const ftr=document.getElementById('hintCtxFooter')?.value||''; if(ftr) url += '&context_footer=' + encodeURIComponent(ftr);
+        const tpl=document.getElementById('hintCtxTpl')?.value||''; if(tpl) url += '&context_item_template=' + encodeURIComponent(tpl);
+        const jn=document.getElementById('hintJoiner')?.value||''; if(jn) url += '&joiner=' + encodeURIComponent(jn);
+      }
+    }catch{}
+    const r = await fetch(url, { headers: { 'X-ARW-Admin': __adminHeader || '' } });
     const j = await r.json();
-    document.getElementById('stateOut').textContent = JSON.stringify(j,null,2);
+    const data = j?.data || j;
+    document.getElementById('stateOut').textContent = JSON.stringify(data,null,2);
+    // Render context preview if present
+    try{
+      const prev = data?.context_preview || '';
+      const el = document.getElementById('ctxPreview'); if(el){ el.textContent = prev || '(no preview)'; }
+    }catch{}
+    // Quick KPIs
+    try{
+      const el = document.getElementById('ctxKpis');
+      const aux = (data && data.aux && data.aux.context) || {};
+      const ret = aux.retrieval || {};
+      const parts = [];
+      const ib = aux.items_before, ia = aux.items_after, idr = aux.items_dropped;
+      const tb = aux.before_tokens, ta = aux.after_tokens, bud = aux.budget_tokens, per = aux.per_item_cap_tokens;
+      const k = (ret.k!=null) ? ret.k : (data?.policy?.planner?.retrieval?.k);
+      const lam = (ret.lambda!=null) ? ret.lambda : (data?.policy?.planner?.retrieval?.lambda || data?.policy?.planner?.retrieval?.div);
+      const compr = aux.compression_aggr;
+      if (k!=null) parts.push(`<span class="key">k</span><code>${k}</code>`);
+      if (lam!=null) parts.push(`<span class="key">λ</span><code>${Number(lam).toFixed ? Number(lam).toFixed(2) : lam}</code>`);
+      if (compr!=null) parts.push(`<span class="key">compr</span><code>${Number(compr).toFixed ? Number(compr).toFixed(2) : compr}</code>`);
+      if (ib!=null) parts.push(`<span class="key">items</span><code>${ib}→${ia??ib}</code>`);
+      if (idr!=null) parts.push(`<span class="key">drop</span><code>${idr}</code>`);
+      if (tb!=null) parts.push(`<span class="key">tokens</span><code>${tb}→${ta??tb}</code>`);
+      if (bud!=null) parts.push(`<span class="key">budget</span><code>${bud}</code>`);
+      if (per!=null) parts.push(`<span class="key">per</span><code>${per}</code>`);
+      if (el){ el.innerHTML = parts.join(' '); el.style.display = parts.length? 'flex':'none'; }
+    }catch{}
     try {
-      const planner = (j && j.policy && j.policy.planner) || null;
+      const planner = (data && data.policy && data.policy.planner) || null;
       const row = document.getElementById('plannerMeta');
       if (planner && row){
         const mode = planner.mode || 'balanced';

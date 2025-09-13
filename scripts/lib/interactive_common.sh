@@ -554,7 +554,7 @@ ic_host_summary() {
 
 ic_project_overview() {
   ic_section "Project"
-  printf "  %s\n" "Agents Running Wild (ARW) — local-first Rust workspace for personal AI agents."
+  printf "  %s\n" "Agent Hub (ARW) — local-first Rust workspace for personal AI agents."
   printf "  %s\n" "Highlights: user-mode HTTP service + debug UI; macro-driven tools;"
   printf "             event stream + tracing hooks; portable packaging."
 }

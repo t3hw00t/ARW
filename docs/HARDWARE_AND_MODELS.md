@@ -62,7 +62,7 @@ arw-cas: content-addressable, mmapped read-only artifacts; atomic swaps; GC for 
 - GC: `POST /admin/models/cas_gc` deletes unreferenced blobs older than `ttl_days`; emits `Models.CasGc`.
 - Quota (optional): `ARW_MODELS_QUOTA_MB` caps total CAS size. With `ARW_DL_PREFLIGHT=1`, the downloader denies requests whose projected total would exceed the quota.
  - Legacy migration: on startup, ARW best‑effort migrates legacy model files with known `sha256` into the CAS layout.
- - Downloads metrics: `{state_dir}/downloads.metrics.json` stores `ewma_mbps`; `GET /admin/models/downloads_metrics` exposes it for UI/ops.
+ - Downloads metrics: `{state_dir}/downloads.metrics.json` stores `ewma_mbps`; `GET /admin/models/downloads_metrics` exposes EWMA plus live counters for UI/ops.
 
 ## Interoperability (arw-model-manifest)
 

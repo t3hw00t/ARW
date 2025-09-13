@@ -64,6 +64,33 @@ pub(crate) struct Hints {
     mode: Option<String>,
     #[serde(default)]
     slo_ms: Option<u64>,
+    // Extended knobs
+    #[serde(default)]
+    retrieval_k: Option<usize>,
+    #[serde(default)]
+    retrieval_div: Option<f64>,
+    #[serde(default)]
+    mmr_lambda: Option<f64>,
+    #[serde(default)]
+    compression_aggr: Option<f64>,
+    #[serde(default)]
+    vote_k: Option<u8>,
+    #[serde(default)]
+    context_budget_tokens: Option<usize>,
+    #[serde(default)]
+    context_item_budget_tokens: Option<usize>,
+    #[serde(default)]
+    context_format: Option<String>,
+    #[serde(default)]
+    include_provenance: Option<bool>,
+    #[serde(default)]
+    context_item_template: Option<String>,
+    #[serde(default)]
+    context_header: Option<String>,
+    #[serde(default)]
+    context_footer: Option<String>,
+    #[serde(default)]
+    joiner: Option<String>,
 }
 #[arw_gate("governor:hints:set")]
 #[arw_admin(
@@ -83,6 +110,19 @@ pub(crate) async fn governor_hints_set(
             req.http_timeout_secs,
             req.mode,
             req.slo_ms,
+            req.retrieval_k,
+            req.retrieval_div,
+            req.mmr_lambda,
+            req.compression_aggr,
+            req.vote_k,
+            req.context_budget_tokens,
+            req.context_item_budget_tokens,
+            req.context_format.clone(),
+            req.include_provenance,
+            req.context_item_template.clone(),
+            req.context_header.clone(),
+            req.context_footer.clone(),
+            req.joiner.clone(),
         )
         .await;
         return super::ok(serde_json::json!({})).into_response();
@@ -93,6 +133,19 @@ pub(crate) async fn governor_hints_set(
         http_timeout_secs: req.http_timeout_secs,
         mode: req.mode,
         slo_ms: req.slo_ms,
+        retrieval_k: req.retrieval_k,
+        retrieval_div: req.retrieval_div,
+        mmr_lambda: req.mmr_lambda,
+        compression_aggr: req.compression_aggr,
+        vote_k: req.vote_k,
+        context_budget_tokens: req.context_budget_tokens,
+        context_item_budget_tokens: req.context_item_budget_tokens,
+        context_format: req.context_format,
+        include_provenance: req.include_provenance,
+        context_item_template: req.context_item_template,
+        context_header: req.context_header,
+        context_footer: req.context_footer,
+        joiner: req.joiner,
     };
     super::governor_hints_set(State(state), Json(req2))
         .await

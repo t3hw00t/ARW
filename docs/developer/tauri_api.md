@@ -11,7 +11,7 @@ This page documents the Tauri 2 APIs used by the Desktop Launcher and common pat
   - Upgrade note: `Submenu::with_id(manager, id, text, enabled, items)` was removed; use `with_id_and_items(manager, id, text, enabled, &[...])`.
 - Menu items: create with `MenuItem::with_id(app, "id", "Label", enabled, None::<&str>)`.
 - Top-level tray menu: `Menu::with_items(app, &[&svc_sub, &dbg_sub, &windows_sub, &quit])`.
-- Tray icon: `TrayIconBuilder::with_id("arw-launcher-tray").tooltip("ARW").menu(&menu).on_menu_event(...)`.
+- Tray icon: `TrayIconBuilder::with_id("arw-launcher-tray").tooltip("Agent Hub (ARW)").menu(&menu).on_menu_event(...)`.
 
 Example
 ```rust
@@ -26,7 +26,7 @@ let quit  = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 let menu  = Menu::with_items(app, &[&svc, &quit])?;
 
 let _tray = TrayIconBuilder::with_id("arw-launcher-tray")
-  .tooltip("ARW")
+  .tooltip("Agent Hub (ARW)")
   .menu(&menu)
   .on_menu_event(|app, ev| match ev.id.as_ref() {
     "svc-start" => { /* ... */ }
@@ -39,7 +39,7 @@ let _tray = TrayIconBuilder::with_id("arw-launcher-tray")
 
 ## Windows
 - Create the main window with `WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))`.
-- Set common attributes: `.title("ARW Launcher").inner_size(480.0, 320.0).build()?;`.
+- Set common attributes: `.title("Agent Hub (ARW) Launcher").inner_size(480.0, 320.0).build()?;`.
 
 ## Notifications
 - Plugin: `tauri_plugin_notification`.
@@ -67,4 +67,3 @@ let _tray = TrayIconBuilder::with_id("arw-launcher-tray")
 - Launcher source: `apps/arw-launcher/src-tauri/src/main.rs`
 - Shared plugin: `crates/arw-tauri`
 - Guide: `docs/guide/launcher.md`
-

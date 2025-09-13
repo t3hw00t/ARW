@@ -155,15 +155,29 @@ pub fn list_admin_endpoints() -> Vec<AdminEndpoint> {
 /// Compute effective paths and portability flags (env-based; cross‑platform).
 pub fn load_effective_paths() -> serde_json::Value {
     // Load defaults from config file if present, then overlay env vars
-    let cfg_path = std::env::var("ARW_CONFIG")
-        .ok()
-        .unwrap_or_else(|| "configs/default.toml".to_string());
-    let cfg = load_config(&cfg_path)
-        .map_err(|e| {
-            tracing::error!("invalid config {}: {}", cfg_path, e);
-            e
-        })
-        .ok();
+    // Resolve config path independent of current working directory.
+    let cfg_path_env = std::env::var("ARW_CONFIG").ok();
+    let cfg_resolved = match cfg_path_env {
+        Some(p) => Some(std::path::PathBuf::from(p)),
+        None => resolve_config_path("configs/default.toml"),
+    };
+    let cfg = cfg_resolved
+        .as_ref()
+        .and_then(|p| p.to_str())
+        .and_then(|p| match load_config(p) {
+            Ok(c) => Some(c),
+            Err(e) => {
+                tracing::error!(
+                    "invalid config {}: {}",
+                    cfg_resolved
+                        .as_ref()
+                        .map(|p| p.to_string_lossy().to_string())
+                        .unwrap_or_else(|| "<none>".into()),
+                    e
+                );
+                None
+            }
+        });
 
     let portable = std::env::var("ARW_PORTABLE")
         .ok()
@@ -254,4 +268,59 @@ pub fn introspect_schema(id: &str) -> Option<serde_json::Value> {
         "memory.probe" | "introspect.tools" => Some(tool_schema(id)),
         _ => None,
     }
+}
+
+/// Resolve a config file path independent of the current working directory.
+///
+/// Search order (first existing wins):
+/// - `ARW_CONFIG_DIR` environment variable if set (joined with `rel`)
+/// - Directory of the current executable (joined with `rel`)
+/// - Parent of the executable directory (joined with `rel`) — useful for dev layouts
+/// - Workspace root during development (relative to this crate's manifest): `../../` (joined with `rel`)
+/// - Current working directory (joined with `rel`)
+///
+/// If `rel` is absolute, it is returned if it exists.
+pub fn resolve_config_path(rel: &str) -> Option<std::path::PathBuf> {
+    use std::path::{Path, PathBuf};
+    let rel_path = Path::new(rel);
+    if rel_path.is_absolute() {
+        return if rel_path.exists() {
+            Some(rel_path.to_path_buf())
+        } else {
+            None
+        };
+    }
+
+    let mut candidates: Vec<PathBuf> = Vec::new();
+
+    if let Ok(cfg_dir) = std::env::var("ARW_CONFIG_DIR") {
+        if !cfg_dir.trim().is_empty() {
+            candidates.push(PathBuf::from(cfg_dir));
+        }
+    }
+
+    if let Ok(exe_path) = std::env::current_exe() {
+        if let Some(exe_dir) = exe_path.parent() {
+            candidates.push(exe_dir.to_path_buf());
+            if let Some(parent) = exe_dir.parent() {
+                candidates.push(parent.to_path_buf());
+            }
+        }
+    }
+
+    // Dev convenience: from arw-core crate dir to workspace root
+    let dev_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../");
+    candidates.push(dev_root);
+
+    if let Ok(cwd) = std::env::current_dir() {
+        candidates.push(cwd);
+    }
+
+    for base in candidates.into_iter() {
+        let p = base.join(rel);
+        if p.exists() {
+            return Some(p);
+        }
+    }
+    None
 }

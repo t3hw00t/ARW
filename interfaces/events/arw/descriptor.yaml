@@ -1,0 +1,25 @@
+id: events.arw
+kind: events
+title: ARW Events
+owner: platform
+lifecycle: stable
+stability_since: 2025-01-01
+sunset: null
+tech:
+  protocol: sse
+  schema:
+    asyncapi: ../../../spec/asyncapi.yaml
+  cloudevents:
+    binding: http
+    content_mode: structured
+docs:
+  human: ../../../docs/guide/events_sse.md
+slo:
+  p95_latency_ms: 150
+  availability: 99.95
+drift_checks:
+  spectral_ruleset: ../../../quality/openapi-spectral.yaml
+  diff_base_branch: main
+change_policy:
+  semver: minor-compatible
+

@@ -1,14 +1,14 @@
 {
   "$schema": "https://schema.tauri.app/v2/capabilities.schema.json",
   "identifier": "main",
-  "description": "Main capabilities for ARW Launcher",
+  "description": "Main capabilities for Agent Hub (ARW) Launcher",
   "permissions": [
     "notification:default",
     "autostart:default",
     "window-state:default",
     {
       "identifier": "arw-commands",
-      "description": "Allow invoking ARW launcher commands from the UI.",
+      "description": "Allow invoking Agent Hub (ARW) launcher commands from the UI.",
       "commands": {
         "allow": [
           "check_service_health",

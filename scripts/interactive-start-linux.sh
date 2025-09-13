@@ -7,7 +7,7 @@ ROOT="$(cd "$DIR/.." && pwd)"
 # shellcheck source=lib/interactive_common.sh
 . "$DIR/lib/interactive_common.sh"
 
-ic_banner "ARW — Start Menu (Linux)" "Start services, tools, and debugging"
+ic_banner "Agent Hub (ARW) — Start Menu (Linux)" "Start services, tools, and debugging"
 ic_project_overview
 ic_feature_matrix
 ic_host_summary
@@ -378,7 +378,7 @@ gen_systemd_service() {
   local unit="$unit_dir/arw.service"
   cat > "$unit" <<UNIT
 [Unit]
-Description=ARW Service (user)
+Description=Agent Hub (ARW) Service (user)
 After=network.target
 
 [Service]

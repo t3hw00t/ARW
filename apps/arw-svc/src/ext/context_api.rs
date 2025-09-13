@@ -30,6 +30,23 @@ pub struct AssembleQs {
     pub s_files: Option<usize>,
     // Optional total prompt budget (tokens), informational
     pub s_total: Option<usize>,
+    // Per-call context formatting/budget overrides (non-persistent)
+    #[serde(default)]
+    pub context_format: Option<String>,
+    #[serde(default)]
+    pub include_provenance: Option<bool>,
+    #[serde(default)]
+    pub context_item_template: Option<String>,
+    #[serde(default)]
+    pub context_header: Option<String>,
+    #[serde(default)]
+    pub context_footer: Option<String>,
+    #[serde(default)]
+    pub joiner: Option<String>,
+    #[serde(default)]
+    pub context_budget_tokens: Option<usize>,
+    #[serde(default)]
+    pub context_item_budget_tokens: Option<usize>,
 }
 
 #[arw_admin(
@@ -60,19 +77,26 @@ pub async fn assemble_get(
         // Balanced: default k=12, diversity on, light self-consistency
         _ => (12usize, Some(0.3f64), false, 3u8),
     };
-    let k_default = q.k.unwrap_or(mode_k);
+    // Apply optional overrides from policy hints (retrieval K/diversity; MMR lambda)
+    let k_default = q.k.or(policy_hints.retrieval_k).unwrap_or(mode_k);
     let evid_k = q.evidence_k.unwrap_or(k_default);
-    let div_used: Option<f64> = match q.div {
-        Some(d) => Some(d),
-        None => mode_div,
-    };
+    let mmr_lambda = q
+        .div
+        .or(policy_hints.mmr_lambda)
+        .or(policy_hints.retrieval_div)
+        .or(mode_div);
     // Estimate pool size for coverage metrics (top-50 as proxy)
     let pool: Vec<serde_json::Value> =
         super::world::select_top_claims(proj_opt, q.q.as_deref().unwrap_or(""), 50).await;
     // Beliefs: use diversity-aware selection when requested or defaulted by mode
-    let items_initial = if let Some(div) = div_used {
-        super::world::select_top_claims_diverse(proj_opt, q.q.as_deref().unwrap_or(""), evid_k, div)
-            .await
+    let items_initial = if let Some(lambda) = mmr_lambda {
+        super::world::select_top_claims_diverse(
+            proj_opt,
+            q.q.as_deref().unwrap_or(""),
+            evid_k,
+            lambda,
+        )
+        .await
     } else {
         super::world::select_top_claims(proj_opt, q.q.as_deref().unwrap_or(""), evid_k).await
     };
@@ -118,6 +142,129 @@ pub async fn assemble_get(
         }
         used_tokens = used_tokens.saturating_add(est);
         items.push(it);
+    }
+    // Optional compression pass (hints.compression_aggr in 0..1): shorten verbose fields
+    if let Some(aggr) = policy_hints.compression_aggr {
+        let a = aggr.clamp(0.0, 1.0);
+        if a > 0.0 {
+            fn trim_field(obj: &mut serde_json::Map<String, serde_json::Value>, key: &str, a: f64) {
+                if let Some(serde_json::Value::String(s)) = obj.get_mut(key) {
+                    let len = s.len();
+                    if len > 0 {
+                        // Keep fraction (1 - 0.6*a): at a=1 keep ~40%
+                        let keep = ((len as f64) * (1.0 - 0.6 * a)).max(32.0) as usize;
+                        if len > keep {
+                            let mut t = s.chars().take(keep).collect::<String>();
+                            t.push('…');
+                            *s = t;
+                        }
+                    }
+                }
+            }
+            for v in items.iter_mut() {
+                if let Some(o) = v.as_object_mut() {
+                    trim_field(o, "text", a);
+                    trim_field(o, "trace", a);
+                    if let Some(serde_json::Value::Object(props)) = o.get_mut("props") {
+                        for k in ["note", "summary", "details", "desc"] {
+                            trim_field(props, k, a);
+                        }
+                    }
+                }
+            }
+            // Recompute evidence tokens after compression
+            used_tokens = 0;
+            for it in items.iter() {
+                used_tokens = used_tokens.saturating_add(est_tokens_belief(it));
+            }
+        }
+    }
+    // Strict budget pack (parity with evaluator) when hints or per-call overrides specify a total token budget
+    // pre-pack token snapshot (unused)
+    let mut aux_pack_before_tokens: Option<u64> = None;
+    let mut aux_pack_after_tokens: Option<u64> = None;
+    let mut aux_items_before: Option<usize> = None;
+    let mut aux_items_after: Option<usize> = None;
+    let mut aux_per_item_cap: Option<u64> = None;
+    fn estimate_tokens_item(v: &serde_json::Value) -> u64 {
+        let mut t = 6;
+        if let Some(id) = v.get("id").and_then(|x| x.as_str()) {
+            t += (id.len() as u64).div_ceil(4);
+        }
+        if let Some(s) = v.get("text").and_then(|x| x.as_str()) {
+            t += (s.len() as u64).div_ceil(4);
+        }
+        if let Some(s) = v.get("trace").and_then(|x| x.as_str()) {
+            t += (s.len() as u64).div_ceil(4);
+        }
+        if let Some(props) = v.get("props").and_then(|x| x.as_object()) {
+            for (_k, vv) in props.iter() {
+                if let Some(s) = vv.as_str() {
+                    t += (s.len() as u64).div_ceil(4);
+                }
+            }
+        }
+        t
+    }
+    fn trim_value_string_to_tokens(val: &mut String, max_tokens: u64) {
+        let max_chars = (max_tokens * 4).max(24) as usize;
+        if val.len() > max_chars {
+            let mut t = val.chars().take(max_chars).collect::<String>();
+            t.push('…');
+            *val = t;
+        }
+    }
+    fn trim_item_to_tokens(v: &mut serde_json::Value, cap_tokens: u64) {
+        if let Some(o) = v.as_object_mut() {
+            if let Some(serde_json::Value::String(s)) = o.get_mut("text") {
+                trim_value_string_to_tokens(s, cap_tokens);
+            }
+            if let Some(serde_json::Value::String(s)) = o.get_mut("trace") {
+                trim_value_string_to_tokens(s, cap_tokens / 2);
+            }
+            if let Some(serde_json::Value::Object(props)) = o.get_mut("props") {
+                for k in ["summary", "note", "details", "desc"] {
+                    if let Some(serde_json::Value::String(s)) = props.get_mut(k) {
+                        trim_value_string_to_tokens(s, cap_tokens / 4);
+                    }
+                }
+            }
+        }
+    }
+    let eff_budget_tokens = q
+        .context_budget_tokens
+        .or(policy_hints.context_budget_tokens)
+        .unwrap_or(0);
+    if eff_budget_tokens > 0 {
+        let total_budget = eff_budget_tokens;
+        let mut toks: Vec<u64> = items.iter().map(estimate_tokens_item).collect();
+        let mut total: i64 = toks.iter().sum::<u64>() as i64;
+        let budget = total_budget as i64;
+        aux_pack_before_tokens = Some(total as u64);
+        aux_items_before = Some(items.len());
+        if total > budget {
+            let per_cap = q
+                .context_item_budget_tokens
+                .or(policy_hints.context_item_budget_tokens)
+                .map(|x| x as u64)
+                .unwrap_or_else(|| (total_budget as u64 / (items.len().max(1) as u64)).max(24));
+            aux_per_item_cap = Some(per_cap);
+            for (i, it) in items.iter_mut().enumerate() {
+                if toks[i] > per_cap {
+                    trim_item_to_tokens(it, per_cap);
+                    toks[i] = estimate_tokens_item(it);
+                }
+            }
+            total = toks.iter().sum::<u64>() as i64;
+            while total > budget && !items.is_empty() {
+                items.pop();
+                toks.pop();
+                total = toks.iter().sum::<u64>() as i64;
+            }
+        }
+        used_tokens = toks.iter().sum::<u64>();
+        aux_pack_after_tokens = Some(used_tokens);
+        aux_items_after = Some(items.len());
     }
     // Include minimal policy + model context (policy_hints already loaded)
     let model_default = { default_model().read().await.clone() };
@@ -252,7 +399,7 @@ pub async fn assemble_get(
         }
         v
     }
-    let beliefs = with_ptrs_beliefs(items, proj_opt);
+    let beliefs = with_ptrs_beliefs(items.clone(), proj_opt);
     let files = with_ptrs_files(files);
     let intents = with_ptrs_events(intents);
     let actions = with_ptrs_events(actions);
@@ -267,10 +414,19 @@ pub async fn assemble_get(
             "query": q.q,
             "k": k_default,
             "evidence_k": evid_k,
-            "diversity": div_used,
+            "diversity": mmr_lambda,
             "counts": {"beliefs": coverage_selected, "files": files.len(), "intents": intents.len(), "actions": actions.len()},
             "coverage": {"pool": coverage_pool, "omitted": coverage_omitted, "recall_risk": coverage_omitted > 0},
             "usage": {"evidence_tokens": used_tokens, "evidence_budget": budget_tokens, "recent_intents_tokens": intents_tokens, "recent_actions_tokens": actions_tokens, "recent_files_tokens": files_tokens, "total_tokens": total_tokens_used},
+            "pack": {
+                "budget_tokens": if eff_budget_tokens>0 { Some(eff_budget_tokens) } else { None::<usize> },
+                "before_tokens": aux_pack_before_tokens,
+                "after_tokens": aux_pack_after_tokens,
+                "items_before": aux_items_before,
+                "items_after": aux_items_after,
+                "items_dropped": match (aux_items_before, aux_items_after) { (Some(a), Some(b)) => Some(a.saturating_sub(b) as u64), _ => None },
+                "per_item_cap_tokens": aux_per_item_cap,
+            },
         });
         crate::ext::corr::ensure_corr(&mut ev);
         state.bus.publish("Context.Assembled", &ev);
@@ -285,12 +441,143 @@ pub async fn assemble_get(
             state.bus.publish("Context.Coverage", &ev2);
         }
     }
+    // Render context preview string (format driven by hints)
+    fn render_context(items: &[serde_json::Value], hints: &super::Hints) -> String {
+        let fmt = hints
+            .context_format
+            .as_deref()
+            .map(|s| s.to_ascii_lowercase())
+            .unwrap_or_else(|| "bullets".to_string());
+        let include_prov = hints.include_provenance.unwrap_or(false);
+        let joiner = hints.joiner.as_deref().unwrap_or("\n");
+        match fmt.as_str() {
+            "jsonl" => {
+                let lines: Vec<String> = items
+                    .iter()
+                    .map(|v| {
+                        let mut o = serde_json::Map::new();
+                        if let Some(id) = v.get("id") {
+                            o.insert("id".into(), id.clone());
+                        }
+                        if let Some(t) = v.get("text") {
+                            o.insert("text".into(), t.clone());
+                        }
+                        if let Some(props) = v.get("props") {
+                            if include_prov {
+                                o.insert("props".into(), props.clone());
+                            }
+                        }
+                        if let Some(c) = v.get("confidence") {
+                            o.insert("confidence".into(), c.clone());
+                        }
+                        serde_json::to_string(&serde_json::Value::Object(o)).unwrap_or_default()
+                    })
+                    .collect();
+                lines.join(joiner)
+            }
+            "inline" => {
+                let parts: Vec<String> = items
+                    .iter()
+                    .map(|v| {
+                        let id = v.get("id").and_then(|x| x.as_str()).unwrap_or("");
+                        let txt = v
+                            .get("text")
+                            .and_then(|x| x.as_str())
+                            .or_else(|| {
+                                v.get("props")
+                                    .and_then(|p| p.get("summary"))
+                                    .and_then(|x| x.as_str())
+                            })
+                            .unwrap_or("");
+                        format!("[{}] {}", id, txt)
+                    })
+                    .collect();
+                parts.join(" · ")
+            }
+            "custom" => {
+                let tpl = hints
+                    .context_item_template
+                    .as_deref()
+                    .unwrap_or("- [{{id}}] {{text}}");
+                let mut out: Vec<String> = Vec::with_capacity(items.len());
+                for v in items.iter() {
+                    let id = v.get("id").and_then(|x| x.as_str()).unwrap_or("");
+                    let txt = v
+                        .get("text")
+                        .and_then(|x| x.as_str())
+                        .or_else(|| {
+                            v.get("props")
+                                .and_then(|p| p.get("summary"))
+                                .and_then(|x| x.as_str())
+                        })
+                        .unwrap_or("");
+                    let conf = v
+                        .get("confidence")
+                        .and_then(|x| x.as_f64())
+                        .map(|c| format!("{:.2}", c))
+                        .unwrap_or_default();
+                    let mut line = tpl
+                        .replace("{{id}}", id)
+                        .replace("{{text}}", txt)
+                        .replace("{{summary}}", txt)
+                        .replace("{{confidence}}", &conf);
+                    if include_prov {
+                        if let Some(props) = v.get("props").and_then(|p| p.as_object()) {
+                            if let Some(serde_json::Value::String(pv)) =
+                                props.get("provenance").cloned()
+                            {
+                                line = line.replace("{{provenance}}", &pv);
+                            }
+                        }
+                    }
+                    out.push(line);
+                }
+                out.join(joiner)
+            }
+            _ => {
+                let lines: Vec<String> = items
+                    .iter()
+                    .map(|v| {
+                        let id = v.get("id").and_then(|x| x.as_str()).unwrap_or("");
+                        let txt = v
+                            .get("text")
+                            .and_then(|x| x.as_str())
+                            .or_else(|| {
+                                v.get("props")
+                                    .and_then(|p| p.get("summary"))
+                                    .and_then(|x| x.as_str())
+                            })
+                            .unwrap_or("");
+                        format!("- [{}] {}", id, txt)
+                    })
+                    .collect();
+                lines.join(joiner)
+            }
+        }
+    }
+    let preview_context = if items.is_empty() {
+        String::new()
+    } else {
+        let body = render_context(&items, &policy_hints);
+        let header = policy_hints
+            .context_header
+            .clone()
+            .unwrap_or_else(|| "You may use the following context.".to_string());
+        let footer = policy_hints.context_footer.clone().unwrap_or_default();
+        if footer.is_empty() {
+            format!("{}\n{}", header, body)
+        } else {
+            format!("{}\n{}\n{}", header, body, footer)
+        }
+    };
+
     // Planner meta (mode-driven suggestions for downstream agents)
     let planner_meta = json!({
         "mode": mode_s,
         "verify_pass": verify_pass,
         "consistency": { "vote_k": vote_k },
-        "retrieval": { "k": k_default, "evidence_k": evid_k, "div": div_used }
+        "retrieval": { "k": k_default, "evidence_k": evid_k, "lambda": mmr_lambda, "hints": {"k": policy_hints.retrieval_k, "div": policy_hints.retrieval_div, "lambda": policy_hints.mmr_lambda} },
+        "compression": { "aggr": policy_hints.compression_aggr }
     });
     ok(json!({
         "beliefs": beliefs,
@@ -299,10 +586,25 @@ pub async fn assemble_get(
         "model": { "default": model_default },
         "project": { "name": proj, "notes": notes_path },
         "budget": { "slots": { "instructions": q.s_inst, "plan": q.s_plan, "policy": q.s_policy, "evidence": q.s_evid, "nice": q.s_nice, "intents": q.s_intents, "actions": q.s_actions, "files": q.s_files, "total": q.s_total },
-                     "requested": { "k": k_default, "evidence_k": evid_k, "diversity": div_used },
+                     "requested": { "k": k_default, "evidence_k": evid_k, "diversity": mmr_lambda },
                      "usage": { "evidence_tokens": used_tokens, "recent_intents_tokens": intents_tokens, "recent_actions_tokens": actions_tokens, "recent_files_tokens": files_tokens, "total_tokens": used_tokens + intents_tokens + actions_tokens + files_tokens } },
         "coverage": { "pool": coverage_pool, "selected": coverage_selected, "omitted": coverage_omitted, "recall_risk": coverage_omitted > 0, "evidence_tokens_used": used_tokens, "evidence_tokens_budget": budget_tokens },
-        "params": { "proj": q.proj, "q": q.q, "k": k_default, "evidence_k": evid_k, "div": div_used, "s_inst": q.s_inst, "s_plan": q.s_plan, "s_policy": q.s_policy, "s_evid": q.s_evid, "s_nice": q.s_nice }
+        "params": { "proj": q.proj, "q": q.q, "k": k_default, "evidence_k": evid_k, "div": mmr_lambda, "s_inst": q.s_inst, "s_plan": q.s_plan, "s_policy": q.s_policy, "s_evid": q.s_evid, "s_nice": q.s_nice },
+        "context_preview": preview_context,
+        "aux": {
+            "context": {
+                "budget_tokens": if eff_budget_tokens>0 { Some(eff_budget_tokens) } else { None::<usize> },
+                "before_tokens": aux_pack_before_tokens,
+                "after_tokens": aux_pack_after_tokens,
+                "items_before": aux_items_before,
+                "items_after": aux_items_after,
+                "items_dropped": match (aux_items_before, aux_items_after) { (Some(a), Some(b)) => Some(a.saturating_sub(b) as u64), _ => None },
+                "per_item_cap_tokens": aux_per_item_cap,
+                "compression_aggr": policy_hints.compression_aggr,
+                "retrieval": { "k": evid_k, "lambda": mmr_lambda }
+            },
+            "recents": { "tokens": intents_tokens + actions_tokens + files_tokens }
+        }
     }))
 }
 

@@ -10,7 +10,8 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
     // Service submenu
     let svc_start = MenuItem::with_id(app, "svc-start", "Start Service", true, None::<&str>)?;
     let svc_stop = MenuItem::with_id(app, "svc-stop", "Stop Service", true, None::<&str>)?;
-    let svc_sub = Submenu::with_id_and_items(app, "svc", "Service", true, &[&svc_start, &svc_stop])?;
+    let svc_sub =
+        Submenu::with_id_and_items(app, "svc", "Service", true, &[&svc_start, &svc_stop])?;
 
     // Debug submenu
     let dbg_browser = MenuItem::with_id(
@@ -22,14 +23,21 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
     )?;
     let dbg_window =
         MenuItem::with_id(app, "dbg-window", "Open Debug (Window)", true, None::<&str>)?;
-    let dbg_sub = Submenu::with_id_and_items(app, "dbg", "Debug", true, &[&dbg_browser, &dbg_window])?;
+    let dbg_sub =
+        Submenu::with_id_and_items(app, "dbg", "Debug", true, &[&dbg_browser, &dbg_window])?;
 
     // Windows submenu
     let w_events = MenuItem::with_id(app, "win-events", "Events", true, None::<&str>)?;
     let w_logs = MenuItem::with_id(app, "win-logs", "Logs", true, None::<&str>)?;
     let w_models = MenuItem::with_id(app, "win-models", "Models", true, None::<&str>)?;
     let w_conns = MenuItem::with_id(app, "win-conns", "Connections", true, None::<&str>)?;
-    let windows_sub = Submenu::with_id_and_items(app, "windows", "Windows", true, &[&w_events, &w_logs, &w_models, &w_conns])?;
+    let windows_sub = Submenu::with_id_and_items(
+        app,
+        "windows",
+        "Windows",
+        true,
+        &[&w_events, &w_logs, &w_models, &w_conns],
+    )?;
 
     // Quit
     let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
@@ -37,7 +45,7 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
     let menu = Menu::with_items(app, &[&svc_sub, &dbg_sub, &windows_sub, &quit_i])?;
 
     let _ = TrayIconBuilder::with_id("arw-launcher-tray")
-        .tooltip("ARW")
+        .tooltip("Agent Hub (ARW)")
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
             // Service
@@ -108,7 +116,11 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
             let _ = start_h.set_enabled(!is_up);
             let _ = stop_h.set_enabled(is_up);
             if let Some(tray) = app_h.tray_by_id("arw-launcher-tray") {
-                let _ = tray.set_tooltip(Some(if is_up { "ARW: online" } else { "ARW: offline" }));
+                let _ = tray.set_tooltip(Some(if is_up {
+                    "Agent Hub (ARW): online"
+                } else {
+                    "Agent Hub (ARW): offline"
+                }));
             }
             if prev != Some(is_up) {
                 // Only notify on real changes and if enabled in prefs
@@ -118,7 +130,7 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
                     let _ = app_h
                         .notification()
                         .builder()
-                        .title("ARW Service")
+                        .title("Agent Hub (ARW) Service")
                         .body(if is_up {
                             "Service is online"
                         } else {
@@ -164,7 +176,7 @@ fn main() {
                 "main",
                 tauri::WebviewUrl::App("index.html".into()),
             )
-            .title("ARW Launcher")
+            .title("Agent Hub (ARW) Launcher")
             .inner_size(480.0, 320.0)
             .build()?;
             #[cfg(all(desktop, not(test)))]

@@ -33,6 +33,7 @@ Port already in use
 ## Debug UI Missing
 - Symptom: `/debug` returns 404 or a minimal page.
 - Fix: ensure `ARW_DEBUG=1` for local dev, or run via the Desktop Launcher.
+- Tip: `GET /about` should still work without debug. It returns name/version and the `docs_url` link; if `/about` fails, check service logs and port.
 
 ## SSE Doesn’t Stream
 - Symptom: `curl` returns headers but shows no lines.
@@ -79,7 +80,7 @@ Free space via CAS GC
   Listen for `Models.CasGc` summary events.
 
 Metrics
-- Admin endpoint: `GET /admin/models/downloads_metrics` → `{ ewma_mbps }`.
+- Admin endpoint: `GET /admin/models/downloads_metrics` → `{ ewma_mbps, …counters }`.
 - SSE: subscribe to `Models.DownloadProgress` for status/progress.
 
 ## Launcher Build on Linux Fails

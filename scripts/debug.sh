@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# ARW — Quick debug runner (standard + interactive)
+# Agent Hub (ARW) — Quick debug runner (standard + interactive)
 # Thin wrapper over scripts/start.sh with ARW_DEBUG=1 and convenience flags.
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -58,7 +58,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 prompt_interactive() {
-  echo "ARW — Debug (interactive)"
+  echo "Agent Hub (ARW) — Debug (interactive)"
   read -r -p "HTTP port [$PORT]: " ans; PORT=${ans:-$PORT}
   read -r -p "Docs URL (optional) [${DOCS_URL}]: " ans; DOCS_URL=${ans:-$DOCS_URL}
   if [[ -z "${ADMIN_TOKEN:-}" ]]; then
@@ -95,4 +95,3 @@ if [[ $OPEN_UI -eq 1 ]]; then
   elif command -v open >/dev/null 2>&1; then open "$base/debug" || true
   else "$DIR/open-url.sh" "$base/debug" || true; fi
 fi
-

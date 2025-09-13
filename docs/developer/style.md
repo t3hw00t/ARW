@@ -33,6 +33,35 @@ Guidelines
 - Keep modules small and responsibilities clear.
 - Instrument with tracing at boundaries and errors.
 
+### Egress Ledger Helper (Builder)
+
+When appending to the egress ledger from Rust code, prefer the typed helper and builder:
+
+```rust
+// Build and append an "allow" entry (models.download completion)
+let entry = EgressLedgerEntry::allow("models.download")
+    .dest(dest_host.clone(), dest_port, dest_proto.clone())
+    .corr_id(corr_id.clone())
+    .bytes_in(bytes)
+    .duration_ms(elapsed_ms)
+    .build();
+Self::append_egress_ledger(&bus, entry).await;
+
+// Build and append a "deny" entry (request_failed)
+let entry = EgressLedgerEntry::deny("request_failed")
+    .dest(dest_host.clone(), dest_port, dest_proto.clone())
+    .corr_id(corr_id.clone())
+    .duration_ms(elapsed())
+    .extra(serde_json::json!({"error": e.to_string()}))
+    .build();
+Self::append_egress_ledger(&bus, entry).await;
+```
+
+Benefits
+- Consistent shape across allow/deny cases (decision, reason_code, dest, corr_id, bytes/duration).
+- Less duplication and fewer mistakes vs ad‑hoc JSON assembly.
+- Extensible: add fields in one place without touching call sites.
+
 ## Documentation Conventions
 
 - Title and H1: front‑matter `title:` and a single `#` H1 matching it.
@@ -48,6 +77,29 @@ Guidelines
 - Security: surface a “Minimum Secure Setup” box on Quickstart/Admin pages.
 - Terms: prefer glossary terms; add new ones to `docs/GLOSSARY.md`.
 - Formatting: keep sections short; prefer 80–100 char lines but don’t force awkward wraps.
+
+## API Style (OpenAPI/AsyncAPI)
+
+- OperationId: snake_case ending with `_doc` (e.g., `state_world_get_doc`). Enforced by Spectral in CI and pre‑push; code‑generated OpenAPI is linted too.
+- Tags: every operation has a non‑empty `tags` array. Prefer existing groups (Public, Public/Specs, Admin/*).
+- Descriptions: brief, one‑line imperative description for each operation. The pre‑commit hook can auto‑fill placeholders.
+- Deprecations: set `deprecated: true` and include `x-sunset: 'YYYY-MM-DDTHH:MM:SSZ'`. Runtime emits `Deprecation`, optional `Sunset`, and `Link: rel="deprecation"`.
+- Events: SSE envelopes include CloudEvents metadata under `ce` (`specversion`, `type`, `source`, `id`, `time`, `datacontenttype`). Document channels in AsyncAPI.
+- Consistency: ProblemDetails for 4xx/5xx; keep response shapes and pagination/query params consistent across similar endpoints.
+
+### Helpers & Scripts
+
+- Normalize/auto‑fill: `python3 scripts/ensure_openapi_descriptions.py` (also runs in pre‑commit & CI)
+- New endpoint scaffold:
+  - Preview: `just endpoint-new METHOD /path tag="Admin/Core"`
+  - Apply to spec: `just endpoint-add METHOD /path tag="Admin/Core" summary="..." desc="..."`
+- Release notes: `just docs-release-notes base=origin/main`
+- Interfaces local checks: `just interfaces-index`, `just interfaces-lint`, `just interfaces-diff`
+
+### Pre‑commit & Pre‑push
+
+- Pre‑commit: fmt/clippy/tests; generates interface index + deprecations and ensures descriptions/tags; lints specs when staged.
+- Pre‑push: OpenAPI sync check (codegen vs spec); Spectral lint on spec + generated OpenAPI; AsyncAPI diff (best‑effort); generates interface release notes (warn on drift).
 
 ## UI Conventions (Apps & Debug)
 

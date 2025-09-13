@@ -1,0 +1,323 @@
+name: Interfaces
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  catalog-index:
+    name: Generate index and check in sync
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install deps
+        run: pip install pyyaml
+      - name: Generate index.yaml
+        run: |
+          python scripts/interfaces_generate_index.py
+      - name: Generate deprecations doc
+        run: |
+          python scripts/generate_deprecations.py
+      - name: Ensure OpenAPI descriptions and tags
+        run: |
+          python scripts/ensure_openapi_descriptions.py || true
+          if ! git diff --quiet -- spec/openapi.yaml; then
+            echo '::error::spec/openapi.yaml was modified to add placeholder descriptions/tags; commit the changes.'
+            git --no-pager diff -- spec/openapi.yaml | sed -n '1,160p'
+            exit 1
+          fi
+      - name: Generate static OpenAPI JSON
+        run: |
+          python scripts/generate_openapi_json.py
+          if ! git diff --quiet -- docs/static/openapi.json; then
+            echo '::error::docs/static/openapi.json is out of date. Run scripts/generate_openapi_json.py and commit.'
+            git --no-pager diff -- docs/static/openapi.json | sed -n '1,160p'
+            exit 1
+          fi
+      - name: Diff check (ensure generated is committed)
+        run: |
+          set -e
+          if ! git diff --quiet -- interfaces/index.yaml; then
+            echo '::error::interfaces/index.yaml is out of date. Run scripts/interfaces_generate_index.py and commit.'
+            git --no-pager diff -- interfaces/index.yaml || true
+            exit 1
+          fi
+          if ! git diff --quiet -- docs/reference/deprecations.md; then
+            echo '::error::docs/reference/deprecations.md is out of date. Run scripts/generate_deprecations.py and commit.'
+            git --no-pager diff -- docs/reference/deprecations.md || true
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interface-index
+          path: interfaces/index.yaml
+
+  spectral-lint:
+    name: Lint OpenAPI/AsyncAPI
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Spectral CLI
+        run: npm install --no-save @stoplight/spectral-cli
+      - name: Lint specs
+        run: |
+          npx spectral lint -r quality/openapi-spectral.yaml spec/openapi.yaml
+          npx spectral lint -r quality/openapi-spectral.yaml spec/asyncapi.yaml
+
+  openapi-sync:
+    name: OpenAPI in sync with code
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+      - name: Generate OpenAPI from code
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ifc-gen
+          # Run in a temp CWD so auxiliary files land outside repo
+          (cd /tmp/ifc-gen && OPENAPI_OUT=/tmp/ifc-gen/openapi.yaml cargo run -p arw-svc --quiet || true)
+          test -s /tmp/ifc-gen/openapi.yaml || { echo '::error::Failed to generate OpenAPI via arw-svc'; exit 1; }
+      - name: Compare with spec/openapi.yaml
+        run: |
+          set -euo pipefail
+          python - << 'PY'
+          import sys, yaml
+          def strip_deprecated(obj):
+            if isinstance(obj, dict):
+              obj.pop('deprecated', None)
+              return {k: strip_deprecated(v) for k,v in obj.items()}
+            if isinstance(obj, list):
+              return [strip_deprecated(x) for x in obj]
+            return obj
+          a = yaml.safe_load(open('spec/openapi.yaml'))
+          b = yaml.safe_load(open('/tmp/ifc-gen/openapi.yaml'))
+          a = strip_deprecated(a)
+          b = strip_deprecated(b)
+          yaml.safe_dump(a, open('/tmp/spec.norm.yaml','w'), sort_keys=False)
+          yaml.safe_dump(b, open('/tmp/gen.norm.yaml','w'), sort_keys=False)
+          PY
+          diff -u /tmp/spec.norm.yaml /tmp/gen.norm.yaml > /tmp/openapi.diff || {
+            echo '::error::spec/openapi.yaml is out of sync with code-generated output (normalized).'
+            cat /tmp/openapi.diff || true
+            exit 1
+          }
+      - name: Spectral lint (generated OpenAPI)
+        run: |
+          npm install --no-save @stoplight/spectral-cli
+          npx spectral lint -r quality/openapi-spectral.yaml /tmp/ifc-gen/openapi.yaml
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: openapi-diff
+          path: /tmp/openapi.diff
+
+  api-diff:
+    name: Diff OpenAPI & AsyncAPI
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Prepare base and head specs
+        id: prep
+        run: |
+          set -euo pipefail
+          BASE_REF="${{ github.base_ref }}"
+          mkdir -p /tmp/ifc
+          if git show "origin/${BASE_REF}:spec/openapi.yaml" >/tmp/ifc/base.yaml 2>/dev/null; then
+            echo "base_openapi=/tmp/ifc/base.yaml" >> "$GITHUB_OUTPUT"
+          fi
+          cp spec/openapi.yaml /tmp/ifc/rev.yaml || true
+          if git show "origin/${BASE_REF}:spec/asyncapi.yaml" >/tmp/ifc/a_base.yaml 2>/dev/null; then
+            echo "base_asyncapi=/tmp/ifc/a_base.yaml" >> "$GITHUB_OUTPUT"
+          fi
+          cp spec/asyncapi.yaml /tmp/ifc/a_rev.yaml || true
+      - name: Diff OpenAPI (oasdiff)
+        if: steps.prep.outputs.base_openapi
+        run: |
+          docker run --rm -v /tmp/ifc:/tmp -w /tmp tufin/oasdiff:latest \
+            -format markdown -fail-on-breaking -base /tmp/base.yaml -revision /tmp/rev.yaml \
+            > /tmp/ifc/openapi-diff.md || (echo '::error::Breaking changes in OpenAPI'; cat /tmp/ifc/openapi-diff.md; exit 1)
+      - name: Install AsyncAPI diff
+        if: steps.prep.outputs.base_asyncapi
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Diff AsyncAPI
+        if: steps.prep.outputs.base_asyncapi
+        run: |
+          npm install --no-save @asyncapi/diff
+          npx @asyncapi/diff /tmp/ifc/a_base.yaml /tmp/ifc/a_rev.yaml --markdown > /tmp/ifc/asyncapi-diff.md || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: interface-diffs
+          path: /tmp/ifc/*.md
+
+  notes:
+    name: Build Interface Release Notes (artifact)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' || startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install AsyncAPI diff
+        run: npm install --no-save @asyncapi/diff
+      - name: Generate release notes
+        env:
+          BASE_REF: ${{ github.base_ref || 'origin/main' }}
+        run: |
+          python3 scripts/generate_interface_release_notes.py
+      - uses: actions/upload-artifact@v4
+        with:
+          name: interface-release-notes
+          path: docs/reference/interface-release-notes.md
+
+  prism-mock:
+    name: Mock server smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Install Prism
+        run: npm install --no-save @stoplight/prism-cli
+      - name: Start Prism (background)
+        run: |
+          npx prism mock spec/openapi.yaml -h 127.0.0.1 -p 4010 &
+          echo $! > PRISM_PID
+          sleep 3
+      - name: Smoke request
+        run: |
+          set -e
+          curl -sS http://127.0.0.1:4010/about | head -c 200 | sed 's/.*/OK/'
+      - name: Stop Prism
+        if: always()
+        run: |
+          kill $(cat PRISM_PID) 2>/dev/null || true
+
+  hygiene:
+    name: Descriptor hygiene
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Install deps
+        run: pip install pyyaml
+      - name: Check review/sunset dates
+        run: |
+          python - << 'PY'
+          import os, sys, yaml
+          from datetime import datetime, timezone
+          now = datetime.now(timezone.utc)
+          bad = 0
+          for root, _, files in os.walk('interfaces'):
+              if 'descriptor.yaml' in files:
+                  p = os.path.join(root, 'descriptor.yaml')
+                  try:
+                      y = yaml.safe_load(open(p))
+                  except Exception as e:
+                      print(f"::error file={p}::Failed to parse: {e}")
+                      bad += 1
+                      continue
+                  def past(dv):
+                      if not dv: return False
+                      try:
+                          dt = datetime.fromisoformat(str(dv).replace('Z', '+00:00'))
+                          return dt < now
+                      except: return False
+                  if past(y.get('sunset')):
+                      print(f"::error file={p}::sunset is in the past ({y.get('sunset')})")
+                      bad += 1
+                  ra = y.get('review_after')
+                  if past(ra):
+                      print(f"::error file={p}::review_after is past due ({ra})")
+                      bad += 1
+          sys.exit(bad)
+          PY
+
+  headers-check:
+    name: Deprecation/Sunset headers (if applicable)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+      - name: Find deprecated operations
+        id: find
+        run: |
+          python - << 'PY'
+          import yaml, json
+          y = yaml.safe_load(open('spec/openapi.yaml'))
+          hits = []
+          for p, ops in (y.get('paths') or {}).items():
+            for m, op in (ops or {}).items():
+              if m.lower() in ['get','post','put','patch','delete','options','head'] and (op or {}).get('deprecated'):
+                hits.append({'method': m.upper(), 'path': p})
+          print('found', len(hits), 'deprecated ops')
+          print('HITS=' + json.dumps(hits))
+          with open('hits.json','w') as f: json.dump(hits, f)
+          PY
+          echo "hits=$(cat hits.json)" >> "$GITHUB_OUTPUT"
+      - name: Start service
+        if: steps.find.outputs.hits != '[]'
+        run: |
+          ARW_DEBUG=1 ARW_PORT=8099 nohup cargo run -p arw-svc >/tmp/svc.log 2>&1 &
+          for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8099/healthz && break || sleep 1; done
+      - name: Verify headers for one deprecated op
+        if: steps.find.outputs.hits != '[]'
+        run: |
+          set -euo pipefail
+          hit=$(python -c "import json,os;h=json.loads(os.environ['H']);print(h[0]['method'],h[0]['path'])" H='${{ steps.find.outputs.hits }}')
+          method=$(echo "$hit" | awk '{print $1}')
+          path=$(echo "$hit" | awk '{print $2}')
+          echo "Testing $method $path"
+          code=0
+          out=$(curl -isS -X "$method" "http://127.0.0.1:8099$path" || true)
+          echo "$out" | tee /tmp/dep.out
+          echo "$out" | grep -i '^Deprecation:' >/dev/null || code=1
+          if [ $code -ne 0 ]; then echo '::error::Missing Deprecation header'; exit 1; fi
+          echo "$out" | grep -i '^Sunset:' >/dev/null && echo 'Sunset header present (ok)'
+          true

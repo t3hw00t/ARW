@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="540" viewBox="0 0 960 540">
+  <rect width="960" height="540" fill="#f8fafc"/>
+  <text x="40" y="56" font-family="sans-serif" font-size="22" fill="#111827">Experiments Panel (placeholder)</text>
+  <rect x="20" y="80" width="920" height="140" fill="#ffffff" stroke="#e5e7eb" rx="8"/>
+  <text x="40" y="110" font-family="sans-serif" font-size="16" fill="#374151">Definitions</text>
+  <text x="40" y="140" font-family="monospace" font-size="14" fill="#374151">exp-1 — name: λ+compression · variants: A,B,C [Run A/B] [Activate Winner]</text>
+  <text x="40" y="165" font-family="monospace" font-size="14" fill="#374151">exp-2 — name: vote-k sweep · variants: A,B [Run A/B] [Activate Winner]</text>
+  <rect x="20" y="240" width="920" height="260" fill="#ffffff" stroke="#e5e7eb" rx="8"/>
+  <text x="40" y="270" font-family="sans-serif" font-size="16" fill="#374151">Scoreboard</text>
+  <text x="40" y="300" font-family="monospace" font-size="14" fill="#374151">exp-1: [A 62.5% · 190 ms · ctx 380t/6i] [B 68.7% · 170 ms · ctx 420t/7i ★]</text>
+  <text x="40" y="325" font-family="monospace" font-size="14" fill="#374151">exp-2: [A 57.2% · 200 ms] [B 60.4% · 195 ms ★]</text>
+</svg>

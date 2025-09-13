@@ -234,7 +234,7 @@ See the Admin Endpoints guide for details and examples. Summary:
 - POST `/admin/models/cas_gc` — CAS GC once `{ttl_days}`; emits `Models.CasGc`.
 - GET  `/admin/models/by-hash/:sha256` — serve a CAS blob by sha256 (egress‑gated).
 - GET  `/admin/state/models_hashes` — list installed model hashes and sizes.
-- GET  `/admin/models/downloads_metrics` — `{ ewma_mbps }` throughput estimate.
+- GET  `/admin/models/downloads_metrics` — Lightweight metrics `{ ewma_mbps, started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total }`.
 
 Events (AsyncAPI)
 - `Models.DownloadProgress`: standardized progress/errors with optional `budget` and `disk`.

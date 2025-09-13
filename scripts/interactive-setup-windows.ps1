@@ -52,9 +52,9 @@ function Write-InstallLogDir($rel){
 Write-InstallLogDir '.arw\bin'
 Write-InstallLogDir '.arw\rust'
 
-Banner 'ARW — Interactive Setup (Windows)' 'Portable, local-first agent workspace'
+Banner 'Agent Hub (ARW) — Interactive Setup (Windows)' 'Portable, local-first agent workspace'
 Section 'Project'
-Write-Host '  Agents Running Wild (ARW) — local-first Rust workspace for personal AI agents.'
+Write-Host '  Agent Hub (ARW) — local-first Rust workspace for personal AI agents.'
 Write-Host '  Highlights: user-mode HTTP service + debug UI; macro-driven tools; event stream; portable packaging.'
 
 Section 'Host / Hardware'

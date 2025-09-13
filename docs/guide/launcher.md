@@ -32,7 +32,7 @@ API reference
 - See Developer: `docs/developer/tauri_api.md` for the exact Tauri APIs we use (submenu/menu patterns, tray, notifications) and upgrade notes.
 
 Status
-- Tray tooltip shows “ARW: online/offline”.
+- Tray tooltip shows “Agent Hub (ARW): online/offline”.
 - Start/Stop enable/disable reflects live health checks to `/healthz`.
 - Optional desktop notifications on state change; toggle in the Launcher UI.
 

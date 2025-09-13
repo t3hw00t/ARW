@@ -3,6 +3,9 @@ info:
   title: "arw-svc events"
   version: "0.1.0"
 defaultContentType: application/json
+tags:
+  - name: CloudEvents
+    description: Events include CloudEvents 1.0 metadata under `ce` (see components.schemas.EventEnvelope)
 channels:
   Service.Start:
     subscribe:
@@ -185,6 +188,31 @@ components:
           bytes_out: { type: integer }
           bytes_in: { type: integer }
           duration_ms: { type: integer }
+  schemas:
+    EventEnvelope:
+      type: object
+      description: Envelope delivered over SSE; includes CloudEvents metadata under `ce`.
+      properties:
+        time:
+          type: string
+          format: date-time
+        kind:
+          type: string
+          description: Event type (also mapped to CloudEvents `type`)
+        payload:
+          description: Event payload (varies by channel)
+        policy:
+          description: Optional gating capsule
+        ce:
+          type: object
+          description: CloudEvents 1.0 metadata
+          properties:
+            specversion: { type: string, enum: ["1.0"] }
+            type: { type: string }
+            source: { type: string }
+            id: { type: string }
+            time: { type: string, format: date-time }
+            datacontenttype: { type: string }
     ToolRan:
       name: Tool.Ran
       payload:

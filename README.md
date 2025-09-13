@@ -1,22 +1,71 @@
-# Agents Running Wild (ARW)
+# Agent Hub (ARW)
 
 <div align="left">
 
-[![CI](https://github.com/t3hw00t/Agent_Hub/actions/workflows/ci.yml/badge.svg)](https://github.com/t3hw00t/Agent_Hub/actions/workflows/ci.yml)
-[![Docs](https://img.shields.io/badge/docs-material%20for%20mkdocs-blue)](https://t3hw00t.github.io/Agent_Hub/)
+[![CI](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml/badge.svg)](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml)
+[![Docs](https://img.shields.io/badge/docs-material%20for%20mkdocs-blue)](https://t3hw00t.github.io/ARW/)
 [![Container](https://img.shields.io/badge/ghcr-arw--svc-blue?logo=docker)](https://ghcr.io/t3hw00t/arw-svc)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-informational)](#licensing)
-[![Release](https://img.shields.io/github/v/release/t3hw00t/Agent_Hub?display_name=tag)](https://github.com/t3hw00t/Agent_Hub/releases)
+[![Release](https://img.shields.io/github/v/release/t3hw00t/ARW?display_name=tag)](https://github.com/t3hw00t/ARW/releases)
 
 </div>
 
-10‑second pitch: local‑first agents with a unified object graph and a single live event stream (SSE). One service powers the Debug UI, CLI, and Recipes — all looking at the same state with strong observability.
+Your private AI control room that can scale and share when you choose.
 
-General direction: a unified object graph + single event stream. Every surface—Project Hub, Chat, Training Park, Managers (Agents/Models/Hardware/Permissions/Containers/Plugins)—is just a different lens on the same shared objects, driven by the same live events (SSE). This keeps the system coherent, inspectable, and easy to extend.
+In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” on your computer to research, plan, write, and build—while you stay in charge. It is local‑first and privacy‑first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.
 
-Full documentation → https://t3hw00t.github.io/Agent_Hub/
+Full documentation → https://t3hw00t.github.io/ARW/
 
-## Highlights
+General direction: a unified object graph + a single live event stream (SSE). Every surface—Project Hub, Chat, Training Park, and Managers (Agents/Models/Hardware/Permissions/Containers/Plugins)—is just a different lens on the same shared objects, driven by the same live events. This keeps the system coherent, inspectable, and easy to extend.
+
+## Why It’s Different
+
+- You decide access: files, web, mic, and camera are off until you grant time‑limited permission.
+- You can see and replay everything: each result shows sources, steps, tools used, and cost; any run can be snapshotted and compared later.
+- It grows with you: start on one laptop; when needed, invite other machines to help or co‑drive an agent in real time.
+- It is configurable, not brittle: frontier techniques arrive as “Logic Units” (safe strategy packs) you can turn on, A/B test, and roll back in one click.
+
+## What You Can Do
+
+- Turn messy folders, PDFs, and links into clean briefs, reports, or knowledge bases.
+- Run a focused research sprint: collect sources, extract facts, compare viewpoints, draft with citations.
+- Watch sites or docs for changes and get short, actionable updates.
+- Turn vague goals into concrete plans, tasks, and next steps.
+- Chat naturally to explore data and export both the answer and the evidence.
+
+## Scaling & Sharing (Opt‑In)
+
+- Pool compute: add your own GPU box or a trusted friend’s machine as a worker. Heavy jobs offload there under your rules and budget.
+- Live co‑drive: share an agent session so others can watch, suggest, or take the wheel with your approval. Risky actions still wait in a staging area for you to approve.
+- Clear boundaries: before anything leaves your machine, you see what would be sent, to whom, and the estimated cost. An egress ledger records it all.
+- Fair splits: contributions (GPU time, tokens, tasks) are metered per collaborator so shared project revenue can be split transparently later.
+
+## Safety & Control
+
+- Permission leases with timers and scopes; no silent escalation.
+- A project “world view” tracks key facts, open questions, and constraints so agents act on evidence, not guesses.
+- Budgets for time, tokens, and spend; the system stays within plan and shows the meter.
+- Signed plugins and sandboxed tools by default.
+
+## Improves Over Time
+
+- Logic Units library adds strategies like better retrieval, cautious tool use, or alternative reasoning styles—without code.
+- An experiment mode runs quick A/B checks on saved tasks so changes are data‑driven, not vibes‑driven.
+- A curated research watcher suggests new, safe‑to‑try configurations when something promising appears in the wild.
+
+## Who It’s For
+
+- People who want real help on real work without giving away their data.
+- Independent builders who prefer practical, local tools that can scale when needed.
+- Teams who want transparent collaboration, clear costs, and reproducible results.
+
+## Invitation
+
+If you want AI that is useful, private, and accountable—and that can team up across machines when it matters—Agent Hub is your control room. Start local. Share only when you choose. Stay in the loop the whole time.
+
+## Under the Hood
+
+The details that make ARW practical in real workflows.
 
 - Local‑first: runs offline by default; portable, per‑user state. See `docs/guide/offline_sync.md`.
 - Unified object graph: consistent state across Hub, Chat, and Training. See `docs/architecture/object_graph.md`.
@@ -48,6 +97,12 @@ Open http://127.0.0.1:8090 and visit `/debug` (set `ARW_DEBUG=1` for local dev).
 Docker (amd64/arm64); Native binaries: Windows (x64/ARM64), macOS (x64/ARM64), Linux (x64/ARM64)
 ```bash
 docker run --rm -p 8090:8090 ghcr.io/t3hw00t/arw-svc:latest
+```
+
+Verify endpoints
+```bash
+curl -sS http://127.0.0.1:8090/healthz
+curl -sS http://127.0.0.1:8090/about | jq
 ```
 
 ### Debug & Audit Helpers
@@ -88,7 +143,7 @@ scripts/audit.ps1 -Interactive
 
 <i>Screenshot:</i> see the Debug UI at `/debug` (add `ARW_DEBUG=1`).
 
-Screenshots → https://t3hw00t.github.io/Agent_Hub/guide/screenshots/
+Screenshots → https://t3hw00t.github.io/ARW/guide/screenshots/
 
 ## What’s Inside
 

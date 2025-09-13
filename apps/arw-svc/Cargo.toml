@@ -39,6 +39,8 @@ wgpu = { version = "0.19", optional = true }
 tokio-util = { version = "0.7", features = ["io"] }
 moka = { version = "0.12", features = ["sync"] }
 json-patch = "1"
+regex = "1"
+serde_yaml = "0.9"
 
 [features]
 default = []

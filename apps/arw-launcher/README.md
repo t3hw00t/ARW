@@ -1,4 +1,6 @@
-ARW Launcher (Tauri) — pre‑alpha
+Agent Hub (ARW) Launcher — pre‑alpha
+
+Your private AI control room that can scale and share when you choose. The launcher gives you a friendly tray to start/stop the local service and open the Debug UI.
 
 Minimal Tauri app that provides a system tray with Start/Stop Service and
 Open Debug UI actions. This is an initial integration to validate the Tauri

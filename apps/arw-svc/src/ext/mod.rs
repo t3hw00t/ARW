@@ -29,11 +29,15 @@ pub mod chat;
 pub mod chat_api;
 pub mod context_api;
 pub mod corr;
+pub mod distill;
 pub mod egress_api;
 pub mod experiments_api;
+pub mod experiments_engine;
 pub mod feedback_api;
 pub mod feedback_engine;
 pub mod feedback_engine_api;
+pub mod goldens;
+pub mod goldens_api;
 pub mod governor_api;
 pub mod hierarchy_api;
 pub mod logic_units_api;
@@ -43,13 +47,14 @@ pub mod models_api;
 pub mod patch_api;
 pub mod policy;
 pub mod read_model;
+pub mod redteam;
 pub mod review_api;
 pub mod self_model;
 pub mod self_model_agg;
 pub mod self_model_api;
+pub mod snappy;
 pub mod state_api;
 pub mod stats;
-pub mod snappy;
 pub mod tools_api;
 pub mod tools_exec;
 pub mod ui;
@@ -186,6 +191,8 @@ pub async fn load_persisted() {
             *st = fb;
         }
     }
+    // experiments winners (best-effort)
+    crate::ext::experiments_engine::load_persisted().await;
     // world model (best-effort)
     world::load_persisted().await;
 
@@ -346,6 +353,136 @@ pub fn extra_routes() -> Router<AppState> {
         .route(
             "/feedback/policy",
             get(feedback_engine_api::feedback_policy_get),
+        )
+        // goldens
+        .route("/goldens/list", get(goldens_api::goldens_list))
+        .route("/goldens/add", post(goldens_api::goldens_add))
+        .route("/goldens/run", post(goldens_api::goldens_run))
+        // experiment runner (A/B on goldens)
+        .route(
+            "/experiments/run",
+            post(|State(state): State<crate::AppState>, Json(body): Json<serde_json::Value>| async move {
+                let proj = body.get("proj").and_then(|s| s.as_str()).unwrap_or("default").to_string();
+                let exp_id = body.get("id").and_then(|s| s.as_str()).unwrap_or("exp").to_string();
+                let variants: Vec<String> = body
+                    .get("variants")
+                    .and_then(|v| v.as_array())
+                    .map(|a| a.iter().filter_map(|x| x.as_str().map(|s| s.to_string())).collect())
+                    .unwrap_or_else(|| vec!["A".into(), "B".into()]);
+                let budget_total_ms = body.get("budget_total_ms").and_then(|v| v.as_u64());
+                let out = experiments_engine::run_ab_on_goldens(
+                    &state,
+                    experiments_engine::RunPlan { proj, exp_id, variants, budget_total_ms },
+                )
+                .await;
+                ok(serde_json::to_value(out).unwrap())
+            }),
+        )
+        .route(
+            "/experiments/define",
+            post(|State(state): State<crate::AppState>, Json(body): Json<serde_json::Value>| async move {
+                let id = body.get("id").and_then(|s| s.as_str()).unwrap_or(&uuid::Uuid::new_v4().to_string()).to_string();
+                let name = body.get("name").and_then(|s| s.as_str()).unwrap_or(&id).to_string();
+                let variants = body.get("variants").cloned().unwrap_or(json!({}));
+                let vmap: std::collections::HashMap<String, experiments_engine::VariantCfg> = variants
+                    .as_object()
+                    .map(|m| m
+                        .iter()
+                        .filter_map(|(k, v)| serde_json::from_value::<experiments_engine::VariantCfg>(v.clone()).ok().map(|cfg| (k.clone(), cfg)))
+                        .collect())
+                    .unwrap_or_default();
+                let out = experiments_engine::start(&state, experiments_engine::StartReq { id: id.clone(), name, variants: vmap }).await;
+                ok(out)
+            }),
+        )
+        .route(
+            "/experiments/list",
+            get(|_state: State<crate::AppState>| async move {
+                let items = experiments_engine::list().await;
+                ok(json!({"items": items}))
+            }),
+        )
+        .route(
+            "/experiments/winners",
+            get(|_state: State<crate::AppState>| async move {
+                let winners = experiments_engine::list_winners().await;
+                ok(json!({"items": winners}))
+            }),
+        )
+        .route(
+            "/experiments/scoreboard",
+            get(|_state: State<crate::AppState>| async move {
+                let board = experiments_engine::list_scoreboard().await;
+                ok(json!({"items": board}))
+            }),
+        )
+        .route(
+            "/experiments/activate",
+            post(|State(state): State<crate::AppState>, Json(body): Json<serde_json::Value>| async move {
+                let id = body.get("id").and_then(|s| s.as_str()).unwrap_or("");
+                let variant = body.get("variant").and_then(|s| s.as_str()).unwrap_or("");
+                if id.is_empty() || variant.is_empty(){ return ok(json!({"error":"missing id/variant"})); }
+                if let Some(cfg) = experiments_engine::get_variant(id, variant).await {
+                    {
+                        let mut h = hints().write().await;
+                        if let Some(k) = cfg.retrieval_k { h.retrieval_k = Some(k); }
+                        if let Some(d) = cfg.retrieval_div { h.retrieval_div = Some(d); }
+                        if let Some(vk) = cfg.vote_k { h.vote_k = Some((vk as u8).clamp(0, 8)); }
+                        if let Some(l) = cfg.mmr_lambda { h.mmr_lambda = Some(l); }
+                        if let Some(c) = cfg.compression_aggr { h.compression_aggr = Some(c); }
+                        if let Some(tb) = cfg.context_budget_tokens { h.context_budget_tokens = Some(tb); }
+                        if let Some(pcap) = cfg.context_item_budget_tokens { h.context_item_budget_tokens = Some(pcap); }
+                        if let Some(fmt) = cfg.context_format.clone() { h.context_format = Some(fmt); }
+                        if let Some(pv) = cfg.include_provenance { h.include_provenance = Some(pv); }
+                        if let Some(tpl) = cfg.context_item_template.clone() { h.context_item_template = Some(tpl); }
+                        if let Some(hdr) = cfg.context_header.clone() { h.context_header = Some(hdr); }
+                        if let Some(ftr) = cfg.context_footer.clone() { h.context_footer = Some(ftr); }
+                        if let Some(jn) = cfg.joiner.clone() { h.joiner = Some(jn); }
+                    }
+                    persist_orch().await;
+                    let mut payload = json!({
+                        "id": id,
+                        "variant": variant,
+                        "applied": {
+                            "retrieval_k": cfg.retrieval_k,
+                            "mmr_lambda": cfg.mmr_lambda,
+                            "retrieval_div": cfg.retrieval_div,
+                            "compression_aggr": cfg.compression_aggr,
+                            "vote_k": cfg.vote_k,
+                            "context_budget_tokens": cfg.context_budget_tokens,
+                            "context_item_budget_tokens": cfg.context_item_budget_tokens,
+                            "context_format": cfg.context_format,
+                            "include_provenance": cfg.include_provenance,
+                            "context_item_template": cfg.context_item_template,
+                            "context_header": cfg.context_header,
+                            "context_footer": cfg.context_footer,
+                            "joiner": cfg.joiner
+                        }
+                    });
+                    crate::ext::corr::ensure_corr(&mut payload);
+                    state.bus.publish("Experiment.Activated", &payload);
+                    return ok(json!({"ok": true}));
+                }
+                ok(json!({"ok": false, "error": "not_found"}))
+            }),
+        )
+        // safety red-team checks (CI-friendly)
+        .route(
+            "/safety/checks",
+            post(|Json(body): Json<serde_json::Value>| async move {
+                let patches = body
+                    .get("patches")
+                    .and_then(|v| v.as_array())
+                    .cloned()
+                    .unwrap_or_default();
+                let issues = redteam::check_patches_for_risks(&patches);
+                ok(json!({"issues": issues}))
+            }),
+        )
+        // distillation
+        .route(
+            "/distill/run",
+            post(|State(state): State<crate::AppState>| async move { ok(distill::distill_once(&state).await) }),
         )
         .route(
             "/feedback/versions",
@@ -591,8 +728,11 @@ mod tests {
 pub async fn about() -> impl IntoResponse {
     let docs_url = std::env::var("ARW_DOCS_URL")
         .ok()
-        .or(Some("https://t3hw00t.github.io/Agent_Hub/".to_string()));
+        .or(Some("https://t3hw00t.github.io/ARW/".to_string()));
     Json(json!({
+        "name": "Agent Hub (ARW)",
+        "tagline": "Your private AI control room that can scale and share when you choose.",
+        "description": "Agent Hub (ARW) lets you run your own team of AI helpers on your computer to research, plan, write, and build—while you stay in charge. It is local-first and privacy-first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.",
         "service": "arw-svc",
         "version": env!("CARGO_PKG_VERSION"),
         "role": format!("{:?}", hier::get_state().self_node.role),
@@ -743,6 +883,32 @@ pub(crate) struct Hints {
     pub(crate) mode: Option<String>,
     #[serde(default)]
     pub(crate) slo_ms: Option<u64>,
+    #[serde(default)]
+    pub(crate) retrieval_k: Option<usize>,
+    #[serde(default)]
+    pub(crate) retrieval_div: Option<f64>,
+    #[serde(default)]
+    pub(crate) mmr_lambda: Option<f64>,
+    #[serde(default)]
+    pub(crate) compression_aggr: Option<f64>,
+    #[serde(default)]
+    pub(crate) vote_k: Option<u8>,
+    #[serde(default)]
+    pub(crate) context_budget_tokens: Option<usize>,
+    #[serde(default)]
+    pub(crate) context_item_budget_tokens: Option<usize>,
+    #[serde(default)]
+    pub(crate) context_format: Option<String>,
+    #[serde(default)]
+    pub(crate) include_provenance: Option<bool>,
+    #[serde(default)]
+    pub(crate) context_item_template: Option<String>,
+    #[serde(default)]
+    pub(crate) context_header: Option<String>,
+    #[serde(default)]
+    pub(crate) context_footer: Option<String>,
+    #[serde(default)]
+    pub(crate) joiner: Option<String>,
 }
 static HINTS: OnceLock<RwLock<Hints>> = OnceLock::new();
 pub(crate) fn hints() -> &'static RwLock<Hints> {
@@ -753,6 +919,19 @@ pub(crate) fn hints() -> &'static RwLock<Hints> {
             http_timeout_secs: None,
             mode: None,
             slo_ms: None,
+            retrieval_k: None,
+            retrieval_div: None,
+            mmr_lambda: None,
+            compression_aggr: None,
+            vote_k: None,
+            context_budget_tokens: None,
+            context_item_budget_tokens: None,
+            context_format: None,
+            include_provenance: None,
+            context_item_template: None,
+            context_header: None,
+            context_footer: None,
+            joiner: None,
         })
     })
 }
@@ -780,6 +959,45 @@ async fn governor_hints_set(
         }
         if req.slo_ms.is_some() {
             h.slo_ms = req.slo_ms;
+        }
+        if req.retrieval_k.is_some() {
+            h.retrieval_k = req.retrieval_k;
+        }
+        if req.retrieval_div.is_some() {
+            h.retrieval_div = req.retrieval_div;
+        }
+        if req.mmr_lambda.is_some() {
+            h.mmr_lambda = req.mmr_lambda;
+        }
+        if req.compression_aggr.is_some() {
+            h.compression_aggr = req.compression_aggr;
+        }
+        if req.vote_k.is_some() {
+            h.vote_k = req.vote_k;
+        }
+        if req.context_budget_tokens.is_some() {
+            h.context_budget_tokens = req.context_budget_tokens;
+        }
+        if req.context_item_budget_tokens.is_some() {
+            h.context_item_budget_tokens = req.context_item_budget_tokens;
+        }
+        if req.context_format.is_some() {
+            h.context_format = req.context_format.clone();
+        }
+        if req.include_provenance.is_some() {
+            h.include_provenance = req.include_provenance;
+        }
+        if req.context_item_template.is_some() {
+            h.context_item_template = req.context_item_template.clone();
+        }
+        if req.context_header.is_some() {
+            h.context_header = req.context_header.clone();
+        }
+        if req.context_footer.is_some() {
+            h.context_footer = req.context_footer.clone();
+        }
+        if req.joiner.is_some() {
+            h.joiner = req.joiner.clone();
         }
     }
     // Apply dynamic HTTP timeout immediately if provided

@@ -35,7 +35,7 @@ CAS (Content‑Addressable Store)
 Downloads Metrics (EWMA)
 - A persisted moving average of observed download throughput used to make admission decisions under hard budgets.
 - Stored in `{state_dir}/downloads.metrics.json` as `{ ewma_mbps }`.
-- Read via `GET /admin/models/downloads_metrics` for UI/status displays.
+- Read via `GET /admin/models/downloads_metrics` for UI/status displays (returns EWMA + counters).
 
 Resume Validators
 - Metadata captured from remote responses (`ETag`, `Last-Modified`) and stored alongside partial files.

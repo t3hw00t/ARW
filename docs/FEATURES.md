@@ -4,16 +4,36 @@ title: Features
 
 # Features
 
-Updated: 2025-09-10 (cluster/gating/hierarchy updates)
+Updated: 2025-09-13
 
-## Summary
+## Outcomes
+- Turn messy folders, PDFs, and links into clean briefs, reports, or knowledge bases.
+- Run focused research sprints: collect sources, extract facts, compare viewpoints, and draft with citations.
+- Watch sites or docs for changes and get short, actionable updates.
+- Turn vague goals into concrete plans, tasks, and next steps.
+- Chat to explore data and export both answers and evidence.
+
+## Why It’s Different
+- Local‑first and privacy‑first by default; you decide access with time‑limited permission leases.
+- Unified object graph with a single live event stream (SSE); every surface looks at the same state.
+- Inspectable and replayable runs with sources, steps, tools used, and cost.
+- Configurable strategies via Logic Units you can A/B, apply, and roll back without code changes.
+
+## Scaling & Sharing (Opt‑In)
+- Pool compute to your own GPU box or a trusted collaborator’s machine; offload under your rules and budget.
+- Live co‑drive sessions; risky actions wait in a staging area for approval.
+- Clear boundaries: egress previews and a ledger of what left and why.
+- Fair splits across GPU time, tokens, and tasks.
+
+## Under the Hood
 - Open, local‑first agent runtime with versioned tool schemas and portable packaging. Rust core; optional plugins; thin UIs.
 
-## Core Capabilities
+### Core Capabilities
 - Interop: MCP (client/server), HTTP/WS with OpenAPI 3.1 + AsyncAPI. See: API and Schema (API_AND_SCHEMA.md).
 - Observability: OpenTelemetry traces/logs/metrics; in‑process event bus (optional journal, SSE replay). See: Admin Endpoints (guide/admin_endpoints.md).
 - Caching layers: Action Cache with CAS and singleflight; digest‑addressed blob serving with strong validators; read‑models over SSE (JSON Patch deltas with coalescing); llama.cpp prompt caching. See: Architecture → Caching Layers.
 - Security & Policy: Central gating keys and deny contracts; ingress/egress guards; Policy Capsules; roadmap RPU for signatures/ABAC. See: Security Hardening (guide/security_hardening.md), Policy (POLICY.md).
+ - Self‑improvement loop: goldens + rewards, A/B runner (with shadow), config patch engine, policy‑aware tuner, calibrated self‑model, nightly distillation, and a persisted experiments scoreboard + winners. See: Experiments (guide/experiments_ab.md).
 - Egress control (planned): policy‑backed, per‑node egress gateway + DNS guard with project‑level network posture and an egress ledger. See: Architecture → Egress Firewall; Guide → Network Posture.
  - Lightweight mitigations (planned): memory quarantine; project isolation; belief‑diff review; cluster manifest pinning; hardened headless browsing; safe archive handling; DNS anomaly guard; accelerator zeroing; event sequencing; context rehydration check. See: Architecture → Lightweight Mitigations.
  - Models: enhanced downloader with resume, checksum, EWMA admission, disk reserve checks, content‑disposition filenames, cross‑platform finalize, and a simple concurrency limiter (`ARW_MODELS_MAX_CONC`).

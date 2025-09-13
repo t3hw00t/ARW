@@ -41,7 +41,7 @@ Signals and helpers
 - `Models.ManifestWritten` is emitted after writing `<state>/models/<id>.json`.
 - Partial downloads keep `<name>.part` plus `<name>.part.meta` (resume validators: `etag`, `last_modified`) for `If-Range` safety.
 - Optional preflight (`ARW_DL_PREFLIGHT=1`) performs HEAD to capture `Content-Length` and validators and to enforce size/quota early.
-- Throughput EWMA is persisted in `{state_dir}/downloads.metrics.json` and used to admit downloads under hard budgets. Admins can read it via `GET /admin/models/downloads_metrics`.
+- Throughput EWMA is persisted in `{state_dir}/downloads.metrics.json` and used to admit downloads under hard budgets. Admins can read it (along with live counters) via `GET /admin/models/downloads_metrics`.
  - Schema: the per‑ID model manifest is defined at `spec/schemas/model_manifest.json`.
 
 GC & quotas

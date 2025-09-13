@@ -349,10 +349,7 @@ pub(crate) async fn routes_for_analysis() -> HashMap<String, (f64, u64, u64)> {
 /// Snapshot of p95 latency per path (ms)
 pub(crate) async fn routes_p95_by_path() -> HashMap<String, u64> {
     let rs = route_stats_cell().read().await.clone();
-    rs.by_path
-        .into_iter()
-        .map(|(k, v)| (k, v.p95_ms))
-        .collect()
+    rs.by_path.into_iter().map(|(k, v)| (k, v.p95_ms)).collect()
 }
 
 pub(crate) async fn event_kind_count(kind: &str) -> u64 {

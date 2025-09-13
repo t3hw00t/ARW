@@ -3,7 +3,7 @@
   "permission": [
     {
       "identifier": "arw-commands",
-      "description": "Allow invoking ARW launcher commands from the UI.",
+      "description": "Allow invoking Agent Hub (ARW) launcher commands from the UI.",
       "commands": {
         "allow": [
       "check_service_health",

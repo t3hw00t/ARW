@@ -1,0 +1,96 @@
+extends:
+  - spectral:oas
+  - spectral:asyncapi
+
+rules:
+  # Baseline adjustments
+  oas3-api-servers: off  # not documenting servers in this repo
+  operation-operationId-unique: error
+  operation-tags: error
+  # Soften common hygiene warnings to hints while we retrofit descriptions
+  operation-description: hint
+  operation-tag-defined: hint
+  # Keep default 'operation-summary-or-description' (from spectral:oas); do not force summary alone
+  info-contact: off
+  info-license: off
+  asyncapi-server-no-trailing-slash: off
+
+  # OperationId style: snake_case with _doc suffix (matches codegen wrappers)
+  x-operationId-style:
+    description: operationId should be snake_case and end with _doc
+    message: "operationId '{{value}}' should be snake_case and end with _doc"
+    severity: error
+    given: $.paths[*][*].operationId
+    then:
+      - field: ""
+        function: pattern
+        functionOptions:
+          match: "^[a-z0-9_]+_doc$"
+
+  # Error responses should use ProblemDetails
+  x-error-problem-details:
+    description: 4xx/5xx responses must use ProblemDetails schema
+    message: Error responses for {{path}},{{method}} must use ProblemDetails
+    severity: warn
+    given: $.paths[*][*].responses[/(4|5)\d{2}/]
+    then:
+      - field: content.application/json.schema.$ref
+        function: pattern
+        functionOptions:
+          match: "^#\/components\/schemas\/ProblemDetails$"
+
+  # Deprecation hygiene: summary or description should clearly flag deprecation
+  x-deprecated-summary:
+    description: Deprecated operations should include 'Deprecated' in summary or description
+    message: "Deprecated operation should include 'Deprecated' in summary or description"
+    severity: warn
+    given: $.paths[*][*][?(@.deprecated==true)]
+    then:
+      - field: summary
+        function: pattern
+        functionOptions:
+          match: (?i)deprecated
+
+  # Deprecated operations must declare x-sunset with ISO8601 date
+  x-deprecated-require-sunset:
+    description: Deprecated operations must specify x-sunset (RFC 8594 aligned)
+    message: "Deprecated operation missing x-sunset (ISO8601)"
+    severity: error
+    given: $.paths[*][*][?(@.deprecated==true)]
+    then:
+      - field: x-sunset
+        function: truthy
+  x-deprecated-sunset-iso8601:
+    description: x-sunset should be an ISO8601 timestamp (Z-normalized)
+    message: "x-sunset should be ISO8601 (e.g., 2026-01-01T00:00:00Z)"
+    severity: warn
+    given: $.paths[*][*].x-sunset
+    then:
+      function: pattern
+      functionOptions:
+        match: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+      - field: description
+        function: pattern
+        functionOptions:
+          match: (?i)deprecated
+
+  # GET list endpoints should support pagination (soft rule)
+  x-pagination-list-get:
+    description: List GET endpoints should expose pagination params
+    message: "Consider adding 'page' and 'page_size' or 'limit' query params"
+    severity: hint
+    given: $.paths[*/list].get
+    then:
+      function: defined
+      field: parameters
+
+  # Events channel naming: Title.Case with dot segments (AsyncAPI)
+  x-asyncapi-channel-naming:
+    description: Event channel names should use Domain.Event format
+    message: "Channel '{{property}}' should match ^[A-Za-z]+(\.[A-Za-z][A-Za-z0-9]+)+$"
+    severity: warn
+    given: $.channels.*~
+    then:
+      function: pattern
+      functionOptions:
+        match: "^[A-Za-z]+(\.[A-Za-z][A-Za-z0-9]+)+$"

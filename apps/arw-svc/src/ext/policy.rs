@@ -125,12 +125,12 @@ struct FbPolicyCfg {
 fn load_cfg() -> Option<FbPolicyCfg> {
     static CFG: OnceLock<Option<FbPolicyCfg>> = OnceLock::new();
     CFG.get_or_init(|| {
-        let p = std::path::Path::new("configs/feedback.toml");
-        if let Ok(s) = std::fs::read_to_string(p) {
-            toml::from_str::<FbPolicyCfg>(&s).ok()
-        } else {
-            None
+        if let Some(p) = arw_core::resolve_config_path("configs/feedback.toml") {
+            if let Ok(s) = std::fs::read_to_string(p) {
+                return toml::from_str::<FbPolicyCfg>(&s).ok();
+            }
         }
+        None
     })
     .clone()
 }

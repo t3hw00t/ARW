@@ -10,6 +10,14 @@ Updated: 2025-09-12
 - Build and test on Linux and Windows for every push and PR.
 - Lint and format checks keep changes tidy.
 
+### Interfaces workflow (APIs, events, tools)
+- Lint: Spectral on `spec/openapi.yaml` and `spec/asyncapi.yaml` using `quality/openapi-spectral.yaml`.
+- Diff: OpenAPI via `tufin/oasdiff` (breaking changes fail), AsyncAPI via `@asyncapi/diff` (markdown artifact).
+- Sync: Generate OpenAPI from code (`OPENAPI_OUT`) and normalize‑diff against `spec/openapi.yaml`.
+- Mock: Boot Prism on OpenAPI and smoke a request.
+- Hygiene: fail if any descriptor has `review_after` or `sunset` past due.
+- Docs: generate “Interface Deprecations” and attach “Interface Release Notes” as artifacts.
+
 ## Artifacts
 - Packaging scripts assemble a portable bundle with binaries and configs.
 - Windows and Linux bundles are uploaded as CI artifacts.
@@ -60,6 +68,13 @@ lychee --no-progress --config .lychee.toml README.md docs/**
 python3 -m venv .venv && . .venv/bin/activate
 pip install mkdocs-material mkdocs mkdocs-git-revision-date-localized-plugin
 mkdocs build --strict
+
+# 5) Interfaces (local)
+just interfaces-index       # regenerate interfaces/index.yaml
+just interfaces-lint        # spectral lint OpenAPI/AsyncAPI
+just interfaces-diff        # OpenAPI diff vs origin/main (Docker)
+just docs-deprecations      # generate deprecations doc
+just docs-release-notes     # generate release notes (BASE_REF=... override)
 ```
 
 Tips

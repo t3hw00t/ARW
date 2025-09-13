@@ -13,6 +13,8 @@ Centralized reference for ARW environment variables and common flags. Defaults f
 ## Service
 - `ARW_PORT`: HTTP listen port (default: `8090`).
 - `ARW_PORTABLE`: `1` keeps state/cache/logs near the app bundle.
+ - `ARW_CONFIG`: absolute path to the primary config TOML (overrides discovery).
+ - `ARW_CONFIG_DIR`: base directory to search for additional configs (e.g., `configs/gating.toml`, `configs/feedback.toml`). When unset, the service also probes beside the executable and the current directory.
 
 ## Admin & Security
 - `ARW_ADMIN_TOKEN`: required token for admin endpoints.
@@ -26,7 +28,7 @@ Centralized reference for ARW environment variables and common flags. Defaults f
 - `ARW_DEBUG`: `1` enables local debug mode; do not use in production.
 
 ## Docs & Debug UI
-- `ARW_DOCS_URL`: URL to your hosted docs for UI links.
+- `ARW_DOCS_URL`: URL to your hosted docs for UI links. Appears in `GET /about` as `docs_url` so clients can discover your manual.
 - Debug UI is accessible at `/debug` when enabled.
 
 ## State & Paths
@@ -36,6 +38,10 @@ Centralized reference for ARW environment variables and common flags. Defaults f
 Defaults
 - Windows: per-user Known Folders via `directories` (e.g., LocalAppData for data/logs, Roaming for config). No writes to Program Files/HKLM by default.
 - Unix: XDG‑compatible locations (e.g., `~/.local/share`, `~/.cache`, `~/.config`).
+
+Config discovery (CWD‑independent)
+- Primary config: if `ARW_CONFIG` is not set, ARW looks for `configs/default.toml` in the following locations (first hit wins): `ARW_CONFIG_DIR`, beside the executable, parent of the executable (useful in dev trees), repository root (dev), then the current directory.
+- Optional configs (e.g., `configs/gating.toml`, `configs/feedback.toml`) follow the same search order via `ARW_CONFIG_DIR` and executable‑relative paths.
 
 ## Chat & Models
 - `ARW_LLAMA_URL`: llama.cpp server endpoint (e.g., `http://127.0.0.1:8080`).

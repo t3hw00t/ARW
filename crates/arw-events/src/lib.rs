@@ -14,6 +14,21 @@ pub struct Envelope {
     pub payload: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub policy: Option<arw_protocol::GatingCapsule>,
+    /// Optional CloudEvents metadata (structured as an extension for SSE)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ce: Option<CloudEventMeta>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CloudEventMeta {
+    pub specversion: String,
+    #[serde(rename = "type")]
+    pub type_name: String,
+    pub source: String,
+    pub id: String,
+    pub time: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub datacontenttype: Option<String>,
 }
 
 /// Pluggable event bus API. For now subscribe returns a local channel receiver
@@ -110,10 +125,18 @@ impl EventBus for LocalBus {
         let val = serde_json::to_value(payload)
             .unwrap_or_else(|_| serde_json::json!({ "_ser": "error" }));
         let env = Envelope {
-            time: now,
+            time: now.clone(),
             kind: kind.to_string(),
             payload: val,
             policy: None,
+            ce: Some(CloudEventMeta {
+                specversion: "1.0".into(),
+                type_name: kind.to_string(),
+                source: std::env::var("ARW_EVENT_SOURCE").unwrap_or_else(|_| "arw-svc".into()),
+                id: now.clone(),
+                time: now.clone(),
+                datacontenttype: Some("application/json".into()),
+            }),
         };
         self.counters.published.fetch_add(1, Ordering::Relaxed);
         match self.tx.send(env.clone()) {
@@ -145,10 +168,18 @@ impl EventBus for LocalBus {
         let val = serde_json::to_value(payload)
             .unwrap_or_else(|_| serde_json::json!({ "_ser": "error" }));
         let env = Envelope {
-            time: now,
+            time: now.clone(),
             kind: kind.to_string(),
             payload: val,
             policy,
+            ce: Some(CloudEventMeta {
+                specversion: "1.0".into(),
+                type_name: kind.to_string(),
+                source: std::env::var("ARW_EVENT_SOURCE").unwrap_or_else(|_| "arw-svc".into()),
+                id: now.clone(),
+                time: now.clone(),
+                datacontenttype: Some("application/json".into()),
+            }),
         };
         self.counters.published.fetch_add(1, Ordering::Relaxed);
         match self.tx.send(env.clone()) {

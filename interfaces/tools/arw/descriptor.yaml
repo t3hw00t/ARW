@@ -1,0 +1,18 @@
+id: toolset.arw
+kind: mcp
+title: ARW MCP Tools
+owner: platform
+lifecycle: experimental
+stability_since: 2025-01-01
+sunset: null
+tech:
+  protocol: mcp
+  schema:
+    mcp: ../../../spec/mcp-tools.json
+docs:
+  human: ../../../docs/reference/api.md
+drift_checks:
+  diff_base_branch: main
+change_policy:
+  semver: minor-compatible
+

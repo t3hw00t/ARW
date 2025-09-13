@@ -2,7 +2,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# ARW — Supply-chain and code audit helper (PowerShell)
+# Agent Hub (ARW) — Supply-chain and code audit helper (PowerShell)
 
 param(
   [switch]$Interactive,
@@ -74,7 +74,7 @@ if ($Interactive) {
   $runDeny = -not $NoDeny
   while ($true) {
     Write-Host "";
-    Write-Host "ARW — Audit Menu" -ForegroundColor White
+    Write-Host "Agent Hub (ARW) — Audit Menu" -ForegroundColor White
     Write-Host "  Root: $Root" -ForegroundColor DarkCyan
     $hasAudit = [bool](Get-Command cargo-audit -ErrorAction SilentlyContinue)
     $hasDeny  = [bool](Get-Command cargo-deny  -ErrorAction SilentlyContinue)

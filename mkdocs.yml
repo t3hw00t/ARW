@@ -1,5 +1,7 @@
-site_name: ARW
-repo_url: https://github.com/t3hw00t/Agent_Hub
+site_name: Agent Hub (ARW)
+site_description: "Your private AI control room that can scale and share when you choose. Run a local-first, privacy-first team of AI helpers — and only pool compute with trusted peers when needed."
+repo_url: https://github.com/t3hw00t/ARW
+site_url: https://t3hw00t.github.io/ARW/
 theme:
   name: material
   features:
@@ -33,11 +35,15 @@ markdown_extensions:
   - pymdownx.snippets
 nav:
   - Home: index.md
+  - Overview:
+      - Features: FEATURES.md
+      - Concepts: guide/concepts.md
   - Tutorials:
-      - Try ARW in 2 Minutes: guide/quickstart.md
+      - Quickstart: guide/quickstart.md
   - How‑to:
       - Models Download: guide/models_download.md
       - Subscribe to Events (SSE): guide/events_sse.md
+      - Scaling & Sharing: guide/scaling_sharing.md
       - Security Hardening: guide/security_hardening.md
       - Network Posture: guide/network_posture.md
       - Desktop Launcher: guide/launcher.md
@@ -46,6 +52,8 @@ nav:
       - Troubleshooting: guide/troubleshooting.md
   - Reference:
       - API Reference: reference/api.md
+      - Interface Deprecations: reference/deprecations.md
+      - Interface Catalog: reference/interface-catalog.md
       - Configuration: CONFIGURATION.md
       - CLI Reference: reference/cli.md
       - Schemas:
@@ -112,4 +120,5 @@ nav:
       - Release Notes: release_notes.md
       - Roadmap: ROADMAP.md
       - Interface Roadmap: INTERFACE_ROADMAP.md
+      - Interface Release Notes: reference/interface-release-notes.md
       - Backlog: BACKLOG.md

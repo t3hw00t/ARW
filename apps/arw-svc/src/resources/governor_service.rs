@@ -30,6 +30,7 @@ impl GovernorService {
         serde_json::to_value(h).unwrap_or(json!({}))
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub async fn hints_set_values(
         &self,
         state: &AppState,
@@ -38,6 +39,19 @@ impl GovernorService {
         http_timeout_secs: Option<u64>,
         mode: Option<String>,
         slo_ms: Option<u64>,
+        retrieval_k: Option<usize>,
+        retrieval_div: Option<f64>,
+        mmr_lambda: Option<f64>,
+        compression_aggr: Option<f64>,
+        vote_k: Option<u8>,
+        context_budget_tokens: Option<usize>,
+        context_item_budget_tokens: Option<usize>,
+        context_format: Option<String>,
+        include_provenance: Option<bool>,
+        context_item_template: Option<String>,
+        context_header: Option<String>,
+        context_footer: Option<String>,
+        joiner: Option<String>,
     ) {
         {
             let mut h = crate::ext::hints().write().await;
@@ -55,6 +69,45 @@ impl GovernorService {
             }
             if slo_ms.is_some() {
                 h.slo_ms = slo_ms;
+            }
+            if retrieval_k.is_some() {
+                h.retrieval_k = retrieval_k;
+            }
+            if retrieval_div.is_some() {
+                h.retrieval_div = retrieval_div;
+            }
+            if mmr_lambda.is_some() {
+                h.mmr_lambda = mmr_lambda;
+            }
+            if compression_aggr.is_some() {
+                h.compression_aggr = compression_aggr;
+            }
+            if vote_k.is_some() {
+                h.vote_k = vote_k;
+            }
+            if context_budget_tokens.is_some() {
+                h.context_budget_tokens = context_budget_tokens;
+            }
+            if context_item_budget_tokens.is_some() {
+                h.context_item_budget_tokens = context_item_budget_tokens;
+            }
+            if context_format.is_some() {
+                h.context_format = context_format.clone();
+            }
+            if include_provenance.is_some() {
+                h.include_provenance = include_provenance;
+            }
+            if context_item_template.is_some() {
+                h.context_item_template = context_item_template.clone();
+            }
+            if context_header.is_some() {
+                h.context_header = context_header.clone();
+            }
+            if context_footer.is_some() {
+                h.context_footer = context_footer.clone();
+            }
+            if joiner.is_some() {
+                h.joiner = joiner.clone();
             }
         }
         // Apply dynamic HTTP timeout: prefer explicit, else derive from SLO

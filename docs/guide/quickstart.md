@@ -6,6 +6,8 @@ title: Quickstart
 
 Updated: 2025-09-12
 
+Run ARW locally in a couple of minutes. It’s your private AI control room: start on one machine, stay in full control, and only scale or share when you choose. See the Features page for what you can do next.
+
 !!! warning "Minimum Secure Setup"
     - Set an admin token: `ARW_ADMIN_TOKEN=your-secret`
     - Don’t enable debug in production: leave `ARW_DEBUG` unset
@@ -67,6 +69,7 @@ nix develop
 
 ## Peek at What's Available
 - Health: `GET /healthz`
+- About: `GET /about` (name, tagline, docs url, key endpoints)
 - Events (SSE): `GET /admin/events` (send `X-ARW-Admin` or Bearer)
 - Tools: `GET /admin/introspect/tools`
 - Schemas: `GET /admin/introspect/schemas/{id}`

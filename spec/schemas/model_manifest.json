@@ -1,7 +1,7 @@
 {
   "$comment": "SPDX-License-Identifier: MIT OR Apache-2.0",
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://github.com/t3hw00t/Agent_Hub/spec/schemas/model_manifest.json",
+  "$id": "https://github.com/t3hw00t/ARW/spec/schemas/model_manifest.json",
   "title": "Model Manifest",
   "type": "object",
   "additionalProperties": false,

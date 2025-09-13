@@ -102,7 +102,7 @@ Start the service with Compose (builds locally by default):
 
 ```bash
 docker compose -f docker-compose.yml up --build -d
-# open http://127.0.0.1:8090/healthz
+# open http://127.0.0.1:8090/healthz and http://127.0.0.1:8090/about
 ```
 
 Stop and remove:

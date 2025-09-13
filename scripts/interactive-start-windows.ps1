@@ -34,8 +34,8 @@ if (-not ($env:Path -split ';' | Where-Object { $_ -eq $localRustCargoBin })) { 
 $envFile = Join-Path $root '.arw\env.ps1'
 if (Test-Path $envFile) { . $envFile }
 
-Banner 'ARW — Start Menu (Windows)' 'Start services, tools, and debugging'
-Write-Host '  Agents Running Wild (ARW) — local-first Rust workspace for personal AI agents.'
+Banner 'Agent Hub (ARW) — Start Menu (Windows)' 'Start services, tools, and debugging'
+Write-Host '  Agent Hub (ARW) — local-first Rust workspace for personal AI agents.'
 Write-Host '  Highlights: user-mode HTTP service + debug UI; macro-driven tools; event stream; portable packaging.'
 
 $Port = if ($env:ARW_PORT) { [int]$env:ARW_PORT } else { 8090 }

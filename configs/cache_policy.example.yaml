@@ -1,0 +1,38 @@
+cache:
+  action_cache:
+    key: jcs(json(input, env, tool_version))
+    store: cas://local-ssd
+    ttl: 7d
+    revalidate_on: [tool_version_change, secret_version_change]
+  llm:
+    kv_prefix_cache: on
+    semantic_cache:
+      embedder: "bge-small-en"
+      sim_threshold: 0.92
+      verifier: "mini-qa-judge"
+      scope: per-user
+      negative_cache_ttl: 2h
+  read_models:
+    sse:
+      format: json-patch
+      resume: last-event-id
+      coalesce_ms: 250
+      idle_publish_ms: 2000
+  in_memory:
+    policy: w-tinylfu
+    capacity_mb: 512
+  disk:
+    engine: rocksdb
+    block_cache_uncompressed_mb: 512
+    block_cache_compressed_mb: 512
+    partitioned_index_filters: true
+    secondary_cache: ssd
+  edge:
+    headers:
+      cache_control: "public, max-age=60, stale-while-revalidate=300, stale-if-error=86400"
+    request_coalescing: true
+  compression:
+    zstd_dictionary:
+      per_type: [json_tool_output, patches]
+      train_on: last_10k_samples
+

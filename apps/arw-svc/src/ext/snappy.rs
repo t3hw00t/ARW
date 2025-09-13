@@ -99,7 +99,8 @@ async fn publish_snappy(bus: &arw_events::Bus) {
         &cur,
     );
     if breach {
-        let mut notice = json!({"p95_max_ms": interactive_p95, "budget_ms": budgets.full_result_p95_ms});
+        let mut notice =
+            json!({"p95_max_ms": interactive_p95, "budget_ms": budgets.full_result_p95_ms});
         crate::ext::corr::ensure_corr(&mut notice);
         bus.publish("Snappy.Notice", &notice);
     }
@@ -110,7 +111,8 @@ async fn publish_snappy(bus: &arw_events::Bus) {
         .unwrap_or(0);
     if detail_every > 0 {
         use std::time::SystemTime;
-        static LAST: once_cell::sync::OnceCell<std::sync::Mutex<u64>> = once_cell::sync::OnceCell::new();
+        static LAST: once_cell::sync::OnceCell<std::sync::Mutex<u64>> =
+            once_cell::sync::OnceCell::new();
         let now = SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
@@ -135,4 +137,3 @@ pub async fn prewarm() {
     let _ = arw_core::introspect_schema("memory.probe");
     let _ = arw_core::introspect_schema("introspect.tools");
 }
-

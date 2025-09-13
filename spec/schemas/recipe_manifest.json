@@ -1,7 +1,7 @@
 {
   "$comment": "SPDX-License-Identifier: MIT OR Apache-2.0",
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://github.com/t3hw00t/Agent_Hub/spec/schemas/recipe_manifest.json",
+  "$id": "https://github.com/t3hw00t/ARW/spec/schemas/recipe_manifest.json",
   "title": "AgentRecipeManifest",
   "type": "object",
   "required": ["id", "name", "version", "prompts", "tools", "permissions"],

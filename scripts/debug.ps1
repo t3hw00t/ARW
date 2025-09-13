@@ -2,7 +2,7 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
-# ARW — Quick debug runner (PowerShell)
+# Agent Hub (ARW) — Quick debug runner (PowerShell)
 
 param(
   [switch]$Interactive,
@@ -22,7 +22,7 @@ function Warn($t){ Write-Host "[debug] $t" -ForegroundColor Yellow }
 $Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 
 if ($Interactive) {
-  Write-Host 'ARW — Debug (interactive)' -ForegroundColor White
+  Write-Host 'Agent Hub (ARW) — Debug (interactive)' -ForegroundColor White
   $ans = Read-Host "HTTP port [$Port]"; if ($ans) { $Port = [int]$ans }
   $ans = Read-Host "Docs URL (optional) [$DocsUrl]"; if ($ans -ne '') { $DocsUrl = $ans }
   if (-not $AdminToken) {
@@ -55,4 +55,3 @@ if (-not $NoOpen) {
   $base = "http://127.0.0.1:$Port/debug"
   try { Start-Process $base | Out-Null } catch {}
 }
-

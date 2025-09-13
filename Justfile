@@ -120,3 +120,32 @@ task-done id:
 
 task-note id text:
   bash scripts/tasks.sh note {{id}} {{text}}
+
+# Interfaces
+interfaces-index:
+  python3 scripts/interfaces_generate_index.py
+
+interfaces-lint:
+  if ! command -v npx >/dev/null 2>&1; then echo 'npx not found (Node). Install Node.js to lint interfaces.' >&2; exit 1; fi
+  npx spectral lint -r quality/openapi-spectral.yaml spec/openapi.yaml
+  npx spectral lint -r quality/openapi-spectral.yaml spec/asyncapi.yaml
+
+interfaces-diff base="main":
+  if ! command -v docker >/dev/null 2>&1; then echo 'docker not found; cannot run oasdiff container' >&2; exit 1; fi
+  mkdir -p /tmp/ifc
+  if git show origin/{{base}}:spec/openapi.yaml >/tmp/ifc/base.yaml 2>/dev/null; then :; else echo 'missing base OpenAPI in origin/{{base}}' >&2; exit 1; fi
+  cp spec/openapi.yaml /tmp/ifc/rev.yaml
+  docker run --rm -v /tmp/ifc:/tmp -w /tmp tufin/oasdiff:latest -format markdown -fail-on-breaking -base /tmp/base.yaml -revision /tmp/rev.yaml || true
+
+docs-deprecations:
+  python3 scripts/generate_deprecations.py
+
+docs-release-notes base="origin/main":
+  BASE_REF={{base}} python3 scripts/generate_interface_release_notes.py
+
+# Endpoint scaffolding
+endpoint-new method path tag="":
+  python3 scripts/new_endpoint_template.py {{method}} {{path}} {{ if tag != "" { print("--tag '" + tag + "'") }}}
+
+endpoint-add method path tag="" summary="" desc="":
+  python3 scripts/new_endpoint_template.py {{method}} {{path}} {{ if tag != "" { print("--tag '" + tag + "'") }}} {{ if summary != "" { print("--summary '" + summary + "'") }}} {{ if desc != "" { print("--description '" + desc + "'") }}} --apply

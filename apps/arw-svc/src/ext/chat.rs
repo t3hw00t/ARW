@@ -56,12 +56,16 @@ pub(crate) async fn chat_send(
         .as_deref()
         .unwrap_or("balanced")
         .to_ascii_lowercase();
-    let (verify_pass, vote_k) = match mode.as_str() {
+    let (verify_pass, mut vote_k) = match mode.as_str() {
         "quick" => (false, 0u8),
         "deep" => (false, 5u8),
         "verified" => (true, 3u8),
         _ => (false, 3u8),
     };
+    // Optional override from policy hints
+    if let Some(v) = hints.vote_k {
+        vote_k = v;
+    }
     let model = req.model.clone().unwrap_or_else(|| "echo".to_string());
     let user = json!({"role":"user","content": req.message});
     // Self-consistency (vote-k) if gated and requested

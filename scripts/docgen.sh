@@ -330,3 +330,7 @@ components:
           params: { type: object }
 YAML
 info "Wrote $spec_dir/asyncapi.yaml"
+# OpenAPI JSON (for quick preview/static consumption)
+if command -v python3 >/dev/null 2>&1; then
+  python3 "$root_dir/scripts/generate_openapi_json.py" || true
+fi

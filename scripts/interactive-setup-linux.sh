@@ -7,7 +7,7 @@ ROOT="$(cd "$DIR/.." && pwd)"
 # shellcheck source=scripts/lib/interactive_common.sh
 . "$DIR/lib/interactive_common.sh"
 
-ic_banner "ARW — Interactive Setup (Linux)" "Portable, local-first agent workspace"
+ic_banner "Agent Hub (ARW) — Interactive Setup (Linux)" "Portable, local-first agent workspace"
 ic_project_overview
 ic_feature_matrix
 ic_host_summary

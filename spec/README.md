@@ -1,4 +1,4 @@
-ARW API and Schema Artifacts
+Agent Hub (ARW) API and Schema Artifacts
 
 This folder hosts generated specifications produced by future tooling (arw-docgen):
 - spec/openapi.yaml — HTTP API surface (OpenAPI 3.1)
@@ -9,4 +9,3 @@ This folder hosts generated specifications produced by future tooling (arw-docge
 Artifacts are generated from Rust tool/operation declarations (#[arw_tool]) to ensure a single source of truth.
 
 In CI, compatibility guards will validate schema evolution and publish artifacts.
-

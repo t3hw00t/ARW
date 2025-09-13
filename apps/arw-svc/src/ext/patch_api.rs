@@ -56,6 +56,15 @@ pub async fn apply(
     State(state): State<AppState>,
     Json(req): Json<ApplyPatchReq>,
 ) -> impl IntoResponse {
+    // Optional safety checks on proposed patches
+    let issues = super::redteam::check_patches_for_risks(&req.patches);
+    let enforce = std::env::var("ARW_PATCH_SAFETY")
+        .ok()
+        .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if enforce && !issues.is_empty() {
+        return super::ApiError::bad_request("safety checks failed").into_response();
+    }
     // Load current config (object)
     let cfg_path = crate::ext::paths::config_path();
     let mut cfg = crate::ext::io::load_json_file_async(&cfg_path)
@@ -124,6 +133,7 @@ pub async fn apply(
         "scope": req.scope,
         "patch_count": req.patches.len(),
         "snapshot_id": snap_id,
+        "safety_issues": issues,
     });
     super::corr::ensure_corr(&mut payload);
     state.bus.publish("LogicUnit.Applied", &payload);

@@ -14,6 +14,32 @@ Updated: 2025-09-13
 - Index (JSON): `/admin/index.json`
 - Public endpoints (no auth): `/healthz`, `/metrics`, `/spec/*`, `/version`, `/about`
 
+### Public: /about
+- Path: `GET /about`
+- Returns a small JSON document with service + branding info:
+  - `name`: "Agent Hub (ARW)"
+  - `tagline`: "Your private AI control room that can scale and share when you choose."
+  - `description`: one‑paragraph plain‑terms summary
+  - `service`: binary id (e.g., `arw-svc`)
+  - `version`: semantic version string
+  - `role`: current node role
+  - `docs_url`: base docs URL if configured
+  - `endpoints`: key useful paths (e.g., `/spec/*`, `/healthz`, `/admin/*`)
+
+Example
+```json
+{
+  "name": "Agent Hub (ARW)",
+  "tagline": "Your private AI control room that can scale and share when you choose.",
+  "description": "Agent Hub (ARW) lets you run your own team of AI helpers on your computer to research, plan, write, and build—while you stay in charge.",
+  "service": "arw-svc",
+  "version": "0.1.0",
+  "role": "Home",
+  "docs_url": "https://t3hw00t.github.io/ARW/",
+  "endpoints": ["/spec/openapi.yaml", "/healthz", "/admin/events", "/admin/probe"]
+}
+```
+
 !!! warning "Minimum Secure Setup"
     - Set `ARW_ADMIN_TOKEN` and require it on all admin calls
     - Keep the service bound to `127.0.0.1` or place behind TLS proxy
@@ -53,13 +79,36 @@ Rate limiting:
   - `/admin/state/world`: Project Map snapshot (scoped belief graph)
   - `/admin/state/world/select`: top‑K beliefs (claims) with trace
   - `/admin/context/assemble`: minimal context assembly (beliefs + policy/model)
+    - Returns `context_preview` (formatted evidence) and `aux.context` (packing metrics)
+    - Supports non‑persistent overrides via query params:
+      - `context_format` = bullets|jsonl|inline|custom
+      - `include_provenance` = true|false
+      - `context_item_template` = string (custom format)
+      - `context_header` / `context_footer` / `joiner`
+      - `context_budget_tokens` / `context_item_budget_tokens`
 - `/admin/governor/*`: governor profile & hints
+  - Hints include retrieval/formatting knobs: `retrieval_k`, `mmr_lambda`, `compression_aggr`, `vote_k`, `context_budget_tokens`, `context_item_budget_tokens`, `context_format`, `include_provenance`, `context_item_template`, `context_header`, `context_footer`, `joiner`.
 - `/admin/hierarchy/*`: negotiation & role/state helpers
 - World diffs review (planned MVP):
   - `POST /admin/world_diffs/queue` — queue a world diff from collaborators for review
   - `POST /admin/world_diffs/decision` — decide queued diff {apply|reject|defer}
 - `/admin/projects/*`: project list/tree/notes
 - `/admin/chat[/*]`: chat inspection and send/clear
+- Goldens & Experiments
+  - `/admin/goldens/list?proj=NAME` — list goldens for a project
+  - `/admin/goldens/add` (POST) — add a golden item `{proj,kind:"chat",input:{prompt},expect:{contains|equals|regex}}`
+  - `/admin/goldens/run` (POST) — run evaluator `{proj,limit?,temperature?,vote_k?}` (uses retrieval/formatting hints if set)
+  - `/admin/experiments/define` (POST) — define variants with knobs
+  - `/admin/experiments/run` (POST) — A/B on goldens `{id,proj,variants:["A","B"]}`; emits `Experiment.Result` and `Experiment.Winner`
+  - `/admin/experiments/activate` (POST) — apply a variant’s knobs to live hints `{id,variant}`
+  - `/admin/experiments/list` (GET) — list experiment definitions
+  - `/admin/experiments/scoreboard` (GET) — persisted scoreboard (last‑run snapshot per variant)
+  - `/admin/experiments/winners` (GET) — persisted winners (last known)
+- Patch Safety
+  - `/admin/safety/checks` (POST) — static red‑team checks for proposed patches; returns issues (SSRF patterns, prompt‑injection phrasing, secrets markers, permission widenings)
+  - `ARW_PATCH_SAFETY=1` — enforce checks in `/admin/patch/apply`
+- Distillation
+  - `/admin/distill/run` (POST) — run distillation once (beliefs/playbooks/index hygiene); emits `Distill.Completed`
 - `/admin/emit/test`: emit a test event
 - `/admin/shutdown`: request shutdown
 
@@ -146,6 +195,8 @@ curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?replay=10"
 { "decision": "allow", "reason_code": "models.download", "posture": "off", "project_id": "default", "episode_id": null, "corr_id": "...", "node_id": null, "tool_id": "models.download", "dest": { "host": "example", "port": 443, "protocol": "https" }, "bytes_out": 0, "bytes_in": 1048576, "duration_ms": 1200 }
 ```
 
+See also: Developer → [Egress Ledger Helper (Builder)](../developer/style.md#egress-ledger-helper-builder)
+
 ## OpenAPI
 
 - `/spec/openapi.yaml` provides an OpenAPI document for many admin endpoints (includes Models admin routes).
@@ -188,7 +239,7 @@ curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
 - `GET  /state/models` — Public, read‑only models list.
 - `GET  /admin/state/models_hashes` — Admin summary of installed hashes and sizes.
 - `GET  /admin/models/by-hash/:sha256` — Serve a CAS blob by hash (egress‑gated; `io:egress:models.peer`).
-- `GET  /admin/models/downloads_metrics` — Lightweight downloads metrics used for admission checks; returns `{ ewma_mbps: number|null }`.
+- `GET  /admin/models/downloads_metrics` — Lightweight downloads metrics used for admission checks; returns `{ ewma_mbps: number|null, started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total }`.
  - `GET  /admin/state/models_metrics` — Read‑model counters `{ started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total, ewma_mbps }`.
  - SSE: `State.ModelsMetrics.Patch` and generic `State.ReadModel.Patch` (id=`models_metrics`) publish RFC‑6902 JSON Patches with coalescing.
  - `POST /admin/models/concurrency` — Set models download concurrency at runtime. Body: `{ max: number, block?: boolean }`. When `block` is `true` (default), shrinking waits for permits; when `false`, it shrinks opportunistically.
