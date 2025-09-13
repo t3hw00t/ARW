@@ -64,8 +64,10 @@ echo "[pre-push] OpenAPI codegen sync check"
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 (
-  cd "$tmp"
-  OPENAPI_OUT="$tmp/openapi.yaml" cargo run -p arw-svc --quiet || true
+  # Ensure codegen runs from the repo root so Cargo and relative paths resolve
+  ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+  cd "$ROOT"
+  OPENAPI_OUT="$tmp/openapi.yaml" cargo run -p arw-svc --bin arw-svc --quiet || true
 )
 if [[ ! -s "$tmp/openapi.yaml" ]]; then
   echo "::error::Failed to generate OpenAPI via arw-svc (OPENAPI_OUT)" >&2
