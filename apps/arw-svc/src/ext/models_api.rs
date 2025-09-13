@@ -8,6 +8,51 @@ use axum::{extract::State, response::IntoResponse, Json};
 use serde::Deserialize;
 use serde_json::json;
 
+/// Aggregate models state in one call for UI: items, default, concurrency, metrics
+#[arw_admin(
+    method = "GET",
+    path = "/admin/models/summary",
+    summary = "Summarize models state (items/default/concurrency/metrics)"
+)]
+#[arw_gate("models:summary")]
+pub(crate) async fn models_summary(State(state): State<AppState>) -> impl IntoResponse {
+    use tokio::join;
+    let Some(svc) = state.resources.get::<ModelsService>() else {
+        return (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "ModelsService missing",
+        )
+            .into_response();
+    };
+    let models_fut = async { super::models().read().await.clone() };
+    let default_fut = async { super::default_model().read().await.clone() };
+    let conc_fut = async { svc.concurrency_get().await };
+    let metrics_fut = async {
+        use serde_json::{Map, Value};
+        let base = crate::resources::models_service::models_metrics_value();
+        let mut obj = match base {
+            Value::Object(m) => m,
+            _ => Map::new(),
+        };
+        let ewma = crate::ext::io::load_json_file_async(&crate::ext::paths::downloads_metrics_path())
+            .await
+            .and_then(|v| v.get("ewma_mbps").and_then(|x| x.as_f64()));
+        obj.insert(
+            "ewma_mbps".into(),
+            match ewma { Some(v) => Value::from(v), None => Value::Null },
+        );
+        Value::Object(obj)
+    };
+    let (items, default, concurrency, metrics) = join!(models_fut, default_fut, conc_fut, metrics_fut);
+    super::ok(json!({
+        "items": items,
+        "default": default,
+        "concurrency": concurrency,
+        "metrics": metrics,
+    }))
+    .into_response()
+}
+
 #[arw_admin(method = "GET", path = "/admin/models", summary = "List models")]
 #[arw_gate("models:list")]
 pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoResponse {

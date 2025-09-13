@@ -67,53 +67,38 @@ trap 'rm -rf "$tmp"' EXIT
   # Ensure codegen runs from the repo root so Cargo and relative paths resolve
   ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
   cd "$ROOT"
-  OPENAPI_OUT="$tmp/openapi.yaml" cargo run -p arw-svc --bin arw-svc --quiet || true
+  OPENAPI_OUT="$tmp/codegen.yaml" cargo run -p arw-svc --bin arw-svc --quiet || true
 )
-if [[ ! -s "$tmp/openapi.yaml" ]]; then
+if [[ ! -s "$tmp/codegen.yaml" ]]; then
   echo "::error::Failed to generate OpenAPI via arw-svc (OPENAPI_OUT)" >&2
   exit 1
 fi
 py=$(command -v python3 || true)
 if [[ -n "$py" ]]; then
-  "$py" - "$tmp/openapi.yaml" << 'PY' > "$tmp/spec.norm.yaml"
+  # Merge curated fields into codegen and validate path parity
+  "$py" scripts/openapi_overlay.py "$tmp/codegen.yaml" spec/openapi.yaml "$tmp/merged.yaml" || {
+    echo "::error::OpenAPI path parity mismatch (see error above)" >&2
+    exit 1
+  }
+  # Normalize key order before diff to avoid spurious ordering diffs
+  "$py" - << 'PY' spec/openapi.yaml > "$tmp/spec.norm.yaml"
 import sys, yaml
-gen = yaml.safe_load(open(sys.argv[1]))
-def strip_some(obj):
-  if isinstance(obj, dict):
-    # remove noisy differences not owned by codegen
-    for k in ['deprecated','description','summary','x-sunset','info','tags','components']:
-      obj.pop(k, None)
-    return {k: strip_some(v) for k,v in obj.items()}
-  if isinstance(obj, list):
-    return [strip_some(x) for x in obj]
-  return obj
-cur = strip_some(yaml.safe_load(open('spec/openapi.yaml')))
-gen = strip_some(gen)
-yaml.safe_dump(cur, sys.stdout, sort_keys=True)
+print(yaml.safe_dump(yaml.safe_load(open(sys.argv[1])), sort_keys=True), end='')
 PY
-  "$py" - "$tmp/openapi.yaml" << 'PY' > "$tmp/gen.norm.yaml"
+  "$py" - << 'PY' "$tmp/merged.yaml" > "$tmp/merged.norm.yaml"
 import sys, yaml
-def strip_some(obj):
-  if isinstance(obj, dict):
-    for k in ['deprecated','description','summary','x-sunset','info','tags','components']:
-      obj.pop(k, None)
-    return {k: strip_some(v) for k,v in obj.items()}
-  if isinstance(obj, list):
-    return [strip_some(x) for x in obj]
-  return obj
-gen = strip_some(yaml.safe_load(open(sys.argv[1])))
-yaml.safe_dump(gen, sys.stdout, sort_keys=True)
+print(yaml.safe_dump(yaml.safe_load(open(sys.argv[1])), sort_keys=True), end='')
 PY
-  if ! diff -u "$tmp/spec.norm.yaml" "$tmp/gen.norm.yaml" >/dev/null; then
+  if ! diff -u "$tmp/spec.norm.yaml" "$tmp/merged.norm.yaml" >/dev/null; then
     echo "::error::OpenAPI spec out of sync with code-generated output" >&2
-    diff -u "$tmp/spec.norm.yaml" "$tmp/gen.norm.yaml" | sed -n '1,200p'
+    diff -u "$tmp/spec.norm.yaml" "$tmp/merged.norm.yaml" | sed -n '1,200p'
     exit 1
   fi
 else
-  echo "[pre-push] python3 not found; performing raw diff"
-  if ! diff -u spec/openapi.yaml "$tmp/openapi.yaml" >/dev/null; then
-    echo "::error::OpenAPI spec out of sync with code-generated output" >&2
-    diff -u spec/openapi.yaml "$tmp/openapi.yaml" | sed -n '1,200p'
+  echo "::warning::python3 not found; skipping overlay merge and raw-diffing codegen vs spec"
+  if ! diff -u spec/openapi.yaml "$tmp/codegen.yaml" >/dev/null; then
+    echo "::error::OpenAPI spec out of sync with code-generated output (raw)" >&2
+    diff -u spec/openapi.yaml "$tmp/codegen.yaml" | sed -n '1,200p'
     exit 1
   fi
 fi
