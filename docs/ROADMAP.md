@@ -48,6 +48,7 @@ Roadmap highlights themes and timelines; Backlog tracks actionable items.
 - Semantic caches (design): per‑user/project Q→A cache with verifier; negative cache for retrieval misses; SimHash prefilter.
 - Storage: RocksDB tiers for persistent caches; optional flash secondary cache; Zstd dictionaries for small JSON blobs.
 - Measurement: layer hit ratios, latency/bytes saved, stampede suppression, semantic false‑hit rate; expose in `/state/*`.
+ - Cache Policy: author a declarative cache policy manifest and loader; map to current knobs incrementally; document fallbacks and scope privacy defaults.
 
 ## Heuristic Feedback Engine
 Scope: Lightweight, near‑live suggestions with guardrails.

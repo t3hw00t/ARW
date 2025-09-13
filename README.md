@@ -23,7 +23,7 @@ Full documentation → https://t3hw00t.github.io/Agent_Hub/
 - Live events (SSE): one stream drives UIs and tools. See `docs/architecture/events_vocabulary.md` and `docs/architecture/sse_patch_contract.md`.
 - Debug UI: inspect episodes, state snapshots, and traces. See `docs/guide/troubleshooting.md`.
 - Recipes + Schemas: installable strategy packs with JSON Schemas. See `docs/guide/recipes.md` and `spec/schemas/`.
-- Observability: tracing/logging/metrics and journal. See `docs/architecture/observability_otel.md`.
+- Observability: tracing/logging/metrics and journal. See `docs/architecture/observability_otel.md`. CI enforces snappy budgets; see `docs/guide/snappy_bench.md`.
  - Caching Layers: Action Cache with CAS and singleflight; digest‑addressed blob serving with strong validators; read‑models over SSE (JSON Patch deltas with coalescing); llama.cpp prompt caching. See `docs/architecture/caching_layers.md`.
 
 ## Try ARW in 2 Minutes

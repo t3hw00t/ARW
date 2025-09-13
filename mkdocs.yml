@@ -37,6 +37,7 @@ nav:
       - Try ARW in 2 Minutes: guide/quickstart.md
   - How‑to:
       - Models Download: guide/models_download.md
+      - Subscribe to Events (SSE): guide/events_sse.md
       - Security Hardening: guide/security_hardening.md
       - Network Posture: guide/network_posture.md
       - Desktop Launcher: guide/launcher.md

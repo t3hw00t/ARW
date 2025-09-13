@@ -71,6 +71,7 @@ Caching & Performance (High Priority)
 - [t-250913001009-1004] Singleflight: coalesce identical in‑flight tool runs and expensive read‑model recomputes — todo
 - [t-250913001012-1005] Read‑models SSE deltas: stream JSON Patch with `Last-Event-ID` resume; wire Debug UI to apply patches — todo
 - [t-250913001015-1006] Metrics: expose cache hit/miss/age, bytes/latency saved, stampede suppression rate at `/state/*` and `/metrics` — todo
+- [t-250913001018-1007] Cache Policy manifest + loader: define YAML format, map to env knobs, and plan migration to config‑first overrides — docs done; loader todo
 
 Egress Firewall & Posture (Plan)
 - Policy: add network scopes (domain/IP/CIDR, port, protocol) and TTL leases; surface in UI.

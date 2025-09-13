@@ -70,6 +70,11 @@ Contract excerpt (server):
 - Allocation budget: forbid >N allocations in hot handlers (rough guard for polish).
 - Docs gate: PR must state impact on these budgets (kept/improved/regressed).
 
+Reference implementation in‑repo:
+
+- Harness: `snappy_bench` (see `docs/guide/snappy_bench.md`)
+- Workflow: `.github/workflows/snappy.yml` (enforces budgets on push/PR)
+
 ## H. Default Configuration (repo‑kept)
 
 ```
@@ -103,4 +108,3 @@ policies:
 ## J. Why “CachyOS‑style” Works Here
 
 CachyOS’s BORE is about resilient responsiveness under varied load; we mirror the effect by classifying and reserving capacity for bursts, streaming earliest useful work first, and biasing every decision toward perceived latency. The sysctl/scheduler mindset becomes: “interactive gets headroom; everything else yields.”
-

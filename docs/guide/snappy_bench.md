@@ -1,0 +1,31 @@
+# Snappy Bench (I2F, First Partial, Cadence)
+
+A tiny harness to validate the “Snappy by Default” budgets against a live service.
+
+- Binary: `arw-svc` → `snappy_bench` (built with the service)
+- Measures:
+  - `i2f_ms`: connect to `/admin/events`; time to first SSE event (Service.Connected)
+  - `first_partial_ms`: POST `/admin/emit/test`; time to `Service.Test` on SSE
+  - `cadence_p95_ms`: p95 inter-arrival ms across a burst of test events
+- Budgets (env; defaults match the charter):
+  - `ARW_SNAPPY_I2F_P95_MS` (default `50`)
+  - `ARW_SNAPPY_FIRST_PARTIAL_P95_MS` (default `150`)
+  - `ARW_SNAPPY_CADENCE_MS` (default `250`)
+- Strict mode: exit non‑zero on breach when `ARW_BENCH_STRICT=1`
+
+Quickstart (local):
+
+```
+ARW_DEBUG=1 ARW_PORT=8095 cargo run -p arw-svc &
+sleep 1
+ARW_BENCH_BASE=http://127.0.0.1:8095 ARW_BENCH_STRICT=1 \
+  cargo run -p arw-svc --bin snappy_bench
+```
+
+CI: see `.github/workflows/snappy.yml` (runs on push and PR). Budgets are enforced with strict mode.
+
+Notes
+- `/admin/emit/test` publishes a small `Service.Test` event used by the harness to drive bursts.
+- Admin gate: CI runs with `ARW_DEBUG=1`; in production, pass `Authorization: Bearer`.
+- SSE contract and resume behavior: see `docs/architecture/sse_patch_contract.md`.
+
