@@ -59,7 +59,7 @@ paths:
       - Admin/Chat
       summary: 'Deprecated: Chat history'
       deprecated: true
-      x-sunset: '2026-01-01T00:00:00Z'
+      x-sunset: "2026-01-01T00:00:00Z"
       description: Deprecated dev chat history used by the debug UI; scheduled for
         removal after sunset.
       operationId: chat_get_doc
@@ -78,7 +78,7 @@ paths:
       - Admin/Chat
       summary: 'Deprecated: Clear chat history'
       deprecated: true
-      x-sunset: '2026-01-01T00:00:00Z'
+      x-sunset: "2026-01-01T00:00:00Z"
       description: Deprecated dev helper to clear in-memory chat history.
       operationId: chat_clear_doc
       responses:
@@ -100,7 +100,7 @@ paths:
       - Admin/Chat
       summary: 'Deprecated: Send chat message'
       deprecated: true
-      x-sunset: '2026-01-01T00:00:00Z'
+      x-sunset: "2026-01-01T00:00:00Z"
       description: Deprecated dev helper to send a message to the synthetic chat backend.
       operationId: chat_send_doc
       requestBody:
@@ -728,6 +728,10 @@ paths:
       responses:
         '200':
           description: Models summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelsSummary'
       description: 'Models: GET /admin/models/summary.'
   /admin/models/add:
     post:
@@ -1325,6 +1329,47 @@ paths:
       description: 'Public: GET /version.'
 components:
   schemas:
+    ModelsConcurrency:
+      type: object
+      required: [configured_max, available_permits, held_permits]
+      properties:
+        configured_max: { type: integer, format: int64, minimum: 0 }
+        available_permits: { type: integer, format: int64, minimum: 0 }
+        held_permits: { type: integer, format: int64, minimum: 0 }
+        hard_cap:
+          type: [integer, 'null']
+          format: int64
+          minimum: 0
+    ModelsMetrics:
+      type: object
+      required: [started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total]
+      properties:
+        started: { type: integer, format: int64, minimum: 0 }
+        queued: { type: integer, format: int64, minimum: 0 }
+        admitted: { type: integer, format: int64, minimum: 0 }
+        resumed: { type: integer, format: int64, minimum: 0 }
+        canceled: { type: integer, format: int64, minimum: 0 }
+        completed: { type: integer, format: int64, minimum: 0 }
+        completed_cached: { type: integer, format: int64, minimum: 0 }
+        errors: { type: integer, format: int64, minimum: 0 }
+        bytes_total: { type: integer, format: int64, minimum: 0 }
+        ewma_mbps:
+          type: [number, 'null']
+          format: double
+          minimum: 0
+    ModelsSummary:
+      type: object
+      required: [items, concurrency, metrics]
+      properties:
+        items:
+          type: array
+          items: { type: object }
+        default:
+          type: string
+        concurrency:
+          $ref: '#/components/schemas/ModelsConcurrency'
+        metrics:
+          $ref: '#/components/schemas/ModelsMetrics'
     About:
       type: object
       description: Service and branding information.

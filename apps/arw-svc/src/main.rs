@@ -1976,7 +1976,7 @@ struct ApiDoc;
 // --- OpenAPI-only wrappers for common admin endpoints ---
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/admin/models/summary", tag = "Admin/Models", responses(
-    (status=200, description="Models summary")
+    (status=200, description="Models summary", body = ext::models_api::ModelsSummary)
 ))]
 async fn models_summary_doc() -> impl IntoResponse {
     ext::models_api::models_summary(State(AppState {

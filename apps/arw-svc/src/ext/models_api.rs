@@ -5,8 +5,41 @@ use arw_macros::{arw_admin, arw_gate};
 use axum::extract::{Path, Query};
 use axum::http::{HeaderMap, HeaderValue};
 use axum::{extract::State, response::IntoResponse, Json};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
+
+#[derive(Serialize, utoipa::ToSchema)]
+pub(crate) struct ModelsConcurrency {
+    configured_max: u64,
+    available_permits: u64,
+    held_permits: u64,
+    #[serde(default)]
+    hard_cap: Option<u64>,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+pub(crate) struct ModelsMetrics {
+    started: u64,
+    queued: u64,
+    admitted: u64,
+    resumed: u64,
+    canceled: u64,
+    completed: u64,
+    completed_cached: u64,
+    errors: u64,
+    bytes_total: u64,
+    #[serde(default)]
+    ewma_mbps: Option<f64>,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+pub(crate) struct ModelsSummary {
+    items: Vec<serde_json::Value>,
+    #[serde(default)]
+    default: String,
+    concurrency: ModelsConcurrency,
+    metrics: ModelsMetrics,
+}
 
 /// Aggregate models state in one call for UI: items, default, concurrency, metrics
 #[arw_admin(
@@ -26,35 +59,78 @@ pub(crate) async fn models_summary(State(state): State<AppState>) -> impl IntoRe
     };
     let models_fut = async { super::models().read().await.clone() };
     let default_fut = async { super::default_model().read().await.clone() };
-    let conc_fut = async { svc.concurrency_get().await };
+    let conc_fut = async {
+        let v = svc.concurrency_get().await;
+        ModelsConcurrency {
+            configured_max: v
+                .get("configured_max")
+                .and_then(|x| x.as_u64())
+                .unwrap_or_default(),
+            available_permits: v
+                .get("available_permits")
+                .and_then(|x| x.as_u64())
+                .unwrap_or_default(),
+            held_permits: v
+                .get("held_permits")
+                .and_then(|x| x.as_u64())
+                .unwrap_or_default(),
+            hard_cap: v.get("hard_cap").and_then(|x| x.as_u64()),
+        }
+    };
     let metrics_fut = async {
-        use serde_json::{Map, Value};
         let base = crate::resources::models_service::models_metrics_value();
-        let mut obj = match base {
-            Value::Object(m) => m,
-            _ => Map::new(),
-        };
         let ewma =
             crate::ext::io::load_json_file_async(&crate::ext::paths::downloads_metrics_path())
                 .await
                 .and_then(|v| v.get("ewma_mbps").and_then(|x| x.as_f64()));
-        obj.insert(
-            "ewma_mbps".into(),
-            match ewma {
-                Some(v) => Value::from(v),
-                None => Value::Null,
-            },
-        );
-        Value::Object(obj)
+        ModelsMetrics {
+            started: base
+                .get("started")
+                .and_then(|x| x.as_u64())
+                .unwrap_or_default(),
+            queued: base
+                .get("queued")
+                .and_then(|x| x.as_u64())
+                .unwrap_or_default(),
+            admitted: base
+                .get("admitted")
+                .and_then(|x| x.as_u64())
+                .unwrap_or_default(),
+            resumed: base
+                .get("resumed")
+                .and_then(|x| x.as_u64())
+                .unwrap_or_default(),
+            canceled: base
+                .get("canceled")
+                .and_then(|x| x.as_u64())
+                .unwrap_or_default(),
+            completed: base
+                .get("completed")
+                .and_then(|x| x.as_u64())
+                .unwrap_or_default(),
+            completed_cached: base
+                .get("completed_cached")
+                .and_then(|x| x.as_u64())
+                .unwrap_or_default(),
+            errors: base
+                .get("errors")
+                .and_then(|x| x.as_u64())
+                .unwrap_or_default(),
+            bytes_total: base
+                .get("bytes_total")
+                .and_then(|x| x.as_u64())
+                .unwrap_or_default(),
+            ewma_mbps: ewma,
+        }
     };
     let (items, default, concurrency, metrics) =
         join!(models_fut, default_fut, conc_fut, metrics_fut);
-    super::ok(json!({
-        "items": items,
-        "default": default,
-        "concurrency": concurrency,
-        "metrics": metrics,
-    }))
+    super::ok(ModelsSummary {
+        items,
+        default,
+        concurrency,
+        metrics,
+    })
     .into_response()
 }
 

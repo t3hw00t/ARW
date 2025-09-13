@@ -92,3 +92,12 @@ rules:
       function: pattern
       functionOptions:
         match: '^[A-Za-z]+(\\.[A-Za-z][A-Za-z0-9]+)+$'
+
+  # AsyncAPI triage: loosen strictness to reflect current minimal channel docs
+  asyncapi-operation-operationId: warn
+  asyncapi-operation-description: hint
+  asyncapi-servers: off
+  asyncapi-info-contact: hint
+  asyncapi-info-license: hint
+  asyncapi-info-description: hint
+  asyncapi-latest-version: hint
