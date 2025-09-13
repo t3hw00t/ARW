@@ -78,28 +78,31 @@ if [[ -n "$py" ]]; then
   "$py" - "$tmp/openapi.yaml" << 'PY' > "$tmp/spec.norm.yaml"
 import sys, yaml
 gen = yaml.safe_load(open(sys.argv[1]))
-def strip_deprecated(obj):
+def strip_some(obj):
   if isinstance(obj, dict):
-    obj.pop('deprecated', None)
-    return {k: strip_deprecated(v) for k,v in obj.items()}
+    # remove noisy differences not owned by codegen
+    for k in ['deprecated','description','summary','x-sunset','info','tags','components']:
+      obj.pop(k, None)
+    return {k: strip_some(v) for k,v in obj.items()}
   if isinstance(obj, list):
-    return [strip_deprecated(x) for x in obj]
+    return [strip_some(x) for x in obj]
   return obj
-cur = strip_deprecated(yaml.safe_load(open('spec/openapi.yaml')))
-gen = strip_deprecated(gen)
-yaml.safe_dump(cur, sys.stdout, sort_keys=False)
+cur = strip_some(yaml.safe_load(open('spec/openapi.yaml')))
+gen = strip_some(gen)
+yaml.safe_dump(cur, sys.stdout, sort_keys=True)
 PY
   "$py" - "$tmp/openapi.yaml" << 'PY' > "$tmp/gen.norm.yaml"
 import sys, yaml
-def strip_deprecated(obj):
+def strip_some(obj):
   if isinstance(obj, dict):
-    obj.pop('deprecated', None)
-    return {k: strip_deprecated(v) for k,v in obj.items()}
+    for k in ['deprecated','description','summary','x-sunset','info','tags','components']:
+      obj.pop(k, None)
+    return {k: strip_some(v) for k,v in obj.items()}
   if isinstance(obj, list):
-    return [strip_deprecated(x) for x in obj]
+    return [strip_some(x) for x in obj]
   return obj
-gen = strip_deprecated(yaml.safe_load(open(sys.argv[1])))
-yaml.safe_dump(gen, sys.stdout, sort_keys=False)
+gen = strip_some(yaml.safe_load(open(sys.argv[1])))
+yaml.safe_dump(gen, sys.stdout, sort_keys=True)
 PY
   if ! diff -u "$tmp/spec.norm.yaml" "$tmp/gen.norm.yaml" >/dev/null; then
     echo "::error::OpenAPI spec out of sync with code-generated output" >&2

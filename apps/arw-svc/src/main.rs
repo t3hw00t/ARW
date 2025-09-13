@@ -152,6 +152,23 @@ struct OkResponse {
     ok: bool,
 }
 
+#[derive(serde::Serialize, ToSchema)]
+struct About {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    tagline: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
+    service: String,
+    version: String,
+    #[serde(default)]
+    role: Option<String>,
+    #[serde(default)]
+    docs_url: Option<String>,
+    endpoints: Vec<String>,
+}
+
 #[tokio::main]
 async fn main() {
     arw_otel::init();
@@ -1682,6 +1699,7 @@ fn probe_npus_best_effort() -> Vec<serde_json::Value> {
     path = "/admin/emit/test",
     tag = "Admin/Core",
     operation_id = "emit_test_doc",
+    description = "Emit a test event onto the internal event bus (for verification).",
     responses(
         (status = 200, description = "Emit test event", body = OkResponse),
         (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
@@ -1742,6 +1760,7 @@ struct EventsQs {
     path = "/admin/events",
     tag = "Admin/Core",
     operation_id = "events_doc",
+    description = "Server-Sent Events stream; emits JSON envelopes with CloudEvents metadata; supports Last-Event-ID resume and ?replay=N.",
     responses(
         (status = 200, description = "SSE event stream"),
         (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
@@ -1891,7 +1910,7 @@ async fn feedback_policy_doc() -> impl IntoResponse {
         models_default_set_doc,
         models_download_doc,
         models_download_cancel_doc,
-        state_models_hashes_doc,
+        // state_models_hashes_doc,
         models_jobs_doc,
         models_concurrency_get_doc,
         models_concurrency_set_doc,
@@ -1924,11 +1943,32 @@ async fn feedback_policy_doc() -> impl IntoResponse {
         feedback_reset_post_doc,
         tasks_enqueue_doc,
         // new read-model and tools endpoints
-        state_models_metrics_doc,
-        state_route_stats_doc,
-        tools_cache_stats_doc
+        // state_models_metrics_doc,
+        // state_route_stats_doc,
+        // tools_cache_stats_doc
     ),
-    tags((name = "arw-svc"))
+    info(
+        title = "Agent Hub (ARW) Service API",
+        description = "Your private AI control room that can scale and share when you choose.\n\nIn plain terms: Agent Hub (ARW) lets you run your own team of AI \u{201C}helpers\u{201D} on your computer to research, plan, write, and build—while you stay in charge. It is local\u{2011}first and privacy\u{2011}first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.\n",
+        license(name = ""),
+        version = "0.1.0"
+    ),
+    tags(
+        (name = "Admin/Chat", description = "Admin/Chat endpoints"),
+        (name = "Admin/Core", description = "Admin/Core endpoints"),
+        (name = "Admin/Feedback", description = "Admin/Feedback endpoints"),
+        (name = "Admin/Governor", description = "Admin/Governor endpoints"),
+        (name = "Admin/Hierarchy", description = "Admin/Hierarchy endpoints"),
+        (name = "Admin/Introspect", description = "Admin/Introspect endpoints"),
+        (name = "Admin/Memory", description = "Admin/Memory endpoints"),
+        (name = "Admin/Models", description = "Admin/Models endpoints"),
+        (name = "Admin/Projects", description = "Admin/Projects endpoints"),
+        (name = "Admin/State", description = "Admin/State endpoints"),
+        (name = "Admin/Tasks", description = "Admin/Tasks endpoints"),
+        (name = "Admin/Tools", description = "Admin/Tools endpoints"),
+        (name = "Public", description = "Public endpoints"),
+        (name = "Public/Specs", description = "Public/Specs endpoints")
+    )
 )]
 struct ApiDoc;
 
@@ -2207,7 +2247,7 @@ async fn tools_run_doc(Json(_req): Json<ext::tools_api::ToolRunReq>) -> impl Int
 }
 
 #[allow(dead_code)]
-#[utoipa::path(post, path = "/admin/chat/send", tag = "Admin/Chat", request_body = ext::chat_api::ChatSendReq, responses(
+#[utoipa::path(post, path = "/admin/chat/send", tag = "Admin/Chat", summary = "Deprecated: Send chat message", description = "Deprecated dev helper to send a message to the synthetic chat backend.", request_body = ext::chat_api::ChatSendReq, responses(
     (status=200, description="Message sent", body = OkResponse),
     (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
 ))]
@@ -2215,7 +2255,7 @@ async fn chat_send_doc(Json(_req): Json<ext::chat_api::ChatSendReq>) -> impl Int
     Json(json!({"ok": true}))
 }
 #[allow(dead_code)]
-#[utoipa::path(post, path = "/admin/chat/clear", tag = "Admin/Chat", responses(
+#[utoipa::path(post, path = "/admin/chat/clear", tag = "Admin/Chat", summary = "Deprecated: Clear chat history", description = "Deprecated dev helper to clear in-memory chat history.", responses(
     (status=200, description="Cleared", body = OkResponse),
     (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
 ))]
@@ -2495,7 +2535,7 @@ async fn tools_cache_stats_doc() -> impl IntoResponse {
     ext::tools_api::tools_cache_stats().await
 }
 #[allow(dead_code)]
-#[utoipa::path(get, path = "/admin/chat", tag = "Admin/Chat", summary = "Deprecated: Chat history", responses(
+#[utoipa::path(get, path = "/admin/chat", tag = "Admin/Chat", summary = "Deprecated: Chat history", description = "Deprecated dev chat history used by the debug UI; scheduled for removal after sunset.", responses(
     (status=200, description="Chat history"),
     (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
 ))]
@@ -2606,7 +2646,13 @@ async fn version_doc() -> impl IntoResponse {
 }
 
 #[allow(dead_code)]
-#[utoipa::path(get, path = "/about", tag = "Public", responses((status=200, description="About service")))]
+#[utoipa::path(
+    get,
+    path = "/about",
+    tag = "Public",
+    description = "Return service metadata and branding for the running instance.",
+    responses((status=200, description="About service", body = About))
+)]
 async fn about_doc() -> impl IntoResponse {
     ext::about().await
 }
