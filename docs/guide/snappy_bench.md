@@ -29,3 +29,18 @@ Notes
 - Admin gate: CI runs with `ARW_DEBUG=1`; in production, pass `Authorization: Bearer`.
 - SSE contract and resume behavior: see `docs/architecture/sse_patch_contract.md`.
 
+Cold‑start mode
+
+- Set `ARW_BENCH_COLD=1` and provide the service binary path with `ARW_BENCH_EXE`.
+- Provide a `ARW_BENCH_BASE` with the desired port (e.g., `http://127.0.0.1:8096`).
+- Budget (p95): `ARW_SNAPPY_COLD_START_MS` (default `500`).
+
+Example:
+
+```
+cargo build -p arw-svc --bin arw-svc --bin snappy_bench
+ARW_BENCH_BASE=http://127.0.0.1:8096 \
+ARW_BENCH_EXE=./Agent_Hub/target/debug/arw-svc \
+ARW_BENCH_COLD=1 ARW_BENCH_STRICT=1 \
+  cargo run -p arw-svc --bin snappy_bench
+```

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="860" height="520" viewBox="0 0 860 520" role="img" aria-labelledby="title desc">
+  <title>Debug UI Mock</title>
+  <desc>Mock layout of ARW Debug UI: header, sidebar, timeline, and details.</desc>
+  <defs>
+    <style>
+      .bg{fill:#f9fafb}
+      .card{fill:#ffffff;stroke:#e5e7eb}
+      .bar{fill:#111827}
+      .muted{fill:#9ca3af}
+      .text{font: 13px sans-serif; fill:#111827}
+      .small{font: 11px sans-serif; fill:#6b7280}
+    </style>
+  </defs>
+  <rect x="0" y="0" width="860" height="520" class="bg"/>
+  <rect x="0" y="0" width="860" height="42" class="bar"/>
+  <text x="16" y="26" class="text" fill="#ffffff">ARW Debug</text>
+  <rect x="0" y="42" width="200" height="478" class="card"/>
+  <text x="16" y="64" class="small">Panels</text>
+  <text x="16" y="86" class="text">Events</text>
+  <text x="16" y="110" class="text">Models</text>
+  <text x="16" y="134" class="text">Memory</text>
+  <text x="16" y="158" class="text">Tools</text>
+
+  <rect x="212" y="54" width="628" height="200" class="card"/>
+  <text x="224" y="76" class="small">Live Timeline (SSE)</text>
+  <rect x="224" y="90" width="600" height="18" fill="#e5e7eb"/>
+  <rect x="224" y="114" width="560" height="18" fill="#e5e7eb"/>
+  <rect x="224" y="138" width="520" height="18" fill="#e5e7eb"/>
+  <rect x="224" y="162" width="580" height="18" fill="#e5e7eb"/>
+  <rect x="224" y="186" width="540" height="18" fill="#e5e7eb"/>
+
+  <rect x="212" y="268" width="628" height="240" class="card"/>
+  <text x="224" y="290" class="small">Details</text>
+  <rect x="224" y="304" width="600" height="24" fill="#f3f4f6"/>
+  <text x="230" y="320" class="small">status=downloading · code=soft_exhausted · corr_id=…</text>
+  <rect x="224" y="336" width="600" height="140" fill="#f9fafb"/>
+  <text x="230" y="356" class="small">{ id, budget, disk, … }</text>
+</svg>
+

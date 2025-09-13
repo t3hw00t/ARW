@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Context, Result};
+use axum::http;
 use futures_util::StreamExt;
 use reqwest::header::{ACCEPT, AUTHORIZATION};
 use std::time::{Duration, Instant};
@@ -8,6 +9,7 @@ struct Budgets {
     i2f_p95_ms: u64,
     first_partial_p95_ms: u64,
     cadence_ms: u64,
+    cold_start_ms: u64,
 }
 
 fn budgets_from_env() -> Budgets {
@@ -18,6 +20,7 @@ fn budgets_from_env() -> Budgets {
         i2f_p95_ms: get("ARW_SNAPPY_I2F_P95_MS", 50),
         first_partial_p95_ms: get("ARW_SNAPPY_FIRST_PARTIAL_P95_MS", 150),
         cadence_ms: get("ARW_SNAPPY_CADENCE_MS", 250),
+        cold_start_ms: get("ARW_SNAPPY_COLD_START_MS", 500),
     }
 }
 
@@ -95,6 +98,51 @@ async fn sse_connect(base: &str, admin: Option<&str>, prefixes: &[&str]) -> Resu
     Ok((resp2, rx))
 }
 
+async fn cold_start(base: &str, admin: Option<&str>, exe: &str) -> Result<u64> {
+    use tokio::process::Command;
+    use tokio::io::AsyncReadExt;
+    use std::process::Stdio;
+    // Derive port from base URL if present; fallback to 8097
+    let port: u16 = url_port_from_base(base).unwrap_or(8097);
+    let t0 = Instant::now();
+    let mut child = Command::new(exe)
+        .env("ARW_DEBUG", "1")
+        .env("ARW_PORT", port.to_string())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|e| anyhow!("spawn {} failed: {}", exe, e))?;
+
+    // Try to connect SSE quickly; retry until service is ready or timeout
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let mut rx_opt = None;
+    while Instant::now() < deadline {
+        match sse_connect(base, admin, &["Service."]).await {
+            Ok((_r, rx)) => { rx_opt = Some(rx); break; }
+            Err(_) => { tokio::time::sleep(Duration::from_millis(25)).await; }
+        }
+    }
+    let mut rx = rx_opt.ok_or_else(|| anyhow!("sse connect did not succeed within deadline"))?;
+    // Wait for first event (Service.Connected) with a short timeout
+    let cold_ms = match tokio::time::timeout(Duration::from_secs(3), rx.recv()).await {
+        Ok(Some(_ev)) => t0.elapsed().as_millis() as u64,
+        _ => 3000,
+    };
+    // Best-effort shutdown
+    let _ = child.kill().await;
+    Ok(cold_ms)
+}
+
+fn url_port_from_base(base: &str) -> Option<u16> {
+    if let Ok(u) = base.parse::<http::Uri>() {
+        return u.port_u16();
+    }
+    if let Ok(u) = reqwest::Url::parse(base) {
+        return Some(u.port().unwrap_or(if u.scheme()=="https" {443} else {80}));
+    }
+    None
+}
+
 fn p95(mut v: Vec<u64>) -> u64 {
     if v.is_empty() { return 0; }
     v.sort_unstable();
@@ -108,6 +156,18 @@ async fn main() -> Result<()> {
     let base = std::env::var("ARW_BENCH_BASE").unwrap_or_else(|_| "http://127.0.0.1:8090".to_string());
     let admin = std::env::var("ARW_ADMIN_TOKEN").ok();
     let budgets = budgets_from_env();
+
+    // Optional cold-start mode: spawn service and measure time to first event
+    if std::env::var("ARW_BENCH_COLD").ok().as_deref() == Some("1") {
+        let exe = std::env::var("ARW_BENCH_EXE").map_err(|_| anyhow!("ARW_BENCH_EXE (path to arw-svc) is required for cold-start bench"))?;
+        let cold_ms = cold_start(&base, admin.as_deref(), &exe).await?;
+        println!("cold_start_ms={}", cold_ms);
+        if cold_ms > budgets.cold_start_ms && std::env::var("ARW_BENCH_STRICT").ok().as_deref() == Some("1") {
+            eprintln!("FAIL: cold_start {}ms > budget {}ms", cold_ms, budgets.cold_start_ms);
+            std::process::exit(1);
+        }
+        return Ok(());
+    }
 
     // I2F (connect → first event)
     let t0 = Instant::now();

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="300" viewBox="0 0 760 300" role="img" aria-labelledby="title desc">
+  <title>ARW Architecture Overview</title>
+  <desc>arw-svc provides HTTP and SSE; Debug UI (browser) and CLI consume; Schemas define contracts.</desc>
+  <defs>
+    <style>
+      .box{fill:#ffffff;stroke:#111827;stroke-width:2;rx:10;ry:10}
+      .label{font: 14px sans-serif; fill:#111827}
+      .muted{font: 12px sans-serif; fill:#6b7280}
+      .arrow{stroke:#111827;stroke-width:2;marker-end:url(#arrow)}
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="10" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M0,0 L10,3 L0,6 z" fill="#111827"/>
+    </marker>
+  </defs>
+  <rect x="40" y="110" width="200" height="80" class="box"/>
+  <text x="140" y="140" text-anchor="middle" class="label">arw-svc</text>
+  <text x="140" y="160" text-anchor="middle" class="muted">HTTP + SSE</text>
+
+  <rect x="320" y="40" width="200" height="80" class="box"/>
+  <text x="420" y="72" text-anchor="middle" class="label">Debug UI</text>
+  <text x="420" y="92" text-anchor="middle" class="muted">Browser</text>
+
+  <rect x="320" y="180" width="200" height="80" class="box"/>
+  <text x="420" y="212" text-anchor="middle" class="label">arw-cli</text>
+  <text x="420" y="232" text-anchor="middle" class="muted">Automation</text>
+
+  <rect x="590" y="110" width="120" height="80" class="box"/>
+  <text x="650" y="140" text-anchor="middle" class="label">Schemas</text>
+  <text x="650" y="160" text-anchor="middle" class="muted">JSON</text>
+
+  <line x1="240" y1="150" x2="320" y2="80" class="arrow"/>
+  <line x1="240" y1="150" x2="320" y2="220" class="arrow"/>
+  <line x1="520" y1="80" x2="590" y2="150" class="arrow"/>
+  <line x1="520" y1="220" x2="590" y2="150" class="arrow"/>
+
+  <text x="280" y="100" class="muted">SSE</text>
+  <text x="280" y="205" class="muted">REST/gRPC</text>
+</svg>
+

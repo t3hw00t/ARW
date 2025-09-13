@@ -2216,6 +2216,33 @@ async fn state_intents_doc() -> impl IntoResponse {
 async fn state_actions_doc() -> impl IntoResponse {
     ext::state_api::actions_get().await
 }
+
+// --- OpenAPI-only wrappers for new read-model and tools endpoints ---
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/state/models_metrics", tag = "Admin/State", responses(
+    (status=200, description="Models download metrics (counters + EWMA)"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn state_models_metrics_doc(State(state): State<AppState>) -> impl IntoResponse {
+    ext::models_api::models_metrics_get(State(state)).await
+}
+
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/state/route_stats", tag = "Admin/State", responses(
+    (status=200, description="HTTP route stats (p95/ewma/hits/errors)"),
+    (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
+))]
+async fn state_route_stats_doc() -> impl IntoResponse {
+    ext::stats::route_stats_get().await
+}
+
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/tools/cache_stats", tag = "Admin/Tools", responses(
+    (status=200, description="Tool Action Cache stats (hit/miss/coalesced)")
+))]
+async fn tools_cache_stats_doc() -> impl IntoResponse {
+    ext::tools_api::tools_cache_stats().await
+}
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/admin/chat", tag = "Admin/Chat", responses(
     (status=200, description="Chat history"),

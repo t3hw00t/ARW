@@ -41,6 +41,7 @@ nav:
       - Security Hardening: guide/security_hardening.md
       - Network Posture: guide/network_posture.md
       - Desktop Launcher: guide/launcher.md
+      - Screenshots: guide/screenshots.md
       - Admin Endpoints: guide/admin_endpoints.md
       - Troubleshooting: guide/troubleshooting.md
   - Reference:
