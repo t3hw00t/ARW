@@ -51,6 +51,7 @@ nav:
           - Egress Schemas: api/egress_schemas.md
           - Cluster Schemas: api/cluster_schemas.md
           - Memory & World Schemas: api/memory_world_schemas.md
+          - JSON Schemas: reference/schemas.md
       - Support Matrix: reference/support_matrix.md
       - Telemetry & Privacy: reference/telemetry_privacy.md
       - Trust Boundaries: reference/trust_boundaries.md

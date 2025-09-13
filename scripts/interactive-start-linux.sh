@@ -88,22 +88,23 @@ env_args() {
 start_service_only() {
   ic_section "Start: service only"
   if ! security_preflight; then ic_warn "Start canceled"; return; fi
-  ARW_NO_TRAY=1 ARW_PORT="$PORT" ARW_DOCS_URL="$DOCS_URL" ARW_ADMIN_TOKEN="$ADMIN_TOKEN" \
+  ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 ARW_PORT="$PORT" ARW_DOCS_URL="$DOCS_URL" ARW_ADMIN_TOKEN="$ADMIN_TOKEN" \
   ARW_CONFIG="$CFG_PATH" ARW_PID_FILE="$PID_FILE" ARW_LOG_FILE="$LOGS_DIR/arw-svc.out.log" \
   readarray -t _ARGS < <(env_args); bash "$DIR/start.sh" "${_ARGS[@]}" || true
 }
 
-start_tray_plus_service() {
-  ic_section "Start: tray + service"
+start_launcher_plus_service() {
+  ic_section "Start: launcher + service"
   if ! security_preflight; then ic_warn "Start canceled"; return; fi
   ARW_PORT="$PORT" ARW_DOCS_URL="$DOCS_URL" ARW_ADMIN_TOKEN="$ADMIN_TOKEN" \
   ARW_CONFIG="$CFG_PATH" ARW_PID_FILE="$PID_FILE" ARW_LOG_FILE="$LOGS_DIR/arw-svc.out.log" \
   readarray -t _ARGS < <(env_args); bash "$DIR/start.sh" "${_ARGS[@]}" || true
-  # If tray still unavailable, hint dependencies
-  local tray
-  tray=$(ic_detect_bin arw-tray)
-  if [[ ! -x "$tray" ]]; then
-    ic_warn "Tray not available. On Linux, install pkg-config and GTK dev (see Setup → Dependencies)."
+  # If launcher missing or fails to build, hint Linux WebKitGTK deps for Tauri
+  local launcher
+  launcher=$(ic_detect_bin arw-launcher)
+  if [[ ! -x "$launcher" ]]; then
+    ic_warn "Launcher not available. On Linux, install WebKitGTK 4.1 + libsoup3 dev packages."
+    ic_info "Run: bash scripts/install-tauri-deps.sh"
   fi
 }
 
@@ -288,7 +289,7 @@ main_menu() {
   1) Configure runtime (port/docs/token)
   2) Select config file (ARW_CONFIG)
   3) Start service only
-  4) Start tray + service (if available)
+  4) Start launcher + service
   5) Start connector (NATS)
   6) Open/probe endpoints
   7) Build & test
@@ -304,7 +305,7 @@ main_menu() {
   17) Configure HTTP port (write config)
   18) Spec sync (validate /spec)
   19) Docs build + open
-  20) Tray build check
+  20) Launcher build check
   21) Export OpenAPI + schemas
   22) Security tips
   23) Troubleshoot (analyze logs)
@@ -327,7 +328,7 @@ EOF
       1) configure_runtime ;;
       2) pick_config ;;
       3) start_service_only ;;
-      4) start_tray_plus_service ;;
+      4) start_launcher_plus_service ;;
       5) start_connector ;;
       6) open_links_menu ;;
       7) build_test_menu ;;
@@ -343,7 +344,7 @@ EOF
       17) configure_http_port ;;
       18) spec_sync ;;
       19) docs_build_open ;;
-      20) tray_build_check ;;
+      20) launcher_build_check ;;
       21) spec_export ;;
       22) ic_security_tips ;;
       23) troubleshoot ;;
@@ -472,16 +473,12 @@ docs_build_open() {
   if [[ -f "$ROOT/site/index.html" ]]; then ic_open_url "file://$ROOT/site/index.html"; else ic_warn "site/index.html not found"; fi
 }
 
-tray_build_check() {
-  ic_section "Tray build check"
-  if ! command -v pkg-config >/dev/null 2>&1; then ic_warn "pkg-config not found. Enable in Dependencies"; fi
-  if command -v pkg-config >/dev/null 2>&1; then
-    if pkg-config --exists gtk+-3.0; then ic_info "GTK3 detected"; else ic_warn "GTK3 not detected"; fi
-  fi
-  local log="$ROOT/.arw/logs/tray-build.log"; mkdir -p "$(dirname "$log")"
-  (cd "$ROOT" && ic_cargo build --release -p arw-tray) &>"$log" || true
+launcher_build_check() {
+  ic_section "Launcher build check (Tauri)"
+  local log="$ROOT/.arw/logs/launcher-build.log"; mkdir -p "$(dirname "$log")"
+  (cd "$ROOT" && ic_cargo build --release -p arw-launcher) &>"$log" || true
   tail -n 40 "$log" 2>/dev/null || true
-  local exe="$ROOT/target/release/arw-tray"; if [[ -x "$exe" ]]; then ic_info "Tray built at $exe"; else ic_warn "Tray build did not produce binary (see log)"; fi
+  local exe="$ROOT/target/release/arw-launcher"; if [[ -x "$exe" ]]; then ic_info "Launcher built at $exe"; else ic_warn "Launcher build did not produce binary (see log). On Linux, install WebKitGTK 4.1 + libsoup3 dev packages (see scripts/install-tauri-deps.sh)"; fi
   ic_press_enter
 }
 
@@ -497,9 +494,10 @@ spec_export() {
 
 troubleshoot() {
   ic_banner "Troubleshooter" "Common issues"
-  local tlog="$ROOT/.arw/logs/tray-build.log"; if [[ -f "$tlog" ]]; then
-    if grep -qi 'pkg-config' "$tlog"; then ic_warn "pkg-config errors detected. Install via Dependencies."; fi
-    if grep -qi 'gtk' "$tlog"; then ic_warn "GTK headers missing. Install GTK dev (Dependencies)."; fi
+  local tlog="$ROOT/.arw/logs/launcher-build.log"; if [[ -f "$tlog" ]]; then
+    if grep -qi 'webkit2gtk' "$tlog" || grep -qi 'javascriptcoregtk' "$tlog" || grep -qi 'libsoup' "$tlog"; then
+      ic_warn "Missing WebKitGTK 4.1 / JavaScriptCoreGTK / libsoup3 dev packages. Run scripts/install-tauri-deps.sh."
+    fi
   fi
   local slog="$ROOT/.arw/logs/arw-svc.out.log"; if [[ -f "$slog" ]]; then
     if grep -qi 'failed to bind' "$slog"; then ic_warn "Port in use; configure a new port."; fi
@@ -746,7 +744,7 @@ logs_menu() {
   echo "  0) Back"
   read -r -p "Select: " pick || true
   case "$pick" in
-    1) ARW_LOG_FILE="$svc_log" ARW_NO_TRAY=1 ARW_PORT="$PORT" bash -lc true >/dev/null 2>&1; if [[ -f "$svc_log" ]]; then tail -n 200 -f "$svc_log"; else { ic_warn "No service log yet. It will appear after next start with logging."; ic_press_enter; }; fi ;;
+    1) ARW_LOG_FILE="$svc_log" ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 ARW_PORT="$PORT" bash -lc true >/dev/null 2>&1; if [[ -f "$svc_log" ]]; then tail -n 200 -f "$svc_log"; else { ic_warn "No service log yet. It will appear after next start with logging."; ic_press_enter; }; fi ;;
     2) if [[ -f "$nats_out" ]]; then tail -n 200 -f "$nats_out"; else { ic_warn "No nats out log"; ic_press_enter; }; fi ;;
     3) if [[ -f "$nats_err" ]]; then tail -n 200 -f "$nats_err"; else { ic_warn "No nats err log"; ic_press_enter; }; fi ;;
     *) : ;;

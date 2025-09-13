@@ -438,7 +438,7 @@ ic_doctor() {
   command -v jq >/dev/null 2>&1 && ic_info "jq: $(jq --version)" || ic_warn "jq not found"
   command -v mkdocs >/dev/null 2>&1 && ic_info "mkdocs: $(mkdocs --version 2>/dev/null | head -n1)" || ic_warn "mkdocs not found (docs optional)"
   local svc; svc=$(ic_detect_bin arw-svc); [[ -x "$svc" ]] && ic_info "arw-svc: $svc" || ic_warn "arw-svc not built"
-  local tray; tray=$(ic_detect_bin arw-tray); [[ -x "$tray" ]] && ic_info "arw-tray: $tray" || ic_warn "tray not built (GTK optional)"
+  local launcher; launcher=$(ic_detect_bin arw-launcher); [[ -x "$launcher" ]] && ic_info "arw-launcher: $launcher" || ic_warn "launcher not built (Tauri)"
   local nats="${ARW_NATS_URL:-nats://127.0.0.1:4222}"; read -r h p < <(ic_parse_host_port "$nats");
   if ic_port_test "$h" "$p"; then ic_info "NATS reachable at $h:$p"; else ic_warn "NATS not reachable at $h:$p"; fi
 }
@@ -563,7 +563,7 @@ ic_feature_matrix() {
   ic_section "Feature Matrix"
   printf "  • Service:    arw-svc (HTTP, /debug UI)\n"
   printf "  • CLI:        arw-cli (tools, capsules, gates)\n"
-  printf "  • Tray:       arw-tray (optional; Linux requires GTK)\n"
+  printf "  • Launcher:   arw-launcher (Tauri; Linux needs WebKitGTK 4.1 + libsoup3)\n"
   printf "  • Connector:  arw-connector (optional; NATS feature)\n"
   printf "  • Docs:       MkDocs site under docs/ (optional)\n"
 }

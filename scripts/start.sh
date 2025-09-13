@@ -12,6 +12,9 @@ no_build=0
 wait_health=0
 wait_health_timeout_secs=30
 pid_file="${ARW_PID_FILE:-}"
+# New modes: prefer launcher-first by default
+service_only=0
+launcher_only=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -24,8 +27,10 @@ while [[ $# -gt 0 ]]; do
     --no-build) no_build=1; shift;;
     --wait-health) wait_health=1; shift;;
     --wait-health-timeout-secs) wait_health_timeout_secs="$2"; shift 2;;
+    --service-only) service_only=1; shift;;
+    --launcher-only) launcher_only=1; shift;;
     -h|--help)
-      echo "Usage: $0 [--port N] [--debug] [--docs-url URL] [--admin-token TOKEN] [--timeout-secs N] [--dist] [--no-build] [--wait-health] [--wait-health-timeout-secs N]"; exit 0;;
+      echo "Usage: $0 [--port N] [--debug] [--docs-url URL] [--admin-token TOKEN] [--timeout-secs N] [--dist] [--no-build] [--wait-health] [--wait-health-timeout-secs N] [--service-only] [--launcher-only]"; exit 0;;
     *) echo "Unknown option: $1"; exit 1;;
   esac
 done
@@ -50,35 +55,30 @@ else
   launcher="$ROOT/target/release/$launcher_exe"
 fi
 
-if [[ ! -x "$svc" ]]; then
-  if [[ $no_build -eq 1 ]]; then
-    echo "[start] Service binary not found and --no-build specified. Build first or omit --no-build." >&2
-    exit 1
+if [[ $service_only -eq 1 ]]; then
+  # Ensure service exists (build if allowed)
+  if [[ ! -x "$svc" ]]; then
+    if [[ $no_build -eq 1 ]]; then
+      echo "[start] Service binary not found and --no-build specified. Build first or omit --no-build." >&2
+      exit 1
+    fi
+    echo "[start] Service binary not found ($svc). Building release..."
+    (cd "$ROOT" && cargo build --release -p arw-svc)
+    svc="$ROOT/target/release/$exe"
   fi
-  echo "[start] Service binary not found ($svc). Building release..."
-  (cd "$ROOT" && cargo build --release -p arw-svc)
-  svc="$ROOT/target/release/$exe"
-fi
-
-if [[ ! -x "$launcher" && $no_build -eq 0 ]]; then
-  echo "[start] Launcher binary not found ($launcher). Attempting build..."
-  (cd "$ROOT" && cargo build --release -p arw-launcher) || true
-  launcher="$ROOT/target/release/$launcher_exe"
-fi
-
-echo "[start] Launching $svc on http://127.0.0.1:$ARW_PORT"
-if [[ -n "${ARW_LOG_FILE:-}" ]]; then
-  mkdir -p "$(dirname "$ARW_LOG_FILE")" || true
-  echo "[start] Logging service output to $ARW_LOG_FILE"
-  "$svc" >>"$ARW_LOG_FILE" 2>&1 &
 else
-  "$svc" &
+  # Ensure launcher exists (build if allowed)
+  if [[ ! -x "$launcher" ]]; then
+    if [[ $no_build -eq 1 ]]; then
+      echo "[start] Launcher binary not found and --no-build specified. Build first or omit --no-build." >&2
+    else
+      echo "[start] Launcher binary not found ($launcher). Attempting build..."
+      (cd "$ROOT" && cargo build --release -p arw-launcher) || true
+      launcher="$ROOT/target/release/$launcher_exe"
+    fi
+  fi
 fi
-svc_pid=$!
-if [[ -n "$pid_file" ]]; then
-  mkdir -p "$(dirname "$pid_file")" || true
-  echo "$svc_pid" > "$pid_file" || true
-fi
+
 wait_for_health() {
   local base="http://127.0.0.1:$ARW_PORT"
   local deadline=$(( $(date +%s) + wait_health_timeout_secs ))
@@ -100,17 +100,38 @@ wait_for_health() {
   return 1
 }
 
-if [[ $wait_health -eq 1 ]]; then
-  wait_for_health || true
-fi
-
-if [[ "${ARW_NO_TRAY:-0}" == "1" ]]; then
-  echo "[start] ARW_NO_TRAY=1; skipping launcher; service running in background"
+if [[ $service_only -eq 1 ]]; then
+  echo "[start] Starting service only on http://127.0.0.1:$ARW_PORT"
+  if [[ -n "${ARW_LOG_FILE:-}" ]]; then
+    mkdir -p "$(dirname "$ARW_LOG_FILE")" || true
+    echo "[start] Logging service output to $ARW_LOG_FILE"
+    "$svc" >>"$ARW_LOG_FILE" 2>&1 &
+  else
+    "$svc" &
+  fi
+  svc_pid=$!
+  if [[ -n "$pid_file" ]]; then
+    mkdir -p "$(dirname "$pid_file")" || true
+    echo "$svc_pid" > "$pid_file" || true
+  fi
+  if [[ $wait_health -eq 1 ]]; then
+    wait_for_health || true
+  fi
+  # Stay in foreground to keep service attached when logs are not redirected
   wait
-elif [[ -x "$launcher" ]]; then
-  echo "[start] Launching launcher $launcher"
-  exec "$launcher"
 else
-  echo "[start] Launcher binary not found ($launcher); service running in background"
-  wait
+  if [[ "${ARW_NO_LAUNCHER:-0}" == "1" || "${ARW_NO_TRAY:-0}" == "1" ]]; then
+    echo "[start] Headless requested via env (ARW_NO_LAUNCHER/ARW_NO_TRAY); forcing --service-only"
+    exec "$0" --service-only "$@"
+  fi
+  if [[ ! -x "$launcher" ]]; then
+    echo "[start] Launcher binary not found ($launcher); falling back to service only"
+    exec "$0" --service-only "$@"
+  fi
+  if [[ $launcher_only -eq 0 ]]; then
+    # Hint the launcher to auto-start the service
+    export ARW_AUTOSTART=1
+  fi
+  echo "[start] Launching launcher $launcher (port $ARW_PORT)"
+  exec "$launcher"
 fi

@@ -57,13 +57,13 @@ ensure_prereqs() {
     ic_warn "MkDocs not found (docs optional)"
   fi
   if command -v pkg-config >/dev/null 2>&1; then
-    if pkg-config --exists gtk+-3.0 2>/dev/null || pkg-config --exists gtk4 2>/dev/null; then
-      ic_info "GTK detected (tray build likely OK)"
+    if pkg-config --exists webkit2gtk-4.1 2>/dev/null && pkg-config --exists javascriptcoregtk-4.1 2>/dev/null && pkg-config --exists libsoup-3.0 2>/dev/null; then
+      ic_info "WebKitGTK 4.1 + libsoup3 detected (launcher build OK)"
     else
-      ic_warn "GTK dev files not detected (tray optional). Install libgtk-3-dev (or gtk4)"
+      ic_warn "Missing WebKitGTK 4.1 / JavaScriptCoreGTK / libsoup3 dev packages (needed for launcher)."
     fi
   else
-    ic_warn "pkg-config not found (tray optional)"
+    ic_warn "pkg-config not found (needed to build the launcher)"
   fi
   ic_press_enter
   return $ok
@@ -89,7 +89,7 @@ dependencies_menu() {
   2) Install cargo-nextest (tests)
   3) Install jq (package manager or local)
   4) Install pkg-config
-  5) Install GTK dev (for tray)
+  5) Install Tauri deps (WebKitGTK 4.1 + libsoup3)
   6) Create local MkDocs venv (.venv)
   7) Toggle use of Nix devshell for builds [current: ${ARW_USE_NIX}]
   8) Toggle system package managers (apt/dnf/brew) [current: ${ARW_ALLOW_SYSTEM_PKGS:-0}]
@@ -103,7 +103,7 @@ EOF
       2) ic_ensure_nextest || ic_warn "cargo-nextest install failed" ;;
       3) ic_ensure_jq || ic_warn "jq install failed" ;;
       4) ic_install_pkg pkg-config || ic_warn "pkg-config install failed" ;;
-      5) ic_install_pkg gtk-dev || ic_warn "GTK dev install failed" ;;
+      5) bash "$DIR/install-tauri-deps.sh" || ic_warn "See above for distro-specific commands" ;;
       6) ic_ensure_mkdocs_venv || ic_warn "MkDocs venv install failed" ;;
       7) if [[ "${ARW_USE_NIX}" == "1" ]]; then export ARW_USE_NIX=0; else export ARW_USE_NIX=1; fi ;;
       8) if [[ "${ARW_ALLOW_SYSTEM_PKGS:-0}" == "1" ]]; then export ARW_ALLOW_SYSTEM_PKGS=0; else export ARW_ALLOW_SYSTEM_PKGS=1; fi ;;
@@ -245,8 +245,8 @@ first_run_wizard() {
   ic_banner "First‑Run Wizard" "Guided setup for ARW"
   ic_section "Goal"
   echo "  Choose a setup profile:"
-  echo "   1) Local only (no tray)"
-  echo "   2) Local with tray (optional)"
+  echo "   1) Local only (no launcher)"
+  echo "   2) Local with launcher (preferred)"
   echo "   3) Cluster (NATS)"
   read -r -p "Select [1/2/3]: " prof; prof=${prof:-1}
 
@@ -288,8 +288,17 @@ TOML
   ic_info "Wrote configs/local.toml and set ARW_CONFIG"
 
   if [[ "$prof" == 2 ]]; then
-    ic_section "Tray"
-    if command -v pkg-config >/dev/null 2>&1; then pkg-config --exists gtk+-3.0 && ic_info "GTK ok" || ic_warn "GTK dev missing (tray optional)"; else ic_warn "pkg-config missing (tray optional)"; fi
+    ic_section "Launcher deps"
+    if command -v pkg-config >/dev/null 2>&1; then
+      if pkg-config --exists webkit2gtk-4.1 2>/dev/null && pkg-config --exists javascriptcoregtk-4.1 2>/dev/null && pkg-config --exists libsoup-3.0 2>/dev/null; then
+        ic_info "WebKitGTK 4.1 + libsoup3 detected"
+      else
+        ic_warn "Missing WebKitGTK 4.1 / JavaScriptCoreGTK / libsoup3 dev packages (needed for launcher)"
+        ic_info "Hint: bash scripts/install-tauri-deps.sh"
+      fi
+    else
+      ic_warn "pkg-config not found (needed to build the launcher)"
+    fi
   elif [[ "$prof" == 3 ]]; then
     ic_section "NATS"
     ic_nats_install || ic_warn "NATS install failed"
@@ -301,7 +310,7 @@ TOML
 
   ic_section "Start"
   read -r -p "Start service now? (Y/n): " go; if [[ "${go,,}" != n* ]]; then
-    ARW_NO_TRAY=$([[ "$prof" == 2 ]] && echo 0 || echo 1) \
+    ARW_NO_LAUNCHER=$([[ "$prof" == 2 ]] && echo 0 || echo 1) ARW_NO_TRAY=$([[ "$prof" == 2 ]] && echo 0 || echo 1) \
     ARW_PORT="$PORT" ARW_CONFIG="$ARW_CONFIG" ARW_DOCS_URL="$DOCS_URL" \
     ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" bash "$DIR/start.sh" --debug --port "$PORT" --wait-health --wait-health-timeout-secs 20
     ic_open_url "http://127.0.0.1:$PORT/spec"

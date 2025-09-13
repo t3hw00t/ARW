@@ -54,21 +54,21 @@
     },
     {
       "id": "t-250909170248-9575",
-      "title": "Install GTK dev packages + build tray",
-      "desc": "Install libgtk-3-dev and friends; build arw-tray",
+      "title": "Install Tauri deps + build launcher",
+      "desc": "Install WebKitGTK 4.1 + JavaScriptCoreGTK + libsoup3; build arw-launcher",
       "status": "done",
       "notes": [
         {
           "time": "2025-09-09 16:07:39 UTC",
-          "text": "Attempted tray build; pkg-config missing gdk-3.0 (install libgtk-3-dev, ensure pkg-config finds .pc files)"
+          "text": "Attempted launcher build; pkg-config missing webkit2gtk (install tauri deps via scripts/install-tauri-deps.sh)"
         },
         {
           "time": "2025-09-09 16:14:14 UTC",
-          "text": "Linker error: -lxdo not found; install libxdo-dev"
+          "text": "Package dev headers missing; install WebKitGTK/JavaScriptCoreGTK/libsoup dev packages"
         },
         {
           "time": "2025-09-09 16:17:25 UTC",
-          "text": "Tray built successfully with GTK+xdo"
+          "text": "Launcher built successfully"
         }
       ],
       "updated": "2025-09-09 16:17:25 UTC",
@@ -112,8 +112,8 @@
     },
     {
       "id": "t-250909193840-6168",
-      "title": "Stabilize CI for tray + tests",
-      "desc": "Install GTK/xdo dev libs and drop --all-features in tests",
+      "title": "Stabilize CI for launcher deps + tests",
+      "desc": "Install Tauri/WebKitGTK deps on Linux and drop --all-features in tests",
       "status": "done",
       "notes": [],
       "updated": "2025-09-09 17:38:40 UTC",

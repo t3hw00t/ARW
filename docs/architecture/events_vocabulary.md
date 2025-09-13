@@ -53,6 +53,10 @@ Mapping from existing ARW events
  - Memory quarantine emits planned events; a compact review queue materializes under `/state/memory/quarantine`.
  - Cluster trust uses planned manifest events; scheduler logs pin/deny reasons as codes.
 - Tools registered via `#[arw_tool]` already emit `Tool.Ran` with inputs/outputs summary.
+ - Read‑models: small server‑maintained summaries publish RFC‑6902 JSON Patch deltas for efficient UI sync:
+   - `State.ModelsMetrics.Patch` (and generic `State.ReadModel.Patch` id=`models_metrics`) — models counters + EWMA.
+   - `State.RouteStats.Patch` (and generic `State.ReadModel.Patch` id=`route_stats`) — route latencies/hits/errors.
+   Publishing is coalesced; clients can also fetch `/state/models_metrics` and `/state/route_stats` for full snapshots.
 - Self‑Model endpoints emit compact events: `SelfModel.Proposed` (agent, proposal_id, rationale, widens_scope?) and `SelfModel.Updated` (agent, proposal_id). Read‑models available at `/state/self` and `/state/self/{agent}`.
 
 Replay and filtering

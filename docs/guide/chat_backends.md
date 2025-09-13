@@ -27,11 +27,13 @@ Run a local llama.cpp server and point ARW to it:
 export ARW_LLAMA_URL=http://127.0.0.1:8080
 ```
 
-The service will POST to `ARW_LLAMA_URL/completion` with:
+The service will POST to `ARW_LLAMA_URL/completion` with prompt caching enabled for KV/prefix reuse:
 
 ```json
-{ "prompt": "...", "n_predict": 128, "temperature": 0.7 }
+{ "prompt": "...", "n_predict": 128, "cache_prompt": true, "temperature": 0.7 }
 ```
+
+Tip: run llama.cpp with a persistent prompt cache file (e.g., `--prompt-cache llama.prompt.bin`) to reuse KV across sessions.
 
 If the server returns `{ "content": "..." }`, ARW uses it. It also supports an OpenAI-like `{ choices[0].message.content }` fallback shape.
 

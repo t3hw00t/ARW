@@ -13,6 +13,5 @@ Endpoints
 
 Semantics
 - status vs code: `status` is human‑friendly, `code` is a stable machine hint.
-- pagination/filtering: TBD per read‑model; will be documented per endpoint.
+- pagination/filtering: available on selected read‑models (e.g., `/state/models_hashes` supports `limit`, `offset`, `provider`, `sort`, `order`). See endpoint docs.
 - stability levels: Stable / Beta / Experimental noted per endpoint as we graduate features.
-

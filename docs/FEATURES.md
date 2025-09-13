@@ -12,6 +12,7 @@ Updated: 2025-09-10 (cluster/gating/hierarchy updates)
 ## Core Capabilities
 - Interop: MCP (client/server), HTTP/WS with OpenAPI 3.1 + AsyncAPI. See: API and Schema (API_AND_SCHEMA.md).
 - Observability: OpenTelemetry traces/logs/metrics; in‑process event bus (optional journal, SSE replay). See: Admin Endpoints (guide/admin_endpoints.md).
+- Caching layers: Action Cache with CAS and singleflight; digest‑addressed blob serving with strong validators; read‑models over SSE (JSON Patch deltas with coalescing); llama.cpp prompt caching. See: Architecture → Caching Layers.
 - Security & Policy: Central gating keys and deny contracts; ingress/egress guards; Policy Capsules; roadmap RPU for signatures/ABAC. See: Security Hardening (guide/security_hardening.md), Policy (POLICY.md).
 - Egress control (planned): policy‑backed, per‑node egress gateway + DNS guard with project‑level network posture and an egress ledger. See: Architecture → Egress Firewall; Guide → Network Posture.
  - Lightweight mitigations (planned): memory quarantine; project isolation; belief‑diff review; cluster manifest pinning; hardened headless browsing; safe archive handling; DNS anomaly guard; accelerator zeroing; event sequencing; context rehydration check. See: Architecture → Lightweight Mitigations.

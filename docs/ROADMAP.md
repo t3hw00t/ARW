@@ -39,6 +39,16 @@ Roadmap highlights themes and timelines; Backlog tracks actionable items.
  - Logic Units (config‑first): manifest/schema, Library UI with diff preview, apply/revert/promote, initial sample units
  - Research Watcher (read‑only): draft Suggested units from curated feeds; human review flow
 
+## Caching & Performance
+- Inference‑level: enable llama.cpp prompt cache; plan vLLM prefix/KV reuse when we add that backend.
+- Exact CAS HTTP caching: strong validators and long‑lived `Cache-Control` for immutable model blobs served by sha256.
+- Action Cache (Bazel‑style): deterministic keys (tool id, version, canonical input, env signature) → CAS’d outputs; in‑memory front (W‑TinyLFU), disk CAS backing.
+- Request coalescing: singleflight on identical tool calls and expensive reads to prevent stampedes.
+- Read‑models over SSE: stream JSON Patch deltas with Last‑Event‑ID resume; avoid snapshot retransmits.
+- Semantic caches (design): per‑user/project Q→A cache with verifier; negative cache for retrieval misses; SimHash prefilter.
+- Storage: RocksDB tiers for persistent caches; optional flash secondary cache; Zstd dictionaries for small JSON blobs.
+- Measurement: layer hit ratios, latency/bytes saved, stampede suppression, semantic false‑hit rate; expose in `/state/*`.
+
 ## Heuristic Feedback Engine
 Scope: Lightweight, near‑live suggestions with guardrails.
 See Backlog → Now → Feedback Engine for concrete work items.
@@ -54,6 +64,8 @@ See Backlog → Now → Feedback Engine for concrete work items.
 - WASI plugin sandbox: capability‑based tools with explicit permissions.
 - Policy engine integration: Cedar bindings; per‑tool permission manifests.
 - Model orchestration: adapters (llama.cpp, ONNX Runtime) with pooling and profiles.
+  - vLLM adapter with PagedAttention and prefix cache; share KV across sessions.
+  - GPU/CPU KV memory policy hints for long‑context batching and prefix sharing.
 - Capsules: record inputs/outputs/events/hints; export/import; deterministic replay.
 - Dataset & memory lab: local pipelines, tags, audits, and reproducible reports.
  - Commons Kit: ship 5 public‑goods recipes with signed index and exportable memories.
@@ -64,6 +76,7 @@ See Backlog → Now → Feedback Engine for concrete work items.
 - Cluster trust (plan): node manifest pinning; mTLS; event sequencing and dedupe keys; scheduler targets only trusted manifests.
 - Regulatory Provenance Unit (RPU): trust store, signature verification, Cedar ABAC for capsule adoption, hop TTL/propagation, adoption ledger (ephemeral by default).
 - JetStream durable queue backend with acks, delay/nack, and subject mapping (keep core NATS for fast lane).
+ - Peer/edge CAS: gated `by-digest` endpoints for tool artifacts; optional gossip in multi‑host dev.
 - Remote core connections (secure multi‑node):
   - mTLS between nodes/connectors and a remote coordinator; certificate rotation strategy.
   - NATS TLS profiles and client auth options for WAN clusters; local default remains plaintext loopback.

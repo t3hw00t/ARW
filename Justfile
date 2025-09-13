@@ -81,7 +81,7 @@ docs-check:
 
 # Service
 start port=8090 debug=1:
-  ARW_NO_TRAY=1 bash scripts/start.sh {{ if debug == "1" { "--debug" } else { "" } }} --port {{port}}
+  ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 bash scripts/start.sh {{ if debug == "1" { "--debug" } else { "" } }} --port {{port}}
 
 open-debug host="127.0.0.1" port=8090:
   bash scripts/open-url.sh http://{{host}}:{{port}}/debug

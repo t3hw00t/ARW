@@ -20,10 +20,11 @@ Full documentation → https://t3hw00t.github.io/Agent_Hub/
 
 - Local‑first: runs offline by default; portable, per‑user state. See `docs/guide/offline_sync.md`.
 - Unified object graph: consistent state across Hub, Chat, and Training. See `docs/architecture/object_graph.md`.
-- Live events (SSE): one stream drives UIs and tools. See `docs/architecture/events_vocabulary.md`.
+- Live events (SSE): one stream drives UIs and tools. See `docs/architecture/events_vocabulary.md` and `docs/architecture/sse_patch_contract.md`.
 - Debug UI: inspect episodes, state snapshots, and traces. See `docs/guide/troubleshooting.md`.
 - Recipes + Schemas: installable strategy packs with JSON Schemas. See `docs/guide/recipes.md` and `spec/schemas/`.
 - Observability: tracing/logging/metrics and journal. See `docs/architecture/observability_otel.md`.
+ - Caching Layers: Action Cache with CAS and singleflight; digest‑addressed blob serving with strong validators; read‑models over SSE (JSON Patch deltas with coalescing); llama.cpp prompt caching. See `docs/architecture/caching_layers.md`.
 
 ## Try ARW in 2 Minutes
 
@@ -36,10 +37,13 @@ powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
 Linux / macOS
 ```bash
 bash scripts/setup.sh
-bash scripts/start.sh --wait-health
+# Option A: Desktop launcher
+cargo run -p arw-launcher
+# Option B: Headless service only
+bash scripts/start.sh --service-only --wait-health
 ```
 
-Open http://127.0.0.1:8090 and visit `/debug` (set `ARW_DEBUG=1` for local dev). The Debug UI includes an Episodes panel (stitched by `corr_id`) and live state snapshots; server read‑models are exposed under `/state/*` (observations, beliefs, world, intents, actions, episodes, self/{agent}).
+Open http://127.0.0.1:8090 and visit `/debug` (set `ARW_DEBUG=1` for local dev). The Debug UI includes an Episodes panel (stitched by `corr_id`) and live state snapshots; server read‑models are exposed under `/state/*` (observations, beliefs, world, intents, actions, episodes, self/{agent}). The desktop launcher tray also exposes “Debug” and “Windows” shortcuts.
 
 Docker (amd64/arm64); Native binaries: Windows (x64/ARM64), macOS (x64/ARM64), Linux (x64/ARM64)
 ```bash
@@ -66,7 +70,7 @@ docker run --rm -p 8090:8090 ghcr.io/t3hw00t/arw-svc:latest
 
 ## What’s Inside
 
-- Service: user‑mode HTTP with debug UI and SSE events
+- Service: user‑mode HTTP with debug UI and SSE events. “Snappy by Default” budgets prioritize first feedback within 50 ms and first partial ≤150 ms; see `docs/ethics/SNAPPY_CHARTER.md`.
 - Tools: macro‑driven registration with generated JSON Schemas
 - Observability: tracing/logging/metrics and event journal (optional)
 - Packaging: portable installs and per‑user state by default

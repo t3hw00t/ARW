@@ -4,62 +4,83 @@ use tauri::Manager;
 #[cfg(all(desktop, not(test)))]
 fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()> {
     use std::time::Duration;
-    use tauri::menu::{Menu, MenuItem};
+    use tauri::menu::{Menu, MenuItem, Submenu};
     use tauri::tray::TrayIconBuilder;
 
-    let start_i = MenuItem::with_id(app, "start", "Start Service", true, None::<&str>)?;
-    let stop_i = MenuItem::with_id(app, "stop", "Stop Service", true, None::<&str>)?;
-    let open_i = MenuItem::with_id(app, "open-debug", "Open Debug UI", true, None::<&str>)?;
-    let events_i = MenuItem::with_id(app, "events", "Events Window", true, None::<&str>)?;
-    let logs_i = MenuItem::with_id(app, "logs", "Logs", true, None::<&str>)?;
-    let models_i = MenuItem::with_id(app, "models", "Models", true, None::<&str>)?;
-    let conns_i = MenuItem::with_id(app, "connections", "Connections", true, None::<&str>)?;
+    // Service submenu
+    let svc_start = MenuItem::with_id(app, "svc-start", "Start Service", true, None::<&str>)?;
+    let svc_stop = MenuItem::with_id(app, "svc-stop", "Stop Service", true, None::<&str>)?;
+    let svc_sub = Submenu::with_id_and_items(app, "svc", "Service", true, &[&svc_start, &svc_stop])?;
+
+    // Debug submenu
+    let dbg_browser = MenuItem::with_id(
+        app,
+        "dbg-browser",
+        "Open Debug (Browser)",
+        true,
+        None::<&str>,
+    )?;
+    let dbg_window =
+        MenuItem::with_id(app, "dbg-window", "Open Debug (Window)", true, None::<&str>)?;
+    let dbg_sub = Submenu::with_id_and_items(app, "dbg", "Debug", true, &[&dbg_browser, &dbg_window])?;
+
+    // Windows submenu
+    let w_events = MenuItem::with_id(app, "win-events", "Events", true, None::<&str>)?;
+    let w_logs = MenuItem::with_id(app, "win-logs", "Logs", true, None::<&str>)?;
+    let w_models = MenuItem::with_id(app, "win-models", "Models", true, None::<&str>)?;
+    let w_conns = MenuItem::with_id(app, "win-conns", "Connections", true, None::<&str>)?;
+    let windows_sub = Submenu::with_id_and_items(app, "windows", "Windows", true, &[&w_events, &w_logs, &w_models, &w_conns])?;
+
+    // Quit
     let quit_i = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
 
-    let menu = Menu::with_items(
-        app,
-        &[
-            &start_i, &stop_i, &open_i, &events_i, &logs_i, &models_i, &conns_i, &quit_i,
-        ],
-    )?;
+    let menu = Menu::with_items(app, &[&svc_sub, &dbg_sub, &windows_sub, &quit_i])?;
 
-    let _ = TrayIconBuilder::with_id("arw-tray")
+    let _ = TrayIconBuilder::with_id("arw-launcher-tray")
         .tooltip("ARW")
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
-            "start" => {
+            // Service
+            "svc-start" => {
                 let st = app.state::<ServiceState>();
                 let _ = arw_tauri::start_service(st, None);
             }
-            "stop" => {
-                let st = app.state::<ServiceState>();
-                let _ = arw_tauri::stop_service(st, None);
+            "svc-stop" => {
+                let app_c = app.clone();
+                tauri::async_runtime::spawn(async move {
+                    let st = app_c.state::<ServiceState>();
+                    let _ = arw_tauri::stop_service(st, None).await;
+                });
             }
-            "open-debug" => {
+            // Debug
+            "dbg-browser" => {
                 let _ = arw_tauri::open_debug_ui(None);
             }
-            "events" => {
+            "dbg-window" => {
+                let _ = arw_tauri::open_debug_window(app.clone(), None);
+            }
+            // Windows
+            "win-events" => {
                 let _ = arw_tauri::open_events_window(app.clone());
             }
-            "logs" => {
+            "win-logs" => {
                 let _ = arw_tauri::open_logs_window(app.clone());
             }
-            "models" => {
+            "win-models" => {
                 let _ = arw_tauri::open_models_window(app.clone());
             }
-            "connections" => {
+            "win-conns" => {
                 let _ = arw_tauri::open_connections_window(app.clone());
             }
-            "quit" => {
-                app.exit(0);
-            }
+            // App
+            "quit" => app.exit(0),
             _ => {}
         })
         .build(app);
 
     // Background health polling to update tray state + notifications on change
-    let start_h = start_i.clone();
-    let stop_h = stop_i.clone();
+    let start_h = svc_start.clone();
+    let stop_h = svc_stop.clone();
     let app_h = app.clone();
     tauri::async_runtime::spawn(async move {
         let mut prev = None;
@@ -86,7 +107,7 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
                 .unwrap_or(false);
             let _ = start_h.set_enabled(!is_up);
             let _ = stop_h.set_enabled(is_up);
-            if let Some(tray) = app_h.tray_by_id("arw-tray") {
+            if let Some(tray) = app_h.tray_by_id("arw-launcher-tray") {
                 let _ = tray.set_tooltip(Some(if is_up { "ARW: online" } else { "ARW: offline" }));
             }
             if prev != Some(is_up) {

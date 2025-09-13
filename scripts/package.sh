@@ -72,9 +72,6 @@ exe=''
 
 cp "$bin_dir/arw-svc$exe" "$out/bin/arw-svc$exe"
 cp "$bin_dir/arw-cli$exe" "$out/bin/arw-cli$exe" 2>/dev/null || true
-if [[ -f "$bin_dir/arw-tray$exe" ]]; then
-  cp "$bin_dir/arw-tray$exe" "$out/bin/arw-tray$exe"
-fi
 if [[ -f "$bin_dir/arw-launcher$exe" ]]; then
   cp "$bin_dir/arw-launcher$exe" "$out/bin/arw-launcher$exe"
 fi
@@ -100,7 +97,7 @@ Usage
 - Run service: bin/arw-svc$exe
 - Debug UI:    http://127.0.0.1:8090/debug
 - CLI sanity:  bin/arw-cli$exe
- - Launcher:    bin/arw-launcher$exe (includes tray)
+ - Launcher:    bin/arw-launcher$exe (tray + windows UI)
 
 Notes
 - To force portable mode: export ARW_PORTABLE=1

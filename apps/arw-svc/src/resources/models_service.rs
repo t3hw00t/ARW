@@ -4,7 +4,120 @@ use crate::app_state::AppState;
 use futures_util::StreamExt;
 use once_cell::sync::OnceCell;
 use std::collections::{HashMap, HashSet};
-use tokio::sync::{RwLock, Semaphore}; // for cancel/active job tracking
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::OnceLock as StdOnceLock;
+use tokio::sync::{Notify, RwLock, Semaphore}; // for cancel/active job tracking
+
+// ---------------- Models download metrics (process-local counters) ----------------
+static DL_STARTED: AtomicU64 = AtomicU64::new(0);
+static DL_QUEUED: AtomicU64 = AtomicU64::new(0);
+static DL_ADMITTED: AtomicU64 = AtomicU64::new(0);
+static DL_RESUMED: AtomicU64 = AtomicU64::new(0);
+static DL_CANCELED: AtomicU64 = AtomicU64::new(0);
+static DL_COMPLETED: AtomicU64 = AtomicU64::new(0);
+static DL_COMPLETED_CACHED: AtomicU64 = AtomicU64::new(0);
+static DL_ERRORS: AtomicU64 = AtomicU64::new(0);
+static DL_BYTES: AtomicU64 = AtomicU64::new(0);
+
+// Coalescing buffer for metrics patches
+static METRICS_DIRTY: AtomicBool = AtomicBool::new(false);
+static METRICS_NOTIFY: StdOnceLock<Notify> = StdOnceLock::new();
+fn metrics_notify() -> &'static Notify {
+    METRICS_NOTIFY.get_or_init(Notify::new)
+}
+fn metrics_mark_dirty() {
+    METRICS_DIRTY.store(true, Ordering::Relaxed);
+    metrics_notify().notify_one();
+}
+
+fn metrics_bump_status(s: &str) {
+    match s {
+        "started" => {
+            DL_STARTED.fetch_add(1, Ordering::Relaxed);
+        }
+        "queued" => {
+            DL_QUEUED.fetch_add(1, Ordering::Relaxed);
+        }
+        "admitted" => {
+            DL_ADMITTED.fetch_add(1, Ordering::Relaxed);
+        }
+        "resumed" => {
+            DL_RESUMED.fetch_add(1, Ordering::Relaxed);
+        }
+        "canceled" => {
+            DL_CANCELED.fetch_add(1, Ordering::Relaxed);
+        }
+        _ => {}
+    }
+}
+
+pub fn models_metrics_value() -> Value {
+    json!({
+        "started": DL_STARTED.load(Ordering::Relaxed),
+        "queued": DL_QUEUED.load(Ordering::Relaxed),
+        "admitted": DL_ADMITTED.load(Ordering::Relaxed),
+        "resumed": DL_RESUMED.load(Ordering::Relaxed),
+        "canceled": DL_CANCELED.load(Ordering::Relaxed),
+        "completed": DL_COMPLETED.load(Ordering::Relaxed),
+        "completed_cached": DL_COMPLETED_CACHED.load(Ordering::Relaxed),
+        "errors": DL_ERRORS.load(Ordering::Relaxed),
+        "bytes_total": DL_BYTES.load(Ordering::Relaxed),
+    })
+}
+
+fn publish_models_metrics_patch(bus: &arw_events::Bus) {
+    let cur = models_metrics_value();
+    // Emit under both a specific and a generic topic for broader consumers
+    crate::ext::read_model::emit_patch_dual(
+        bus,
+        "State.ModelsMetrics.Patch",
+        "State.ReadModel.Patch",
+        "models_metrics",
+        &cur,
+    );
+}
+
+// Emit JSON Patch for the models state (list + default).
+async fn publish_models_state_patch(bus: &arw_events::Bus) {
+    let list = crate::ext::models().read().await.clone();
+    let default = crate::ext::default_model().read().await.clone();
+    let cur = json!({ "items": list, "default": default });
+    crate::ext::read_model::emit_patch_dual(
+        bus,
+        "State.Models.Patch",
+        "State.ReadModel.Patch",
+        "models",
+        &cur,
+    );
+}
+
+/// Start coalesced publisher for models metrics read‑model
+pub async fn start_models_metrics_publisher(bus: arw_events::Bus) {
+    let idle_ms: u64 = std::env::var("ARW_MODELS_METRICS_PUBLISH_MS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(2000)
+        .max(200);
+    let coalesce_ms: u64 = std::env::var("ARW_MODELS_METRICS_COALESCE_MS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(250)
+        .max(10);
+    let notify = metrics_notify();
+    let mut idle = tokio::time::interval(std::time::Duration::from_millis(idle_ms));
+    loop {
+        tokio::select! {
+            _ = notify.notified() => {
+                tokio::time::sleep(std::time::Duration::from_millis(coalesce_ms)).await;
+                let _ = METRICS_DIRTY.swap(false, Ordering::Relaxed);
+                publish_models_metrics_patch(&bus);
+            }
+            _ = idle.tick() => {
+                publish_models_metrics_patch(&bus);
+            }
+        }
+    }
+}
 
 #[derive(Default)]
 pub struct ModelsService;
@@ -47,7 +160,13 @@ fn emit_progress(
     }
     let mut payload = Value::Object(obj);
     crate::ext::corr::ensure_corr(&mut payload);
+    // Increment metrics by status when present
+    if let Some(Value::String(s)) = payload.get("status") {
+        metrics_bump_status(s);
+    }
     bus.publish("Models.DownloadProgress", &payload);
+    // Mark for coalesced patch publish
+    metrics_mark_dirty();
 }
 
 // Small helper to emit standardized error events and audit them.
@@ -78,7 +197,9 @@ async fn emit_error(
     }
     let mut payload = Value::Object(obj);
     crate::ext::corr::ensure_corr(&mut payload);
+    DL_ERRORS.fetch_add(1, Ordering::Relaxed);
     bus.publish("Models.DownloadProgress", &payload);
+    metrics_mark_dirty();
     crate::ext::io::audit_event("models.download.error", &payload).await;
 
     // Reflect error status into models list to avoid "downloading" getting stuck.
@@ -101,6 +222,8 @@ async fn emit_error(
         .await;
     }
     bus.publish("Models.Changed", &json!({"op":"error","id": id}));
+    // Stream a read-model patch for consumers applying deltas
+    publish_models_state_patch(bus).await;
 }
 
 // tests are placed at the end of file to avoid clippy items-after-test-module
@@ -331,25 +454,33 @@ impl ModelsService {
     fn http_keepalive() -> Option<std::time::Duration> {
         use std::time::Duration;
         static VAL: OnceCell<Option<Duration>> = OnceCell::new();
-        VAL.get_or_init(|| {
+        *VAL.get_or_init(|| {
             let secs = std::env::var("ARW_DL_HTTP_KEEPALIVE_SECS")
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(60);
-            if secs == 0 { None } else { Some(Duration::from_secs(secs)) }
-        }).clone()
+            if secs == 0 {
+                None
+            } else {
+                Some(Duration::from_secs(secs))
+            }
+        })
     }
     // ARW_DL_HTTP_POOL_IDLE_SECS: u64 seconds; 0 disables explicit idle timeout. Default 90.
     fn http_pool_idle_timeout() -> Option<std::time::Duration> {
         use std::time::Duration;
         static VAL: OnceCell<Option<Duration>> = OnceCell::new();
-        VAL.get_or_init(|| {
+        *VAL.get_or_init(|| {
             let secs = std::env::var("ARW_DL_HTTP_POOL_IDLE_SECS")
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
                 .unwrap_or(90);
-            if secs == 0 { None } else { Some(Duration::from_secs(secs)) }
-        }).clone()
+            if secs == 0 {
+                None
+            } else {
+                Some(Duration::from_secs(secs))
+            }
+        })
     }
     // ARW_DL_HTTP_POOL_MAX_IDLE_PER_HOST: usize; pool slots per host. Default 8, minimum 1.
     fn http_pool_max_idle_per_host() -> usize {
@@ -414,7 +545,7 @@ impl ModelsService {
         // Safety net when hard budget is 0 to avoid hung downloads.
         // Set ARW_DL_IDLE_TIMEOUT_SECS=0 to disable (no idle timeout).
         static DUR: OnceCell<Option<std::time::Duration>> = OnceCell::new();
-        DUR.get_or_init(|| {
+        *DUR.get_or_init(|| {
             let secs = std::env::var("ARW_DL_IDLE_TIMEOUT_SECS")
                 .ok()
                 .and_then(|s| s.parse::<u64>().ok())
@@ -424,7 +555,7 @@ impl ModelsService {
             } else {
                 Some(std::time::Duration::from_secs(secs))
             }
-        }).clone()
+        })
     }
 
     fn disk_reserve_bytes() -> u64 {
@@ -748,7 +879,10 @@ impl ModelsService {
         let mut deleted: u64 = 0;
         let mut deleted_bytes: u64 = 0;
         if let Ok(mut rd) = afs::read_dir(&cas_dir).await {
+            let mut yield_ctr: u64 = 0;
             while let Ok(Some(ent)) = rd.next_entry().await {
+                yield_ctr += 1;
+                if yield_ctr % 64 == 0 { tokio::task::yield_now().await; }
                 let path = ent.path();
                 let Ok(md) = ent.metadata().await else {
                     continue;
@@ -805,7 +939,10 @@ impl ModelsService {
         let _ = afs::create_dir_all(&cas_dir).await;
         let mut changed = false;
         let mut list = crate::ext::models().read().await.clone();
+        let mut ctr: u64 = 0;
         for m in list.iter_mut() {
+            ctr += 1;
+            if ctr % 64 == 0 { tokio::task::yield_now().await; }
             let sh = match m.get("sha256").and_then(|v| v.as_str()) {
                 Some(s) if s.len() == 64 => s.to_string(),
                 _ => continue,
@@ -872,6 +1009,8 @@ impl ModelsService {
                 &Value::Array(list),
             )
             .await;
+            // Read-model patch not emitted here (no bus context); subsequent
+            // interactions will refresh UI from disk.
         }
     }
 
@@ -889,6 +1028,8 @@ impl ModelsService {
         state
             .bus
             .publish("Models.Refreshed", &json!({"count": new.len()}));
+        // Emit patch for the full models state
+        publish_models_state_patch(&state.bus).await;
         new
     }
 
@@ -935,6 +1076,8 @@ impl ModelsService {
                 &json!({"id": v.last().and_then(|m| m.get("id")).cloned() }),
             )
             .await;
+            // Emit patch
+            publish_models_state_patch(&state.bus).await;
         }
     }
 
@@ -947,6 +1090,7 @@ impl ModelsService {
                 .bus
                 .publish("Models.Changed", &json!({"op":"delete","id": id}));
             super::super::ext::io::audit_event("models.delete", &json!({"id": id})).await;
+            publish_models_state_patch(&state.bus).await;
         }
     }
 
@@ -970,6 +1114,7 @@ impl ModelsService {
         .map_err(|e| e.to_string());
         if res.is_ok() {
             super::super::ext::io::audit_event("models.default", &json!({"id": id})).await;
+            publish_models_state_patch(&state.bus).await;
         }
         res
     }
@@ -1205,12 +1350,18 @@ impl ModelsService {
                     )
                     .await;
                     // Publish completion as cached
+                    // Metrics: completed via cache
+                    DL_COMPLETED.fetch_add(1, Ordering::Relaxed);
+                    DL_COMPLETED_CACHED.fetch_add(1, Ordering::Relaxed);
                     let mut p = json!({"id": id_in, "status":"complete", "file": cas_file_name, "provider": provider, "code":"cached"});
                     crate::ext::corr::ensure_corr(&mut p);
                     state.bus.publish("Models.DownloadProgress", &p);
+                    metrics_mark_dirty();
                     state
                         .bus
                         .publish("Models.Changed", &json!({"op":"downloaded","id": id_in}));
+                    // Patch read-model for models (cached completion)
+                    publish_models_state_patch(&state.bus).await;
                     return Ok(());
                 }
             }
@@ -1325,21 +1476,23 @@ impl ModelsService {
                         Some(&corr_id),
                     );
                     // Now that we've been admitted, reflect 'downloading' in the models list.
-                    {
-                        let mut v = crate::ext::models().write().await;
-                        if let Some(m) = v
-                            .iter_mut()
-                            .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id))
-                        {
-                            if let Some(obj) = m.as_object_mut() {
-                                obj.insert("status".into(), Value::String("downloading".into()));
-                                obj.insert("provider".into(), Value::String(provider.clone()));
-                            }
-                        } else {
-                            v.push(json!({"id": id, "provider": provider.clone(), "status":"downloading"}));
-                        }
-                    }
-                    Some(p)
+        {
+            let mut v = crate::ext::models().write().await;
+            if let Some(m) = v
+                .iter_mut()
+                .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id))
+            {
+                if let Some(obj) = m.as_object_mut() {
+                    obj.insert("status".into(), Value::String("downloading".into()));
+                    obj.insert("provider".into(), Value::String(provider.clone()));
+                }
+            } else {
+                v.push(json!({"id": id, "provider": provider.clone(), "status":"downloading"}));
+            }
+        }
+        // Publish a patch so UIs can reflect the 'downloading' status
+        publish_models_state_patch(&sp.bus).await;
+        Some(p)
                 }
                 Err(_) => {
                     emit_error(
@@ -2365,6 +2518,7 @@ impl ModelsService {
                                         "Models.Changed",
                                         &json!({"op":"canceled","id": id}),
                                     );
+                                    publish_models_state_patch(&sp.bus).await;
                                     return;
                                 }
                                 if let Err(e) = file.write_all(&bytes).await {
@@ -2976,6 +3130,9 @@ impl ModelsService {
                                 json!({"available": av, "total": tt, "reserve": reserve_bytes});
                         }
                     }
+                    // Metrics: completed (non-cached); add bytes downloaded
+                    DL_COMPLETED.fetch_add(1, Ordering::Relaxed);
+                    DL_BYTES.fetch_add(bytes, Ordering::Relaxed);
                     // Emit standardized completion event
                     let mut extra = p.clone();
                     // extra already contains id/status/file/provider and maybe disk; remove id/status to avoid duplication in payload
@@ -3051,6 +3208,9 @@ impl ModelsService {
                     .await;
                     sp.bus
                         .publish("Models.Changed", &json!({"op":"downloaded","id": id}));
+                    // Emit patch for final completion
+                    publish_models_state_patch(&sp.bus).await;
+                    metrics_mark_dirty();
                 }
                 Err(e) => {
                     emit_error(
@@ -3190,3 +3350,4 @@ mod tests {
         );
     }
 }
+// SPDX-License-Identifier: MIT OR Apache-2.0

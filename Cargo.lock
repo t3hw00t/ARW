@@ -184,7 +184,7 @@ dependencies = [
 
 [[package]]
 name = "arw-cli"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "arw-core",
@@ -199,7 +199,7 @@ dependencies = [
 
 [[package]]
 name = "arw-connector"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "arw-core",
@@ -214,7 +214,7 @@ dependencies = [
 
 [[package]]
 name = "arw-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "arrow2",
@@ -245,7 +245,7 @@ dependencies = [
 
 [[package]]
 name = "arw-events"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "arw-protocol",
  "async-nats",
@@ -259,7 +259,7 @@ dependencies = [
 
 [[package]]
 name = "arw-launcher"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "arw-tauri",
@@ -278,7 +278,7 @@ dependencies = [
 
 [[package]]
 name = "arw-macros"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -287,7 +287,7 @@ dependencies = [
 
 [[package]]
 name = "arw-otel"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "opentelemetry 0.22.0",
  "opentelemetry-otlp",
@@ -298,7 +298,7 @@ dependencies = [
 
 [[package]]
 name = "arw-protocol"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "schemars 0.8.22",
  "serde",
@@ -308,7 +308,7 @@ dependencies = [
 
 [[package]]
 name = "arw-svc"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "arw-core",
@@ -323,6 +323,8 @@ dependencies = [
  "http-body-util",
  "hyper 1.7.0",
  "inventory",
+ "json-patch 1.4.0",
+ "moka",
  "nvml-wrapper",
  "once_cell",
  "os_info",
@@ -351,7 +353,7 @@ dependencies = [
 
 [[package]]
 name = "arw-tauri"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "anyhow",
  "directories",
@@ -2481,6 +2483,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "generator"
+version = "0.8.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "605183a538e3e2a9c1038635cc5c2d194e2ee8fd0d1b66b8349fad7dbacce5a2"
+dependencies = [
+ "cc",
+ "cfg-if",
+ "libc",
+ "log",
+ "rustversion",
+ "windows 0.61.3",
+]
+
+[[package]]
 name = "generic-array"
 version = "0.14.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3510,6 +3526,17 @@ dependencies = [
 
 [[package]]
 name = "json-patch"
+version = "1.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ec9ad60d674508f3ca8f380a928cfe7b096bc729c4e2dbfe3852bc45da3ab30b"
+dependencies = [
+ "serde",
+ "serde_json",
+ "thiserror 1.0.69",
+]
+
+[[package]]
+name = "json-patch"
 version = "3.0.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "863726d7afb6bc2590eeff7135d923545e5e964f004c2ccf8716c25e70a86f08"
@@ -3784,6 +3811,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "34080505efa8e45a4b816c349525ebe327ceaa8559756f0356cba97ef3bf7432"
 
 [[package]]
+name = "loom"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "419e0dc8046cb947daa77eb95ae174acfbddb7673b4151f56d1eed8e93fbfaca"
+dependencies = [
+ "cfg-if",
+ "generator",
+ "scoped-tls",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "lru-slab"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3951,6 +3991,25 @@ dependencies = [
  "libc",
  "wasi 0.11.1+wasi-snapshot-preview1",
  "windows-sys 0.59.0",
+]
+
+[[package]]
+name = "moka"
+version = "0.12.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a9321642ca94a4282428e6ea4af8cc2ca4eac48ac7a6a4ea8f33f76d0ce70926"
+dependencies = [
+ "crossbeam-channel",
+ "crossbeam-epoch",
+ "crossbeam-utils",
+ "loom",
+ "parking_lot",
+ "portable-atomic",
+ "rustc_version",
+ "smallvec",
+ "tagptr",
+ "thiserror 1.0.69",
+ "uuid",
 ]
 
 [[package]]
@@ -5991,6 +6050,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "scoped-tls"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e1cf6437eb19a8f4a6cc0f7dca544973b0b78843adbfeb3683d1a94a0024a294"
+
+[[package]]
 name = "scopeguard"
 version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6658,6 +6723,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "tagptr"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b2093cf4c8eb1e67749a6762251bc9cd836b6fc171623bd0a9d324d37af2417"
+
+[[package]]
 name = "tao"
 version = "0.34.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6792,7 +6863,7 @@ dependencies = [
  "dirs 6.0.0",
  "glob",
  "heck 0.5.0",
- "json-patch",
+ "json-patch 3.0.1",
  "schemars 0.8.22",
  "semver",
  "serde",
@@ -6811,7 +6882,7 @@ checksum = "1ab3a62cf2e6253936a8b267c2e95839674e7439f104fa96ad0025e149d54d8a"
 dependencies = [
  "base64 0.22.1",
  "ico",
- "json-patch",
+ "json-patch 3.0.1",
  "plist",
  "png",
  "proc-macro2",
@@ -7021,7 +7092,7 @@ dependencies = [
  "html5ever",
  "http 1.3.1",
  "infer",
- "json-patch",
+ "json-patch 3.0.1",
  "kuchikiki",
  "log",
  "memchr",

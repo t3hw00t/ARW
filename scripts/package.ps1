@@ -61,12 +61,12 @@ $exe = ''
 if ($isWindows) { $exe = '.exe' }
 $svcSrc = Join-Path $binRoot "arw-svc$exe"
 $cliSrc = Join-Path $binRoot "arw-cli$exe"
-$traySrc = Join-Path $binRoot "arw-tray$exe"
+$launcherSrc = Join-Path $binRoot "arw-launcher$exe"
 if (-not (Test-Path $svcSrc)) { Die "Missing binary: $svcSrc (did the build succeed?)" }
 if (-not (Test-Path $cliSrc)) { Die "Missing binary: $cliSrc (did the build succeed?)" }
 Copy-Item $svcSrc -Destination (Join-Path $binDir ("arw-svc$exe"))
 Copy-Item $cliSrc -Destination (Join-Path $binDir ("arw-cli$exe"))
-if (Test-Path $traySrc) { Copy-Item $traySrc -Destination (Join-Path $binDir ("arw-tray$exe")) }
+if (Test-Path $launcherSrc) { Copy-Item $launcherSrc -Destination (Join-Path $binDir ("arw-launcher$exe")) }
 
 # Configs
 $cfgOut = Join-Path $out 'configs'
@@ -90,7 +90,7 @@ $readme = @"
 ARW portable bundle ($name)
 
 Contents
-- bin/        arw-svc, arw-cli
+- bin/        arw-svc, arw-cli, (optional) arw-launcher
 - configs/    default.toml (portable state paths)
 - docs/       project docs
 - sandbox/    Windows Sandbox config (Windows only)
@@ -99,6 +99,7 @@ Usage
 - Run service: bin/arw-svc$exe
 - Debug UI:    http://127.0.0.1:8090/debug
 - CLI sanity:  bin/arw-cli$exe
+- Launcher:    bin/arw-launcher$exe (tray + windows UI)
 
 Notes
 - To force portable mode: set environment variable ARW_PORTABLE=1

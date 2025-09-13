@@ -2,6 +2,16 @@
 
 This project follows Keep a Changelog and Semantic Versioning. All notable changes are recorded here.
 
+## [Unreleased]
+
+### Changed
+- Launcher-first start flow across scripts and interactive menus.
+- Removed legacy tray binary from packaging and setup; migrated docs to launcher terminology.
+- Linux CI and dist workflows install Tauri/WebKitGTK deps for launcher builds.
+
+### Added
+- Launcher tray menu grouped into Service / Debug / Windows / Quit; live health polling and notifications.
+
 ## [0.1.0-beta] - 2025-09-11
 
 Stability baseline. Consolidated features, CI hardening, docs, and ops.
@@ -17,9 +27,10 @@ Stability baseline. Consolidated features, CI hardening, docs, and ops.
 
 ### Changed
 - Consolidated merged branches; pruned stale `codex/*` remotes.
-- `arw-tray` updated to ureq v3; `arw-cli` to rand 0.9.
+- Introduced Tauri-based launcher (`arw-launcher`) and aligned scripts to a launcher‑first flow.
+- `arw-cli` updated to rand 0.9.
 - `arw-svc` refactors: AppState/Resources split; extended APIs and Debug UI.
-- CI excludes desktop UI crates from default Linux builds for stability.
+- CI installs Tauri/WebKitGTK deps on Linux for launcher builds.
 
 ### Fixed
 - Clippy lints in macros and service; formatting across touched files.

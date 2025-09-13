@@ -221,7 +221,9 @@ async fn llama_reply(prompt: &str, temperature: Option<f64>) -> Option<String> {
         .ok()?;
     let mut body = serde_json::json!({
         "prompt": prompt,
-        "n_predict": 128
+        "n_predict": 128,
+        // Enable llama.cpp prompt cache for KV/prefix reuse
+        "cache_prompt": true
     });
     if let Some(t) = temperature {
         if let Some(o) = body.as_object_mut() {

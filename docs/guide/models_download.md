@@ -19,6 +19,9 @@ See also: Guide → Performance & Reasoning Playbook (budgets/admission), Refere
 - POST `/admin/models/cas_gc` — Run a one‑off CAS GC sweep; deletes unreferenced blobs older than `ttl_days`.
 - GET  `/admin/state/models_hashes` — Admin summary of installed model hashes and sizes.
 - GET  `/admin/models/by-hash/:sha256` — Serve a CAS blob by hash (egress‑gated; `io:egress:models.peer`).
+  - Emits strong validators and immutable caching for digest‑addressed blobs:
+    - `ETag: "<sha256>"`, `Last-Modified`, `Cache-Control: public, max-age=31536000, immutable`.
+    - Honors `If-None-Match` (304 Not Modified) for repeat requests.
 
 ## Request
 
@@ -122,6 +125,8 @@ Note: formal `Egress.Decision` remains planned; previews and ledger appends are 
 The downloader maintains a lightweight throughput EWMA used for admission checks.
 - File: `{state_dir}/downloads.metrics.json` → `{ ewma_mbps }`
 - Admin endpoint: `GET /admin/models/downloads_metrics`
+ - Read‑model: `GET /admin/state/models_metrics` and public `GET /state/models_metrics` (mirrors counters + EWMA).
+ - SSE patches: `State.ModelsMetrics.Patch` and generic `State.ReadModel.Patch` (id=`models_metrics`) publish RFC‑6902 JSON Patches. Publishing is coalesced (`ARW_MODELS_METRICS_COALESCE_MS`, default 250ms) with an idle refresh (`ARW_MODELS_METRICS_PUBLISH_MS`, default 2000ms).
 
 ## Examples
 
@@ -152,6 +157,7 @@ Resume:
 - On failure, the model list is updated to `status: "error"` with `error_code` to avoid stuck "downloading" states.
 - State directory is shown in `GET /admin/probe`.
 - Concurrency: set `ARW_MODELS_MAX_CONC` (default 2) to limit simultaneous downloads. When saturated, a download emits `status: "queued"` and then `"admitted"` once it starts.
+ - Live counters: `started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total` are exported to Prometheus at `/metrics` as `arw_models_download_*` and to the read‑model at `/state/models_metrics`.
 - Disk safety: the downloader reserves space to avoid filling the disk. Set `ARW_MODELS_DISK_RESERVE_MB` (default 256) to control the reserved free‑space buffer. If there isn’t enough free space for the download, it aborts with an error event.
 - Size caps: set `ARW_MODELS_MAX_MB` (default 4096) to cap the maximum allowed size per download. The cap is enforced using the `Content-Length` when available and during streaming when it isn’t.
 - Checksum: when `sha256` is provided, it must be a 64‑char hex string; invalid values are rejected up front.

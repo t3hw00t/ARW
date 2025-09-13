@@ -64,6 +64,14 @@ Security & Admin
 - Admin auth hardening — hashed tokens + per‑token/IP sliding rate‑limit [t-250911230312-0863]
 - Per‑route gating layers; slim global admin middleware [t-250911230252-9858]
 
+Caching & Performance (High Priority)
+- [t-250913001000-1001] Llama.cpp prompt cache: set `cache_prompt: true` in requests; doc server `--prompt-cache` for persistence — in progress
+- [t-250913001003-1002] CAS HTTP caching: add `ETag`, `Last-Modified`, long‑lived `Cache-Control`, and 304 handling to `/admin/models/by-hash/{sha256}` — in progress
+- [t-250913001006-1003] Action Cache (MVP): wrap `tools_exec::run` with deterministic key (tool id, version, canonical JSON, env signature stub) and CAS’d outputs; Moka front with TTL; `Tool.Cache` events — in progress
+- [t-250913001009-1004] Singleflight: coalesce identical in‑flight tool runs and expensive read‑model recomputes — todo
+- [t-250913001012-1005] Read‑models SSE deltas: stream JSON Patch with `Last-Event-ID` resume; wire Debug UI to apply patches — todo
+- [t-250913001015-1006] Metrics: expose cache hit/miss/age, bytes/latency saved, stampede suppression rate at `/state/*` and `/metrics` — todo
+
 Egress Firewall & Posture (Plan)
 - Policy: add network scopes (domain/IP/CIDR, port, protocol) and TTL leases; surface in UI.
 - Gateway: per‑node loopback proxy (HTTP(S)/WS CONNECT; optional SOCKS5) with allow/deny by SNI/Host and port; deny IP‑literals by default; no TLS MITM.

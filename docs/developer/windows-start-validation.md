@@ -21,7 +21,7 @@ Service + launcher (default)
   - Tip: The Start menu lets you toggle health wait (and timeout) under “Configure runtime”.
 
 Service only (CLI)
-- Set `ARW_NO_TRAY=1` from the menu (or via environment) and start “service only”.
+- Set `ARW_NO_LAUNCHER=1` from the menu (or via environment) and start “service only”.
 - Expect: service starts in background; PID/log file present when configured.
 
 Dist bundle
@@ -43,5 +43,5 @@ Preferences file
 - Verify `./.arw/env.ps1` contains literal lines like `$env:ARW_PORT = '8090'` (not expanded values).
 
 Notes
-- The launcher is optional; use CLI-only mode or `ARW_NO_TRAY=1` to skip it.
+- The launcher is optional; use CLI-only mode or `ARW_NO_LAUNCHER=1` (alias: `ARW_NO_TRAY=1`) to skip it.
 - For clean logs, delete `./.arw/logs/*` between runs.

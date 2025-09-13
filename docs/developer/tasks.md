@@ -65,13 +65,13 @@ Updated: 2025-09-12 18:31 UTC
 - [t-250909194935-4017] Lint and tests green — done (updated: 2025-09-09 17:49:35 UTC)
 - [t-250909194935-6232] Format codebase (cargo fmt) — done (updated: 2025-09-09 17:49:35 UTC)
 - [t-250909194935-0534] Refactor svc ext to use io/paths — done (updated: 2025-09-09 17:49:35 UTC)
-- [t-250909193840-6168] Stabilize CI for tray + tests — done (updated: 2025-09-09 17:38:40 UTC)
+- [t-250909193840-6168] Stabilize CI for launcher deps + tests — done (updated: 2025-09-09 17:38:40 UTC)
 - [t-250909193840-5994] Add mkdocs.yml config — done (updated: 2025-09-09 17:38:40 UTC)
 - [t-250909181725-7338] Create portable dist bundle — done (updated: 2025-09-09 16:17:25 UTC)
-- [t-250909170248-9575] Install GTK dev packages + build tray — done (updated: 2025-09-09 16:17:25 UTC)
-    - 2025-09-09 16:07:39 UTC: Attempted tray build; pkg-config missing gdk-3.0 (install libgtk-3-dev, ensure pkg-config finds .pc files)
-  - 2025-09-09 16:14:14 UTC: Linker error: -lxdo not found; install libxdo-dev
-  - 2025-09-09 16:17:25 UTC: Tray built successfully with GTK+xdo
+- [t-250909170248-9575] Install Tauri deps + build launcher — done (updated: 2025-09-09 16:17:25 UTC)
+    - 2025-09-09 16:07:39 UTC: Attempted launcher build; missing WebKitGTK 4.x dev packages (install tauri deps)
+  - 2025-09-09 16:14:14 UTC: Installed WebKitGTK/JavaScriptCoreGTK/libsoup; rebuild succeeded
+  - 2025-09-09 16:17:25 UTC: Launcher built successfully
 - [t-250909170247-4088] GitHub CLI login — done (updated: 2025-09-09 16:14:14 UTC)
     - 2025-09-09 16:14:14 UTC: Not required (SSH-only auth to GitHub)
 - [t-250909180808-9579] Verify SSH git auth to GitHub — done (updated: 2025-09-09 16:08:08 UTC)
@@ -80,4 +80,3 @@ Updated: 2025-09-12 18:31 UTC
 - [t-250909170247-6008] Start service and verify /about — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
-

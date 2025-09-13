@@ -6,6 +6,36 @@ title: Desktop Launcher (Tauri 2)
 
 The tray-based launcher lives at `apps/arw-launcher/src-tauri`. It uses Tauri 2 with the capabilities + permissions model.
 
+Launch
+```bash
+# Dev run (hot)
+cargo run -p arw-launcher
+
+# Scripted run (launcher-first; auto-starts service)
+bash scripts/start.sh --port 8090
+
+# Headless (service only)
+bash scripts/start.sh --service-only --wait-health
+```
+
+Linux dependencies (Tauri)
+- Install WebKitGTK 4.1 + libsoup3 dev packages: `bash scripts/install-tauri-deps.sh`
+- Or enter the Nix dev shell: `nix develop`
+
+Menu
+- Service: Start Service, Stop Service
+- Debug: Open Debug (Browser), Open Debug (Window)
+- Windows: Events, Logs, Models, Connections
+- Quit: exit the launcher
+
+API reference
+- See Developer: `docs/developer/tauri_api.md` for the exact Tauri APIs we use (submenu/menu patterns, tray, notifications) and upgrade notes.
+
+Status
+- Tray tooltip shows “ARW: online/offline”.
+- Start/Stop enable/disable reflects live health checks to `/healthz`.
+- Optional desktop notifications on state change; toggle in the Launcher UI.
+
 Build locally
 ```bash
 cargo build -p arw-launcher
@@ -25,4 +55,3 @@ When adding new commands to the plugin:
 
 Windows
 - The `tauri.conf.json` sets `bundle.windows.webviewInstallMode: downloadBootstrapper` for WebView2.
-

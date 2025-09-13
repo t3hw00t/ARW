@@ -14,7 +14,7 @@ jobs:
         os: [ubuntu-22.04, ubuntu-24.04]
     steps:
       - uses: actions/checkout@v4
-      - name: Install system deps (Linux GUI)
+      - name: Install Tauri (WebKitGTK) deps (Linux)
         run: |
           sudo apt-get update
           # GTK/WebKitGTK and related deps for tauri/wry (Linux)

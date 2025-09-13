@@ -42,3 +42,15 @@ pub(crate) async fn run_tool_endpoint(
     }
     resp
 }
+
+/// Tool Action Cache stats (hit/miss/coalesced, capacity/ttl/entries)
+#[arw_admin(
+    method = "GET",
+    path = "/admin/tools/cache_stats",
+    summary = "Get tool action cache stats"
+)]
+#[arw_gate("tools:cache_stats")]
+pub(crate) async fn tools_cache_stats() -> impl IntoResponse {
+    let v = super::tools_exec::cache_stats_value();
+    super::ok(v).into_response()
+}

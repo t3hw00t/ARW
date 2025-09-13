@@ -42,12 +42,14 @@ pub mod memory_api;
 pub mod models_api;
 pub mod patch_api;
 pub mod policy;
+pub mod read_model;
 pub mod review_api;
 pub mod self_model;
 pub mod self_model_agg;
 pub mod self_model_api;
 pub mod state_api;
 pub mod stats;
+pub mod snappy;
 pub mod tools_api;
 pub mod tools_exec;
 pub mod ui;
@@ -389,6 +391,7 @@ pub fn extra_routes() -> Router<AppState> {
         // tools
         .route("/tools", get(tools_api::list_tools))
         .route("/tools/run", post(tools_api::run_tool_endpoint))
+        .route("/tools/cache_stats", get(tools_api::tools_cache_stats))
         // context assembly
         .route("/context/assemble", get(context_api::assemble_get))
         .route("/context/rehydrate", post(context_api::rehydrate_post))
@@ -426,6 +429,8 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/state/experiments", get(state_api::experiments_get))
         .route("/state/runtime_matrix", get(state_api::runtime_matrix_get))
         .route("/state/models_hashes", get(models_api::models_hashes_get))
+        .route("/state/models_metrics", get(models_api::models_metrics_get))
+        .route("/state/route_stats", get(stats::route_stats_get))
         .route("/state/egress/ledger", get(egress_api::egress_ledger_get))
         .route(
             "/state/memory/quarantine",
@@ -1236,8 +1241,21 @@ async fn run_tool_endpoint(
     State(state): State<AppState>,
     Json(req): Json<ToolRunReq>,
 ) -> impl IntoResponse {
-    match run_tool_internal(&req.id, &req.input) {
-        Ok(out) => {
+    let t0 = std::time::Instant::now();
+    match tools_exec::run_with_cache_stats(&req.id, &req.input) {
+        Ok((out, outcome, digest, key, age)) => {
+            // Cache event
+            let mut cache_evt = json!({
+                "id": req.id,
+                "outcome": outcome,
+                "elapsed_ms": t0.elapsed().as_millis() as u64,
+                "key": key,
+                "digest": digest,
+                "age_secs": age,
+            });
+            crate::ext::corr::ensure_corr(&mut cache_evt);
+            state.bus.publish("Tool.Cache", &cache_evt);
+
             let mut payload = json!({"id": req.id, "output": out});
             crate::ext::corr::ensure_corr(&mut payload);
             state.bus.publish("Tool.Ran", &payload);

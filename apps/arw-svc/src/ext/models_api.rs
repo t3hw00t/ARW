@@ -2,7 +2,7 @@ use super::super::resources::models_service::ModelsService;
 use crate::AppState;
 use arw_core::gating;
 use arw_macros::{arw_admin, arw_gate};
-use axum::extract::Path;
+use axum::extract::{Path, Query};
 use axum::http::{HeaderMap, HeaderValue};
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::Deserialize;
@@ -279,13 +279,30 @@ pub(crate) async fn models_cas_gc(
 }
 
 // Public read-model: summarize installed model hashes for clustering/ads.
+#[derive(Deserialize)]
+pub(crate) struct ModelsHashesQs {
+    #[serde(default)]
+    limit: Option<usize>,
+    #[serde(default)]
+    offset: Option<usize>,
+    #[serde(default)]
+    provider: Option<String>,
+    #[serde(default)]
+    sort: Option<String>,   // bytes | sha256 | path | providers_count
+    #[serde(default)]
+    order: Option<String>,  // asc | desc
+}
+
 #[arw_admin(
     method = "GET",
     path = "/admin/state/models_hashes",
-    summary = "List installed model hashes"
+    summary = "List installed model hashes (paginated)"
 )]
 #[arw_gate("state:models_hashes:get")]
-pub(crate) async fn models_hashes_get(State(_state): State<AppState>) -> impl IntoResponse {
+pub(crate) async fn models_hashes_get(
+    State(_state): State<AppState>,
+    Query(q): Query<ModelsHashesQs>,
+) -> impl IntoResponse {
     use std::collections::{HashMap, HashSet};
     let models = crate::ext::models().read().await.clone();
     let mut by_hash: HashMap<String, (u64, String, HashSet<String>)> = HashMap::new();
@@ -325,7 +342,51 @@ pub(crate) async fn models_hashes_get(State(_state): State<AppState>) -> impl In
             "providers": providers.into_iter().collect::<Vec<_>>()
         }));
     }
-    Json(json!({"count": items.len(), "items": items})).into_response()
+    // Optional provider filter
+    if let Some(p) = q.provider.as_deref() {
+        let prov = p.to_string();
+        items.retain(|it| it["providers"].as_array().map(|arr| arr.iter().any(|v| v.as_str()==Some(prov.as_str()))).unwrap_or(false));
+    }
+    // Sorting
+    let sort_key = q
+        .sort
+        .as_deref()
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_else(|| "bytes".to_string());
+    let mut desc_default = sort_key == "bytes"; // default desc for bytes, asc otherwise
+    let order_s = q
+        .order
+        .as_deref()
+        .map(|s| s.to_ascii_lowercase());
+    let desc = match order_s.as_deref() {
+        Some("asc") => false,
+        Some("desc") => true,
+        _ => desc_default,
+    };
+    items.sort_by(|a, b| {
+        use std::cmp::Ordering;
+        let ord = match sort_key.as_str() {
+            "sha256" => a["sha256"].as_str().cmp(&b["sha256"].as_str()),
+            "path" => a["path"].as_str().cmp(&b["path"].as_str()),
+            "providers_count" => a["providers"].as_array().map(|x| x.len()).cmp(&b["providers"].as_array().map(|x| x.len())),
+            _ => a["bytes"].as_u64().cmp(&b["bytes"].as_u64()),
+        };
+        if desc { ord.reverse() } else { ord }
+    });
+    // Pagination
+    let total = items.len();
+    let offset = q.offset.unwrap_or(0).min(total);
+    let limit = q.limit.unwrap_or(200).clamp(1, 10_000);
+    let end = offset.saturating_add(limit).min(total);
+    let page = items[offset..end].to_vec();
+    Json(json!({
+        "total": total,
+        "count": page.len(),
+        "limit": limit,
+        "offset": offset,
+        "items": page
+    }))
+    .into_response()
 }
 
 // Admin: serve a CAS blob by hash (gated). Intended for invited peers.
@@ -335,7 +396,10 @@ pub(crate) async fn models_hashes_get(State(_state): State<AppState>) -> impl In
     summary = "Serve model blob by sha256 (egress gated)"
 )]
 #[arw_gate("io:egress:models.peer")]
-pub(crate) async fn models_blob_get(Path(sha256): Path<String>) -> impl IntoResponse {
+pub(crate) async fn models_blob_get(
+    headers_in: HeaderMap,
+    Path(sha256): Path<String>,
+) -> impl IntoResponse {
     // Validate hash
     let ok = sha256.len() == 64 && sha256.chars().all(|c| c.is_ascii_hexdigit());
     if !ok {
@@ -369,12 +433,40 @@ pub(crate) async fn models_blob_get(Path(sha256): Path<String>) -> impl IntoResp
                 axum::http::header::CONTENT_TYPE,
                 HeaderValue::from_static("application/octet-stream"),
             );
+            // Strong validators for immutable CAS blobs
+            let etag_val = format!("\"{}\"", sha256);
+            if let Ok(h) = HeaderValue::from_str(&etag_val) {
+                headers.insert(axum::http::header::ETAG, h);
+            }
+            // Long-lived immutable cache control (blob addressed by digest)
+            headers.insert(
+                axum::http::header::CACHE_CONTROL,
+                HeaderValue::from_static("public, max-age=31536000, immutable"),
+            );
             if let Some(m) = meta {
                 headers.insert(
                     axum::http::header::CONTENT_LENGTH,
                     HeaderValue::from_str(&m.len().to_string())
                         .unwrap_or(HeaderValue::from_static("0")),
                 );
+                // Last-Modified from file mtime (best-effort)
+                if let Ok(modified) = m.modified() {
+                    let dt = chrono::DateTime::<chrono::Utc>::from(modified).to_rfc2822();
+                    if let Ok(h) = HeaderValue::from_str(&dt) {
+                        headers.insert(axum::http::header::LAST_MODIFIED, h);
+                    }
+                }
+            }
+            // If-None-Match handling (304 Not Modified)
+            if let Some(inm) = headers_in.get(axum::http::header::IF_NONE_MATCH) {
+                if inm
+                    .to_str()
+                    .ok()
+                    .map(|s| s.contains(&etag_val))
+                    .unwrap_or(false)
+                {
+                    return (axum::http::StatusCode::NOT_MODIFIED, headers).into_response();
+                }
             }
             (headers, body).into_response()
         }
@@ -469,3 +561,33 @@ pub(crate) async fn models_jobs(State(state): State<AppState>) -> impl IntoRespo
     let v = svc.jobs_status().await;
     Json(v).into_response()
 }
+
+/// Read-model: models download metrics (counters + EWMA MB/s)
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/models_metrics",
+    summary = "Get models download metrics"
+)]
+#[arw_gate("state:models_metrics:get")]
+pub(crate) async fn models_metrics_get(State(_state): State<AppState>) -> impl IntoResponse {
+    use serde_json::{Map, Value};
+    // Process counters from service
+    let base = crate::resources::models_service::models_metrics_value();
+    let mut obj = match base {
+        Value::Object(m) => m,
+        _ => Map::new(),
+    };
+    // EWMA MB/s from persisted metrics file (best-effort)
+    let ewma = crate::ext::io::load_json_file_async(&crate::ext::paths::downloads_metrics_path())
+        .await
+        .and_then(|v| v.get("ewma_mbps").and_then(|x| x.as_f64()));
+    obj.insert(
+        "ewma_mbps".into(),
+        match ewma {
+            Some(v) => Value::from(v),
+            None => Value::Null,
+        },
+    );
+    Json(Value::Object(obj)).into_response()
+}
+// SPDX-License-Identifier: MIT OR Apache-2.0

@@ -276,7 +276,7 @@ async fn main() {
     }
 
     let state = AppState {
-        bus,
+        bus: bus.clone(),
         stop_tx: Some(stop_tx.clone()),
         queue,
         resources: Resources::new(),
@@ -302,6 +302,8 @@ async fn main() {
     state
         .bus
         .publish("Service.Start", &json!({"msg":"arw-svc started"}));
+    // Pre‑warm hot lookups/caches for snappy I2F
+    ext::snappy::prewarm().await;
 
     // Spawn stats aggregator and observations read-model updater
     {
@@ -479,6 +481,26 @@ async fn main() {
             return;
         }
     };
+    // Start periodic publishers for read-model patches
+    {
+        let bus_clone = bus.clone();
+        tokio::spawn(async move {
+            ext::stats::start_route_stats_publisher(bus_clone).await;
+        });
+    }
+    {
+        let bus_clone = bus.clone();
+        tokio::spawn(async move {
+            arw_svc::resources::models_service::start_models_metrics_publisher(bus_clone).await;
+        });
+    }
+    {
+        let bus_clone = bus.clone();
+        tokio::spawn(async move {
+            ext::snappy::start_snappy_publisher(bus_clone).await;
+        });
+    }
+
     let server = axum::serve(listener, app).with_graceful_shutdown(async move {
         let _ = stop_rx.recv().await;
     });
@@ -1491,6 +1513,7 @@ struct EventsQs {
 async fn events(
     State(state): State<AppState>,
     Query(q): Query<EventsQs>,
+    headers: HeaderMap,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
     // audit subscription
     crate::ext::io::audit_event(
@@ -1540,11 +1563,19 @@ async fn events(
         )
     }));
 
+    let resume_from = headers
+        .get("Last-Event-ID")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string());
+    let init_body = match resume_from {
+        Some(id) => format!("{{\"resume_from\":\"{}\"}}", id.replace('"', "\\\"")),
+        None => "{}".to_string(),
+    };
     let initial = tokio_stream::once(Ok::<Event, Infallible>(
         Event::default()
             .id("0")
             .event("Service.Connected")
-            .data("{}"),
+            .data(init_body),
     ));
     // merge: connected -> replay -> live
     let stream = tokio_stream::StreamExt::chain(initial, replay_stream);
@@ -1621,6 +1652,7 @@ async fn feedback_policy_doc() -> impl IntoResponse {
         models_default_set_doc,
         models_download_doc,
         models_download_cancel_doc,
+        state_models_hashes_doc,
         models_jobs_doc,
         models_concurrency_get_doc,
         models_concurrency_set_doc,
@@ -1856,6 +1888,30 @@ async fn models_download_cancel_doc(
     Json(_req): Json<ext::models_api::CancelReq>,
 ) -> impl IntoResponse {
     Json(json!({"ok": true}))
+}
+
+// Public: models hashes with pagination/filtering/sorting
+#[allow(dead_code)]
+#[utoipa::path(
+    get,
+    path = "/state/models_hashes",
+    tag = "Public/State",
+    params(
+        ("limit" = Option<usize>, Query, description = "Max items to return (default 200, max 10000)"),
+        ("offset" = Option<usize>, Query, description = "Starting index (default 0)"),
+        ("provider" = Option<String>, Query, description = "Filter by provider id") ,
+        ("sort" = Option<String>, Query, description = "Sort key: bytes|sha256|path|providers_count (default bytes)"),
+        ("order" = Option<String>, Query, description = "Sort order: asc|desc (default desc for bytes, asc otherwise)")
+    ),
+    responses(
+        (status = 200, description = "Paginated hashes list"),
+        (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
+    )
+)]
+async fn state_models_hashes_doc(
+    Query(_q): Query<ext::models_api::ModelsHashesQs>,
+) -> impl IntoResponse {
+    Json(json!({}))
 }
 
 // --- OpenAPI-only wrappers for models jobs/concurrency ---

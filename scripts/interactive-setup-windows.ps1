@@ -342,8 +342,8 @@ function Save-Preferences {
 function First-Run-Wizard {
   Banner 'First-Run Wizard' 'Guided setup for ARW'
   Write-Host 'Choose a setup profile:'
-  Write-Host '  1) Local only (no tray)'
-  Write-Host '  2) Local with tray (optional)'
+  Write-Host '  1) Local only (no launcher)'
+  Write-Host '  2) Local with launcher (preferred)'
   Write-Host '  3) Cluster (NATS)'
   $prof = Read-Host 'Select [1/2/3]'; if (-not $prof) { $prof = '1' }
   $p = Read-Host ("HTTP port [" + $Port + "]"); if (-not $p) { $p = $Port }

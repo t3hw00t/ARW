@@ -16,6 +16,12 @@ Centralized reference for ARW environment variables and common flags. Defaults f
 
 ## Admin & Security
 - `ARW_ADMIN_TOKEN`: required token for admin endpoints.
+ - `ARW_TOOLS_CACHE_TTL_SECS`: Action Cache TTL (seconds; default 600).
+ - `ARW_TOOLS_CACHE_CAP`: Action Cache max entries (default 2048).
+ - `ARW_ROUTE_STATS_COALESCE_MS`: coalesce window for route stats read‑model patches (default 250ms; min 10ms).
+ - `ARW_ROUTE_STATS_PUBLISH_MS`: idle publish cadence for route stats (default 2000ms; min 200ms).
+ - `ARW_MODELS_METRICS_COALESCE_MS`: coalesce window for models metrics patches (default 250ms; min 10ms).
+ - `ARW_MODELS_METRICS_PUBLISH_MS`: idle publish cadence for models metrics (default 2000ms; min 200ms).
 - `ARW_ADMIN_RL`: admin rate limit as `limit/window_secs` (default `60/60`).
 - `ARW_DEBUG`: `1` enables local debug mode; do not use in production.
 
@@ -60,6 +66,20 @@ HTTP client (downloads)
 - `ARW_DL_HTTP_POOL_MAX_IDLE_PER_HOST`: max idle connections per host (default `8`, min `1`).
 The enhanced downloader path is always enabled; the legacy `ARW_DL_NEW` flag has been removed to reduce maintenance overhead.
 
+### Snappy Budgets & Streaming
+
+These knobs prioritize perceived latency and streaming cadence.
+
+- `ARW_SNAPPY_I2F_P95_MS`: p95 interaction-to-first-feedback target (default `50`)
+- `ARW_SNAPPY_FIRST_PARTIAL_P95_MS`: p95 first useful partial target (default `150`)
+- `ARW_SNAPPY_CADENCE_MS`: steady stream cadence budget (default `250`)
+- `ARW_SNAPPY_FULL_RESULT_P95_MS`: p95 full result target (default `2000`)
+- `ARW_SNAPPY_PROTECTED_ENDPOINTS`: CSV prefixes for interactive surface (default `/debug,/state/,/chat/,/admin/events`)
+- `ARW_SNAPPY_PUBLISH_MS`: snappy read‑model publish interval ms (default `2000`)
+- `ARW_SNAPPY_DETAIL_EVERY`: seconds between detailed p95 breakdown events (optional)
+
+SSE contract: see `architecture/sse_patch_contract.md` for `Last-Event-ID` and JSON Patch topics.
+
 ## Hardware Probes & Metrics
 - `ARW_ROCM_SMI`: `1` enables ROCm SMI enrichment for AMD GPU metrics on Linux (best‑effort).
 - `ARW_DXCORE_NPU`: `1` enables DXCore probe for NPUs on Windows when built with `npu_dxcore` feature.
@@ -89,7 +109,8 @@ These options are planned for the policy‑backed egress gateway; names may evol
 - `ARW_GPU_ZERO_ON_RELEASE`: `1` to zero VRAM/workspace buffers between jobs when supported.
 
 ## Launcher & CLI
-- `ARW_NO_TRAY`: `1` to skip launching the tray/launcher when starting the service.
+- `ARW_NO_LAUNCHER`: `1` to skip launching the desktop launcher when starting the service.
+- `ARW_NO_TRAY`: deprecated alias for `ARW_NO_LAUNCHER` (still honored).
 - `ARW_HEADLESS`: `1` for headless setup flows in CI.
 
 ## Trust & Policy

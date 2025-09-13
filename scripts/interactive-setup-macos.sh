@@ -79,8 +79,8 @@ dependencies_menu() {
   1) Install Rust toolchain (rustup)
   2) Install cargo-nextest (tests)
   3) Install jq (brew or local)
-  4) Install pkg-config (for tray)
-  5) Install GTK (for tray)
+  4) Install pkg-config (optional)
+  5) Install GTK (legacy; optional)
   6) Create local MkDocs venv (.venv)
   7) Toggle use of Nix devshell for builds [current: ${ARW_USE_NIX}]
   8) Toggle system package managers (brew/apt) [current: ${ARW_ALLOW_SYSTEM_PKGS:-0}]
@@ -232,8 +232,8 @@ first_run_wizard() {
   ic_banner "First‑Run Wizard" "Guided setup for ARW"
   ic_section "Goal"
   echo "  Choose a setup profile:"
-  echo "   1) Local only (no tray)"
-  echo "   2) Local with tray (optional)"
+  echo "   1) Local only (no launcher)"
+  echo "   2) Local with launcher (preferred)"
   echo "   3) Cluster (NATS)"
   read -r -p "Select [1/2/3]: " prof; prof=${prof:-1}
 
@@ -275,8 +275,8 @@ TOML
   ic_info "Wrote configs/local.toml and set ARW_CONFIG"
 
   if [[ "$prof" == 2 ]]; then
-    ic_section "Tray"
-    if command -v pkg-config >/dev/null 2>&1; then pkg-config --exists gtk+-3.0 && ic_info "GTK ok" || ic_warn "GTK dev missing (tray optional)"; else ic_warn "pkg-config missing (tray optional)"; fi
+    ic_section "Launcher"
+    ic_info "No extra system libraries required on macOS for the Tauri launcher."
   elif [[ "$prof" == 3 ]]; then
     ic_section "NATS"
     ic_nats_install || ic_warn "NATS install failed"
@@ -288,7 +288,7 @@ TOML
 
   ic_section "Start"
   read -r -p "Start service now? (Y/n): " go; if [[ "${go,,}" != n* ]]; then
-    ARW_NO_TRAY=$([[ "$prof" == 2 ]] && echo 0 || echo 1) \
+    ARW_NO_LAUNCHER=$([[ "$prof" == 2 ]] && echo 0 || echo 1) ARW_NO_TRAY=$([[ "$prof" == 2 ]] && echo 0 || echo 1) \
     ARW_PORT="$PORT" ARW_CONFIG="$ARW_CONFIG" ARW_DOCS_URL="$DOCS_URL" \
     ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" bash "$DIR/start.sh" --debug --port "$PORT" --wait-health --wait-health-timeout-secs 20
     ic_open_url "http://127.0.0.1:$PORT/spec"

@@ -81,6 +81,7 @@ function Pick-Config {
 
 function Start-ServiceOnly {
   Section 'Start: service only'
+  $env:ARW_NO_LAUNCHER = '1'
   $env:ARW_NO_TRAY = '1'
   if ($CfgPath) { $env:ARW_CONFIG = $CfgPath }
   $runDir = Join-Path $root '.arw\run'; New-Item -ItemType Directory -Force $runDir | Out-Null
@@ -101,8 +102,9 @@ function Start-ServiceOnly {
   & (Join-Path $PSScriptRoot 'start.ps1') @svcArgs
 }
 
-function Start-TrayPlusService {
-  Section 'Start: tray + service'
+function Start-LauncherPlusService {
+  Section 'Start: launcher + service'
+  $env:ARW_NO_LAUNCHER = ''
   $env:ARW_NO_TRAY = ''
   if ($CfgPath) { $env:ARW_CONFIG = $CfgPath }
   $runDir = Join-Path $root '.arw\run'; New-Item -ItemType Directory -Force $runDir | Out-Null
@@ -117,10 +119,8 @@ function Start-TrayPlusService {
   if (-not (Security-Preflight)) { Warn 'Start canceled'; return }
   if ($WaitHealth) { $svcArgs += @('-WaitHealth','-WaitHealthTimeoutSecs', $WaitHealthTimeoutSecs) }
   & (Join-Path $PSScriptRoot 'start.ps1') @svcArgs
-  $tray = Join-Path $root 'target\release\arw-tray.exe'
-  if (-not (Test-Path $tray)) {
-    Warn 'Tray not available. If build failed or toolchains missing, use Setup → Dependencies.'
-  }
+  $launcher = Join-Path $root 'target\release\arw-launcher.exe'
+  if (-not (Test-Path $launcher)) { Warn 'Launcher not built yet. Use Build & Test → cargo build -p arw-launcher or Setup → Dependencies.' }
 }
 
 function Start-Connector {
@@ -238,7 +238,7 @@ function Main-Menu {
   1) Configure runtime (port/docs/token)
   2) Select config file (ARW_CONFIG)
   3) Start service only
-  4) Start tray + service (if available)
+  4) Start launcher + service
   5) Start connector (NATS)
   6) Open/probe endpoints
   7) Build & test
@@ -253,7 +253,7 @@ function Main-Menu {
   16) Configure HTTP port (write config)
   17) Spec sync (validate /spec)
   18) Docs build + open
-  19) Tray build check
+  19) Launcher build check
   20) Generate reverse proxy templates (Caddy/Nginx)
   21) Security tips
   22) Start Caddy reverse proxy (https://localhost:8443)
@@ -277,7 +277,7 @@ function Main-Menu {
       '1' { Configure-Runtime }
       '2' { Pick-Config }
       '3' { Start-ServiceOnly }
-      '4' { Start-TrayPlusService }
+      '4' { Start-LauncherPlusService }
       '5' { Start-Connector }
       '6' { Open-ProbeMenu }
       '7' { Build-TestMenu }
@@ -292,7 +292,7 @@ function Main-Menu {
       '16' { Configure-Http-Port }
       '17' { Spec-Sync }
       '18' { Docs-Build-Open }
-      '19' { Tray-Build-Check }
+      '19' { Launcher-Build-Check }
       '20' { Reverse-Proxy-Templates }
       '21' { Security-Tips }
       '22' { Reverse-Proxy-Caddy-Start }
@@ -328,7 +328,7 @@ function Force-Stop {
     Warn 'PID file missing; attempted Stop-Process arw-svc'
   }
   # Also stop optional companion processes
-  try { Stop-Process -Name 'arw-tray' -Force -ErrorAction SilentlyContinue } catch {}
+  try { Stop-Process -Name 'arw-launcher' -Force -ErrorAction SilentlyContinue } catch {}
   try { Stop-Process -Name 'arw-connector' -Force -ErrorAction SilentlyContinue } catch {}
 }
 
@@ -530,7 +530,7 @@ function Session-Summary {
 
 function Stop-All {
   if ($script:GlobalDryRun) {
-    Dry 'Would force-stop arw-svc, arw-tray, arw-connector'
+    Dry 'Would force-stop arw-svc, arw-launcher, arw-connector'
     Dry 'Would stop Caddy (and remove pid file)'
     Dry 'Would stop nats-server'
   } else {
@@ -631,14 +631,14 @@ function Docs-Build-Open {
   if (Test-Path $idx) { Start-Process -FilePath $idx | Out-Null } else { Warn 'site/index.html not found' }
 }
 
-function Tray-Build-Check {
-  Section 'Tray build check'
+function Launcher-Build-Check {
+  Section 'Launcher build check (Tauri)'
   $logDir = Join-Path $root '.arw\logs'; New-Item -ItemType Directory -Force $logDir | Out-Null
-  $log = Join-Path $logDir 'tray-build.log'
-  try { Push-Location $root; cargo build --release -p arw-tray *> $log } catch { } finally { Pop-Location }
+  $log = Join-Path $logDir 'launcher-build.log'
+  try { Push-Location $root; cargo build --release -p arw-launcher *> $log } catch { } finally { Pop-Location }
   Get-Content -Path $log -Tail 60 | Write-Host
-  $exe = Join-Path $root 'target\release\arw-tray.exe'
-  if (Test-Path $exe) { Info ("Tray built: " + $exe) } else { Warn 'Tray not built; GTK for Windows builds are non-trivial; consider using service only (tray optional).' }
+  $exe = Join-Path $root 'target\release\arw-launcher.exe'
+  if (Test-Path $exe) { Info ("Launcher built: " + $exe) } else { Warn 'Launcher not built; ensure Rust toolchain and WebView2 runtime (see WebView2 menu).' }
 }
 
 function Doctor {
@@ -650,7 +650,7 @@ function Doctor {
   $mk = Get-Command mkdocs -ErrorAction SilentlyContinue
   if ($mk) { Info (mkdocs --version) } else { Warn 'mkdocs not found (docs optional)' }
   $svc = Join-Path $root 'target\release\arw-svc.exe'; if (Test-Path $svc) { Info ("arw-svc: " + $svc) } else { Warn 'arw-svc not built' }
-  $tray = Join-Path $root 'target\release\arw-tray.exe'; if (Test-Path $tray) { Info ("arw-tray: " + $tray) } else { Warn 'tray not built (optional)' }
+  $launcher = Join-Path $root 'target\release\arw-launcher.exe'; if (Test-Path $launcher) { Info ("arw-launcher: " + $launcher) } else { Warn 'launcher not built (optional)' }
   try { $ok = (Test-NetConnection -ComputerName 127.0.0.1 -Port 4222 -WarningAction SilentlyContinue).TcpTestSucceeded; if ($ok) { Info 'NATS reachable on 127.0.0.1:4222' } else { Warn 'NATS not reachable' } } catch { }
   Read-Host 'Continue' | Out-Null
 }

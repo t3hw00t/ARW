@@ -30,14 +30,14 @@ if ($Port) { if (-not $DryRun) { $env:ARW_PORT = "$Port" } else { Dry "Would set
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $exe = 'arw-svc.exe'
-$trayExe = 'arw-tray.exe'
+$launcherExe = 'arw-launcher.exe'
 $svc = if ($UseDist) {
   $zipBase = Get-ChildItem -Path (Join-Path $root 'dist') -Filter 'arw-*-windows-*' -Directory -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
   if ($zipBase) { Join-Path $zipBase.FullName (Join-Path 'bin' $exe) } else { $null }
 } else { Join-Path (Join-Path $root 'target\release') $exe }
-$tray = if ($UseDist) {
-  if ($zipBase) { Join-Path $zipBase.FullName (Join-Path 'bin' $trayExe) } else { $null }
-} else { Join-Path (Join-Path $root 'target\release') $trayExe }
+$launcher = if ($UseDist) {
+  if ($zipBase) { Join-Path $zipBase.FullName (Join-Path 'bin' $launcherExe) } else { $null }
+} else { Join-Path (Join-Path $root 'target\release') $launcherExe }
 
 if (-not $svc -or -not (Test-Path $svc)) {
   if ($DryRun) {
@@ -63,30 +63,30 @@ if (-not $svc -or -not (Test-Path $svc)) {
   }
 }
 
-if (-not $tray -or -not (Test-Path $tray)) {
+if (-not $launcher -or -not (Test-Path $launcher)) {
   if ($DryRun) {
-    Write-Warning "Tray binary not found ($tray). [dryrun] would attempt build (arw-tray)."
+    Write-Warning "Launcher binary not found ($launcher). [dryrun] would attempt build (arw-launcher)."
   } elseif (-not $NoBuild) {
-    Write-Warning "Tray binary not found ($tray). Attempting build..."
+    Write-Warning "Launcher binary not found ($launcher). Attempting build..."
     try {
       Push-Location $root
       if (Get-Command cargo -ErrorAction SilentlyContinue) {
-        cargo build --release -p arw-tray
+        cargo build --release -p arw-launcher
       } else {
-        Write-Warning "Rust 'cargo' not found; skipping tray build."
+        Write-Warning "Rust 'cargo' not found; skipping launcher build."
       }
     } catch {
-      Write-Warning "Tray build attempt failed: $($_.Exception.Message)"
+      Write-Warning "Launcher build attempt failed: $($_.Exception.Message)"
     } finally {
       try { Pop-Location } catch {}
     }
   }
-  $tray = Join-Path (Join-Path $root 'target\release') $trayExe
+  $launcher = Join-Path (Join-Path $root 'target\release') $launcherExe
 }
 
-# Respect ARW_NO_TRAY=1 for CLI-only environments
-$skipTray = $false
-if ($env:ARW_NO_TRAY -and $env:ARW_NO_TRAY -eq '1') { $skipTray = $true }
+# Respect ARW_NO_LAUNCHER/ARW_NO_TRAY=1 for CLI-only environments
+$skipLauncher = $false
+if (($env:ARW_NO_LAUNCHER -and $env:ARW_NO_LAUNCHER -eq '1') -or ($env:ARW_NO_TRAY -and $env:ARW_NO_TRAY -eq '1')) { $skipLauncher = $true }
 
 function Ensure-ParentDir($path) {
   try {
@@ -111,14 +111,14 @@ function Wait-For-Health($port, $timeoutSecs) {
   if ($ok) { Info ("Health OK after " + $attempts + " checks → $base/healthz") } else { Write-Warning ("Health not reachable within $timeoutSecs seconds → $base/healthz") }
 }
 
-if (-not $skipTray -and (Test-Path $tray)) {
+if (-not $skipLauncher -and (Test-Path $launcher)) {
   Info "Launching $svc on http://127.0.0.1:$Port"
   if ($DryRun) {
     Dry ("Would start: $svc (cwd=$root)")
     if ($env:ARW_LOG_FILE) { Dry ("Would redirect output to $env:ARW_LOG_FILE") }
     if ($env:ARW_PID_FILE) { Dry ("Would write PID file to $env:ARW_PID_FILE") }
     if ($WaitHealth) { Dry ("Would wait for health at /healthz (timeout ${WaitHealthTimeoutSecs}s)") }
-    Dry ("Would launch tray: $tray")
+    Dry ("Would launch launcher: $launcher")
   } else {
     if ($env:ARW_LOG_FILE) {
       Ensure-ParentDir $env:ARW_LOG_FILE
@@ -131,11 +131,13 @@ if (-not $skipTray -and (Test-Path $tray)) {
       try { $p.Id | Out-File -FilePath $env:ARW_PID_FILE -Encoding ascii -Force } catch {}
     }
     if ($WaitHealth) { Wait-For-Health -port $Port -timeoutSecs $WaitHealthTimeoutSecs }
-    Info "Launching tray $tray"
-    & $tray
+    Info "Launching launcher $launcher"
+    # Hint the launcher to auto-start the service if not already running
+    try { $env:ARW_AUTOSTART = '1' } catch {}
+    & $launcher
   }
 } else {
-  $msg = if ($skipTray) { '(ARW_NO_TRAY=1)' } else { '(tray not found)' }
+  $msg = if ($skipLauncher) { '(headless env: ARW_NO_LAUNCHER/ARW_NO_TRAY)' } else { '(launcher not found)' }
   Info "Launching $svc on http://127.0.0.1:$Port $msg"
   if ($DryRun) {
     Dry ("Would start: $svc (cwd=$root)")

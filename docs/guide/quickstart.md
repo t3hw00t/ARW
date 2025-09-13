@@ -34,11 +34,16 @@ bash scripts/test.sh
 === "Windows"
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
+# Interactive menu (launcher-first)
+powershell -ExecutionPolicy Bypass -File scripts/interactive-start-windows.ps1
 ```
 
 === "Linux / macOS"
 ```bash
 bash scripts/start.sh --wait-health
+# Interactive menu (launcher-first)
+bash scripts/interactive-start-linux.sh   # Linux
+bash scripts/interactive-start-macos.sh   # macOS
 ```
 
 ## Verify

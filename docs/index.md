@@ -4,9 +4,25 @@ title: Agents Running Wild (ARW)
 
 # Agents Running Wild (ARW)
 
-ARW is a lightweight, local agent service and CLI. It focuses on beauty, harmony, and safe performance: clean lines, subtle interactions, and responsive behavior. The core design treats everything as a unified object graph plus a single event stream, so every surface (Project Hub, Chat, Training Park, Managers) is just a lens on the same truth.
+Microsummary: Local‑first agent service and CLI with a unified object graph and one live event stream (SSE). Debug UI, Recipes, and Tools all look at the same state for a coherent experience. Stable entrypoint.
+
+10‑second pitch
+- Local‑first: runs offline by default; portable, per‑user state.
+- Unified object graph: one source of truth across UI surfaces.
+- Live events (SSE): a single stream powers Debug UI and tools.
+- Observability: tracing/logging/metrics and an optional event journal.
+- Recipes + Schemas: strategy packs with JSON Schemas and policy prompts.
 
 Updated: 2025-09-12
+
+Who is it for?
+- Builders who want strong observability and local control.
+- Teams piloting recipes/tools with explicit trust boundaries.
+- Researchers exploring context, retrieval, and evaluation patterns.
+
+Non‑goals
+- Not a hosted cloud platform; no hidden network egress by default.
+- Not a monolithic “one‑true‑agent” — compose via recipes and tools.
 
 ## What You Can Expect
 - Simple, local-first service with a small, friendly UI.

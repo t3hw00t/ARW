@@ -35,12 +35,12 @@ Describe 'Windows PowerShell Scripts - Parse and Structure' {
       $content = Get-Content -Path $startInteractive -Raw
       $funcs = Select-String -Path $startInteractive -Pattern '^function\s+([A-Za-z0-9\-]+)\b' -AllMatches | ForEach-Object { $_.Matches } | ForEach-Object { $_.Groups[1].Value }
       $required = @(
-        'Configure-Runtime','Pick-Config','Start-ServiceOnly','Start-TrayPlusService','Start-Connector',
+        'Configure-Runtime','Pick-Config','Start-ServiceOnly','Start-LauncherPlusService','Start-Connector',
         'Open-ProbeMenu','Build-TestMenu','Cli-ToolsMenu','Main-Menu','Force-Stop','Logs-Menu',
         'Save-Prefs-From-Start','Open-Terminal-Here','Security-Preflight','Reverse-Proxy-Templates',
         'Reverse-Proxy-Caddy-Start','Reverse-Proxy-Caddy-Stop','Reverse-Proxy-Caddy-Choose-Start',
         'Session-Summary','Stop-All','TLS-Wizard','Configure-Http-Port','Spec-Sync','Docs-Build-Open',
-        'Tray-Build-Check','Doctor','Install-NatsLocal','Nats-Menu','Wsl-Select-Distro','Wsl-Run',
+        'Launcher-Build-Check','Doctor','Install-NatsLocal','Nats-Menu','Wsl-Select-Distro','Wsl-Run',
         'Wsl-Install-Nats','Wsl-Start-Nats','Wsl-Stop-Nats','Wsl-Show-Info','Wsl-Open-Terminal','Wsl-Set-Default',
         'Security-Tips','Start-DryRun','Reverse-Proxy-Caddy-Start-Preview','Reverse-Proxy-Caddy-Stop-Preview','Reverse-Proxy-Templates-Preview','TLS-Wizard-Preview'
       )
@@ -56,9 +56,9 @@ Describe 'Windows PowerShell Scripts - Parse and Structure' {
       (Get-Content -Path $startInteractive -Raw) -match "new-tab','-p'" | Should -BeTrue
     }
 
-    It 'Force-Stop also kills tray and connector if present' {
+    It 'Force-Stop also kills launcher and connector if present' {
       $raw = Get-Content -Path $startInteractive -Raw
-      $raw -match "Stop-Process -Name 'arw-tray'" | Should -BeTrue
+      $raw -match "Stop-Process -Name 'arw-launcher'" | Should -BeTrue
       $raw -match "Stop-Process -Name 'arw-connector'" | Should -BeTrue
     }
 

@@ -35,6 +35,7 @@ Rate limiting:
 - `/admin/introspect/tools`: list available tools
 - `/admin/introspect/schemas/{id}`: schema for a known tool id
 - `/admin/introspect/stats`: runtime & route stats (JSON)
+- `/admin/tools/cache_stats`: tool Action Cache stats (hit/miss/coalesced, capacity, ttl)
 - `/admin/events`: SSE event stream
 - `/admin/probe`: effective paths & memory snapshot (read‑only)
 - `/admin/memory[/*]`: memory get/apply/save/load/limit
@@ -47,6 +48,8 @@ Rate limiting:
 - `/admin/self_model/propose` (POST): propose a self‑model update; emits `SelfModel.Proposed`
 - `/admin/self_model/apply` (POST): apply a proposal; emits `SelfModel.Updated`
 - `/admin/state/*`: observations, beliefs, world, intents, actions
+  - `/admin/state/models_metrics`: models download counters + EWMA (read‑model)
+  - `/admin/state/route_stats`: per‑route latency/hit/error read‑model
   - `/admin/state/world`: Project Map snapshot (scoped belief graph)
   - `/admin/state/world/select`: top‑K beliefs (claims) with trace
   - `/admin/context/assemble`: minimal context assembly (beliefs + policy/model)
@@ -186,6 +189,18 @@ curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
 - `GET  /admin/state/models_hashes` — Admin summary of installed hashes and sizes.
 - `GET  /admin/models/by-hash/:sha256` — Serve a CAS blob by hash (egress‑gated; `io:egress:models.peer`).
 - `GET  /admin/models/downloads_metrics` — Lightweight downloads metrics used for admission checks; returns `{ ewma_mbps: number|null }`.
+ - `GET  /admin/state/models_metrics` — Read‑model counters `{ started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total, ewma_mbps }`.
+ - SSE: `State.ModelsMetrics.Patch` and generic `State.ReadModel.Patch` (id=`models_metrics`) publish RFC‑6902 JSON Patches with coalescing.
+
+### Tools
+
+- `GET /admin/tools/cache_stats` — Tool Action Cache stats `{ hit, miss, coalesced, entries, ttl_secs, capacity }`.
+- Events: `Tool.Cache` per run `{ id, outcome:hit|miss|coalesced, elapsed_ms, key, digest, age_secs }`.
+
+### Route Stats (Read‑model)
+
+- `GET /admin/state/route_stats` — `{ by_path: { "/path": { hits, errors, ewma_ms, p95_ms, max_ms } } }`.
+- SSE: `State.RouteStats.Patch` and generic `State.ReadModel.Patch` (id=`route_stats`) with coalescing.
 
 #### Models Manifest
 

@@ -8,14 +8,14 @@ Updated: 2025-09-07
 
 See also: [Roadmap](ROADMAP.md)
 
-This roadmap consolidates user-facing interface concepts to guide a unified, accessible experience across the service, tray app, and debug tooling.
+This roadmap consolidates user-facing interface concepts to guide a unified, accessible experience across the service, launcher, and debug tooling.
 
 ## Short‑Term (0–3 Months)
 - Guided micro-tutorials for first-time features
 - Micro-satisfaction elements (light animations, haptic feedback)
-- Contextual tray actions with recent commands
+- Contextual launcher tray actions with recent commands
 - Inline doc hints and contextual tooltips
-- Command palette/quick-action menu in tray app
+- Command palette/quick-action menu in the launcher
 
 ## Medium‑Term (3–6 Months)
 - Multi-modal input (voice, stylus, gesture)
