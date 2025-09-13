@@ -4,6 +4,10 @@ This project follows Keep a Changelog and Semantic Versioning. All notable chang
 
 ## [Unreleased]
 
+_No changes yet._
+
+## [0.1.2] - 2025-09-13
+
 ### Changed
 - Launcher-first start flow across scripts and interactive menus.
 - Removed legacy tray binary from packaging and setup; migrated docs to launcher terminology.
