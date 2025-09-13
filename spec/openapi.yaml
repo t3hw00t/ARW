@@ -1363,13 +1363,25 @@ components:
       properties:
         items:
           type: array
-          items: { type: object }
+          items:
+            $ref: '#/components/schemas/ModelItem'
         default:
           type: string
         concurrency:
           $ref: '#/components/schemas/ModelsConcurrency'
         metrics:
           $ref: '#/components/schemas/ModelsMetrics'
+    ModelItem:
+      type: object
+      required: [id]
+      properties:
+        id: { type: string }
+        provider: { type: [string, 'null'] }
+        path: { type: [string, 'null'] }
+        sha256: { type: [string, 'null'] }
+        bytes: { type: [integer, 'null'], format: int64, minimum: 0 }
+        status: { type: [string, 'null'] }
+        error_code: { type: [string, 'null'] }
     About:
       type: object
       description: Service and branding information.

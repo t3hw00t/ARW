@@ -4,13 +4,13 @@ title: Interface Release Notes
 
 # Interface Release Notes
 
-Base: `origin/main` vs Head: `4bc4c042`
+Base: `origin/main` vs Head: `5f09743d`
 
 ## OpenAPI (REST)
 
 ```diff
---- /tmp/tmpwla4xdtx/openapi.base.yaml	2025-09-13 22:43:37.441313551 +0200
-+++ /tmp/tmpwla4xdtx/openapi.head.yaml	2025-09-13 22:43:37.441313551 +0200
+--- /tmp/tmphrg03xwl/openapi.base.yaml	2025-09-13 22:49:09.731111020 +0200
++++ /tmp/tmphrg03xwl/openapi.head.yaml	2025-09-13 22:49:09.731111020 +0200
 @@ -1,23 +1,67 @@
  openapi: 3.1.0
  info:
@@ -645,7 +645,7 @@ Base: `origin/main` vs Head: `4bc4c042`
    /version:
      get:
        tags:
-@@ -1179,8 +1326,84 @@
+@@ -1179,8 +1326,96 @@
        responses:
          '200':
            description: Service version
@@ -686,13 +686,25 @@ Base: `origin/main` vs Head: `4bc4c042`
 +      properties:
 +        items:
 +          type: array
-+          items: { type: object }
++          items:
++            $ref: '#/components/schemas/ModelItem'
 +        default:
 +          type: string
 +        concurrency:
 +          $ref: '#/components/schemas/ModelsConcurrency'
 +        metrics:
 +          $ref: '#/components/schemas/ModelsMetrics'
++    ModelItem:
++      type: object
++      required: [id]
++      properties:
++        id: { type: string }
++        provider: { type: [string, 'null'] }
++        path: { type: [string, 'null'] }
++        sha256: { type: [string, 'null'] }
++        bytes: { type: [integer, 'null'], format: int64, minimum: 0 }
++        status: { type: [string, 'null'] }
++        error_code: { type: [string, 'null'] }
 +    About:
 +      type: object
 +      description: Service and branding information.
@@ -730,7 +742,7 @@ Base: `origin/main` vs Head: `4bc4c042`
      ApplyMemory:
        type: object
        required:
-@@ -1526,5 +1749,3 @@
+@@ -1526,5 +1761,3 @@
          id:
            type: string
          input: {}
@@ -742,8 +754,8 @@ Base: `origin/main` vs Head: `4bc4c042`
 ## AsyncAPI (Events)
 
 ```diff
---- /tmp/tmpwla4xdtx/asyncapi.base.yaml	2025-09-13 22:43:38.602443576 +0200
-+++ /tmp/tmpwla4xdtx/asyncapi.head.yaml	2025-09-13 22:43:38.602443576 +0200
+--- /tmp/tmphrg03xwl/asyncapi.base.yaml	2025-09-13 22:49:10.619772526 +0200
++++ /tmp/tmphrg03xwl/asyncapi.head.yaml	2025-09-13 22:49:10.619772526 +0200
 @@ -3,6 +3,9 @@
    title: "arw-svc events"
    version: "0.1.0"

@@ -33,8 +33,25 @@ pub(crate) struct ModelsMetrics {
 }
 
 #[derive(Serialize, utoipa::ToSchema)]
+pub(crate) struct ModelItem {
+    id: String,
+    #[serde(default)]
+    provider: Option<String>,
+    #[serde(default)]
+    path: Option<String>,
+    #[serde(default)]
+    sha256: Option<String>,
+    #[serde(default)]
+    bytes: Option<u64>,
+    #[serde(default)]
+    status: Option<String>,
+    #[serde(default)]
+    error_code: Option<String>,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
 pub(crate) struct ModelsSummary {
-    items: Vec<serde_json::Value>,
+    items: Vec<ModelItem>,
     #[serde(default)]
     default: String,
     concurrency: ModelsConcurrency,
@@ -57,7 +74,48 @@ pub(crate) async fn models_summary(State(state): State<AppState>) -> impl IntoRe
         )
             .into_response();
     };
-    let models_fut = async { super::models().read().await.clone() };
+    let models_fut = async {
+        let arr = super::models().read().await.clone();
+        arr.into_iter()
+            .filter_map(|m| {
+                let id = m.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
+                let id = match id {
+                    Some(v) => v,
+                    None => return None,
+                };
+                let provider = m
+                    .get("provider")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let path = m
+                    .get("path")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let sha256 = m
+                    .get("sha256")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let bytes = m.get("bytes").and_then(|v| v.as_u64());
+                let status = m
+                    .get("status")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let error_code = m
+                    .get("error_code")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                Some(ModelItem {
+                    id,
+                    provider,
+                    path,
+                    sha256,
+                    bytes,
+                    status,
+                    error_code,
+                })
+            })
+            .collect::<Vec<_>>()
+    };
     let default_fut = async { super::default_model().read().await.clone() };
     let conc_fut = async {
         let v = svc.concurrency_get().await;
