@@ -430,18 +430,13 @@ async fn main() {
         let bus = state.bus.clone();
         tokio::spawn(async move {
             let mut rx = bus.subscribe();
-            loop {
-                match rx.recv().await {
-                    Ok(env) => {
-                        if env.kind == "Catalog.Updated" {
-                            refresh_dep_cache();
-                            // align seen_gen with current generation
-                            dep_cache()
-                                .seen_gen
-                                .store(catalog_gen().load(Ordering::Relaxed), Ordering::Relaxed);
-                        }
-                    }
-                    Err(_) => break,
+            while let Ok(env) = rx.recv().await {
+                if env.kind == "Catalog.Updated" {
+                    refresh_dep_cache();
+                    // align seen_gen with current generation
+                    dep_cache()
+                        .seen_gen
+                        .store(catalog_gen().load(Ordering::Relaxed), Ordering::Relaxed);
                 }
             }
         });
