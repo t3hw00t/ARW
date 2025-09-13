@@ -34,16 +34,21 @@ pub(crate) async fn models_summary(State(state): State<AppState>) -> impl IntoRe
             Value::Object(m) => m,
             _ => Map::new(),
         };
-        let ewma = crate::ext::io::load_json_file_async(&crate::ext::paths::downloads_metrics_path())
-            .await
-            .and_then(|v| v.get("ewma_mbps").and_then(|x| x.as_f64()));
+        let ewma =
+            crate::ext::io::load_json_file_async(&crate::ext::paths::downloads_metrics_path())
+                .await
+                .and_then(|v| v.get("ewma_mbps").and_then(|x| x.as_f64()));
         obj.insert(
             "ewma_mbps".into(),
-            match ewma { Some(v) => Value::from(v), None => Value::Null },
+            match ewma {
+                Some(v) => Value::from(v),
+                None => Value::Null,
+            },
         );
         Value::Object(obj)
     };
-    let (items, default, concurrency, metrics) = join!(models_fut, default_fut, conc_fut, metrics_fut);
+    let (items, default, concurrency, metrics) =
+        join!(models_fut, default_fut, conc_fut, metrics_fut);
     super::ok(json!({
         "items": items,
         "default": default,
