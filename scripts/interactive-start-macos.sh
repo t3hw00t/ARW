@@ -298,6 +298,7 @@ main_menu() {
   32) Stop all (svc/proxy/nats)
   33) Configure external base URL (write config)
   34) Validate+start proxy then test (/healthz,/spec)
+  35) Audit supply-chain (cargo-audit/deny)
   0) Exit
 EOF
     read -r -p "Select: " pick || true
@@ -336,6 +337,7 @@ EOF
       32) stop_all ;;
       33) configure_external_base_url ;;
       34) proxy_validate_and_test ;;
+      35) bash "$DIR/audit.sh" --interactive || ic_warn "audit helper failed" ;;
       0|'') break ;;
       *) : ;;
     esac

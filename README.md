@@ -50,6 +50,26 @@ Docker (amd64/arm64); Native binaries: Windows (x64/ARM64), macOS (x64/ARM64), L
 docker run --rm -p 8090:8090 ghcr.io/t3hw00t/arw-svc:latest
 ```
 
+### Debug & Audit Helpers
+
+Quick wrappers exist for common flows:
+
+```bash
+# Linux/macOS — quick debug run (opens /debug)
+bash scripts/debug.sh --interactive
+
+# Linux/macOS — supply-chain audit (cargo-audit + cargo-deny)
+bash scripts/audit.sh --interactive
+```
+
+```powershell
+# Windows — quick debug run
+scripts/debug.ps1 -Interactive
+
+# Windows — supply-chain audit
+scripts/audit.ps1 -Interactive
+```
+
 ## Architecture at a Glance
 
 ```

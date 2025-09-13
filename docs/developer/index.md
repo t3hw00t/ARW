@@ -18,6 +18,8 @@ Updated: 2025-09-12
 cargo install cargo-nextest
 cargo build --workspace --all-targets --locked
 cargo nextest run --workspace --locked
+# Regenerate OpenAPI from code
+(cd Agent_Hub && OPENAPI_OUT=docs/api/openapi.yaml cargo run -p arw-svc)
 ```
 
 ## Desktop UI (Tauri 2)

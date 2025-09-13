@@ -418,6 +418,7 @@ function Main-Menu {
   12) First-run wizard (guided)
   13) Create support bundle
   14) Toggle dry-run mode (now: On/Off)
+  15) Audit supply-chain (cargo-audit/deny)
   0) Exit
 '@
     $pick = Read-Host 'Select'
@@ -436,6 +437,7 @@ function Main-Menu {
       '12' { First-Run-Wizard }
       '13' { Support-Bundle }
       '14' { $script:SetupDryRun = -not $script:SetupDryRun; if ($script:SetupDryRun) { Info 'Dry-run mode enabled' } else { Info 'Dry-run mode disabled' } }
+      '15' { try { & (Join-Path $PSScriptRoot 'audit.ps1') -Interactive } catch { Warn $_.Exception.Message } }
       '0' { break }
       default { }
     }

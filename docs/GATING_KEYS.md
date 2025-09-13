@@ -1,44 +1,82 @@
 # Gating Keys
 
-Generated from code.
+Authoritative list of gate keys referenced in code (handlers and explicit checks). This page is updated from the codebase; dynamic patterns are noted separately.
 
-- `queue:enqueue`
+Updated: 2025-09-13
+
+- `admin:emit`
+- `admin:shutdown`
+- `chat:clear`
+- `chat:send`
+- `context:rehydrate:file`
 - `events:Task.Completed`
-- `memory:get`
-- `memory:save`
-- `memory:load`
-- `memory:apply`
-- `memory:limit:get`
-- `memory:limit:set`
-- `models:list`
-- `models:refresh`
-- `models:save`
-- `models:load`
-- `models:add`
-- `models:delete`
-- `models:default:get`
-- `models:default:set`
-- `models:download`
-- `feedback:state`
-- `feedback:signal`
+- `experiments:assign`
+- `experiments:start`
+- `experiments:stop`
 - `feedback:analyze`
 - `feedback:apply`
 - `feedback:auto`
 - `feedback:reset`
-- `tools:list`
-- `tools:run`
-- `chat:send`
-- `chat:clear`
-- `governor:set`
+- `feedback:signal`
+- `feedback:state`
 - `governor:hints:set`
+- `governor:set`
+- `hierarchy:accept`
 - `hierarchy:hello`
 - `hierarchy:offer`
-- `hierarchy:accept`
-- `hierarchy:state:get`
 - `hierarchy:role:set`
-- `introspect:tools`
+- `hierarchy:state:get`
+- `introspect:probe`
 - `introspect:schema`
 - `introspect:stats`
-- `introspect:probe`
-- `admin:shutdown`
-- `admin:emit`
+- `introspect:tools`
+- `io:egress:chat`
+- `io:egress:models.download`
+- `io:egress:models.peer`
+- `logic_units:apply`
+- `logic_units:install`
+- `logic_units:revert`
+- `memory:admit`
+- `memory:apply`
+- `memory:get`
+- `memory:limit:get`
+- `memory:limit:set`
+- `memory:load`
+- `memory:quarantine`
+- `memory:save`
+- `models:add`
+- `models:cas_gc`
+- `models:concurrency:get`
+- `models:concurrency:set`
+- `models:default:get`
+- `models:default:set`
+- `models:delete`
+- `models:download`
+- `models:jobs`
+- `models:list`
+- `models:load`
+- `models:refresh`
+- `models:save`
+- `patch:apply`
+- `patch:dry_run`
+- `patch:revert`
+- `projects:file:get`
+- `projects:file:patch`
+- `projects:file:set`
+- `queue:enqueue`
+- `state:downloads_metrics:get`
+- `state:egress_ledger:get`
+- `state:memory_quarantine:get`
+- `state:models_hashes:get`
+- `state:models_metrics:get`
+- `state:route_stats:get`
+- `state:world_diffs:get`
+- `tools:cache_stats`
+- `tools:list`
+- `tools:run`
+- `world_diffs:decide`
+- `world_diffs:queue`
+
+Dynamic patterns (computed at runtime):
+- `io:egress:task.<kind>` — tool/task egress per kind
+- `io:egress:tools.<id>` — tool egress per tool id

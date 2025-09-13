@@ -12,13 +12,13 @@ png = "0.17"
 anyhow = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-tauri = { version = "2.4.1", default-features = false, features = ["wry", "tray-icon"] }
+tauri = { version = "2.8.5", default-features = false, features = ["wry", "tray-icon"] }
 arw-tauri = { path = "../../../crates/arw-tauri", version = "0.1.1" }
-tauri-plugin-single-instance = "2.2"
-tauri-plugin-window-state = "2.2"
-tauri-plugin-autostart = "2.2"
-tauri-plugin-notification = "2.0.0"
-tauri-plugin-updater = "2.0.0"
+tauri-plugin-single-instance = "2.3.4"
+tauri-plugin-window-state = "2.4.0"
+tauri-plugin-autostart = "2.5.0"
+tauri-plugin-notification = "2.3.1"
+tauri-plugin-updater = "2.9.0"
 tokio = { workspace = true }
 
 [features]

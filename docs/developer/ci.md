@@ -25,6 +25,12 @@ scripts/test.ps1
 
 # Package bundle (release)
 scripts/package.ps1
+
+# Quick debug run (service with /debug)
+scripts/debug.ps1
+
+# Supply-chain audit (cargo-audit + cargo-deny)
+scripts/audit.ps1
 ```
 
 ## Local CI Mirror
@@ -42,6 +48,9 @@ cargo test --workspace
 # 2) Supply-chain checks (advisories/licenses/sources/bans)
 cargo install cargo-deny --locked # once
 cargo deny check advisories bans sources licenses || true
+
+# Or use the helper wrapper (Bash/PowerShell):
+scripts/audit.sh --interactive
 
 # 3) Links (README + docs)
 cargo install lychee --locked # once

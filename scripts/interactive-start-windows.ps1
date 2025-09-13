@@ -270,6 +270,7 @@ function Main-Menu {
   33) Generate reverse proxy templates (dry-run)
   34) TLS wizard (dry-run preview)
   35) WebView2 runtime (check/install)
+  36) Audit supply-chain (cargo-audit/deny)
   0) Exit
 '@
     $pick = Read-Host 'Select'
@@ -309,6 +310,7 @@ function Main-Menu {
       '33' { Reverse-Proxy-Templates-Preview }
       '34' { TLS-Wizard-Preview }
       '35' { WebView2-Menu }
+      '36' { try { & (Join-Path $PSScriptRoot 'audit.ps1') -Interactive } catch { Write-Warning $_.Exception.Message } }
       '0' { break }
       default { }
     }

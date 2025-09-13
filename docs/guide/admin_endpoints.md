@@ -7,7 +7,7 @@ title: Admin Endpoints
 
 ARW exposes a unified admin/ops HTTP namespace under `/admin`. All sensitive routes live here so updates can’t miss gating.
 
-Updated: 2025-09-12
+Updated: 2025-09-13
 
 - Base: `/admin`
 - Index (HTML): `/admin`
@@ -191,6 +191,9 @@ curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
 - `GET  /admin/models/downloads_metrics` — Lightweight downloads metrics used for admission checks; returns `{ ewma_mbps: number|null }`.
  - `GET  /admin/state/models_metrics` — Read‑model counters `{ started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total, ewma_mbps }`.
  - SSE: `State.ModelsMetrics.Patch` and generic `State.ReadModel.Patch` (id=`models_metrics`) publish RFC‑6902 JSON Patches with coalescing.
+ - `POST /admin/models/concurrency` — Set models download concurrency at runtime. Body: `{ max: number, block?: boolean }`. When `block` is `true` (default), shrinking waits for permits; when `false`, it shrinks opportunistically.
+ - `GET  /admin/models/concurrency` — Get current concurrency, including `{ configured_max, available_permits, held_permits, hard_cap }`.
+ - `GET  /admin/models/jobs` — Snapshot of active jobs and inflight hashes for observability.
 
 ### Tools
 

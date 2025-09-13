@@ -1683,7 +1683,11 @@ async fn feedback_policy_doc() -> impl IntoResponse {
         feedback_apply_post_doc,
         feedback_auto_post_doc,
         feedback_reset_post_doc,
-        tasks_enqueue_doc
+        tasks_enqueue_doc,
+        // new read-model and tools endpoints
+        state_models_metrics_doc,
+        state_route_stats_doc,
+        tools_cache_stats_doc
     ),
     tags((name = "arw-svc"))
 )]

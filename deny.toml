@@ -1,6 +1,16 @@
 [advisories]
 # cargo-deny defaults to denying advisories; scope unmaintained to direct deps
 unmaintained = "workspace"
+ignore = [
+  # TEMP: launcher pulls gtk/glib via wry; glib<0.20 hits RUSTSEC-2024-0429.
+  # Remove when Cargo.lock resolves to glib >= 0.20.0 (audit.sh auto-cleans).
+  "RUSTSEC-2024-0429",
+  # TEMP: arrow2 0.18 used only for benches (feature `arrow-bench`) drags advisories.
+  # RUSTSEC-2023-0086 (lexical-core 0.8.x) and RUSTSEC-2025-0038 (arrow2 OOB).
+  # Neither ships in runtime. Revisit if arrow2 is used in production code.
+  "RUSTSEC-2023-0086",
+  "RUSTSEC-2025-0038",
+]
 
 [licenses]
 allow = [

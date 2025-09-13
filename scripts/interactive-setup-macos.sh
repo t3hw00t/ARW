@@ -201,6 +201,7 @@ main_menu() {
   12) Doctor (quick checks)
   13) First-run wizard (guided)
   14) Create support bundle
+  15) Audit supply-chain (cargo-audit/deny)
   0) Exit
 EOF
     read -r -p "Select: " pick || true
@@ -219,6 +220,7 @@ EOF
       12) ic_doctor ;;
       13) first_run_wizard ;;
       14) ic_support_bundle ;;
+      15) bash "$DIR/audit.sh" --interactive || ic_warn "audit helper failed" ;;
       0|'') break ;;
       *) : ;;
     esac

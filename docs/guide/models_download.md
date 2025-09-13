@@ -6,7 +6,7 @@ title: Models Download (HTTP)
 
 ARW provides HTTP endpoints (admin‑gated) to manage local models with streaming downloads, live progress via SSE, safe cancel, resume (HTTP Range), and mandatory SHA‑256 verification.
 
-Updated: 2025-09-12
+Updated: 2025-09-13
 
 See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*).
 
@@ -22,6 +22,9 @@ See also: Guide → Performance & Reasoning Playbook (budgets/admission), Refere
   - Emits strong validators and immutable caching for digest‑addressed blobs:
     - `ETag: "<sha256>"`, `Last-Modified`, `Cache-Control: public, max-age=31536000, immutable`.
     - Honors `If-None-Match` (304 Not Modified) for repeat requests.
+ - POST `/admin/models/concurrency` — Set download concurrency at runtime. Body: `{ max: number, block?: boolean }`.
+ - GET  `/admin/models/concurrency` — Get the current concurrency settings and limits.
+ - GET  `/admin/models/jobs` — Snapshot of active jobs and inflight hashes for troubleshooting.
 
 ## Request
 

@@ -106,12 +106,68 @@ fn canonicalize_json(v: &Value) -> Value {
 }
 
 fn compute_action_key(tool_id: &str, tool_ver: &str, input: &Value) -> String {
+    // Compose a stable key from tool id@version, an environment/policy signature,
+    // and a canonicalized representation of input.
     let mut hasher = sha2::Sha256::new();
     hasher.update(tool_id.as_bytes());
     hasher.update(b"@\0");
     hasher.update(tool_ver.as_bytes());
     hasher.update(b"\0");
-    // TODO: add env signature (policy/secret versions) when available
+    // Environment/policy signature: include non-secret markers that should bust cache
+    // when policy or secret versions change. We avoid hashing actual secret values.
+    // Recognized markers (optional):
+    // - ARW_POLICY_VERSION, ARW_SECRETS_VERSION
+    // - ARW_PROJECT_ID, ARW_NET_POSTURE
+    // - ARW_TOOLS_CACHE_SALT (manual salt)
+    // Additionally, include a compact hash of the gating snapshot (deny lists/contracts).
+    fn env_signature() -> String {
+        let mut pairs: Vec<(String, String)> = Vec::new();
+        let add = |k: &str, pairs: &mut Vec<(String, String)>| {
+            if let Ok(v) = std::env::var(k) {
+                if !v.is_empty() {
+                    pairs.push((k.to_string(), v));
+                }
+            }
+        };
+        // Known version markers and posture context
+        for k in [
+            "ARW_POLICY_VERSION",
+            "ARW_SECRETS_VERSION",
+            "ARW_PROJECT_ID",
+            "ARW_NET_POSTURE",
+            "ARW_TOOLS_CACHE_SALT",
+        ] {
+            add(k, &mut pairs);
+        }
+        // Back-compat aliases sometimes used in setups
+        for k in ["ARW_POLICY_VER", "ARW_SECRETS_VER"] {
+            add(k, &mut pairs);
+        }
+        // Include a short hash of gating snapshot (policy denies/contracts)
+        // to invalidate caches when policy is updated at runtime.
+        let gating_hash = {
+            let snap = arw_core::gating::snapshot();
+            let bytes = serde_json::to_vec(&snap).unwrap_or_default();
+            let mut h = sha2::Sha256::new();
+            h.update(&bytes);
+            format!("{:x}", h.finalize())
+        };
+        pairs.push(("GATING".into(), gating_hash));
+        pairs.sort_by(|a, b| a.0.cmp(&b.0));
+        let mut out = String::new();
+        for (k, v) in pairs.into_iter() {
+            out.push_str(&k);
+            out.push('=');
+            out.push_str(&v);
+            out.push(';');
+        }
+        out
+    }
+    let env_sig = env_signature();
+    hasher.update(b"env:\0");
+    hasher.update(env_sig.as_bytes());
+    hasher.update(b"\0");
+
     let canon = canonicalize_json(input);
     let bytes = serde_json::to_vec(&canon).unwrap_or_default();
     hasher.update(&bytes);

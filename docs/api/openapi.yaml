@@ -312,6 +312,39 @@ paths:
                   ewma_mbps:
                     type: number
                     nullable: true
+  /admin/state/models_metrics:
+    get:
+      tags: [models]
+      operationId: state_models_metrics
+      responses:
+        '200':
+          description: Models download metrics (counters + EWMA)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelsMetrics'
+  /admin/state/route_stats:
+    get:
+      tags: [state]
+      operationId: state_route_stats
+      responses:
+        '200':
+          description: HTTP route stats (p95/ewma/hits/errors)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RouteStats'
+  /admin/tools/cache_stats:
+    get:
+      tags: [tools]
+      operationId: tools_cache_stats
+      responses:
+        '200':
+          description: Tool Action Cache stats
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ToolCacheStats'
 components:
   schemas:
     OkResponse:
@@ -348,6 +381,43 @@ components:
         sha256: { type: string }
         budget:
           $ref: '#/components/schemas/BudgetOverride'
+    ModelsMetrics:
+      type: object
+      properties:
+        started: { type: integer }
+        queued: { type: integer }
+        admitted: { type: integer }
+        resumed: { type: integer }
+        canceled: { type: integer }
+        completed: { type: integer }
+        completed_cached: { type: integer }
+        errors: { type: integer }
+        bytes_total: { type: integer }
+        ewma_mbps: { type: number, nullable: true }
+    RouteStats:
+      type: object
+      properties:
+        by_path:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              hits: { type: integer }
+              errors: { type: integer }
+              ewma_ms: { type: number }
+              p95_ms: { type: integer }
+              max_ms: { type: integer }
+    ToolCacheStats:
+      type: object
+      properties:
+        hit: { type: integer }
+        miss: { type: integer }
+        coalesced: { type: integer }
+        capacity: { type: integer }
+        ttl_secs: { type: integer }
+        entries: { type: integer }
 tags:
 - name: arw-svc
 - name: models
+ - name: state
+ - name: tools
