@@ -720,6 +720,15 @@ paths:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
       description: 'Models: GET /admin/models.'
+  /admin/models/summary:
+    get:
+      tags:
+      - Admin/Models
+      operationId: models_summary_doc
+      responses:
+        '200':
+          description: Models summary
+      description: 'Models: GET /admin/models/summary.'
   /admin/models/add:
     post:
       tags:

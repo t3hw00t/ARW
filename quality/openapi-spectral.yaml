@@ -66,13 +66,9 @@ rules:
     severity: warn
     given: $.paths[*][*].x-sunset
     then:
-      function: pattern
-      functionOptions:
-        match: "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
-      - field: description
-        function: pattern
+      - function: pattern
         functionOptions:
-          match: (?i)deprecated
+          match: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$'
 
   # GET list endpoints should support pagination (soft rule)
   x-pagination-list-get:
@@ -89,8 +85,10 @@ rules:
     description: Event channel names should use Domain.Event format
     message: "Channel '{{property}}' should match ^[A-Za-z]+(\.[A-Za-z][A-Za-z0-9]+)+$"
     severity: warn
+    formats:
+      - asyncapi2
     given: $.channels.*~
     then:
       function: pattern
       functionOptions:
-        match: "^[A-Za-z]+(\.[A-Za-z][A-Za-z0-9]+)+$"
+        match: '^[A-Za-z]+(\\.[A-Za-z][A-Za-z0-9]+)+$'

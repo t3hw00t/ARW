@@ -1901,6 +1901,7 @@ async fn feedback_policy_doc() -> impl IntoResponse {
         memory_apply_doc,
         memory_limit_set_doc,
         models_list_doc,
+        models_summary_doc,
         models_default_get_doc,
         models_refresh_doc,
         models_save_doc,
@@ -1973,6 +1974,20 @@ async fn feedback_policy_doc() -> impl IntoResponse {
 struct ApiDoc;
 
 // --- OpenAPI-only wrappers for common admin endpoints ---
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/admin/models/summary", tag = "Admin/Models", responses(
+    (status=200, description="Models summary")
+))]
+async fn models_summary_doc() -> impl IntoResponse {
+    ext::models_api::models_summary(State(AppState {
+        bus: arw_events::Bus::new_with_replay(1, 1),
+        stop_tx: None,
+        queue: std::sync::Arc::new(arw_core::orchestrator::LocalQueue::new()),
+        resources: Resources::new(),
+    }))
+    .await
+}
+
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/admin/memory", tag = "Admin/Memory", responses(
     (status=200, description="Memory snapshot"),

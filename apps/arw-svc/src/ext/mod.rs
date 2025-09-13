@@ -503,6 +503,7 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/memory/limit", post(memory_api::memory_limit_set))
         // models
         .route("/models", get(models_api::list_models))
+        .route("/models/summary", get(models_api::models_summary))
         .route("/models/refresh", post(models_api::refresh_models))
         .route("/models/save", post(models_api::models_save))
         .route("/models/load", post(models_api::models_load))
