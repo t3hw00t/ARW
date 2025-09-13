@@ -26,7 +26,6 @@ jobs:
         shell: pwsh
         continue-on-error: true
         run: |
-          Set-Location Agent_Hub
           $res = Invoke-ScriptAnalyzer -Path scripts -Recurse -ReportSummary -Severity Warning,Error
           $res | Format-Table -AutoSize | Out-String | Write-Host
           if ($res | Where-Object { $_.Severity -eq 'Error' }) { Write-Host 'Errors found.' -ForegroundColor Red }

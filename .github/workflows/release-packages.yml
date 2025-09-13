@@ -23,11 +23,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            Agent_Hub
+            .
 
       - name: Build native (x86_64)
         run: |
-          cd Agent_Hub
           cargo build --release -p arw-svc -p arw-cli --locked || true
           bash scripts/package.sh
 
@@ -41,7 +40,6 @@ jobs:
           CC_aarch64_unknown_linux_gnu: aarch64-linux-gnu-gcc
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: |
-          cd Agent_Hub
           rustup target add aarch64-unknown-linux-gnu
           cargo build --release -p arw-svc -p arw-cli --target aarch64-unknown-linux-gnu --locked || true
           bash scripts/package.sh --no-build --target aarch64-unknown-linux-gnu
@@ -50,7 +48,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            Agent_Hub/dist/*.zip
+            dist/*.zip
 
   windows:
     name: package (windows)
@@ -66,19 +64,17 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            Agent_Hub
+            .
 
       - name: Build native (x86_64)
         shell: pwsh
         run: |
-          Set-Location Agent_Hub
           cargo build --release -p arw-svc -p arw-cli --locked
           ./scripts/package.ps1
 
       - name: Build cross (aarch64-pc-windows-msvc)
         shell: pwsh
         run: |
-          Set-Location Agent_Hub
           rustup target add aarch64-pc-windows-msvc
           cargo build --release -p arw-svc -p arw-cli --target aarch64-pc-windows-msvc --locked
           ./scripts/package.ps1 -NoBuild -Target aarch64-pc-windows-msvc
@@ -87,7 +83,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            Agent_Hub/dist/*.zip
+            dist/*.zip
 
   macos:
     name: package (macos)
@@ -103,11 +99,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            Agent_Hub
+            .
 
       - name: Build native
         run: |
-          cd Agent_Hub
           cargo build --release -p arw-svc -p arw-cli --locked || true
           bash scripts/package.sh
 
@@ -115,9 +110,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            Agent_Hub/dist/*.zip
+            dist/*.zip
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
-

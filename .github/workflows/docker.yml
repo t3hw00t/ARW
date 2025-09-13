@@ -24,8 +24,8 @@ jobs:
       - name: Build (no push)
         uses: docker/build-push-action@v6
         with:
-          context: Agent_Hub
-          file: Agent_Hub/apps/arw-svc/Dockerfile
+          context: .
+          file: apps/arw-svc/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: false
           cache-from: type=gha

@@ -29,12 +29,11 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: |
-            Agent_Hub
+            .
 
       - name: Build arw-svc (release)
         shell: pwsh
         run: |
-          Set-Location Agent_Hub
           cargo build --release -p arw-svc --locked
 
       - name: Run Windows Advanced Gate (informational by default)
@@ -42,6 +41,4 @@ jobs:
         env:
           ARW_STRICT_SIGN_VERIFY: ${{ inputs.strict_sign }}
         run: |
-          Set-Location Agent_Hub
           ./scripts/windows-advanced-gate.ps1
-

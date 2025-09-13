@@ -17,7 +17,6 @@ jobs:
       - name: Install cargo-deny
         run: cargo install cargo-deny --locked
       - name: Run cargo-deny (advisories, licenses, bans)
-        working-directory: Agent_Hub
         run: |
           cargo deny check advisories bans sources licenses
         continue-on-error: true
