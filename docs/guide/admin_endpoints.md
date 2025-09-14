@@ -7,7 +7,7 @@ title: Admin Endpoints
 
 ARW exposes a unified admin/ops HTTP namespace under `/admin`. All sensitive routes live here so updates can’t miss gating.
 
-Updated: 2025-09-13
+Updated: 2025-09-14
 
 - Base: `/admin`
 - Index (HTML): `/admin`
@@ -74,7 +74,7 @@ Rate limiting:
 - `/admin/self_model/propose` (POST): propose a self‑model update; emits `SelfModel.Proposed`
 - `/admin/self_model/apply` (POST): apply a proposal; emits `SelfModel.Updated`
 - `/admin/state/*`: observations, beliefs, world, intents, actions
-  - `/admin/state/models_metrics`: models download counters + EWMA (read‑model)
+  - `/admin/state/models_metrics`: models download counters + EWMA (read‑model). Shape matches the metrics used in `/admin/models/summary`.
   - `/admin/state/route_stats`: per‑route latency/hit/error read‑model
   - `/admin/state/world`: Project Map snapshot (scoped belief graph)
   - `/admin/state/world/select`: top‑K beliefs (claims) with trace
@@ -160,37 +160,39 @@ curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?replay=10"
 
 ### Event Examples
 
-- Models.DownloadProgress (progress)
+Canonical topic names are defined once in `apps/arw-svc/src/ext/topics.rs` and referenced by the service.
+
+- models.download.progress (progress)
 ```
 { "id": "qwen2.5-coder-7b", "status": "downloading", "code": "progress", "progress": 42, "downloaded": 12582912, "total": 30000000 }
 ```
 
-- Models.DownloadProgress (complete)
+- models.download.progress (complete)
 ```
 { "id": "qwen2.5-coder-7b", "status": "complete", "code": "complete", "file": "qwen.gguf", "provider": "local", "cas_file": "<sha256>.gguf" }
 ```
 
-- Models.DownloadProgress (error)
+- models.download.progress (error)
 ```
-{ "id": "qwen2.5-coder-7b", "error": "checksum mismatch", "code": "checksum_mismatch", "expected": "<hex>", "actual": "<hex>" }
-```
-
-- Models.DownloadProgress (canceled)
-```
-{ "id": "qwen2.5-coder-7b", "status": "canceled", "code": "canceled_by_user" }
+{ "id": "qwen2.5-coder-7b", "error": "checksum mismatch", "code": "checksum-mismatch", "expected": "<hex>", "actual": "<hex>" }
 ```
 
-- Models.CasGc (summary)
+- models.download.progress (canceled)
+```
+{ "id": "qwen2.5-coder-7b", "status": "canceled", "code": "canceled-by-user" }
+```
+
+- models.cas.gc (summary)
 ```
 { "scanned": 12, "kept": 9, "deleted": 3, "deleted_bytes": 8796093022, "ttl_days": 14 }
 ```
 
-- Egress.Preview (pre-offload)
+- egress.preview (pre-offload)
 ```
 { "id": "qwen2.5-coder-7b", "url": "https://example/model.gguf", "dest": { "host": "example", "port": 443, "protocol": "https" }, "provider": "local", "corr_id": "..." }
 ```
 
-- Egress.Ledger.Appended (allow)
+- egress.ledger.appended (allow)
 ```
 { "decision": "allow", "reason_code": "models.download", "posture": "off", "project_id": "default", "episode_id": null, "corr_id": "...", "node_id": null, "tool_id": "models.download", "dest": { "host": "example", "port": 443, "protocol": "https" }, "bytes_out": 0, "bytes_in": 1048576, "duration_ms": 1200 }
 ```
@@ -233,15 +235,19 @@ curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
 - `POST /admin/models/download` — Start or resume a model download.
   - Body: `{id,url,sha256,provider?,budget?}` where `budget` can override `{soft_ms,hard_ms,class}` for this request.
   - Requires a 64‑char hex `sha256`.
-  - Emits `Models.Download` (compat) and standardized `Models.DownloadProgress` events.
+  - Emits standardized `models.download.progress` events.
 - `POST /admin/models/download/cancel` — Cancel an in‑flight download for `{id}`. Emits `cancel-requested` then `canceled` when complete (or `no-active-job`).
-- `POST /admin/models/cas_gc` — Run a one‑off CAS GC sweep: `{ttl_days}`. Emits `Models.CasGc`.
+- `POST /admin/models/cas_gc` — Run a one‑off CAS GC sweep: `{ttl_days}`. Emits `models.cas.gc`.
 - `GET  /state/models` — Public, read‑only models list.
 - `GET  /admin/state/models_hashes` — Admin summary of installed hashes and sizes.
+
+Notes
+- Success responses use a consistent envelope `{ ok: true, data: ... }`.
+- Errors return RFC‑7807 ProblemDetails with HTTP status codes. Missing services and unexpected errors are mapped to `500` with a structured JSON body.
 - `GET  /admin/models/by-hash/:sha256` — Serve a CAS blob by hash (egress‑gated; `io:egress:models.peer`).
 - `GET  /admin/models/downloads_metrics` — Lightweight downloads metrics used for admission checks; returns `{ ewma_mbps: number|null, started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total }`.
  - `GET  /admin/state/models_metrics` — Read‑model counters `{ started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total, ewma_mbps }`.
- - SSE: `State.ModelsMetrics.Patch` and generic `State.ReadModel.Patch` (id=`models_metrics`) publish RFC‑6902 JSON Patches with coalescing.
+- SSE: `state.read.model.patch` with id=`models_metrics` publishes RFC‑6902 JSON Patches with coalescing.
  - `POST /admin/models/concurrency` — Set models download concurrency at runtime. Body: `{ max: number, block?: boolean }`. When `block` is `true` (default), shrinking waits for permits; when `false`, it shrinks opportunistically.
  - `GET  /admin/models/concurrency` — Get current concurrency, including `{ configured_max, available_permits, held_permits, hard_cap }`.
  - `GET  /admin/models/jobs` — Snapshot of active jobs and inflight hashes for observability.
@@ -249,12 +255,12 @@ curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
 ### Tools
 
 - `GET /admin/tools/cache_stats` — Tool Action Cache stats `{ hit, miss, coalesced, entries, ttl_secs, capacity }`.
-- Events: `Tool.Cache` per run `{ id, outcome:hit|miss|coalesced, elapsed_ms, key, digest, age_secs }`.
+- Events: `tool.cache` per run `{ id, outcome:hit|miss|coalesced, elapsed_ms, key, digest, age_secs }`.
 
 ### Route Stats (Read‑model)
 
 - `GET /admin/state/route_stats` — `{ by_path: { "/path": { hits, errors, ewma_ms, p95_ms, max_ms } } }`.
-- SSE: `State.RouteStats.Patch` and generic `State.ReadModel.Patch` (id=`route_stats`) with coalescing.
+- SSE: `state.read.model.patch` with id=`route_stats` (coalesced).
 
 #### Models Manifest
 

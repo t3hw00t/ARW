@@ -11,7 +11,7 @@ This plan layers pragmatic, low‑overhead safeguards on top of ARW’s policy/e
 ## Memory Write Policy & Quarantine
 - Treat retrieved text as untrusted; only beliefs with explicit provenance and a positive evidence score can enter long‑term memory.
 - Quarantine risky items (HTML/scripts/forms/JS‑heavy pages); require a safer extractor or explicit review before admitting.
-- Emit `Memory.Quarantined` and `Memory.Admitted` events; surface a small review queue in the sidecar.
+- Emit `memory.quarantined` and `memory.admitted` events; surface a small review queue in the sidecar.
 
 ## Project Isolation by Construction
 - Strict per‑project namespaces for caches, embeddings, semantic indexes; no cross‑project mounts by default.
@@ -65,4 +65,3 @@ This plan layers pragmatic, low‑overhead safeguards on top of ARW’s policy/e
 - Seeded red‑team tests in CI: prompt‑injection sample, zip‑slip sample, SSRF sample, secrets‑in‑logs detector.
 
 See also: Egress Firewall; Network Posture; Threat Model; Security Hardening; Cluster Federation.
-

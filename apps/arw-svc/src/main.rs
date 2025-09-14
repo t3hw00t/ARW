@@ -173,6 +173,8 @@ struct About {
 async fn main() {
     arw_otel::init();
 
+    // legacy/dual event kind modes removed; bus publishes normalized kinds
+
     if let Ok(path) = std::env::var("OPENAPI_OUT") {
         let doc = ApiDoc::openapi();
         if let Some(parent) = std::path::Path::new(&path).parent() {
@@ -328,7 +330,7 @@ async fn main() {
     // Emit a startup event so /events sees something if connected early.
     state
         .bus
-        .publish("Service.Start", &json!({"msg":"arw-svc started"}));
+        .publish("service.start", &json!({"msg":"arw-svc started"}));
     // Pre‑warm hot lookups/caches for snappy I2F
     ext::snappy::prewarm().await;
 
@@ -389,7 +391,7 @@ async fn main() {
                 intv.tick().await;
                 let snap = collect_metrics_snapshot().await;
                 st.bus.publish(
-                    "Probe.Metrics",
+                    "probe.metrics",
                     &serde_json::json!({
                         "cpu": snap["cpu"]["avg"],
                         "mem": {"used": snap["memory"]["used"], "total": snap["memory"]["total"]},
@@ -448,7 +450,7 @@ async fn main() {
         tokio::spawn(async move {
             let mut rx = bus.subscribe();
             while let Ok(env) = rx.recv().await {
-                if env.kind == "Catalog.Updated" {
+                if env.kind == "Catalog.Updated" || env.kind == "catalog.updated" {
                     refresh_dep_cache();
                     // align seen_gen with current generation
                     dep_cache()
@@ -902,7 +904,7 @@ async fn rate_allow() -> bool {
     responses((status = 200, description = "Service health", body = OkResponse))
 )]
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
-    state.bus.publish("Service.Health", &json!({"ok": true}));
+    state.bus.publish("service.health", &json!({"ok": true}));
     Json(OkResponse { ok: true })
 }
 
@@ -980,7 +982,7 @@ async fn probe(State(state): State<AppState>) -> impl IntoResponse {
     let ep = arw_core::load_effective_paths();
 
     // Publish that JSON to the event bus
-    state.bus.publish("Memory.Applied", &ep);
+    state.bus.publish("memory.applied", &ep);
 
     // Return it to the client
     ext::ok::<serde_json::Value>(ep).into_response()
@@ -1101,7 +1103,7 @@ async fn probe_hw(State(state): State<AppState>) -> impl IntoResponse {
         "npus": npus,
     });
     // Publish minimal event for observability
-    state.bus.publish("Probe.HW", &serde_json::json!({"cpus": cpus_logical, "gpus": out["gpus"].as_array().map(|a| a.len()).unwrap_or(0)}));
+    state.bus.publish("probe.hw", &serde_json::json!({"cpus": cpus_logical, "gpus": out["gpus"].as_array().map(|a| a.len()).unwrap_or(0)}));
     ext::ok::<serde_json::Value>(out).into_response()
 }
 
@@ -1425,7 +1427,7 @@ async fn probe_metrics(State(state): State<AppState>) -> impl IntoResponse {
     let out = collect_metrics_snapshot().await;
     // publish a compact event for dashboards (no polling needed)
     state.bus.publish(
-        "Probe.Metrics",
+        "probe.metrics",
         &serde_json::json!({
             "cpu": out["cpu"]["avg"],
             "mem": {"used": out["memory"]["used"], "total": out["memory"]["total"]},
@@ -1713,7 +1715,7 @@ async fn emit_test(State(state): State<AppState>) -> impl IntoResponse {
         .unwrap_or(0);
     state
         .bus
-        .publish("Service.Test", &json!({"msg":"ping","t": now_ms}));
+        .publish("service.test", &json!({"msg":"ping","t": now_ms}));
     // audit
     crate::ext::io::audit_event("admin.emit.test", &json!({"t": now_ms})).await;
     Json(OkResponse { ok: true }).into_response()
@@ -1734,7 +1736,7 @@ async fn emit_test(State(state): State<AppState>) -> impl IntoResponse {
 async fn shutdown(State(state): State<AppState>) -> impl IntoResponse {
     state
         .bus
-        .publish("Service.Stop", &json!({"reason":"user request"}));
+        .publish("service.stop", &json!({"reason":"user request"}));
     // audit
     crate::ext::io::audit_event("admin.shutdown", &json!({"reason": "user request"})).await;
     if let Some(tx) = &state.stop_tx {
@@ -1771,6 +1773,47 @@ async fn events(
     Query(q): Query<EventsQs>,
     headers: HeaderMap,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
+    // Helper: format SSE data as either ARW envelope JSON (default) or CloudEvents structured JSON (opt-in)
+    let ce_mode = std::env::var("ARW_EVENTS_SSE_MODE")
+        .ok()
+        .unwrap_or_else(|| "envelope".into());
+    fn sse_data_for(mode: &str, env: &arw_events::Envelope) -> String {
+        if mode.eq_ignore_ascii_case("ce-structured") {
+            // CloudEvents structured content; fall back to env fields when ce meta is absent
+            let (specversion, type_name, source, id, time, dct) = match &env.ce {
+                Some(ce) => (
+                    ce.specversion.clone(),
+                    ce.type_name.clone(),
+                    ce.source.clone(),
+                    ce.id.clone(),
+                    ce.time.clone(),
+                    ce.datacontenttype
+                        .clone()
+                        .unwrap_or_else(|| "application/json".into()),
+                ),
+                None => (
+                    "1.0".into(),
+                    env.kind.clone(),
+                    std::env::var("ARW_EVENT_SOURCE").unwrap_or_else(|_| "arw-svc".into()),
+                    env.time.clone(),
+                    env.time.clone(),
+                    "application/json".into(),
+                ),
+            };
+            serde_json::json!({
+                "specversion": specversion,
+                "type": type_name,
+                "source": source,
+                "id": id,
+                "time": time,
+                "datacontenttype": dct,
+                "data": env.payload.clone(),
+            })
+            .to_string()
+        } else {
+            serde_json::to_string(env).unwrap_or_else(|_| "{}".to_string())
+        }
+    }
     // audit subscription
     crate::ext::io::audit_event(
         "admin.events.subscribe",
@@ -1783,9 +1826,10 @@ async fn events(
         state.bus.subscribe()
     };
     let bus_for_lag = state.bus.clone();
+    let ce_mode_b = ce_mode.clone();
     let bstream = BroadcastStream::new(rx).flat_map(move |res| match res {
         Ok(env) => {
-            let data = serde_json::to_string(&env).unwrap_or_else(|_| "{}".to_string());
+            let data = sse_data_for(&ce_mode_b, &env);
             tokio_stream::once(Ok::<Event, Infallible>(
                 Event::default()
                     .id(env.time.clone())
@@ -1797,7 +1841,7 @@ async fn events(
             bus_for_lag.note_lag(n);
             let body = format!("{{\"skipped\":{}}}", n);
             tokio_stream::once(Ok::<Event, Infallible>(
-                Event::default().id("gap").event("Bus.Gap").data(body),
+                Event::default().id("gap").event("bus.gap").data(body),
             ))
         }
     });
@@ -1809,8 +1853,9 @@ async fn events(
     } else {
         Vec::new()
     };
-    let replay_stream = tokio_stream::iter(replay_items.into_iter().map(|env| {
-        let data = serde_json::to_string(&env).unwrap_or_else(|_| "{}".to_string());
+    let ce_mode_r = ce_mode.clone();
+    let replay_stream = tokio_stream::iter(replay_items.into_iter().map(move |env| {
+        let data = sse_data_for(&ce_mode_r, &env);
         Ok::<Event, Infallible>(
             Event::default()
                 .id(env.time.clone())
@@ -1830,7 +1875,7 @@ async fn events(
     let initial = tokio_stream::once(Ok::<Event, Infallible>(
         Event::default()
             .id("0")
-            .event("Service.Connected")
+            .event("service.connected")
             .data(init_body),
     ));
     // merge: connected -> replay -> live

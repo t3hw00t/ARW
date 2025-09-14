@@ -1,5 +1,6 @@
 {
   "openapi": "3.1.0",
+  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "info": {
     "title": "Agent Hub (ARW) Service API",
     "description": "Your private AI control room that can scale and share when you choose.\n\nIn plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” on your computer to research, plan, write, and build—while you stay in charge. It is local‑first and privacy‑first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.\n",
@@ -64,9 +65,65 @@
     {
       "name": "Public/Specs",
       "description": "Public/Specs endpoints"
+    },
+    {
+      "name": "Public/State",
+      "description": "Public read-models and state"
     }
   ],
   "paths": {
+    "/models/blob/{sha256}": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "description": "Return a CAS blob by SHA-256 digest. Strong validators are provided with\nETag (hex digest) and Last-Modified. Clients may send If-None-Match to\nreceive 304 Not Modified. Cache-Control is set to long-lived immutable.\n",
+        "operationId": "models_blob_get_doc",
+        "parameters": [
+          {
+            "name": "sha256",
+            "in": "path",
+            "description": "Hex lowercase SHA-256 (64 chars)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Blob bytes",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "206": {
+            "description": "Partial Content (Range)"
+          },
+          "304": {
+            "description": "Not Modified"
+          },
+          "400": {
+            "description": "Invalid sha256",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          }
+        }
+      }
+    },
     "/about": {
       "get": {
         "tags": [
@@ -1142,7 +1199,36 @@
         "operationId": "models_list_doc",
         "responses": {
           "200": {
-            "description": "Models list"
+            "description": "Models list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModelItem"
+                  }
+                },
+                "examples": {
+                  "basic": {
+                    "summary": "Two models",
+                    "value": [
+                      {
+                        "id": "llama3:8b",
+                        "provider": "ollama",
+                        "bytes": 5347737600,
+                        "status": "ready"
+                      },
+                      {
+                        "id": "qwen2:7b",
+                        "provider": "hf",
+                        "bytes": 4855592960,
+                        "status": "downloading"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
           },
           "403": {
             "description": "Forbidden",
@@ -1156,6 +1242,70 @@
           }
         },
         "description": "Models: GET /admin/models."
+      }
+    },
+    "/admin/models/summary": {
+      "get": {
+        "tags": [
+          "Admin/Models"
+        ],
+        "operationId": "models_summary_doc",
+        "responses": {
+          "200": {
+            "description": "Models summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelsSummary"
+                },
+                "examples": {
+                  "basic": {
+                    "summary": "Typical models summary",
+                    "value": {
+                      "items": [
+                        {
+                          "id": "llama3:8b",
+                          "provider": "ollama",
+                          "path": "/models/llama3/8b.bin",
+                          "sha256": "0123abcd...",
+                          "bytes": 5347737600,
+                          "status": "ready"
+                        },
+                        {
+                          "id": "qwen2:7b",
+                          "provider": "hf",
+                          "path": "/models/qwen2/7b.bin",
+                          "sha256": "89ab0123...",
+                          "bytes": 4855592960,
+                          "status": "downloading"
+                        }
+                      ],
+                      "concurrency": {
+                        "configured_max": 2,
+                        "available_permits": 2,
+                        "held_permits": 0,
+                        "hard_cap": null
+                      },
+                      "metrics": {
+                        "started": 4,
+                        "queued": 1,
+                        "admitted": 3,
+                        "resumed": 0,
+                        "canceled": 0,
+                        "completed": 2,
+                        "completed_cached": 0,
+                        "errors": 0,
+                        "bytes_total": 10245591040,
+                        "ewma_mbps": 18.2
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "Models: GET /admin/models/summary."
       }
     },
     "/admin/models/add": {
@@ -1217,7 +1367,24 @@
         "operationId": "models_concurrency_get_doc",
         "responses": {
           "200": {
-            "description": "Concurrency settings"
+            "description": "Concurrency settings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelsConcurrency"
+                },
+                "examples": {
+                  "typical": {
+                    "value": {
+                      "configured_max": 2,
+                      "available_permits": 2,
+                      "held_permits": 0,
+                      "hard_cap": null
+                    }
+                  }
+                }
+              }
+            }
           },
           "403": {
             "description": "Forbidden",
@@ -2116,10 +2283,254 @@
         },
         "description": "Public: GET /version."
       }
+    },
+    "/state/models": {
+      "get": {
+        "description": "Public read-only models list",
+        "tags": [
+          "Public/State"
+        ],
+        "operationId": "state_models_doc",
+        "responses": {
+          "200": {
+            "description": "Models list",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ModelItem"
+                  }
+                },
+                "examples": {
+                  "basic": {
+                    "value": [
+                      {
+                        "id": "llama3:8b",
+                        "provider": "ollama",
+                        "bytes": 5347737600,
+                        "status": "ready"
+                      },
+                      {
+                        "id": "qwen2:7b",
+                        "provider": "hf",
+                        "bytes": 4855592960,
+                        "status": "downloading"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "ModelsConcurrency": {
+        "type": "object",
+        "required": [
+          "configured_max",
+          "available_permits",
+          "held_permits"
+        ],
+        "properties": {
+          "configured_max": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "available_permits": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "held_permits": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "hard_cap": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          }
+        },
+        "example": {
+          "configured_max": 2,
+          "available_permits": 2,
+          "held_permits": 0,
+          "hard_cap": null
+        }
+      },
+      "ModelsMetrics": {
+        "type": "object",
+        "required": [
+          "started",
+          "queued",
+          "admitted",
+          "resumed",
+          "canceled",
+          "completed",
+          "completed_cached",
+          "errors",
+          "bytes_total"
+        ],
+        "properties": {
+          "started": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "queued": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "admitted": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "resumed": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "canceled": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "completed": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "completed_cached": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "errors": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "bytes_total": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "ewma_mbps": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double",
+            "minimum": 0
+          }
+        },
+        "example": {
+          "started": 4,
+          "queued": 1,
+          "admitted": 3,
+          "resumed": 0,
+          "canceled": 0,
+          "completed": 2,
+          "completed_cached": 0,
+          "errors": 0,
+          "bytes_total": 10245591040,
+          "ewma_mbps": 18.2
+        }
+      },
+      "ModelsSummary": {
+        "type": "object",
+        "required": [
+          "items",
+          "concurrency",
+          "metrics"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelItem"
+            }
+          },
+          "default": {
+            "type": "string"
+          },
+          "concurrency": {
+            "$ref": "#/components/schemas/ModelsConcurrency"
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/ModelsMetrics"
+          }
+        }
+      },
+      "ModelItem": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "error_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "example": {
+          "id": "llama3:8b",
+          "provider": "ollama",
+          "path": "/models/llama3/8b.bin",
+          "sha256": "0123abcd...",
+          "bytes": 5347737600,
+          "status": "ready"
+        }
+      },
       "About": {
         "type": "object",
         "description": "Service and branding information.",

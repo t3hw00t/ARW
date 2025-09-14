@@ -33,7 +33,7 @@ async function health() {
   }catch{}
 }
 
-// Mini downloads widget (Models.*)
+// Mini downloads widget (models.*)
 function miniDownloads() {
   const root=document.getElementById('dlmini');
   if(!root) return;
@@ -41,8 +41,8 @@ function miniDownloads() {
   const getPort = ()=> ARW.getPortFromInput('port') || 8090;
   (async ()=>{
     try{
-      const es = new EventSource(ARW.base(getPort()) + '/events?prefixes=Models.');
-      es.addEventListener('Models.DownloadProgress', (ev)=>{
+      const es = new EventSource(ARW.base(getPort()) + '/events?prefix=models.');
+      es.addEventListener('models.download.progress', (ev)=>{
         try{
           const j = JSON.parse(ev.data||'{}');
           const id = j.id; const pct=(j.progress||0)+'%';

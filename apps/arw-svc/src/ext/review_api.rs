@@ -98,7 +98,7 @@ pub async fn memory_quarantine_add(
     // Emit event
     let mut ev = entry.clone();
     super::corr::ensure_corr(&mut ev);
-    state.bus.publish("Memory.Quarantined", &ev);
+    state.bus.publish("memory.quarantined", &ev);
     super::ok(serde_json::json!({"ok": true})).into_response()
 }
 
@@ -129,7 +129,7 @@ pub async fn memory_quarantine_admit(
     // Emit event
     let mut ev = serde_json::json!({"id": req.id});
     super::corr::ensure_corr(&mut ev);
-    state.bus.publish("Memory.Admitted", &ev);
+    state.bus.publish("memory.admitted", &ev);
     let removed = before.saturating_sub(
         super::io::load_json_file_async(&p)
             .await

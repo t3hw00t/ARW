@@ -91,18 +91,13 @@ async fn publish_snappy(bus: &arw_events::Bus) {
         },
         "breach": breach,
     });
-    crate::ext::read_model::emit_patch_dual(
-        bus,
-        "State.Snappy.Patch",
-        "State.ReadModel.Patch",
-        "snappy",
-        &cur,
-    );
+    use crate::ext::topics::TOPIC_READMODEL_PATCH;
+    crate::ext::read_model::emit_patch(bus, TOPIC_READMODEL_PATCH, "snappy", &cur);
     if breach {
         let mut notice =
             json!({"p95_max_ms": interactive_p95, "budget_ms": budgets.full_result_p95_ms});
         crate::ext::corr::ensure_corr(&mut notice);
-        bus.publish("Snappy.Notice", &notice);
+        bus.publish(crate::ext::topics::TOPIC_SNAPPY_NOTICE, &notice);
     }
     // For deeper introspection (opt-in), publish a detailed but infrequent map
     let detail_every = std::env::var("ARW_SNAPPY_DETAIL_EVERY")
@@ -123,7 +118,7 @@ async fn publish_snappy(bus: &arw_events::Bus) {
             *last = now;
             let mut pl = json!({"p95_by_path": p95_by_path});
             crate::ext::corr::ensure_corr(&mut pl);
-            bus.publish("Snappy.Detail", &pl);
+            bus.publish(crate::ext::topics::TOPIC_SNAPPY_DETAIL, &pl);
         }
     }
 }

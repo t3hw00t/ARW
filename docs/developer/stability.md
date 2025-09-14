@@ -45,7 +45,7 @@ Notes for Tauri 2
 
 ## Observability
 - Prefer structured logs (key=value) and consistent error variants
-- Emit `Service.*` lifecycle events around startup/shutdown
+- Emit `service.*` lifecycle events around startup/shutdown
 
 ## When to unfreeze
 - CI is green on multiple runs

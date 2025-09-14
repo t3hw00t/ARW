@@ -40,7 +40,7 @@ Restart=always
 Contract excerpt (server):
 
 - Transport: `text/event-stream` (SSE), HTTP/2 preferred
-- Event types: `Service.Connected` (ack/resume), `State.*.Patch` (JSON Patch), `*.Notice`, `*.Done`
+- Event types: `service.connected` (ack/resume), `state.*.patch` (JSON Patch), `*.notice`, `*.done`
 - Patch format: `application/json-patch+json` (RFC 6902)
 - Resume: `Last-Event-ID` header is accepted; `?replay=N` also supported
 - Budgets: first event ≤150 ms; cadence ≤250 ms

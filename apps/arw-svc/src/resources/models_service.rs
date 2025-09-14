@@ -1,12 +1,12 @@
 use serde_json::{json, Value};
 
 use crate::app_state::AppState;
-use futures_util::StreamExt;
 use once_cell::sync::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::sync::OnceLock as StdOnceLock;
 use tokio::sync::{Notify, RwLock, Semaphore}; // for cancel/active job tracking
+                                              // Event topics used by this service
+use crate::ext::topics::*;
 
 // ---------------- Models download metrics (process-local counters) ----------------
 static DL_STARTED: AtomicU64 = AtomicU64::new(0);
@@ -21,7 +21,7 @@ static DL_BYTES: AtomicU64 = AtomicU64::new(0);
 
 // Coalescing buffer for metrics patches
 static METRICS_DIRTY: AtomicBool = AtomicBool::new(false);
-static METRICS_NOTIFY: StdOnceLock<Notify> = StdOnceLock::new();
+static METRICS_NOTIFY: OnceCell<Notify> = OnceCell::new();
 fn metrics_notify() -> &'static Notify {
     METRICS_NOTIFY.get_or_init(Notify::new)
 }
@@ -66,43 +66,37 @@ pub fn models_metrics_value() -> Value {
 }
 
 fn publish_models_metrics_patch(bus: &arw_events::Bus) {
-    let cur = models_metrics_value();
-    // Emit under both a specific and a generic topic for broader consumers
-    crate::ext::read_model::emit_patch_dual(
-        bus,
-        "State.ModelsMetrics.Patch",
-        "State.ReadModel.Patch",
-        "models_metrics",
-        &cur,
-    );
+    // Start with process-local counters
+    let mut cur = models_metrics_value();
+    // Align shape with HTTP snapshot by including EWMA MB/s when available
+    if let Some(obj) = cur.as_object_mut() {
+        let ewma = crate::ext::io::load_json_file(&crate::ext::paths::downloads_metrics_path())
+            .and_then(|v| v.get("ewma_mbps").and_then(|x| x.as_f64()));
+        match ewma {
+            Some(v) => {
+                obj.insert("ewma_mbps".into(), serde_json::Value::from(v));
+            }
+            None => {
+                obj.insert("ewma_mbps".into(), serde_json::Value::Null);
+            }
+        }
+    }
+    // Emit under the unified read‑model topic
+    crate::ext::read_model::emit_patch(bus, TOPIC_READMODEL_PATCH, "models_metrics", &cur);
 }
 
-// Emit JSON Patch for the models state (list + default).
+// Emit JSON Patch for the models state (list + default) under unified topic.
 async fn publish_models_state_patch(bus: &arw_events::Bus) {
     let list = crate::ext::models().read().await.clone();
     let default = crate::ext::default_model().read().await.clone();
     let cur = json!({ "items": list, "default": default });
-    crate::ext::read_model::emit_patch_dual(
-        bus,
-        "State.Models.Patch",
-        "State.ReadModel.Patch",
-        "models",
-        &cur,
-    );
+    crate::ext::read_model::emit_patch(bus, TOPIC_READMODEL_PATCH, "models", &cur);
 }
 
 /// Start coalesced publisher for models metrics read‑model
 pub async fn start_models_metrics_publisher(bus: arw_events::Bus) {
-    let idle_ms: u64 = std::env::var("ARW_MODELS_METRICS_PUBLISH_MS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(2000)
-        .max(200);
-    let coalesce_ms: u64 = std::env::var("ARW_MODELS_METRICS_COALESCE_MS")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(250)
-        .max(10);
+    let idle_ms: u64 = ModelsService::env_u64("ARW_MODELS_METRICS_PUBLISH_MS", 2000).max(200);
+    let coalesce_ms: u64 = ModelsService::env_u64("ARW_MODELS_METRICS_COALESCE_MS", 250).max(10);
     let notify = metrics_notify();
     let mut idle = tokio::time::interval(std::time::Duration::from_millis(idle_ms));
     loop {
@@ -220,12 +214,30 @@ fn emit_progress(
     extra: Option<Value>,
     corr_id: Option<&str>,
 ) {
+    // Validate status/code against our known vocabulary (warn-only by default)
+    #[inline]
+    fn validate(kind: &str, val: &str) {
+        // Enable strict validation via ARW_DL_PROGRESS_VALIDATE=1
+        let strict = matches!(
+            std::env::var("ARW_DL_PROGRESS_VALIDATE").ok().as_deref(),
+            Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("on")
+        );
+        if kind == "status" && !ModelsService::PROGRESS_STATUS.contains(&val) && strict {
+            tracing::warn!("unknown models.progress status='{}'", val);
+        }
+        if kind == "code" && !ModelsService::PROGRESS_CODES.contains(&val) && strict {
+            tracing::warn!("unknown models.progress code='{}'", val);
+        }
+    }
+
     let mut obj = serde_json::Map::new();
     obj.insert("id".into(), Value::String(id.to_string()));
     if let Some(s) = status {
+        validate("status", s);
         obj.insert("status".into(), Value::String(s.to_string()));
     }
     if let Some(c) = code {
+        validate("code", c);
         obj.insert("code".into(), Value::String(c.to_string()));
     }
     if let Some(b) = budget {
@@ -245,7 +257,7 @@ fn emit_progress(
     if let Some(Value::String(s)) = payload.get("status") {
         metrics_bump_status(s);
     }
-    bus.publish("Models.DownloadProgress", &payload);
+    bus.publish(TOPIC_PROGRESS, &payload);
     // Mark for coalesced patch publish
     metrics_mark_dirty();
 }
@@ -260,6 +272,14 @@ async fn emit_error(
     extra: Option<Value>,
     corr_id: Option<&str>,
 ) {
+    // Validate error code (warn-only unless ARW_DL_PROGRESS_VALIDATE enables strict warnings)
+    let strict = matches!(
+        std::env::var("ARW_DL_PROGRESS_VALIDATE").ok().as_deref(),
+        Some("1") | Some("true") | Some("TRUE") | Some("yes") | Some("on")
+    );
+    if strict && !ModelsService::PROGRESS_CODES.contains(&code) {
+        tracing::warn!("unknown models.error code='{}'", code);
+    }
     let mut obj = serde_json::Map::new();
     obj.insert("id".into(), Value::String(id.to_string()));
     obj.insert("status".into(), Value::String("error".into()));
@@ -279,7 +299,7 @@ async fn emit_error(
     let mut payload = Value::Object(obj);
     crate::ext::corr::ensure_corr(&mut payload);
     DL_ERRORS.fetch_add(1, Ordering::Relaxed);
-    bus.publish("Models.DownloadProgress", &payload);
+    bus.publish(TOPIC_PROGRESS, &payload);
     metrics_mark_dirty();
     crate::ext::io::audit_event("models.download.error", &payload).await;
 
@@ -302,16 +322,1200 @@ async fn emit_error(
         )
         .await;
     }
-    bus.publish("Models.Changed", &json!({"op":"error","id": id}));
+    bus.publish(TOPIC_MODELS_CHANGED, &json!({"op":"error","id": id}));
     // Stream a read-model patch for consumers applying deltas
     publish_models_state_patch(bus).await;
 }
 
 // tests are placed at the end of file to avoid clippy items-after-test-module
-#[cfg(test)]
-mod tests_early_placeholder {}
 
 impl ModelsService {
+    #[inline]
+    fn env_u64(name: &str, default: u64) -> u64 {
+        std::env::var(name)
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(default)
+    }
+    #[inline]
+    fn env_usize(name: &str, default: usize) -> usize {
+        std::env::var(name)
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .unwrap_or(default)
+    }
+    #[inline]
+    fn env_f64(name: &str, default: f64) -> f64 {
+        std::env::var(name)
+            .ok()
+            .and_then(|s| s.parse::<f64>().ok())
+            .unwrap_or(default)
+    }
+    // Emit the standardized start event and audit it; returns corr_id.
+    async fn emit_download_started(
+        bus: &arw_events::Bus,
+        id: &str,
+        url: &str,
+        budget: &crate::ext::budget::Budget,
+    ) -> String {
+        let mut p = json!({
+            "id": id,
+            "url": Self::redact_url_for_logs(url),
+            "budget": budget.as_json()
+        });
+        let corr = crate::ext::corr::ensure_corr(&mut p);
+        crate::ext::io::audit_event("models.download", &p).await;
+        emit_progress(
+            bus,
+            id,
+            Some("started"),
+            Some("started"),
+            if Self::progress_include_budget() {
+                Some(budget)
+            } else {
+                None
+            },
+            None,
+            Some(&corr),
+        );
+        corr
+    }
+
+    // After acquiring the concurrency permit, emit "admitted" and reflect 'downloading' in models list.
+    async fn on_admitted_set_downloading(
+        state: &crate::app_state::AppState,
+        id: &str,
+        provider: &str,
+        budget: &crate::ext::budget::Budget,
+        corr_id: &str,
+    ) {
+        emit_progress(
+            &state.bus,
+            id,
+            Some("admitted"),
+            Some("admitted"),
+            if Self::progress_include_budget() {
+                Some(budget)
+            } else {
+                None
+            },
+            None,
+            Some(corr_id),
+        );
+        // Now that we've been admitted, reflect 'downloading' in the models list.
+        {
+            let mut v = crate::ext::models().write().await;
+            if let Some(m) = v
+                .iter_mut()
+                .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(id))
+            {
+                if let Some(obj) = m.as_object_mut() {
+                    obj.insert("status".into(), Value::String("downloading".into()));
+                    obj.insert("provider".into(), Value::String(provider.to_string()));
+                }
+            } else {
+                v.push(json!({"id": id, "provider": provider.to_string(), "status":"downloading"}));
+            }
+        }
+        // Publish a patch so UIs can reflect the 'downloading' status
+        publish_models_state_patch(&state.bus).await;
+    }
+
+    // Extract destination tuple for egress events and ledger (host, port, protocol)
+    fn dest_tuple(url: &str) -> (String, u16, String) {
+        if let Ok(u) = reqwest::Url::parse(url) {
+            let host = u.host_str().unwrap_or("").to_string();
+            let port = u.port().unwrap_or_else(|| match u.scheme() {
+                "https" => 443,
+                "http" => 80,
+                _ => 0,
+            });
+            let proto = u.scheme().to_string();
+            (host, port, proto)
+        } else {
+            (String::new(), 0u16, String::from("http"))
+        }
+    }
+
+    // Validate that a Content-Range header matches our resume offset
+    fn validate_resume_content_range(resume_from: u64, content_range: &str) -> bool {
+        let s = content_range.trim();
+        if let Some(rest) = s.strip_prefix("bytes ") {
+            let parts: Vec<&str> = rest.split('/').collect();
+            if let Some(range) = parts.first() {
+                let mut it = range.split('-');
+                if let (Some(start_s), Some(_end_s)) = (it.next(), it.next()) {
+                    if let Ok(start_off) = start_s.parse::<u64>() {
+                        return start_off == resume_from;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    // Finalize a successful download: promote/copy tmp into place (CAS if sha known),
+    // fsync, remove resume meta, write manifest, update models list, metrics, events, and ledger.
+    #[allow(clippy::too_many_arguments)]
+    async fn finalize_and_write_manifest(
+        sp: &crate::app_state::AppState,
+        id: &str,
+        provider: &str,
+        corr_id: &str,
+        budget: &crate::ext::budget::Budget,
+        expect_sha: &Option<String>,
+        final_name: &str,
+        target_dir: &std::path::Path,
+        tmp: &std::path::Path,
+        meta_path: &std::path::Path,
+        reserve_bytes: u64,
+        dest_host: &str,
+        dest_port: u16,
+        dest_proto: &str,
+        t0: std::time::Instant,
+        target: &mut std::path::PathBuf,
+    ) {
+        use tokio::fs as afs;
+        // Promote tmp to a content-addressed target path now that verification passed
+        // Layout: <state>/models/by-hash/<sha256>[.<ext>]
+        let cas_file_name: String;
+        if let Some(ref exp) = expect_sha {
+            let cas_dir = target_dir.join("by-hash");
+            if let Err(e) = afs::create_dir_all(&cas_dir).await {
+                emit_error(
+                    &sp.bus,
+                    id,
+                    "mkdir-failed",
+                    &format!("Failed to create directory: {}", e),
+                    Some(budget),
+                    None,
+                    Some(corr_id),
+                )
+                .await;
+                return;
+            }
+            // Derive a canonical filename using the hash and the original extension (if any)
+            let ext = final_name.rsplit('.').next().filter(|s| *s != final_name);
+            cas_file_name = match ext {
+                Some(ex) if !ex.is_empty() => format!("{}.{}", exp, ex),
+                _ => exp.clone(),
+            };
+            let cas_target = cas_dir.join(&cas_file_name);
+            if afs::metadata(&cas_target).await.is_ok() {
+                // Already have this blob; discard temp
+                let _ = afs::remove_file(tmp).await;
+            } else if let Err(_e) = afs::rename(tmp, &cas_target).await {
+                // If rename fails (Windows lock or cross-device), try remove + rename,
+                // and finally fall back to copy + remove.
+                let _ = afs::remove_file(&cas_target).await;
+                match afs::rename(tmp, &cas_target).await {
+                    Ok(_) => {}
+                    Err(e2) => match afs::copy(tmp, &cas_target).await {
+                        Ok(_) => {
+                            let _ = afs::remove_file(tmp).await;
+                        }
+                        Err(_) => {
+                            emit_error(
+                                &sp.bus,
+                                id,
+                                "finalize-failed",
+                                &format!("Finalize failed: {}", e2),
+                                Some(budget),
+                                None,
+                                Some(corr_id),
+                            )
+                            .await;
+                            return;
+                        }
+                    },
+                }
+            }
+            // update target to the content-addressed path
+            *target = cas_target.clone();
+        } else {
+            // Fallback (should not happen since we require sha256): keep original target path
+            if let Err(_e) = afs::rename(tmp, &*target).await {
+                let _ = afs::remove_file(&*target).await;
+                match afs::rename(tmp, &*target).await {
+                    Ok(_) => {}
+                    Err(e2) => match afs::copy(tmp, &*target).await {
+                        Ok(_) => {
+                            let _ = afs::remove_file(tmp).await;
+                        }
+                        Err(_) => {
+                            emit_error(
+                                &sp.bus,
+                                id,
+                                "finalize-failed",
+                                &format!("Finalize failed: {}", e2),
+                                Some(budget),
+                                None,
+                                Some(corr_id),
+                            )
+                            .await;
+                            return;
+                        }
+                    },
+                }
+            }
+            // Use the final_name as the canonical file name when sha is unknown
+            // (only for completeness; sha is required by API)
+            cas_file_name = final_name.to_string();
+        }
+        // fsync finalized CAS/target file for durability
+        if let Ok(f) = afs::File::open(&*target).await {
+            let _ = f.sync_all().await;
+        }
+        // cleanup sidecar meta on success
+        let _ = afs::remove_file(meta_path).await;
+        // Write a sidecar manifest <id>.json alongside the model
+        let manifest_path = target_dir.join(format!("{}.json", Self::sanitize_file_name(id)));
+        // Emit manifest written event
+        let mut ev = json!({"id": id, "manifest_path": manifest_path.to_string_lossy(), "sha256": expect_sha.clone(), "cas": "sha256", "corr_id": corr_id});
+        crate::ext::corr::ensure_corr(&mut ev);
+        sp.bus.publish(TOPIC_MODELS_MANIFEST_WRITTEN, &ev);
+        let bytes = match afs::metadata(&*target).await {
+            Ok(md) => md.len(),
+            Err(_) => 0,
+        };
+        let mut manifest = serde_json::Map::new();
+        manifest.insert("id".into(), Value::String(id.to_string()));
+        // file: canonical content-addressed filename; name: original display filename (if different)
+        manifest.insert("file".into(), Value::String(cas_file_name.clone()));
+        if cas_file_name != final_name {
+            manifest.insert("name".into(), Value::String(final_name.to_string()));
+        }
+        manifest.insert(
+            "path".into(),
+            Value::String(target.to_string_lossy().to_string()),
+        );
+        if let Some(ref sh) = expect_sha {
+            manifest.insert("sha256".into(), Value::String(sh.clone()));
+            manifest.insert("cas".into(), Value::String("sha256".into()));
+        }
+        manifest.insert(
+            "bytes".into(),
+            Value::Number(serde_json::Number::from(bytes)),
+        );
+        manifest.insert("provider".into(), Value::String(provider.to_string()));
+        manifest.insert("verified".into(), Value::Bool(true));
+        let _ =
+            crate::ext::io::save_json_file_async(&manifest_path, &Value::Object(manifest)).await;
+        // Update EWMA throughput based on observed bytes/time
+        let elapsed_ms = t0.elapsed().as_millis() as u64;
+        if elapsed_ms > 0 {
+            if let Ok(md) = afs::metadata(&*target).await {
+                let bytes = md.len() as f64;
+                let mbps = (bytes / (1024.0 * 1024.0)) / (elapsed_ms as f64 / 1000.0);
+                Self::update_ewma_mbps(mbps).await;
+            }
+        }
+        let mut p = json!({"id": id, "status":"complete", "file": final_name, "provider": provider, "cas_file": cas_file_name});
+        if Self::progress_include_disk() {
+            if let (Ok(av), Ok(tt)) = (
+                fs2::available_space(target_dir),
+                fs2::total_space(target_dir),
+            ) {
+                p["disk"] = json!({"available": av, "total": tt, "reserve": reserve_bytes});
+            }
+        }
+        // Metrics: completed (non-cached); add bytes downloaded
+        DL_COMPLETED.fetch_add(1, Ordering::Relaxed);
+        DL_BYTES.fetch_add(bytes, Ordering::Relaxed);
+        // Emit standardized completion event
+        let mut extra = p.clone();
+        if let Some(obj) = extra.as_object_mut() {
+            obj.remove("id");
+            obj.remove("status");
+        }
+        emit_progress(
+            &sp.bus,
+            id,
+            Some("complete"),
+            Some("complete"),
+            if Self::progress_include_budget() {
+                Some(budget)
+            } else {
+                None
+            },
+            Some(extra),
+            Some(corr_id),
+        );
+        // Audit completion with full object
+        crate::ext::io::audit_event("models.download.complete", &p).await;
+        // Append egress ledger (best-effort)
+        Self::append_egress_ledger(
+            &sp.bus,
+            EgressLedgerEntry::allow("models.download")
+                .dest(dest_host.to_string(), dest_port, dest_proto.to_string())
+                .corr_id(corr_id.to_string())
+                .bytes_in(bytes)
+                .duration_ms(elapsed_ms)
+                .build(),
+        )
+        .await;
+        {
+            let mut v = crate::ext::models().write().await;
+            if let Some(m) = v
+                .iter_mut()
+                .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(id))
+            {
+                let mut obj = serde_json::Map::new();
+                obj.insert("id".into(), Value::String(id.to_string()));
+                obj.insert("provider".into(), Value::String(provider.to_string()));
+                obj.insert("status".into(), Value::String("available".into()));
+                obj.insert(
+                    "path".into(),
+                    Value::String(target.to_string_lossy().to_string()),
+                );
+                if let Some(ref sh) = expect_sha {
+                    obj.insert("sha256".into(), Value::String(sh.clone()));
+                    obj.insert("cas".into(), Value::String("sha256".into()));
+                    obj.insert("file".into(), Value::String(cas_file_name.clone()));
+                }
+                if let Ok(md) = afs::metadata(&*target).await {
+                    obj.insert(
+                        "bytes".into(),
+                        Value::Number(serde_json::Number::from(md.len())),
+                    );
+                }
+                *m = Value::Object(obj);
+            }
+        }
+        let _ = crate::ext::io::save_json_file_async(
+            &crate::ext::paths::models_path(),
+            &Value::Array(crate::ext::models().read().await.clone()),
+        )
+        .await;
+        sp.bus
+            .publish(TOPIC_MODELS_CHANGED, &json!({"op":"downloaded","id": id}));
+        publish_models_state_patch(&sp.bus).await;
+        metrics_mark_dirty();
+    }
+
+    // Stream the HTTP response into tmp, supporting resume/validators, budget and disk checks,
+    // progress heartbeats, and finally finalize/promote on success.
+    #[allow(clippy::too_many_arguments)]
+    async fn stream_download_loop(
+        sp: &crate::app_state::AppState,
+        id: &str,
+        provider: &str,
+        url: &str,
+        dest_host: &str,
+        dest_port: u16,
+        dest_proto: &str,
+        corr_id: &str,
+        budget: &crate::ext::budget::Budget,
+        client: &reqwest::Client,
+        resp: reqwest::Response,
+        resume_from: &mut u64,
+        target_dir: &std::path::Path,
+        final_name: &mut String,
+        target: &mut std::path::PathBuf,
+        tmp: &std::path::Path,
+        meta_path: &std::path::Path,
+        expect_sha: &Option<String>,
+        reserve_bytes: u64,
+        max_bytes: u64,
+    ) {
+        use futures_util::StreamExt;
+        use sha2::Digest;
+        use tokio::fs as afs;
+        use tokio::io::{AsyncWriteExt, BufWriter};
+        let total_rem = resp.content_length().unwrap_or(0);
+        let status = resp.status();
+        // Validate acceptable HTTP status for initial or ranged request
+        let ok_status = status.is_success()
+            || (*resume_from > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT);
+        if !ok_status {
+            let extra = json!({"status": status.as_str()});
+            emit_error(
+                &sp.bus,
+                id,
+                "downstream-http-status",
+                &format!("HTTP status {}", status.as_u16()),
+                Some(budget),
+                Some(extra),
+                Some(corr_id),
+            )
+            .await;
+            return;
+        }
+        // Capture validators for future resumes and parse Content-Disposition filename
+        let t0 = std::time::Instant::now();
+        Self::save_resume_validators(meta_path, resp.headers()).await;
+        if let Some(cd) = resp
+            .headers()
+            .get(reqwest::header::CONTENT_DISPOSITION)
+            .and_then(|v| v.to_str().ok())
+        {
+            if let Some(fname) = Self::filename_from_content_disposition(cd) {
+                let cand = Self::sanitize_file_name(&fname);
+                if !cand.is_empty() {
+                    *final_name = cand;
+                    *target = target_dir.join(&*final_name);
+                }
+            }
+        }
+        // If resuming, validate Content-Range consistency with our offset.
+        if *resume_from > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT {
+            if let Some(cr) = resp
+                .headers()
+                .get(reqwest::header::CONTENT_RANGE)
+                .and_then(|v| v.to_str().ok())
+            {
+                let ok_range = Self::validate_resume_content_range(*resume_from, cr);
+                if !ok_range {
+                    // Upstream changed or server returned an unexpected range: abort safely.
+                    let _ = afs::remove_file(tmp).await;
+                    let _ = afs::remove_file(meta_path).await;
+                    let extra = json!({ "expected_offset": *resume_from, "content_range": cr });
+                    emit_error(
+                        &sp.bus,
+                        id,
+                        "upstream-changed",
+                        "content-range does not match resume offset",
+                        Some(budget),
+                        Some(extra),
+                        Some(corr_id),
+                    )
+                    .await;
+                    return;
+                }
+            } else {
+                // No Content-Range header on 206 response while resuming. Abort.
+                let _ = afs::remove_file(tmp).await;
+                let _ = afs::remove_file(meta_path).await;
+                emit_error(
+                    &sp.bus,
+                    id,
+                    "resume-no-content-range",
+                    "missing Content-Range on partial content",
+                    Some(budget),
+                    None,
+                    Some(corr_id),
+                )
+                .await;
+                return;
+            }
+        }
+        let total_all = if *resume_from > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT {
+            let mut p = json!({"offset": *resume_from});
+            if Self::progress_include_disk() {
+                if let (Ok(av), Ok(tt)) = (
+                    fs2::available_space(target_dir),
+                    fs2::total_space(target_dir),
+                ) {
+                    p["disk"] = json!({"available": av, "total": tt, "reserve": reserve_bytes});
+                }
+            }
+            emit_progress(
+                &sp.bus,
+                id,
+                Some("resumed"),
+                Some("resumed"),
+                if Self::progress_include_budget() {
+                    Some(budget)
+                } else {
+                    None
+                },
+                Some(p),
+                Some(corr_id),
+            );
+            *resume_from + total_rem
+        } else {
+            if *resume_from > 0 {
+                let _ = afs::remove_file(tmp).await;
+                *resume_from = 0;
+            }
+            total_rem
+        };
+        // Enforce quota if configured (post-GET when total known)
+        if total_all > 0 {
+            if let Some(quota) = Self::models_quota_bytes() {
+                let (cas_total, _files) = Self::cas_usage_totals().await;
+                if cas_total.saturating_add(total_all) > quota {
+                    let extra = json!({"quota": quota, "cas_total": cas_total, "need": total_all});
+                    emit_error(
+                        &sp.bus,
+                        id,
+                        "quota-exceeded",
+                        "Models quota exceeded",
+                        Some(budget),
+                        Some(extra),
+                        Some(corr_id),
+                    )
+                    .await;
+                    // Ledger: deny
+                    Self::append_egress_ledger(
+                        &sp.bus,
+                        EgressLedgerEntry::deny("quota-exceeded")
+                            .dest(dest_host.to_string(), dest_port, dest_proto.to_string())
+                            .corr_id(corr_id.to_string())
+                            .build(),
+                    )
+                    .await;
+                    return;
+                }
+            }
+        }
+        // Hard cap by expected total when known
+        if max_bytes > 0 && total_all > 0 && total_all > max_bytes {
+            let extra = json!({"total": total_all, "max_bytes": max_bytes});
+            emit_error(
+                &sp.bus,
+                id,
+                "size-limit",
+                "Size exceeds limit",
+                Some(budget),
+                Some(extra),
+                Some(corr_id),
+            )
+            .await;
+            // Ledger: deny
+            Self::append_egress_ledger(
+                &sp.bus,
+                EgressLedgerEntry::deny("size-limit")
+                    .dest(dest_host.to_string(), dest_port, dest_proto.to_string())
+                    .corr_id(corr_id.to_string())
+                    .build(),
+            )
+            .await;
+            return;
+        }
+        // Open file (append if resuming)
+        let mut file: BufWriter<afs::File> = if *resume_from > 0 {
+            match afs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(tmp)
+                .await
+            {
+                Ok(f) => BufWriter::with_capacity(1 << 20, f),
+                Err(e) => {
+                    emit_error(
+                        &sp.bus,
+                        id,
+                        "open-failed",
+                        &format!("Open failed: {}", e),
+                        Some(budget),
+                        None,
+                        Some(corr_id),
+                    )
+                    .await;
+                    return;
+                }
+            }
+        } else {
+            match afs::File::create(tmp).await {
+                Ok(f) => BufWriter::with_capacity(1 << 20, f),
+                Err(e) => {
+                    emit_error(
+                        &sp.bus,
+                        id,
+                        "create-failed",
+                        &format!("Create failed: {}", e),
+                        Some(budget),
+                        None,
+                        Some(corr_id),
+                    )
+                    .await;
+                    return;
+                }
+            }
+        };
+        let mut hasher_opt = if expect_sha.is_some() && *resume_from == 0 {
+            Some(sha2::Sha256::new())
+        } else {
+            None
+        };
+        let mut downloaded: u64 = 0;
+        // Idle timeout handling
+        let idle_timeout = Self::idle_timeout_duration();
+        let mut last_chunk = std::time::Instant::now();
+        let mut degraded_sent = false;
+        // Soft-budget degrade threshold (percentage of soft budget used)
+        let soft_degrade_ms = if budget.soft_ms > 0 {
+            let pct = Self::env_u64("ARW_BUDGET_SOFT_DEGRADE_PCT", 80).clamp(1, 99);
+            Some(budget.soft_ms.saturating_mul(pct) / 100)
+        } else {
+            None
+        };
+        let mut stream = resp.bytes_stream();
+        'stream_loop: loop {
+            // Idle timeout enforcement when no hard budget
+            if budget.hard_ms == 0 {
+                if let Some(dur) = idle_timeout {
+                    if last_chunk.elapsed() >= dur {
+                        let _ = afs::remove_file(tmp).await;
+                        let _ = afs::remove_file(meta_path).await;
+                        let p = json!({"offset": *resume_from, "reason": "idle-timeout"});
+                        emit_error(
+                            &sp.bus,
+                            id,
+                            "idle-timeout",
+                            "No progress within idle timeout",
+                            Some(budget),
+                            Some(p),
+                            Some(corr_id),
+                        )
+                        .await;
+                        // Ledger: deny
+                        Self::append_egress_ledger(
+                            &sp.bus,
+                            EgressLedgerEntry::deny("idle-timeout")
+                                .dest(dest_host.to_string(), dest_port, dest_proto.to_string())
+                                .corr_id(corr_id.to_string())
+                                .bytes_in(*resume_from + downloaded)
+                                .duration_ms(budget.spent_ms())
+                                .build(),
+                        )
+                        .await;
+                        return;
+                    }
+                }
+            }
+            let next_chunk = match stream.next().await {
+                None => None,
+                Some(Err(e)) => {
+                    // If we’re resuming and server closed stream, try re-issuing range GET once
+                    if *resume_from > 0 {
+                        // flush file to be safe
+                        let _ = file.flush().await;
+                        let mut rq2 = client.get(url);
+                        rq2 = budget.apply_to_request(rq2);
+                        rq2 = rq2.header(
+                            reqwest::header::RANGE,
+                            format!("bytes={}-", *resume_from + downloaded),
+                        );
+                        if let Ok(r2) = rq2.send().await {
+                            let st = r2.status();
+                            if st == reqwest::StatusCode::PARTIAL_CONTENT {
+                                // refresh validators and continue
+                                Self::save_resume_validators(meta_path, r2.headers()).await;
+                                let mut p = json!({
+                                    "offset": *resume_from + downloaded,
+                                    "reason": "resync",
+                                });
+                                if Self::progress_include_disk() {
+                                    if let (Ok(av), Ok(tt)) = (
+                                        fs2::available_space(target_dir),
+                                        fs2::total_space(target_dir),
+                                    ) {
+                                        p["disk"] = json!({"available": av, "total": tt, "reserve": reserve_bytes});
+                                    }
+                                }
+                                emit_progress(
+                                    &sp.bus,
+                                    id,
+                                    Some("resync"),
+                                    Some("resync"),
+                                    if Self::progress_include_budget() {
+                                        Some(budget)
+                                    } else {
+                                        None
+                                    },
+                                    Some(p),
+                                    Some(corr_id),
+                                );
+                                stream = r2.bytes_stream();
+                                continue 'stream_loop;
+                            } else if st == reqwest::StatusCode::OK {
+                                // Server ignored range; restart from zero
+                                let _ = afs::remove_file(tmp).await;
+                                let _ = afs::remove_file(meta_path).await;
+                                // Refresh validators
+                                let etag_val = r2
+                                    .headers()
+                                    .get(reqwest::header::ETAG)
+                                    .and_then(|v| v.to_str().ok())
+                                    .map(|s| s.to_string());
+                                let lm_val = r2
+                                    .headers()
+                                    .get(reqwest::header::LAST_MODIFIED)
+                                    .and_then(|v| v.to_str().ok())
+                                    .map(|s| s.to_string());
+                                if etag_val.is_some() || lm_val.is_some() {
+                                    let mut obj = serde_json::Map::new();
+                                    if let Some(e) = &etag_val {
+                                        obj.insert("etag".into(), Value::String(e.clone()));
+                                    }
+                                    if let Some(lm) = &lm_val {
+                                        obj.insert(
+                                            "last_modified".into(),
+                                            Value::String(lm.clone()),
+                                        );
+                                    }
+                                    let _ = afs::write(
+                                        meta_path,
+                                        serde_json::to_vec(&Value::Object(obj)).unwrap_or_default(),
+                                    )
+                                    .await;
+                                }
+                                match afs::File::create(tmp).await {
+                                    Ok(f) => {
+                                        file = BufWriter::with_capacity(1 << 20, f);
+                                        *resume_from = 0;
+                                        downloaded = 0;
+                                        if expect_sha.is_some() {
+                                            hasher_opt = Some(sha2::Sha256::new());
+                                        }
+                                        emit_progress(
+                                            &sp.bus,
+                                            id,
+                                            Some("resync"),
+                                            Some("resync"),
+                                            if Self::progress_include_budget() {
+                                                Some(budget)
+                                            } else {
+                                                None
+                                            },
+                                            None,
+                                            Some(corr_id),
+                                        );
+                                        stream = r2.bytes_stream();
+                                        continue 'stream_loop;
+                                    }
+                                    Err(e) => {
+                                        emit_error(
+                                            &sp.bus,
+                                            id,
+                                            "create-failed",
+                                            &format!("Create failed: {}", e),
+                                            Some(budget),
+                                            None,
+                                            Some(corr_id),
+                                        )
+                                        .await;
+                                        return;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Some(Err(e))
+                }
+                other => other,
+            };
+            match next_chunk {
+                None => break,
+                Some(Ok(bytes)) => {
+                    // Enforce hard budget mid-stream
+                    if budget.hard_exhausted() {
+                        let _ = afs::remove_file(tmp).await;
+                        let extra = json!({"spent_ms": budget.spent_ms()});
+                        emit_error(
+                            &sp.bus,
+                            id,
+                            "hard-exhausted",
+                            "Hard budget exhausted",
+                            Some(budget),
+                            Some(extra),
+                            Some(corr_id),
+                        )
+                        .await;
+                        // Ledger: deny
+                        Self::append_egress_ledger(
+                            &sp.bus,
+                            EgressLedgerEntry::deny("hard-exhausted")
+                                .dest(dest_host.to_string(), dest_port, dest_proto.to_string())
+                                .corr_id(corr_id.to_string())
+                                .bytes_in(*resume_from + downloaded)
+                                .duration_ms(budget.spent_ms())
+                                .build(),
+                        )
+                        .await;
+                        return;
+                    }
+                    // Fire a one-time degrade notification when soft budget crosses threshold
+                    if let Some(th) = soft_degrade_ms {
+                        if !degraded_sent && budget.spent_ms() >= th {
+                            degraded_sent = true;
+                            let p = json!({ "reason": "soft budget threshold", "spent_ms": budget.spent_ms() });
+                            emit_progress(
+                                &sp.bus,
+                                id,
+                                Some("degraded"),
+                                Some("soft-exhausted"),
+                                if Self::progress_include_budget() {
+                                    Some(budget)
+                                } else {
+                                    None
+                                },
+                                Some(p),
+                                Some(corr_id),
+                            );
+                        }
+                    }
+                    if Self::is_canceled(
+                        &ModelsService::current_job_id(id).await.unwrap_or_default(),
+                    )
+                    .await
+                    {
+                        let _ = afs::remove_file(tmp).await;
+                        let _ = afs::remove_file(meta_path).await;
+                        emit_progress(
+                            &sp.bus,
+                            id,
+                            Some("canceled"),
+                            Some("canceled-by-user"),
+                            if Self::progress_include_budget() {
+                                Some(budget)
+                            } else {
+                                None
+                            },
+                            None,
+                            Some(corr_id),
+                        );
+                        let p2 = json!({"id": id, "status": "canceled"});
+                        crate::ext::io::audit_event("models.download.canceled", &p2).await;
+                        {
+                            let mut v = crate::ext::models().write().await;
+                            if let Some(m) = v
+                                .iter_mut()
+                                .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(id))
+                            {
+                                if let Some(obj) = m.as_object_mut() {
+                                    obj.insert("status".into(), Value::String("canceled".into()));
+                                }
+                            }
+                            let _ = crate::ext::io::save_json_file_async(
+                                &crate::ext::paths::models_path(),
+                                &Value::Array(v.clone()),
+                            )
+                            .await;
+                        }
+                        sp.bus
+                            .publish(TOPIC_MODELS_CHANGED, &json!({"op":"canceled","id": id}));
+                        return;
+                    }
+                    if let Err(e) = file.write_all(&bytes).await {
+                        emit_error(
+                            &sp.bus,
+                            id,
+                            "io-write",
+                            &format!("Write failed: {}", e),
+                            Some(budget),
+                            None,
+                            Some(corr_id),
+                        )
+                        .await;
+                        return;
+                    }
+                    if let Some(ref mut h) = hasher_opt {
+                        h.update(&bytes);
+                    }
+                    downloaded += bytes.len() as u64;
+                    // Enforce max size during stream when total unknown
+                    if max_bytes > 0 && *resume_from + downloaded > max_bytes {
+                        let _ = afs::remove_file(tmp).await;
+                        let _ = afs::remove_file(meta_path).await;
+                        let extra = json!({"downloaded": *resume_from + downloaded, "max_bytes": max_bytes});
+                        emit_error(
+                            &sp.bus,
+                            id,
+                            "size-limit-stream",
+                            "Size limit exceeded mid-stream",
+                            Some(budget),
+                            Some(extra),
+                            Some(corr_id),
+                        )
+                        .await;
+                        // Ledger: deny
+                        Self::append_egress_ledger(
+                            &sp.bus,
+                            EgressLedgerEntry::deny("size-limit-stream")
+                                .dest(dest_host.to_string(), dest_port, dest_proto.to_string())
+                                .corr_id(corr_id.to_string())
+                                .bytes_in(*resume_from + downloaded)
+                                .duration_ms(budget.spent_ms())
+                                .build(),
+                        )
+                        .await;
+                        return;
+                    }
+                    // Disk space safety check
+                    if let Ok(avail) = fs2::available_space(target_dir) {
+                        if avail < reserve_bytes {
+                            // low-disk guard
+                            let _ = afs::remove_file(tmp).await;
+                            let _ = afs::remove_file(meta_path).await;
+                            let extra = json!({"downloaded": *resume_from + downloaded, "available": avail, "reserve": reserve_bytes});
+                            emit_error(
+                                &sp.bus,
+                                id,
+                                "disk-insufficient-stream",
+                                "Insufficient disk space mid-stream",
+                                Some(budget),
+                                Some(extra),
+                                Some(corr_id),
+                            )
+                            .await;
+                            // Ledger: deny
+                            Self::append_egress_ledger(
+                                &sp.bus,
+                                EgressLedgerEntry::deny("disk-insufficient-stream")
+                                    .dest(dest_host.to_string(), dest_port, dest_proto.to_string())
+                                    .corr_id(corr_id.to_string())
+                                    .bytes_in(*resume_from + downloaded)
+                                    .duration_ms(budget.spent_ms())
+                                    .build(),
+                            )
+                            .await;
+                            return;
+                        }
+                    }
+                    // Heartbeat progress (percent when total known)
+                    if total_all > 0 {
+                        let pct = (((*resume_from + downloaded) * 100) / total_all).min(100);
+                        let mut p =
+                            json!({"progress": pct, "downloaded": *resume_from + downloaded});
+                        if Self::progress_include_disk() {
+                            if let (Ok(av), Ok(tt)) = (
+                                fs2::available_space(target_dir),
+                                fs2::total_space(target_dir),
+                            ) {
+                                p["disk"] =
+                                    json!({"available": av, "total": tt, "reserve": reserve_bytes});
+                            }
+                        }
+                        emit_progress(
+                            &sp.bus,
+                            id,
+                            Some("downloading"),
+                            Some("progress"),
+                            if Self::progress_include_budget() {
+                                Some(budget)
+                            } else {
+                                None
+                            },
+                            Some(p),
+                            Some(corr_id),
+                        );
+                    }
+                    last_chunk = std::time::Instant::now();
+                }
+                Some(Err(e)) => {
+                    // Flush and surface error
+                    let _ = file.flush().await;
+                    emit_error(
+                        &sp.bus,
+                        id,
+                        "io-read",
+                        &format!("Read failed: {}", e),
+                        Some(budget),
+                        None,
+                        Some(corr_id),
+                    )
+                    .await;
+                    return;
+                }
+            }
+        }
+        // Stream ended. Flush and verify if needed
+        if let Err(e) = file.flush().await {
+            emit_error(
+                &sp.bus,
+                id,
+                "flush-failed",
+                &format!("Flush failed: {}", e),
+                Some(budget),
+                None,
+                Some(corr_id),
+            )
+            .await;
+            return;
+        }
+        if let Some(exp) = expect_sha.as_ref() {
+            // If we hashed on the fly, finish from hasher; else fully re-read to compute hash
+            let actual = match hasher_opt.take() {
+                Some(h) => format!("{:x}", h.finalize()),
+                None => match afs::File::open(tmp).await {
+                    Ok(mut f) => {
+                        use tokio::io::AsyncReadExt;
+                        let mut h = sha2::Sha256::new();
+                        let mut buf = vec![0u8; 1 << 20];
+                        loop {
+                            match f.read(&mut buf).await {
+                                Ok(0) => break,
+                                Ok(n) => h.update(&buf[..n]),
+                                Err(e) => {
+                                    emit_error(
+                                        &sp.bus,
+                                        id,
+                                        "verify-read-failed",
+                                        &format!("Verify read failed: {}", e),
+                                        Some(budget),
+                                        None,
+                                        Some(corr_id),
+                                    )
+                                    .await;
+                                    return;
+                                }
+                            }
+                        }
+                        format!("{:x}", h.finalize())
+                    }
+                    Err(e) => {
+                        emit_error(
+                            &sp.bus,
+                            id,
+                            "verify-open-failed",
+                            &format!("Verify open failed: {}", e),
+                            Some(budget),
+                            None,
+                            Some(corr_id),
+                        )
+                        .await;
+                        return;
+                    }
+                },
+            };
+            if actual != *exp {
+                let _ = afs::remove_file(tmp).await;
+                let _ = afs::remove_file(meta_path).await;
+                let extra = json!({"expected": exp.clone(), "actual": actual});
+                emit_error(
+                    &sp.bus,
+                    id,
+                    "checksum-mismatch",
+                    "checksum mismatch",
+                    Some(budget),
+                    Some(extra),
+                    Some(corr_id),
+                )
+                .await;
+                return;
+            }
+        }
+        // If server reported a total size, ensure the file matches
+        if total_all > 0 {
+            if let Ok(md) = afs::metadata(tmp).await {
+                if md.len() != total_all {
+                    let _ = afs::remove_file(tmp).await;
+                    let _ = afs::remove_file(meta_path).await;
+                    let extra = json!({"expected_bytes": total_all, "actual_bytes": md.len()});
+                    emit_error(
+                        &sp.bus,
+                        id,
+                        "size-mismatch",
+                        "size mismatch",
+                        Some(budget),
+                        Some(extra),
+                        Some(corr_id),
+                    )
+                    .await;
+                    return;
+                }
+            }
+        }
+        // Finalize into place and write manifest, events, ledger
+        Self::finalize_and_write_manifest(
+            sp,
+            id,
+            provider,
+            corr_id,
+            budget,
+            expect_sha,
+            final_name,
+            target_dir,
+            tmp,
+            meta_path,
+            reserve_bytes,
+            dest_host,
+            dest_port,
+            dest_proto,
+            t0,
+            target,
+        )
+        .await;
+    }
+    // ---- Progress/Event Vocabulary (single source of truth) ----
+    /// Allowed `status` values for `models.download.progress` events.
+    ///
+    /// Keep in sync with documentation:
+    /// - docs: `docs/architecture/events_vocabulary.md` (statuses list)
+    /// - reference: `docs/reference/topics.md`
+    ///
+    /// See also: `progress_codes()` for allowed `code` values.
+    pub const PROGRESS_STATUS: [&'static str; 13] = [
+        "started",
+        "queued",
+        "admitted",
+        "downloading",
+        "resumed",
+        "resync",
+        "degraded",
+        "canceled",
+        "complete",
+        "cancel-requested",
+        "no-active-job",
+        "cache-mismatch",
+        "error",
+    ];
+    /// Allowed `code` values for `models.download.progress` (and error) events.
+    ///
+    /// Codes are hyphenated, stable machine hints. Keep in sync with docs:
+    /// - docs: `docs/architecture/events_vocabulary.md` (common code values)
+    /// - reference: `docs/reference/topics.md`
+    pub const PROGRESS_CODES: [&'static str; 44] = [
+        // lifecycle & progress codes
+        "started",
+        "queued",
+        "admitted",
+        "downloading",
+        "progress",
+        "resumed",
+        "resync",
+        "degraded",
+        "canceled-by-user",
+        "complete",
+        "cached",
+        "already-in-progress",
+        "already-in-progress-hash",
+        "cache-mismatch",
+        "soft-exhausted",
+        "cancel-requested",
+        "no-active-job",
+        // error/guard codes
+        "request-failed",
+        "concurrency-closed",
+        "downstream-http-status",
+        "upstream-changed",
+        "resume-no-content-range",
+        "resume-http-status",
+        "resume-failed",
+        "resync-failed",
+        "quota-exceeded",
+        "size-limit",
+        "idle-timeout",
+        "hard-exhausted",
+        "io-read",
+        "io-write",
+        "flush-failed",
+        "mkdir-failed",
+        "open-failed",
+        "create-failed",
+        "verify-open-failed",
+        "verify-read-failed",
+        "checksum-mismatch",
+        "size-mismatch",
+        "finalize-failed",
+        "admission-denied",
+        "disk-insufficient",
+        "size-limit-stream",
+        "disk-insufficient-stream",
+    ];
+    /// Borrow the canonical list of allowed status values.
+    #[inline]
+    pub fn progress_statuses() -> &'static [&'static str] {
+        &Self::PROGRESS_STATUS
+    }
+    /// Borrow the canonical list of allowed code values.
+    #[inline]
+    pub fn progress_codes() -> &'static [&'static str] {
+        &Self::PROGRESS_CODES
+    }
     // Track desired concurrency at runtime (defaults from env on first access)
     fn concurrency_cfg_cell() -> &'static RwLock<usize> {
         static CFG: OnceCell<RwLock<usize>> = OnceCell::new();
@@ -452,7 +1656,7 @@ impl ModelsService {
             "available_permits": sem.available_permits(),
         });
         // Publish and audit change (best-effort)
-        state.bus.publish("Models.ConcurrencyChanged", &payload);
+        state.bus.publish(TOPIC_CONCURRENCY_CHANGED, &payload);
         crate::ext::io::audit_event("models.concurrency.set", &payload).await;
         Ok(payload)
     }
@@ -509,11 +1713,7 @@ impl ModelsService {
 
     // Global concurrency limiter for downloads (permits per concurrent job).
     fn max_concurrency() -> usize {
-        std::env::var("ARW_MODELS_MAX_CONC")
-            .ok()
-            .and_then(|s| s.parse::<usize>().ok())
-            .unwrap_or(2)
-            .max(1)
+        Self::env_usize("ARW_MODELS_MAX_CONC", 2).max(1)
     }
     fn concurrency_sem() -> &'static std::sync::Arc<Semaphore> {
         static SEM: OnceCell<std::sync::Arc<Semaphore>> = OnceCell::new();
@@ -657,8 +1857,8 @@ impl ModelsService {
             }
         }
         crate::ext::corr::ensure_corr(&mut entry);
-        super::super::ext::io::egress_ledger_append(&entry).await;
-        bus.publish("Egress.Ledger.Appended", &entry);
+        crate::ext::io::egress_ledger_append(&entry).await;
+        bus.publish(TOPIC_EGRESS_LEDGER_APPENDED, &entry);
     }
 
     fn idle_timeout_duration() -> Option<std::time::Duration> {
@@ -666,10 +1866,7 @@ impl ModelsService {
         // Set ARW_DL_IDLE_TIMEOUT_SECS=0 to disable (no idle timeout).
         static DUR: OnceCell<Option<std::time::Duration>> = OnceCell::new();
         *DUR.get_or_init(|| {
-            let secs = std::env::var("ARW_DL_IDLE_TIMEOUT_SECS")
-                .ok()
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(300);
+            let secs = Self::env_u64("ARW_DL_IDLE_TIMEOUT_SECS", 300);
             if secs == 0 {
                 None
             } else {
@@ -681,23 +1878,13 @@ impl ModelsService {
     fn disk_reserve_bytes() -> u64 {
         static BYTES: OnceCell<u64> = OnceCell::new();
         *BYTES.get_or_init(|| {
-            std::env::var("ARW_MODELS_DISK_RESERVE_MB")
-                .ok()
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(256)
-                .saturating_mul(1024 * 1024)
+            Self::env_u64("ARW_MODELS_DISK_RESERVE_MB", 256).saturating_mul(1024 * 1024)
         })
     }
 
     fn ewma_alpha() -> f64 {
         static ALPHA: OnceCell<f64> = OnceCell::new();
-        *ALPHA.get_or_init(|| {
-            std::env::var("ARW_DL_EWMA_ALPHA")
-                .ok()
-                .and_then(|s| s.parse::<f64>().ok())
-                .filter(|a| *a > 0.0 && *a < 1.0)
-                .unwrap_or(0.3)
-        })
+        *ALPHA.get_or_init(|| Self::env_f64("ARW_DL_EWMA_ALPHA", 0.3).clamp(0.000_001, 0.999_999))
     }
 
     async fn load_ewma_mbps() -> Option<f64> {
@@ -739,6 +1926,23 @@ impl ModelsService {
         .await;
     }
 
+    // Load resume validators from sidecar, preferring ETag over Last-Modified.
+    // Returns a string suitable for the If-Range header when present.
+    async fn load_resume_ifrange(meta_path: &std::path::Path) -> Option<String> {
+        use tokio::fs as afs;
+        if let Ok(bytes) = afs::read(meta_path).await {
+            if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&bytes) {
+                if let Some(etag) = val.get("etag").and_then(|v| v.as_str()) {
+                    return Some(etag.to_string());
+                }
+                if let Some(lm) = val.get("last_modified").and_then(|v| v.as_str()) {
+                    return Some(lm.to_string());
+                }
+            }
+        }
+        None
+    }
+
     async fn update_ewma_mbps(sample_mbps: f64) {
         if !sample_mbps.is_finite() || sample_mbps <= 0.0 {
             return;
@@ -752,13 +1956,7 @@ impl ModelsService {
 
     fn max_download_bytes() -> u64 {
         static BYTES: OnceCell<u64> = OnceCell::new();
-        *BYTES.get_or_init(|| {
-            std::env::var("ARW_MODELS_MAX_MB")
-                .ok()
-                .and_then(|s| s.parse::<u64>().ok())
-                .unwrap_or(4096)
-                .saturating_mul(1024 * 1024)
-        })
+        *BYTES.get_or_init(|| Self::env_u64("ARW_MODELS_MAX_MB", 4096).saturating_mul(1024 * 1024))
     }
 
     fn models_quota_bytes() -> Option<u64> {
@@ -766,6 +1964,51 @@ impl ModelsService {
             .ok()
             .and_then(|s| s.parse::<u64>().ok())
             .map(|mb| mb.saturating_mul(1024 * 1024))
+    }
+
+    // Compute current CAS usage (bytes, files) in models/by-hash
+    async fn cas_usage_totals() -> (u64, u64) {
+        use tokio::fs as afs;
+        let dir = crate::ext::paths::state_dir()
+            .join("models")
+            .join("by-hash");
+        let mut bytes: u64 = 0;
+        let mut files: u64 = 0;
+        if let Ok(mut rd) = afs::read_dir(&dir).await {
+            while let Ok(Some(ent)) = rd.next_entry().await {
+                if let Ok(md) = ent.metadata().await {
+                    if md.is_file() {
+                        files = files.saturating_add(1);
+                        bytes = bytes.saturating_add(md.len());
+                    }
+                }
+            }
+        }
+        (bytes, files)
+    }
+
+    // Public snapshot: CAS quota/usage quick view for UI/ops
+    pub async fn quota_status(&self) -> Value {
+        let dir = crate::ext::paths::state_dir()
+            .join("models")
+            .join("by-hash");
+        let (used_bytes, files) = Self::cas_usage_totals().await;
+        let quota = Self::models_quota_bytes();
+        let max_bytes = Self::max_download_bytes();
+        let reserve = Self::disk_reserve_bytes();
+        json!({
+            "dir": dir.to_string_lossy(),
+            "files": files,
+            "used_bytes": used_bytes,
+            "used_mb": used_bytes / (1024u64 * 1024u64),
+            "quota_bytes": quota,
+            "quota_mb": quota.map(|b| b / (1024u64*1024u64)),
+            "over_quota": quota.map(|q| used_bytes > q).unwrap_or(false),
+            "max_download_bytes": max_bytes,
+            "max_download_mb": max_bytes / (1024u64 * 1024u64),
+            "disk_reserve_bytes": reserve,
+            "disk_reserve_mb": reserve / (1024u64 * 1024u64),
+        })
     }
 
     // Produce a cross-platform safe filename (Windows/macOS/Linux).
@@ -1050,108 +2293,23 @@ impl ModelsService {
             "ttl_days": ttl_days
         });
         crate::ext::corr::ensure_corr(&mut payload);
-        bus.publish("Models.CasGc", &payload);
-    }
-
-    // Best-effort migration: move legacy model files to CAS layout if sha256 is present.
-    pub async fn migrate_legacy_to_cas() {
-        use tokio::fs as afs;
-        let dir = crate::ext::paths::state_dir().join("models");
-        let cas_dir = dir.join("by-hash");
-        let _ = afs::create_dir_all(&cas_dir).await;
-        let mut changed = false;
-        let mut list = crate::ext::models().read().await.clone();
-        let mut ctr: u64 = 0;
-        for m in list.iter_mut() {
-            ctr += 1;
-            if ctr % 64 == 0 {
-                tokio::task::yield_now().await;
-            }
-            let sh = match m.get("sha256").and_then(|v| v.as_str()) {
-                Some(s) if s.len() == 64 => s.to_string(),
-                _ => continue,
-            };
-            let path = match m.get("path").and_then(|v| v.as_str()) {
-                Some(p) => std::path::PathBuf::from(p),
-                None => continue,
-            };
-            // Skip if already under by-hash
-            if let Some(parent) = path.parent() {
-                if parent.ends_with("by-hash") {
-                    continue;
-                }
-            }
-            // Move into CAS layout if file exists
-            if afs::metadata(&path).await.is_ok() {
-                let ext = path
-                    .extension()
-                    .and_then(|s| s.to_str())
-                    .map(|s| s.to_string());
-                let cas_file = match ext {
-                    Some(ex) if !ex.is_empty() => format!("{}.{}", sh, ex),
-                    _ => sh.clone(),
-                };
-                let cas_path = cas_dir.join(&cas_file);
-                if afs::metadata(&cas_path).await.is_err() {
-                    let _ = afs::rename(&path, &cas_path).await;
-                }
-                // Update model entry
-                if let Some(obj) = m.as_object_mut() {
-                    obj.insert(
-                        "path".into(),
-                        Value::String(cas_path.to_string_lossy().to_string()),
-                    );
-                    obj.insert("cas".into(), Value::String("sha256".into()));
-                    obj.insert("file".into(), Value::String(cas_file.clone()));
-                }
-                // Update manifest if present
-                if let Some(id) = m.get("id").and_then(|v| v.as_str()) {
-                    let manifest_path = dir.join(format!("{}.json", Self::sanitize_file_name(id)));
-                    if let Some(mut man) = crate::ext::io::load_json_file_async(&manifest_path)
-                        .await
-                        .and_then(|v| v.as_object().cloned())
-                    {
-                        man.insert(
-                            "path".into(),
-                            Value::String(cas_path.to_string_lossy().to_string()),
-                        );
-                        man.insert("file".into(), Value::String(cas_file));
-                        man.insert("cas".into(), Value::String("sha256".into()));
-                        let _ = afs::write(
-                            &manifest_path,
-                            serde_json::to_vec(&Value::Object(man)).unwrap_or_default(),
-                        )
-                        .await;
-                    }
-                }
-                changed = true;
-            }
-        }
-        if changed {
-            let _ = crate::ext::io::save_json_file_async(
-                &crate::ext::paths::models_path(),
-                &Value::Array(list),
-            )
-            .await;
-            // Read-model patch not emitted here (no bus context); subsequent
-            // interactions will refresh UI from disk.
-        }
+        bus.publish(TOPIC_MODELS_CAS_GC, &payload);
     }
 
     pub async fn refresh(&self, state: &AppState) -> Vec<Value> {
-        let new = super::super::ext::default_models();
+        let new = crate::ext::default_models();
         {
             let mut m = crate::ext::models().write().await;
             *m = new.clone();
         }
-        let _ = super::super::ext::io::save_json_file_async(
-            &super::super::ext::paths::models_path(),
+        let _ = crate::ext::io::save_json_file_async(
+            &crate::ext::paths::models_path(),
             &Value::Array(new.clone()),
         )
         .await;
         state
             .bus
-            .publish("Models.Refreshed", &json!({"count": new.len()}));
+            .publish(TOPIC_MODELS_REFRESHED, &json!({"count": new.len()}));
         // Emit patch for the full models state
         publish_models_state_patch(&state.bus).await;
         new
@@ -1159,16 +2317,13 @@ impl ModelsService {
 
     pub async fn save(&self) -> Result<(), String> {
         let v = crate::ext::models().read().await.clone();
-        super::super::ext::io::save_json_file_async(
-            &super::super::ext::paths::models_path(),
-            &Value::Array(v),
-        )
-        .await
-        .map_err(|e| e.to_string())
+        crate::ext::io::save_json_file_async(&crate::ext::paths::models_path(), &Value::Array(v))
+            .await
+            .map_err(|e| e.to_string())
     }
 
     pub async fn load(&self) -> Result<Vec<Value>, String> {
-        match super::super::ext::io::load_json_file_async(&super::super::ext::paths::models_path())
+        match crate::ext::io::load_json_file_async(&crate::ext::paths::models_path())
             .await
             .and_then(|v| v.as_array().cloned())
         {
@@ -1191,11 +2346,11 @@ impl ModelsService {
         {
             v.push(json!({"id": id, "provider": provider.unwrap_or_else(|| "local".to_string()), "status":"available"}));
             state.bus.publish(
-                "Models.Changed",
+                TOPIC_MODELS_CHANGED,
                 &json!({"op":"add","id": v.last().and_then(|m| m.get("id")).cloned()}),
             );
             // audit
-            super::super::ext::io::audit_event(
+            crate::ext::io::audit_event(
                 "models.add",
                 &json!({"id": v.last().and_then(|m| m.get("id")).cloned() }),
             )
@@ -1212,8 +2367,8 @@ impl ModelsService {
         if v.len() != before {
             state
                 .bus
-                .publish("Models.Changed", &json!({"op":"delete","id": id}));
-            super::super::ext::io::audit_event("models.delete", &json!({"id": id})).await;
+                .publish(TOPIC_MODELS_CHANGED, &json!({"op":"delete","id": id}));
+            crate::ext::io::audit_event("models.delete", &json!({"id": id})).await;
             publish_models_state_patch(&state.bus).await;
         }
     }
@@ -1229,15 +2384,15 @@ impl ModelsService {
         }
         state
             .bus
-            .publish("Models.Changed", &json!({"op":"default","id": id}));
-        let res = super::super::ext::io::save_json_file_async(
-            &super::super::ext::paths::models_path(),
+            .publish(TOPIC_MODELS_CHANGED, &json!({"op":"default","id": id}));
+        let res = crate::ext::io::save_json_file_async(
+            &crate::ext::paths::models_path(),
             &Value::Array(crate::ext::models().read().await.clone()),
         )
         .await
         .map_err(|e| e.to_string());
         if res.is_ok() {
-            super::super::ext::io::audit_event("models.default", &json!({"id": id})).await;
+            crate::ext::io::audit_event("models.default", &json!({"id": id})).await;
             publish_models_state_patch(&state.bus).await;
         }
         res
@@ -1290,7 +2445,7 @@ impl ModelsService {
                 None,
                 None,
             );
-            super::super::ext::io::audit_event("models.download.cancel", &p).await;
+            crate::ext::io::audit_event("models.download.cancel", &p).await;
             return;
         }
         let p = json!({"id": id, "status":"no-active-job"});
@@ -1303,7 +2458,7 @@ impl ModelsService {
             None,
             None,
         );
-        super::super::ext::io::audit_event("models.download.cancel", &p).await;
+        crate::ext::io::audit_event("models.download.cancel", &p).await;
     }
 
     pub async fn download_with_budget(
@@ -1405,8 +2560,8 @@ impl ModelsService {
                     emit_progress(
                         &state.bus,
                         &id_in,
-                        Some("cache_mismatch"),
-                        Some("cache_mismatch"),
+                        Some("cache-mismatch"),
+                        Some("cache-mismatch"),
                         None,
                         None,
                         None,
@@ -1479,11 +2634,12 @@ impl ModelsService {
                     DL_COMPLETED_CACHED.fetch_add(1, Ordering::Relaxed);
                     let mut p = json!({"id": id_in, "status":"complete", "file": cas_file_name, "provider": provider, "code":"cached"});
                     crate::ext::corr::ensure_corr(&mut p);
-                    state.bus.publish("Models.DownloadProgress", &p);
+                    state.bus.publish(TOPIC_PROGRESS, &p);
                     metrics_mark_dirty();
-                    state
-                        .bus
-                        .publish("Models.Changed", &json!({"op":"downloaded","id": id_in}));
+                    state.bus.publish(
+                        TOPIC_MODELS_CHANGED,
+                        &json!({"op":"downloaded","id": id_in}),
+                    );
                     // Patch read-model for models (cached completion)
                     publish_models_state_patch(&state.bus).await;
                     return Ok(());
@@ -1506,28 +2662,7 @@ impl ModelsService {
                 };
             }
         }
-        let corr_id = {
-            // Start event (separate topic) still published as-is for compatibility
-            let mut p = json!({"id": id_in, "url": Self::redact_url_for_logs(&url_in), "budget": dl_budget.as_json()});
-            let corr = crate::ext::corr::ensure_corr(&mut p);
-            state.bus.publish("Models.Download", &p);
-            super::super::ext::io::audit_event("models.download", &p).await;
-            // Also emit a standardized progress event for downstream listeners
-            emit_progress(
-                &state.bus,
-                &id_in,
-                Some("started"),
-                Some("started"),
-                if Self::progress_include_budget() {
-                    Some(&dl_budget)
-                } else {
-                    None
-                },
-                None,
-                Some(&corr),
-            );
-            corr
-        };
+        let corr_id = Self::emit_download_started(&state.bus, &id_in, &url_in, &dl_budget).await;
         // Spawn worker
         let id = id_in.clone();
         let url = url_in.clone();
@@ -1541,7 +2676,7 @@ impl ModelsService {
         let max_bytes = Self::max_download_bytes();
         let sp = state.clone();
         let budget = dl_budget.clone();
-        // Always use the enhanced downloader path; legacy flag removed.
+
         // Guard to ensure bookkeeping cleanup on every exit path
         struct ActiveJobGuard {
             model_id: String,
@@ -1586,44 +2721,15 @@ impl ModelsService {
             }
             let _permit = match sem.acquire_owned().await {
                 Ok(p) => {
-                    emit_progress(
-                        &sp.bus,
-                        &id,
-                        Some("admitted"),
-                        Some("admitted"),
-                        if Self::progress_include_budget() {
-                            Some(&budget)
-                        } else {
-                            None
-                        },
-                        None,
-                        Some(&corr_id),
-                    );
-                    // Now that we've been admitted, reflect 'downloading' in the models list.
-                    {
-                        let mut v = crate::ext::models().write().await;
-                        if let Some(m) = v
-                            .iter_mut()
-                            .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id))
-                        {
-                            if let Some(obj) = m.as_object_mut() {
-                                obj.insert("status".into(), Value::String("downloading".into()));
-                                obj.insert("provider".into(), Value::String(provider.clone()));
-                            }
-                        } else {
-                            v.push(json!({"id": id, "provider": provider.clone(), "status":"downloading"}));
-                        }
-                    }
-                    // Publish a patch so UIs can reflect the 'downloading' status
-                    publish_models_state_patch(&sp.bus).await;
+                    Self::on_admitted_set_downloading(&sp, &id, &provider, &budget, &corr_id).await;
                     Some(p)
                 }
                 Err(_) => {
                     emit_error(
                         &sp.bus,
                         &id,
-                        "concurrency_closed",
-                        "download concurrency limiter unavailable",
+                        "concurrency-closed",
+                        "Download concurrency limiter unavailable",
                         Some(&budget),
                         None,
                         Some(&corr_id),
@@ -1633,20 +2739,7 @@ impl ModelsService {
                 }
             };
             // Prepare destination tuple for ledger/events
-            let (dest_host, dest_port, dest_proto) = {
-                if let Ok(u) = reqwest::Url::parse(&url) {
-                    let host = u.host_str().unwrap_or("").to_string();
-                    let port = u.port().unwrap_or_else(|| match u.scheme() {
-                        "https" => 443,
-                        "http" => 80,
-                        _ => 0,
-                    });
-                    let proto = u.scheme();
-                    (host, port, proto.to_string())
-                } else {
-                    (String::new(), 0u16, String::from("http"))
-                }
-            };
+            let (dest_host, dest_port, dest_proto) = Self::dest_tuple(&url);
             // Emit a pre-offload preview event (best-effort)
             {
                 let mut pv = json!({
@@ -1657,7 +2750,7 @@ impl ModelsService {
                 });
                 pv["corr_id"] = Value::String(corr_id.clone());
                 crate::ext::corr::ensure_corr(&mut pv);
-                sp.bus.publish("Egress.Preview", &pv);
+                sp.bus.publish(TOPIC_EGRESS_PREVIEW, &pv);
             }
             // Guard inflight hash entry
             struct HashGuard(Option<String>);
@@ -1668,9 +2761,7 @@ impl ModelsService {
                     }
                 }
             }
-            use sha2::Digest;
             use tokio::fs as afs;
-            use tokio::io::{AsyncWriteExt, BufWriter};
             // Sanitize filename and compute initial paths (final name may change via Content-Disposition)
             // Strip query/fragment from the last path segment for a more stable default name.
             let seg = url.rsplit('/').next().unwrap_or(&id);
@@ -1694,8 +2785,8 @@ impl ModelsService {
                 emit_error(
                     &sp.bus,
                     &id,
-                    "mkdir_failed",
-                    &format!("mkdir failed: {}", e),
+                    "mkdir-failed",
+                    &format!("Failed to create directory: {}", e),
                     Some(&budget),
                     None,
                     Some(&corr_id),
@@ -1708,8 +2799,8 @@ impl ModelsService {
                 emit_error(
                     &sp.bus,
                     &id,
-                    "mkdir_failed",
-                    &format!("mkdir failed: {}", e),
+                    "mkdir-failed",
+                    &format!("Failed to create directory: {}", e),
                     Some(&budget),
                     None,
                     Some(&corr_id),
@@ -1766,27 +2857,15 @@ impl ModelsService {
                         // Quota check: CAS dir size + total must not exceed quota
                         if let Some(quota) = Self::models_quota_bytes() {
                             // compute CAS total
-                            let cas_dir = crate::ext::paths::state_dir()
-                                .join("models")
-                                .join("by-hash");
-                            let mut cas_total: u64 = 0;
-                            if let Ok(mut rd) = afs::read_dir(&cas_dir).await {
-                                while let Ok(Some(ent)) = rd.next_entry().await {
-                                    if let Ok(md) = ent.metadata().await {
-                                        if md.is_file() {
-                                            cas_total = cas_total.saturating_add(md.len());
-                                        }
-                                    }
-                                }
-                            }
+                            let (cas_total, _files) = Self::cas_usage_totals().await;
                             if cas_total.saturating_add(total) > quota {
                                 let extra =
                                     json!({"quota": quota, "cas_total": cas_total, "need": total});
                                 emit_error(
                                     &sp.bus,
                                     &id,
-                                    "quota_exceeded",
-                                    "models quota exceeded",
+                                    "quota-exceeded",
+                                    "Models quota exceeded",
                                     Some(&budget),
                                     Some(extra),
                                     Some(&corr_id),
@@ -1795,7 +2874,7 @@ impl ModelsService {
                                 // Ledger: deny
                                 Self::append_egress_ledger(
                                     &sp.bus,
-                                    EgressLedgerEntry::deny("quota_exceeded")
+                                    EgressLedgerEntry::deny("quota-exceeded")
                                         .dest(dest_host.clone(), dest_port, dest_proto.clone())
                                         .corr_id(corr_id.clone())
                                         .build(),
@@ -1811,8 +2890,8 @@ impl ModelsService {
                             emit_error(
                                 &sp.bus,
                                 &id,
-                                "size_limit",
-                                "size exceeds limit",
+                                "size-limit",
+                                "Size exceeds limit",
                                 Some(&budget),
                                 Some(extra),
                                 Some(&corr_id),
@@ -1821,7 +2900,7 @@ impl ModelsService {
                             // Ledger: deny
                             Self::append_egress_ledger(
                                 &sp.bus,
-                                EgressLedgerEntry::deny("size_limit")
+                                EgressLedgerEntry::deny("size-limit")
                                     .dest(dest_host.clone(), dest_port, dest_proto.clone())
                                     .corr_id(corr_id.clone())
                                     .build(),
@@ -1843,7 +2922,7 @@ impl ModelsService {
                     &sp.bus,
                     &id,
                     Some("canceled"),
-                    Some("canceled_by_user"),
+                    Some("canceled-by-user"),
                     if Self::progress_include_budget() {
                         Some(&budget)
                     } else {
@@ -1871,7 +2950,7 @@ impl ModelsService {
                     .await;
                 }
                 sp.bus
-                    .publish("Models.Changed", &json!({"op":"canceled","id": id}));
+                    .publish(TOPIC_MODELS_CHANGED, &json!({"op":"canceled","id": id}));
                 return;
             }
 
@@ -1884,16 +2963,8 @@ impl ModelsService {
                 if resume_from > 0 {
                     rq = rq.header(reqwest::header::RANGE, format!("bytes={}-", resume_from));
                     // Try If-Range with stored ETag/Last-Modified
-                    if let Ok(bytes) = afs::read(&meta_path).await {
-                        if let Ok(val) = serde_json::from_slice::<serde_json::Value>(&bytes) {
-                            if let Some(etag) = val.get("etag").and_then(|v| v.as_str()) {
-                                rq = rq.header(reqwest::header::IF_RANGE, etag.to_string());
-                            } else if let Some(lm) =
-                                val.get("last_modified").and_then(|v| v.as_str())
-                            {
-                                rq = rq.header(reqwest::header::IF_RANGE, lm.to_string());
-                            }
-                        }
+                    if let Some(ifr) = Self::load_resume_ifrange(&meta_path).await {
+                        rq = rq.header(reqwest::header::IF_RANGE, ifr);
                     }
                 }
                 match rq.send().await {
@@ -1915,1350 +2986,39 @@ impl ModelsService {
             let t0 = std::time::Instant::now();
             match resp_result {
                 Ok(resp) => {
-                    let total_rem = resp.content_length().unwrap_or(0);
-                    let status = resp.status();
-                    // Validate acceptable HTTP status for initial or ranged request
-                    let ok_status = status.is_success()
-                        || (resume_from > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT);
-                    if !ok_status {
-                        let extra = json!({"status": status.as_str()});
-                        emit_error(
-                            &sp.bus,
-                            &id,
-                            "downstream_http_status",
-                            &format!("http status {}", status.as_u16()),
-                            Some(&budget),
-                            Some(extra),
-                            Some(&corr_id),
-                        )
-                        .await;
-                        return;
-                    }
-                    // capture validators for future resumes and parse Content-Disposition filename
-                    Self::save_resume_validators(&meta_path, resp.headers()).await;
-                    if let Some(cd) = resp
-                        .headers()
-                        .get(reqwest::header::CONTENT_DISPOSITION)
-                        .and_then(|v| v.to_str().ok())
-                    {
-                        if let Some(fname) = Self::filename_from_content_disposition(cd) {
-                            let cand = Self::sanitize_file_name(&fname);
-                            if !cand.is_empty() {
-                                final_name = cand;
-                                target = target_dir.join(&final_name);
-                            }
-                        }
-                    }
-                    // If resuming, validate Content-Range consistency with our offset.
-                    if resume_from > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT {
-                        if let Some(cr) = resp
-                            .headers()
-                            .get(reqwest::header::CONTENT_RANGE)
-                            .and_then(|v| v.to_str().ok())
-                        {
-                            // Expect formats like: bytes <start>-<end>/<total> or bytes <start>-<end>/*
-                            let mut ok_range = false;
-                            let s = cr.trim();
-                            if let Some(rest) = s.strip_prefix("bytes ") {
-                                let parts: Vec<&str> = rest.split('/').collect();
-                                if let Some(range) = parts.first() {
-                                    let mut it = range.split('-');
-                                    if let (Some(start_s), Some(_end_s)) = (it.next(), it.next()) {
-                                        if let Ok(start_off) = start_s.parse::<u64>() {
-                                            ok_range = start_off == resume_from;
-                                        }
-                                    }
-                                }
-                            }
-                            if !ok_range {
-                                // Upstream changed or server returned an unexpected range: abort safely.
-                                let _ = afs::remove_file(&tmp).await;
-                                let _ = afs::remove_file(&meta_path).await;
-                                let extra = json!({
-                                    "expected_offset": resume_from,
-                                    "content_range": s,
-                                });
-                                emit_error(
-                                    &sp.bus,
-                                    &id,
-                                    "upstream_changed",
-                                    "content-range does not match resume offset",
-                                    Some(&budget),
-                                    Some(extra),
-                                    Some(&corr_id),
-                                )
-                                .await;
-                                return;
-                            }
-                        } else {
-                            // No Content-Range header on 206 response while resuming. Abort.
-                            let _ = afs::remove_file(&tmp).await;
-                            let _ = afs::remove_file(&meta_path).await;
-                            emit_error(
-                                &sp.bus,
-                                &id,
-                                "resume_no_content_range",
-                                "missing Content-Range on partial content",
-                                Some(&budget),
-                                None,
-                                Some(&corr_id),
-                            )
-                            .await;
-                            return;
-                        }
-                    }
-                    let total_all = if resume_from > 0
-                        && status == reqwest::StatusCode::PARTIAL_CONTENT
-                    {
-                        let mut p = json!({"offset": resume_from});
-                        if Self::progress_include_disk() {
-                            if let (Ok(av), Ok(tt)) = (
-                                fs2::available_space(&target_dir),
-                                fs2::total_space(&target_dir),
-                            ) {
-                                p["disk"] =
-                                    json!({"available": av, "total": tt, "reserve": reserve_bytes});
-                            }
-                        }
-                        emit_progress(
-                            &sp.bus,
-                            &id,
-                            Some("resumed"),
-                            Some("resumed"),
-                            if Self::progress_include_budget() {
-                                Some(&budget)
-                            } else {
-                                None
-                            },
-                            Some(p),
-                            Some(&corr_id),
-                        );
-                        resume_from + total_rem
-                    } else {
-                        if resume_from > 0 {
-                            let _ = afs::remove_file(&tmp).await;
-                            resume_from = 0;
-                        }
-                        total_rem
-                    };
-                    // Enforce quota if configured (post-GET when total known)
-                    if total_all > 0 {
-                        if let Some(quota) = Self::models_quota_bytes() {
-                            let cas_dir = crate::ext::paths::state_dir()
-                                .join("models")
-                                .join("by-hash");
-                            let mut cas_total: u64 = 0;
-                            if let Ok(mut rd) = afs::read_dir(&cas_dir).await {
-                                while let Ok(Some(ent)) = rd.next_entry().await {
-                                    if let Ok(md) = ent.metadata().await {
-                                        if md.is_file() {
-                                            cas_total = cas_total.saturating_add(md.len());
-                                        }
-                                    }
-                                }
-                            }
-                            if cas_total.saturating_add(total_all) > quota {
-                                let extra = json!({"quota": quota, "cas_total": cas_total, "need": total_all});
-                                emit_error(
-                                    &sp.bus,
-                                    &id,
-                                    "quota_exceeded",
-                                    "models quota exceeded",
-                                    Some(&budget),
-                                    Some(extra),
-                                    Some(&corr_id),
-                                )
-                                .await;
-                                // Ledger: deny
-                                Self::append_egress_ledger(
-                                    &sp.bus,
-                                    EgressLedgerEntry::deny("quota_exceeded")
-                                        .dest(dest_host.clone(), dest_port, dest_proto.clone())
-                                        .corr_id(corr_id.clone())
-                                        .build(),
-                                )
-                                .await;
-                                return;
-                            }
-                        }
-                    }
-                    // Hard cap by expected total when known
-                    if max_bytes > 0 && total_all > 0 && total_all > max_bytes {
-                        let extra = json!({"total": total_all, "max_bytes": max_bytes});
-                        emit_error(
-                            &sp.bus,
-                            &id,
-                            "size_limit",
-                            "size exceeds limit",
-                            Some(&budget),
-                            Some(extra),
-                            Some(&corr_id),
-                        )
-                        .await;
-                        // Ledger: deny
-                        Self::append_egress_ledger(
-                            &sp.bus,
-                            EgressLedgerEntry::deny("size_limit")
-                                .dest(dest_host.clone(), dest_port, dest_proto.clone())
-                                .corr_id(corr_id.clone())
-                                .build(),
-                        )
-                        .await;
-                        return;
-                    }
-                    // Admission: if hard budget configured and we know total bytes, ensure we can plausibly finish
-                    if budget.hard_ms > 0 && total_all > 0 {
-                        // Minimum expected throughput (MB/s) with EWMA fallback
-                        let floor_mbps: f64 = std::env::var("ARW_DL_MIN_MBPS")
-                            .ok()
-                            .and_then(|s| s.parse::<f64>().ok())
-                            .unwrap_or(2.0);
-                        let hist_mbps = Self::load_ewma_mbps().await.unwrap_or(floor_mbps);
-                        let mbps: f64 = hist_mbps.max(floor_mbps);
-                        let need_bytes = total_all.saturating_sub(resume_from) as f64;
-                        let bytes_per_ms = (mbps.max(0.1) * 1024.0 * 1024.0) / 1000.0;
-                        let need_ms = (need_bytes / bytes_per_ms).ceil() as u64;
-                        let remaining_hard = budget.remaining_hard_ms();
-                        if need_ms > remaining_hard.saturating_sub(500) {
-                            let extra = json!({"need_ms": need_ms, "remaining_hard_ms": remaining_hard, "mbps": mbps});
-                            emit_error(
-                                &sp.bus,
-                                &id,
-                                "admission_denied",
-                                "admission_denied: insufficient hard budget",
-                                Some(&budget),
-                                Some(extra),
-                                Some(&corr_id),
-                            )
-                            .await;
-                            // Ledger: deny
-                            Self::append_egress_ledger(
-                                &sp.bus,
-                                EgressLedgerEntry::deny("admission_denied")
-                                    .dest(dest_host.clone(), dest_port, dest_proto.clone())
-                                    .corr_id(corr_id.clone())
-                                    .build(),
-                            )
-                            .await;
-                            return;
-                        }
-                    }
-                    // Pre-check free space if total size known
-                    if total_all > 0 {
-                        if let Ok(avail) = fs2::available_space(&target_dir) {
-                            let need = total_all.saturating_sub(resume_from);
-                            if avail <= reserve_bytes.saturating_add(need) {
-                                let extra = json!({"need": need, "available": avail, "reserve": reserve_bytes});
-                                emit_error(
-                                    &sp.bus,
-                                    &id,
-                                    "disk_insufficient",
-                                    "insufficient disk space",
-                                    Some(&budget),
-                                    Some(extra),
-                                    Some(&corr_id),
-                                )
-                                .await;
-                                // Ledger: deny
-                                Self::append_egress_ledger(
-                                    &sp.bus,
-                                    EgressLedgerEntry::deny("disk_insufficient")
-                                        .dest(dest_host.clone(), dest_port, dest_proto.clone())
-                                        .corr_id(corr_id.clone())
-                                        .build(),
-                                )
-                                .await;
-                                return;
-                            }
-                        }
-                    }
-                    let mut file = if resume_from > 0 {
-                        match afs::OpenOptions::new().append(true).open(&tmp).await {
-                            Ok(f) => BufWriter::with_capacity(1 << 20, f),
-                            Err(e) => {
-                                emit_error(
-                                    &sp.bus,
-                                    &id,
-                                    "open_failed",
-                                    &format!("open failed: {}", e),
-                                    Some(&budget),
-                                    None,
-                                    Some(&corr_id),
-                                )
-                                .await;
-                                return;
-                            }
-                        }
-                    } else {
-                        match afs::File::create(&tmp).await {
-                            Ok(f) => BufWriter::with_capacity(1 << 20, f),
-                            Err(e) => {
-                                emit_error(
-                                    &sp.bus,
-                                    &id,
-                                    "create_failed",
-                                    &format!("create failed: {}", e),
-                                    Some(&budget),
-                                    None,
-                                    Some(&corr_id),
-                                )
-                                .await;
-                                return;
-                            }
-                        }
-                    };
-                    // Hash on-the-fly when not resuming (avoids extra disk pass)
-                    let mut hasher_opt = if expect_sha.is_some() && resume_from == 0 {
-                        Some(sha2::Sha256::new())
-                    } else {
-                        None
-                    };
-                    let mut downloaded: u64 = 0;
-                    let mut since_check: u64 = 0;
-                    // stream-level retries for transient errors (resume with Range)
-                    let mut stream_retries_left: u32 = std::env::var("ARW_DL_STREAM_RETRIES")
-                        .ok()
-                        .and_then(|s| s.parse::<u32>().ok())
-                        .unwrap_or(2);
-                    // Soft-budget degrade threshold (percentage of soft budget used)
-                    let soft_total = budget.soft_ms;
-                    let degrade_pct: u64 = std::env::var("ARW_BUDGET_SOFT_DEGRADE_PCT")
-                        .ok()
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .filter(|v| *v > 0 && *v < 100)
-                        .unwrap_or(80);
-                    let soft_degrade_ms = if soft_total > 0 {
-                        Some(soft_total.saturating_mul(degrade_pct) / 100)
-                    } else {
-                        None
-                    };
-                    let mut degraded_sent = false;
-                    let mut stream = resp.bytes_stream();
-                    let idle_dur = if budget.hard_ms == 0 {
-                        Self::idle_timeout_duration()
-                    } else {
-                        None
-                    };
-                    'stream_loop: loop {
-                        let next_chunk = match idle_dur {
-                            Some(d) => {
-                                match tokio::time::timeout(d, stream.next()).await {
-                                    Ok(v) => v,
-                                    Err(_elapsed) => {
-                                        // Idle read timeout: attempt resume if possible, else error out
-                                        if stream_retries_left > 0 && !budget.hard_exhausted() {
-                                            stream_retries_left -= 1;
-                                            // Advance resume offset to include what we wrote this attempt
-                                            resume_from = resume_from.saturating_add(downloaded);
-                                            downloaded = 0;
-                                            // Build a new ranged request from current offset
-                                            let mut rq = client.get(&url);
-                                            rq = budget.apply_to_request(rq);
-                                            rq = rq.header(
-                                                reqwest::header::RANGE,
-                                                format!("bytes={}-", resume_from),
-                                            );
-                                            if let Ok(bytes) = afs::read(&meta_path).await {
-                                                if let Ok(val) =
-                                                    serde_json::from_slice::<serde_json::Value>(
-                                                        &bytes,
-                                                    )
-                                                {
-                                                    if let Some(etag) =
-                                                        val.get("etag").and_then(|v| v.as_str())
-                                                    {
-                                                        rq = rq.header(
-                                                            reqwest::header::IF_RANGE,
-                                                            etag.to_string(),
-                                                        );
-                                                    } else if let Some(lm) = val
-                                                        .get("last_modified")
-                                                        .and_then(|v| v.as_str())
-                                                    {
-                                                        rq = rq.header(
-                                                            reqwest::header::IF_RANGE,
-                                                            lm.to_string(),
-                                                        );
-                                                    }
-                                                }
-                                            }
-                                            match rq.send().await {
-                                                Ok(r2) => {
-                                                    let st = r2.status();
-                                                    if st == reqwest::StatusCode::PARTIAL_CONTENT {
-                                                        // Update resume validators from new response
-                                                        let etag_val = r2
-                                                            .headers()
-                                                            .get(reqwest::header::ETAG)
-                                                            .and_then(|v| v.to_str().ok())
-                                                            .map(|s| s.to_string());
-                                                        let lm_val = r2
-                                                            .headers()
-                                                            .get(reqwest::header::LAST_MODIFIED)
-                                                            .and_then(|v| v.to_str().ok())
-                                                            .map(|s| s.to_string());
-                                                        if etag_val.is_some() || lm_val.is_some() {
-                                                            let mut obj = serde_json::Map::new();
-                                                            if let Some(e) = &etag_val {
-                                                                obj.insert(
-                                                                    "etag".into(),
-                                                                    Value::String(e.clone()),
-                                                                );
-                                                            }
-                                                            if let Some(lm) = &lm_val {
-                                                                obj.insert(
-                                                                    "last_modified".into(),
-                                                                    Value::String(lm.clone()),
-                                                                );
-                                                            }
-                                                            let _ = afs::write(
-                                                                &meta_path,
-                                                                serde_json::to_vec(&Value::Object(
-                                                                    obj,
-                                                                ))
-                                                                .unwrap_or_default(),
-                                                            )
-                                                            .await;
-                                                        }
-                                                        let p = json!({"offset": resume_from, "reason": "idle_timeout"});
-                                                        emit_progress(
-                                                            &sp.bus,
-                                                            &id,
-                                                            Some("resumed"),
-                                                            Some("resumed"),
-                                                            if Self::progress_include_budget() {
-                                                                Some(&budget)
-                                                            } else {
-                                                                None
-                                                            },
-                                                            Some(p),
-                                                            Some(&corr_id),
-                                                        );
-                                                        stream = r2.bytes_stream();
-                                                        continue 'stream_loop;
-                                                    } else if st == reqwest::StatusCode::OK {
-                                                        let _ = afs::remove_file(&tmp).await;
-                                                        let _ = afs::remove_file(&meta_path).await; // meta no longer valid
-                                                        let etag_val = r2
-                                                            .headers()
-                                                            .get(reqwest::header::ETAG)
-                                                            .and_then(|v| v.to_str().ok())
-                                                            .map(|s| s.to_string());
-                                                        let lm_val = r2
-                                                            .headers()
-                                                            .get(reqwest::header::LAST_MODIFIED)
-                                                            .and_then(|v| v.to_str().ok())
-                                                            .map(|s| s.to_string());
-                                                        if etag_val.is_some() || lm_val.is_some() {
-                                                            let mut obj = serde_json::Map::new();
-                                                            if let Some(e) = &etag_val {
-                                                                obj.insert(
-                                                                    "etag".into(),
-                                                                    Value::String(e.clone()),
-                                                                );
-                                                            }
-                                                            if let Some(lm) = &lm_val {
-                                                                obj.insert(
-                                                                    "last_modified".into(),
-                                                                    Value::String(lm.clone()),
-                                                                );
-                                                            }
-                                                            let _ = afs::write(
-                                                                &meta_path,
-                                                                serde_json::to_vec(&Value::Object(
-                                                                    obj,
-                                                                ))
-                                                                .unwrap_or_default(),
-                                                            )
-                                                            .await;
-                                                        }
-                                                        match afs::File::create(&tmp).await {
-                                                            Ok(f) => {
-                                                                file = BufWriter::with_capacity(
-                                                                    1 << 20,
-                                                                    f,
-                                                                );
-                                                                resume_from = 0;
-                                                                downloaded = 0;
-                                                                if expect_sha.is_some() {
-                                                                    hasher_opt =
-                                                                        Some(sha2::Sha256::new());
-                                                                }
-                                                                emit_progress(
-                                                                    &sp.bus,
-                                                                    &id,
-                                                                    Some("resync"),
-                                                                    Some("resync"),
-                                                                    if Self::progress_include_budget(
-                                                                    ) {
-                                                                        Some(&budget)
-                                                                    } else {
-                                                                        None
-                                                                    },
-                                                                    None,
-                                                                    Some(&corr_id),
-                                                                );
-                                                                stream = r2.bytes_stream();
-                                                                continue 'stream_loop;
-                                                            }
-                                                            Err(e2) => {
-                                                                emit_error(
-                                                                    &sp.bus,
-                                                                    &id,
-                                                                    "resync_failed",
-                                                                    &format!(
-                                                                        "resync failed: {}",
-                                                                        e2
-                                                                    ),
-                                                                    Some(&budget),
-                                                                    None,
-                                                                    Some(&corr_id),
-                                                                )
-                                                                .await;
-                                                                return;
-                                                            }
-                                                        }
-                                                    } else {
-                                                        emit_error(
-                                                            &sp.bus,
-                                                            &id,
-                                                            "resume_http_status",
-                                                            &format!(
-                                                                "resume http status {}",
-                                                                st.as_u16()
-                                                            ),
-                                                            Some(&budget),
-                                                            None,
-                                                            Some(&corr_id),
-                                                        )
-                                                        .await;
-                                                        return;
-                                                    }
-                                                }
-                                                Err(e2) => {
-                                                    emit_error(
-                                                        &sp.bus,
-                                                        &id,
-                                                        "resume_failed",
-                                                        &format!("resume failed: {} (prior: idle timeout)", e2),
-                                                        Some(&budget),
-                                                        None,
-                                                        Some(&corr_id),
-                                                    ).await;
-                                                    return;
-                                                }
-                                            }
-                                        } else {
-                                            let extra = json!({"offset": resume_from + downloaded});
-                                            emit_error(
-                                                &sp.bus,
-                                                &id,
-                                                "idle_timeout",
-                                                "idle read timeout",
-                                                Some(&budget),
-                                                Some(extra),
-                                                Some(&corr_id),
-                                            )
-                                            .await;
-                                            Self::append_egress_ledger(
-                                                &sp.bus,
-                                                EgressLedgerEntry::deny("idle_timeout")
-                                                    .dest(
-                                                        dest_host.clone(),
-                                                        dest_port,
-                                                        dest_proto.clone(),
-                                                    )
-                                                    .corr_id(corr_id.clone())
-                                                    .bytes_in(resume_from + downloaded)
-                                                    .duration_ms(t0.elapsed().as_millis() as u64)
-                                                    .build(),
-                                            )
-                                            .await;
-                                            return;
-                                        }
-                                    }
-                                }
-                            }
-                            None => stream.next().await,
-                        };
-
-                        match next_chunk {
-                            None => break,
-                            Some(Ok(bytes)) => {
-                                // Enforce hard budget mid-stream
-                                if budget.hard_exhausted() {
-                                    let _ = afs::remove_file(&tmp).await;
-                                    let extra = json!({"spent_ms": budget.spent_ms()});
-                                    emit_error(
-                                        &sp.bus,
-                                        &id,
-                                        "hard_exhausted",
-                                        "hard budget exhausted",
-                                        Some(&budget),
-                                        Some(extra),
-                                        Some(&corr_id),
-                                    )
-                                    .await;
-                                    // Ledger: deny (budget hard exhausted)
-                                    Self::append_egress_ledger(
-                                        &sp.bus,
-                                        EgressLedgerEntry::deny("hard_exhausted")
-                                            .dest(dest_host.clone(), dest_port, dest_proto.clone())
-                                            .corr_id(corr_id.clone())
-                                            .bytes_in(resume_from + downloaded)
-                                            .duration_ms(t0.elapsed().as_millis() as u64)
-                                            .build(),
-                                    )
-                                    .await;
-                                    return;
-                                }
-                                // Fire a one-time degrade notification when soft budget crosses threshold
-                                if let Some(th) = soft_degrade_ms {
-                                    if !degraded_sent && budget.spent_ms() >= th {
-                                        degraded_sent = true;
-                                        let p = json!({
-                                            "reason": "soft budget threshold",
-                                            "spent_ms": budget.spent_ms()
-                                        });
-                                        emit_progress(
-                                            &sp.bus,
-                                            &id,
-                                            Some("degraded"),
-                                            Some("soft_exhausted"),
-                                            if Self::progress_include_budget() {
-                                                Some(&budget)
-                                            } else {
-                                                None
-                                            },
-                                            Some(p),
-                                            Some(&corr_id),
-                                        );
-                                    }
-                                }
-                                if Self::is_canceled(&job).await {
-                                    let _ = afs::remove_file(&tmp).await;
-                                    let _ = afs::remove_file(&meta_path).await;
-                                    emit_progress(
-                                        &sp.bus,
-                                        &id,
-                                        Some("canceled"),
-                                        Some("canceled_by_user"),
-                                        if Self::progress_include_budget() {
-                                            Some(&budget)
-                                        } else {
-                                            None
-                                        },
-                                        None,
-                                        Some(&corr_id),
-                                    );
-                                    let p2 = json!({"id": id, "status": "canceled"});
-                                    crate::ext::io::audit_event("models.download.canceled", &p2)
-                                        .await;
-                                    // Update models list to reflect cancellation
-                                    {
-                                        let mut v = crate::ext::models().write().await;
-                                        if let Some(m) = v.iter_mut().find(|m| {
-                                            m.get("id").and_then(|s| s.as_str()) == Some(&id)
-                                        }) {
-                                            if let Some(obj) = m.as_object_mut() {
-                                                obj.insert(
-                                                    "status".into(),
-                                                    Value::String("canceled".into()),
-                                                );
-                                            }
-                                        }
-                                        let _ = crate::ext::io::save_json_file_async(
-                                            &crate::ext::paths::models_path(),
-                                            &Value::Array(v.clone()),
-                                        )
-                                        .await;
-                                    }
-                                    sp.bus.publish(
-                                        "Models.Changed",
-                                        &json!({"op":"canceled","id": id}),
-                                    );
-                                    publish_models_state_patch(&sp.bus).await;
-                                    return;
-                                }
-                                if let Err(e) = file.write_all(&bytes).await {
-                                    emit_error(
-                                        &sp.bus,
-                                        &id,
-                                        "io_write",
-                                        &format!("write failed: {}", e),
-                                        Some(&budget),
-                                        None,
-                                        Some(&corr_id),
-                                    )
-                                    .await;
-                                    return;
-                                }
-                                if let Some(ref mut h) = hasher_opt {
-                                    h.update(&bytes);
-                                }
-                                downloaded += bytes.len() as u64;
-                                // Enforce max size during stream when total unknown
-                                if max_bytes > 0 && resume_from + downloaded > max_bytes {
-                                    let _ = afs::remove_file(&tmp).await;
-                                    let _ = afs::remove_file(&meta_path).await;
-                                    let extra = json!({"downloaded": resume_from + downloaded, "max_bytes": max_bytes});
-                                    emit_error(
-                                        &sp.bus,
-                                        &id,
-                                        "size_limit_stream",
-                                        "size exceeds limit (stream)",
-                                        Some(&budget),
-                                        Some(extra),
-                                        Some(&corr_id),
-                                    )
-                                    .await;
-                                    // Ledger: deny
-                                    Self::append_egress_ledger(
-                                        &sp.bus,
-                                        EgressLedgerEntry::deny("size_limit_stream")
-                                            .dest(dest_host.clone(), dest_port, dest_proto.clone())
-                                            .corr_id(corr_id.clone())
-                                            .bytes_in(resume_from + downloaded)
-                                            .duration_ms(t0.elapsed().as_millis() as u64)
-                                            .build(),
-                                    )
-                                    .await;
-                                    return;
-                                }
-                                // For unknown total, periodically ensure we keep reserve free space
-                                since_check = since_check.saturating_add(bytes.len() as u64);
-                                if total_all == 0 && since_check >= 8 * 1024 * 1024 {
-                                    since_check = 0;
-                                    if let Ok(avail) = fs2::available_space(&target_dir) {
-                                        if avail <= reserve_bytes.saturating_add(8 * 1024 * 1024) {
-                                            let _ = afs::remove_file(&tmp).await;
-                                            let _ = afs::remove_file(&meta_path).await;
-                                            let extra = json!({"downloaded": resume_from + downloaded, "available": avail, "reserve": reserve_bytes});
-                                            emit_error(
-                                                &sp.bus,
-                                                &id,
-                                                "disk_insufficient_stream",
-                                                "insufficient disk space (stream)",
-                                                Some(&budget),
-                                                Some(extra),
-                                                Some(&corr_id),
-                                            )
-                                            .await;
-                                            // Ledger: deny
-                                            Self::append_egress_ledger(
-                                                &sp.bus,
-                                                EgressLedgerEntry::deny("disk_insufficient_stream")
-                                                    .dest(
-                                                        dest_host.clone(),
-                                                        dest_port,
-                                                        dest_proto.clone(),
-                                                    )
-                                                    .corr_id(corr_id.clone())
-                                                    .bytes_in(resume_from + downloaded)
-                                                    .duration_ms(t0.elapsed().as_millis() as u64)
-                                                    .build(),
-                                            )
-                                            .await;
-                                            return;
-                                        }
-                                        // Emit standardized heartbeat when total unknown
-                                        let mut extra =
-                                            json!({"downloaded": resume_from + downloaded});
-                                        if Self::progress_include_disk() {
-                                            if let Ok(total) = fs2::total_space(&target_dir) {
-                                                extra["disk"] = json!({"available": avail, "total": total, "reserve": reserve_bytes});
-                                            }
-                                        }
-                                        emit_progress(
-                                            &sp.bus,
-                                            &id,
-                                            Some("downloading"),
-                                            Some("downloading"),
-                                            if Self::progress_include_budget() {
-                                                Some(&budget)
-                                            } else {
-                                                None
-                                            },
-                                            Some(extra),
-                                            Some(&corr_id),
-                                        );
-                                    }
-                                }
-                                if total_all > 0 {
-                                    let pct =
-                                        (((resume_from + downloaded) * 100) / total_all).min(100);
-                                    let mut extra = json!({
-                                        "progress": pct,
-                                        "downloaded": resume_from + downloaded,
-                                        "total": total_all
-                                    });
-                                    if Self::progress_include_disk() {
-                                        if let (Ok(av), Ok(tt)) = (
-                                            fs2::available_space(&target_dir),
-                                            fs2::total_space(&target_dir),
-                                        ) {
-                                            extra["disk"] = json!({"available": av, "total": tt, "reserve": reserve_bytes});
-                                        }
-                                    }
-                                    emit_progress(
-                                        &sp.bus,
-                                        &id,
-                                        Some("downloading"),
-                                        Some("progress"),
-                                        if Self::progress_include_budget() {
-                                            Some(&budget)
-                                        } else {
-                                            None
-                                        },
-                                        Some(extra),
-                                        Some(&corr_id),
-                                    );
-                                }
-                            }
-                            Some(Err(e)) => {
-                                // Try to resume if we have budget and retries left
-                                if stream_retries_left > 0 && !budget.hard_exhausted() {
-                                    stream_retries_left -= 1;
-                                    // Advance resume offset to include what we wrote this attempt
-                                    resume_from = resume_from.saturating_add(downloaded);
-                                    downloaded = 0;
-                                    // Build a new ranged request from current offset
-                                    let mut rq = client.get(&url);
-                                    rq = budget.apply_to_request(rq);
-                                    // No whole-request timeout; idle is enforced per-chunk below.
-                                    rq = rq.header(
-                                        reqwest::header::RANGE,
-                                        format!("bytes={}-", resume_from),
-                                    );
-                                    if let Ok(bytes) = afs::read(&meta_path).await {
-                                        if let Ok(val) =
-                                            serde_json::from_slice::<serde_json::Value>(&bytes)
-                                        {
-                                            if let Some(etag) =
-                                                val.get("etag").and_then(|v| v.as_str())
-                                            {
-                                                rq = rq.header(
-                                                    reqwest::header::IF_RANGE,
-                                                    etag.to_string(),
-                                                );
-                                            } else if let Some(lm) =
-                                                val.get("last_modified").and_then(|v| v.as_str())
-                                            {
-                                                rq = rq.header(
-                                                    reqwest::header::IF_RANGE,
-                                                    lm.to_string(),
-                                                );
-                                            }
-                                        }
-                                    }
-                                    match rq.send().await {
-                                        Ok(r2) => {
-                                            let st = r2.status();
-                                            if st == reqwest::StatusCode::PARTIAL_CONTENT {
-                                                // Update resume validators from new response
-                                                let etag_val = r2
-                                                    .headers()
-                                                    .get(reqwest::header::ETAG)
-                                                    .and_then(|v| v.to_str().ok())
-                                                    .map(|s| s.to_string());
-                                                let lm_val = r2
-                                                    .headers()
-                                                    .get(reqwest::header::LAST_MODIFIED)
-                                                    .and_then(|v| v.to_str().ok())
-                                                    .map(|s| s.to_string());
-                                                if etag_val.is_some() || lm_val.is_some() {
-                                                    let mut obj = serde_json::Map::new();
-                                                    if let Some(e) = &etag_val {
-                                                        obj.insert(
-                                                            "etag".into(),
-                                                            Value::String(e.clone()),
-                                                        );
-                                                    }
-                                                    if let Some(lm) = &lm_val {
-                                                        obj.insert(
-                                                            "last_modified".into(),
-                                                            Value::String(lm.clone()),
-                                                        );
-                                                    }
-                                                    let _ = afs::write(
-                                                        &meta_path,
-                                                        serde_json::to_vec(&Value::Object(obj))
-                                                            .unwrap_or_default(),
-                                                    )
-                                                    .await;
-                                                }
-                                                let p = json!({"offset": resume_from});
-                                                emit_progress(
-                                                    &sp.bus,
-                                                    &id,
-                                                    Some("resumed"),
-                                                    Some("resumed"),
-                                                    if Self::progress_include_budget() {
-                                                        Some(&budget)
-                                                    } else {
-                                                        None
-                                                    },
-                                                    Some(p),
-                                                    Some(&corr_id),
-                                                );
-                                                stream = r2.bytes_stream();
-                                                continue 'stream_loop;
-                                            } else if st == reqwest::StatusCode::OK {
-                                                // Server ignored range; safest is to restart from zero
-                                                // Remove tmp and start fresh (but only if allowed by budget)
-                                                let _ = afs::remove_file(&tmp).await;
-                                                let _ = afs::remove_file(&meta_path).await; // meta no longer valid
-                                                                                            // Refresh validators from this new full response
-                                                let etag_val = r2
-                                                    .headers()
-                                                    .get(reqwest::header::ETAG)
-                                                    .and_then(|v| v.to_str().ok())
-                                                    .map(|s| s.to_string());
-                                                let lm_val = r2
-                                                    .headers()
-                                                    .get(reqwest::header::LAST_MODIFIED)
-                                                    .and_then(|v| v.to_str().ok())
-                                                    .map(|s| s.to_string());
-                                                if etag_val.is_some() || lm_val.is_some() {
-                                                    let mut obj = serde_json::Map::new();
-                                                    if let Some(e) = &etag_val {
-                                                        obj.insert(
-                                                            "etag".into(),
-                                                            Value::String(e.clone()),
-                                                        );
-                                                    }
-                                                    if let Some(lm) = &lm_val {
-                                                        obj.insert(
-                                                            "last_modified".into(),
-                                                            Value::String(lm.clone()),
-                                                        );
-                                                    }
-                                                    let _ = afs::write(
-                                                        &meta_path,
-                                                        serde_json::to_vec(&Value::Object(obj))
-                                                            .unwrap_or_default(),
-                                                    )
-                                                    .await;
-                                                }
-                                                match afs::File::create(&tmp).await {
-                                                    Ok(f) => {
-                                                        file = BufWriter::with_capacity(1 << 20, f);
-                                                        resume_from = 0;
-                                                        downloaded = 0;
-                                                        // Since we're starting from zero again, hash on the fly.
-                                                        if expect_sha.is_some() {
-                                                            hasher_opt = Some(sha2::Sha256::new());
-                                                        }
-                                                        emit_progress(
-                                                            &sp.bus,
-                                                            &id,
-                                                            Some("resync"),
-                                                            Some("resync"),
-                                                            if Self::progress_include_budget() {
-                                                                Some(&budget)
-                                                            } else {
-                                                                None
-                                                            },
-                                                            None,
-                                                            Some(&corr_id),
-                                                        );
-                                                        stream = r2.bytes_stream();
-                                                        continue 'stream_loop;
-                                                    }
-                                                    Err(e2) => {
-                                                        emit_error(
-                                                            &sp.bus,
-                                                            &id,
-                                                            "resync_failed",
-                                                            &format!("resync failed: {}", e2),
-                                                            Some(&budget),
-                                                            None,
-                                                            Some(&corr_id),
-                                                        )
-                                                        .await;
-                                                        return;
-                                                    }
-                                                }
-                                            } else {
-                                                emit_error(
-                                                    &sp.bus,
-                                                    &id,
-                                                    "resume_http_status",
-                                                    &format!("resume http status {}", st.as_u16()),
-                                                    Some(&budget),
-                                                    None,
-                                                    Some(&corr_id),
-                                                )
-                                                .await;
-                                                return;
-                                            }
-                                        }
-                                        Err(e2) => {
-                                            emit_error(
-                                                &sp.bus,
-                                                &id,
-                                                "resume_failed",
-                                                &format!("resume failed: {} (prior: {})", e2, e),
-                                                Some(&budget),
-                                                None,
-                                                Some(&corr_id),
-                                            )
-                                            .await;
-                                            return;
-                                        }
-                                    }
-                                } else {
-                                    emit_error(
-                                        &sp.bus,
-                                        &id,
-                                        "io_read",
-                                        &format!("read failed: {}", e),
-                                        Some(&budget),
-                                        None,
-                                        Some(&corr_id),
-                                    )
-                                    .await;
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                    if let Err(e) = file.flush().await {
-                        // Cleanup temp artifacts on flush failure
-                        let _ = afs::remove_file(&tmp).await;
-                        let _ = afs::remove_file(&meta_path).await;
-                        emit_error(
-                            &sp.bus,
-                            &id,
-                            "flush_failed",
-                            &format!("flush failed: {}", e),
-                            Some(&budget),
-                            None,
-                            Some(&corr_id),
-                        )
-                        .await;
-                        return;
-                    }
-                    // Ensure handle closed before rename on platforms with exclusive locks
-                    drop(file);
-                    // Verify checksum BEFORE promoting tmp -> final target
-                    if let Some(ref exp) = expect_sha {
-                        let actual = if let Some(h) = hasher_opt.take() {
-                            format!("{:x}", h.finalize())
-                        } else {
-                            // resumed: compute from file on disk
-                            let mut f = match afs::File::open(&tmp).await {
-                                Ok(f) => f,
-                                Err(e) => {
-                                    // Could not open temp file to verify checksum
-                                    let _ = afs::remove_file(&tmp).await;
-                                    let _ = afs::remove_file(&meta_path).await;
-                                    emit_error(
-                                        &sp.bus,
-                                        &id,
-                                        "verify_open_failed",
-                                        &format!("verify open failed: {}", e),
-                                        Some(&budget),
-                                        None,
-                                        Some(&corr_id),
-                                    )
-                                    .await;
-                                    return;
-                                }
-                            };
-                            let mut h = sha2::Sha256::new();
-                            let mut buf = vec![0u8; 1024 * 1024];
-                            loop {
-                                match tokio::io::AsyncReadExt::read(&mut f, &mut buf).await {
-                                    Ok(0) => break,
-                                    Ok(n) => h.update(&buf[..n]),
-                                    Err(e) => {
-                                        // Read failed during verification; abort and clean up
-                                        let _ = afs::remove_file(&tmp).await;
-                                        let _ = afs::remove_file(&meta_path).await;
-                                        emit_error(
-                                            &sp.bus,
-                                            &id,
-                                            "verify_read_failed",
-                                            &format!("verify read failed: {}", e),
-                                            Some(&budget),
-                                            None,
-                                            Some(&corr_id),
-                                        )
-                                        .await;
-                                        return;
-                                    }
-                                }
-                            }
-                            format!("{:x}", h.finalize())
-                        };
-                        if actual != *exp {
-                            let _ = afs::remove_file(&tmp).await;
-                            let _ = afs::remove_file(&meta_path).await;
-                            let extra = json!({"expected": exp.clone(), "actual": actual});
-                            emit_error(
-                                &sp.bus,
-                                &id,
-                                "checksum_mismatch",
-                                "checksum mismatch",
-                                Some(&budget),
-                                Some(extra),
-                                Some(&corr_id),
-                            )
-                            .await;
-                            return;
-                        }
-                    }
-                    // If server reported a total size, ensure the file matches
-                    if total_all > 0 {
-                        if let Ok(md) = afs::metadata(&tmp).await {
-                            if md.len() != total_all {
-                                let _ = afs::remove_file(&tmp).await;
-                                let _ = afs::remove_file(&meta_path).await;
-                                let extra =
-                                    json!({"expected_bytes": total_all, "actual_bytes": md.len()});
-                                emit_error(
-                                    &sp.bus,
-                                    &id,
-                                    "size_mismatch",
-                                    "size mismatch",
-                                    Some(&budget),
-                                    Some(extra),
-                                    Some(&corr_id),
-                                )
-                                .await;
-                                return;
-                            }
-                        }
-                    }
-                    // Promote tmp to a content-addressed target path now that verification passed
-                    // Layout: <state>/models/by-hash/<sha256>[.<ext>]
-                    let cas_file_name: String;
-                    if let Some(ref exp) = expect_sha {
-                        let cas_dir = target_dir.join("by-hash");
-                        if let Err(e) = afs::create_dir_all(&cas_dir).await {
-                            emit_error(
-                                &sp.bus,
-                                &id,
-                                "mkdir_failed",
-                                &format!("mkdir failed: {}", e),
-                                Some(&budget),
-                                None,
-                                Some(&corr_id),
-                            )
-                            .await;
-                            return;
-                        }
-                        // Derive a canonical filename using the hash and the original extension (if any)
-                        let ext = final_name.rsplit('.').next().filter(|s| *s != final_name);
-                        cas_file_name = match ext {
-                            Some(ex) if !ex.is_empty() => format!("{}.{}", exp, ex),
-                            _ => exp.clone(),
-                        };
-                        let cas_target = cas_dir.join(&cas_file_name);
-                        if afs::metadata(&cas_target).await.is_ok() {
-                            // Already have this blob; discard temp
-                            let _ = afs::remove_file(&tmp).await;
-                        } else if let Err(_e) = afs::rename(&tmp, &cas_target).await {
-                            // If rename fails (Windows lock or cross-device), try remove + rename,
-                            // and finally fall back to copy + remove.
-                            let _ = afs::remove_file(&cas_target).await;
-                            match afs::rename(&tmp, &cas_target).await {
-                                Ok(_) => {}
-                                Err(e2) => match afs::copy(&tmp, &cas_target).await {
-                                    Ok(_) => {
-                                        let _ = afs::remove_file(&tmp).await;
-                                    }
-                                    Err(_) => {
-                                        emit_error(
-                                            &sp.bus,
-                                            &id,
-                                            "finalize_failed",
-                                            &format!("finalize failed: {}", e2),
-                                            Some(&budget),
-                                            None,
-                                            Some(&corr_id),
-                                        )
-                                        .await;
-                                        return;
-                                    }
-                                },
-                            }
-                        }
-                        // update target to the content-addressed path
-                        target = cas_target.clone();
-                    } else {
-                        // Fallback (should not happen since we require sha256): keep original target path
-                        if let Err(_e) = afs::rename(&tmp, &target).await {
-                            let _ = afs::remove_file(&target).await;
-                            match afs::rename(&tmp, &target).await {
-                                Ok(_) => {}
-                                Err(e2) => match afs::copy(&tmp, &target).await {
-                                    Ok(_) => {
-                                        let _ = afs::remove_file(&tmp).await;
-                                    }
-                                    Err(_) => {
-                                        emit_error(
-                                            &sp.bus,
-                                            &id,
-                                            "finalize_failed",
-                                            &format!("finalize failed: {}", e2),
-                                            Some(&budget),
-                                            None,
-                                            Some(&corr_id),
-                                        )
-                                        .await;
-                                        return;
-                                    }
-                                },
-                            }
-                        }
-                        cas_file_name = final_name.clone();
-                    }
-                    // fsync finalized CAS/target file for durability
-                    if let Ok(f) = afs::File::open(&target).await {
-                        let _ = f.sync_all().await;
-                    }
-                    // cleanup sidecar meta on success
-                    let _ = afs::remove_file(&meta_path).await;
-                    // Write a sidecar manifest <id>.json alongside the model
-                    let manifest_path =
-                        target_dir.join(format!("{}.json", Self::sanitize_file_name(&id)));
-                    // Emit manifest written event
-                    let mut ev = json!({"id": id, "manifest_path": manifest_path.to_string_lossy(), "sha256": expect_sha.clone(), "cas": "sha256", "corr_id": corr_id});
-                    crate::ext::corr::ensure_corr(&mut ev);
-                    sp.bus.publish("Models.ManifestWritten", &ev);
-                    let bytes = match afs::metadata(&target).await {
-                        Ok(md) => md.len(),
-                        Err(_) => 0,
-                    };
-                    let mut manifest = serde_json::Map::new();
-                    manifest.insert("id".into(), Value::String(id.clone()));
-                    // file: canonical content-addressed filename; name: original display filename (if different)
-                    manifest.insert("file".into(), Value::String(cas_file_name.clone()));
-                    if cas_file_name != final_name {
-                        manifest.insert("name".into(), Value::String(final_name.clone()));
-                    }
-                    manifest.insert(
-                        "path".into(),
-                        Value::String(target.to_string_lossy().to_string()),
-                    );
-                    manifest.insert("url".into(), Value::String(Self::redact_url_for_logs(&url)));
-                    if let Some(exp) = expect_sha.clone() {
-                        manifest.insert("sha256".into(), Value::String(exp));
-                        manifest.insert("cas".into(), Value::String("sha256".into()));
-                    }
-                    manifest.insert(
-                        "bytes".into(),
-                        Value::Number(serde_json::Number::from(bytes)),
-                    );
-                    manifest.insert("provider".into(), Value::String(provider.clone()));
-                    manifest.insert("verified".into(), Value::Bool(true));
-                    let _ = crate::ext::io::save_json_file_async(
-                        &manifest_path,
-                        &Value::Object(manifest),
-                    )
-                    .await;
-                    // Update EWMA throughput based on observed bytes/time
-                    let elapsed_ms = t0.elapsed().as_millis() as u64;
-                    if elapsed_ms > 0 {
-                        if let Ok(md) = afs::metadata(&target).await {
-                            let bytes = md.len() as f64;
-                            let mbps = (bytes / (1024.0 * 1024.0)) / (elapsed_ms as f64 / 1000.0);
-                            Self::update_ewma_mbps(mbps).await;
-                        }
-                    }
-                    let mut p = json!({"id": id, "status":"complete", "file": final_name, "provider": provider, "cas_file": cas_file_name});
-                    if Self::progress_include_disk() {
-                        if let (Ok(av), Ok(tt)) = (
-                            fs2::available_space(&target_dir),
-                            fs2::total_space(&target_dir),
-                        ) {
-                            p["disk"] =
-                                json!({"available": av, "total": tt, "reserve": reserve_bytes});
-                        }
-                    }
-                    // Metrics: completed (non-cached); add bytes downloaded
-                    DL_COMPLETED.fetch_add(1, Ordering::Relaxed);
-                    DL_BYTES.fetch_add(bytes, Ordering::Relaxed);
-                    // Emit standardized completion event
-                    let mut extra = p.clone();
-                    // extra already contains id/status/file/provider and maybe disk; remove id/status to avoid duplication in payload
-                    if let Some(obj) = extra.as_object_mut() {
-                        obj.remove("id");
-                        obj.remove("status");
-                    }
-                    emit_progress(
-                        &sp.bus,
+                    // Delegated streaming path; returns after completion or error
+                    Self::stream_download_loop(
+                        &sp,
                         &id,
-                        Some("complete"),
-                        Some("complete"),
-                        if Self::progress_include_budget() {
-                            Some(&budget)
-                        } else {
-                            None
-                        },
-                        Some(extra),
-                        Some(&corr_id),
-                    );
-                    // Audit completion with full object
-                    crate::ext::io::audit_event("models.download.complete", &p).await;
-                    // Append egress ledger (best-effort)
-                    Self::append_egress_ledger(
-                        &sp.bus,
-                        EgressLedgerEntry::allow("models.download")
-                            .dest(dest_host.clone(), dest_port, dest_proto.clone())
-                            .corr_id(corr_id.clone())
-                            .bytes_in(bytes)
-                            .duration_ms(elapsed_ms)
-                            .build(),
+                        &provider,
+                        &url,
+                        &dest_host,
+                        dest_port,
+                        &dest_proto,
+                        &corr_id,
+                        &budget,
+                        &client,
+                        resp,
+                        &mut resume_from,
+                        &target_dir,
+                        &mut final_name,
+                        &mut target,
+                        &tmp,
+                        &meta_path,
+                        &expect_sha,
+                        reserve_bytes,
+                        max_bytes,
                     )
                     .await;
-                    {
-                        let mut v = crate::ext::models().write().await;
-                        if let Some(m) = v
-                            .iter_mut()
-                            .find(|m| m.get("id").and_then(|s| s.as_str()) == Some(&id))
-                        {
-                            let mut obj = serde_json::Map::new();
-                            obj.insert("id".into(), Value::String(id.clone()));
-                            obj.insert("provider".into(), Value::String(provider.clone()));
-                            obj.insert("status".into(), Value::String("available".into()));
-                            obj.insert(
-                                "path".into(),
-                                Value::String(target.to_string_lossy().to_string()),
-                            );
-                            if let Some(ref sh) = expect_sha {
-                                obj.insert("sha256".into(), Value::String(sh.clone()));
-                                obj.insert("cas".into(), Value::String("sha256".into()));
-                                obj.insert("file".into(), Value::String(cas_file_name.clone()));
-                            }
-                            if let Ok(md) = afs::metadata(&target).await {
-                                obj.insert(
-                                    "bytes".into(),
-                                    Value::Number(serde_json::Number::from(md.len())),
-                                );
-                            }
-                            *m = Value::Object(obj);
-                        }
-                    }
-                    let _ = crate::ext::io::save_json_file_async(
-                        &crate::ext::paths::models_path(),
-                        &Value::Array(crate::ext::models().read().await.clone()),
-                    )
-                    .await;
-                    sp.bus
-                        .publish("Models.Changed", &json!({"op":"downloaded","id": id}));
-                    // Emit patch for final completion
-                    publish_models_state_patch(&sp.bus).await;
-                    metrics_mark_dirty();
+                    return;
                 }
+
                 Err(e) => {
                     emit_error(
                         &sp.bus,
                         &id,
-                        "request_failed",
-                        &format!("request failed: {}", e),
+                        "request-failed",
+                        &format!("Request failed: {}", e),
                         Some(&budget),
                         None,
                         Some(&corr_id),
@@ -3267,7 +3027,7 @@ impl ModelsService {
                     // Append failed egress attempt to ledger (best-effort)
                     Self::append_egress_ledger(
                         &sp.bus,
-                        EgressLedgerEntry::deny("request_failed")
+                        EgressLedgerEntry::deny("request-failed")
                             .dest(dest_host.clone(), dest_port, dest_proto.clone())
                             .corr_id(corr_id.clone())
                             .duration_ms(t0.elapsed().as_millis() as u64)
@@ -3300,6 +3060,8 @@ impl ModelsService {
 #[cfg(test)]
 mod tests {
     use super::ModelsService;
+    use std::collections::BTreeSet;
+    use std::path::PathBuf;
 
     #[test]
     fn sanitize_file_name_basic() {
@@ -3399,7 +3161,7 @@ mod tests {
     #[tokio::test]
     async fn normalize_path_str_canonicalizes_existing() {
         use tokio::fs as afs;
-        // Create a temporary file under OS temp dir
+
         let dir = std::env::temp_dir().join(format!("arw_test_{}", uuid::Uuid::new_v4()));
         let _ = afs::create_dir_all(&dir).await;
         let file = dir.join("sample.txt");
@@ -3432,6 +3194,121 @@ mod tests {
         ] {
             assert!(v.get(k).is_some(), "missing key: {}", k);
         }
+    }
+
+    #[test]
+    fn docs_statuses_match_progress_status_constant() {
+        // Locate docs file relative to the crate directory
+        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push("../../docs/architecture/events_vocabulary.md");
+        let ok = std::fs::read_to_string(&p).ok();
+        let Some(text) = ok else {
+            // Best-effort: if file missing in packaged builds, skip with pass
+            eprintln!(
+                "warning: docs file not found; skipping status consistency check: {}",
+                p.display()
+            );
+            return;
+        };
+        // Find the line that lists statuses and extract backtick-enclosed tokens
+        let mut doc_vals: BTreeSet<String> = BTreeSet::new();
+        for line in text.lines() {
+            if line.contains("models.download.progress statuses may include:") {
+                let mut s = line;
+                while let Some(i) = s.find('`') {
+                    let rest = &s[i + 1..];
+                    if let Some(end) = rest.find('`') {
+                        let token = &rest[..end];
+                        if !token.trim().is_empty() {
+                            doc_vals.insert(token.trim().to_string());
+                        }
+                        s = &rest[end + 1..];
+                    } else {
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        assert!(
+            !doc_vals.is_empty(),
+            "failed to parse statuses from docs; check formatting in events_vocabulary.md"
+        );
+        let code_vals: BTreeSet<String> = ModelsService::progress_statuses()
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        // Compute differences for clear failures
+        let extra_in_docs: Vec<_> = doc_vals.difference(&code_vals).cloned().collect();
+        let extra_in_code: Vec<_> = code_vals.difference(&doc_vals).cloned().collect();
+        assert!(
+            extra_in_docs.is_empty() && extra_in_code.is_empty(),
+            "status drift: docs-only={:?}, code-only={:?}",
+            extra_in_docs,
+            extra_in_code
+        );
+    }
+
+    #[test]
+    fn docs_codes_are_subset_of_progress_codes() {
+        // Read docs file with the “Common code values” list
+        let mut p = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        p.push("../../docs/architecture/events_vocabulary.md");
+        let ok = std::fs::read_to_string(&p).ok();
+        let Some(text) = ok else {
+            eprintln!(
+                "warning: docs file not found; skipping code consistency check: {}",
+                p.display()
+            );
+            return;
+        };
+        // Collect backticked tokens on the "Common `code` values:" line,
+        // expanding shorthand like `disk-insufficient(-stream)` into two codes.
+        let mut doc_codes: BTreeSet<String> = BTreeSet::new();
+        for line in text.lines() {
+            if line.contains("Common `code` values:") {
+                // Start parsing after the colon to avoid the inline backticked word `code`
+                let mut s = match line.find(':') {
+                    Some(i) => &line[i + 1..],
+                    None => line,
+                };
+                while let Some(i) = s.find('`') {
+                    let rest = &s[i + 1..];
+                    if let Some(end) = rest.find('`') {
+                        let token = rest[..end].trim();
+                        if !token.is_empty() {
+                            if let Some(prefix) = token.strip_suffix("(-stream)") {
+                                // Expand shorthand “x(-stream)” into x and x-stream
+                                doc_codes.insert(prefix.to_string());
+                                doc_codes.insert(format!("{}-stream", prefix));
+                            } else {
+                                doc_codes.insert(token.to_string());
+                            }
+                        }
+                        s = &rest[end + 1..];
+                    } else {
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        assert!(
+            !doc_codes.is_empty(),
+            "failed to parse common code values from docs; check formatting in events_vocabulary.md"
+        );
+        let code_vals: BTreeSet<String> = ModelsService::progress_codes()
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        // All documented common codes must be recognized by the service
+        let extras: Vec<_> = doc_codes.difference(&code_vals).cloned().collect();
+        assert!(
+            extras.is_empty(),
+            "doc lists unknown codes not in PROGRESS_CODES: {:?}",
+            extras
+        );
     }
 }
 // SPDX-License-Identifier: MIT OR Apache-2.0

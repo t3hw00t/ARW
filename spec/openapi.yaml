@@ -1,4 +1,5 @@
 openapi: 3.1.0
+jsonSchemaDialect: https://json-schema.org/draft/2020-12/schema
 info:
   title: Agent Hub (ARW) Service API
   description: "Your private AI control room that can scale and share when you choose.\n\
@@ -42,6 +43,42 @@ tags:
 - name: Public/State
   description: Public read-models and state
 paths:
+  /models/blob/{sha256}:
+    get:
+      tags:
+      - Public
+      description: |
+        Return a CAS blob by SHA-256 digest. Strong validators are provided with
+        ETag (hex digest) and Last-Modified. Clients may send If-None-Match to
+        receive 304 Not Modified. Cache-Control is set to long-lived immutable.
+      operationId: models_blob_get_doc
+      parameters:
+      - name: sha256
+        in: path
+        description: Hex lowercase SHA-256 (64 chars)
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Blob bytes
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        '206':
+          description: Partial Content (Range)
+        '304':
+          description: Not Modified
+        '400':
+          description: Invalid sha256
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProblemDetails'
+        '404':
+          description: Not found
   /about:
     get:
       tags:
@@ -1391,6 +1428,32 @@ paths:
         '200':
           description: Service version
       description: 'Public: GET /version.'
+  /state/models:
+    get:
+      description: Public read-only models list
+      tags:
+      - Public/State
+      operationId: state_models_doc
+      responses:
+        '200':
+          description: Models list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ModelItem'
+              examples:
+                basic:
+                  value:
+                    - id: llama3:8b
+                      provider: ollama
+                      bytes: 5347737600
+                      status: ready
+                    - id: qwen2:7b
+                      provider: hf
+                      bytes: 4855592960
+                      status: downloading
   # (no additional entries)
 components:
   schemas:

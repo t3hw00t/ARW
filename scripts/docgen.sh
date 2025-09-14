@@ -101,104 +101,144 @@ asyncapi: 2.6.0
 info:
   title: "arw-svc events"
   version: "0.1.0"
+  description: "Normalized dot.case event channels for arw-svc."
+  license:
+    name: "MIT OR Apache-2.0"
+  contact:
+    name: "ARW"
+    url: "https://github.com/t3hw00t/ARW"
+    email: "noreply@example.com"
 defaultContentType: application/json
+tags:
+  - name: CloudEvents
+    description: Events include CloudEvents 1.0 metadata under `ce`.
 channels:
-  Service.Start:
+  service.start:
     subscribe:
+      operationId: service_start
+      description: Service emitted start event
       message:
         $ref: '#/components/messages/ServiceStart'
-  Service.Health:
+  service.health:
     subscribe:
+      operationId: service_health
+      description: Periodic health heartbeat
       message:
         $ref: '#/components/messages/ServiceHealth'
-  Service.Test:
+  service.test:
     subscribe:
+      operationId: service_test
+      description: Test event emission
       message:
         $ref: '#/components/messages/ServiceTest'
-  Governor.Changed:
+  governor.changed:
     subscribe:
+      operationId: governor_changed
+      description: Governor profile changed
       message:
         $ref: '#/components/messages/GovernorChanged'
-  Memory.Applied:
+  memory.applied:
     subscribe:
+      operationId: memory_applied
+      description: Memory applied to working set
       message:
         $ref: '#/components/messages/MemoryApplied'
-  Models.Changed:
+  models.changed:
     subscribe:
+      operationId: models_changed
+      description: Models list/default changed
       message:
         $ref: '#/components/messages/ModelsChanged'
-  Models.DownloadProgress:
+  models.download.progress:
     subscribe:
+      operationId: models_download_progress
+      description: Download progress, status codes, metrics snapshots
       message:
         $ref: '#/components/messages/ModelsDownloadProgress'
-  Models.ManifestWritten:
+  models.manifest.written:
     subscribe:
+      operationId: models_manifest_written
+      description: A model manifest has been written
       message:
         $ref: '#/components/messages/ModelsManifestWritten'
-  Models.CasGc:
+  models.cas.gc:
     subscribe:
+      operationId: models_cas_gc
+      description: CAS GC run summary
       message:
         $ref: '#/components/messages/ModelsCasGc'
-  Egress.Preview:
+  egress.preview:
     subscribe:
+      operationId: egress_preview
+      description: Egress preflight summary
       message:
         $ref: '#/components/messages/EgressPreview'
-  Egress.Ledger.Appended:
+  egress.ledger.appended:
     subscribe:
+      operationId: egress_ledger_appended
+      description: Egress decision appended to ledger
       message:
         $ref: '#/components/messages/EgressLedgerAppended'
-  Tool.Ran:
+  tool.ran:
     subscribe:
+      operationId: tool_ran
+      description: Tool execution completed
       message:
         $ref: '#/components/messages/ToolRan'
-  Feedback.Signal:
+  feedback.signal:
     subscribe:
+      operationId: feedback_signal
+      description: Feedback signal recorded
       message:
         $ref: '#/components/messages/FeedbackSignal'
-  Feedback.Suggested:
+  feedback.suggested:
     subscribe:
+      operationId: feedback_suggested
+      description: Feedback suggestion produced
       message:
         $ref: '#/components/messages/FeedbackSuggested'
-  Feedback.Applied:
+  feedback.applied:
     subscribe:
+      operationId: feedback_applied
+      description: Feedback suggestion applied
       message:
         $ref: '#/components/messages/FeedbackApplied'
 components:
   messages:
     ServiceStart:
-      name: Service.Start
+      name: service.start
       payload:
         type: object
         additionalProperties: true
     ServiceHealth:
-      name: Service.Health
+      name: service.health
       payload:
         type: object
         properties:
           ok: { type: boolean }
     ServiceTest:
-      name: Service.Test
+      name: service.test
       payload:
         type: object
         additionalProperties: true
     GovernorChanged:
-      name: Governor.Changed
+      name: governor.changed
       payload:
         type: object
         properties:
           profile: { type: string }
     MemoryApplied:
-      name: Memory.Applied
+      name: memory.applied
       payload:
         type: object
         additionalProperties: true
     ModelsChanged:
-      name: Models.Changed
+      name: models.changed
       payload:
         type: object
         additionalProperties: true
     ModelsDownloadProgress:
-      name: Models.DownloadProgress
+      name: models.download.progress
       payload:
         type: object
         properties:
@@ -228,7 +268,7 @@ components:
               reserve: { type: integer }
         additionalProperties: true
     ModelsManifestWritten:
-      name: Models.ManifestWritten
+      name: models.manifest.written
       payload:
         type: object
         properties:
@@ -237,7 +277,7 @@ components:
           sha256: { type: ["string","null"] }
           cas: { type: ["string","null"] }
     ModelsCasGc:
-      name: Models.CasGc
+      name: models.cas.gc
       payload:
         type: object
         properties:
@@ -247,7 +287,7 @@ components:
           deleted_bytes: { type: integer }
           ttl_days: { type: integer }
     EgressPreview:
-      name: Egress.Preview
+      name: egress.preview
       payload:
         type: object
         properties:
@@ -263,7 +303,7 @@ components:
           corr_id: { type: string }
         additionalProperties: true
     EgressLedgerAppended:
-      name: Egress.Ledger.Appended
+      name: egress.ledger.appended
       payload:
         type: object
         properties:
@@ -285,14 +325,14 @@ components:
           bytes_in: { type: integer }
           duration_ms: { type: integer }
     ToolRan:
-      name: Tool.Ran
+      name: tool.ran
       payload:
         type: object
         properties:
           id: { type: string }
           output: { type: object }
     FeedbackSignal:
-      name: Feedback.Signal
+      name: feedback.signal
       payload:
         type: object
         properties:
@@ -305,7 +345,7 @@ components:
               confidence: { type: number }
               severity: { type: integer }
     FeedbackSuggested:
-      name: Feedback.Suggested
+      name: feedback.suggested
       payload:
         type: object
         properties:
@@ -321,7 +361,7 @@ components:
                 rationale: { type: string }
                 confidence: { type: number }
     FeedbackApplied:
-      name: Feedback.Applied
+      name: feedback.applied
       payload:
         type: object
         properties:

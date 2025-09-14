@@ -24,7 +24,7 @@ Guidelines
 - Language: US English (American). Examples: canceled, color, disk.
 - Tone: calm and helpful; avoid blame. Offer a next step or link.
 - Errors: one‑line summary + cause + suggestion. Prefer “couldn’t connect (timeout)” over vague “failed”.
-- Events: `status` is human‑friendly (started, downloading, degraded, complete, canceled). `code` is a stable machine hint (e.g., `admission_denied`, `hard_exhausted`, `disk_insufficient`, `canceled_by_user`). Add codes additively; don’t change existing meanings.
+- Events: `status` is human‑friendly (started, downloading, degraded, complete, canceled). `code` is a stable machine hint (e.g., `admission-denied`, `hard-exhausted`, `disk-insufficient`, `canceled-by-user`). Add codes additively; don’t change existing meanings.
 - Consistency: reuse nouns/verbs across UI, events, and APIs (download, resume, cancel).
 - Brevity: keep messages short; include context only when it changes a decision.
 
@@ -47,8 +47,8 @@ let entry = EgressLedgerEntry::allow("models.download")
     .build();
 Self::append_egress_ledger(&bus, entry).await;
 
-// Build and append a "deny" entry (request_failed)
-let entry = EgressLedgerEntry::deny("request_failed")
+// Build and append a "deny" entry (request-failed)
+let entry = EgressLedgerEntry::deny("request-failed")
     .dest(dest_host.clone(), dest_port, dest_proto.clone())
     .corr_id(corr_id.clone())
     .duration_ms(elapsed())

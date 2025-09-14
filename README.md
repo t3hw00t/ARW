@@ -145,6 +145,18 @@ scripts/audit.ps1 -Interactive
 
 Screenshots → https://t3hw00t.github.io/ARW/guide/screenshots/
 
+## Event Topics (Canonical)
+
+- Source of truth: `apps/arw-svc/src/ext/topics.rs` — centralized constants used by the service.
+- `models.download.progress`: download lifecycle, progress, and errors; optional `budget` and `disk` fields.
+- `models.changed`: models list deltas (add/delete/default/downloaded/error/canceled).
+- `models.refreshed`: emitted after default models refresh with `{count}`.
+- `models.manifest.written`: manifest sidecar written with `manifest_path` and `sha256`.
+- `models.cas.gc`: CAS GC summary after a sweep.
+- `egress.preview`: pre‑offload preview payload (dest host/port/protocol) before downloads.
+- `egress.ledger.appended`: appended egress ledger entries.
+- `state.read.model.patch`: RFC‑6902 JSON Patches; ids include `models`, `models_metrics`, `route_stats`, `snappy`.
+
 ## What’s Inside
 
 - Service: user‑mode HTTP with debug UI and SSE events. “Snappy by Default” budgets prioritize first feedback within 50 ms and first partial ≤150 ms; see `docs/ethics/SNAPPY_CHARTER.md`.
@@ -227,7 +239,7 @@ See `CONTRIBUTING.md`. Please open issues/PRs and discussions on GitHub.
 
 - Language: US English (American).
 - Tone: calm, friendly, and action‑oriented.
-- Events: `status` is human‑friendly; `code` is a stable machine hint (e.g., `admission_denied`, `hard_exhausted`, `disk_insufficient`, `canceled_by_user`).
+- Events: `status` is human‑friendly; `code` is a stable machine hint (e.g., `admission-denied`, `hard-exhausted`, `disk-insufficient`, `canceled-by-user`).
 - More: see `docs/developer/style.md` (Style & Harmony).
 
 —

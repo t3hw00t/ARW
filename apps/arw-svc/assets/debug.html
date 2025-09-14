@@ -275,7 +275,7 @@
         <label><input type="checkbox" id="fMemory" checked> Memory</label>
         <label><input type="checkbox" id="fModels" checked> Models</label>
         <button class="iconbtn" id="sseReplay50" title="Replay last 50">Replay 50</button>
-        <button class="iconbtn" id="sseOnlyModels" title="Filter to Models.*">Models only</button>
+        <button class="iconbtn" id="sseOnlyModels" title="Filter to models.*">Models only</button>
       </div>
       <div id="log"></div>
     </div>
@@ -287,7 +287,7 @@
       <div id="egOut" style="max-height:28vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
     </div>
     <div class="box" data-collapsed="1">
-      <h3>System <a href="#" class="help" data-doc="events" data-tip="Live metrics via SSE (Probe.Metrics)." title="System metrics">?</a></h3>
+      <h3>System <a href="#" class="help" data-doc="events" data-tip="Live metrics via SSE (probe.metrics)." title="System metrics">?</a></h3>
       <div class="row">
         <div><span class="key">CPU</span> <code id="sysCpu">–</code></div>
         <div><span class="key">Mem</span> <code id="sysMem">–</code></div>
@@ -676,19 +676,19 @@ function codeExplain(code, extra){
     case 'cached': return 'using cached file';
     case 'already-in-progress':
     case 'already-in-progress-hash': return 'duplicate request';
-    case 'admission_denied': return 'insufficient time budget';
-    case 'hard_exhausted': return 'time budget exhausted';
-    case 'size_limit':
-    case 'size_limit_stream': return 'size exceeds limit';
-    case 'disk_insufficient':
-    case 'disk_insufficient_stream': {
+    case 'admission-denied': return 'insufficient time budget';
+    case 'hard-exhausted': return 'time budget exhausted';
+    case 'size-limit':
+    case 'size-limit-stream': return 'size exceeds limit';
+    case 'disk-insufficient':
+    case 'disk-insufficient-stream': {
       const need = extra?.need || extra?.downloaded || 0, av = extra?.available || 0, res = extra?.reserve || 0;
       return `disk low; need ${bytesHuman(need)}, free ${bytesHuman(av)} (reserve ${bytesHuman(res)})`;
     }
-    case 'resume_http_status':
-    case 'downstream_http_status': return 'server http status';
-    case 'checksum_mismatch': return 'checksum mismatch';
-    case 'request_failed': return 'request failed';
+    case 'resume-http-status':
+    case 'downstream-http-status': return 'server http status';
+    case 'checksum-mismatch': return 'checksum mismatch';
+    case 'request-failed': return 'request failed';
     default: return code ? String(code) : '';
   }
 }
@@ -788,9 +788,9 @@ function allow(kind){
   const s=document.getElementById('fService').checked;
   const m=document.getElementById('fMemory').checked;
   const o=document.getElementById('fModels').checked;
-  if(kind.startsWith('Service.')) return s;
-  if(kind.startsWith('Memory.'))  return m;
-  if(kind.startsWith('Models.'))  return o;
+  if(kind.startsWith('service.')) return s;
+  if(kind.startsWith('memory.'))  return m;
+  if(kind.startsWith('models.'))  return o;
   return true;
 }
 function svgIcon(kind, tone){
@@ -810,7 +810,7 @@ function svgIcon(kind, tone){
   }
 }
 function iconsFor(kind, obj){
-  if (kind === 'Models.DownloadProgress'){
+  if (kind === 'models.download.progress'){
     const s = obj.status; const c = obj.code;
     if (s === 'complete') return svgIcon('check','ok');
     if (s === 'queued') return svgIcon('timer','info');
@@ -823,16 +823,16 @@ function iconsFor(kind, obj){
       case 'cached': return svgIcon('check','ok') + svgIcon('hash','info');
       case 'already-in-progress':
       case 'already-in-progress-hash': return svgIcon('download','warn');
-      case 'admission_denied': return svgIcon('lock','bad') + svgIcon('timer','warn');
-      case 'hard_exhausted':   return svgIcon('timer','bad');
-      case 'size_limit':
-      case 'size_limit_stream':return svgIcon('stop','bad');
-      case 'disk_insufficient':
-      case 'disk_insufficient_stream': return svgIcon('hdd','bad') + svgIcon('warn','warn');
-      case 'checksum_mismatch':return svgIcon('hash','bad') + svgIcon('stop','bad');
-      case 'request_failed':   return svgIcon('cloud','bad') + svgIcon('stop','bad');
-      case 'resume_http_status':
-      case 'downstream_http_status': return svgIcon('cloud','warn') + svgIcon('warn','warn');
+      case 'admission-denied': return svgIcon('lock','bad') + svgIcon('timer','warn');
+      case 'hard-exhausted':   return svgIcon('timer','bad');
+      case 'size-limit':
+      case 'size-limit-stream':return svgIcon('stop','bad');
+      case 'disk-insufficient':
+      case 'disk-insufficient-stream': return svgIcon('hdd','bad') + svgIcon('warn','warn');
+      case 'checksum-mismatch':return svgIcon('hash','bad') + svgIcon('stop','bad');
+      case 'request-failed':   return svgIcon('cloud','bad') + svgIcon('stop','bad');
+      case 'resume-http-status':
+      case 'downstream-http-status': return svgIcon('cloud','warn') + svgIcon('warn','warn');
       default: return '';
     }
   }
@@ -843,7 +843,7 @@ function pushEvt(kind, data){
   try{ const eb=document.getElementById('eventsBadge'); if(eb){ const n=parseInt(eb.getAttribute('data-n')||'0',10)+1; eb.setAttribute('data-n', String(n)); eb.className='badge good'; eb.innerHTML='<span class="dot"></span> Events: '+n; } }catch{}
   const div = document.createElement('div');
   div.className='evt';
-  if (kind === 'Models.DownloadProgress'){
+  if (kind === 'models.download.progress'){
     try{
       const obj = JSON.parse(data||'{}');
       const ico = iconsFor(kind, obj);
@@ -872,11 +872,13 @@ async function updateModelsCount(){
 }
 // Track model download progress into a header badge
 function bindSSEHandlers(){
-es.addEventListener('Models.DownloadProgress', (e)=>{
+es.addEventListener('models.download.progress', (e)=>{
   try{
     const obj = JSON.parse(e.data||'{}');
     // Update Download Manager
     try{ updateDlEntry(obj); }catch{}
+    // Toast on start
+    if (obj && obj.status === 'started' && obj.id) { try{ showToast('Downloading '+ obj.id +'…'); }catch{} }
     const b = document.getElementById('modelsBadge'); if(!b) return;
     if (obj.error){ b.className='badge bad'; b.innerHTML = '<span class="dot"></span> Models: error'; return; }
     if (obj.status === 'canceled'){ b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: canceled'; return; }
@@ -893,19 +895,9 @@ es.addEventListener('Models.DownloadProgress', (e)=>{
 });
 // Live patches for models metrics (RFC 6902)
 // Live patches for models metrics (RFC 6902)
-es.addEventListener('State.ModelsMetrics.Patch', (e)=>{
-  try{
-    const env = JSON.parse(e.data||'{}');
-    const p = env && env.payload ? env.payload : env;
-    const patch = Array.isArray(p?.patch) ? p.patch : [];
-    if (document.getElementById('mmLive')?.checked) {
-      modelsMetricsApplyPatch(patch);
-      modelsMetricsRender();
-    }
-  }catch{}
-});
+// Dedicated metrics patch topic removed in favor of unified ReadModel
 // Generic read-model patch stream: handle models_metrics id
-es.addEventListener('State.ReadModel.Patch', (e)=>{
+es.addEventListener('state.read.model.patch', (e)=>{
   try{
     const env = JSON.parse(e.data||'{}');
     const pl = env?.payload || env;
@@ -925,11 +917,11 @@ es.addEventListener('State.ReadModel.Patch', (e)=>{
   }catch{}
 });
 // Start event + model changes
-es.addEventListener('Models.Download', (e)=>{ pushEvt('Models.Download', e.data); try{ const j=JSON.parse(e.data||'{}'); updateDlEntry({ id: j.id, status:'started'}); if(j && j.id){ showToast('Downloading '+ j.id +'…'); } }catch{} });
-es.addEventListener('Models.Changed', (e)=>{ pushEvt('Models.Changed', e.data); try{ updateModelsCount(); const j=JSON.parse(e.data||'{}'); if(j && j.op==='downloaded' && j.id){ updateDlEntry({ id:j.id, status:'complete'}); } modelsMaybeShowHint(true); }catch{} });
+// Start event removed; rely on DownloadProgress with status='started'
+es.addEventListener('models.changed', (e)=>{ pushEvt('models.changed', e.data); try{ updateModelsCount(); const j=JSON.parse(e.data||'{}'); if(j && j.op==='downloaded' && j.id){ updateDlEntry({ id:j.id, status:'complete'}); } modelsMaybeShowHint(true); }catch{} });
 // Pre‑offload preview (egress)
-es.addEventListener('Egress.Preview', (e)=>{
-  pushEvt('Egress.Preview', e.data);
+es.addEventListener('egress.preview', (e)=>{
+  pushEvt('egress.preview', e.data);
   try{
     const j = JSON.parse(e.data||'{}');
     const host = (j && j.dest && j.dest.host) || '';
@@ -942,12 +934,12 @@ es.addEventListener('Egress.Preview', (e)=>{
   }catch{}
 });
 es.onmessage = (e) => pushEvt('message', e.data);
-['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Bus.Gap','Beliefs.Updated','Intents.Proposed','Intents.Approved','Intents.Rejected','Actions.Applied','Actions.HintApplied','Chat.Message','World.Updated','Egress.Preview'].forEach(k => {
+['service.connected','service.health','service.test','memory.applied','models.refreshed','tool.ran','bus.gap','beliefs.updated','intents.proposed','intents.approved','intents.rejected','actions.applied','actions.hint.applied','chat.message','world.updated','egress.preview'].forEach(k => {
   es.addEventListener(k, (e)=>pushEvt(k, e.data));
 });
 // Goldens + Experiments KPIs
-es.addEventListener('Goldens.Evaluated', (e)=>{
-  pushEvt('Goldens.Evaluated', e.data);
+es.addEventListener('goldens.evaluated', (e)=>{
+  pushEvt('goldens.evaluated', e.data);
   try{
     const j = JSON.parse(e.data||'{}');
     const total = Number(j.total||0), passed = Number(j.passed||0);
@@ -1098,7 +1090,7 @@ async function expExportCSV(){ try{
   document.body.appendChild(a); a.click(); a.remove();
   showToast('Scoreboard exported');
 }catch{ showToast('export failed'); } }
-es.addEventListener('Experiment.Result', (e)=>{ pushEvt('Experiment.Result', e.data); try{
+es.addEventListener('experiment.result', (e)=>{ pushEvt('experiment.result', e.data); try{
   const j = JSON.parse(e.data||'{}');
   const id = j.exp_id || (document.getElementById('expId')?.value||'');
   const key = expKey(id, j.variant||'');
@@ -1106,7 +1098,7 @@ es.addEventListener('Experiment.Result', (e)=>{ pushEvt('Experiment.Result', e.d
   renderExpKpis();
   try{ if(document.getElementById('expLive')?.checked){ renderExpBoard(); } }catch{}
 }catch{} });
-es.addEventListener('Experiment.Winner', (e)=>{ pushEvt('Experiment.Winner', e.data); try{
+es.addEventListener('experiment.winner', (e)=>{ pushEvt('experiment.winner', e.data); try{
   const j = JSON.parse(e.data||'{}');
   const id = j.exp_id || (document.getElementById('expId')?.value||'');
   const w = j.winner || '';
@@ -1118,23 +1110,23 @@ es.addEventListener('Experiment.Winner', (e)=>{ pushEvt('Experiment.Winner', e.d
   try{ if(document.getElementById('expLive')?.checked){ renderExpBoard(); } }catch{}
 }catch{} });
 // Planner hint
-es.addEventListener('Chat.Planner', (e)=>{
-  pushEvt('Chat.Planner', e.data);
+es.addEventListener('chat.planner', (e)=>{
+  pushEvt('chat.planner', e.data);
 });
 // Feedback live updates
-  es.addEventListener('Feedback.Suggested', (e)=>{
-    pushEvt('Feedback.Suggested', e.data);
+  es.addEventListener('feedback.suggested', (e)=>{
+    pushEvt('feedback.suggested', e.data);
     try{ const j=JSON.parse(e.data); document.getElementById('fbLiveOut').textContent = JSON.stringify(j,null,2); fbRenderList(j); }catch{}
   });
   // Auto-refresh Project Map on World updates
-  es.addEventListener('World.Updated', async (e)=>{
-    pushEvt('World.Updated', e.data);
+  es.addEventListener('world.updated', async (e)=>{
+    pushEvt('world.updated', e.data);
     const live = document.getElementById('wmLive');
     if (live && live.checked){ try{ await worldMapRefresh(); }catch{} }
   });
 // Show probe events
-es.addEventListener('Chat.Probe', (e)=>{
-  pushEvt('Chat.Probe', e.data);
+es.addEventListener('chat.probe', (e)=>{
+  pushEvt('chat.probe', e.data);
 });
 
 // Insights aggregation overlay
@@ -1172,15 +1164,15 @@ function applyPatchObj(target, patch){ try{
     }
   }
 }catch{}}
-  ['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Chat.Message','Governor.Changed','Bus.Gap','Beliefs.Updated','Intents.Proposed','Intents.Approved','Intents.Rejected','Actions.Applied','Actions.HintApplied','World.Updated','Egress.Preview'].forEach(k => {
-    es.addEventListener(k, (e)=>{ agg.total++; agg.kinds[k]=(agg.kinds[k]||0)+1; renderInsights(); });
-  });
+['service.connected','service.health','service.test','memory.applied','models.refreshed','tool.ran','chat.message','governor.changed','bus.gap','beliefs.updated','intents.proposed','intents.approved','intents.rejected','actions.applied','actions.hint.applied','world.updated','egress.preview'].forEach(k => {
+  es.addEventListener(k, (e)=>{ agg.total++; agg.kinds[k]=(agg.kinds[k]||0)+1; renderInsights(); });
+});
   // System metrics (low-frequency)
-  es.addEventListener('Probe.Metrics', (e)=>{
+  es.addEventListener('probe.metrics', (e)=>{
     try{ const j=JSON.parse(e.data||'{}'); updateSystemFromMetrics(j); }catch{}
   });
   // Route stats read-model patches
-  es.addEventListener('State.RouteStats.Patch', (e)=>{
+  es.addEventListener('state.read.model.patch', (e)=>{
     try{
       const env = JSON.parse(e.data||'{}');
       const p = env && env.payload ? env.payload : env;
@@ -1192,7 +1184,7 @@ function applyPatchObj(target, patch){ try{
       if (document.getElementById('routesLive')?.checked) routesPanelRender();
     }catch{}
   });
-  es.addEventListener('State.ReadModel.Patch', (e)=>{
+  es.addEventListener('state.read.model.patch', (e)=>{
     try{
       const env = JSON.parse(e.data||'{}');
       const pl = env?.payload || env;
@@ -1208,7 +1200,7 @@ function applyPatchObj(target, patch){ try{
     }catch{}
   });
   // Self‑model live refresh on related events
-  es.addEventListener('Tool.Ran', ()=>{ try{ const cb=document.getElementById('selfLive'); if(cb && cb.checked){ selfView(); } }catch{} });
+  es.addEventListener('tool.ran', ()=>{ try{ const cb=document.getElementById('selfLive'); if(cb && cb.checked){ selfView(); } }catch{} });
   es.addEventListener('SelfModel.Updated', ()=>{ try{ const cb=document.getElementById('selfLive'); if(cb && cb.checked){ selfView(); } }catch{} });
 }
 
@@ -1350,17 +1342,7 @@ async function modelsRowDownload(id){ try{
   if(!r.ok){ showToast('Download request failed ('+r.status+')'); return; }
   showToast('Downloading ' + id + '…');
 }catch{ showToast('Download request failed'); }}
-// Apply specific topic for models read-model
-es.addEventListener('State.Models.Patch', (e)=>{
-  try{
-    const env = JSON.parse(e.data||'{}');
-    const p = env && env.payload ? env.payload : env;
-    const patch = Array.isArray(p?.patch) ? p.patch : [];
-    window.__modelsRM = window.__modelsRM || { items: [], default: null };
-    applyPatchObj(window.__modelsRM, patch);
-    modelsRender();
-  }catch{}
-});
+// Specific models topic removed; rely on state.read.model.patch (id='models')
 // --- Routes panel helpers ---
 function msfmt(n){ try{ const v=Number(n||0); return v.toFixed(0)+' ms'; }catch{ return String(n||0);} }
 function routesPanelRender(){ try{
@@ -1436,12 +1418,12 @@ function extractTestId(obj){
 function waitForMemoryApplied(target, timeoutMs){
   return new Promise(resolve => {
     let settled = false;
-    const done = ok => { if(!settled){ settled=true; clearTimeout(timer); es.removeEventListener('Memory.Applied', onNamed); es.removeEventListener('message', onMsg); resolve(ok); } };
+    const done = ok => { if(!settled){ settled=true; clearTimeout(timer); es.removeEventListener('memory.applied', onNamed); es.removeEventListener('message', onMsg); resolve(ok); } };
     function maybeResolve(dataText){
       try{
         const obj = JSON.parse(dataText || '{}');
         const kind = obj?.kind;
-        if (kind && kind !== 'Memory.Applied') return;
+        if (kind && kind !== 'memory.applied') return;
         const tid = extractTestId(obj);
         if (tid && target && tid !== target) return;
         done(true);
@@ -1449,7 +1431,7 @@ function waitForMemoryApplied(target, timeoutMs){
     }
     const onNamed = (e)=> maybeResolve(e.data);
     const onMsg   = (e)=> maybeResolve(e.data);
-    es.addEventListener('Memory.Applied', onNamed);
+    es.addEventListener('memory.applied', onNamed);
     es.addEventListener('message',       onMsg);
     const timer = setTimeout(()=> done(false), timeoutMs || 3500);
   });
@@ -1630,7 +1612,7 @@ document.addEventListener('DOMContentLoaded', ()=>{ const cb=document.getElement
 // SSE presets
 document.addEventListener('DOMContentLoaded', ()=>{
   const b1=document.getElementById('sseReplay50'); if(b1){ b1.addEventListener('click', ()=>{ startSSE(50, []); showToast('Replaying last 50'); }); }
-  const b2=document.getElementById('sseOnlyModels'); if(b2){ b2.addEventListener('click', ()=>{ startSSE(0, ['Models.']); showToast('Filtering to Models.*'); }); }
+  const b2=document.getElementById('sseOnlyModels'); if(b2){ b2.addEventListener('click', ()=>{ startSSE(0, ['models.']); showToast('Filtering to models.*'); }); }
 });
 
 // --- Persist common inputs ---

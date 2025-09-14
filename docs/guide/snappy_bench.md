@@ -4,8 +4,8 @@ A tiny harness to validate the “Snappy by Default” budgets against a live se
 
 - Binary: `arw-svc` → `snappy_bench` (built with the service)
 - Measures:
-  - `i2f_ms`: connect to `/admin/events`; time to first SSE event (Service.Connected)
-  - `first_partial_ms`: POST `/admin/emit/test`; time to `Service.Test` on SSE
+- `i2f_ms`: connect to `/admin/events`; time to first SSE event (service.connected)
+  - `first_partial_ms`: POST `/admin/emit/test`; time to `service.test` on SSE
   - `cadence_p95_ms`: p95 inter-arrival ms across a burst of test events
 - Budgets (env; defaults match the charter):
   - `ARW_SNAPPY_I2F_P95_MS` (default `50`)
@@ -25,7 +25,7 @@ ARW_BENCH_BASE=http://127.0.0.1:8095 ARW_BENCH_STRICT=1 \
 CI: see `.github/workflows/snappy.yml` (runs on push and PR). Budgets are enforced with strict mode.
 
 Notes
-- `/admin/emit/test` publishes a small `Service.Test` event used by the harness to drive bursts.
+- `/admin/emit/test` publishes a small `service.test` event used by the harness to drive bursts.
 - Admin gate: CI runs with `ARW_DEBUG=1`; in production, pass `Authorization: Bearer`.
 - SSE contract and resume behavior: see `docs/architecture/sse_patch_contract.md`.
 

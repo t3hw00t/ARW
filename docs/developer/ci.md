@@ -75,6 +75,7 @@ just interfaces-lint        # spectral lint OpenAPI/AsyncAPI
 just interfaces-diff        # OpenAPI diff vs origin/main (Docker)
 just docs-deprecations      # generate deprecations doc
 just docs-release-notes     # generate release notes (BASE_REF=... override)
+just check-enums            # verify ModelsDownloadProgress status/code enums match code
 ```
 
 Tips

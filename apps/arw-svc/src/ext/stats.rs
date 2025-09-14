@@ -138,13 +138,8 @@ pub async fn start_route_stats_publisher(bus: arw_events::Bus) {
 
 async fn publish_route_stats(bus: &arw_events::Bus) {
     let cur = route_stats_read_model().await;
-    crate::ext::read_model::emit_patch_dual(
-        bus,
-        "State.RouteStats.Patch",
-        "State.ReadModel.Patch",
-        "route_stats",
-        &cur,
-    );
+    use crate::ext::topics::TOPIC_READMODEL_PATCH;
+    crate::ext::read_model::emit_patch(bus, TOPIC_READMODEL_PATCH, "route_stats", &cur);
 }
 
 static ROUTE_DIRTY: AtomicBool = AtomicBool::new(false);

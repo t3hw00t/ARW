@@ -16,7 +16,7 @@ This document outlines a multi‑layer caching strategy for ARW, blending resear
 
 - Tool/action cache (Bazel‑style)
   - Treat each tool invocation as a deterministic action keyed by a content hash of: tool id/version, canonical input (RFC‑8785 JSON), and an environment signature.
-  - Store outputs in a content‑addressed store (CAS) and map `action_key → digest`. Replay on hit; execute on miss. Emit `Tool.Cache` events and publish lightweight counters.
+  - Store outputs in a content‑addressed store (CAS) and map `action_key → digest`. Replay on hit; execute on miss. Emit `tool.cache` events and publish lightweight counters.
 
 - Semantic response cache (planned)
   - Cache Q→A pairs per project/user keyed by embeddings with a verifier gate. Only reuse when a thresholded match passes a quick check; otherwise seed the model with the cached answer for speculative decoding.
@@ -48,7 +48,7 @@ This document outlines a multi‑layer caching strategy for ARW, blending resear
 
 - Report hit ratio (by layer), P95/P99 latency saved, bytes saved (post‑compression), stampede suppression rate, semantic false‑hit rate, and recompute budget.
 - In ARW:
-  - Tool Action Cache: `/admin/tools/cache_stats`, `Tool.Cache` events, and `/metrics` `arw_tools_cache_*`.
+  - Tool Action Cache: `/admin/tools/cache_stats`, `tool.cache` events, and `/metrics` `arw_tools_cache_*`.
   - Models metrics: `/state/models_metrics` and `/metrics` `arw_models_download_*`.
   - Route stats: `/state/route_stats` and overlays in `/debug` (p95/ewma/hits/errors).
 
@@ -65,4 +65,3 @@ This document outlines a multi‑layer caching strategy for ARW, blending resear
 - Context‑aware keys and SimHash prefilter for semantic caches.
 - RocksDB tier for persistent hot sets (tools/semantic/embeddings) with Zstd dictionaries for small JSON types.
 - Peer/edge CAS for artifacts (opt‑in; IPLD/libp2p style gossip for multi‑host dev).
-

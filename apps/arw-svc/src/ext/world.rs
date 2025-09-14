@@ -224,7 +224,7 @@ pub async fn on_event(bus: &arw_events::Bus, env: &Envelope) {
 
         match env.kind.as_str() {
             // Feedback suggestions -> claims with confidence + provenance
-            "Feedback.Suggested" => {
+            "feedback.suggested" => {
                 let list: Vec<Value> = env
                     .payload
                     .get("suggestions")
@@ -275,7 +275,7 @@ pub async fn on_event(bus: &arw_events::Bus, env: &Envelope) {
                 touched = true;
             }
             // Project file writes -> entities and observed_at edges
-            "Projects.FileWritten" => {
+            "projects.file.written" => {
                 let proj = env
                     .payload
                     .get("proj")
@@ -314,7 +314,7 @@ pub async fn on_event(bus: &arw_events::Bus, env: &Envelope) {
                 touched = true;
             }
             // Model download progress -> entities and budget nodes
-            "Models.DownloadProgress" => {
+            crate::ext::topics::TOPIC_PROGRESS => {
                 if let Some(id) = env.payload.get("id").and_then(|v| v.as_str()) {
                     let status = env
                         .payload
@@ -333,7 +333,7 @@ pub async fn on_event(bus: &arw_events::Bus, env: &Envelope) {
                 }
             }
             // Model lifecycle changes
-            "Models.Changed" => {
+            crate::ext::topics::TOPIC_MODELS_CHANGED => {
                 if let Some(id) = env.payload.get("id").and_then(|v| v.as_str()) {
                     let op = env.payload.get("op").and_then(|v| v.as_str()).unwrap_or("");
                     let ent_id = format!("model:{}", id);
@@ -353,7 +353,7 @@ pub async fn on_event(bus: &arw_events::Bus, env: &Envelope) {
                 }
             }
             // Project lifecycle
-            "Projects.Created" => {
+            "projects.created" => {
                 if let Some(name) = env.payload.get("name").and_then(|v| v.as_str()) {
                     let ent_id = format!("proj:{}", name);
                     let n = upsert_node(g, &ent_id, NodeKind::Entity);
@@ -364,7 +364,7 @@ pub async fn on_event(bus: &arw_events::Bus, env: &Envelope) {
                 }
             }
             // Runtime health -> entity runtime with metrics
-            "Service.Health" | "Probe.Metrics" | "Runtime.Health" => {
+            "service.health" | "probe.metrics" | "runtime.health" => {
                 let ent_id = "runtime";
                 let n = upsert_node(g, ent_id, NodeKind::Entity);
                 n.props.insert("last".into(), env.payload.clone());
@@ -372,7 +372,7 @@ pub async fn on_event(bus: &arw_events::Bus, env: &Envelope) {
                 touched = true;
             }
             // Policy hints applied -> policy node
-            "Actions.HintApplied" => {
+            "actions.hint.applied" => {
                 let pol_id = "policy:hints";
                 let n = upsert_node(g, pol_id, NodeKind::Policy);
                 n.props.insert("last".into(), env.payload.clone());
@@ -442,7 +442,7 @@ pub async fn on_event(bus: &arw_events::Bus, env: &Envelope) {
                 "stale": stale_count,
             });
             crate::ext::corr::ensure_corr(&mut payload);
-            bus.publish("World.Updated", &payload);
+            bus.publish("world.updated", &payload);
         }
     }
 }

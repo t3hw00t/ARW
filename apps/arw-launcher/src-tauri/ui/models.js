@@ -36,22 +36,22 @@ function iconsFor(status, code){
   if (status === 'degraded') return svgIcon('timer','warn');
   if (status === 'canceled') return svgIcon('stop','info');
   switch(String(code||'')){
-    case 'admission_denied':
+    case 'admission-denied':
       return svgIcon('lock','bad') + svgIcon('timer','warn');
-    case 'hard_exhausted':
+    case 'hard-exhausted':
       return svgIcon('timer','bad');
-    case 'size_limit':
-    case 'size_limit_stream':
+    case 'size-limit':
+    case 'size-limit-stream':
       return svgIcon('stop','bad');
-    case 'disk_insufficient':
-    case 'disk_insufficient_stream':
+    case 'disk-insufficient':
+    case 'disk-insufficient-stream':
       return svgIcon('hdd','bad') + svgIcon('warn','warn');
-    case 'checksum_mismatch':
+    case 'checksum-mismatch':
       return svgIcon('hash','bad') + svgIcon('stop','bad');
-    case 'request_failed':
+    case 'request-failed':
       return svgIcon('cloud','bad') + svgIcon('stop','bad');
-    case 'resume_http_status':
-    case 'downstream_http_status':
+    case 'resume-http-status':
+    case 'downstream-http-status':
       return svgIcon('cloud','warn') + svgIcon('warn','warn');
     case 'resync':
       return svgIcon('refresh','warn');
@@ -156,13 +156,13 @@ function bytesHuman(n){ if(!n && n!==0) return '–'; const kb=1024, mb=kb*1024,
 
 function sse() {
   const p = port() || 8090;
-  const es = new EventSource(ARW.base(p) + '/admin/events?prefix=Models.');
+  const es = new EventSource(ARW.base(p) + '/admin/events?prefix=models.');
   const last = {}; // id -> { t: ms, bytes: number }
   es.onmessage = (ev) => {
     try {
       const j = JSON.parse(ev.data);
-      if (j.kind && j.kind.startsWith('Models.')) {
-        if (j.kind === 'Models.DownloadProgress') {
+      if (j.kind && j.kind.startsWith('models.')) {
+        if (j.kind === 'models.download.progress') {
           const pl = j.payload || {};
           document.getElementById('dlprog').textContent = JSON.stringify(pl, null, 2);
           const id = pl.id || '';
@@ -234,7 +234,7 @@ function sse() {
             }
           }catch{}
         }
-        if (j.kind === 'Models.Changed' || j.kind === 'Models.Refreshed') {
+        if (j.kind === 'models.changed' || j.kind === 'models.refreshed') {
           refresh();
         }
       }
@@ -291,4 +291,3 @@ function renderCatalog(arr){
     tb.appendChild(tr);
   });
 }
-

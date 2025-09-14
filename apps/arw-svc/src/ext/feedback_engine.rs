@@ -30,7 +30,7 @@ pub fn start_feedback_engine(state: AppState) {
                 ver().store(1, Ordering::Relaxed);
             }
             state.bus.publish(
-                "Feedback.Suggested",
+                "feedback.suggested",
                 &json!({"version": 1, "suggestions": list}),
             );
         }
@@ -67,8 +67,8 @@ pub fn start_feedback_engine(state: AppState) {
             }
 
             // Heuristic 2: Memory pressure
-            // Use number of Memory.Applied events as proxy (from stats counters)
-            let mem_applied = stats::event_kind_count("Memory.Applied").await;
+            // Use number of memory.applied events as proxy (from stats counters)
+            let mem_applied = stats::event_kind_count("memory.applied").await;
             if mem_applied > 200 {
                 let cur = { *mem_limit().read().await } as u64;
                 if cur < 300 {
@@ -91,7 +91,7 @@ pub fn start_feedback_engine(state: AppState) {
                     let v = ver().fetch_add(1, Ordering::Relaxed) + 1;
                     let _ = persist_snapshot(v, &out).await;
                     state.bus.publish(
-                        "Feedback.Suggested",
+                        "feedback.suggested",
                         &json!({"version": v, "suggestions": out}),
                     );
                     // Also emit a beliefs update for read-model consumers

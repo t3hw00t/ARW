@@ -8,18 +8,16 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
-use futures_util::StreamExt;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use sha2::Digest;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
-use tokio::fs as afs;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
+// (legacy models inline removed) unused imports pruned
 use tokio::sync::RwLock;
 
 use crate::AppState;
+// Use fully-qualified constants to avoid unused import warnings in unreachable code paths
 use arw_core::gating;
 use arw_core::hierarchy as hier;
 use arw_core::orchestrator::Task as OrchTask;
@@ -57,6 +55,7 @@ pub mod state_api;
 pub mod stats;
 pub mod tools_api;
 pub mod tools_exec;
+pub mod topics;
 pub mod ui;
 pub mod world;
 // internal helpers split into modules
@@ -154,6 +153,17 @@ impl IntoResponse for ApiError {
     }
 }
 
+// ---------- shared helpers ----------
+#[allow(clippy::result_large_err)]
+pub(crate) fn require_service<T: Send + Sync + 'static>(
+    state: &crate::AppState,
+) -> Result<std::sync::Arc<T>, ApiError> {
+    state
+        .resources
+        .get::<T>()
+        .ok_or_else(|| ApiError::internal(&format!("{} missing", std::any::type_name::<T>())))
+}
+
 // ---------- persistence bootstrap ----------
 #[derive(serde::Deserialize)]
 struct OrchFile {
@@ -241,10 +251,7 @@ pub async fn load_persisted() {
         }
     }
 
-    // Migrate legacy model files into CAS layout (best-effort, non-blocking)
-    tokio::spawn(async move {
-        crate::resources::models_service::ModelsService::migrate_legacy_to_cas().await;
-    });
+    // legacy CAS migration removed
 }
 
 pub(crate) async fn persist_orch() {
@@ -460,7 +467,7 @@ pub fn extra_routes() -> Router<AppState> {
                         }
                     });
                     crate::ext::corr::ensure_corr(&mut payload);
-                    state.bus.publish("Experiment.Activated", &payload);
+                    state.bus.publish("experiment.activated", &payload);
                     return ok(json!({"ok": true}));
                 }
                 ok(json!({"ok": false, "error": "not_found"}))
@@ -516,6 +523,10 @@ pub fn extra_routes() -> Router<AppState> {
             "/models/download/cancel",
             post(models_api::models_download_cancel),
         )
+        .route(
+            "/models/blob/:sha256",
+            get(models_api::models_blob_get),
+        )
         .route("/models/jobs", get(models_api::models_jobs))
         .route(
             "/models/concurrency",
@@ -526,6 +537,7 @@ pub fn extra_routes() -> Router<AppState> {
             post(models_api::models_concurrency_set),
         )
         .route("/models/cas_gc", post(models_api::models_cas_gc))
+        // legacy models migrate endpoint removed
         // tools
         .route("/tools", get(tools_api::list_tools))
         .route("/tools/run", post(tools_api::run_tool_endpoint))
@@ -867,7 +879,7 @@ async fn governor_set(
     }
     state
         .bus
-        .publish("Governor.Changed", &json!({"profile": req.name.clone()}));
+        .publish("governor.changed", &json!({"profile": req.name.clone()}));
     persist_orch().await;
     ok(json!({}))
 }
@@ -1023,141 +1035,7 @@ async fn governor_hints_set(
 
 // moved to memory module
 
-async fn list_models() -> impl IntoResponse {
-    let v = models().read().await.clone();
-    ok::<Vec<Value>>(v)
-}
-async fn refresh_models(State(state): State<AppState>) -> impl IntoResponse {
-    let new = default_models();
-    {
-        let mut m = models().write().await;
-        *m = new.clone();
-    }
-    let _ = io::save_json_file_async(&paths::models_path(), &Value::Array(new.clone())).await;
-    state
-        .bus
-        .publish("Models.Refreshed", &json!({"count": new.len()}));
-    ok::<Vec<Value>>(new)
-}
-async fn models_save() -> impl IntoResponse {
-    let v = models().read().await.clone();
-    match io::save_json_file_async(&paths::models_path(), &Value::Array(v)).await {
-        Ok(_) => ok(json!({})).into_response(),
-        Err(e) => ApiError::internal(&e.to_string()).into_response(),
-    }
-}
-async fn models_load() -> impl IntoResponse {
-    match io::load_json_file_async(&paths::models_path())
-        .await
-        .and_then(|v| v.as_array().cloned())
-    {
-        Some(arr) => {
-            {
-                let mut m = models().write().await;
-                *m = arr.clone();
-            }
-            ok::<Vec<Value>>(arr).into_response()
-        }
-        None => ApiError::not_found("no models.json").into_response(),
-    }
-}
-
-#[derive(Deserialize)]
-pub(crate) struct ModelId {
-    id: String,
-    #[serde(default)]
-    provider: Option<String>,
-}
-async fn models_add(State(state): State<AppState>, Json(req): Json<ModelId>) -> impl IntoResponse {
-    if let Some(svc) = state
-        .resources
-        .get::<crate::resources::models_service::ModelsService>()
-    {
-        svc.add(&state, req.id, req.provider).await;
-        return ok(json!({})).into_response();
-    }
-    let mut v = models().write().await;
-    if !v
-        .iter()
-        .any(|m| m.get("id").and_then(|s| s.as_str()) == Some(&req.id))
-    {
-        v.push(json!({"id": req.id, "provider": req.provider.unwrap_or_else(|| "local".to_string()), "status":"available"}));
-        state.bus.publish(
-            "Models.Changed",
-            &json!({"op":"add","id": v.last().and_then(|m| m.get("id")).cloned()}),
-        );
-    }
-    io::audit_event("models.add", &json!({"id": req.id})).await;
-    ok(json!({})).into_response()
-}
-async fn models_delete(
-    State(state): State<AppState>,
-    Json(req): Json<ModelId>,
-) -> impl IntoResponse {
-    if let Some(svc) = state
-        .resources
-        .get::<crate::resources::models_service::ModelsService>()
-    {
-        svc.delete(&state, req.id).await;
-        return ok(json!({})).into_response();
-    }
-    let mut v = models().write().await;
-    let before = v.len();
-    v.retain(|m| m.get("id").and_then(|s| s.as_str()) != Some(&req.id));
-    if v.len() != before {
-        state
-            .bus
-            .publish("Models.Changed", &json!({"op":"delete","id": req.id}));
-    }
-    io::audit_event("models.delete", &json!({"id": req.id})).await;
-    ok(json!({})).into_response()
-}
-async fn models_default_get() -> impl IntoResponse {
-    // No state here; fall back to ext default
-    let id = { default_model().read().await.clone() };
-    ok(json!({"default": id }))
-}
-async fn models_default_set(
-    State(state): State<AppState>,
-    Json(req): Json<ModelId>,
-) -> impl IntoResponse {
-    if let Some(svc) = state
-        .resources
-        .get::<crate::resources::models_service::ModelsService>()
-    {
-        let _ = svc.default_set(&state, req.id).await;
-        return ok(json!({})).into_response();
-    }
-    {
-        let mut d = default_model().write().await;
-        *d = req.id.clone();
-    }
-    state
-        .bus
-        .publish("Models.Changed", &json!({"op":"default","id": req.id}));
-    let _ = io::save_json_file_async(
-        &paths::models_path(),
-        &Value::Array(models().read().await.clone()),
-    )
-    .await;
-    persist_orch().await;
-    io::audit_event("models.default", &json!({"id": req.id})).await;
-    ok(json!({})).into_response()
-}
-
-#[derive(Deserialize)]
-pub(crate) struct DownloadReq {
-    pub(crate) id: String,
-    pub(crate) url: String,
-    #[serde(default)]
-    pub(crate) provider: Option<String>,
-    #[serde(default)]
-    pub(crate) sha256: Option<String>,
-}
-async fn models_download(
-    State(state): State<AppState>,
-    Json(req): Json<DownloadReq>,
-) -> impl IntoResponse {
+/*
     // Delegate to ModelsService; if unavailable, return 501 to avoid unsafe fallback.
     if let Some(svc) = state
         .resources
@@ -1201,7 +1079,7 @@ async fn models_download(
         if already_in_progress {
             let mut p = json!({"id": req.id, "status":"already-in-progress"});
             crate::ext::corr::ensure_corr(&mut p);
-            state.bus.publish("Models.DownloadProgress", &p);
+            state.bus.publish(crate::ext::topics::TOPIC_PROGRESS, &p);
             return ok(json!({})).into_response();
         }
         // Validate URL scheme (accept http/https only)
@@ -1211,7 +1089,7 @@ async fn models_download(
         {
             let mut p = json!({"id": req.id, "url": req.url});
             crate::ext::corr::ensure_corr(&mut p);
-            state.bus.publish("Models.Download", &p);
+            // legacy start event removed; kept for historical context (disabled block)
         }
         io::audit_event("models.download", &json!({"id": req.id})).await;
         let id = req.id.clone();
@@ -1229,7 +1107,7 @@ async fn models_download(
             if let Err(e) = afs::create_dir_all(&target_dir).await {
                 let mut p = json!({"id": id, "error": format!("mkdir failed: {}", e)});
                 crate::ext::corr::ensure_corr(&mut p);
-                sp.bus.publish("Models.DownloadProgress", &p);
+                sp.bus.publish(crate::ext::topics::TOPIC_PROGRESS, &p);
                 return;
             }
             let client = reqwest::Client::builder()
@@ -1256,7 +1134,7 @@ async fn models_download(
                     {
                         let mut p = json!({"id": id, "status":"resumed", "offset": resume_from});
                         crate::ext::corr::ensure_corr(&mut p);
-                        sp.bus.publish("Models.DownloadProgress", &p);
+                        sp.bus.publish(crate::ext::topics::TOPIC_PROGRESS, &p);
                         resume_from + total_rem
                     } else {
                         if resume_from > 0 {
@@ -1274,7 +1152,7 @@ async fn models_download(
                                 let mut p =
                                     json!({"id": id, "error": format!("open failed: {}", e)});
                                 crate::ext::corr::ensure_corr(&mut p);
-                                sp.bus.publish("Models.DownloadProgress", &p);
+                                sp.bus.publish(crate::ext::topics::TOPIC_PROGRESS, &p);
                                 return;
                             }
                         }
@@ -1285,7 +1163,7 @@ async fn models_download(
                                 let mut p =
                                     json!({"id": id, "error": format!("create failed: {}", e)});
                                 crate::ext::corr::ensure_corr(&mut p);
-                                sp.bus.publish("Models.DownloadProgress", &p);
+                                sp.bus.publish(crate::ext::topics::TOPIC_PROGRESS, &p);
                                 return;
                             }
                         }
@@ -1300,7 +1178,7 @@ async fn models_download(
                                     let _ = afs::remove_file(&tmp).await;
                                     let mut p = json!({"id": id, "status":"canceled"});
                                     crate::ext::corr::ensure_corr(&mut p);
-                                    sp.bus.publish("Models.DownloadProgress", &p);
+                                    sp.bus.publish(crate::ext::topics::TOPIC_PROGRESS, &p);
                                     clear_cancel(&id).await;
                                     return;
                                 }
@@ -1308,7 +1186,7 @@ async fn models_download(
                                     let mut p =
                                         json!({"id": id, "error": format!("write failed: {}", e)});
                                     crate::ext::corr::ensure_corr(&mut p);
-                                    sp.bus.publish("Models.DownloadProgress", &p);
+                                    sp.bus.publish(crate::ext::topics::TOPIC_PROGRESS, &p);
                                     return;
                                 }
                                 downloaded += bytes.len() as u64;
@@ -1317,14 +1195,14 @@ async fn models_download(
                                         (((resume_from + downloaded) * 100) / total_all).min(100);
                                     let mut p = json!({"id": id, "progress": pct, "downloaded": resume_from + downloaded, "total": total_all});
                                     crate::ext::corr::ensure_corr(&mut p);
-                                    sp.bus.publish("Models.DownloadProgress", &p);
+                                    sp.bus.publish(crate::ext::topics::TOPIC_PROGRESS, &p);
                                 }
                             }
                             Err(e) => {
                                 let mut p =
                                     json!({"id": id, "error": format!("read failed: {}", e)});
                                 crate::ext::corr::ensure_corr(&mut p);
-                                sp.bus.publish("Models.DownloadProgress", &p);
+                                sp.bus.publish(crate::ext::topics::TOPIC_PROGRESS, &p);
                                 return;
                             }
                         }
@@ -1333,13 +1211,13 @@ async fn models_download(
                     if let Err(e) = file.flush().await {
                         let mut p = json!({"id": id, "error": format!("flush failed: {}", e)});
                         crate::ext::corr::ensure_corr(&mut p);
-                        sp.bus.publish("Models.DownloadProgress", &p);
+                        sp.bus.publish(crate::ext::topics::TOPIC_PROGRESS, &p);
                         return;
                     }
                     if let Err(e) = afs::rename(&tmp, &target).await {
                         let mut p = json!({"id": id, "error": format!("finalize failed: {}", e)});
                         crate::ext::corr::ensure_corr(&mut p);
-                        sp.bus.publish("Models.DownloadProgress", &p);
+                        sp.bus.publish(crate::ext::topics::TOPIC_PROGRESS, &p);
                         return;
                     }
                     // checksum verification (required when provided by UI; service path requires it)
@@ -1368,13 +1246,13 @@ async fn models_download(
                             let _ = afs::remove_file(&target).await;
                             let mut p = json!({"id": id, "error": "checksum mismatch", "expected": exp, "actual": actual});
                             crate::ext::corr::ensure_corr(&mut p);
-                            sp.bus.publish("Models.DownloadProgress", &p);
+                            sp.bus.publish(crate::ext::topics::TOPIC_PROGRESS, &p);
                             return;
                         }
                     }
                     let mut p = json!({"id": id, "status":"complete", "file": safe_name, "provider": provider});
                     crate::ext::corr::ensure_corr(&mut p);
-                    sp.bus.publish("Models.DownloadProgress", &p);
+                    sp.bus.publish(crate::ext::topics::TOPIC_PROGRESS, &p);
                     {
                         let mut v = models().write().await;
                         if let Some(m) = v
@@ -1390,58 +1268,21 @@ async fn models_download(
                     )
                     .await;
                     sp.bus
-                        .publish("Models.Changed", &json!({"op":"downloaded","id": id}));
+                        .publish(crate::ext::topics::TOPIC_MODELS_CHANGED, &json!({"op":"downloaded","id": id}));
                 }
                 Err(e) => {
                     let mut p = json!({"id": id, "error": format!("request failed: {}", e)});
                     crate::ext::corr::ensure_corr(&mut p);
-                    sp.bus.publish("Models.DownloadProgress", &p);
+                    sp.bus.publish(crate::ext::topics::TOPIC_PROGRESS, &p);
                 }
             }
         });
         ok(json!({})).into_response()
     }
 }
+*/
 
-// ----- download cancel helpers -----
-use std::collections::HashSet;
-static DL_CANCEL: OnceLock<RwLock<HashSet<String>>> = OnceLock::new();
-fn cancel_cell() -> &'static RwLock<HashSet<String>> {
-    DL_CANCEL.get_or_init(|| RwLock::new(HashSet::new()))
-}
-async fn is_canceled(id: &str) -> bool {
-    cancel_cell().read().await.contains(id)
-}
-async fn clear_cancel(id: &str) {
-    cancel_cell().write().await.remove(id);
-}
-async fn set_cancel(id: &str) {
-    cancel_cell().write().await.insert(id.to_string());
-}
-
-#[derive(Deserialize)]
-pub(crate) struct CancelReq {
-    id: String,
-}
-async fn models_download_cancel(
-    State(state): State<AppState>,
-    Json(req): Json<CancelReq>,
-) -> impl IntoResponse {
-    // Delegate to ModelsService when available (consolidated path)
-    if let Some(svc) = state
-        .resources
-        .get::<crate::resources::models_service::ModelsService>()
-    {
-        svc.cancel_download(&state, req.id).await;
-        return ok(json!({})).into_response();
-    }
-    set_cancel(&req.id).await;
-    state.bus.publish(
-        "Models.DownloadProgress",
-        &json!({"id": req.id, "status":"cancel-requested"}),
-    );
-    ok(json!({})).into_response()
-}
+// removed legacy inline download cancel helpers (consolidated via models_api)
 
 // ---- Tools ----
 async fn list_tools() -> impl IntoResponse {
@@ -1473,11 +1314,11 @@ async fn run_tool_endpoint(
                 "age_secs": age,
             });
             crate::ext::corr::ensure_corr(&mut cache_evt);
-            state.bus.publish("Tool.Cache", &cache_evt);
+            state.bus.publish("tool.cache", &cache_evt);
 
             let mut payload = json!({"id": req.id, "output": out});
             crate::ext::corr::ensure_corr(&mut payload);
-            state.bus.publish("Tool.Ran", &payload);
+            state.bus.publish("tool.ran", &payload);
             Json(payload.get("output").cloned().unwrap_or_else(|| json!({}))).into_response()
         }
         Err(e) => ApiError::bad_request(&e).into_response(),
@@ -1597,7 +1438,7 @@ async fn analyze_feedback() {
     }
 
     // Heuristic 3: Many memory applications -> suggest increasing memory limit modestly
-    let mem_applied = stats::event_kind_count("Memory.Applied").await;
+    let mem_applied = stats::event_kind_count("memory.applied").await;
     if mem_applied > 200 {
         let cur = { *mem_limit().read().await } as u64;
         if cur < 300 {
@@ -1655,7 +1496,7 @@ async fn feedback_signal_post(
     }
     state
         .bus
-        .publish("Feedback.Signal", &json!({"signal": sig}));
+        .publish("feedback.signal", &json!({"signal": sig}));
     analyze_feedback().await;
     let st = feedback_cell().read().await.clone();
     persist_feedback().await;
@@ -1734,7 +1575,7 @@ async fn feedback_apply_post(
         };
         if applied_ok {
             state.bus.publish(
-                "Feedback.Applied",
+                "feedback.applied",
                 &json!({"id": sug.id, "action": sug.action, "params": sug.params}),
             );
             // Also emit a generic Actions event for episodes
@@ -1789,7 +1630,7 @@ async fn apply_suggestion(s: &Suggestion, state: &AppState) -> bool {
                 *g = name.to_string();
                 state
                     .bus
-                    .publish("Governor.Changed", &json!({"profile": name}));
+                    .publish("governor.changed", &json!({"profile": name}));
                 true
             } else {
                 false
@@ -2152,7 +1993,7 @@ function allow(kind){
   const o=document.getElementById('fModels').checked;
   if(kind.startsWith('Service.')) return s;
   if(kind.startsWith('Memory.'))  return m;
-  if(kind.startsWith('Models.'))  return o;
+  if(kind.startsWith('models.'))  return o;
   return true;
 }
 function pushEvt(kind, data){
@@ -2165,12 +2006,12 @@ function pushEvt(kind, data){
   while (log.childElementCount > 200) log.removeChild(log.lastChild);
 }
 es.onmessage = (e) => pushEvt('message', e.data);
-['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Models.DownloadProgress','Feedback.Suggested'].forEach(k => {
+['service.connected','service.health','service.test','memory.applied','models.refreshed','tool.ran','models.download.progress','feedback.suggested'].forEach(k => {
   es.addEventListener(k, (e)=>pushEvt(k, e.data));
 });
 
 // reflect download progress in Models box
-es.addEventListener('Models.DownloadProgress', (e)=>{
+es.addEventListener('models.download.progress', (e)=>{
   try{ document.getElementById('modelsOut').textContent = JSON.stringify(JSON.parse(e.data), null, 2); }catch{}
 });
 
@@ -2188,7 +2029,7 @@ function renderInsights(){
   }
   el.innerHTML = lines.join('');
 }
-['Service.Connected','Service.Health','Service.Test','Memory.Applied','Models.Refreshed','Tool.Ran','Chat.Message','Governor.Changed'].forEach(k => {
+['service.connected','service.health','service.test','memory.applied','models.refreshed','tool.ran','chat.message','governor.changed'].forEach(k => {
   es.addEventListener(k, (e)=>{ agg.total++; agg.kinds[k]=(agg.kinds[k]||0)+1; renderInsights(); });
 });
 
@@ -2215,12 +2056,12 @@ function extractTestId(obj){
 function waitForMemoryApplied(target, timeoutMs){
   return new Promise(resolve => {
     let settled = false;
-    const done = ok => { if(!settled){ settled=true; clearTimeout(timer); es.removeEventListener('Memory.Applied', onNamed); es.removeEventListener('message', onMsg); resolve(ok); } };
+const done = ok => { if(!settled){ settled=true; clearTimeout(timer); es.removeEventListener('memory.applied', onNamed); es.removeEventListener('message', onMsg); resolve(ok); } };
     function maybeResolve(dataText){
       try{
         const obj = JSON.parse(dataText || '{}');
         const kind = obj?.kind;
-        if (kind && kind !== 'Memory.Applied') return;
+        if (kind && kind !== 'memory.applied') return;
         const tid = extractTestId(obj);
         if (tid && target && tid !== target) return;
         done(true);
@@ -2228,7 +2069,7 @@ function waitForMemoryApplied(target, timeoutMs){
     }
     const onNamed = (e)=> maybeResolve(e.data);
     const onMsg   = (e)=> maybeResolve(e.data);
-    es.addEventListener('Memory.Applied', onNamed);
+    es.addEventListener('memory.applied', onNamed);
     es.addEventListener('message',       onMsg);
     const timer = setTimeout(()=> done(false), timeoutMs || 3500);
   });
@@ -2249,7 +2090,7 @@ async function runSelfTests(){
     const waiter = waitForMemoryApplied(target, 3500);
     await jpost('/memory/apply',{kind:'ephemeral',value:{ test:'selftest', test_id: target, t: Date.now() }});
     const ok = await waiter;
-    if(ok){ pass('SSE Memory.Applied'); } else { fail('SSE Memory.Applied','timeout'); }
+    if(ok){ pass('SSE memory.applied'); } else { fail('SSE memory.applied','timeout'); }
   } catch(e){ fail('SSE Memory.Applied',e); }
 
   logT('Done.');
@@ -2289,7 +2130,7 @@ async function fbFetchSuggestions(){
 async function fbApplySingle(id){ await req('POST','/feedback/apply',{id},'fbOut','rt-orch'); }
 
 // Refresh suggestions when engine publishes updates
-es.addEventListener('Feedback.Suggested', ()=>{ fbFetchSuggestions(); fbVersions(); });
+es.addEventListener('feedback.suggested', ()=>{ fbFetchSuggestions(); fbVersions(); });
 // Initial fetch
 fbFetchSuggestions();
 fbVersions();

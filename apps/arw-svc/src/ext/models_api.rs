@@ -3,6 +3,7 @@ use crate::AppState;
 use arw_core::gating;
 use arw_macros::{arw_admin, arw_gate};
 use axum::extract::{Path, Query};
+use axum::http::StatusCode;
 use axum::http::{HeaderMap, HeaderValue};
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
@@ -67,12 +68,9 @@ pub(crate) struct ModelsSummary {
 #[arw_gate("models:summary")]
 pub(crate) async fn models_summary(State(state): State<AppState>) -> impl IntoResponse {
     use tokio::join;
-    let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "ModelsService missing",
-        )
-            .into_response();
+    let svc = match super::require_service::<ModelsService>(&state) {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
     };
     let models_fut = async {
         let arr = super::models().read().await.clone();
@@ -136,11 +134,7 @@ pub(crate) async fn models_summary(State(state): State<AppState>) -> impl IntoRe
         }
     };
     let metrics_fut = async {
-        let base = crate::resources::models_service::models_metrics_value();
-        let ewma =
-            crate::ext::io::load_json_file_async(&crate::ext::paths::downloads_metrics_path())
-                .await
-                .and_then(|v| v.get("ewma_mbps").and_then(|x| x.as_f64()));
+        let base = svc.downloads_metrics().await;
         ModelsMetrics {
             started: base
                 .get("started")
@@ -178,7 +172,7 @@ pub(crate) async fn models_summary(State(state): State<AppState>) -> impl IntoRe
                 .get("bytes_total")
                 .and_then(|x| x.as_u64())
                 .unwrap_or_default(),
-            ewma_mbps: ewma,
+            ewma_mbps: base.get("ewma_mbps").and_then(|x| x.as_f64()),
         }
     };
     let (items, default, concurrency, metrics) =
@@ -195,12 +189,9 @@ pub(crate) async fn models_summary(State(state): State<AppState>) -> impl IntoRe
 #[arw_admin(method = "GET", path = "/admin/models", summary = "List models")]
 #[arw_gate("models:list")]
 pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
-    let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "ModelsService missing",
-        )
-            .into_response();
+    let svc = match super::require_service::<ModelsService>(&state) {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
     };
     let list: Vec<serde_json::Value> = svc.list().await;
     Json::<Vec<serde_json::Value>>(list).into_response()
@@ -212,12 +203,9 @@ pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoRespo
 )]
 #[arw_gate("models:refresh")]
 pub(crate) async fn refresh_models(State(state): State<AppState>) -> impl IntoResponse {
-    let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "ModelsService missing",
-        )
-            .into_response();
+    let svc = match super::require_service::<ModelsService>(&state) {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
     };
     let list: Vec<serde_json::Value> = svc.refresh(&state).await;
     Json::<Vec<serde_json::Value>>(list).into_response()
@@ -228,14 +216,12 @@ pub(crate) async fn refresh_models(State(state): State<AppState>) -> impl IntoRe
     summary = "Save models to disk"
 )]
 #[arw_gate("models:save")]
-pub(crate) async fn models_save() -> impl IntoResponse {
-    // Write via ext::io directly (no service needed)
-    match super::super::ext::io::save_json_file_async(
-        &super::super::ext::paths::models_path(),
-        &serde_json::Value::Array(super::super::ext::models().read().await.clone()),
-    )
-    .await
-    {
+pub(crate) async fn models_save(State(state): State<AppState>) -> impl IntoResponse {
+    let svc = match super::require_service::<ModelsService>(&state) {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
+    };
+    match svc.save().await {
         Ok(_) => Json(serde_json::json!({"ok": true})).into_response(),
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -250,13 +236,14 @@ pub(crate) async fn models_save() -> impl IntoResponse {
     summary = "Load models from disk"
 )]
 #[arw_gate("models:load")]
-pub(crate) async fn models_load() -> impl IntoResponse {
-    match super::super::ext::io::load_json_file_async(&super::super::ext::paths::models_path())
-        .await
-        .and_then(|v| v.as_array().cloned())
-    {
-        Some(arr) => Json::<Vec<serde_json::Value>>(arr).into_response(),
-        None => (axum::http::StatusCode::NOT_FOUND, "no models.json").into_response(),
+pub(crate) async fn models_load(State(state): State<AppState>) -> impl IntoResponse {
+    let svc = match super::require_service::<ModelsService>(&state) {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
+    };
+    match svc.load().await {
+        Ok(arr) => Json::<Vec<serde_json::Value>>(arr).into_response(),
+        Err(_) => (axum::http::StatusCode::NOT_FOUND, "no models.json").into_response(),
     }
 }
 
@@ -276,12 +263,9 @@ pub(crate) async fn models_add(
     State(state): State<AppState>,
     Json(req): Json<ModelId>,
 ) -> impl IntoResponse {
-    let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "ModelsService missing",
-        )
-            .into_response();
+    let svc = match super::require_service::<ModelsService>(&state) {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
     };
     svc.add(&state, req.id, req.provider).await;
     Json(serde_json::json!({"ok": true})).into_response()
@@ -296,12 +280,9 @@ pub(crate) async fn models_delete(
     State(state): State<AppState>,
     Json(req): Json<ModelId>,
 ) -> impl IntoResponse {
-    let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "ModelsService missing",
-        )
-            .into_response();
+    let svc = match super::require_service::<ModelsService>(&state) {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
     };
     svc.delete(&state, req.id).await;
     Json(serde_json::json!({"ok": true})).into_response()
@@ -313,12 +294,9 @@ pub(crate) async fn models_delete(
 )]
 #[arw_gate("models:default:get")]
 pub(crate) async fn models_default_get(State(state): State<AppState>) -> impl IntoResponse {
-    let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "ModelsService missing",
-        )
-            .into_response();
+    let svc = match super::require_service::<ModelsService>(&state) {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
     };
     let id = svc.default_get().await;
     Json(serde_json::json!({"default": id})).into_response()
@@ -333,12 +311,9 @@ pub(crate) async fn models_default_set(
     State(state): State<AppState>,
     Json(req): Json<ModelId>,
 ) -> impl IntoResponse {
-    let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "ModelsService missing",
-        )
-            .into_response();
+    let svc = match super::require_service::<ModelsService>(&state) {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
     };
     let ok = svc.default_set(&state, req.id).await.is_ok();
     Json(serde_json::json!({"ok": ok})).into_response()
@@ -379,12 +354,9 @@ pub(crate) async fn models_download(
     if !gating::allowed("io:egress:models.download") {
         return super::ApiError::forbidden("gated:egress").into_response();
     }
-    let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "ModelsService missing",
-        )
-            .into_response();
+    let svc = match super::require_service::<ModelsService>(&state) {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
     };
     let budget_override =
         req.budget.map(
@@ -425,12 +397,9 @@ pub(crate) async fn models_download_cancel(
     State(state): State<AppState>,
     Json(req): Json<CancelReq>,
 ) -> impl IntoResponse {
-    let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "ModelsService missing",
-        )
-            .into_response();
+    let svc = match super::require_service::<ModelsService>(&state) {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
     };
     svc.cancel_download(&state, req.id).await;
     super::ok(serde_json::json!({})).into_response()
@@ -461,6 +430,8 @@ pub(crate) async fn models_cas_gc(
     ModelsService::cas_gc_once(&state.bus, req.ttl_days).await;
     super::ok(serde_json::json!({"started": true, "ttl_days": req.ttl_days})).into_response()
 }
+
+// (legacy models migrate endpoint removed)
 
 // Public read-model: summarize installed model hashes for clustering/ads.
 #[derive(Deserialize)]
@@ -588,6 +559,19 @@ pub(crate) async fn models_hashes_get(
     summary = "Serve model blob by sha256 (egress gated)"
 )]
 #[arw_gate("io:egress:models.peer")]
+#[utoipa::path(
+    get,
+    path = "/models/blob/{sha256}",
+    tag = "Public",
+    operation_id = "models_blob_get_doc",
+    params(("sha256" = String, Path, description = "Hex lowercase SHA-256 (64 chars)")),
+    responses(
+        (status=200, description="CAS blob bytes (ETag/immutable cache)", body=String),
+        (status=304, description="Not Modified (If-None-Match)"),
+        (status=400, description="Invalid sha256", body = arw_protocol::ProblemDetails),
+        (status=404, description="Not found")
+    )
+)]
 pub(crate) async fn models_blob_get(
     headers_in: HeaderMap,
     Path(sha256): Path<String>,
@@ -616,10 +600,10 @@ pub(crate) async fn models_blob_get(
         return axum::http::StatusCode::NOT_FOUND.into_response();
     };
     match tokio::fs::File::open(&path).await {
-        Ok(file) => {
+        Ok(mut file) => {
+            use tokio::io::{AsyncReadExt, AsyncSeekExt};
             let meta = tokio::fs::metadata(&path).await.ok();
-            let stream = tokio_util::io::ReaderStream::new(file);
-            let body = axum::body::Body::from_stream(stream);
+            let total_len = meta.as_ref().map(|m| m.len()).unwrap_or(0);
             let mut headers = HeaderMap::new();
             headers.insert(
                 axum::http::header::CONTENT_TYPE,
@@ -635,12 +619,7 @@ pub(crate) async fn models_blob_get(
                 axum::http::header::CACHE_CONTROL,
                 HeaderValue::from_static("public, max-age=31536000, immutable"),
             );
-            if let Some(m) = meta {
-                headers.insert(
-                    axum::http::header::CONTENT_LENGTH,
-                    HeaderValue::from_str(&m.len().to_string())
-                        .unwrap_or(HeaderValue::from_static("0")),
-                );
+            if let Some(m) = meta.as_ref() {
                 // Last-Modified from file mtime (best-effort)
                 if let Ok(modified) = m.modified() {
                     let dt = chrono::DateTime::<chrono::Utc>::from(modified).to_rfc2822();
@@ -657,12 +636,90 @@ pub(crate) async fn models_blob_get(
                     .map(|s| s.contains(&etag_val))
                     .unwrap_or(false)
                 {
-                    return (axum::http::StatusCode::NOT_MODIFIED, headers).into_response();
+                    return (StatusCode::NOT_MODIFIED, headers).into_response();
                 }
             }
+
+            // Range support: bytes=start-end | bytes=start- | bytes=-suffix
+            let range_hdr = headers_in
+                .get(axum::http::header::RANGE)
+                .and_then(|v| v.to_str().ok())
+                .unwrap_or("")
+                .trim()
+                .to_string();
+            if !range_hdr.is_empty() && total_len > 0 {
+                let prefix = "bytes=";
+                if let Some(spec) = range_hdr.strip_prefix(prefix) {
+                    let mut start: Option<u64> = None;
+                    let mut end: Option<u64> = None;
+                    if let Some(hy) = spec.find('-') {
+                        let (a, b) = spec.split_at(hy);
+                        let b = &b[1..];
+                        if a.is_empty() {
+                            // suffix: bytes=-N
+                            if let Ok(n) = b.parse::<u64>() {
+                                let n = n.min(total_len);
+                                start = Some(total_len.saturating_sub(n));
+                                end = Some(total_len.saturating_sub(1));
+                            }
+                        } else if b.is_empty() {
+                            // bytes=START-
+                            if let Ok(sv) = a.parse::<u64>() {
+                                start = Some(sv);
+                                end = Some(total_len.saturating_sub(1));
+                            }
+                        } else {
+                            // bytes=START-END
+                            if let (Ok(sv), Ok(ev)) = (a.parse::<u64>(), b.parse::<u64>()) {
+                                start = Some(sv);
+                                end = Some(ev);
+                            }
+                        }
+                    }
+                    if let (Some(s), Some(e)) = (start, end) {
+                        if s <= e && e < total_len {
+                            // valid range
+                            let len = e - s + 1;
+                            let _ = file.seek(std::io::SeekFrom::Start(s)).await;
+                            let reader = file.take(len);
+                            let stream = tokio_util::io::ReaderStream::new(reader);
+                            let body = axum::body::Body::from_stream(stream);
+                            headers.insert(
+                                axum::http::header::CONTENT_RANGE,
+                                HeaderValue::from_str(&format!("bytes {}-{}/{}", s, e, total_len))
+                                    .unwrap_or(HeaderValue::from_static("")),
+                            );
+                            headers.insert(
+                                axum::http::header::CONTENT_LENGTH,
+                                HeaderValue::from_str(&len.to_string())
+                                    .unwrap_or(HeaderValue::from_static("0")),
+                            );
+                            return (StatusCode::PARTIAL_CONTENT, headers, body).into_response();
+                        } else {
+                            // 416 Range Not Satisfiable
+                            headers.insert(
+                                axum::http::header::CONTENT_RANGE,
+                                HeaderValue::from_str(&format!("bytes */{}", total_len))
+                                    .unwrap_or(HeaderValue::from_static("")),
+                            );
+                            return (StatusCode::RANGE_NOT_SATISFIABLE, headers).into_response();
+                        }
+                    }
+                }
+            }
+            // Full body
+            if let Some(m) = meta.as_ref() {
+                headers.insert(
+                    axum::http::header::CONTENT_LENGTH,
+                    HeaderValue::from_str(&m.len().to_string())
+                        .unwrap_or(HeaderValue::from_static("0")),
+                );
+            }
+            let stream = tokio_util::io::ReaderStream::new(file);
+            let body = axum::body::Body::from_stream(stream);
             (headers, body).into_response()
         }
-        Err(_) => axum::http::StatusCode::NOT_FOUND.into_response(),
+        Err(_) => StatusCode::NOT_FOUND.into_response(),
     }
 }
 
@@ -674,20 +731,33 @@ pub(crate) async fn models_blob_get(
 )]
 #[arw_gate("state:downloads_metrics:get")]
 pub(crate) async fn models_downloads_metrics(State(state): State<AppState>) -> impl IntoResponse {
-    let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "ModelsService missing",
-        )
-            .into_response();
+    let svc = match super::require_service::<ModelsService>(&state) {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
     };
     let v = svc.downloads_metrics().await;
     Json(v).into_response()
 }
 
+/// Get current models CAS quota and usage snapshot
+#[arw_admin(
+    method = "GET",
+    path = "/admin/models/quota",
+    summary = "Get models CAS quota and usage"
+)]
+#[arw_gate("models:quota:get")]
+pub(crate) async fn models_quota_get(State(state): State<AppState>) -> impl IntoResponse {
+    let svc = match super::require_service::<ModelsService>(&state) {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
+    };
+    let v = svc.quota_status().await;
+    Json(v).into_response()
+}
+
 #[cfg(test)]
 mod tests {
-    use super::models_downloads_metrics;
+    use super::{models_downloads_metrics, models_quota_get};
     use crate::AppState;
     use axum::{http::Request, routing::get, Router};
     use http_body_util::BodyExt; // for collecting body
@@ -737,6 +807,37 @@ mod tests {
             assert!(v.get(k).is_some(), "missing key: {}", k);
         }
     }
+
+    #[tokio::test]
+    async fn http_models_quota_shape() {
+        // Minimal app wiring for the quota endpoint
+        let state = {
+            let st = AppState::default();
+            st.resources.insert(std::sync::Arc::new(
+                crate::resources::models_service::ModelsService::new(),
+            ));
+            st
+        };
+        let app = Router::new()
+            .route("/admin/models/quota", get(models_quota_get))
+            .with_state(state);
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri("/admin/models/quota")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(resp.status().is_success());
+        let bytes = resp.into_body().collect().await.unwrap().to_bytes();
+        let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+        // Verify shape contains basic keys
+        for k in ["dir", "files", "used_bytes", "used_mb", "over_quota"] {
+            assert!(v.get(k).is_some(), "missing key: {}", k);
+        }
+    }
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -756,12 +857,9 @@ pub(crate) async fn models_concurrency_set(
     State(state): State<AppState>,
     Json(req): Json<ConcurrencySetReq>,
 ) -> impl IntoResponse {
-    let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "ModelsService missing",
-        )
-            .into_response();
+    let svc = match super::require_service::<ModelsService>(&state) {
+        Ok(s) => s,
+        Err(e) => return e.into_response(),
     };
     let block = req.block.unwrap_or(true);
     match svc.concurrency_set(&state, req.max, block).await {
@@ -779,11 +877,7 @@ pub(crate) async fn models_concurrency_set(
 #[arw_gate("models:concurrency:get")]
 pub(crate) async fn models_concurrency_get(State(state): State<AppState>) -> impl IntoResponse {
     let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "ModelsService missing",
-        )
-            .into_response();
+        return super::ApiError::internal("ModelsService missing").into_response();
     };
     let v = svc.concurrency_get().await;
     Json(v).into_response()
@@ -798,11 +892,7 @@ pub(crate) async fn models_concurrency_get(State(state): State<AppState>) -> imp
 #[arw_gate("models:jobs")]
 pub(crate) async fn models_jobs(State(state): State<AppState>) -> impl IntoResponse {
     let Some(svc) = state.resources.get::<ModelsService>() else {
-        return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            "ModelsService missing",
-        )
-            .into_response();
+        return super::ApiError::internal("ModelsService missing").into_response();
     };
     let v = svc.jobs_status().await;
     Json(v).into_response()
@@ -815,25 +905,11 @@ pub(crate) async fn models_jobs(State(state): State<AppState>) -> impl IntoRespo
     summary = "Get models download metrics"
 )]
 #[arw_gate("state:models_metrics:get")]
-pub(crate) async fn models_metrics_get(State(_state): State<AppState>) -> impl IntoResponse {
-    use serde_json::{Map, Value};
-    // Process counters from service
-    let base = crate::resources::models_service::models_metrics_value();
-    let mut obj = match base {
-        Value::Object(m) => m,
-        _ => Map::new(),
-    };
-    // EWMA MB/s from persisted metrics file (best-effort)
-    let ewma = crate::ext::io::load_json_file_async(&crate::ext::paths::downloads_metrics_path())
-        .await
-        .and_then(|v| v.get("ewma_mbps").and_then(|x| x.as_f64()));
-    obj.insert(
-        "ewma_mbps".into(),
-        match ewma {
-            Some(v) => Value::from(v),
-            None => Value::Null,
-        },
-    );
-    Json(Value::Object(obj)).into_response()
+pub(crate) async fn models_metrics_get(State(state): State<AppState>) -> impl IntoResponse {
+    // Use the service helper to return a consistent shape (counters + ewma)
+    match super::require_service::<ModelsService>(&state) {
+        Ok(svc) => Json(svc.downloads_metrics().await).into_response(),
+        Err(e) => e.into_response(),
+    }
 }
 // SPDX-License-Identifier: MIT OR Apache-2.0

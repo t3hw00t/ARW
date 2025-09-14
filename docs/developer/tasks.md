@@ -4,7 +4,7 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-12 18:31 UTC
+Updated: 2025-09-13 23:50 UTC
 
 
 ## To Do
@@ -69,8 +69,8 @@ Updated: 2025-09-12 18:31 UTC
 - [t-250909193840-5994] Add mkdocs.yml config — done (updated: 2025-09-09 17:38:40 UTC)
 - [t-250909181725-7338] Create portable dist bundle — done (updated: 2025-09-09 16:17:25 UTC)
 - [t-250909170248-9575] Install Tauri deps + build launcher — done (updated: 2025-09-09 16:17:25 UTC)
-    - 2025-09-09 16:07:39 UTC: Attempted launcher build; missing WebKitGTK 4.x dev packages (install tauri deps)
-  - 2025-09-09 16:14:14 UTC: Installed WebKitGTK/JavaScriptCoreGTK/libsoup; rebuild succeeded
+    - 2025-09-09 16:07:39 UTC: Attempted launcher build; pkg-config missing webkit2gtk (install tauri deps via scripts/install-tauri-deps.sh)
+  - 2025-09-09 16:14:14 UTC: Package dev headers missing; install WebKitGTK/JavaScriptCoreGTK/libsoup dev packages
   - 2025-09-09 16:17:25 UTC: Launcher built successfully
 - [t-250909170247-4088] GitHub CLI login — done (updated: 2025-09-09 16:14:14 UTC)
     - 2025-09-09 16:14:14 UTC: Not required (SSH-only auth to GitHub)
@@ -80,3 +80,4 @@ Updated: 2025-09-12 18:31 UTC
 - [t-250909170247-6008] Start service and verify /about — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
+

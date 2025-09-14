@@ -94,14 +94,14 @@
       }
       setInterval(pollHealth, 3000);
       pollHealth();
-      // Mini downloads widget (Models.*)
+      // Mini downloads widget (models.*)
       (function(){
         try{
           const box = document.getElementById('dlmini'); if(!box) return;
           const last = {};
-          const es = new EventSource(ARW.base(getPort()) + '/events?prefixes=Models.');
+          const es = new EventSource(ARW.base(getPort()) + '/events?prefix=models.');
           const mk = (id)=>{ let el = document.getElementById('dl_'+id); if(!el){ el = document.createElement('div'); el.id='dl_'+id; el.className='badge'; el.style.marginTop='6px'; box.appendChild(el); } return el; };
-          es.addEventListener('Models.DownloadProgress', (ev)=>{
+          es.addEventListener('models.download.progress', (ev)=>{
             try{
               const j = JSON.parse(ev.data||'{}'); const id = j.id||''; if(!id) return; const el = mk(id);
               if(j.status==='complete'){ el.className='badge'; el.innerHTML = '<span class="dot"></span> '+id+' complete'; setTimeout(()=>{ if(el&&el.parentNode) el.parentNode.removeChild(el); }, 1500); return; }

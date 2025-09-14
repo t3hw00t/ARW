@@ -11,13 +11,13 @@ Updated: 2025-09-12
 
 ## Goals
 - Extremely light: constant memory, O(1) updates per event, periodic evaluation off the hot path.
-- Near‑live: publishes `Feedback.Suggested` every ~250–500 ms when changes occur; UIs update via SSE.
+- Near‑live: publishes `feedback.suggested` every ~250–500 ms when changes occur; UIs update via SSE.
 - Safe by default: suggestions only; applies are policy‑gated and rate‑limited.
 
 ## Runtime
 - Engine cadence: `ARW_FEEDBACK_TICK_MS` (ms) or `tick_ms` in `configs/feedback.toml` (default 500).
 - Suggestions include `id`, `action` (`hint`, `mem_limit`, `profile`), `params`, `rationale`, and `confidence`.
-- Live view: SSE `/admin/events` with `Feedback.Suggested`, or `GET /feedback/suggestions`.
+- Live view: SSE `/admin/events` with `feedback.suggested`, or `GET /feedback/suggestions`.
 
 ## Policy (Guardrails)
 - Caps and bounds are merged from `configs/feedback.toml` and env vars:
@@ -45,7 +45,7 @@ Updated: 2025-09-12
 
 ## Specs
 - OpenAPI: `/spec/openapi.yaml`
-- AsyncAPI (events): `/spec/asyncapi.yaml` (includes Feedback.* channels)
+- AsyncAPI (events): `/spec/asyncapi.yaml` (includes feedback.* channels)
 - MCP tools catalog: `/spec/mcp-tools.json`
 
 ## UI (Debug)

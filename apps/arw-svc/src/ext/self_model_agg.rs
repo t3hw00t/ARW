@@ -12,7 +12,7 @@ fn agent_id() -> String {
 
 // Handle selected events to keep a lightweight competence map up-to-date.
 pub async fn on_event(env: &arw_events::Envelope) {
-    if env.kind.as_str() == "Tool.Ran" {
+    if env.kind.as_str() == "tool.ran" {
         if let Some(tool_id) = env.payload.get("id").and_then(|v| v.as_str()) {
             let agent = agent_id();
             // Increment count and update last timestamp; keep success_rate optional (unknown failures)

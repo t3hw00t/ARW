@@ -65,16 +65,16 @@ cache:
   - In‑memory: Moka W‑TinyLFU front.
   - Env: `ARW_TOOLS_CACHE_TTL_SECS`, `ARW_TOOLS_CACHE_CAP`.
   - Admin: `GET /admin/tools/cache_stats`.
-  - Events/metrics: `Tool.Cache` events, `/metrics` `arw_tools_cache_*`.
+  - Events/metrics: `tool.cache` events, `/metrics` `arw_tools_cache_*`.
 
 - LLM KV/prefix cache:
   - llama.cpp: client sends `cache_prompt: true`; server can run with `--prompt-cache <file>` for persistence.
   - vLLM: plan to rely on PagedAttention/prefix cache when adapter lands.
 
 - Read‑models over SSE:
-  - JSON Patch deltas (RFC 6902) with coalescing and idle publish.
-  - Models metrics (counters + EWMA): `GET /state/models_metrics`, SSE `State.ModelsMetrics.Patch`.
-  - Route stats (p95/ewma/hits/errors): `GET /state/route_stats`, SSE `State.RouteStats.Patch`.
+  - JSON Patch deltas (RFC 6902) with coalescing and idle publish via `state.read.model.patch`.
+  - Models metrics (counters + EWMA): `GET /state/models_metrics`, SSE id=`models_metrics`.
+  - Route stats (p95/ewma/hits/errors): `GET /state/route_stats`, SSE id=`route_stats`.
   - Env: `ARW_MODELS_METRICS_COALESCE_MS`, `ARW_MODELS_METRICS_PUBLISH_MS`, `ARW_ROUTE_STATS_COALESCE_MS`, `ARW_ROUTE_STATS_PUBLISH_MS`.
 
 - Edge/HTTP validators:
@@ -93,4 +93,3 @@ cache:
 
 - This manifest is a design document today — it does not override env or code.
 - Where possible, ARW maps policy concepts to env knobs and admin endpoints to keep changes incremental and transparent.
-

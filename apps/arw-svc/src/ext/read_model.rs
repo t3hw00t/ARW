@@ -33,15 +33,4 @@ pub fn emit_patch(bus: &arw_events::Bus, topic: &str, id: &str, current: &Value)
     imp::diff_and_publish(bus, topic, id, current);
 }
 
-/// Convenience: publish the same model under both a specific and a generic topic.
-pub fn emit_patch_dual(
-    bus: &arw_events::Bus,
-    specific_topic: &str,
-    generic_topic: &str,
-    id: &str,
-    current: &Value,
-) {
-    // Compute independently to keep code simple; objects are tiny.
-    imp::diff_and_publish(bus, specific_topic, id, current);
-    imp::diff_and_publish(bus, generic_topic, id, current);
-}
+// Note: prior dual-topic helper removed; use emit_patch with the unified topic.

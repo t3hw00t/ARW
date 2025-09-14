@@ -81,6 +81,79 @@ pub struct LocalBus {
 }
 
 impl LocalBus {
+    // legacy/dual kind modes removed; always publish normalized kinds
+
+    fn normalize_segment(seg: &str) -> String {
+        if seg.is_empty() {
+            return String::new();
+        }
+        // Split CamelCase into dot-separated tokens and lowercase all
+        let mut out = String::with_capacity(seg.len() + 4);
+        let chars: Vec<char> = seg.chars().collect();
+        let mut i = 0;
+        while i < chars.len() {
+            let c = chars[i];
+            let mut j = i + 1;
+            if c.is_uppercase() {
+                // consume a run of uppercase letters
+                while j < chars.len() && chars[j].is_uppercase() {
+                    j += 1;
+                }
+                // If the run is length > 1 and next is lowercase, keep the run together
+                let token: String = chars[i..j].iter().collect();
+                if !out.is_empty() {
+                    out.push('.');
+                }
+                out.push_str(&token.to_lowercase());
+                i = j;
+            } else {
+                // consume a run of lowercase/digits/others until next uppercase
+                while j < chars.len() && !chars[j].is_uppercase() {
+                    j += 1;
+                }
+                let token: String = chars[i..j].iter().collect();
+                if !out.is_empty() {
+                    out.push('.');
+                }
+                out.push_str(&token.to_lowercase());
+                i = j;
+            }
+        }
+        out
+    }
+
+    fn normalize_kind(kind: &str) -> String {
+        let mut out_parts: Vec<String> = Vec::new();
+        for part in kind.split('.') {
+            if part.is_empty() {
+                continue;
+            }
+            out_parts.push(Self::normalize_segment(part));
+        }
+        out_parts.join(".")
+    }
+
+    fn send_env(&self, env: Envelope) {
+        self.counters.published.fetch_add(1, Ordering::Relaxed);
+        match self.tx.send(env.clone()) {
+            Ok(n) => {
+                self.counters
+                    .delivered
+                    .fetch_add(n as u64, Ordering::Relaxed);
+            }
+            Err(_e) => {
+                self.counters.no_receivers.fetch_add(1, Ordering::Relaxed);
+            }
+        }
+        // Optional journal
+        self.maybe_journal_env(&env);
+        // Push to replay buffer
+        let mut rb = self.replay.lock().unwrap();
+        if rb.len() == self.replay_cap {
+            rb.pop_front();
+        }
+        rb.push_back(env);
+    }
     pub fn new(capacity: usize) -> Self {
         Self::new_with_replay(capacity, 256)
     }
@@ -124,39 +197,22 @@ impl EventBus for LocalBus {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let val = serde_json::to_value(payload)
             .unwrap_or_else(|_| serde_json::json!({ "_ser": "error" }));
+        let norm = Self::normalize_kind(kind);
         let env = Envelope {
             time: now.clone(),
-            kind: kind.to_string(),
+            kind: norm.clone(),
             payload: val,
             policy: None,
             ce: Some(CloudEventMeta {
                 specversion: "1.0".into(),
-                type_name: kind.to_string(),
+                type_name: norm.clone(),
                 source: std::env::var("ARW_EVENT_SOURCE").unwrap_or_else(|_| "arw-svc".into()),
                 id: now.clone(),
                 time: now.clone(),
                 datacontenttype: Some("application/json".into()),
             }),
         };
-        self.counters.published.fetch_add(1, Ordering::Relaxed);
-        match self.tx.send(env.clone()) {
-            Ok(n) => {
-                self.counters
-                    .delivered
-                    .fetch_add(n as u64, Ordering::Relaxed);
-            }
-            Err(_e) => {
-                self.counters.no_receivers.fetch_add(1, Ordering::Relaxed);
-            }
-        }
-        // Optional journal
-        self.maybe_journal_env(&env);
-        // Push to replay buffer
-        let mut rb = self.replay.lock().unwrap();
-        if rb.len() == self.replay_cap {
-            rb.pop_front();
-        }
-        rb.push_back(env);
+        self.send_env(env);
     }
     fn publish_with_policy<T: Serialize>(
         &self,
@@ -167,37 +223,22 @@ impl EventBus for LocalBus {
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let val = serde_json::to_value(payload)
             .unwrap_or_else(|_| serde_json::json!({ "_ser": "error" }));
+        let norm = Self::normalize_kind(kind);
         let env = Envelope {
             time: now.clone(),
-            kind: kind.to_string(),
+            kind: norm.clone(),
             payload: val,
             policy,
             ce: Some(CloudEventMeta {
                 specversion: "1.0".into(),
-                type_name: kind.to_string(),
+                type_name: norm.clone(),
                 source: std::env::var("ARW_EVENT_SOURCE").unwrap_or_else(|_| "arw-svc".into()),
                 id: now.clone(),
                 time: now.clone(),
                 datacontenttype: Some("application/json".into()),
             }),
         };
-        self.counters.published.fetch_add(1, Ordering::Relaxed);
-        match self.tx.send(env.clone()) {
-            Ok(n) => {
-                self.counters
-                    .delivered
-                    .fetch_add(n as u64, Ordering::Relaxed);
-            }
-            Err(_e) => {
-                self.counters.no_receivers.fetch_add(1, Ordering::Relaxed);
-            }
-        }
-        self.maybe_journal_env(&env);
-        let mut rb = self.replay.lock().unwrap();
-        if rb.len() == self.replay_cap {
-            rb.pop_front();
-        }
-        rb.push_back(env);
+        self.send_env(env);
     }
     fn subscribe_filtered(
         &self,

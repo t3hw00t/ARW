@@ -138,7 +138,7 @@ async fn cold_start(base: &str, admin: Option<&str>, exe: &str) -> Result<u64> {
     let deadline = Instant::now() + Duration::from_secs(5);
     let mut rx_opt = None;
     while Instant::now() < deadline {
-        match sse_connect(base, admin, &["Service."]).await {
+        match sse_connect(base, admin, &["service."]).await {
             Ok((_r, rx)) => {
                 rx_opt = Some(rx);
                 break;
@@ -149,7 +149,7 @@ async fn cold_start(base: &str, admin: Option<&str>, exe: &str) -> Result<u64> {
         }
     }
     let mut rx = rx_opt.ok_or_else(|| anyhow!("sse connect did not succeed within deadline"))?;
-    // Wait for first event (Service.Connected) with a short timeout
+    // Wait for first event (service.connected) with a short timeout
     let cold_ms = match tokio::time::timeout(Duration::from_secs(3), rx.recv()).await {
         Ok(Some(_ev)) => t0.elapsed().as_millis() as u64,
         _ => 3000,
@@ -210,13 +210,13 @@ async fn main() -> Result<()> {
 
     // I2F (connect → first event)
     let t0 = Instant::now();
-    let (_resp_unused, mut rx) = sse_connect(&base, admin.as_deref(), &["Service."]).await?;
+    let (_resp_unused, mut rx) = sse_connect(&base, admin.as_deref(), &["service."]).await?;
     let i2f_ms = match tokio::time::timeout(Duration::from_secs(2), rx.recv()).await {
         Ok(Some(_ev)) => t0.elapsed().as_millis() as u64,
         _ => 2_000,
     };
 
-    // First partial (emit test → first Service.Test)
+    // First partial (emit test → first service.test)
     let client = reqwest::Client::new();
     let url_emit = format!("{}/admin/emit/test", base.trim_end_matches('/'));
     let mut req = client.get(&url_emit);
@@ -230,7 +230,7 @@ async fn main() -> Result<()> {
     let deadline = Duration::from_millis(1500);
     while start.elapsed() < deadline {
         if let Ok(Some(ev)) = tokio::time::timeout(Duration::from_millis(200), rx.recv()).await {
-            if ev.kind == "Service.Test" {
+            if ev.kind == "service.test" {
                 first_partial_ms = t1.elapsed().as_millis() as u64;
                 break;
             }
@@ -251,7 +251,7 @@ async fn main() -> Result<()> {
         }
         let _ = req.send().await;
         if let Ok(Some(ev)) = tokio::time::timeout(Duration::from_millis(1000), rx.recv()).await {
-            if ev.kind == "Service.Test" {
+            if ev.kind == "service.test" {
                 times.push(ev.t);
             }
         }

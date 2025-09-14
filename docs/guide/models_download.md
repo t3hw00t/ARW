@@ -9,12 +9,13 @@ ARW provides HTTP endpoints (admin‑gated) to manage local models with streamin
 Updated: 2025-09-13
 
 See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*).
+Canonical topics used by the service are defined once under `apps/arw-svc/src/ext/topics.rs`.
 
 ## Endpoints
 
 - POST `/admin/models/download` — Start or resume a download.
 - POST `/admin/models/download/cancel` — Cancel an in‑flight download.
-- GET  `/admin/events` — Listen for `Models.DownloadProgress` events (SSE; supports `?replay=N` and repeated `prefix=` filters).
+- GET  `/admin/events` — Listen for `models.download.progress` events (SSE; supports `?replay=N` and repeated `prefix=` filters).
 - GET  `/state/models` — Public, read‑only models list (no admin token required).
 - GET  `/admin/models/summary` — Aggregated summary for UIs: `{ items, default, concurrency, metrics }`.
 - POST `/admin/models/cas_gc` — Run a one‑off CAS GC sweep; deletes unreferenced blobs older than `ttl_days`.
@@ -77,7 +78,7 @@ Events related to cancel:
 
 ## Progress (SSE)
 
-Subscribe to `GET /admin/events` and filter `Models.DownloadProgress` events. Examples:
+Subscribe to `GET /admin/events` and filter `models.download.progress` events. Examples:
 
 ```
 { "id": "qwen2.5-coder-7b", "progress": 42, "downloaded": 12345678, "total": 30000000 }
@@ -89,24 +90,24 @@ Subscribe to `GET /admin/events` and filter `Models.DownloadProgress` events. Ex
 Schema notes (best effort):
 - Always includes: `id`.
 - Progress: `progress` (0–100), `downloaded`, `total` (optional).
-- Status: `status` (e.g., started, resumed, downloading, degraded, complete, canceled).
-- Codes: `code` provides a stable machine hint for complex statuses (e.g., `admission_denied`, `hard_exhausted`, `disk_insufficient(_stream)`, `size_limit(_stream)`, `checksum_mismatch`, `canceled_by_user`, `quota_exceeded`, `cached`, `already-in-progress-hash`, `resync`).
+- Status: `status` (e.g., started, resumed, resync, downloading, degraded, complete, canceled, no-active-job, cache-mismatch).
+- Codes: `code` provides a stable machine hint for complex statuses (e.g., `admission-denied`, `hard-exhausted`, `disk-insufficient(-stream)`, `size-limit(-stream)`, `checksum-mismatch`, `canceled-by-user`, `quota-exceeded`, `cached`, `already-in-progress-hash`, `resync`).
 - Budget snapshot: `budget` object with `soft_ms`, `hard_ms`, `spent_ms`, `remaining_*` when available.
 - Disk snapshot: `disk` object `{available,total,reserve}` when available.
 
 UI guidance:
 - Simple statuses (started/downloading/resumed/complete/canceled) should use compact single icons.
-- Complex codes can show a small, subtle icon set (e.g., `lock+timer` for `admission_denied`).
+- Complex codes can show a small, subtle icon set (e.g., `lock+timer` for `admission-denied`).
 ```
 
 Minimal SSE consumer (bash)
 ```bash
 BASE=http://127.0.0.1:8090
-curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?prefix=Models.DownloadProgress&replay=5" \
+curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?prefix=models.download.progress&replay=5" \
  | jq -rc 'if .id then {id:.id,status:(.status//""),code:(.code//""),pct:(.progress//null),dl:(.downloaded//null),tot:(.total//null)} else . end'
 ```
 
-Tip: use repeated `prefix=` to follow multiple channels: `...&prefix=Models.DownloadProgress&prefix=Models.CasGc`.
+Tip: use repeated `prefix=` to follow multiple channels: `...&prefix=models.download.progress&prefix=models.cas.gc`.
 
 ## Egress Events
 
@@ -132,7 +133,7 @@ The downloader maintains a lightweight throughput EWMA used for admission checks
 - File: `{state_dir}/downloads.metrics.json` → `{ ewma_mbps }`
 - Admin endpoint: `GET /admin/models/downloads_metrics` → `{ ewma_mbps, …counters }`
  - Read‑model: `GET /admin/state/models_metrics` and public `GET /state/models_metrics` (mirrors counters + EWMA).
- - SSE patches: `State.ModelsMetrics.Patch` and generic `State.ReadModel.Patch` (id=`models_metrics`) publish RFC‑6902 JSON Patches. Publishing is coalesced (`ARW_MODELS_METRICS_COALESCE_MS`, default 250ms) with an idle refresh (`ARW_MODELS_METRICS_PUBLISH_MS`, default 2000ms).
+ - SSE patches: `state.read.model.patch` with id=`models_metrics` publishes RFC‑6902 JSON Patches. Publishing is coalesced (`ARW_MODELS_METRICS_COALESCE_MS`, default 250ms) with an idle refresh (`ARW_MODELS_METRICS_PUBLISH_MS`, default 2000ms).
 
 ## Examples
 
@@ -171,9 +172,9 @@ Resume:
   - `ARW_DL_PROGRESS_INCLUDE_BUDGET=1`
   - `ARW_DL_PROGRESS_INCLUDE_DISK=1`
   Related tuning knobs: `ARW_MODELS_MAX_MB`, `ARW_MODELS_DISK_RESERVE_MB`, `ARW_DL_MIN_MBPS`, `ARW_DL_EWMA_ALPHA`, `ARW_DL_SEND_RETRIES`, `ARW_DL_STREAM_RETRIES`, `ARW_DL_IDLE_TIMEOUT_SECS`, `ARW_BUDGET_SOFT_DEGRADE_PCT`.
- - Admission checks: when `total` is known, the downloader estimates if it can finish within the remaining hard budget using a throughput baseline `ARW_DL_MIN_MBPS` and a persisted EWMA. If not, it emits `code: "admission_denied"`.
+ - Admission checks: when `total` is known, the downloader estimates if it can finish within the remaining hard budget using a throughput baseline `ARW_DL_MIN_MBPS` and a persisted EWMA. If not, it emits `code: "admission-denied"`.
  - Idle safety: when no hard budget is set, `ARW_DL_IDLE_TIMEOUT_SECS` applies an idle timeout to avoid hung transfers.
-- Quota & preflight: when `ARW_DL_PREFLIGHT=1`, a HEAD request captures `Content-Length` and validators. If `ARW_MODELS_QUOTA_MB` is set, the preflight denies downloads whose projected CAS size would exceed the quota, emitting `code: "quota_exceeded"`. Early size checks also enforce `ARW_MODELS_MAX_MB`.
+- Quota & preflight: when `ARW_DL_PREFLIGHT=1`, a HEAD request captures `Content-Length` and validators. If `ARW_MODELS_QUOTA_MB` is set, the preflight denies downloads whose projected CAS size would exceed the quota, emitting `code: "quota-exceeded"`. Early size checks also enforce `ARW_MODELS_MAX_MB`.
 
 ### Manifest
 
@@ -194,7 +195,9 @@ curl -sS -X POST "$BASE/admin/models/cas_gc" \
   -d '{"ttl_days":14}'
 ```
 
-GC emits a compact `Models.CasGc` event with `{scanned, kept, deleted, deleted_bytes, ttl_days}`.
+GC emits a compact `models.cas.gc` event with `{scanned, kept, deleted, deleted_bytes, ttl_days}`.
+
+Note: kinds are normalized; legacy CamelCase forms have been removed.
 Get a summary suitable for dashboards:
 
 ```bash

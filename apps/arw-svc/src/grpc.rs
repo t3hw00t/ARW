@@ -25,7 +25,7 @@ impl ArwService for GrpcSvc {
     ) -> Result<tonic::Response<HealthCheckResponse>, tonic::Status> {
         self.state
             .bus
-            .publish("Service.Health", &json!({"ok": true}));
+            .publish("service.health", &json!({"ok": true}));
         Ok(tonic::Response::new(HealthCheckResponse { ok: true }))
     }
 }

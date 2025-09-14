@@ -10,7 +10,7 @@ Purpose
 Principles
 - Data‑first: patches are JSON Merge/Patch documents; no dynamic code needed for the common path.
 - Deterministic: ordered application with pre/post validation against schemas (recipes, policies, flows, tools).
-- Audited: emits `LogicUnit.Applied/Reverted` and `Policy.Decision` events when permissions change.
+- Audited: emits `logic_unit.applied/reverted` and `policy.decision` events when permissions change.
 
 Flow
 1) Dry‑run: compute diff and validate; return human‑readable summary (added/changed/removed) and warnings.
@@ -23,4 +23,3 @@ Endpoints (planned)
 - `POST /patch/revert` → snapshot id or unit id
 
 See also: Logic Units, Permissions & Policies, Replay & Time Travel.
-

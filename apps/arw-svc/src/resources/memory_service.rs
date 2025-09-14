@@ -68,7 +68,7 @@ impl MemoryService {
                 .await;
             let mut payload = json!({"kind": kind, "value": value, "ttl_ms": ttl_ms});
             crate::ext::corr::ensure_corr(&mut payload);
-            state.bus.publish("Memory.Applied", &payload);
+            state.bus.publish("memory.applied", &payload);
             Ok(())
         } else {
             Err("invalid kind".into())

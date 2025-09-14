@@ -45,7 +45,7 @@ The UI exposes two complementary areas:
 ### Scoreboard
 
 - Live variant badges show: solve rate, latency, and context KPIs `ctx {tokens}t/{items}i`.
-- The panel auto‑updates from SSE (`Experiment.Result` and `Experiment.Winner`).
+- The panel auto‑updates from SSE (`experiment.result` and `experiment.winner`).
 - “Refresh defs” seeds the board from persisted data (`/admin/experiments/scoreboard` and `/admin/experiments/winners`).
 
 ### Event Payloads

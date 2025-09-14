@@ -137,6 +137,9 @@ interfaces-diff base="main":
   cp spec/openapi.yaml /tmp/ifc/rev.yaml
   docker run --rm -v /tmp/ifc:/tmp -w /tmp tufin/oasdiff:latest -format markdown -fail-on-breaking -base /tmp/base.yaml -revision /tmp/rev.yaml || true
 
+check-enums:
+  python3 scripts/check_models_progress_enums.py
+
 docs-deprecations:
   python3 scripts/generate_deprecations.py
 

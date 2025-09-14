@@ -83,4 +83,4 @@ Open `/debug`, select a model (echo/reverse/time), set Temperature if desired, a
   - `chat:self_consistency` — allow running vote‑k sampling
   - `chat:verify` — allow running a verifier pass
 
-If a gate is denied, behavior degrades gracefully to a single pass. Planner metadata is returned regardless, under `assistant.planner` and also emitted on `Chat.Planner` events.
+If a gate is denied, behavior degrades gracefully to a single pass. Planner metadata is returned regardless, under `assistant.planner` and also emitted on `chat.planner` events.

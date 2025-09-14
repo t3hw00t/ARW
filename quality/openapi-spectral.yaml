@@ -82,16 +82,16 @@ rules:
 
   # Events channel naming: Title.Case with dot segments (AsyncAPI)
   x-asyncapi-channel-naming:
-    description: Event channel names should use Domain.Event format
-    message: "Channel '{{property}}' should match ^[A-Za-z]+(\.[A-Za-z][A-Za-z0-9]+)+$"
-    severity: warn
+    description: Event channel names should use dot.case segments
+    message: "Channel '{{property}}' should be dot.case (e.g., models.download.progress)"
+    severity: hint
     formats:
       - asyncapi2
     given: $.channels.*~
     then:
       function: pattern
       functionOptions:
-        match: '^[A-Za-z]+(\\.[A-Za-z][A-Za-z0-9]+)+$'
+        match: '^[a-z]+(\\.[a-z][a-z0-9]+)+$'
 
   # AsyncAPI triage: loosen strictness to reflect current minimal channel docs
   asyncapi-operation-operationId: warn
@@ -100,4 +100,16 @@ rules:
   asyncapi-info-contact: hint
   asyncapi-info-license: hint
   asyncapi-info-description: hint
-  asyncapi-latest-version: hint
+  asyncapi-latest-version: off
+
+  # AsyncAPI: encourage correlationId on messages (soft rule)
+  x-asyncapi-message-correlation-id:
+    description: AsyncAPI messages should define a correlationId
+    message: "Message '{{property}}' should define correlationId"
+    severity: hint
+    formats:
+      - asyncapi2
+    given: $.components.messages[*]
+    then:
+      - field: correlationId
+        function: defined

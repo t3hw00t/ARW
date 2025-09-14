@@ -4,14 +4,14 @@ title: Interface Release Notes
 
 # Interface Release Notes
 
-Base: `origin/main` vs Head: `9de58ccf`
+Base: `origin/main` vs Head: `30793631`
 
 ## OpenAPI (REST)
 
 ```diff
---- /tmp/tmp6djs0o53/openapi.base.yaml	2025-09-13 22:59:51.312433465 +0200
-+++ /tmp/tmp6djs0o53/openapi.head.yaml	2025-09-13 22:59:51.312433465 +0200
-@@ -1,23 +1,67 @@
+--- /tmp/tmp0en6za0y/openapi.base.yaml	2025-09-14 01:47:45.605619198 +0200
++++ /tmp/tmp0en6za0y/openapi.head.yaml	2025-09-14 01:47:45.605619198 +0200
+@@ -1,23 +1,69 @@
  openapi: 3.1.0
  info:
 -  title: arw-svc
@@ -55,6 +55,8 @@ Base: `origin/main` vs Head: `9de58ccf`
 +  description: Public endpoints
 +- name: Public/Specs
 +  description: Public/Specs endpoints
++- name: Public/State
++  description: Public read-models and state
  paths:
    /about:
      get:
@@ -81,7 +83,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: chat_get_doc
        responses:
          '200':
-@@ -32,6 +76,10 @@
+@@ -32,6 +78,10 @@
      post:
        tags:
        - Admin/Chat
@@ -92,7 +94,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: chat_clear_doc
        responses:
          '200':
-@@ -50,6 +98,10 @@
+@@ -50,6 +100,10 @@
      post:
        tags:
        - Admin/Chat
@@ -103,7 +105,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: chat_send_doc
        requestBody:
          content:
-@@ -74,7 +126,8 @@
+@@ -74,7 +128,8 @@
      get:
        tags:
        - Admin/Core
@@ -113,7 +115,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        responses:
          '200':
            description: Emit test event
-@@ -92,7 +145,9 @@
+@@ -92,7 +147,9 @@
      get:
        tags:
        - Admin/Core
@@ -124,7 +126,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        responses:
          '200':
            description: SSE event stream
-@@ -106,6 +161,7 @@
+@@ -106,6 +163,7 @@
      post:
        tags:
        - Admin/Feedback
@@ -132,7 +134,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: feedback_analyze_post_doc
        responses:
          '200':
-@@ -124,6 +180,7 @@
+@@ -124,6 +182,7 @@
      post:
        tags:
        - Admin/Feedback
@@ -140,7 +142,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: feedback_apply_post_doc
        requestBody:
          content:
-@@ -148,6 +205,7 @@
+@@ -148,6 +207,7 @@
      post:
        tags:
        - Admin/Feedback
@@ -148,7 +150,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: feedback_auto_post_doc
        requestBody:
          content:
-@@ -172,6 +230,7 @@
+@@ -172,6 +232,7 @@
      get:
        tags:
        - Admin/Feedback
@@ -156,7 +158,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: feedback_policy_doc
        responses:
          '200':
-@@ -186,6 +245,7 @@
+@@ -186,6 +247,7 @@
      post:
        tags:
        - Admin/Feedback
@@ -164,7 +166,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: feedback_reset_post_doc
        responses:
          '200':
-@@ -204,6 +264,7 @@
+@@ -204,6 +266,7 @@
      post:
        tags:
        - Admin/Feedback
@@ -172,7 +174,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: feedback_signal_post_doc
        requestBody:
          content:
-@@ -228,6 +289,7 @@
+@@ -228,6 +291,7 @@
      get:
        tags:
        - Admin/Feedback
@@ -180,7 +182,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: feedback_state_get_doc
        responses:
          '200':
-@@ -242,6 +304,7 @@
+@@ -242,6 +306,7 @@
      get:
        tags:
        - Admin/Feedback
@@ -188,7 +190,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: feedback_suggestions_doc
        responses:
          '200':
-@@ -256,6 +319,7 @@
+@@ -256,6 +321,7 @@
      get:
        tags:
        - Admin/Feedback
@@ -196,7 +198,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: feedback_updates_doc
        parameters:
        - name: since
-@@ -281,6 +345,8 @@
+@@ -281,6 +347,8 @@
      get:
        tags:
        - Admin/Governor
@@ -205,7 +207,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: governor_hints_get_doc
        responses:
          '200':
-@@ -294,6 +360,7 @@
+@@ -294,6 +362,7 @@
      post:
        tags:
        - Admin/Governor
@@ -213,7 +215,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: governor_hints_set_doc
        requestBody:
          content:
-@@ -318,6 +385,7 @@
+@@ -318,6 +387,7 @@
      get:
        tags:
        - Admin/Governor
@@ -221,7 +223,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: governor_profile_get_doc
        responses:
          '200':
-@@ -331,6 +399,7 @@
+@@ -331,6 +401,7 @@
      post:
        tags:
        - Admin/Governor
@@ -229,7 +231,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        operationId: governor_profile_set_doc
        requestBody:
          content:
-@@ -375,6 +444,7 @@
+@@ -375,6 +446,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -237,7 +239,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/hierarchy/hello:
      post:
        tags:
-@@ -399,6 +469,7 @@
+@@ -399,6 +471,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -245,7 +247,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/hierarchy/offer:
      post:
        tags:
-@@ -423,6 +494,7 @@
+@@ -423,6 +496,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -253,7 +255,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/hierarchy/role:
      post:
        tags:
-@@ -447,6 +519,7 @@
+@@ -447,6 +521,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -261,7 +263,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/hierarchy/state:
      get:
        tags:
-@@ -461,11 +534,12 @@
+@@ -461,11 +536,12 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -275,7 +277,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        parameters:
        - name: id
          in: path
-@@ -484,11 +558,12 @@
+@@ -484,11 +560,12 @@
                  $ref: '#/components/schemas/ProblemDetails'
          '404':
            description: Unknown tool id
@@ -289,7 +291,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        responses:
          '200':
            description: List available tools
-@@ -498,6 +573,7 @@
+@@ -498,6 +575,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -297,7 +299,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/memory:
      get:
        tags:
-@@ -512,6 +588,7 @@
+@@ -512,6 +590,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -305,7 +307,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/memory/apply:
      post:
        tags:
-@@ -542,6 +619,7 @@
+@@ -542,6 +621,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -313,7 +315,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/memory/limit:
      get:
        tags:
-@@ -556,6 +634,7 @@
+@@ -556,6 +636,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -321,7 +323,7 @@ Base: `origin/main` vs Head: `9de58ccf`
      post:
        tags:
        - Admin/Memory
-@@ -579,6 +658,7 @@
+@@ -579,6 +660,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -329,7 +331,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/memory/load:
      post:
        tags:
-@@ -599,6 +679,7 @@
+@@ -599,6 +681,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -337,7 +339,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/memory/save:
      post:
        tags:
-@@ -623,6 +704,7 @@
+@@ -623,6 +706,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -345,7 +347,31 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/models:
      get:
        tags:
-@@ -637,6 +719,53 @@
+@@ -631,12 +715,77 @@
+       responses:
+         '200':
+           description: Models list
++          content:
++            application/json:
++              schema:
++                type: array
++                items:
++                  $ref: '#/components/schemas/ModelItem'
++              examples:
++                basic:
++                  summary: Two models
++                  value:
++                    - id: llama3:8b
++                      provider: ollama
++                      bytes: 5347737600
++                      status: ready
++                    - id: qwen2:7b
++                      provider: hf
++                      bytes: 4855592960
++                      status: downloading
+         '403':
+           description: Forbidden
+           content:
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -399,7 +425,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/models/add:
      post:
        tags:
-@@ -667,6 +796,7 @@
+@@ -667,6 +816,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -407,7 +433,24 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/models/concurrency:
      get:
        tags:
-@@ -681,6 +811,7 @@
+@@ -675,12 +825,24 @@
+       responses:
+         '200':
+           description: Concurrency settings
++          content:
++            application/json:
++              schema:
++                $ref: '#/components/schemas/ModelsConcurrency'
++              examples:
++                typical:
++                  value:
++                    configured_max: 2
++                    available_permits: 2
++                    held_permits: 0
++                    hard_cap: null
+         '403':
+           description: Forbidden
+           content:
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -415,7 +458,7 @@ Base: `origin/main` vs Head: `9de58ccf`
      post:
        tags:
        - Admin/Models
-@@ -704,6 +835,7 @@
+@@ -704,6 +866,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -423,7 +466,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/models/default:
      get:
        tags:
-@@ -718,6 +850,7 @@
+@@ -718,6 +881,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -431,7 +474,7 @@ Base: `origin/main` vs Head: `9de58ccf`
      post:
        tags:
        - Admin/Models
-@@ -741,6 +874,7 @@
+@@ -741,6 +905,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -439,7 +482,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/models/delete:
      post:
        tags:
-@@ -765,6 +899,7 @@
+@@ -765,6 +930,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -447,7 +490,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/models/download:
      post:
        tags:
-@@ -801,6 +936,7 @@
+@@ -801,6 +967,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -455,7 +498,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/models/download/cancel:
      post:
        tags:
-@@ -825,6 +961,7 @@
+@@ -825,6 +992,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -463,7 +506,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/models/jobs:
      get:
        tags:
-@@ -839,6 +976,7 @@
+@@ -839,6 +1007,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -471,7 +514,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/models/load:
      post:
        tags:
-@@ -857,6 +995,7 @@
+@@ -857,6 +1026,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -479,7 +522,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/models/refresh:
      post:
        tags:
-@@ -875,6 +1014,7 @@
+@@ -875,6 +1045,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -487,7 +530,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/models/save:
      post:
        tags:
-@@ -893,11 +1033,12 @@
+@@ -893,11 +1064,12 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -501,7 +544,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        responses:
          '200':
            description: Returns effective memory paths
-@@ -907,6 +1048,7 @@
+@@ -907,6 +1079,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -509,7 +552,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/projects/create:
      post:
        tags:
-@@ -937,6 +1079,7 @@
+@@ -937,6 +1110,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -517,7 +560,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/projects/list:
      get:
        tags:
-@@ -951,6 +1094,7 @@
+@@ -951,6 +1125,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -525,7 +568,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/projects/notes:
      post:
        tags:
-@@ -982,11 +1126,12 @@
+@@ -982,11 +1157,12 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -539,7 +582,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        responses:
          '200':
            description: Shutdown service
-@@ -1000,6 +1145,7 @@
+@@ -1000,6 +1176,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -547,7 +590,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/state/actions:
      get:
        tags:
-@@ -1014,6 +1160,7 @@
+@@ -1014,6 +1191,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -555,7 +598,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/state/beliefs:
      get:
        tags:
-@@ -1028,6 +1175,7 @@
+@@ -1028,6 +1206,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -563,7 +606,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/state/intents:
      get:
        tags:
-@@ -1042,6 +1190,7 @@
+@@ -1042,6 +1221,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -571,7 +614,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/state/observations:
      get:
        tags:
-@@ -1056,6 +1205,7 @@
+@@ -1056,6 +1236,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -579,7 +622,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/tasks/enqueue:
      post:
        tags:
-@@ -1080,6 +1230,7 @@
+@@ -1080,6 +1261,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -587,7 +630,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/tools:
      get:
        tags:
-@@ -1094,6 +1245,7 @@
+@@ -1094,6 +1276,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -595,7 +638,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /admin/tools/run:
      post:
        tags:
-@@ -1114,10 +1266,12 @@
+@@ -1114,10 +1297,12 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/ProblemDetails'
@@ -610,7 +653,7 @@ Base: `origin/main` vs Head: `9de58ccf`
        responses:
          '200':
            description: Service health
-@@ -1125,6 +1279,7 @@
+@@ -1125,6 +1310,7 @@
              application/json:
                schema:
                  $ref: '#/components/schemas/OkResponse'
@@ -618,7 +661,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /metrics:
      get:
        tags:
-@@ -1133,6 +1288,7 @@
+@@ -1133,6 +1319,7 @@
        responses:
          '200':
            description: Prometheus metrics
@@ -626,7 +669,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /spec:
      get:
        tags:
-@@ -1141,6 +1297,27 @@
+@@ -1141,6 +1328,27 @@
        responses:
          '200':
            description: Spec index
@@ -654,7 +697,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /spec/asyncapi.yaml:
      get:
        tags:
-@@ -1151,6 +1328,7 @@
+@@ -1151,6 +1359,7 @@
            description: AsyncAPI YAML
          '404':
            description: Missing
@@ -662,7 +705,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /spec/mcp-tools.json:
      get:
        tags:
-@@ -1161,6 +1339,7 @@
+@@ -1161,6 +1370,7 @@
            description: MCP tools JSON
          '404':
            description: Missing
@@ -670,7 +713,7 @@ Base: `origin/main` vs Head: `9de58ccf`
    /spec/openapi.yaml:
      get:
        tags:
-@@ -1171,6 +1350,7 @@
+@@ -1171,6 +1381,7 @@
            description: OpenAPI YAML
          '404':
            description: Missing
@@ -678,11 +721,38 @@ Base: `origin/main` vs Head: `9de58ccf`
    /version:
      get:
        tags:
-@@ -1179,8 +1359,120 @@
+@@ -1179,8 +1390,147 @@
        responses:
          '200':
            description: Service version
 +      description: 'Public: GET /version.'
++  /state/models:
++    get:
++      description: Public read-only models list
++      tags:
++      - Public/State
++      operationId: state_models_doc
++      responses:
++        '200':
++          description: Models list
++          content:
++            application/json:
++              schema:
++                type: array
++                items:
++                  $ref: '#/components/schemas/ModelItem'
++              examples:
++                basic:
++                  value:
++                    - id: llama3:8b
++                      provider: ollama
++                      bytes: 5347737600
++                      status: ready
++                    - id: qwen2:7b
++                      provider: hf
++                      bytes: 4855592960
++                      status: downloading
++  # (no additional entries)
  components:
    schemas:
 +    ModelsConcurrency:
@@ -799,186 +869,259 @@ Base: `origin/main` vs Head: `9de58ccf`
      ApplyMemory:
        type: object
        required:
-@@ -1526,5 +1818,3 @@
+@@ -1526,5 +1876,4 @@
          id:
            type: string
          input: {}
 -tags:
 -- name: arw-svc
++  #
 
 ```
 
 ## AsyncAPI (Events)
 
 ```diff
---- /tmp/tmp6djs0o53/asyncapi.base.yaml	2025-09-13 22:59:52.412113247 +0200
-+++ /tmp/tmp6djs0o53/asyncapi.head.yaml	2025-09-13 22:59:52.412113247 +0200
-@@ -3,65 +3,98 @@
+--- /tmp/tmp0en6za0y/asyncapi.base.yaml	2025-09-14 01:47:46.358205362 +0200
++++ /tmp/tmp0en6za0y/asyncapi.head.yaml	2025-09-14 01:47:46.358205362 +0200
+@@ -2,104 +2,144 @@
+ info:
    title: "arw-svc events"
    version: "0.1.0"
++  description: "Normalized dot.case event channels for arw-svc."
++  license:
++    name: "MIT OR Apache-2.0"
++  contact:
++    name: "ARW"
++    url: "https://github.com/t3hw00t/ARW"
++    email: "noreply@example.com"
  defaultContentType: application/json
 +tags:
 +  - name: CloudEvents
-+    description: Events include CloudEvents 1.0 metadata under `ce` (see components.schemas.EventEnvelope)
++    description: Events include CloudEvents 1.0 metadata under `ce`.
  channels:
-   Service.Start:
+-  Service.Start:
++  service.start:
      subscribe:
 +      operationId: service_start
 +      description: Service emitted start event
        message:
          $ref: '#/components/messages/ServiceStart'
-   Service.Health:
+-  Service.Health:
++  service.health:
      subscribe:
 +      operationId: service_health
 +      description: Periodic health heartbeat
        message:
          $ref: '#/components/messages/ServiceHealth'
-   Service.Test:
+-  Service.Test:
++  service.test:
      subscribe:
 +      operationId: service_test
 +      description: Test event emission
        message:
          $ref: '#/components/messages/ServiceTest'
-   Governor.Changed:
+-  Governor.Changed:
++  governor.changed:
      subscribe:
 +      operationId: governor_changed
 +      description: Governor profile changed
        message:
          $ref: '#/components/messages/GovernorChanged'
-   Memory.Applied:
+-  Memory.Applied:
++  memory.applied:
      subscribe:
 +      operationId: memory_applied
 +      description: Memory applied to working set
        message:
          $ref: '#/components/messages/MemoryApplied'
-   Models.Changed:
+-  Models.Changed:
++  models.changed:
      subscribe:
 +      operationId: models_changed
 +      description: Models list/default changed
        message:
          $ref: '#/components/messages/ModelsChanged'
-   Models.DownloadProgress:
+-  Models.DownloadProgress:
++  models.download.progress:
      subscribe:
 +      operationId: models_download_progress
 +      description: Download progress, status codes, metrics snapshots
        message:
          $ref: '#/components/messages/ModelsDownloadProgress'
-   Models.ManifestWritten:
+-  Models.ManifestWritten:
++  models.manifest.written:
      subscribe:
 +      operationId: models_manifest_written
 +      description: A model manifest has been written
        message:
          $ref: '#/components/messages/ModelsManifestWritten'
-   Models.CasGc:
+-  Models.CasGc:
++  models.cas.gc:
      subscribe:
 +      operationId: models_cas_gc
 +      description: CAS GC run summary
        message:
          $ref: '#/components/messages/ModelsCasGc'
-   Egress.Preview:
+-  Egress.Preview:
++  egress.preview:
      subscribe:
 +      operationId: egress_preview
 +      description: Egress preflight summary
        message:
          $ref: '#/components/messages/EgressPreview'
-   Egress.Ledger.Appended:
+-  Egress.Ledger.Appended:
++  egress.ledger.appended:
      subscribe:
 +      operationId: egress_ledger_appended
 +      description: Egress decision appended to ledger
        message:
          $ref: '#/components/messages/EgressLedgerAppended'
-   Tool.Ran:
+-  Tool.Ran:
++  tool.ran:
      subscribe:
 +      operationId: tool_ran
 +      description: Tool execution completed
        message:
          $ref: '#/components/messages/ToolRan'
-   Feedback.Signal:
+-  Feedback.Signal:
++  feedback.signal:
      subscribe:
 +      operationId: feedback_signal
 +      description: Feedback signal recorded
        message:
          $ref: '#/components/messages/FeedbackSignal'
-   Feedback.Suggested:
+-  Feedback.Suggested:
++  feedback.suggested:
      subscribe:
 +      operationId: feedback_suggested
 +      description: Feedback suggestion produced
        message:
          $ref: '#/components/messages/FeedbackSuggested'
-   Feedback.Applied:
+-  Feedback.Applied:
++  feedback.applied:
      subscribe:
 +      operationId: feedback_applied
 +      description: Feedback suggestion applied
        message:
          $ref: '#/components/messages/FeedbackApplied'
  components:
-@@ -188,6 +221,66 @@
-     ToolRan:
-       name: Tool.Ran
+   messages:
+     ServiceStart:
+-      name: Service.Start
++      name: service.start
        payload:
-+        type: object
-+        properties:
-+          tool_id: { type: string }
-+          ok: { type: boolean }
-+          duration_ms: { type: integer }
-+          output: {}
-+    FeedbackSignal:
-+      name: Feedback.Signal
-+      payload:
-+        type: object
-+        properties:
-+          kind: { type: string }
-+          target: { type: string }
-+          confidence: { type: number }
-+          severity: { type: integer }
-+          note: { type: ["string","null"] }
-+    FeedbackSuggested:
-+      name: Feedback.Suggested
-+      payload:
-+        type: object
-+        properties:
-+          id: { type: string }
-+          summary: { type: string }
-+          confidence: { type: number }
-+    FeedbackApplied:
-+      name: Feedback.Applied
-+      payload:
-+        type: object
-+        properties:
-+          id: { type: string }
-+          action: { type: string }
-+          ok: { type: boolean }
-+  schemas:
-+    EventEnvelope:
-+      type: object
-+      description: Envelope delivered over SSE; includes CloudEvents metadata under `ce`.
-+      properties:
-+        time:
-+          type: string
-+          format: date-time
-+        kind:
-+          type: string
-+          description: Event type (also mapped to CloudEvents `type`)
-+        payload:
-+          description: Event payload (varies by channel)
-+        policy:
-+          description: Optional gating capsule
-+        ce:
-+          type: object
-+          description: CloudEvents 1.0 metadata
-+          properties:
-+            specversion: { type: string, enum: ["1.0"] }
-+            type: { type: string }
-+            source: { type: string }
-+            id: { type: string }
-+            time: { type: string, format: date-time }
-+            datacontenttype: { type: string }
-+    ToolRan:
-+      name: Tool.Ran
-+      payload:
+         type: object
+         additionalProperties: true
+     ServiceHealth:
+-      name: Service.Health
++      name: service.health
+       payload:
+         type: object
+         properties:
+           ok: { type: boolean }
+     ServiceTest:
+-      name: Service.Test
++      name: service.test
+       payload:
+         type: object
+         additionalProperties: true
+     GovernorChanged:
+-      name: Governor.Changed
++      name: governor.changed
+       payload:
+         type: object
+         properties:
+           profile: { type: string }
+     MemoryApplied:
+-      name: Memory.Applied
++      name: memory.applied
+       payload:
+         type: object
+         additionalProperties: true
+     ModelsChanged:
+-      name: Models.Changed
++      name: models.changed
+       payload:
+         type: object
+         additionalProperties: true
+     ModelsDownloadProgress:
+-      name: Models.DownloadProgress
++      name: models.download.progress
+       payload:
+         type: object
+         properties:
+@@ -129,7 +169,7 @@
+               reserve: { type: integer }
+         additionalProperties: true
+     ModelsManifestWritten:
+-      name: Models.ManifestWritten
++      name: models.manifest.written
+       payload:
+         type: object
+         properties:
+@@ -138,7 +178,7 @@
+           sha256: { type: ["string","null"] }
+           cas: { type: ["string","null"] }
+     ModelsCasGc:
+-      name: Models.CasGc
++      name: models.cas.gc
+       payload:
+         type: object
+         properties:
+@@ -148,7 +188,7 @@
+           deleted_bytes: { type: integer }
+           ttl_days: { type: integer }
+     EgressPreview:
+-      name: Egress.Preview
++      name: egress.preview
+       payload:
+         type: object
+         properties:
+@@ -164,7 +204,7 @@
+           corr_id: { type: string }
+         additionalProperties: true
+     EgressLedgerAppended:
+-      name: Egress.Ledger.Appended
++      name: egress.ledger.appended
+       payload:
+         type: object
+         properties:
+@@ -186,14 +226,14 @@
+           bytes_in: { type: integer }
+           duration_ms: { type: integer }
+     ToolRan:
+-      name: Tool.Ran
++      name: tool.ran
+       payload:
          type: object
          properties:
            id: { type: string }
+           output: { type: object }
+     FeedbackSignal:
+-      name: Feedback.Signal
++      name: feedback.signal
+       payload:
+         type: object
+         properties:
+@@ -206,7 +246,7 @@
+               confidence: { type: number }
+               severity: { type: integer }
+     FeedbackSuggested:
+-      name: Feedback.Suggested
++      name: feedback.suggested
+       payload:
+         type: object
+         properties:
+@@ -222,7 +262,7 @@
+                 rationale: { type: string }
+                 confidence: { type: number }
+     FeedbackApplied:
+-      name: Feedback.Applied
++      name: feedback.applied
+       payload:
+         type: object
+         properties:
 
 ```
 

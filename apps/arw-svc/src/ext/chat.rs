@@ -150,13 +150,13 @@ pub(crate) async fn chat_send(
             .unwrap()
             .insert("corr_id".into(), cid);
     }
-    state.bus.publish("Chat.Message", &in_evt);
-    state.bus.publish("Chat.Message", &out_evt);
+    state.bus.publish("chat.message", &in_evt);
+    state.bus.publish("chat.message", &out_evt);
     // Emit a lightweight planner hint event for UI/recipes
     let mut hint_evt =
         json!({"mode": mode, "verify_pass": verify_pass, "consistency": {"vote_k": vote_k}});
     crate::ext::corr::ensure_corr(&mut hint_evt);
-    state.bus.publish("Chat.Planner", &hint_evt);
+    state.bus.publish("chat.planner", &hint_evt);
     super::ok(assist).into_response()
 }
 
@@ -206,7 +206,7 @@ pub(crate) async fn chat_status(
         let mut payload =
             json!({"backend": backend, "probe_ok": ok, "latency_ms": dt, "error": err});
         crate::ext::corr::ensure_corr(&mut payload);
-        state.bus.publish("Chat.Probe", &payload);
+        state.bus.publish("chat.probe", &payload);
         return super::ok(payload).into_response();
     }
     super::ok(json!({"backend": backend})).into_response()

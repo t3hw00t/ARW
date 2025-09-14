@@ -9,7 +9,7 @@ Purpose
 
 Approach
 - Maintain a checklist and test corpus (seeded cases) aligned with OWASP LLM Top‑10 and the OWASP GenAI project.
-- Surface violations as `Policy.Decision` events and block at policy gates.
+- Surface violations as `policy.decision` events and block at policy gates.
 
 Components
 - Test kit: run seeded prompts/tools; expect denials or sanitization.

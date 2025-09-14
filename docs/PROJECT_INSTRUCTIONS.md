@@ -48,7 +48,7 @@ Clustering & Sharing: See `docs/architecture/cluster_federation.md` for the fede
 
 One source of truth: tool functions annotated with macros generate schemas + runtime + docs.
 
-Generated artifacts: /spec/openapi.yaml, /spec/asyncapi.yaml (event streams including Feedback.*), /spec/mcp-tools.json, /spec/schemas/*.json.
+Generated artifacts: /spec/openapi.yaml, /spec/asyncapi.yaml (event streams including feedback.*), /spec/mcp-tools.json, /spec/schemas/*.json.
 
 Introspection endpoints expose tool catalogs and schemas at runtime.
 

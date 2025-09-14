@@ -18,7 +18,7 @@ Endpoints:
 - Add: `POST /admin/goldens/add` → `{proj, id?, kind, input, expect}`
 - Run: `POST /admin/goldens/run` → `{proj, limit?, temperature?, vote_k?}`
 
-Events: `Goldens.Evaluated` with `{proj, total, passed, failed, avg_latency_ms}`.
+Events: `goldens.evaluated` with `{proj, total, passed, failed, avg_latency_ms}`.
 
 ## Experiments
 
@@ -51,9 +51,9 @@ Endpoints:
 Notes:
 
 - Scoreboard rows are the most recent run snapshot per `(exp_id, variant)` (not cumulative).
-- Winners are updated when `Experiment.Winner` is declared.
+- Winners are updated when `experiment.winner` is declared.
 
-Events: `Experiment.Result` per variant; `Experiment.Winner` with top scorer.
+Events: `experiment.result` per variant; `experiment.winner` with top scorer.
 
 ## How A/B Runs Work
 

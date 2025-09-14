@@ -45,23 +45,23 @@ Port already in use
 ## Model Download Issues
 
 Disk insufficient (preflight)
-- Symptom: `Models.DownloadProgress` with `code: "disk_insufficient"` and a `need/available/reserve` payload.
+- Symptom: `models.download.progress` with `code: "disk-insufficient"` and a `need/available/reserve` payload.
 - Fix: free space or reduce `ARW_MODELS_DISK_RESERVE_MB` (default 256). Consider GC below.
 
 Disk insufficient (stream)
-- Symptom: `code: "disk_insufficient_stream"` mid‑transfer.
+- Symptom: `code: "disk-insufficient-stream"` mid‑transfer.
 - Fix: free up space; retry the same request to resume.
 
 Size exceeds limit
-- Symptom: `code: "size_limit"` or `"size_limit_stream"`.
+- Symptom: `code: "size-limit"` or `"size-limit-stream"`.
 - Fix: increase `ARW_MODELS_MAX_MB` (MiB) or choose a smaller model.
 
 Quota exceeded
-- Symptom: `code: "quota_exceeded"` with CAS totals in payload.
+- Symptom: `code: "quota-exceeded"` with CAS totals in payload.
 - Fix: increase `ARW_MODELS_QUOTA_MB` or remove unused models; see GC.
 
 Checksum mismatch
-- Symptom: `code: "checksum_mismatch"` at the end.
+- Symptom: `code: "checksum-mismatch"` at the end.
 - Fix: verify the source and SHA‑256; retry; switch mirror.
 
 Hung/idle
@@ -77,11 +77,11 @@ Free space via CAS GC
     -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
     -d '{"ttl_days":14}' | jq
   ```
-  Listen for `Models.CasGc` summary events.
+  Listen for `models.cas.gc` summary events.
 
 Metrics
 - Admin endpoint: `GET /admin/models/downloads_metrics` → `{ ewma_mbps, …counters }`.
-- SSE: subscribe to `Models.DownloadProgress` for status/progress.
+- SSE: subscribe to `models.download.progress` for status/progress.
 
 ## Launcher Build on Linux Fails
 - Symptom: errors about WebKitGTK/libsoup.

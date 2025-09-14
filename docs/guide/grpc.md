@@ -46,5 +46,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Notes
 
-- The gRPC server publishes a `Service.Health` event on each `healthz` call.
+- The gRPC server publishes a `service.health` event on each `healthz` call.
 - gRPC is opt-in and not required for core HTTP functionality.

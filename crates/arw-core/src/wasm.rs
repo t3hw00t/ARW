@@ -1,7 +1,7 @@
 //! Helpers for WASM plug‑ins (experimental, feature = "wasm").
 
 use anyhow::{anyhow, Result};
-use wasmtime::component::Component;
+use wasmtime::component::{Component, Instance, Linker};
 use wasmtime::Store;
 // Re-export the Engine type for downstream helpers
 pub use wasmtime::Engine;
@@ -45,9 +45,45 @@ impl WasmTool {
         &self.info
     }
 
-    pub fn invoke(&mut self, _input: &str) -> Result<String> {
+    pub fn invoke(&mut self, input: &str) -> Result<String> {
+        // Best-effort: instantiate the component with an empty linker (no imports).
+        // If the component requires WASI or other imports, instantiation will fail
+        // and we surface that error to the caller.
+        let engine = self.store.engine();
+        let mut linker: Linker<()> = Linker::new(engine);
+        let instance: Instance = linker.instantiate(&mut self.store, &self.component)?;
+
+        // Try a few common exported function names and simple signatures:
+        // 1) (string) -> string
+        // 2) () -> string
+        // 3) (string) -> ()
+        // 4) () -> ()
+        let candidates = ["invoke", "run", "main", "call", "process"];
+        for name in candidates.iter() {
+            // (string) -> string
+            if let Ok(f) = instance.get_typed_func::<(String,), (String,)>(&mut self.store, name) {
+                let (out,) = f.call(&mut self.store, (input.to_string(),))?;
+                return Ok(out);
+            }
+            // () -> string
+            if let Ok(f) = instance.get_typed_func::<(), (String,)>(&mut self.store, name) {
+                let (out,) = f.call(&mut self.store, ())?;
+                return Ok(out);
+            }
+            // (string) -> ()
+            if let Ok(f) = instance.get_typed_func::<(String,), ()>(&mut self.store, name) {
+                let _ = f.call(&mut self.store, (input.to_string(),))?;
+                return Ok(String::new());
+            }
+            // () -> ()
+            if let Ok(f) = instance.get_typed_func::<(), ()>(&mut self.store, name) {
+                let _ = f.call(&mut self.store, ())?;
+                return Ok(String::new());
+            }
+        }
+
         Err(anyhow!(
-            "invoke not implemented (experimental wasm feature)"
+            "no compatible export found (tried invoke/run/main/call/process with (), (string)"
         ))
     }
 }

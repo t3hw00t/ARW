@@ -105,7 +105,7 @@ pub(crate) async fn memory_apply(
         let mut payload =
             serde_json::json!({"kind": req.kind, "value": req.value, "ttl_ms": req.ttl_ms});
         crate::ext::corr::ensure_corr(&mut payload);
-        state.bus.publish("Memory.Applied", &payload);
+        state.bus.publish("memory.applied", &payload);
         (
             axum::http::StatusCode::ACCEPTED,
             super::ok(serde_json::json!({})),

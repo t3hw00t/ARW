@@ -26,7 +26,13 @@ pub async fn distill_once(state: &AppState) -> Value {
     )
     .await;
 
-    // Beliefs snapshot is materialized via events; leave as future work to copy here if needed.
+    // Persist a beliefs snapshot for debugging/ops (best-effort)
+    let beliefs = super::state_api::beliefs_snapshot().await;
+    let _ = super::io::save_json_file_async(
+        &dir.join("distilled.beliefs.json"),
+        &json!({"items": beliefs}),
+    )
+    .await;
 
     // Short world index hygiene: prune old world versions keeping last 5
     prune_world_versions(5).await;

@@ -52,6 +52,7 @@ nav:
       - Troubleshooting: guide/troubleshooting.md
   - Reference:
       - API Reference: reference/api.md
+      - Event Topics: reference/topics.md
       - Interface Deprecations: reference/deprecations.md
       - Interface Catalog: reference/interface-catalog.md
       - Configuration: CONFIGURATION.md

@@ -21,7 +21,7 @@ Why it helps your intended scope
 How to realize it with your current architecture (no new core monolith)
 
 - Treat it as a read‑model: `/state/world` per project that is built from the same event stream and object graph you already standardized (episodes, observations, actions, artifacts, policies).
-- Use events you already have: `Beliefs.Updated`, `Feedback.Suggested`, `Projects.FileWritten`, `Actions.HintApplied`, `Runtime.Health`, `Models.DownloadProgress`. The world view is just these events materialized into a belief graph with provenance and confidence.
+- Use events you already have: `beliefs.updated`, `feedback.suggested`, `projects.file.written`, `actions.hint.applied`, `runtime.health`, `models.download.progress`. The world view is just these events materialized into a belief graph with provenance and confidence.
 - Feed the context recipe: let recipes pull top‑K beliefs (by relevance, freshness, and diversity) the same way they pull files or vector hits; show a trace of why each belief is included.
 - Show it in the UI: a compact “Project Map” panel (entities, key claims with confidence, open questions, contradictions, stale items). Training Park can surface its health: coverage, staleness, contradiction rate, retrieval diversity.
 - Keep it bounded: only ingest what the project touches; purge or summarize over time (retention and dedup rules already fit your Memory Workbench).

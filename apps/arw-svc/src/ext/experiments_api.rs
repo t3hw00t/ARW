@@ -44,7 +44,7 @@ pub async fn start(State(state): State<AppState>, Json(req): Json<StartReq>) -> 
         "budgets": req.budgets,
     });
     super::corr::ensure_corr(&mut payload);
-    state.bus.publish("Experiment.Started", &payload);
+    state.bus.publish("experiment.started", &payload);
     super::ok(json!({ "id": id })).into_response()
 }
 
@@ -57,7 +57,7 @@ pub async fn start(State(state): State<AppState>, Json(req): Json<StartReq>) -> 
 pub async fn stop(State(state): State<AppState>, Json(req): Json<StopReq>) -> impl IntoResponse {
     let mut payload = json!({ "id": req.id });
     super::corr::ensure_corr(&mut payload);
-    state.bus.publish("Experiment.Completed", &payload);
+    state.bus.publish("experiment.completed", &payload);
     super::ok(json!({ "stopped": true })).into_response()
 }
 
@@ -73,6 +73,6 @@ pub async fn assign(
 ) -> impl IntoResponse {
     let mut payload = json!({ "id": req.id, "variant": req.variant, "agent": req.agent });
     super::corr::ensure_corr(&mut payload);
-    state.bus.publish("Experiment.VariantChosen", &payload);
+    state.bus.publish("experiment.variant.chosen", &payload);
     super::ok(json!({ "assigned": true })).into_response()
 }

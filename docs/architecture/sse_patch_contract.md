@@ -3,9 +3,9 @@
 Purpose: stream deltas, not snapshots, to keep interaction latency low and bytes small. Resume connections without losing context.
 
 - Transport: `text/event-stream` (SSE), HTTP/2 preferred.
-- Event kinds: domain events (`Models.DownloadProgress`, `Chat.Message`), read‑model patches (`State.*.Patch`), notices, and a startup ack.
+- Event kinds: domain events (`models.download.progress`, `chat.message`), read‑model patches (`state.*.patch`), notices, and a startup ack. Canonical constants live in `apps/arw-svc/src/ext/topics.rs`.
 - Patch format: RFC 6902 (`application/json-patch+json`) with compact paths.
-- Resume: client may send `Last-Event-ID`. Server acks with `Service.Connected` and includes `{"resume_from":"<id>"}` for clients to decide replay strategy. The query `?replay=N` replays from the in‑process buffer (best‑effort).
+- Resume: client may send `Last-Event-ID`. Server acks with `service.connected` and includes `{"resume_from":"<id>"}` for clients to decide replay strategy. The query `?replay=N` replays from the in‑process buffer (best‑effort).
 
 Example handshake:
 
@@ -14,7 +14,7 @@ Example handshake:
 
 ```
 id: 0
-event: Service.Connected
+event: service.connected
 data: {"resume_from":"2025-09-13T00:00:00.001Z"}
 ```
 
@@ -23,7 +23,6 @@ data: {"resume_from":"2025-09-13T00:00:00.001Z"}
 Read‑model patch topics:
 
 - `State.<Name>.Patch` — specific topic for a model. Payload: `{ id: "<id>", patch: <json-patch-array> }`.
-- `State.ReadModel.Patch` — generic topic. Payload: `{ id: "<id>", patch: <json-patch-array> }`.
+- `state.read.model.patch` — generic topic. Payload: `{ id: "<id>", patch: <json-patch-array> }`. See `TOPIC_READMODEL_PATCH` in `apps/arw-svc/src/ext/topics.rs`.
 
 Clients can apply patches to a local object and render without re-fetching full snapshots.
-

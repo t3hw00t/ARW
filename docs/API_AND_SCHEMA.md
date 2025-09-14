@@ -79,7 +79,7 @@ RFC 7807 Problem Details errors.
 W3C Trace Context + OpenTelemetry.
 
 ## UI Cross‑Reference
-- In the Debug UI (`/debug`, set `ARW_DEBUG=1`), the Tools panel exercises example tools and shows emitted `Tool.Ran` events.
+- In the Debug UI (`/debug`, set `ARW_DEBUG=1`), the Tools panel exercises example tools and shows emitted `tool.ran` events.
 - Click the small “?” next to Tools for a tip and a link back to this page.
 
 ## Directories
@@ -231,12 +231,12 @@ See the Admin Endpoints guide for details and examples. Summary:
 
 - POST `/admin/models/download` — start/resume a download `{id,url,sha256,provider?,budget?}`.
 - POST `/admin/models/download/cancel` — cancel an in‑flight download for `{id}`.
-- POST `/admin/models/cas_gc` — CAS GC once `{ttl_days}`; emits `Models.CasGc`.
+- POST `/admin/models/cas_gc` — CAS GC once `{ttl_days}`; emits `models.cas.gc`.
 - GET  `/admin/models/by-hash/:sha256` — serve a CAS blob by sha256 (egress‑gated).
 - GET  `/admin/state/models_hashes` — list installed model hashes and sizes.
 - GET  `/admin/models/downloads_metrics` — Lightweight metrics `{ ewma_mbps, started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total }`.
 
 Events (AsyncAPI)
-- `Models.DownloadProgress`: standardized progress/errors with optional `budget` and `disk`.
-- `Models.ManifestWritten`, `Models.CasGc`, `Models.Changed`, `Models.Refreshed`.
-- Egress: `Egress.Preview`, `Egress.Ledger.Appended`.
+- `models.download.progress`: standardized progress/errors with optional `budget` and `disk`.
+- `models.manifest.written`, `models.cas.gc`, `models.changed`, `models.refreshed`.
+- Egress: `egress.preview`, `egress.ledger.appended`.

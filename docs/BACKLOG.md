@@ -68,7 +68,7 @@ Security & Admin
 Caching & Performance (High Priority)
 - [t-250913001000-1001] Llama.cpp prompt cache: set `cache_prompt: true` in requests; doc server `--prompt-cache` for persistence — in progress
 - [t-250913001003-1002] CAS HTTP caching: add `ETag`, `Last-Modified`, long‑lived `Cache-Control`, and 304 handling to `/admin/models/by-hash/{sha256}` — in progress
-- [t-250913001006-1003] Action Cache (MVP): wrap `tools_exec::run` with deterministic key (tool id, version, canonical JSON, env signature stub) and CAS’d outputs; Moka front with TTL; `Tool.Cache` events — in progress
+- [t-250913001006-1003] Action Cache (MVP): wrap `tools_exec::run` with deterministic key (tool id, version, canonical JSON, env signature stub) and CAS’d outputs; Moka front with TTL; `tool.cache` events — in progress
 - [t-250913001009-1004] Singleflight: coalesce identical in‑flight tool runs and expensive read‑model recomputes — todo
 - [t-250913001012-1005] Read‑models SSE deltas: stream JSON Patch with `Last-Event-ID` resume; wire Debug UI to apply patches — todo
 - [t-250913001015-1006] Metrics: expose cache hit/miss/age, bytes/latency saved, stampede suppression rate at `/state/*` and `/metrics` — todo
@@ -85,7 +85,7 @@ Egress Firewall & Posture (Plan)
 - Cluster: replicate gateway+DNS guard per Worker; propagate policies from Home over mTLS; Workers cannot widen scope.
 
 Lightweight Mitigations (Plan)
-- Memory quarantine: add review queue and `Memory.Quarantined`/`Memory.Admitted` events; admit only with provenance + evidence score.
+- Memory quarantine: add review queue and `memory.quarantined`/`memory.admitted` events; admit only with provenance + evidence score.
 - Project isolation: enforce per‑project namespaces for caches/embeddings/indexes; “export views” only; imports read‑only and revocable.
 - Belief‑graph ingest: queue world diffs; surface conflicts; require accept/apply with audit events.
 - Cluster manifest pinning: define signed manifest schema; publish/verify; scheduler filters to trusted manifests.
@@ -133,6 +133,18 @@ Queues, NATS & Orchestration
 Specs & Docs
 - Generate AsyncAPI + MCP artifacts and serve under /spec/* [t-250909224102-9629]
 - Docgen: gating keys listing + config schema and examples
+- Event normalization rollout
+  - [t-250913213500-ev01] Add dual-mode warning logs when ARW_EVENTS_KIND_MODE=dual to surface remaining legacy consumers — removed (modes dropped)
+  - [t-250913213501-ev02] Update all docs/screenshots/snippets to normalized kinds (models.download.progress, …) — in progress
+  - [t-250913213502-ev03] Add envelope schema `ApiEnvelope<T>` in OpenAPI and adopt in responses (opt-in) — todo
+  - [t-250913213503-ev04] Add short descriptions to any endpoints with Spectral hints (e.g., /state/models) — done
+  - [t-250913213504-ev05] Adjust Spectral AsyncAPI rule to accept dot.case explicitly to remove naming warnings — todo
+  - [t-250913213505-ev06] Plan removal: switch all deployments to normalized kinds, then drop legacy/dual paths — done
+  - [t-250913213506-ev07] Add deprecation note to release notes (legacy event kinds) — done
+
+OpenAPI/Examples
+- [t-250913213507-api01] Add examples for /admin/models/jobs and /admin/models/download responses — todo
+- [t-250913213508-api02] Document public /state/models envelope explicitly or add note about envelope omission in examples — todo
 
 Feedback Engine (Near‑Live)
 - Engine crate and integration: actor with O(1) stats, deltas via bus, snapshot+persistence [t-250909224102-8952]

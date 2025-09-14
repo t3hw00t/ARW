@@ -82,12 +82,16 @@ pub async fn intents_snapshot() -> Vec<serde_json::Value> {
 pub async fn actions_snapshot() -> Vec<serde_json::Value> {
     actions().read().unwrap().iter().cloned().collect()
 }
+// Beliefs snapshot (internal helper for distillation and summaries)
+pub async fn beliefs_snapshot() -> Vec<serde_json::Value> {
+    beliefs().read().unwrap().clone()
+}
 
 pub async fn on_event(env: &Envelope) {
     // Always keep observations current
     obs_on_event(env).await;
-    // Beliefs update from Feedback.Suggested or Beliefs.* events
-    if env.kind == "Feedback.Suggested" || env.kind.starts_with("Beliefs.") {
+    // Beliefs update from feedback.suggested or beliefs.* events
+    if env.kind == "feedback.suggested" || env.kind.starts_with("beliefs.") {
         let mut list: Vec<serde_json::Value> = Vec::new();
         if let Some(arr) = env.payload.get("suggestions").and_then(|x| x.as_array()) {
             list = arr.clone();
@@ -102,7 +106,7 @@ pub async fn on_event(env: &Envelope) {
         beliefs_ver().fetch_add(1, Ordering::Relaxed);
     }
     // Logic Units: rolling list of unit events
-    if env.kind.starts_with("LogicUnit.") {
+    if env.kind.starts_with("logic.unit.") {
         let mut q = logic_units().write().unwrap();
         if q.len() == q.capacity() {
             let _ = q.pop_front();
@@ -110,7 +114,7 @@ pub async fn on_event(env: &Envelope) {
         q.push_back(json!({"time": env.time, "kind": env.kind, "payload": env.payload}));
     }
     // Experiments: rolling list of experiment events
-    if env.kind.starts_with("Experiment.") {
+    if env.kind.starts_with("experiment.") {
         let mut q = experiments().write().unwrap();
         if q.len() == q.capacity() {
             let _ = q.pop_front();
@@ -118,7 +122,7 @@ pub async fn on_event(env: &Envelope) {
         q.push_back(json!({"time": env.time, "kind": env.kind, "payload": env.payload}));
     }
     // Runtime matrix: keep last health per target/id when provided
-    if env.kind == "Runtime.Health" {
+    if env.kind == "runtime.health" {
         let mut m = runtime_matrix().write().unwrap();
         let key = env
             .payload
@@ -129,7 +133,7 @@ pub async fn on_event(env: &Envelope) {
         m.insert(key, env.payload.clone());
     }
     // Intents: rolling list of generic Intents.* events
-    if env.kind.starts_with("Intents.") {
+    if env.kind.starts_with("intents.") {
         let mut q = intents().write().unwrap();
         if q.len() == q.capacity() {
             let _ = q.pop_front();
@@ -137,7 +141,7 @@ pub async fn on_event(env: &Envelope) {
         q.push_back(json!({"time": env.time, "kind": env.kind, "payload": env.payload}));
     }
     // Actions: rolling list of generic Actions.* events
-    if env.kind.starts_with("Actions.") {
+    if env.kind.starts_with("Actions.") || env.kind.starts_with("actions.") {
         let mut q = actions().write().unwrap();
         if q.len() == q.capacity() {
             let _ = q.pop_front();

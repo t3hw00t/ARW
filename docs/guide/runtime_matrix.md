@@ -14,7 +14,7 @@ Matrix cells
 
 Features
 - Pin combos per agent/project; fallbacks with policy
-- Event‑driven: `Runtime.Health`, `Models.Changed`, `Policy.*`
+- Event‑driven: `runtime.health`, `models.changed`, `policy.*`
 - Quick actions: (re)load model, switch runtime/sandbox, open logs
 
 Backends

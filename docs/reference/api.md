@@ -19,3 +19,28 @@ Semantics
 - stability: experimental → beta → stable → deprecated → sunset (see Interface Catalog and Deprecations pages).
 - deprecations: deprecated operations advertise `Deprecation: true`; `Sunset: <date>` when scheduled; `Link: rel="deprecation"` points to the doc.
 - operationId: snake_case with `_doc` suffix (enforced by Spectral; code‑generated OpenAPI is linted in CI).
+
+## Models
+
+`GET /models/blob/{sha256}`
+
+- Returns the content‑addressed model blob stored under CAS by hex SHA‑256.
+- Caching: strong validators with `ETag: "{sha256}"` and `Last-Modified`.
+- Clients can send `If-None-Match` to receive `304 Not Modified`.
+- Supports `Range: bytes=...` for partial content; returns `206` with `Content-Range`.
+- Cache policy: `Cache-Control: public, max-age=31536000, immutable` (digest‑addressed).
+
+Examples
+
+```bash
+# Full download
+curl -SsfLO "http://127.0.0.1:8090/models/blob/0123abcd..."
+
+# Conditional
+curl -I -H 'If-None-Match: "0123abcd..."' \
+  "http://127.0.0.1:8090/models/blob/0123abcd..."
+
+# Partial
+curl -sS -H 'Range: bytes=0-1048575' \
+  -o part.bin "http://127.0.0.1:8090/models/blob/0123abcd..."
+```

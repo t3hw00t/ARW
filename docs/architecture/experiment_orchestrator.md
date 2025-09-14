@@ -12,7 +12,7 @@ Concepts
 - Budgets: token/time/cost caps per variant.
 
 Lifecycle Events
-- `Experiment.Started`, `Experiment.VariantChosen`, `Experiment.Result`, `Experiment.Completed`.
+- `experiment.started`, `experiment.variant.chosen`, `experiment.result`, `experiment.completed`.
 
 Read‑Models
 - `/state/experiments` shows recent lifecycle events and results.
@@ -26,4 +26,3 @@ UI
 - A/B dry‑run in Logic Units Library; deltas displayed inline (solve‑rate, latency, token spend, diversity).
 
 See also: Logic Units, Evaluation Harness, Budgets & Context Economy.
-

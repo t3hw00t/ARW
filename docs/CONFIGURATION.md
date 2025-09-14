@@ -30,6 +30,7 @@ Centralized reference for ARW environment variables and common flags. Defaults f
 ## Docs & Debug UI
 - `ARW_DOCS_URL`: URL to your hosted docs for UI links. Appears in `GET /about` as `docs_url` so clients can discover your manual.
 - Debug UI is accessible at `/debug` when enabled.
+- `ARW_EVENTS_SSE_MODE`: format for SSE `data` payloads. `envelope` (default) emits the ARW envelope `{ time, kind, payload, ce }`. `ce-structured` emits CloudEvents 1.0 structured JSON with `data` holding the payload.
 
 ## State & Paths
 - `ARW_STATE_DIR`: override state directory.
@@ -63,8 +64,9 @@ Config discovery (CWD‑independent)
 - `ARW_DL_IDLE_TIMEOUT_SECS`: idle fallback timeout when no hard budget is set (default `300`; set `0` to disable).
 - `ARW_DL_EWMA_ALPHA`: smoothing factor for throughput EWMA used in admission decisions (default `0.3`).
 - `ARW_DL_PREFLIGHT`: when `1`, perform a HEAD preflight to capture `Content-Length` and resume validators (ETag/Last-Modified). Enables early enforcement of `ARW_MODELS_MAX_MB` and `ARW_MODELS_QUOTA_MB` before starting the transfer.
-- `ARW_DL_PROGRESS_INCLUDE_BUDGET`: when `1`, include a `budget` snapshot in `Models.DownloadProgress` events.
+- `ARW_DL_PROGRESS_INCLUDE_BUDGET`: when `1`, include a `budget` snapshot in `models.download.progress` events.
 - `ARW_DL_PROGRESS_INCLUDE_DISK`: when `1`, include a `disk` snapshot `{available,total,reserve}` in progress events.
+- `ARW_DL_PROGRESS_VALIDATE`: when `1`, validate progress `status`/`code` against the known vocabulary and log warnings for unknown values (helps catch drift).
  
 HTTP client (downloads)
 - `ARW_DL_HTTP_KEEPALIVE_SECS`: TCP keepalive seconds for the download client pool (default `60`; `0` = unset/OS default).
@@ -87,10 +89,15 @@ These knobs prioritize perceived latency and streaming cadence.
 
 SSE contract: see `architecture/sse_patch_contract.md` for `Last-Event-ID` and JSON Patch topics.
 
+## Events & Kinds
+- Kinds are normalized lowercase dot.case (e.g., `models.download.progress`).
+- Normalized kinds appear in the CloudEvents `ce.type` and envelope `kind` fields.
+- SSE filters should use normalized prefixes (e.g., `?prefix=models.`).
+
 ## Hardware Probes & Metrics
 - `ARW_ROCM_SMI`: `1` enables ROCm SMI enrichment for AMD GPU metrics on Linux (best‑effort).
 - `ARW_DXCORE_NPU`: `1` enables DXCore probe for NPUs on Windows when built with `npu_dxcore` feature.
-- `ARW_METRICS_INTERVAL_SECS`: background SSE `Probe.Metrics` interval seconds (default `10`, min `2`).
+- `ARW_METRICS_INTERVAL_SECS`: background SSE `probe.metrics` interval seconds (default `10`, min `2`).
 
 ## CORS & Networking
 - `ARW_CORS_ANY`: `1` to relax CORS during development only.
