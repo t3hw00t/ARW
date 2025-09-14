@@ -7,6 +7,7 @@ import os
 import sys
 import yaml
 from datetime import datetime, timezone
+import hashlib
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPEC = os.path.join(REPO, 'spec', 'openapi.yaml')
@@ -14,8 +15,12 @@ DESC = os.path.join(REPO, 'interfaces', 'http', 'arw-svc', 'descriptor.yaml')
 OUT = os.path.join(REPO, 'docs', 'reference', 'deprecations.md')
 
 
-def iso_now():
-    return datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
+def file_sha256(path: str) -> str:
+    h = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for chunk in iter(lambda: f.read(8192), b''):
+            h.update(chunk)
+    return h.hexdigest()
 
 
 def load_yaml(path):
@@ -70,7 +75,15 @@ def gen():
     lines.append('')
     lines.append('# Interface Deprecations')
     lines.append('')
-    lines.append(f'_Generated {iso_now()} from spec/openapi.yaml. Do not edit._')
+    # Stable header: embed spec content hash to avoid timestamp churn
+    try:
+        sh = file_sha256(SPEC)[:12]
+        hdr = f'_Generated from spec/openapi.yaml (sha256:{sh}). Do not edit._'
+    except Exception:
+        # Fallback: ISO now, but this path should rarely execute
+        hdr = datetime.now(timezone.utc).isoformat(timespec='seconds').replace('+00:00', 'Z')
+        hdr = f'_Generated {hdr} from spec/openapi.yaml. Do not edit._'
+    lines.append(hdr)
     lines.append('')
     lines.append('When an operation is marked deprecated, the runtime emits standard headers (Deprecation, optionally Sunset and Link rel="deprecation").')
     lines.append('')
@@ -90,4 +103,3 @@ def gen():
 
 if __name__ == '__main__':
     sys.exit(gen())
-

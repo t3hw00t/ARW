@@ -4,7 +4,7 @@ title: Interface Deprecations
 
 # Interface Deprecations
 
-_Generated 2025-09-14T03:52:49Z from spec/openapi.yaml. Do not edit._
+_Generated from spec/openapi.yaml (sha256:0c8e78203969). Do not edit._
 
 When an operation is marked deprecated, the runtime emits standard headers (Deprecation, optionally Sunset and Link rel="deprecation").
 
