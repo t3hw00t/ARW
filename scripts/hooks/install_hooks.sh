@@ -109,7 +109,8 @@ if command -v npx >/dev/null 2>&1; then
   base_ref=${BASE_REF:-origin/main}
   if git show "$base_ref:spec/asyncapi.yaml" > "$tmp/a_base.yaml" 2>/dev/null; then
     cp spec/asyncapi.yaml "$tmp/a_head.yaml"
-    npx --yes @asyncapi/diff "$tmp/a_base.yaml" "$tmp/a_head.yaml" --markdown | sed -n '1,200p' || true
+    # Use AsyncAPI CLI for diff output in markdown format
+    npx --yes @asyncapi/cli diff "$tmp/a_base.yaml" "$tmp/a_head.yaml" -f md | sed -n '1,200p' || true
   fi
 fi
 
@@ -121,7 +122,7 @@ if command -v npx >/dev/null 2>&1; then
   # AsyncAPI is kept minimal; treat errors as warnings for now
   npx --yes @stoplight/spectral-cli lint -r quality/openapi-spectral.yaml --fail-severity=warn spec/asyncapi.yaml || true
   # Lint code-generated OpenAPI as well (style parity)
-  npx --yes @stoplight/spectral-cli lint -r quality/openapi-spectral.yaml "$tmp/openapi.yaml" || exit 1
+  npx --yes @stoplight/spectral-cli lint -r quality/openapi-spectral.yaml "$tmp/codegen.yaml" || exit 1
 else
   echo "[pre-push] npx unavailable; skipping spectral"
 fi
