@@ -108,42 +108,74 @@ components:
   messages:
     ServiceStart:
       name: service.start
+      correlationId:
+        description: Correlates events within an episode
+        location: "$message.payload#/corr_id"
       payload:
         type: object
+        properties:
+          corr_id: { type: string }
         additionalProperties: true
     ServiceHealth:
       name: service.health
+      correlationId:
+        description: Correlates events within an episode
+        location: "$message.payload#/corr_id"
       payload:
         type: object
         properties:
+          corr_id: { type: string }
           ok: { type: boolean }
     ServiceTest:
       name: service.test
-      payload:
-        type: object
-        additionalProperties: true
-    GovernorChanged:
-      name: governor.changed
+      correlationId:
+        description: Correlates events within an episode
+        location: "$message.payload#/corr_id"
       payload:
         type: object
         properties:
+          corr_id: { type: string }
+        additionalProperties: true
+    GovernorChanged:
+      name: governor.changed
+      correlationId:
+        description: Correlates events within an episode
+        location: "$message.payload#/corr_id"
+      payload:
+        type: object
+        properties:
+          corr_id: { type: string }
           profile: { type: string }
     MemoryApplied:
       name: memory.applied
+      correlationId:
+        description: Correlates events within an episode
+        location: "$message.payload#/corr_id"
       payload:
         type: object
+        properties:
+          corr_id: { type: string }
         additionalProperties: true
     ModelsChanged:
       name: models.changed
+      correlationId:
+        description: Correlates events within an episode
+        location: "$message.payload#/corr_id"
       payload:
         type: object
+        properties:
+          corr_id: { type: string }
         additionalProperties: true
     ModelsDownloadProgress:
       name: models.download.progress
+      correlationId:
+        description: Correlates download episodes and related events
+        location: "$message.payload#/corr_id"
       payload:
         type: object
         properties:
           id: { type: string }
+          corr_id: { type: string }
           status:
             type: string
             enum: [started, queued, admitted, downloading, resumed, resync, degraded, canceled, complete, cancel-requested, no-active-job, cache-mismatch, error]
@@ -174,18 +206,26 @@ components:
         additionalProperties: true
     ModelsManifestWritten:
       name: models.manifest.written
+      correlationId:
+        description: Correlates events within an episode
+        location: "$message.payload#/corr_id"
       payload:
         type: object
         properties:
           id: { type: string }
+          corr_id: { type: string }
           manifest_path: { type: string }
           sha256: { type: ["string","null"] }
           cas: { type: ["string","null"] }
     ModelsCasGc:
       name: models.cas.gc
+      correlationId:
+        description: Correlates events within an episode
+        location: "$message.payload#/corr_id"
       payload:
         type: object
         properties:
+          corr_id: { type: string }
           scanned: { type: integer }
           kept: { type: integer }
           deleted: { type: integer }
@@ -193,6 +233,9 @@ components:
           ttl_days: { type: integer }
     EgressPreview:
       name: egress.preview
+      correlationId:
+        description: Correlates events within an episode
+        location: "$message.payload#/corr_id"
       payload:
         type: object
         properties:
@@ -209,6 +252,9 @@ components:
         additionalProperties: true
     EgressLedgerAppended:
       name: egress.ledger.appended
+      correlationId:
+        description: Correlates events within an episode
+        location: "$message.payload#/corr_id"
       payload:
         type: object
         properties:
@@ -231,16 +277,24 @@ components:
           duration_ms: { type: integer }
     ToolRan:
       name: tool.ran
+      correlationId:
+        description: Correlates events within an episode
+        location: "$message.payload#/corr_id"
       payload:
         type: object
         properties:
+          corr_id: { type: string }
           id: { type: string }
           output: { type: object }
     FeedbackSignal:
       name: feedback.signal
+      correlationId:
+        description: Correlates events within an episode
+        location: "$message.payload#/corr_id"
       payload:
         type: object
         properties:
+          corr_id: { type: string }
           signal:
             type: object
             properties:
@@ -251,9 +305,13 @@ components:
               severity: { type: integer }
     FeedbackSuggested:
       name: feedback.suggested
+      correlationId:
+        description: Correlates events within an episode
+        location: "$message.payload#/corr_id"
       payload:
         type: object
         properties:
+          corr_id: { type: string }
           version: { type: integer }
           suggestions:
             type: array
@@ -267,9 +325,13 @@ components:
                 confidence: { type: number }
     FeedbackApplied:
       name: feedback.applied
+      correlationId:
+        description: Correlates events within an episode
+        location: "$message.payload#/corr_id"
       payload:
         type: object
         properties:
+          corr_id: { type: string }
           id: { type: string }
           action: { type: string }
           params: { type: object }
