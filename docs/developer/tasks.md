@@ -4,11 +4,15 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-13 23:50 UTC
+Updated: 2025-09-14 06:58 UTC
 
 
 ## To Do
-- [t-250912024851-8114] Models: move download worker into ModelsService — todo (updated: 2025-09-12 00:48:51 UTC)
+- [t-250914050916-ev18] Release notes: dot.case migration — todo (updated: 2025-09-14 05:09:16 UTC)
+- [t-250914050912-ev16] CI: event kind linter — todo (updated: 2025-09-14 05:09:12 UTC)
+- [t-250914050910-ev15] Docs: dot.case normalization — todo (updated: 2025-09-14 05:09:10 UTC)
+- [t-250914050906-ev13] Connector: task.completed + subjects — todo (updated: 2025-09-14 05:09:06 UTC)
+- [t-250914050904-ev12] Debug UI: dot.case listeners — todo (updated: 2025-09-14 05:09:04 UTC)
 - [t-250912024843-7597] Resources: Hierarchy/Governor services — todo (updated: 2025-09-12 00:48:43 UTC)
 - [t-250912024838-4137] UI: Episodes filters + details toggle — todo (updated: 2025-09-12 00:48:38 UTC)
 - [t-250912001105-7850] Phase 3: Episodes + Debug UI reactive views — todo (updated: 2025-09-11 22:11:05 UTC)
@@ -30,12 +34,16 @@ Updated: 2025-09-13 23:50 UTC
 - [t-250909224102-8952] Plan: Heuristic engine crate + integration — todo (updated: 2025-09-09 20:41:02 UTC)
 
 ## In Progress
+- [t-250914050908-ev14] Feature Matrix: dot.case topics — in_progress (updated: 2025-09-14 05:09:08 UTC)
+- [t-250914050902-ev11] Events: replace publishers with constants — in_progress (updated: 2025-09-14 05:09:02 UTC)
+- [t-250914050900-ev10] Events: topics.rs dot.case only — in_progress (updated: 2025-09-14 05:09:00 UTC)
 
 ## Paused
 - [t-250911230236-6445] Security: per-route gating layers; slim global admin middleware — paused (updated: 2025-09-11 21:03:46 UTC)
     - 2025-09-11 21:03:46 UTC: Duplicate of t-250911230252-9858; track only the latter.
 
 ## Done
+- [t-250912024851-8114] Models: move download worker into ModelsService — done (updated: 2025-09-14 00:00:00 UTC)
 - [t-250912020516-8533] Phase 1: AppState builder + unified struct — done (updated: 2025-09-12 00:05:22 UTC)
     - 2025-09-12 00:05:22 UTC: Unified AppState in app_state.rs; main/lib migrated; added Resources container; built+tests green for arw-svc.
 - [t-250911230302-0138] Tools: central execution registry unified for /tools and tasks — done (updated: 2025-09-11 21:14:14 UTC)

@@ -71,8 +71,8 @@ Rate limiting:
 - `/admin/models[/*]`: list/save/load/add/delete/default/download
 - `/admin/tools[/*]`: list and run tools
 - `/admin/feedback[/*]`: feedback engine state & policy
-- `/admin/self_model/propose` (POST): propose a self‑model update; emits `SelfModel.Proposed`
-- `/admin/self_model/apply` (POST): apply a proposal; emits `SelfModel.Updated`
+- `/admin/self_model/propose` (POST): propose a self‑model update; emits `self.model.proposed`
+- `/admin/self_model/apply` (POST): apply a proposal; emits `self.model.updated`
 - `/admin/state/*`: observations, beliefs, world, intents, actions
   - `/admin/state/models_metrics`: models download counters + EWMA (read‑model). Shape matches the metrics used in `/admin/models/summary`.
   - `/admin/state/route_stats`: per‑route latency/hit/error read‑model
@@ -99,7 +99,7 @@ Rate limiting:
   - `/admin/goldens/add` (POST) — add a golden item `{proj,kind:"chat",input:{prompt},expect:{contains|equals|regex}}`
   - `/admin/goldens/run` (POST) — run evaluator `{proj,limit?,temperature?,vote_k?}` (uses retrieval/formatting hints if set)
   - `/admin/experiments/define` (POST) — define variants with knobs
-  - `/admin/experiments/run` (POST) — A/B on goldens `{id,proj,variants:["A","B"]}`; emits `Experiment.Result` and `Experiment.Winner`
+  - `/admin/experiments/run` (POST) — A/B on goldens `{id,proj,variants:["A","B"]}`; emits `experiment.result` and `experiment.winner`
   - `/admin/experiments/activate` (POST) — apply a variant’s knobs to live hints `{id,variant}`
   - `/admin/experiments/list` (GET) — list experiment definitions
   - `/admin/experiments/scoreboard` (GET) — persisted scoreboard (last‑run snapshot per variant)
@@ -108,7 +108,7 @@ Rate limiting:
   - `/admin/safety/checks` (POST) — static red‑team checks for proposed patches; returns issues (SSRF patterns, prompt‑injection phrasing, secrets markers, permission widenings)
   - `ARW_PATCH_SAFETY=1` — enforce checks in `/admin/patch/apply`
 - Distillation
-  - `/admin/distill/run` (POST) — run distillation once (beliefs/playbooks/index hygiene); emits `Distill.Completed`
+  - `/admin/distill/run` (POST) — run distillation once (beliefs/playbooks/index hygiene); emits `distill.completed`
 - `/admin/emit/test`: emit a test event
 - `/admin/shutdown`: request shutdown
 
@@ -236,6 +236,17 @@ curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
   - Body: `{id,url,sha256,provider?,budget?}` where `budget` can override `{soft_ms,hard_ms,class}` for this request.
   - Requires a 64‑char hex `sha256`.
   - Emits standardized `models.download.progress` events.
+  
+  Example request/response
+  ```bash
+  curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
+    -H 'Content-Type: application/json' \
+    -d '{"id":"llama3.1:8b-instruct-q4_K_M","url":"https://example/model.bin","sha256":"7f2e4c0f9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e","provider":"hf"}' \
+    -X POST "$BASE/admin/models/download" | jq
+  # {
+  #   "ok": true
+  # }
+  ```
 - `POST /admin/models/download/cancel` — Cancel an in‑flight download for `{id}`. Emits `cancel-requested` then `canceled` when complete (or `no-active-job`).
 - `POST /admin/models/cas_gc` — Run a one‑off CAS GC sweep: `{ttl_days}`. Emits `models.cas.gc`.
 - `GET  /state/models` — Public, read‑only models list.
@@ -250,7 +261,20 @@ Notes
 - SSE: `state.read.model.patch` with id=`models_metrics` publishes RFC‑6902 JSON Patches with coalescing.
  - `POST /admin/models/concurrency` — Set models download concurrency at runtime. Body: `{ max: number, block?: boolean }`. When `block` is `true` (default), shrinking waits for permits; when `false`, it shrinks opportunistically.
  - `GET  /admin/models/concurrency` — Get current concurrency, including `{ configured_max, available_permits, held_permits, hard_cap }`.
- - `GET  /admin/models/jobs` — Snapshot of active jobs and inflight hashes for observability.
+  - `GET  /admin/models/jobs` — Snapshot of active jobs and inflight hashes for observability.
+    
+    Example response
+    ```json
+    {
+      "active": [
+        { "model_id": "llama3.1:8b-instruct-q4_K_M", "job_id": "dl-5f45c0a1" }
+      ],
+      "inflight_hashes": [
+        "7f2e4c0f9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e"
+      ],
+      "concurrency": { "configured_max": 2, "available_permits": 1, "held_permits": 0 }
+    }
+    ```
 
 ### Tools
 

@@ -28,7 +28,7 @@ Never‑Out‑Of‑Context (High Priority)
 - [t-250912143005-0002] Context API: allow slot budgets and return stable pointers (IDs) for all included items — todo
 - [t-250912143009-0003] Retrieval: add MMR‑style selector across vector/graph mounts and world beliefs — todo
 - [t-250912143013-0004] Compression cascade: summarize episodes (extract→abstract→outline) into mounts with provenance — todo
-- [t-250912143017-0005] Failure detectors: emit Context.RecallRisk and Context.Coverage with meters in UI — todo
+- [t-250912143017-0005] Failure detectors: emit `context.recall_risk` and `context.coverage` with meters in UI — todo
 - [t-250912143021-0006] Memory hygiene: per‑lane caps + TTL + janitor job with rollups and evictions — todo
 - [t-250912143025-0007] Logic Unit: ship config‑only Never‑Out‑Of‑Context defaults (budgets, diversity, rehydrate rules) — todo
 - [t-250912143029-0008] UI: Project Hub panel “What’s in context now” with artifact pointers and rehydrate actions — todo
@@ -54,7 +54,7 @@ Last‑mile Structures
 - Config Patch Engine: dry‑run/apply/revert endpoints; schema validation; audited permission widening
 - Experiment Orchestrator: start/stop/assign; emit Experiment.*; fold to `/state/experiments`
 - Provenance/Snapshots: enrich `/state/episode/{id}/snapshot` with effective config (units, params, model hash, policies)
-- AppSec Harness: seed tests; surface violations as `Policy.Decision` events; block unsafe tool I/O
+- AppSec Harness: seed tests; surface violations as `policy.decision` events; block unsafe tool I/O
 - Observability (OTel): map timeline to traces (corr_id as trace); correlate metrics/logs
 - Compliance Mode: workspace switch; record‑keeping + approvals; UI status widget
 - Supply‑Chain Trust: signed manifests, SBOMs, sandbox defaults; align desktop capabilities with policies
@@ -67,7 +67,7 @@ Security & Admin
 
 Caching & Performance (High Priority)
 - [t-250913001000-1001] Llama.cpp prompt cache: set `cache_prompt: true` in requests; doc server `--prompt-cache` for persistence — in progress
-- [t-250913001003-1002] CAS HTTP caching: add `ETag`, `Last-Modified`, long‑lived `Cache-Control`, and 304 handling to `/admin/models/by-hash/{sha256}` — in progress
+- [t-250913001003-1002] CAS HTTP caching: add `ETag`, `Last-Modified`, long‑lived `Cache-Control`, and 304 handling to `/admin/models/by-hash/{sha256}` — done
 - [t-250913001006-1003] Action Cache (MVP): wrap `tools_exec::run` with deterministic key (tool id, version, canonical JSON, env signature stub) and CAS’d outputs; Moka front with TTL; `tool.cache` events — in progress
 - [t-250913001009-1004] Singleflight: coalesce identical in‑flight tool runs and expensive read‑model recomputes — todo
 - [t-250913001012-1005] Read‑models SSE deltas: stream JSON Patch with `Last-Event-ID` resume; wire Debug UI to apply patches — todo
@@ -142,8 +142,19 @@ Specs & Docs
   - [t-250913213505-ev06] Plan removal: switch all deployments to normalized kinds, then drop legacy/dual paths — done
   - [t-250913213506-ev07] Add deprecation note to release notes (legacy event kinds) — done
 
+Strict dot.case normalization (no back-compat)
+- [t-250914050900-ev10] Update topics SSoT to dot.case only (remove CamelCase constants) — in progress
+- [t-250914050902-ev11] Replace all publishers to use topics.rs constants (no hard-coded strings) — in progress
+- [t-250914050904-ev12] Debug UI: switch listeners to dot.case only — todo
+- [t-250914050906-ev13] Connector: publish `task.completed` and subjects `arw.events.task.completed` + node variant — todo
+- [t-250914050908-ev14] Update Feature Matrix topics to dot.case — in progress
+- [t-250914050910-ev15] Docs: update Events Vocabulary/Topics/Admin Endpoints to dot.case — todo
+- [t-250914050912-ev16] CI linter: fail on any `publish("...CamelCase...")` or legacy subjects — todo
+- [t-250914050914-ev17] arw-core gating keys: add `events:task.completed` and update callers — plan
+- [t-250914050916-ev18] Release notes: breaking change, mapping table, migration notes — todo
+
 OpenAPI/Examples
-- [t-250913213507-api01] Add examples for /admin/models/jobs and /admin/models/download responses — todo
+- [t-250913213507-api01] Add examples for /admin/models/jobs and /admin/models/download responses — done
 - [t-250913213508-api02] Document public /state/models envelope explicitly or add note about envelope omission in examples — todo
 
 Feedback Engine (Near‑Live)

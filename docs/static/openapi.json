@@ -1566,6 +1566,14 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OkResponse"
+                },
+                "examples": {
+                  "started": {
+                    "summary": "Enqueued/started",
+                    "value": {
+                      "ok": true
+                    }
+                  }
                 }
               }
             }
@@ -1653,7 +1661,32 @@
         "operationId": "models_jobs_doc",
         "responses": {
           "200": {
-            "description": "Jobs status"
+            "description": "Jobs status",
+            "content": {
+              "application/json": {
+                "examples": {
+                  "basic": {
+                    "summary": "Sample snapshot",
+                    "value": {
+                      "active": [
+                        {
+                          "model_id": "llama3.1:8b-instruct-q4_K_M",
+                          "job_id": "dl-5f45c0a1"
+                        }
+                      ],
+                      "inflight_hashes": [
+                        "7f2e4c0f9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e"
+                      ],
+                      "concurrency": {
+                        "configured_max": 2,
+                        "available_permits": 1,
+                        "held_permits": 0
+                      }
+                    }
+                  }
+                }
+              }
+            }
           },
           "403": {
             "description": "Forbidden",

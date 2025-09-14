@@ -1,7 +1,79 @@
 {
   "version": 1,
-  "updated": "2025-09-13 23:50 UTC",
+  "updated": "2025-09-14 06:58 UTC",
   "tasks": [
+    {
+      "id": "t-250914050900-ev10",
+      "title": "Events: topics.rs dot.case only",
+      "desc": "Normalize topic constant values to dot.case; remove CamelCase variants",
+      "status": "in_progress",
+      "notes": [],
+      "updated": "2025-09-14 05:09:00 UTC"
+    },
+    {
+      "id": "t-250914050902-ev11",
+      "title": "Events: replace publishers with constants",
+      "desc": "Ensure all bus.publish() use topics.rs constants; no hard-coded strings",
+      "status": "in_progress",
+      "notes": [],
+      "updated": "2025-09-14 05:09:02 UTC"
+    },
+    {
+      "id": "t-250914050904-ev12",
+      "title": "Debug UI: dot.case listeners",
+      "desc": "Switch /debug event listeners to dot.case kinds only",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-14 05:09:04 UTC"
+    },
+    {
+      "id": "t-250914050906-ev13",
+      "title": "Connector: task.completed + subjects",
+      "desc": "Publish kind=task.completed and NATS subjects arw.events.task.completed and node variant",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-14 05:09:06 UTC"
+    },
+    {
+      "id": "t-250914050908-ev14",
+      "title": "Feature Matrix: dot.case topics",
+      "desc": "Update interfaces/features.json topics to dot.case; regen docs",
+      "status": "in_progress",
+      "notes": [],
+      "updated": "2025-09-14 05:09:08 UTC"
+    },
+    {
+      "id": "t-250914050910-ev15",
+      "title": "Docs: dot.case normalization",
+      "desc": "Update Events Vocabulary/Topics/Admin Endpoints examples to dot.case",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-14 05:09:10 UTC"
+    },
+    {
+      "id": "t-250914050912-ev16",
+      "title": "CI: event kind linter",
+      "desc": "Add script to fail PRs on CamelCase event kinds or legacy subjects",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-14 05:09:12 UTC"
+    },
+    {
+      "id": "t-250914050914-ev17",
+      "title": "Gating keys: events:task.completed",
+      "desc": "Add dot.case gating key aliases or migrate to dot.case in arw-core",
+      "status": "plan",
+      "notes": [],
+      "updated": "2025-09-14 05:09:14 UTC"
+    },
+    {
+      "id": "t-250914050916-ev18",
+      "title": "Release notes: dot.case migration",
+      "desc": "Write breaking change notes and mapping table; migration checklist",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-14 05:09:16 UTC"
+    },
     {
       "id": "t-250909170247-9910",
       "title": "Integrate tasks tracker with docs",
@@ -517,9 +589,10 @@
       "id": "t-250912024851-8114",
       "title": "Models: move download worker into ModelsService",
       "desc": "Refactor /models/download + progress/cancel to live in a typed service; endpoints call service; preserve resume/cancel/checksum, publish corr_id progress events.",
-      "status": "todo",
+      "status": "done",
       "notes": [],
-      "updated": "2025-09-12 00:48:51 UTC"
+      "updated": "2025-09-14 00:00:00 UTC",
+      "done_at": "2025-09-14 00:00:00 UTC"
     }
   ]
 }
