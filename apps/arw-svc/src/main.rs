@@ -1989,6 +1989,8 @@ async fn feedback_policy_doc() -> impl IntoResponse {
         feedback_auto_post_doc,
         feedback_reset_post_doc,
         tasks_enqueue_doc,
+        // Public blob-by-digest endpoint (not wrapped)
+        ext::models_api::models_blob_get,
         // new read-model and tools endpoints
         // state_models_metrics_doc,
         // state_route_stats_doc,
