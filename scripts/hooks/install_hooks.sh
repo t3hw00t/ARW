@@ -121,8 +121,8 @@ if command -v npx >/dev/null 2>&1; then
   npx --yes @stoplight/spectral-cli lint -r quality/openapi-spectral.yaml spec/openapi.yaml || exit 1
   # AsyncAPI is kept minimal; treat errors as warnings for now
   npx --yes @stoplight/spectral-cli lint -r quality/openapi-spectral.yaml --fail-severity=warn spec/asyncapi.yaml || true
-  # Lint code-generated OpenAPI as well (style parity)
-  npx --yes @stoplight/spectral-cli lint -r quality/openapi-spectral.yaml "$tmp/codegen.yaml" || exit 1
+  # Lint merged OpenAPI (codegen + curated overlay) for style parity
+  npx --yes @stoplight/spectral-cli lint -r quality/openapi-spectral.yaml "$tmp/merged.yaml" || exit 1
 else
   echo "[pre-push] npx unavailable; skipping spectral"
 fi
