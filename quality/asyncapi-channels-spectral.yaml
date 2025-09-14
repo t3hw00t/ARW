@@ -1,0 +1,12 @@
+extends: []
+
+rules:
+  channel-dot-case:
+    description: AsyncAPI channel keys must be dot.case
+    message: "Channel '{{value}}' should be dot.case (e.g., models.download.progress)"
+    severity: warn
+    given: $.channels[*]
+    then:
+      function: pattern
+      functionOptions:
+        match: '^[a-z]+(\.[a-z][a-z0-9]+)+$'

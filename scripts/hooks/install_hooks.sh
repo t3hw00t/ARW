@@ -125,6 +125,15 @@ if command -v npx >/dev/null 2>&1; then
     echo "[pre-push] no AsyncAPI changes; skipping spectral"
   else
     npx --yes @stoplight/spectral-cli@6 lint -r quality/openapi-spectral.yaml --fail-severity=warn spec/asyncapi.yaml || true
+    # Tiny build step: extract channel keys and lint with a simple rule
+    if command -v python3 >/dev/null 2>&1; then
+      chan_json="$tmp/asyncapi.channels.json"
+      python3 scripts/extract_asyncapi_channels.py "$chan_json" || {
+        echo "::error::failed to extract AsyncAPI channels" >&2; exit 1; }
+      npx --yes @stoplight/spectral-cli@6 lint -r quality/asyncapi-channels-spectral.yaml "$chan_json" || exit 1
+    else
+      echo "::warning::python3 not found; skipping asyncapi channel key lint"
+    fi
   fi
   # Lint merged OpenAPI (codegen + curated overlay) for style parity
   npx --yes @stoplight/spectral-cli@6 lint -r quality/openapi-spectral.yaml "$tmp/merged.yaml" || exit 1
