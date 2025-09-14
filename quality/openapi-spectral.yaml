@@ -64,10 +64,9 @@ rules:
     description: x-sunset should be an ISO8601 timestamp (Z-normalized)
     message: "x-sunset should be ISO8601 (e.g., 2026-01-01T00:00:00Z)"
     severity: warn
-    given: $.paths[*][*].x-sunset
+    given: $.paths[*][*][?(@.deprecated==true)].x-sunset
     then:
-      - field: ""
-        function: pattern
+      - function: pattern
         functionOptions:
           match: '^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$'
 
