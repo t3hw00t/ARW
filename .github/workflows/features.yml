@@ -1,0 +1,27 @@
+name: Feature Matrix
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  matrix-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Generate Feature Matrix
+        run: |
+          python3 scripts/gen_feature_matrix.py
+      - name: Ensure matrix is committed
+        run: |
+          if ! git diff --quiet -- docs/reference/feature_matrix.md; then
+            echo '::error::Feature Matrix is out of date. Run `just features-gen` and commit.'
+            git --no-pager diff -- docs/reference/feature_matrix.md | sed -n '1,200p'
+            exit 1
+          fi

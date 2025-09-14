@@ -1,0 +1,315 @@
+{
+  "version": 1,
+  "features": [
+    {
+      "id": "model_steward",
+      "name": "Model Steward",
+      "owner": "platform",
+      "deps": ["event_spine", "guardrail_gateway"],
+      "description": "Manage local models with safe HTTP download, resume, checksum verification, CAS storage, quotas, live progress, metrics, and concurrency controls.",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "core", "maturity": "complete"},
+      "ssot": [
+        {"path": "apps/arw-svc/src/resources/models_service.rs"},
+        {"path": "apps/arw-svc/src/ext/models_api.rs"},
+        {"path": "apps/arw-svc/src/ext/paths.rs"},
+        {"path": "apps/arw-svc/src/ext/topics.rs"}
+      ],
+      "http": [
+        {"method": "GET", "path": "/admin/models/summary"},
+        {"method": "POST", "path": "/admin/models/download"},
+        {"method": "POST", "path": "/admin/models/download/cancel"},
+        {"method": "POST", "path": "/admin/models/cas_gc"},
+        {"method": "GET", "path": "/admin/models/concurrency"},
+        {"method": "POST", "path": "/admin/models/concurrency"},
+        {"method": "GET", "path": "/admin/models/jobs"},
+        {"method": "GET", "path": "/admin/state/models_metrics"},
+        {"method": "GET", "path": "/state/models"}
+      ],
+      "read_models": ["models", "models_metrics"],
+      "topics": [
+        "models.download.progress",
+        "models.changed",
+        "models.manifest.written",
+        "models.cas.gc",
+        "models.refreshed",
+        "state.read.model.patch"
+      ],
+      "env": [
+        "ARW_MODELS_MAX_MB",
+        "ARW_MODELS_DISK_RESERVE_MB",
+        "ARW_MODELS_MAX_CONC",
+        "ARW_MODELS_MAX_CONC_HARD",
+        "ARW_MODELS_QUOTA_MB",
+        "ARW_DL_EWMA_ALPHA",
+        "ARW_DL_MIN_MBPS"
+      ]
+    },
+    {
+      "id": "event_spine",
+      "name": "Event Spine",
+      "owner": "platform",
+      "description": "Unified in-process bus + SSE stream; maintains compact read-models and publishes JSON Patch deltas for low-latency UIs.",
+      "scope": {"surface": "backend", "audience": "dev", "layer": "connectivity", "maturity": "complete"},
+      "ssot": [
+        {"path": "apps/arw-svc/src/main.rs"},
+        {"path": "apps/arw-svc/src/ext/read_model.rs"},
+        {"path": "apps/arw-svc/src/ext/topics.rs"}
+      ],
+      "http": [
+        {"method": "GET", "path": "/admin/events"}
+      ],
+      "read_models": ["models", "models_metrics", "route_stats", "snappy"],
+      "topics": ["state.read.model.patch"],
+      "env": ["ARW_BUS_CAP", "ARW_BUS_REPLAY"]
+    },
+    {
+      "id": "snappy_governor",
+      "name": "Snappy Governor",
+      "owner": "platform",
+      "deps": ["event_spine"],
+      "description": "Latency budgets and route observability; publishes budgets vs. measured p95 and breach notices.",
+      "scope": {"surface": "backend", "audience": "dev", "layer": "core", "maturity": "complete"},
+      "ssot": [
+        {"path": "apps/arw-svc/src/ext/stats.rs"},
+        {"path": "apps/arw-svc/src/ext/snappy.rs"}
+      ],
+      "http": [
+        {"method": "GET", "path": "/metrics"},
+        {"method": "GET", "path": "/admin/state/route_stats"}
+      ],
+      "read_models": ["route_stats", "snappy"],
+      "topics": ["snappy.notice", "snappy.detail", "state.read.model.patch"],
+      "env": [
+        "ARW_SNAPPY_I2F_P95_MS",
+        "ARW_SNAPPY_FIRST_PARTIAL_P95_MS",
+        "ARW_SNAPPY_FULL_RESULT_P95_MS",
+        "ARW_SNAPPY_PUBLISH_MS"
+      ]
+    },
+    {
+      "id": "tool_forge",
+      "name": "Tool Forge",
+      "owner": "platform",
+      "deps": ["event_spine"],
+      "description": "Tool registry with schema introspection and an Action Cache (in-memory TTL + CAS) with singleflight.",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "core", "maturity": "complete"},
+      "ssot": [
+        {"path": "apps/arw-svc/src/ext/tools_exec.rs"},
+        {"path": "apps/arw-svc/src/ext/tools_api.rs"}
+      ],
+      "http": [
+        {"method": "GET", "path": "/admin/tools"},
+        {"method": "POST", "path": "/admin/tools/run"},
+        {"method": "GET", "path": "/admin/tools/cache_stats"}
+      ],
+      "read_models": [],
+      "topics": ["task.completed"],
+      "env": ["ARW_TOOLS_CACHE_CAP", "ARW_TOOLS_CACHE_TTL_SECS", "ARW_POLICY_VERSION", "ARW_SECRETS_VERSION"]
+    },
+    {
+      "id": "chat_workbench",
+      "name": "Chat Workbench",
+      "owner": "platform",
+      "deps": ["event_spine"],
+      "description": "Debug chat UI surface with synthetic replies or llama/OpenAI backends; planner hints, optional self-consistency and verifier (gated).",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "auxiliary", "maturity": "complete"},
+      "ssot": [
+        {"path": "apps/arw-svc/src/ext/chat.rs"},
+        {"path": "apps/arw-svc/src/ext/chat_api.rs"}
+      ],
+      "http": [
+        {"method": "GET", "path": "/admin/chat"},
+        {"method": "POST", "path": "/admin/chat/send"},
+        {"method": "POST", "path": "/admin/chat/clear"},
+        {"method": "GET", "path": "/admin/chat/status"}
+      ],
+      "read_models": [],
+      "topics": ["chat.message", "chat.planner", "chat.probe"],
+      "env": ["ARW_LLAMA_URL", "ARW_OPENAI_API_KEY", "ARW_OPENAI_BASE_URL", "ARW_OPENAI_MODEL"]
+    },
+    {
+      "id": "memory_lanes",
+      "name": "Memory Lanes",
+      "owner": "platform",
+      "deps": ["event_spine"],
+      "description": "Local-first memory with lanes (ephemeral/episodic/semantic/procedural), ring limits, and apply/get/save/load endpoints.",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "core", "maturity": "complete"},
+      "ssot": [
+        {"path": "apps/arw-svc/src/ext/memory.rs"}
+      ],
+      "http": [
+        {"method": "GET", "path": "/admin/memory"},
+        {"method": "POST", "path": "/admin/memory/apply"},
+        {"method": "POST", "path": "/admin/memory/save"},
+        {"method": "POST", "path": "/admin/memory/load"},
+        {"method": "GET", "path": "/admin/memory/limit"},
+        {"method": "POST", "path": "/admin/memory/limit"}
+      ],
+      "read_models": [],
+      "topics": ["memory.applied"],
+      "env": ["ARW_MEM_LIMIT"]
+    },
+    {
+      "id": "project_hub",
+      "name": "Project Hub Primitives",
+      "owner": "platform",
+      "deps": ["event_spine"],
+      "description": "Projects tree/creation/notes and safe file IO (atomic write, SHA precondition), with audit/events.",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "core", "maturity": "complete"},
+      "ssot": [
+        {"path": "apps/arw-svc/src/ext/projects.rs"},
+        {"path": "apps/arw-svc/src/ext/paths.rs"}
+      ],
+      "http": [
+        {"method": "GET", "path": "/admin/projects/list"},
+        {"method": "POST", "path": "/admin/projects/create"},
+        {"method": "GET", "path": "/admin/projects/tree"},
+        {"method": "GET", "path": "/admin/projects/notes"},
+        {"method": "POST", "path": "/admin/projects/notes"},
+        {"method": "GET", "path": "/admin/projects/file"},
+        {"method": "POST", "path": "/admin/projects/file"},
+        {"method": "POST", "path": "/admin/projects/patch"}
+      ],
+      "read_models": [],
+      "topics": ["projects.created", "projects.file.written"],
+      "env": ["ARW_PROJECTS_DIR", "ARW_PROJECT_MAX_FILE_MB"]
+    },
+    {
+      "id": "feedback_loop",
+      "name": "Feedback Loop",
+      "owner": "platform",
+      "deps": ["event_spine"],
+      "description": "Near-live suggestions and policy with persisted state, supporting guidance to improve runs.",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "helpers", "maturity": "complete"},
+      "ssot": [
+        {"path": "apps/arw-svc/src/ext/feedback_engine.rs"},
+        {"path": "apps/arw-svc/src/ext/feedback_engine_api.rs"}
+      ],
+      "http": [
+        {"method": "GET", "path": "/admin/feedback/suggestions"},
+        {"method": "GET", "path": "/admin/feedback/updates"},
+        {"method": "GET", "path": "/admin/feedback/policy"}
+      ],
+      "read_models": [],
+      "topics": ["feedback.suggested", "feedback.updated"],
+      "env": []
+    },
+    {
+      "id": "experiment_deck",
+      "name": "Experiment Deck",
+      "owner": "platform",
+      "deps": ["event_spine"],
+      "description": "Define variants, run A/B on goldens, publish results and winner; apply hints.",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "core", "maturity": "complete"},
+      "ssot": [
+        {"path": "apps/arw-svc/src/ext/experiments_engine.rs"},
+        {"path": "apps/arw-svc/src/ext/experiments_api.rs"}
+      ],
+      "http": [
+        {"method": "POST", "path": "/experiments/start"},
+        {"method": "GET", "path": "/experiments/list"},
+        {"method": "GET", "path": "/experiments/winners"},
+        {"method": "GET", "path": "/experiments/scoreboard"},
+        {"method": "POST", "path": "/experiments/run"},
+        {"method": "POST", "path": "/experiments/activate"}
+      ],
+      "read_models": [],
+      "topics": ["experiment.result", "experiment.winner"],
+      "env": []
+    },
+    {
+      "id": "self_card",
+      "name": "Self Card + Forecasts",
+      "owner": "platform",
+      "deps": ["event_spine"],
+      "description": "Per-agent identity and competence, with periodic aggregates for forecasts and resource curves.",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "helpers", "maturity": "complete"},
+      "ssot": [
+        {"path": "apps/arw-svc/src/ext/self_model.rs"},
+        {"path": "apps/arw-svc/src/ext/self_model_agg.rs"},
+        {"path": "apps/arw-svc/src/ext/self_model_api.rs"}
+      ],
+      "http": [
+        {"method": "GET", "path": "/state/self"},
+        {"method": "GET", "path": "/state/self/:agent"}
+      ],
+      "read_models": [],
+      "topics": ["self.model.proposed", "self.model.updated"],
+      "env": []
+    },
+    {
+      "id": "project_map",
+      "name": "Project Map (World Model)",
+      "owner": "platform",
+      "deps": ["event_spine"],
+      "description": "Observations folded into beliefs/intents/actions and stitched episodes for a scoped project world model.",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "connectivity", "maturity": "complete"},
+      "ssot": [
+        {"path": "apps/arw-svc/src/ext/state_api.rs"},
+        {"path": "apps/arw-svc/src/ext/world.rs"}
+      ],
+      "http": [
+        {"method": "GET", "path": "/admin/state/observations"},
+        {"method": "GET", "path": "/admin/state/beliefs"},
+        {"method": "GET", "path": "/admin/state/intents"},
+        {"method": "GET", "path": "/admin/state/actions"},
+        {"method": "GET", "path": "/admin/state/episodes"}
+      ],
+      "read_models": [],
+      "topics": ["world.updated"],
+      "env": []
+    },
+    {
+      "id": "guardrail_gateway",
+      "name": "Guardrail Gateway (Policy + Egress)",
+      "owner": "platform",
+      "deps": ["event_spine"],
+      "description": "Ingress/egress policy gating with previews and append-only egress ledger. Full proxy/DNS guard is planned.",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "connectivity", "maturity": "partial"},
+      "ssot": [
+        {"path": "apps/arw-svc/src/ext/io.rs"},
+        {"path": "apps/arw-svc/src/ext/topics.rs"},
+        {"path": "docs/architecture/egress_firewall.md"}
+      ],
+      "http": [],
+      "read_models": [],
+      "topics": ["egress.preview", "egress.ledger.appended"],
+      "env": ["ARW_EGRESS_LEDGER_ENABLE", "ARW_NET_POSTURE"]
+    },
+    {
+      "id": "orchestrator_plane",
+      "name": "Orchestrator Plane",
+      "owner": "platform",
+      "deps": ["event_spine"],
+      "description": "Local queue for tasks with optional NATS bridge and background worker(s) for offloads.",
+      "scope": {"surface": "backend", "audience": "dev", "layer": "connectivity", "maturity": "complete"},
+      "ssot": [
+        {"path": "apps/arw-svc/src/ext/mod.rs"},
+        {"path": "apps/arw-connector/src/main.rs"}
+      ],
+      "http": [],
+      "read_models": [],
+      "topics": ["task.completed"],
+      "env": ["ARW_NATS_URL", "ARW_NODE_ID", "ARW_NATS_OUT"]
+    },
+    {
+      "id": "interface_registry",
+      "name": "Interface Registry & Specs",
+      "owner": "platform",
+      "description": "Descriptors and generated OpenAPI/AsyncAPI/MCP schemas with drift checks and deprecation headers.",
+      "scope": {"surface": "dev", "audience": "dev", "layer": "auxiliary", "maturity": "complete"},
+      "ssot": [
+        {"path": "interfaces/index.yaml"},
+        {"path": "apps/arw-svc/src/main.rs"}
+      ],
+      "http": [
+        {"method": "GET", "path": "/spec/openapi.yaml"},
+        {"method": "GET", "path": "/spec/asyncapi.yaml"},
+        {"method": "GET", "path": "/spec/mcp-tools.json"}
+      ],
+      "read_models": [],
+      "topics": [],
+      "env": []
+    }
+  ]
+}
