@@ -57,6 +57,11 @@ def ensure_path_parity(code, curated):
 
 def merge_overlay(code, curated):
     out = dict(code)
+    # Preserve curated top-level identifiers for stability
+    if 'openapi' in curated:
+        out['openapi'] = curated['openapi']
+    if 'jsonSchemaDialect' in curated:
+        out['jsonSchemaDialect'] = curated['jsonSchemaDialect']
     out['info'] = curated.get('info')
     out['tags'] = curated.get('tags')
     # Paths: copy selected keys from curated into codegen
