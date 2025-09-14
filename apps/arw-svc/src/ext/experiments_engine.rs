@@ -318,7 +318,9 @@ pub async fn run_ab_on_goldens(state: &AppState, plan: RunPlan) -> RunOutcome {
             }
         });
         crate::ext::corr::ensure_corr(&mut payload);
-        state.bus.publish("experiment.result", &payload);
+        state
+            .bus
+            .publish(crate::ext::topics::TOPIC_EXPERIMENT_RESULT, &payload);
         // Optional budget guard (simple): break if avg latency * total exceeds budget_total_ms
         if let Some(b) = plan.budget_total_ms {
             let est = (summary.avg_latency_ms as u64) * (summary.total as u64);
@@ -355,7 +357,9 @@ pub async fn run_ab_on_goldens(state: &AppState, plan: RunPlan) -> RunOutcome {
         }
         let mut payload = json!({"exp_id": plan.exp_id, "proj": plan.proj, "winner": w});
         crate::ext::corr::ensure_corr(&mut payload);
-        state.bus.publish("experiment.winner", &payload);
+        state
+            .bus
+            .publish(crate::ext::topics::TOPIC_EXPERIMENT_WINNER, &payload);
     }
     RunOutcome {
         exp_id: plan.exp_id,

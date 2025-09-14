@@ -15,7 +15,7 @@ Schemas
 
 Notes
 - Quarantine forms the basis of a small review queue: `/state/memory/quarantine` (planned) with SSE events `memory.quarantined` and `memory.admitted`.
-- World diff review integrates in the collaboration flow; queued/conflict/applied states reflect in `WorldDiff.*` planned events.
+- World diff review integrates in the collaboration flow; queued/conflict/applied states reflect in `world.diff.*` planned events.
 - Redaction rules are applied to logs, snapshots, and egress previews; keep matchers simple and audited.
-- Archive policy is enforced by safe unpackers (path canonicalization + limits), with events `Archive.Unpacked` and `Archive.Blocked`.
+- Archive policy is enforced by safe unpackers (path canonicalization + limits), with events `archive.unpacked` and `archive.blocked`.
 - DNS anomaly events are best‑effort alerts from the DNS guard; use to surface brief UI banners and suggest posture tightening.

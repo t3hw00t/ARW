@@ -50,13 +50,13 @@ The UI exposes two complementary areas:
 
 ### Event Payloads
 
-`Experiment.Result` includes:
+`experiment.result` includes:
 
 - `passed`, `failed`, `total`, `avg_latency_ms`
 - `avg_ctx_tokens`, `avg_ctx_items`
 - `knobs` for traceability (retrieval, budgets, formatting)
 
-`Experiment.Winner` includes `{exp_id, proj, winner}`; winners are persisted.
+`experiment.winner` includes `{exp_id, proj, winner}`; winners are persisted.
 
 ## Tips
 

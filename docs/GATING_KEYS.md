@@ -3,7 +3,7 @@
 Generated from code.
 
 - `queue:enqueue`
-- `events:Task.Completed`
+- `events:task.completed`
 - `memory:get`
 - `memory:save`
 - `memory:load`

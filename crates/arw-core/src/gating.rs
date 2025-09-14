@@ -417,6 +417,6 @@ mod tests {
             quota_limit: None,
             quota_window_secs: None,
         });
-        assert!(!allowed("events:Task.Completed"));
+        assert!(!allowed("events:task.completed"));
     }
 }

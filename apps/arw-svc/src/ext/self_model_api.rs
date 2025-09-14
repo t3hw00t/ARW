@@ -62,7 +62,9 @@ pub async fn self_model_propose(
         "rationale": req.rationale,
     });
     super::corr::ensure_corr(&mut payload);
-    state.bus.publish("SelfModel.Proposed", &payload);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_SELFMODEL_PROPOSED, &payload);
     super::ok(env).into_response()
 }
 
@@ -87,7 +89,9 @@ pub async fn self_model_apply(
                 "agent": res.get("agent").and_then(|s| s.as_str()).unwrap_or_default(),
             });
             super::corr::ensure_corr(&mut payload);
-            state.bus.publish("SelfModel.Updated", &payload);
+            state
+                .bus
+                .publish(crate::ext::topics::TOPIC_SELFMODEL_UPDATED, &payload);
             super::ok(res).into_response()
         }
         Err(e) => super::ApiError::bad_request(&e).into_response(),

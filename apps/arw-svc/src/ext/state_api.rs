@@ -132,7 +132,7 @@ pub async fn on_event(env: &Envelope) {
             .to_string();
         m.insert(key, env.payload.clone());
     }
-    // Intents: rolling list of generic Intents.* events
+    // Intents: rolling list of generic intents.* events
     if env.kind.starts_with("intents.") {
         let mut q = intents().write().unwrap();
         if q.len() == q.capacity() {
@@ -140,8 +140,8 @@ pub async fn on_event(env: &Envelope) {
         }
         q.push_back(json!({"time": env.time, "kind": env.kind, "payload": env.payload}));
     }
-    // Actions: rolling list of generic Actions.* events
-    if env.kind.starts_with("Actions.") || env.kind.starts_with("actions.") {
+    // Actions: rolling list of generic actions.* events
+    if env.kind.starts_with("actions.") {
         let mut q = actions().write().unwrap();
         if q.len() == q.capacity() {
             let _ = q.pop_front();

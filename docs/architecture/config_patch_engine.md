@@ -15,7 +15,7 @@ Principles
 Flow
 1) Dry‑run: compute diff and validate; return human‑readable summary (added/changed/removed) and warnings.
 2) Apply: atomically update config; emit events; snapshot effective config; offer one‑click rollback.
-3) Revert: restore last snapshot; emit `LogicUnit.Reverted`.
+3) Revert: restore last snapshot; emit `logic.unit.reverted`.
 
 Endpoints (planned)
 - `POST /patch/dry-run` → `{ diff, warnings }`

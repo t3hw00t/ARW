@@ -1,6 +1,6 @@
 //! Central registry of gating keys for SoT and docs.
 pub const QUEUE_ENQUEUE: &str = "queue:enqueue";
-pub const EVENTS_TASK_COMPLETED: &str = "events:Task.Completed";
+pub const EVENTS_TASK_COMPLETED: &str = "events:task.completed";
 
 // Memory
 pub const MEMORY_GET: &str = "memory:get";

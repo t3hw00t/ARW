@@ -12,6 +12,7 @@ Workflow
 2. Run format and clippy checks.
 3. Update docs and regenerate the workspace status page.
 4. Keep commits focused and messages descriptive.
+5. Keep interfaces and events consistent with the Feature Matrix and naming policy.
 
 Prerequisites
 - Install `cargo-nextest`: `cargo install cargo-nextest`
@@ -23,6 +24,12 @@ cargo clippy --workspace --all-targets -- -D warnings
 scripts/test.ps1   # or ./scripts/test.sh
 scripts/docgen.ps1 # or ./scripts/docgen.sh
 just docs-check    # quick docs lint (links/headings), optional
+
+# Feature Matrix (living)
+just features-gen  # regenerates docs/reference/feature_matrix.md from interfaces/features.json
+
+# Event kinds linter (dot.case)
+python3 scripts/lint_event_kinds.py
 
 ## Stability window
 We are currently in a short stability/consolidation phase. Please:
@@ -70,3 +77,20 @@ PR acceptance checklist
 - Schemas/examples refreshed as needed
 - Changelog entry included
 - Labels applied (type/*, area/*)
+
+## Event & Interface Policy
+
+- Event kinds are dot.case only: `foo.bar.baz`. CamelCase is not allowed anywhere (code, docs, assets, or subjects).
+- Use the single source of truth for event constants: `apps/arw-svc/src/ext/topics.rs`.
+- Publishers must use constants from `topics.rs` — do not inline strings.
+- NATS subjects must be dot.case (e.g., `arw.events.task.completed`, `arw.events.node.<node_id>.task.completed`).
+- Run `python3 scripts/lint_event_kinds.py` before submitting to ensure no regressions.
+
+## Feature Matrix Policy
+
+- When adding/refactoring a feature, update `interfaces/features.json` with:
+  - `name`, `description`, `scope` (surface/audience/layer/maturity)
+  - SSoT file paths, HTTP endpoints, read‑models, event topics, env vars
+  - `owner` and `deps`
+- Regenerate: `just features-gen` and commit `docs/reference/feature_matrix.md`.
+- Keep docs in sync with code; avoid drift by updating both in the same PR.

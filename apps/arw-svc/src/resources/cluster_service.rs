@@ -35,7 +35,9 @@ impl ClusterService {
             "nodes": nodes,
         });
         crate::ext::corr::ensure_corr(&mut payload);
-        state.bus.publish("Cluster.Node.Changed", &payload);
+        state
+            .bus
+            .publish(crate::ext::topics::TOPIC_CLUSTER_NODE_CHANGED, &payload);
         payload
     }
 
@@ -95,6 +97,8 @@ impl ClusterService {
             "models": models_view,
         });
         crate::ext::corr::ensure_corr(&mut payload);
-        state.bus.publish("Cluster.Node.Advertise", &payload);
+        state
+            .bus
+            .publish(crate::ext::topics::TOPIC_CLUSTER_NODE_ADVERTISE, &payload);
     }
 }

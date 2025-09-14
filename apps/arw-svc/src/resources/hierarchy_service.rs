@@ -21,7 +21,9 @@ impl HierarchyService {
             CoreRole::Connector => hier::Role::Connector,
             CoreRole::Observer => hier::Role::Observer,
         });
-        state.bus.publish("Hierarchy.Hello", &req);
+        state
+            .bus
+            .publish(crate::ext::topics::TOPIC_HIERARCHY_HELLO, &req);
     }
 
     pub async fn offer(&self, state: &AppState, req: CoreOffer) {
@@ -30,21 +32,27 @@ impl HierarchyService {
                 hier::add_child(req.from_id.clone());
             }
         }
-        state.bus.publish("Hierarchy.Offer", &req);
+        state
+            .bus
+            .publish(crate::ext::topics::TOPIC_HIERARCHY_OFFER, &req);
     }
 
     pub async fn accept(&self, state: &AppState, req: CoreAccept) {
         if req.parent_id == hier::get_state().self_node.id {
             hier::add_child(req.child_id.clone());
         }
-        state.bus.publish("Hierarchy.Accepted", &req);
+        state
+            .bus
+            .publish(crate::ext::topics::TOPIC_HIERARCHY_ACCEPTED, &req);
     }
 
     pub async fn state_event(&self, state: &AppState) -> arw_core::hierarchy::HierarchyState {
         let st = hier::get_state();
         let mut p = serde_json::json!({"epoch": st.epoch});
         crate::ext::corr::ensure_corr(&mut p);
-        state.bus.publish("Hierarchy.State", &p);
+        state
+            .bus
+            .publish(crate::ext::topics::TOPIC_HIERARCHY_STATE, &p);
         st
     }
 
@@ -67,6 +75,8 @@ impl HierarchyService {
         arw_core::gating::apply_role_defaults(gate_role);
         let mut p = serde_json::json!({"role": role});
         crate::ext::corr::ensure_corr(&mut p);
-        state.bus.publish("Hierarchy.RoleChanged", &p);
+        state
+            .bus
+            .publish(crate::ext::topics::TOPIC_HIERARCHY_ROLE_CHANGED, &p);
     }
 }

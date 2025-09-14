@@ -136,7 +136,9 @@ pub async fn apply(
         "safety_issues": issues,
     });
     super::corr::ensure_corr(&mut payload);
-    state.bus.publish("LogicUnit.Applied", &payload);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_LOGICUNIT_APPLIED, &payload);
     super::ok(json!({ "applied": true, "snapshot_id": payload.get("snapshot_id") })).into_response()
 }
 
@@ -163,6 +165,8 @@ pub async fn revert(
     }
     let mut payload = json!({ "unit_id": req.unit_id, "snapshot_id": req.snapshot_id });
     super::corr::ensure_corr(&mut payload);
-    state.bus.publish("LogicUnit.Reverted", &payload);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_LOGICUNIT_REVERTED, &payload);
     super::ok(json!({ "reverted": true })).into_response()
 }

@@ -9,7 +9,7 @@ Purpose
 
 Model
 - Grants are leases with `{ capability, scope, ttl_secs, issued_at, issued_by, reason }`.
-- Events: `Policy.Prompt`, `Policy.Allow`, `Policy.Deny`, `Policy.Expired`.
+- Events: `policy.prompt`, `policy.allow`, `policy.deny`, `policy.expired`.
 - Denials and escalations are first‑class events.
 
 Storage

@@ -1,3 +1,27 @@
+//! Models API — admin endpoints for the models lifecycle
+//!
+//! Updated: 2025-09-14
+//!
+//! Overview
+//! - List, refresh, save, and load models; manage the default; trigger
+//!   downloads with mandatory SHA‑256 integrity.
+//! - Get/Set download concurrency; run a CAS GC pass.
+//! - Provide read-model snapshots for download metrics and installed hashes.
+//! - Serve CAS blobs by SHA‑256 (immutable; ETag-aware).
+//!
+//! Events & read-models
+//! - Publishes `models.changed`, `models.download.progress`, `models.cas.gc`, and
+//!   `models.manifest.written` via the service.
+//! - Read-models: `models` (items + default) and `models_metrics` (counters + `ewma_mbps`).
+//!
+//! Gating
+//! - All admin endpoints are gated via `#[arw_admin]` and `#[arw_gate]`.
+//! - Egress: downloads require `io:egress:models.download`; blob serving requires
+//!   `io:egress:models.peer`.
+//!
+//! See also
+//! - Service logic and progress/status codes: `crate::resources::models_service`.
+//! - Topics reference: `docs/reference/topics.md`.
 use super::super::resources::models_service::ModelsService;
 use crate::AppState;
 use arw_core::gating;
@@ -9,6 +33,8 @@ use axum::{extract::State, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+/// Runtime download concurrency snapshot (configured vs. available), optionally
+/// including a hard cap from `ARW_MODELS_MAX_CONC_HARD`.
 #[derive(Serialize, utoipa::ToSchema)]
 pub(crate) struct ModelsConcurrency {
     configured_max: u64,
@@ -18,6 +44,8 @@ pub(crate) struct ModelsConcurrency {
     hard_cap: Option<u64>,
 }
 
+/// Aggregated counters and throughput estimate for downloads. Matches the
+/// shape returned by `ModelsService::downloads_metrics`.
 #[derive(Serialize, utoipa::ToSchema)]
 pub(crate) struct ModelsMetrics {
     started: u64,
@@ -33,6 +61,8 @@ pub(crate) struct ModelsMetrics {
     ewma_mbps: Option<f64>,
 }
 
+/// Item in the models list. Many fields are optional while downloading or
+/// when entries were added before materialization.
 #[derive(Serialize, utoipa::ToSchema)]
 pub(crate) struct ModelItem {
     id: String,
@@ -50,6 +80,7 @@ pub(crate) struct ModelItem {
     error_code: Option<String>,
 }
 
+/// Composite summary for UI: models items, default id, concurrency, metrics.
 #[derive(Serialize, utoipa::ToSchema)]
 pub(crate) struct ModelsSummary {
     items: Vec<ModelItem>,
@@ -188,6 +219,10 @@ pub(crate) async fn models_summary(State(state): State<AppState>) -> impl IntoRe
 
 #[arw_admin(method = "GET", path = "/admin/models", summary = "List models")]
 #[arw_gate("models:list")]
+/// List all model entries currently known to the service.
+///
+/// Returns the raw array persisted at `<state>/models/models.json` augmented by
+/// runtime fields (e.g., `status`, `error_code`) while downloads are in-flight.
 pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoResponse {
     let svc = match super::require_service::<ModelsService>(&state) {
         Ok(s) => s,
@@ -202,6 +237,7 @@ pub(crate) async fn list_models(State(state): State<AppState>) -> impl IntoRespo
     summary = "Refresh model list"
 )]
 #[arw_gate("models:refresh")]
+/// Reset to defaults (provider-curated), persist, and publish events/patches.
 pub(crate) async fn refresh_models(State(state): State<AppState>) -> impl IntoResponse {
     let svc = match super::require_service::<ModelsService>(&state) {
         Ok(s) => s,
@@ -216,6 +252,7 @@ pub(crate) async fn refresh_models(State(state): State<AppState>) -> impl IntoRe
     summary = "Save models to disk"
 )]
 #[arw_gate("models:save")]
+/// Persist the current models array to `<state>/models/models.json`.
 pub(crate) async fn models_save(State(state): State<AppState>) -> impl IntoResponse {
     let svc = match super::require_service::<ModelsService>(&state) {
         Ok(s) => s,
@@ -236,6 +273,7 @@ pub(crate) async fn models_save(State(state): State<AppState>) -> impl IntoRespo
     summary = "Load models from disk"
 )]
 #[arw_gate("models:load")]
+/// Load the models array from `<state>/models/models.json`. 404 if missing.
 pub(crate) async fn models_load(State(state): State<AppState>) -> impl IntoResponse {
     let svc = match super::require_service::<ModelsService>(&state) {
         Ok(s) => s,
@@ -259,6 +297,8 @@ pub(crate) struct ModelId {
     summary = "Add model entry"
 )]
 #[arw_gate("models:add")]
+/// Add a model id (and optional provider); does not download.
+/// Publishes `models.changed {op:add}` and read-model patches.
 pub(crate) async fn models_add(
     State(state): State<AppState>,
     Json(req): Json<ModelId>,
@@ -276,6 +316,7 @@ pub(crate) async fn models_add(
     summary = "Delete model entry"
 )]
 #[arw_gate("models:delete")]
+/// Delete a model id; publishes `models.changed {op:delete}` and patches.
 pub(crate) async fn models_delete(
     State(state): State<AppState>,
     Json(req): Json<ModelId>,
@@ -293,6 +334,7 @@ pub(crate) async fn models_delete(
     summary = "Get default model"
 )]
 #[arw_gate("models:default:get")]
+/// Return the default model id.
 pub(crate) async fn models_default_get(State(state): State<AppState>) -> impl IntoResponse {
     let svc = match super::require_service::<ModelsService>(&state) {
         Ok(s) => s,
@@ -307,6 +349,7 @@ pub(crate) async fn models_default_get(State(state): State<AppState>) -> impl In
     summary = "Set default model"
 )]
 #[arw_gate("models:default:set")]
+/// Set the default model id; publishes `models.changed {op:default}` and patches.
 pub(crate) async fn models_default_set(
     State(state): State<AppState>,
     Json(req): Json<ModelId>,
@@ -346,6 +389,8 @@ pub(crate) struct DownloadReq {
     summary = "Download model file"
 )]
 #[arw_gate("models:download")]
+/// Start a download with mandatory `sha256`.
+/// Publishes `models.download.progress` and updates the models list.
 pub(crate) async fn models_download(
     State(state): State<AppState>,
     Json(req): Json<DownloadReq>,
@@ -393,6 +438,7 @@ pub(crate) struct CancelReq {
     summary = "Cancel model download"
 )]
 #[arw_gate("models:download")]
+/// Request cancellation by model `id`. Publishes progress and changed events.
 pub(crate) async fn models_download_cancel(
     State(state): State<AppState>,
     Json(req): Json<CancelReq>,
@@ -423,6 +469,7 @@ impl CasGcReq {
     summary = "Run CAS GC once (delete stale blobs)"
 )]
 #[arw_gate("models:cas_gc")]
+/// Trigger a single CAS GC pass for unreferenced blobs older than `ttl_days`.
 pub(crate) async fn models_cas_gc(
     State(state): State<AppState>,
     Json(req): Json<CasGcReq>,
@@ -454,6 +501,7 @@ pub(crate) struct ModelsHashesQs {
     summary = "List installed model hashes (paginated)"
 )]
 #[arw_gate("state:models_hashes:get")]
+/// List installed model hashes with pagination and optional provider filter.
 pub(crate) async fn models_hashes_get(
     State(_state): State<AppState>,
     Query(q): Query<ModelsHashesQs>,
@@ -724,6 +772,9 @@ pub(crate) async fn models_blob_get(
 }
 
 /// Lightweight downloads metrics (throughput EWMA for admission checks)
+///
+/// Deprecated: prefer `GET /admin/state/models_metrics` which returns the
+/// same shape and is the canonical read‑model snapshot.
 #[arw_admin(
     method = "GET",
     path = "/admin/models/downloads_metrics",
@@ -736,7 +787,18 @@ pub(crate) async fn models_downloads_metrics(State(state): State<AppState>) -> i
         Err(e) => return e.into_response(),
     };
     let v = svc.downloads_metrics().await;
-    Json(v).into_response()
+    // Mark as deprecated via response headers while preserving payload shape
+    let mut headers = HeaderMap::new();
+    // RFC 7234 Warning 299: Miscellaneous Persistent Warning (commonly used for deprecation hints)
+    let _ = headers.insert(
+        axum::http::header::WARNING,
+        HeaderValue::from_static("299 - \"Deprecated: use /admin/state/models_metrics\""),
+    );
+    let _ = headers.insert(
+        axum::http::header::LINK,
+        HeaderValue::from_static("</admin/state/models_metrics>; rel=\"successor-version\""),
+    );
+    (headers, Json(v)).into_response()
 }
 
 /// Get current models CAS quota and usage snapshot
@@ -853,6 +915,8 @@ pub(crate) struct ConcurrencySetReq {
     summary = "Set models download concurrency"
 )]
 #[arw_gate("models:concurrency:set")]
+/// Set the maximum concurrent downloads.
+/// With `block=true`, waits to shrink; with `false`, shrinks opportunistically and reports pending.
 pub(crate) async fn models_concurrency_set(
     State(state): State<AppState>,
     Json(req): Json<ConcurrencySetReq>,
@@ -875,6 +939,7 @@ pub(crate) async fn models_concurrency_set(
     summary = "Get models download concurrency"
 )]
 #[arw_gate("models:concurrency:get")]
+/// Return configured max, available permits, held permits, and optional hard cap.
 pub(crate) async fn models_concurrency_get(State(state): State<AppState>) -> impl IntoResponse {
     let Some(svc) = state.resources.get::<ModelsService>() else {
         return super::ApiError::internal("ModelsService missing").into_response();
@@ -890,6 +955,7 @@ pub(crate) async fn models_concurrency_get(State(state): State<AppState>) -> imp
     summary = "List active jobs and inflight hashes"
 )]
 #[arw_gate("models:jobs")]
+/// Return active `model_id`/`job_id` pairs, inflight SHA‑256 hashes, and a concurrency snapshot.
 pub(crate) async fn models_jobs(State(state): State<AppState>) -> impl IntoResponse {
     let Some(svc) = state.resources.get::<ModelsService>() else {
         return super::ApiError::internal("ModelsService missing").into_response();
@@ -905,6 +971,7 @@ pub(crate) async fn models_jobs(State(state): State<AppState>) -> impl IntoRespo
     summary = "Get models download metrics"
 )]
 #[arw_gate("state:models_metrics:get")]
+/// Return the same shape as the `models_metrics` read-model snapshot.
 pub(crate) async fn models_metrics_get(State(state): State<AppState>) -> impl IntoResponse {
     // Use the service helper to return a consistent shape (counters + ewma)
     match super::require_service::<ModelsService>(&state) {

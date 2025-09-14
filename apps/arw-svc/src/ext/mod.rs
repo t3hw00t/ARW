@@ -467,7 +467,9 @@ pub fn extra_routes() -> Router<AppState> {
                         }
                     });
                     crate::ext::corr::ensure_corr(&mut payload);
-                    state.bus.publish("experiment.activated", &payload);
+                    state
+                        .bus
+                        .publish("experiment.activated", &payload);
                     return ok(json!({"ok": true}));
                 }
                 ok(json!({"ok": false, "error": "not_found"}))
@@ -689,9 +691,9 @@ pub fn start_local_task_worker(state: AppState) {
                     let ingress_key = format!("io:ingress:task.{}", t.kind);
                     if !arw_core::gating::allowed(&ingress_key) {
                         let _ = q.ack(lease).await;
-                        if arw_core::gating::allowed("events:Task.Completed") {
+                        if arw_core::gating::allowed(arw_core::gating_keys::EVENTS_TASK_COMPLETED) {
                             bus.publish(
-                                "Task.Completed",
+                                crate::ext::topics::TOPIC_TASK_COMPLETED,
                                 &json!({"id": t.id, "ok": false, "error": "gated:ingress"}),
                             );
                         }
@@ -705,16 +707,16 @@ pub fn start_local_task_worker(state: AppState) {
                     let dt = t0.elapsed().as_millis() as u64;
                     // Egress gating for task output (policy-level)
                     let egress_key = format!("io:egress:task.{}", t.kind);
-                    if gating::allowed("events:Task.Completed")
+                    if gating::allowed(arw_core::gating_keys::EVENTS_TASK_COMPLETED)
                         && arw_core::gating::allowed(&egress_key)
                     {
                         let mut payload = json!({"id": t.id, "ok": ok, "latency_ms": dt, "error": err, "output": out});
                         crate::ext::corr::ensure_corr(&mut payload);
-                        bus.publish("Task.Completed", &payload);
-                    } else if gating::allowed("events:Task.Completed") {
+                        bus.publish(crate::ext::topics::TOPIC_TASK_COMPLETED, &payload);
+                    } else if gating::allowed(arw_core::gating_keys::EVENTS_TASK_COMPLETED) {
                         let mut payload = json!({"id": t.id, "ok": false, "latency_ms": dt, "error": "gated:egress"});
                         crate::ext::corr::ensure_corr(&mut payload);
-                        bus.publish("Task.Completed", &payload);
+                        bus.publish(crate::ext::topics::TOPIC_TASK_COMPLETED, &payload);
                     }
                 }
                 Err(_e) => {
@@ -809,7 +811,9 @@ async fn hierarchy_state(State(state): State<AppState>) -> impl IntoResponse {
     let st = hier::get_state();
     let mut p = serde_json::json!({"epoch": st.epoch});
     crate::ext::corr::ensure_corr(&mut p);
-    state.bus.publish("Hierarchy.State", &p);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_HIERARCHY_STATE, &p);
     Json(st).into_response()
 }
 
@@ -852,7 +856,9 @@ async fn hierarchy_role_set(
     arw_core::gating::apply_role_defaults(gate_role);
     let mut p = serde_json::json!({"role": req.role});
     crate::ext::corr::ensure_corr(&mut p);
-    state.bus.publish("Hierarchy.RoleChanged", &p);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_HIERARCHY_ROLE_CHANGED, &p);
     ok(json!({})).into_response()
 }
 
@@ -877,9 +883,10 @@ async fn governor_set(
         let mut g = governor_profile().write().await;
         *g = req.name.clone();
     }
-    state
-        .bus
-        .publish("governor.changed", &json!({"profile": req.name.clone()}));
+    state.bus.publish(
+        crate::ext::topics::TOPIC_GOVERNOR_CHANGED,
+        &json!({"profile": req.name.clone()}),
+    );
     persist_orch().await;
     ok(json!({}))
 }
@@ -1027,7 +1034,9 @@ async fn governor_hints_set(
     if let Some(secs) = applied_timeout {
         let mut payload = json!({"action":"hint","params":{"http_timeout_secs": secs, "source": "slo|mode"},"ok": true});
         let _cid = crate::ext::corr::ensure_corr(&mut payload);
-        state.bus.publish("Actions.HintApplied", &payload);
+        state
+            .bus
+            .publish(crate::ext::topics::TOPIC_ACTIONS_HINT_APPLIED, &payload);
     }
     persist_orch().await;
     ok(json!({})).into_response()
@@ -1314,11 +1323,15 @@ async fn run_tool_endpoint(
                 "age_secs": age,
             });
             crate::ext::corr::ensure_corr(&mut cache_evt);
-            state.bus.publish("tool.cache", &cache_evt);
+            state
+                .bus
+                .publish(crate::ext::topics::TOPIC_TOOL_CACHE, &cache_evt);
 
             let mut payload = json!({"id": req.id, "output": out});
             crate::ext::corr::ensure_corr(&mut payload);
-            state.bus.publish("tool.ran", &payload);
+            state
+                .bus
+                .publish(crate::ext::topics::TOPIC_TOOL_RAN, &payload);
             Json(payload.get("output").cloned().unwrap_or_else(|| json!({}))).into_response()
         }
         Err(e) => ApiError::bad_request(&e).into_response(),
@@ -1494,9 +1507,10 @@ async fn feedback_signal_post(
             st.signals.remove(0);
         }
     }
-    state
-        .bus
-        .publish("feedback.signal", &json!({"signal": sig}));
+    state.bus.publish(
+        crate::ext::topics::TOPIC_FEEDBACK_SIGNAL,
+        &json!({"signal": sig}),
+    );
     analyze_feedback().await;
     let st = feedback_cell().read().await.clone();
     persist_feedback().await;
@@ -1559,7 +1573,9 @@ async fn feedback_apply_post(
                     "suggestion": {"id": sug.id, "action": sug.action, "params": sug.params}
                 });
                 crate::ext::corr::ensure_corr(&mut intent);
-                state.bus.publish("Intents.Approved", &intent);
+                state
+                    .bus
+                    .publish(crate::ext::topics::TOPIC_INTENTS_APPROVED, &intent);
                 apply_suggestion(&sug, &state).await
             }
             Err(reason) => {
@@ -1569,7 +1585,9 @@ async fn feedback_apply_post(
                     "suggestion": {"id": sug.id, "action": sug.action, "params": sug.params}
                 });
                 crate::ext::corr::ensure_corr(&mut intent);
-                state.bus.publish("Intents.Rejected", &intent);
+                state
+                    .bus
+                    .publish(crate::ext::topics::TOPIC_INTENTS_REJECTED, &intent);
                 return ApiError::forbidden("gated by policy").into_response();
             }
         };
@@ -1585,7 +1603,9 @@ async fn feedback_apply_post(
                 "suggestion": {"id": sug.id, "action": sug.action, "params": sug.params}
             });
             crate::ext::corr::ensure_corr(&mut payload);
-            state.bus.publish("Actions.Applied", &payload);
+            state
+                .bus
+                .publish(crate::ext::topics::TOPIC_ACTIONS_APPLIED, &payload);
             persist_orch().await;
         }
         return ok(json!({"ok": applied_ok})).into_response();
@@ -1628,9 +1648,10 @@ async fn apply_suggestion(s: &Suggestion, state: &AppState) -> bool {
             if let Some(name) = s.params.get("name").and_then(|x| x.as_str()) {
                 let mut g = governor_profile().write().await;
                 *g = name.to_string();
-                state
-                    .bus
-                    .publish("governor.changed", &json!({"profile": name}));
+                state.bus.publish(
+                    crate::ext::topics::TOPIC_GOVERNOR_CHANGED,
+                    &json!({"profile": name}),
+                );
                 true
             } else {
                 false

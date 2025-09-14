@@ -98,7 +98,9 @@ pub async fn memory_quarantine_add(
     // Emit event
     let mut ev = entry.clone();
     super::corr::ensure_corr(&mut ev);
-    state.bus.publish("memory.quarantined", &ev);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_MEMORY_QUARANTINED, &ev);
     super::ok(serde_json::json!({"ok": true})).into_response()
 }
 
@@ -129,7 +131,9 @@ pub async fn memory_quarantine_admit(
     // Emit event
     let mut ev = serde_json::json!({"id": req.id});
     super::corr::ensure_corr(&mut ev);
-    state.bus.publish("memory.admitted", &ev);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_MEMORY_ADMITTED, &ev);
     let removed = before.saturating_sub(
         super::io::load_json_file_async(&p)
             .await
@@ -184,7 +188,9 @@ pub async fn world_diffs_queue(
     let _ = super::io::save_json_file_async(&p, &serde_json::Value::Array(arr)).await;
     let mut ev = entry.clone();
     super::corr::ensure_corr(&mut ev);
-    state.bus.publish("WorldDiff.Queued", &ev);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_WORLDDIFF_QUEUED, &ev);
     super::ok(serde_json::json!({"ok": true})).into_response()
 }
 
@@ -233,9 +239,15 @@ pub async fn world_diffs_decision(
     if let Some(mut ev) = found {
         super::corr::ensure_corr(&mut ev);
         match req.decision.as_str() {
-            "apply" => state.bus.publish("WorldDiff.Applied", &ev),
-            "reject" => state.bus.publish("WorldDiff.Rejected", &ev),
-            _ => state.bus.publish("WorldDiff.Queued", &ev),
+            "apply" => state
+                .bus
+                .publish(crate::ext::topics::TOPIC_WORLDDIFF_APPLIED, &ev),
+            "reject" => state
+                .bus
+                .publish(crate::ext::topics::TOPIC_WORLDDIFF_REJECTED, &ev),
+            _ => state
+                .bus
+                .publish(crate::ext::topics::TOPIC_WORLDDIFF_QUEUED, &ev),
         };
         return super::ok(serde_json::json!({"ok": true})).into_response();
     }

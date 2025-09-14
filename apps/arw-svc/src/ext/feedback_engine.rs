@@ -94,9 +94,9 @@ pub fn start_feedback_engine(state: AppState) {
                         "feedback.suggested",
                         &json!({"version": v, "suggestions": out}),
                     );
-                    // Also emit a beliefs update for read-model consumers
+                    // Also emit a beliefs update for read-model consumers (dot.case)
                     state.bus.publish(
-                        "Beliefs.Updated",
+                        "beliefs.updated",
                         &json!({"version": v, "suggestions": out}),
                     );
                     // Emit Intents for each suggestion (proposed)
@@ -107,7 +107,9 @@ pub fn start_feedback_engine(state: AppState) {
                             "suggestion": s,
                         });
                         crate::ext::corr::ensure_corr(&mut intent);
-                        state.bus.publish("Intents.Proposed", &intent);
+                        state
+                            .bus
+                            .publish(crate::ext::topics::TOPIC_INTENTS_PROPOSED, &intent);
                     }
                 }
             }

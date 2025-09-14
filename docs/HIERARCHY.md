@@ -35,9 +35,9 @@ See also: [Roadmap](ROADMAP.md)
 ## MVP in This Repo
 - Local `arw-core::hierarchy` state, with APIs to get/set role and minimal parent/child links.
 - HTTP endpoints in `arw-svc`:
-  - GET /hierarchy/state — returns local state, emits Hierarchy.State
-  - POST /hierarchy/role { role } — sets role, emits Hierarchy.RoleChanged
-- AsyncAPI channels added: Hierarchy.RoleChanged, Hierarchy.State.
+- GET /hierarchy/state — returns local state, emits hierarchy.state
+- POST /hierarchy/role { role } — sets role, emits hierarchy.role.changed
+ - AsyncAPI channels added: hierarchy.role.changed, hierarchy.state.
 
 ## Next Steps
 - Control-plane transport: gRPC/QUIC for Hello/Offer/Accept with mTLS.

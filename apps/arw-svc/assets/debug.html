@@ -1201,7 +1201,7 @@ function applyPatchObj(target, patch){ try{
   });
   // Self‑model live refresh on related events
   es.addEventListener('tool.ran', ()=>{ try{ const cb=document.getElementById('selfLive'); if(cb && cb.checked){ selfView(); } }catch{} });
-  es.addEventListener('SelfModel.Updated', ()=>{ try{ const cb=document.getElementById('selfLive'); if(cb && cb.checked){ selfView(); } }catch{} });
+  es.addEventListener('self.model.updated', ()=>{ try{ const cb=document.getElementById('selfLive'); if(cb && cb.checked){ selfView(); } }catch{} });
 }
 
 // --- System/HW helpers ---
@@ -1452,8 +1452,8 @@ async function runSelfTests(){
     const waiter = waitForMemoryApplied(target, 3500);
     await jpost('/memory/apply',{kind:'ephemeral',value:{ test:'selftest', test_id: target, t: Date.now() }});
     const ok = await waiter;
-    if(ok){ pass('SSE Memory.Applied'); } else { fail('SSE Memory.Applied','timeout'); }
-  } catch(e){ fail('SSE Memory.Applied',e); }
+    if(ok){ pass('SSE memory.applied'); } else { fail('SSE memory.applied','timeout'); }
+  } catch(e){ fail('SSE memory.applied',e); }
 
   logT('Done.');
 }

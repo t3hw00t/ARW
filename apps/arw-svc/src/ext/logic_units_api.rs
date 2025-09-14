@@ -52,7 +52,9 @@ pub async fn install(
         .to_string();
     let mut payload = json!({ "id": id, "manifest": req.manifest });
     super::corr::ensure_corr(&mut payload);
-    state.bus.publish("LogicUnit.Installed", &payload);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_LOGICUNIT_INSTALLED, &payload);
     super::ok(json!({ "installed": true, "id": id })).into_response()
 }
 
@@ -78,7 +80,9 @@ pub async fn apply(State(state): State<AppState>, Json(req): Json<ApplyReq>) -> 
         "patch_count": req.patches.len(),
     });
     super::corr::ensure_corr(&mut payload);
-    state.bus.publish("LogicUnit.Applied", &payload);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_LOGICUNIT_APPLIED, &payload);
     super::ok(json!({ "applied": true })).into_response()
 }
 
@@ -98,6 +102,8 @@ pub async fn revert(
         "scope": req.scope,
     });
     super::corr::ensure_corr(&mut payload);
-    state.bus.publish("LogicUnit.Reverted", &payload);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_LOGICUNIT_REVERTED, &payload);
     super::ok(json!({ "reverted": true })).into_response()
 }

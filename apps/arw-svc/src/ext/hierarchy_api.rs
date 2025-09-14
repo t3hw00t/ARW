@@ -25,7 +25,9 @@ pub async fn hello(State(state): State<AppState>, Json(req): Json<CoreHello>) ->
         arw_protocol::CoreRole::Connector => hier::Role::Connector,
         arw_protocol::CoreRole::Observer => hier::Role::Observer,
     });
-    state.bus.publish("Hierarchy.Hello", &req);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_HIERARCHY_HELLO, &req);
     super::ok(serde_json::json!({})).into_response()
 }
 
@@ -45,7 +47,9 @@ pub async fn offer(State(state): State<AppState>, Json(req): Json<CoreOffer>) ->
             hier::add_child(req.from_id.clone());
         }
     }
-    state.bus.publish("Hierarchy.Offer", &req);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_HIERARCHY_OFFER, &req);
     super::ok(serde_json::json!({})).into_response()
 }
 
@@ -66,6 +70,8 @@ pub async fn accept(
     if req.parent_id == hier::get_state().self_node.id {
         hier::add_child(req.child_id.clone());
     }
-    state.bus.publish("Hierarchy.Accepted", &req);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_HIERARCHY_ACCEPTED, &req);
     super::ok(serde_json::json!({})).into_response()
 }

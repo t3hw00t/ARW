@@ -118,11 +118,16 @@ fi
 echo "[pre-push] Spectral lint OpenAPI/AsyncAPI"
 if command -v npx >/dev/null 2>&1; then
   # Lint repo spec
-  npx --yes @stoplight/spectral-cli lint -r quality/openapi-spectral.yaml spec/openapi.yaml || exit 1
+  npx --yes @stoplight/spectral-cli@6 lint -r quality/openapi-spectral.yaml spec/openapi.yaml || exit 1
   # AsyncAPI is kept minimal; treat errors as warnings for now
-  npx --yes @stoplight/spectral-cli lint -r quality/openapi-spectral.yaml --fail-severity=warn spec/asyncapi.yaml || true
+  base_ref=${BASE_REF:-origin/main}
+  if git diff --quiet "$base_ref"..HEAD -- spec/asyncapi.yaml 2>/dev/null; then
+    echo "[pre-push] no AsyncAPI changes; skipping spectral"
+  else
+    npx --yes @stoplight/spectral-cli@6 lint -r quality/openapi-spectral.yaml --fail-severity=warn spec/asyncapi.yaml || true
+  fi
   # Lint merged OpenAPI (codegen + curated overlay) for style parity
-  npx --yes @stoplight/spectral-cli lint -r quality/openapi-spectral.yaml "$tmp/merged.yaml" || exit 1
+  npx --yes @stoplight/spectral-cli@6 lint -r quality/openapi-spectral.yaml "$tmp/merged.yaml" || exit 1
 else
   echo "[pre-push] npx unavailable; skipping spectral"
 fi

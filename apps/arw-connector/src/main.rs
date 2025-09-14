@@ -45,18 +45,18 @@ async fn main() -> anyhow::Result<()> {
                             };
                             let _ = q.ack(lease).await;
                             tracing::info!(target: "arw-connector", "completed task {}", t.id);
-                            // Publish Task.Completed event
+                            // Publish task.completed event
                             let env = json!({
                                 "time": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-                                "kind": "Task.Completed",
+                                "kind": "task.completed",
                                 "payload": {"id": t.id, "ok": true, "output": out}
                             });
                             if let Ok(bytes) = serde_json::to_vec(&env) {
                                 let _ = nats
-                                    .publish("arw.events.Task.Completed", bytes.clone().into())
+                                    .publish("arw.events.task.completed", bytes.clone().into())
                                     .await;
                                 let subj =
-                                    format!("arw.events.node.{}.{}", node_id, "Task.Completed");
+                                    format!("arw.events.node.{}.{}", node_id, "task.completed");
                                 let _ = nats.publish(subj, bytes.into()).await;
                             }
                         }

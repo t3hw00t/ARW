@@ -125,7 +125,7 @@ When downloads are offloaded, ARW emits compact egress events for observability:
 
 See also: Developer → [Egress Ledger Helper (Builder)](../developer/style.md#egress-ledger-helper-builder)
 
-Note: formal `Egress.Decision` remains planned; previews and ledger appends are emitted today.
+Note: formal `egress.decision` remains planned; previews and ledger appends are emitted today.
 
 ## Metrics
 
@@ -183,7 +183,7 @@ On success, a per‑ID manifest is written at `{state_dir}/models/<id>.json` des
 ### Policy & Egress
 
 - The admin endpoint is gated by capability and egress policy: the request must satisfy `io:egress:models.download`.
-- Optional egress ledger entries are appended for download attempts (success/failure); see “Egress & Provenance” docs. A compact `Egress.Preview` is emitted before offload with `{dest:{host,port,protocol}}` and `corr_id` for observability.
+- Optional egress ledger entries are appended for download attempts (success/failure); see “Egress & Provenance” docs. A compact `egress.preview` is emitted before offload with `{dest:{host,port,protocol}}` and `corr_id` for observability.
 
 Security note: all `/admin/*` endpoints require either debug mode (`ARW_DEBUG=1`) or an admin token. Set `ARW_ADMIN_TOKEN` on the service and send it as `Authorization: Bearer <token>` or `X-ARW-Admin: <token>`.
 GC unused blobs:

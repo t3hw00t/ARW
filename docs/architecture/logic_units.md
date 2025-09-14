@@ -26,7 +26,7 @@ Object Graph placement
 - Agent Profile exposes named slots; Projects/Agents bind units by slot.
 
 Events (vocabulary)
-- `LogicUnit.Suggested`, `LogicUnit.Installed`, `LogicUnit.Applied`, `LogicUnit.Reverted`, `LogicUnit.Promoted`.
+- `logic.unit.suggested`, `logic.unit.installed`, `logic.unit.applied`, `logic.unit.reverted`, `logic.unit.promoted`.
 
 Good defaults to ship
 - Metacognition: enable confidence estimates and simple calibration.

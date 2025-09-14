@@ -49,3 +49,14 @@ jobs:
             README.md docs/**
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  event-kinds:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      - name: Lint event kinds (dot.case)
+        run: |
+          python3 scripts/lint_event_kinds.py

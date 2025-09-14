@@ -61,11 +61,10 @@ Why this is worth it
 
 Endpoints & Events (MVP)
 - GET `/state/self` → list all stored self‑models; GET `/state/self/{agent}` → JSON model.
-- POST `/admin/self_model/propose` → persist a proposal (`SelfModel.Proposed`).
-- POST `/admin/self_model/apply` → apply a proposal (`SelfModel.Updated`).
+- POST `/admin/self_model/propose` → persist a proposal (`self.model.proposed`).
+- POST `/admin/self_model/apply` → apply a proposal (`self.model.updated`).
 
 Storage
 - Files under `<state>/self/{agent}.json`; proposals under `<state>/self/_proposals/{id}.json`.
 
 See also: Events Vocabulary, Logic Units, Evaluation Harness, Policy & Permissions.
-

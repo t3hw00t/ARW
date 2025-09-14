@@ -67,10 +67,9 @@ Implementation notes (ARW)
 - Context API: extend `/admin/context/assemble` to accept slot budgets, diversity knobs, and to return pointers (stable IDs) for all included items.
 - Retrieval: add MMR‑style selector over vector/graph mounts and the world belief graph.
 - Compression: background job to summarize episodes and roll up entities; write summaries to mounts with provenance.
-- Failure detectors: emit `Context.RecallRisk` and `Context.Coverage` events; surface in UI and adjust next‑turn retrieval.
+- Failure detectors: emit `context.recall_risk` and `context.coverage` events; surface in UI and adjust next‑turn retrieval.
 - Long‑context: add an optional merge step in Recipes; distill back into beliefs/summaries after use.
 
 See also
 - Architecture → Budgets & Context, Memory Lifecycle, World Model
 - Guide → Context Recipes, Training Park
-

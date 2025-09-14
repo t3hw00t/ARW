@@ -104,6 +104,8 @@ pub async fn goldens_run(
         "avg_latency_ms": summary.avg_latency_ms,
     });
     super::corr::ensure_corr(&mut payload);
-    state.bus.publish("goldens.evaluated", &payload);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_GOLDENS_EVALUATED, &payload);
     super::ok(serde_json::to_value(summary).unwrap()).into_response()
 }

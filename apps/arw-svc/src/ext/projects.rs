@@ -61,7 +61,9 @@ pub(crate) async fn projects_create(
     // Emit event for orchestration/agents to react to project lifecycle
     let mut p = json!({"name": safe.clone()});
     corr::ensure_corr(&mut p);
-    state.bus.publish("Projects.Created", &p);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_PROJECTS_CREATED, &p);
     super::ok(json!({"name": safe})).into_response()
 }
 
@@ -179,7 +181,9 @@ pub(crate) async fn projects_notes_set(
     }
     let mut p = json!({"name": q.proj});
     corr::ensure_corr(&mut p);
-    state.bus.publish("Projects.NotesSaved", &p);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_PROJECTS_NOTES_SAVED, &p);
     super::ok(json!({})).into_response()
 }
 
@@ -300,7 +304,9 @@ pub(crate) async fn projects_file_set(
     }
     let mut evt = json!({"proj": q.proj, "path": q.path});
     super::corr::ensure_corr(&mut evt);
-    state.bus.publish("Projects.FileWritten", &evt);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_PROJECTS_FILE_WRITTEN, &evt);
     super::io::audit_event("projects.file.write", &evt).await;
     super::ok(json!({})).into_response()
 }

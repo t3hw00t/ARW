@@ -11,7 +11,6 @@ Node Manifest (signed)
 - Use for attestation/pinning: scheduler targets only nodes whose manifest matches the workspace spec; Home Node verifies signatures against the trust store.
 
 Events (planned)
-- `Cluster.ManifestPublished`, `Cluster.ManifestTrusted`, `Cluster.ManifestRejected`
+- `cluster.manifest.published`, `cluster.manifest.trusted`, `cluster.manifest.rejected`
 
 See also: Architecture → Lightweight Mitigations; Clustering; Policy; Developer Security.
-

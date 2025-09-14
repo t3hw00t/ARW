@@ -12,7 +12,7 @@ Budgets
 - Each execution carries a spend plan: tokens in/out, latency targets, and optional $ estimates for remote APIs.
 
 Events
-- `Budget.Planned`, `Budget.Spent`, `Budget.Degraded` (soft exhausted), `Budget.HardExhausted`.
+- `budget.planned`, `budget.spent`, `budget.degraded` (soft exhausted), `budget.hard_exhausted`.
 
 Context recipes
 - Cap tokens per pipe; track actual contribution vs budget.

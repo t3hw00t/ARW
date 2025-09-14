@@ -1,3 +1,32 @@
+//! Models Service — downloads, CAS, events, and metrics
+//!
+//! Updated: 2025-09-14
+//!
+//! Responsibilities
+//! - Resumable HTTP downloads with mandatory SHA‑256 integrity.
+//! - Content‑addressed storage under `<state>/models/by-hash`.
+//! - Event publishing: `models.download.progress`, `models.changed`, `models.manifest.written`.
+//! - Read-model patches: `models` (items + default), `models_metrics` (counters + `ewma_mbps`).
+//! - Egress ledger entries for download allow/deny.
+//!
+//! Endpoints
+//! - Handlers live in `apps/arw-svc/src/ext/models_api.rs` (list, default, download, cancel,
+//!   concurrency, CAS GC, metrics, hashes).
+//!
+//! Configuration
+//! - Concurrency: `ARW_MODELS_MAX_CONC`, `ARW_MODELS_MAX_CONC_HARD`.
+//! - Progress details: `ARW_DL_PROGRESS_INCLUDE_BUDGET`, `ARW_DL_PROGRESS_INCLUDE_DISK`,
+//!   `ARW_DL_PROGRESS_VALIDATE`.
+//! - Timeouts: `ARW_DL_IDLE_TIMEOUT_SECS`.
+//! - HTTP pool: `ARW_DL_HTTP_KEEPALIVE_SECS`, `ARW_DL_HTTP_POOL_IDLE_SECS`,
+//!   `ARW_DL_HTTP_POOL_MAX_IDLE_PER_HOST`.
+//! - Metrics cadence: `ARW_MODELS_METRICS_PUBLISH_MS`, `ARW_MODELS_METRICS_COALESCE_MS`.
+//! - Disk/quota: `ARW_MODELS_DISK_RESERVE_MB`, `ARW_MODELS_MAX_MB`, `ARW_MODELS_QUOTA_MB`.
+//! - Throughput smoothing: `ARW_DL_EWMA_ALPHA`.
+//!
+//! References
+//! - Status/code enums are the source of truth here; `spec/asyncapi.yaml` mirrors them.
+//! - See `docs/architecture/events_vocabulary.md` and `docs/reference/topics.md`.
 use serde_json::{json, Value};
 
 use crate::app_state::AppState;
@@ -65,6 +94,9 @@ pub fn models_metrics_value() -> Value {
     })
 }
 
+/// Publish a coalesced read-model patch for download metrics.
+///
+/// Shape matches the HTTP snapshot: counters plus an optional `ewma_mbps`.
 fn publish_models_metrics_patch(bus: &arw_events::Bus) {
     // Start with process-local counters
     let mut cur = models_metrics_value();
@@ -86,6 +118,7 @@ fn publish_models_metrics_patch(bus: &arw_events::Bus) {
 }
 
 // Emit JSON Patch for the models state (list + default) under unified topic.
+/// Publish a read-model patch for the models list and default.
 async fn publish_models_state_patch(bus: &arw_events::Bus) {
     let list = crate::ext::models().read().await.clone();
     let default = crate::ext::default_model().read().await.clone();
@@ -93,7 +126,9 @@ async fn publish_models_state_patch(bus: &arw_events::Bus) {
     crate::ext::read_model::emit_patch(bus, TOPIC_READMODEL_PATCH, "models", &cur);
 }
 
-/// Start coalesced publisher for models metrics read‑model
+/// Spawn a task that publishes coalesced `models_metrics` read-model patches.
+///
+/// Controlled by `ARW_MODELS_METRICS_PUBLISH_MS` and `ARW_MODELS_METRICS_COALESCE_MS`.
 pub async fn start_models_metrics_publisher(bus: arw_events::Bus) {
     let idle_ms: u64 = ModelsService::env_u64("ARW_MODELS_METRICS_PUBLISH_MS", 2000).max(200);
     let coalesce_ms: u64 = ModelsService::env_u64("ARW_MODELS_METRICS_COALESCE_MS", 250).max(10);
@@ -1533,7 +1568,10 @@ impl ModelsService {
             .and_then(|s| s.parse::<usize>().ok())
             .filter(|v| *v >= 1)
     }
-    // Lightweight snapshot of downloader state for admin/ops
+    /// Lightweight snapshot of downloader state for admin/ops.
+    ///
+    /// Includes active `model_id`→`job_id` pairs, in‑flight sha256 hashes, and a
+    /// small concurrency summary (configured, available, held permits).
     pub async fn jobs_status(&self) -> Value {
         let active_map = Self::active_jobs_cell().read().await.clone();
         let mut active = Vec::with_capacity(active_map.len());
@@ -1559,7 +1597,10 @@ impl ModelsService {
             "concurrency": conc,
         })
     }
-    // Read current concurrency settings and limits
+    /// Read current concurrency settings and limits.
+    ///
+    /// Returns `configured_max`, `available_permits`, `held_permits`, and optional
+    /// `hard_cap` from `ARW_MODELS_MAX_CONC_HARD`.
     pub async fn concurrency_get(&self) -> Value {
         let desired = *Self::concurrency_cfg_cell().read().await as u64;
         let held_cnt = Self::held_permits_cell().read().await.len() as u64;
@@ -1572,9 +1613,11 @@ impl ModelsService {
             "hard_cap": hard,
         })
     }
-    // Change the effective max concurrency at runtime.
-    // Increasing uses add_permits and/or releases held permits.
-    // Decreasing acquires and holds permits to reduce availability, waiting for in-flight tasks.
+    /// Change the effective max concurrency at runtime.
+    ///
+    /// Increasing uses `add_permits` and/or releases held permits. Decreasing
+    /// acquires and holds permits to reduce availability. When `block` is
+    /// false, shrinking is opportunistic and reports `pending_shrink`.
     pub async fn concurrency_set(
         &self,
         state: &AppState,
@@ -1664,8 +1707,9 @@ impl ModelsService {
         Self
     }
 
-    // Expose lightweight downloads metrics for UI/ops.
-    // Returns JSON with optional EWMA throughput estimate.
+    /// Lightweight download metrics for UI and operations.
+    ///
+    /// Returns counters merged with an optional `ewma_mbps` throughput estimate.
     pub async fn downloads_metrics(&self) -> Value {
         let ewma = Self::load_ewma_mbps().await;
         let counters = models_metrics_value();
@@ -1988,6 +2032,10 @@ impl ModelsService {
     }
 
     // Public snapshot: CAS quota/usage quick view for UI/ops
+    /// Snapshot of CAS usage and quota status.
+    ///
+    /// Reports directory, file count, used bytes/MB, and whether
+    /// `ARW_MODELS_QUOTA_MB` is exceeded.
     pub async fn quota_status(&self) -> Value {
         let dir = crate::ext::paths::state_dir()
             .join("models")
@@ -2192,12 +2240,14 @@ impl ModelsService {
         None
     }
 
+    /// Return the current models list (in-memory state).
     pub async fn list(&self) -> Vec<Value> {
         crate::ext::models().read().await.clone()
     }
 
     // Run a single CAS GC sweep. Deletes unreferenced blobs older than ttl_days.
     // Publishes a compact summary event on success.
+    /// Run a single CAS GC pass for unreferenced blobs older than `ttl_days`.
     pub async fn cas_gc_once(bus: &arw_events::Bus, ttl_days: u64) {
         use tokio::fs as afs;
         let state_dir = crate::ext::paths::state_dir();
@@ -2296,6 +2346,7 @@ impl ModelsService {
         bus.publish(TOPIC_MODELS_CAS_GC, &payload);
     }
 
+    /// Reset the models list to defaults (provider-curated) and publish events/patches.
     pub async fn refresh(&self, state: &AppState) -> Vec<Value> {
         let new = crate::ext::default_models();
         {
@@ -2315,6 +2366,7 @@ impl ModelsService {
         new
     }
 
+    /// Persist the current models array to `<state>/models/models.json`.
     pub async fn save(&self) -> Result<(), String> {
         let v = crate::ext::models().read().await.clone();
         crate::ext::io::save_json_file_async(&crate::ext::paths::models_path(), &Value::Array(v))
@@ -2322,6 +2374,7 @@ impl ModelsService {
             .map_err(|e| e.to_string())
     }
 
+    /// Load the models array from `<state>/models/models.json`.
     pub async fn load(&self) -> Result<Vec<Value>, String> {
         match crate::ext::io::load_json_file_async(&crate::ext::paths::models_path())
             .await
@@ -2338,6 +2391,7 @@ impl ModelsService {
         }
     }
 
+    /// Add a model id (and optional provider); publishes `models.changed`.
     pub async fn add(&self, state: &AppState, id: String, provider: Option<String>) {
         let mut v = crate::ext::models().write().await;
         if !v
@@ -2360,6 +2414,7 @@ impl ModelsService {
         }
     }
 
+    /// Delete a model id; publishes `models.changed`.
     pub async fn delete(&self, state: &AppState, id: String) {
         let mut v = crate::ext::models().write().await;
         let before = v.len();
@@ -2373,10 +2428,12 @@ impl ModelsService {
         }
     }
 
+    /// Return the default model id used for inference.
     pub async fn default_get(&self) -> String {
         crate::ext::default_model().read().await.clone()
     }
 
+    /// Set the default model id; publishes `models.changed`.
     pub async fn default_set(&self, state: &AppState, id: String) -> Result<(), String> {
         {
             let mut d = crate::ext::default_model().write().await;
@@ -2431,6 +2488,7 @@ impl ModelsService {
         Self::active_jobs_cell().write().await.remove(model_id);
     }
 
+    /// Request cancellation by model id; publishes progress and changed events.
     pub async fn cancel_download(&self, state: &AppState, id: String) {
         // Resolve current job for this model id; if present, cancel that job only
         if let Some(job) = Self::current_job_id(&id).await {
@@ -2461,6 +2519,9 @@ impl ModelsService {
         crate::ext::io::audit_event("models.download.cancel", &p).await;
     }
 
+    /// Start a download with optional budget override.
+    ///
+    /// Requires `sha256`. Publishes progress events and updates the models list.
     pub async fn download_with_budget(
         &self,
         state: &AppState,
@@ -3174,6 +3235,68 @@ mod tests {
         // Cleanup
         let _ = afs::remove_file(&file).await;
         let _ = afs::remove_dir_all(&dir).await;
+    }
+
+    #[test]
+    fn asyncapi_progress_vocab_matches() {
+        use std::collections::BTreeSet;
+
+        // Locate AsyncAPI spec relative to this crate
+        let spec_path =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../spec/asyncapi.yaml");
+        let data = std::fs::read_to_string(&spec_path).expect("read spec/asyncapi.yaml");
+        let yaml: serde_yaml::Value = serde_yaml::from_str(&data).expect("parse asyncapi.yaml");
+
+        let status_yaml = &yaml["components"]["messages"]["ModelsDownloadProgress"]["payload"]
+            ["properties"]["status"]["enum"];
+        let code_yaml = &yaml["components"]["messages"]["ModelsDownloadProgress"]["payload"]
+            ["properties"]["code"]["enum"];
+
+        let to_set = |node: &serde_yaml::Value| -> BTreeSet<String> {
+            node.as_sequence()
+                .expect("enum should be sequence")
+                .iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        };
+        let status_set_spec = to_set(status_yaml);
+        let code_set_spec = to_set(code_yaml);
+
+        let status_set_code: BTreeSet<String> = super::ModelsService::PROGRESS_STATUS
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let code_set_code: BTreeSet<String> = super::ModelsService::PROGRESS_CODES
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+
+        // Helpful diffs
+        let missing_in_spec: Vec<_> = status_set_code
+            .difference(&status_set_spec)
+            .cloned()
+            .collect();
+        let extra_in_spec: Vec<_> = status_set_spec
+            .difference(&status_set_code)
+            .cloned()
+            .collect();
+        assert!(
+            status_set_spec == status_set_code,
+            "status enums mismatch: missing_in_spec={:?} extra_in_spec={:?}",
+            missing_in_spec,
+            extra_in_spec
+        );
+
+        let missing_codes_in_spec: Vec<_> =
+            code_set_code.difference(&code_set_spec).cloned().collect();
+        let extra_codes_in_spec: Vec<_> =
+            code_set_spec.difference(&code_set_code).cloned().collect();
+        assert!(
+            code_set_spec == code_set_code,
+            "code enums mismatch: missing_in_spec={:?} extra_in_spec={:?}",
+            missing_codes_in_spec,
+            extra_codes_in_spec
+        );
     }
 
     #[tokio::test]

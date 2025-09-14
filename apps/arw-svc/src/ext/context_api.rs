@@ -429,7 +429,9 @@ pub async fn assemble_get(
             },
         });
         crate::ext::corr::ensure_corr(&mut ev);
-        state.bus.publish("Context.Assembled", &ev);
+        state
+            .bus
+            .publish(crate::ext::topics::TOPIC_CONTEXT_ASSEMBLED, &ev);
         if coverage_omitted > 0 {
             let mut ev2 = json!({
                 "proj": ev["proj"].clone(),
@@ -438,7 +440,9 @@ pub async fn assemble_get(
                 "omitted": coverage_omitted,
             });
             crate::ext::corr::ensure_corr(&mut ev2);
-            state.bus.publish("Context.Coverage", &ev2);
+            state
+                .bus
+                .publish(crate::ext::topics::TOPIC_CONTEXT_COVERAGE, &ev2);
         }
     }
     // Render context preview string (format driven by hints)

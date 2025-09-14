@@ -40,7 +40,9 @@ pub async fn distill_once(state: &AppState) -> Value {
     // Emit a small event
     let mut payload = json!({"playbooks":  playbooks.len()});
     super::corr::ensure_corr(&mut payload);
-    state.bus.publish("Distill.Completed", &payload);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_DISTILL_COMPLETED, &payload);
     json!({"ok": true, "playbooks": playbooks.len()})
 }
 

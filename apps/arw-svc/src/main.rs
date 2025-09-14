@@ -328,9 +328,10 @@ async fn main() {
     ext::load_persisted().await;
 
     // Emit a startup event so /events sees something if connected early.
-    state
-        .bus
-        .publish("service.start", &json!({"msg":"arw-svc started"}));
+    state.bus.publish(
+        ext::topics::TOPIC_SERVICE_START,
+        &json!({"msg":"arw-svc started"}),
+    );
     // Pre‑warm hot lookups/caches for snappy I2F
     ext::snappy::prewarm().await;
 
@@ -404,7 +405,7 @@ async fn main() {
         });
     }
 
-    // Interface catalog watcher -> publish Catalog.Updated on changes
+    // Interface catalog watcher -> publish catalog.updated on changes
     {
         let bus = state.bus.clone();
         tokio::spawn(async move {
@@ -436,7 +437,7 @@ async fn main() {
                 if digest != last_digest {
                     last_digest = digest.clone();
                     let payload = serde_json::json!({ "digest": digest, "files": files });
-                    bus.publish("Catalog.Updated", &payload);
+                    bus.publish(ext::topics::TOPIC_CATALOG_UPDATED, &payload);
                     // bump catalog generation to refresh deprecation caches lazily
                     catalog_gen().fetch_add(1, Ordering::Relaxed);
                 }
@@ -444,13 +445,13 @@ async fn main() {
         });
     }
 
-    // Subscribe to Catalog.Updated to refresh deprecation caches immediately
+    // Subscribe to catalog.updated to refresh deprecation caches immediately
     {
         let bus = state.bus.clone();
         tokio::spawn(async move {
             let mut rx = bus.subscribe();
             while let Ok(env) = rx.recv().await {
-                if env.kind == "Catalog.Updated" || env.kind == "catalog.updated" {
+                if env.kind == ext::topics::TOPIC_CATALOG_UPDATED {
                     refresh_dep_cache();
                     // align seen_gen with current generation
                     dep_cache()
@@ -904,7 +905,9 @@ async fn rate_allow() -> bool {
     responses((status = 200, description = "Service health", body = OkResponse))
 )]
 async fn healthz(State(state): State<AppState>) -> impl IntoResponse {
-    state.bus.publish("service.health", &json!({"ok": true}));
+    state
+        .bus
+        .publish(ext::topics::TOPIC_SERVICE_HEALTH, &json!({"ok": true}));
     Json(OkResponse { ok: true })
 }
 
@@ -982,7 +985,7 @@ async fn probe(State(state): State<AppState>) -> impl IntoResponse {
     let ep = arw_core::load_effective_paths();
 
     // Publish that JSON to the event bus
-    state.bus.publish("memory.applied", &ep);
+    state.bus.publish(ext::topics::TOPIC_MEMORY_APPLIED, &ep);
 
     // Return it to the client
     ext::ok::<serde_json::Value>(ep).into_response()
@@ -1103,7 +1106,10 @@ async fn probe_hw(State(state): State<AppState>) -> impl IntoResponse {
         "npus": npus,
     });
     // Publish minimal event for observability
-    state.bus.publish("probe.hw", &serde_json::json!({"cpus": cpus_logical, "gpus": out["gpus"].as_array().map(|a| a.len()).unwrap_or(0)}));
+    state.bus.publish(
+        ext::topics::TOPIC_PROBE_HW,
+        &serde_json::json!({"cpus": cpus_logical, "gpus": out["gpus"].as_array().map(|a| a.len()).unwrap_or(0)}),
+    );
     ext::ok::<serde_json::Value>(out).into_response()
 }
 
@@ -1713,9 +1719,10 @@ async fn emit_test(State(state): State<AppState>) -> impl IntoResponse {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
-    state
-        .bus
-        .publish("service.test", &json!({"msg":"ping","t": now_ms}));
+    state.bus.publish(
+        ext::topics::TOPIC_SERVICE_TEST,
+        &json!({"msg":"ping","t": now_ms}),
+    );
     // audit
     crate::ext::io::audit_event("admin.emit.test", &json!({"t": now_ms})).await;
     Json(OkResponse { ok: true }).into_response()
@@ -1734,9 +1741,10 @@ async fn emit_test(State(state): State<AppState>) -> impl IntoResponse {
 )]
 #[arw_gate("admin:shutdown")]
 async fn shutdown(State(state): State<AppState>) -> impl IntoResponse {
-    state
-        .bus
-        .publish("service.stop", &json!({"reason":"user request"}));
+    state.bus.publish(
+        ext::topics::TOPIC_SERVICE_STOP,
+        &json!({"reason":"user request"}),
+    );
     // audit
     crate::ext::io::audit_event("admin.shutdown", &json!({"reason": "user request"})).await;
     if let Some(tx) = &state.stop_tx {

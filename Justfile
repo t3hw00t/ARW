@@ -101,6 +101,10 @@ dev-watch port=8090:
 docs-serve addr="127.0.0.1:8000":
   mkdocs serve -a {{addr}}
 
+# Generate Feature Matrix (docs/reference/feature_matrix.md)
+features-gen:
+  python3 scripts/gen_feature_matrix.py
+
 # Run service + docs together (Unix)
 dev-all port=8090 addr="127.0.0.1:8000":
   ARW_DEBUG=1 ARW_PORT={{port}} ARW_DOCS_URL=http://{{addr}} bash scripts/dev.sh {{port}} {{addr}}

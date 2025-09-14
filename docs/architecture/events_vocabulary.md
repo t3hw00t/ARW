@@ -25,13 +25,13 @@ Canonical categories (normalized)
 - Jobs (offload): `job.assigned`, `job.progress`, `job.completed`, `job.error`
 - Sessions (sharing): `session.invited`, `session.role.changed`, `session.event.relayed`
 - Egress: `egress.preview` (pre‑offload summary), `egress.ledger.appended` (append‑only record)
-  - `Egress.Decision` remains planned; today we emit previews and ledger appends for downloads and select offloads.
+  - `egress.decision` remains planned; today we emit previews and ledger appends for downloads and select offloads.
   - See also: Developer → [Egress Ledger Helper (Builder)](../developer/style.md#egress-ledger-helper-builder)
- - Memory (planned): `Memory.Quarantined`, `Memory.Admitted`
- - World diffs (planned): `WorldDiff.Queued`, `WorldDiff.Conflict`, `WorldDiff.Applied`
- - Cluster trust (planned): `Cluster.ManifestPublished`, `Cluster.ManifestTrusted`, `Cluster.ManifestRejected`, `Cluster.EventRejected`
- - Archives (planned): `Archive.Unpacked`, `Archive.Blocked`
- - DNS (planned): `Dns.Anomaly`
+- Memory (planned): `memory.quarantined`, `memory.admitted`
+- World diffs (planned): `world.diff.queued`, `world.diff.conflict`, `world.diff.applied`
+- Cluster trust (planned): `cluster.manifest.published`, `cluster.manifest.trusted`, `cluster.manifest.rejected`, `cluster.event.rejected`
+- Archives (planned): `archive.unpacked`, `archive.blocked`
+- DNS (planned): `dns.anomaly`
 
 Minimal event envelope
 ```
@@ -44,14 +44,14 @@ Notes
 
 Mapping from existing ARW events
 - Observations/Beliefs/Intents/Actions are already exposed under `/state/*` and emitted in debug builds; clients can mirror or subscribe.
-- `models.download.progress` supports `{ id, status|error, code, budget?, disk? }` — see `resources/models_service.rs`.
+- `models.download.progress` supports `{ id, status|error, code, budget?, disk? }` — see `apps/arw-svc/src/resources/models_service.rs`.
   - Common `code` values: `admission-denied`, `hard-exhausted`, `disk-insufficient(-stream)`, `size-limit(-stream)`, `checksum-mismatch`, `cache-mismatch`, `canceled-by-user`, `already-in-progress-hash`, `quota-exceeded`, `cached`, `resync`.
 - Download start is represented via `models.download.progress` with `status:"started"`.
 - `models.manifest.written` is emitted after a successful write of `<state>/models/<id>.json`.
 - `models.cas.gc` emits `{scanned, kept, deleted, deleted_bytes, ttl_days}` after a GC sweep.
 - `models.changed` publishes ops like `add`, `delete`, `default`, `downloaded`, `canceled`, `error`.
 - `models.refreshed` publishes a count after resetting the models list to defaults.
-- Cluster events are additive and off by default. When enabled, Workers publish `Cluster.Node.Advertise` (capabilities, health), periodic `Cluster.Node.Heartbeat`, and receive `Job.*` assignments. The Home Node merges remote `Job.*` and `Session.*` events into the unified timeline by `corr_id`.
+- Cluster events are additive and off by default. When enabled, Workers publish `cluster.node.advertise` (capabilities, health), periodic `cluster.node.heartbeat`, and receive `job.*` assignments. The Home Node merges remote `job.*` and `session.*` events into the unified timeline by `corr_id`.
 - World model (read‑model) materializes from existing events like `feedback.suggested` / `beliefs.updated`, `projects.file.written`, `actions.hint.applied`, `runtime.health`, and `models.download.progress`. A compact `world.updated` event is emitted with counts and version for UI/SSE.
 - Egress firewall emits previews and ledger appends today. An append‑only ledger records normalized entries with episode/project/node attribution. Decisions remain planned.
  - Model downloads emit progress heartbeats and budget/disk hints; when enabled, egress ledger entries are appended for `allow` and `deny` decisions around downloads.
@@ -77,7 +77,7 @@ Mapping from existing ARW events
 | state.read.model.patch     | Read‑model JSON Patch deltas     | id, patch[...] |
 | snappy.notice              | Snappy budgets: breach notice    | p95_max_ms, budget_ms |
 | snappy.detail              | Snappy budgets: periodic detail  | p95_by_path{"/path":p95_ms} |
-- Self‑Model endpoints emit compact events: `SelfModel.Proposed` (agent, proposal_id, rationale, widens_scope?) and `SelfModel.Updated` (agent, proposal_id). Read‑models available at `/state/self` and `/state/self/{agent}`.
+- Self‑Model endpoints emit compact events: `self.model.proposed` (agent, proposal_id, rationale, widens_scope?) and `self.model.updated` (agent, proposal_id). Read‑models available at `/state/self` and `/state/self/{agent}`.
 
 Replay and filtering
 - SSE supports `?replay=N` and lightweight prefix filters (`?prefix=models.`) for scoped dashboards.

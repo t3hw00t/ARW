@@ -19,9 +19,10 @@ impl GovernorService {
             let mut g = crate::ext::governor_profile().write().await;
             *g = name.clone();
         }
-        state
-            .bus
-            .publish("governor.changed", &json!({"profile": name}));
+        state.bus.publish(
+            crate::ext::topics::TOPIC_GOVERNOR_CHANGED,
+            &json!({"profile": name}),
+        );
         crate::ext::persist_orch().await;
     }
 
@@ -120,13 +121,17 @@ impl GovernorService {
             crate::dyn_timeout::set_global_timeout_secs(secs);
             let mut payload = json!({"action":"hint","params":{"http_timeout_secs": secs, "source": "slo|mode"},"ok": true});
             crate::ext::corr::ensure_corr(&mut payload);
-            state.bus.publish("actions.hint.applied", &payload);
+            state
+                .bus
+                .publish(crate::ext::topics::TOPIC_ACTIONS_HINT_APPLIED, &payload);
         }
         // Optional mode-policy side effects (light-touch): expose as event for UI/recipes
         if let Some(m) = mode {
             let mut payload = json!({"action":"mode","mode": m});
             crate::ext::corr::ensure_corr(&mut payload);
-            state.bus.publish("governor.changed", &payload);
+            state
+                .bus
+                .publish(crate::ext::topics::TOPIC_GOVERNOR_CHANGED, &payload);
         }
         crate::ext::persist_orch().await;
     }

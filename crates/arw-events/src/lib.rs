@@ -87,39 +87,55 @@ impl LocalBus {
         if seg.is_empty() {
             return String::new();
         }
-        // Split CamelCase into dot-separated tokens and lowercase all
-        let mut out = String::with_capacity(seg.len() + 4);
+        // Split CamelCase (and acronyms) into tokens, lowercase them, joined with '.'
+        // Examples: "Task" -> "task"; "WorldDiff" -> "world.diff"; "HTTPServer" -> "http.server"
         let chars: Vec<char> = seg.chars().collect();
-        let mut i = 0;
+        let mut tokens: Vec<String> = Vec::new();
+        let mut i = 0usize;
         while i < chars.len() {
             let c = chars[i];
-            let mut j = i + 1;
+            // Uppercase start
             if c.is_uppercase() {
-                // consume a run of uppercase letters
-                while j < chars.len() && chars[j].is_uppercase() {
-                    j += 1;
+                let mut j = i + 1;
+                if j < chars.len() && chars[j].is_lowercase() {
+                    // Capitalized word: consume following lowercase letters
+                    while j < chars.len() && chars[j].is_lowercase() {
+                        j += 1;
+                    }
+                    let token: String = chars[i..j].iter().collect();
+                    tokens.push(token.to_lowercase());
+                    i = j;
+                    continue;
+                } else {
+                    // Acronym run: consume consecutive uppercase letters
+                    while j < chars.len() && chars[j].is_uppercase() {
+                        j += 1;
+                    }
+                    if j < chars.len() && chars[j].is_lowercase() && j - i > 1 {
+                        // Split before the last uppercase when followed by lowercase: HTTPServer -> HTTP + Server
+                        let head: String = chars[i..j - 1].iter().collect();
+                        tokens.push(head.to_lowercase());
+                        i = j - 1; // leave last uppercase for the next iteration
+                        continue;
+                    } else {
+                        let token: String = chars[i..j].iter().collect();
+                        tokens.push(token.to_lowercase());
+                        i = j;
+                        continue;
+                    }
                 }
-                // If the run is length > 1 and next is lowercase, keep the run together
-                let token: String = chars[i..j].iter().collect();
-                if !out.is_empty() {
-                    out.push('.');
-                }
-                out.push_str(&token.to_lowercase());
-                i = j;
             } else {
-                // consume a run of lowercase/digits/others until next uppercase
-                while j < chars.len() && !chars[j].is_uppercase() {
+                // Lowercase/digit run
+                let mut j = i + 1;
+                while j < chars.len() && (chars[j].is_lowercase() || chars[j].is_ascii_digit()) {
                     j += 1;
                 }
                 let token: String = chars[i..j].iter().collect();
-                if !out.is_empty() {
-                    out.push('.');
-                }
-                out.push_str(&token.to_lowercase());
+                tokens.push(token.to_lowercase());
                 i = j;
             }
         }
-        out
+        tokens.join(".")
     }
 
     fn normalize_kind(kind: &str) -> String {
@@ -367,7 +383,7 @@ impl Bus {
 
 #[cfg(feature = "nats")]
 pub async fn attach_nats_outgoing(bus: &Bus, url: &str, node_id: &str) {
-    // Connect once and spawn a relay: local bus -> NATS subjects (arw.events.node.<node_id>.<Kind>)
+    // Connect once and spawn a relay: local bus -> NATS subjects (arw.events.node.<node_id>.<kind>)
     match async_nats::connect(url).await {
         Ok(client) => {
             // Optional outgoing filter: ARW_NATS_OUT_FILTER="prefix1,prefix2"
@@ -422,7 +438,7 @@ pub async fn attach_nats_outgoing(bus: &Bus, url: &str, node_id: &str) {
 pub async fn attach_nats_outgoing(_bus: &Bus, _url: &str, _node_id: &str) {}
 
 /// Subscribe to NATS subjects and publish into the local bus (aggregator mode).
-/// Uses subject form: `arw.events.node.<node_id>.<Kind>` to avoid loops.
+/// Uses subject form: `arw.events.node.<node_id>.<kind>` to avoid loops.
 #[cfg(feature = "nats")]
 pub async fn attach_nats_incoming(bus: &Bus, url: &str, self_node_id: &str) {
     use futures_util::StreamExt;
@@ -441,7 +457,7 @@ pub async fn attach_nats_incoming(bus: &Bus, url: &str, self_node_id: &str) {
             tokio::spawn(async move {
                 let mut sub = sub;
                 while let Some(msg) = sub.next().await {
-                    // Subject pattern: arw.events.node.<node>.<Kind>
+                    // Subject pattern: arw.events.node.<node>.<kind>
                     let subj = msg.subject.clone();
                     let parts: Vec<&str> = subj.split('.').collect();
                     if parts.len() >= 5 {

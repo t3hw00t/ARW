@@ -442,7 +442,7 @@ pub async fn on_event(bus: &arw_events::Bus, env: &Envelope) {
                 "stale": stale_count,
             });
             crate::ext::corr::ensure_corr(&mut payload);
-            bus.publish("world.updated", &payload);
+            bus.publish(crate::ext::topics::TOPIC_WORLD_UPDATED, &payload);
         }
     }
 }
