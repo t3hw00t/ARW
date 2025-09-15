@@ -61,3 +61,4 @@ Type: Explanation
 - Security Hardening (guide/security_hardening.md)
 - Deployment (DEPLOYMENT.md)
 - Configuration (CONFIGURATION.md)
+- Universal Feature Catalog (reference/feature_catalog.md)

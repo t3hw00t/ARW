@@ -6,6 +6,13 @@ die()  { echo "error: $*" >&2; exit 1; }
 
 command -v cargo >/dev/null 2>&1 || die "Rust 'cargo' not found in PATH"
 
+info "Validating feature registry"
+python3 scripts/check_feature_integrity.py
+
+info "Generating feature docs"
+python3 scripts/gen_feature_matrix.py
+python3 scripts/gen_feature_catalog.py
+
 info "Collecting cargo metadata"
 json=$(cargo metadata --no-deps --locked --format-version 1)
 

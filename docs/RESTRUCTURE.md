@@ -131,6 +131,7 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
 - Lexicon: Lease (capability grant), Policy (ABAC with leases), Egress Ledger (normalized network record), Working Set (context), Logic Unit (strategy pack), WASI Host (plugins), Decision (allow/require_capability/explain).
 - Prose: US English, concise and friendly; headings in Title Case; keep consistent tone. See `docs/developer/docs_style.md` and `CONTRIBUTING.md`.
 - Code: keep event/topic names and HTTP routes consistent with docs; prefer small, composable modules; avoid unnecessary renames during the restructure.
+- Feature catalog: curate `interfaces/feature_catalog.json` alongside `interfaces/features.json`; run `python3 scripts/check_feature_integrity.py` then `python3 scripts/gen_feature_catalog.py` when capabilities move.
 
 ## New Modules (current status)
 - `crates/arw-kernel` (SQLite + CAS) — Implemented

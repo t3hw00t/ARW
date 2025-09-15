@@ -20,6 +20,7 @@ In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” o
 Full documentation → https://t3hw00t.github.io/ARW/
 
 Feature Matrix → docs/reference/feature_matrix.md (living, generated from `interfaces/features.json`).
+Universal Feature Catalog → docs/reference/feature_catalog.md (experience-first map generated from `interfaces/feature_catalog.json`).
 
 General direction: a unified object graph + a single live event stream (SSE). Every surface—Project Hub, Chat, Training Park, and Managers (Agents/Models/Hardware/Permissions/Containers/Plugins)—is just a different lens on the same shared objects, driven by the same live events. This keeps the system coherent, inspectable, and easy to extend.
 
