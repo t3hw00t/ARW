@@ -87,6 +87,7 @@ mod api_orchestrator;
 mod api_policy;
 mod api_spec;
 mod api_state;
+mod context_loop;
 mod coverage;
 mod egress_proxy;
 mod util;
