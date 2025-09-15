@@ -1,6 +1,9 @@
-use axum::{extract::{State, Query}, response::sse::{Event as SseEvent, KeepAlive, Sse}};
-use axum::response::IntoResponse;
 use axum::http::HeaderMap;
+use axum::response::IntoResponse;
+use axum::{
+    extract::{Query, State},
+    response::sse::{Event as SseEvent, KeepAlive, Sse},
+};
 use tokio_stream::StreamExt as _;
 // no local json macro use here
 
@@ -25,7 +28,13 @@ pub async fn events_sse(
                 let tx2 = tx.clone();
                 tokio::spawn(async move {
                     for r in rows {
-                        let env = arw_events::Envelope { time: r.time, kind: r.kind, payload: r.payload, policy: None, ce: None };
+                        let env = arw_events::Envelope {
+                            time: r.time,
+                            kind: r.kind,
+                            payload: r.payload,
+                            policy: None,
+                            ce: None,
+                        };
                         let _ = tx2.send((env, Some(r.id.to_string()))).await;
                     }
                 });
@@ -42,7 +51,13 @@ pub async fn events_sse(
                         let tx2 = tx.clone();
                         tokio::spawn(async move {
                             for r in rows {
-                                let env = arw_events::Envelope { time: r.time, kind: r.kind, payload: r.payload, policy: None, ce: None };
+                                let env = arw_events::Envelope {
+                                    time: r.time,
+                                    kind: r.kind,
+                                    payload: r.payload,
+                                    policy: None,
+                                    ce: None,
+                                };
                                 let _ = tx2.send((env, Some(r.id.to_string()))).await;
                             }
                         });
@@ -54,7 +69,13 @@ pub async fn events_sse(
     // Optional prefix filter (CSV or repeated values comma-joined)
     let prefixes: Vec<String> = q
         .get("prefix")
-        .map(|s| s.split(',').map(|p| p.trim()).filter(|p| !p.is_empty()).map(|p| p.to_string()).collect())
+        .map(|s| {
+            s.split(',')
+                .map(|p| p.trim())
+                .filter(|p| !p.is_empty())
+                .map(|p| p.to_string())
+                .collect()
+        })
         .unwrap_or_default();
     let mut bus_rx = state.bus.subscribe();
     let sse_ids = state.sse_id_map.clone();
@@ -64,21 +85,33 @@ pub async fn events_sse(
                 let mut hasher = sha2::Sha256::new();
                 hasher.update(env.time.as_bytes());
                 hasher.update(env.kind.as_bytes());
-                if let Ok(pbytes) = serde_json::to_vec(&env.payload) { hasher.update(&pbytes); }
+                if let Ok(pbytes) = serde_json::to_vec(&env.payload) {
+                    hasher.update(&pbytes);
+                }
                 let digest = hasher.finalize();
-                let key = u64::from_le_bytes([digest[0],digest[1],digest[2],digest[3],digest[4],digest[5],digest[6],digest[7]]);
+                let key = u64::from_le_bytes([
+                    digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6],
+                    digest[7],
+                ]);
                 let id_opt = {
                     let dq = sse_ids.lock().await;
-                    dq.iter().rev().find(|(k, _)| *k == key).map(|(_, v)| v.to_string())
+                    dq.iter()
+                        .rev()
+                        .find(|(k, _)| *k == key)
+                        .map(|(_, v)| v.to_string())
                 };
                 let _ = tx.send((env, id_opt)).await;
             }
         }
     });
-    let mode = std::env::var("ARW_EVENTS_SSE_MODE").ok().unwrap_or_else(|| "envelope".into());
+    let mode = std::env::var("ARW_EVENTS_SSE_MODE")
+        .ok()
+        .unwrap_or_else(|| "envelope".into());
     let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(move |(env, sid)| {
         let mut ev = SseEvent::default().event(env.kind.clone());
-        if let Some(idv) = sid.clone() { ev = ev.id(idv); }
+        if let Some(idv) = sid.clone() {
+            ev = ev.id(idv);
+        }
         let data = if mode == "ce-structured" {
             // Basic CloudEvents 1.0 structured JSON
             let ce = serde_json::json!({
@@ -104,5 +137,9 @@ pub async fn events_sse(
         ev = ev.data(data);
         Result::<SseEvent, std::convert::Infallible>::Ok(ev)
     });
-    Sse::new(stream).keep_alive(KeepAlive::new().interval(std::time::Duration::from_secs(10)).text("keep-alive"))
+    Sse::new(stream).keep_alive(
+        KeepAlive::new()
+            .interval(std::time::Duration::from_secs(10))
+            .text("keep-alive"),
+    )
 }

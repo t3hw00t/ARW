@@ -1,5 +1,5 @@
-use serde_json::Value;
 use serde_json::json;
+use serde_json::Value;
 
 pub fn default_models() -> Vec<Value> {
     vec![
@@ -9,7 +9,11 @@ pub fn default_models() -> Vec<Value> {
 }
 
 pub fn effective_posture() -> String {
-    if let Ok(p) = std::env::var("ARW_NET_POSTURE") { return p; }
-    if let Ok(p) = std::env::var("ARW_SECURITY_POSTURE") { return p; }
+    if let Ok(p) = std::env::var("ARW_NET_POSTURE") {
+        return p;
+    }
+    if let Ok(p) = std::env::var("ARW_SECURITY_POSTURE") {
+        return p;
+    }
     "standard".into()
 }

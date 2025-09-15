@@ -1,4 +1,4 @@
-use sysinfo::{System, CpuRefreshKind, RefreshKind};
+use sysinfo::{CpuRefreshKind, RefreshKind, System};
 use tracing::info;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -23,7 +23,11 @@ pub struct PerfTuning {
 
 impl PerfPreset {
     pub fn from_env() -> Option<Self> {
-        match std::env::var("ARW_PERF_PRESET").ok().as_deref().map(|s| s.trim().to_lowercase()) {
+        match std::env::var("ARW_PERF_PRESET")
+            .ok()
+            .as_deref()
+            .map(|s| s.trim().to_lowercase())
+        {
             Some(ref s) if s == "eco" => Some(PerfPreset::Eco),
             Some(ref s) if s == "balanced" => Some(PerfPreset::Balanced),
             Some(ref s) if s == "performance" || s == "perf" => Some(PerfPreset::Performance),
@@ -117,22 +121,42 @@ pub fn apply_performance_preset() -> PerfPreset {
     set_if_unset("ARW_HTTP_MAX_CONC", t.http_max_conc.to_string());
     set_if_unset("ARW_ACTIONS_QUEUE_MAX", t.actions_queue_max.to_string());
     set_if_unset("ARW_CONTEXT_SCAN_LIMIT", t.context_scan_limit.to_string());
-    set_if_unset("ARW_REHYDRATE_FILE_HEAD_KB", t.rehydrate_file_head_kb.to_string());
-    set_if_unset("ARW_ROUTE_STATS_COALESCE_MS", t.route_stats_coalesce_ms.to_string());
-    set_if_unset("ARW_ROUTE_STATS_PUBLISH_MS", t.route_stats_publish_ms.to_string());
-    set_if_unset("ARW_MODELS_METRICS_COALESCE_MS", t.models_metrics_coalesce_ms.to_string());
-    set_if_unset("ARW_MODELS_METRICS_PUBLISH_MS", t.models_metrics_publish_ms.to_string());
+    set_if_unset(
+        "ARW_REHYDRATE_FILE_HEAD_KB",
+        t.rehydrate_file_head_kb.to_string(),
+    );
+    set_if_unset(
+        "ARW_ROUTE_STATS_COALESCE_MS",
+        t.route_stats_coalesce_ms.to_string(),
+    );
+    set_if_unset(
+        "ARW_ROUTE_STATS_PUBLISH_MS",
+        t.route_stats_publish_ms.to_string(),
+    );
+    set_if_unset(
+        "ARW_MODELS_METRICS_COALESCE_MS",
+        t.models_metrics_coalesce_ms.to_string(),
+    );
+    set_if_unset(
+        "ARW_MODELS_METRICS_PUBLISH_MS",
+        t.models_metrics_publish_ms.to_string(),
+    );
 
     // Provide a canonical computed tier for observability
-    std::env::set_var("ARW_PERF_PRESET_TIER", match preset {
-        PerfPreset::Eco => "eco",
-        PerfPreset::Balanced => "balanced",
-        PerfPreset::Performance => "performance",
-        PerfPreset::Turbo => "turbo",
-    });
+    std::env::set_var(
+        "ARW_PERF_PRESET_TIER",
+        match preset {
+            PerfPreset::Eco => "eco",
+            PerfPreset::Balanced => "balanced",
+            PerfPreset::Performance => "performance",
+            PerfPreset::Turbo => "turbo",
+        },
+    );
 
     info!(
-        tier = std::env::var("ARW_PERF_PRESET_TIER").unwrap_or_default().as_str(),
+        tier = std::env::var("ARW_PERF_PRESET_TIER")
+            .unwrap_or_default()
+            .as_str(),
         http_max_conc = t.http_max_conc,
         actions_queue_max = t.actions_queue_max,
         context_scan_limit = t.context_scan_limit,

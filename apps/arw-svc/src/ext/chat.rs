@@ -186,11 +186,14 @@ pub(crate) async fn chat_status(
         .is_some()
     {
         "llama"
-    } else if std::env::var("ARW_LITELLM_BASE_URL").ok().filter(|s| !s.trim().is_empty()).is_some()
-        || std::env::var("ARW_OPENAI_API_KEY")
+    } else if std::env::var("ARW_LITELLM_BASE_URL")
         .ok()
         .filter(|s| !s.trim().is_empty())
         .is_some()
+        || std::env::var("ARW_OPENAI_API_KEY")
+            .ok()
+            .filter(|s| !s.trim().is_empty())
+            .is_some()
     {
         "openai-compatible"
     } else {

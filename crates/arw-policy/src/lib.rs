@@ -17,7 +17,10 @@ pub struct PolicyConfig {
 
 impl Default for PolicyConfig {
     fn default() -> Self {
-        Self { allow_all: true, lease_rules: vec![] }
+        Self {
+            allow_all: true,
+            lease_rules: vec![],
+        }
     }
 }
 
@@ -49,17 +52,31 @@ impl PolicyEngine {
         }
         // Next: security posture presets
         if let Ok(posture) = std::env::var("ARW_SECURITY_POSTURE") {
-            return Self { cfg: posture_to_config(&posture) };
+            return Self {
+                cfg: posture_to_config(&posture),
+            };
         }
         // Default posture when nothing set
-        Self { cfg: posture_to_config("standard") }
+        Self {
+            cfg: posture_to_config("standard"),
+        }
     }
 
     pub fn evaluate_action(&self, kind: &str) -> Decision {
         if self.cfg.allow_all {
-            return Decision { allow: true, require_capability: None, explain: json!({"mode":"allow_all"}), model: None };
+            return Decision {
+                allow: true,
+                require_capability: None,
+                explain: json!({"mode":"allow_all"}),
+                model: None,
+            };
         }
-        if let Some(rule) = self.cfg.lease_rules.iter().find(|r| kind.starts_with(&r.kind_prefix)) {
+        if let Some(rule) = self
+            .cfg
+            .lease_rules
+            .iter()
+            .find(|r| kind.starts_with(&r.kind_prefix))
+        {
             return Decision {
                 allow: false,
                 require_capability: Some(rule.capability.clone()),
@@ -67,7 +84,12 @@ impl PolicyEngine {
                 model: None,
             };
         }
-        Decision { allow: true, require_capability: None, explain: json!({"mode":"default_allow"}), model: None }
+        Decision {
+            allow: true,
+            require_capability: None,
+            explain: json!({"mode":"default_allow"}),
+            model: None,
+        }
     }
 
     pub fn snapshot(&self) -> serde_json::Value {
@@ -112,33 +134,84 @@ fn posture_to_config(posture: &str) -> PolicyConfig {
     let p = posture.trim().to_ascii_lowercase();
     match p.as_str() {
         // Dev-friendly: wide open
-        "relaxed" => PolicyConfig { allow_all: true, lease_rules: vec![] },
+        "relaxed" => PolicyConfig {
+            allow_all: true,
+            lease_rules: vec![],
+        },
         // Default: gate sensitive areas with leases
         "standard" => PolicyConfig {
             allow_all: false,
             lease_rules: vec![
-                LeaseRule { kind_prefix: "net.http.".into(), capability: "net:http".into() },
-                LeaseRule { kind_prefix: "net.tcp.".into(), capability: "net:tcp".into() },
-                LeaseRule { kind_prefix: "fs.".into(), capability: "fs".into() },
-                LeaseRule { kind_prefix: "context.rehydrate".into(), capability: "context:rehydrate:file".into() },
-                LeaseRule { kind_prefix: "models.download".into(), capability: "models:download".into() },
-                LeaseRule { kind_prefix: "tools.browser.".into(), capability: "browser".into() },
-                LeaseRule { kind_prefix: "app.".into(), capability: "app".into() },
-                LeaseRule { kind_prefix: "shell.".into(), capability: "shell".into() },
+                LeaseRule {
+                    kind_prefix: "net.http.".into(),
+                    capability: "net:http".into(),
+                },
+                LeaseRule {
+                    kind_prefix: "net.tcp.".into(),
+                    capability: "net:tcp".into(),
+                },
+                LeaseRule {
+                    kind_prefix: "fs.".into(),
+                    capability: "fs".into(),
+                },
+                LeaseRule {
+                    kind_prefix: "context.rehydrate".into(),
+                    capability: "context:rehydrate:file".into(),
+                },
+                LeaseRule {
+                    kind_prefix: "models.download".into(),
+                    capability: "models:download".into(),
+                },
+                LeaseRule {
+                    kind_prefix: "tools.browser.".into(),
+                    capability: "browser".into(),
+                },
+                LeaseRule {
+                    kind_prefix: "app.".into(),
+                    capability: "app".into(),
+                },
+                LeaseRule {
+                    kind_prefix: "shell.".into(),
+                    capability: "shell".into(),
+                },
             ],
         },
         // Hardened: require leases for most effects (network, fs, process, app)
         "strict" => PolicyConfig {
             allow_all: false,
             lease_rules: vec![
-                LeaseRule { kind_prefix: "net.".into(), capability: "net".into() },
-                LeaseRule { kind_prefix: "fs.".into(), capability: "fs".into() },
-                LeaseRule { kind_prefix: "context.".into(), capability: "context".into() },
-                LeaseRule { kind_prefix: "models.".into(), capability: "models".into() },
-                LeaseRule { kind_prefix: "tools.".into(), capability: "tools".into() },
-                LeaseRule { kind_prefix: "app.".into(), capability: "app".into() },
-                LeaseRule { kind_prefix: "shell.".into(), capability: "shell".into() },
-                LeaseRule { kind_prefix: "system.".into(), capability: "system".into() },
+                LeaseRule {
+                    kind_prefix: "net.".into(),
+                    capability: "net".into(),
+                },
+                LeaseRule {
+                    kind_prefix: "fs.".into(),
+                    capability: "fs".into(),
+                },
+                LeaseRule {
+                    kind_prefix: "context.".into(),
+                    capability: "context".into(),
+                },
+                LeaseRule {
+                    kind_prefix: "models.".into(),
+                    capability: "models".into(),
+                },
+                LeaseRule {
+                    kind_prefix: "tools.".into(),
+                    capability: "tools".into(),
+                },
+                LeaseRule {
+                    kind_prefix: "app.".into(),
+                    capability: "app".into(),
+                },
+                LeaseRule {
+                    kind_prefix: "shell.".into(),
+                    capability: "shell".into(),
+                },
+                LeaseRule {
+                    kind_prefix: "system.".into(),
+                    capability: "system".into(),
+                },
             ],
         },
         _ => posture_to_config("standard"),

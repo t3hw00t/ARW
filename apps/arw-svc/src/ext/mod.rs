@@ -2,13 +2,13 @@
 // ext module: split into submodules (ui, later more)
 
 use arw_macros::{arw_admin, arw_gate};
+use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use axum::{
     extract::State,
     response::IntoResponse,
     routing::{get, post},
     Json, Router,
 };
-use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -25,6 +25,7 @@ use arw_core::gating;
 use arw_core::hierarchy as hier;
 use arw_core::orchestrator::Task as OrchTask;
 use arw_protocol::ProblemDetails;
+pub mod actions_api;
 pub mod budget;
 pub mod chat;
 pub mod chat_api;
@@ -63,7 +64,6 @@ pub mod tools_exec;
 pub mod topics;
 pub mod ui;
 pub mod world;
-pub mod actions_api;
 // internal helpers split into modules
 pub mod io;
 pub mod paths;
@@ -327,7 +327,13 @@ pub(crate) async fn triad_events_sse(
                 let tx2 = tx.clone();
                 tokio::spawn(async move {
                     for r in rows {
-                        let env = arw_events::Envelope { time: r.time, kind: r.kind, payload: r.payload, policy: None, ce: None };
+                        let env = arw_events::Envelope {
+                            time: r.time,
+                            kind: r.kind,
+                            payload: r.payload,
+                            policy: None,
+                            ce: None,
+                        };
                         let _ = tx2.send(env).await;
                     }
                 });
@@ -343,9 +349,15 @@ pub(crate) async fn triad_events_sse(
     });
     let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(|env| {
         let data = serde_json::to_string(&env).unwrap_or("{}".to_string());
-        Result::<SseEvent, std::convert::Infallible>::Ok(SseEvent::default().data(data).event(env.kind))
+        Result::<SseEvent, std::convert::Infallible>::Ok(
+            SseEvent::default().data(data).event(env.kind),
+        )
     });
-    Sse::new(stream).keep_alive(KeepAlive::new().interval(std::time::Duration::from_secs(10)).text("keep-alive"))
+    Sse::new(stream).keep_alive(
+        KeepAlive::new()
+            .interval(std::time::Duration::from_secs(10))
+            .text("keep-alive"),
+    )
 }
 
 static KERNEL: OnceLock<Option<arw_kernel::Kernel>> = OnceLock::new();

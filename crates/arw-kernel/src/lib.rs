@@ -252,7 +252,15 @@ impl Kernel {
             let corr_id: Option<String> = row.get(5)?;
             let payload_s: String = row.get(6)?;
             let payload = serde_json::from_str(&payload_s).unwrap_or(serde_json::json!({}));
-            out.push(EventRow { id, time, kind, actor, proj, corr_id, payload });
+            out.push(EventRow {
+                id,
+                time,
+                kind,
+                actor,
+                proj,
+                corr_id,
+                payload,
+            });
         }
         // Ensure ascending order for replay
         if after_id.is_none() {
@@ -261,7 +269,12 @@ impl Kernel {
         Ok(out)
     }
 
-    pub async fn cas_put(bytes: &[u8], mime: Option<&str>, meta: Option<&serde_json::Value>, dir: &Path) -> Result<String> {
+    pub async fn cas_put(
+        bytes: &[u8],
+        mime: Option<&str>,
+        meta: Option<&serde_json::Value>,
+        dir: &Path,
+    ) -> Result<String> {
         use sha2::Digest as _;
         let mut h = sha2::Sha256::new();
         h.update(bytes);
@@ -274,11 +287,15 @@ impl Kernel {
         }
         let meta_path = cas_dir.join(format!("{}.json", sha));
         let meta_obj = serde_json::json!({"mime": mime, "meta": meta});
-        tokio::fs::write(&meta_path, serde_json::to_vec(&meta_obj)?).await.ok();
+        tokio::fs::write(&meta_path, serde_json::to_vec(&meta_obj)?)
+            .await
+            .ok();
         Ok(sha)
     }
 
-    pub fn db_path(&self) -> &Path { &self.db_path }
+    pub fn db_path(&self) -> &Path {
+        &self.db_path
+    }
 
     pub fn insert_action(
         &self,
@@ -292,8 +309,7 @@ impl Kernel {
         let conn = self.conn()?;
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let input_s = serde_json::to_string(input).unwrap_or("{}".to_string());
-        let policy_s = policy_ctx
-            .map(|v| serde_json::to_string(v).unwrap_or("{}".to_string()));
+        let policy_s = policy_ctx.map(|v| serde_json::to_string(v).unwrap_or("{}".to_string()));
         conn.execute(
             "INSERT OR REPLACE INTO actions(id,kind,input,policy_ctx,idem_key,state,created,updated) VALUES(?,?,?,?,?,?,?,?)",
             params![
@@ -326,8 +342,8 @@ impl Kernel {
             let input_s: String = row.get(2)?;
             let policy_s: Option<String> = row.get(3)?;
             let input_v = serde_json::from_str(&input_s).unwrap_or(serde_json::json!({}));
-            let policy_v = policy_s
-                .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
+            let policy_v =
+                policy_s.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
             Ok(ActionRow {
                 id: row.get(0)?,
                 kind: row.get(1)?,
@@ -335,7 +351,8 @@ impl Kernel {
                 policy_ctx: policy_v,
                 idem_key: row.get(4)?,
                 state: row.get(5)?,
-                output: row.get::<_, Option<String>>(6)?
+                output: row
+                    .get::<_, Option<String>>(6)?
                     .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()),
                 error: row.get(7)?,
                 created: row.get(8)?,
@@ -514,7 +531,11 @@ impl Kernel {
         Ok(out)
     }
 
-    pub fn find_valid_lease(&self, subject: &str, capability: &str) -> Result<Option<serde_json::Value>> {
+    pub fn find_valid_lease(
+        &self,
+        subject: &str,
+        capability: &str,
+    ) -> Result<Option<serde_json::Value>> {
         let conn = self.conn()?;
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let mut stmt = conn.prepare(
@@ -627,11 +648,17 @@ impl Kernel {
         use sha2::Digest as _;
         let mut h = sha2::Sha256::new();
         h.update(lane.as_bytes());
-        if let Some(k) = kind { h.update(k.as_bytes()); }
-        if let Some(k) = key { h.update(k.as_bytes()); }
+        if let Some(k) = kind {
+            h.update(k.as_bytes());
+        }
+        if let Some(k) = key {
+            h.update(k.as_bytes());
+        }
         h.update(value_s.as_bytes());
         let hash = format!("{:x}", h.finalize());
-        let id = id_opt.map(|s| s.to_string()).unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let id = id_opt
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
         let tags_s = tags.map(|ts| ts.join(","));
         conn.execute(
             "INSERT OR REPLACE INTO memory_records(id,lane,kind,key,value,tags,hash,embed,score,prob,created,updated) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
@@ -656,15 +683,23 @@ impl Kernel {
             params![
                 id,
                 lane,
-                key.unwrap_or("") ,
+                key.unwrap_or(""),
                 value_s,
-                match tags { Some(ts) => ts.join(","), None => String::new() }
+                match tags {
+                    Some(ts) => ts.join(","),
+                    None => String::new(),
+                }
             ],
         );
         Ok(id)
     }
 
-    pub fn search_memory(&self, q: &str, lane: Option<&str>, limit: i64) -> Result<Vec<serde_json::Value>> {
+    pub fn search_memory(
+        &self,
+        q: &str,
+        lane: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
         let conn = self.conn()?;
         let like = format!("%{}%", q);
         let mut out = Vec::new();
@@ -677,7 +712,8 @@ impl Kernel {
             let mut rows = stmt.query(params![l, like, like, like, limit])?;
             while let Some(r) = rows.next()? {
                 let value_s: String = r.get(4)?;
-                let value_v = serde_json::from_str::<serde_json::Value>(&value_s).unwrap_or(serde_json::json!({}));
+                let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
+                    .unwrap_or(serde_json::json!({}));
                 out.push(serde_json::json!({
                     "id": r.get::<_, String>(0)?,
                     "lane": r.get::<_, String>(1)?,
@@ -700,7 +736,8 @@ impl Kernel {
             let mut rows = stmt.query(params![like, like, like, limit])?;
             while let Some(r) = rows.next()? {
                 let value_s: String = r.get(4)?;
-                let value_v = serde_json::from_str::<serde_json::Value>(&value_s).unwrap_or(serde_json::json!({}));
+                let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
+                    .unwrap_or(serde_json::json!({}));
                 out.push(serde_json::json!({
                     "id": r.get::<_, String>(0)?,
                     "lane": r.get::<_, String>(1)?,
@@ -718,7 +755,12 @@ impl Kernel {
         Ok(out)
     }
 
-    pub fn fts_search_memory(&self, q: &str, lane: Option<&str>, limit: i64) -> Result<Vec<serde_json::Value>> {
+    pub fn fts_search_memory(
+        &self,
+        q: &str,
+        lane: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
         let conn = self.conn()?;
         let mut out = Vec::new();
         if let Some(l) = lane {
@@ -731,7 +773,8 @@ impl Kernel {
             let mut rows = stmt.query(params![q, l, limit])?;
             while let Some(rw) = rows.next()? {
                 let value_s: String = rw.get(4)?;
-                let value_v = serde_json::from_str::<serde_json::Value>(&value_s).unwrap_or(serde_json::json!({}));
+                let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
+                    .unwrap_or(serde_json::json!({}));
                 out.push(serde_json::json!({
                     "id": rw.get::<_, String>(0)?,
                     "lane": rw.get::<_, String>(1)?,
@@ -755,7 +798,8 @@ impl Kernel {
             let mut rows = stmt.query(params![q, limit])?;
             while let Some(rw) = rows.next()? {
                 let value_s: String = rw.get(4)?;
-                let value_v = serde_json::from_str::<serde_json::Value>(&value_s).unwrap_or(serde_json::json!({}));
+                let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
+                    .unwrap_or(serde_json::json!({}));
                 out.push(serde_json::json!({
                     "id": rw.get::<_, String>(0)?,
                     "lane": rw.get::<_, String>(1)?,
@@ -773,7 +817,12 @@ impl Kernel {
         Ok(out)
     }
 
-    pub fn search_memory_by_embedding(&self, embed: &[f32], lane: Option<&str>, limit: i64) -> Result<Vec<serde_json::Value>> {
+    pub fn search_memory_by_embedding(
+        &self,
+        embed: &[f32],
+        lane: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
         // Naive scan: consider recent records with non-null embed and same length vector.
         let conn = self.conn()?;
         let mut out: Vec<(f32, serde_json::Value)> = Vec::new();
@@ -783,18 +832,27 @@ impl Kernel {
             "SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated FROM memory_records ORDER BY updated DESC LIMIT 1000"
         };
         let mut stmt = conn.prepare(sql)?;
-        let mut rows = if let Some(l) = lane { stmt.query([l])? } else { stmt.query([])? };
+        let mut rows = if let Some(l) = lane {
+            stmt.query([l])?
+        } else {
+            stmt.query([])?
+        };
         while let Some(r) = rows.next()? {
             let embed_s: Option<String> = r.get(7)?;
             if let Some(es) = embed_s {
                 if let Ok(vec_json) = serde_json::from_str::<serde_json::Value>(&es) {
                     if let Some(arr) = vec_json.as_array() {
                         let mut v2: Vec<f32> = Vec::with_capacity(arr.len());
-                        for v in arr.iter() { if let Some(f) = v.as_f64() { v2.push(f as f32); } }
+                        for v in arr.iter() {
+                            if let Some(f) = v.as_f64() {
+                                v2.push(f as f32);
+                            }
+                        }
                         if v2.len() == embed.len() && embed.len() > 0 {
                             let sim = Self::cosine_sim(embed, &v2);
                             let value_s: String = r.get(4)?;
-                            let value_v = serde_json::from_str::<serde_json::Value>(&value_s).unwrap_or(serde_json::json!({}));
+                            let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
+                                .unwrap_or(serde_json::json!({}));
                             let item = serde_json::json!({
                                 "id": r.get::<_, String>(0)?,
                                 "lane": r.get::<_, String>(1)?,
@@ -816,7 +874,11 @@ impl Kernel {
         }
         // sort by sim desc, take limit
         out.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-        let items: Vec<serde_json::Value> = out.into_iter().take(limit as usize).map(|(_, v)| v).collect();
+        let items: Vec<serde_json::Value> = out
+            .into_iter()
+            .take(limit as usize)
+            .map(|(_, v)| v)
+            .collect();
         Ok(items)
     }
 
@@ -829,10 +891,20 @@ impl Kernel {
             na += a[i] * a[i];
             nb += b[i] * b[i];
         }
-        if na == 0f32 || nb == 0f32 { 0f32 } else { dot / (na.sqrt() * nb.sqrt()) }
+        if na == 0f32 || nb == 0f32 {
+            0f32
+        } else {
+            dot / (na.sqrt() * nb.sqrt())
+        }
     }
 
-    pub fn select_memory_hybrid(&self, q: Option<&str>, embed: Option<&[f32]>, lane: Option<&str>, k: i64) -> Result<Vec<serde_json::Value>> {
+    pub fn select_memory_hybrid(
+        &self,
+        q: Option<&str>,
+        embed: Option<&[f32]>,
+        lane: Option<&str>,
+        k: i64,
+    ) -> Result<Vec<serde_json::Value>> {
         let conn = self.conn()?;
         // Candidate set via FTS when q present, else recent by updated
         let mut candidates: Vec<serde_json::Value> = Vec::new();
@@ -853,10 +925,15 @@ impl Kernel {
                          ORDER BY r.updated DESC LIMIT 400",
                     )?
                 };
-                let mut rows = if let Some(l) = lane { stmt.query(params![qs, l])? } else { stmt.query(params![qs])? };
+                let mut rows = if let Some(l) = lane {
+                    stmt.query(params![qs, l])?
+                } else {
+                    stmt.query(params![qs])?
+                };
                 while let Some(r) = rows.next()? {
                     let value_s: String = r.get(4)?;
-                    let value_v = serde_json::from_str::<serde_json::Value>(&value_s).unwrap_or(serde_json::json!({}));
+                    let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
+                        .unwrap_or(serde_json::json!({}));
                     candidates.push(serde_json::json!({
                         "id": r.get::<_, String>(0)?,
                         "lane": r.get::<_, String>(1)?,
@@ -883,10 +960,15 @@ impl Kernel {
             } else {
                 conn.prepare("SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated FROM memory_records ORDER BY updated DESC LIMIT 400")?
             };
-            let mut rows = if let Some(l) = lane { stmt.query(params![l])? } else { stmt.query([])? };
+            let mut rows = if let Some(l) = lane {
+                stmt.query(params![l])?
+            } else {
+                stmt.query([])?
+            };
             while let Some(r) = rows.next()? {
                 let value_s: String = r.get(4)?;
-                let value_v = serde_json::from_str::<serde_json::Value>(&value_s).unwrap_or(serde_json::json!({}));
+                let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
+                    .unwrap_or(serde_json::json!({}));
                 candidates.push(serde_json::json!({
                     "id": r.get::<_, String>(0)?,
                     "lane": r.get::<_, String>(1)?,
@@ -912,32 +994,67 @@ impl Kernel {
                 if let Ok(vec_json) = serde_json::from_str::<serde_json::Value>(es) {
                     if let Some(arr) = vec_json.as_array() {
                         let mut v2: Vec<f32> = Vec::with_capacity(arr.len());
-                        for v in arr.iter() { if let Some(f) = v.as_f64() { v2.push(f as f32); } }
+                        for v in arr.iter() {
+                            if let Some(f) = v.as_f64() {
+                                v2.push(f as f32);
+                            }
+                        }
                         if v2.len() == e.len() && !e.is_empty() {
                             sim = Self::cosine_sim(e, &v2);
                         }
                     }
                 }
             }
-            let fts_hit = item.get("_fts_hit").and_then(|v| v.as_bool()).unwrap_or(false);
-            let recency = item.get("updated").and_then(|v| v.as_str()).and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok()).map(|t| {
-                let age = now.signed_duration_since(t.with_timezone(&chrono::Utc)).num_seconds().max(0) as f64;
-                let hl = 3600f64 * 6f64; // 6h half-life
-                ((-age/hl).exp()) as f32
-            }).unwrap_or(0.5);
-            let util = item.get("score").and_then(|v| v.as_f64()).map(|s| s.max(0.0).min(1.0) as f32).unwrap_or(0.0);
-            let w_sim = 0.5f32; let w_fts = 0.2f32; let w_rec = 0.2f32; let w_util = 0.1f32;
+            let fts_hit = item
+                .get("_fts_hit")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(false);
+            let recency = item
+                .get("updated")
+                .and_then(|v| v.as_str())
+                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+                .map(|t| {
+                    let age = now
+                        .signed_duration_since(t.with_timezone(&chrono::Utc))
+                        .num_seconds()
+                        .max(0) as f64;
+                    let hl = 3600f64 * 6f64; // 6h half-life
+                    ((-age / hl).exp()) as f32
+                })
+                .unwrap_or(0.5);
+            let util = item
+                .get("score")
+                .and_then(|v| v.as_f64())
+                .map(|s| s.max(0.0).min(1.0) as f32)
+                .unwrap_or(0.0);
+            let w_sim = 0.5f32;
+            let w_fts = 0.2f32;
+            let w_rec = 0.2f32;
+            let w_util = 0.1f32;
             let fts_score = if fts_hit { 1.0 } else { 0.0 };
-            let cscore = w_sim*sim + w_fts*fts_score + w_rec*recency + w_util*util;
-            if let Some(obj) = item.as_object_mut() { obj.insert("cscore".into(), serde_json::json!(cscore)); obj.insert("sim".into(), serde_json::json!(sim)); }
+            let cscore = w_sim * sim + w_fts * fts_score + w_rec * recency + w_util * util;
+            if let Some(obj) = item.as_object_mut() {
+                obj.insert("cscore".into(), serde_json::json!(cscore));
+                obj.insert("sim".into(), serde_json::json!(sim));
+            }
             scored.push((cscore, item));
         }
-        scored.sort_by(|a,b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-        let items: Vec<serde_json::Value> = scored.into_iter().take(k as usize).map(|(_,v)| v).collect();
+        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        let items: Vec<serde_json::Value> = scored
+            .into_iter()
+            .take(k as usize)
+            .map(|(_, v)| v)
+            .collect();
         Ok(items)
     }
 
-    pub fn insert_memory_link(&self, src_id: &str, dst_id: &str, rel: Option<&str>, weight: Option<f64>) -> Result<()> {
+    pub fn insert_memory_link(
+        &self,
+        src_id: &str,
+        dst_id: &str,
+        rel: Option<&str>,
+        weight: Option<f64>,
+    ) -> Result<()> {
         let conn = self.conn()?;
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let relv = rel.unwrap_or("");
@@ -970,7 +1087,8 @@ impl Kernel {
         let mut rows = stmt.query(params![id])?;
         if let Some(r) = rows.next()? {
             let value_s: String = r.get(4)?;
-            let value_v = serde_json::from_str::<serde_json::Value>(&value_s).unwrap_or(serde_json::json!({}));
+            let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
+                .unwrap_or(serde_json::json!({}));
             Ok(Some(serde_json::json!({
                 "id": r.get::<_, String>(0)?,
                 "lane": r.get::<_, String>(1)?,
@@ -989,7 +1107,11 @@ impl Kernel {
         }
     }
 
-    pub fn list_recent_memory(&self, lane: Option<&str>, limit: i64) -> Result<Vec<serde_json::Value>> {
+    pub fn list_recent_memory(
+        &self,
+        lane: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
         let conn = self.conn()?;
         let mut out = Vec::new();
         if let Some(l) = lane {
@@ -999,7 +1121,8 @@ impl Kernel {
             let mut rows = stmt.query(params![l, limit])?;
             while let Some(r) = rows.next()? {
                 let value_s: String = r.get(4)?;
-                let value_v = serde_json::from_str::<serde_json::Value>(&value_s).unwrap_or(serde_json::json!({}));
+                let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
+                    .unwrap_or(serde_json::json!({}));
                 out.push(serde_json::json!({
                     "id": r.get::<_, String>(0)?,
                     "lane": r.get::<_, String>(1)?,
@@ -1021,7 +1144,8 @@ impl Kernel {
             let mut rows = stmt.query(params![limit])?;
             while let Some(r) = rows.next()? {
                 let value_s: String = r.get(4)?;
-                let value_v = serde_json::from_str::<serde_json::Value>(&value_s).unwrap_or(serde_json::json!({}));
+                let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
+                    .unwrap_or(serde_json::json!({}));
                 out.push(serde_json::json!({
                     "id": r.get::<_, String>(0)?,
                     "lane": r.get::<_, String>(1)?,
@@ -1046,7 +1170,10 @@ impl Kernel {
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let cfg = serde_json::to_string(config).unwrap_or("{}".into());
-        conn.execute("INSERT INTO config_snapshots(id,config,created) VALUES(?,?,?)", params![id, cfg, now])?;
+        conn.execute(
+            "INSERT INTO config_snapshots(id,config,created) VALUES(?,?,?)",
+            params![id, cfg, now],
+        )?;
         Ok(id)
     }
 
@@ -1056,14 +1183,18 @@ impl Kernel {
         let mut rows = stmt.query(params![id])?;
         if let Some(r) = rows.next()? {
             let cfg_s: String = r.get(0)?;
-            let v = serde_json::from_str::<serde_json::Value>(&cfg_s).unwrap_or(serde_json::json!({}));
+            let v =
+                serde_json::from_str::<serde_json::Value>(&cfg_s).unwrap_or(serde_json::json!({}));
             Ok(Some(v))
-        } else { Ok(None) }
+        } else {
+            Ok(None)
+        }
     }
 
     pub fn list_config_snapshots(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
         let conn = self.conn()?;
-        let mut stmt = conn.prepare("SELECT id,created FROM config_snapshots ORDER BY created DESC LIMIT ?")?;
+        let mut stmt =
+            conn.prepare("SELECT id,created FROM config_snapshots ORDER BY created DESC LIMIT ?")?;
         let mut rows = stmt.query(params![limit])?;
         let mut out = Vec::new();
         while let Some(r) = rows.next()? {
@@ -1073,7 +1204,11 @@ impl Kernel {
     }
 
     // ---------- Orchestrator jobs ----------
-    pub fn insert_orchestrator_job(&self, goal: &str, data: Option<&serde_json::Value>) -> Result<String> {
+    pub fn insert_orchestrator_job(
+        &self,
+        goal: &str,
+        data: Option<&serde_json::Value>,
+    ) -> Result<String> {
         let conn = self.conn()?;
         let id = uuid::Uuid::new_v4().to_string();
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
@@ -1085,18 +1220,34 @@ impl Kernel {
         Ok(id)
     }
 
-    pub fn update_orchestrator_job(&self, id: &str, status: Option<&str>, progress: Option<f64>) -> Result<bool> {
+    pub fn update_orchestrator_job(
+        &self,
+        id: &str,
+        status: Option<&str>,
+        progress: Option<f64>,
+    ) -> Result<bool> {
         let conn = self.conn()?;
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let mut set_parts: Vec<&str> = Vec::new();
-        if status.is_some() { set_parts.push("status=?"); }
-        if progress.is_some() { set_parts.push("progress=?"); }
+        if status.is_some() {
+            set_parts.push("status=?");
+        }
+        if progress.is_some() {
+            set_parts.push("progress=?");
+        }
         set_parts.push("updated=?");
-        let sql = format!("UPDATE orchestrator_jobs SET {} WHERE id=?", set_parts.join(","));
+        let sql = format!(
+            "UPDATE orchestrator_jobs SET {} WHERE id=?",
+            set_parts.join(",")
+        );
         let mut stmt = conn.prepare(&sql)?;
         let mut params_vec: Vec<rusqlite::types::Value> = Vec::new();
-        if let Some(s) = status { params_vec.push(rusqlite::types::Value::from(s.to_string())); }
-        if let Some(p) = progress { params_vec.push(rusqlite::types::Value::from(p)); }
+        if let Some(s) = status {
+            params_vec.push(rusqlite::types::Value::from(s.to_string()));
+        }
+        if let Some(p) = progress {
+            params_vec.push(rusqlite::types::Value::from(p));
+        }
         params_vec.push(rusqlite::types::Value::from(now.clone()));
         params_vec.push(rusqlite::types::Value::from(id.to_string()));
         let n = stmt.execute(rusqlite::params_from_iter(params_vec))?;
@@ -1124,7 +1275,12 @@ impl Kernel {
     }
 
     // ---------- Logic Units ----------
-    pub fn insert_logic_unit(&self, id: &str, manifest: &serde_json::Value, status: &str) -> Result<()> {
+    pub fn insert_logic_unit(
+        &self,
+        id: &str,
+        manifest: &serde_json::Value,
+        status: &str,
+    ) -> Result<()> {
         let conn = self.conn()?;
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
         let mf_s = serde_json::to_string(manifest).unwrap_or("{}".into());
@@ -1142,7 +1298,8 @@ impl Kernel {
         let mut out = Vec::new();
         while let Some(r) = rows.next()? {
             let mf_s: String = r.get(1)?;
-            let mf_v = serde_json::from_str::<serde_json::Value>(&mf_s).unwrap_or(serde_json::json!({}));
+            let mf_v =
+                serde_json::from_str::<serde_json::Value>(&mf_s).unwrap_or(serde_json::json!({}));
             out.push(serde_json::json!({
                 "id": r.get::<_, String>(0)?,
                 "manifest": mf_v,

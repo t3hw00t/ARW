@@ -12,8 +12,8 @@ pub mod hierarchy;
 pub mod orchestrator;
 #[cfg(feature = "nats")]
 pub mod orchestrator_nats;
-pub mod rpu;
 pub mod perf;
+pub mod rpu;
 
 #[cfg(feature = "wasm")]
 pub mod wasm;

@@ -12,7 +12,10 @@ pub struct ActionReq {
     pub idem_key: Option<String>,
 }
 
-pub async fn actions_submit_post(State(state): State<AppState>, Json(req): Json<ActionReq>) -> impl IntoResponse {
+pub async fn actions_submit_post(
+    State(state): State<AppState>,
+    Json(req): Json<ActionReq>,
+) -> impl IntoResponse {
     // Idempotency by idem_key when kernel is available
     let mut id: String = uuid::Uuid::new_v4().to_string();
     if let Some(k) = crate::ext::kernel() {
@@ -27,7 +30,14 @@ pub async fn actions_submit_post(State(state): State<AppState>, Json(req): Json<
                 return crate::ext::ok(json!({"id": id, "duplicate": true}));
             }
         }
-        let _ = k.insert_action(&id, &req.kind, &req.input, None, req.idem_key.as_deref(), "queued");
+        let _ = k.insert_action(
+            &id,
+            &req.kind,
+            &req.input,
+            None,
+            req.idem_key.as_deref(),
+            "queued",
+        );
     }
     // Publish submitted event (bus remains SoT for live apps; kernel persists)
     let mut payload = json!({"id": id, "kind": req.kind, "status": "queued"});
@@ -37,4 +47,3 @@ pub async fn actions_submit_post(State(state): State<AppState>, Json(req): Json<
         .publish(crate::ext::topics::TOPIC_ACTIONS_SUBMITTED, &payload);
     crate::ext::ok(json!({"id": id}))
 }
-

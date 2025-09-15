@@ -590,7 +590,10 @@ async fn main() {
     app = app.route("/spec", get(spec_index));
     // Actions (triad)
     arw_svc::route_recorder::note("POST", "/actions");
-    app = app.route("/actions", axum::routing::post(ext::actions_api::actions_submit_post));
+    app = app.route(
+        "/actions",
+        axum::routing::post(ext::actions_api::actions_submit_post),
+    );
     // Triad (experimental): public events with replay via kernel
     arw_svc::route_recorder::note("GET", "/triad/events");
     app = app.route("/triad/events", get(ext::triad_events_sse));

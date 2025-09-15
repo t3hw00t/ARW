@@ -1,5 +1,8 @@
-use axum::{extract::{State, Query}, Json};
 use axum::response::IntoResponse;
+use axum::{
+    extract::{Query, State},
+    Json,
+};
 use serde_json::{json, Value};
 
 use crate::AppState;
@@ -11,13 +14,24 @@ pub async fn state_episodes(State(state): State<AppState>) -> impl IntoResponse 
     let mut by_corr: BTreeMap<String, Vec<Value>> = BTreeMap::new();
     for r in rows {
         let cid = r.corr_id.unwrap_or_else(|| "".to_string());
-        if cid.is_empty() { continue; }
-        by_corr.entry(cid).or_default().push(json!({"id": r.id, "time": r.time, "kind": r.kind, "payload": r.payload}));
+        if cid.is_empty() {
+            continue;
+        }
+        by_corr
+            .entry(cid)
+            .or_default()
+            .push(json!({"id": r.id, "time": r.time, "kind": r.kind, "payload": r.payload}));
     }
     let mut items: Vec<Value> = Vec::new();
     for (cid, evs) in by_corr.into_iter() {
-        let start = evs.first().and_then(|e| e.get("time").cloned()).unwrap_or(json!(null));
-        let end = evs.last().and_then(|e| e.get("time").cloned()).unwrap_or(json!(null));
+        let start = evs
+            .first()
+            .and_then(|e| e.get("time").cloned())
+            .unwrap_or(json!(null));
+        let end = evs
+            .last()
+            .and_then(|e| e.get("time").cloned())
+            .unwrap_or(json!(null));
         items.push(json!({"id": cid, "events": evs, "start": start, "end": end}));
     }
     Json(json!({"items": items}))
@@ -39,15 +53,33 @@ pub async fn state_contributions(State(state): State<AppState>) -> impl IntoResp
     Json(json!({"items": items}))
 }
 
-pub async fn state_actions(State(state): State<AppState>, Query(q): Query<std::collections::HashMap<String, String>>) -> impl IntoResponse {
-    let limit = q.get("limit").and_then(|s| s.parse::<i64>().ok()).unwrap_or(200);
-    let items = state.kernel.list_actions(limit.max(1).min(2000)).unwrap_or_default();
+pub async fn state_actions(
+    State(state): State<AppState>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let limit = q
+        .get("limit")
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(200);
+    let items = state
+        .kernel
+        .list_actions(limit.max(1).min(2000))
+        .unwrap_or_default();
     Json(json!({"items": items}))
 }
 
-pub async fn state_egress(State(state): State<AppState>, Query(q): Query<std::collections::HashMap<String, String>>) -> impl IntoResponse {
-    let limit = q.get("limit").and_then(|s| s.parse::<i64>().ok()).unwrap_or(200);
-    let items = state.kernel.list_egress(limit.max(1).min(2000)).unwrap_or_default();
+pub async fn state_egress(
+    State(state): State<AppState>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let limit = q
+        .get("limit")
+        .and_then(|s| s.parse::<i64>().ok())
+        .unwrap_or(200);
+    let items = state
+        .kernel
+        .list_egress(limit.max(1).min(2000))
+        .unwrap_or_default();
     Json(json!({"items": items}))
 }
 
@@ -55,7 +87,10 @@ pub async fn state_models() -> impl IntoResponse {
     use tokio::fs as afs;
     let path = crate::state_dir().join("models.json");
     let items: Vec<Value> = match afs::read(&path).await {
-        Ok(bytes) => serde_json::from_slice(&bytes).ok().and_then(|v: Value| v.as_array().cloned()).unwrap_or_else(crate::util::default_models),
+        Ok(bytes) => serde_json::from_slice(&bytes)
+            .ok()
+            .and_then(|v: Value| v.as_array().cloned())
+            .unwrap_or_else(crate::util::default_models),
         Err(_) => crate::util::default_models(),
     };
     Json(json!({"items": items}))
@@ -78,9 +113,13 @@ pub async fn state_self_list() -> impl IntoResponse {
     Json(json!({"agents": agents}))
 }
 
-pub async fn state_self_get(axum::extract::Path(agent): axum::extract::Path<String>) -> impl IntoResponse {
+pub async fn state_self_get(
+    axum::extract::Path(agent): axum::extract::Path<String>,
+) -> impl IntoResponse {
     use tokio::fs as afs;
-    let path = crate::state_dir().join("self").join(format!("{}.json", agent));
+    let path = crate::state_dir()
+        .join("self")
+        .join(format!("{}.json", agent));
     match afs::read(&path).await {
         Ok(bytes) => match serde_json::from_slice::<Value>(&bytes) {
             Ok(v) => (axum::http::StatusCode::OK, Json(v)),

@@ -49,7 +49,11 @@ pub(crate) async fn projects_ui() -> impl IntoResponse {
     )
 }
 
-#[arw_admin(method = "GET", path = "/admin/ui/flows", summary = "Flows UI (Logic Units)")]
+#[arw_admin(
+    method = "GET",
+    path = "/admin/ui/flows",
+    summary = "Flows UI (Logic Units)"
+)]
 pub(crate) async fn flows_ui() -> impl IntoResponse {
     (
         [
