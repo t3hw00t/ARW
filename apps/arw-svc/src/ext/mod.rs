@@ -360,6 +360,20 @@ pub(crate) async fn triad_events_sse(
     )
 }
 
+// Admin-registered wrapper for triad SSE to ensure it appears in the
+// admin endpoint registry as required by tests.
+#[arw_admin(
+    method = "GET",
+    path = "/admin/triad/events",
+    summary = "Triad event stream (SSE)"
+)]
+pub async fn triad_events_sse_admin(
+    s: axum::extract::State<AppState>,
+    q: axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    triad_events_sse(s, q).await
+}
+
 static KERNEL: OnceLock<Option<arw_kernel::Kernel>> = OnceLock::new();
 pub fn set_kernel(k: Option<arw_kernel::Kernel>) {
     let _ = KERNEL.set(k);
