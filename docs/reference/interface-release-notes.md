@@ -4,7 +4,7 @@ title: Interface Release Notes
 
 # Interface Release Notes
 
-Base: `origin/main` vs Head: `7620712a`
+Base: `origin/main` vs Head: `09846980`
 
 ## OpenAPI (REST)
 

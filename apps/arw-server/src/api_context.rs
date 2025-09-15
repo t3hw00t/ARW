@@ -8,7 +8,7 @@ use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
 
-use crate::{coverage, state_dir, working_set, AppState};
+use crate::{coverage, working_set, AppState};
 
 #[derive(Deserialize)]
 pub(crate) struct AssembleReq {
@@ -49,7 +49,7 @@ pub(crate) struct AssembleReq {
 pub async fn context_assemble(
     State(state): State<AppState>,
     Json(req): Json<AssembleReq>,
-) -> impl IntoResponse {
+) -> axum::response::Response {
     let include_sources = req.include_sources.unwrap_or(false);
     let debug = req.debug.unwrap_or(false);
     let base_spec = build_spec(&req);
@@ -200,7 +200,7 @@ async fn stream_working_set(
     include_sources: bool,
     debug: bool,
     max_iterations: usize,
-) -> impl IntoResponse {
+) -> axum::response::Response {
     let (tx, rx) = mpsc::channel::<working_set::WorkingSetStreamEvent>(128);
     let state_clone = state.clone();
     let spec_clone = base_spec.clone();
@@ -276,35 +276,33 @@ async fn stream_working_set(
     let stream = ReceiverStream::new(rx).filter_map(move |evt| {
         let include_sources = include_sources;
         let debug = debug;
-        async move {
-            if !include_sources
-                && matches!(
-                    evt.kind.as_str(),
-                    working_set::STREAM_EVENT_SEED
-                        | working_set::STREAM_EVENT_EXPANDED
-                        | working_set::STREAM_EVENT_QUERY_EXPANDED
-                )
-            {
-                return None;
-            }
-            let mut payload = evt.payload;
-            if let Some(obj) = payload.as_object_mut() {
-                if !debug {
-                    obj.remove("diagnostics");
-                }
-                if !include_sources {
-                    obj.remove("seeds");
-                    obj.remove("expanded");
-                }
-            }
-            let data_json = json!({
-                "iteration": evt.iteration,
-                "payload": payload
-            });
-            let data = serde_json::to_string(&data_json).unwrap_or_else(|_| "{}".to_string());
-            let event = Event::default().event(evt.kind).data(data);
-            Some(Ok::<_, Infallible>(event))
+        if !include_sources
+            && matches!(
+                evt.kind.as_str(),
+                working_set::STREAM_EVENT_SEED
+                    | working_set::STREAM_EVENT_EXPANDED
+                    | working_set::STREAM_EVENT_QUERY_EXPANDED
+            )
+        {
+            return None;
         }
+        let mut payload = evt.payload;
+        if let Some(obj) = payload.as_object_mut() {
+            if !debug {
+                obj.remove("diagnostics");
+            }
+            if !include_sources {
+                obj.remove("seeds");
+                obj.remove("expanded");
+            }
+        }
+        let data_json = json!({
+            "iteration": evt.iteration,
+            "payload": payload
+        });
+        let data = serde_json::to_string(&data_json).unwrap_or_else(|_| "{}".to_string());
+        let event = Event::default().event(evt.kind).data(data);
+        Some(Ok::<_, Infallible>(event))
     });
     Sse::new(stream).into_response()
 }

@@ -195,6 +195,7 @@ pub async fn memory_select_coherent(
                 seeds,
                 expanded,
                 diagnostics,
+                ..
             } = ws;
             let mut body = json!({"items": items, "mode": "coherent"});
             if req.include_sources.unwrap_or(false) {
@@ -304,6 +305,7 @@ pub async fn memory_explain_coherent(
                 seeds,
                 expanded,
                 diagnostics,
+                ..
             } = ws;
             (
                 axum::http::StatusCode::OK,
