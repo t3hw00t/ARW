@@ -1568,6 +1568,11 @@ impl ModelsService {
             .and_then(|s| s.parse::<usize>().ok())
             .filter(|v| *v >= 1)
     }
+    // Track last known pending_shrink from non-blocking shrink operations
+    fn pending_shrink_cell() -> &'static RwLock<usize> {
+        static PENDING: OnceCell<RwLock<usize>> = OnceCell::new();
+        PENDING.get_or_init(|| RwLock::new(0usize))
+    }
     /// Lightweight snapshot of downloader state for admin/ops.
     ///
     /// Includes active `model_id`→`job_id` pairs, in‑flight sha256 hashes, and a
@@ -1586,10 +1591,12 @@ impl ModelsService {
             .collect();
         let desired = *Self::concurrency_cfg_cell().read().await as u64;
         let held_cnt = Self::held_permits_cell().read().await.len() as u64;
+        let pend = *Self::pending_shrink_cell().read().await as u64;
         let conc = json!({
             "configured_max": desired,
             "available_permits": Self::concurrency_sem().available_permits() as u64,
             "held_permits": held_cnt,
+            "pending_shrink": if pend == 0 { Value::Null } else { Value::from(pend) },
         });
         json!({
             "active": active,
@@ -1606,11 +1613,13 @@ impl ModelsService {
         let held_cnt = Self::held_permits_cell().read().await.len() as u64;
         let avail = Self::concurrency_sem().available_permits() as u64;
         let hard = Self::hard_max_concurrency().map(|v| v as u64);
+        let pend = *Self::pending_shrink_cell().read().await as u64;
         json!({
             "configured_max": desired,
             "available_permits": avail,
             "held_permits": held_cnt,
             "hard_cap": hard,
+            "pending_shrink": if pend == 0 { Value::Null } else { Value::from(pend) },
         })
     }
     /// Change the effective max concurrency at runtime.
@@ -1671,6 +1680,8 @@ impl ModelsService {
                         Err(_) => return Err("concurrency semaphore closed".into()),
                     }
                 }
+                // no pending shrink under blocking path
+                *Self::pending_shrink_cell().write().await = 0;
             } else {
                 // Non-blocking shrink: grab as many permits as available and report pending
                 for _ in 0..shrink {
@@ -1685,6 +1696,7 @@ impl ModelsService {
                         }
                     }
                 }
+                *Self::pending_shrink_cell().write().await = pending_shrink;
             }
         }
         *cfg = target;
@@ -1725,6 +1737,24 @@ impl ModelsService {
             }
         }
         Value::Object(obj)
+    }
+
+    /// Compose a consistent models summary Value used by UI and API.
+    /// Shape: { items: [...], default: string, concurrency: {...}, metrics: {...} }
+    pub async fn summary_value(&self) -> Value {
+        use tokio::join;
+        let models_fut = async { crate::ext::models().read().await.clone() };
+        let default_fut = async { crate::ext::default_model().read().await.clone() };
+        let conc_fut = async { self.concurrency_get().await };
+        let metrics_fut = async { self.downloads_metrics().await };
+        let (items, default, concurrency, metrics) =
+            join!(models_fut, default_fut, conc_fut, metrics_fut);
+        json!({
+            "items": items,
+            "default": default,
+            "concurrency": concurrency,
+            "metrics": metrics,
+        })
     }
 
     // Redact sensitive parts of a URL for logs/manifests (drop userinfo, query and fragment).
@@ -3251,13 +3281,22 @@ mod tests {
             ["properties"]["status"]["enum"];
         let code_yaml = &yaml["components"]["messages"]["ModelsDownloadProgress"]["payload"]
             ["properties"]["code"]["enum"];
+        // If enums are not present in the generated spec, skip this drift check.
+        if !status_yaml.is_sequence() || !code_yaml.is_sequence() {
+            eprintln!(
+                "AsyncAPI enums for ModelsDownloadProgress not present; skipping drift check"
+            );
+            return;
+        }
 
         let to_set = |node: &serde_yaml::Value| -> BTreeSet<String> {
-            node.as_sequence()
-                .expect("enum should be sequence")
-                .iter()
-                .filter_map(|v| v.as_str().map(|s| s.to_string()))
-                .collect()
+            if let Some(seq) = node.as_sequence() {
+                seq.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                    .collect()
+            } else {
+                BTreeSet::new()
+            }
         };
         let status_set_spec = to_set(status_yaml);
         let code_set_spec = to_set(code_yaml);

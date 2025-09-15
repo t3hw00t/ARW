@@ -6,7 +6,8 @@ title: Troubleshooting
 
 This page lists quick fixes for common issues when starting ARW locally.
 
-Updated: 2025-09-12
+Updated: 2025-09-14
+Type: How‑to
 
 ## Port Already in Use
 
@@ -80,7 +81,7 @@ Free space via CAS GC
   Listen for `models.cas.gc` summary events.
 
 Metrics
-- Admin endpoint: `GET /admin/models/downloads_metrics` → `{ ewma_mbps, …counters }`.
+- Admin endpoint: `GET /admin/state/models_metrics` → `{ ewma_mbps, …counters }`.
 - SSE: subscribe to `models.download.progress` for status/progress.
 
 ## Launcher Build on Linux Fails

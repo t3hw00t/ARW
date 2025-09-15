@@ -6,7 +6,8 @@ title: Models Download (HTTP)
 
 ARW provides HTTP endpoints (admin‑gated) to manage local models with streaming downloads, live progress via SSE, safe cancel, resume (HTTP Range), and mandatory SHA‑256 verification.
 
-Updated: 2025-09-13
+Updated: 2025-09-14
+Type: How‑to
 
 See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*).
 Canonical topics used by the service are defined once under `apps/arw-svc/src/ext/topics.rs`.
@@ -24,9 +25,10 @@ Canonical topics used by the service are defined once under `apps/arw-svc/src/ex
   - Emits strong validators and immutable caching for digest‑addressed blobs:
     - `ETag: "<sha256>"`, `Last-Modified`, `Cache-Control: public, max-age=31536000, immutable`.
     - Honors `If-None-Match` (304 Not Modified) for repeat requests.
- - POST `/admin/models/concurrency` — Set download concurrency at runtime. Body: `{ max: number, block?: boolean }`.
- - GET  `/admin/models/concurrency` — Get the current concurrency settings and limits.
- - GET  `/admin/models/jobs` — Snapshot of active jobs and inflight hashes for troubleshooting.
+  - See also: [HTTP Caching Semantics](../snippets/http_caching_semantics.md)
+- POST `/admin/models/concurrency` — Set download concurrency at runtime. Body: `{ max: number, block?: boolean }`.
+- GET  `/admin/models/concurrency` — Get the current concurrency settings and limits. Includes optional `pending_shrink` when a previous non‑blocking shrink left remainder.
+- GET  `/admin/models/jobs` — Snapshot of active jobs and inflight hashes for troubleshooting.
 
 ## Request
 
@@ -131,7 +133,7 @@ Note: formal `egress.decision` remains planned; previews and ledger appends are 
 
 The downloader maintains a lightweight throughput EWMA used for admission checks.
 - File: `{state_dir}/downloads.metrics.json` → `{ ewma_mbps }`
-- Admin endpoint: `GET /admin/models/downloads_metrics` → `{ ewma_mbps, …counters }`
+- Admin endpoint: `GET /admin/state/models_metrics` → `{ ewma_mbps, …counters }`
  - Read‑model: `GET /admin/state/models_metrics` and public `GET /state/models_metrics` (mirrors counters + EWMA).
  - SSE patches: `state.read.model.patch` with id=`models_metrics` publishes RFC‑6902 JSON Patches. Publishing is coalesced (`ARW_MODELS_METRICS_COALESCE_MS`, default 250ms) with an idle refresh (`ARW_MODELS_METRICS_PUBLISH_MS`, default 2000ms).
 
@@ -221,3 +223,6 @@ Example response (wrapped in `{ ok, data }`):
   }
 }
 ```
+
+Concurrency notes
+- Non‑blocking shrink (`block=false`) reduces availability opportunistically and may report a `pending_shrink` remainder in both the set response and subsequent `GET /admin/models/concurrency` (and in the Jobs snapshot’s concurrency). Use a blocking call or wait for running jobs to finish to bring `pending_shrink` to zero.

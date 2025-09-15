@@ -2,7 +2,9 @@
 title: Naming & IDs
 ---
 
-# Naming and ID Scheme
+# Naming & IDs
+Updated: 2025-09-12
+Type: Explanation
 
 IDs
 - Short, unique, stable; type prefixes when helpful (proj_, agent_, art_, run_).
@@ -15,4 +17,3 @@ Events
 - Include `id`, `corr_id`, and `code` consistently for easy cross‑linking.
 
 See also: Identity & Tenancy, Artifacts & Provenance.
-

@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ARW Chat</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="ui-kit.css" />
+    <link rel="stylesheet" href="common.css" />
+  </head>
+  <body>
+    <a href="#messages" class="skip-link">Skip to messages</a>
+    <script src="common.js"></script>
+    <div class="wrap">
+      <header class="row">
+        <strong>Chat</strong>
+        <label>Port: <input id="port" type="number" min="1" max="65535" value="8090"></label>
+        <span id="statusBadges" class="badges" style="margin-left:auto"></span>
+        <span id="sseStat" class="dim" role="status" aria-live="polite">SSE: off</span>
+        <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+        <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+      </header>
+      <div class="layout">
+        <main id="chatMain">
+          <section class="card" style="min-height:240px" role="region" aria-labelledby="chatTitle">
+            <h3 id="chatTitle" class="sr-only">Messages</h3>
+            <div id="messages" role="log" aria-live="polite" aria-relevant="additions text" style="min-height:180px"></div>
+            <div class="row" style="margin-top:8px">
+              <input id="msg" aria-label="Message" style="flex:1" placeholder="Say hello" />
+              <button id="send" class="primary">Send</button>
+              <button id="capture" class="ghost" title="Capture screen">Capture</button>
+              <button id="captureWin" class="ghost" title="Capture this window">Capture window</button>
+              <button id="captureRegion" class="ghost" title="Capture region (drag)">Capture region</button>
+              <label class="key"><input type="checkbox" id="autoOcr"> Auto OCR</label>
+            </div>
+          </section>
+          <section class="card">
+            <h3>Compare Replies</h3>
+            <div class="row"><span class="dim">Click any message → Pin A/B</span></div>
+            <div class="grid cols-2">
+              <div>
+                <div class="row"><strong>A</strong> <button id="clearA" class="ghost">Clear</button></div>
+                <div id="cmpAOut" class="cmp-code"></div>
+              </div>
+              <div>
+                <div class="row"><strong>B</strong> <button id="clearB" class="ghost">Clear</button></div>
+                <div id="cmpBOut" class="cmp-code"></div>
+              </div>
+            </div>
+            <div class="controls">
+              <label class="key"><input type="checkbox" id="txtOnlyChanges"/> only changes</label>
+              <label class="key"><input type="checkbox" id="txtWrap" checked/> wrap</label>
+              <span class="spacer"></span>
+              <button id="btn-diff" class="primary">Diff</button>
+            </div>
+            <div id="cmpOut" class="cmp-code"></div>
+          </section>
+        </main>
+        <aside id="sidecar"></aside>
+      </div>
+    </div>
+    <script src="chat.js"></script>
+  </body>
+  </html>

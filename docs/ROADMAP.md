@@ -4,7 +4,8 @@ title: Roadmap
 
 # Roadmap
 
-Updated: 2025-09-12
+Updated: 2025-09-14
+Type: Reference
 
 See also: [Backlog](BACKLOG.md) and [Interface Roadmap](INTERFACE_ROADMAP.md).
 Roadmap highlights themes and timelines; Backlog tracks actionable items.
@@ -19,7 +20,8 @@ Roadmap highlights themes and timelines; Backlog tracks actionable items.
 - Repo hygiene: Dependabot for Cargo and Actions; .gitattributes for line endings.
 - Persistence hardening: atomic JSON/bytes writes with per‑path async locks; best‑effort cross‑process advisory locks; audit log rotation.
 - Event bus upgrades: counters (published/delivered/lagged/no_receivers), configurable capacity/replay, lag surfaced as `bus.gap`, subscribe‑filtered API, SSE replay and prefix filters, optional persistent JSONL journal with rotation, Prometheus `/metrics`.
-- Debug UI: metrics quick‑link, SSE presets (Replay 50, Models‑only), insights wired to route stats, download progress.
+- Debug/Launcher UIs: metrics quick‑link, SSE presets (Replay 50, Models‑only), insights wired to route stats, download progress.
+- Workflow Views: universal right‑sidecar across Hub/Chat/Training with Timeline/Context/Policy/Metrics/Models; command palette; Compare panels (Text/JSON, Image, CSV) in Hub; Chat A/B pin‑to‑compare; Events window presets + filters; Logs focus mode and route filter; P95 sparklines.
 - Episodes & State: live read‑models under `/state/*` (observations, beliefs, world, intents, actions, episodes) with corr_id stitching, duration and error rollups; Episodes panel with filters and details in Debug UI. The `world` view is a scoped belief graph (Project Map) built from the event stream with a selector endpoint for top‑K beliefs.
 - Resources pattern: unified AppState with typed `Resources`; moved Governor/Hierarchy/Memory/Models logic behind services; endpoints prefer services while preserving behavior.
 - Tests + Lint: fixed flaky gating contract tests (serialized shared state); workspace clippy clean with `-D warnings`.
@@ -28,12 +30,14 @@ Roadmap highlights themes and timelines; Backlog tracks actionable items.
 - Stabilization window: limit to bug fixes, docs, tests, and internal cleanups; additive API changes only.
 - Observability & Eventing: event journal tail/readers and metrics/docgen polish — see Backlog → Now.
 - Security & Remote Access: hashed tokens, per‑route gating, TLS profiles, proxy templates — see Backlog → Now.
+- UI coherence & routing: canonical admin debug/UI endpoints; launcher open path alignment; SSE reconnection/backoff and status — see Backlog → UI Coherence.
 - Egress Firewall (plan): add policy network scopes + TTL leases; per‑node loopback proxy + DNS guard; route containerized scrapers first; egress ledger and pre‑offload preview; default posture “Public only.”
 - Lightweight mitigations (plan): memory quarantine; project isolation; belief‑diff review queue; hardened headless browsing (disable SW/H3; same‑origin); safe archive jail; DNS guard with anomaly alerts; secrets redaction; security posture presets.
 - State & Episodes: observations/beliefs/intents/actions stores; episodes with reactive UI — see Backlog → Now.
 - Services & Orchestration: hierarchy/governor services; queue leases and nack behavior — see Backlog → Now.
 - Specs & Interop: AsyncAPI + MCP artifacts and /spec/* serving — see Backlog → Now.
 - Docs & Showcase: gating keys docgen; packaging and installer polish — see Backlog → Next.
+ - Visual capture: screenshot tool (OS‑level) with optional window crop; OCR (optional); SSE events + thumbnails; sidecar Activity integration.
  - UI coherence: universal right‑sidecar across Hub/Chat/Training; command palette
  - Recipes MVP: schema + gallery + runner (local‑first, default‑deny permissions)
  - Logic Units (config‑first): manifest/schema, Library UI with diff preview, apply/revert/promote, initial sample units

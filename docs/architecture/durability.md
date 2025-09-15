@@ -2,7 +2,9 @@
 title: Durability & Offline
 ---
 
-# Durability & Offline Semantics
+# Durability & Offline
+Updated: 2025-09-12
+Type: Explanation
 
 Goals
 - Event journal + periodic snapshots; idempotent tool actions; crash‑safe resume; explicit conflict resolution when offline.
@@ -12,4 +14,3 @@ Patterns
 - Use 3‑way merges for notes/config; last‑writer‑wins only for low‑risk state.
 
 See also: Offline & Sync, Replay & Time Travel, Artifacts & Provenance.
-

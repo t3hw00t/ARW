@@ -57,3 +57,33 @@ jobs:
           mike deploy --push --update-aliases latest
           mike set-default --push latest
 
+  a11y:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install mkdocs
+        run: |
+          pip install mkdocs-material mkdocs mkdocs-git-revision-date-localized-plugin
+      - name: Build docs
+        run: mkdocs build --strict
+      - name: Serve docs
+        run: |
+          nohup python3 -m http.server 8000 -d site >/dev/null 2>&1 &
+          sleep 2
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Axe a11y (optional)
+        continue-on-error: true
+        run: |
+          bash scripts/ci_run_axe.sh http://127.0.0.1:8000 a11y-reports
+      - name: Upload a11y reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: site-a11y-reports
+          path: a11y-reports

@@ -3,6 +3,8 @@ title: UI Architecture
 ---
 
 # UI Architecture
+Updated: 2025-09-12
+Type: How‑to
 
 Layout
 - Left rail: Projects, Chat, Training, Agents, Models, Tools, Logic Units, Memories, Data, Runtimes, Policies, Containers, Hardware, Settings, Plugins, Docs

@@ -384,7 +384,23 @@ impl Bus {
 #[cfg(feature = "nats")]
 pub async fn attach_nats_outgoing(bus: &Bus, url: &str, node_id: &str) {
     // Connect once and spawn a relay: local bus -> NATS subjects (arw.events.node.<node_id>.<kind>)
-    match async_nats::connect(url).await {
+    // Build URL with optional TLS/user:pass based on environment
+    let mut u = url.to_string();
+    if std::env::var("ARW_NATS_TLS").ok().as_deref() == Some("1") {
+        u = u.replacen("nats://", "tls://", 1);
+        u = u.replacen("ws://", "wss://", 1);
+    }
+    if !u.contains('@') {
+        if let (Ok(user), Ok(pass)) = (
+            std::env::var("ARW_NATS_USER"),
+            std::env::var("ARW_NATS_PASS"),
+        ) {
+            if let Some((scheme, rest)) = u.split_once("://") {
+                u = format!("{}://{}:{}@{}", scheme, user, pass, rest);
+            }
+        }
+    }
+    match async_nats::connect(&u).await {
         Ok(client) => {
             // Optional outgoing filter: ARW_NATS_OUT_FILTER="prefix1,prefix2"
             let mut rx = {
@@ -443,7 +459,23 @@ pub async fn attach_nats_outgoing(_bus: &Bus, _url: &str, _node_id: &str) {}
 pub async fn attach_nats_incoming(bus: &Bus, url: &str, self_node_id: &str) {
     use futures_util::StreamExt;
     let self_node = self_node_id.to_string();
-    match async_nats::connect(url).await {
+    // Build URL with optional TLS/user:pass based on environment
+    let mut u = url.to_string();
+    if std::env::var("ARW_NATS_TLS").ok().as_deref() == Some("1") {
+        u = u.replacen("nats://", "tls://", 1);
+        u = u.replacen("ws://", "wss://", 1);
+    }
+    if !u.contains('@') {
+        if let (Ok(user), Ok(pass)) = (
+            std::env::var("ARW_NATS_USER"),
+            std::env::var("ARW_NATS_PASS"),
+        ) {
+            if let Some((scheme, rest)) = u.split_once("://") {
+                u = format!("{}://{}:{}@{}", scheme, user, pass, rest);
+            }
+        }
+    }
+    match async_nats::connect(&u).await {
         Ok(client) => {
             // Subscribe to node-specific subjects
             let sub = match client.subscribe("arw.events.node.>").await {

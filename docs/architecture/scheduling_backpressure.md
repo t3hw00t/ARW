@@ -2,7 +2,9 @@
 title: Scheduling & Backpressure
 ---
 
-# Scheduling, Concurrency, and Backpressure
+# Scheduling & Backpressure
+Updated: 2025-09-12
+Type: Explanation
 
 Principles
 - Prevent stampedes, deadlocks, and device starvation; enable graceful degradation.

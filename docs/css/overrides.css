@@ -1,26 +1,4 @@
-:root{
-  --md-primary-fg-color:        #b87333;  /* copper accent */
-  --md-primary-fg-color--light: #dca777;
-  --md-primary-fg-color--dark:  #915a29;
-  --md-accent-fg-color:         #1bb3a3;  /* muted teal */
-  /* RGB variants for alpha control in gradient markers */
-  --md-primary-rgb:             184,115,51;
-  --md-primary-dark-rgb:        145,90,41;
-  --md-accent-rgb:              27,179,163;
-  --md-accent-light-rgb:        99,211,201;
-  /* Default strengths (0..1) for topic trio */
-  --topic-exp-default:          .66;
-  --topic-complex-default:      .66;
-  --topic-complicated-default:  .66;
-  /* Surfaces */
-  --surface:                    #ffffff;
-  --surface-muted:              #fafaf9;
-  --ink:                        #111827;
-  --muted:                      #6b7280;
-  --line:                       #e5e7eb;
-  /* Subtle noise overlay (SVG fractalNoise) */
-  --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0.035'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-}
+/* Variables come from docs/css/tokens.css (synced from assets/design/tokens.css) */
 
 .md-typeset code,.md-typeset pre{background:rgba(0,0,0,0.04)}
 .md-typeset .admonition{border-radius:8px}
@@ -77,7 +55,6 @@ body{color:var(--ink)}
 }
 
 /* Interactive elements: subtle textured look */
-.md-typeset a,
 .md-typeset .md-button,
 .md-clipboard,
 .md-search__input,
@@ -107,6 +84,67 @@ body{color:var(--ink)}
   border:1px solid var(--line);
   border-radius:8px;
   box-shadow: 0 1px 0 rgba(255,255,255,0.7) inset;
+}
+
+/* Restore readable link styling (don’t make all anchors look like buttons) */
+.md-typeset a:not(.md-button){
+  background: none;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+  text-decoration: underline;
+  text-decoration-color: rgba(0,0,0,0.25);
+}
+.md-typeset a:not(.md-button):hover{
+  text-decoration-color: rgba(0,0,0,0.5);
+}
+
+/* Content comfort and overflow handling */
+.md-content__inner{
+  padding: 1rem 1.25rem; /* previously 0.2px: add breathing room */
+}
+@media (min-width: 1024px){
+  .md-content__inner{ padding: 1.25rem 1.5rem }
+}
+
+/* Prevent images and tables from overflowing the content box */
+.md-typeset img{
+  max-width: 100%;
+  height: auto;
+}
+.md-typeset table{
+  display: block;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+.md-typeset pre{ overflow-x: auto }
+
+/* Subtle meta badges under H1 */
+.doc-meta{ display:flex; gap:.5rem; align-items:center; margin:.25rem 0 1rem }
+.badge, .status-badge{
+  display:inline-block; line-height:1; white-space:nowrap;
+  font-size:.72em; font-weight:700; letter-spacing:.02em;
+  padding:.28em .55em; border-radius:9999px;
+  border:1px solid rgba(0,0,0,.08);
+  color:#374151; background: rgba(0,0,0,.06);
+}
+.status-badge.status-planned{      color:#4b5563; background: rgba(75,85,99,.12);  border-color: rgba(75,85,99,.2) }
+.status-badge.status-experimental{ color:#b45309; background: rgba(245,158,11,.12); border-color: rgba(245,158,11,.25) }
+.status-badge.status-beta{         color:#2563eb; background: rgba(37,99,235,.12);  border-color: rgba(37,99,235,.25) }
+.status-badge.status-stable{       color:var(--md-primary-fg-color--dark); background: rgba(var(--md-primary-rgb), .12); border-color: rgba(var(--md-primary-dark-rgb), .25) }
+.status-badge.status-deprecated{   color:#b91c1c; background: rgba(239,68,68,.12);  border-color: rgba(239,68,68,.25) }
+.type-badge{ color:#0f766e; background: rgba(15,118,110,.10); border-color: rgba(15,118,110,.25) }
+.updated-badge{ color:#374151; background: rgba(17,24,39,.06); border-color: rgba(17,24,39,.15) }
+
+@media (prefers-color-scheme: dark){
+  .badge, .status-badge{ border-color: rgba(255,255,255,.08); color:#d1d5db; background: rgba(255,255,255,.06) }
+  .status-badge.status-planned{      color:#e5e7eb; background: rgba(229,231,235,.08); border-color: rgba(229,231,235,.18) }
+  .status-badge.status-experimental{ color:#fbbf24; background: rgba(251,191,36,.15);  border-color: rgba(251,191,36,.28) }
+  .status-badge.status-beta{         color:#93c5fd; background: rgba(59,130,246,.15);  border-color: rgba(59,130,246,.28) }
+  .status-badge.status-stable{       color:#dca777; background: rgba(184,115,51,.15);   border-color: rgba(145,90,41,.28) }
+  .status-badge.status-deprecated{   color:#fca5a5; background: rgba(239,68,68,.15);   border-color: rgba(239,68,68,.28) }
+  .type-badge{ color:#67e8f9; background: rgba(103,232,249,.12); border-color: rgba(103,232,249,.24) }
+  .updated-badge{ color:#9ca3af; background: rgba(156,163,175,.12); border-color: rgba(156,163,175,.24) }
 }
 
 /* Topic markers (legacy single badges) */
@@ -193,4 +231,18 @@ body{color:var(--ink)}
   background-repeat: no-repeat;
   box-shadow: inset 0 0 0 1px rgba(0,0,0,0.08), 0 1px 0 rgba(0,0,0,0.05);
   text-shadow: 0 1px 0 rgba(0,0,0,0.25);
+}
+
+/* High contrast preferences */
+@media (prefers-contrast: more){
+  .md-content__inner{ box-shadow: none; border-width: 2px }
+  .md-typeset .md-button{ box-shadow: none }
+  .md-typeset a:not(.md-button){ text-decoration-thickness: .14em; text-underline-offset: .18em }
+}
+
+@media (forced-colors: active){
+  * { forced-color-adjust: none }
+  .md-content__inner{ background: Canvas; color: CanvasText; border-color: ButtonText }
+  .md-typeset .md-button{ background: ButtonFace; color: ButtonText; border-color: ButtonText }
+  .md-sidebar--primary,.md-sidebar--secondary{ background: Canvas; border-color: ButtonText }
 }

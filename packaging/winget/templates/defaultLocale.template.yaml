@@ -1,0 +1,7 @@
+PackageIdentifier: ARW.Launcher
+PackageVersion: __VERSION__
+PackageLocale: en-US
+Publisher: ARW
+PackageName: Agent Hub (ARW) Launcher
+ShortDescription: Desktop launcher and tray for Agent Hub (ARW)
+

@@ -40,6 +40,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Verify design tokens are in sync
+        run: |
+          bash scripts/check_tokens_sync.sh
       - name: Lychee link check
         uses: lycheeverse/lychee-action@v1
         with:
@@ -59,4 +62,4 @@ jobs:
           python-version: '3.x'
       - name: Lint event kinds (dot.case)
         run: |
-          python3 scripts/lint_event_kinds.py
+          python3 scripts/lint_event_names.py

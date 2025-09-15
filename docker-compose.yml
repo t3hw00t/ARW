@@ -11,6 +11,7 @@ services:
     environment:
       - ARW_PORT=${ARW_PORT:-8090}
       - ARW_DEBUG=${ARW_DEBUG:-0}
+      - ARW_BIND=${ARW_BIND:-0.0.0.0}
     ports:
       - "8090:8090"
     volumes:

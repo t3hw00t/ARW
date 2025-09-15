@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from PIL import Image, ImageDraw, ImageFilter
 
-# Project aesthetic colors (docs/css/overrides.css)
+# Project aesthetic colors (docs/css/tokens.css)
 COPPER = (0xB8, 0x73, 0x33)
 COPPER_D = (0x91, 0x5A, 0x29)
 TEAL   = (0x1B, 0xB3, 0xA3)

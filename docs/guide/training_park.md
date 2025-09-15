@@ -3,6 +3,8 @@ title: Training Park
 ---
 
 # Training Park
+Updated: 2025-09-12
+Type: How‑to
 
 Third primary perspective for tuning instincts, memory, and behavior. Focus on impressionistic state, not raw data.
 

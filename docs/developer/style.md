@@ -6,7 +6,8 @@ title: Style & Harmony
 
 We aim for a calm, precise experience. Keep visuals understated; let high-impact interactions shine.
 
-Updated: 2025-09-12
+Updated: 2025-09-14
+Type: Reference
 
 Guidelines
 - Clarity first: short sentences, mild technical terms.
@@ -116,3 +117,66 @@ Benefits
 - Topic markers: use `.topic-trio` with strengths and mirrored `data-*` labels to convey scope.
 - Admonitions: prefer `tip`/`note` for guidance; `warning` for security/irreversible actions.
 - Screenshots/figures: strive for same density and spacing rhythm as the app; avoid artificial zoom.
+---
+title: Developer Style Guide
+---
+
+# Developer Style Guide
+
+This guide aligns code and UI conventions across ARW for a clean, fast, and consistent experience. Prefer clarity and performance over cleverness; keep the interactive performance ethos visible in both UX and code.
+
+## UX & UI
+- Layout: two‑column by default (content + right‑sidecar). The sidecar is sticky and collapsible per lane; avoid nested scroll regions when possible.
+- Density: default to compact but readable. Use 12–14px for mono blocks, 14–16px for body text depending on view.
+- Rhythm: use the shared spacing scale (`--sp2/3/4/5`) and avoid ad‑hoc margins/paddings.
+- Color: use design tokens (`--color-ink`, `--color-muted`, `--color-line`, `--surface`, `--surface-muted`, status/brand tokens). Avoid hardcoded hex; prefer tokens.
+- Motion: default to subtle. Respect `prefers-reduced-motion: reduce` — no critical info conveyed by animation.
+- Components: reuse patterns — cards (bordered, soft gradient), pills (inline status), badges (count/ok/warn). Avoid bespoke one‑offs.
+- Readability: long text uses `white-space: pre-wrap`; code/JSON uses `pre` with small mono font and optional pretty toggle.
+- Accessibility: ensure focus outlines on interactive elements; use semantic headings and labels; keyboard path for all actions (palette, buttons).
+
+## Events & Sidecar
+- One SSE connection per window. Subscribe with `prefix` filters where possible; no parallel streams.
+- Read‑models publish RFC‑6902 patch deltas (`state.read.model.patch`). Apply locally and render snapshots incrementally.
+- Sidecar lanes (default order): Timeline, Context, Policy, Metrics, Models, Activity. Keep each lane scannable, avoid walls of text.
+- Metrics: display route P95 with a small sparkline; color P95 green when under the current SLO. Keep numeric noise minimal.
+- Policy: show leases as compact “pills” with scope, TTL, and principal; defer actions to explicit prompts.
+
+## HTML/CSS
+- Structure: minimal, semantic HTML; prefer utility classes defined in `common.css`.
+- Dark mode: scope via `@media (prefers-color-scheme: dark)` with the same variable keys.
+- Don’t inline styles beyond small, dynamic overrides (e.g., `white-space` toggles).
+- Avoid layout shifts: give fixed heights or max‑heights to dynamic panels (logs, diff outputs).
+
+## JavaScript
+- Keep pages small and self‑contained. Put shared logic in `common.js` (SSE, read‑models, sidecar, palette, toasts, templates).
+- Avoid frameworks for launcher pages (Web Components or React are overkill here). Vanilla + small helpers.
+- SSE: one `EventSource` per page; replace on options change; handle `open`/`error` and expose a simple subscribe API.
+- JSON patches: apply with a tight function; do not pull heavy diff libs into the launcher UI.
+- Command palette: Ctrl/Cmd‑K. Include essential actions (open windows, refresh, toggle focus, SSE replay).
+- Persistence: use `get_prefs/set_prefs` via Tauri; keep keys namespaced (e.g., `ui:hub`).
+- Error handling: swallow non‑critical errors in UI (network blips); surface critical ones as concise toasts.
+
+## Rust (Service)
+- Endpoints: prefer public `/state/*` for UI read‑models; keep admin routes under `/admin/*` and document tokens when necessary.
+- Events: publish dot.case kinds only. Avoid legacy CamelCase.
+- Read‑models: publish via `read_model::emit_patch(bus, TOPIC_READMODEL_PATCH, id, &value)`; keep IDs stable and small.
+- Performance: keep per‑route timing and P95 calculation cheap; emit deltas at a reasonable frequency (coalesce bursts).
+- Security: gate actions (`/actions/*` when introduced) and ingress/egress per the policy module; never rely on UI for enforcement.
+
+## Copy & Tone
+- Calm, factual, and actionable. Prefer brevity in labels and helper text; avoid jargon.
+- Buttons: verbs (“Refresh models”, “Run A/B”), not nouns.
+- Tooltips: short, specific hints; no marketing.
+
+## Interactive Performance Principles (UX visible)
+- Show SLO targets and current performance (e.g., green P95).
+- Avoid long loading states; render incrementally.
+- Offer “Only changes” toggles for noisy views (diffs, logs).
+
+## Review Checklist
+- Fonts/sizes match shared tokens; spacing consistent.
+- One SSE per page; filters configured; pause/clear/copy controls where relevant.
+- Keyboard access: palette active; focus outlines visible.
+- Dark mode legible; contrast good in both modes.
+- No console errors; no obvious layout shifts.

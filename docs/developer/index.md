@@ -6,12 +6,14 @@ title: Developer Guide
 
 This workspace is designed to be clear and modular. Start with Structure for an overview of crates and apps. CI & Releases explains how we validate changes and package artifacts.
 
-Updated: 2025-09-12
+Updated: 2025-09-13
+Type: Reference
 
 ## Key Ideas
 - Single workspace with focused crates and clean boundaries.
 - Inventory-based tool registration via `#[arw_tool]`.
 - Observability ready: tracing everywhere, OTEL wiring optional.
+- Open standards and coherence: Design Tokens SSoT, dot.case events, CloudEvents, and documented ADRs.
 
 ## Useful Commands
 ```bash
@@ -23,6 +25,12 @@ cargo nextest run --workspace --locked
 # Optional: regenerate static JSON preview for docs/static/openapi.json
 python3 scripts/generate_openapi_json.py
 ```
+
+## Design & Standards
+- Design Theme & Tokens: developer/design_theme.md
+- UI Kit (Launcher): developer/ui_kit.md
+- Open Standards: developer/standards.md
+- ADRs: adr/0001-design-tokens-ssot.md, adr/0002-events-naming.md
 
 ## Desktop UI (Tauri 2)
 - Launcher app: `apps/arw-launcher/src-tauri`.

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ARW Hub</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="ui-kit.css" />
+    <link rel="stylesheet" href="common.css" />
+  </head>
+  <body>
+    <a href="#main" class="skip-link">Skip to main content</a>
+    <script src="common.js"></script>
+    <div class="wrap">
+      <header class="row">
+        <strong>Project Hub</strong>
+        <label>Port: <input id="port" type="number" min="1" max="65535" value="8090"></label>
+        <button id="btn-focus" class="ghost">Toggle Focus</button>
+        <button id="btn-save" class="ghost">Save Layout</button>
+        <button id="btn-apply" class="ghost">Apply Layout</button>
+        <label class="key"><input type="checkbox" id="tplPerProj"> per‑project</label>
+        <button id="btn-gallery" class="ghost">Gallery</button>
+        <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+        <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+        <span id="galleryBadge" class="badge" title="Recent screenshots"><span class="dot"></span> 0</span>
+        <span id="statusBadges" class="badges" style="margin-left:auto"></span>
+        <span id="sseStat" class="dim" role="status" aria-live="polite">SSE: off</span>
+      </header>
+      <div class="layout">
+        <main class="grid cols-2" id="main">
+          <section class="card" id="files" role="region" aria-labelledby="filesTitle">
+            <h3 id="filesTitle">Files</h3>
+            <div class="row">
+              <label class="key">Project</label>
+              <select id="projSel" aria-label="Select project" style="min-width:180px"></select>
+              <input id="projName" aria-label="New project name" placeholder="new project" style="min-width:180px">
+              <button id="btnCreateProj" class="ghost">Create</button>
+              <button id="btnRefreshProj" class="ghost">Refresh</button>
+              <button id="btnProjPrefs" class="ghost">Prefs</button>
+              <span id="projPrefsBadge" class="badge" title="Project overrides" style="display:none"><span class="dot"></span> Editor</span>
+              <span class="dim" id="projStat"></span>
+            </div>
+            <div class="row">
+              <button id="btnTreeBack" class="ghost" aria-label="Back to previous folder">Back</button>
+              <input id="fileFilter" placeholder="filter files…" aria-label="Filter files" style="min-width:200px">
+              <div id="crumbs" class="row" style="flex-wrap:wrap"></div>
+            </div>
+            <div id="projTree" class="card" role="tree" aria-label="Project files" aria-multiselectable="false" style="background:#fff; max-height:260px; overflow:auto"></div>
+            <div class="dim" style="margin-top:6px">Hint: Click folders to navigate; click files to preview or copy.</div>
+          </section>
+          <section class="card" id="notes" role="region" aria-labelledby="notesTitle">
+            <h3 id="notesTitle">Notes</h3>
+            <div class="row"><span class="key">project</span> <code id="curProj">–</code></div>
+            <textarea id="notesArea" style="width:100%; min-height:160px" placeholder="Project notes..."></textarea>
+            <div class="row"><button id="btnSaveNotes" class="primary">Save Notes</button> <button id="btnReloadNotes" class="ghost">Reload</button> <label class="key"><input type="checkbox" id="notesAutosave" checked aria-label="Enable notes autosave"> autosave</label> <span id="notesStat" role="status" aria-live="polite" class="dim"></span></div>
+          </section>
+          <section class="card" id="agents" role="region" aria-labelledby="agentsTitle">
+            <h3 id="agentsTitle">Agents</h3>
+            <div class="row">
+              <label class="key">role</label>
+              <select id="roleSel">
+                <option>root</option>
+                <option>regional</option>
+                <option selected>edge</option>
+                <option>connector</option>
+                <option>observer</option>
+              </select>
+              <button id="btnRoleApply" class="ghost">Apply</button>
+              <button id="btnRoleRefresh" class="ghost">Refresh</button>
+            </div>
+            <pre id="agentState" class="mono" style="max-height:200px; overflow:auto">{}</pre>
+          </section>
+          <section class="card" id="runs" role="region" aria-labelledby="runsTitle">
+            <h3 id="runsTitle">Runs</h3>
+            <div class="row">
+              <input id="runFilter" placeholder="filter by id" style="min-width:200px">
+              <label class="key"><input id="runErrOnly" type="checkbox"> errors only</label>
+              <button id="btnRunsRefresh" class="ghost">Refresh</button>
+              <span class="dim" id="runsStat"></span>
+            </div>
+            <div style="overflow:auto; max-height:220px">
+              <table aria-label="Recent episodes">
+                <thead><tr><th>id</th><th>count</th><th>ms</th><th>errors</th><th>actions</th></tr></thead>
+                <tbody id="runsTbl"></tbody>
+              </table>
+            </div>
+            <div class="row" style="margin-top:6px">
+              <button id="btnRunCopy" class="ghost">Copy snapshot</button>
+              <button id="btnRunPinA" class="ghost">Pin A</button>
+              <button id="btnRunPinB" class="ghost">Pin B</button>
+              <span class="dim" id="runSnapMeta"></span>
+            </div>
+            <pre id="runSnap" class="cmp-code" style="max-height:200px"></pre>
+          </section>
+          <section class="card" id="compare" role="region" aria-labelledby="compareTitle">
+            <h3 id="compareTitle">Compare</h3>
+            <div class="cmp-tabs" role="tablist" aria-label="Compare views">
+              <button id="tab-text" role="tab" class="active" aria-selected="true" aria-controls="cmpText" tabindex="0" title="Show Text / JSON compare">Text / JSON</button>
+              <button id="tab-image" role="tab" aria-selected="false" aria-controls="cmpImage" tabindex="-1" title="Show Image compare">Image</button>
+              <button id="tab-csv" role="tab" aria-selected="false" aria-controls="cmpCSV" tabindex="-1" title="Show Table compare">CSV / Table</button>
+            </div>
+            <div id="cmpText" role="tabpanel" aria-labelledby="tab-text">
+              <div class="row">
+                <textarea id="cmpA" placeholder="Paste text/JSON A" style="flex:1;min-height:120px"></textarea>
+                <textarea id="cmpB" placeholder="Paste text/JSON B" style="flex:1;min-height:120px"></textarea>
+              </div>
+              <div class="controls">
+                <label class="key"><input type="checkbox" id="txtOnlyChanges"/> only changes</label>
+                <label class="key"><input type="checkbox" id="txtWrap" checked/> wrap</label>
+                <span class="spacer"></span>
+                <button id="btn-diff" class="primary">Diff</button>
+                <button id="btn-copy-diff" class="ghost">Copy diff</button>
+                <span class="dim">Drop files into either box</span>
+              </div>
+              <div id="cmpOut" class="cmp-code"></div>
+            </div>
+            <div id="cmpImage" role="tabpanel" aria-labelledby="tab-image" hidden style="display:none">
+              <div class="row"><input id="imgA" type="file" accept="image/*"> <input id="imgB" type="file" accept="image/*"></div>
+              <div class="img-compare" id="imgCmp">
+                <img id="imgUnder" alt="B"/>
+                <img id="imgOver" class="top" alt="A"/>
+                <input id="imgSlider" type="range" min="0" max="100" value="50"/>
+              </div>
+            </div>
+            <div id="cmpCSV" role="tabpanel" aria-labelledby="tab-csv" hidden style="display:none">
+              <div class="row">
+                <textarea id="csvA" placeholder="Paste CSV/TSV A" style="flex:1;min-height:120px"></textarea>
+                <textarea id="csvB" placeholder="Paste CSV/TSV B" style="flex:1;min-height:120px"></textarea>
+              </div>
+              <div class="controls">
+                <input id="csvKey" placeholder="Key column(s), comma-separated" style="flex:1;min-width:200px"/>
+                <label class="key"><input id="csvHeader" type="checkbox" checked/> header row</label>
+                <label class="key"><input id="csvOnlyChanges" type="checkbox"/> only changes</label>
+                <label class="key"><input id="csvTwoRow" type="checkbox"/> two‑row changes</label>
+                <span class="spacer"></span>
+                <button id="btn-csv-diff" class="primary">Diff Tables</button>
+                <button id="btn-csv-export" class="ghost">Export CSV</button>
+                <button id="btn-csv-copy" class="ghost">Copy summary</button>
+              </div>
+              <div id="csvSummary" class="cmp-summary"></div>
+              <div id="csvOut" class="cmp-code" style="padding:0"></div>
+            </div>
+          </section>
+        </main>
+        <aside id="sidecar"></aside>
+      </div>
+    </div>
+    <script src="hub.js"></script>
+  </body>
+  </html>

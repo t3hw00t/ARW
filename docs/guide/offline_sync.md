@@ -2,7 +2,10 @@
 title: Offline & Sync
 ---
 
-# Offline, Caching, and Sync Semantics
+# Offline & Sync
+
+Updated: 2025-09-12
+Type: How‑to
 
 Local‑first
 - Local read‑models + event journal are authoritative; UI rehydrates from them.
@@ -14,4 +17,3 @@ Conflicts
 - Last‑writer‑wins only for non‑critical state; 3‑way merges for notes/config.
 
 See also: Artifacts & Provenance, Naming & IDs.
-

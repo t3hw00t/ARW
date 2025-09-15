@@ -1,6 +1,6 @@
 [package]
 name = "arw-connector"
-version = "0.1.2"
+version = "0.1.4"
 edition = "2021"
 license.workspace = true
 
@@ -11,7 +11,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread","macros","signal","sync"] }
-arw-core = { path = "../../crates/arw-core", version = "0.1.2", features = ["nats"] }
+arw-core = { path = "../../crates/arw-core", version = "0.1.4", features = ["nats"] }
 chrono = { workspace = true }
 
 [dependencies.async-nats]

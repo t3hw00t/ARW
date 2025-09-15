@@ -1,0 +1,15 @@
+PackageIdentifier: ARW.Launcher
+PackageVersion: __VERSION__
+InstallerType: msi
+Installers:
+  - Architecture: x64
+    InstallerUrl: __URL_X64__
+    InstallerSha256: __SHA256_X64__
+    InstallerLocale: en-US
+    Scope: user
+  - Architecture: arm64
+    InstallerUrl: __URL_ARM64__
+    InstallerSha256: __SHA256_ARM64__
+    InstallerLocale: en-US
+    Scope: user
+

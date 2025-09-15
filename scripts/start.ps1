@@ -19,6 +19,15 @@ $ErrorActionPreference = 'Stop'
 $script:IwrArgs = @{}
 try { if ($PSVersionTable.PSVersion.Major -lt 6) { $script:IwrArgs = @{ UseBasicParsing = $true } } } catch {}
 
+# Optional: WebView2 runtime helpers (for Tauri-based launcher)
+$script:HasWebView2 = $true
+try {
+  . (Join-Path $PSScriptRoot 'webview2.ps1')
+  try {
+    if (Get-Command Test-WebView2Runtime -ErrorAction SilentlyContinue) { $script:HasWebView2 = (Test-WebView2Runtime) }
+  } catch { $script:HasWebView2 = $true }
+} catch { $script:HasWebView2 = $true }
+
 function Info($m){ Write-Host "[start] $m" -ForegroundColor DarkCyan }
 function Dry($m){ if ($DryRun) { Write-Host "[dryrun] $m" -ForegroundColor Yellow } }
 
@@ -131,6 +140,9 @@ if (-not $skipLauncher -and (Test-Path $launcher)) {
       try { $p.Id | Out-File -FilePath $env:ARW_PID_FILE -Encoding ascii -Force } catch {}
     }
     if ($WaitHealth) { Wait-For-Health -port $Port -timeoutSecs $WaitHealthTimeoutSecs }
+    if (-not $script:HasWebView2) {
+      Write-Warning "WebView2 Runtime not detected; the launcher may prompt to install it. You can install it now via: powershell -ExecutionPolicy Bypass -File scripts/webview2.ps1"
+    }
     Info "Launching launcher $launcher"
     # Hint the launcher to auto-start the service if not already running
     try { $env:ARW_AUTOSTART = '1' } catch {}

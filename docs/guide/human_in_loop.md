@@ -2,7 +2,10 @@
 title: Human‑in‑the‑Loop
 ---
 
-# Human‑in‑the‑Loop Contract
+# Human‑in‑the‑Loop
+
+Updated: 2025-09-12
+Type: How‑to
 
 Staging Area
 - Per‑project staging for proposed actions. Modes: auto, ask‑once, always‑review.
@@ -14,4 +17,3 @@ UI
 - Inline approvals in the sidecar; collapsible details show inputs, policies, and artifacts.
 
 See also: Artifacts & Provenance, Policy, Recipes.
-

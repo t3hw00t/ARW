@@ -2,7 +2,9 @@
 title: Data Governance & Privacy
 ---
 
-# Data Governance & Privacy Classification
+# Data Governance & Privacy
+Updated: 2025-09-12
+Type: Explanation
 
 Classification
 - Inputs labeled: public | internal | secret | regulated.
@@ -16,4 +18,3 @@ Audit
 - Per‑episode classification summaries; exportable reports per project.
 
 See also: Memory Lifecycle, Permissions & Policies, Threat Model.
-

@@ -8,6 +8,7 @@ title: Security Hardening
 This guide summarizes recommended steps to run ARW more securely beyond the local‑dev defaults.
 
 Updated: 2025-09-12
+Type: How‑to
 
 Baseline
 - Bind: the service binds to `127.0.0.1` by default. Keep it private or put it behind a reverse proxy.
@@ -115,6 +116,44 @@ Checklist
 - [ ] Trust store configured; capsules signed and verified when used
 - [ ] Reverse proxy/TLS if remote
 - [ ] Logs/State directories scoped and monitored
+
+## Security Headers & CSP
+- Default response headers are set by middleware:
+  - `X-Content-Type-Options: nosniff`
+  - `Referrer-Policy: no-referrer`
+  - `X-Frame-Options: DENY`
+  - `Permissions-Policy: geolocation=(), microphone=(), camera=()`
+- CSP (Content Security Policy):
+  - Auto-add for `text/html` unless disabled. Env: `ARW_CSP_AUTO=1` (default).
+  - Presets: `ARW_CSP_PRESET=relaxed|strict` (default relaxed). Strict disables inline JS/CSS used by small pages.
+  - Override: set `ARW_CSP` to a full policy string, or set to `off`/`0` to disable.
+
+## Access Logs (Optional)
+- Enable structured access logs: `ARW_ACCESS_LOG=1` (target: `http.access`).
+- Sampling: `ARW_ACCESS_SAMPLE_N` (default 1 = every request).
+- Fields: method, path, matched route, status, `dt_ms`, client IP, `request_id`, request/response lengths.
+- Optional fields:
+  - User-Agent: `ARW_ACCESS_UA=1` (hash value with `ARW_ACCESS_UA_HASH=1`).
+  - Referer: `ARW_ACCESS_REF=1` (strip query string with `ARW_ACCESS_REF_STRIP_QS=1`, default on).
+
+### Rolling Access Log Files
+- Enable rolling sink for `http.access`: `ARW_ACCESS_LOG_ROLL=1`.
+- Directory: `ARW_ACCESS_LOG_DIR` (defaults to `${ARW_LOGS_DIR:-./logs}`), ensure writable.
+- Prefix: `ARW_ACCESS_LOG_PREFIX` (default `http-access`).
+- Rotation: `ARW_ACCESS_LOG_ROTATION=daily|hourly|minutely` (default `daily`).
+- Example:
+  ```bash
+  ARW_ACCESS_LOG=1 \
+  ARW_ACCESS_LOG_ROLL=1 \
+  ARW_ACCESS_LOG_DIR=/var/log/arw \
+  ARW_ACCESS_LOG_PREFIX=http-access \
+  ARW_ACCESS_LOG_ROTATION=daily \
+  arw-svc
+  ```
+
+## Proxy Awareness
+- By default, admin rate-limits use the remote socket address.
+- When behind a trusted reverse proxy, set `ARW_TRUST_FORWARD_HEADERS=1` to honor `X-Forwarded-For`/`X-Real-IP`.
 
 ## Network Posture & Egress Firewall (Plan)
 - Add a host‑local egress gateway (loopback proxy) plus a DNS guard for agent/tool traffic.

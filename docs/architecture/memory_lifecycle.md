@@ -2,7 +2,9 @@
 title: Memory Lifecycle
 ---
 
-# Memory Lifecycle & Hygiene
+# Memory Lifecycle
+Updated: 2025-09-12
+Type: Explanation
 
 MemoryMounts
 - Each mount declares retention policy, dedup keys, freshness windows, and GC rules.

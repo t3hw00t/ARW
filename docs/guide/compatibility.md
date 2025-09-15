@@ -3,6 +3,8 @@ title: Compatibility Notes
 ---
 
 # Compatibility Notes
+Updated: 2025-09-12
+Type: How‑to
 
 This page summarizes high‑level notes and known issues when running ARW on
 different operating systems and environments. It’s intended for users, not
@@ -103,3 +105,20 @@ If you encounter a compatibility issue not covered here, please open an issue
 with your OS version, environment (bare metal / VM / container), and a short
 description.
 
+## Hardware Detection (GPU/NPU)
+
+ARW collects a best‑effort hardware snapshot for display in the Debug UI and for basic scheduling hints.
+
+- GPUs
+  - Linux: probes `/sys/class/drm` for discrete adapters and, when available, enriches vendor‑specific hints (e.g., NVIDIA model, AMD VRAM totals). If `ARW_ROCM_SMI=1`, ARW attempts an ROCm SMI JSON probe for metrics.
+  - Cross‑platform: when built with the `gpu_wgpu` feature (default in `arw-svc`), ARW enumerates adapters via `wgpu` across Vulkan/Metal/DX12/GL to report name/vendor/device/backend/type.
+  - Windows/macOS: the `wgpu` probe provides a portable fallback. Additional platform probes may appear over time.
+
+- NPUs
+  - Linux: probes `/sys/class/accel` and scans kernel modules for hints (e.g., `intel_vpu`, `amdxdna`).
+  - macOS: reports the Apple Neural Engine presence on Apple Silicon.
+  - Windows (optional): when built with `npu_dxcore` and `ARW_DXCORE_NPU=1`, ARW uses DXCore to enumerate compute‑capable adapters as a proxy for NPU presence.
+
+Notes
+- These probes are read‑only and best‑effort; absence of a device in the snapshot does not prevent using an accelerator through a model runtime.
+- Accelerator availability for inference depends on your chosen backend (e.g., ONNX Runtime, DirectML/ROCm/CUDA, CoreML) and its own driver/runtime requirements.

@@ -3,6 +3,8 @@ title: UX Invariants
 ---
 
 # UX Invariants
+Updated: 2025-09-12
+Type: Explanation
 
 Consistency across surfaces
 - Right‑side episode timeline/sidecar everywhere (Hub, Chat, Training).
@@ -11,4 +13,3 @@ Consistency across surfaces
 - Policy prompts inline; never blocking modals.
 
 See also: UI Architecture, Context Recipes, Permissions & Policies.
-

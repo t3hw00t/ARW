@@ -2,7 +2,9 @@
 title: Evaluation Harness
 ---
 
-# Evaluation & Experiment Harness
+# Evaluation Harness
+Updated: 2025-09-12
+Type: How‑to
 
 Purpose
 - Safely evolve models, recipes, tools, and policies; measure if changes helped.
@@ -19,4 +21,3 @@ Artifacts
 - Store results as artifacts with provenance; export CSV/JSON reports.
 
 See also: Artifacts & Provenance, Runtime Matrix, Cost & Quotas.
-

@@ -5,7 +5,8 @@ title: Metrics & Insights
 # Metrics & Insights
 { .topic-trio style="--exp:.6; --complex:.7; --complicated:.6" data-exp=".6" data-complex=".7" data-complicated=".6" }
 
-Updated: 2025-09-07
+Updated: 2025-09-12
+Type: How‑to
 
 ## Overview
 - ARW collects lightweight, privacy‑respecting metrics locally to help you tune and understand behavior.
@@ -23,6 +24,74 @@ Updated: 2025-09-07
 
 ## Security
 - `/introspect/*` surfaces are gated by default; see Developer Security Notes.
+
+## Prometheus Exposition
+
+- Endpoint: `GET /metrics` (text/plain; Prometheus exposition format)
+- Selected counters and gauges:
+  - `arw_bus_*` — event bus totals and receiver counts
+  - `arw_http_route_*` — per-route hits/errors and latency histogram (p95 available via UI)
+  - `arw_models_download_*` — models download lifecycle counters and EWMA throughput
+  - `arw_tools_cache_*` — action cache hits/miss/coalesced and capacity/TTL
+  - `arw_build_info{service,version,sha}` — build metadata
+- Trust (RPU):
+    - `arw_rpu_trust_last_reload_ms` — epoch ms of last trust store reload
+    - `arw_rpu_trust_issuers` — current trust issuers count
+
+### GPU/NPU metrics examples (PromQL)
+
+- Adapters count (GPU/NPU):
+```
+arw_gpu_adapters
+arw_npu_adapters
+```
+
+- Total GPU memory across adapters (bytes) and usage percent:
+```
+sum(arw_gpu_adapter_memory_bytes{kind="total"})
+100 * sum(arw_gpu_adapter_memory_bytes{kind="used"}) / sum(arw_gpu_adapter_memory_bytes{kind="total"})
+```
+
+- GPU memory total by vendor (joins `vendor` from `arw_gpu_adapter_info`):
+```
+sum by (vendor) (
+  arw_gpu_adapter_memory_bytes{kind="total"}
+  * on (index) group_left(vendor) arw_gpu_adapter_info
+)
+```
+
+- Top 5 busiest adapters (percent):
+```
+topk(5, arw_gpu_adapter_busy_percent)
+```
+
+- Max busy percent by vendor (join vendor labels via adapter info):
+```
+max by (vendor) (
+  arw_gpu_adapter_busy_percent
+  * on (index) group_left(vendor) arw_gpu_adapter_info
+)
+```
+
+Notes
+- `arw_gpu_adapter_info` is a 1‑valued series used to carry labels (`index`, `vendor_id`, `vendor`, `name`). Use a label join (`on(index) group_left(...)`) to attach those labels to other adapter metrics.
+- Memory `kind` label is one of `total` or `used`.
+
+See also:
+- Snippets → Prometheus Recording Rules — ARW
+- Snippets → Grafana — Quick Panels (CPU/Mem/GPU)
+- Snippets → Prometheus Alerting Rules — ARW
+
+Example scrape minimal config (Prometheus):
+```
+scrape_configs:
+  - job_name: 'arw'
+    static_configs:
+      - targets: ['127.0.0.1:8090']
+        labels:
+          instance: 'local'
+    metrics_path: /metrics
+```
 
 ## Tuning Tips
 - Use p95 to find outliers; EWMA helps watch short‑term drift.

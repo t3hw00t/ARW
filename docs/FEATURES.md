@@ -5,6 +5,7 @@ title: Features
 # Features
 
 Updated: 2025-09-13
+Type: Explanation
 
 ## Outcomes
 - Turn messy folders, PDFs, and links into clean briefs, reports, or knowledge bases.

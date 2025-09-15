@@ -30,7 +30,7 @@ pub fn start_feedback_engine(state: AppState) {
                 ver().store(1, Ordering::Relaxed);
             }
             state.bus.publish(
-                "feedback.suggested",
+                crate::ext::topics::TOPIC_FEEDBACK_SUGGESTED,
                 &json!({"version": 1, "suggestions": list}),
             );
         }
@@ -91,12 +91,12 @@ pub fn start_feedback_engine(state: AppState) {
                     let v = ver().fetch_add(1, Ordering::Relaxed) + 1;
                     let _ = persist_snapshot(v, &out).await;
                     state.bus.publish(
-                        "feedback.suggested",
+                        crate::ext::topics::TOPIC_FEEDBACK_SUGGESTED,
                         &json!({"version": v, "suggestions": out}),
                     );
                     // Also emit a beliefs update for read-model consumers (dot.case)
                     state.bus.publish(
-                        "beliefs.updated",
+                        crate::ext::topics::TOPIC_BELIEFS_UPDATED,
                         &json!({"version": v, "suggestions": out}),
                     );
                     // Emit Intents for each suggestion (proposed)

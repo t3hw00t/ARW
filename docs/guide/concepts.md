@@ -8,6 +8,7 @@ title: Core Concepts
 This page orients you to ARW’s moving parts so the rest of the guide makes sense.
 
 Updated: 2025-09-12
+Type: Explanation
 
 ## Service
 - `arw-svc` is a local HTTP service with a small debug UI. It listens on `127.0.0.1:<port>` by default.

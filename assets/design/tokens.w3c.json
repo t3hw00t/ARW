@@ -1,0 +1,41 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/schema.json",
+  "color": {
+    "brand": {
+      "copper": { "$type": "color", "$value": "#b87333" },
+      "copper_dark": { "$type": "color", "$value": "#915a29" },
+      "teal": { "$type": "color", "$value": "#1bb3a3" },
+      "teal_light": { "$type": "color", "$value": "#63d3c9" }
+    },
+    "neutrals": {
+      "ink": { "$type": "color", "$value": "#111827" },
+      "muted": { "$type": "color", "$value": "#6b7280" },
+      "line": { "$type": "color", "$value": "#e5e7eb" },
+      "surface": { "$type": "color", "$value": "#ffffff" },
+      "surface_muted": { "$type": "color", "$value": "#fafaf9" }
+    },
+    "status": {
+      "ok": { "$type": "color", "$value": "#16a34a" },
+      "warn": { "$type": "color", "$value": "#f59e0b" },
+      "bad": { "$type": "color", "$value": "#dc2626" },
+      "info": { "$type": "color", "$value": "#3b82f6" }
+    }
+  },
+  "spacing": {
+    "sp2": { "$type": "dimension", "$value": "8px" },
+    "sp3": { "$type": "dimension", "$value": "12px" },
+    "sp4": { "$type": "dimension", "$value": "16px" },
+    "sp5": { "$type": "dimension", "$value": "24px" }
+  },
+  "radii": {
+    "r2": { "$type": "dimension", "$value": "6px" },
+    "r3": { "$type": "dimension", "$value": "8px" },
+    "r4": { "$type": "dimension", "$value": "12px" }
+  },
+  "shadows": {
+    "shadow_1": { "$type": "shadow", "$value": "0 1px 0 rgba(255,255,255,0.7) inset, 0 1px 6px rgba(0,0,0,0.04)" },
+    "shadow_2": { "$type": "shadow", "$value": "0 10px 30px rgba(0,0,0,0.04), 0 1px 0 rgba(255,255,255,0.7) inset" },
+    "shadow_3": { "$type": "shadow", "$value": "0 18px 50px rgba(0,0,0,0.18)" }
+  }
+}
+

@@ -18,6 +18,14 @@
           "open_logs_window",
           "open_models_window",
           "open_connections_window",
+          "open_hub_window",
+          "open_chat_window",
+          "open_training_window",
+          "active_window_bounds",
+          "run_tool_admin",
+          "projects_import",
+          "projects_file_get",
+          "projects_file_set",
           "models_list",
           "models_refresh",
           "models_save",
@@ -35,7 +43,8 @@
           "launcher_autostart_status",
           "set_launcher_autostart",
           "open_url",
-          "open_path"
+          "open_path",
+          "open_in_editor"
         ],
         "deny": []
       }

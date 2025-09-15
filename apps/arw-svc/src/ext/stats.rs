@@ -32,7 +32,120 @@ pub(crate) async fn stats_on_event(kind: &str) {
     s.total += 1;
     *s.kinds.entry(kind.to_string()).or_default() += 1;
 }
-#[derive(Clone, Default, serde::Serialize)]
+
+// ---- Probe metrics aggregation (GPU/NPU) ----
+#[derive(Clone, Default)]
+struct ProbeAgg {
+    gpu_count: u64,
+    gpu_mem_used: u64,
+    gpu_mem_total: u64,
+    npu_count: u64,
+    gpus: Vec<GpuAdapter>,
+    // CPU and Memory snapshot
+    cpu_avg: f64,
+    cpu_cores: Vec<f64>,
+    mem_total: u64,
+    mem_used: u64,
+    swap_total: u64,
+    swap_used: u64,
+}
+
+#[derive(Clone, Default)]
+struct GpuAdapter {
+    index: String,
+    name: String,
+    vendor: String,
+    vendor_id: String,
+    mem_total: u64,
+    mem_used: Option<u64>,
+    busy_percent: Option<u64>,
+}
+static PROBE: OnceLock<RwLock<ProbeAgg>> = OnceLock::new();
+fn probe_cell() -> &'static RwLock<ProbeAgg> {
+    PROBE.get_or_init(|| RwLock::new(ProbeAgg::default()))
+}
+pub async fn start_probe_metrics_collector(bus: arw_events::Bus) {
+    let mut rx = bus.subscribe();
+    while let Ok(env) = rx.recv().await {
+        if env.kind == crate::ext::topics::TOPIC_PROBE_METRICS {
+            // payload is JSON with cpu/memory/disk and arrays gpus/npus
+            let p = env.payload;
+            // Initialize with CPU avg; fill the rest below
+            let mut agg = ProbeAgg {
+                cpu_avg: p
+                    .get("cpu")
+                    .and_then(|c| c.get("avg"))
+                    .and_then(|v| v.as_f64())
+                    .unwrap_or(0.0),
+                ..Default::default()
+            };
+            // CPU cores
+            if let Some(arr) = p
+                .get("cpu")
+                .and_then(|c| c.get("per_core"))
+                .and_then(|v| v.as_array())
+            {
+                agg.cpu_cores = arr.iter().filter_map(|x| x.as_f64()).collect();
+            }
+            // Memory
+            if let Some(m) = p.get("memory").and_then(|v| v.as_object()) {
+                agg.mem_total = m.get("total").and_then(|x| x.as_u64()).unwrap_or(0);
+                agg.mem_used = m.get("used").and_then(|x| x.as_u64()).unwrap_or(0);
+                agg.swap_total = m.get("swap_total").and_then(|x| x.as_u64()).unwrap_or(0);
+                agg.swap_used = m.get("swap_used").and_then(|x| x.as_u64()).unwrap_or(0);
+            }
+            if let Some(gpus) = p.get("gpus").and_then(|v| v.as_array()) {
+                agg.gpu_count = gpus.len() as u64;
+                for g in gpus {
+                    let mt = g.get("mem_total").and_then(|x| x.as_u64()).unwrap_or(0);
+                    let mu = g.get("mem_used").and_then(|x| x.as_u64());
+                    agg.gpu_mem_total = agg.gpu_mem_total.saturating_add(mt);
+                    if let Some(n) = mu {
+                        agg.gpu_mem_used = agg.gpu_mem_used.saturating_add(n);
+                    }
+                    let idx = g
+                        .get("index")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let name = g
+                        .get("name")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let vendor = g
+                        .get("vendor")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let vendor_id = g
+                        .get("vendor_id")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .to_string();
+                    let busy = g.get("busy_percent").and_then(|x| x.as_u64());
+                    agg.gpus.push(GpuAdapter {
+                        index: idx,
+                        name,
+                        vendor,
+                        vendor_id,
+                        mem_total: mt,
+                        mem_used: mu,
+                        busy_percent: busy,
+                    });
+                }
+            }
+            if let Some(npus) = p.get("npus").and_then(|v| v.as_array()) {
+                agg.npu_count = npus.len() as u64;
+            }
+            {
+                let mut w = probe_cell().write().await;
+                *w = agg;
+            }
+        }
+    }
+}
+#[derive(Clone, serde::Serialize)]
 struct RouteStat {
     hits: u64,
     errors: u64,
@@ -43,6 +156,10 @@ struct RouteStat {
     p95_ms: u64,
     #[serde(skip_serializing)]
     sample: VecDeque<u64>,
+    #[serde(skip_serializing)]
+    sum_ms: u64,
+    #[serde(skip_serializing)]
+    hist: Vec<u64>, // per-bucket counts (+Inf as last)
 }
 #[derive(Clone, Default, serde::Serialize)]
 struct RouteStats {
@@ -52,9 +169,55 @@ static ROUTE_STATS: OnceLock<RwLock<RouteStats>> = OnceLock::new();
 fn route_stats_cell() -> &'static RwLock<RouteStats> {
     ROUTE_STATS.get_or_init(|| RwLock::new(RouteStats::default()))
 }
+
+// Histogram buckets (ms). Final bucket stores +Inf cumulative.
+static HIST_MS: once_cell::sync::OnceCell<Vec<u64>> = once_cell::sync::OnceCell::new();
+fn hist_buckets() -> &'static [u64] {
+    HIST_MS
+        .get_or_init(|| {
+            if let Ok(s) = std::env::var("ARW_ROUTE_HIST_MS") {
+                let mut v: Vec<u64> = s
+                    .split(',')
+                    .filter_map(|t| t.trim().parse::<u64>().ok())
+                    .collect();
+                v.sort_unstable();
+                v.dedup();
+                if !v.is_empty() {
+                    return v;
+                }
+            }
+            vec![5, 10, 25, 50, 100, 200, 500, 1000, 2000, 5000, 10000]
+        })
+        .as_slice()
+}
+fn new_hist() -> Vec<u64> {
+    vec![0; hist_buckets().len() + 1]
+}
+fn hist_index(ms: u64) -> usize {
+    for (i, &b) in hist_buckets().iter().enumerate() {
+        if ms <= b {
+            return i;
+        }
+    }
+    hist_buckets().len() // +Inf bucket
+}
 pub(crate) async fn route_obs(path: &str, status: u16, ms: u64) {
     let mut rs = route_stats_cell().write().await;
-    let ent = rs.by_path.entry(path.to_string()).or_default();
+    let ent = rs
+        .by_path
+        .entry(path.to_string())
+        .or_insert_with(|| RouteStat {
+            hits: 0,
+            errors: 0,
+            ewma_ms: 0.0,
+            last_ms: 0,
+            max_ms: 0,
+            last_status: 0,
+            p95_ms: 0,
+            sample: VecDeque::with_capacity(50),
+            sum_ms: 0,
+            hist: new_hist(),
+        });
     ent.hits += 1;
     if status >= 400 {
         ent.errors += 1;
@@ -70,6 +233,11 @@ pub(crate) async fn route_obs(path: &str, status: u16, ms: u64) {
     ent.last_ms = ms;
     ent.max_ms = ent.max_ms.max(ms);
     ent.last_status = status;
+    ent.sum_ms = ent.sum_ms.saturating_add(ms);
+    let idx = hist_index(ms);
+    if let Some(c) = ent.hist.get_mut(idx) {
+        *c = c.saturating_add(1);
+    }
     // p95 with small sliding sample
     if ent.sample.len() >= 50 {
         ent.sample.pop_front();
@@ -213,6 +381,93 @@ pub(crate) async fn metrics_get(State(state): State<AppState>) -> impl IntoRespo
         name, ver, sha
     );
 
+    // RPU trust
+    out.push_str("# HELP arw_rpu_trust_last_reload_ms Epoch ms of last trust store reload\n# TYPE arw_rpu_trust_last_reload_ms gauge\n");
+    let _ = writeln!(
+        out,
+        "arw_rpu_trust_last_reload_ms {}",
+        arw_core::rpu::trust_last_reload_ms()
+    );
+    out.push_str("# HELP arw_rpu_trust_issuers Number of trust issuers\n# TYPE arw_rpu_trust_issuers gauge\n");
+    let _ = writeln!(
+        out,
+        "arw_rpu_trust_issuers {}",
+        arw_core::rpu::trust_snapshot().len()
+    );
+
+    // GPU/NPU aggregated metrics from last probe
+    out.push_str("# HELP arw_gpu_adapters GPU adapters count\n# TYPE arw_gpu_adapters gauge\n");
+    out.push_str("# HELP arw_gpu_mem_bytes_total Total GPU memory across adapters\n# TYPE arw_gpu_mem_bytes_total gauge\n");
+    out.push_str("# HELP arw_gpu_mem_bytes_used GPU memory used across adapters\n# TYPE arw_gpu_mem_bytes_used gauge\n");
+    out.push_str("# HELP arw_npu_adapters NPU adapters count\n# TYPE arw_npu_adapters gauge\n");
+    let snap = probe_cell().read().await.clone();
+    let _ = writeln!(out, "arw_gpu_adapters {}", snap.gpu_count);
+    let _ = writeln!(out, "arw_gpu_mem_bytes_total {}", snap.gpu_mem_total);
+    let _ = writeln!(out, "arw_gpu_mem_bytes_used {}", snap.gpu_mem_used);
+    let _ = writeln!(out, "arw_npu_adapters {}", snap.npu_count);
+    // CPU/Mem
+    out.push_str(
+        "# HELP arw_cpu_percent_avg Average CPU usage percent\n# TYPE arw_cpu_percent_avg gauge\n",
+    );
+    let _ = writeln!(out, "arw_cpu_percent_avg {}", snap.cpu_avg);
+    out.push_str("# HELP arw_cpu_percent_core CPU usage percent by core (labels: core)\n# TYPE arw_cpu_percent_core gauge\n");
+    for (i, v) in snap.cpu_cores.iter().enumerate() {
+        let _ = writeln!(out, "arw_cpu_percent_core{{core=\"{}\"}} {}", i, v);
+    }
+    out.push_str(
+        "# HELP arw_mem_bytes_total Total system memory bytes\n# TYPE arw_mem_bytes_total gauge\n",
+    );
+    out.push_str(
+        "# HELP arw_mem_bytes_used Used system memory bytes\n# TYPE arw_mem_bytes_used gauge\n",
+    );
+    out.push_str(
+        "# HELP arw_swap_bytes_total Total system swap bytes\n# TYPE arw_swap_bytes_total gauge\n",
+    );
+    out.push_str(
+        "# HELP arw_swap_bytes_used Used system swap bytes\n# TYPE arw_swap_bytes_used gauge\n",
+    );
+    let _ = writeln!(out, "arw_mem_bytes_total {}", snap.mem_total);
+    let _ = writeln!(out, "arw_mem_bytes_used {}", snap.mem_used);
+    let _ = writeln!(out, "arw_swap_bytes_total {}", snap.swap_total);
+    let _ = writeln!(out, "arw_swap_bytes_used {}", snap.swap_used);
+
+    // Per-adapter metrics
+    out.push_str("# HELP arw_gpu_adapter_info GPU adapter info (labels: index,vendor_id,vendor,name)\n# TYPE arw_gpu_adapter_info gauge\n");
+    out.push_str("# HELP arw_gpu_adapter_memory_bytes GPU adapter memory bytes by kind (labels: index,kind)\n# TYPE arw_gpu_adapter_memory_bytes gauge\n");
+    out.push_str("# HELP arw_gpu_adapter_busy_percent GPU adapter busy percent (labels: index)\n# TYPE arw_gpu_adapter_busy_percent gauge\n");
+    for g in snap.gpus.iter() {
+        let _ = writeln!(
+            out,
+            "arw_gpu_adapter_info{{index=\"{}\",vendor_id=\"{}\",vendor=\"{}\",name=\"{}\"}} 1",
+            esc(&g.index),
+            esc(&g.vendor_id),
+            esc(&g.vendor),
+            esc(&g.name)
+        );
+        let _ = writeln!(
+            out,
+            "arw_gpu_adapter_memory_bytes{{index=\"{}\",kind=\"total\"}} {}",
+            esc(&g.index),
+            g.mem_total
+        );
+        if let Some(mu) = g.mem_used {
+            let _ = writeln!(
+                out,
+                "arw_gpu_adapter_memory_bytes{{index=\"{}\",kind=\"used\"}} {}",
+                esc(&g.index),
+                mu
+            );
+        }
+        if let Some(bp) = g.busy_percent {
+            let _ = writeln!(
+                out,
+                "arw_gpu_adapter_busy_percent{{index=\"{}\"}} {}",
+                esc(&g.index),
+                bp
+            );
+        }
+    }
+
     // Events by kind
     out.push_str("# HELP arw_events_total Total events by kind\n# TYPE arw_events_total counter\n");
     for (k, v) in events.kinds.iter() {
@@ -302,6 +557,13 @@ pub(crate) async fn metrics_get(State(state): State<AppState>) -> impl IntoRespo
     out.push_str(
         "# HELP arw_http_route_max_ms max latency ms\n# TYPE arw_http_route_max_ms gauge\n",
     );
+    out.push_str(
+        "# HELP arw_http_route_latency_ms Histogram of HTTP latencies in ms\n# TYPE arw_http_route_latency_ms histogram\n",
+    );
+    // Global histogram aggregation
+    let mut g_hist = new_hist();
+    let mut g_sum: u64 = 0;
+    let mut g_count: u64 = 0;
     for (path, st) in routes.by_path.iter() {
         let p = esc(path);
         let _ = writeln!(
@@ -321,7 +583,56 @@ pub(crate) async fn metrics_get(State(state): State<AppState>) -> impl IntoRespo
         );
         let _ = writeln!(out, "arw_http_route_p95_ms{{path=\"{}\"}} {}", p, st.p95_ms);
         let _ = writeln!(out, "arw_http_route_max_ms{{path=\"{}\"}} {}", p, st.max_ms);
+        // Histogram (cumulative buckets)
+        let mut cum: u64 = 0;
+        for (i, &b) in hist_buckets().iter().enumerate() {
+            let c = *st.hist.get(i).unwrap_or(&0);
+            cum = cum.saturating_add(c);
+            let _ = writeln!(
+                out,
+                "arw_http_route_latency_ms_bucket{{path=\"{}\",le=\"{}\"}} {}",
+                p, b, cum
+            );
+        }
+        // +Inf bucket (includes overflow)
+        let c = *st.hist.last().unwrap_or(&0);
+        cum = cum.saturating_add(c);
+        let _ = writeln!(
+            out,
+            "arw_http_route_latency_ms_bucket{{path=\"{}\",le=\"+Inf\"}} {}",
+            p, cum
+        );
+        let _ = writeln!(
+            out,
+            "arw_http_route_latency_ms_sum{{path=\"{}\"}} {}",
+            p, st.sum_ms
+        );
+        let _ = writeln!(
+            out,
+            "arw_http_route_latency_ms_count{{path=\"{}\"}} {}",
+            p, st.hits
+        );
+        // Aggregate
+        for (i, &v) in st.hist.iter().enumerate() {
+            if let Some(g) = g_hist.get_mut(i) {
+                *g = (*g).saturating_add(v);
+            }
+        }
+        g_sum = g_sum.saturating_add(st.sum_ms);
+        g_count = g_count.saturating_add(st.hits);
     }
+    // Global histogram exposition
+    let mut cum: u64 = 0;
+    for (i, &b) in hist_buckets().iter().enumerate() {
+        let c = *g_hist.get(i).unwrap_or(&0);
+        cum = cum.saturating_add(c);
+        let _ = writeln!(out, "arw_http_latency_ms_bucket{{le=\"{}\"}} {}", b, cum);
+    }
+    let c = *g_hist.last().unwrap_or(&0);
+    cum = cum.saturating_add(c);
+    let _ = writeln!(out, "arw_http_latency_ms_bucket{{le=\"+Inf\"}} {}", cum);
+    let _ = writeln!(out, "arw_http_latency_ms_sum {}", g_sum);
+    let _ = writeln!(out, "arw_http_latency_ms_count {}", g_count);
     (
         axum::http::StatusCode::OK,
         [(

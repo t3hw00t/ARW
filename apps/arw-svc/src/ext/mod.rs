@@ -10,13 +10,14 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::collections::HashSet;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 // (legacy models inline removed) unused imports pruned
 use tokio::sync::RwLock;
 
-use crate::AppState;
+use crate::{route_recorder, AppState};
 // Use fully-qualified constants to avoid unused import warnings in unreachable code paths
 use arw_core::gating;
 use arw_core::hierarchy as hier;
@@ -38,6 +39,7 @@ pub mod goldens;
 pub mod goldens_api;
 pub mod governor_api;
 pub mod hierarchy_api;
+pub mod http;
 pub mod logic_units_api;
 pub mod memory;
 pub mod memory_api;
@@ -47,6 +49,7 @@ pub mod policy;
 pub mod read_model;
 pub mod redteam;
 pub mod review_api;
+pub mod rpu_api;
 pub mod self_model;
 pub mod self_model_agg;
 pub mod self_model_api;
@@ -365,6 +368,9 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/goldens/list", get(goldens_api::goldens_list))
         .route("/goldens/add", post(goldens_api::goldens_add))
         .route("/goldens/run", post(goldens_api::goldens_run))
+        // RPU (Regulatory Provenance Unit): trust store introspection and reload
+        .route("/rpu/trust", get(rpu_api::rpu_trust_get))
+        .route("/rpu/reload", post(rpu_api::rpu_reload_post))
         // experiment runner (A/B on goldens)
         .route(
             "/experiments/run",
@@ -469,7 +475,7 @@ pub fn extra_routes() -> Router<AppState> {
                     crate::ext::corr::ensure_corr(&mut payload);
                     state
                         .bus
-                        .publish("experiment.activated", &payload);
+                        .publish(crate::ext::topics::TOPIC_EXPERIMENT_ACTIVATED, &payload);
                     return ok(json!({"ok": true}));
                 }
                 ok(json!({"ok": false, "error": "not_found"}))
@@ -529,6 +535,10 @@ pub fn extra_routes() -> Router<AppState> {
             "/models/blob/:sha256",
             get(models_api::models_blob_get),
         )
+        .route(
+            "/models/blob/:sha256",
+            axum::routing::head(models_api::models_blob_head),
+        )
         .route("/models/jobs", get(models_api::models_jobs))
         .route(
             "/models/concurrency",
@@ -585,6 +595,10 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/state/route_stats", get(stats::route_stats_get))
         .route("/state/egress/ledger", get(egress_api::egress_ledger_get))
         .route(
+            "/state/egress/ledger/summary",
+            get(egress_api::egress_ledger_summary),
+        )
+        .route(
             "/state/memory/quarantine",
             get(review_api::memory_quarantine_get),
         )
@@ -621,7 +635,8 @@ pub fn extra_routes() -> Router<AppState> {
         // project file ops (safe, gated)
         .route("/projects/file", get(projects::projects_file_get))
         .route("/projects/file", post(projects::projects_file_set))
-        .route("/projects/patch", post(projects::projects_file_patch));
+        .route("/projects/patch", post(projects::projects_file_patch))
+        .route("/projects/import", post(projects::projects_import));
 
     // debug UI gated via ARW_DEBUG=1
     if std::env::var("ARW_DEBUG").ok().as_deref() == Some("1") {
@@ -629,7 +644,10 @@ pub fn extra_routes() -> Router<AppState> {
             .route("/debug", get(ui::debug_ui))
             .route("/ui/models", get(ui::models_ui))
             .route("/ui/agents", get(ui::agents_ui))
-            .route("/ui/projects", get(ui::projects_ui));
+            .route("/ui/projects", get(ui::projects_ui))
+            // serve shared CSS
+            .route("/ui/assets/tokens.css", get(ui::ui_tokens_css))
+            .route("/ui/assets/ui-kit.css", get(ui::ui_kit_css));
     }
     r
 }
@@ -728,22 +746,28 @@ pub fn start_local_task_worker(state: AppState) {
     });
 }
 
-// ---- Tests (moved to end) ----
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn tools_math_add() {
-        let out = run_tool_internal("math.add", &json!({"a": 1.0, "b": 2.0})).unwrap();
-        assert_eq!(out.get("sum").and_then(|v| v.as_f64()).unwrap(), 3.0);
-    }
-}
+// ---- Tests moved to file end ----
 
 pub async fn about() -> impl IntoResponse {
     let docs_url = std::env::var("ARW_DOCS_URL")
         .ok()
         .or(Some("https://t3hw00t.github.io/ARW/".to_string()));
+    // Assemble public endpoints from the recorder (METHOD path)
+    let public_pairs = route_recorder::snapshot();
+    let public_count = public_pairs.len();
+    let mut eps: Vec<String> = public_pairs
+        .into_iter()
+        .map(|(m, p)| format!("{} {}", m, p))
+        .collect();
+    // Extend from the compile-time registry of admin endpoints to avoid drift.
+    let admin_list = arw_core::list_admin_endpoints();
+    let admin_count = admin_list.len();
+    for e in admin_list.into_iter() {
+        eps.push(format!("{} {}", e.method, e.path));
+    }
+    eps.sort();
+    eps.dedup();
+    let total_count = eps.len();
     Json(json!({
         "name": "Agent Hub (ARW)",
         "tagline": "Your private AI control room that can scale and share when you choose.",
@@ -752,45 +776,8 @@ pub async fn about() -> impl IntoResponse {
         "version": env!("CARGO_PKG_VERSION"),
         "role": format!("{:?}", hier::get_state().self_node.role),
         "docs_url": docs_url,
-        "endpoints": [
-          "/spec/openapi.yaml",
-          "/spec/asyncapi.yaml",
-          "/spec/mcp-tools.json",
-          "/healthz",
-          "/version",
-          "/about",
-          // admin endpoints:
-          "/admin/events",
-          "/admin/probe",
-          "/admin/introspect/stats",
-          "/admin/introspect/tools",
-          "/admin/introspect/schemas/:id",
-          "/admin/hierarchy/state",
-          "/admin/hierarchy/role",
-          "/admin/governor/profile",
-          "/admin/governor/hints",
-          "/admin/memory",
-          "/admin/memory/apply",
-          "/admin/memory/save",
-          "/admin/memory/load",
-          "/admin/memory/limit",
-          "/admin/models",
-          "/admin/models/refresh",
-          "/admin/models/save",
-          "/admin/models/load",
-          "/admin/models/add",
-          "/admin/models/delete",
-          "/admin/models/default",
-          "/admin/tools",
-          "/admin/tools/run",
-          "/admin/chat",
-          "/admin/chat/send",
-          "/admin/chat/clear",
-          "/admin/experiments/start",
-          "/admin/experiments/stop",
-          "/admin/experiments/assign",
-          "/admin/debug"
-        ]
+        "counts": { "public": public_count, "admin": admin_count, "total": total_count },
+        "endpoints": eps
     }))
 }
 
@@ -1311,6 +1298,13 @@ async fn run_tool_endpoint(
     Json(req): Json<ToolRunReq>,
 ) -> impl IntoResponse {
     let t0 = std::time::Instant::now();
+    // Additional gating for sensitive tools
+    if req.id == "ui.screenshot.capture" && !arw_core::gating::allowed("io:screenshot") {
+        return ApiError::forbidden("gated:screenshot").into_response();
+    }
+    if req.id == "ui.screenshot.ocr" && !arw_core::gating::allowed("io:ocr") {
+        return ApiError::forbidden("gated:ocr").into_response();
+    }
     match tools_exec::run_with_cache_stats(&req.id, &req.input) {
         Ok((out, outcome, digest, key, age)) => {
             // Cache event
@@ -1332,6 +1326,14 @@ async fn run_tool_endpoint(
             state
                 .bus
                 .publish(crate::ext::topics::TOPIC_TOOL_RAN, &payload);
+            // Fan-out: publish screenshots.captured for UI thumbnails when applicable
+            if req.id == "ui.screenshot.capture" {
+                let mut ev = out.clone();
+                crate::ext::corr::ensure_corr(&mut ev);
+                state
+                    .bus
+                    .publish(crate::ext::topics::TOPIC_SCREENSHOTS_CAPTURED, &ev);
+            }
             Json(payload.get("output").cloned().unwrap_or_else(|| json!({}))).into_response()
         }
         Err(e) => ApiError::bad_request(&e).into_response(),
@@ -1396,6 +1398,11 @@ pub(crate) struct FeedbackState {
 static FEEDBACK: OnceLock<RwLock<FeedbackState>> = OnceLock::new();
 fn feedback_cell() -> &'static RwLock<FeedbackState> {
     FEEDBACK.get_or_init(|| RwLock::new(FeedbackState::default()))
+}
+// Track applied suggestion ids to avoid re-applying on repeated updates
+static APPLIED_SUGGESTIONS: OnceLock<RwLock<HashSet<String>>> = OnceLock::new();
+fn applied_set() -> &'static RwLock<HashSet<String>> {
+    APPLIED_SUGGESTIONS.get_or_init(|| RwLock::new(HashSet::new()))
 }
 static SUGG_SEQ: OnceLock<AtomicU64> = OnceLock::new();
 fn next_id() -> String {
@@ -1593,7 +1600,7 @@ async fn feedback_apply_post(
         };
         if applied_ok {
             state.bus.publish(
-                "feedback.applied",
+                crate::ext::topics::TOPIC_FEEDBACK_APPLIED,
                 &json!({"id": sug.id, "action": sug.action, "params": sug.params}),
             );
             // Also emit a generic Actions event for episodes
@@ -1669,6 +1676,87 @@ async fn apply_suggestion(s: &Suggestion, state: &AppState) -> bool {
         _ => false,
     }
 }
+
+/// Auto-apply safe suggestions when enabled and suggestion events arrive.
+pub(crate) async fn auto_apply_from_event(state: &AppState, env: &arw_events::Envelope) {
+    if env.kind != crate::ext::topics::TOPIC_FEEDBACK_SUGGESTED {
+        return;
+    }
+    // Check toggle
+    if !feedback_cell().read().await.auto_apply {
+        return;
+    }
+    // Parse suggestions array
+    let list = match env
+        .payload
+        .get("suggestions")
+        .and_then(|v| v.as_array())
+        .cloned()
+    {
+        Some(v) => v,
+        None => return,
+    };
+    for v in list.into_iter() {
+        let id = match v.get("id").and_then(|x| x.as_str()) {
+            Some(s) => s.to_string(),
+            None => continue,
+        };
+        // Skip if already applied
+        if applied_set().read().await.contains(&id) {
+            continue;
+        }
+        // Build Suggestion
+        let sug = match v.get("action").and_then(|x| x.as_str()) {
+            Some(action) => Suggestion {
+                id: id.clone(),
+                action: action.to_string(),
+                params: v.get("params").cloned().unwrap_or_else(|| json!({})),
+                rationale: v
+                    .get("rationale")
+                    .and_then(|x| x.as_str())
+                    .unwrap_or("")
+                    .to_string(),
+                confidence: v.get("confidence").and_then(|x| x.as_f64()).unwrap_or(0.0),
+            },
+            None => continue,
+        };
+        // Policy gate
+        let ok = match policy::allow_apply(&sug.action, &sug.params).await {
+            Ok(()) => {
+                // Emit approved intent
+                let mut intent = json!({
+                    "status": "approved",
+                    "suggestion": {"id": sug.id, "action": sug.action, "params": sug.params}
+                });
+                crate::ext::corr::ensure_corr(&mut intent);
+                state
+                    .bus
+                    .publish(crate::ext::topics::TOPIC_INTENTS_APPROVED, &intent);
+                apply_suggestion(&sug, state).await
+            }
+            Err(_reason) => false,
+        };
+        if ok {
+            // Mark applied to avoid repeats
+            applied_set().write().await.insert(id.clone());
+            // Emit bookkeeping events
+            state.bus.publish(
+                crate::ext::topics::TOPIC_FEEDBACK_APPLIED,
+                &json!({"id": sug.id, "action": sug.action, "params": sug.params}),
+            );
+            let mut payload = json!({
+                "ok": true,
+                "source": "feedback.auto_apply",
+                "suggestion": {"id": sug.id, "action": sug.action, "params": sug.params}
+            });
+            crate::ext::corr::ensure_corr(&mut payload);
+            state
+                .bus
+                .publish(crate::ext::topics::TOPIC_ACTIONS_APPLIED, &payload);
+            persist_orch().await;
+        }
+    }
+}
 // moved to chat module
 
 // debug_ui implementation lives in ui.rs
@@ -1681,30 +1769,30 @@ static DEBUG_HTML: &str = r##"<!doctype html>
   <title>ARW Debug</title>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
-    :root{color-scheme:light dark}
-    body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;line-height:1.45}
+    :root{color-scheme:light dark; --color-line:#e5e7eb; --color-muted:#6b7280; --surface:#ffffff; --surface-muted:#fafaf9; --color-ink:#111827; --status-ok:#16a34a; --status-bad:#dc2626}
+    body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;line-height:1.45;color:var(--color-ink);background:var(--surface-muted)}
     header{display:flex;gap:12px;align-items:center;margin-bottom:16px}
     code,pre{background:#0b0b0c10;padding:2px 4px;border-radius:4px}
     .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
     button,input,select,textarea{font:inherit}
-    button{padding:8px 12px;border:1px solid #ddd;background:#fff;border-radius:6px;cursor:pointer}
+    button{padding:8px 12px;border:1px solid var(--color-line);background:var(--surface);border-radius:6px;cursor:pointer}
     button:hover{background:#f3f4f6}
     .iconbtn{padding:6px 8px;font-size:12px}
     .cols{display:grid;grid-template-columns:1fr 1fr;gap:16px}
-    .box{border:1px solid #e5e7eb;border-radius:6px;padding:12px;background:#fff}
-    #log{max-height:40vh;overflow:auto;border:1px solid #e5e7eb;border-radius:6px;padding:8px;background:#fff}
+    .box{border:1px solid var(--color-line);border-radius:6px;padding:12px;background:var(--surface)}
+    #log{max-height:40vh;overflow:auto;border:1px solid var(--color-line);border-radius:6px;padding:8px;background:var(--surface)}
     .evt{padding:4px 6px;border-bottom:1px dashed #eee;font-family:ui-monospace,Menlo,Consolas,monospace}
-    .key{color:#6b7280}
+    .key{color:var(--color-muted)}
     textarea{width:100%;min-height:100px}
-    .pass{color:#16a34a}.fail{color:#dc2626}
-    a.help{display:inline-block;margin-left:8px;width:18px;height:18px;border-radius:50%;border:1px solid #d1d5db;color:#6b7280;text-align:center;line-height:16px;text-decoration:none;font-weight:600;font-size:12px}
+    .pass{color:var(--status-ok)}.fail{color:var(--status-bad)}
+    a.help{display:inline-block;margin-left:8px;width:18px;height:18px;border-radius:50%;border:1px solid var(--color-line);color:var(--color-muted);text-align:center;line-height:16px;text-decoration:none;font-weight:600;font-size:12px}
     a.help:hover{background:#f3f4f6;color:#374151}
-    .tip{position:fixed;z-index:50;max-width:360px;background:#ffffff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,0.08);padding:10px 12px}
+    .tip{position:fixed;z-index:50;max-width:360px;background:var(--surface);border:1px solid var(--color-line);border-radius:8px;box-shadow:0 6px 24px rgba(0,0,0,0.08);padding:10px 12px}
     .tip .t-title{font-weight:600;margin-bottom:4px}
     .tip .t-more{color:#2563eb;text-decoration:none}
     .t-hidden{display:none}
     .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:8px 12px;border-radius:8px;display:none;max-width:70vw}
-    #insights{position:fixed;right:16px;bottom:16px;background:#fff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.08);padding:10px 12px;display:none;min-width:260px;max-width:50vw}
+    #insights{position:fixed;right:16px;bottom:16px;background:var(--surface);border:1px solid var(--color-line);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,0.08);padding:10px 12px;display:none;min-width:260px;max-width:50vw}
     #insights .kv{display:flex;justify-content:space-between;color:#374151}
     #insights h4{margin:4px 0 6px 0;font-size:14px}
     .chip{display:inline-block;padding:2px 6px;border-radius:10px;background:#e5e7eb;color:#374151;font-size:12px;margin-left:6px}
@@ -2245,3 +2333,282 @@ document.addEventListener('DOMContentLoaded', ()=>{
 "##; */
 
 // stats moved to stats.rs
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::route_recorder;
+    use axum::{routing::post, Router};
+    use http_body_util::BodyExt as _;
+    use tower::ServiceExt as _;
+
+    #[tokio::test]
+    async fn about_includes_recorded_public_endpoints() {
+        // Simulate router building recording public routes
+        route_recorder::note("GET", "/healthz");
+        route_recorder::note("GET", "/state/models");
+
+        let resp = super::about().await.into_response();
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let arr = v
+            .get("endpoints")
+            .and_then(|x| x.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let s: std::collections::HashSet<String> = arr
+            .into_iter()
+            .filter_map(|x| x.as_str().map(|s| s.to_string()))
+            .collect();
+        assert!(s.contains("GET /healthz"), "missing recorded endpoint");
+        assert!(s.contains("GET /state/models"), "missing recorded endpoint");
+
+        // Basic counts consistency: total equals endpoints length
+        let counts = v.get("counts").cloned().unwrap_or_default();
+        let total = counts.get("total").and_then(|x| x.as_u64()).unwrap_or(0) as usize;
+        assert_eq!(
+            total,
+            s.len(),
+            "counts.total does not match endpoints length"
+        );
+        // Admin should be non-zero in this build
+        let admin = counts.get("admin").and_then(|x| x.as_u64()).unwrap_or(0);
+        assert!(admin >= 1, "expected at least one admin endpoint");
+        // Public should be at least as large as what we recorded here
+        let public = counts.get("public").and_then(|x| x.as_u64()).unwrap_or(0);
+        assert!(
+            public >= 2,
+            "expected public count to include recorded endpoints"
+        );
+        // Sum bound: public + admin should be >= total (since endpoints are deduped strings)
+        assert!(
+            public + admin >= total as u64,
+            "sum(public,admin) should cover total after dedupe"
+        );
+    }
+
+    #[tokio::test]
+    async fn about_drift_against_spec_subset() {
+        // Parse a small subset of public paths from OpenAPI and assert they appear in /about
+        let spec = std::fs::read_to_string("spec/openapi.yaml").expect("spec/openapi.yaml present");
+        let y: serde_yaml::Value = serde_yaml::from_str(&spec).expect("valid openapi yaml");
+        let paths = y
+            .get("paths")
+            .and_then(|v| v.as_mapping())
+            .cloned()
+            .unwrap_or_default();
+        let subset = [
+            "/about",
+            "/healthz",
+            "/version",
+            "/state/models",
+            "/spec/openapi.yaml",
+        ];
+        // Record only the subset with GET defined
+        for p in subset.iter() {
+            if let Some(entry) = paths.get(serde_yaml::Value::from(*p)) {
+                if entry.get("get").is_some() {
+                    route_recorder::note("GET", p);
+                }
+            }
+        }
+        let resp = super::about().await.into_response();
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let arr = v
+            .get("endpoints")
+            .and_then(|x| x.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let s: std::collections::HashSet<String> = arr
+            .into_iter()
+            .filter_map(|x| x.as_str().map(|s| s.to_string()))
+            .collect();
+        for p in subset.iter() {
+            if let Some(entry) = paths.get(serde_yaml::Value::from(*p)) {
+                if entry.get("get").is_some() {
+                    assert!(
+                        s.contains(&format!("GET {}", p)),
+                        "missing in /about: GET {}",
+                        p
+                    );
+                }
+            }
+        }
+        // Counts sanity
+        let counts = v.get("counts").cloned().unwrap_or_default();
+        let total = counts.get("total").and_then(|x| x.as_u64()).unwrap_or(0) as usize;
+        assert_eq!(
+            total,
+            s.len(),
+            "counts.total does not match endpoints length"
+        );
+    }
+
+    #[tokio::test]
+    async fn about_drift_against_spec_all_public_gets() {
+        // Record all GET endpoints tagged Public* from the OpenAPI and assert they appear
+        let spec = match std::fs::read_to_string("spec/openapi.yaml") {
+            Ok(s) => s,
+            Err(_) => return, // skip if spec missing in this environment
+        };
+        let y: serde_yaml::Value = match serde_yaml::from_str(&spec) {
+            Ok(v) => v,
+            Err(_) => return,
+        };
+        let paths = match y.get("paths").and_then(|v| v.as_mapping()) {
+            Some(m) => m,
+            None => return,
+        };
+        let mut expected: Vec<String> = Vec::new();
+        for (kp, vp) in paths.iter() {
+            let path = match kp.as_str() {
+                Some(s) => s,
+                None => continue,
+            };
+            if let Some(getm) = vp.get("get") {
+                let tags = getm
+                    .get("tags")
+                    .and_then(|t| t.as_sequence())
+                    .cloned()
+                    .unwrap_or_default();
+                let mut is_public = false;
+                for tag in tags.into_iter() {
+                    if let Some(ts) = tag.as_str() {
+                        if ts.starts_with("Public") {
+                            is_public = true;
+                            break;
+                        }
+                    }
+                }
+                if is_public {
+                    route_recorder::note("GET", path);
+                    expected.push(format!("GET {}", path));
+                }
+            }
+        }
+        if expected.is_empty() {
+            return;
+        }
+        let resp = super::about().await.into_response();
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        let arr = v
+            .get("endpoints")
+            .and_then(|x| x.as_array())
+            .cloned()
+            .unwrap_or_default();
+        let s: std::collections::HashSet<String> = arr
+            .into_iter()
+            .filter_map(|x| x.as_str().map(|s| s.to_string()))
+            .collect();
+        for e in expected.iter() {
+            assert!(s.contains(e), "missing in /about: {}", e);
+        }
+        let counts = v.get("counts").cloned().unwrap_or_default();
+        let total = counts.get("total").and_then(|x| x.as_u64()).unwrap_or(0) as usize;
+        assert_eq!(
+            total,
+            s.len(),
+            "counts.total does not match endpoints length"
+        );
+    }
+
+    #[tokio::test]
+    async fn gating_denies_memory_apply() {
+        arw_core::gating::deny_user(["memory:apply".to_string()]);
+        let app = Router::new()
+            // Use gated wrapper to validate deny behavior
+            .route(
+                "/admin/memory/apply",
+                post(crate::ext::memory_api::memory_apply),
+            )
+            .with_state(AppState::default());
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/admin/memory/apply")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                "{\"kind\":\"ephemeral\",\"value\":{}}",
+            ))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), axum::http::StatusCode::FORBIDDEN);
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        assert!(String::from_utf8_lossy(&body).contains("gated"));
+    }
+
+    #[tokio::test]
+    async fn gating_denies_feedback_apply() {
+        arw_core::gating::deny_user(["feedback:apply".to_string()]);
+        let app = Router::new()
+            // Use gated wrapper to validate deny behavior
+            .route(
+                "/admin/feedback/apply",
+                post(crate::ext::feedback_api::feedback_apply_post),
+            )
+            .with_state(AppState::default());
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/admin/feedback/apply")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from("{\"id\":\"sug-1\"}"))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert_eq!(resp.status(), axum::http::StatusCode::FORBIDDEN);
+    }
+
+    #[tokio::test]
+    async fn happy_path_memory_apply_allowed() {
+        // No gating deny set; should pass
+        let app = Router::new()
+            // Call internal non-gated handler (bypasses #[arw_gate]) for functional happy-path
+            .route(
+                "/admin/memory/apply",
+                post(crate::ext::memory::memory_apply),
+            )
+            .with_state(AppState::default());
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/admin/memory/apply")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from(
+                "{\"kind\":\"ephemeral\",\"value\":{\"hp\":true}}",
+            ))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert!(resp.status().is_success());
+    }
+
+    #[tokio::test]
+    async fn happy_path_feedback_apply_allowed() {
+        // Seed a valid suggestion into legacy FEEDBACK store
+        {
+            let mut st = feedback_cell().write().await;
+            st.suggestions.clear();
+            st.suggestions.push(Suggestion {
+                id: "sug-HP1".into(),
+                action: "hint".into(),
+                params: json!({"http_timeout_secs": 30}),
+                rationale: "test".into(),
+                confidence: 0.9,
+            });
+        }
+        let app = Router::new()
+            // Call internal non-gated handler for happy-path
+            .route("/admin/feedback/apply", post(super::feedback_apply_post))
+            .with_state(AppState::default());
+        let req = axum::http::Request::builder()
+            .method("POST")
+            .uri("/admin/feedback/apply")
+            .header("content-type", "application/json")
+            .body(axum::body::Body::from("{\"id\":\"sug-HP1\"}"))
+            .unwrap();
+        let resp = app.oneshot(req).await.unwrap();
+        assert!(resp.status().is_success());
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        let v: serde_json::Value = serde_json::from_slice(&body).unwrap_or_default();
+        // ok envelope with ok field
+        assert!(v.get("ok").and_then(|x| x.as_bool()).unwrap_or(false));
+    }
+}

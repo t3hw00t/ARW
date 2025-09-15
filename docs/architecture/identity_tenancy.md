@@ -2,7 +2,9 @@
 title: Identity & Tenancy
 ---
 
-# System Identity & Tenancy
+# Identity & Tenancy
+Updated: 2025-09-12
+Type: Explanation
 
 Principals
 - User: the human operator on this machine.
@@ -21,4 +23,3 @@ Policy & UI
 - Decisions are events with `{ principal_scope, ttl, policy_id }`.
 
 See also: Permissions & Policies, Data Governance, Naming & IDs.
-

@@ -2,9 +2,12 @@
 title: Network Posture
 ---
 
-# Network Posture (Plan)
+# Network Posture
 
 Updated: 2025-09-12
+
+Status: Planned
+Type: How‑to
 
 Network posture is a per‑project setting that translates policy into enforceable egress controls via a host‑local gateway and DNS guard. It remains opt‑in and aims to keep the local fast‑path fast.
 
@@ -28,4 +31,3 @@ Network posture is a per‑project setting that translates policy into enforceab
 - `ARW_DNS_GUARD_ENABLE`: `1` (per node)
 
 See also: Architecture → Egress Firewall; Policy; Security Hardening; Clustering.
-

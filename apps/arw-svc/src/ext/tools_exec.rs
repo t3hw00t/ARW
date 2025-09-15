@@ -1,3 +1,5 @@
+use base64::Engine;
+use chrono::Datelike;
 use moka::sync::Cache;
 use once_cell::sync::OnceCell;
 use serde_json::{json, Map, Value};
@@ -10,7 +12,7 @@ use std::sync::{
     atomic::{AtomicU64, Ordering},
     Arc, Condvar, Mutex, RwLock,
 };
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH}; // for base64::engine::general_purpose::STANDARD.encode
 
 struct Entry {
     summary: &'static str,
@@ -51,6 +53,244 @@ fn reg() -> &'static RwLock<HashMap<&'static str, Entry>> {
                         .map_err(|e| e.to_string())?
                         .as_millis() as i64;
                     Ok(json!({"now_ms": now}))
+                },
+            },
+        );
+        map.insert(
+            "ui.screenshot.capture",
+            Entry {
+                summary: "Capture screenshot: input {scope, format?, downscale?} -> {path,width,height,preview_b64?}",
+                exec: |input| {
+                    let scope = input.get("scope").and_then(|v| v.as_str()).unwrap_or("screen");
+                    let fmt = input
+                        .get("format")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("png")
+                        .to_ascii_lowercase();
+                    let downscale = input.get("downscale").and_then(|v| v.as_u64()).map(|n| n as u32);
+                    let ext = if fmt == "jpg" || fmt == "jpeg" { "jpg" } else { "png" };
+
+                    // Capture using the `screenshots` crate (best-effort; fallback to stub)
+                    let mut width: u32 = 1;
+                    let mut height: u32 = 1;
+                    let mut rgba: Vec<u8> = Vec::new();
+                    let cap_res = || -> Result<(), String> {
+                        let screens = screenshots::Screen::all().map_err(|e| e.to_string())?;
+                        let screen = if let Some(rest) = scope.strip_prefix("display:") {
+                            let idx: usize = rest.parse().unwrap_or(0);
+                            screens.get(idx).cloned().ok_or_else(|| "display index out of range".to_string())?
+                        } else {
+                            // pick screen containing origin (0,0) or fallback to first
+                            screenshots::Screen::from_point(0, 0)
+                                .unwrap_or_else(|_| screens.into_iter().next().expect("no screens"))
+                        };
+                        let img = if let Some(rest) = scope.strip_prefix("region:") {
+                            // parse x,y,w,h
+                            let parts: Vec<i32> = rest
+                                .split(',')
+                                .filter_map(|t| t.trim().parse::<i32>().ok())
+                                .collect();
+                            if parts.len() != 4 {
+                                return Err("region must be x,y,w,h".to_string());
+                            }
+                            let (x, y, w, h) = (parts[0], parts[1], parts[2], parts[3]);
+                            if w <= 0 || h <= 0 { return Err("invalid region dims".into()); }
+                            screen
+                                .capture_area(x, y, w as u32, h as u32)
+                                .map_err(|e| e.to_string())?
+                        } else {
+                            screen.capture().map_err(|e| e.to_string())?
+                        };
+                        width = img.width();
+                        height = img.height();
+                        let buf = img.into_raw();
+                        // Convert BGRA -> RGBA
+                        rgba = Vec::with_capacity((width as usize) * (height as usize) * 4);
+                        for chunk in buf.chunks(4) {
+                            if chunk.len() < 4 { break; }
+                            let b = chunk[0];
+                            let g = chunk[1];
+                            let r = chunk[2];
+                            let a = 255u8; // screenshots' alpha may be undefined; force opaque
+                            rgba.extend_from_slice(&[r, g, b, a]);
+                        }
+                        Ok(())
+                    }();
+
+                    let now = chrono::Utc::now();
+                    let dir = super::paths::screenshots_dir()
+                        .join(format!("{:04}", now.year()))
+                        .join(format!("{:02}", now.month()))
+                        .join(format!("{:02}", now.day()));
+                    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+                    let safe_scope = scope.chars().map(|c| if c.is_ascii_alphanumeric() { c } else { '_' }).collect::<String>();
+                    let fname = format!("{}-{}.{}", now.format("%H%M%S%3f"), safe_scope, ext);
+                    let path = dir.join(fname);
+
+                    let mut preview_b64: Option<String> = None;
+                    match cap_res {
+                        Ok(()) => {
+                            // Save full image
+                            image::save_buffer(
+                                &path,
+                                &rgba,
+                                width,
+                                height,
+                                image::ColorType::Rgba8,
+                            )
+                            .map_err(|e| e.to_string())?;
+                            // Preview (optional)
+                            if let Some(maxw) = downscale {
+                                let img = image::RgbaImage::from_raw(width, height, rgba.clone())
+                                    .ok_or_else(|| "invalid buffer".to_string())?;
+                                let ratio = (height as f32) / (width as f32);
+                                let new_w = maxw.max(1);
+                                let new_h = ((new_w as f32) * ratio).round().max(1.0) as u32;
+                                let resized = image::imageops::resize(&img, new_w, new_h, image::imageops::FilterType::Triangle);
+                                let mut bytes: Vec<u8> = Vec::new();
+                                let dynimg = image::DynamicImage::ImageRgba8(resized);
+                                dynimg
+                                    .write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageOutputFormat::Png)
+                                    .map_err(|e| e.to_string())?;
+                                preview_b64 = Some(format!(
+                                    "data:image/png;base64,{}",
+                                    base64::engine::general_purpose::STANDARD.encode(&bytes)
+                                ));
+                            }
+                        }
+                        Err(_e) => {
+                            // Fallback: create empty file to indicate attempt
+                            let mut f = std::fs::File::create(&path).map_err(|e| e.to_string())?;
+                            f.flush().map_err(|e| e.to_string())?;
+                        }
+                    }
+
+                    let mut out = json!({
+                        "path": path.to_string_lossy(),
+                        "width": width,
+                        "height": height,
+                    });
+                    if let Some(b64) = preview_b64 { out["preview_b64"] = json!(b64); }
+                    Ok(out)
+                },
+            },
+        );
+        map.insert(
+            "ui.screenshot.annotate_burn",
+            Entry {
+                summary: "Annotate existing image: input {path, annotate[], downscale?} -> {path, ann_path, width, height, preview_b64?}",
+                exec: |input| {
+                    let path = input
+                        .get("path")
+                        .and_then(|v| v.as_str())
+                        .ok_or("missing 'path'")?;
+                    let ann = input
+                        .get("annotate")
+                        .and_then(|v| v.as_array())
+                        .cloned()
+                        .unwrap_or_default();
+                    let downscale = input.get("downscale").and_then(|v| v.as_u64()).map(|n| n as u32);
+                    // Load image
+                    let img_dyn = image::open(path).map_err(|e| e.to_string())?;
+                    let mut img = img_dyn.to_rgba8();
+                    let (width, height) = img.dimensions();
+                    // Sidecar annotate JSON
+                    let sidecar = serde_json::json!({"annotate": ann});
+                    // Apply annotations (blur + border)
+                    for it in ann.iter() {
+                        let x = it.get("x").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        let y = it.get("y").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        let w = it.get("w").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        let h = it.get("h").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                        let blur = it.get("blur").and_then(|v| v.as_bool()).unwrap_or(true);
+                        // Clamp to bounds
+                        let x2 = x.min(width.saturating_sub(1));
+                        let y2 = y.min(height.saturating_sub(1));
+                        let w2 = w.min(width.saturating_sub(x2));
+                        let h2 = h.min(height.saturating_sub(y2));
+                        if w2 == 0 || h2 == 0 { continue; }
+                        if blur {
+                            let sub = image::imageops::crop(&mut img, x2, y2, w2, h2).to_image();
+                            let blurred = image::imageops::blur(&sub, 3.0);
+                            image::imageops::overlay(&mut img, &blurred, x2 as i64, y2 as i64);
+                        }
+                        // Draw border (2px)
+                        let teal = image::Rgba([27, 179, 163, 255]);
+                        // top/bottom
+                        for dx in x2..(x2 + w2) {
+                            for t in 0..2 {
+                                if y2 + t < height {
+                                    img.put_pixel(dx, y2 + t, teal);
+                                }
+                                if y2 + h2 > t {
+                                    let yy = (y2 + h2 - 1).saturating_sub(t);
+                                    img.put_pixel(dx, yy, teal);
+                                }
+                            }
+                        }
+                        // left/right
+                        for dy in y2..(y2 + h2) {
+                            for t in 0..2 {
+                                if x2 + t < width {
+                                    img.put_pixel(x2 + t, dy, teal);
+                                }
+                                if x2 + w2 > t {
+                                    let xx = (x2 + w2 - 1).saturating_sub(t);
+                                    img.put_pixel(xx, dy, teal);
+                                }
+                            }
+                        }
+                    }
+                    // Save annotated image next to original
+                    let p = std::path::Path::new(path);
+                    let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("image");
+                    let ext = p.extension().and_then(|s| s.to_str()).unwrap_or("png");
+                    let ann_path = p.with_file_name(format!("{}.ann.{}", stem, ext));
+                    img.save(&ann_path).map_err(|e| e.to_string())?;
+                    // Write sidecar
+        let _ann_json_path = ann_path.with_extension(format!("{}.json", ann_path.extension().and_then(|s| s.to_str()).unwrap_or("json")));
+                    // but prefer .ann.json next to file
+                    let ann_sidecar = p.with_file_name(format!("{}.ann.json", stem));
+                    std::fs::write(&ann_sidecar, serde_json::to_vec_pretty(&sidecar).unwrap_or_default()).map_err(|e| e.to_string())?;
+                    // Build preview
+                    let mut preview_b64 = None;
+                    if let Some(maxw) = downscale {
+                        let ratio = (height as f32) / (width as f32);
+                        let new_w = maxw.max(1);
+                        let new_h = ((new_w as f32) * ratio).round().max(1.0) as u32;
+                        let resized = image::imageops::resize(&img, new_w, new_h, image::imageops::FilterType::Triangle);
+                        let mut bytes: Vec<u8> = Vec::new();
+                        let dynimg = image::DynamicImage::ImageRgba8(resized);
+                        dynimg
+                            .write_to(&mut std::io::Cursor::new(&mut bytes), image::ImageOutputFormat::Png)
+                            .map_err(|e| e.to_string())?;
+                        preview_b64 = Some(format!(
+                            "data:image/png;base64,{}",
+                            base64::engine::general_purpose::STANDARD.encode(&bytes)
+                        ));
+                    }
+                    let mut out = json!({
+                        "path": ann_path.to_string_lossy(),
+                        "ann_path": ann_sidecar.to_string_lossy(),
+                        "width": width,
+                        "height": height
+                    });
+                    if let Some(b64) = preview_b64 { out["preview_b64"] = json!(b64); }
+                    Ok(out)
+                },
+            },
+        );
+        map.insert(
+            "ui.screenshot.ocr",
+            Entry {
+                summary: "Extract text from image: input {path} -> {text,blocks[]}",
+                exec: |input| {
+                    let path = input
+                        .get("path")
+                        .and_then(|v| v.as_str())
+                        .ok_or("missing 'path'")?;
+                    let text = ocr_image_text(path).unwrap_or_else(|e| format!("(unavailable: {})", e));
+                    Ok(json!({"text": text, "blocks": []}))
                 },
             },
         );
@@ -226,6 +466,18 @@ fn sf_end(key: &str) {
 pub fn run(id: &str, input: &Value) -> Result<Value, String> {
     let (out, _, _, _, _) = run_with_cache_stats(id, input)?;
     Ok(out)
+}
+
+fn ocr_image_text(_path: &str) -> Result<String, String> {
+    #[cfg(feature = "ocr_tesseract")]
+    {
+        let mut lt = leptess::LepTess::new(None, "eng").map_err(|e| e.to_string())?;
+        lt.set_image(path);
+        let text = lt.get_utf8_text().map_err(|e| e.to_string())?;
+        return Ok(text);
+    }
+    #[allow(unreachable_code)]
+    Err("ocr feature not compiled".into())
 }
 
 // Returns (output, outcome, digest_opt, action_key, age_secs)

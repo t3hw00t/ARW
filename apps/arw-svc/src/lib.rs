@@ -3,6 +3,11 @@ pub mod app_state;
 mod dyn_timeout;
 mod ext;
 pub mod resources;
+pub mod route_recorder;
+#[cfg(feature = "server")]
+pub mod state_bridge;
+#[cfg(test)]
+pub mod test_support;
 
 pub use app_state::AppState;
 use axum::{routing::get, Router};

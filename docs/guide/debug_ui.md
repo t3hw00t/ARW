@@ -4,9 +4,18 @@ title: Debug UI Overview
 
 # Debug UI Overview
 
-Updated: 2025-09-13
+Updated: 2025-09-14
+Type: How‑to
 
 The Debug UI (served by the Tauri Launcher or via `/admin`) is a lightweight control panel for ARW. It exposes a live event stream, useful admin actions, and compact insight panels. This page highlights two high‑leverage areas you’ll likely use often: Context Assembly and Experiments.
+
+## Trust (RPU)
+
+- A dedicated Trust (RPU) panel shows a redacted trust store summary — issuer ids and algorithms — along with the last reload time.
+- Buttons:
+  - Refresh → `GET /admin/rpu/trust`
+  - Reload → `POST /admin/rpu/reload` (publishes `rpu.trust.changed`)
+- The Events viewer includes an “RPU only” preset and refreshes the panel automatically on `rpu.trust.changed`.
 
 ## Context Assembly
 
@@ -62,7 +71,7 @@ The UI exposes two complementary areas:
 
 - Use the Assemble overrides to trial formatting/budget changes before baking them into hints or variants.
 - Watch the KPIs while iterating: the best solve rate with a much larger context may not be worth the cost unless justified.
-- The A/B runner executes in batch lanes; keep interactive work snappy by scheduling heavy runs off‑peak.
+- The A/B runner executes in batch lanes; keep interactive work fast by scheduling heavy runs off‑peak.
 - Screenshot (placeholder):
 
 ![Context Assemble Preview](../images/context_assemble.svg)

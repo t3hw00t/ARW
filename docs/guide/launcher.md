@@ -3,6 +3,8 @@ title: Desktop Launcher (Tauri 2)
 ---
 
 # Desktop Launcher (Tauri 2)
+Updated: 2025-09-15
+Type: How‑to
 
 The tray-based launcher lives at `apps/arw-launcher/src-tauri`. It uses Tauri 2 with the capabilities + permissions model.
 
@@ -55,3 +57,8 @@ When adding new commands to the plugin:
 
 Windows
 - The `tauri.conf.json` sets `bundle.windows.webviewInstallMode: downloadBootstrapper` for WebView2.
+ - Quickstart and WebView2 install: see `docs/guide/windows_install.md`.
+
+Design & UI
+- Launcher pages include `tokens.css` (design tokens) and `ui-kit.css` (primitives) for consistent visuals.
+- See Developer → Design Theme and Developer → UI Kit for details.

@@ -2,7 +2,9 @@
 title: Replay & Time Travel
 ---
 
-# Deterministic Replay & Time Travel
+# Replay & Time Travel
+Updated: 2025-09-12
+Type: Explanation
 
 Episode capture
 - Pin model hash/quant, tool versions, policies, recipes, seeds, and input snapshots.
@@ -12,4 +14,3 @@ Replay
 - Compare outputs and deltas; export audit bundles.
 
 See also: Versioning & Migration, Artifacts & Provenance.
-

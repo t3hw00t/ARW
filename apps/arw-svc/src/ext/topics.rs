@@ -9,7 +9,7 @@ pub const TOPIC_CONCURRENCY_CHANGED: &str = "models.concurrency.changed";
 pub const TOPIC_READMODEL_PATCH: &str = "state.read.model.patch";
 pub const TOPIC_MODELS_REFRESHED: &str = "models.refreshed";
 pub const TOPIC_MODELS_CAS_GC: &str = "models.cas.gc";
-// Snappy (latency budgets) topics
+// Interactive performance (snappy) topics
 pub const TOPIC_SNAPPY_NOTICE: &str = "snappy.notice";
 pub const TOPIC_SNAPPY_DETAIL: &str = "snappy.detail";
 
@@ -22,6 +22,8 @@ pub const TOPIC_CHAT_PROBE: &str = "chat.probe";
 pub const TOPIC_MEMORY_APPLIED: &str = "memory.applied";
 pub const TOPIC_MEMORY_QUARANTINED: &str = "memory.quarantined";
 pub const TOPIC_MEMORY_ADMITTED: &str = "memory.admitted";
+// Beliefs (read-model summaries)
+pub const TOPIC_BELIEFS_UPDATED: &str = "beliefs.updated";
 
 // Feedback engine
 pub const TOPIC_FEEDBACK_SUGGESTED: &str = "feedback.suggested";
@@ -38,6 +40,7 @@ pub const TOPIC_EXPERIMENT_WINNER: &str = "experiment.winner";
 pub const TOPIC_EXPERIMENT_STARTED: &str = "experiment.started";
 pub const TOPIC_EXPERIMENT_COMPLETED: &str = "experiment.completed";
 pub const TOPIC_EXPERIMENT_VARIANT_CHOSEN: &str = "experiment.variant.chosen";
+pub const TOPIC_EXPERIMENT_ACTIVATED: &str = "experiment.activated";
 
 // Self-model & world diffs (review)
 pub const TOPIC_SELFMODEL_PROPOSED: &str = "self.model.proposed";
@@ -65,6 +68,7 @@ pub const TOPIC_SERVICE_HEALTH: &str = "service.health";
 pub const TOPIC_SERVICE_TEST: &str = "service.test";
 pub const TOPIC_SERVICE_STOP: &str = "service.stop";
 pub const TOPIC_PROBE_HW: &str = "probe.hw";
+pub const TOPIC_PROBE_METRICS: &str = "probe.metrics";
 pub const TOPIC_CATALOG_UPDATED: &str = "catalog.updated";
 
 // Orchestrator
@@ -94,9 +98,15 @@ pub const TOPIC_ACTIONS_APPLIED: &str = "actions.applied";
 // Tools
 pub const TOPIC_TOOL_CACHE: &str = "tool.cache";
 pub const TOPIC_TOOL_RAN: &str = "tool.ran";
+// Screenshots
+pub const TOPIC_SCREENSHOTS_CAPTURED: &str = "screenshots.captured";
 
 // Feedback misc signals
 pub const TOPIC_FEEDBACK_SIGNAL: &str = "feedback.signal";
+pub const TOPIC_FEEDBACK_APPLIED: &str = "feedback.applied";
 
 // Distillation
 pub const TOPIC_DISTILL_COMPLETED: &str = "distill.completed";
+
+// RPU (trust store)
+pub const TOPIC_RPU_TRUST_CHANGED: &str = "rpu.trust.changed";

@@ -4,45 +4,108 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-14 06:58 UTC
+Updated: 2025-09-15 00:37 UTC
 
 
 ## To Do
-- [t-250914050916-ev18] Release notes: dot.case migration — todo (updated: 2025-09-14 05:09:16 UTC)
-- [t-250914050912-ev16] CI: event kind linter — todo (updated: 2025-09-14 05:09:12 UTC)
-- [t-250914050910-ev15] Docs: dot.case normalization — todo (updated: 2025-09-14 05:09:10 UTC)
-- [t-250914050906-ev13] Connector: task.completed + subjects — todo (updated: 2025-09-14 05:09:06 UTC)
-- [t-250914050904-ev12] Debug UI: dot.case listeners — todo (updated: 2025-09-14 05:09:04 UTC)
-- [t-250912024843-7597] Resources: Hierarchy/Governor services — todo (updated: 2025-09-12 00:48:43 UTC)
-- [t-250912024838-4137] UI: Episodes filters + details toggle — todo (updated: 2025-09-12 00:48:38 UTC)
-- [t-250912001105-7850] Phase 3: Episodes + Debug UI reactive views — todo (updated: 2025-09-11 22:11:05 UTC)
-- [t-250912001100-3438] Phase 2: Beliefs/Intents/Actions stores + endpoints — todo (updated: 2025-09-11 22:11:00 UTC)
-- [t-250912001055-0044] Phase 2: Observations read-model + /state/observations — todo (updated: 2025-09-11 22:10:55 UTC)
-- [t-250911230333-9794] RPU: watch trust store and strengthen verification — todo (updated: 2025-09-11 21:03:33 UTC)
-- [t-250911230329-4722] CLI: migrate arw-cli to clap — todo (updated: 2025-09-11 21:03:29 UTC)
-- [t-250911230325-2116] Tests: end-to-end coverage for endpoints & gating — todo (updated: 2025-09-11 21:03:25 UTC)
-- [t-250911230320-8615] Metrics: structured registry w/ histograms — todo (updated: 2025-09-11 21:03:20 UTC)
-- [t-250911230316-4765] NATS: TLS/auth config and reconnect tuning — todo (updated: 2025-09-11 21:03:16 UTC)
-- [t-250911230312-0863] Admin auth: hashed tokens + per-token/IP sliding rate-limit — todo (updated: 2025-09-11 21:03:12 UTC)
+- [t-250911230333-9794] RPU: watch trust store and strengthen verification — todo (updated: 2025-09-14 23:17:01 UTC)
+    - 2025-09-14 23:17:01 UTC: Added /admin/rpu/trust and /admin/rpu/reload endpoints; gating keys rpu:trust:get and rpu:trust:reload; will add file watch next.
+- [t-250914223250-ui11] Route SLO selector — todo (updated: 2025-09-14 22:38:50 UTC)
+- [t-250914223240-ui10] Export CSV: logs/table diffs — todo (updated: 2025-09-14 22:38:40 UTC)
+- [t-250914223230-ui09] Runs: pin artifacts to compare — todo (updated: 2025-09-14 22:38:30 UTC)
+- [t-250909224102-9629] Spec: AsyncAPI+MCP artifacts + /spec/* — todo (updated: 2025-09-14 17:54:55 UTC)
+    - 2025-09-14 17:54:55 UTC: Spec endpoints covered: openapi/asyncapi/mcp and index return 200 and correct content-type; added unit checks for token extraction, sha256 match, and IP key. Tests write temp spec files for isolation.
 - [t-250911230308-0779] Orchestrator: configurable lease, nack delay, and max in-flight — todo (updated: 2025-09-11 21:03:08 UTC)
-- [t-250911230306-7961] Introspection: auto-generate /about endpoints from router — todo (updated: 2025-09-11 21:03:06 UTC)
-- [t-250911230252-9858] Security: per-route gating layers; slim global admin middleware — todo (updated: 2025-09-11 21:02:52 UTC)
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-11 21:02:19 UTC)
-- [t-250909224103-0211] UI: near-live feedback in /debug — todo (updated: 2025-09-09 20:41:03 UTC)
-- [t-250909224103-5251] Policy: hook feedback auto-apply — todo (updated: 2025-09-09 20:41:03 UTC)
-- [t-250909224102-9629] Spec: AsyncAPI+MCP artifacts + /spec/* — todo (updated: 2025-09-09 20:41:02 UTC)
 - [t-250909224102-8952] Plan: Heuristic engine crate + integration — todo (updated: 2025-09-09 20:41:02 UTC)
 
 ## In Progress
-- [t-250914050908-ev14] Feature Matrix: dot.case topics — in_progress (updated: 2025-09-14 05:09:08 UTC)
-- [t-250914050902-ev11] Events: replace publishers with constants — in_progress (updated: 2025-09-14 05:09:02 UTC)
-- [t-250914050900-ev10] Events: topics.rs dot.case only — in_progress (updated: 2025-09-14 05:09:00 UTC)
+- [t-250914223220-cap03] OCR for screenshots (optional) — in_progress (updated: 2025-09-14 23:05:00 UTC)
+    - 2025-09-14 23:05:00 UTC: Tool stub added using leptess behind feature ocr_tesseract; Chat can auto-run OCR if enabled.
+- [t-250914223100-ui08] Templates: save/load (prefs) — in_progress (updated: 2025-09-14 22:37:00 UTC)
+    - 2025-09-14 22:37:00 UTC: Hub saves focused flag + lanes; next: per‑project file persistence.
 
 ## Paused
-- [t-250911230236-6445] Security: per-route gating layers; slim global admin middleware — paused (updated: 2025-09-11 21:03:46 UTC)
-    - 2025-09-11 21:03:46 UTC: Duplicate of t-250911230252-9858; track only the latter.
 
 ## Done
+- [t-250914230010-ui13] Auto OCR preference + toggle — done (updated: 2025-09-14 23:07:00 UTC)
+    - 2025-09-14 23:07:00 UTC: Chat toggle added; palette action updates prefs and Chat checkbox.
+- [t-250914230000-ui12] Activity thumbnails: Open/Copy actions — done (updated: 2025-09-14 23:06:00 UTC)
+    - 2025-09-14 23:06:00 UTC: Buttons added in sidecar Activity lane; uses open_path and clipboard helper.
+- [t-250914223210-cap02] Window crop from Tauri bounds — done (updated: 2025-09-14 22:56:00 UTC)
+    - 2025-09-14 22:56:00 UTC: Added Tauri command active_window_bounds and UI actions (palette/chat) to capture this window via region.
+- [t-250914223200-cap01] Screenshot tool (OS‑level capture) — done (updated: 2025-09-14 22:55:00 UTC)
+    - 2025-09-14 22:55:00 UTC: Implemented with screenshots+image crates; downscale preview_b64; emits screenshots.captured.
+- [t-250914223040-ui07] Metrics: P95 sparkline per route — done (updated: 2025-09-14 22:36:00 UTC)
+    - 2025-09-14 22:36:00 UTC: Sparkline added; 32‑point ring buffer per route; SLO=150ms.
+- [t-250914223030-ui06] Command palette (Ctrl/Cmd‑K) — done (updated: 2025-09-14 22:35:00 UTC)
+    - 2025-09-14 22:35:00 UTC: common.js palette; mounted in Hub/Chat/Training.
+- [t-250914223025-ui05] Logs polish: route filter + focus mode — done (updated: 2025-09-14 22:34:00 UTC)
+    - 2025-09-14 22:34:00 UTC: logs.html/js updated; top routes and event kinds tables.
+- [t-250914223020-ui04] Events polish: presets + filters + pretty/wrap/pause — done (updated: 2025-09-14 22:33:00 UTC)
+    - 2025-09-14 22:33:00 UTC: events.html/js updated; capped buffer; shows kind+timestamp.
+- [t-250914223015-ui03] Chat Compare: Pin A/B and diff — done (updated: 2025-09-14 22:32:00 UTC)
+    - 2025-09-14 22:32:00 UTC: chat.html/js compare section added; pin buttons per message; uses shared highlighter.
+- [t-250914223010-ui02] Hub Compare: Text/JSON, Image, CSV — done (updated: 2025-09-14 22:31:00 UTC)
+    - 2025-09-14 22:31:00 UTC: hub.html/js + styles; drag‑drop inputs; compact tables; documented in Workflow Views.
+- [t-250914223000-ui01] UI Kernel: sidecar lanes + SSE/read store — done (updated: 2025-09-14 22:30:00 UTC)
+    - 2025-09-14 22:30:00 UTC: common.js/css updated; lanes wired to /events and /state/*; policy pills, context bullets, metrics table.
+- [t-250911230306-7961] Introspection: auto-generate /about endpoints from router — done (updated: 2025-09-14 20:14:37 UTC)
+    - 2025-09-14 20:06:36 UTC: /about now includes runtime-recorded public routes (METHOD path) + admin registry; drift-free.
+  - 2025-09-14 20:14:37 UTC: /about now reports counts: {public, admin, total} alongside METHOD path list.
+- [t-250914210000-doc01] Docs: /about endpoints (METHOD path) — done (updated: 2025-09-14 20:06:36 UTC)
+    - 2025-09-14 20:06:36 UTC: Docs updated: /about endpoints now include METHOD path; sources and example adjusted.
+- [t-250913001003-1002] CAS HTTP caching + ranges — done (updated: 2025-09-14 20:06:36 UTC)
+    - 2025-09-14 20:06:36 UTC: Added HEAD, Accept-Ranges, If-Modified-Since, and 416 handling; tests added.
+- [t-250911230329-4722] CLI: migrate arw-cli to clap — done (updated: 2025-09-14 17:40:12 UTC)
+    - 2025-09-14 17:39:55 UTC: arw-cli migrated to clap: subcommands for paths, tools, gate keys, capsule {template, gen-ed25519, sign-ed25519}. Default prints bootstrap (hello + paths).
+  - 2025-09-14 17:40:10 UTC: arw-cli migrated to clap: subcommands for paths, tools, gate keys, capsule {template, gen-ed25519, sign-ed25519}. Default prints bootstrap (hello + paths).
+- [t-250911230325-2116] Tests: end-to-end coverage for endpoints & gating — done (updated: 2025-09-14 17:38:19 UTC)
+    - 2025-09-14 17:38:18 UTC: Added gating E2E tests: memory.apply and feedback.apply return 403 when gated via deny_user. Fixed admin routes test to not double-prefix existing /admin paths. Spec now enumerates models.download.progress status/code values for drift checks.
+- [t-250911230316-4765] NATS: TLS/auth config and reconnect tuning — done (updated: 2025-09-14 17:26:37 UTC)
+    - 2025-09-14 17:26:21 UTC: NATS TLS/auth via env: ARW_NATS_TLS + ARW_NATS_USER/PASS; initial connect retries/backoff; events + queue clients honor settings.
+- [t-250911230320-8615] Metrics: structured registry w/ histograms — done (updated: 2025-09-14 17:23:43 UTC)
+    - 2025-09-14 17:23:43 UTC: Added per-route latency histograms with Prometheus exposition: arw_http_route_latency_ms_* and global arw_http_latency_ms_*; kept ewma/p95; route stats JSON unchanged.
+- [t-250911230252-9858] Security: per-route gating layers; slim global admin middleware — done (updated: 2025-09-14 17:16:48 UTC)
+    - 2025-09-14 17:16:48 UTC: Duplicate of per-route gating/admin middleware; marked done with note.
+- [t-250911230236-6445] Security: per-route gating layers; slim global admin middleware — done (updated: 2025-09-14 17:16:47 UTC)
+    - 2025-09-11 21:03:46 UTC: Duplicate of t-250911230252-9858; track only the latter.
+  - 2025-09-14 17:16:47 UTC: Per-route gating via #[arw_gate] confirmed across endpoints; admin middleware slimmed and hardened (hashed token, per-key RL).
+- [t-250911230312-0863] Admin auth: hashed tokens + per-token/IP sliding rate-limit — done (updated: 2025-09-14 17:16:46 UTC)
+    - 2025-09-14 17:16:46 UTC: Admin auth: support ARW_ADMIN_TOKEN_SHA256 (constant-time compare) and per-token/IP sliding rate limit via token bucket (ARW_ADMIN_RL=limit/window).
+- [t-250912024843-7597] Resources: Hierarchy/Governor services — done (updated: 2025-09-14 17:12:12 UTC)
+    - 2025-09-14 17:12:11 UTC: Hierarchy/Governor services implemented and registered in AppState; admin APIs mounted; events emitted on changes.
+- [t-250912024838-4137] UI: Episodes filters + details toggle — done (updated: 2025-09-14 17:12:11 UTC)
+    - 2025-09-14 17:12:10 UTC: Episodes filters (errors-only + substring) and details toggle exist; confirmed and kept live refresh.
+- [t-250909224103-5251] Policy: hook feedback auto-apply — done (updated: 2025-09-14 17:12:10 UTC)
+    - 2025-09-14 17:12:10 UTC: Auto-apply wired: toggle /feedback/auto drives automatic apply of policy-approved suggestions; emits intents/actions events and persists state.
+- [t-250909224103-0211] UI: near-live feedback in /debug — done (updated: 2025-09-14 17:12:09 UTC)
+    - 2025-09-14 17:12:08 UTC: Debug UI already renders live feedback.suggested; added auto-apply hook: when enabled, safe suggestions are auto-applied on feedback.suggested events (policy-gated).
+- [t-250912001105-7850] Phase 3: Episodes + Debug UI reactive views — done (updated: 2025-09-14 17:02:37 UTC)
+    - 2025-09-14 17:02:36 UTC: Episodes view: /state/episodes endpoint + Debug UI panel with live refresh and episode snapshots; stitch by corr_id in ext/state_api.rs.
+- [t-250912001100-3438] Phase 2: Beliefs/Intents/Actions stores + endpoints — done (updated: 2025-09-14 17:02:36 UTC)
+    - 2025-09-14 17:02:36 UTC: Beliefs/Intents/Actions rolling stores implemented; endpoints: /state/{beliefs,intents,actions} and admin variants; wired via on_event with corr_id episodes stitching.
+- [t-250912001055-0044] Phase 2: Observations read-model + /state/observations — done (updated: 2025-09-14 17:02:35 UTC)
+    - 2025-09-14 17:02:35 UTC: Public /state/observations exists; admin wrapper at /admin/state/observations; rolling store wired via ext::state_api::obs_on_event and bus subscriber.
+- [t-250914050908-ev14] Feature Matrix: dot.case topics — done (updated: 2025-09-14 16:59:13 UTC)
+    - 2025-09-14 16:59:12 UTC: Feature Matrix events verified/updated: experiments list now includes experiment.activated; all entries dot.case.
+- [t-250914050900-ev10] Events: topics.rs dot.case only — done (updated: 2025-09-14 16:59:12 UTC)
+    - 2025-09-14 16:59:11 UTC: Enforced dot.case: linter checks topic constants and blocks string-literal publishes in service; topics.rs audited.
+- [t-250914050904-ev12] Debug UI: dot.case listeners — done (updated: 2025-09-14 16:59:11 UTC)
+    - 2025-09-14 16:59:11 UTC: Debug UI binds dot.case topics: added handlers for experiment.activated and generic listeners for task.completed/feedback.updated/catalog.updated; SSE filters already use dot.case prefixes.
+- [t-250914050916-ev18] Release notes: dot.case migration — done (updated: 2025-09-14 16:53:02 UTC)
+    - 2025-09-14 16:53:01 UTC: Release notes expanded: dot.case constants, connector subjects, new experiment.activated topic.
+- [t-250914050914-ev17] Gating keys: events:task.completed — done (updated: 2025-09-14 16:53:02 UTC)
+    - 2025-09-14 16:53:02 UTC: Gating key events:task.completed confirmed in arw-core and used in arw-svc; gating keys doc lists it.
+- [t-250914050910-ev15] Docs: dot.case normalization — done (updated: 2025-09-14 16:53:01 UTC)
+    - 2025-09-14 16:53:00 UTC: Docs updated for dot.case: topics table includes experiment.activated; reinforced constants usage and SSE guidance.
+- [t-250914050912-ev16] CI: event kind linter — done (updated: 2025-09-14 16:53:00 UTC)
+    - 2025-09-14 16:52:59 UTC: Enhanced linter: fails on string-literal Bus.publish in apps/arw-svc and CamelCase subjects; verified repo passes.
+- [t-250914050906-ev13] Connector: task.completed + subjects — done (updated: 2025-09-14 16:46:51 UTC)
+    - 2025-09-14 16:46:50 UTC: Connector now uses dot.case constants for task.completed and builds subjects: cluster 'arw.events.task.completed' and node 'arw.events.node.<node_id>.task.completed'.
+- [t-250914050902-ev11] Events: replace publishers with constants — done (updated: 2025-09-14 16:44:17 UTC)
+    - 2025-09-14 16:43:57 UTC: Replaced string publish in arw-svc with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13.
+  - 2025-09-14 16:44:18 UTC: Replaced string publish in arw-svc with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13.
 - [t-250912024851-8114] Models: move download worker into ModelsService — done (updated: 2025-09-14 00:00:00 UTC)
 - [t-250912020516-8533] Phase 1: AppState builder + unified struct — done (updated: 2025-09-12 00:05:22 UTC)
     - 2025-09-12 00:05:22 UTC: Unified AppState in app_state.rs; main/lib migrated; added Resources container; built+tests green for arw-svc.

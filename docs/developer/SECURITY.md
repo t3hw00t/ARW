@@ -5,7 +5,8 @@ title: Developer Security Notes
 # Developer Security Notes
 { .topic-trio style="--exp:.4; --complex:.6; --complicated:.8" data-exp=".4" data-complex=".6" data-complicated=".8" }
 
-Updated: 2025-09-07
+Updated: 2025-09-12
+Type: Reference
 
 ## Surface
 - Bind: loopback only (127.0.0.1) by default.

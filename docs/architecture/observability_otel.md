@@ -2,7 +2,9 @@
 title: Observability (OTel)
 ---
 
-# Observability Standard (OpenTelemetry)
+# Observability (OTel)
+Updated: 2025-09-12
+Type: Explanation
 
 Map the episode timeline to trace semantics and expose correlated metrics/logs.
 
@@ -18,4 +20,3 @@ Notes
 - Keep payloads privacy‑respecting by default; redact according to Data Governance.
 
 See also: Metrics & Insights, Events Vocabulary, Replay & Time Travel.
-

@@ -4,7 +4,8 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-09-12
+Updated: 2025-09-13
+Type: Tutorial
 
 Run ARW locally in a couple of minutes. It’s your private AI control room: start on one machine, stay in full control, and only scale or share when you choose. See the Features page for what you can do next.
 
@@ -43,6 +44,8 @@ powershell -ExecutionPolicy Bypass -File scripts/interactive-start-windows.ps1
 === "Linux / macOS"
 ```bash
 bash scripts/start.sh --wait-health
+# Optional: bind address (default 127.0.0.1)
+# ARW_BIND=0.0.0.0 bash scripts/start.sh --wait-health
 # Interactive menu (launcher-first)
 bash scripts/interactive-start-linux.sh   # Linux
 bash scripts/interactive-start-macos.sh   # macOS
@@ -52,6 +55,11 @@ bash scripts/interactive-start-macos.sh   # macOS
 ```bash
 curl -sS http://127.0.0.1:8090/healthz
 ```
+
+## Open
+- Landing page: http://127.0.0.1:8090/
+- Debug UI (when `ARW_DEBUG=1`): http://127.0.0.1:8090/debug
+- Admin index (requires token or debug): http://127.0.0.1:8090/admin
 
 ## Desktop Launcher (Optional)
 

@@ -1,4 +1,6 @@
 # Interface Catalog
+Updated: 2025-09-13
+Type: Reference
 
 This repo keeps a single, machine‑readable catalog of every interface (HTTP, events/SSE, and MCP tools) under `interfaces/`. Each interface has a small descriptor with ownership, lifecycle, and a pointer to the full spec.
 

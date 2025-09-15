@@ -2,7 +2,9 @@
 title: Threat Model
 ---
 
-# Threat Model & Supply‑Chain Security
+# Threat Model
+Updated: 2025-09-12
+Type: How‑to
 
 Risks
 - Prompt injection, tool SSRF, model/file tampering, plugin malware.

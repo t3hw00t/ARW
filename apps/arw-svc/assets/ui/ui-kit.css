@@ -1,0 +1,93 @@
+/* UI Kit primitives (shared across launcher pages) */
+
+/* Containers */
+.card{
+  padding: var(--sp5);
+  border: 1px solid var(--color-line);
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffffff, #fafafa);
+  box-shadow: var(--shadow-2);
+}
+/* Global rhythm: give cards comfortable top spacing */
+.card{ margin-top: var(--sp4); }
+
+/* Buttons */
+button{
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid #cfd6de;
+  background-image: linear-gradient(180deg, #ffffff, #f3f4f6), var(--noise);
+  background-blend-mode: overlay, normal;
+  color: var(--color-ink);
+  cursor: pointer;
+  box-shadow: var(--shadow-1), 0 8px 18px rgba(0,0,0,0.06);
+  transition: transform .06s ease, box-shadow .12s ease;
+}
+button:hover{ transform: translateY(-0.5px); box-shadow: 0 1px 0 rgba(255,255,255,0.95) inset, 0 14px 28px rgba(0,0,0,0.08) }
+button:active{ transform: translateY(0); box-shadow: 0 4px 8px rgba(0,0,0,0.08) }
+button.primary{ border-color: var(--color-brand-copper); background-image: linear-gradient(180deg, var(--color-brand-copper), var(--color-brand-copper-dark)), var(--noise); color:#fff }
+button.ghost{ background: transparent; border-color: #cfd6de }
+
+/* Inputs */
+input, select, textarea{
+  font: inherit;
+  color: var(--color-ink);
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  padding: 6px 8px;
+  background: #ffffff;
+  box-shadow: 0 1px 0 rgba(255,255,255,0.9) inset;
+}
+input:focus, select:focus, textarea:focus{ outline: none; border-color: var(--color-brand-copper); box-shadow: 0 0 0 3px rgba(var(--brand-copper-rgb), 0.15) }
+
+/* Chips & Badges */
+.badge{ display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid var(--color-line); border-radius:999px; font-size:12px; background:#fff; box-shadow: 0 1px 0 rgba(255,255,255,0.9) inset }
+.pill{ display:inline-flex; gap:6px; align-items:center; padding:4px 8px; border:1px solid var(--color-line); border-radius:999px; background: linear-gradient(180deg,#ffffff,#f6f7f9); font-size:12px }
+
+/* Status helpers */
+.ok{ color: var(--status-ok) }
+.warn{ color: var(--status-warn) }
+.bad{ color: var(--status-bad) }
+.dim{ color: var(--color-muted) }
+
+.dot{ width:8px; height:8px; border-radius:999px; background:#aaa; display:inline-block }
+.dot.ok{ background: var(--status-ok) }
+.dot.bad{ background: var(--status-bad) }
+
+/* Meter */
+.bar{ height:8px; border:1px solid var(--color-line); border-radius:8px; overflow:hidden; margin:4px 0; background:linear-gradient(180deg,#fff,#f7f7f7) }
+.bar>i{ display:block; height:8px; width:0%; background: linear-gradient(90deg, var(--color-accent-teal), var(--color-accent-teal-light)) }
+
+/* Toast */
+.toast-wrap{ position:fixed; right:16px; bottom:16px; display:flex; flex-direction:column; gap:8px; z-index: 9999 }
+.toast{ background: #0f172a; color:#fff; padding:8px 12px; border-radius:10px; opacity:.95; box-shadow: var(--shadow-3) }
+
+/* Density toggle (compact spacing) */
+body.compact{ --sp2:6px; --sp3:10px; --sp4:12px; --sp5:18px }
+
+/* Focus accessibility */
+button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{
+  outline: 2px solid rgba(var(--brand-copper-rgb), 0.55);
+  outline-offset: 2px;
+}
+
+/* Dark mode adjustments */
+@media (prefers-color-scheme: dark){
+  .card{ background: linear-gradient(180deg,#12161f,#0f141a); border-color: var(--color-line); box-shadow: 0 12px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.04) }
+  button{ color:#e5e7eb; border-color:#39404a; box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 8px 18px rgba(0,0,0,0.35); background-image: linear-gradient(180deg,#1a202b,#131822), var(--noise) }
+  button.primary{ background-image: linear-gradient(180deg, var(--color-brand-copper-dark), #6f3e1d), var(--noise) }
+}
+
+/* High contrast preferences */
+@media (prefers-contrast: more){
+  .card{ box-shadow: none; border-width: 2px }
+  button{ border-color: var(--color-line); box-shadow: none }
+  .badge, .pill{ border-width: 2px }
+  .toast{ opacity: 1 }
+}
+
+@media (forced-colors: active){
+  *{ outline-color: CanvasText; forced-color-adjust: none }
+  button{ background: ButtonFace; color: ButtonText; border-color: ButtonText }
+  .card{ background: Canvas; color: CanvasText; border-color: ButtonText }
+}

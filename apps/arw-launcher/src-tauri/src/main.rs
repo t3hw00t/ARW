@@ -31,12 +31,23 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
     let w_logs = MenuItem::with_id(app, "win-logs", "Logs", true, None::<&str>)?;
     let w_models = MenuItem::with_id(app, "win-models", "Models", true, None::<&str>)?;
     let w_conns = MenuItem::with_id(app, "win-conns", "Connections", true, None::<&str>)?;
+    let w_hub = MenuItem::with_id(app, "win-hub", "Project Hub", true, None::<&str>)?;
+    let w_chat = MenuItem::with_id(app, "win-chat", "Chat", true, None::<&str>)?;
+    let w_training = MenuItem::with_id(app, "win-training", "Training Park", true, None::<&str>)?;
     let windows_sub = Submenu::with_id_and_items(
         app,
         "windows",
         "Windows",
         true,
-        &[&w_events, &w_logs, &w_models, &w_conns],
+        &[
+            &w_events,
+            &w_logs,
+            &w_models,
+            &w_conns,
+            &w_hub,
+            &w_chat,
+            &w_training,
+        ],
     )?;
 
     // Quit
@@ -79,6 +90,15 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
             }
             "win-conns" => {
                 let _ = arw_tauri::open_connections_window(app.clone());
+            }
+            "win-hub" => {
+                let _ = arw_tauri::open_hub_window(app.clone());
+            }
+            "win-chat" => {
+                let _ = arw_tauri::open_chat_window(app.clone());
+            }
+            "win-training" => {
+                let _ = arw_tauri::open_training_window(app.clone());
             }
             // App
             "quit" => app.exit(0),

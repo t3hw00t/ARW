@@ -6,6 +6,8 @@ use arw_svc::resources::hierarchy_service::HierarchyService;
 use arw_svc::resources::memory_service::MemoryService;
 use arw_svc::resources::models_service::ModelsService;
 use arw_svc::resources::Resources;
+use axum::extract::ConnectInfo;
+use axum::extract::Extension;
 use axum::extract::Query;
 use axum::http::HeaderMap;
 use axum::http::StatusCode;
@@ -43,7 +45,9 @@ use tracing::info;
 use utoipa::{OpenApi, ToSchema};
 mod dyn_timeout;
 mod ext;
+mod route_recorder;
 use arw_core::gating;
+use arw_svc::state_bridge;
 #[cfg(feature = "grpc")]
 mod grpc;
 
@@ -332,13 +336,14 @@ async fn main() {
         ext::topics::TOPIC_SERVICE_START,
         &json!({"msg":"arw-svc started"}),
     );
-    // Pre‑warm hot lookups/caches for snappy I2F
+    // Pre‑warm hot lookups/caches for interactive I2F (snappy stream)
     ext::snappy::prewarm().await;
 
     // Spawn stats aggregator and observations read-model updater
     {
         let mut rx = state.bus.subscribe();
         let bus = state.bus.clone();
+        let st2 = state.clone();
         tokio::spawn(async move {
             while let Ok(env) = rx.recv().await {
                 ext::stats::stats_on_event(&env.kind).await;
@@ -347,6 +352,8 @@ async fn main() {
                 ext::world::on_event(&bus, &env).await;
                 // Update self‑model aggregates (competence, forecasts)
                 ext::self_model_agg::on_event(&env).await;
+                // Auto-apply safe feedback when enabled
+                ext::auto_apply_from_event(&st2, &env).await;
             }
         });
     }
@@ -392,7 +399,7 @@ async fn main() {
                 intv.tick().await;
                 let snap = collect_metrics_snapshot().await;
                 st.bus.publish(
-                    "probe.metrics",
+                    ext::topics::TOPIC_PROBE_METRICS,
                     &serde_json::json!({
                         "cpu": snap["cpu"]["avg"],
                         "mem": {"used": snap["memory"]["used"], "total": snap["memory"]["total"]},
@@ -445,6 +452,36 @@ async fn main() {
         });
     }
 
+    // Watch trust store file and publish rpu.trust.changed on reloads
+    {
+        let bus = state.bus.clone();
+        tokio::spawn(async move {
+            use std::time::Duration;
+            let path = std::env::var("ARW_TRUST_CAPSULES")
+                .ok()
+                .unwrap_or_else(|| "configs/trust_capsules.json".to_string());
+            let mut last_mtime: Option<std::time::SystemTime> = None;
+            loop {
+                let mut changed = false;
+                if let Ok(md) = std::fs::metadata(&path) {
+                    if let Ok(mt) = md.modified() {
+                        if last_mtime.map(|t| t < mt).unwrap_or(true) {
+                            last_mtime = Some(mt);
+                            changed = true;
+                        }
+                    }
+                }
+                if changed {
+                    arw_core::rpu::reload_trust();
+                    let count = arw_core::rpu::trust_snapshot().len();
+                    let payload = serde_json::json!({ "count": count, "path": path, "ts_ms": arw_core::rpu::trust_last_reload_ms() });
+                    bus.publish(ext::topics::TOPIC_RPU_TRUST_CHANGED, &payload);
+                }
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+        });
+    }
+
     // Subscribe to catalog.updated to refresh deprecation caches immediately
     {
         let bus = state.bus.clone();
@@ -474,57 +511,112 @@ async fn main() {
         }
     }
 
-    let mut app = Router::new()
-        // Public endpoints
-        .route("/healthz", get(healthz))
-        .route("/metrics", get(ext::stats::metrics_get))
-        .route("/version", get(ext::version))
-        .route("/about", get(ext::about))
-        // Interface catalog (index + health)
-        .route("/catalog/index", get(catalog_index))
-        .route("/catalog/health", get(catalog_health))
-        .route("/state/models", get(ext::state_api::models_state_get))
-        .route("/state/self", get(ext::self_model_api::self_state_list))
-        .route(
-            "/state/self/:agent",
-            get(ext::self_model_api::self_state_get),
+    let mut app = Router::new();
+    // Record + attach public endpoints without changing route types
+    arw_svc::route_recorder::note("GET", "/healthz");
+    app = app.route("/healthz", get(healthz));
+    arw_svc::route_recorder::note("GET", "/metrics");
+    app = app.route("/metrics", get(ext::stats::metrics_get));
+    arw_svc::route_recorder::note("GET", "/version");
+    app = app.route("/version", get(ext::version));
+    arw_svc::route_recorder::note("GET", "/about");
+    app = app.route("/about", get(ext::about));
+    // Public CAS blob by digest (GET/HEAD)
+    arw_svc::route_recorder::note("GET", "/models/blob/:sha256");
+    app = app.route(
+        "/models/blob/:sha256",
+        get(ext::models_api::models_blob_get),
+    );
+    arw_svc::route_recorder::note("HEAD", "/models/blob/:sha256");
+    app = app.route(
+        "/models/blob/:sha256",
+        axum::routing::head(ext::models_api::models_blob_head),
+    );
+    // Interface catalog (index + health)
+    arw_svc::route_recorder::note("GET", "/catalog/index");
+    app = app.route("/catalog/index", get(catalog_index));
+    arw_svc::route_recorder::note("GET", "/catalog/health");
+    app = app.route("/catalog/health", get(catalog_health));
+    arw_svc::route_recorder::note("GET", "/state/models");
+    app = app.route("/state/models", get(ext::state_api::models_state_get));
+    arw_svc::route_recorder::note("GET", "/state/self");
+    app = app.route("/state/self", get(ext::self_model_api::self_state_list));
+    arw_svc::route_recorder::note("GET", "/state/self/:agent");
+    app = app.route(
+        "/state/self/:agent",
+        get(ext::self_model_api::self_state_get),
+    );
+    arw_svc::route_recorder::note("GET", "/state/models_hashes");
+    app = app.route(
+        "/state/models_hashes",
+        get(ext::models_api::models_hashes_get),
+    );
+    // Serve generated specs when present (public)
+    arw_svc::route_recorder::note("GET", "/spec/openapi.yaml");
+    app = app.route("/spec/openapi.yaml", get(spec_openapi));
+    arw_svc::route_recorder::note("GET", "/spec/asyncapi.yaml");
+    app = app.route("/spec/asyncapi.yaml", get(spec_asyncapi));
+    arw_svc::route_recorder::note("GET", "/spec/mcp-tools.json");
+    app = app.route("/spec/mcp-tools.json", get(spec_mcp));
+    arw_svc::route_recorder::note("GET", "/spec");
+    app = app.route("/spec", get(spec_index));
+    // Friendly top-level landing page + quiet favicon
+    app = app
+        .route("/", get(index_landing))
+        .route("/favicon.ico", get(favicon_empty));
+
+    // Administrative endpoints are nested under /admin
+    app = app.nest(
+        "/admin",
+        Router::new()
+            // Match paths before metrics/security to capture MatchedPath
+            .route("/", get(admin_index_html))
+            .route("/index.json", get(admin_index_json))
+            .route("/probe", get(probe))
+            .route("/probe/hw", get(probe_hw))
+            .route("/probe/metrics", get(probe_metrics))
+            .route("/events", get(events))
+            .route("/emit/test", get(emit_test))
+            .route("/shutdown", get(shutdown))
+            .route(
+                "/self_model/propose",
+                axum::routing::post(ext::self_model_api::self_model_propose),
+            )
+            .route(
+                "/self_model/apply",
+                axum::routing::post(ext::self_model_api::self_model_apply),
+            )
+            .route("/introspect/tools", get(introspect_tools))
+            .route("/introspect/schemas/:id", get(introspect_schema))
+            // Bring in extra admin routes (memory/models/tools/etc.)
+            .merge(ext::extra_routes()),
+    );
+    // Friendly top-level alias for Debug UI in local debug builds
+    if std::env::var("ARW_DEBUG").ok().as_deref() == Some("1") {
+        arw_svc::route_recorder::note("GET", "/debug");
+        app = app.route("/debug", get(ext::ui::debug_ui));
+    }
+    // Spec health (public)
+    app = app.route("/spec/health", get(spec_health));
+    // Trace with request-id and client ip in span
+    let trace = TraceLayer::new_for_http().make_span_with(|req: &Request<_>| {
+        let rid = req
+            .extensions()
+            .get::<String>()
+            .cloned()
+            .unwrap_or_else(|| "".to_string());
+        let ip = client_ip_key_from_request(req);
+        tracing::info_span!(
+            "http",
+            method = %req.method(),
+            uri = %req.uri(),
+            version = ?req.version(),
+            request_id = %rid,
+            ip = %ip
         )
-        .route(
-            "/state/models_hashes",
-            get(ext::models_api::models_hashes_get),
-        )
-        // Serve generated specs when present (public)
-        .route("/spec/openapi.yaml", get(spec_openapi))
-        .route("/spec/asyncapi.yaml", get(spec_asyncapi))
-        .route("/spec/mcp-tools.json", get(spec_mcp))
-        .route("/spec", get(spec_index))
-        // Administrative endpoints are nested under /admin
-        .nest(
-            "/admin",
-            Router::new()
-                // Match paths before metrics/security to capture MatchedPath
-                .route("/", get(admin_index_html))
-                .route("/index.json", get(admin_index_json))
-                .route("/probe", get(probe))
-                .route("/probe/hw", get(probe_hw))
-                .route("/probe/metrics", get(probe_metrics))
-                .route("/events", get(events))
-                .route("/emit/test", get(emit_test))
-                .route("/shutdown", get(shutdown))
-                .route(
-                    "/self_model/propose",
-                    axum::routing::post(ext::self_model_api::self_model_propose),
-                )
-                .route(
-                    "/self_model/apply",
-                    axum::routing::post(ext::self_model_api::self_model_apply),
-                )
-                .route("/introspect/tools", get(introspect_tools))
-                .route("/introspect/schemas/:id", get(introspect_schema))
-                // Bring in extra admin routes (memory/models/tools/etc.)
-                .merge(ext::extra_routes()),
-        )
-        .layer(TraceLayer::new_for_http())
+    });
+    app = app
+        .layer(trace)
         .layer(CompressionLayer::new())
         .layer(RequestBodyLimitLayer::new(8 * 1024 * 1024))
         .layer(
@@ -533,17 +625,23 @@ async fn main() {
             {
                 CorsLayer::new()
                     .allow_origin(Any)
-                    .allow_methods([axum::http::Method::GET, axum::http::Method::POST])
+                    .allow_methods([
+                        axum::http::Method::GET,
+                        axum::http::Method::POST,
+                        axum::http::Method::HEAD,
+                    ])
                     .allow_headers(Any)
             } else {
                 CorsLayer::new()
             },
         )
         .layer(middleware::from_fn(dyn_timeout::dyn_timeout_mw))
+        .layer(middleware::from_fn(access_log_mw))
+        .layer(middleware::from_fn(request_id_mw))
+        .layer(middleware::from_fn(security_headers_mw))
         .layer(middleware::from_fn(deprecation_headers_mw))
         .layer(middleware::from_fn(security_mw))
-        .layer(middleware::from_fn(metrics_mw))
-        .with_state(state.clone());
+        .layer(middleware::from_fn(metrics_mw));
 
     // Optionally serve local docs at /docs when in debug mode and site exists
     if std::env::var("ARW_DEBUG").ok().as_deref() == Some("1") {
@@ -564,7 +662,10 @@ async fn main() {
         .and_then(|c| c.runtime.port)
         .or_else(|| std::env::var("ARW_PORT").ok().and_then(|s| s.parse().ok()))
         .unwrap_or(8090);
-    let addr = SocketAddr::from(([127, 0, 0, 1], port));
+    let bind = std::env::var("ARW_BIND").unwrap_or_else(|_| "127.0.0.1".to_string());
+    let addr = format!("{}:{}", bind, port)
+        .parse::<SocketAddr>()
+        .unwrap_or_else(|_| SocketAddr::from(([127, 0, 0, 1], port)));
     info!("arw-svc listening on http://{}", addr);
 
     let listener = match tokio::net::TcpListener::bind(addr).await {
@@ -593,12 +694,58 @@ async fn main() {
             ext::snappy::start_snappy_publisher(bus_clone).await;
         });
     }
+    {
+        let bus_clone = bus.clone();
+        tokio::spawn(async move {
+            ext::stats::start_probe_metrics_collector(bus_clone).await;
+        });
+    }
 
-    let server = axum::serve(listener, app).with_graceful_shutdown(async move {
+    // Serve router (Axum 0.7)
+    // Keep handlers typed with `State<AppState>`, but run unit-state router.
+    // A FromRef bridge provides access to the global state.
+    state_bridge::set_global_state(state.clone());
+    let app_unit = app.with_state(state);
+    let server = axum::serve(
+        listener,
+        app_unit.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(async move {
         let _ = stop_rx.recv().await;
     });
     if let Err(e) = server.await {
         eprintln!("server error: {}", e);
+    }
+}
+
+// Test helpers for bin tests to satisfy paths used in ext/* tests
+#[cfg(test)]
+mod test_support {
+    /// Set `ARW_STATE_DIR` to a unique temp dir for the scope of the returned guard.
+    /// Drops reset the env var to its previous value.
+    pub fn scoped_state_dir() -> (tempfile::TempDir, ScopedEnv) {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let prev = std::env::var("ARW_STATE_DIR").ok();
+        std::env::set_var("ARW_STATE_DIR", dir.path().to_string_lossy().to_string());
+        (
+            dir,
+            ScopedEnv {
+                key: "ARW_STATE_DIR",
+                prev,
+            },
+        )
+    }
+    pub struct ScopedEnv {
+        key: &'static str,
+        prev: Option<String>,
+    }
+    impl Drop for ScopedEnv {
+        fn drop(&mut self) {
+            match &self.prev {
+                Some(v) => std::env::set_var(self.key, v),
+                None => std::env::remove_var(self.key),
+            }
+        }
     }
 }
 
@@ -614,6 +761,16 @@ async fn metrics_mw(req: Request<axum::body::Body>, next: Next) -> Response {
     let dt = t0.elapsed().as_millis() as u64;
     let status = res.status().as_u16();
     ext::stats::route_obs(&path, status, dt).await;
+    // Add basic Server-Timing for easy client-side perf inspection
+    let mut res = res;
+    let h = res.headers_mut();
+    if !h.contains_key("server-timing") {
+        let _ = h.insert(
+            axum::http::header::HeaderName::from_static("server-timing"),
+            axum::http::HeaderValue::from_str(&format!("total;dur={}", dt))
+                .unwrap_or_else(|_| axum::http::HeaderValue::from_static("total")),
+        );
+    }
     res
 }
 
@@ -628,18 +785,28 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
     }
 
     let debug = std::env::var("ARW_DEBUG").ok().as_deref() == Some("1");
-    let token = std::env::var("ARW_ADMIN_TOKEN").ok();
-    let ok = if let Some(t) = token {
-        if t.is_empty() {
-            debug
+    let tok_provided = extract_admin_token(req.headers());
+    // Accept logic: prefer hashed token, else plain token, else debug
+    let ok = if let Some(tok) = tok_provided.as_deref() {
+        if let Ok(h) = std::env::var("ARW_ADMIN_TOKEN_SHA256") {
+            token_sha256_matches(tok, &h)
+        } else if let Ok(t) = std::env::var("ARW_ADMIN_TOKEN") {
+            if t.is_empty() {
+                debug
+            } else {
+                ct_eq(tok.as_bytes(), t.as_bytes())
+            }
         } else {
-            header_token_matches(req.headers(), &t)
+            debug
         }
     } else {
+        // No token supplied; allow only if debug
         debug
     };
     if ok {
-        if !rate_allow().await {
+        // Per-token/IP token-bucket rate limit (sliding) for admin endpoints
+        let key = tok_provided.unwrap_or_else(|| client_ip_key_req(&req));
+        if !rate_allow_keyed(&key).await {
             let body = serde_json::json!({
                 "type": "about:blank",
                 "title": "Too Many Requests",
@@ -672,6 +839,234 @@ async fn security_mw(req: Request<axum::body::Body>, next: Next) -> Response {
         (SC::UNAUTHORIZED, axum::Json(body)),
     )
         .into_response()
+}
+
+// ---- Request ID middleware ----
+// Ensures each response carries x-request-id; adopts incoming if present.
+async fn request_id_mw(mut req: Request<axum::body::Body>, next: Next) -> Response {
+    let rid = req
+        .headers()
+        .get("x-request-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    req.extensions_mut().insert(rid.clone());
+    let mut res = next.run(req).await;
+    let h = res.headers_mut();
+    if !h.contains_key("x-request-id") {
+        let _ = h.insert(
+            axum::http::header::HeaderName::from_static("x-request-id"),
+            axum::http::HeaderValue::from_str(&rid)
+                .unwrap_or_else(|_| axum::http::HeaderValue::from_static("invalid-request-id")),
+        );
+    }
+    res
+}
+
+// ---- Security headers middleware ----
+// Adds conservative security headers that play well with our endpoints.
+async fn security_headers_mw(req: Request<axum::body::Body>, next: Next) -> Response {
+    let mut res = next.run(req).await;
+    let h = res.headers_mut();
+    h.entry(axum::http::header::HeaderName::from_static(
+        "x-content-type-options",
+    ))
+    .or_insert(axum::http::HeaderValue::from_static("nosniff"));
+    h.entry(axum::http::header::HeaderName::from_static(
+        "referrer-policy",
+    ))
+    .or_insert(axum::http::HeaderValue::from_static("no-referrer"));
+    h.entry(axum::http::header::HeaderName::from_static(
+        "x-frame-options",
+    ))
+    .or_insert(axum::http::HeaderValue::from_static("DENY"));
+    h.entry(axum::http::header::HeaderName::from_static(
+        "permissions-policy",
+    ))
+    .or_insert(axum::http::HeaderValue::from_static(
+        "geolocation=(), microphone=(), camera=()",
+    ));
+    // Optionally add CSP automatically for HTML responses (debug/docs/static). Can be overridden by ARW_CSP.
+    if csp_auto_enabled() && !h.contains_key("content-security-policy") {
+        if let Some(ct) = h
+            .get(axum::http::header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+        {
+            if ct.starts_with("text/html") {
+                if let Some(csp) = csp_header_value() {
+                    let _ = h.insert(
+                        axum::http::HeaderName::from_static("content-security-policy"),
+                        csp,
+                    );
+                }
+            }
+        }
+    }
+    res
+}
+
+fn csp_header_value() -> Option<axum::http::HeaderValue> {
+    // Allow override or opt-out
+    if let Ok(v) = std::env::var("ARW_CSP") {
+        let s = v.trim();
+        if s.is_empty() || s == "0" || s.eq_ignore_ascii_case("off") {
+            return None;
+        }
+        return axum::http::HeaderValue::from_str(s).ok();
+    }
+    // Preset: relaxed (default) or strict (disables inline scripts/styles used by tiny HTML pages)
+    let preset = std::env::var("ARW_CSP_PRESET").unwrap_or_else(|_| "relaxed".into());
+    let def = if preset.eq_ignore_ascii_case("strict") {
+        // Hardened: disable inline scripts/styles; small HTML pages may lose minor UX features.
+        "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'"
+    } else {
+        // Relaxed: permit inline for small admin/spec/landing pages without nonces.
+        "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'"
+    };
+    axum::http::HeaderValue::from_str(def).ok()
+}
+
+fn csp_auto_enabled() -> bool {
+    std::env::var("ARW_CSP_AUTO")
+        .ok()
+        .map(|v| v == "1")
+        .unwrap_or(true)
+}
+
+// ---- Access log (opt-in via ARW_ACCESS_LOG=1) ----
+static ACCESS_ENABLED: OnceLock<bool> = OnceLock::new();
+static ACCESS_SAMPLE_N: OnceLock<u64> = OnceLock::new();
+static ACCESS_SEQ: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+fn access_log_enabled() -> bool {
+    *ACCESS_ENABLED.get_or_init(|| std::env::var("ARW_ACCESS_LOG").ok().as_deref() == Some("1"))
+}
+fn access_sample_n() -> u64 {
+    *ACCESS_SAMPLE_N.get_or_init(|| {
+        std::env::var("ARW_ACCESS_SAMPLE_N")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1)
+            .max(1)
+    })
+}
+fn access_log_ua() -> bool {
+    std::env::var("ARW_ACCESS_UA").ok().as_deref() == Some("1")
+}
+fn access_log_ua_hash() -> bool {
+    std::env::var("ARW_ACCESS_UA_HASH").ok().as_deref() == Some("1")
+}
+fn access_log_ref() -> bool {
+    std::env::var("ARW_ACCESS_REF").ok().as_deref() == Some("1")
+}
+fn access_log_ref_strip_qs() -> bool {
+    std::env::var("ARW_ACCESS_REF_STRIP_QS")
+        .ok()
+        .map(|v| v == "1")
+        .unwrap_or(true)
+}
+async fn access_log_mw(req: Request<axum::body::Body>, next: Next) -> Response {
+    if !access_log_enabled() {
+        return next.run(req).await;
+    }
+    use axum::extract::MatchedPath;
+    let t0 = std::time::Instant::now();
+    let method = req.method().clone();
+    let path_only = req.uri().path().to_string();
+    let rid = req
+        .headers()
+        .get("x-request-id")
+        .and_then(|v| v.to_str().ok())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| {
+            req.extensions()
+                .get::<String>()
+                .cloned()
+                .unwrap_or_else(|| uuid::Uuid::new_v4().to_string())
+        });
+    let ip = client_ip_key_req(&req);
+    let matched = req
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|m| m.as_str().to_string());
+    let req_len = req
+        .headers()
+        .get(axum::http::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0);
+    // Capture UA/Referer before handing off
+    let user_agent: String = if access_log_ua() {
+        let raw = req
+            .headers()
+            .get(axum::http::header::USER_AGENT)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if access_log_ua_hash() {
+            use sha2::Digest as _;
+            let mut hasher = sha2::Sha256::new();
+            hasher.update(raw.as_bytes());
+            format!("sha256:{}", hex::encode(hasher.finalize()))
+        } else {
+            raw.to_string()
+        }
+    } else {
+        String::new()
+    };
+    let referer_out: String = if access_log_ref() {
+        let raw = req
+            .headers()
+            .get(axum::http::header::REFERER)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("");
+        if access_log_ref_strip_qs() {
+            if let Ok(u) = url::Url::parse(raw) {
+                let mut out = format!(
+                    "{}://{}{}",
+                    u.scheme(),
+                    u.host_str().unwrap_or(""),
+                    u.path()
+                );
+                if let Some(p) = u.port() {
+                    out = format!("{}:{}", out, p);
+                }
+                out
+            } else {
+                raw.split('?').next().unwrap_or("").to_string()
+            }
+        } else {
+            raw.to_string()
+        }
+    } else {
+        String::new()
+    };
+    let res = next.run(req).await;
+    let dt = t0.elapsed().as_millis() as u64;
+    let status = res.status().as_u16();
+    let resp_len = res
+        .headers()
+        .get(axum::http::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok())
+        .unwrap_or(0);
+    let n = ACCESS_SEQ.fetch_add(1, std::sync::atomic::Ordering::Relaxed) + 1;
+    if n % access_sample_n() == 0 {
+        tracing::info!(
+            target: "http.access",
+            %method,
+            path = %path_only,
+            matched = matched.as_deref().unwrap_or(""),
+            status = status,
+            dt_ms = dt,
+            ip = %ip,
+            request_id = %rid,
+            req_len = req_len,
+            resp_len = resp_len,
+            ua = %user_agent,
+            referer = %referer_out,
+            "request"
+        );
+    }
+    res
 }
 
 // ---- Deprecation/Sunset headers middleware ----
@@ -831,23 +1226,80 @@ fn spec_sunset_for(method: &str, path_pat: &str) -> Option<String> {
     })
 }
 
-fn header_token_matches(h: &HeaderMap, token: &str) -> bool {
+fn extract_admin_token(h: &HeaderMap) -> Option<String> {
     // Prefer Authorization: Bearer <token>
     if let Some(v) = h
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
     {
         if let Some(bearer) = v.strip_prefix("Bearer ") {
-            if ct_eq(bearer.as_bytes(), token.as_bytes()) {
-                return true;
-            }
+            return Some(bearer.to_string());
         }
     }
     // Back-compat: X-ARW-Admin: <token>
-    h.get("x-arw-admin")
-        .and_then(|v| v.to_str().ok())
-        .map(|v| ct_eq(v.as_bytes(), token.as_bytes()))
-        .unwrap_or(false)
+    if let Some(v) = h.get("x-arw-admin").and_then(|v| v.to_str().ok()) {
+        return Some(v.to_string());
+    }
+    None
+}
+
+fn client_ip_from_headers(h: &HeaderMap) -> Option<String> {
+    if let Some(v) = h.get("x-forwarded-for").and_then(|v| v.to_str().ok()) {
+        if let Some(first) = v.split(',').next() {
+            return Some(first.trim().to_string());
+        }
+    }
+    if let Some(v) = h.get("x-real-ip").and_then(|v| v.to_str().ok()) {
+        return Some(v.trim().to_string());
+    }
+    if let Some(v) = h.get("cf-connecting-ip").and_then(|v| v.to_str().ok()) {
+        return Some(v.trim().to_string());
+    }
+    None
+}
+
+// Back-compat helper used by a unit test; keep behavior trusting headers.
+#[allow(dead_code)]
+fn client_ip_key(h: &HeaderMap) -> String {
+    client_ip_from_headers(h).unwrap_or_else(|| "unknown".to_string())
+}
+
+// Prefer remote addr unless explicitly trusting forward headers.
+fn client_ip_key_req(req: &Request<axum::body::Body>) -> String {
+    let trust = std::env::var("ARW_TRUST_FORWARD_HEADERS").ok().as_deref() == Some("1");
+    if trust {
+        if let Some(s) = client_ip_from_headers(req.headers()) {
+            return s;
+        }
+    }
+    if let Some(ConnectInfo(addr)) = req.extensions().get::<ConnectInfo<SocketAddr>>().cloned() {
+        return addr.ip().to_string();
+    }
+    // Fallback to headers if no connect info was available
+    client_ip_from_headers(req.headers()).unwrap_or_else(|| "unknown".to_string())
+}
+
+// Generic variant for TraceLayer (any Body type)
+fn client_ip_key_from_request<B>(req: &Request<B>) -> String {
+    let trust = std::env::var("ARW_TRUST_FORWARD_HEADERS").ok().as_deref() == Some("1");
+    if trust {
+        if let Some(s) = client_ip_from_headers(req.headers()) {
+            return s;
+        }
+    }
+    if let Some(ConnectInfo(addr)) = req.extensions().get::<ConnectInfo<SocketAddr>>().cloned() {
+        return addr.ip().to_string();
+    }
+    client_ip_from_headers(req.headers()).unwrap_or_else(|| "unknown".to_string())
+}
+
+fn token_sha256_matches(token: &str, expected_hex: &str) -> bool {
+    use sha2::Digest as _;
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(token.as_bytes());
+    let dig = hasher.finalize();
+    let got = hex::encode(dig);
+    ct_eq(got.as_bytes(), expected_hex.as_bytes())
 }
 
 #[inline]
@@ -862,41 +1314,44 @@ fn ct_eq(a: &[u8], b: &[u8]) -> bool {
     diff == 0
 }
 
-// ---- global rate limit (fixed window) ----
-struct RateWin {
-    count: u64,
-    start: std::time::Instant,
+// ---- per-key token-bucket rate limit (sliding) ----
+struct Bucket {
+    tokens: f64,
+    last: std::time::Instant,
 }
-static RL_STATE: OnceLock<tokio::sync::Mutex<RateWin>> = OnceLock::new();
-fn rl_params() -> (u64, u64) {
+static RL_MAP: OnceLock<tokio::sync::Mutex<std::collections::HashMap<String, Bucket>>> =
+    OnceLock::new();
+fn rl_params() -> (f64, f64) {
     if let Ok(s) = std::env::var("ARW_ADMIN_RL") {
         if let Some((a, b)) = s.split_once('/') {
-            if let (Ok(l), Ok(w)) = (a.parse::<u64>(), b.parse::<u64>()) {
-                return (l.max(1), w.max(1));
+            if let (Ok(l), Ok(w)) = (a.parse::<f64>(), b.parse::<f64>()) {
+                return (l.max(1.0), w.max(1.0));
             }
         }
     }
-    (60, 60)
+    (60.0, 60.0)
 }
-async fn rate_allow() -> bool {
+async fn rate_allow_keyed(key: &str) -> bool {
     let (limit, win_secs) = rl_params();
+    let cap = limit; // bucket capacity
+    let refill_per_sec = limit / win_secs;
     let now = std::time::Instant::now();
-    let m = RL_STATE.get_or_init(|| {
-        tokio::sync::Mutex::new(RateWin {
-            count: 0,
-            start: now,
-        })
+    let m = RL_MAP.get_or_init(|| tokio::sync::Mutex::new(std::collections::HashMap::new()));
+    let mut map = m.lock().await;
+    let b = map.entry(key.to_string()).or_insert(Bucket {
+        tokens: cap,
+        last: now,
     });
-    let mut st = m.lock().await;
-    if now.duration_since(st.start).as_secs() >= win_secs {
-        st.start = now;
-        st.count = 0;
+    let elapsed = now.duration_since(b.last).as_secs_f64();
+    b.last = now;
+    // refill
+    b.tokens = (b.tokens + elapsed * refill_per_sec).min(cap);
+    if b.tokens >= 1.0 {
+        b.tokens -= 1.0;
+        true
+    } else {
+        false
     }
-    if st.count >= limit {
-        return false;
-    }
-    st.count += 1;
-    true
 }
 #[utoipa::path(
     get,
@@ -1117,10 +1572,80 @@ async fn probe_hw(State(state): State<AppState>) -> impl IntoResponse {
 fn probe_gpus_best_effort() -> Vec<serde_json::Value> {
     probe_gpus_linux()
 }
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
 fn probe_gpus_best_effort() -> Vec<serde_json::Value> {
-    // TODO: add Windows/macOS probes in future iterations (DXGI/Metal)
+    use serde_json::json;
+    use std::os::windows::ffi::OsStringExt as _;
+    use windows::Win32::Graphics::Dxgi::{
+        CreateDXGIFactory1, IDXGIAdapter1, IDXGIFactory1, DXGI_ADAPTER_DESC1, DXGI_ERROR_NOT_FOUND,
+    };
+    unsafe {
+        let factory: IDXGIFactory1 = match CreateDXGIFactory1::<IDXGIFactory1>() {
+            Ok(f) => f,
+            Err(_) => return Vec::new(),
+        };
+        let mut out = Vec::new();
+        let mut i: u32 = 0;
+        loop {
+            match factory.EnumAdapters1(i) {
+                Ok(adapter) => {
+                    let mut desc: DXGI_ADAPTER_DESC1 = std::mem::zeroed();
+                    if adapter.GetDesc1(&mut desc).is_ok() {
+                        let wname = &desc.Description;
+                        let len = wname.iter().position(|&c| c == 0).unwrap_or(wname.len());
+                        let name = std::ffi::OsString::from_wide(&wname[..len])
+                            .to_string_lossy()
+                            .to_string();
+                        out.push(json!({
+                            "name": name,
+                            "vendor_id": format!("0x{:04x}", desc.VendorId),
+                            "device_id": format!("0x{:04x}", desc.DeviceId),
+                            "dedicated_vram": (desc.DedicatedVideoMemory as u64),
+                        }));
+                    }
+                    i += 1;
+                }
+                Err(e) => {
+                    if e.code() == DXGI_ERROR_NOT_FOUND {
+                        break;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+        out
+    }
+}
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+fn probe_gpus_best_effort() -> Vec<serde_json::Value> {
     Vec::new()
+}
+
+#[cfg(feature = "gpu_wgpu")]
+fn probe_gpus_wgpu() -> Vec<serde_json::Value> {
+    use serde_json::json;
+    let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::default());
+    let mut out = Vec::new();
+    for adapter in instance.enumerate_adapters(wgpu::Backends::all()) {
+        let info = adapter.get_info();
+        let backend = match info.backend {
+            wgpu::Backend::Empty => "empty",
+            wgpu::Backend::Vulkan => "vulkan",
+            wgpu::Backend::Metal => "metal",
+            wgpu::Backend::Dx12 => "dx12",
+            wgpu::Backend::Gl => "gl",
+            wgpu::Backend::BrowserWebGpu => "webgpu",
+        };
+        out.push(json!({
+            "name": info.name,
+            "vendor": format!("0x{:04x}", info.vendor),
+            "device": format!("0x{:04x}", info.device),
+            "device_type": format!("{:?}", info.device_type).to_lowercase(),
+            "backend": backend,
+        }));
+    }
+    out
 }
 
 #[cfg(target_os = "linux")]
@@ -1433,7 +1958,7 @@ async fn probe_metrics(State(state): State<AppState>) -> impl IntoResponse {
     let out = collect_metrics_snapshot().await;
     // publish a compact event for dashboards (no polling needed)
     state.bus.publish(
-        "probe.metrics",
+        ext::topics::TOPIC_PROBE_METRICS,
         &serde_json::json!({
             "cpu": out["cpu"]["avg"],
             "mem": {"used": out["memory"]["used"], "total": out["memory"]["total"]},
@@ -1533,7 +2058,81 @@ fn probe_gpu_metrics_best_effort() -> Vec<serde_json::Value> {
     }
     out
 }
-#[cfg(not(target_os = "linux"))]
+#[cfg(target_os = "windows")]
+fn probe_gpu_metrics_best_effort() -> Vec<serde_json::Value> {
+    use serde_json::json;
+    use windows::Win32::Graphics::Dxgi::{
+        CreateDXGIFactory1, IDXGIAdapter1, IDXGIAdapter3, IDXGIFactory1, DXGI_ADAPTER_DESC1,
+        DXGI_ERROR_NOT_FOUND, DXGI_MEMORY_SEGMENT_GROUP, DXGI_MEMORY_SEGMENT_GROUP_LOCAL,
+        DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, DXGI_QUERY_VIDEO_MEMORY_INFO,
+    };
+    unsafe {
+        let factory: IDXGIFactory1 = match CreateDXGIFactory1::<IDXGIFactory1>() {
+            Ok(f) => f,
+            Err(_) => return Vec::new(),
+        };
+        let mut out = Vec::new();
+        let mut i: u32 = 0;
+        loop {
+            match factory.EnumAdapters1(i) {
+                Ok(adapter) => {
+                    let mut desc: DXGI_ADAPTER_DESC1 = std::mem::zeroed();
+                    if adapter.GetDesc1(&mut desc).is_ok() {
+                        let wname = &desc.Description;
+                        let len = wname.iter().position(|&c| c == 0).unwrap_or(wname.len());
+                        let name = std::ffi::OsString::from_wide(&wname[..len])
+                            .to_string_lossy()
+                            .to_string();
+                        // Best-effort current usage (requires IDXGIAdapter3)
+                        let mut used_local: Option<u64> = None;
+                        // QueryVideoMemoryInfo is advisory; ignore errors
+                        if let Ok(adapter3) = adapter.cast::<IDXGIAdapter3>() {
+                            let mut info: DXGI_QUERY_VIDEO_MEMORY_INFO = std::mem::zeroed();
+                            if adapter3
+                                .QueryVideoMemoryInfo(0, DXGI_MEMORY_SEGMENT_GROUP_LOCAL, &mut info)
+                                .is_ok()
+                            {
+                                used_local = Some(info.CurrentUsage as u64);
+                            }
+                            // Optionally check non-local as a fallback
+                            if used_local.is_none() {
+                                let mut info2: DXGI_QUERY_VIDEO_MEMORY_INFO = std::mem::zeroed();
+                                if adapter3
+                                    .QueryVideoMemoryInfo(
+                                        0,
+                                        DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL,
+                                        &mut info2,
+                                    )
+                                    .is_ok()
+                                {
+                                    used_local = Some(info2.CurrentUsage as u64);
+                                }
+                            }
+                        }
+                        out.push(json!({
+                            "index": format!("adapter{}", i),
+                            "vendor": "windows",
+                            "vendor_id": format!("0x{:04x}", desc.VendorId),
+                            "name": name,
+                            "mem_total": (desc.DedicatedVideoMemory as u64),
+                            "mem_used": used_local,
+                        }));
+                    }
+                    i += 1;
+                }
+                Err(e) => {
+                    if e.code() == DXGI_ERROR_NOT_FOUND {
+                        break;
+                    } else {
+                        break;
+                    }
+                }
+            }
+        }
+        out
+    }
+}
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
 fn probe_gpu_metrics_best_effort() -> Vec<serde_json::Value> {
     Vec::new()
 }
@@ -1780,12 +2379,15 @@ async fn events(
     State(state): State<AppState>,
     Query(q): Query<EventsQs>,
     headers: HeaderMap,
+    Extension(rid): Extension<String>,
 ) -> Sse<impl tokio_stream::Stream<Item = Result<Event, Infallible>>> {
     // Helper: format SSE data as either ARW envelope JSON (default) or CloudEvents structured JSON (opt-in)
     let ce_mode = std::env::var("ARW_EVENTS_SSE_MODE")
         .ok()
         .unwrap_or_else(|| "envelope".into());
-    fn sse_data_for(mode: &str, env: &arw_events::Envelope) -> String {
+    let decorate = std::env::var("ARW_EVENTS_SSE_DECORATE").ok().as_deref() == Some("1");
+    let rid_sse = rid.clone();
+    fn sse_data_for2(mode: &str, env: &arw_events::Envelope, decorate: bool, rid: &str) -> String {
         if mode.eq_ignore_ascii_case("ce-structured") {
             // CloudEvents structured content; fall back to env fields when ce meta is absent
             let (specversion, type_name, source, id, time, dct) = match &env.ce {
@@ -1808,7 +2410,7 @@ async fn events(
                     "application/json".into(),
                 ),
             };
-            serde_json::json!({
+            let mut v = serde_json::json!({
                 "specversion": specversion,
                 "type": type_name,
                 "source": source,
@@ -1816,10 +2418,27 @@ async fn events(
                 "time": time,
                 "datacontenttype": dct,
                 "data": env.payload.clone(),
-            })
-            .to_string()
+            });
+            if decorate {
+                if let Some(obj) = v.as_object_mut() {
+                    obj.insert(
+                        "arw_request_id".into(),
+                        serde_json::Value::String(rid.to_string()),
+                    );
+                }
+            }
+            v.to_string()
         } else {
-            serde_json::to_string(env).unwrap_or_else(|_| "{}".to_string())
+            let mut v = serde_json::to_value(env).unwrap_or_else(|_| serde_json::json!({}));
+            if decorate {
+                if let Some(obj) = v.as_object_mut() {
+                    obj.insert(
+                        "request_id".into(),
+                        serde_json::Value::String(rid.to_string()),
+                    );
+                }
+            }
+            serde_json::to_string(&v).unwrap_or_else(|_| "{}".to_string())
         }
     }
     // audit subscription
@@ -1835,9 +2454,10 @@ async fn events(
     };
     let bus_for_lag = state.bus.clone();
     let ce_mode_b = ce_mode.clone();
+    let rid_b = rid_sse.clone();
     let bstream = BroadcastStream::new(rx).flat_map(move |res| match res {
         Ok(env) => {
-            let data = sse_data_for(&ce_mode_b, &env);
+            let data = sse_data_for2(&ce_mode_b, &env, decorate, &rid_b);
             tokio_stream::once(Ok::<Event, Infallible>(
                 Event::default()
                     .id(env.time.clone())
@@ -1862,8 +2482,9 @@ async fn events(
         Vec::new()
     };
     let ce_mode_r = ce_mode.clone();
+    let rid_r = rid_sse.clone();
     let replay_stream = tokio_stream::iter(replay_items.into_iter().map(move |env| {
-        let data = sse_data_for(&ce_mode_r, &env);
+        let data = sse_data_for2(&ce_mode_r, &env, decorate, &rid_r);
         Ok::<Event, Infallible>(
             Event::default()
                 .id(env.time.clone())
@@ -1876,10 +2497,11 @@ async fn events(
         .get("Last-Event-ID")
         .and_then(|v| v.to_str().ok())
         .map(|s| s.to_string());
-    let init_body = match resume_from {
-        Some(id) => format!("{{\"resume_from\":\"{}\"}}", id.replace('"', "\\\"")),
-        None => "{}".to_string(),
-    };
+    let init_json = serde_json::json!({
+        "resume_from": resume_from,
+        "request_id": rid,
+    });
+    let init_body = serde_json::to_string(&init_json).unwrap_or_else(|_| "{}".to_string());
     let initial = tokio_stream::once(Ok::<Event, Infallible>(
         Event::default()
             .id("0")
@@ -2258,7 +2880,7 @@ async fn models_download_cancel_doc(
         ("order" = Option<String>, Query, description = "Sort order: asc|desc (default desc for bytes, asc otherwise)")
     ),
     responses(
-        (status = 200, description = "Paginated hashes list"),
+        (status = 200, description = "Paginated hashes list", body = ext::models_api::HashesPage),
         (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
     )
 )]
@@ -2268,10 +2890,25 @@ async fn state_models_hashes_doc(
     Json(json!({}))
 }
 
+// Public: models metrics snapshot (counters + EWMA)
+#[allow(dead_code)]
+#[utoipa::path(
+    get,
+    path = "/state/models_metrics",
+    tag = "Public/State",
+    responses(
+        (status = 200, description = "Download metrics", body = ext::models_api::ModelsMetrics),
+        (status = 403, description = "Forbidden", body = arw_protocol::ProblemDetails)
+    )
+)]
+async fn state_models_metrics_public_doc() -> impl IntoResponse {
+    Json(json!({}))
+}
+
 // --- OpenAPI-only wrappers for models jobs/concurrency ---
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/admin/models/jobs", tag = "Admin/Models", responses(
-    (status=200, description="Jobs status"),
+    (status=200, description="Jobs status", body = ext::models_api::ModelsJobs),
     (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
 ))]
 async fn models_jobs_doc() -> impl IntoResponse {
@@ -2285,7 +2922,7 @@ async fn models_jobs_doc() -> impl IntoResponse {
 }
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/admin/models/concurrency", tag = "Admin/Models", responses(
-    (status=200, description="Concurrency settings"),
+    (status=200, description="Concurrency settings", body = ext::models_api::ModelsConcurrency),
     (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
 ))]
 async fn models_concurrency_get_doc() -> impl IntoResponse {
@@ -2582,7 +3219,7 @@ async fn state_actions_doc() -> impl IntoResponse {
 // --- OpenAPI-only wrappers for new read-model and tools endpoints ---
 #[allow(dead_code)]
 #[utoipa::path(get, path = "/admin/state/models_metrics", tag = "Admin/State", responses(
-    (status=200, description="Models download metrics (counters + EWMA)"),
+    (status=200, description="Models download metrics (counters + EWMA)", body = ext::models_api::ModelsMetrics),
     (status=403, description="Forbidden", body = arw_protocol::ProblemDetails)
 ))]
 async fn state_models_metrics_doc(State(state): State<AppState>) -> impl IntoResponse {
@@ -2634,24 +3271,63 @@ async fn projects_list_doc() -> impl IntoResponse {
 #[arw_admin(method = "GET", path = "/admin", summary = "Admin index (HTML)")]
 async fn admin_index_html() -> impl IntoResponse {
     let items = arw_core::list_admin_endpoints();
-    // Build simple HTML list
-    let mut list = String::new();
+    let docs_url = descriptor_docs_url();
+    // Build items
+    let mut list_html = String::new();
     for e in &items {
-        let line = format!(
-            "<li><code>{}</code> <a href=\"{}\">{}</a> — {}</li>",
+        use std::fmt::Write as _;
+        let _ = writeln!(
+            &mut list_html,
+            "<li data-q=\"{} {} {}\"><code class=method>{}</code> <a href=\"{}\">{}</a><span class=summary>{}</span></li>",
+            e.method.to_lowercase(), e.path.to_lowercase(), e.summary.to_lowercase(),
             e.method, e.path, e.path, e.summary
         );
-        list.push_str(&line);
     }
-    let body = format!(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><title>Admin Index</title></head><body><h1>Admin Endpoints</h1><ul>{}</ul><p><a href=\"/admin/index.json\">index.json</a></p></body></html>",
-        list
+    // Compose HTML
+    let mut body = String::new();
+    body.push_str(r#"<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Admin Index</title>
+<style>:root{--bg:#ffffff;--fg:#222;--muted:#777;--btn-border:#ddd;--accent:#0366d6}
+@media (prefers-color-scheme: dark){:root{--bg:#0b0b0f;--fg:#ddd;--muted:#889;--btn-border:#333;--accent:#4da3ff}}
+[data-theme="dark"]{--bg:#0b0b0f;--fg:#ddd;--muted:#889;--btn-border:#333;--accent:#4da3ff}
+*{box-sizing:border-box} body{font:14px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:24px;background:var(--bg);color:var(--fg)}
+h1{font-size:20px;margin:0 0 12px} .bar{display:flex;gap:8px;align-items:center;margin:8px 0 16px} input[type=text]{flex:1;padding:8px;border:1px solid var(--btn-border);border-radius:6px}
+.btn{display:inline-block;padding:6px 10px;border:1px solid var(--btn-border);border-radius:6px;text-decoration:none;color:var(--accent);background:transparent}
+ul{list-style:none;padding:0;margin:0} li{padding:6px 0;border-bottom:1px solid #f0f0f0} code.method{display:inline-block;min-width:48px;margin-right:8px;color:#555} .summary{color:#666;margin-left:8px}
+.links{margin-left:auto;display:flex;gap:8px;align-items:center} .top{display:flex;gap:12px;align-items:center;justify-content:space-between} .muted{color:var(--muted)} .toggle{cursor:pointer}</style>
+<script>(function(){function f(){const q=(document.getElementById('q').value||'').toLowerCase();document.querySelectorAll('#list li').forEach(function(li){const k=li.getAttribute('data-q')||'';li.style.display=k.indexOf(q)>=0?'':'none';});}
+window.addEventListener('DOMContentLoaded',function(){var el=document.getElementById('q'); if(el){ el.addEventListener('input',f); }
+// theme toggle
+var root=document.documentElement; var KEY='arw-theme'; function apply(t){ if(t==='dark'){ root.setAttribute('data-theme','dark'); } else { root.removeAttribute('data-theme'); } }
+function cur(){ return localStorage.getItem(KEY)||''; } function tog(){ var t=cur()==='dark'?'light':'dark'; localStorage.setItem(KEY,t); apply(t); }
+apply(cur()); var btn=document.getElementById('themeToggle'); if(btn){ btn.addEventListener('click', tog); }
+});})();</script></head><body>
+"#);
+    body.push_str("<div class=top><h1>Admin Endpoints</h1><div class=links><a class=btn href=\\\"/\\\">Home</a>");
+    if std::env::var("ARW_DEBUG").ok().as_deref() == Some("1") {
+        body.push_str("<a class=btn href=\"/debug\">Open Debug UI</a>");
+    }
+    if let Some(u) = docs_url {
+        body.push_str(&format!(
+            "<a class=btn href=\"{}\" target=\"_blank\">Docs</a>",
+            u
+        ));
+    }
+    body.push_str(" <a class=btn href=\"/admin/index.json\">index.json</a> <button id=\"themeToggle\" class=\"btn toggle\" type=\"button\" aria-label=\"Toggle dark mode\">Theme</button></div></div>");
+    body.push_str(&format!("<div class=bar><input id=q type=text placeholder=\"Filter routes (method, path, summary)\"><span class=muted>{} endpoints</span></div>", items.len()));
+    body.push_str(&format!("<ul id=list>{}</ul>", list_html));
+    body.push_str("</body></html>");
+    let mut h = HeaderMap::new();
+    h.insert(
+        axum::http::header::CONTENT_TYPE,
+        axum::http::HeaderValue::from_static("text/html; charset=utf-8"),
     );
-    (
-        StatusCode::OK,
-        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
-        body,
-    )
+    if let Some(csp) = csp_header_value() {
+        h.insert(
+            axum::http::HeaderName::from_static("content-security-policy"),
+            csp,
+        );
+    }
+    (StatusCode::OK, h, body)
 }
 
 #[arw_admin(
@@ -2807,19 +3483,240 @@ async fn spec_index() -> impl IntoResponse {
             links.push((name.to_string(), ct));
         }
     }
-    let items: String = links
-        .iter()
-        .map(|(n, _ct)| format!("<li><a href=\"/spec/{}\">{}</a></li>", n, n))
-        .collect();
-    let body = format!(
-        "<!doctype html><html><head><meta charset=\"utf-8\"><title>ARW Specs</title></head><body><h1>Specs</h1><ul>{}</ul></body></html>",
-        items
+    let mut items_html = String::new();
+    for (n, _ct) in &links {
+        items_html.push_str(&format!("<li><a href=\"/spec/{}\">{}</a></li>", n, n));
+    }
+    items_html.push_str("<li><a href=\"/spec/health\">health</a></li>");
+    let mut body = String::new();
+    body.push_str(r#"<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ARW Specs</title>
+<style>:root{--bg:#ffffff;--fg:#222;--muted:#777;--btn-border:#ddd;--accent:#0366d6}
+@media (prefers-color-scheme: dark){:root{--bg:#0b0b0f;--fg:#ddd;--muted:#889;--btn-border:#333;--accent:#4da3ff}}
+[data-theme="dark"]{--bg:#0b0b0f;--fg:#ddd;--muted:#889;--btn-border:#333;--accent:#4da3ff}
+*{box-sizing:border-box} body{font:14px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif;margin:24px;background:var(--bg);color:var(--fg)}
+h1{font-size:20px;margin:0 0 12px} .bar{display:flex;gap:8px;align-items:center;margin:8px 0 16px}
+.btn{display:inline-block;padding:6px 10px;border:1px solid var(--btn-border);border-radius:6px;text-decoration:none;color:var(--accent);background:transparent}
+ul{list-style:none;padding:0;margin:0} li{padding:6px 0;border-bottom:1px solid #f0f0f0} .toggle{cursor:pointer}
+</style>
+<script>(function(){var root=document.documentElement,KEY='arw-theme';function apply(t){if(t==='dark'){root.setAttribute('data-theme','dark');}else{root.removeAttribute('data-theme');}}function cur(){return localStorage.getItem(KEY)||'';}function tog(){var t=cur()==='dark'?'light':'dark';localStorage.setItem(KEY,t);apply(t);}window.addEventListener('DOMContentLoaded',function(){apply(cur());var b=document.getElementById('themeToggle'); if(b){b.addEventListener('click',tog);} });})();</script>
+</head><body>
+<div class=bar><h1>Specs</h1><span style="flex:1"></span><a class="btn" href="/">Home</a> <button id="themeToggle" class="btn toggle" type="button" aria-label="Toggle dark mode">Theme</button></div>
+<ul>"#);
+    body.push_str(&items_html);
+    body.push_str("</ul></body></html>");
+    let mut h = HeaderMap::new();
+    h.insert(
+        axum::http::header::CONTENT_TYPE,
+        axum::http::HeaderValue::from_static("text/html; charset=utf-8"),
     );
-    (
-        StatusCode::OK,
-        [(axum::http::header::CONTENT_TYPE, "text/html; charset=utf-8")],
-        body,
-    )
+    if let Some(csp) = csp_header_value() {
+        h.insert(
+            axum::http::HeaderName::from_static("content-security-policy"),
+            csp,
+        );
+    }
+    (StatusCode::OK, h, body)
+}
+
+// Public landing page
+async fn index_landing() -> impl IntoResponse {
+    let debug = std::env::var("ARW_DEBUG").ok().as_deref() == Some("1");
+    let docs = descriptor_docs_url();
+    let mut links = vec![
+        "<a class=btn href=\"/about\">About</a>".to_string(),
+        "<a class=btn href=\"/spec\">Specs</a>".to_string(),
+    ];
+    if debug {
+        links.push("<a class=btn href=\"/debug\">Debug UI</a>".to_string());
+        links.push("<a class=btn href=\"/admin\">Admin</a>".to_string());
+    }
+    if let Some(u) = docs {
+        links.push(format!(
+            "<a class=btn href=\"{}\" target=\"_blank\">Docs</a>",
+            u
+        ));
+    }
+    let mut body = String::new();
+    body.push_str(r#"<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Agent Hub</title>
+<style>:root{--bg:#ffffff;--fg:#222;--muted:#666;--btn-border:#ddd;--accent:#0366d6;--ok:#2da44e;--err:#d1242f}
+@media (prefers-color-scheme: dark){:root{--bg:#0b0b0f;--fg:#ddd;--muted:#889;--btn-border:#333;--accent:#4da3ff}}
+[data-theme="dark"]{--bg:#0b0b0f;--fg:#ddd;--muted:#889;--btn-border:#333;--accent:#4da3ff}
+*{box-sizing:border-box} body{margin:24px;background:var(--bg);color:var(--fg);font:16px/1.5 -apple-system,BlinkMacSystemFont,Segoe UI,Roboto,Helvetica,Arial,sans-serif}
+h1{font-size:22px;margin:0 0 12px} .bar{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.btn{display:inline-block;padding:8px 12px;border:1px solid var(--btn-border);border-radius:8px;text-decoration:none;color:var(--accent);background:transparent}
+.muted{color:var(--muted)} .spacer{flex:1}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border:1px solid var(--btn-border);border-radius:999px}
+.badge .dot{width:10px;height:10px;border-radius:50%;background:var(--muted)}
+.badge.ok .dot{background:var(--ok)} .badge.err .dot{background:var(--err)} .toggle{cursor:pointer}
+</style>
+</head><body>"#);
+    body.push_str(r#"<div class=bar><h1>Agent Hub (ARW)</h1><span class="spacer"></span><span id="status" class="badge"><span class=dot></span><span id="statusText">Checking…</span></span> <span id="version" class="badge">v…</span> <button id="themeToggle" class="btn toggle" type="button" aria-label="Toggle dark mode">Theme</button></div>"#);
+    body.push_str(r#"<p class=muted>Your private AI control room.</p><div class=bar>"#);
+    body.push_str(&links.join(" "));
+    body.push_str("</div>");
+    body.push_str(r#"<script>(function(){var root=document.documentElement,KEY='arw-theme';function apply(t){if(t==='dark'){root.setAttribute('data-theme','dark');}else{root.removeAttribute('data-theme');}}
+function cur(){return localStorage.getItem(KEY)||'';} function tog(){var t=cur()==='dark'?'light':'dark';localStorage.setItem(KEY,t);apply(t);} apply(cur()); var btn=document.getElementById('themeToggle'); if(btn){btn.addEventListener('click',tog);} 
+var badge=document.getElementById('status'), text=document.getElementById('statusText'); async function poll(){try{var r=await fetch('/healthz',{cache:'no-store'}); if(r.ok){badge.classList.add('ok');badge.classList.remove('err'); if(text){text.textContent='Online';}} else {throw new Error('bad');}} catch(e){badge.classList.add('err');badge.classList.remove('ok'); if(text){text.textContent='Offline';}} finally {setTimeout(poll,4000);}} poll(); async function about(){try{var r=await fetch('/about',{cache:'no-store'}); if(r.ok){var j=await r.json(); var v=(j&&j.version)||(j&&j.data&&j.data.version); var el=document.getElementById('version'); if(el && v){ el.textContent='v'+v; }}}catch(e){} } about();})();</script>"#);
+    body.push_str("</body></html>");
+    let mut h = HeaderMap::new();
+    h.insert(
+        axum::http::header::CONTENT_TYPE,
+        axum::http::HeaderValue::from_static("text/html; charset=utf-8"),
+    );
+    if let Some(csp) = csp_header_value() {
+        h.insert(
+            axum::http::HeaderName::from_static("content-security-policy"),
+            csp,
+        );
+    }
+    (StatusCode::OK, h, body)
+}
+
+async fn favicon_empty() -> impl IntoResponse {
+    StatusCode::NO_CONTENT
+}
+
+#[allow(dead_code)]
+#[utoipa::path(get, path = "/spec/health", tag = "Public/Specs", responses((status=200, description="Spec health JSON")))]
+async fn spec_health() -> impl IntoResponse {
+    let checks = [
+        ("openapi.yaml", "application/yaml"),
+        ("asyncapi.yaml", "application/yaml"),
+        ("mcp-tools.json", "application/json"),
+    ];
+    let mut items = Vec::new();
+    for (name, ct) in checks.iter() {
+        let p = std::path::Path::new("spec").join(name);
+        let (exists, size) = match std::fs::metadata(&p) {
+            Ok(md) => (true, md.len()),
+            Err(_) => (false, 0),
+        };
+        items.push(serde_json::json!({"name": name, "content_type": ct, "path": p.to_string_lossy(), "exists": exists, "size": size }));
+    }
+    Json(serde_json::json!({"items": items}))
+}
+
+// ---- Tests for specs and security helpers ----
+#[cfg(test)]
+mod tests_specs_sec {
+    use super::*;
+    use axum::{routing::get, Router};
+    use tower::ServiceExt as _;
+
+    #[tokio::test]
+    async fn spec_endpoints_return_ok() {
+        // Ensure local spec files exist under current CWD for the handlers
+        let _ = std::fs::create_dir_all("spec");
+        let _ = std::fs::write(
+            "spec/openapi.yaml",
+            b"openapi: 3.1.0\ninfo: {title: test, version: 0.0.0}\n",
+        );
+        let _ = std::fs::write(
+            "spec/asyncapi.yaml",
+            b"asyncapi: 2.6.0\ninfo: {title: test, version: 0.0.0}\n",
+        );
+        let _ = std::fs::write("spec/mcp-tools.json", b"[]\n");
+
+        let app = Router::new()
+            .route("/spec/openapi.yaml", get(spec_openapi))
+            .route("/spec/asyncapi.yaml", get(spec_asyncapi))
+            .route("/spec/mcp-tools.json", get(spec_mcp))
+            .route("/spec", get(spec_index))
+            .route("/spec/health", get(spec_health));
+
+        for (path, ct) in [
+            ("/spec/openapi.yaml", Some("application/yaml")),
+            ("/spec/asyncapi.yaml", Some("application/yaml")),
+            ("/spec/mcp-tools.json", Some("application/json")),
+            ("/spec", Some("text/html; charset=utf-8")),
+            ("/spec/health", Some("application/json")),
+        ] {
+            let resp = app
+                .clone()
+                .oneshot(
+                    axum::http::Request::builder()
+                        .uri(path)
+                        .body(axum::body::Body::empty())
+                        .unwrap(),
+                )
+                .await
+                .unwrap();
+            assert!(resp.status().is_success(), "{}", path);
+            if let Some(expect_ct) = ct {
+                let got = resp
+                    .headers()
+                    .get(axum::http::header::CONTENT_TYPE)
+                    .and_then(|v| v.to_str().ok())
+                    .unwrap_or("");
+                assert_eq!(got, expect_ct, "{}", path);
+            }
+        }
+    }
+
+    #[test]
+    fn extract_admin_token_prefers_bearer() {
+        let mut h = HeaderMap::new();
+        h.insert(
+            axum::http::header::AUTHORIZATION,
+            axum::http::HeaderValue::from_static("Bearer abc"),
+        );
+        h.insert(
+            axum::http::HeaderName::from_static("x-arw-admin"),
+            axum::http::HeaderValue::from_static("xyz"),
+        );
+        let tok = extract_admin_token(&h).unwrap();
+        assert_eq!(tok, "abc");
+    }
+
+    #[test]
+    fn client_ip_key_picks_forwarded() {
+        let mut h = HeaderMap::new();
+        h.insert(
+            axum::http::HeaderName::from_static("x-forwarded-for"),
+            axum::http::HeaderValue::from_static("1.2.3.4, 5.6.7.8"),
+        );
+        let k = client_ip_key(&h);
+        assert_eq!(k, "1.2.3.4");
+    }
+
+    #[test]
+    fn token_sha256_matches_works() {
+        let tok = "s3cr3t";
+        use sha2::Digest as _;
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(tok.as_bytes());
+        let hex = hex::encode(hasher.finalize());
+        assert!(token_sha256_matches(tok, &hex));
+        assert!(!token_sha256_matches("nope", &hex));
+    }
+
+    #[tokio::test]
+    async fn security_rate_limit_per_token() {
+        // Configure rate limit: 1 per 60 seconds
+        std::env::set_var("ARW_ADMIN_RL", "1/60");
+        std::env::set_var("ARW_ADMIN_TOKEN", "t0k");
+
+        let app = Router::new()
+            .route(
+                "/admin/ping",
+                get(|| async { (StatusCode::OK, Json(serde_json::json!({"ok": true}))) }),
+            )
+            .layer(middleware::from_fn(security_mw));
+
+        let mk = |auth: &str| {
+            axum::http::Request::builder()
+                .uri("/admin/ping")
+                .header(axum::http::header::AUTHORIZATION, auth)
+                .body(axum::body::Body::empty())
+                .unwrap()
+        };
+        // First should pass
+        let r1 = app.clone().oneshot(mk("Bearer t0k")).await.unwrap();
+        assert_eq!(r1.status(), StatusCode::OK);
+        // Second should rate-limit
+        let r2 = app.oneshot(mk("Bearer t0k")).await.unwrap();
+        assert_eq!(r2.status(), StatusCode::TOO_MANY_REQUESTS);
+    }
 }
 
 // ---- Interface catalog (debug) ----

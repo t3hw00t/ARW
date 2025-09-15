@@ -4,7 +4,8 @@ title: Backlog
 
 # Backlog
 
-Updated: 2025-09-12
+Updated: 2025-09-15
+Type: Reference
 
 This backlog captures concrete work items and near-term priorities. The Roadmap focuses on higher‑level themes and time horizons; see About → Roadmap for strategic context.
 
@@ -35,8 +36,49 @@ Never‑Out‑Of‑Context (High Priority)
 - [t-250912143033-0009] Training Park: dials for diversity/recency/compression; recall‑risk and coverage meters — todo
 
 UI Coherence
-- Universal right‑sidecar across Hub/Chat/Training; subscribe once to `/admin/events` with `corr_id` filters
-- Command Palette: global search + actions; attach agent to project; grant scoped permissions with TTL
+- Universal right‑sidecar across Hub/Chat/Training; subscribe once to `/events` — done (initial lanes)
+- Command Palette: global search + actions; attach agent to project; grant scoped permissions with TTL — done (initial)
+- Compare: Hub Text/JSON (Only changes/Wrap/Copy), Image slider, CSV/Table key‑diff — done
+- Compare: Chat A/B pin‑to‑compare and diff — done
+- Events window: presets (state/models/tools/egress/feedback), include/exclude body filters, pretty/wrap/pause — done
+- Events window: RPU preset (rpu.*) — done
+- Logs window: route filter and focus tables mode — done
+- Screenshots: precise screen/window/region capture (with preview), sidecar Activity thumbnails — done
+- OCR: default‑on build with Tesseract; Auto OCR toggle in Chat; palette toggle — done
+- Gallery: modal with Open/Copy/Copy MD/Save to project/Annotate — done
+- Annotation overlay: draw rectangles; blur+border burn; sidecar JSON — done
+- Save to project: server import endpoint; path prompt; toast feedback — done
+- Project Hub (Files): breadcrumbs + Back; filter; inline expandable tree with persisted expansions; drag‑and‑drop upload; per‑project editor overrides; Open in Editor flow — done
+- Project Hub (Files): notes autosave with inline status; conflict‑aware merge UI with diff + scroll‑sync — done
+- Project Hub (Files): expand‑on‑search (auto‑expand ancestors of matches) and match highlighting — done
+- Project Hub (Runs): Pin‑to‑compare available; filters are non‑persistent (view‑only) — done
+- Accessibility: tree roles/aria‑level/expanded; regions labeled; command palette and gallery as dialogs; focus ring on rows; Compare tabs with role=tablist and roving tabindex — done
+- Routes: canonicalize admin UI paths (`/admin/debug`, `/admin/ui/*`); keep local dev alias `/debug`; update launcher open path — doing
+- SSE store: add connection status + resilient auto-reconnect with modest backoff; reuse filters and replay across reconnect — doing
+- Connections window: allow per-connection admin token; open Events/Logs/Models windows pointed at that base — todo
+- Per‑project templates: save/apply lanes/grid/focus in Hub — done
+- Route SLO selector UI: adjustable p95 threshold in Logs/Events — done
+- Export CSV: route/kind tables — done; table diff export — done (two‑row or wide)
+- Next: labels/arrows in annotator; redaction presets (regex+OCR); append Markdown to NOTES.md; Pin‑to‑compare from Runs; retention/tagging for gallery; guided countdown for capture.
+ - Next: keyboard shortcuts (global) cheatsheet and discoverability; ARIA polish for Agents/Runs actions; skip‑links across pages; unit tests for /projects/file content_b64 path; virtualize large trees.
+
+Design System & Tokens
+- [t-250914231200-dsg01] Single‑source tokens (CSS/JSON) under `assets/design/` — done
+- [t-250914231205-dsg02] Sync helper and task (`scripts/sync_tokens.sh`, `just tokens-sync`) — done
+- [t-250914231210-dsg03] Docs: load tokens via `extra_css`; add Design Theme page — done
+- [t-250914231215-dsg04] Launcher: adopt tokens across common/index/events/logs/models/connections — done (initial)
+- [t-250914231220-dsg05] Service Debug UI: replace inline styles with token vars — in progress
+- [t-250914231225-dsg06] Docs overrides: dedupe variables; rely on tokens only — done
+- [t-250914231240-dsg09] CI: add tokens sync check step (uses `just tokens-check`) — done
+- [t-250914231230-dsg07] Extract `ui-kit.css` primitives (buttons/inputs/badges) for launcher pages — done
+- [t-250914231235-dsg08] Contrast audit (WCAG AA) sweep; adjust any low‑contrast cases — todo
+- [t-250914231245-dsg10] Add W3C tokens pipeline (Style Dictionary) to emit platform targets — plan
+- [t-250914231250-dsg11] Add prefers-contrast / forced-colors styles for key components — todo
+ - [t-250914231255-dsg12] Tailwind tokens export (JSON) for downstream configs — done
+
+Standards & Docs
+- [t-250914231255-std01] Add ADR framework and seed first ADRs (tokens SSoT, event naming) — plan
+ - [t-250914231300-std02] Optional docs a11y check in CI (axe) — done
 
 Recipes MVP
 - Finalize `spec/schemas/recipe_manifest.json`; add doc‑tests and example gallery entries
@@ -73,6 +115,9 @@ Caching & Performance (High Priority)
 - [t-250913001012-1005] Read‑models SSE deltas: stream JSON Patch with `Last-Event-ID` resume; wire Debug UI to apply patches — todo
 - [t-250913001015-1006] Metrics: expose cache hit/miss/age, bytes/latency saved, stampede suppression rate at `/state/*` and `/metrics` — todo
 - [t-250913001018-1007] Cache Policy manifest + loader: define YAML format, map to env knobs, and plan migration to config‑first overrides — docs done; loader todo
+- [t-250914210100-http01] HTTP helpers module (`ext::http`) for ETag/Last‑Modified/Range parsing; adopt in models blob GET/HEAD — done
+- [t-250914210104-http02] Adopt `ext::http` helpers across any future digest/static file endpoints (keep semantics consistent) — todo
+- [t-250914210107-http03] Docs: consolidate HTTP caching semantics into a short reusable snippet and cross‑link from API/Guide — done
 
 Egress Firewall & Posture (Plan)
 - Policy: add network scopes (domain/IP/CIDR, port, protocol) and TTL leases; surface in UI.
@@ -111,7 +156,11 @@ Remote Access & TLS
 Observability & Eventing
 - Event journal: reader endpoint (tail N) and topic‑filtered consumers across workers/connectors
 - Metrics registry with histograms; wire to /metrics [t-250911230320-8615]
-- Docs: surface route metrics/events in docs and status page
+- Docs: surface route metrics/events in docs and status page — done
+- RPU trust: watcher + endpoints + `rpu.trust.changed` event + Prometheus gauges — done
+
+Compatibility & Hardware
+- GPU probe fallback via wgpu: enumerate adapters across backends — done
 
 State Read‑Models & Episodes
 - Observations read‑model + GET /state/observations [t-250912001055-0044]
@@ -124,7 +173,8 @@ Hierarchy & Governor Services
 
 CLI & Introspection
 - Migrate arw-cli to clap (derive, help, completions, JSON flag) [t-250911230329-4722]
-- Auto‑generate /about endpoints from router/introspection [t-250911230306-7961]
+- Auto‑generate /about endpoints from router/introspection [t-250911230306-7961] — done
+  - /about merges public endpoints (runtime recorder) and admin endpoints (macro registry); entries are `METHOD path`; deduped and sorted.
 
 Queues, NATS & Orchestration
 - Orchestrator: lease handling, nack(retry_after_ms), group max in‑flight + tests [t-250911230308-0779]
@@ -133,14 +183,26 @@ Queues, NATS & Orchestration
 Specs & Docs
 - Generate AsyncAPI + MCP artifacts and serve under /spec/* [t-250909224102-9629]
 - Docgen: gating keys listing + config schema and examples
+- AsyncAPI: include `rpu.trust.changed` channel — done
 - Event normalization rollout
   - [t-250913213500-ev01] Add dual-mode warning logs when ARW_EVENTS_KIND_MODE=dual to surface remaining legacy consumers — removed (modes dropped)
   - [t-250913213501-ev02] Update all docs/screenshots/snippets to normalized kinds (models.download.progress, …) — in progress
+  - Gallery guide and screenshots guide updates — done
   - [t-250913213502-ev03] Add envelope schema `ApiEnvelope<T>` in OpenAPI and adopt in responses (opt-in) — todo
   - [t-250913213503-ev04] Add short descriptions to any endpoints with Spectral hints (e.g., /state/models) — done
   - [t-250913213504-ev05] Adjust Spectral AsyncAPI rule to accept dot.case explicitly to remove naming warnings — todo
   - [t-250913213505-ev06] Plan removal: switch all deployments to normalized kinds, then drop legacy/dual paths — done
   - [t-250913213506-ev07] Add deprecation note to release notes (legacy event kinds) — done
+
+Visual Capture (Screenshots)
+- Screenshot tool (OS‑level): capture entire screen/display or region; save to `.arw/screenshots/` and emit `screenshots.captured` — done
+- Window crop: obtain Tauri window bounds and crop screenshot to window rectangle — done
+- OCR pass (optional): run OCR over captured region (tesseract/rapidocr) to extract text for search — in progress (feature‑flag ready; enabled by default)
+- Sidecar: Activity lane shows recent screenshots as thumbnails with open/copy actions — done
+- Annotation: overlay + burn tool with sidecar JSON; blur+border — done
+- Gallery: modal with actions and annotate — done
+- Policy: gate under `io:screenshot` and `io:ocr`; leases and audit — done
+- Next: redaction presets; labels/arrows; retention and search in gallery; Save to project macro to append Markdown in NOTES.md.
 
 Strict dot.case normalization (no back-compat)
 - [t-250914050900-ev10] Update topics SSoT to dot.case only (remove CamelCase constants) — in progress
@@ -164,6 +226,19 @@ Feedback Engine (Near‑Live)
 
 Testing
 - End‑to‑end coverage for endpoints & gating; fixtures; CI integration [t-250911230325-2116]
+- [t-250914210200-test01] Scoped state dir for tests (`test_support::scoped_state_dir`) to isolate `ARW_STATE_DIR` — done
+- [t-250914210204-test02] Migrate env‑derived `state_dir` lookups to a process‑lifetime cache (OnceCell) with a test‑only reset hook to avoid flakiness — todo
+- [t-250914210208-test03] Concurrency controls: add tests for `block=false` shrink path and pending_shrink reporting — todo
+
+Stabilization & Contracts
+- [t-250914210300-api01] Models summary: switch handler to typed snapshots from `ModelsService` (avoid ad‑hoc JSON picks) — done
+- [t-250914210302-api06] Concurrency: expose `pending_shrink` in `GET /admin/models/concurrency` and jobs snapshot — done
+- [t-250914210303-ui01] Models UI: add Jobs panel, concurrency controls with feedback, Installed Hashes filters + reset, and persistence — done
+- [t-250914210304-ui02] Installed Hashes: add pagination controls (offset/next/prev) — todo
+- [t-250914210304-api02] Egress ledger: add compact summarizer endpoint (time‑bounded; filters by decision/reason) — done
+- [t-250914210308-api03] CAS GC: centralize manifest reference extraction (single helper used by GC and any scanners) — todo
+- [t-250914210312-api04] Contract tests: promote spec/docs consistency checks to CI (status/code enums already validated in unit tests) — todo
+- [t-250914210316-api05] Sweep and remove any remaining deprecated endpoints; update docs and SDKs — todo
 
 ## Next (1–2 Months)
 

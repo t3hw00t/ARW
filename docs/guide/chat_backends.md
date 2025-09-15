@@ -7,7 +7,8 @@ title: Chat Backends
 
 The ARW debug Chat UI can use simple synthetic replies (echo/reverse/time) or call real model backends when configured.
 
-Updated: 2025-09-12
+Updated: 2025-09-14
+Type: How‑to
 
 ## Synthetic (Default)
 

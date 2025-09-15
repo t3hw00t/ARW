@@ -24,6 +24,11 @@ cargo clippy --workspace --all-targets -- -D warnings
 scripts/test.ps1   # or ./scripts/test.sh
 scripts/docgen.ps1 # or ./scripts/docgen.sh
 just docs-check    # quick docs lint (links/headings), optional
+just docs-type-stamp  # insert Type: badges based on path
+just docs-stamp       # stamp Updated: dates from git history
+
+# Serve docs locally (hot reload)
+just docs-serve
 
 # Feature Matrix (living)
 just features-gen  # regenerates docs/reference/feature_matrix.md from interfaces/features.json
@@ -71,6 +76,8 @@ Docs lint checklist
 - Link canonical pages: Quickstart, Deployment, Configuration, Admin Endpoints.
 - Ensure page is included in `mkdocs.yml` nav.
 - Run `just docs-check` and ensure `mkdocs build --strict` passes.
+- Use `just docs-type-stamp` and `just docs-stamp` to keep badges and dates consistent.
+- Install repo hooks to automate checks: `just hooks-install` (runs format, clippy, tests, spec checks, and docs build when docs change).
 
 PR acceptance checklist
 - User‑visible docs updated when behavior changes

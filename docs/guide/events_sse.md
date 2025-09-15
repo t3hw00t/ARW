@@ -3,13 +3,15 @@ title: Subscribe to Events (SSE)
 ---
 
 # Subscribe to Events (SSE)
+Updated: 2025-09-14
+Type: How‑to
 
 Microsummary: Connect to the live Server‑Sent Events stream, filter by prefix, and replay recent events. Admin‑gated. Stable.
 
 Overview
 - Endpoint: `GET /admin/events` (text/event-stream)
 - Auth: requires admin access; set `ARW_ADMIN_TOKEN` and use it as `Authorization: Bearer <token>` if configured.
-- Filters: `?prefix=models.` (or any event kind prefix)
+- Filters: `?prefix=models.` (or any event kind prefix, e.g., `rpu.` for RPU trust events)
 - Replay: `?replay=N` to emit the last N events on connect (best‑effort)
 
 Envelope
@@ -58,10 +60,17 @@ Examples
     -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
     "http://127.0.0.1:8090/admin/events?prefix=models.&replay=10"
   ```
+  Watch only RPU trust events:
+  ```bash
+  curl -N \
+    -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+    "http://127.0.0.1:8090/admin/events?prefix=rpu.&replay=5"
+  ```
 
 Event model
 - Events use a compact envelope with `status` (human) and `code` (machine) conventions.
 - Common kinds: `models.download.progress`, `egress.ledger.appended`, `task.completed`, `feedback.suggested`.
+ - RPU trust change: `rpu.trust.changed` (payload includes `{count, path?, ts_ms}`)
 
 Note: event kinds are normalized. Legacy `Models.*` forms have been removed.
 - See Explanations → Events Vocabulary for the canonical list. For source‑of‑truth topic names used by the service, see `apps/arw-svc/src/ext/topics.rs`.

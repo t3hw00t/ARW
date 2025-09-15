@@ -1,4 +1,6 @@
 # gRPC (optional)
+Updated: 2025-09-14
+Type: How‑to
 { .topic-trio style="--exp:.5; --complex:.7; --complicated:.5" data-exp=".5" data-complex=".7" data-complicated=".5" }
 
 ARW exposes an optional gRPC server in `arw-svc` behind the `grpc` feature.

@@ -203,6 +203,12 @@ channels:
       description: Feedback suggestion applied
       message:
         $ref: '#/components/messages/FeedbackApplied'
+  rpu.trust.changed:
+    subscribe:
+      operationId: rpu_trust_changed
+      description: Trust store changed/reloaded
+      message:
+        $ref: '#/components/messages/RpuTrustChanged'
 components:
   messages:
     ServiceStart:
@@ -368,6 +374,13 @@ components:
           id: { type: string }
           action: { type: string }
           params: { type: object }
+    RpuTrustChanged:
+      name: rpu.trust.changed
+      payload:
+        type: object
+        properties:
+          count: { type: integer }
+          path: { type: string }
 YAML
 info "Wrote $spec_dir/asyncapi.yaml"
 # OpenAPI JSON (for quick preview/static consumption)

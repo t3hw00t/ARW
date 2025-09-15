@@ -2,9 +2,12 @@
 title: Security Posture
 ---
 
-# Security Posture (Plan)
+# Security Posture
 
 Updated: 2025-09-12
+Type: How‑to
+
+Status: Planned
 
 Per‑project security posture presets combine policy, egress, and lightweight mitigations.
 
@@ -17,4 +20,3 @@ Planned configuration
 - `ARW_SECURITY_POSTURE`: `relaxed|standard|strict` (per project)
 
 See also: Network Posture; Lightweight Mitigations; Security Hardening.
-

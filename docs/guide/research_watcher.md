@@ -3,6 +3,8 @@ title: Research Watcher
 ---
 
 # Research Watcher
+Updated: 2025-09-12
+Type: How‑to
 
 A small, read‑only watcher that surfaces candidate Logic Units from frontier research as config‑packages you can A/B on demand.
 

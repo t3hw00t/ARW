@@ -2,6 +2,7 @@ use super::{corr, io, paths, ApiError};
 use crate::AppState;
 use arw_macros::{arw_admin, arw_gate};
 use axum::{extract::Query, response::IntoResponse, Json};
+use base64::Engine as _;
 use serde::Deserialize;
 use serde_json::json;
 use tokio::fs as afs;
@@ -9,6 +10,19 @@ use tokio::fs as afs;
 #[derive(Deserialize, utoipa::ToSchema)]
 pub(crate) struct ProjCreateReq {
     pub name: String,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+pub(crate) struct ImportReq {
+    /// Project name (existing)
+    pub proj: String,
+    /// Destination relative path inside the project (e.g., "images/capture.png")
+    pub dest: String,
+    /// Source absolute path (must be under state_dir/screenshots)
+    pub src_path: String,
+    /// copy | move (default copy)
+    #[serde(default)]
+    pub mode: Option<String>,
 }
 
 #[arw_admin(
@@ -197,7 +211,12 @@ pub(crate) struct FileQs {
 
 #[derive(Deserialize, utoipa::ToSchema)]
 pub(crate) struct FileWriteBody {
-    content: String,
+    /// UTF-8 content (text mode)
+    #[serde(default)]
+    content: Option<String>,
+    /// Base64-encoded bytes (binary mode)
+    #[serde(default)]
+    content_b64: Option<String>,
     #[serde(default)]
     prev_sha256: Option<String>,
 }
@@ -257,7 +276,14 @@ pub(crate) async fn projects_file_get(Query(q): Query<FileQs>) -> impl IntoRespo
         Ok(s) => s,
         Err(_) => return ApiError::bad_request("non-utf8 file").into_response(),
     };
-    super::ok(json!({"path": q.path, "sha256": sha, "content": content})).into_response()
+    let abs_str = abs.to_string_lossy().to_string();
+    super::ok(json!({
+        "path": q.path,
+        "sha256": sha,
+        "content": content,
+        "abs_path": abs_str
+    }))
+    .into_response()
 }
 
 #[arw_admin(
@@ -278,8 +304,19 @@ pub(crate) async fn projects_file_set(
         return ApiError::bad_request("invalid path").into_response();
     };
     let abs = root.join(rel);
+    // Resolve input bytes (text or base64)
+    let bytes: Vec<u8> = if let Some(b64) = body.content_b64.as_deref() {
+        match base64::engine::general_purpose::STANDARD.decode(b64) {
+            Ok(b) => b,
+            Err(_) => return ApiError::bad_request("invalid base64").into_response(),
+        }
+    } else if let Some(txt) = body.content.as_deref() {
+        txt.as_bytes().to_vec()
+    } else {
+        return ApiError::bad_request("missing content").into_response();
+    };
     let maxb = max_file_bytes();
-    if (body.content.len() as u64) > maxb {
+    if (bytes.len() as u64) > maxb {
         return ApiError::bad_request("content too large").into_response();
     }
     if let Some(expected) = body.prev_sha256.as_deref() {
@@ -299,7 +336,7 @@ pub(crate) async fn projects_file_set(
     if let Some(parent) = abs.parent() {
         let _ = afs::create_dir_all(parent).await;
     }
-    if let Err(e) = super::io::save_bytes_atomic(&abs, body.content.as_bytes()).await {
+    if let Err(e) = super::io::save_bytes_atomic(&abs, &bytes).await {
         return ApiError::internal(&e.to_string()).into_response();
     }
     let mut evt = json!({"proj": q.proj, "path": q.path});
@@ -335,10 +372,61 @@ pub(crate) async fn projects_file_patch(
     }
     // delegate to file_set semantics
     let body = FileWriteBody {
-        content: req.content,
+        content: Some(req.content),
+        content_b64: None,
         prev_sha256: req.prev_sha256,
     };
     projects_file_set(axum::extract::State(state), Query(q), Json(body))
         .await
         .into_response()
+}
+
+#[arw_admin(
+    method = "POST",
+    path = "/admin/projects/import",
+    summary = "Import a file into the project (copy/move from screenshots dir)"
+)]
+#[arw_gate("projects:file:import")]
+pub(crate) async fn projects_import(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    Json(req): Json<ImportReq>,
+) -> impl IntoResponse {
+    // Validate project root
+    let Some(root) = paths::project_root(&req.proj) else {
+        return ApiError::bad_request("invalid proj").into_response();
+    };
+    // Validate source path under screenshots dir
+    let shots = super::paths::screenshots_dir();
+    let src = std::path::Path::new(&req.src_path).to_path_buf();
+    // Normalize src (best-effort)
+    let src_can = src.canonicalize().unwrap_or(src.clone());
+    let shots_can = shots.canonicalize().unwrap_or(shots.clone());
+    if !src_can.starts_with(&shots_can) {
+        return ApiError::forbidden("src not under screenshots dir").into_response();
+    }
+    // Validate dest relative path
+    let Some(dest_rel) = validate_rel_path(&req.dest) else {
+        return ApiError::bad_request("invalid dest").into_response();
+    };
+    let dest_abs = root.join(&dest_rel);
+    if let Some(parent) = dest_abs.parent() {
+        let _ = afs::create_dir_all(parent).await;
+    }
+    // Copy or move
+    let mode = req.mode.as_deref().unwrap_or("copy").to_ascii_lowercase();
+    let res = if mode == "move" {
+        afs::rename(&src_can, &dest_abs).await
+    } else {
+        afs::copy(&src_can, &dest_abs).await.map(|_| ())
+    };
+    if let Err(e) = res {
+        return ApiError::internal(&e.to_string()).into_response();
+    }
+    // Emit event
+    let mut evt = json!({"proj": req.proj, "path": dest_rel.to_string_lossy()});
+    super::corr::ensure_corr(&mut evt);
+    state
+        .bus
+        .publish(crate::ext::topics::TOPIC_PROJECTS_FILE_WRITTEN, &evt);
+    super::ok(json!({"ok": true})).into_response()
 }

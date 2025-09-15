@@ -7,6 +7,8 @@ title: Feature Matrix
 _Last updated: 2025-09-14T07:03:48Z_
 
 # Feature Matrix
+Updated: 2025-09-14
+Type: Reference
 
 This page is generated from `interfaces/features.json` and validated against code (topics and file paths).
 
@@ -76,7 +78,7 @@ Unified in-process bus + SSE stream; maintains compact read-models and publishes
   - `ARW_BUS_CAP`
   - `ARW_BUS_REPLAY`
 
-## Snappy Governor
+## Interactive Performance Governor
 
 Latency budgets and route observability; publishes budgets vs. measured p95 and breach notices.
 

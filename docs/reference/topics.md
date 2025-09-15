@@ -3,6 +3,8 @@ title: Event Topics (Canonical)
 ---
 
 # Event Topics (Canonical)
+Updated: 2025-09-14
+Type: Reference
 
 Source of truth for event kinds published by the service. These constants are defined once in code and imported where needed to avoid drift:
 
@@ -26,8 +28,10 @@ Related docs:
 | egress.preview             | Pre‑offload destination summary  | id, url (redacted), dest{host,port,protocol}, provider, corr_id |
 | egress.ledger.appended     | Egress ledger entry appended     | decision, reason_code, dest, bytes_in/out, duration_ms, attribution |
 | state.read.model.patch     | Read‑model JSON Patch deltas     | id, patch[...] |
-| snappy.notice              | Snappy budgets: breach notice    | p95_max_ms, budget_ms |
-| snappy.detail              | Snappy budgets: periodic detail  | p95_by_path{"/path":p95_ms} |
+| snappy.notice              | Interactive budgets: breach notice | p95_max_ms, budget_ms |
+| snappy.detail              | Interactive budgets: periodic detail | p95_by_path{"/path":p95_ms} |
+| experiment.activated       | Experiment variant applied       | id, variant, applied{...} |
+| rpu.trust.changed          | Trust store changed/reloaded     | count, path |
 
 ### Read‑Model Ids (commonly used)
 
@@ -35,4 +39,3 @@ Related docs:
 - models_metrics — counters + EWMA MB/s (patch stream)
 - route_stats — route latencies/hits/errors (patch stream)
 - snappy — interactive budgets summary (patch stream)
-

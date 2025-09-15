@@ -4,7 +4,8 @@ title: Configuration
 
 # Configuration
 { .topic-trio style="--exp:.7; --complex:.5; --complicated:.3" data-exp=".7" data-complex=".5" data-complicated=".3" }
-Updated: 2025-09-12
+Updated: 2025-09-14
+Type: Reference
 
 See also: [Glossary](GLOSSARY.md), [Admin Endpoints](guide/admin_endpoints.md), [Quickstart](guide/quickstart.md)
 
@@ -12,6 +13,7 @@ Centralized reference for ARW environment variables and common flags. Defaults f
 
 ## Service
 - `ARW_PORT`: HTTP listen port (default: `8090`).
+- `ARW_BIND`: HTTP bind address (default: `127.0.0.1`). Use `0.0.0.0` to listen on all interfaces in trusted environments or behind a TLS proxy.
 - `ARW_PORTABLE`: `1` keeps state/cache/logs near the app bundle.
  - `ARW_CONFIG`: absolute path to the primary config TOML (overrides discovery).
  - `ARW_CONFIG_DIR`: base directory to search for additional configs (e.g., `configs/gating.toml`, `configs/feedback.toml`). When unset, the service also probes beside the executable and the current directory.
@@ -29,7 +31,7 @@ Centralized reference for ARW environment variables and common flags. Defaults f
 
 ## Docs & Debug UI
 - `ARW_DOCS_URL`: URL to your hosted docs for UI links. Appears in `GET /about` as `docs_url` so clients can discover your manual.
-- Debug UI is accessible at `/debug` when enabled.
+- Debug UI is accessible at `/admin/debug` when enabled. In local debug builds (`ARW_DEBUG=1`) a friendly alias is also served at `/debug`.
 - `ARW_EVENTS_SSE_MODE`: format for SSE `data` payloads. `envelope` (default) emits the ARW envelope `{ time, kind, payload, ce }`. `ce-structured` emits CloudEvents 1.0 structured JSON with `data` holding the payload.
 
 ## State & Paths
@@ -74,7 +76,7 @@ HTTP client (downloads)
 - `ARW_DL_HTTP_POOL_MAX_IDLE_PER_HOST`: max idle connections per host (default `8`, min `1`).
 The enhanced downloader path is always enabled; the legacy `ARW_DL_NEW` flag has been removed to reduce maintenance overhead.
 
-### Snappy Budgets & Streaming
+### Interactive Performance Budgets & Streaming
 
 These knobs prioritize perceived latency and streaming cadence.
 
@@ -84,7 +86,15 @@ These knobs prioritize perceived latency and streaming cadence.
 - `ARW_SNAPPY_COLD_START_MS`: cold start budget for control plane (default `500`)
 - `ARW_SNAPPY_FULL_RESULT_P95_MS`: p95 full result target (default `2000`)
 - `ARW_SNAPPY_PROTECTED_ENDPOINTS`: CSV prefixes for interactive surface (default `/debug,/state/,/chat/,/admin/events`)
-- `ARW_SNAPPY_PUBLISH_MS`: snappy read‑model publish interval ms (default `2000`)
+- `ARW_ROUTE_HIST_MS`: CSV millisecond buckets for route latency histograms (default `5,10,25,50,100,200,500,1000,2000,5000,10000`)
+- `ARW_NATS_URL`: NATS URL, e.g. `nats://127.0.0.1:4222`
+- `ARW_NODE_ID`: node identifier for NATS subjects (defaults to hostname)
+- `ARW_NATS_OUT`: when `1`, relay local events to NATS subjects
+- `ARW_NATS_TLS`: when `1`, upgrade `nats://` to `tls://` and `ws://` to `wss://`
+- `ARW_NATS_USER` / `ARW_NATS_PASS`: basic auth; injected into URL if not present
+- `ARW_NATS_CONNECT_RETRIES`: initial connect retry count (default 3)
+- `ARW_NATS_CONNECT_BACKOFF_MS`: initial connect backoff between attempts (default 500 ms)
+- `ARW_SNAPPY_PUBLISH_MS`: interactive read‑model publish interval ms (default `2000`)
 - `ARW_SNAPPY_DETAIL_EVERY`: seconds between detailed p95 breakdown events (optional)
 
 SSE contract: see `architecture/sse_patch_contract.md` for `Last-Event-ID` and JSON Patch topics.
@@ -126,6 +136,8 @@ These options are planned for the policy‑backed egress gateway; names may evol
 - `ARW_NO_LAUNCHER`: `1` to skip launching the desktop launcher when starting the service.
 - `ARW_NO_TRAY`: deprecated alias for `ARW_NO_LAUNCHER` (still honored).
 - `ARW_HEADLESS`: `1` for headless setup flows in CI.
+
+See also: CLI Guide (guide/cli.md)
 
 ## Trust & Policy
 - `ARW_TRUST_CAPSULES`: path to trusted capsule issuers/keys JSON.

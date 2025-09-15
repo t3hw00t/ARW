@@ -81,7 +81,7 @@ rules:
       field: parameters
 
   # Events channel naming: Title.Case with dot segments (AsyncAPI)
-  # Disabled for now: dot.case channels already enforced in code; rule yields false positives on property selector
+  # Disabled for now: dot.case channels already enforced in code; '@key' targets subscribe/publish, and '*~' key selector is flaky across Spectral versions
   x-asyncapi-channel-naming:
     description: Event channel names should use dot.case segments
     message: "Channel '{{property}}' should be dot.case (e.g., models.download.progress)"

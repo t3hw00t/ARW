@@ -4,7 +4,8 @@ title: Interface Roadmap
 
 # Interface Roadmap
 
-Updated: 2025-09-07
+Updated: 2025-09-13
+Type: Reference
 
 See also: [Roadmap](ROADMAP.md)
 
@@ -16,6 +17,10 @@ This roadmap consolidates user-facing interface concepts to guide a unified, acc
 - Contextual launcher tray actions with recent commands
 - Inline doc hints and contextual tooltips
 - Command palette/quick-action menu in the launcher
+ - Canonical admin routes: `/admin/debug`, `/admin/ui/*` (keep clear dev aliases)
+ - SSE robustness: status badges + auto-reconnect with backoff and Last-Event-ID resume
+ - Connections: per-connection admin token and open app windows for that base
+ - Schema-generated forms from OpenAPI for consistent parameter UIs
 
 ## Medium‑Term (3–6 Months)
 - Multi-modal input (voice, stylus, gesture)

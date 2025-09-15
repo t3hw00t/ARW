@@ -77,6 +77,15 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-connections').addEventListener('click', async () => {
     try { await invoke('open_connections_window'); } catch (e) { console.error(e); }
   });
+  document.getElementById('btn-hub').addEventListener('click', async () => {
+    try { await invoke('open_hub_window'); } catch (e) { console.error(e); }
+  });
+  document.getElementById('btn-chat').addEventListener('click', async () => {
+    try { await invoke('open_chat_window'); } catch (e) { console.error(e); }
+  });
+  document.getElementById('btn-training').addEventListener('click', async () => {
+    try { await invoke('open_training_window'); } catch (e) { console.error(e); }
+  });
   document.getElementById('btn-start').addEventListener('click', async () => {
     try { await invoke('start_service', { port: getPort() }); ARW.toast('Service starting'); } catch (e) { console.error(e); }
   });

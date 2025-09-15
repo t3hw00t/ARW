@@ -2,6 +2,8 @@
 <head>
   <meta charset="utf-8">
   <title>ARW Debug</title>
+  <link rel="stylesheet" href="/admin/ui/assets/tokens.css"/>
+  <link rel="stylesheet" href="/admin/ui/assets/ui-kit.css"/>
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <style>
     :root{
@@ -19,8 +21,10 @@
       /* spacing rhythm */
       --sp2: 8px; --sp3: 12px; --sp4: 16px; --sp5: 24px;
     }
-    body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;line-height:1.45;color:var(--ink);background: radial-gradient(1000px 500px at 15% -10%, #ffffff, #f7f7f9 55%, #f1f5f9)}
-    header{display:flex;gap:12px;align-items:center;margin-bottom:16px;position:sticky;top:0;background:rgba(255,255,255,0.7);backdrop-filter:saturate(140%) blur(6px);padding:8px 12px;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,0.06)}
+    body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;line-height:1.45;color:var(--ink);background: var(--surface)}
+    /* manual theme override */
+    [data-theme="dark"]{ --bg:#0b0b0f; --ink:#e5e7eb; --line:#1f232a; --muted:#889 }
+    header{display:flex;gap:12px;align-items:center;margin-bottom:16px;position:sticky;top:0;background:rgba(255,255,255,0.7);backdrop-filter:saturate(140%) blur(6px);padding:8px 12px;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,0.06)}
     code,pre{background:#0b0b0c10;padding:2px 4px;border-radius:4px}
     .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
     button,input,select,textarea{font:inherit}
@@ -28,25 +32,16 @@
     button:hover{transform:translateY(-0.5px);box-shadow:0 1px 0 rgba(255,255,255,0.95) inset, 0 14px 28px rgba(0,0,0,0.08)}
     .iconbtn{padding:6px 8px;font-size:12px}
     .cols{display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px}
-    .box{border:1px solid var(--line);border-radius:12px;padding:12px;background:linear-gradient(180deg,#ffffff,#fafafa);box-shadow:0 12px 30px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.65);position:relative}
-    .box>h3{margin:4px 0 8px 0; cursor:pointer; display:flex; align-items:center; gap:8px}
-    .box>h3::after{ content:"▾"; font-size:12px; color:#6b7280 }
-    .box[data-collapsed="1"]>h3::after{ content:"▸" }
-    .box[data-collapsed="1"]>:not(h3){ display:none }
-    .box::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:var(--noise);opacity:.5;border-radius:12px}
+    .card>h3{margin:4px 0 8px 0; cursor:pointer; display:flex; align-items:center; gap:8px}
+    .card>h3::after{ content:"▾"; font-size:12px; color:#6b7280 }
+    .card[data-collapsed="1"]>h3::after{ content:"▸" }
+    .card[data-collapsed="1"]>:not(h3){ display:none }
     #log{max-height:40vh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px;background:linear-gradient(180deg,#ffffff,#fafafa);box-shadow:inset 0 1px 0 rgba(255,255,255,0.6)}
     .evt{padding:4px 6px;border-bottom:1px dashed #eee;font-family:ui-monospace,Menlo,Consolas,monospace}
     .key{color:var(--muted)}
     textarea{width:100%;min-height:100px}
     .pass{color:var(--ok)}.fail{color:var(--bad)}
-    .badge{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid var(--line);background-image:linear-gradient(180deg,#ffffff,#f6f7f9), var(--noise);background-blend-mode:overlay,normal}
-    .dot{width:8px;height:8px;border-radius:50%;display:inline-block}
-    .good{color:#166534;border-color:#bbf7d0;background:#ecfdf5}
-    .good .dot{background:var(--ok)}
-    .warn{color:#854d0e;border-color:#fde68a;background:#fefce8}
-    .warn .dot{background:var(--warn)}
-    .bad{color:#991b1b;border-color:#fecaca;background:#fef2f2}
-    .bad .dot{background:var(--bad)}
+    /* badges/dots/tones provided by shared UI kit */
     /* Iconography */
     .icons{ display:inline-flex; gap:6px; align-items:center; margin-right:6px }
     .ico{ width:14px; height:14px; display:inline-block; vertical-align:-2px; color:currentColor; opacity:.9 }
@@ -56,7 +51,7 @@
     .ico.info{ color:#6b7280 }
     .ico.accent{ color: var(--neon) }
     /* Subtle hint block */
-    .hint{ font-size:12px; color:#374151; background:#f8fafc; border:1px solid #e5e7eb; border-left:3px solid #1bb3a3; padding:8px 10px; border-radius:8px; margin:6px 0 }
+    .hint{ font-size:12px; color:#374151; background:#f8fafc; border:1px solid var(--line); border-left:3px solid var(--color-accent-teal); padding:8px 10px; border-radius:8px; margin:6px 0 }
     .hint .dismiss{ float:right; text-decoration:none; color:#6b7280; font-weight:600 }
     /* Downloads list */
     .dlrow{ display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px dashed #eee }
@@ -73,35 +68,33 @@
     .dlid{ font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:600; min-width:140px }
     .dlstat{ font-size:12px; color:var(--muted); min-width:90px }
     .dlmeta{ font-size:12px; color:var(--muted) }
-    .pbar{ width:180px; height:8px; background:#e5e7eb; border-radius:999px; overflow:hidden; box-shadow:inset 0 1px 0 rgba(255,255,255,0.6) }
+    .pbar{ width:180px; height:8px; background:var(--line); border-radius:999px; overflow:hidden; box-shadow:inset 0 1px 0 rgba(255,255,255,0.6) }
     .pfill{ height:100%; background:linear-gradient(90deg, var(--neon), #22c55e); width:0% }
     .ghost{ padding:6px 10px; border:1px dashed #cfd6de; background:#fff; border-radius:6px; cursor:pointer }
     a.help{display:inline-block;margin-left:8px;width:18px;height:18px;border-radius:50%;border:1px solid #d1d5db;color:#6b7280;text-align:center;line-height:16px;text-decoration:none;font-weight:600;font-size:12px}
     a.help:hover{background:#f3f4f6;color:#374151}
-    .tip{position:fixed;z-index:50;max-width:360px;background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,0.14);padding:10px 12px}
+    .tip{position:fixed;z-index:50;max-width:360px;background:#ffffff;border:1px solid var(--line);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,0.14);padding:10px 12px}
     .tip .t-title{font-weight:600;margin-bottom:4px}
-    .tip .t-more{color:#2563eb;text-decoration:none}
+    .tip .t-more{color:var(--color-accent-teal);text-decoration:none}
     .t-hidden{display:none}
     .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:8px 12px;border-radius:10px;display:none;max-width:70vw;box-shadow:0 16px 40px rgba(0,0,0,0.14)}
-    #insights{position:fixed;right:16px;bottom:16px;background:#fff;border:1px solid #e5e7eb;border-radius:12px;box-shadow:0 18px 48px rgba(0,0,0,0.12);padding:10px 12px;display:none;min-width:260px;max-width:50vw}
+    #insights{position:fixed;right:16px;bottom:16px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 48px rgba(0,0,0,0.12);padding:10px 12px;display:none;min-width:260px;max-width:50vw}
     #insights .kv{display:flex;justify-content:space-between;color:#374151}
     #insights h4{margin:4px 0 6px 0;font-size:14px}
     .palette{position:fixed;inset:0;background:rgba(0,0,0,0.2);display:none;align-items:flex-start;justify-content:center;padding-top:10vh}
-    .pal-box{background:#fff;color:#111;width:min(680px,90vw);border:1px solid #e5e7eb;border-radius:10px;box-shadow:0 20px 50px rgba(0,0,0,0.15);overflow:hidden}
+    .pal-box{background:#fff;color:#111;width:min(680px,90vw);border:1px solid var(--line);border-radius:10px;box-shadow:0 20px 50px rgba(0,0,0,0.15);overflow:hidden}
     .pal-box input{width:100%;padding:10px 12px;border:none;outline:none;font:inherit}
     .pal-list{max-height:50vh;overflow:auto}
     .pal-item{padding:8px 12px;border-top:1px solid #f1f5f9;cursor:pointer;display:flex;justify-content:space-between}
-    .pal-item.sel{background:#eef2ff}
+    .pal-item.sel{background:var(--surface-muted)}
     .pal-item .hint{color:#6b7280;font-size:12px}
     @media (max-width:900px){ .cols{grid-template-columns:1fr} }
     @media (pointer: coarse){ button{ padding:12px 16px } .iconbtn{ padding:10px 12px; font-size:14px } }
     button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{ outline:2px solid rgba(184,115,51,0.55); outline-offset:2px }
     @media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important } }
     @media (prefers-color-scheme: dark){
-      body{ background: radial-gradient(1000px 500px at 15% -10%, #0f1117, #0b0d12 55%, #090b10) }
+      body{ background: var(--surface) }
       header{ background: rgba(16,18,24,0.7); border-color:#1f232a; box-shadow:0 10px 24px rgba(0,0,0,0.35) }
-      .box{ background: linear-gradient(180deg,#12161f,#0f141a); border-color:#1f232a; box-shadow: 0 12px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06) }
-      .box::before{ opacity: .25 }
       #log{ background: linear-gradient(180deg,#12161f,#0f141a); border-color:#1f232a; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06) }
       .tip{ background:#0f141a; border-color:#1f232a; box-shadow:0 16px 40px rgba(0,0,0,0.6) }
       .toast{ background:#1f2937; color:#e5e7eb; border-color:#374151 }
@@ -111,7 +104,7 @@
     body.density-compact .row{ gap:6px; margin:6px 0 }
     body.density-compact header{ gap:10px; padding:6px 10px }
     body.density-compact .cols{ gap:12px }
-    body.density-compact .box{ padding:10px; border-radius:10px }
+    body.density-compact .card{ padding:10px; border-radius:10px }
     body.density-compact .iconbtn{ padding:6px 8px }
   </style>
 </head>
@@ -126,14 +119,20 @@
     <span id="eventsBadge" class="badge warn" title="Events activity"><span class="dot"></span> Events: 0</span>
     <span id="modelsBadge" class="badge warn" title="Models activity"><span class="dot"></span> Models: idle</span>
     <a id="metricsLink" class="help" href="#" title="Open /metrics" style="display:inline-block">M</a>
+    <button id="copyMetrics" class="iconbtn" title="Copy /metrics to clipboard">Copy metrics</button>
     <a id="catalogLink" class="help" href="#" title="Open Interface Catalog (/catalog/index)" style="display:inline-block">C</a>
     <span id="catalogBadge" class="badge warn" title="Interface Catalog status"><span class="dot"></span> Catalog: …</span>
     <button class="iconbtn" id="btnExpandAll" title="Expand all">Expand</button>
     <button class="iconbtn" id="btnCollapseAll" title="Collapse all">Collapse</button>
     <button class="iconbtn" id="btnDensity" title="Toggle density">Density</button>
-    <span id="memBadge" class="badge good" title="Memory usage"><span class="dot"></span> Mem: –</span>
-    <span id="govBadge" class="badge good" title="Governor profile"><span class="dot"></span> Gov: –</span>
-    <span id="modeBadge" class="badge good" title="Run mode"><span class="dot"></span> Mode: balanced</span>
+    <button class="iconbtn" id="btnBack" title="Back">Back</button>
+    <a class="iconbtn" href="/" title="Home">Home</a>
+    <button class="iconbtn" id="themeToggle" title="Toggle theme">Theme</button>
+    <span id="memBadge" class="badge ok" title="Memory usage"><span class="dot"></span> Mem: –</span>
+    <span id="cpuBadge" class="badge ok" title="CPU usage"><span class="dot"></span> CPU: –</span>
+    <span id="gpuBadge" class="badge ok" title="GPU memory usage (sum across adapters)"><span class="dot"></span> GPU: –</span>
+    <span id="govBadge" class="badge ok" title="Governor profile"><span class="dot"></span> Gov: –</span>
+    <span id="modeBadge" class="badge ok" title="Run mode"><span class="dot"></span> Mode: balanced</span>
     <span id="sloBadge" class="badge warn" title="Interactive SLO (P95)"><span class="dot"></span> SLO: 1500 ms</span>
     <span id="egressBadge" class="badge warn" title="Pre‑offload preview"><span class="dot"></span> Egress: idle</span>
     <button id="chatTestBtn" class="iconbtn" title="Test chat backend">Test</button>
@@ -166,6 +165,20 @@
     <button id="copyStatsBtn" class="iconbtn" title="Copy stats JSON" style="display:inline-block">Copy stats</button>
     <button id="copyCurlBtn" class="iconbtn" style="display:none" title="Copy last request as curl">Copy curl</button>
   </header>
+  <script>
+    (function(){
+      try{
+        const KEY = 'arw-theme';
+        const apply = t => { const r=document.documentElement; if(t==='dark'){ r.setAttribute('data-theme','dark'); } else { r.removeAttribute('data-theme'); } };
+        const cur = () => localStorage.getItem(KEY)||'';
+        apply(cur());
+        const btn = document.getElementById('themeToggle');
+        if(btn) btn.addEventListener('click', ()=>{ const t = cur()==='dark'?'light':'dark'; localStorage.setItem(KEY,t); apply(t); });
+        const back = document.getElementById('btnBack');
+        if(back) back.addEventListener('click', ()=>{ try{ if(document.referrer){ history.back(); } else { location.assign('/admin'); } } catch(e){ location.assign('/admin'); } });
+      }catch{}
+    })();
+  </script>
 
   <div class="row">
     <button onclick="hit('/version')">/version</button>
@@ -177,9 +190,9 @@
   </div>
 
   <div class="cols">
-    <div class="box">
+    <div class="card">
       <h3>Chat <a href="#" class="help" data-doc="orchestrator" data-tip="Super simple debug chat; models are stubbed (echo/reverse/time)." title="Chat docs">?</a></h3>
-      <div class="row">
+      <div class="row" role="toolbar" aria-label="Chat settings">
         <select id="chatModel">
           <option value="echo">echo</option>
           <option value="reverse">reverse</option>
@@ -188,19 +201,19 @@
         <input id="chatTemp" type="number" step="0.1" min="0" max="2" value="0.7" style="width: 80px;">
       </div>
       <textarea id="chatInput" placeholder="Say hello"></textarea>
-      <div class="row"><button onclick="chatSend()">Send</button> <button onclick="chatClear()">Clear</button></div>
+      <div class="row" role="toolbar" aria-label="Chat actions"><button onclick="chatSend()">Send</button> <button onclick="chatClear()">Clear</button></div>
       <pre id="chatOut">[]</pre>
     </div>
-    <div class="box">
+    <div class="card">
       <h3>Orchestration <a href="#" class="help" data-doc="orchestrator" data-tip="Common actions to manage the local agent service." title="Orchestration docs">?</a></h3>
-      <div class="row">
+      <div class="row" role="toolbar" aria-label="Orchestration actions">
         <button onclick="orProbe()">Probe now</button>
         <button onclick="orEmitTest()">Emit test</button>
         <button onclick="orRefreshModels()">Refresh models</button>
         <button onclick="runSelfTests()">Self‑tests</button>
         <button onclick="orShutdown()">Shutdown</button>
       </div>
-      <div class="row">
+      <div class="row" role="toolbar" aria-label="Profile">
         <label class="key">profile</label>
         <select id="profileSel">
           <option value="performance">performance</option>
@@ -210,7 +223,7 @@
         <button onclick="orProfileApply()">Apply</button>
         <button onclick="orProfileGet()">Get</button>
       </div>
-      <div class="row">
+      <div class="row" role="toolbar" aria-label="Hints">
         <label class="key">hints</label>
         <input id="hintConc" type="number" min="1" placeholder="concurrency" style="width:120px;">
         <input id="hintBuf" type="number" min="1" placeholder="event buffer" style="width:140px;">
@@ -243,8 +256,8 @@
       </div>
       <div class="row"><span class="key">time</span> <code id="rt-orch">–</code></div>
     </div>
-    <div class="box">
-      <h3>Memory <a href="#" class="help" data-doc="memory" data-tip="Understand memory kinds and how /memory endpoints work." title="Memory docs">?</a> <span id="memHdrBadge" class="badge good" style="margin-left:6px"><span class="dot"></span> Mem: –</span></h3>
+    <div class="card">
+      <h3>Memory <a href="#" class="help" data-doc="memory" data-tip="Understand memory kinds and how /memory endpoints work." title="Memory docs">?</a> <span id="memHdrBadge" class="badge ok" style="margin-left:6px"><span class="dot"></span> Mem: –</span></h3>
       <div class="row">
         <button onclick="refreshMemory()">Refresh</button>
         <button onclick="saveMemory()">Save</button>
@@ -268,7 +281,7 @@
       <pre id="memOut">{}</pre>
     </div>
 
-    <div class="box" data-collapsed="1">
+    <div class="card" data-collapsed="1">
       <h3>Events <a href="#" class="help" data-doc="events" data-tip="Live event stream from /events (SSE)." title="Events docs">?</a></h3>
       <div class="row">
         <label><input type="checkbox" id="fService" checked> Service</label>
@@ -276,33 +289,51 @@
         <label><input type="checkbox" id="fModels" checked> Models</label>
         <button class="iconbtn" id="sseReplay50" title="Replay last 50">Replay 50</button>
         <button class="iconbtn" id="sseOnlyModels" title="Filter to models.*">Models only</button>
+        <button class="iconbtn" id="sseOnlyRpu" title="Filter to rpu.*">RPU only</button>
       </div>
       <div id="log"></div>
     </div>
-    <div class="box" data-collapsed="1">
+    <div class="card" data-collapsed="1">
       <h3>Egress Preview <a href="#" class="help" data-doc="deployment" data-tip="Pre‑offload preview: where data would go and why." title="Egress preview">?</a></h3>
       <div class="row">
         <button class="iconbtn" id="egClear">Clear</button>
       </div>
       <div id="egOut" style="max-height:28vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
     </div>
-    <div class="box" data-collapsed="1">
+    <div class="card" data-collapsed="1">
       <h3>System <a href="#" class="help" data-doc="events" data-tip="Live metrics via SSE (probe.metrics)." title="System metrics">?</a></h3>
       <div class="row">
         <div><span class="key">CPU</span> <code id="sysCpu">–</code></div>
         <div><span class="key">Mem</span> <code id="sysMem">–</code></div>
         <div><span class="key">Disk</span> <code id="sysDisk">–</code></div>
+        <div><span class="key">GPU</span> <code id="sysGpu">–</code></div>
+        <div><span class="key">NPU</span> <code id="sysNpu">–</code></div>
       </div>
       <div class="row">
         <button class="iconbtn" onclick="refreshMetrics()">Refresh</button>
         <button class="iconbtn" onclick="refreshHW()">Refresh HW</button>
+        <button class="iconbtn" id="gpuToggle">GPU adapters</button>
       </div>
+      <div id="gpuList" style="display:none; padding:8px; border:1px dashed var(--line); border-radius:8px; background:#fff"></div>
       <pre id="sysOut">{}</pre>
+    </div>
+    <div class="card" data-collapsed="1">
+      <h3>Trust (RPU) <a href="#" class="help" data-doc="trust_boundaries" data-tip="Regulatory Provenance Unit — trust store and signatures." title="RPU Trust">?</a></h3>
+      <div class="row">
+        <div class="kv"><b>issuers</b> <span id="rpuCount">–</span></div>
+        <div class="kv"><b>last reload</b> <span id="rpuLast">–</span></div>
+      </div>
+      <div class="row">
+        <button class="iconbtn" id="rpuRefreshBtn">Refresh</button>
+        <button class="iconbtn" id="rpuReloadBtn">Reload</button>
+        <a class="iconbtn" id="rpuEventsBtn" target="_blank">Open RPU events</a>
+      </div>
+      <pre id="rpuOut">{}</pre>
     </div>
   </div>
 
   <div class="cols" style="margin-top:16px">
-    <div class="box" data-collapsed="1">
+    <div class="card" data-collapsed="1">
       <h3>Experiments (Live) <a href="#" class="help" data-doc="testing" data-tip="Recent experiment activity and quick scoreboard." title="Experiments">?</a></h3>
       <div class="row">
         <button class="iconbtn" onclick="expDefs()">Refresh defs</button>
@@ -314,7 +345,7 @@
       <div id="expDefs" style="max-height:20vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
       <div id="expBoard" style="max-height:28vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px;margin-top:8px"></div>
     </div>
-    <div class="box" data-collapsed="1">
+    <div class="card" data-collapsed="1">
       <h3>Models Metrics <a href="#" class="help" data-doc="events" data-tip="Live counters and EWMA for model downloads." title="Models metrics">?</a></h3>
       <div class="row">
         <button class="iconbtn" onclick="modelsMetricsRefresh()">Refresh</button>
@@ -335,7 +366,7 @@
         <div class="kv"><b>ewma_mbps</b> <span id="mmEwma">0</span></div>
       </div>
     </div>
-    <div class="box">
+    <div class="card">
       <h3>Tools <a href="#" class="help" data-doc="tools" data-tip="Tools, schemas, and how to call them." title="Tools docs">?</a></h3>
       <div class="row">
         <select id="toolId">
@@ -350,7 +381,7 @@
       <pre id="toolOut">{}</pre>
     </div>
 
-    <div class="box">
+    <div class="card">
       <h3>Goldens / Experiments <a href="#" class="help" data-doc="testing" data-tip="Run goldens and A/B variants offline; activate a live variant by applying hints." title="Goldens/Experiments">?</a></h3>
       <div class="row">
         <input id="goldProj" placeholder="project" value="default" style="width: 160px;">
@@ -371,7 +402,7 @@
       <pre id="goldOut">{}</pre>
     </div>
 
-    <div class="box">
+    <div class="card">
       <h3>Self‑tests</h3>
       <div class="row">
         <button class="primary" onclick="runSelfTests()">Run self‑tests</button>
@@ -379,7 +410,7 @@
       </div>
       <pre id="tests">Ready.</pre>
     </div>
-    <div class="box" data-collapsed="1">
+    <div class="card" data-collapsed="1">
       <h3>Episodes <a href="#" class="help" data-doc="events" data-tip="Stitched by corr_id from live events." title="Episodes docs">?</a></h3>
       <div class="row">
         <button onclick="episodesRefresh()">Refresh</button>
@@ -389,7 +420,7 @@
       </div>
       <div id="epList" style="max-height:36vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
     </div>
-    <div class="box" data-collapsed="1">
+    <div class="card" data-collapsed="1">
       <h3>State Snapshots</h3>
       <div class="row">
         <button onclick="pullState('observations')">Observations</button>
@@ -412,7 +443,7 @@
       <pre id="ctxPreview" style="white-space:pre-wrap">(assemble to render)</pre>
       <pre id="stateOut">{}</pre>
     </div>
-    <div class="box" data-collapsed="1">
+    <div class="card" data-collapsed="1">
       <h3>Project Map</h3>
       <div class="row">
         <button class="ghost" onclick="worldMapRefresh()">Refresh</button>
@@ -420,7 +451,7 @@
       </div>
       <div id="worldMap" style="max-height:28vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
     </div>
-    <div class="box" data-collapsed="1">
+    <div class="card" data-collapsed="1">
       <h3>Routes <a href="#" class="help" data-doc="events" data-tip="Live HTTP route stats (p95/ewma/hits/errors)." title="Routes stats">?</a></h3>
       <div class="row">
         <button class="iconbtn" onclick="routesPanelRefresh()">Refresh</button>
@@ -435,7 +466,7 @@
       </div>
       <div id="routesTable" style="max-height:36vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
     </div>
-  <div class="box" data-collapsed="1">
+  <div class="card" data-collapsed="1">
       <h3>Self‑Learning <a href="#" class="help" data-doc="orchestrator" data-tip="Signals → suggestions. Gently embedded feedback." title="Self‑Learning docs">?</a></h3>
       <div class="row">
         <select id="sigKind">
@@ -470,7 +501,7 @@
       <div id="fbList"></div>
       <pre id="fbLiveOut" style="display:none">{"version":0,"suggestions":[]}</pre>
     </div>
-    <div class="box">
+    <div class="card">
       <h3>Models <a href="#" class="help" data-doc="orchestrator" data-tip="Add/delete and set default model." title="Models docs">?</a> <span id="modelsHdrBadge" class="badge warn" style="margin-left:6px"><span class="dot"></span> 0</span></h3>
       <div id="modelsHint" class="hint" style="display:none">
         <a href="#" class="dismiss" title="dismiss" onclick="modelsHintDismiss(); return false;">×</a>
@@ -502,13 +533,18 @@
       <pre id="modelsOut" style="display:none">[]</pre>
       <div id="modelsTable" class="mtable"></div>
     </div>
-    <div class="box" id="dlBox">
-      <h3>Downloads <span id="dlCount" class="badge warn" style="margin-left:6px"><span class="dot"></span> 0</span></h3>
+    <div class="card" id="dlBox">
+      <h3>Downloads</h3>
+      <div class="row" role="toolbar" aria-label="Downloads actions">
+        <span id="dlCount" class="badge warn"><span class="dot"></span> 0</span>
+        <button class="iconbtn" onclick="dlClearFinished()">Clear finished</button>
+        <button class="iconbtn" id="copyDownloadsBtn" title="Copy JSON">Copy</button>
+      </div>
       <div id="dlRows"></div>
     </div>
-    <div class="box" data-collapsed="1">
+    <div class="card" data-collapsed="1">
       <h3>Agent Card <a href="#" class="help" data-doc="events" data-tip="Self‑model: capabilities, competence, calibration, costs, failure modes." title="Self‑Model docs">?</a> <span id="selfHdrBadge" class="badge warn" style="margin-left:6px"><span class="dot"></span> 0</span></h3>
-      <div class="row">
+      <div class="row" role="toolbar" aria-label="Agent Card actions">
         <button class="iconbtn" onclick="selfRefreshList()">Refresh</button>
         <select id="selfAgentSel" style="min-width:180px"></select>
         <input id="selfAgentId" placeholder="or type agent id" style="width:200px">
@@ -605,7 +641,7 @@ async function runTool(){
   let input; try{ input = JSON.parse(bodyTxt); }catch(e){ alert('Invalid JSON'); return; }
   const tb=document.getElementById('toolsBadge'); if(tb){ tb.className='badge warn'; tb.innerHTML='<span class=\"dot\"></span> Tools: active'; }
   await req('POST', '/tools/run', { id, input }, 'toolOut', 'rt-tool');
-  if(tb){ tb.className='badge good'; tb.innerHTML='<span class=\"dot\"></span> Tools: done'; setTimeout(()=>{ tb.className='badge warn'; tb.innerHTML='<span class=\"dot\"></span> Tools: idle'; }, 1200); }
+  if(tb){ tb.className='badge ok'; tb.innerHTML='<span class=\"dot\"></span> Tools: done'; setTimeout(()=>{ tb.className='badge warn'; tb.innerHTML='<span class=\"dot\"></span> Tools: idle'; }, 1200); }
 }
 
 // Orchestration actions
@@ -721,7 +757,7 @@ function renderDownloads(){
   const ids = Object.keys(downloads);
   // Update count badge
   const b = document.getElementById('dlCount');
-  if(b){ b.className = 'badge ' + (ids.length? 'good':'warn'); b.innerHTML = '<span class="dot"></span> ' + ids.length; }
+  if(b){ b.className = 'badge ' + (ids.length? 'ok':'warn'); b.innerHTML = '<span class="dot"></span> ' + ids.length; }
   const lines = [];
   ids.sort();
   ids.forEach(id => {
@@ -747,6 +783,14 @@ function renderDownloads(){
     ${note? `<div class="dlmeta" style="margin:-4px 0 4px 150px">${note}</div>`:''}`);
   });
   el.innerHTML = lines.join('');
+}
+
+function dlClearFinished(){
+  try{
+    const ids = Object.keys(downloads||{});
+    ids.forEach(id => { const d = downloads[id]; if (d && d.finished) delete downloads[id]; });
+    renderDownloads();
+  }catch{}
 }
 
 // --- Subtle Models hint ---
@@ -840,7 +884,7 @@ function iconsFor(kind, obj){
 }
 function pushEvt(kind, data){
   if(!allow(kind)) return;
-  try{ const eb=document.getElementById('eventsBadge'); if(eb){ const n=parseInt(eb.getAttribute('data-n')||'0',10)+1; eb.setAttribute('data-n', String(n)); eb.className='badge good'; eb.innerHTML='<span class="dot"></span> Events: '+n; } }catch{}
+  try{ const eb=document.getElementById('eventsBadge'); if(eb){ const n=parseInt(eb.getAttribute('data-n')||'0',10)+1; eb.setAttribute('data-n', String(n)); eb.className='badge ok'; eb.innerHTML='<span class="dot"></span> Events: '+n; } }catch{}
   const div = document.createElement('div');
   div.className='evt';
   if (kind === 'models.download.progress'){
@@ -867,7 +911,7 @@ async function updateModelsCount(){
     const j = await r.json();
     const n = Array.isArray(j) ? j.length : (Array.isArray(j?.data) ? j.data.length : 0);
     const b = document.getElementById('modelsHdrBadge');
-    if(b){ b.className = 'badge ' + (n>0 ? 'good' : 'warn'); b.innerHTML = '<span class="dot"></span> ' + n; }
+    if(b){ b.className = 'badge ' + (n>0 ? 'ok' : 'warn'); b.innerHTML = '<span class="dot"></span> ' + n; }
   }catch{}
 }
 // Track model download progress into a header badge
@@ -882,14 +926,14 @@ es.addEventListener('models.download.progress', (e)=>{
     const b = document.getElementById('modelsBadge'); if(!b) return;
     if (obj.error){ b.className='badge bad'; b.innerHTML = '<span class="dot"></span> Models: error'; return; }
     if (obj.status === 'canceled'){ b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: canceled'; return; }
-    if (obj.status === 'complete'){ b.className='badge good'; b.innerHTML = '<span class="dot"></span> Models: complete'; return; }
-    if ((obj.code||'') === 'cached'){ b.className='badge good'; b.innerHTML = '<span class="dot"></span> Models: cached'; return; }
+    if (obj.status === 'complete'){ b.className='badge ok'; b.innerHTML = '<span class="dot"></span> Models: complete'; return; }
+    if ((obj.code||'') === 'cached'){ b.className='badge ok'; b.innerHTML = '<span class="dot"></span> Models: cached'; return; }
     if (obj.status === 'queued'){ b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: queued'; return; }
-    if (obj.status === 'admitted'){ b.className='badge good'; b.innerHTML = '<span class="dot"></span> Models: admitted'; return; }
+    if (obj.status === 'admitted'){ b.className='badge ok'; b.innerHTML = '<span class="dot"></span> Models: admitted'; return; }
     if (obj.status === 'degraded'){ b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: degraded'; return; }
     if (obj.status === 'already-in-progress'){ b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: duplicate'; return; }
     const pct = (obj.progress!=null)? obj.progress : null;
-    if (pct!=null){ b.className='badge good'; b.innerHTML = '<span class="dot"></span> Models: ' + pct + '%'; }
+    if (pct!=null){ b.className='badge ok'; b.innerHTML = '<span class="dot"></span> Models: ' + pct + '%'; }
     else { b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: active'; }
   }catch{}
 });
@@ -928,13 +972,22 @@ es.addEventListener('egress.preview', (e)=>{
     const port = (j && j.dest && j.dest.port) || '';
     const proto = (j && j.dest && j.dest.protocol) || '';
     const b = document.getElementById('egressBadge');
-    if (b){ b.className='badge good'; b.innerHTML = '<span class="dot"></span> Egress: ' + (proto||'http') + '://' + host + (port?(':'+port):''); setTimeout(()=>{ b.className='badge warn'; b.innerHTML='<span class="dot"></span> Egress: idle'; }, 4000); }
+    if (b){ b.className='badge ok'; b.innerHTML = '<span class="dot"></span> Egress: ' + (proto||'http') + '://' + host + (port?(':'+port):''); setTimeout(()=>{ b.className='badge warn'; b.innerHTML='<span class="dot"></span> Egress: idle'; }, 4000); }
     const out = document.getElementById('egOut');
     if(out){ const row=document.createElement('div'); row.className='evt'; const url = (j && j.url) || ''; row.textContent = `${proto||'http'}://${host}${port?':'+port:''} ← ${url}`; out.prepend(row); while(out.childElementCount>100) out.removeChild(out.lastChild); }
   }catch{}
 });
+// Trust (RPU) change
+es.addEventListener('rpu.trust.changed', (e)=>{ pushEvt('rpu.trust.changed', e.data); try{
+  const j = JSON.parse(e.data||'{}');
+  const newCount = Number(j?.count||0);
+  const prev = Number(window.__rpuCount||0);
+  const delta = newCount - prev;
+  if (!Number.isNaN(delta) && delta !== 0) { showToast('RPU trust changed (' + (delta>0?('+'+delta):String(delta)) + ')'); }
+  rpuRefresh();
+}catch{} });
 es.onmessage = (e) => pushEvt('message', e.data);
-['service.connected','service.health','service.test','memory.applied','models.refreshed','tool.ran','bus.gap','beliefs.updated','intents.proposed','intents.approved','intents.rejected','actions.applied','actions.hint.applied','chat.message','world.updated','egress.preview'].forEach(k => {
+['service.connected','service.health','service.test','memory.applied','models.refreshed','tool.ran','bus.gap','beliefs.updated','intents.proposed','intents.approved','intents.rejected','actions.applied','actions.hint.applied','chat.message','world.updated','egress.preview','task.completed','experiment.activated','feedback.updated','catalog.updated'].forEach(k => {
   es.addEventListener(k, (e)=>pushEvt(k, e.data));
 });
 // Goldens + Experiments KPIs
@@ -963,7 +1016,7 @@ function renderExpKpis(){
     arr.sort((a,b)=> (b.passed||0)-(a.passed||0));
     const chips = arr.map(it=>{
       const rate = (it.total>0)? ((it.passed*100/it.total).toFixed(1)+'%') : '–';
-      const cls = it.winner? 'badge good' : 'badge';
+      const cls = it.winner? 'badge ok' : 'badge';
       return `<span class="${cls}" title="${id}/${it.variant}"><span class="dot"></span> ${it.variant}: ${rate} · ${it.avg_ms||0} ms</span>`;
     }).join(' ');
     return `<div class="kv"><b>${id}</b><span>${chips}</span></div>`;
@@ -1003,7 +1056,7 @@ function renderExpBoard(){
       const star = it.winner? '★' : '';
       return `<div class="kv"><span>${it.variant}</span><span>${rate} · ${(it.avg_ms||0)} ms ${star}</span></div>`;
     }).join('');
-    return `<div class="box-lite"><div class="row"><b>${id}</b></div>${lines}</div>`;
+    return `<div class="card"><div class="row"><b>${id}</b></div>${lines}</div>`;
   });
   board.innerHTML = blocks.join('');
 }
@@ -1164,7 +1217,7 @@ function applyPatchObj(target, patch){ try{
     }
   }
 }catch{}}
-['service.connected','service.health','service.test','memory.applied','models.refreshed','tool.ran','chat.message','governor.changed','bus.gap','beliefs.updated','intents.proposed','intents.approved','intents.rejected','actions.applied','actions.hint.applied','world.updated','egress.preview'].forEach(k => {
+['service.connected','service.health','service.test','memory.applied','models.refreshed','tool.ran','chat.message','governor.changed','bus.gap','beliefs.updated','intents.proposed','intents.approved','intents.rejected','actions.applied','actions.hint.applied','world.updated','egress.preview','task.completed','experiment.activated','feedback.updated','catalog.updated'].forEach(k => {
   es.addEventListener(k, (e)=>{ agg.total++; agg.kinds[k]=(agg.kinds[k]||0)+1; renderInsights(); });
 });
   // System metrics (low-frequency)
@@ -1207,17 +1260,54 @@ function applyPatchObj(target, patch){ try{
 // --- System/HW helpers ---
 function bytesHuman(n){ if(!n && n!==0) return '–'; const kb=1024, mb=kb*1024, gb=mb*1024, tb=gb*1024; if(n>=tb) return (n/tb).toFixed(2)+' TiB'; if(n>=gb) return (n/gb).toFixed(2)+' GiB'; if(n>=mb) return (n/mb).toFixed(1)+' MiB'; if(n>=kb) return (n/kb).toFixed(1)+' KiB'; return n+' B'; }
 function escAttr(s){ try{ return String(s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;'); }catch{ return ''; } }
-function setMemBadge(used,total){ try{ const el=document.getElementById('memBadge'); if(!el) return; const pct = total>0? (100*used/total) : 0; const txt = `Mem: ${pct.toFixed(1)}% (${bytesHuman(used)}/${bytesHuman(total)})`; el.innerHTML = '<span class="dot"></span> '+txt; el.className = 'badge ' + (pct>=90? 'bad' : pct>=75 ? 'warn' : 'good'); }catch{} }
+function setMemBadge(used,total){ try{ const el=document.getElementById('memBadge'); if(!el) return; const pct = total>0? (100*used/total) : 0; const txt = `Mem: ${pct.toFixed(1)}% (${bytesHuman(used)}/${bytesHuman(total)})`; el.innerHTML = '<span class="dot"></span> '+txt; el.className = 'badge ' + (pct>=90? 'bad' : pct>=75 ? 'warn' : 'ok'); }catch{} }
+function setCpuBadge(pct){ try{ const el=document.getElementById('cpuBadge'); if(!el) return; const p = Number(pct)||0; el.innerHTML = '<span class="dot"></span> CPU: ' + p.toFixed(1) + '%'; el.className = 'badge ' + (p>=90? 'bad' : p>=75 ? 'warn' : 'ok'); }catch{} }
+function setGpuBadge(used,total){ try{ const el=document.getElementById('gpuBadge'); if(!el) return; const pct = total>0? (100*used/total) : 0; const txt = `GPU: ${pct.toFixed(1)}% (${bytesHuman(used)}/${bytesHuman(total)})`; el.innerHTML = '<span class="dot"></span> '+txt; el.className = 'badge ' + (pct>=95? 'bad' : pct>=80 ? 'warn' : 'ok'); }catch{} }
 function updateSystemFromMetrics(m){ try{
   const cpuAvg = (m?.cpu ?? m?.cpu_avg ?? 0);
   const memUsed = m?.mem?.used ?? m?.mem_used; const memTotal = m?.mem?.total ?? 0;
   const disk = m?.disk || {}; const dAvail = disk.available, dTotal = disk.total;
   const sysCpu = document.getElementById('sysCpu'); if(sysCpu) sysCpu.textContent = (typeof cpuAvg==='number'? cpuAvg.toFixed(1) : String(cpuAvg)) + ' %';
+  setCpuBadge(cpuAvg||0);
   const sysMem = document.getElementById('sysMem'); if(sysMem) sysMem.textContent = `${bytesHuman(memUsed)} / ${bytesHuman(memTotal)}`;
   const sysDisk = document.getElementById('sysDisk'); if(sysDisk) sysDisk.textContent = `${bytesHuman(dAvail)} free / ${bytesHuman(dTotal)} total`;
+  const sysGpu = document.getElementById('sysGpu'); if(sysGpu) sysGpu.textContent = Array.isArray(m?.gpus)? String(m.gpus.length) : '0';
+  const sysNpu = document.getElementById('sysNpu'); if(sysNpu) sysNpu.textContent = Array.isArray(m?.npus)? String(m.npus.length) : '0';
   setMemBadge(memUsed||0, memTotal||0);
+  // GPU badge aggregate
+  try{
+    const arr = Array.isArray(m?.gpus) ? m.gpus : [];
+    let total=0, used=0; for(const g of arr){ total += Number(g?.mem_total||0); used += Number(g?.mem_used||0); }
+    setGpuBadge(used, total);
+  }catch{}
   const out = document.getElementById('sysOut'); if(out){ const merged = { cpu_avg: cpuAvg, mem: m.mem, disk: m.disk, gpus: m.gpus, npus: m.npus }; out.textContent = JSON.stringify(merged, null, 2); }
+  // Render GPU adapters list (collapsible)
+  try{
+    const div = document.getElementById('gpuList'); if (div){
+      const arr = Array.isArray(m?.gpus) ? m.gpus : [];
+      if (arr.length === 0) { div.innerHTML = '<div class="key">no adapters</div>'; }
+      else {
+        const rows = arr.map((g)=>{
+          const name = escAttr(g?.name || g?.index || 'adapter');
+          const ven = escAttr(g?.vendor_id || g?.vendor || '');
+          const used = (g?.mem_used!=null) ? bytesHuman(Number(g.mem_used)) : '–';
+          const total = (g?.mem_total!=null) ? bytesHuman(Number(g.mem_total)) : '–';
+          const busy = (g?.busy_percent!=null) ? String(g.busy_percent)+'%' : '';
+          return `<div class="kv"><b>${name}</b><span>${ven}</span><span>${used} / ${total} ${busy}</span></div>`;
+        }).join('');
+        div.innerHTML = rows;
+      }
+    }
+  }catch{}
 }catch{} }
+// Toggle GPU list
+document.addEventListener('DOMContentLoaded', ()=>{
+  const btn = document.getElementById('gpuToggle');
+  if (btn) btn.addEventListener('click', ()=>{
+    const div = document.getElementById('gpuList'); if (!div) return;
+    div.style.display = (div.style.display === 'none') ? 'block' : 'none';
+  });
+});
 // --- Models Metrics (read-model) ---
 let modelsMetrics = {};
 function modelsMetricsRender(){ try{
@@ -1279,12 +1369,12 @@ function modelsRender(){ try{
     </div>`;
   const basename = (p)=>{ try{ if(!p) return ''; const i=p.lastIndexOf('/'); return i>=0? p.slice(i+1): p; }catch{ return String(p||''); } };
   const shortSha = (s)=>{ try{ return s? String(s).slice(0,8)+'…' : ''; }catch{ return ''; } };
-  const statusBadge = (st)=>{ const s=String(st||'').toLowerCase(); const tone = s==='available'? 'good' : s==='downloading'? 'warn' : s==='error'? 'bad' : 'warn'; return `<span class="badge ${tone} small">${st||'–'}</span>`; };
+  const statusBadge = (st)=>{ const s=String(st||'').toLowerCase(); const tone = s==='available'? 'ok' : s==='downloading'? 'warn' : s==='error'? 'bad' : 'warn'; return `<span class="badge ${tone} small">${st||'–'}</span>`; };
   const rows = items.map(m=>{
     const id = m?.id||''; const prov=m?.provider||'local'; const st=m?.status||'available';
     const bytes = typeof m?.bytes==='number'? m.bytes : null; const size = bytes!=null? bytesHuman(bytes) : '–';
     const file = m?.file || basename(m?.path||''); const sha = shortSha(m?.sha256);
-    const def = (rm.default && id===rm.default) ? `<span class=\"badge good small\" title=\"default model\">default</span>` : '';
+    const def = (rm.default && id===rm.default) ? `<span class=\"badge ok small\" title=\"default model\">default</span>` : '';
     const sid = String(id).replace(/[^a-zA-Z0-9_-]/g,'_');
     const btnSetDef = `<button class=\"ghost\" title=\"Set default\" onclick=\"modelsRowSetDefault('${id.replace(/'/g, \"%27\")}')\">Default</button>`;
     const btnDl = `<button class=\"ghost\" title=\"Download model\" onclick=\"modelsRowDownloadInline('${sid}','${id.replace(/'/g, \"%27\")}','${(prov||'').replace(/'/g, '%27')}')\">Download</button>`;
@@ -1301,7 +1391,7 @@ function modelsRender(){ try{
   });
   tbl.innerHTML = head + (rows.join('') || '<div class="mrow"><div class="mcell">no models</div></div>');
   const badge = document.getElementById('modelsHdrBadge');
-  if(badge){ const n = items.length; badge.className = 'badge ' + (n>0 ? 'good' : 'warn'); badge.innerHTML = '<span class="dot"></span> ' + n + (rm.default? ' · default: '+rm.default : ''); }
+  if(badge){ const n = items.length; badge.className = 'badge ' + (n>0 ? 'ok' : 'warn'); badge.innerHTML = '<span class="dot"></span> ' + n + (rm.default? ' · default: '+rm.default : ''); }
 }catch{}}
 // Row actions
 async function modelsRowSetDefault(id){ try{
@@ -1476,9 +1566,9 @@ async function fbFetchSuggestions(){ await req('GET','/feedback/suggestions',nul
 function fbRenderList(j){
   const el = document.getElementById('fbList'); if(!el) return;
   const list = (j && j.suggestions) || [];
-  const vb = document.getElementById('fbVerBadge'); if(vb){ const v=(j&&j.version)||0; vb.className='badge ' + (v>0?'good':'warn'); vb.innerHTML='<span class="dot"></span> v'+v; }
+  const vb = document.getElementById('fbVerBadge'); if(vb){ const v=(j&&j.version)||0; vb.className='badge ' + (v>0?'ok':'warn'); vb.innerHTML='<span class="dot"></span> v'+v; }
   if(!Array.isArray(list) || list.length===0){ el.innerHTML = '<div class="key">no suggestions</div>'; return; }
-  const cls = (c)=> c>=0.8? 'good' : (c>=0.5? 'warn' : 'bad');
+  const cls = (c)=> c>=0.8? 'ok' : (c>=0.5? 'warn' : 'bad');
   const rows = list.map(s => {
     const id = s.id || '(unknown)';
     const action = s.action || '?';
@@ -1586,16 +1676,17 @@ document.addEventListener('DOMContentLoaded', initDocs);
 // Metrics link
 document.addEventListener('DOMContentLoaded', ()=>{
   const a=document.getElementById('metricsLink'); if(!a) return; a.href = base + '/metrics'; a.target='_blank'; a.title='Open Prometheus metrics';
+  const cm=document.getElementById('copyMetrics'); if(cm){ cm.addEventListener('click', async ()=>{ try{ const r=await fetch(base + '/metrics'); const t=await r.text(); await navigator.clipboard.writeText(t); showToast('Metrics copied'); }catch{ showToast('Copy failed'); } }); }
   // Catalog link + health badge
   const cl=document.getElementById('catalogLink'); if(cl){ cl.href = base + '/catalog/index'; cl.target='_blank'; cl.title='Open Interface Catalog'; }
   (async()=>{ try{
     const r = await fetch(base + '/catalog/health');
-    if(r.ok){ const j = await r.json(); const cb=document.getElementById('catalogBadge'); if(cb){ cb.className = 'badge ' + (j.ok? 'good':'warn'); cb.innerHTML = '<span class="dot"></span> Catalog: ' + (j.ok? 'ok':'warn'); } }
+    if(r.ok){ const j = await r.json(); const cb=document.getElementById('catalogBadge'); if(cb){ cb.className = 'badge ' + (j.ok? 'ok':'warn'); cb.innerHTML = '<span class="dot"></span> Catalog: ' + (j.ok? 'ok':'warn'); } }
   }catch{} })();
 });
-function setAdmin(on){ __adminOk = !!on; const b=document.getElementById('adminBadge'); if(!b) return; b.className = 'badge ' + (on ? 'good' : 'warn'); b.innerHTML = '<span class="dot"></span> Admin: ' + (on ? 'on' : 'off'); }
-function setSSE(on){ const b=document.getElementById('sseBadge'); if(!b) return; b.className = 'badge ' + (on ? 'good' : 'bad'); b.innerHTML = '<span class="dot"></span> SSE: ' + (on ? 'live' : 'off'); }
-function setChat(name, ok){ const b=document.getElementById('chatBadge'); if(!b) return; const cls = ok ? (name==='synthetic'?'warn':'good') : 'bad'; b.className = 'badge ' + cls; b.innerHTML = '<span class="dot"></span> Chat: ' + name; }
+function setAdmin(on){ __adminOk = !!on; const b=document.getElementById('adminBadge'); if(!b) return; b.className = 'badge ' + (on ? 'ok' : 'warn'); b.innerHTML = '<span class="dot"></span> Admin: ' + (on ? 'on' : 'off'); }
+function setSSE(on){ const b=document.getElementById('sseBadge'); if(!b) return; b.className = 'badge ' + (on ? 'ok' : 'bad'); b.innerHTML = '<span class="dot"></span> SSE: ' + (on ? 'live' : 'off'); }
+function setChat(name, ok){ const b=document.getElementById('chatBadge'); if(!b) return; const cls = ok ? (name==='synthetic'?'warn':'ok') : 'bad'; b.className = 'badge ' + cls; b.innerHTML = '<span class="dot"></span> Chat: ' + name; }
 async function chatProbe(){ try{ const r=await fetch(base + '/chat/status?probe=1'); const j=await r.json(); setChat(j.backend||'synthetic', !!j.ok); showToast('Chat ' + (j.backend||'synthetic') + ': ' + (j.ok?'ok':'fail') + (j.latency_ms?(' · '+j.latency_ms+' ms') : '')); }catch{ setChat('synthetic', false); showToast('Chat probe failed'); } }
 async function chatInit(){ try{ const r=await fetch(base + '/chat/status'); const j=await r.json(); setChat(j.backend||'synthetic', !!j.ok); }catch{ setChat('synthetic', false); } }
 async function probeAdmin(){ try{ const r = await fetch(base + '/introspect/tools'); setAdmin(r.ok); }catch{ setAdmin(false); } }
@@ -1605,6 +1696,28 @@ document.addEventListener('DOMContentLoaded', ()=>{ try{ initBadges(); }catch(e)
 document.addEventListener('DOMContentLoaded', ()=>{ try{ updateModelsCount(); }catch(e){} });
 document.addEventListener('DOMContentLoaded', ()=>{ try{ renderDownloads(); }catch(e){} });
 document.addEventListener('DOMContentLoaded', ()=>{ try{ modelsMaybeShowHint(false); }catch(e){} });
+document.addEventListener('DOMContentLoaded', ()=>{ try{ const b=document.getElementById('copyDownloadsBtn'); if(b){ b.addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(JSON.stringify(downloads||{}, null, 2)); showToast('Copied'); }catch{} }); } }catch(e){} });
+// Trust (RPU) wiring
+async function rpuRefresh(){ try{
+  const r = await fetch(base + '/admin/rpu/trust', { headers: { 'X-ARW-Admin': __adminHeader || '' } });
+  if(!r.ok) return;
+  const j = await r.json();
+  const count = (j && (j.count||j.data?.count)) || 0;
+  const last = (j && (j.last_reload_ms||j.data?.last_reload_ms)) || 0;
+  const elC = document.getElementById('rpuCount'); if (elC) elC.textContent = String(count);
+  const elL = document.getElementById('rpuLast'); if (elL) elL.textContent = last? (new Date(last).toISOString()) : '–';
+  const elOut = document.getElementById('rpuOut'); if (elOut) elOut.textContent = JSON.stringify(j, null, 2);
+}catch(e){ console.error(e); }}
+async function rpuReload(){ try{
+  const r = await fetch(base + '/admin/rpu/reload', { method: 'POST', headers: { 'X-ARW-Admin': __adminHeader || '' } });
+  if(r.ok){ showToast('Trust reloaded'); await rpuRefresh(); } else { showToast('Reload failed'); }
+}catch(e){ console.error(e); showToast('Reload failed'); }}
+document.addEventListener('DOMContentLoaded', ()=>{
+  const rb=document.getElementById('rpuRefreshBtn'); if(rb){ rb.addEventListener('click', rpuRefresh); }
+  const rl=document.getElementById('rpuReloadBtn'); if(rl){ rl.addEventListener('click', rpuReload); }
+  const re=document.getElementById('rpuEventsBtn'); if(re){ re.href = base + '/admin/events?prefix=' + encodeURIComponent('rpu.'); re.title='Open Events (rpu.*)'; }
+  rpuRefresh();
+});
 // Pull policy bounds for display
 document.addEventListener('DOMContentLoaded', fbFetchPolicy);
 // Start live suggestions if enabled
@@ -1613,6 +1726,7 @@ document.addEventListener('DOMContentLoaded', ()=>{ const cb=document.getElement
 document.addEventListener('DOMContentLoaded', ()=>{
   const b1=document.getElementById('sseReplay50'); if(b1){ b1.addEventListener('click', ()=>{ startSSE(50, []); showToast('Replaying last 50'); }); }
   const b2=document.getElementById('sseOnlyModels'); if(b2){ b2.addEventListener('click', ()=>{ startSSE(0, ['models.']); showToast('Filtering to models.*'); }); }
+  const b3=document.getElementById('sseOnlyRpu'); if(b3){ b3.addEventListener('click', ()=>{ startSSE(0, ['rpu.']); showToast('Filtering to rpu.*'); }); }
 });
 
 // --- Persist common inputs ---
@@ -1634,7 +1748,7 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 });
 document.addEventListener('DOMContentLoaded', ()=>{
-  const sel=document.getElementById('hdrProfile'); if(sel){ sel.addEventListener('change', async ()=>{ try{ await fetch(base+'/governor/profile',{method:'POST',headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: sel.value})}); const b=document.getElementById('govBadge'); if(b){ b.className='badge good'; b.innerHTML='<span class=\"dot\"></span> Gov: '+sel.value; } showToast('Profile set to '+sel.value); }catch{ showToast('Profile change failed'); } }); }
+  const sel=document.getElementById('hdrProfile'); if(sel){ sel.addEventListener('change', async ()=>{ try{ await fetch(base+'/governor/profile',{method:'POST',headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: sel.value})}); const b=document.getElementById('govBadge'); if(b){ b.className='badge ok'; b.innerHTML='<span class=\"dot\"></span> Gov: '+sel.value; } showToast('Profile set to '+sel.value); }catch{ showToast('Profile change failed'); } }); }
 });
 // Mode/SLO header wiring
 document.addEventListener('DOMContentLoaded', ()=>{
@@ -1649,8 +1763,8 @@ document.addEventListener('DOMContentLoaded', ()=>{
   const updateBadges = ()=>{
     const m = (modeSel && modeSel.value) || 'balanced';
     const s = (sloInp && sloInp.value) || '1500';
-    if(modeBadge){ modeBadge.className='badge good'; modeBadge.innerHTML = '<span class="dot"></span> Mode: ' + m; }
-    if(sloBadge){ sloBadge.className='badge ' + (parseInt(s,10)<=1500? 'good':'warn'); sloBadge.innerHTML = '<span class="dot"></span> SLO: ' + s + ' ms'; }
+    if(modeBadge){ modeBadge.className='badge ok'; modeBadge.innerHTML = '<span class="dot"></span> Mode: ' + m; }
+    if(sloBadge){ sloBadge.className='badge ' + (parseInt(s,10)<=1500? 'ok':'warn'); sloBadge.innerHTML = '<span class="dot"></span> SLO: ' + s + ' ms'; }
   };
   if(modeSel){ modeSel.addEventListener('change', ()=>{ savePref('hdrMode', modeSel.value); updateBadges(); }); }
   if(applyBtn){ applyBtn.addEventListener('click', async ()=>{
@@ -1674,9 +1788,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
 function initBadges(){
   try{
     const prof = document.getElementById('hdrProfile')?.value || 'balanced';
-    const gb = document.getElementById('govBadge'); if(gb){ gb.className='badge good'; gb.innerHTML='<span class="dot"></span> Gov: '+prof; }
-    const modeSel = document.getElementById('hdrMode'); const m = (modeSel && modeSel.value) || 'balanced'; const mb=document.getElementById('modeBadge'); if(mb){ mb.className='badge good'; mb.innerHTML='<span class="dot"></span> Mode: '+m; }
-    const s = document.getElementById('hdrSlo')?.value || '1500'; const sb=document.getElementById('sloBadge'); if(sb){ sb.className='badge ' + (parseInt(s,10)<=1500? 'good':'warn'); sb.innerHTML='<span class="dot"></span> SLO: '+s+' ms'; }
+    const gb = document.getElementById('govBadge'); if(gb){ gb.className='badge ok'; gb.innerHTML='<span class="dot"></span> Gov: '+prof; }
+    const modeSel = document.getElementById('hdrMode'); const m = (modeSel && modeSel.value) || 'balanced'; const mb=document.getElementById('modeBadge'); if(mb){ mb.className='badge ok'; mb.innerHTML='<span class="dot"></span> Mode: '+m; }
+    const s = document.getElementById('hdrSlo')?.value || '1500'; const sb=document.getElementById('sloBadge'); if(sb){ sb.className='badge ' + (parseInt(s,10)<=1500? 'ok':'warn'); sb.innerHTML='<span class="dot"></span> SLO: '+s+' ms'; }
   }catch{}
 }
 
@@ -1861,7 +1975,7 @@ async function contextAssemble(){
       const row = document.getElementById('plannerMeta');
       if (planner && row){
         const mode = planner.mode || 'balanced';
-        const verify = planner.verify_pass ? '<span class="badge good"><span class="dot"></span> verify</span>' : '<span class="badge warn"><span class="dot"></span> verify off</span>';
+        const verify = planner.verify_pass ? '<span class="badge ok"><span class="dot"></span> verify</span>' : '<span class="badge warn"><span class="dot"></span> verify off</span>';
         const vote = (planner.consistency && planner.consistency.vote_k!=null) ? planner.consistency.vote_k : '–';
         const k2 = (planner.retrieval && planner.retrieval.k!=null) ? planner.retrieval.k : '–';
         const div = (planner.retrieval && planner.retrieval.div!=null) ? planner.retrieval.div : '–';
@@ -1894,7 +2008,7 @@ function episodesRender(j){ try{
     const last = ep.last || '';
     const dur = ep.duration_ms!=null ? ` · ${ep.duration_ms} ms` : '';
     const errs = ep.errors||0;
-    const badge = errs>0 ? `<span class="badge bad" style="margin-left:6px"><span class="dot"></span> ${errs} err</span>` : `<span class="badge good" style="margin-left:6px"><span class="dot"></span> OK</span>`;
+    const badge = errs>0 ? `<span class="badge bad" style="margin-left:6px"><span class="dot"></span> ${errs} err</span>` : `<span class="badge ok" style="margin-left:6px"><span class="dot"></span> OK</span>`;
     const eid = `epd-${(ep.id||String(idx)).replace(/[^a-zA-Z0-9_-]/g,'_')}`;
     const head = `<div style="font-weight:600;display:flex;justify-content:space-between;align-items:center"><span>${ep.id} <span style="color:var(--muted);font-weight:400"> · ${count} events${dur} · ${last}</span>${badge}</span><button class="iconbtn" onclick="const d=document.getElementById('${eid}'); d.style.display = (d.style.display==='none'||!d.style.display)?'block':'none';">Details</button></div>`;
     const bodyAll = (ep.items||[]).map(ev=>{
@@ -1906,7 +2020,7 @@ function episodesRender(j){ try{
       try{ const sid = ev?.payload?.suggestion?.id; if (sid){ applyBtn = ` <button class="iconbtn" onclick="epApply('${sid}')">Apply</button>`; } }catch{}
       return `<div class="evt">[${t}] ${k}: ${p}${applyBtn}</div>`;
     }).join('');
-    return `<div class="box" style="border:1px dashed #e5e7eb;margin:6px 0;padding:6px">${head}<div id="${eid}" style="display:none">${bodyAll}</div></div>`;
+    return `<div class="card" style="border:1px dashed #e5e7eb;margin:6px 0;padding:6px">${head}<div id="${eid}" style="display:none">${bodyAll}</div></div>`;
   }).join('');
   el.innerHTML = html;
 }catch{}}
@@ -1928,7 +2042,7 @@ async function selfRefreshList(){
     const sel = document.getElementById('selfAgentSel');
     if(sel){ sel.innerHTML = ''; items.forEach(it => { const o=document.createElement('option'); o.value = it.agent || ''; o.textContent = it.agent || '(unnamed)'; sel.appendChild(o); }); }
     const badge = document.getElementById('selfHdrBadge');
-    if (badge){ badge.className = 'badge ' + (items.length ? 'good' : 'warn'); badge.innerHTML = '<span class="dot"></span> ' + items.length; }
+    if (badge){ badge.className = 'badge ' + (items.length ? 'ok' : 'warn'); badge.innerHTML = '<span class="dot"></span> ' + items.length; }
   }catch(e){ showToast('self list failed'); }
 }
 function _fmtPct(x){ if(typeof x !== 'number' || !isFinite(x)) return '–'; return Math.round(x*1000)/10 + '%'; }
@@ -2060,3 +2174,5 @@ async function modelsGc(){
   </script>
 </body>
 </html>
+// Experiment activated (applied variant)
+es.addEventListener('experiment.activated', (e)=>{ pushEvt('experiment.activated', e.data); });

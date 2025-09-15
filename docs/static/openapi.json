@@ -1,6 +1,5 @@
 {
   "openapi": "3.1.0",
-  "jsonSchemaDialect": "https://json-schema.org/draft/2020-12/schema",
   "info": {
     "title": "Agent Hub (ARW) Service API",
     "description": "Your private AI control room that can scale and share when you choose.\n\nIn plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” on your computer to research, plan, write, and build—while you stay in charge. It is local‑first and privacy‑first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.\n",
@@ -9,121 +8,7 @@
     },
     "version": "0.1.0"
   },
-  "tags": [
-    {
-      "name": "Admin/Chat",
-      "description": "Admin/Chat endpoints"
-    },
-    {
-      "name": "Admin/Core",
-      "description": "Admin/Core endpoints"
-    },
-    {
-      "name": "Admin/Feedback",
-      "description": "Admin/Feedback endpoints"
-    },
-    {
-      "name": "Admin/Governor",
-      "description": "Admin/Governor endpoints"
-    },
-    {
-      "name": "Admin/Hierarchy",
-      "description": "Admin/Hierarchy endpoints"
-    },
-    {
-      "name": "Admin/Introspect",
-      "description": "Admin/Introspect endpoints"
-    },
-    {
-      "name": "Admin/Memory",
-      "description": "Admin/Memory endpoints"
-    },
-    {
-      "name": "Admin/Models",
-      "description": "Admin/Models endpoints"
-    },
-    {
-      "name": "Admin/Projects",
-      "description": "Admin/Projects endpoints"
-    },
-    {
-      "name": "Admin/State",
-      "description": "Admin/State endpoints"
-    },
-    {
-      "name": "Admin/Tasks",
-      "description": "Admin/Tasks endpoints"
-    },
-    {
-      "name": "Admin/Tools",
-      "description": "Admin/Tools endpoints"
-    },
-    {
-      "name": "Public",
-      "description": "Public endpoints"
-    },
-    {
-      "name": "Public/Specs",
-      "description": "Public/Specs endpoints"
-    },
-    {
-      "name": "Public/State",
-      "description": "Public read-models and state"
-    }
-  ],
   "paths": {
-    "/models/blob/{sha256}": {
-      "get": {
-        "tags": [
-          "Public"
-        ],
-        "description": "Return a CAS blob by SHA-256 digest. Strong validators are provided with\nETag (hex digest) and Last-Modified. Clients may send If-None-Match to\nreceive 304 Not Modified. Cache-Control is set to long-lived immutable.\n",
-        "operationId": "models_blob_get_doc",
-        "parameters": [
-          {
-            "name": "sha256",
-            "in": "path",
-            "description": "Hex lowercase SHA-256 (64 chars)",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Blob bytes",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
-                }
-              }
-            }
-          },
-          "206": {
-            "description": "Partial Content (Range)"
-          },
-          "304": {
-            "description": "Not Modified"
-          },
-          "400": {
-            "description": "Invalid sha256",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Not found"
-          }
-        }
-      }
-    },
     "/about": {
       "get": {
         "tags": [
@@ -151,8 +36,6 @@
           "Admin/Chat"
         ],
         "summary": "Deprecated: Chat history",
-        "deprecated": true,
-        "x-sunset": "2026-01-01T00:00:00Z",
         "description": "Deprecated dev chat history used by the debug UI; scheduled for removal after sunset.",
         "operationId": "chat_get_doc",
         "responses": {
@@ -178,8 +61,6 @@
           "Admin/Chat"
         ],
         "summary": "Deprecated: Clear chat history",
-        "deprecated": true,
-        "x-sunset": "2026-01-01T00:00:00Z",
         "description": "Deprecated dev helper to clear in-memory chat history.",
         "operationId": "chat_clear_doc",
         "responses": {
@@ -212,8 +93,6 @@
           "Admin/Chat"
         ],
         "summary": "Deprecated: Send chat message",
-        "deprecated": true,
-        "x-sunset": "2026-01-01T00:00:00Z",
         "description": "Deprecated dev helper to send a message to the synthetic chat backend.",
         "operationId": "chat_send_doc",
         "requestBody": {
@@ -310,7 +189,6 @@
         "tags": [
           "Admin/Feedback"
         ],
-        "description": "Analyze recorded signals and stats to propose suggestions.",
         "operationId": "feedback_analyze_post_doc",
         "responses": {
           "200": {
@@ -333,7 +211,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Feedback: POST /admin/feedback/analyze."
       }
     },
     "/admin/feedback/apply": {
@@ -341,7 +220,6 @@
         "tags": [
           "Admin/Feedback"
         ],
-        "description": "Apply a suggestion by id (policy-gated).",
         "operationId": "feedback_apply_post_doc",
         "requestBody": {
           "content": {
@@ -374,7 +252,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Feedback: POST /admin/feedback/apply."
       }
     },
     "/admin/feedback/auto": {
@@ -382,7 +261,6 @@
         "tags": [
           "Admin/Feedback"
         ],
-        "description": "Enable or disable automatic application of accepted suggestions.",
         "operationId": "feedback_auto_post_doc",
         "requestBody": {
           "content": {
@@ -415,7 +293,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Feedback: POST /admin/feedback/auto."
       }
     },
     "/admin/feedback/policy": {
@@ -423,7 +302,6 @@
         "tags": [
           "Admin/Feedback"
         ],
-        "description": "Return the effective feedback policy and tunables.",
         "operationId": "feedback_policy_doc",
         "responses": {
           "200": {
@@ -439,7 +317,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Feedback: GET /admin/feedback/policy."
       }
     },
     "/admin/feedback/reset": {
@@ -447,7 +326,6 @@
         "tags": [
           "Admin/Feedback"
         ],
-        "description": "Clear feedback signals and suggestions.",
         "operationId": "feedback_reset_post_doc",
         "responses": {
           "200": {
@@ -470,7 +348,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Feedback: POST /admin/feedback/reset."
       }
     },
     "/admin/feedback/signal": {
@@ -478,7 +357,6 @@
         "tags": [
           "Admin/Feedback"
         ],
-        "description": "Record a feedback signal (kind/target/confidence/severity/note).",
         "operationId": "feedback_signal_post_doc",
         "requestBody": {
           "content": {
@@ -511,7 +389,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Feedback: POST /admin/feedback/signal."
       }
     },
     "/admin/feedback/state": {
@@ -519,7 +398,6 @@
         "tags": [
           "Admin/Feedback"
         ],
-        "description": "Return the current feedback engine state.",
         "operationId": "feedback_state_get_doc",
         "responses": {
           "200": {
@@ -535,7 +413,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Feedback: GET /admin/feedback/state."
       }
     },
     "/admin/feedback/suggestions": {
@@ -543,7 +422,6 @@
         "tags": [
           "Admin/Feedback"
         ],
-        "description": "List current suggestions with rationale and confidence.",
         "operationId": "feedback_suggestions_doc",
         "responses": {
           "200": {
@@ -559,7 +437,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Feedback: GET /admin/feedback/suggestions."
       }
     },
     "/admin/feedback/updates": {
@@ -567,7 +446,6 @@
         "tags": [
           "Admin/Feedback"
         ],
-        "description": "Poll for suggestion/version updates since the given version.",
         "operationId": "feedback_updates_doc",
         "parameters": [
           {
@@ -599,7 +477,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Feedback: GET /admin/feedback/updates."
       }
     },
     "/admin/governor/hints": {
@@ -607,7 +486,6 @@
         "tags": [
           "Admin/Governor"
         ],
-        "description": "Get current governor hints (concurrency, timeouts, retrieval, context, etc.).",
         "operationId": "governor_hints_get_doc",
         "responses": {
           "200": {
@@ -623,13 +501,13 @@
               }
             }
           }
-        }
+        },
+        "description": "Governor: GET /admin/governor/hints."
       },
       "post": {
         "tags": [
           "Admin/Governor"
         ],
-        "description": "Set governor hints (validated and persisted).",
         "operationId": "governor_hints_set_doc",
         "requestBody": {
           "content": {
@@ -662,7 +540,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Governor: POST /admin/governor/hints."
       }
     },
     "/admin/governor/profile": {
@@ -670,7 +549,6 @@
         "tags": [
           "Admin/Governor"
         ],
-        "description": "Get the active governor profile (performance/balanced/power-saver).",
         "operationId": "governor_profile_get_doc",
         "responses": {
           "200": {
@@ -686,13 +564,13 @@
               }
             }
           }
-        }
+        },
+        "description": "Governor: GET /admin/governor/profile."
       },
       "post": {
         "tags": [
           "Admin/Governor"
         ],
-        "description": "Set the active governor profile.",
         "operationId": "governor_profile_set_doc",
         "requestBody": {
           "content": {
@@ -725,7 +603,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Governor: POST /admin/governor/profile."
       }
     },
     "/admin/hierarchy/accept": {
@@ -1199,36 +1078,7 @@
         "operationId": "models_list_doc",
         "responses": {
           "200": {
-            "description": "Models list",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ModelItem"
-                  }
-                },
-                "examples": {
-                  "basic": {
-                    "summary": "Two models",
-                    "value": [
-                      {
-                        "id": "llama3:8b",
-                        "provider": "ollama",
-                        "bytes": 5347737600,
-                        "status": "ready"
-                      },
-                      {
-                        "id": "qwen2:7b",
-                        "provider": "hf",
-                        "bytes": 4855592960,
-                        "status": "downloading"
-                      }
-                    ]
-                  }
-                }
-              }
-            }
+            "description": "Models list"
           },
           "403": {
             "description": "Forbidden",
@@ -1242,70 +1092,6 @@
           }
         },
         "description": "Models: GET /admin/models."
-      }
-    },
-    "/admin/models/summary": {
-      "get": {
-        "tags": [
-          "Admin/Models"
-        ],
-        "operationId": "models_summary_doc",
-        "responses": {
-          "200": {
-            "description": "Models summary",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ModelsSummary"
-                },
-                "examples": {
-                  "basic": {
-                    "summary": "Typical models summary",
-                    "value": {
-                      "items": [
-                        {
-                          "id": "llama3:8b",
-                          "provider": "ollama",
-                          "path": "/models/llama3/8b.bin",
-                          "sha256": "0123abcd...",
-                          "bytes": 5347737600,
-                          "status": "ready"
-                        },
-                        {
-                          "id": "qwen2:7b",
-                          "provider": "hf",
-                          "path": "/models/qwen2/7b.bin",
-                          "sha256": "89ab0123...",
-                          "bytes": 4855592960,
-                          "status": "downloading"
-                        }
-                      ],
-                      "concurrency": {
-                        "configured_max": 2,
-                        "available_permits": 2,
-                        "held_permits": 0,
-                        "hard_cap": null
-                      },
-                      "metrics": {
-                        "started": 4,
-                        "queued": 1,
-                        "admitted": 3,
-                        "resumed": 0,
-                        "canceled": 0,
-                        "completed": 2,
-                        "completed_cached": 0,
-                        "errors": 0,
-                        "bytes_total": 10245591040,
-                        "ewma_mbps": 18.2
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "description": "Models: GET /admin/models/summary."
       }
     },
     "/admin/models/add": {
@@ -1372,16 +1158,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/ModelsConcurrency"
-                },
-                "examples": {
-                  "typical": {
-                    "value": {
-                      "configured_max": 2,
-                      "available_permits": 2,
-                      "held_permits": 0,
-                      "hard_cap": null
-                    }
-                  }
                 }
               }
             }
@@ -1566,14 +1342,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/OkResponse"
-                },
-                "examples": {
-                  "started": {
-                    "summary": "Enqueued/started",
-                    "value": {
-                      "ok": true
-                    }
-                  }
                 }
               }
             }
@@ -1664,26 +1432,8 @@
             "description": "Jobs status",
             "content": {
               "application/json": {
-                "examples": {
-                  "basic": {
-                    "summary": "Sample snapshot",
-                    "value": {
-                      "active": [
-                        {
-                          "model_id": "llama3.1:8b-instruct-q4_K_M",
-                          "job_id": "dl-5f45c0a1"
-                        }
-                      ],
-                      "inflight_hashes": [
-                        "7f2e4c0f9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e"
-                      ],
-                      "concurrency": {
-                        "configured_max": 2,
-                        "available_permits": 1,
-                        "held_permits": 0
-                      }
-                    }
-                  }
+                "schema": {
+                  "$ref": "#/components/schemas/ModelsJobs"
                 }
               }
             }
@@ -1793,6 +1543,27 @@
           }
         },
         "description": "Models: POST /admin/models/save."
+      }
+    },
+    "/admin/models/summary": {
+      "get": {
+        "tags": [
+          "Admin/Models"
+        ],
+        "operationId": "models_summary_doc",
+        "responses": {
+          "200": {
+            "description": "Models summary",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelsSummary"
+                }
+              }
+            }
+          }
+        },
+        "description": "Models: GET /admin/models/summary."
       }
     },
     "/admin/probe": {
@@ -2172,53 +1943,18 @@
         "description": "Tools: POST /admin/tools/run."
       }
     },
-    "/healthz": {
-      "get": {
-        "tags": [
-          "Public"
-        ],
-        "operationId": "healthz_doc",
-        "responses": {
-          "200": {
-            "description": "Service health",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/OkResponse"
-                }
-              }
-            }
-          }
-        },
-        "description": "GET /healthz."
-      }
-    },
-    "/metrics": {
-      "get": {
-        "tags": [
-          "Public"
-        ],
-        "operationId": "metrics_doc",
-        "responses": {
-          "200": {
-            "description": "Prometheus metrics"
-          }
-        },
-        "description": "Public: GET /metrics."
-      }
-    },
-    "/spec": {
+    "/catalog/health": {
       "get": {
         "tags": [
           "Public/Specs"
         ],
-        "operationId": "spec_index_doc",
+        "operationId": "catalog_health_doc",
         "responses": {
           "200": {
-            "description": "Spec index"
+            "description": "Catalog health"
           }
         },
-        "description": "Specs: GET /spec."
+        "description": "Specs: GET /catalog/health."
       }
     },
     "/catalog/index": {
@@ -2238,18 +1974,104 @@
         "description": "Specs: GET /catalog/index."
       }
     },
-    "/catalog/health": {
+    "/healthz": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "operationId": "healthz_doc",
+        "responses": {
+          "200": {
+            "description": "Service health",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OkResponse"
+                }
+              }
+            }
+          }
+        },
+        "description": "Public: GET /healthz."
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "operationId": "metrics_doc",
+        "responses": {
+          "200": {
+            "description": "Prometheus metrics"
+          }
+        },
+        "description": "Public: GET /metrics."
+      }
+    },
+    "/models/blob/{sha256}": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "operationId": "models_blob_get_doc",
+        "parameters": [
+          {
+            "name": "sha256",
+            "in": "path",
+            "description": "Hex lowercase SHA-256 (64 chars)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "CAS blob bytes (ETag/immutable cache)",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "304": {
+            "description": "Not Modified (If-None-Match/If-Modified-Since)"
+          },
+          "400": {
+            "description": "Invalid sha256",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Not found"
+          },
+          "416": {
+            "description": "Range Not Satisfiable"
+          }
+        },
+        "description": "Public: GET /models/blob/{sha256}."
+      }
+    },
+    "/spec": {
       "get": {
         "tags": [
           "Public/Specs"
         ],
-        "operationId": "catalog_health_doc",
+        "operationId": "spec_index_doc",
         "responses": {
           "200": {
-            "description": "Catalog health"
+            "description": "Spec index"
           }
         },
-        "description": "Specs: GET /catalog/health."
+        "description": "Specs: GET /spec."
       }
     },
     "/spec/asyncapi.yaml": {
@@ -2303,23 +2125,8 @@
         "description": "Specs: GET /spec/openapi.yaml."
       }
     },
-    "/version": {
-      "get": {
-        "tags": [
-          "Public"
-        ],
-        "operationId": "version_doc",
-        "responses": {
-          "200": {
-            "description": "Service version"
-          }
-        },
-        "description": "Public: GET /version."
-      }
-    },
     "/state/models": {
       "get": {
-        "description": "Public read-only models list",
         "tags": [
           "Public/State"
         ],
@@ -2334,280 +2141,98 @@
                   "items": {
                     "$ref": "#/components/schemas/ModelItem"
                   }
-                },
-                "examples": {
-                  "basic": {
-                    "value": [
-                      {
-                        "id": "llama3:8b",
-                        "provider": "ollama",
-                        "bytes": 5347737600,
-                        "status": "ready"
-                      },
-                      {
-                        "id": "qwen2:7b",
-                        "provider": "hf",
-                        "bytes": 4855592960,
-                        "status": "downloading"
-                      }
-                    ]
-                  }
                 }
               }
             }
           }
-        }
+        },
+        "description": "State: GET /state/models."
+      }
+    },
+    "/version": {
+      "get": {
+        "tags": [
+          "Public"
+        ],
+        "operationId": "version_doc",
+        "responses": {
+          "200": {
+            "description": "Service version"
+          }
+        },
+        "description": "Public: GET /version."
       }
     }
   },
   "components": {
     "schemas": {
-      "ModelsConcurrency": {
-        "type": "object",
-        "required": [
-          "configured_max",
-          "available_permits",
-          "held_permits"
-        ],
-        "properties": {
-          "configured_max": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "available_permits": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "held_permits": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "hard_cap": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "minimum": 0
-          }
-        },
-        "example": {
-          "configured_max": 2,
-          "available_permits": 2,
-          "held_permits": 0,
-          "hard_cap": null
-        }
-      },
-      "ModelsMetrics": {
-        "type": "object",
-        "required": [
-          "started",
-          "queued",
-          "admitted",
-          "resumed",
-          "canceled",
-          "completed",
-          "completed_cached",
-          "errors",
-          "bytes_total"
-        ],
-        "properties": {
-          "started": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "queued": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "admitted": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "resumed": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "canceled": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "completed": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "completed_cached": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "errors": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "bytes_total": {
-            "type": "integer",
-            "format": "int64",
-            "minimum": 0
-          },
-          "ewma_mbps": {
-            "type": [
-              "number",
-              "null"
-            ],
-            "format": "double",
-            "minimum": 0
-          }
-        },
-        "example": {
-          "started": 4,
-          "queued": 1,
-          "admitted": 3,
-          "resumed": 0,
-          "canceled": 0,
-          "completed": 2,
-          "completed_cached": 0,
-          "errors": 0,
-          "bytes_total": 10245591040,
-          "ewma_mbps": 18.2
-        }
-      },
-      "ModelsSummary": {
-        "type": "object",
-        "required": [
-          "items",
-          "concurrency",
-          "metrics"
-        ],
-        "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ModelItem"
-            }
-          },
-          "default": {
-            "type": "string"
-          },
-          "concurrency": {
-            "$ref": "#/components/schemas/ModelsConcurrency"
-          },
-          "metrics": {
-            "$ref": "#/components/schemas/ModelsMetrics"
-          }
-        }
-      },
-      "ModelItem": {
-        "type": "object",
-        "required": [
-          "id"
-        ],
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "provider": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "path": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "sha256": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "bytes": {
-            "type": [
-              "integer",
-              "null"
-            ],
-            "format": "int64",
-            "minimum": 0
-          },
-          "status": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "error_code": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        },
-        "example": {
-          "id": "llama3:8b",
-          "provider": "ollama",
-          "path": "/models/llama3/8b.bin",
-          "sha256": "0123abcd...",
-          "bytes": 5347737600,
-          "status": "ready"
-        }
-      },
       "About": {
         "type": "object",
-        "description": "Service and branding information.",
+        "required": [
+          "service",
+          "version",
+          "endpoints"
+        ],
         "properties": {
-          "name": {
-            "type": "string",
-            "example": "Agent Hub (ARW)"
-          },
-          "tagline": {
-            "type": "string",
-            "example": "Your private AI control room that can scale and share when you choose."
-          },
           "description": {
-            "type": "string"
-          },
-          "service": {
-            "type": "string",
-            "example": "arw-svc"
-          },
-          "version": {
-            "type": "string",
-            "example": "0.1.0"
-          },
-          "role": {
-            "type": "string",
-            "example": "Home"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "docs_url": {
-            "type": "string",
-            "format": "uri",
-            "example": "https://t3hw00t.github.io/ARW/"
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "endpoints": {
             "type": "array",
             "items": {
               "type": "string"
             }
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "service": {
+            "type": "string"
+          },
+          "tagline": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "version": {
+            "type": "string"
           }
-        },
+        }
+      },
+      "ActiveJob": {
+        "type": "object",
+        "description": "Active download job pair.",
         "required": [
-          "service",
-          "version",
-          "endpoints"
-        ]
+          "model_id",
+          "job_id"
+        ],
+        "properties": {
+          "job_id": {
+            "type": "string"
+          },
+          "model_id": {
+            "type": "string"
+          }
+        }
       },
       "ApplyMemory": {
         "type": "object",
@@ -2944,6 +2569,51 @@
       "Hints": {
         "type": "object",
         "properties": {
+          "compression_aggr": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "context_budget_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "context_footer": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "context_format": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "context_header": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "context_item_budget_tokens": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
+          "context_item_template": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "event_buffer": {
             "type": [
               "integer",
@@ -2959,6 +2629,18 @@
             "format": "int64",
             "minimum": 0
           },
+          "include_provenance": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "joiner": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "max_concurrency": {
             "type": [
               "integer",
@@ -2966,11 +2648,32 @@
             ],
             "minimum": 0
           },
+          "mmr_lambda": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
           "mode": {
             "type": [
               "string",
               "null"
             ]
+          },
+          "retrieval_div": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "retrieval_k": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
           },
           "slo_ms": {
             "type": [
@@ -2978,6 +2681,14 @@
               "null"
             ],
             "format": "int64",
+            "minimum": 0
+          },
+          "vote_k": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
             "minimum": 0
           }
         }
@@ -2996,6 +2707,219 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "ModelItem": {
+        "type": "object",
+        "description": "Item in the models list. Many fields are optional while downloading or\nwhen entries were added before materialization.",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "bytes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "error_code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "id": {
+            "type": "string"
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "provider": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "sha256": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "ModelsConcurrency": {
+        "type": "object",
+        "description": "Runtime download concurrency snapshot (configured vs. available), optionally\nincluding a hard cap from `ARW_MODELS_MAX_CONC_HARD`.",
+        "required": [
+          "configured_max",
+          "available_permits",
+          "held_permits"
+        ],
+        "properties": {
+          "available_permits": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "configured_max": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "hard_cap": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "held_permits": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "pending_shrink": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "ModelsJobs": {
+        "type": "object",
+        "description": "Snapshot of downloader jobs and inflight hashes plus a concurrency view.",
+        "required": [
+          "active",
+          "inflight_hashes",
+          "concurrency"
+        ],
+        "properties": {
+          "active": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ActiveJob"
+            }
+          },
+          "concurrency": {
+            "$ref": "#/components/schemas/ModelsConcurrency"
+          },
+          "inflight_hashes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "ModelsMetrics": {
+        "type": "object",
+        "description": "Aggregated counters and throughput estimate for downloads. Matches the\nshape returned by `ModelsService::downloads_metrics`.",
+        "required": [
+          "started",
+          "queued",
+          "admitted",
+          "resumed",
+          "canceled",
+          "completed",
+          "completed_cached",
+          "errors",
+          "bytes_total"
+        ],
+        "properties": {
+          "admitted": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "bytes_total": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "canceled": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "completed": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "completed_cached": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "errors": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "ewma_mbps": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "queued": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "resumed": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "started": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "ModelsSummary": {
+        "type": "object",
+        "description": "Composite summary for UI: models items, default id, concurrency, metrics.",
+        "required": [
+          "items",
+          "concurrency",
+          "metrics"
+        ],
+        "properties": {
+          "concurrency": {
+            "$ref": "#/components/schemas/ModelsConcurrency"
+          },
+          "default": {
+            "type": "string"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ModelItem"
+            }
+          },
+          "metrics": {
+            "$ref": "#/components/schemas/ModelsMetrics"
           }
         }
       },
@@ -3115,5 +3039,67 @@
         }
       }
     }
-  }
+  },
+  "tags": [
+    {
+      "name": "Admin/Chat",
+      "description": "Admin/Chat endpoints"
+    },
+    {
+      "name": "Admin/Core",
+      "description": "Admin/Core endpoints"
+    },
+    {
+      "name": "Admin/Feedback",
+      "description": "Admin/Feedback endpoints"
+    },
+    {
+      "name": "Admin/Governor",
+      "description": "Admin/Governor endpoints"
+    },
+    {
+      "name": "Admin/Hierarchy",
+      "description": "Admin/Hierarchy endpoints"
+    },
+    {
+      "name": "Admin/Introspect",
+      "description": "Admin/Introspect endpoints"
+    },
+    {
+      "name": "Admin/Memory",
+      "description": "Admin/Memory endpoints"
+    },
+    {
+      "name": "Admin/Models",
+      "description": "Admin/Models endpoints"
+    },
+    {
+      "name": "Admin/Projects",
+      "description": "Admin/Projects endpoints"
+    },
+    {
+      "name": "Admin/State",
+      "description": "Admin/State endpoints"
+    },
+    {
+      "name": "Admin/Tasks",
+      "description": "Admin/Tasks endpoints"
+    },
+    {
+      "name": "Admin/Tools",
+      "description": "Admin/Tools endpoints"
+    },
+    {
+      "name": "Public",
+      "description": "Public endpoints"
+    },
+    {
+      "name": "Public/Specs",
+      "description": "Public/Specs endpoints"
+    },
+    {
+      "name": "Public/State",
+      "description": "Public/State endpoints"
+    }
+  ]
 }

@@ -3,6 +3,8 @@ title: Versioning & Migration
 ---
 
 # Versioning & Migration
+Updated: 2025-09-12
+Type: Explanation
 
 Everything versioned
 - Prompts, recipes, policies, flows, tool schemas — add‑only evolution; semver for operations.

@@ -7,10 +7,21 @@ theme:
   features:
     - navigation.instant
     - navigation.sections
+    - navigation.top
     - content.code.copy
     - content.tabs.link
+    - content.action.edit
+    - content.action.view
+    - search.suggest
+    - search.highlight
+  icon:
+    repo: fontawesome/brands/github
+edit_uri: edit/main/docs/
 extra_css:
+  - css/tokens.css
   - css/overrides.css
+extra_javascript:
+  - static/status-badges.js
 docs_dir: docs
 plugins:
   - search
@@ -40,24 +51,70 @@ nav:
       - Concepts: guide/concepts.md
   - Tutorials:
       - Quickstart: guide/quickstart.md
+      - Shortcuts: guide/shortcuts.md
   - How‑to:
+      - Docker: guide/docker.md
+      - Kubernetes (Helm): guide/kubernetes.md
+      - Reverse Proxy: guide/reverse_proxy.md
       - Models Download: guide/models_download.md
       - Subscribe to Events (SSE): guide/events_sse.md
+      - Events & Logs Windows: guide/events_logs.md
+      - Command Palette: guide/command_palette.md
+      - Workflow Views & Sidecar: guide/workflow_views.md
       - Scaling & Sharing: guide/scaling_sharing.md
       - Security Hardening: guide/security_hardening.md
       - Network Posture: guide/network_posture.md
       - Desktop Launcher: guide/launcher.md
+      - Windows:
+          - Install & Launcher: guide/windows_install.md
+          - Download (x64 MSI): https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-x64.msi
+          - Download (ARM64 MSI): https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-arm64.msi
       - Screenshots: guide/screenshots.md
+      - Screenshots Gallery: guide/gallery.md
+      - CLI Guide: guide/cli.md
+      - Debug UI: guide/debug_ui.md
+      - Offline & Sync: guide/offline_sync.md
+      - Plugins: guide/plugins.md
+      - Policy Permissions: guide/policy_permissions.md
+      - Projects UI: guide/projects_ui.md
+      - Recipes: guide/recipes.md
+      - Runtime Matrix: guide/runtime_matrix.md
+      - Security Posture: guide/security_posture.md
+      - Threat Model: guide/threat_model.md
+      - UI Architecture: guide/ui_architecture.md
+      - Compatibility: guide/compatibility.md
+      - Design System: guide/design_system.md
+      - gRPC: guide/grpc.md
+      - Cost & Quotas: guide/cost_quota.md
+      - Context Recipes: guide/context_recipes.md
+      - Metrics & Insights: guide/METRICS_AND_INSIGHTS.md
+      - Chat Backends: guide/chat_backends.md
+      - Feedback Engine: guide/feedback_engine.md
+      - Logic Units Library: guide/logic_units_library.md
+      - Evaluation Harness: guide/eval_harness.md
+      - Experiments (A/B): guide/experiments_ab.md
+      - Performance & Reasoning Playbook: guide/performance_reasoning_playbook.md
+      - Research Watcher: guide/research_watcher.md
+      - Human‑in‑the‑Loop: guide/human_in_loop.md
+      - Interactive Performance Config: guide/interactive_performance.md
+      - Interactive Performance Bench: guide/interactive_bench.md
+      - Training Park: guide/training_park.md
       - Admin Endpoints: guide/admin_endpoints.md
       - Troubleshooting: guide/troubleshooting.md
   - Reference:
       - API Reference: reference/api.md
+      - Models Types: reference/models_types.md
       - Feature Matrix: reference/feature_matrix.md
       - Event Topics: reference/topics.md
       - Interface Deprecations: reference/deprecations.md
       - Interface Catalog: reference/interface-catalog.md
       - Configuration: CONFIGURATION.md
       - CLI Reference: reference/cli.md
+      - Specs Index: reference/specs.md
+      - Gating Keys: GATING_KEYS.md
+      - Models Typed Shapes: reference/models_types.md
+      - Tools:
+          - UI Screenshot Tools: reference/tools/ui_screenshot.md
       - Schemas:
           - API and Schema: API_AND_SCHEMA.md
           - Egress Schemas: api/egress_schemas.md
@@ -97,19 +154,46 @@ nav:
       - Replay & Time Travel: architecture/replay_time_travel.md
       - Naming & IDs: architecture/naming_ids.md
       - UX Invariants: architecture/ux_invariants.md
+      - Cache Policy Manifest: architecture/cache_policy.md
+      - Caching Layers: architecture/caching_layers.md
+      - Runtime Layout: architecture/runtime_layout.md
+      - SSE Patch Contract: architecture/sse_patch_contract.md
   - Contribute:
       - Overview: developer/index.md
       - Docs Style (Diátaxis): developer/docs_style.md
+      - Design Theme: developer/design_theme.md
+      - Standards: developer/standards.md
+      - UI Kit (Launcher): developer/ui_kit.md
+      - ADRs:
+          - Index: adr/index.md
+          - 0001: adr/0001-design-tokens-ssot.md
+          - 0002: adr/0002-events-naming.md
       - Status: developer/status.md
       - Tasks: developer/tasks.md
       - Stability Freeze: developer/stability.md
       - CI: developer/ci.md
+      - Tauri API: developer/tauri_api.md
       - Style: developer/style.md
       - Security: developer/SECURITY.md
       - Windows Compatibility Gate: developer/windows-compat-gate.md
       - Windows Start Validation: developer/windows-start-validation.md
       - Plugin ABI & Trust: developer/plugin_abi_trust.md
       - Contract Tests: developer/contract_tests.md
+  - Operations:
+      - Systemd Service: ops/systemd_service.md
+      - Systemd Overrides: ops/systemd_overrides.md
+  - Appendix:
+      - Snippets:
+          - HTTP Caching Semantics: snippets/http_caching_semantics.md
+          - Grafana GPU Dashboard: snippets/grafana_gpu_dashboard.md
+          - Grafana Quick Panels: snippets/grafana_quick_panels.md
+          - Prometheus Recording Rules: snippets/prometheus_recording_rules.md
+          - Prometheus Alerting Rules: snippets/prometheus_alerting_rules.md
+      - Monitoring:
+          - Prometheus Recording Rules: snippets/prometheus_recording_rules.md
+          - Prometheus Alerting Rules: snippets/prometheus_alerting_rules.md
+          - Grafana — Quick Panels: snippets/grafana_quick_panels.md
+          - Grafana — GPU/NPU Dashboard: snippets/grafana_gpu_dashboard.md
       - Assisted Coding:
           - Working Agreement: ai/ASSISTED_DEV_GUIDE.md
           - Repo Map: ai/REPO_MAP.md

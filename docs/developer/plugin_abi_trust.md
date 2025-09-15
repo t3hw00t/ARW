@@ -2,7 +2,9 @@
 title: Plugin ABI & Trust
 ---
 
-# Plugin/Extension ABI & Trust Model
+# Plugin ABI & Trust
+Updated: 2025-09-12
+Type: Reference
 
 Manifests
 - Signed plugin manifests declare capabilities, UI contributions (panels/commands), background tasks, and spec compatibility.
@@ -17,4 +19,3 @@ Provenance
 - Record tool versions and signatures in artifacts and episodes for audit.
 
 See also: Plugins & Extensions, Threat Model, Contract Tests.
-

@@ -6,6 +6,7 @@ title: Windows Compatibility Gate
 { .topic-trio style="--exp:.3; --complex:.6; --complicated:.8" data-exp=".3" data-complex=".6" data-complicated=".8" }
 
 Updated: 2025-09-12
+Type: Reference
 
 Use this checklist to gate PRs/releases for Windows.
 
@@ -16,6 +17,7 @@ Core standards
 Runtime dependencies (Tauri/WebView2)
 - WebView2 Evergreen Runtime present check and bootstrapper: use `scripts/webview2.ps1` or Interactive Start → “WebView2 runtime (check/install)”. On Windows 11 it’s in‑box; Windows 10/Server requires Evergreen.
 - Tauri bundling: `tauri.conf.json` includes Windows `webviewInstallMode: "downloadBootstrapper"`.
+- CI: workflow (`tauri-windows`) builds the launcher MSI and can sign it when `WINDOWS_CERT_PFX`/`WINDOWS_CERT_PASSWORD` secrets are present.
 
 Tauri 2 migration
 - The launcher is on Tauri 2 and relies on capabilities/permissions to expose commands to the UI.

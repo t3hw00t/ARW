@@ -3,6 +3,8 @@ title: Context Recipes
 ---
 
 # Context Recipes
+Updated: 2025-09-12
+Type: How‑to
 
 Treat context assembly as a readable pipeline (“recipe”) of pipes:
 - Recent episodes (window, filters)

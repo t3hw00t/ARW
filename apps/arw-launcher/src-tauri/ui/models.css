@@ -1,19 +1,22 @@
-:root{ --teal:#1bb3a3; --line:#ddd }
+/* tokens.css provides variables */
 html, body { height: 100%; margin: 0; font-family: system-ui, sans-serif; }
 .wrap { padding: 16px; display: grid; gap: 16px; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 table { width: 100%; border-collapse: collapse; }
 th, td { border-bottom: 1px solid #eee; padding: 6px 8px; text-align: left; }
-th { color: #555; font-weight: 600; }
-.dim { color: #666; }
+.hl { background: #fff7d6; transition: background 0.6s ease; }
+@media (prefers-color-scheme: dark){ .hl { background: #3a320f; } }
+.blink { animation: blink 1s linear infinite; }
+@keyframes blink { 50% { opacity: .4 } }
+.dim { color: var(--color-muted); }
+.ok { color: var(--status-ok); }
+.bad { color: var(--status-bad); }
 input[type=text], input[type=url], input[type=number] { padding: 6px 8px; border: 1px solid #ccc; border-radius: 8px; }
 button { padding: 8px 12px; border: 1px solid #aaa; border-radius: 8px; background: #fafafa; cursor: pointer; }
 button:hover { background: #f0f0f0; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
-.ok { color: #0a0; }
-.bad { color: #a00; }
-.bar{ height:8px; border:1px solid var(--line); border-radius:8px; overflow:hidden; margin:4px 0 }
-.bar>i{ display:block; height:8px; width:0%; background: var(--teal) }
+.bar{ height:8px; border:1px solid var(--color-line); border-radius:8px; overflow:hidden; margin:4px 0 }
+.bar>i{ display:block; height:8px; width:0%; background: var(--color-accent-teal) }
 
 /* Fixed widths moved from inline */
 #port{ width: 90px }
@@ -24,4 +27,3 @@ button:hover { background: #f0f0f0; }
 #durl{ width: 380px }
 #dsha{ width: 260px }
 #caturl{ width: 420px }
-

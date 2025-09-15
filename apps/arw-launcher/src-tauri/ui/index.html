@@ -6,6 +6,9 @@
     <title>Agent Hub (ARW) Launcher</title>
   </head>
   <body>
+    <a href="#btn-open" class="skip-link">Skip to controls</a>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="ui-kit.css" />
     <link rel="stylesheet" href="common.css" />
     <link rel="stylesheet" href="index.css" />
     <script src="common.js" defer></script>
@@ -14,26 +17,32 @@
         <h2>Agent Hub (ARW) Launcher <span class="badge"><span class="dot" id="svc-dot"></span><span id="svc-text">unknown</span></span></h2>
         <p>Use the tray to start/stop the service or open the Debug UI.</p>
         <div class="row">
-          <label>Port: <input id="port" type="number" min="1" max="65535" value="8090"/></label>
+          <label>Port: <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8090"/></label>
           <label><input id="autostart" type="checkbox"/> Autostart service</label>
           <label><input id="notif" type="checkbox" checked/> Notify on status change</label>
           <label><input id="loginstart" type="checkbox"/> Start launcher at login</label>
+          <span id="statusBadges" class="badges" style="margin-left:auto"></span>
         </div>
         <div class="row">
-          <button id="btn-save" class="ghost">Save</button>
-          <button id="btn-start" class="primary">Start Service</button>
-          <button id="btn-stop" class="ghost">Stop Service</button>
-          <button id="btn-open" class="primary">Open Debug UI</button>
-          <button id="btn-open-window" class="ghost">Open in Window</button>
-          <button id="btn-events" class="ghost">Events Window</button>
-          <button id="btn-logs" class="ghost">Logs</button>
-          <button id="btn-models" class="ghost">Models</button>
-          <button id="btn-connections">Connections</button>
-          <button id="btn-health">Check Health</button>
-          <span id="health"></span>
+          <button id="btn-save" class="ghost" title="Save preferences">Save</button>
+          <button id="btn-start" class="primary" title="Start local service">Start Service</button>
+          <button id="btn-stop" class="ghost" title="Stop local service">Stop Service</button>
+          <button id="btn-open" class="primary" title="Open Debug UI in browser">Open Debug UI</button>
+          <button id="btn-open-window" class="ghost" title="Open Debug UI in window">Open in Window</button>
+          <button id="btn-events" class="ghost" title="Open Events window">Events Window</button>
+          <button id="btn-logs" class="ghost" title="Open Logs window">Logs</button>
+          <button id="btn-models" class="ghost" title="Open Models manager">Models</button>
+          <button id="btn-connections" title="Open Connections manager">Connections</button>
+          <button id="btn-hub" class="ghost" title="Open Project Hub">Project Hub</button>
+          <button id="btn-chat" class="ghost" title="Open Chat">Chat</button>
+          <button id="btn-training" class="ghost" title="Open Training Park">Training Park</button>
+          <button id="btn-health" title="Check service health">Check Health</button>
+          <span id="health" role="status" aria-live="polite"></span>
         </div>
         <div class="row">
-          <button id="btn-updates">Check Updates</button>
+          <button id="btn-updates" title="Open releases page">Check Updates</button>
+          <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+          <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
         </div>
         <div class="row" id="dlmini"></div>
       </div>

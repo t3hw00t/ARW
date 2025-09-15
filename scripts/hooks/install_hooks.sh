@@ -52,6 +52,20 @@ else
   echo "[pre-commit] cargo test"
   cargo test --workspace --locked
 fi
+
+# Docs: stamp Updated/Type and build check if docs changed
+if git diff --cached --name-only | grep -E '^(docs/|mkdocs.yml)' >/dev/null 2>&1; then
+  echo "[pre-commit] Docs changed — stamping metadata and building"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 scripts/stamp_docs_updated.py || true
+    python3 scripts/stamp_docs_type.py || true
+    # stage any modified docs files
+    git add docs/**/*.md 2>/dev/null || true
+  fi
+  if command -v bash >/dev/null 2>&1; then
+    bash scripts/docs_check.sh
+  fi
+fi
 EOF
 chmod +x .git/hooks/pre-commit
 echo "[hooks] Installed .git/hooks/pre-commit"

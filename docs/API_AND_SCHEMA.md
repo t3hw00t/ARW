@@ -5,7 +5,8 @@ title: API and Schema
 # API and Schema
 { .topic-trio style="--exp:.9; --complex:.6; --complicated:.5" data-exp=".9" data-complex=".6" data-complicated=".5" }
 
-Updated: 2025-09-06.
+Updated: 2025-09-14
+Type: Reference
 
 See also: [Glossary](GLOSSARY.md), [Configuration](CONFIGURATION.md)
 
@@ -234,7 +235,7 @@ See the Admin Endpoints guide for details and examples. Summary:
 - POST `/admin/models/cas_gc` — CAS GC once `{ttl_days}`; emits `models.cas.gc`.
 - GET  `/admin/models/by-hash/:sha256` — serve a CAS blob by sha256 (egress‑gated).
 - GET  `/admin/state/models_hashes` — list installed model hashes and sizes.
-- GET  `/admin/models/downloads_metrics` — Lightweight metrics `{ ewma_mbps, started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total }`.
+- GET  `/admin/state/models_metrics` — Lightweight metrics `{ ewma_mbps, started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total }`.
 
 Events (AsyncAPI)
 - `models.download.progress`: standardized progress/errors with optional `budget` and `disk`.

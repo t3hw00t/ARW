@@ -1,0 +1,183 @@
+name: tauri-windows
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ["v*.*.*"]
+
+jobs:
+  bundle-msi:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            target: x86_64-pc-windows-msvc
+          - arch: arm64
+            target: aarch64-pc-windows-msvc
+    continue-on-error: ${{ matrix.arch == 'arm64' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Install Rust (stable)
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add cross target (if needed)
+        if: ${{ matrix.arch == 'arm64' }}
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build service + cli (release)
+        run: |
+          cargo build --release --locked --target ${{ matrix.target }} -p arw-svc -p arw-cli
+
+      - name: Stage external binaries for bundler
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force apps/arw-launcher/src-tauri/bin | Out-Null
+          Copy-Item target/${{ matrix.target }}/release/arw-svc.exe apps/arw-launcher/src-tauri/bin/arw-svc.exe -Force
+          Copy-Item target/${{ matrix.target }}/release/arw-cli.exe apps/arw-launcher/src-tauri/bin/arw-cli.exe -Force
+
+      - name: Install Tauri CLI
+        run: cargo install tauri-cli --locked
+
+      - name: Install WiX Toolset (MSI bundler)
+        run: choco install -y wixtoolset
+
+      - name: Bundle launcher (MSI)
+        working-directory: apps/arw-launcher/src-tauri
+        run: tauri build --bundles msi --target ${{ matrix.target }}
+
+      - name: Collect artifacts
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist-out-${{ matrix.arch }} | Out-Null
+          $paths = @(
+            'apps/arw-launcher/src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi',
+            'apps/arw-launcher/src-tauri/target/${{ matrix.target }}/release/*.exe',
+            'target/${{ matrix.target }}/release/arw-svc.exe',
+            'target/${{ matrix.target }}/release/arw-cli.exe'
+          )
+          foreach ($p in $paths) { Get-ChildItem -Path $p -ErrorAction SilentlyContinue | Copy-Item -Destination dist-out-${{ matrix.arch }} -Force }
+
+      - name: Rename MSI to stable name
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path dist-out-${{ matrix.arch }} -Filter *.msi -File | Select-Object -First 1
+          if ($msi) {
+            $new = Join-Path (Split-Path $msi.FullName -Parent) "arw-launcher-${{ matrix.arch }}.msi"
+            Rename-Item -Path $msi.FullName -NewName $new -Force
+            Write-Host "[rename] -> $new"
+          } else {
+            Write-Host '[rename] No MSI found to rename'
+          }
+
+      - name: Optional Code Sign (EXE/MSI)
+        if: ${{ secrets.WINDOWS_CERT_PFX && secrets.WINDOWS_CERT_PASSWORD }}
+        shell: pwsh
+        run: |
+          $pfxB64 = "${{ secrets.WINDOWS_CERT_PFX }}"
+          $pwd    = "${{ secrets.WINDOWS_CERT_PASSWORD }}"
+          $pfx    = "$env:RUNNER_TEMP\code_sign_cert.pfx"
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($pfxB64))
+          $signtool = (Get-Command signtool.exe -ErrorAction SilentlyContinue).Path
+          if (-not $signtool) { Write-Error 'signtool.exe not found on runner'; exit 1 }
+          foreach($f in Get-ChildItem -Path dist-out-${{ matrix.arch }} -Include *.exe,*.msi -File) {
+            & $signtool sign /f "$pfx" /p "$pwd" /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 "$($f.FullName)"
+          }
+
+      - name: Compute MSI SHA256 (winget helper)
+        shell: pwsh
+        run: |
+          $out = "dist-out-${{ matrix.arch }}\\msi-sha256.txt"
+          Remove-Item $out -Force -ErrorAction SilentlyContinue
+          foreach ($m in Get-ChildItem -Path dist-out-${{ matrix.arch }} -Filter *.msi -File) {
+            $h = (Get-FileHash -Algorithm SHA256 $m.FullName).Hash
+            "${h}  $($m.Name)" | Out-File -FilePath $out -Encoding ascii -Append
+          }
+
+      - name: Smoke test MSI install + launch (x64 only)
+        if: ${{ matrix.arch == 'x64' }}
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          $msi = Get-ChildItem -Path dist-out-x64 -Filter *.msi -File | Select-Object -First 1
+          if (-not $msi) { throw 'No MSI found in dist-out' }
+          Write-Host "[smoke] Installing $($msi.Name)"
+          $p = Start-Process -FilePath msiexec.exe -ArgumentList "/i `"$($msi.FullName)`" /qn /norestart" -PassThru -Wait
+          if ($p.ExitCode -ne 0) { throw "msiexec install failed: $($p.ExitCode)" }
+          $displayName = 'Agent Hub (ARW) Launcher'
+          $installedPath = $null
+          foreach ($k in 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*') {
+            try {
+              $e = Get-ItemProperty -Path $k -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -eq $displayName } | Select-Object -First 1
+              if ($e) { $installedPath = $e.InstallLocation; break }
+            } catch {}
+          }
+          if (-not $installedPath -or -not (Test-Path $installedPath)) {
+            $pf = $env:ProgramFiles
+            $pf86 = ${env:ProgramFiles(x86)}
+            $cands = @()
+            if ($pf)  { $cands += (Join-Path $pf  $displayName) }
+            if ($pf86){ $cands += (Join-Path $pf86 $displayName) }
+            foreach ($d in $cands) { if ($d -and (Test-Path $d)) { $installedPath = $d; break } }
+          }
+          if (-not $installedPath) { throw 'Could not resolve install directory' }
+          $exe = Join-Path $installedPath 'arw-launcher.exe'
+          if (-not (Test-Path $exe)) { throw "Launcher exe not found at $exe" }
+          $svc = Join-Path $installedPath 'arw-svc.exe'
+          if (-not (Test-Path $svc)) { throw "Service exe not found at $svc" }
+          Write-Host "[smoke] Launching $exe (hidden) with ARW_AUTOSTART=1"
+          $env:ARW_AUTOSTART = '1'
+          $env:ARW_PORT = '8090'
+          $p2 = Start-Process -FilePath $exe -WindowStyle Hidden -PassThru
+          # Poll health
+          $deadline = (Get-Date).AddSeconds(15)
+          $ok = $false
+          while ((Get-Date) -lt $deadline) {
+            try {
+              $r = Invoke-WebRequest -TimeoutSec 3 -Uri 'http://127.0.0.1:8090/healthz'
+              if ($r.StatusCode -ge 200 -and $r.StatusCode -lt 300) { $ok = $true; break }
+            } catch {}
+            Start-Sleep -Milliseconds 500
+          }
+          if ($ok) { Write-Host '[smoke] Health OK' } else { Write-Warning '[smoke] Health check failed (non-fatal)' }
+          try { Stop-Process -Id $p2.Id -Force } catch {}
+          Write-Host '[smoke] Uninstalling MSI'
+          $p3 = Start-Process -FilePath msiexec.exe -ArgumentList "/x `"$($msi.FullName)`" /qn /norestart" -PassThru -Wait
+          if ($p3.ExitCode -ne 0) { Write-Warning ("Uninstall exit code: " + $p3.ExitCode) }
+
+      - name: Upload launcher MSI + bins
+        uses: actions/upload-artifact@v4
+        with:
+          name: arw-windows-launcher-msi-${{ matrix.arch }}
+          path: dist-out-${{ matrix.arch }}/*
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    needs: [bundle-msi]
+    runs-on: windows-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist
+      - name: List artifacts
+        run: dir dist
+      - name: Publish Release (MSI + bins)
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/**/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

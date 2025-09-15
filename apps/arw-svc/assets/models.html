@@ -1,38 +1,39 @@
 <!doctype html><meta charset="utf-8"><title>ARW Models</title>
+<link rel="stylesheet" href="/admin/ui/assets/tokens.css"/>
+<link rel="stylesheet" href="/admin/ui/assets/ui-kit.css"/>
 <style>
-  :root{--line:#e5e7eb;--ink:#111827;--muted:#6b7280;--ok:#22c55e;--warn:#f59e0b;--bad:#ef4444;--noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0.04'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
-  body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;color:var(--ink);background: radial-gradient(1000px 500px at 15% -10%, #ffffff, #f7f7f9 55%, #f1f5f9)}
+  :root{--color-line:#e5e7eb;--color-ink:#111827;--color-muted:#6b7280;--status-ok:#16a34a;--status-warn:#f59e0b;--status-bad:#dc2626;--surface:#ffffff;--surface-muted:#f7f7f9;--noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0.04'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+  body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;color:var(--color-ink);background: var(--surface)}
   h1{margin:0 0 10px 0}
-  .box{border:1px solid var(--line);border-radius:12px;padding:12px;background:linear-gradient(180deg,#ffffff,#fafafa);box-shadow:0 12px 30px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.65);position:relative}
-  .box::before{content:"";position:absolute;inset:0;background-image:var(--noise);opacity:.5;border-radius:12px;pointer-events:none}
   .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
-  button,input{font:inherit;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background-image:linear-gradient(180deg,#ffffff,#f3f4f6), var(--noise);background-blend-mode:overlay,normal;box-shadow:0 1px 0 rgba(255,255,255,0.9) inset, 0 8px 18px rgba(0,0,0,0.06)}
-  button:hover{transform:translateY(-0.5px)}
-  pre{background:linear-gradient(180deg,#ffffff,#fafafa);border:1px solid var(--line);border-radius:12px;padding:8px;overflow:auto;box-shadow:inset 0 1px 0 rgba(255,255,255,0.6)}
-  .badge{display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:600;border:1px solid var(--line);background-image:linear-gradient(180deg,#ffffff,#f6f7f9), var(--noise);background-blend-mode:overlay,normal}
-  .dot{width:8px;height:8px;border-radius:50%}
-  .good{color:#166534;border-color:#bbf7d0;background:#ecfdf5}.good .dot{background:var(--ok)}
-  .warn{color:#854d0e;border-color:#fde68a;background:#fefce8}.warn .dot{background:var(--warn)}
-  .bad{color:#991b1b;border-color:#fecaca;background:#fef2f2}.bad .dot{background:var(--bad)}
+  pre{background:linear-gradient(180deg,#ffffff,#fafafa);border:1px solid var(--color-line);border-radius:12px;padding:8px;overflow:auto;box-shadow:inset 0 1px 0 rgba(255,255,255,0.6)}
+  /* Rely on shared UI kit for badges, dots, tones */
   @media (prefers-color-scheme: dark){
-    body{ background: radial-gradient(1000px 500px at 15% -10%, #0f1117, #0b0d12 55%, #090b10); color:#e5e7eb }
-    .box{ background: linear-gradient(180deg,#12161f,#0f141a); border-color:#1f232a; box-shadow: 0 12px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06) }
-    .box::before{ opacity: .25 }
-    button,input{ color:#e5e7eb; background-image:linear-gradient(180deg,#1a202b,#131822), var(--noise); border-color:#2a2f37; box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 8px 18px rgba(0,0,0,0.35) }
-    pre{ background: linear-gradient(180deg,#12161f,#0f141a); border-color:#1f232a; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06) }
-    .badge{ background:#12161f; border-color:#1f232a }
+    :root{ --color-ink:#e5e7eb; --color-line:#1f232a }
+    body{ background: var(--surface); color:var(--color-ink) }
+    pre{ background: linear-gradient(180deg,#12161f,#0f141a); border-color:var(--color-line); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06) }
   }
 </style>
 <h1>Models <span id="mdlBadge" class="badge warn"><span class="dot"></span> 0</span></h1>
-<div class="box">
-  <div class="row"><input id="mId" placeholder="model id" style="width:240px"><input id="mProv" placeholder="provider (local)" style="width:160px"></div>
-  <div class="row"><button onclick="listM()">List</button><button onclick="addM()">Add</button><button onclick="delM()">Delete</button><button onclick="defGet()">Get default</button><button onclick="defSet()">Set default</button></div>
+<div class="row">
+  <span class='badge' id='sseBadge' style='margin-left:auto'><span class='dot'></span> SSE: off</span>
+  <span id='statusBadges' style='margin-left:8px'></span>
+  </div>
+<div class="card">
+  <div class="row" role="toolbar" aria-label="Models actions"><input id="mId" placeholder="model id" style="width:240px"><input id="mProv" placeholder="provider (local)" style="width:160px"></div>
+  <div class="row" role="toolbar" aria-label="Models actions"><button onclick="listM()">List</button><button onclick="addM()">Add</button><button onclick="delM()">Delete</button><button onclick="defGet()">Get default</button><button onclick="defSet()">Set default</button></div>
   <pre id="out">[]</pre>
 </div>
 <script>
 const base = location.origin;
+// Lightweight SSE status indicator
+try{
+  const es = new EventSource(base + '/events');
+  es.onopen = ()=>{ const el=document.getElementById('sseBadge'); if (el){ el.innerHTML = "<span class='dot ok'></span> SSE: on"; } };
+  es.onerror = ()=>{ const el=document.getElementById('sseBadge'); if (el){ el.innerHTML = "<span class='dot bad'></span> SSE: off"; } };
+}catch{}
 async function call(method,path,body){ const r=await fetch(base+path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined}); const t=await r.text(); try{ return JSON.parse(t);}catch{ return t; } }
-async function listM(){ const j=await call('GET','/models'); const b=document.getElementById('mdlBadge'); if(Array.isArray(j)&&b){ b.className='badge good'; b.innerHTML='<span class="dot"></span> '+j.length; } document.getElementById('out').textContent=JSON.stringify(j,null,2); }
+async function listM(){ const j=await call('GET','/models'); const b=document.getElementById('mdlBadge'); if(Array.isArray(j)&&b){ b.className='badge ok'; b.innerHTML='<span class="dot"></span> '+j.length; } document.getElementById('out').textContent=JSON.stringify(j,null,2); }
 async function addM(){ const id=document.getElementById('mId').value.trim(); if(!id) return; const provider=(document.getElementById('mProv').value||'local').trim(); await call('POST','/models/add',{id,provider}); await listM(); }
 async function delM(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await call('POST','/models/delete',{id}); await listM(); }
 async function defGet(){ const j=await call('GET','/models/default'); document.getElementById('out').textContent=JSON.stringify(j,null,2); }

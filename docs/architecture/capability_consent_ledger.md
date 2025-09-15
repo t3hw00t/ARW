@@ -3,6 +3,8 @@ title: Capability & Consent Ledger
 ---
 
 # Capability & Consent Ledger
+Updated: 2025-09-14
+Type: Explanation
 
 Purpose
 - Auditable, time‑bound permissions the UI can always explain.

@@ -1,0 +1,25 @@
+[Unit]
+Description=ARW Service (Docker container)
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+EnvironmentFile=-/etc/default/arw-svc
+User=%i
+ExecStartPre=/usr/bin/docker pull ${ARW_IMAGE:-ghcr.io/t3hw00t/arw-svc:latest}
+ExecStart=/usr/bin/docker run --rm \
+  --name arw-svc \
+  -p ${ARW_PORT:-8090}:${ARW_PORT:-8090} \
+  -e ARW_BIND=${ARW_BIND:-127.0.0.1} \
+  -e ARW_PORT=${ARW_PORT:-8090} \
+  -e ARW_DEBUG=${ARW_DEBUG:-0} \
+  -e ARW_ADMIN_TOKEN=${ARW_ADMIN_TOKEN:-} \
+  ${ARW_IMAGE:-ghcr.io/t3hw00t/arw-svc:latest}
+ExecStop=/usr/bin/docker stop arw-svc
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target
+

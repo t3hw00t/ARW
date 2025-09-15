@@ -6,19 +6,26 @@
     <title>Agent Hub (ARW) Connection Manager</title>
   </head>
   <body>
+    <a href="#rows" class="skip-link">Skip to connections table</a>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="ui-kit.css" />
     <link rel="stylesheet" href="common.css" />
     <link rel="stylesheet" href="connections.css" />
     <script src="common.js" defer></script>
     <div class="wrap">
-      <div class="row">
-        <input id="cname" type="text" placeholder="name">
-        <input id="curl" type="url" placeholder="http://127.0.0.1:8090">
+      <div class="row" role="region" aria-label="Connections controls">
+        <input id="cname" aria-label="Connection name" type="text" placeholder="name">
+        <input id="curl" aria-label="Base URL" type="url" placeholder="http://127.0.0.1:8090">
+        <input id="ctok" aria-label="Admin token" type="text" placeholder="admin token (optional)">
         <button id="btn-add">Add</button>
         <button id="btn-save">Save</button>
+        <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+        <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+        <span id="statusBadges" class="badges" style="margin-left:auto"></span>
         <span id="stat" class="dim"></span>
       </div>
       <div>
-        <table>
+        <table aria-label="Saved connections">
           <thead>
             <tr><th>Name</th><th>Base URL</th><th>Status</th><th>Actions</th></tr>
           </thead>

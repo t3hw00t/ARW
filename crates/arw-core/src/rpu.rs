@@ -5,8 +5,10 @@ use crate::gating;
 use base64::{engine::general_purpose::STANDARD as b64, Engine};
 use once_cell::sync::OnceCell;
 use serde::Deserialize;
+use serde::Serialize;
 use std::fs;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
 
 #[derive(Debug, Deserialize, Clone)]
@@ -23,6 +25,14 @@ struct TrustConfig {
 }
 
 static TRUST: OnceCell<RwLock<TrustConfig>> = OnceCell::new();
+static TRUST_LAST_MS: OnceCell<AtomicU64> = OnceCell::new();
+
+fn now_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u64
+}
 
 fn load_trust() -> TrustConfig {
     if let Some(cell) = TRUST.get() {
@@ -40,6 +50,9 @@ fn load_trust() -> TrustConfig {
         TrustConfig::default()
     };
     let _ = TRUST.set(RwLock::new(cfg.clone()));
+    TRUST_LAST_MS
+        .get_or_init(|| AtomicU64::new(now_ms()))
+        .store(now_ms(), Ordering::Relaxed);
     cfg
 }
 
@@ -61,6 +74,48 @@ pub fn reload_trust() {
     } else {
         let _ = TRUST.set(RwLock::new(cfg));
     }
+    TRUST_LAST_MS
+        .get_or_init(|| AtomicU64::new(now_ms()))
+        .store(now_ms(), Ordering::Relaxed);
+}
+
+/// Public snapshot of the trust store without exposing keys.
+#[derive(Debug, Serialize, Clone)]
+pub struct TrustIssuer {
+    pub id: String,
+    pub alg: String,
+}
+
+/// Return a redacted view of the current trust issuers (id, alg only).
+pub fn trust_snapshot() -> Vec<TrustIssuer> {
+    if let Some(cell) = TRUST.get() {
+        return cell
+            .read()
+            .map(|cfg| {
+                (cfg.issuers.iter())
+                    .map(|e| TrustIssuer {
+                        id: e.id.clone(),
+                        alg: e.alg.clone(),
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+    }
+    let cfg = load_trust();
+    cfg.issuers
+        .into_iter()
+        .map(|e| TrustIssuer {
+            id: e.id,
+            alg: e.alg,
+        })
+        .collect()
+}
+
+/// Milliseconds since epoch of the last successful trust load/reload.
+pub fn trust_last_reload_ms() -> u64 {
+    TRUST_LAST_MS
+        .get_or_init(|| AtomicU64::new(now_ms()))
+        .load(Ordering::Relaxed)
 }
 
 fn signing_bytes(cap: &arw_protocol::GatingCapsule) -> Vec<u8> {

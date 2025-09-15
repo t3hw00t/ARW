@@ -3,6 +3,8 @@ title: Events Vocabulary
 ---
 
 # Events Vocabulary
+Updated: 2025-09-14
+Type: Explanation
 
 Normalize ARW events into a small internal vocabulary. Drive all live UI from this stream via `GET /admin/events` (SSE; admin‑gated). Use `corr_id` to stitch episodes.
 
@@ -17,7 +19,7 @@ Canonical categories (normalized)
 - Policy: `policy.prompt`, `policy.allow`, `policy.deny`
 - Runtime: `runtime.health`, `runtime.profile.changed`
 - Models: `models.download.progress`, `models.changed`, `models.cas.gc`, `models.manifest.written`, `models.refreshed`
- - Snappy: read‑model id=`snappy` via `state.read.model.patch`; events `snappy.notice` (breach), `snappy.detail` (periodic detail).
+ - Interactive performance (snappy): read‑model id=`snappy` via `state.read.model.patch`; events `snappy.notice` (breach), `snappy.detail` (periodic detail).
   - models.download.progress statuses may include: `started`, `queued`, `admitted`, `resumed`, `downloading`, `resync`, `degraded` (soft budget), `cancel-requested`, `complete`, `error`, `canceled`, `no-active-job`, `cache-mismatch`.
 - Self‑Model: `self.model.proposed`, `self.model.updated`
 - Logic Units: `logic.unit.suggested`, `logic.unit.installed`, `logic.unit.applied`, `logic.unit.reverted`, `logic.unit.promoted`

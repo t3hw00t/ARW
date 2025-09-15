@@ -2,9 +2,12 @@
 title: Cluster Schemas
 ---
 
-# Cluster Schemas (Planned)
+# Cluster Schemas
 
-Updated: 2025-09-12
+Updated: 2025-09-14
+Type: Reference
+
+Status: Planned
 
 Node Manifest (signed)
 - spec/schemas/cluster_node_manifest.json

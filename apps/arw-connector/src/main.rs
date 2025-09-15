@@ -1,5 +1,14 @@
 use tracing_subscriber::{fmt, EnvFilter};
 
+// Event topic and subject constants (dot.case)
+// Only needed when built with the `nats` feature; guard to avoid dead_code in other builds.
+#[cfg(feature = "nats")]
+const TOPIC_TASK_COMPLETED: &str = "task.completed";
+#[cfg(feature = "nats")]
+const SUBJECT_EVENTS_ROOT: &str = "arw.events"; // cluster-wide
+#[cfg(feature = "nats")]
+const SUBJECT_NODE_ROOT: &str = "arw.events.node"; // per-node
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let _ = fmt()
@@ -48,15 +57,19 @@ async fn main() -> anyhow::Result<()> {
                             // Publish task.completed event
                             let env = json!({
                                 "time": chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
-                                "kind": "task.completed",
+                                "kind": TOPIC_TASK_COMPLETED,
                                 "payload": {"id": t.id, "ok": true, "output": out}
                             });
                             if let Ok(bytes) = serde_json::to_vec(&env) {
-                                let _ = nats
-                                    .publish("arw.events.task.completed", bytes.clone().into())
-                                    .await;
-                                let subj =
-                                    format!("arw.events.node.{}.{}", node_id, "task.completed");
+                                // Cluster-wide subject
+                                let subj_cluster =
+                                    format!("{}.{}", SUBJECT_EVENTS_ROOT, TOPIC_TASK_COMPLETED);
+                                let _ = nats.publish(subj_cluster, bytes.clone().into()).await;
+                                // Node-scoped subject to avoid loops and allow targeting
+                                let subj = format!(
+                                    "{}.{}.{}",
+                                    SUBJECT_NODE_ROOT, node_id, TOPIC_TASK_COMPLETED
+                                );
                                 let _ = nats.publish(subj, bytes.into()).await;
                             }
                         }

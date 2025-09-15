@@ -6,7 +6,8 @@ title: Windows Start Script Validation
 
 This checklist helps validate ARW startup on Windows after changes to `scripts/start.ps1` and the interactive menus.
 
-Updated: 2025-09-12
+Updated: 2025-09-13
+Type: Reference
 
 Quick pre-reqs
 - Install Rust toolchain (rustup): https://rustup.rs

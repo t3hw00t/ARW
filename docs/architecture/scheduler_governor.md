@@ -3,6 +3,8 @@ title: Scheduler & Governor
 ---
 
 # Scheduler & Governor
+Updated: 2025-09-12
+Type: Explanation
 
 Purpose
 - Fair queues per device/project, preemption, backpressure, and kill‑switches. Admit by budget; degrade gracefully when over plan.

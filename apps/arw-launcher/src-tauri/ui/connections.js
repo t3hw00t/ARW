@@ -7,11 +7,17 @@ async function refresh(){
   conns.forEach(c => {
     const tr = document.createElement('tr');
     tr.innerHTML = `<td>${c.name||''}</td><td>${c.base||''}</td><td data-st class="dim">…</td><td>
-      <button data-open>Open Debug</button>
-      <button data-ping>Ping</button>
-      <button data-del>Delete</button>
+      <button data-ev title="Open Events window">Events</button>
+      <button data-logs title="Open Logs window">Logs</button>
+      <button data-models title="Open Models window">Models</button>
+      <button data-open title="Open Debug UI">Open Debug</button>
+      <button data-ping title="Ping connection">Ping</button>
+      <button data-del title="Delete connection">Delete</button>
     </td>`;
-    tr.querySelector('[data-open]').addEventListener('click', async ()=>{ try{ await invoke('open_url', { url: (c.base||'').replace(/\/$/,'') + '/debug' }); }catch(e){} });
+    tr.querySelector('[data-ev]').addEventListener('click', async ()=>{ try{ await invoke('open_events_window_base', { base: (c.base||'').replace(/\/$/,''), labelSuffix: (c.name||'') }); }catch(e){} });
+    tr.querySelector('[data-logs]').addEventListener('click', async ()=>{ try{ await invoke('open_logs_window_base', { base: (c.base||'').replace(/\/$/,''), labelSuffix: (c.name||'') }); }catch(e){} });
+    tr.querySelector('[data-models]').addEventListener('click', async ()=>{ try{ await invoke('open_models_window_base', { base: (c.base||'').replace(/\/$/,''), labelSuffix: (c.name||'') }); }catch(e){} });
+    tr.querySelector('[data-open]').addEventListener('click', async ()=>{ try{ await invoke('open_url', { url: (c.base||'').replace(/\/$/,'') + '/admin/debug' }); }catch(e){} });
     tr.querySelector('[data-ping]').addEventListener('click', async ()=>{ await pingRow(tr, c) });
     tr.querySelector('[data-del]').addEventListener('click', async ()=>{ const cc = (await load()).filter(x => x.name !== c.name); await save(cc); refresh(); });
     rows.appendChild(tr);
@@ -32,14 +38,17 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-add').addEventListener('click', async ()=>{
     const name = document.getElementById('cname').value.trim();
     const base = document.getElementById('curl').value.trim();
+    const token = document.getElementById('ctok').value.trim();
     if (!name || !base) return;
     const conns = await load();
-    if (!conns.find(x => x.name === name)) conns.push({ name, base });
-    await save(conns); document.getElementById('stat').textContent = 'Saved'; ARW.toast('Connection added'); refresh();
+    if (!conns.find(x => x.name === name)) conns.push({ name, base, token }); else {
+      // update existing
+      conns.forEach(x => { if (x.name === name) { x.base = base; x.token = token; } });
+    }
+    await save(conns); document.getElementById('stat').textContent = 'Saved'; ARW.toast('Connection saved'); refresh();
   });
   document.getElementById('btn-save').addEventListener('click', async ()=>{
     const conns = await load(); await save(conns); document.getElementById('stat').textContent = 'Saved'; ARW.toast('Connections saved');
   });
   (async ()=>{ await refresh(); setInterval(refresh, 10000) })();
 });
-

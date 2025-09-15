@@ -1,0 +1,55 @@
+name: Docs Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Rust (for docgen)
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: stable
+          profile: minimal
+          override: true
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: |
+            . -> target
+
+      - name: Generate docs/status + tasks and specs (docgen)
+        run: |
+          bash scripts/docgen.sh
+          # Ensure generated artifacts are committed
+          set -e
+          if ! git diff --quiet -- docs/developer/status.md docs/developer/tasks.md spec/asyncapi.yaml spec/mcp-tools.json; then
+            echo '::error::Docgen artifacts changed. Run scripts/docgen.sh and commit the updates.'
+            git --no-pager diff -- docs/developer/status.md docs/developer/tasks.md spec/asyncapi.yaml spec/mcp-tools.json | sed -n '1,200p'
+            exit 1
+          fi
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install MkDocs and plugins
+        run: |
+          python -m pip install --upgrade pip
+          pip install \
+            mkdocs \
+            mkdocs-material \
+            mkdocs-git-revision-date-localized-plugin \
+            pymdown-extensions
+
+      - name: Run docs check (build + lint)
+        run: bash scripts/docs_check.sh

@@ -2,9 +2,12 @@
 title: Lightweight Mitigations
 ---
 
-# Lightweight Mitigations (Plan)
+# Lightweight Mitigations
 
-Updated: 2025-09-12
+Updated: 2025-09-14
+Type: Explanation
+
+Status: Planned
 
 This plan layers pragmatic, low‑overhead safeguards on top of ARW’s policy/egress/firewall work. They are compatible with snapshots/replay, staging approvals, and the project‑scoped design.
 

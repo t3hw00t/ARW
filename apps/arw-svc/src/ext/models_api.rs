@@ -23,6 +23,7 @@
 //! - Service logic and progress/status codes: `crate::resources::models_service`.
 //! - Topics reference: `docs/reference/topics.md`.
 use super::super::resources::models_service::ModelsService;
+use super::http::{build_blob_headers, is_not_modified, parse_range_spec};
 use crate::AppState;
 use arw_core::gating;
 use arw_macros::{arw_admin, arw_gate};
@@ -31,7 +32,6 @@ use axum::http::StatusCode;
 use axum::http::{HeaderMap, HeaderValue};
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
-use serde_json::json;
 
 /// Runtime download concurrency snapshot (configured vs. available), optionally
 /// including a hard cap from `ARW_MODELS_MAX_CONC_HARD`.
@@ -42,6 +42,8 @@ pub(crate) struct ModelsConcurrency {
     held_permits: u64,
     #[serde(default)]
     hard_cap: Option<u64>,
+    #[serde(default)]
+    pending_shrink: Option<u64>,
 }
 
 /// Aggregated counters and throughput estimate for downloads. Matches the
@@ -59,6 +61,40 @@ pub(crate) struct ModelsMetrics {
     bytes_total: u64,
     #[serde(default)]
     ewma_mbps: Option<f64>,
+}
+
+/// Active download job pair.
+#[derive(Serialize, utoipa::ToSchema)]
+pub(crate) struct ActiveJob {
+    model_id: String,
+    job_id: String,
+}
+
+/// Snapshot of downloader jobs and inflight hashes plus a concurrency view.
+#[derive(Serialize, utoipa::ToSchema)]
+pub(crate) struct ModelsJobs {
+    active: Vec<ActiveJob>,
+    inflight_hashes: Vec<String>,
+    concurrency: ModelsConcurrency,
+}
+
+/// Item in the installed-hashes summary.
+#[derive(Clone, Serialize, utoipa::ToSchema)]
+pub(crate) struct HashItem {
+    sha256: String,
+    bytes: u64,
+    path: String,
+    providers: Vec<String>,
+}
+
+/// Paginated page of installed-hash items.
+#[derive(Serialize, utoipa::ToSchema)]
+pub(crate) struct HashesPage {
+    total: usize,
+    count: usize,
+    limit: usize,
+    offset: usize,
+    items: Vec<HashItem>,
 }
 
 /// Item in the models list. Many fields are optional while downloading or
@@ -98,116 +134,103 @@ pub(crate) struct ModelsSummary {
 )]
 #[arw_gate("models:summary")]
 pub(crate) async fn models_summary(State(state): State<AppState>) -> impl IntoResponse {
-    use tokio::join;
     let svc = match super::require_service::<ModelsService>(&state) {
         Ok(s) => s,
         Err(e) => return e.into_response(),
     };
-    let models_fut = async {
-        let arr = super::models().read().await.clone();
-        arr.into_iter()
-            .filter_map(|m| {
-                let id = m.get("id").and_then(|v| v.as_str()).map(|s| s.to_string());
-                let id = match id {
-                    Some(v) => v,
-                    None => return None,
-                };
-                let provider = m
-                    .get("provider")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-                let path = m
-                    .get("path")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-                let sha256 = m
-                    .get("sha256")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-                let bytes = m.get("bytes").and_then(|v| v.as_u64());
-                let status = m
-                    .get("status")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-                let error_code = m
-                    .get("error_code")
-                    .and_then(|v| v.as_str())
-                    .map(|s| s.to_string());
-                Some(ModelItem {
-                    id,
-                    provider,
-                    path,
-                    sha256,
-                    bytes,
-                    status,
-                    error_code,
+    let v = svc.summary_value().await;
+    // Map to typed struct for OpenAPI schema stability
+    let items = v
+        .get("items")
+        .and_then(|x| x.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|m| {
+                    let id = m.get("id").and_then(|v| v.as_str())?.to_string();
+                    Some(ModelItem {
+                        id,
+                        provider: m
+                            .get("provider")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        path: m
+                            .get("path")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        sha256: m
+                            .get("sha256")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        bytes: m.get("bytes").and_then(|v| v.as_u64()),
+                        status: m
+                            .get("status")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        error_code: m
+                            .get("error_code")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                    })
                 })
-            })
-            .collect::<Vec<_>>()
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let default = v
+        .get("default")
+        .and_then(|x| x.as_str())
+        .unwrap_or_default()
+        .to_string();
+    let c = v.get("concurrency").cloned().unwrap_or_default();
+    let concurrency = ModelsConcurrency {
+        configured_max: c
+            .get("configured_max")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        available_permits: c
+            .get("available_permits")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        held_permits: c
+            .get("held_permits")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        hard_cap: c.get("hard_cap").and_then(|x| x.as_u64()),
+        pending_shrink: c.get("pending_shrink").and_then(|x| x.as_u64()),
     };
-    let default_fut = async { super::default_model().read().await.clone() };
-    let conc_fut = async {
-        let v = svc.concurrency_get().await;
-        ModelsConcurrency {
-            configured_max: v
-                .get("configured_max")
-                .and_then(|x| x.as_u64())
-                .unwrap_or_default(),
-            available_permits: v
-                .get("available_permits")
-                .and_then(|x| x.as_u64())
-                .unwrap_or_default(),
-            held_permits: v
-                .get("held_permits")
-                .and_then(|x| x.as_u64())
-                .unwrap_or_default(),
-            hard_cap: v.get("hard_cap").and_then(|x| x.as_u64()),
-        }
+    let m = v.get("metrics").cloned().unwrap_or_default();
+    let metrics = ModelsMetrics {
+        started: m
+            .get("started")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        queued: m.get("queued").and_then(|x| x.as_u64()).unwrap_or_default(),
+        admitted: m
+            .get("admitted")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        resumed: m
+            .get("resumed")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        canceled: m
+            .get("canceled")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        completed: m
+            .get("completed")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        completed_cached: m
+            .get("completed_cached")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        errors: m.get("errors").and_then(|x| x.as_u64()).unwrap_or_default(),
+        bytes_total: m
+            .get("bytes_total")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        ewma_mbps: m.get("ewma_mbps").and_then(|x| x.as_f64()),
     };
-    let metrics_fut = async {
-        let base = svc.downloads_metrics().await;
-        ModelsMetrics {
-            started: base
-                .get("started")
-                .and_then(|x| x.as_u64())
-                .unwrap_or_default(),
-            queued: base
-                .get("queued")
-                .and_then(|x| x.as_u64())
-                .unwrap_or_default(),
-            admitted: base
-                .get("admitted")
-                .and_then(|x| x.as_u64())
-                .unwrap_or_default(),
-            resumed: base
-                .get("resumed")
-                .and_then(|x| x.as_u64())
-                .unwrap_or_default(),
-            canceled: base
-                .get("canceled")
-                .and_then(|x| x.as_u64())
-                .unwrap_or_default(),
-            completed: base
-                .get("completed")
-                .and_then(|x| x.as_u64())
-                .unwrap_or_default(),
-            completed_cached: base
-                .get("completed_cached")
-                .and_then(|x| x.as_u64())
-                .unwrap_or_default(),
-            errors: base
-                .get("errors")
-                .and_then(|x| x.as_u64())
-                .unwrap_or_default(),
-            bytes_total: base
-                .get("bytes_total")
-                .and_then(|x| x.as_u64())
-                .unwrap_or_default(),
-            ewma_mbps: base.get("ewma_mbps").and_then(|x| x.as_f64()),
-        }
-    };
-    let (items, default, concurrency, metrics) =
-        join!(models_fut, default_fut, conc_fut, metrics_fut);
     super::ok(ModelsSummary {
         items,
         default,
@@ -536,24 +559,19 @@ pub(crate) async fn models_hashes_get(
         }
         entry.2.insert(prov);
     }
-    let mut items = Vec::with_capacity(by_hash.len());
+    let mut items: Vec<HashItem> = Vec::with_capacity(by_hash.len());
     for (sha256, (bytes, path, providers)) in by_hash.into_iter() {
-        items.push(json!({
-            "sha256": sha256,
-            "bytes": bytes,
-            "path": path,
-            "providers": providers.into_iter().collect::<Vec<_>>()
-        }));
+        items.push(HashItem {
+            sha256,
+            bytes,
+            path,
+            providers: providers.into_iter().collect::<Vec<_>>(),
+        });
     }
     // Optional provider filter
     if let Some(p) = q.provider.as_deref() {
         let prov = p.to_string();
-        items.retain(|it| {
-            it["providers"]
-                .as_array()
-                .map(|arr| arr.iter().any(|v| v.as_str() == Some(prov.as_str())))
-                .unwrap_or(false)
-        });
+        items.retain(|it| it.providers.iter().any(|s| s == prov.as_str()));
     }
     // Sorting
     let sort_key = q
@@ -570,13 +588,10 @@ pub(crate) async fn models_hashes_get(
     };
     items.sort_by(|a, b| {
         let ord = match sort_key.as_str() {
-            "sha256" => a["sha256"].as_str().cmp(&b["sha256"].as_str()),
-            "path" => a["path"].as_str().cmp(&b["path"].as_str()),
-            "providers_count" => a["providers"]
-                .as_array()
-                .map(|x| x.len())
-                .cmp(&b["providers"].as_array().map(|x| x.len())),
-            _ => a["bytes"].as_u64().cmp(&b["bytes"].as_u64()),
+            "sha256" => a.sha256.as_str().cmp(b.sha256.as_str()),
+            "path" => a.path.as_str().cmp(b.path.as_str()),
+            "providers_count" => a.providers.len().cmp(&b.providers.len()),
+            _ => a.bytes.cmp(&b.bytes),
         };
         if desc {
             ord.reverse()
@@ -590,13 +605,13 @@ pub(crate) async fn models_hashes_get(
     let limit = q.limit.unwrap_or(200).clamp(1, 10_000);
     let end = offset.saturating_add(limit).min(total);
     let page = items[offset..end].to_vec();
-    Json(json!({
-        "total": total,
-        "count": page.len(),
-        "limit": limit,
-        "offset": offset,
-        "items": page
-    }))
+    Json(HashesPage {
+        total,
+        count: page.len(),
+        limit,
+        offset,
+        items: page,
+    })
     .into_response()
 }
 
@@ -615,9 +630,10 @@ pub(crate) async fn models_hashes_get(
     params(("sha256" = String, Path, description = "Hex lowercase SHA-256 (64 chars)")),
     responses(
         (status=200, description="CAS blob bytes (ETag/immutable cache)", body=String),
-        (status=304, description="Not Modified (If-None-Match)"),
+        (status=304, description="Not Modified (If-None-Match/If-Modified-Since)"),
         (status=400, description="Invalid sha256", body = arw_protocol::ProblemDetails),
-        (status=404, description="Not found")
+        (status=404, description="Not found"),
+        (status=416, description="Range Not Satisfiable")
     )
 )]
 pub(crate) async fn models_blob_get(
@@ -625,144 +641,65 @@ pub(crate) async fn models_blob_get(
     Path(sha256): Path<String>,
 ) -> impl IntoResponse {
     // Validate hash
-    let ok = sha256.len() == 64 && sha256.chars().all(|c| c.is_ascii_hexdigit());
-    if !ok {
+    if !(sha256.len() == 64 && sha256.chars().all(|c| c.is_ascii_hexdigit())) {
         return (axum::http::StatusCode::BAD_REQUEST, "invalid sha256").into_response();
     }
-    // Find matching CAS file in models/by-hash (sha256 or sha256.ext)
-    let dir = crate::ext::paths::state_dir()
-        .join("models")
-        .join("by-hash");
-    let mut found: Option<std::path::PathBuf> = None;
-    if let Ok(mut rd) = tokio::fs::read_dir(&dir).await {
-        while let Ok(Some(ent)) = rd.next_entry().await {
-            let f = ent.file_name();
-            let name = f.to_string_lossy();
-            if name == sha256 || name.starts_with(&format!("{}.", sha256)) {
-                found = Some(ent.path());
-                break;
-            }
-        }
-    }
-    let Some(path) = found else {
+    // Locate blob path
+    let Some(path) = find_cas_blob_path(&sha256).await else {
         return axum::http::StatusCode::NOT_FOUND.into_response();
     };
     match tokio::fs::File::open(&path).await {
         Ok(mut file) => {
             use tokio::io::{AsyncReadExt, AsyncSeekExt};
-            let meta = tokio::fs::metadata(&path).await.ok();
-            let total_len = meta.as_ref().map(|m| m.len()).unwrap_or(0);
-            let mut headers = HeaderMap::new();
-            headers.insert(
-                axum::http::header::CONTENT_TYPE,
-                HeaderValue::from_static("application/octet-stream"),
-            );
-            // Strong validators for immutable CAS blobs
-            let etag_val = format!("\"{}\"", sha256);
-            if let Ok(h) = HeaderValue::from_str(&etag_val) {
-                headers.insert(axum::http::header::ETAG, h);
-            }
-            // Long-lived immutable cache control (blob addressed by digest)
-            headers.insert(
-                axum::http::header::CACHE_CONTROL,
-                HeaderValue::from_static("public, max-age=31536000, immutable"),
-            );
-            if let Some(m) = meta.as_ref() {
-                // Last-Modified from file mtime (best-effort)
-                if let Ok(modified) = m.modified() {
-                    let dt = chrono::DateTime::<chrono::Utc>::from(modified).to_rfc2822();
-                    if let Ok(h) = HeaderValue::from_str(&dt) {
-                        headers.insert(axum::http::header::LAST_MODIFIED, h);
-                    }
-                }
-            }
-            // If-None-Match handling (304 Not Modified)
-            if let Some(inm) = headers_in.get(axum::http::header::IF_NONE_MATCH) {
-                if inm
-                    .to_str()
-                    .ok()
-                    .map(|s| s.contains(&etag_val))
-                    .unwrap_or(false)
-                {
-                    return (StatusCode::NOT_MODIFIED, headers).into_response();
-                }
+            let meta = match tokio::fs::metadata(&path).await {
+                Ok(m) => m,
+                Err(_) => return StatusCode::NOT_FOUND.into_response(),
+            };
+            let total_len = meta.len();
+            let mut headers = build_blob_headers(&meta, &sha256);
+            // Conditional requests (ETag/Last-Modified)
+            if is_not_modified(&headers_in, &headers, &meta, &sha256) {
+                return (StatusCode::NOT_MODIFIED, headers).into_response();
             }
 
             // Range support: bytes=start-end | bytes=start- | bytes=-suffix
-            let range_hdr = headers_in
+            if let Some(r) = headers_in
                 .get(axum::http::header::RANGE)
                 .and_then(|v| v.to_str().ok())
-                .unwrap_or("")
-                .trim()
-                .to_string();
-            if !range_hdr.is_empty() && total_len > 0 {
-                let prefix = "bytes=";
-                if let Some(spec) = range_hdr.strip_prefix(prefix) {
-                    let mut start: Option<u64> = None;
-                    let mut end: Option<u64> = None;
-                    if let Some(hy) = spec.find('-') {
-                        let (a, b) = spec.split_at(hy);
-                        let b = &b[1..];
-                        if a.is_empty() {
-                            // suffix: bytes=-N
-                            if let Ok(n) = b.parse::<u64>() {
-                                let n = n.min(total_len);
-                                start = Some(total_len.saturating_sub(n));
-                                end = Some(total_len.saturating_sub(1));
-                            }
-                        } else if b.is_empty() {
-                            // bytes=START-
-                            if let Ok(sv) = a.parse::<u64>() {
-                                start = Some(sv);
-                                end = Some(total_len.saturating_sub(1));
-                            }
-                        } else {
-                            // bytes=START-END
-                            if let (Ok(sv), Ok(ev)) = (a.parse::<u64>(), b.parse::<u64>()) {
-                                start = Some(sv);
-                                end = Some(ev);
-                            }
-                        }
-                    }
-                    if let (Some(s), Some(e)) = (start, end) {
-                        if s <= e && e < total_len {
-                            // valid range
-                            let len = e - s + 1;
-                            let _ = file.seek(std::io::SeekFrom::Start(s)).await;
-                            let reader = file.take(len);
-                            let stream = tokio_util::io::ReaderStream::new(reader);
-                            let body = axum::body::Body::from_stream(stream);
-                            headers.insert(
-                                axum::http::header::CONTENT_RANGE,
-                                HeaderValue::from_str(&format!("bytes {}-{}/{}", s, e, total_len))
-                                    .unwrap_or(HeaderValue::from_static("")),
-                            );
-                            headers.insert(
-                                axum::http::header::CONTENT_LENGTH,
-                                HeaderValue::from_str(&len.to_string())
-                                    .unwrap_or(HeaderValue::from_static("0")),
-                            );
-                            return (StatusCode::PARTIAL_CONTENT, headers, body).into_response();
-                        } else {
-                            // 416 Range Not Satisfiable
-                            headers.insert(
-                                axum::http::header::CONTENT_RANGE,
-                                HeaderValue::from_str(&format!("bytes */{}", total_len))
-                                    .unwrap_or(HeaderValue::from_static("")),
-                            );
-                            return (StatusCode::RANGE_NOT_SATISFIABLE, headers).into_response();
-                        }
-                    }
+            {
+                if let Some((s, e)) = parse_range_spec(r, total_len) {
+                    let len = e - s + 1;
+                    let _ = file.seek(std::io::SeekFrom::Start(s)).await;
+                    let reader = file.take(len);
+                    let stream = tokio_util::io::ReaderStream::new(reader);
+                    let body = axum::body::Body::from_stream(stream);
+                    headers.insert(
+                        axum::http::header::CONTENT_RANGE,
+                        HeaderValue::from_str(&format!("bytes {}-{}/{}", s, e, total_len))
+                            .unwrap_or(HeaderValue::from_static("")),
+                    );
+                    headers.insert(
+                        axum::http::header::CONTENT_LENGTH,
+                        HeaderValue::from_str(&len.to_string())
+                            .unwrap_or(HeaderValue::from_static("0")),
+                    );
+                    return (StatusCode::PARTIAL_CONTENT, headers, body).into_response();
+                } else if r.trim().starts_with("bytes=") {
+                    // Invalid/unsatisfiable range
+                    headers.insert(
+                        axum::http::header::CONTENT_RANGE,
+                        HeaderValue::from_str(&format!("bytes */{}", total_len))
+                            .unwrap_or(HeaderValue::from_static("")),
+                    );
+                    return (StatusCode::RANGE_NOT_SATISFIABLE, headers).into_response();
                 }
             }
             // Full body
-            if let Some(m) = meta.as_ref() {
-                headers.insert(
-                    axum::http::header::CONTENT_LENGTH,
-                    HeaderValue::from_str(&m.len().to_string())
-                        .unwrap_or(HeaderValue::from_static("0")),
-                );
-            }
+            headers.insert(
+                axum::http::header::CONTENT_LENGTH,
+                HeaderValue::from_str(&total_len.to_string())
+                    .unwrap_or(HeaderValue::from_static("0")),
+            );
             let stream = tokio_util::io::ReaderStream::new(file);
             let body = axum::body::Body::from_stream(stream);
             (headers, body).into_response()
@@ -771,35 +708,59 @@ pub(crate) async fn models_blob_get(
     }
 }
 
-/// Lightweight downloads metrics (throughput EWMA for admission checks)
-///
-/// Deprecated: prefer `GET /admin/state/models_metrics` which returns the
-/// same shape and is the canonical read‑model snapshot.
+// HEAD metadata for a CAS blob by hash (same path as GET)
 #[arw_admin(
-    method = "GET",
-    path = "/admin/models/downloads_metrics",
-    summary = "Get downloads metrics (EWMA MB/s)"
+    method = "HEAD",
+    path = "/admin/models/by-hash/:sha256",
+    summary = "HEAD model blob by sha256 (egress gated)"
 )]
-#[arw_gate("state:downloads_metrics:get")]
-pub(crate) async fn models_downloads_metrics(State(state): State<AppState>) -> impl IntoResponse {
-    let svc = match super::require_service::<ModelsService>(&state) {
-        Ok(s) => s,
-        Err(e) => return e.into_response(),
+#[arw_gate("io:egress:models.peer")]
+pub(crate) async fn models_blob_head(
+    headers_in: HeaderMap,
+    Path(sha256): Path<String>,
+) -> impl IntoResponse {
+    // Validate hash
+    if !(sha256.len() == 64 && sha256.chars().all(|c| c.is_ascii_hexdigit())) {
+        return (axum::http::StatusCode::BAD_REQUEST, "invalid sha256").into_response();
+    }
+    let Some(path) = find_cas_blob_path(&sha256).await else {
+        return axum::http::StatusCode::NOT_FOUND.into_response();
     };
-    let v = svc.downloads_metrics().await;
-    // Mark as deprecated via response headers while preserving payload shape
-    let mut headers = HeaderMap::new();
-    // RFC 7234 Warning 299: Miscellaneous Persistent Warning (commonly used for deprecation hints)
+    let Ok(meta) = tokio::fs::metadata(&path).await else {
+        return axum::http::StatusCode::NOT_FOUND.into_response();
+    };
+    let mut headers = build_blob_headers(&meta, &sha256);
+    if is_not_modified(&headers_in, &headers, &meta, &sha256) {
+        return (StatusCode::NOT_MODIFIED, headers).into_response();
+    }
     let _ = headers.insert(
-        axum::http::header::WARNING,
-        HeaderValue::from_static("299 - \"Deprecated: use /admin/state/models_metrics\""),
+        axum::http::header::CONTENT_LENGTH,
+        HeaderValue::from_str(&meta.len().to_string()).unwrap_or(HeaderValue::from_static("0")),
     );
-    let _ = headers.insert(
-        axum::http::header::LINK,
-        HeaderValue::from_static("</admin/state/models_metrics>; rel=\"successor-version\""),
-    );
-    (headers, Json(v)).into_response()
+    (StatusCode::OK, headers).into_response()
 }
+
+/// Internal: locate a CAS blob file for a given hex sha256, allowing optional extensions.
+async fn find_cas_blob_path(sha256: &str) -> Option<std::path::PathBuf> {
+    let dir = crate::ext::paths::state_dir()
+        .join("models")
+        .join("by-hash");
+    let p_exact = dir.join(sha256);
+    if std::fs::metadata(&p_exact).is_ok() {
+        return Some(p_exact);
+    }
+    if let Ok(mut rd) = tokio::fs::read_dir(&dir).await {
+        while let Ok(Some(ent)) = rd.next_entry().await {
+            let name = ent.file_name().to_string_lossy().to_string();
+            if name == sha256 || name.starts_with(&format!("{}.", sha256)) {
+                return Some(ent.path());
+            }
+        }
+    }
+    None
+}
+
+// helpers moved to super::http
 
 /// Get current models CAS quota and usage snapshot
 #[arw_admin(
@@ -819,14 +780,18 @@ pub(crate) async fn models_quota_get(State(state): State<AppState>) -> impl Into
 
 #[cfg(test)]
 mod tests {
-    use super::{models_downloads_metrics, models_quota_get};
+    use super::{models_blob_get, models_blob_head, models_metrics_get, models_quota_get};
     use crate::AppState;
-    use axum::{http::Request, routing::get, Router};
+    use axum::{
+        http::Request,
+        routing::{get, head},
+        Router,
+    };
     use http_body_util::BodyExt; // for collecting body
     use tower::ServiceExt; // for `oneshot`
 
     #[tokio::test]
-    async fn http_downloads_metrics_shape() {
+    async fn http_models_metrics_shape() {
         // Build minimal app with the handler and a state containing ModelsService
         let state = {
             let st = AppState::default();
@@ -836,15 +801,12 @@ mod tests {
             st
         };
         let app = Router::new()
-            .route(
-                "/admin/models/downloads_metrics",
-                get(models_downloads_metrics),
-            )
+            .route("/admin/state/models_metrics", get(models_metrics_get))
             .with_state(state);
         let resp = app
             .oneshot(
                 Request::builder()
-                    .uri("/admin/models/downloads_metrics")
+                    .uri("/admin/state/models_metrics")
                     .body(axum::body::Body::empty())
                     .unwrap(),
             )
@@ -900,6 +862,183 @@ mod tests {
             assert!(v.get(k).is_some(), "missing key: {}", k);
         }
     }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn http_models_blob_head_and_304() {
+        // Use a temp state dir for CAS
+        let (_tmp, _guard) = crate::test_support::scoped_state_dir();
+        let base = crate::ext::paths::state_dir();
+        let cas_dir = base.join("models").join("by-hash");
+        std::fs::create_dir_all(&cas_dir).unwrap();
+        let sha = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+        let fpath = cas_dir.join(sha);
+        std::fs::write(&fpath, b"hello").unwrap();
+        assert!(std::fs::metadata(&fpath).is_ok());
+
+        let app = Router::new()
+            .route("/admin/models/by-hash/:sha256", head(models_blob_head))
+            .with_state(AppState::default());
+
+        // Initial HEAD: expect 200 with ETag, Accept-Ranges, Content-Length
+        let resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("HEAD")
+                    .uri(format!("/admin/models/by-hash/{}", sha))
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), axum::http::StatusCode::OK);
+        let h = resp.headers();
+        assert_eq!(
+            h.get("ETag").unwrap().to_str().unwrap(),
+            format!("\"{}\"", sha)
+        );
+        assert_eq!(h.get("Accept-Ranges").unwrap().to_str().unwrap(), "bytes");
+        assert_eq!(h.get("Content-Length").unwrap().to_str().unwrap(), "5");
+
+        // With If-None-Match -> 304
+        let resp2 = app
+            .oneshot(
+                Request::builder()
+                    .method("HEAD")
+                    .uri(format!("/admin/models/by-hash/{}", sha))
+                    .header("If-None-Match", format!("\"{}\"", sha))
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp2.status(), axum::http::StatusCode::NOT_MODIFIED);
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn http_models_blob_range_416() {
+        // Use a temp state dir for CAS
+        let (_tmp, _guard) = crate::test_support::scoped_state_dir();
+        let base = crate::ext::paths::state_dir();
+        let cas_dir = base.join("models").join("by-hash");
+        std::fs::create_dir_all(&cas_dir).unwrap();
+        let sha = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let fpath = cas_dir.join(sha);
+        std::fs::write(&fpath, b"hello").unwrap();
+        assert!(std::fs::metadata(&fpath).is_ok());
+
+        let app = Router::new()
+            .route("/admin/models/by-hash/:sha256", get(models_blob_get))
+            .with_state(AppState::default());
+
+        // Request an invalid range
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/admin/models/by-hash/{}", sha))
+                    .header("Range", "bytes=10-20")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), axum::http::StatusCode::RANGE_NOT_SATISFIABLE);
+        let h = resp.headers();
+        assert_eq!(
+            h.get("Content-Range").unwrap().to_str().unwrap(),
+            "bytes */5"
+        );
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn http_models_blob_range_206() {
+        // Use a temp state dir for CAS
+        let (_tmp, _guard) = crate::test_support::scoped_state_dir();
+        let base = crate::ext::paths::state_dir();
+        let cas_dir = base.join("models").join("by-hash");
+        std::fs::create_dir_all(&cas_dir).unwrap();
+        let sha = "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb";
+        let fpath = cas_dir.join(sha);
+        std::fs::write(&fpath, b"hello").unwrap();
+
+        let app = Router::new()
+            .route("/admin/models/by-hash/:sha256", get(models_blob_get))
+            .with_state(AppState::default());
+
+        // Request a valid range
+        let resp = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/admin/models/by-hash/{}", sha))
+                    .header("Range", "bytes=0-1")
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp.status(), axum::http::StatusCode::PARTIAL_CONTENT);
+        let h = resp.headers();
+        assert_eq!(
+            h.get("Content-Range").unwrap().to_str().unwrap(),
+            "bytes 0-1/5"
+        );
+        assert_eq!(h.get("Content-Length").unwrap().to_str().unwrap(), "2");
+        // Verify body content matches the requested slice
+        let body = resp.into_body().collect().await.unwrap().to_bytes();
+        assert_eq!(&body[..], b"he");
+    }
+
+    #[serial_test::serial]
+    #[tokio::test]
+    async fn http_models_blob_if_modified_since_304() {
+        let (_tmp, _guard) = crate::test_support::scoped_state_dir();
+        let base = crate::ext::paths::state_dir();
+        let cas_dir = base.join("models").join("by-hash");
+        std::fs::create_dir_all(&cas_dir).unwrap();
+        let sha = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+        let fpath = cas_dir.join(sha);
+        std::fs::write(&fpath, b"hello").unwrap();
+
+        let app = Router::new()
+            .route("/admin/models/by-hash/:sha256", get(models_blob_get))
+            .with_state(AppState::default());
+
+        // First GET to obtain Last-Modified
+        let resp1 = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/admin/models/by-hash/{}", sha))
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert!(resp1.status().is_success());
+        let lm = resp1
+            .headers()
+            .get(axum::http::header::LAST_MODIFIED)
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+
+        // Second GET with If-Modified-Since should return 304
+        let resp2 = app
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/admin/models/by-hash/{}", sha))
+                    .header(axum::http::header::IF_MODIFIED_SINCE, lm)
+                    .body(axum::body::Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(resp2.status(), axum::http::StatusCode::NOT_MODIFIED);
+    }
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -945,7 +1084,23 @@ pub(crate) async fn models_concurrency_get(State(state): State<AppState>) -> imp
         return super::ApiError::internal("ModelsService missing").into_response();
     };
     let v = svc.concurrency_get().await;
-    Json(v).into_response()
+    let out = ModelsConcurrency {
+        configured_max: v
+            .get("configured_max")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        available_permits: v
+            .get("available_permits")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        held_permits: v
+            .get("held_permits")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        hard_cap: v.get("hard_cap").and_then(|x| x.as_u64()),
+        pending_shrink: v.get("pending_shrink").and_then(|x| x.as_u64()),
+    };
+    Json(out).into_response()
 }
 
 /// Admin: snapshot of active download jobs and inflight hashes
@@ -961,7 +1116,59 @@ pub(crate) async fn models_jobs(State(state): State<AppState>) -> impl IntoRespo
         return super::ApiError::internal("ModelsService missing").into_response();
     };
     let v = svc.jobs_status().await;
-    Json(v).into_response()
+    // Map JSON to typed output (stable field names)
+    let active = v
+        .get("active")
+        .and_then(|x| x.as_array())
+        .map(|arr| {
+            arr.iter()
+                .map(|it| ActiveJob {
+                    model_id: it
+                        .get("model_id")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                    job_id: it
+                        .get("job_id")
+                        .and_then(|x| x.as_str())
+                        .unwrap_or_default()
+                        .to_string(),
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let inflight_hashes = v
+        .get("inflight_hashes")
+        .and_then(|x| x.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|s| s.as_str().map(|t| t.to_string()))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let conc_v = v.get("concurrency").cloned().unwrap_or_default();
+    let concurrency = ModelsConcurrency {
+        configured_max: conc_v
+            .get("configured_max")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        available_permits: conc_v
+            .get("available_permits")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        held_permits: conc_v
+            .get("held_permits")
+            .and_then(|x| x.as_u64())
+            .unwrap_or_default(),
+        hard_cap: conc_v.get("hard_cap").and_then(|x| x.as_u64()),
+        pending_shrink: conc_v.get("pending_shrink").and_then(|x| x.as_u64()),
+    };
+    Json(ModelsJobs {
+        active,
+        inflight_hashes,
+        concurrency,
+    })
+    .into_response()
 }
 
 /// Read-model: models download metrics (counters + EWMA MB/s)
@@ -975,7 +1182,49 @@ pub(crate) async fn models_jobs(State(state): State<AppState>) -> impl IntoRespo
 pub(crate) async fn models_metrics_get(State(state): State<AppState>) -> impl IntoResponse {
     // Use the service helper to return a consistent shape (counters + ewma)
     match super::require_service::<ModelsService>(&state) {
-        Ok(svc) => Json(svc.downloads_metrics().await).into_response(),
+        Ok(svc) => {
+            let base = svc.downloads_metrics().await;
+            let out = ModelsMetrics {
+                started: base
+                    .get("started")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or_default(),
+                queued: base
+                    .get("queued")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or_default(),
+                admitted: base
+                    .get("admitted")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or_default(),
+                resumed: base
+                    .get("resumed")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or_default(),
+                canceled: base
+                    .get("canceled")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or_default(),
+                completed: base
+                    .get("completed")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or_default(),
+                completed_cached: base
+                    .get("completed_cached")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or_default(),
+                errors: base
+                    .get("errors")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or_default(),
+                bytes_total: base
+                    .get("bytes_total")
+                    .and_then(|x| x.as_u64())
+                    .unwrap_or_default(),
+                ewma_mbps: base.get("ewma_mbps").and_then(|x| x.as_f64()),
+            };
+            Json(out).into_response()
+        }
         Err(e) => e.into_response(),
     }
 }

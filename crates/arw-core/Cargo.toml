@@ -1,6 +1,6 @@
 [package]
 name = "arw-core"
-version = "0.1.2"
+version = "0.1.4"
 edition = "2021"
 license.workspace = true
 
@@ -9,8 +9,8 @@ anyhow = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tracing = { workspace = true }
-arw-protocol = { path = "../arw-protocol", version = "0.1.2" }
-arw-events = { path = "../arw-events", version = "0.1.2" }
+arw-protocol = { path = "../arw-protocol", version = "0.1.4" }
+arw-events = { path = "../arw-events", version = "0.1.4" }
 toml = { workspace = true }
 async-trait = "0.1"
 tokio = { workspace = true }

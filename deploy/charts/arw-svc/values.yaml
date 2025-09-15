@@ -2,6 +2,7 @@ image:
   repository: ghcr.io/t3hw00t/arw-svc
   tag: latest
   pullPolicy: IfNotPresent
+  pullSecrets: [] # list of secret names for private registries (e.g., GHCR)
 
 service:
   type: ClusterIP
@@ -9,7 +10,25 @@ service:
 
 env:
   ARW_PORT: 8090
+  ARW_BIND: 0.0.0.0
   ARW_DEBUG: 0
+  ARW_TRUST_FORWARD_HEADERS: 0
+  # Access logs (structured)
+  ARW_ACCESS_LOG: 0
+  ARW_ACCESS_SAMPLE_N: 1
+  ARW_ACCESS_UA: 0
+  ARW_ACCESS_UA_HASH: 0
+  ARW_ACCESS_REF: 0
+  ARW_ACCESS_REF_STRIP_QS: 1
+  # Rolling access log files
+  ARW_ACCESS_LOG_ROLL: 0
+  ARW_ACCESS_LOG_DIR: ""
+  ARW_ACCESS_LOG_PREFIX: ""
+  ARW_ACCESS_LOG_ROTATION: daily
+  # CSP (HTML)
+  ARW_CSP_AUTO: 1
+  ARW_CSP_PRESET: relaxed
+  ARW_CSP: ""
   extra: [] # list of { name: FOO, value: BAR }
 
 resources: {}

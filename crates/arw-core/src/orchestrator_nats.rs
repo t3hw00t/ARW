@@ -21,13 +21,54 @@ pub struct NatsQueue {
 
 impl NatsQueue {
     pub async fn connect(url: &str) -> Result<Self> {
-        let client = async_nats::connect(url).await?;
+        let client = connect_with_env(url).await?;
         Ok(Self {
             client,
             subject: "arw.tasks".to_string(),
             subs: Arc::new(Mutex::new(HashMap::new())),
         })
     }
+}
+
+/// Build a NATS connection honoring basic env-based auth/TLS knobs and simple initial retry.
+async fn connect_with_env(url: &str) -> Result<Client> {
+    // Optional TLS upgrade
+    let mut u = url.to_string();
+    if std::env::var("ARW_NATS_TLS").ok().as_deref() == Some("1") {
+        u = u.replacen("nats://", "tls://", 1);
+        u = u.replacen("ws://", "wss://", 1);
+    }
+    // If ARW_NATS_USER/PASS are provided and URL has no userinfo, inject them (best-effort)
+    if !u.contains('@') {
+        if let (Ok(user), Ok(pass)) = (
+            std::env::var("ARW_NATS_USER"),
+            std::env::var("ARW_NATS_PASS"),
+        ) {
+            if let Some((scheme, rest)) = u.split_once("://") {
+                u = format!("{}://{}:{}@{}", scheme, user, pass, rest);
+            }
+        }
+    }
+    // Initial connect retry/backoff
+    let retries: u32 = std::env::var("ARW_NATS_CONNECT_RETRIES")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(3);
+    let backoff_ms: u64 = std::env::var("ARW_NATS_CONNECT_BACKOFF_MS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(500);
+    let mut last_err: Option<anyhow::Error> = None;
+    for _ in 0..=retries {
+        match async_nats::connect(&u).await {
+            Ok(c) => return Ok(c),
+            Err(e) => {
+                last_err = Some(anyhow::anyhow!(e));
+                tokio::time::sleep(std::time::Duration::from_millis(backoff_ms)).await;
+            }
+        }
+    }
+    Err(last_err.unwrap_or_else(|| anyhow::anyhow!("nats connect failed")))
 }
 
 #[async_trait]

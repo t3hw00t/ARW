@@ -3,6 +3,8 @@ title: Config Plane & Patch Engine
 ---
 
 # Config Plane & Patch Engine
+Updated: 2025-09-14
+Type: Explanation
 
 Purpose
 - Atomically apply/revert/validate "Logic Unit" config bundles (and other config deltas) against versioned schemas. Produce a human‑readable diff; fail‑closed on validation; audit any permission widening.

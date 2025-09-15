@@ -2,9 +2,10 @@
 title: Caching Layers
 ---
 
-# Caching Layers (Design + Implementation)
+# Caching Layers
 
-Updated: 2025-09-13
+Updated: 2025-09-14
+Type: Explanation
 
 This document outlines a multi‑layer caching strategy for ARW, blending research‑informed ideas with practical, incremental implementations. It aims for high ROI first (latency, throughput, stability), while keeping privacy and determinism front‑and‑center.
 
@@ -35,6 +36,7 @@ This document outlines a multi‑layer caching strategy for ARW, blending resear
 
 - Edge & HTTP caching
   - Emit strong validators and immutable `Cache-Control` for digest‑addressed blobs. ARW serves `ETag:"<sha256>"`, `Last-Modified`, and `public, max-age=31536000, immutable` for `/admin/models/by-hash/:sha256`, and honors `If-None-Match`.
+  - See also: [HTTP Caching Semantics](../snippets/http_caching_semantics.md)
   - Stampede protection: coalesce identical misses with a singleflight mechanism.
 
 ## What’s implemented in ARW today

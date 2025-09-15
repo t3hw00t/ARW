@@ -1,0 +1,71 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arw/spec/schemas/workflow_template.json",
+  "title": "WorkflowTemplate",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "title": { "type": "string" },
+    "surfaces": {
+      "type": "array",
+      "items": { "enum": ["hub", "chat", "training"] }
+    },
+    "grid": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rows": { "type": "integer", "minimum": 1 },
+        "cols": { "type": "integer", "minimum": 1 },
+        "gap": { "type": "integer", "minimum": 0 }
+      },
+      "required": ["rows", "cols"]
+    },
+    "panels": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "type": { "type": "string", "minLength": 1 },
+          "title": { "type": "string" },
+          "x": { "type": "integer", "minimum": 0 },
+          "y": { "type": "integer", "minimum": 0 },
+          "w": { "type": "integer", "minimum": 1 },
+          "h": { "type": "integer", "minimum": 1 },
+          "props": { "type": "object", "additionalProperties": true }
+        },
+        "required": ["id", "type", "x", "y", "w", "h"]
+      }
+    },
+    "sidecar": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "lanes": {
+          "type": "array",
+          "items": { "enum": [
+            "timeline", "context", "policy", "metrics", "models", "activity"
+          ]}
+        },
+        "collapsed": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "compare": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "slots": { "type": "integer", "minimum": 2, "maximum": 3 },
+        "mode": { "enum": ["side-by-side", "timeline"] }
+      }
+    },
+    "filters": {
+      "type": "object",
+      "description": "Optional default filters for data (e.g., project, corr_id)",
+      "additionalProperties": true
+    }
+  },
+  "required": ["id", "surfaces", "grid", "panels"]
+}
+

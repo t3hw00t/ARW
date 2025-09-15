@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ARW Training Park</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="ui-kit.css" />
+    <link rel="stylesheet" href="common.css" />
+  </head>
+  <body>
+    <a href="#results" class="skip-link">Skip to results</a>
+    <script src="common.js"></script>
+    <div class="wrap">
+      <header class="row">
+        <strong>Training Park</strong>
+        <label>Port: <input id="port" type="number" min="1" max="65535" value="8090"></label>
+        <button id="abRun" class="primary">Run A/B</button>
+        <span id="statusBadges" class="badges" style="margin-left:auto"></span>
+        <span id="sseStat" class="dim" role="status" aria-live="polite">SSE: off</span>
+        <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+        <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+      </header>
+      <div class="layout">
+        <main class="grid cols-3" role="region" aria-label="Training panels">
+          <section class="card" role="region" aria-labelledby="controlsTitle">
+            <h3 id="controlsTitle">Controls</h3>
+            <div class="row"><label>Preset <select><option>performance</option><option selected>balanced</option><option>power-saver</option></select></label></div>
+            <div class="row"><label>Diversity <input type="range" min="0" max="1" step="0.05"></label></div>
+            <div class="row"><label>Compression <input type="range" min="0" max="1" step="0.1"></label></div>
+          </section>
+          <section class="card" role="region" aria-labelledby="datasetTitle"><h3 id="datasetTitle">Dataset/Tasks</h3><div class="dim">Coming soon</div></section>
+          <section class="card" role="region" aria-labelledby="resultsTitle"><h3 id="resultsTitle">Results</h3><div id="results" class="mono"></div></section>
+        </main>
+        <aside id="sidecar"></aside>
+      </div>
+    </div>
+    <script src="training.js"></script>
+  </body>
+  </html>

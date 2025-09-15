@@ -2,9 +2,12 @@
 title: Egress Schemas
 ---
 
-# Egress Schemas (Planned)
+# Egress Schemas
 
-Updated: 2025-09-12
+Updated: 2025-09-13
+Type: Reference
+
+Status: Planned
 
 This page anchors the two minimal JSON Schemas introduced for the policy‑backed egress firewall work:
 

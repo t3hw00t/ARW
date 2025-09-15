@@ -6,16 +6,42 @@
     <title>ARW Events</title>
   </head>
   <body>
+    <a href="#log" class="skip-link">Skip to events log</a>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="ui-kit.css" />
     <link rel="stylesheet" href="common.css" />
     <link rel="stylesheet" href="events.css" />
     <script src="common.js" defer></script>
-    <div class="toolbar">
-      <label>Port: <input id="port" type="number" min="1" max="65535" value="8090"></label>
-      <label>Filter: <input id="filter" type="text" placeholder="e.g. models.* or service.*"></label>
+    <div class="toolbar" role="region" aria-label="Events controls">
+      <label>Port: <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8090"></label>
+      <label>Prefix: <input id="filter" aria-label="Event prefix filter" type="text" placeholder="e.g. models. or state."></label>
+      <label>Include: <input id="inc" aria-label="Include text" type="text" placeholder="text in body"></label>
+      <label>Exclude: <input id="exc" aria-label="Exclude text" type="text" placeholder="text to skip"></label>
       <button id="btn-replay" class="primary">Replay 50</button>
-      <span id="stat" class="dim">SSE: off</span>
+      <span class="dim">Presets:</span>
+      <button class="ghost" data-preset="state.">state</button>
+      <button class="ghost" data-preset="models.">models</button>
+      <button class="ghost" data-preset="tools.">tools</button>
+      <button class="ghost" data-preset="egress.">egress</button>
+      <button class="ghost" data-preset="feedback.">feedback</button>
+      <button class="ghost" data-preset="rpu.">rpu</button>
+      <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+      <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+      <button id="btn-clear" title="Clear events">Clear</button>
+      <button id="btn-copy" title="Copy last event">Copy last</button>
+      <label class="dim"><input type="checkbox" id="pretty" checked> pretty</label>
+      <label class="dim"><input type="checkbox" id="wrap" checked> wrap</label>
+      <label class="dim">SLO p95 (ms): <input id="slo" type="number" min="10" step="10" value="150" style="width:90px"></label>
+      <label class="dim"><input type="checkbox" id="pause"> pause</label>
+      <span id="statusBadges" class="badges" style="margin-left:auto"></span>
+      <span class="badges" style="margin-left:12px">
+        <span id="cpuBadge" class="badge" aria-label="CPU usage">CPU: –</span>
+        <span id="memBadge" class="badge" aria-label="Memory usage">Mem: –</span>
+        <span id="gpuBadge" class="badge" aria-label="GPU usage">GPU: –</span>
+      </span>
+      <span class="dim">SSE: <b id="stat" role="status" aria-live="polite">off</b></span>
     </div>
-    <div id="log"></div>
+    <div id="log" role="log" aria-live="polite" aria-relevant="additions text"></div>
     <script src="events.js" defer></script>
   </body>
   </html>

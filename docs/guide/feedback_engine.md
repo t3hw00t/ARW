@@ -7,7 +7,8 @@ title: Feedback Engine (Lightweight, Near‑Live)
 
 The feedback engine observes service events and route metrics to propose gentle tuning suggestions (e.g., HTTP timeout hints, memory ring size), without blocking request paths.
 
-Updated: 2025-09-12
+Updated: 2025-09-14
+Type: How‑to
 
 ## Goals
 - Extremely light: constant memory, O(1) updates per event, periodic evaluation off the hot path.

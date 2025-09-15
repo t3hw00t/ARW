@@ -1,37 +1,38 @@
 <!doctype html><meta charset="utf-8"><title>ARW Projects</title>
+<link rel="stylesheet" href="/admin/ui/assets/tokens.css"/>
+<link rel="stylesheet" href="/admin/ui/assets/ui-kit.css"/>
 <style>
-  :root{--line:#e5e7eb;--ink:#111827;--muted:#6b7280;--noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0.04'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
-  body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;color:var(--ink);background: radial-gradient(1000px 500px at 15% -10%, #ffffff, #f7f7f9 55%, #f1f5f9)}
+  :root{--color-line:#e5e7eb;--color-ink:#111827;--color-muted:#6b7280;--surface:#ffffff;--surface-muted:#f7f7f9;--noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0.04'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+  body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;color:var(--color-ink);background: var(--surface)}
   .grid{display:grid;grid-template-columns:260px 1fr;gap:16px}
-  .box{border:1px solid var(--line);border-radius:12px;padding:12px;background:linear-gradient(180deg,#ffffff,#fafafa);box-shadow:0 12px 30px rgba(0,0,0,0.06), inset 0 1px 0 rgba(255,255,255,0.65);position:relative}
-  .box::before{content:"";position:absolute;inset:0;background-image:var(--noise);opacity:.5;border-radius:12px;pointer-events:none}
   .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
-  button,input{font:inherit;padding:8px 12px;border:1px solid var(--line);border-radius:8px;background-image:linear-gradient(180deg,#ffffff,#f3f4f6), var(--noise);background-blend-mode:overlay,normal;box-shadow:0 1px 0 rgba(255,255,255,0.9) inset, 0 8px 18px rgba(0,0,0,0.06)}
   ul{list-style:none;padding:0;margin:0}
   li{padding:4px 6px;cursor:pointer;border-radius:6px}
   li:hover{background:#f3f4f6}
-  pre,textarea{background:linear-gradient(180deg,#ffffff,#fafafa);border:1px solid var(--line);border-radius:12px;padding:8px;overflow:auto;box-shadow:inset 0 1px 0 rgba(255,255,255,0.6)}
+  pre,textarea{background:linear-gradient(180deg,#ffffff,#fafafa);border:1px solid var(--color-line);border-radius:12px;padding:8px;overflow:auto;box-shadow:inset 0 1px 0 rgba(255,255,255,0.6)}
   textarea{width:100%;min-height:180px}
   @media (prefers-color-scheme: dark){
-    body{ background: radial-gradient(1000px 500px at 15% -10%, #0f1117, #0b0d12 55%, #090b10); color:#e5e7eb }
-    .box{ background: linear-gradient(180deg,#12161f,#0f141a); border-color:#1f232a; box-shadow: 0 12px 30px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06) }
-    .box::before{ opacity: .25 }
-    button,input{ color:#e5e7eb; background-image:linear-gradient(180deg,#1a202b,#131822), var(--noise); border-color:#2a2f37; box-shadow: 0 1px 0 rgba(255,255,255,0.06) inset, 0 8px 18px rgba(0,0,0,0.35) }
-    pre,textarea{ background: linear-gradient(180deg,#12161f,#0f141a); border-color:#1f232a; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06) }
+    :root{ --color-ink:#e5e7eb; --color-line:#1f232a }
+    body{ background: var(--surface); color:var(--color-ink) }
+    pre,textarea{ background: linear-gradient(180deg,#12161f,#0f141a); border-color:var(--color-line); box-shadow: inset 0 1px 0 rgba(255,255,255,0.06) }
   }
 </style>
 <h1>Projects</h1>
+<div class='row'>
+  <span class='badge' id='sseBadge' style='margin-left:auto'><span class='dot'></span> SSE: off</span>
+  <span id='statusBadges' style='margin-left:8px'></span>
+</div>
 <div class='grid'>
-  <div class='box'>
-    <div class='row'>
+  <div class='card'>
+    <div class='row' role='toolbar' aria-label='Project actions'>
       <input id='projName' placeholder='project name' style='width: 160px;'>
       <button onclick='createProj()'>Create</button>
     </div>
     <ul id='projList'></ul>
   </div>
-  <div class='box'>
+  <div class='card'>
     <div class='row'><span class='key'>project</span><code id='curProj'>–</code></div>
-    <div class='row'>
+    <div class='row' role='toolbar' aria-label='Notes & files'>
       <div style='flex:1'>
         <h3>Notes</h3>
         <textarea id='notes' placeholder='Project notes...'></textarea>
@@ -39,7 +40,7 @@
       </div>
       <div style='flex:1'>
         <h3>Files</h3>
-        <div id='tree' class='box' style='background:#fff; max-height:260px; overflow:auto'></div>
+        <div id='tree' class='card' style='max-height:260px; overflow:auto'></div>
       </div>
     </div>
     <pre id='out'>{}</pre>
@@ -47,6 +48,12 @@
 </div>
 <script>
 const base=location.origin;
+// Lightweight SSE status indicator
+try{
+  const es = new EventSource(base + '/events');
+  es.onopen = ()=>{ const el=document.getElementById('sseBadge'); if (el){ el.innerHTML = "<span class='dot ok'></span> SSE: on"; } };
+  es.onerror = ()=>{ const el=document.getElementById('sseBadge'); if (el){ el.innerHTML = "<span class='dot bad'></span> SSE: off"; } };
+}catch{}
 let current=null;
 function setProj(n){ current=n; document.getElementById('curProj').textContent = n||'–'; if(n){ loadNotes(); loadTree(''); } }
 async function listProjs(){ const r=await fetch(base+'/projects/list'); const j=await r.json().catch(()=>[]); const ul=document.getElementById('projList'); ul.innerHTML=''; (j.items||[]).forEach(n=>{ const li=document.createElement('li'); li.textContent=n; li.onclick=()=>setProj(n); ul.appendChild(li); }); }

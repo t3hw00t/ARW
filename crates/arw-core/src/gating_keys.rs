@@ -60,6 +60,10 @@ pub const INTROSPECT_PROBE: &str = "introspect:probe";
 pub const ADMIN_SHUTDOWN: &str = "admin:shutdown";
 pub const ADMIN_EMIT: &str = "admin:emit";
 
+// RPU (Regulatory Provenance Unit)
+pub const RPU_TRUST_GET: &str = "rpu:trust:get";
+pub const RPU_TRUST_RELOAD: &str = "rpu:trust:reload";
+
 // Projects (file ops)
 pub const PROJECTS_FILE_GET: &str = "projects:file:get";
 pub const PROJECTS_FILE_SET: &str = "projects:file:set";
@@ -110,6 +114,8 @@ pub fn list() -> Vec<&'static str> {
         INTROSPECT_PROBE,
         ADMIN_SHUTDOWN,
         ADMIN_EMIT,
+        RPU_TRUST_GET,
+        RPU_TRUST_RELOAD,
         PROJECTS_FILE_GET,
         PROJECTS_FILE_SET,
         PROJECTS_FILE_PATCH,

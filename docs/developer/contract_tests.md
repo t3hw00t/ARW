@@ -2,7 +2,9 @@
 title: Contract Tests
 ---
 
-# Contract Tests for Tools & Flows
+# Contract Tests
+Updated: 2025-09-12
+Type: Reference
 
 Tool kit
 - Validate JSON Schemas and capability declarations.
@@ -15,4 +17,3 @@ CI
 - Run contract tests in CI; gate plugin admission on passing results.
 
 See also: Plugin ABI & Trust, API and Schema.
-

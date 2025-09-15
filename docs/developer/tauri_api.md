@@ -3,6 +3,8 @@ title: Tauri API Usage (v2)
 ---
 
 # Tauri API Usage (v2)
+Updated: 2025-09-13
+Type: Reference
 
 This page documents the Tauri 2 APIs used by the Desktop Launcher and common patterns we follow. Tested with Tauri 2.8.x.
 

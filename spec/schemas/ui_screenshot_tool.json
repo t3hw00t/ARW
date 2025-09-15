@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://arw/spec/schemas/ui_screenshot_tool.json",
+  "title": "ui.screenshot.capture (planned)",
+  "type": "object",
+  "properties": {
+    "scope": {
+      "type": "string",
+      "description": "screen | display:n | window:<id> | region:x,y,w,h"
+    },
+    "format": { "enum": ["png", "jpg"], "default": "png" },
+    "downscale": { "type": "integer", "minimum": 1 },
+    "annotate": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "x": { "type": "integer" },
+          "y": { "type": "integer" },
+          "w": { "type": "integer" },
+          "h": { "type": "integer" },
+          "label": { "type": "string" }
+        },
+        "required": ["x","y","w","h"]
+      }
+    }
+  },
+  "required": ["scope"]
+}
+

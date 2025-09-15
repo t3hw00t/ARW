@@ -3,6 +3,8 @@ title: Error & Event Taxonomy
 ---
 
 # Error & Event Taxonomy
+Updated: 2025-09-14
+Type: Explanation
 
 Canonical event types
 - Episode lifecycle; obs/bel/int/act; tokens.in/out; tool.invoked/ran/error; policy.prompt/allow/deny; runtime.health; artifact.created.

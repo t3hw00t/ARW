@@ -20,8 +20,10 @@ fn all_ext_routes_have_admin_registry_entries() {
                 if p.is_empty() {
                     continue;
                 }
-                // We build under /admin, so prefix for registry lookup
-                let full = if p.starts_with('/') {
+                // We build under /admin, so prefix unless already an admin path
+                let full = if p.starts_with("/admin/") {
+                    p.to_string()
+                } else if p.starts_with('/') {
                     format!("/admin{}", p)
                 } else {
                     format!("/admin/{}", p)

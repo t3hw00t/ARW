@@ -1,78 +1,136 @@
 {
   "version": 1,
-  "updated": "2025-09-14 06:58 UTC",
+  "updated": "2025-09-15 00:37 UTC",
   "tasks": [
     {
       "id": "t-250914050900-ev10",
       "title": "Events: topics.rs dot.case only",
       "desc": "Normalize topic constant values to dot.case; remove CamelCase variants",
-      "status": "in_progress",
-      "notes": [],
-      "updated": "2025-09-14 05:09:00 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 16:59:11 UTC",
+          "text": "Enforced dot.case: linter checks topic constants and blocks string-literal publishes in service; topics.rs audited."
+        }
+      ],
+      "updated": "2025-09-14 16:59:12 UTC",
+      "done_at": "2025-09-14 16:59:12 UTC"
     },
     {
       "id": "t-250914050902-ev11",
       "title": "Events: replace publishers with constants",
       "desc": "Ensure all bus.publish() use topics.rs constants; no hard-coded strings",
-      "status": "in_progress",
-      "notes": [],
-      "updated": "2025-09-14 05:09:02 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 16:43:57 UTC",
+          "text": "Replaced string publish in arw-svc with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13."
+        },
+        {
+          "time": "2025-09-14 16:44:18 UTC",
+          "text": "Replaced string publish in arw-svc with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13."
+        }
+      ],
+      "updated": "2025-09-14 16:44:17 UTC",
+      "done_at": "2025-09-14 16:44:17 UTC"
     },
     {
       "id": "t-250914050904-ev12",
       "title": "Debug UI: dot.case listeners",
       "desc": "Switch /debug event listeners to dot.case kinds only",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-14 05:09:04 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 16:59:11 UTC",
+          "text": "Debug UI binds dot.case topics: added handlers for experiment.activated and generic listeners for task.completed/feedback.updated/catalog.updated; SSE filters already use dot.case prefixes."
+        }
+      ],
+      "updated": "2025-09-14 16:59:11 UTC",
+      "done_at": "2025-09-14 16:59:11 UTC"
     },
     {
       "id": "t-250914050906-ev13",
       "title": "Connector: task.completed + subjects",
       "desc": "Publish kind=task.completed and NATS subjects arw.events.task.completed and node variant",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-14 05:09:06 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 16:46:50 UTC",
+          "text": "Connector now uses dot.case constants for task.completed and builds subjects: cluster 'arw.events.task.completed' and node 'arw.events.node.<node_id>.task.completed'."
+        }
+      ],
+      "updated": "2025-09-14 16:46:51 UTC",
+      "done_at": "2025-09-14 16:46:51 UTC"
     },
     {
       "id": "t-250914050908-ev14",
       "title": "Feature Matrix: dot.case topics",
       "desc": "Update interfaces/features.json topics to dot.case; regen docs",
-      "status": "in_progress",
-      "notes": [],
-      "updated": "2025-09-14 05:09:08 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 16:59:12 UTC",
+          "text": "Feature Matrix events verified/updated: experiments list now includes experiment.activated; all entries dot.case."
+        }
+      ],
+      "updated": "2025-09-14 16:59:13 UTC",
+      "done_at": "2025-09-14 16:59:13 UTC"
     },
     {
       "id": "t-250914050910-ev15",
       "title": "Docs: dot.case normalization",
       "desc": "Update Events Vocabulary/Topics/Admin Endpoints examples to dot.case",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-14 05:09:10 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 16:53:00 UTC",
+          "text": "Docs updated for dot.case: topics table includes experiment.activated; reinforced constants usage and SSE guidance."
+        }
+      ],
+      "updated": "2025-09-14 16:53:01 UTC",
+      "done_at": "2025-09-14 16:53:01 UTC"
     },
     {
       "id": "t-250914050912-ev16",
       "title": "CI: event kind linter",
       "desc": "Add script to fail PRs on CamelCase event kinds or legacy subjects",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-14 05:09:12 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 16:52:59 UTC",
+          "text": "Enhanced linter: fails on string-literal Bus.publish in apps/arw-svc and CamelCase subjects; verified repo passes."
+        }
+      ],
+      "updated": "2025-09-14 16:53:00 UTC",
+      "done_at": "2025-09-14 16:53:00 UTC"
     },
     {
       "id": "t-250914050914-ev17",
       "title": "Gating keys: events:task.completed",
       "desc": "Add dot.case gating key aliases or migrate to dot.case in arw-core",
-      "status": "plan",
-      "notes": [],
-      "updated": "2025-09-14 05:09:14 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 16:53:02 UTC",
+          "text": "Gating key events:task.completed confirmed in arw-core and used in arw-svc; gating keys doc lists it."
+        }
+      ],
+      "updated": "2025-09-14 16:53:02 UTC",
+      "done_at": "2025-09-14 16:53:02 UTC"
     },
     {
       "id": "t-250914050916-ev18",
       "title": "Release notes: dot.case migration",
       "desc": "Write breaking change notes and mapping table; migration checklist",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-14 05:09:16 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 16:53:01 UTC",
+          "text": "Release notes expanded: dot.case constants, connector subjects, new experiment.activated topic."
+        }
+      ],
+      "updated": "2025-09-14 16:53:02 UTC",
+      "done_at": "2025-09-14 16:53:02 UTC"
     },
     {
       "id": "t-250909170247-9910",
@@ -327,24 +385,41 @@
       "title": "Spec: AsyncAPI+MCP artifacts + /spec/*",
       "desc": "Generate /spec/asyncapi.yaml and /spec/mcp-tools.json in CI and serve endpoints",
       "status": "todo",
-      "notes": [],
-      "updated": "2025-09-09 20:41:02 UTC"
+      "notes": [
+        {
+          "time": "2025-09-14 17:54:55 UTC",
+          "text": "Spec endpoints covered: openapi/asyncapi/mcp and index return 200 and correct content-type; added unit checks for token extraction, sha256 match, and IP key. Tests write temp spec files for isolation."
+        }
+      ],
+      "updated": "2025-09-14 17:54:55 UTC"
     },
     {
       "id": "t-250909224103-5251",
       "title": "Policy: hook feedback auto-apply",
       "desc": "Shadow mode default; policy-gated auto-apply with bounds and rate limits",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-09 20:41:03 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 17:12:10 UTC",
+          "text": "Auto-apply wired: toggle /feedback/auto drives automatic apply of policy-approved suggestions; emits intents/actions events and persists state."
+        }
+      ],
+      "updated": "2025-09-14 17:12:10 UTC",
+      "done_at": "2025-09-14 17:12:10 UTC"
     },
     {
       "id": "t-250909224103-0211",
       "title": "UI: near-live feedback in /debug",
       "desc": "Consume Feedback.Suggested via SSE; show deltas with rationale/confidence",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-09 20:41:03 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 17:12:08 UTC",
+          "text": "Debug UI already renders live feedback.suggested; added auto-apply hook: when enabled, safe suggestions are auto-applied on feedback.suggested events (policy-gated)."
+        }
+      ],
+      "updated": "2025-09-14 17:12:09 UTC",
+      "done_at": "2025-09-14 17:12:09 UTC"
     },
     {
       "id": "t-250909225651-0602",
@@ -422,22 +497,33 @@
       "id": "t-250911230236-6445",
       "title": "Security: per-route gating layers; slim global admin middleware",
       "desc": "Attach arw_gate checks (or equivalent) via route-layer middleware; remove wrapper functions and reduce prefix-gated global middleware to just truly global endpoints; add per-route tests for 403/429/OK.",
-      "status": "paused",
+      "status": "done",
       "notes": [
         {
           "time": "2025-09-11 21:03:46 UTC",
           "text": "Duplicate of t-250911230252-9858; track only the latter."
+        },
+        {
+          "time": "2025-09-14 17:16:47 UTC",
+          "text": "Per-route gating via #[arw_gate] confirmed across endpoints; admin middleware slimmed and hardened (hashed token, per-key RL)."
         }
       ],
-      "updated": "2025-09-11 21:03:46 UTC"
+      "updated": "2025-09-14 17:16:47 UTC",
+      "done_at": "2025-09-14 17:16:47 UTC"
     },
     {
       "id": "t-250911230252-9858",
       "title": "Security: per-route gating layers; slim global admin middleware",
       "desc": "Attach arw_gate checks (or equivalent) via route-layer middleware; remove wrapper functions and reduce prefix-gated global middleware to just truly global endpoints; add per-route tests for 403/429/OK.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-11 21:02:52 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 17:16:48 UTC",
+          "text": "Duplicate of per-route gating/admin middleware; marked done with note."
+        }
+      ],
+      "updated": "2025-09-14 17:16:48 UTC",
+      "done_at": "2025-09-14 17:16:48 UTC"
     },
     {
       "id": "t-250911230258-1357",
@@ -471,9 +557,19 @@
       "id": "t-250911230306-7961",
       "title": "Introspection: auto-generate /about endpoints from router",
       "desc": "Wrap Router with a builder that records (method,path) on registration; at startup snapshot the registry and serve via /about; remove static array to prevent drift; add test to ensure a new route appears in /about.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-11 21:03:06 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 20:06:36 UTC",
+          "text": "/about now includes runtime-recorded public routes (METHOD path) + admin registry; drift-free."
+        },
+        {
+          "time": "2025-09-14 20:14:37 UTC",
+          "text": "/about now reports counts: {public, admin, total} alongside METHOD path list."
+        }
+      ],
+      "updated": "2025-09-14 20:14:37 UTC",
+      "done_at": "2025-09-14 20:06:36 UTC"
     },
     {
       "id": "t-250911230308-0779",
@@ -487,73 +583,130 @@
       "id": "t-250911230312-0863",
       "title": "Admin auth: hashed tokens + per-token/IP sliding rate-limit",
       "desc": "Support multiple admin tokens (hashed or HMACed), rotate without restart; replace fixed-window RL with sliding window keyed by token/IP; keep constant-time compare where applicable; add tests for lockout and fairness.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-11 21:03:12 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 17:16:46 UTC",
+          "text": "Admin auth: support ARW_ADMIN_TOKEN_SHA256 (constant-time compare) and per-token/IP sliding rate limit via token bucket (ARW_ADMIN_RL=limit/window)."
+        }
+      ],
+      "updated": "2025-09-14 17:16:46 UTC",
+      "done_at": "2025-09-14 17:16:46 UTC"
     },
     {
       "id": "t-250911230316-4765",
       "title": "NATS: TLS/auth config and reconnect tuning",
       "desc": "Add creds/jwt/nkey/TLS config to cluster section; implement robust reconnect/backoff; document subject ACLs; update connector + svc to use secure options; extend compose/helm values.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-11 21:03:16 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 17:26:21 UTC",
+          "text": "NATS TLS/auth via env: ARW_NATS_TLS + ARW_NATS_USER/PASS; initial connect retries/backoff; events + queue clients honor settings."
+        }
+      ],
+      "updated": "2025-09-14 17:26:37 UTC",
+      "done_at": "2025-09-14 17:26:37 UTC"
     },
     {
       "id": "t-250911230320-8615",
       "title": "Metrics: structured registry w/ histograms",
       "desc": "Adopt metrics + prometheus exporters; replace manual string metrics; add request latency histogram, per-endpoint counters; keep ext/stats JSON for UI; wire registry to /metrics.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-11 21:03:20 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 17:23:43 UTC",
+          "text": "Added per-route latency histograms with Prometheus exposition: arw_http_route_latency_ms_* and global arw_http_latency_ms_*; kept ewma/p95; route stats JSON unchanged."
+        }
+      ],
+      "updated": "2025-09-14 17:23:43 UTC",
+      "done_at": "2025-09-14 17:23:43 UTC"
     },
     {
       "id": "t-250911230325-2116",
       "title": "Tests: end-to-end coverage for endpoints & gating",
       "desc": "Add ServiceExt::oneshot integration tests for /healthz,/about,/tools,/memory,/models,/chat plus policy branches (403/429/OK); add test fixtures for admin token and x-arw-gate capsule; wire into CI.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-11 21:03:25 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 17:38:18 UTC",
+          "text": "Added gating E2E tests: memory.apply and feedback.apply return 403 when gated via deny_user. Fixed admin routes test to not double-prefix existing /admin paths. Spec now enumerates models.download.progress status/code values for drift checks."
+        }
+      ],
+      "updated": "2025-09-14 17:38:19 UTC",
+      "done_at": "2025-09-14 17:38:19 UTC"
     },
     {
       "id": "t-250911230329-4722",
       "title": "CLI: migrate arw-cli to clap",
       "desc": "Use clap derive for subcommands, --help generation, shell completions; keep existing verbs (paths/tools/gate/capsule) and add JSON output flag; add tests for parsing.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-11 21:03:29 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 17:39:55 UTC",
+          "text": "arw-cli migrated to clap: subcommands for paths, tools, gate keys, capsule {template, gen-ed25519, sign-ed25519}. Default prints bootstrap (hello + paths)."
+        },
+        {
+          "time": "2025-09-14 17:40:10 UTC",
+          "text": "arw-cli migrated to clap: subcommands for paths, tools, gate keys, capsule {template, gen-ed25519, sign-ed25519}. Default prints bootstrap (hello + paths)."
+        }
+      ],
+      "updated": "2025-09-14 17:40:12 UTC",
+      "done_at": "2025-09-14 17:40:12 UTC"
     },
     {
       "id": "t-250911230333-9794",
       "title": "RPU: watch trust store and strengthen verification",
       "desc": "Add fs-watch for ARW_TRUST_CAPSULES to hot-reload issuers; enrich ABAC checks; expose /introspect/trust for debugging; tests with sample ed25519 and secp256k1 keys/capsules.",
       "status": "todo",
-      "notes": [],
-      "updated": "2025-09-11 21:03:33 UTC"
+      "notes": [
+        {
+          "time": "2025-09-14 23:17:01 UTC",
+          "text": "Added /admin/rpu/trust and /admin/rpu/reload endpoints; gating keys rpu:trust:get and rpu:trust:reload; will add file watch next."
+        }
+      ],
+      "updated": "2025-09-14 23:17:01 UTC"
     },
     {
       "id": "t-250912001055-0044",
       "title": "Phase 2: Observations read-model + /state/observations",
       "desc": "Add obs store; fold from bus subscriber; expose GET /state/observations; drive Debug UI off this.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-11 22:10:55 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 17:02:35 UTC",
+          "text": "Public /state/observations exists; admin wrapper at /admin/state/observations; rolling store wired via ext::state_api::obs_on_event and bus subscriber."
+        }
+      ],
+      "updated": "2025-09-14 17:02:35 UTC",
+      "done_at": "2025-09-14 17:02:35 UTC"
     },
     {
       "id": "t-250912001100-3438",
       "title": "Phase 2: Beliefs/Intents/Actions stores + endpoints",
       "desc": "Define typed events; add stores for beliefs/intents/actions; add GET /state/{beliefs,intents,actions}; wire feedback engine as belief generator and reconciler to apply intents under policy.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-11 22:11:00 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 17:02:36 UTC",
+          "text": "Beliefs/Intents/Actions rolling stores implemented; endpoints: /state/{beliefs,intents,actions} and admin variants; wired via on_event with corr_id episodes stitching."
+        }
+      ],
+      "updated": "2025-09-14 17:02:36 UTC",
+      "done_at": "2025-09-14 17:02:36 UTC"
     },
     {
       "id": "t-250912001105-7850",
       "title": "Phase 3: Episodes + Debug UI reactive views",
       "desc": "Stitch episodes by corr_id; persist episodic summaries; expose GET /state/episodes; update Debug UI to render SSE + /state/* in a single live view (truth window).",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-11 22:11:05 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 17:02:36 UTC",
+          "text": "Episodes view: /state/episodes endpoint + Debug UI panel with live refresh and episode snapshots; stitch by corr_id in ext/state_api.rs."
+        }
+      ],
+      "updated": "2025-09-14 17:02:37 UTC",
+      "done_at": "2025-09-14 17:02:37 UTC"
     },
     {
       "id": "t-250912020516-8533",
@@ -573,17 +726,29 @@
       "id": "t-250912024838-4137",
       "title": "UI: Episodes filters + details toggle",
       "desc": "Add errors-only checkbox and free-text filter; expand/collapse details per episode with duration and badge.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-12 00:48:38 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 17:12:10 UTC",
+          "text": "Episodes filters (errors-only + substring) and details toggle exist; confirmed and kept live refresh."
+        }
+      ],
+      "updated": "2025-09-14 17:12:11 UTC",
+      "done_at": "2025-09-14 17:12:11 UTC"
     },
     {
       "id": "t-250912024843-7597",
       "title": "Resources: Hierarchy/Governor services",
       "desc": "Encapsulate hierarchy (hello/offer/accept/state/role_set) and governor (profile/hints) into typed services; endpoints prefer services; publish corr_id events; persist orchestration.\n",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-12 00:48:43 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 17:12:11 UTC",
+          "text": "Hierarchy/Governor services implemented and registered in AppState; admin APIs mounted; events emitted on changes."
+        }
+      ],
+      "updated": "2025-09-14 17:12:12 UTC",
+      "done_at": "2025-09-14 17:12:12 UTC"
     },
     {
       "id": "t-250912024851-8114",
@@ -593,6 +758,238 @@
       "notes": [],
       "updated": "2025-09-14 00:00:00 UTC",
       "done_at": "2025-09-14 00:00:00 UTC"
+    },
+    {
+      "id": "t-250913001003-1002",
+      "title": "CAS HTTP caching + ranges",
+      "desc": "Add ETag/Last-Modified/immutable cache, HEAD, ranges, 304/416 handling, tests for blob endpoint.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 20:06:36 UTC",
+          "text": "Added HEAD, Accept-Ranges, If-Modified-Since, and 416 handling; tests added."
+        }
+      ],
+      "updated": "2025-09-14 20:06:36 UTC",
+      "done_at": "2025-09-14 20:06:36 UTC"
+    },
+    {
+      "id": "t-250914210000-doc01",
+      "title": "Docs: /about endpoints (METHOD path)",
+      "desc": "Clarify /about endpoints format and sources (runtime recorder + admin registry).",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 20:06:36 UTC",
+          "text": "Docs updated: /about endpoints now include METHOD path; sources and example adjusted."
+        }
+      ],
+      "updated": "2025-09-14 20:06:36 UTC",
+      "done_at": "2025-09-14 20:06:36 UTC"
+    },
+    {
+      "id": "t-250914223000-ui01",
+      "title": "UI Kernel: sidecar lanes + SSE/read store",
+      "desc": "Single SSE client, RFC6902 patch store, lanes (Timeline/Context/Policy/Metrics/Models), shared CSS/JS.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 22:30:00 UTC",
+          "text": "common.js/css updated; lanes wired to /events and /state/*; policy pills, context bullets, metrics table."
+        }
+      ],
+      "updated": "2025-09-14 22:30:00 UTC",
+      "done_at": "2025-09-14 22:30:00 UTC"
+    },
+    {
+      "id": "t-250914223010-ui02",
+      "title": "Hub Compare: Text/JSON, Image, CSV",
+      "desc": "Add diff with Only changes/Wrap/Copy; image slider; CSV/TSV key‑diff with summary and copy.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 22:31:00 UTC",
+          "text": "hub.html/js + styles; drag‑drop inputs; compact tables; documented in Workflow Views."
+        }
+      ],
+      "updated": "2025-09-14 22:31:00 UTC",
+      "done_at": "2025-09-14 22:31:00 UTC"
+    },
+    {
+      "id": "t-250914223015-ui03",
+      "title": "Chat Compare: Pin A/B and diff",
+      "desc": "Allow pinning messages to A/B slots and run Text/JSON diff with toggles.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 22:32:00 UTC",
+          "text": "chat.html/js compare section added; pin buttons per message; uses shared highlighter."
+        }
+      ],
+      "updated": "2025-09-14 22:32:00 UTC",
+      "done_at": "2025-09-14 22:32:00 UTC"
+    },
+    {
+      "id": "t-250914223020-ui04",
+      "title": "Events polish: presets + filters + pretty/wrap/pause",
+      "desc": "Prefix presets, include/exclude filters, replay, wrap/pretty/pause; clear/copy actions.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 22:33:00 UTC",
+          "text": "events.html/js updated; capped buffer; shows kind+timestamp."
+        }
+      ],
+      "updated": "2025-09-14 22:33:00 UTC",
+      "done_at": "2025-09-14 22:33:00 UTC"
+    },
+    {
+      "id": "t-250914223025-ui05",
+      "title": "Logs polish: route filter + focus mode",
+      "desc": "Filter by route substring; focus mode hides raw JSON; wrap toggle; copy JSON.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 22:34:00 UTC",
+          "text": "logs.html/js updated; top routes and event kinds tables."
+        }
+      ],
+      "updated": "2025-09-14 22:34:00 UTC",
+      "done_at": "2025-09-14 22:34:00 UTC"
+    },
+    {
+      "id": "t-250914223030-ui06",
+      "title": "Command palette (Ctrl/Cmd‑K)",
+      "desc": "Open windows (Hub/Chat/Training/Debug/Events), refresh models, SSE replay, toggle focus, copy last event.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 22:35:00 UTC",
+          "text": "common.js palette; mounted in Hub/Chat/Training."
+        }
+      ],
+      "updated": "2025-09-14 22:35:00 UTC",
+      "done_at": "2025-09-14 22:35:00 UTC"
+    },
+    {
+      "id": "t-250914223040-ui07",
+      "title": "Metrics: P95 sparkline per route",
+      "desc": "Client‑side short history sparkline in Metrics lane; P95 SLO color.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 22:36:00 UTC",
+          "text": "Sparkline added; 32‑point ring buffer per route; SLO=150ms."
+        }
+      ],
+      "updated": "2025-09-14 22:36:00 UTC",
+      "done_at": "2025-09-14 22:36:00 UTC"
+    },
+    {
+      "id": "t-250914223100-ui08",
+      "title": "Templates: save/load (prefs)",
+      "desc": "Persist focused/layout lanes under namespaced prefs; apply on load.",
+      "status": "in_progress",
+      "notes": [
+        {
+          "time": "2025-09-14 22:37:00 UTC",
+          "text": "Hub saves focused flag + lanes; next: per‑project file persistence."
+        }
+      ],
+      "updated": "2025-09-14 22:37:00 UTC"
+    },
+    {
+      "id": "t-250914223200-cap01",
+      "title": "Screenshot tool (OS‑level capture)",
+      "desc": "Rust tool to capture display/region; save to .arw/screenshots; emit screenshots.captured; gate by io:screenshot.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 22:55:00 UTC",
+          "text": "Implemented with screenshots+image crates; downscale preview_b64; emits screenshots.captured."
+        }
+      ],
+      "updated": "2025-09-14 22:55:00 UTC",
+      "done_at": "2025-09-14 22:55:00 UTC"
+    },
+    {
+      "id": "t-250914223210-cap02",
+      "title": "Window crop from Tauri bounds",
+      "desc": "Detect window bounds (outer_position/size) and crop screenshot region accordingly.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 22:56:00 UTC",
+          "text": "Added Tauri command active_window_bounds and UI actions (palette/chat) to capture this window via region."
+        }
+      ],
+      "updated": "2025-09-14 22:56:00 UTC",
+      "done_at": "2025-09-14 22:56:00 UTC"
+    },
+    {
+      "id": "t-250914223220-cap03",
+      "title": "OCR for screenshots (optional)",
+      "desc": "Integrate OCR (tesseract/rapidocr) to extract text from captured images for search/instructions.",
+      "status": "in_progress",
+      "notes": [
+        {
+          "time": "2025-09-14 23:05:00 UTC",
+          "text": "Tool stub added using leptess behind feature ocr_tesseract; Chat can auto-run OCR if enabled."
+        }
+      ],
+      "updated": "2025-09-14 23:05:00 UTC"
+    },
+    {
+      "id": "t-250914230000-ui12",
+      "title": "Activity thumbnails: Open/Copy actions",
+      "desc": "Add open path and copy path actions under screenshot thumbnails in Activity lane.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 23:06:00 UTC",
+          "text": "Buttons added in sidecar Activity lane; uses open_path and clipboard helper."
+        }
+      ],
+      "updated": "2025-09-14 23:06:00 UTC",
+      "done_at": "2025-09-14 23:06:00 UTC"
+    },
+    {
+      "id": "t-250914230010-ui13",
+      "title": "Auto OCR preference + toggle",
+      "desc": "Persist auto OCR preference; Chat toggle and palette action to flip it.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-14 23:07:00 UTC",
+          "text": "Chat toggle added; palette action updates prefs and Chat checkbox."
+        }
+      ],
+      "updated": "2025-09-14 23:07:00 UTC",
+      "done_at": "2025-09-14 23:07:00 UTC"
+    },
+    {
+      "id": "t-250914223230-ui09",
+      "title": "Runs: pin artifacts to compare",
+      "desc": "Enable pin‑to‑compare from runs/artifacts list in Hub; deep‑link compare sets.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-14 22:38:30 UTC"
+    },
+    {
+      "id": "t-250914223240-ui10",
+      "title": "Export CSV: logs/table diffs",
+      "desc": "Add Export CSV for top routes and for CSV/Table diff results.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-14 22:38:40 UTC"
+    },
+    {
+      "id": "t-250914223250-ui11",
+      "title": "Route SLO selector",
+      "desc": "Allow changing SLO threshold (P95) in Metrics lane and Logs tables.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-14 22:38:50 UTC"
     }
   ]
 }

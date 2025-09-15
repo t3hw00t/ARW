@@ -3,6 +3,8 @@ title: Budgets & Context Economy
 ---
 
 # Budgets & Context Economy
+Updated: 2025-09-14
+Type: Explanation
 
 Motivation
 - Token/time/compute are scarce; retrieval can drown generation.

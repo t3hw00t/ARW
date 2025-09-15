@@ -2,7 +2,10 @@
 title: AppSec Harness
 ---
 
-# AppSec Harness (Policy‑Integrated)
+# AppSec Harness
+
+Updated: 2025-09-14
+Type: Explanation
 
 Purpose
 - Bake LLM‑specific security checks into development and runtime: prompt‑injection, insecure output handling, tool SSRF, data leakage.

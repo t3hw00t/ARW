@@ -4,7 +4,8 @@ title: CI & Releases
 
 # CI & Releases
 
-Updated: 2025-09-12
+Updated: 2025-09-14
+Type: Reference
 
 ## Continuous Integration
 - Build and test on Linux and Windows for every push and PR.
@@ -21,6 +22,13 @@ Updated: 2025-09-12
 ## Artifacts
 - Packaging scripts assemble a portable bundle with binaries and configs.
 - Windows and Linux bundles are uploaded as CI artifacts.
+
+### Windows Launcher Bundles
+- Workflow: `.github/workflows/tauri-windows.yml` builds launcher MSIs via a two‑arch matrix (x64 primary; ARM64 best‑effort) and uploads them with svc/cli.
+- MSI content: includes `arw-svc.exe` and `arw-cli.exe` so service autostart works out‑of‑the‑box.
+- Optional code signing: enable by adding `WINDOWS_CERT_PFX` (base64 PFX) and `WINDOWS_CERT_PASSWORD` secrets; artifacts are signed with `signtool`.
+- Release: on tagged pushes (`v*.*.*`), x64 MSI always publishes; ARM64 MSI publishes when the toolchain supports cross‑bundling.
+- Smoke test: x64 only — installs the MSI on the runner, verifies files, launches briefly, polls `/healthz`, then uninstalls (non‑blocking).
 
 ## Docs Site
 - Docs are published to GitHub Pages from the `gh-pages` branch.
@@ -76,6 +84,12 @@ just interfaces-diff        # OpenAPI diff vs origin/main (Docker)
 just docs-deprecations      # generate deprecations doc
 just docs-release-notes     # generate release notes (BASE_REF=... override)
 just check-enums            # verify ModelsDownloadProgress status/code enums match code
+
+# Design tokens (single source)
+just tokens-sync            # copy assets/design tokens to docs and launcher UI
+just tokens-check           # verify synced copies match single source
+just tokens-build           # regenerate CSS/JSON tokens from W3C tokens
+just tokens-rebuild         # build + sync + check tokens (SSoT)
 ```
 
 Tips
@@ -92,4 +106,7 @@ cargo +nightly udeps --workspace --all-targets
 # Verify MSRV
 cargo install cargo-msrv --locked
 cargo msrv verify
+
+# Event naming (dot.case)
+python3 scripts/lint_event_names.py
 ```

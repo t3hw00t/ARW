@@ -3,6 +3,8 @@ title: Runtime Matrix
 ---
 
 # Runtime Matrix
+Updated: 2025-09-14
+Type: How‑to
 
 Grid of Models × Hardware × Sandboxes with live health/throughput and load. Pin preferred combos per agent/project; surface degradations as events.
 

@@ -5,6 +5,7 @@ title: Performance & Reasoning Playbook
 # Performance & Reasoning Playbook
 
 Updated: 2025-09-12
+Type: How‑to
 
 Goal
 - Deliver outputs that are fast when it matters, deep when needed, well‑grounded, and reproducible—by default.

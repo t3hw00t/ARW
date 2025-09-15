@@ -2,9 +2,12 @@
 title: Memory & World Schemas
 ---
 
-# Memory & World Schemas (Planned)
+# Memory & World Schemas
 
-Updated: 2025-09-12
+Updated: 2025-09-14
+Type: Reference
+
+Status: Planned
 
 Schemas
 - Memory Quarantine Entry — spec/schemas/memory_quarantine_entry.json

@@ -3,6 +3,8 @@ title: Context Working Set (Never‑Out‑Of‑Context)
 ---
 
 # Context Working Set (Never‑Out‑Of‑Context)
+Updated: 2025-09-14
+Type: Explanation
 
 Core idea
 - Keep only what the model needs right now in the prompt; keep everything else in structured memories you can fetch, compress, or rehydrate on demand.

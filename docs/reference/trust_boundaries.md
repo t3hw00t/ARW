@@ -1,4 +1,6 @@
 # Trust Boundaries
+Updated: 2025-09-12
+Type: Reference
 
 Microsummary: Centralize default‑deny posture and permission prompts; link from tools/recipes. Stable.
 

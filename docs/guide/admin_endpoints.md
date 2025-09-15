@@ -8,6 +8,7 @@ title: Admin Endpoints
 ARW exposes a unified admin/ops HTTP namespace under `/admin`. All sensitive routes live here so updates can’t miss gating.
 
 Updated: 2025-09-14
+Type: How‑to
 
 - Base: `/admin`
 - Index (HTML): `/admin`
@@ -16,7 +17,7 @@ Updated: 2025-09-14
 
 ### Public: /about
 - Path: `GET /about`
-- Returns a small JSON document with service + branding info:
+- Returns a small JSON document with service + branding info and a live endpoint index:
   - `name`: "Agent Hub (ARW)"
   - `tagline`: "Your private AI control room that can scale and share when you choose."
   - `description`: one‑paragraph plain‑terms summary
@@ -24,7 +25,11 @@ Updated: 2025-09-14
   - `version`: semantic version string
   - `role`: current node role
   - `docs_url`: base docs URL if configured
-  - `endpoints`: key useful paths (e.g., `/spec/*`, `/healthz`, `/admin/*`)
+  - `counts`: endpoint counts — `{ public, admin, total }`.
+  - `endpoints`: list of known endpoints as strings in the form `"METHOD /path"`.
+    - Public endpoints are recorded at router build time (source-of-truth is the runtime recorder).
+    - Admin endpoints come from the compile-time registry via `#[arw_admin]` (prevents drift).
+    - The list is deduped and sorted.
 
 Example
 ```json
@@ -36,7 +41,14 @@ Example
   "version": "0.1.0",
   "role": "Home",
   "docs_url": "https://t3hw00t.github.io/ARW/",
-  "endpoints": ["/spec/openapi.yaml", "/healthz", "/admin/events", "/admin/probe"]
+  "counts": { "public": 12, "admin": 48, "total": 60 },
+  "endpoints": [
+    "GET /healthz",
+    "GET /version",
+    "GET /spec/openapi.yaml",
+    "GET /admin/events",
+    "GET /admin/probe"
+  ]
 }
 ```
 
@@ -89,6 +101,25 @@ Rate limiting:
 - `/admin/governor/*`: governor profile & hints
   - Hints include retrieval/formatting knobs: `retrieval_k`, `mmr_lambda`, `compression_aggr`, `vote_k`, `context_budget_tokens`, `context_item_budget_tokens`, `context_format`, `include_provenance`, `context_item_template`, `context_header`, `context_footer`, `joiner`.
 - `/admin/hierarchy/*`: negotiation & role/state helpers
+- RPU (Regulatory Provenance Unit): trust store
+  - `GET /admin/rpu/trust` — redacted trust issuers (id, alg)
+  - `POST /admin/rpu/reload` — reload trust store from disk (publishes `rpu.trust.changed`)
+  - Gating keys: `rpu:trust:get`, `rpu:trust:reload`
+
+Examples
+```bash
+# Trust summary
+curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
+  "$BASE/admin/rpu/trust" | jq
+
+# Reload trust (emits rpu.trust.changed)
+curl -sS -X POST -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
+  "$BASE/admin/rpu/reload" | jq
+
+# Watch only trust events (SSE)
+curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
+  "$BASE/admin/events?prefix=rpu.&replay=5"
+```
 - World diffs review (planned MVP):
   - `POST /admin/world_diffs/queue` — queue a world diff from collaborators for review
   - `POST /admin/world_diffs/decision` — decide queued diff {apply|reject|defer}
@@ -256,11 +287,13 @@ Notes
 - Success responses use a consistent envelope `{ ok: true, data: ... }`.
 - Errors return RFC‑7807 ProblemDetails with HTTP status codes. Missing services and unexpected errors are mapped to `500` with a structured JSON body.
 - `GET  /admin/models/by-hash/:sha256` — Serve a CAS blob by hash (egress‑gated; `io:egress:models.peer`).
-- `GET  /admin/models/downloads_metrics` — Lightweight downloads metrics used for admission checks; returns `{ ewma_mbps: number|null, started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total }`.
+- `GET  /admin/state/models_metrics` — Lightweight downloads metrics used for admission checks; returns `{ ewma_mbps: number|null, started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total }`.
+- `GET  /admin/state/egress/ledger` — Last N ledger entries (JSONL → JSON array).
+- `GET  /admin/state/egress/ledger/summary` — Summary with optional filters (`since_ms`, `decision`, `reason_code`, `project_id`); returns `{ count, scanned, bytes_in, bytes_out, by_decision, top_reasons, sample }`.
  - `GET  /admin/state/models_metrics` — Read‑model counters `{ started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total, ewma_mbps }`.
 - SSE: `state.read.model.patch` with id=`models_metrics` publishes RFC‑6902 JSON Patches with coalescing.
- - `POST /admin/models/concurrency` — Set models download concurrency at runtime. Body: `{ max: number, block?: boolean }`. When `block` is `true` (default), shrinking waits for permits; when `false`, it shrinks opportunistically.
- - `GET  /admin/models/concurrency` — Get current concurrency, including `{ configured_max, available_permits, held_permits, hard_cap }`.
+- `POST /admin/models/concurrency` — Set models download concurrency at runtime. Body: `{ max: number, block?: boolean }`. When `block` is `true` (default), shrinking waits for permits; when `false`, it shrinks opportunistically.
+- `GET  /admin/models/concurrency` — Get current concurrency, including `{ configured_max, available_permits, held_permits, hard_cap, pending_shrink? }`.
   - `GET  /admin/models/jobs` — Snapshot of active jobs and inflight hashes for observability.
     
     Example response
@@ -275,6 +308,9 @@ Notes
       "concurrency": { "configured_max": 2, "available_permits": 1, "held_permits": 0 }
     }
     ```
+
+See also
+- Reference → Models Typed Shapes for the stable response schemas used by these endpoints.
 
 ### Tools
 

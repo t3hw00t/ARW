@@ -6,15 +6,32 @@
     <title>Agent Hub (ARW) Logs</title>
   </head>
   <body>
+    <a href="#out" class="skip-link">Skip to logs</a>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="ui-kit.css" />
     <link rel="stylesheet" href="common.css" />
     <link rel="stylesheet" href="logs.css" />
     <script src="common.js" defer></script>
-    <div class="toolbar">
-      <label>Port: <input id="port" type="number" min="1" max="65535" value="8090"></label>
+    <div class="toolbar" role="region" aria-label="Logs controls">
+      <label>Port: <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8090"></label>
       <button id="btn-refresh" class="primary">Refresh</button>
-      <span id="stat"></span>
+      <label>Filter: <input id="routeFilter" aria-label="Route filter" type="text" placeholder="route contains…"></label>
+      <label class="dim">SLO p95 (ms): <input id="slo" aria-label="SLO threshold" type="number" min="10" step="10" value="150" style="width:90px"></label>
+      <label class="dim"><input type="checkbox" id="focus"/> focus tables</label>
+      <label class="dim"><input type="checkbox" id="auto" checked> auto</label>
+      <label class="dim"><input type="checkbox" id="wrap" checked> wrap</label>
+      <button id="btn-copy">Copy JSON</button>
+      <button id="btn-shortcuts" class="ghost" title="Show keyboard shortcuts">Shortcuts</button>
+      <button id="btn-help" class="ghost" title="Open keyboard shortcuts docs">Help</button>
+      <span id="statusBadges" class="badges" style="margin-left:auto"></span>
+      <span class="badges" style="margin-left:12px">
+        <span id="cpuBadge" class="badge">CPU: –</span>
+        <span id="memBadge" class="badge">Mem: –</span>
+        <span id="gpuBadge" class="badge">GPU: –</span>
+      </span>
+      <span class="dim">Status: <b id="stat" role="status" aria-live="polite">…</b></span>
     </div>
-    <div id="out"></div>
+    <div id="out" role="region" aria-label="Log output"></div>
     <script src="logs.js" defer></script>
   </body>
   </html>

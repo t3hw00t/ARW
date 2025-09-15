@@ -57,6 +57,10 @@ pub(crate) fn config_path() -> PathBuf {
 pub(crate) fn snapshots_dir() -> PathBuf {
     state_dir().join("snapshots")
 }
+// Screenshots root directory (planned tooling)
+pub(crate) fn screenshots_dir() -> PathBuf {
+    state_dir().join("screenshots")
+}
 pub(crate) fn audit_path() -> PathBuf {
     state_dir().join("audit.log")
 }

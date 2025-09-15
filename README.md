@@ -3,10 +3,13 @@
 <div align="left">
 
 [![CI](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml/badge.svg)](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml)
+[![Docs Check](https://github.com/t3hw00t/ARW/actions/workflows/docs-check.yml/badge.svg)](https://github.com/t3hw00t/ARW/actions/workflows/docs-check.yml)
 [![Docs](https://img.shields.io/badge/docs-material%20for%20mkdocs-blue)](https://t3hw00t.github.io/ARW/)
 [![Container](https://img.shields.io/badge/ghcr-arw--svc-blue?logo=docker)](https://ghcr.io/t3hw00t/arw-svc)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-informational)](#licensing)
 [![Release](https://img.shields.io/github/v/release/t3hw00t/ARW?display_name=tag)](https://github.com/t3hw00t/ARW/releases)
+[![Windows x64 MSI](https://img.shields.io/badge/Windows%20x64-MSI-blue?logo=windows)](https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-x64.msi)
+[![Windows ARM64 MSI](https://img.shields.io/badge/Windows%20ARM64-MSI-blue?logo=windows)](https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-arm64.msi)
 
 </div>
 
@@ -74,7 +77,7 @@ The details that make ARW practical in real workflows.
 - Live events (SSE): one stream drives UIs and tools. See `docs/architecture/events_vocabulary.md` and `docs/architecture/sse_patch_contract.md`.
 - Debug UI: inspect episodes, state snapshots, and traces. See `docs/guide/troubleshooting.md`.
 - Recipes + Schemas: installable strategy packs with JSON Schemas. See `docs/guide/recipes.md` and `spec/schemas/`.
-- Observability: tracing/logging/metrics and journal. See `docs/architecture/observability_otel.md`. CI enforces snappy budgets; see `docs/guide/snappy_bench.md`.
+- Observability: tracing/logging/metrics and journal. See `docs/architecture/observability_otel.md`. CI enforces interactive performance budgets; see `docs/guide/interactive_bench.md`.
  - Caching Layers: Action Cache with CAS and singleflight; digest‑addressed blob serving with strong validators; read‑models over SSE (JSON Patch deltas with coalescing); llama.cpp prompt caching. See `docs/architecture/caching_layers.md`.
 
 ## Try ARW in 2 Minutes
@@ -84,6 +87,16 @@ Windows
 powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
 ```
+
+- Windows installer: in progress. See Windows Install & Launcher for current paths and the launcher:
+  - docs/guide/windows_install.md
+  - MSI bundles are attached to GitHub Releases (signed when CI secrets are present).
+
+## Download
+
+- Windows (x64): https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-x64.msi
+- Windows (ARM64, when available): https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-arm64.msi
+- All assets and notes: https://github.com/t3hw00t/ARW/releases
 
 Linux / macOS
 ```bash
@@ -147,6 +160,24 @@ scripts/audit.ps1 -Interactive
 
 Screenshots → https://t3hw00t.github.io/ARW/guide/screenshots/
 
+## Docker Quickstart
+
+```bash
+# Build locally
+docker build -f apps/arw-svc/Dockerfile -t arw-svc:dev .
+
+# Run (dev): binds on localhost unless ARW_BIND set
+docker run --rm -p 8090:8090 \
+  -e ARW_PORT=8090 -e ARW_BIND=0.0.0.0 \
+  -e ARW_DEBUG=1 -e ARW_ADMIN_TOKEN=dev-admin \
+  arw-svc:dev
+
+# Verify
+curl -sS http://127.0.0.1:8090/healthz
+```
+
+Pull from GHCR (on releases): `ghcr.io/t3hw00t/arw-svc:latest`. See the Docker guide for compose and hardening.
+
 ## Event Topics (Canonical)
 
 - Source of truth: `apps/arw-svc/src/ext/topics.rs` — centralized constants used by the service.
@@ -161,7 +192,7 @@ Screenshots → https://t3hw00t.github.io/ARW/guide/screenshots/
 
 ## What’s Inside
 
-- Service: user‑mode HTTP with debug UI and SSE events. “Snappy by Default” budgets prioritize first feedback within 50 ms and first partial ≤150 ms; see `docs/ethics/SNAPPY_CHARTER.md`.
+- Service: user‑mode HTTP with debug UI and SSE events. Interactive performance budgets prioritize first feedback within 50 ms and first partial ≤150 ms; see `docs/guide/interactive_performance.md` and `docs/guide/interactive_bench.md`.
 - Tools: macro‑driven registration with generated JSON Schemas
 - Observability: tracing/logging/metrics and event journal (optional)
 - Packaging: portable installs and per‑user state by default
@@ -192,6 +223,9 @@ Universal sidecar (always on)
 
 - Quickstart guide: `docs/guide/quickstart.md`
 - Performance & Reasoning Playbook: `docs/guide/performance_reasoning_playbook.md`
+- Design Theme & Tokens: `docs/developer/design_theme.md`
+- Open Standards & Practices: `docs/developer/standards.md`
+- ADRs: `docs/adr/0001-design-tokens-ssot.md`, `docs/adr/0002-events-naming.md`
 - Architecture: `docs/architecture/object_graph.md` and `docs/architecture/events_vocabulary.md`
 - World Model: `docs/WORLD_MODEL.md`
 - Desktop Launcher: `docs/guide/launcher.md`
