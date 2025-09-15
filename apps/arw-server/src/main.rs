@@ -87,8 +87,10 @@ mod api_orchestrator;
 mod api_policy;
 mod api_spec;
 mod api_state;
+mod coverage;
 mod egress_proxy;
 mod util;
+mod working_set;
 
 #[derive(Clone)]
 pub(crate) struct AppState {

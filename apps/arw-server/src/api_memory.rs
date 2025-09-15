@@ -6,7 +6,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::AppState;
+use crate::{working_set, AppState};
 
 #[derive(Deserialize)]
 pub(crate) struct MemPutReq {
@@ -162,124 +162,61 @@ pub(crate) struct MemCoherentReq {
     pub limit: Option<i64>,
     #[serde(default)]
     pub expand_per_seed: Option<i64>,
+    #[serde(default)]
+    pub lanes: Option<Vec<String>>,
+    #[serde(default)]
+    pub diversity_lambda: Option<f32>,
+    #[serde(default)]
+    pub min_score: Option<f32>,
+    #[serde(default)]
+    pub include_sources: Option<bool>,
+    #[serde(default)]
+    pub debug: Option<bool>,
+    #[serde(default)]
+    pub lane_bonus: Option<f32>,
+    #[serde(default)]
+    pub project: Option<String>,
+    #[serde(default)]
+    pub expand_query: Option<bool>,
+    #[serde(default)]
+    pub expand_query_top_k: Option<usize>,
+    #[serde(default)]
+    pub scorer: Option<String>,
 }
 pub async fn memory_select_coherent(
     State(state): State<AppState>,
     Json(req): Json<MemCoherentReq>,
 ) -> impl IntoResponse {
-    let lane_opt = req.lane.as_deref();
-    let limit = req.limit.unwrap_or(30);
-    let expand_n = req.expand_per_seed.unwrap_or(3).max(0).min(10);
-    let seeds = match state.kernel.select_memory_hybrid(
-        req.q.as_deref(),
-        req.embed.as_deref().map(|v| v.as_ref()),
-        lane_opt,
-        (limit / 2).max(1),
-    ) {
-        Ok(items) => items,
-        Err(e) => return (
+    let spec = spec_from_req(&req);
+    let response = match working_set::assemble(&state, &spec) {
+        Ok(ws) => {
+            let working_set::WorkingSet {
+                items,
+                seeds,
+                expanded,
+                diagnostics,
+            } = ws;
+            let mut body = json!({"items": items, "mode": "coherent"});
+            if req.include_sources.unwrap_or(false) {
+                body["seeds"] = json!(seeds);
+                body["expanded"] = json!(expanded);
+            }
+            if req.debug.unwrap_or(false) {
+                body["diagnostics"] = diagnostics;
+            }
+            (axum::http::StatusCode::OK, Json(body))
+        }
+        Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(
-                json!({"type":"about:blank","title":"Error","status":500, "detail": e.to_string()}),
-            ),
-        )
-            .into_response(),
+            Json(json!({
+                "type": "about:blank",
+                "title": "Error",
+                "status": 500,
+                "detail": e.to_string()
+            })),
+        ),
     };
-    use std::collections::HashSet;
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut scored: Vec<(f32, Value)> = Vec::new();
-    // Seed scores
-    for it in seeds.iter() {
-        let id = it
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        if id.is_empty() {
-            continue;
-        }
-        seen.insert(id.clone());
-        let sc = it.get("cscore").and_then(|v| v.as_f64()).unwrap_or(0.5) as f32;
-        scored.push((sc, it.clone()));
-        // Expand links
-        if expand_n > 0 {
-            if let Ok(links) = state.kernel.list_memory_links(&id, expand_n) {
-                for lk in links {
-                    let dst_id = lk.get("dst_id").and_then(|v| v.as_str()).unwrap_or("");
-                    if dst_id.is_empty() {
-                        continue;
-                    }
-                    if seen.contains(dst_id) {
-                        continue;
-                    }
-                    if let Ok(Some(mut rec)) = state.kernel.get_memory(dst_id) {
-                        let weight =
-                            lk.get("weight").and_then(|v| v.as_f64()).unwrap_or(1.0) as f32;
-                        // recency score (same as hybrid's component)
-                        let now = chrono::Utc::now();
-                        let recency = rec
-                            .get("updated")
-                            .and_then(|v| v.as_str())
-                            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                            .map(|t| {
-                                let age = now
-                                    .signed_duration_since(t.with_timezone(&chrono::Utc))
-                                    .num_seconds()
-                                    .max(0) as f64;
-                                let hl = 3600f64 * 6f64;
-                                ((-age / hl).exp()) as f32
-                            })
-                            .unwrap_or(0.5);
-                        let cscore = 0.5 * sc + 0.3 * weight + 0.2 * recency;
-                        if let Some(obj) = rec.as_object_mut() {
-                            obj.insert("cscore".into(), json!(cscore));
-                        }
-                        seen.insert(dst_id.to_string());
-                        scored.push((cscore, rec));
-                    }
-                }
-            }
-        }
-    }
-    // Sort and take top limit with light diversity filter (MMR-lite)
-    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-    let mut items: Vec<Value> = Vec::new();
-    for (_, v) in scored.into_iter() {
-        if (items.len() as i64) >= limit {
-            break;
-        }
-        let k_new = v.get("key").and_then(|x| x.as_str()).unwrap_or("");
-        let tags_new: std::collections::HashSet<&str> = v
-            .get("tags")
-            .and_then(|x| x.as_str())
-            .unwrap_or("")
-            .split(',')
-            .filter(|s| !s.is_empty())
-            .collect();
-        let too_similar = items.iter().any(|e| {
-            let k_old = e.get("key").and_then(|x| x.as_str()).unwrap_or("");
-            if !k_old.is_empty() && k_old == k_new {
-                return true;
-            }
-            let tags_old: std::collections::HashSet<&str> = e
-                .get("tags")
-                .and_then(|x| x.as_str())
-                .unwrap_or("")
-                .split(',')
-                .filter(|s| !s.is_empty())
-                .collect();
-            let inter = tags_old.intersection(&tags_new).count();
-            inter >= 3
-        });
-        if !too_similar {
-            items.push(v);
-        }
-    }
-    (
-        axum::http::StatusCode::OK,
-        Json(json!({"items": items, "mode": "coherent"})),
-    )
-        .into_response()
+    response.into_response()
 }
 
 pub async fn state_memory_recent(
@@ -359,128 +296,84 @@ pub async fn memory_explain_coherent(
     State(state): State<AppState>,
     Json(req): Json<MemCoherentReq>,
 ) -> impl IntoResponse {
-    let lane_opt = req.lane.as_deref();
-    let limit = req.limit.unwrap_or(30);
-    let expand_n = req.expand_per_seed.unwrap_or(3).max(0).min(10);
-    let seeds = match state.kernel.select_memory_hybrid(
-        req.q.as_deref(),
-        req.embed.as_deref().map(|v| v.as_ref()),
-        lane_opt,
-        (limit / 2).max(1),
-    ) {
-        Ok(items) => items,
-        Err(e) => return (
+    let spec = spec_from_req(&req);
+    let response = match working_set::assemble(&state, &spec) {
+        Ok(ws) => {
+            let working_set::WorkingSet {
+                items,
+                seeds,
+                expanded,
+                diagnostics,
+            } = ws;
+            (
+                axum::http::StatusCode::OK,
+                Json(json!({
+                    "items": items,
+                    "mode": "coherent_explain",
+                    "seeds": seeds,
+                    "expanded": expanded,
+                    "diagnostics": diagnostics
+                })),
+            )
+        }
+        Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(
-                json!({"type":"about:blank","title":"Error","status":500, "detail": e.to_string()}),
-            ),
-        )
-            .into_response(),
+            Json(json!({
+                "type": "about:blank",
+                "title": "Error",
+                "status": 500,
+                "detail": e.to_string()
+            })),
+        ),
     };
-    use std::collections::HashSet;
-    let mut seen: HashSet<String> = HashSet::new();
-    let mut scored: Vec<(f32, Value)> = Vec::new();
-    let now = chrono::Utc::now();
-    // Seeds with explain
-    for mut it in seeds.clone() {
-        let id = it
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("")
-            .to_string();
-        if id.is_empty() {
-            continue;
+    response.into_response()
+}
+
+fn spec_from_req(req: &MemCoherentReq) -> working_set::WorkingSetSpec {
+    let mut lanes = if let Some(list) = req.lanes.clone() {
+        if list.is_empty() {
+            working_set::default_lanes()
+        } else {
+            list
         }
-        seen.insert(id.clone());
-        let sim = it.get("sim").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
-        let fts = it
-            .get("_fts_hit")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        let recency = it
-            .get("updated")
-            .and_then(|v| v.as_str())
-            .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-            .map(|t| {
-                let age = now
-                    .signed_duration_since(t.with_timezone(&chrono::Utc))
-                    .num_seconds()
-                    .max(0) as f64;
-                let hl = 3600f64 * 6f64; // 6h half-life
-                ((-age / hl).exp()) as f32
-            })
-            .unwrap_or(0.5);
-        let util = it
-            .get("score")
-            .and_then(|v| v.as_f64())
-            .map(|s| s.max(0.0).min(1.0) as f32)
-            .unwrap_or(0.0);
-        let w_sim = 0.5f32;
-        let w_fts = 0.2f32;
-        let w_rec = 0.2f32;
-        let w_util = 0.1f32;
-        let fts_score = if fts { 1.0 } else { 0.0 };
-        let cscore = w_sim * sim + w_fts * fts_score + w_rec * recency + w_util * util;
-        if let Some(obj) = it.as_object_mut() {
-            obj.insert("cscore".into(), json!(cscore));
-            obj.insert(
-                "explain".into(),
-                json!({"sim": sim, "fts": fts, "recency": recency, "utility": util}),
-            );
-        }
-        scored.push((cscore, it));
+    } else if let Some(lane) = req.lane.clone() {
+        vec![lane]
+    } else {
+        working_set::default_lanes()
+    };
+    if lanes.is_empty() {
+        lanes = working_set::default_lanes();
     }
-    // Expand coherent set
-    for it in seeds.iter() {
-        let id = it.get("id").and_then(|v| v.as_str()).unwrap_or("");
-        if id.is_empty() {
-            continue;
-        }
-        if let Ok(links) = state.kernel.list_memory_links(id, expand_n) {
-            for lk in links {
-                let dst_id = lk.get("dst_id").and_then(|v| v.as_str()).unwrap_or("");
-                if dst_id.is_empty() || seen.contains(dst_id) {
-                    continue;
-                }
-                if let Ok(Some(mut rec)) = state.kernel.get_memory(dst_id) {
-                    let weight = lk.get("weight").and_then(|v| v.as_f64()).unwrap_or(1.0) as f32;
-                    let recency = rec
-                        .get("updated")
-                        .and_then(|v| v.as_str())
-                        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                        .map(|t| {
-                            let age = now
-                                .signed_duration_since(t.with_timezone(&chrono::Utc))
-                                .num_seconds()
-                                .max(0) as f64;
-                            let hl = 3600f64 * 6f64;
-                            ((-age / hl).exp()) as f32
-                        })
-                        .unwrap_or(0.5);
-                    let base = it.get("cscore").and_then(|v| v.as_f64()).unwrap_or(0.3) as f32;
-                    let cscore = 0.6 * base + 0.25 * weight + 0.15 * recency;
-                    if let Some(obj) = rec.as_object_mut() {
-                        obj.insert("cscore".into(), json!(cscore));
-                        obj.insert(
-                            "explain".into(),
-                            json!({"base": base, "link_weight": weight, "recency": recency}),
-                        );
-                    }
-                    seen.insert(dst_id.to_string());
-                    scored.push((cscore, rec));
-                }
-            }
-        }
-    }
-    scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-    let items: Vec<Value> = scored
-        .into_iter()
-        .take(limit as usize)
-        .map(|(_, v)| v)
-        .collect();
-    (
-        axum::http::StatusCode::OK,
-        Json(json!({"items": items, "mode": "coherent", "explain": true})),
-    )
-        .into_response()
+    let limit = req
+        .limit
+        .unwrap_or(working_set::default_limit() as i64)
+        .max(1);
+    let expand = req
+        .expand_per_seed
+        .unwrap_or(working_set::default_expand_per_seed() as i64)
+        .max(0);
+    let mut spec = working_set::WorkingSetSpec {
+        query: req.q.clone(),
+        embed: req.embed.clone(),
+        lanes,
+        limit: limit as usize,
+        expand_per_seed: expand as usize,
+        diversity_lambda: req
+            .diversity_lambda
+            .unwrap_or_else(working_set::default_diversity_lambda),
+        min_score: req.min_score.unwrap_or_else(working_set::default_min_score),
+        project: req.project.clone(),
+        lane_bonus: req
+            .lane_bonus
+            .unwrap_or_else(working_set::default_lane_bonus),
+        scorer: req.scorer.clone(),
+        expand_query: req
+            .expand_query
+            .unwrap_or_else(working_set::default_expand_query),
+        expand_query_top_k: req
+            .expand_query_top_k
+            .unwrap_or_else(working_set::default_expand_query_top_k),
+    };
+    spec.normalize();
+    spec
 }
