@@ -63,5 +63,6 @@ if ($bins.Count -eq 0) {
 
 $dest = Join-Path $PSScriptRoot '..' 'docs' 'developer' 'status.md'
 Info "Writing $dest"
-$out -join "`n" | Set-Content -Path $dest -Encoding utf8
+# Avoid pipeline-binding quirks across PowerShell versions by setting -Value explicitly
+Set-Content -Path $dest -Value ($out -join "`n") -Encoding utf8
 Info 'Done.'

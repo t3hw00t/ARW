@@ -38,11 +38,17 @@ if ($Target) {
   if ($Target -like 'aarch64-*') { $arch = 'arm64' }
   elseif ($Target -like 'x86_64-*') { $arch = 'x64' }
   else { $arch = if ($env:PROCESSOR_ARCHITECTURE -match 'ARM') { 'arm64' } else { 'x64' } }
-  $binRoot = Join-Path $root ("target/$Target/release")
+  # Detect profile dir: prefer 'release', fallback to 'maxperf'
+  $relDir = "target/$Target/release"
+  $altDir = "target/$Target/maxperf"
+  $binRoot = Join-Path $root $relDir
+  if (-not (Test-Path $binRoot)) { $binRoot = Join-Path $root $altDir }
 } else {
   $os   = if ($isWindows) { 'windows' } elseif ($IsMacOS) { 'macos' } else { 'linux' }
   $arch = if ($env:PROCESSOR_ARCHITECTURE -match 'ARM') { 'arm64' } else { 'x64' }
+  # Detect profile dir: prefer 'release', fallback to 'maxperf'
   $binRoot = Join-Path $root 'target/release'
+  if (-not (Test-Path $binRoot)) { $binRoot = Join-Path $root 'target/maxperf' }
 }
 $name = "arw-$version-$os-$arch"
 

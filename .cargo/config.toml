@@ -6,3 +6,8 @@ targets = [
     "aarch64-apple-darwin",
     "x86_64-pc-windows-msvc"
 ]
+
+[build]
+# Universal default to keep peak memory predictable across platforms
+# (jobs=1 reduces concurrent rustc processes which can OOM on Windows/MSVC).
+jobs = 1

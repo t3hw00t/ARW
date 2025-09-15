@@ -2,7 +2,8 @@
 param(
   [switch]$Yes,
   [switch]$RunTests,
-  [switch]$NoDocs
+  [switch]$NoDocs,
+  [switch]$MaxPerf
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -37,7 +38,10 @@ if (-not $py) {
       Info 'MkDocs not found. Attempting to install via pip...'
       try { & $py.Path -m pip install --upgrade pip | Out-Null } catch { Warn 'pip upgrade failed (continuing).'}
       try { & $py.Path -m pip install mkdocs mkdocs-material mkdocs-git-revision-date-localized-plugin } catch { Warn 'pip install for mkdocs failed. Docs site will be skipped.' }
-      if (Get-Command mkdocs -ErrorAction SilentlyContinue) {
+      $mkOnPath = Get-Command mkdocs -ErrorAction SilentlyContinue
+      $mkViaPy = $false
+      try { & $py.Path -m mkdocs --version | Out-Null; $mkViaPy = $true } catch { $mkViaPy = $false }
+      if ($mkOnPath -or $mkViaPy) {
         foreach($pkg in 'mkdocs','mkdocs-material','mkdocs-git-revision-date-localized-plugin') { Add-Content $installLog "PIP $pkg" }
       } else {
         Warn 'MkDocs install failed. Docs site will be skipped.'
@@ -45,8 +49,31 @@ if (-not $py) {
     }
   }
 }
-Title 'Build workspace (release)'
-& cargo build --workspace --release --locked
+Title 'Clean previous build artifacts'
+try { & cargo clean } catch {}
+
+Title 'Build (release): core binaries'
+# Build only the essential binaries first to keep memory usage low on all platforms.
+if ($MaxPerf) {
+  Info 'Opt-in: maxperf profile enabled'
+  # Override global jobs=1 to allow parallel builds for maxperf
+  try { $env:CARGO_BUILD_JOBS = [Environment]::ProcessorCount } catch {}
+  & cargo build --profile maxperf --locked -p arw-svc -p arw-cli
+} else {
+  & cargo build --release --locked -p arw-svc -p arw-cli
+}
+
+# Try to build the optional Desktop Launcher (Tauri) best-effort.
+try {
+  Write-Host "[setup] Attempting optional build: arw-launcher" -ForegroundColor DarkCyan
+  if ($MaxPerf) {
+    & cargo build --profile maxperf --locked -p arw-launcher
+  } else {
+    & cargo build --release --locked -p arw-launcher
+  }
+} catch {
+  Warn "arw-launcher build skipped (optional): $($_.Exception.Message)"
+}
 
 if ($RunTests) {
   Title 'Run tests (workspace)'
