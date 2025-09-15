@@ -6,7 +6,7 @@ title: Restructure Handbook (Source of Truth)
 
 This document is the single source of truth for the ongoing ARW restructure. It is written so a new contributor (or a chat without prior context) can pick up work immediately.
 
-Updated: 2025-09-15
+Updated: 2025-09-17
 Owner: Core maintainers
 Scope: Architecture, APIs, modules, migration plan, status, hand‑off tips
 
@@ -39,7 +39,7 @@ Implementation touchpoints in the new stack:
 - `/events?replay=N`: optional replay of the last N events from the journal before live streaming.
 - Kernel: WAL, prepared statements, small per‑request transactions; content goes to CAS.
 - Context: assemble is fast (small K), rehydrate is bounded (head bytes), both stream progress via events when necessary.
-  - Implementation: `/context/assemble` uses the Memory Working Set Builder (hybrid retrieval + lane-aware expansion + MMR diversity) so the async runtime stays responsive; `/context/rehydrate` caps head bytes via `ARW_REHYDRATE_FILE_HEAD_KB`.
+  - Implementation: `/context/assemble` offloads hybrid retrieval to blocking workers (for both streaming and synchronous responses) so the async runtime stays responsive; `/context/rehydrate` caps head bytes via `ARW_REHYDRATE_FILE_HEAD_KB`.
 - Egress: proxy/ledger happen off the synchronous path; preview is an action with SSE.
 
 Server modules (in progress)
@@ -50,6 +50,7 @@ Server modules (in progress)
     - Policy: `apps/arw-server/src/api_policy.rs`
     - Events: `apps/arw-server/src/api_events.rs`
     - Context: `apps/arw-server/src/api_context.rs`
+    - Context Loop Driver: `apps/arw-server/src/context_loop.rs`
     - Actions: `apps/arw-server/src/api_actions.rs`
     - Memory: `apps/arw-server/src/api_memory.rs`
     - Connectors: `apps/arw-server/src/api_connectors.rs`
@@ -86,11 +87,13 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
 
 ### Working Set Telemetry
 
-- Metrics: the working-set builder reports `arw_context_phase_duration_ms`, `arw_context_seed_candidates_total`, `arw_context_query_expansion_total`, `arw_context_link_expansion_total`, `arw_context_selected_total`, and `arw_context_scorer_used_total` so operators can audit retrieval health and preset behavior.
+- Metrics: the working-set builder reports `arw_context_phase_duration_ms`, `arw_context_seed_candidates_total`, `arw_context_query_expansion_total`, `arw_context_link_expansion_total`, `arw_context_selected_total`, and `arw_context_scorer_used_total` so operators can audit retrieval health and preset behavior. The dedicated driver in `apps/arw-server/src/context_loop.rs` adds `arw_context_iteration_duration_ms` (histogram) and `arw_context_iteration_total` (counter) tagged by `outcome` (`success|error|join_error`) and `needs_more` (`true|false`) so dashboards can track CRAG loop health and convergence speed.
 - Streaming Diagnostics: SSE payloads include per-iteration summaries (`working_set.iteration.summary`) with coverage reasons, enabling dashboards to react to refinement loops in real time.
+- Unified driver (`apps/arw-server/src/context_loop.rs`): `drive_context_loop` powers both synchronous responses and streaming SSE. `StreamIterationEmitter` forwards the same iteration payloads that land on the bus, while `SyncIterationCollector` records them for the final JSON body. Each summary payload now ships with `duration_ms` so clients can visualize per-iteration latency.
 - Synchronous assembly still emits the same `working_set.iteration.summary` payloads on the unified bus, now with a `coverage` object (`needs_more`, `reasons`) and the exact spec snapshot for each iteration so non-streaming clients stay in lock-step with live dashboards.
 - Iteration summaries include a `next_spec` snapshot whenever a follow-up iteration is scheduled, giving dashboards and optimizers a preview of the planned adjustments (lane set, limits, thresholds) that will power the next CRAG pass.
 - Bus Events: every `working_set.*` emission lands on the main `GET /events` stream with `iteration`, `project`, `query`, and (when provided) `corr_id` metadata. Dashboards and the Project Hub sidecar no longer need a separate channel to follow context assembly progress.
+- Shared iteration runner: both streaming and synchronous `/context/assemble` flows now call the same blocking worker wrapper in `context_loop.rs`, ensuring identical summary/error payloads while keeping heavy retrieval completely off the async runtime.
 
 ## Agent Orchestrator (Planned)
 - Trains mini‑agents and coordinates agent teams under policy and budgets.
