@@ -131,6 +131,14 @@ docs-serve addr="127.0.0.1:8000":
 features-gen:
   python3 scripts/gen_feature_matrix.py
 
+# Generate Universal Feature Catalog (docs/reference/feature_catalog.md)
+feature-catalog-gen:
+  python3 scripts/gen_feature_catalog.py
+
+# Validate feature registry integrity
+features-validate:
+  python3 scripts/check_feature_integrity.py
+
 # Stamp docs with Updated: YYYY-MM-DD from git history
 docs-stamp:
   python3 scripts/stamp_docs_updated.py

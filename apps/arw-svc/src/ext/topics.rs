@@ -22,6 +22,8 @@ pub const TOPIC_CHAT_PROBE: &str = "chat.probe";
 pub const TOPIC_MEMORY_APPLIED: &str = "memory.applied";
 pub const TOPIC_MEMORY_QUARANTINED: &str = "memory.quarantined";
 pub const TOPIC_MEMORY_ADMITTED: &str = "memory.admitted";
+pub const TOPIC_MEMORY_RECORD_PUT: &str = "memory.record.put";
+pub const TOPIC_MEMORY_LINK_PUT: &str = "memory.link.put";
 // Beliefs (read-model summaries)
 pub const TOPIC_BELIEFS_UPDATED: &str = "beliefs.updated";
 
@@ -61,6 +63,9 @@ pub const TOPIC_CLUSTER_NODE_CHANGED: &str = "cluster.node.changed";
 // Governor / Actions
 pub const TOPIC_GOVERNOR_CHANGED: &str = "governor.changed";
 pub const TOPIC_ACTIONS_HINT_APPLIED: &str = "actions.hint.applied";
+pub const TOPIC_ACTIONS_RUNNING: &str = "actions.running";
+pub const TOPIC_ACTIONS_COMPLETED: &str = "actions.completed";
+pub const TOPIC_ACTIONS_FAILED: &str = "actions.failed";
 
 // Service lifecycle and misc
 pub const TOPIC_SERVICE_START: &str = "service.start";
@@ -70,6 +75,9 @@ pub const TOPIC_SERVICE_STOP: &str = "service.stop";
 pub const TOPIC_PROBE_HW: &str = "probe.hw";
 pub const TOPIC_PROBE_METRICS: &str = "probe.metrics";
 pub const TOPIC_CATALOG_UPDATED: &str = "catalog.updated";
+pub const TOPIC_CONFIG_PATCH_APPLIED: &str = "config.patch.applied";
+pub const TOPIC_POLICY_DECISION: &str = "policy.decision";
+pub const TOPIC_POLICY_RELOADED: &str = "policy.reloaded";
 
 // Orchestrator
 pub const TOPIC_TASK_COMPLETED: &str = "task.completed";
@@ -80,6 +88,14 @@ pub const TOPIC_WORLD_UPDATED: &str = "world.updated";
 // Context assembly
 pub const TOPIC_CONTEXT_ASSEMBLED: &str = "context.assembled";
 pub const TOPIC_CONTEXT_COVERAGE: &str = "context.coverage";
+pub const TOPIC_WORKING_SET_STARTED: &str = "working_set.started";
+pub const TOPIC_WORKING_SET_SEED: &str = "working_set.seed";
+pub const TOPIC_WORKING_SET_EXPANDED: &str = "working_set.expanded";
+pub const TOPIC_WORKING_SET_EXPAND_QUERY: &str = "working_set.expand_query";
+pub const TOPIC_WORKING_SET_SELECTED: &str = "working_set.selected";
+pub const TOPIC_WORKING_SET_COMPLETED: &str = "working_set.completed";
+pub const TOPIC_WORKING_SET_ITERATION_SUMMARY: &str = "working_set.iteration.summary";
+pub const TOPIC_WORKING_SET_ERROR: &str = "working_set.error";
 
 // Goldens
 pub const TOPIC_GOLDENS_EVALUATED: &str = "goldens.evaluated";
@@ -101,6 +117,11 @@ pub const TOPIC_TOOL_CACHE: &str = "tool.cache";
 pub const TOPIC_TOOL_RAN: &str = "tool.ran";
 // Screenshots
 pub const TOPIC_SCREENSHOTS_CAPTURED: &str = "screenshots.captured";
+
+// Connectors & policy plane
+pub const TOPIC_CONNECTORS_REGISTERED: &str = "connectors.registered";
+pub const TOPIC_CONNECTORS_TOKEN_UPDATED: &str = "connectors.token.updated";
+pub const TOPIC_EGRESS_SETTINGS_UPDATED: &str = "egress.settings.updated";
 
 // Feedback misc signals
 pub const TOPIC_FEEDBACK_SIGNAL: &str = "feedback.signal";

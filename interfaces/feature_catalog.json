@@ -1,0 +1,81 @@
+{
+  "version": 1,
+  "pillars": [
+    {
+      "id": "flow_focus",
+      "name": "Flow & Focus",
+      "tagline": "Immediate feedback and a consistent mental model for daily work.",
+      "journeys": [
+        {
+          "id": "orient_start",
+          "name": "Orient & Start",
+          "promise": "Spin up projects with live state, context-on-demand, and predictable response times.",
+          "features": ["triad_kernel", "working_set_builder", "project_hub"]
+        },
+        {
+          "id": "stay_in_flow",
+          "name": "Stay in Flow",
+          "promise": "Keep loops under budget with shared event vocabulary and debugging surfaces.",
+          "features": ["snappy_governor", "event_spine", "chat_workbench"]
+        }
+      ]
+    },
+    {
+      "id": "evidence_insight",
+      "name": "Evidence & Insight",
+      "tagline": "Every answer carries provenance, memory, and opportunities to improve.",
+      "journeys": [
+        {
+          "id": "trace_every_step",
+          "name": "Trace Every Step",
+          "promise": "Surface the beliefs, files, and links that back each decision.",
+          "features": ["memory_atlas", "project_map", "self_card"]
+        },
+        {
+          "id": "improve_results",
+          "name": "Improve Results",
+          "promise": "Capture feedback and experiments so better instincts become reusable defaults.",
+          "features": ["feedback_loop", "experiment_deck", "logic_units_library"]
+        }
+      ]
+    },
+    {
+      "id": "safety_control",
+      "name": "Safety & Control",
+      "tagline": "Explicit permissions, reviewable changes, and opt-in networking.",
+      "journeys": [
+        {
+          "id": "permissioning",
+          "name": "Permissioning",
+          "promise": "Grant capabilities with leases, previews, and clear denials before anything leaves.",
+          "features": ["policy_leases", "egress_sentinel", "guardrail_gateway"]
+        },
+        {
+          "id": "govern_configuration",
+          "name": "Govern Configuration",
+          "promise": "Ship safe defaults, audit runtime tweaks, and keep specs in sync.",
+          "features": ["config_plane", "model_steward", "interface_registry"]
+        }
+      ]
+    },
+    {
+      "id": "scale_extend",
+      "name": "Scale & Extend",
+      "tagline": "Grow from a single laptop to shared runs and custom tooling without losing clarity.",
+      "journeys": [
+        {
+          "id": "scale_work",
+          "name": "Scale Work",
+          "promise": "Queue, schedule, and observe heavier jobs as the team or workload grows.",
+          "features": ["orchestrator_plane", "connectors_registry", "tool_forge"]
+        },
+        {
+          "id": "extend_runtime",
+          "name": "Extend the Runtime",
+          "promise": "Bring new skills online through declarative packs, WASI tools, and memory layers.",
+          "features": ["wasi_tool_host", "logic_units_library", "memory_lanes"]
+        }
+      ]
+    }
+  ]
+}

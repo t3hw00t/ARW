@@ -285,7 +285,8 @@
       "scope": {"surface": "backend", "audience": "dev", "layer": "connectivity", "maturity": "complete"},
       "ssot": [
         {"path": "apps/arw-svc/src/ext/mod.rs"},
-        {"path": "apps/arw-connector/src/main.rs"}
+        {"path": "apps/arw-connector/src/main.rs"},
+        {"path": "apps/arw-server/src/api_orchestrator.rs"}
       ],
       "http": [],
       "read_models": [],
@@ -300,7 +301,8 @@
       "scope": {"surface": "dev", "audience": "dev", "layer": "auxiliary", "maturity": "complete"},
       "ssot": [
         {"path": "interfaces/index.yaml"},
-        {"path": "apps/arw-svc/src/main.rs"}
+        {"path": "apps/arw-svc/src/main.rs"},
+        {"path": "apps/arw-server/src/api_spec.rs"}
       ],
       "http": [
         {"method": "GET", "path": "/spec/openapi.yaml"},
@@ -310,6 +312,238 @@
       "read_models": [],
       "topics": [],
       "env": []
+    },
+    {
+      "id": "triad_kernel",
+      "name": "Triad Kernel & Unified API",
+      "owner": "platform",
+      "deps": ["event_spine"],
+      "description": "Journal-backed actions/events/state plane with SSE replay, contributions ledger, and discoverable metadata for the new server.",
+      "scope": {"surface": "backend", "audience": "dev", "layer": "core", "maturity": "beta"},
+      "ssot": [
+        {"path": "apps/arw-server/src/main.rs"},
+        {"path": "apps/arw-server/src/api_actions.rs"},
+        {"path": "apps/arw-server/src/api_events.rs"},
+        {"path": "apps/arw-server/src/api_state.rs"},
+        {"path": "crates/arw-kernel/src/lib.rs"}
+      ],
+      "http": [
+        {"method": "POST", "path": "/actions"},
+        {"method": "GET", "path": "/actions/:id"},
+        {"method": "POST", "path": "/actions/:id/state"},
+        {"method": "GET", "path": "/events"},
+        {"method": "GET", "path": "/state/episodes"},
+        {"method": "GET", "path": "/state/actions"},
+        {"method": "GET", "path": "/state/contributions"},
+        {"method": "GET", "path": "/state/route_stats"},
+        {"method": "GET", "path": "/healthz"},
+        {"method": "GET", "path": "/about"}
+      ],
+      "read_models": [],
+      "topics": ["actions.submitted", "actions.running", "actions.completed", "actions.failed"],
+      "env": ["ARW_ACTIONS_QUEUE_MAX", "ARW_STATE_DIR", "ARW_PORT", "ARW_BIND", "ARW_PERF_PRESET", "ARW_HTTP_MAX_CONC"]
+    },
+    {
+      "id": "policy_leases",
+      "name": "Policy & Lease Facade",
+      "owner": "platform",
+      "deps": ["triad_kernel"],
+      "description": "ABAC facade with hot reloadable policies, lease issuance, and decision telemetry for capability-gated actions.",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "security", "maturity": "beta"},
+      "ssot": [
+        {"path": "apps/arw-server/src/api_policy.rs"},
+        {"path": "apps/arw-server/src/api_leases.rs"},
+        {"path": "crates/arw-policy/src/lib.rs"}
+      ],
+      "http": [
+        {"method": "GET", "path": "/state/policy"},
+        {"method": "POST", "path": "/policy/reload"},
+        {"method": "POST", "path": "/policy/simulate"},
+        {"method": "POST", "path": "/leases"},
+        {"method": "GET", "path": "/state/leases"}
+      ],
+      "read_models": [],
+      "topics": ["policy.decision", "policy.reloaded"],
+      "env": ["ARW_POLICY_FILE", "ARW_SECURITY_POSTURE"]
+    },
+    {
+      "id": "egress_sentinel",
+      "name": "Egress Sentinel",
+      "owner": "platform",
+      "deps": ["policy_leases"],
+      "description": "Preview-first egress guard with allowlists, IP/DNS defenses, ledger logging, and runtime posture controls.",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "security", "maturity": "beta"},
+      "ssot": [
+        {"path": "apps/arw-server/src/api_egress.rs"},
+        {"path": "apps/arw-server/src/api_egress_settings.rs"},
+        {"path": "apps/arw-server/src/egress_proxy.rs"}
+      ],
+      "http": [
+        {"method": "POST", "path": "/egress/preview"},
+        {"method": "POST", "path": "/egress/settings"},
+        {"method": "GET", "path": "/state/egress"},
+        {"method": "GET", "path": "/state/egress/settings"}
+      ],
+      "read_models": [],
+      "topics": ["egress.ledger.appended", "egress.settings.updated"],
+      "env": ["ARW_NET_POSTURE", "ARW_SECURITY_POSTURE", "ARW_NET_ALLOWLIST", "ARW_EGRESS_BLOCK_IP_LITERALS", "ARW_DNS_GUARD_ENABLE", "ARW_EGRESS_PROXY_ENABLE", "ARW_EGRESS_PROXY_PORT", "ARW_EGRESS_LEDGER_ENABLE"]
+    },
+    {
+      "id": "working_set_builder",
+      "name": "Working Set Builder",
+      "owner": "platform",
+      "deps": ["triad_kernel"],
+      "description": "Hybrid retrieval with coverage loops, streaming diagnostics, and on-demand rehydrate for just-in-time context.",
+      "scope": {"surface": "backend", "audience": "builder", "layer": "intelligence", "maturity": "beta"},
+      "ssot": [
+        {"path": "apps/arw-server/src/api_context.rs"},
+        {"path": "apps/arw-server/src/working_set.rs"},
+        {"path": "apps/arw-server/src/coverage.rs"}
+      ],
+      "http": [
+        {"method": "POST", "path": "/context/assemble"},
+        {"method": "POST", "path": "/context/rehydrate"}
+      ],
+      "read_models": [],
+      "topics": [
+        "working_set.started",
+        "working_set.seed",
+        "working_set.expanded",
+        "working_set.expand_query",
+        "working_set.selected",
+        "working_set.completed",
+        "working_set.iteration.summary",
+        "working_set.error"
+      ],
+      "env": [
+        "ARW_CONTEXT_LANES_DEFAULT",
+        "ARW_CONTEXT_K",
+        "ARW_CONTEXT_EXPAND_PER_SEED",
+        "ARW_CONTEXT_DIVERSITY_LAMBDA",
+        "ARW_CONTEXT_MIN_SCORE",
+        "ARW_CONTEXT_LANE_BONUS",
+        "ARW_CONTEXT_EXPAND_QUERY",
+        "ARW_CONTEXT_EXPAND_QUERY_TOP_K",
+        "ARW_CONTEXT_SCORER",
+        "ARW_CONTEXT_COVERAGE_MAX_ITERS",
+        "ARW_CONTEXT_STREAM_DEFAULT"
+      ]
+    },
+    {
+      "id": "memory_atlas",
+      "name": "Memory Atlas",
+      "owner": "platform",
+      "deps": ["triad_kernel"],
+      "description": "Kernel-backed memory API with hybrid search, embeddings, and coherent selections for durable knowledge.",
+      "scope": {"surface": "backend", "audience": "builder", "layer": "intelligence", "maturity": "beta"},
+      "ssot": [
+        {"path": "apps/arw-server/src/api_memory.rs"},
+        {"path": "crates/arw-kernel/src/lib.rs"}
+      ],
+      "http": [
+        {"method": "POST", "path": "/memory/put"},
+        {"method": "GET", "path": "/state/memory/select"},
+        {"method": "POST", "path": "/memory/search_embed"},
+        {"method": "POST", "path": "/state/memory/select_hybrid"},
+        {"method": "POST", "path": "/memory/select_coherent"},
+        {"method": "POST", "path": "/state/memory/explain_coherent"},
+        {"method": "GET", "path": "/state/memory/recent"},
+        {"method": "POST", "path": "/memory/link"},
+        {"method": "GET", "path": "/state/memory/links"}
+      ],
+      "read_models": [],
+      "topics": ["memory.record.put", "memory.link.put"],
+      "env": []
+    },
+    {
+      "id": "config_plane",
+      "name": "Config Plane",
+      "owner": "platform",
+      "deps": ["triad_kernel"],
+      "description": "Schema-aware config snapshots, diffable patches, and validation helpers for runtime tuning.",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "core", "maturity": "beta"},
+      "ssot": [
+        {"path": "apps/arw-server/src/api_config.rs"}
+      ],
+      "http": [
+        {"method": "GET", "path": "/state/config"},
+        {"method": "GET", "path": "/state/config/snapshots"},
+        {"method": "GET", "path": "/state/config/snapshots/:id"},
+        {"method": "POST", "path": "/patch/apply"},
+        {"method": "POST", "path": "/patch/revert"},
+        {"method": "POST", "path": "/patch/validate"},
+        {"method": "GET", "path": "/state/schema_map"},
+        {"method": "POST", "path": "/patch/infer_schema"}
+      ],
+      "read_models": [],
+      "topics": ["config.patch.applied", "logic.unit.reverted"],
+      "env": ["ARW_SCHEMA_MAP"]
+    },
+    {
+      "id": "logic_units_library",
+      "name": "Logic Units Library",
+      "owner": "platform",
+      "deps": ["config_plane"],
+      "description": "Declarative strategy packs with install/apply/revert flows, schema validation, and audit trails.",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "core", "maturity": "beta"},
+      "ssot": [
+        {"path": "apps/arw-server/src/api_logic_units.rs"},
+        {"path": "apps/arw-server/src/api_config.rs"},
+        {"path": "spec/schemas/logic_unit_manifest.json"}
+      ],
+      "http": [
+        {"method": "GET", "path": "/logic-units"},
+        {"method": "GET", "path": "/state/logic_units"},
+        {"method": "POST", "path": "/logic-units/install"},
+        {"method": "POST", "path": "/logic-units/apply"},
+        {"method": "POST", "path": "/logic-units/revert"}
+      ],
+      "read_models": [],
+      "topics": ["logic.unit.installed", "logic.unit.applied", "logic.unit.reverted", "config.patch.applied"],
+      "env": ["ARW_SCHEMA_MAP"]
+    },
+    {
+      "id": "connectors_registry",
+      "name": "Connectors Registry",
+      "owner": "platform",
+      "deps": ["policy_leases", "egress_sentinel"],
+      "description": "Connector manifests with scoped tokens, audit-friendly storage, and events for cloud/local integrations.",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "connectivity", "maturity": "beta"},
+      "ssot": [
+        {"path": "apps/arw-server/src/api_connectors.rs"}
+      ],
+      "http": [
+        {"method": "GET", "path": "/state/connectors"},
+        {"method": "POST", "path": "/connectors/register"},
+        {"method": "POST", "path": "/connectors/token"}
+      ],
+      "read_models": [],
+      "topics": ["connectors.registered", "connectors.token.updated"],
+      "env": ["ARW_STATE_DIR"]
+    },
+    {
+      "id": "wasi_tool_host",
+      "name": "WASI Tool Host",
+      "owner": "platform",
+      "deps": ["egress_sentinel"],
+      "description": "Embeddable WASI host with http.fetch, connector token injection, and policy-aware allowlists for future plugins.",
+      "scope": {"surface": "runtime", "audience": "dev", "layer": "core", "maturity": "alpha"},
+      "ssot": [
+        {"path": "crates/arw-wasi/src/lib.rs"},
+        {"path": "apps/arw-server/src/main.rs"}
+      ],
+      "http": [],
+      "read_models": [],
+      "topics": ["egress.ledger.appended"],
+      "env": [
+        "ARW_HTTP_TIMEOUT_SECS",
+        "ARW_EGRESS_PROXY_ENABLE",
+        "ARW_EGRESS_PROXY_PORT",
+        "ARW_NET_ALLOWLIST",
+        "ARW_EGRESS_BLOCK_IP_LITERALS",
+        "ARW_DNS_GUARD_ENABLE",
+        "ARW_STATE_DIR"
+      ]
     }
   ]
 }
