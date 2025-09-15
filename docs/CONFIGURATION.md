@@ -28,7 +28,17 @@ Centralized reference for ARW environment variables and common flags. Defaults f
 Presets seed defaults for hot‑path tunables if you haven’t set them explicitly:
 - `ARW_HTTP_MAX_CONC`: HTTP concurrency limit.
 - `ARW_ACTIONS_QUEUE_MAX`: max queued actions before 429.
-- `ARW_CONTEXT_SCAN_LIMIT`: max files scanned by `/context/assemble`.
+- `ARW_CONTEXT_K`: target size of the working set returned by `/context/assemble`.
+- `ARW_CONTEXT_EXPAND_PER_SEED`: number of memory links expanded per seed item during context assembly.
+- `ARW_CONTEXT_DIVERSITY_LAMBDA`: diversity weighting (MMR lambda) applied to the working set selector.
+- `ARW_CONTEXT_MIN_SCORE`: minimum coherence score required for an item to remain in the working set.
+- `ARW_CONTEXT_LANES_DEFAULT`: default lanes (CSV) consulted when building the working set.
+- `ARW_CONTEXT_LANE_BONUS`: preference bonus applied when a lane has not yet been selected in the current working set.
+- `ARW_CONTEXT_EXPAND_QUERY`: enable pseudo-relevance feedback for query expansion during working-set assembly (`0|1`).
+- `ARW_CONTEXT_EXPAND_QUERY_TOP_K`: number of top seeds considered when synthesizing the expansion embedding.
+- `ARW_CONTEXT_SCORER`: working-set scorer (`mmrd`, `confidence`, or custom implementations).
+- `ARW_CONTEXT_STREAM_DEFAULT`: enable SSE streaming by default for `/context/assemble` (`0|1`).
+- `ARW_CONTEXT_COVERAGE_MAX_ITERS`: maximum iterations allowed for the coverage (CRAG) refinement loop.
 - `ARW_REHYDRATE_FILE_HEAD_KB`: preview bytes for `/context/rehydrate`.
 - `ARW_ROUTE_STATS_*`: coalesce/publish cadences for route stats.
 - `ARW_MODELS_METRICS_*`: coalesce/publish cadences for models metrics.
@@ -191,7 +201,17 @@ See also: CLI Guide (guide/cli.md)
  - Downloader persists a lightweight throughput EWMA in `{state_dir}/downloads.metrics.json` to improve admission checks across runs.
 
 ## Context & Snappy Defaults
-- `ARW_CONTEXT_SCAN_LIMIT`: max files scanned in `/context/assemble` (default `200`).
+- `ARW_CONTEXT_K`: default working set size for `/context/assemble` (preset driven).
+- `ARW_CONTEXT_EXPAND_PER_SEED`: link fan-out per seed item when building the working set.
+- `ARW_CONTEXT_DIVERSITY_LAMBDA`: diversity weighting applied during working set selection.
+- `ARW_CONTEXT_MIN_SCORE`: minimum coherence score required to keep an item in the working set.
+- `ARW_CONTEXT_LANES_DEFAULT`: default memory lanes (CSV) used when no lanes are supplied in a request.
+- `ARW_CONTEXT_LANE_BONUS`: diversity bonus awarded to lanes that have not yet been represented in the working set.
+- `ARW_CONTEXT_EXPAND_QUERY`: toggles pseudo-relevance expansion for hybrid retrieval.
+- `ARW_CONTEXT_EXPAND_QUERY_TOP_K`: seeds considered when generating the expansion embedding.
+- `ARW_CONTEXT_SCORER`: working-set scorer strategy.
+- `ARW_CONTEXT_STREAM_DEFAULT`: default SSE streaming behaviour for `/context/assemble`.
+- `ARW_CONTEXT_COVERAGE_MAX_ITERS`: upper bound on CRAG refinement passes before returning results.
 - `ARW_REHYDRATE_FILE_HEAD_KB`: head bytes returned for file rehydrate (default `64`).
 
 ## Notes

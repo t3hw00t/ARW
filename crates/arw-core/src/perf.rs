@@ -13,7 +13,17 @@ pub enum PerfPreset {
 pub struct PerfTuning {
     pub http_max_conc: usize,
     pub actions_queue_max: i64,
-    pub context_scan_limit: usize,
+    pub context_k: usize,
+    pub context_expand: usize,
+    pub context_lambda: f32,
+    pub context_min_score: f32,
+    pub context_lanes: &'static str,
+    pub context_lane_bonus: f32,
+    pub context_expand_query: bool,
+    pub context_expand_query_top_k: usize,
+    pub context_scorer: &'static str,
+    pub context_stream_default: bool,
+    pub context_max_iters: usize,
     pub rehydrate_file_head_kb: u64,
     pub route_stats_coalesce_ms: u64,
     pub route_stats_publish_ms: u64,
@@ -60,7 +70,17 @@ pub fn tuning_for(preset: PerfPreset) -> PerfTuning {
         PerfPreset::Eco => PerfTuning {
             http_max_conc: 256,
             actions_queue_max: 256,
-            context_scan_limit: 120,
+            context_k: 12,
+            context_expand: 2,
+            context_lambda: 0.65,
+            context_min_score: 0.08,
+            context_lanes: "semantic,procedural",
+            context_lane_bonus: 0.08,
+            context_expand_query: false,
+            context_expand_query_top_k: 3,
+            context_scorer: "mmrd",
+            context_stream_default: false,
+            context_max_iters: 2,
             rehydrate_file_head_kb: 32,
             route_stats_coalesce_ms: 350,
             route_stats_publish_ms: 2500,
@@ -70,7 +90,17 @@ pub fn tuning_for(preset: PerfPreset) -> PerfTuning {
         PerfPreset::Balanced => PerfTuning {
             http_max_conc: 1024,
             actions_queue_max: 1024,
-            context_scan_limit: 200,
+            context_k: 18,
+            context_expand: 3,
+            context_lambda: 0.70,
+            context_min_score: 0.1,
+            context_lanes: "semantic,procedural,episodic",
+            context_lane_bonus: 0.06,
+            context_expand_query: true,
+            context_expand_query_top_k: 4,
+            context_scorer: "mmrd",
+            context_stream_default: true,
+            context_max_iters: 2,
             rehydrate_file_head_kb: 64,
             route_stats_coalesce_ms: 250,
             route_stats_publish_ms: 2000,
@@ -80,7 +110,17 @@ pub fn tuning_for(preset: PerfPreset) -> PerfTuning {
         PerfPreset::Performance => PerfTuning {
             http_max_conc: 4096,
             actions_queue_max: 4096,
-            context_scan_limit: 300,
+            context_k: 24,
+            context_expand: 4,
+            context_lambda: 0.74,
+            context_min_score: 0.12,
+            context_lanes: "semantic,procedural,episodic",
+            context_lane_bonus: 0.05,
+            context_expand_query: true,
+            context_expand_query_top_k: 5,
+            context_scorer: "mmrd",
+            context_stream_default: true,
+            context_max_iters: 3,
             rehydrate_file_head_kb: 96,
             route_stats_coalesce_ms: 150,
             route_stats_publish_ms: 1500,
@@ -90,7 +130,17 @@ pub fn tuning_for(preset: PerfPreset) -> PerfTuning {
         PerfPreset::Turbo => PerfTuning {
             http_max_conc: 16384,
             actions_queue_max: 16384,
-            context_scan_limit: 500,
+            context_k: 32,
+            context_expand: 4,
+            context_lambda: 0.78,
+            context_min_score: 0.15,
+            context_lanes: "semantic,procedural,episodic,insight",
+            context_lane_bonus: 0.04,
+            context_expand_query: true,
+            context_expand_query_top_k: 6,
+            context_scorer: "mmrd",
+            context_stream_default: true,
+            context_max_iters: 3,
             rehydrate_file_head_kb: 128,
             route_stats_coalesce_ms: 100,
             route_stats_publish_ms: 1000,
@@ -120,7 +170,38 @@ pub fn apply_performance_preset() -> PerfPreset {
     // Seed widely used tunables only if unset
     set_if_unset("ARW_HTTP_MAX_CONC", t.http_max_conc.to_string());
     set_if_unset("ARW_ACTIONS_QUEUE_MAX", t.actions_queue_max.to_string());
-    set_if_unset("ARW_CONTEXT_SCAN_LIMIT", t.context_scan_limit.to_string());
+    set_if_unset("ARW_CONTEXT_K", t.context_k.to_string());
+    set_if_unset("ARW_CONTEXT_EXPAND_PER_SEED", t.context_expand.to_string());
+    set_if_unset(
+        "ARW_CONTEXT_DIVERSITY_LAMBDA",
+        format!("{:.3}", t.context_lambda),
+    );
+    set_if_unset(
+        "ARW_CONTEXT_MIN_SCORE",
+        format!("{:.3}", t.context_min_score),
+    );
+    set_if_unset("ARW_CONTEXT_LANES_DEFAULT", t.context_lanes.to_string());
+    set_if_unset(
+        "ARW_CONTEXT_LANE_BONUS",
+        format!("{:.3}", t.context_lane_bonus),
+    );
+    set_if_unset(
+        "ARW_CONTEXT_EXPAND_QUERY",
+        if t.context_expand_query { "1" } else { "0" },
+    );
+    set_if_unset(
+        "ARW_CONTEXT_EXPAND_QUERY_TOP_K",
+        t.context_expand_query_top_k.to_string(),
+    );
+    set_if_unset("ARW_CONTEXT_SCORER", t.context_scorer.to_string());
+    set_if_unset(
+        "ARW_CONTEXT_STREAM_DEFAULT",
+        if t.context_stream_default { "1" } else { "0" },
+    );
+    set_if_unset(
+        "ARW_CONTEXT_COVERAGE_MAX_ITERS",
+        t.context_max_iters.to_string(),
+    );
     set_if_unset(
         "ARW_REHYDRATE_FILE_HEAD_KB",
         t.rehydrate_file_head_kb.to_string(),
@@ -159,7 +240,12 @@ pub fn apply_performance_preset() -> PerfPreset {
             .as_str(),
         http_max_conc = t.http_max_conc,
         actions_queue_max = t.actions_queue_max,
-        context_scan_limit = t.context_scan_limit,
+        context_k = t.context_k,
+        context_expand = t.context_expand,
+        context_lambda = t.context_lambda,
+        context_min_score = t.context_min_score,
+        context_lanes = t.context_lanes,
+        context_lane_bonus = t.context_lane_bonus,
         rehydrate_file_head_kb = t.rehydrate_file_head_kb,
         "Applied performance preset defaults (env-seeded if unset)"
     );
