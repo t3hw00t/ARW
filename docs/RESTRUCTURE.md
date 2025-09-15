@@ -69,6 +69,7 @@ We implement a practical “infinite context window” by treating context as an
 - Stable Pointers + Rehydrate: every item carries a stable pointer (file, belief/claim, episode) so agents can rehydrate full content on demand (pull, don’t stuff).
 - Diversity + Compression: MMR/diversity selection plus LLMLingua‑style compression to fit budgets while preserving signal.
 - Streaming Assembly & Coverage: `/context/assemble` can stream `working_set.*` SSE events (`working_set.seed`, `working_set.expanded`, `working_set.selected`, `working_set.completed`) so clients render context as it lands, and a CRAG-style coverage loop widens lanes or relaxes thresholds before returning. This mirrors incremental retrieval patterns explored in [GraphRAG](https://arxiv.org/abs/2404.16130).
+- Coverage-aware refinement: corrective loops look at the specific `coverage.reasons` (`below_target_limit`, `low_lane_diversity`, `weak_average_score`, etc.) and dial spec knobs accordingly (increase limit/expansion, widen lanes, lower thresholds) before the next pass. Each iteration surfaces the proposed `next_spec` so observers can see the planned adjustments before they run.
 - Pluggable Scoring + Pseudo-Relevance Expansion: the working-set builder accepts scorer strategies (`mmrd`, `confidence`, or custom) and optional pseudo-relevance feedback that recomputes hybrid retrieval from the top seeds. The design keeps parity with the latest query expansion and scoring work while remaining tunable per project.
 - Corrective Loop (CRAG): detect coverage gaps/hallucination risk, fetch additional evidence, and update the working set iteratively.
 - Memory Lanes: episodic (raw traces), semantic (fact/claim graph), procedural (skills/templates). Long‑term context comes from lanes, not from long prompts.
@@ -87,6 +88,9 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
 
 - Metrics: the working-set builder reports `arw_context_phase_duration_ms`, `arw_context_seed_candidates_total`, `arw_context_query_expansion_total`, `arw_context_link_expansion_total`, `arw_context_selected_total`, and `arw_context_scorer_used_total` so operators can audit retrieval health and preset behavior.
 - Streaming Diagnostics: SSE payloads include per-iteration summaries (`working_set.iteration.summary`) with coverage reasons, enabling dashboards to react to refinement loops in real time.
+- Synchronous assembly still emits the same `working_set.iteration.summary` payloads on the unified bus, now with a `coverage` object (`needs_more`, `reasons`) and the exact spec snapshot for each iteration so non-streaming clients stay in lock-step with live dashboards.
+- Iteration summaries include a `next_spec` snapshot whenever a follow-up iteration is scheduled, giving dashboards and optimizers a preview of the planned adjustments (lane set, limits, thresholds) that will power the next CRAG pass.
+- Bus Events: every `working_set.*` emission lands on the main `GET /events` stream with `iteration`, `project`, `query`, and (when provided) `corr_id` metadata. Dashboards and the Project Hub sidecar no longer need a separate channel to follow context assembly progress.
 
 ## Agent Orchestrator (Planned)
 - Trains mini‑agents and coordinates agent teams under policy and budgets.
@@ -217,7 +221,7 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
 - `POST /leases` → `{ id, ttl_until }` (create lease; subject=`local`)
 - `GET /state/leases` → `{ items: [...] }`
 - `GET /state/policy` → `{ allow_all, lease_rules[] }`
-- `POST /context/assemble` → assemble working set (hybrid memory retrieval; returns beliefs, seeds, and diagnostics)
+- `POST /context/assemble` → assemble working set (hybrid memory retrieval; returns beliefs, seeds, and diagnostics; accepts optional `corr_id` to stitch events and publishes `working_set.*` on the main bus)
 - `POST /context/rehydrate` → return full content head for a pointer (currently file), gated by leases when policy requires
 
 Events
@@ -269,7 +273,7 @@ Leases
 - List: `curl -s localhost:8091/state/leases | jq`
 
 Context
-- Assemble: `curl -s -X POST localhost:8091/context/assemble -H 'content-type: application/json' -d '{"q":"term","lanes":["semantic","procedural"],"limit":18,"include_sources":true}' | jq`
+- Assemble: `curl -s -X POST localhost:8091/context/assemble -H 'content-type: application/json' -d '{"q":"term","lanes":["semantic","procedural"],"limit":18,"include_sources":true,"corr_id":"demo-ctx-1"}' | jq`
 - Rehydrate (lease‑gated): `curl -s -X POST localhost:8091/context/rehydrate -H 'content-type: application/json' -d '{"ptr":{"kind":"file","path":"state/projects/demo/notes.md"}}' | jq`
 
 Actions and Events

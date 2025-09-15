@@ -28,6 +28,7 @@ Context assembly (every turn)
 - Targeted retrieval: build a small set from semantic + world memories using relevance, recency, and diversity (MMR‑style) to avoid duplicates.
 - Token budgeter: fixed slots for instructions, plan, safety/policy, and evidence; leftover tokens go to nice‑to‑have context.
 - Always include pointers: emit stable IDs alongside excerpts so the agent/UI can rehydrate more by ID when needed.
+- Coverage-guided refinement: when `coverage.reasons` flag gaps (e.g., low lane diversity, weak scores, below target limit) the next iteration automatically widens lanes, increases expansion, or lowers thresholds before running. Dashboards see the proposed adjustments via the `next_spec` snapshot on each `working_set.iteration.summary` event.
 
 Compression cascade (history never bloats)
 - Extract → Abstract → Outline: turn long logs into key claims with sources, short rationales, then a skeletal outline that references artifacts.
@@ -76,6 +77,8 @@ Implementation notes (ARW)
 - Retrieval: add MMR‑style selector over vector/graph mounts and the world belief graph.
 - Compression: background job to summarize episodes and roll up entities; write summaries to mounts with provenance.
 - Failure detectors: emit `context.recall_risk` and `context.coverage` events; surface in UI and adjust next‑turn retrieval.
+- Telemetry: publish `working_set.*` events (started/seed/expanded/selected/completed/iteration.summary/error) on the unified bus with `iteration`, `project`, `query`, and optional `corr_id` so `/events` listeners stay aligned with SSE streams. Every `working_set.iteration.summary` carries the spec snapshot plus a `coverage` object (`needs_more`, `reasons`) whether the client streamed or waited for the synchronous response.
+- Iteration summaries append `next_spec` when a follow-up pass is queued so downstream planners can anticipate the new lane mix, limits, or scoring knobs before the next CRAG step begins.
 - Long‑context: add an optional merge step in Recipes; distill back into beliefs/summaries after use.
 
 See also

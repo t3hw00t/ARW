@@ -2,7 +2,7 @@ use crate::AppState;
 use anyhow::Result;
 use chrono::SecondsFormat;
 use metrics::{counter, histogram};
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Duration;
@@ -175,6 +175,88 @@ impl WorkingSetObserver for ChannelObserver {
             payload,
         };
         let _ = self.tx.blocking_send(evt);
+    }
+}
+
+#[derive(Clone)]
+pub struct BusObserver {
+    bus: arw_events::Bus,
+    iteration: usize,
+    corr_id: Option<String>,
+    project: Option<String>,
+    query: Option<String>,
+}
+
+impl BusObserver {
+    pub fn new(
+        bus: arw_events::Bus,
+        iteration: usize,
+        corr_id: Option<String>,
+        project: Option<String>,
+        query: Option<String>,
+    ) -> Self {
+        Self {
+            bus,
+            iteration,
+            corr_id,
+            project,
+            query,
+        }
+    }
+
+    fn enrich_value(&self, payload: Value) -> Value {
+        let mut map: Map<String, Value> = match payload {
+            Value::Object(map) => map,
+            other => {
+                let mut map = Map::new();
+                map.insert("value".into(), other);
+                map
+            }
+        };
+        map.insert("iteration".into(), json!(self.iteration));
+        if let Some(corr) = &self.corr_id {
+            map.insert("corr_id".into(), Value::String(corr.clone()));
+        }
+        if let Some(project) = &self.project {
+            map.insert("project".into(), Value::String(project.clone()));
+        }
+        if let Some(query) = &self.query {
+            map.insert("query".into(), Value::String(query.clone()));
+        }
+        Value::Object(map)
+    }
+
+    fn publish_enriched(&self, kind: &'static str, value: &Value) {
+        self.bus.publish(kind, value);
+    }
+}
+
+impl WorkingSetObserver for BusObserver {
+    fn emit(&mut self, kind: &'static str, payload: Value) {
+        let enriched = self.enrich_value(payload);
+        self.publish_enriched(kind, &enriched);
+    }
+}
+
+pub struct CompositeObserver<A> {
+    first: A,
+    second: BusObserver,
+}
+
+impl<A> CompositeObserver<A> {
+    pub fn new(first: A, second: BusObserver) -> Self {
+        Self { first, second }
+    }
+}
+
+impl<A> WorkingSetObserver for CompositeObserver<A>
+where
+    A: WorkingSetObserver,
+{
+    fn emit(&mut self, kind: &'static str, payload: Value) {
+        let enriched = self.second.enrich_value(payload);
+        self.first.emit(kind, enriched.clone());
+        self.second.publish_enriched(kind, &enriched);
     }
 }
 
