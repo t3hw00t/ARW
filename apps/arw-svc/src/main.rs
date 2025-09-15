@@ -1614,7 +1614,7 @@ fn probe_gpus_best_effort() -> Vec<serde_json::Value> {
     use serde_json::json;
     use std::os::windows::ffi::OsStringExt as _;
     use windows::Win32::Graphics::Dxgi::{
-        CreateDXGIFactory1, IDXGIAdapter1, IDXGIFactory1, DXGI_ADAPTER_DESC1, DXGI_ERROR_NOT_FOUND,
+        CreateDXGIFactory1, IDXGIFactory1, DXGI_ADAPTER_DESC1, DXGI_ERROR_NOT_FOUND,
     };
     unsafe {
         let factory: IDXGIFactory1 = match CreateDXGIFactory1::<IDXGIFactory1>() {
@@ -1965,7 +1965,7 @@ fn probe_disks_windows() -> Vec<serde_json::Value> {
     for letter in b'A'..=b'Z' {
         let root = format!("{}:\\", letter as char);
         let p = std::path::Path::new(&root);
-        if let Ok(md) = std::fs::metadata(&p) {
+        if std::fs::metadata(&p).is_ok() {
             let total = fs2::total_space(&p).unwrap_or(0);
             let avail = fs2::available_space(&p).unwrap_or(0);
             if total > 0 {
@@ -2098,10 +2098,12 @@ fn probe_gpu_metrics_best_effort() -> Vec<serde_json::Value> {
 #[cfg(target_os = "windows")]
 fn probe_gpu_metrics_best_effort() -> Vec<serde_json::Value> {
     use serde_json::json;
+    use std::os::windows::ffi::OsStringExt as _;
+    use windows::core::Interface as _;
     use windows::Win32::Graphics::Dxgi::{
-        CreateDXGIFactory1, IDXGIAdapter1, IDXGIAdapter3, IDXGIFactory1, DXGI_ADAPTER_DESC1,
-        DXGI_ERROR_NOT_FOUND, DXGI_MEMORY_SEGMENT_GROUP, DXGI_MEMORY_SEGMENT_GROUP_LOCAL,
-        DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL, DXGI_QUERY_VIDEO_MEMORY_INFO,
+        CreateDXGIFactory1, IDXGIAdapter3, IDXGIFactory1, DXGI_ADAPTER_DESC1, DXGI_ERROR_NOT_FOUND,
+        DXGI_MEMORY_SEGMENT_GROUP_LOCAL, DXGI_MEMORY_SEGMENT_GROUP_NON_LOCAL,
+        DXGI_QUERY_VIDEO_MEMORY_INFO,
     };
     unsafe {
         let factory: IDXGIFactory1 = match CreateDXGIFactory1::<IDXGIFactory1>() {
