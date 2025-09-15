@@ -53,7 +53,7 @@ pub async fn state_egress_settings() -> impl IntoResponse {
                 .filter(|x| !x.is_empty())
                 .collect()
         })
-        .unwrap_or_else(|| vec![]);
+        .unwrap_or_default();
     let out = EgressSettings {
         posture,
         allowlist,
@@ -192,7 +192,7 @@ pub async fn egress_settings_update(
                 .filter(|x| !x.is_empty())
                 .collect()
         })
-        .unwrap_or_else(|| vec![]);
+        .unwrap_or_default();
     let out = EgressSettings {
         posture,
         allowlist,

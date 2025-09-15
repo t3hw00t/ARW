@@ -18,6 +18,7 @@ pub async fn state_config(State(state): State<AppState>) -> impl IntoResponse {
 #[derive(Deserialize)]
 pub(crate) struct ApplyReq {
     #[serde(default)]
+    #[allow(dead_code)]
     pub id: Option<String>,
     #[serde(default)]
     pub dry_run: Option<bool>,

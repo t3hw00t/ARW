@@ -16,11 +16,13 @@ pub async fn orchestrator_mini_agents() -> impl IntoResponse {
 #[derive(Deserialize)]
 pub(crate) struct OrchestratorStartReq {
     #[serde(default)]
+    #[allow(dead_code)]
     pub id: Option<String>,
     pub goal: String,
     #[serde(default)]
     pub data: Option<serde_json::Value>,
     #[serde(default)]
+    #[allow(dead_code)]
     pub budget: Option<serde_json::Value>,
 }
 

@@ -63,7 +63,7 @@ pub async fn state_actions(
         .unwrap_or(200);
     let items = state
         .kernel
-        .list_actions(limit.max(1).min(2000))
+        .list_actions(limit.clamp(1, 2000))
         .unwrap_or_default();
     Json(json!({"items": items}))
 }
@@ -78,7 +78,7 @@ pub async fn state_egress(
         .unwrap_or(200);
     let items = state
         .kernel
-        .list_egress(limit.max(1).min(2000))
+        .list_egress(limit.clamp(1, 2000))
         .unwrap_or_default();
     Json(json!({"items": items}))
 }

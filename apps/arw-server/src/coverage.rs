@@ -15,6 +15,7 @@ impl CoverageVerdict {
     }
 }
 
+#[allow(dead_code)]
 pub fn needs_more_context(ws: &WorkingSet) -> bool {
     assess(ws).needs_more
 }
@@ -28,7 +29,7 @@ pub fn assess(ws: &WorkingSet) -> CoverageVerdict {
     if summary.selected < ((summary.target_limit as f32 * 0.6).ceil() as usize) {
         reasons.push("below_target_limit".to_string());
     }
-    let desired_lanes = summary.lanes_requested.max(1).min(3);
+    let desired_lanes = summary.lanes_requested.clamp(1, 3);
     if summary.lane_counts.len() < desired_lanes.min(2) {
         reasons.push("low_lane_diversity".to_string());
     }

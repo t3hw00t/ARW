@@ -153,7 +153,7 @@ async fn main() {
     let host: std::sync::Arc<dyn ToolHost> = {
         match arw_wasi::LocalHost::new() {
             Ok(h) => std::sync::Arc::new(h),
-            Err(_) => std::sync::Arc::new(arw_wasi::NoopHost::default()),
+            Err(_) => std::sync::Arc::new(arw_wasi::NoopHost),
         }
     };
     // Curated endpoints list recorded as routes are added (avoid drift)
@@ -1101,7 +1101,7 @@ fn start_local_worker(state: AppState) {
                         simulate_action(&kind, &input).unwrap_or(json!({"ok": true}))
                     };
                     let _ = kernel.update_action_result(
-                        &env.payload["id"].as_str().unwrap_or("").to_string(),
+                        env.payload["id"].as_str().unwrap_or(""),
                         Some(&out),
                         None,
                     );

@@ -83,7 +83,6 @@ def main():
         tdp = Path(td)
         oa = gen_openapi_diff(base_ref, tdp)
         aa = gen_asyncapi_diff(base_ref, tdp)
-    head_ref = run(['git', 'rev-parse', '--short', 'HEAD'], cwd=REPO).stdout.strip()
     lines = []
     lines.append('---')
     lines.append('title: Interface Release Notes')
@@ -91,7 +90,8 @@ def main():
     lines.append('')
     lines.append('# Interface Release Notes')
     lines.append('')
-    lines.append(f'Base: `{base_ref}` vs Head: `{head_ref}`')
+    # Avoid per-commit churn by omitting dynamic HEAD rev
+    lines.append(f'Base: `{base_ref}`')
     lines.append('')
     lines.append('## OpenAPI (REST)')
     lines.append('')
@@ -108,4 +108,3 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
-

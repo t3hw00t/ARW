@@ -47,7 +47,7 @@ impl WorkingSetSpec {
         if self.limit == 0 {
             self.limit = default_limit();
         }
-        self.limit = self.limit.max(1).min(256);
+        self.limit = self.limit.clamp(1, 256);
         self.expand_per_seed = self.expand_per_seed.min(16);
         if !self.diversity_lambda.is_finite() {
             self.diversity_lambda = default_diversity_lambda();
@@ -71,7 +71,7 @@ impl WorkingSetSpec {
         if self.expand_query_top_k == 0 {
             self.expand_query_top_k = default_expand_query_top_k();
         }
-        self.expand_query_top_k = self.expand_query_top_k.max(1).min(32);
+        self.expand_query_top_k = self.expand_query_top_k.clamp(1, 32);
     }
 
     pub fn scorer_label(&self) -> String {
@@ -234,11 +234,11 @@ impl<'a> WorkingSetBuilder<'a> {
             let fetch_k = ((spec.limit * 3) + spec.expand_per_seed).max(10) as i64;
             let mut items = self.state.kernel.select_memory_hybrid(
                 spec.query.as_deref(),
-                spec.embed.as_ref().map(|v| v.as_slice()),
+                spec.embed.as_deref(),
                 lane.as_deref(),
                 fetch_k,
             )?;
-            for mut item in items.drain(..) {
+            for item in items.drain(..) {
                 let lane_override = lane.clone().or_else(|| {
                     item.get("lane")
                         .and_then(|v| v.as_str())
@@ -460,7 +460,7 @@ impl<'a> WorkingSetBuilder<'a> {
                 lane.as_deref(),
                 fetch_k,
             )?;
-            for mut item in items.drain(..) {
+            for item in items.drain(..) {
                 let lane_override = lane.clone().or_else(|| {
                     item.get("lane")
                         .and_then(|v| v.as_str())
@@ -748,7 +748,7 @@ fn build_expansion_candidate(
     if id == seed.id {
         return None;
     }
-    let mut lane = record
+    let lane = record
         .get("lane")
         .and_then(|v| v.as_str())
         .map(|s| s.to_string())
@@ -799,7 +799,7 @@ fn build_query_expansion_candidate(
     seeds_used: &[String],
 ) -> Option<Candidate> {
     let id = value.get("id").and_then(|v| v.as_str())?.to_string();
-    let mut lane = lane.or_else(|| {
+    let lane = lane.or_else(|| {
         value
             .get("lane")
             .and_then(|v| v.as_str())
@@ -850,6 +850,7 @@ fn insert_candidate(map: &mut HashMap<String, Candidate>, candidate: Candidate) 
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_diagnostics(
     spec: &WorkingSetSpec,
     seeds: &[SeedInfo],

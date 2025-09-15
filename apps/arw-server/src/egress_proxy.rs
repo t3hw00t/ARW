@@ -16,9 +16,11 @@ use tracing::{info, warn};
 
 type ProxyBody = BoxBody<Bytes, Infallible>;
 
+#[allow(dead_code)]
 fn empty_body() -> ProxyBody {
     Empty::<Bytes>::new().boxed()
 }
+#[allow(dead_code)]
 fn bytes_body(b: Bytes) -> ProxyBody {
     Full::new(b).boxed()
 }
@@ -171,25 +173,24 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
         .ok()
         .as_deref()
         == Some("1")
+        && host.parse::<std::net::IpAddr>().is_ok()
     {
-        if host.parse::<std::net::IpAddr>().is_ok() {
-            let _ = maybe_log_egress(
-                &state,
-                "deny",
-                Some("ip_literal"),
-                Some(&host),
-                Some(port),
-                Some("tcp"),
-                None,
-                None,
-                corr_id_hdr.as_deref(),
-                proj_hdr.as_deref(),
-            );
-            return Response::builder()
-                .status(StatusCode::FORBIDDEN)
-                .body(Full::new(Bytes::from_static(b"IP literal blocked")).boxed())
-                .unwrap();
-        }
+        let _ = maybe_log_egress(
+            &state,
+            "deny",
+            Some("ip_literal"),
+            Some(&host),
+            Some(port),
+            Some("tcp"),
+            None,
+            None,
+            corr_id_hdr.as_deref(),
+            proj_hdr.as_deref(),
+        );
+        return Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .body(Full::new(Bytes::from_static(b"IP literal blocked")).boxed())
+            .unwrap();
     }
     if dns_guard() && (port == 853 || is_doh_host(&host)) {
         let _ = maybe_log_egress(
@@ -302,7 +303,7 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
     let st = state.clone();
     tokio::spawn(async move {
         match hyper::upgrade::on(req).await {
-            Ok(mut upgraded) => {
+            Ok(upgraded) => {
                 // Wrap upgraded stream for tokio IO traits
                 let upgraded = TokioIo::new(upgraded);
                 // Bidirectional copy with accounting
@@ -388,7 +389,7 @@ async fn handle_http_forward(
         }
     };
     let host = url.host_str().map(|s| s.to_string());
-    let port = url.port_or_known_default().unwrap_or(80) as u16;
+    let port: u16 = url.port_or_known_default().unwrap_or(80);
     let scheme = url.scheme().to_string();
     // Guards
     if std::env::var("ARW_EGRESS_BLOCK_IP_LITERALS")
@@ -424,7 +425,7 @@ async fn handle_http_forward(
     if dns_guard() {
         let path = url.path().to_string();
         let doh_like =
-            host.as_deref().map(|h| is_doh_host(h)).unwrap_or(false) || path.contains("/dns-query");
+            host.as_deref().map(is_doh_host).unwrap_or(false) || path.contains("/dns-query");
         let wants_dns_message = req
             .headers()
             .get("accept")
@@ -620,6 +621,7 @@ async fn handle_http_forward(
     builder.body(Full::new(resp_bytes).boxed()).unwrap()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn maybe_log_egress(
     state: &AppState,
     decision: &str,

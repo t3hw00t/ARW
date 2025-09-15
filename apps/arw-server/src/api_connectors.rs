@@ -64,7 +64,7 @@ pub async fn connector_register(
     let id = manifest
         .id
         .take()
-        .unwrap_or_else(|| format!("{}-{}", manifest.provider, uuid::Uuid::new_v4().to_string()));
+        .unwrap_or_else(|| format!("{}-{}", manifest.provider, uuid::Uuid::new_v4()));
     let mut obj = serde_json::Map::new();
     obj.insert("id".into(), json!(id));
     obj.insert("kind".into(), json!(manifest.kind));
@@ -81,7 +81,7 @@ pub async fn connector_register(
     ));
     if let Err(e) = tokio::fs::write(
         &path,
-        serde_json::to_vec(&Value::Object(obj.clone())).unwrap_or(Vec::new()),
+        serde_json::to_vec(&Value::Object(obj.clone())).unwrap_or_default(),
     )
     .await
     {
@@ -146,7 +146,7 @@ pub async fn connector_token_set(
     }
     if let Err(e) = tokio::fs::write(
         &path,
-        serde_json::to_vec(&Value::Object(base.clone())).unwrap_or(Vec::new()),
+        serde_json::to_vec(&Value::Object(base.clone())).unwrap_or_default(),
     )
     .await
     {

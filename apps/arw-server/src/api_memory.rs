@@ -35,7 +35,7 @@ pub async fn memory_put(
         req.kind.as_deref(),
         req.key.as_deref(),
         &req.value,
-        req.embed.as_deref().map(|v| v.as_ref()),
+        req.embed.as_deref(),
         req.tags.as_deref(),
         req.score,
         req.prob,
@@ -128,12 +128,10 @@ pub async fn memory_select_hybrid(
 ) -> impl IntoResponse {
     let lane_opt = req.lane.as_deref();
     let limit = req.limit.unwrap_or(20);
-    let res = state.kernel.select_memory_hybrid(
-        req.q.as_deref(),
-        req.embed.as_deref().map(|v| v.as_ref()),
-        lane_opt,
-        limit,
-    );
+    let res =
+        state
+            .kernel
+            .select_memory_hybrid(req.q.as_deref(), req.embed.as_deref(), lane_opt, limit);
     match res {
         Ok(items) => (
             axum::http::StatusCode::OK,

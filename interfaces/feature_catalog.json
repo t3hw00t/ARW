@@ -35,7 +35,7 @@
           "id": "improve_results",
           "name": "Improve Results",
           "promise": "Capture feedback and experiments so better instincts become reusable defaults.",
-          "features": ["feedback_loop", "experiment_deck", "logic_units_library"]
+          "features": ["feedback_loop", "experiment_deck"]
         }
       ]
     },

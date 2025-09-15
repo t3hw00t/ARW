@@ -152,6 +152,7 @@ fn net_posture() -> String {
     crate::util::effective_posture()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn maybe_log_egress(
     state: &AppState,
     decision: &str,

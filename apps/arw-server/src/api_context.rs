@@ -59,8 +59,7 @@ pub async fn context_assemble(
     let max_iterations = req
         .max_iterations
         .unwrap_or_else(working_set::default_max_iterations)
-        .max(1)
-        .min(6);
+        .clamp(1, 6);
 
     if stream_requested {
         return stream_working_set(
@@ -207,7 +206,7 @@ async fn stream_working_set(
     tokio::spawn(async move {
         let mut current_spec = spec_clone;
         let mut iteration = 0usize;
-        let mut sender = tx;
+        let sender = tx;
         loop {
             let state_for_block = state_clone.clone();
             let spec_for_block = current_spec.clone();
@@ -390,36 +389,34 @@ pub async fn context_rehydrate(
                 .await
                 .evaluate_action("context.rehydrate")
                 .allow
-            {
-                if state
+                && state
                     .kernel
                     .find_valid_lease("local", "context:rehydrate:file")
                     .ok()
                     .flatten()
                     .is_none()
-                    && state
-                        .kernel
-                        .find_valid_lease("local", "fs")
-                        .ok()
-                        .flatten()
-                        .is_none()
-                {
-                    state.bus.publish(
-                        "policy.decision",
-                        &json!({
-                            "action": "context.rehydrate",
-                            "allow": false,
-                            "require_capability": "context:rehydrate:file|fs",
-                            "explain": {"reason":"lease_required"}
-                        }),
-                    );
-                    return (
-                        axum::http::StatusCode::FORBIDDEN,
-                        Json(
-                            json!({"type":"about:blank","title":"Forbidden","status":403, "detail":"Lease required: context:rehydrate:file or fs"}),
-                        ),
-                    );
-                }
+                && state
+                    .kernel
+                    .find_valid_lease("local", "fs")
+                    .ok()
+                    .flatten()
+                    .is_none()
+            {
+                state.bus.publish(
+                    "policy.decision",
+                    &json!({
+                        "action": "context.rehydrate",
+                        "allow": false,
+                        "require_capability": "context:rehydrate:file|fs",
+                        "explain": {"reason":"lease_required"}
+                    }),
+                );
+                return (
+                    axum::http::StatusCode::FORBIDDEN,
+                    Json(
+                        json!({"type":"about:blank","title":"Forbidden","status":403, "detail":"Lease required: context:rehydrate:file or fs"}),
+                    ),
+                );
             }
             let path = match req.ptr.get("path").and_then(|v| v.as_str()) {
                 Some(s) => std::path::PathBuf::from(s),
