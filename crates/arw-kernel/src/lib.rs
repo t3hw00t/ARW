@@ -40,8 +40,8 @@ impl Kernel {
         let db_path = dir.join("events.sqlite");
         let need_init = !db_path.exists();
         let conn = Connection::open(&db_path)?;
-        conn.pragma_update(None, "journal_mode", &"WAL")?;
-        conn.pragma_update(None, "synchronous", &"NORMAL")?;
+        conn.pragma_update(None, "journal_mode", "WAL")?;
+        conn.pragma_update(None, "synchronous", "NORMAL")?;
         if need_init {
             Self::init_schema(&conn)?;
         }
@@ -437,6 +437,7 @@ impl Kernel {
         Ok(None)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_lease(
         &self,
         id: &str,
@@ -484,6 +485,7 @@ impl Kernel {
         Ok(out)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn append_contribution(
         &self,
         subject: &str,
@@ -565,6 +567,7 @@ impl Kernel {
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn append_egress(
         &self,
         decision: &str,
@@ -625,6 +628,7 @@ impl Kernel {
         Ok(out)
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn insert_memory(
         &self,
         id_opt: Option<&str>,
@@ -848,7 +852,7 @@ impl Kernel {
                                 v2.push(f as f32);
                             }
                         }
-                        if v2.len() == embed.len() && embed.len() > 0 {
+                        if v2.len() == embed.len() && !embed.is_empty() {
                             let sim = Self::cosine_sim(embed, &v2);
                             let value_s: String = r.get(4)?;
                             let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
@@ -910,7 +914,7 @@ impl Kernel {
         let mut candidates: Vec<serde_json::Value> = Vec::new();
         if let Some(qs) = q {
             if !qs.is_empty() {
-                let mut stmt = if let Some(l) = lane {
+                let mut stmt = if lane.is_some() {
                     conn.prepare(
                         "SELECT r.id,r.lane,r.kind,r.key,r.value,r.tags,r.hash,r.embed,r.score,r.prob,r.updated \
                          FROM memory_records r JOIN memory_fts f ON f.id=r.id \
@@ -953,7 +957,7 @@ impl Kernel {
         }
         // If no FTS candidates or to enrich, fetch recent
         if candidates.is_empty() {
-            let mut stmt = if let Some(l) = lane {
+            let mut stmt = if lane.is_some() {
                 conn.prepare(
                     "SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated FROM memory_records WHERE lane=? ORDER BY updated DESC LIMIT 400",
                 )?
@@ -1025,7 +1029,7 @@ impl Kernel {
             let util = item
                 .get("score")
                 .and_then(|v| v.as_f64())
-                .map(|s| s.max(0.0).min(1.0) as f32)
+                .map(|s| s.clamp(0.0, 1.0) as f32)
                 .unwrap_or(0.0);
             let w_sim = 0.5f32;
             let w_fts = 0.2f32;

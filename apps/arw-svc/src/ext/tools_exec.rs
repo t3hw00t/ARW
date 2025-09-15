@@ -354,7 +354,7 @@ fn reg() -> &'static RwLock<HashMap<&'static str, Entry>> {
                     let allowlist: Vec<String> = std::env::var("ARW_GUARDRAILS_ALLOWLIST")
                         .ok()
                         .map(|s| s.split(',').map(|t| t.trim().to_lowercase()).filter(|t| !t.is_empty()).collect())
-                        .unwrap_or_else(|| Vec::new());
+                        .unwrap_or_default();
                     for m in re_url.find_iter(text) {
                         let url = m.as_str();
                         if let Ok(u) = url::Url::parse(url) {

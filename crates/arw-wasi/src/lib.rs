@@ -75,7 +75,7 @@ impl LocalHost {
                     .filter(|x| !x.is_empty())
                     .collect()
             })
-            .unwrap_or_else(|| Vec::new());
+            .unwrap_or_default();
         Ok(Self { client, allowlist })
     }
 
