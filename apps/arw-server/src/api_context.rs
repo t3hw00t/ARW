@@ -2,7 +2,8 @@ use axum::response::sse::{Event, Sse};
 use axum::response::IntoResponse;
 use axum::{extract::State, Json};
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
+use std::collections::HashSet;
 use std::convert::Infallible;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
@@ -44,6 +45,8 @@ pub(crate) struct AssembleReq {
     pub stream: Option<bool>,
     #[serde(default)]
     pub max_iterations: Option<usize>,
+    #[serde(default)]
+    pub corr_id: Option<String>,
 }
 
 pub async fn context_assemble(
@@ -53,6 +56,8 @@ pub async fn context_assemble(
     let include_sources = req.include_sources.unwrap_or(false);
     let debug = req.debug.unwrap_or(false);
     let base_spec = build_spec(&req);
+    let corr_id = req.corr_id.clone();
+    let bus = state.bus.clone();
     let stream_requested = req
         .stream
         .unwrap_or_else(working_set::default_streaming_enabled);
@@ -68,6 +73,7 @@ pub async fn context_assemble(
             include_sources,
             debug,
             max_iterations,
+            corr_id.clone(),
         )
         .await;
     }
@@ -77,34 +83,63 @@ pub async fn context_assemble(
     let mut last_verdict = coverage::CoverageVerdict::satisfied();
     let mut final_ws: Option<working_set::WorkingSet> = None;
     for iteration in 0..max_iterations {
-        match working_set::assemble(&state, &current_spec) {
+        let spec_for_iteration = current_spec.clone();
+        let mut observer = working_set::BusObserver::new(
+            bus.clone(),
+            iteration,
+            corr_id.clone(),
+            spec_for_iteration.project.clone(),
+            spec_for_iteration.query.clone(),
+        );
+        match working_set::assemble_with_observer(&state, &spec_for_iteration, &mut observer) {
             Ok(ws) => {
                 let verdict = coverage::assess(&ws);
-                let mut entry = serde_json::Map::new();
-                entry.insert("index".into(), json!(iteration));
-                entry.insert("spec".into(), current_spec.snapshot());
-                entry.insert("summary".into(), ws.summary.to_json());
-                entry.insert("coverage_gap".into(), json!(verdict.needs_more));
-                if !verdict.reasons.is_empty() {
-                    entry.insert("reasons".into(), json!(verdict.reasons.clone()));
+                let mut next_spec_candidate: Option<working_set::WorkingSetSpec> = None;
+                if verdict.needs_more && iteration + 1 < max_iterations {
+                    next_spec_candidate = Some(adjust_spec_for_iteration(
+                        iteration,
+                        &spec_for_iteration,
+                        &ws,
+                        &verdict,
+                    ));
                 }
+                let summary_payload = build_iteration_summary_payload(
+                    iteration,
+                    &spec_for_iteration,
+                    &ws.summary,
+                    &verdict,
+                    corr_id.as_ref(),
+                    next_spec_candidate.as_ref(),
+                );
+                bus.publish("working_set.iteration.summary", &summary_payload);
+                let mut entry = summary_payload
+                    .as_object()
+                    .cloned()
+                    .unwrap_or_else(Map::new);
                 if debug {
                     entry.insert("diagnostics".into(), ws.diagnostics.clone());
                 }
                 iterations_meta.push(Value::Object(entry));
                 last_verdict = verdict.clone();
                 let needs_more = verdict.needs_more;
-                current_spec = if needs_more && iteration + 1 < max_iterations {
-                    adjust_spec_for_iteration(&current_spec, &ws, iteration + 1)
-                } else {
-                    current_spec
-                };
+                if verdict.needs_more && iteration + 1 < max_iterations {
+                    if let Some(next_spec) = next_spec_candidate {
+                        current_spec = next_spec;
+                    }
+                }
                 final_ws = Some(ws);
                 if !needs_more || iteration + 1 >= max_iterations {
                     break;
                 }
             }
             Err(e) => {
+                let error_payload = build_working_set_error_payload(
+                    iteration,
+                    &spec_for_iteration,
+                    e.to_string(),
+                    corr_id.as_ref(),
+                );
+                bus.publish("working_set.error", &error_payload);
                 return (
                     axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({
@@ -190,6 +225,11 @@ pub async fn context_assemble(
             obj.insert("embed".into(), json!(embed));
         }
     }
+    if let Some(obj) = body.as_object_mut() {
+        if let Some(cid) = corr_id {
+            obj.insert("corr_id".into(), json!(cid));
+        }
+    }
     (axum::http::StatusCode::OK, Json(body)).into_response()
 }
 
@@ -199,71 +239,110 @@ async fn stream_working_set(
     include_sources: bool,
     debug: bool,
     max_iterations: usize,
+    corr_id: Option<String>,
 ) -> axum::response::Response {
     let (tx, rx) = mpsc::channel::<working_set::WorkingSetStreamEvent>(128);
     let state_clone = state.clone();
     let spec_clone = base_spec.clone();
+    let bus_clone = state.bus.clone();
+    let corr_for_task = corr_id.clone();
     tokio::spawn(async move {
         let mut current_spec = spec_clone;
         let mut iteration = 0usize;
         let sender = tx;
+        let bus = bus_clone;
+        let corr_id = corr_for_task;
         loop {
             let state_for_block = state_clone.clone();
-            let spec_for_block = current_spec.clone();
+            let spec_for_iteration = current_spec.clone();
+            let spec_for_join = spec_for_iteration.clone();
             let sender_for_block = sender.clone();
+            let bus_for_block = bus.clone();
+            let corr_for_block = corr_id.clone();
             let result = tokio::task::spawn_blocking(move || {
-                let mut observer = working_set::ChannelObserver::new(iteration, sender_for_block);
-                let spec_snapshot = spec_for_block.clone();
-                working_set::assemble_with_observer(
+                let chan_observer = working_set::ChannelObserver::new(iteration, sender_for_block);
+                let bus_observer = working_set::BusObserver::new(
+                    bus_for_block.clone(),
+                    iteration,
+                    corr_for_block.clone(),
+                    spec_for_iteration.project.clone(),
+                    spec_for_iteration.query.clone(),
+                );
+                let mut observer = working_set::CompositeObserver::new(chan_observer, bus_observer);
+                let spec_snapshot = spec_for_iteration.clone();
+                let outcome = working_set::assemble_with_observer(
                     &state_for_block,
-                    &spec_for_block,
+                    &spec_for_iteration,
                     &mut observer,
-                )
-                .map(|ws| (ws, spec_snapshot))
+                );
+                (outcome, spec_snapshot)
             })
             .await;
 
             match result {
-                Ok(Ok((ws, spec_used))) => {
+                Ok((Ok(ws), spec_used)) => {
                     let verdict = coverage::assess(&ws);
-                    let mut payload = serde_json::Map::new();
-                    payload.insert("index".into(), json!(iteration));
-                    payload.insert("spec".into(), spec_used.snapshot());
-                    payload.insert("summary".into(), ws.summary.to_json());
-                    payload.insert("coverage_gap".into(), json!(verdict.needs_more));
-                    if !verdict.reasons.is_empty() {
-                        payload.insert("reasons".into(), json!(verdict.reasons.clone()));
+                    let mut next_spec_candidate: Option<working_set::WorkingSetSpec> = None;
+                    if verdict.needs_more && iteration + 1 < max_iterations {
+                        next_spec_candidate = Some(adjust_spec_for_iteration(
+                            iteration, &spec_used, &ws, &verdict,
+                        ));
                     }
+                    let summary_val = build_iteration_summary_payload(
+                        iteration,
+                        &spec_used,
+                        &ws.summary,
+                        &verdict,
+                        corr_id.as_ref(),
+                        next_spec_candidate.as_ref(),
+                    );
+                    bus.publish("working_set.iteration.summary", &summary_val);
                     let _ = sender
                         .send(working_set::WorkingSetStreamEvent {
                             iteration,
                             kind: "working_set.iteration.summary".into(),
-                            payload: Value::Object(payload),
+                            payload: summary_val.clone(),
                         })
                         .await;
                     if verdict.needs_more && iteration + 1 < max_iterations {
-                        current_spec = adjust_spec_for_iteration(&spec_used, &ws, iteration + 1);
-                        iteration += 1;
-                        continue;
+                        if let Some(next_spec) = next_spec_candidate {
+                            current_spec = next_spec;
+                            iteration += 1;
+                            continue;
+                        }
                     }
                     break;
                 }
-                Ok(Err(err)) => {
+                Ok((Err(err), spec_used)) => {
+                    let error_val = build_working_set_error_payload(
+                        iteration,
+                        &spec_used,
+                        err.to_string(),
+                        corr_id.as_ref(),
+                    );
+                    bus.publish("working_set.error", &error_val);
                     let _ = sender
                         .send(working_set::WorkingSetStreamEvent {
                             iteration,
                             kind: "working_set.error".into(),
-                            payload: json!({"error": err.to_string()}),
+                            payload: error_val,
                         })
                         .await;
                     break;
                 }
                 Err(join_err) => {
+                    let error_val = build_working_set_error_payload(
+                        iteration,
+                        &spec_for_join,
+                        join_err.to_string(),
+                        corr_id.as_ref(),
+                    );
+                    bus.publish("working_set.error", &error_val);
                     let _ = sender
                         .send(working_set::WorkingSetStreamEvent {
                             iteration,
                             kind: "working_set.error".into(),
-                            payload: json!({"error": join_err.to_string()}),
+                            payload: error_val,
                         })
                         .await;
                     break;
@@ -286,6 +365,9 @@ async fn stream_working_set(
             return None;
         }
         let mut payload = evt.payload;
+        let corr_meta = payload.as_object().and_then(|m| m.get("corr_id")).cloned();
+        let project_meta = payload.as_object().and_then(|m| m.get("project")).cloned();
+        let query_meta = payload.as_object().and_then(|m| m.get("query")).cloned();
         if let Some(obj) = payload.as_object_mut() {
             if !debug {
                 obj.remove("diagnostics");
@@ -294,16 +376,86 @@ async fn stream_working_set(
                 obj.remove("seeds");
                 obj.remove("expanded");
             }
+            // ensure metadata is reflected at the envelope level even if removed here
         }
-        let data_json = json!({
-            "iteration": evt.iteration,
-            "payload": payload
-        });
-        let data = serde_json::to_string(&data_json).unwrap_or_else(|_| "{}".to_string());
+        let mut data_map = serde_json::Map::new();
+        data_map.insert("iteration".into(), json!(evt.iteration));
+        if let Some(cid) = corr_meta {
+            data_map.insert("corr_id".into(), cid);
+        }
+        if let Some(project) = project_meta {
+            data_map.insert("project".into(), project);
+        }
+        if let Some(query) = query_meta {
+            data_map.insert("query".into(), query);
+        }
+        data_map.insert("payload".into(), payload);
+        let data =
+            serde_json::to_string(&Value::Object(data_map)).unwrap_or_else(|_| "{}".to_string());
         let event = Event::default().event(evt.kind).data(data);
         Some(Ok::<_, Infallible>(event))
     });
     Sse::new(stream).into_response()
+}
+
+fn build_iteration_summary_payload(
+    iteration: usize,
+    spec: &working_set::WorkingSetSpec,
+    summary: &working_set::WorkingSetSummary,
+    verdict: &coverage::CoverageVerdict,
+    corr_id: Option<&String>,
+    next_spec: Option<&working_set::WorkingSetSpec>,
+) -> Value {
+    let mut payload = Map::new();
+    payload.insert("index".into(), json!(iteration));
+    payload.insert("iteration".into(), json!(iteration));
+    payload.insert("spec".into(), spec.snapshot());
+    payload.insert("summary".into(), summary.to_json());
+    let coverage_obj = json!({
+        "needs_more": verdict.needs_more,
+        "reasons": verdict.reasons,
+    });
+    payload.insert("coverage".into(), coverage_obj);
+    payload.insert("coverage_gap".into(), json!(verdict.needs_more));
+    if !verdict.reasons.is_empty() {
+        payload.insert("reasons".into(), json!(verdict.reasons.clone()));
+    }
+    if let Some(cid) = corr_id {
+        payload.insert("corr_id".into(), json!(cid));
+    }
+    if let Some(project) = spec.project.as_ref() {
+        payload.insert("project".into(), json!(project));
+    }
+    if let Some(query) = spec.query.as_ref() {
+        payload.insert("query".into(), json!(query));
+    }
+    if let Some(next_spec) = next_spec {
+        payload.insert("next_spec".into(), next_spec.snapshot());
+    }
+    Value::Object(payload)
+}
+
+fn build_working_set_error_payload(
+    iteration: usize,
+    spec: &working_set::WorkingSetSpec,
+    error: String,
+    corr_id: Option<&String>,
+) -> Value {
+    let mut payload = Map::new();
+    payload.insert("index".into(), json!(iteration));
+    payload.insert("iteration".into(), json!(iteration));
+    payload.insert("error".into(), json!(error));
+    payload.insert("spec".into(), spec.snapshot());
+    if let Some(cid) = corr_id {
+        payload.insert("corr_id".into(), json!(cid));
+    }
+    if let Some(project) = spec.project.as_ref() {
+        payload.insert("project".into(), json!(project));
+    }
+    if let Some(query) = spec.query.as_ref() {
+        payload.insert("query".into(), json!(query));
+    }
+    Value::Object(payload)
 }
 
 fn build_spec(req: &AssembleReq) -> working_set::WorkingSetSpec {
@@ -348,26 +500,69 @@ fn build_spec(req: &AssembleReq) -> working_set::WorkingSetSpec {
 }
 
 fn adjust_spec_for_iteration(
+    iteration: usize,
     prev: &working_set::WorkingSetSpec,
     ws: &working_set::WorkingSet,
-    iteration: usize,
+    verdict: &coverage::CoverageVerdict,
 ) -> working_set::WorkingSetSpec {
     let mut next = prev.clone();
-    next.limit = (next.limit + 4).min(256);
-    next.expand_per_seed = (next.expand_per_seed + 1).min(16);
-    next.min_score = (next.min_score * 0.9).clamp(0.01, 1.0);
-    next.lane_bonus = (next.lane_bonus + 0.02).min(0.3);
-    next.expand_query = true;
-    if ws.summary.lane_counts.len() < 2 {
+    let reasons: HashSet<&str> = verdict.reasons.iter().map(|s| s.as_str()).collect();
+
+    if reasons.contains("below_target_limit") || reasons.contains("no_items_selected") {
+        let bump = ((next.limit as f32 * 0.5).ceil() as usize).max(4);
+        next.limit = (next.limit + bump).min(256);
+        next.expand_per_seed = (next.expand_per_seed + 2).min(16);
+    } else {
+        next.limit = (next.limit + 4).min(256);
+        next.expand_per_seed = (next.expand_per_seed + 1).min(16);
+    }
+
+    if reasons.contains("no_items_above_threshold") {
+        next.min_score = (next.min_score * 0.75).clamp(0.01, 1.0);
+        next.expand_query = true;
+        next.expand_query_top_k = (next.expand_query_top_k + 4).min(32);
+    } else if reasons.contains("weak_average_score") {
+        next.min_score = (next.min_score * 0.85).clamp(0.01, 1.0);
+        next.expand_query = true;
+        next.expand_query_top_k = (next.expand_query_top_k + 2).min(32);
+    } else {
+        next.min_score = (next.min_score * 0.9).clamp(0.01, 1.0);
+    }
+
+    if reasons.contains("low_lane_diversity") {
+        let mut seen: HashSet<String> = next
+            .lanes
+            .iter()
+            .map(|lane| lane.to_ascii_lowercase())
+            .collect();
         for lane in working_set::default_lanes() {
-            if !next.lanes.iter().any(|l| l.eq_ignore_ascii_case(&lane)) {
+            if seen.insert(lane.to_ascii_lowercase()) {
                 next.lanes.push(lane);
             }
         }
+        for lane in ws.summary.lane_counts.keys() {
+            if seen.insert(lane.to_ascii_lowercase()) {
+                next.lanes.push(lane.clone());
+            }
+        }
+        next.lane_bonus = (next.lane_bonus + 0.05).min(0.6);
+        next.diversity_lambda = (next.diversity_lambda * 0.9).clamp(0.3, 1.0);
+    } else {
+        next.lane_bonus = (next.lane_bonus + 0.02).min(0.3);
+        if iteration > 0 {
+            next.diversity_lambda = (next.diversity_lambda * 0.96).clamp(0.4, 1.0);
+        }
     }
-    if iteration > 1 {
-        next.diversity_lambda = (next.diversity_lambda * 0.95).clamp(0.4, 1.0);
+
+    if iteration >= 1 && verdict.needs_more {
+        next.expand_query = true;
+        next.expand_per_seed = (next.expand_per_seed + 1).min(16);
     }
+    if iteration >= 2 && verdict.needs_more {
+        next.limit = (next.limit + 8).min(256);
+        next.expand_query_top_k = (next.expand_query_top_k + 4).min(32);
+    }
+
     next.normalize();
     next
 }
