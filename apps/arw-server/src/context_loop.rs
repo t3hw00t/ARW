@@ -135,6 +135,7 @@ where
 
         match outcome {
             IterationOutcome::Success(success) => {
+                let success = *success;
                 let diagnostics = if capture_diagnostics {
                     Some(success.working_set.diagnostics.clone())
                 } else {
@@ -161,6 +162,7 @@ where
                 }
             }
             IterationOutcome::Error(err) => {
+                let err = *err;
                 let error_event = ContextIterationEvent::Error {
                     iteration,
                     payload: err.payload.clone(),
@@ -196,8 +198,8 @@ pub(crate) struct IterationError {
 }
 
 enum IterationOutcome {
-    Success(IterationSuccess),
-    Error(IterationError),
+    Success(Box<IterationSuccess>),
+    Error(Box<IterationError>),
 }
 
 async fn run_context_iteration(
@@ -287,13 +289,13 @@ async fn run_context_iteration(
                 "needs_more" => needs_more_label,
             );
             bus.publish("working_set.iteration.summary", &summary_payload);
-            IterationOutcome::Success(IterationSuccess {
+            IterationOutcome::Success(Box::new(IterationSuccess {
                 working_set: ws,
                 verdict,
                 summary_payload,
                 next_spec: next_spec_candidate,
                 spec_used,
-            })
+            }))
         }
         Ok((Err(err), spec_used)) => {
             let detail = err.to_string();
@@ -311,11 +313,11 @@ async fn run_context_iteration(
             );
             counter!("arw_context_iteration_total", 1, "outcome" => "error");
             bus.publish("working_set.error", &error_payload);
-            IterationOutcome::Error(IterationError {
+            IterationOutcome::Error(Box::new(IterationError {
                 payload: error_payload,
                 detail,
                 spec: spec_used,
-            })
+            }))
         }
         Err(join_err) => {
             let detail = format_join_error(join_err);
@@ -333,11 +335,11 @@ async fn run_context_iteration(
             );
             counter!("arw_context_iteration_total", 1, "outcome" => "join_error");
             bus.publish("working_set.error", &error_payload);
-            IterationOutcome::Error(IterationError {
+            IterationOutcome::Error(Box::new(IterationError {
                 payload: error_payload,
                 detail,
                 spec: spec_for_payload,
-            })
+            }))
         }
     }
 }
@@ -473,10 +475,8 @@ fn adjust_spec_for_iteration(
             next.lanes.truncate(4);
         }
         next.diversity_lambda = (next.diversity_lambda * 1.05).clamp(0.5, 1.0);
-    } else {
-        if iteration > 0 {
-            next.diversity_lambda = (next.diversity_lambda * 0.96).clamp(0.4, 1.0);
-        }
+    } else if iteration > 0 {
+        next.diversity_lambda = (next.diversity_lambda * 0.96).clamp(0.4, 1.0);
     }
 
     if iteration >= 1 && verdict.needs_more {
