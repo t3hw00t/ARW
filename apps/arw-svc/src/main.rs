@@ -224,6 +224,24 @@ async fn main() {
         .and_then(|s| s.parse().ok())
         .unwrap_or(256);
     let bus = arw_events::Bus::new_with_replay(bus_cap, bus_replay);
+    // Experimental: initialize SQLite kernel journal (on by default)
+    let kernel_opt: Option<arw_kernel::Kernel> = {
+        let enabled = std::env::var("ARW_KERNEL_ENABLE")
+            .ok()
+            .map(|s| s == "1" || s.eq_ignore_ascii_case("true"))
+            .unwrap_or(true);
+        if enabled {
+            match arw_kernel::Kernel::open(&ext::paths::state_dir()) {
+                Ok(k) => Some(k),
+                Err(e) => {
+                    tracing::warn!("kernel init failed: {}", e);
+                    None
+                }
+            }
+        } else {
+            None
+        }
+    };
     // Initialize gating from config/env using resolved path (CWD-independent)
     if let Some(p) = arw_core::resolve_config_path("configs/gating.toml") {
         gating::init_from_config(p.to_string_lossy().as_ref());
@@ -314,6 +332,16 @@ async fn main() {
         queue,
         resources: Resources::new(),
     };
+    // Share kernel with ext and persist events in background
+    ext::set_kernel(kernel_opt.clone());
+    if let Some(k) = kernel_opt.clone() {
+        let mut rx = state.bus.subscribe();
+        tokio::spawn(async move {
+            while let Ok(env) = rx.recv().await {
+                let _ = k.append_event(&env);
+            }
+        });
+    }
     // Register typed services
     state
         .resources
@@ -560,6 +588,12 @@ async fn main() {
     app = app.route("/spec/mcp-tools.json", get(spec_mcp));
     arw_svc::route_recorder::note("GET", "/spec");
     app = app.route("/spec", get(spec_index));
+    // Actions (triad)
+    arw_svc::route_recorder::note("POST", "/actions");
+    app = app.route("/actions", axum::routing::post(ext::actions_api::actions_submit_post));
+    // Triad (experimental): public events with replay via kernel
+    arw_svc::route_recorder::note("GET", "/triad/events");
+    app = app.route("/triad/events", get(ext::triad_events_sse));
     // Friendly top-level landing page + quiet favicon
     app = app
         .route("/", get(index_landing))

@@ -13,6 +13,7 @@ pub mod orchestrator;
 #[cfg(feature = "nats")]
 pub mod orchestrator_nats;
 pub mod rpu;
+pub mod perf;
 
 #[cfg(feature = "wasm")]
 pub mod wasm;

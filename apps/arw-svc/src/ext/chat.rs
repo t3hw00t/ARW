@@ -186,12 +186,13 @@ pub(crate) async fn chat_status(
         .is_some()
     {
         "llama"
-    } else if std::env::var("ARW_OPENAI_API_KEY")
+    } else if std::env::var("ARW_LITELLM_BASE_URL").ok().filter(|s| !s.trim().is_empty()).is_some()
+        || std::env::var("ARW_OPENAI_API_KEY")
         .ok()
         .filter(|s| !s.trim().is_empty())
         .is_some()
     {
-        "openai"
+        "openai-compatible"
     } else {
         "synthetic"
     };
@@ -273,13 +274,21 @@ async fn llama_reply(prompt: &str, temperature: Option<f64>) -> Option<String> {
 }
 
 async fn openai_reply(prompt: &str, temperature: Option<f64>) -> Option<String> {
-    let base = std::env::var("ARW_OPENAI_BASE_URL")
-        .unwrap_or_else(|_| "https://api.openai.com".to_string());
-    let key = std::env::var("ARW_OPENAI_API_KEY").ok()?;
-    if key.trim().is_empty() {
-        return None;
-    }
-    let model = std::env::var("ARW_OPENAI_MODEL").unwrap_or_else(|_| "gpt-4o-mini".to_string());
+    // Support OpenAI-compatible proxies (e.g., LiteLLM) in addition to OpenAI proper.
+    // Precedence: explicit LiteLLM vars -> OpenAI vars -> defaults.
+    let litellm_base = std::env::var("ARW_LITELLM_BASE_URL").ok();
+    let litellm_key = std::env::var("ARW_LITELLM_API_KEY").ok();
+    let litellm_model = std::env::var("ARW_LITELLM_MODEL").ok();
+
+    let base = litellm_base
+        .or_else(|| std::env::var("ARW_OPENAI_BASE_URL").ok())
+        .unwrap_or_else(|| "https://api.openai.com".to_string());
+    let key = litellm_key
+        .or_else(|| std::env::var("ARW_OPENAI_API_KEY").ok())
+        .unwrap_or_default();
+    let model = litellm_model
+        .or_else(|| std::env::var("ARW_OPENAI_MODEL").ok())
+        .unwrap_or_else(|| "gpt-4o-mini".to_string());
     let url = format!("{}/v1/chat/completions", base.trim_end_matches('/'));
     let timeout_s: u64 = crate::dyn_timeout::current_http_timeout_secs();
     let client = reqwest::Client::builder()
@@ -295,13 +304,11 @@ async fn openai_reply(prompt: &str, temperature: Option<f64>) -> Option<String> 
             o.insert("temperature".into(), json!(t));
         }
     }
-    let resp = client
-        .post(url)
-        .bearer_auth(key)
-        .json(&body)
-        .send()
-        .await
-        .ok()?;
+    let mut req = client.post(url).json(&body);
+    if !key.trim().is_empty() {
+        req = req.bearer_auth(key);
+    }
+    let resp = req.send().await.ok()?;
     if !resp.status().is_success() {
         return None;
     }

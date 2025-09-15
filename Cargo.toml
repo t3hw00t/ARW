@@ -3,10 +3,14 @@ members = [
   "crates/arw-protocol",
   "crates/arw-events",
   "crates/arw-core",
+  "crates/arw-kernel",
+  "crates/arw-policy",
+  "crates/arw-wasi",
   "crates/arw-macros",
   "apps/arw-cli",
   "crates/arw-otel",
   "apps/arw-svc",
+  "apps/arw-server",
   "apps/arw-connector",
   "crates/arw-tauri",
   "apps/arw-launcher/src-tauri"
@@ -42,7 +46,7 @@ schemars = { version = "0.8", features = ["derive"] }
 jsonschema = "0.17"
 utoipa = { version = "5", features = ["axum_extras","yaml"] }
 arrow2 = { version = "0.18", features = ["io_json"] }
-reqwest = { version = "0.12", features = ["json","stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["json","stream","rustls-tls"] }
 futures-util = "0.3"
 fs2 = "0.4"
 sysinfo = "0.30"

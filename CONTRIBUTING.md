@@ -13,6 +13,7 @@ Workflow
 3. Update docs and regenerate the workspace status page.
 4. Keep commits focused and messages descriptive.
 5. Keep interfaces and events consistent with the Feature Matrix and naming policy.
+6. During the restructure, keep `docs/RESTRUCTURE.md` up to date for any changes to the triad API (`/actions`, `/events`, `/state`), kernel schemas/behavior, runtime/policy, or migration status.
 
 Prerequisites
 - Install `cargo-nextest`: `cargo install cargo-nextest`

@@ -26,7 +26,7 @@ Related docs:
 | models.manifest.written    | Per‑ID manifest written          | id, manifest_path, sha256 |
 | models.cas.gc              | CAS GC sweep summary             | scanned, kept, deleted, deleted_bytes, ttl_days |
 | egress.preview             | Pre‑offload destination summary  | id, url (redacted), dest{host,port,protocol}, provider, corr_id |
-| egress.ledger.appended     | Egress ledger entry appended     | decision, reason_code, dest, bytes_in/out, duration_ms, attribution |
+| egress.ledger.appended     | Egress ledger entry appended     | id?, decision, reason?, dest(host,port,protocol), bytes_in/out, corr_id?, proj?, posture |
 | state.read.model.patch     | Read‑model JSON Patch deltas     | id, patch[...] |
 | snappy.notice              | Interactive budgets: breach notice | p95_max_ms, budget_ms |
 | snappy.detail              | Interactive budgets: periodic detail | p95_by_path{"/path":p95_ms} |

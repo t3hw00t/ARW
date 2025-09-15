@@ -116,6 +116,13 @@ dev port=8090:
 dev-watch port=8090:
   ARW_DEBUG=1 ARW_PORT={{port}} cargo watch -x "run -p arw-svc"
 
+# New server (triad slice) — quick dev runners
+dev-server port=8091:
+  ARW_DEBUG=1 ARW_PORT={{port}} cargo run -p arw-server
+
+dev-server-preset preset="balanced" port=8091:
+  ARW_DEBUG=1 ARW_PERF_PRESET={{preset}} ARW_PORT={{port}} cargo run -p arw-server
+
 # Docs dev server
 docs-serve addr="127.0.0.1:8000":
   mkdocs serve -a {{addr}}
@@ -225,3 +232,17 @@ endpoint-new method path tag="":
 
 endpoint-add method path tag="" summary="" desc="":
   python3 scripts/new_endpoint_template.py {{method}} {{path}} {{ if tag != "" { print("--tag '" + tag + "'") }}} {{ if summary != "" { print("--summary '" + summary + "'") }}} {{ if desc != "" { print("--description '" + desc + "'") }}} --apply
+egress-get:
+  curl -s http://127.0.0.1:8091/state/egress/settings | jq
+
+egress-set json:
+  curl -s -X POST http://127.0.0.1:8091/egress/settings \
+    -H 'content-type: application/json' \
+    -H "X-ARW-Admin: ${ARW_ADMIN_TOKEN:?set ARW_ADMIN_TOKEN}" \
+    -d '{{json}}' | jq
+
+egress-proxy-on port=9080:
+  just egress-set '{"proxy_enable":true, "proxy_port": {{port}} }'
+
+egress-proxy-off:
+  just egress-set '{"proxy_enable":false}'

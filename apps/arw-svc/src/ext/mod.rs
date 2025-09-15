@@ -8,6 +8,7 @@ use axum::{
     routing::{get, post},
     Json, Router,
 };
+use axum::response::sse::{Event as SseEvent, KeepAlive, Sse};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::HashSet;
@@ -16,6 +17,7 @@ use std::sync::OnceLock;
 use std::time::{SystemTime, UNIX_EPOCH};
 // (legacy models inline removed) unused imports pruned
 use tokio::sync::RwLock;
+use tokio_stream::StreamExt as _;
 
 use crate::{route_recorder, AppState};
 // Use fully-qualified constants to avoid unused import warnings in unreachable code paths
@@ -61,6 +63,7 @@ pub mod tools_exec;
 pub mod topics;
 pub mod ui;
 pub mod world;
+pub mod actions_api;
 // internal helpers split into modules
 pub mod io;
 pub mod paths;
@@ -311,6 +314,48 @@ pub(crate) fn default_model() -> &'static RwLock<String> {
     })
 }
 
+// ---------- Triad SSE (experimental) ----------
+pub(crate) async fn triad_events_sse(
+    State(state): State<AppState>,
+    q: axum::extract::Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    let replay_n: usize = q.get("replay").and_then(|s| s.parse().ok()).unwrap_or(0);
+    let (tx, rx) = tokio::sync::mpsc::channel::<arw_events::Envelope>(128);
+    if let Some(k) = kernel() {
+        if replay_n > 0 {
+            if let Ok(rows) = k.recent_events(replay_n as i64, None) {
+                let tx2 = tx.clone();
+                tokio::spawn(async move {
+                    for r in rows {
+                        let env = arw_events::Envelope { time: r.time, kind: r.kind, payload: r.payload, policy: None, ce: None };
+                        let _ = tx2.send(env).await;
+                    }
+                });
+            }
+        }
+    }
+    let mut bus_rx = state.bus.subscribe();
+    let tx_live = tx.clone();
+    tokio::spawn(async move {
+        while let Ok(env) = bus_rx.recv().await {
+            let _ = tx_live.send(env).await;
+        }
+    });
+    let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(|env| {
+        let data = serde_json::to_string(&env).unwrap_or("{}".to_string());
+        Result::<SseEvent, std::convert::Infallible>::Ok(SseEvent::default().data(data).event(env.kind))
+    });
+    Sse::new(stream).keep_alive(KeepAlive::new().interval(std::time::Duration::from_secs(10)).text("keep-alive"))
+}
+
+static KERNEL: OnceLock<Option<arw_kernel::Kernel>> = OnceLock::new();
+pub fn set_kernel(k: Option<arw_kernel::Kernel>) {
+    let _ = KERNEL.set(k);
+}
+pub fn kernel() -> Option<&'static arw_kernel::Kernel> {
+    KERNEL.get().and_then(|o| o.as_ref())
+}
+
 // ---------- governor profile ----------
 static GOV_PROFILE: OnceLock<RwLock<String>> = OnceLock::new();
 pub(crate) fn governor_profile() -> &'static RwLock<String> {
@@ -351,6 +396,8 @@ pub fn extra_routes() -> Router<AppState> {
         .route("/feedback/apply", post(feedback_api::feedback_apply_post))
         .route("/feedback/auto", post(feedback_api::feedback_auto_post))
         .route("/feedback/reset", post(feedback_api::feedback_reset_post))
+        // triad (experimental): kernel-backed events with replay
+        .route("/triad/events", get(triad_events_sse))
         // feedback engine (near-live suggestions)
         .route(
             "/feedback/suggestions",
@@ -645,6 +692,7 @@ pub fn extra_routes() -> Router<AppState> {
             .route("/ui/models", get(ui::models_ui))
             .route("/ui/agents", get(ui::agents_ui))
             .route("/ui/projects", get(ui::projects_ui))
+            .route("/ui/flows", get(ui::flows_ui))
             // serve shared CSS
             .route("/ui/assets/tokens.css", get(ui::ui_tokens_css))
             .route("/ui/assets/ui-kit.css", get(ui::ui_kit_css));

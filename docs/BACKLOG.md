@@ -62,6 +62,13 @@ UI Coherence
 - Next: labels/arrows in annotator; redaction presets (regex+OCR); append Markdown to NOTES.md; Pin‑to‑compare from Runs; retention/tagging for gallery; guided countdown for capture.
  - Next: keyboard shortcuts (global) cheatsheet and discoverability; ARIA polish for Agents/Runs actions; skip‑links across pages; unit tests for /projects/file content_b64 path; virtualize large trees.
 
+Kernel & Triad (NOW)
+- [t-250915090001-kern01] Add `arw-kernel` crate with SQLite/WAL schema (events, artifacts, actions) and CAS helpers — done
+- [t-250915090010-kern02] Dual-write bus events to kernel and expose `/triad/events?replay=N` — done
+- [t-250915090020-kern03] Add `/actions` endpoint backed by kernel with idempotency and policy stub — todo
+- [t-250915090030-kern04] Add `/state/*` views sourced from kernel (episodes, route_stats, models) — todo
+- [t-250915090040-kern05] Migrate JSONL events journal to SQLite (remove old env) — plan
+
 Design System & Tokens
 - [t-250914231200-dsg01] Single‑source tokens (CSS/JSON) under `assets/design/` — done
 - [t-250914231205-dsg02] Sync helper and task (`scripts/sync_tokens.sh`, `just tokens-sync`) — done

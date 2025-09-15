@@ -94,6 +94,7 @@ pub const TOPIC_INTENTS_PROPOSED: &str = "intents.proposed";
 pub const TOPIC_INTENTS_APPROVED: &str = "intents.approved";
 pub const TOPIC_INTENTS_REJECTED: &str = "intents.rejected";
 pub const TOPIC_ACTIONS_APPLIED: &str = "actions.applied";
+pub const TOPIC_ACTIONS_SUBMITTED: &str = "actions.submitted";
 
 // Tools
 pub const TOPIC_TOOL_CACHE: &str = "tool.cache";

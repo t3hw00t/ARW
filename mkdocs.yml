@@ -64,6 +64,7 @@ nav:
       - Scaling & Sharing: guide/scaling_sharing.md
       - Security Hardening: guide/security_hardening.md
       - Network Posture: guide/network_posture.md
+      - Egress Settings: guide/egress_settings.md
       - Desktop Launcher: guide/launcher.md
       - Windows:
           - Install & Launcher: guide/windows_install.md
@@ -76,6 +77,8 @@ nav:
       - Offline & Sync: guide/offline_sync.md
       - Plugins: guide/plugins.md
       - Policy Permissions: guide/policy_permissions.md
+      - Policy (ABAC Facade): guide/policy_abac.md
+      - Connectors: guide/connectors.md
       - Projects UI: guide/projects_ui.md
       - Recipes: guide/recipes.md
       - Runtime Matrix: guide/runtime_matrix.md
@@ -89,6 +92,9 @@ nav:
       - Context Recipes: guide/context_recipes.md
       - Metrics & Insights: guide/METRICS_AND_INSIGHTS.md
       - Chat Backends: guide/chat_backends.md
+      - Guardrails Checks: guide/guardrails.md
+      - Correlation & Attribution: guide/correlation.md
+      - Flows (Logic Units): guide/flows.md
       - Feedback Engine: guide/feedback_engine.md
       - Logic Units Library: guide/logic_units_library.md
       - Evaluation Harness: guide/eval_harness.md
@@ -98,6 +104,7 @@ nav:
       - Human‑in‑the‑Loop: guide/human_in_loop.md
       - Interactive Performance Config: guide/interactive_performance.md
       - Interactive Performance Bench: guide/interactive_bench.md
+      - Performance Presets: guide/performance_presets.md
       - Training Park: guide/training_park.md
       - Admin Endpoints: guide/admin_endpoints.md
       - Troubleshooting: guide/troubleshooting.md
@@ -128,8 +135,12 @@ nav:
   - Explanations:
       - Unified Object Graph: architecture/object_graph.md
       - Events Vocabulary: architecture/events_vocabulary.md
+      - Restructure Handbook: RESTRUCTURE.md
+      - Kernel (Journal + CAS): architecture/kernel.md
       - Self‑Model (Metacognition): architecture/self_model.md
       - Logic Units: architecture/logic_units.md
+      - Agent Orchestrator: architecture/agent_orchestrator.md
+      - Memory Abstraction Layer: architecture/memory_abstraction.md
       - Egress Firewall: architecture/egress_firewall.md
       - Lightweight Mitigations: architecture/lightweight_mitigations.md
       - Config Patch Engine: architecture/config_patch_engine.md
@@ -169,6 +180,7 @@ nav:
           - 0001: adr/0001-design-tokens-ssot.md
           - 0002: adr/0002-events-naming.md
       - Status: developer/status.md
+      - Admin Handoff: developer/admin_handoff.md
       - Tasks: developer/tasks.md
       - Stability Freeze: developer/stability.md
       - CI: developer/ci.md

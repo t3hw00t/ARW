@@ -16,8 +16,16 @@ queue = "local"
 # nats_url = "nats://127.0.0.1:4222"
 
 # Egress policy preview & ledger (planned)
-# egress_preview = true
-# egress_ledger   = true
+
+# Egress (persisted settings; validated by spec/schemas/egress_settings.json)
+# [egress]
+# posture = "standard"              # off|public|allowlist|custom (or relaxed|standard|strict)
+# allowlist = ["api.github.com"]     # hostnames (exact or use *.suffix in tools/proxy allowlists)
+# block_ip_literals = true           # deny IP literal hosts
+# dns_guard_enable = true            # deny DoH/DoT endpoints and dns-message payloads
+# proxy_enable = true                # start local forward proxy on loopback
+# proxy_port = 9080                  # default binding
+# ledger_enable = true               # append decisions to kernel egress ledger
 
 # Session sharing (planned; roles: view/suggest/drive)
 # share_sessions = false

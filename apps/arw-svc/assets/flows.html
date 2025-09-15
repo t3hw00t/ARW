@@ -1,0 +1,90 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>ARW Flows (Logic Units)</title>
+    <link rel="stylesheet" href="/ui/assets/tokens.css" />
+    <link rel="stylesheet" href="/ui/assets/ui-kit.css" />
+    <style>
+      body { padding: 12px; font-family: var(--font-sans, system-ui, sans-serif); background: var(--bg-1); color: var(--fg-1); }
+      header { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
+      h1 { font-size: 18px; margin: 0; }
+      .card { background: var(--bg-2); border: 1px solid var(--border-1); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+      label { display:block; font-size: 12px; color: var(--fg-3); margin-bottom: 4px; }
+      input[type=text], textarea { width: 100%; background: var(--bg-1); color: var(--fg-1); border: 1px solid var(--border-1); border-radius: 6px; padding: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+      textarea { min-height: 160px; }
+      .row { display:flex; gap: 12px; }
+      .row > .col { flex:1; }
+      .btns { display:flex; gap:8px; align-items:center; }
+      .out { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; background: var(--bg-1); padding: 8px; border-radius: 6px; border: 1px solid var(--border-1); min-height: 80px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <h1>Flows (Logic Units)</h1>
+      <span class="badge" title="POST /admin/logic-units/apply">Logic Units API</span>
+    </header>
+    <div class="card">
+      <div class="row">
+        <div class="col">
+          <label for="unit">Unit ID</label>
+          <input id="unit" type="text" placeholder="my.flow.unit@local" />
+        </div>
+        <div class="col">
+          <label for="scope">Scope (optional)</label>
+          <input id="scope" type="text" placeholder="project:demo" />
+        </div>
+      </div>
+      <div style="margin-top:8px">
+        <label for="patches">Patches (JSON array)</label>
+        <textarea id="patches" spellcheck="false">[
+  {
+    "target": "governor.hints",
+    "op": "merge",
+    "value": { "mode": "verified", "retrieval_k": 20, "mmr_lambda": 0.3, "vote_k": 3, "include_provenance": true }
+  }
+]</textarea>
+      </div>
+      <div class="btns" style="margin-top:8px">
+        <button id="dry" class="btn ghost">Dry Run</button>
+        <button id="apply" class="btn">Apply</button>
+        <span id="status" class="badge">idle</span>
+      </div>
+    </div>
+    <div class="card">
+      <label>Result</label>
+      <div id="out" class="out"></div>
+    </div>
+    <script>
+      async function call(path, body) {
+        const resp = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+        const txt = await resp.text();
+        try { return { ok: resp.ok, json: JSON.parse(txt) }; } catch { return { ok: resp.ok, text: txt }; }
+      }
+      function readPatches() {
+        const t = document.getElementById('patches').value;
+        try { const v = JSON.parse(t); if (!Array.isArray(v)) throw new Error('not array'); return v; } catch(e) { throw new Error('patches must be a JSON array'); }
+      }
+      function show(v) {
+        const out = document.getElementById('out');
+        out.textContent = typeof v === 'string' ? v : JSON.stringify(v, null, 2);
+      }
+      async function run(dry) {
+        const unit = document.getElementById('unit').value.trim() || null;
+        const scope = document.getElementById('scope').value.trim() || null;
+        let patches; try { patches = readPatches(); } catch(e) { show(String(e)); return; }
+        const body = { unit_id: unit, scope, patches };
+        const path = dry ? '/admin/logic-units/apply' : '/admin/logic-units/apply';
+        if (dry) body.dry_run = true;
+        document.getElementById('status').textContent = dry ? 'dry-run' : 'applying';
+        const res = await call(path, body);
+        document.getElementById('status').textContent = res.ok ? 'ok' : 'error';
+        show(res.json ?? res.text);
+      }
+      document.getElementById('dry').addEventListener('click', ()=> run(true));
+      document.getElementById('apply').addEventListener('click', ()=> run(false));
+    </script>
+  </body>
+  </html>
+

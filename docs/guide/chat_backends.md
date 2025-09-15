@@ -65,6 +65,18 @@ Requests are sent to `POST {ARW_OPENAI_BASE_URL}/v1/chat/completions` with a bod
 }
 ```
 
+### LiteLLM (OpenAI-compatible proxy)
+
+ARW also supports LiteLLM by pointing the OpenAI-compatible base URL to your LiteLLM server.
+
+Environment (either form works):
+
+- `ARW_LITELLM_BASE_URL` (e.g., `http://127.0.0.1:4000`)
+- `ARW_LITELLM_API_KEY` (optional, if your proxy requires it)
+- `ARW_LITELLM_MODEL` (optional; otherwise `ARW_OPENAI_MODEL` is used)
+
+If `ARW_LITELLM_*` vars are set, they take precedence over the `ARW_OPENAI_*` ones.
+
 ## Temperature
 
 `/chat/send` accepts an optional `temperature` value. The service includes it in the assistant message and passes it through to backends when set.

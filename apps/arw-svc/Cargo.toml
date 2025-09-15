@@ -16,11 +16,13 @@ arw-events = { path = "../../crates/arw-events", version = "0.1.4" }
 arw-otel = { path = "../../crates/arw-otel", version = "0.1.4", default-features = false }
 tokio-stream = { workspace = true }
 arw-macros = { path = "../../crates/arw-macros", version = "0.1.4" }
+arw-kernel = { path = "../../crates/arw-kernel", version = "0.1.0" }
 inventory = { workspace = true }
 tower-http = { version = "0.6", features = ["trace","compression-br","compression-gzip","cors","timeout","fs","limit"] }
 chrono = { workspace = true }
 utoipa = { workspace = true }
 reqwest = { workspace = true }
+ureq = { version = "2.9", default-features = true, features = ["json"] }
 futures-util = { workspace = true }
 toml = { workspace = true }
 url = "2.5"

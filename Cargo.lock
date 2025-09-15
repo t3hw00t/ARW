@@ -239,6 +239,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serial_test",
+ "sysinfo",
  "tokio",
  "toml 0.8.23",
  "tracing",
@@ -259,6 +260,22 @@ dependencies = [
  "serde_json",
  "tokio",
  "tracing",
+]
+
+[[package]]
+name = "arw-kernel"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arw-events",
+ "chrono",
+ "once_cell",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -303,6 +320,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "arw-policy"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "arw-protocol"
 version = "0.1.4"
 dependencies = [
@@ -313,12 +339,49 @@ dependencies = [
 ]
 
 [[package]]
+name = "arw-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "arw-core",
+ "arw-events",
+ "arw-kernel",
+ "arw-otel",
+ "arw-policy",
+ "arw-wasi",
+ "axum 0.7.9",
+ "base64 0.21.7",
+ "bytes",
+ "chrono",
+ "hex",
+ "http-body-util",
+ "hyper 1.7.0",
+ "hyper-util",
+ "jsonschema",
+ "once_cell",
+ "reqwest 0.12.23",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tokio-stream",
+ "tokio-util",
+ "tower 0.4.13",
+ "tower-http",
+ "tracing",
+ "tracing-subscriber",
+ "url",
+ "uuid",
+]
+
+[[package]]
 name = "arw-svc"
 version = "0.1.4"
 dependencies = [
  "anyhow",
  "arw-core",
  "arw-events",
+ "arw-kernel",
  "arw-macros",
  "arw-otel",
  "arw-protocol",
@@ -359,6 +422,7 @@ dependencies = [
  "tower 0.5.2",
  "tower-http",
  "tracing",
+ "ureq",
  "url",
  "utoipa",
  "uuid",
@@ -381,6 +445,22 @@ dependencies = [
  "tauri",
  "tauri-plugin-autostart",
  "urlencoding",
+]
+
+[[package]]
+name = "arw-wasi"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "base64 0.21.7",
+ "reqwest 0.12.23",
+ "serde",
+ "serde_json",
+ "sha2",
+ "thiserror 2.0.16",
+ "tokio",
+ "url",
 ]
 
 [[package]]
@@ -3067,6 +3147,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "hashlink"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ba4ff7128dee98c7dc9794b6a411377e1404dba1c97deb8d1a55297bd25d8af"
+dependencies = [
+ "hashbrown 0.14.5",
+]
+
+[[package]]
 name = "hassle-rs"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4068,6 +4157,17 @@ dependencies = [
  "bitflags 2.9.4",
  "libc",
  "redox_syscall",
+]
+
+[[package]]
+name = "libsqlite3-sys"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0c10584274047cb335c23d3e61bcef8e323adae7c5c8c760540f73610177fc3f"
+dependencies = [
+ "cc",
+ "pkg-config",
+ "vcpkg",
 ]
 
 [[package]]
@@ -6249,6 +6349,21 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "88f8660c1ff60292143c98d08fc6e2f654d722db50410e3f3797d40baaf9d8f3"
 
 [[package]]
+name = "rusqlite"
+version = "0.31.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b838eba278d213a8beaf485bd313fd580ca4505a00d5871caeb1457c55322cae"
+dependencies = [
+ "bitflags 2.9.4",
+ "chrono",
+ "fallible-iterator",
+ "fallible-streaming-iterator",
+ "hashlink",
+ "libsqlite3-sys",
+ "smallvec",
+]
+
+[[package]]
 name = "rustc-demangle"
 version = "0.1.26"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6307,6 +6422,7 @@ version = "0.23.31"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c0ebcbd2f03de0fc1122ad9bb24b127a5a6cd51d72604a3f3c50ac459762b6cc"
 dependencies = [
+ "log",
  "once_cell",
  "ring",
  "rustls-pki-types",
@@ -8352,6 +8468,24 @@ name = "untrusted"
 version = "0.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
+
+[[package]]
+name = "ureq"
+version = "2.12.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "02d1a66277ed75f640d608235660df48c8e3c19f3b4edb6a263315626cc3c01d"
+dependencies = [
+ "base64 0.22.1",
+ "flate2",
+ "log",
+ "once_cell",
+ "rustls",
+ "rustls-pki-types",
+ "serde",
+ "serde_json",
+ "url",
+ "webpki-roots 0.26.11",
+]
 
 [[package]]
 name = "url"

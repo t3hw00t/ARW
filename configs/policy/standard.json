@@ -1,0 +1,13 @@
+{
+  "allow_all": false,
+  "lease_rules": [
+    { "kind_prefix": "net.http.", "capability": "net:http" },
+    { "kind_prefix": "net.tcp.", "capability": "net:tcp" },
+    { "kind_prefix": "fs.", "capability": "fs" },
+    { "kind_prefix": "context.rehydrate", "capability": "context:rehydrate:file" },
+    { "kind_prefix": "models.download", "capability": "models:download" },
+    { "kind_prefix": "tools.browser.", "capability": "browser" },
+    { "kind_prefix": "app.", "capability": "app" },
+    { "kind_prefix": "shell.", "capability": "shell" }
+  ]
+}

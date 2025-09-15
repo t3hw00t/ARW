@@ -1,0 +1,14 @@
+{
+  "recipes": {
+    "schema_ref": "spec/schemas/recipe_manifest.json",
+    "pointer_prefix": "recipes"
+  },
+  "policy": {
+    "schema_ref": "spec/schemas/policy_network_scopes.json",
+    "pointer_prefix": "policy"
+  },
+  "egress": {
+    "schema_ref": "spec/schemas/egress_settings.json",
+    "pointer_prefix": "egress"
+  }
+}

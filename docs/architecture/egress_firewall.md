@@ -5,7 +5,7 @@ title: Egress Firewall
 # Egress Firewall
 { .topic-trio style="--exp:.5; --complex:.6; --complicated:.7" data-exp=".5" data-complex=".6" data-complicated=".7" }
 
-Updated: 2025-09-12
+Updated: 2025-09-15
 Type: Explanation
 
 This plan adds a lightweight, enforceable egress gateway backed by project policy, with DNS guardrails, filesystem scoping, and leased sensor access. It keeps the fast local path fast and is maintainable by one person per cluster.
@@ -73,17 +73,35 @@ This plan adds a lightweight, enforceable egress gateway backed by project polic
 4) Expand to all tools; add OS firewall rules for host processes we can’t containerize.
 5) Apply the same pattern to Workers; enforce mTLS and policy propagation.
 
-## Planned Configuration (Preview)
-These flags are planned to control posture and gateway behavior. Names may evolve before implementation.
+## Configuration (Current + Preview)
+These flags control posture and gateway behavior. Some are implemented (noted), others are planned.
 - `ARW_NET_POSTURE`: `off|public|allowlist|custom` (per project)
-- `ARW_EGRESS_PROXY_ENABLE`: `1` to start per‑node gateway on loopback
+- `ARW_EGRESS_PROXY_ENABLE`: `1` to start per‑node gateway on loopback (preview forward proxy implemented)
 - `ARW_EGRESS_PROXY_PORT`: listen port (default 9080)
-- `ARW_EGRESS_BLOCK_IP_LITERALS`: `1` to require named hosts
+- `ARW_EGRESS_BLOCK_IP_LITERALS`: `1` to require named hosts (implemented for built‑in http.fetch)
 - `ARW_DNS_GUARD_ENABLE`: `1` to enforce local resolver for tools
 - `ARW_EGRESS_LEDGER`: path or `state://egress.jsonl`
 - `ARW_DISABLE_HTTP3`: `1` for headless scrapers to force H1/H2 via proxy
+- `ARW_EGRESS_LEDGER_ENABLE`: `1` to append entries to the egress ledger (implemented)
 
 See also: Guide → Network Posture, Policy, Security Hardening, Clustering.
+
+## What’s Implemented (Initial)
+- Egress Preview API: `POST /egress/preview` → `{ allow, reason?, host, port, protocol }`. Applies allowlist, IP‑literal guard, and policy/lease rules. When `ARW_EGRESS_LEDGER_ENABLE=1`, logs preview decisions.
+- Egress Proxy (preview): `ARW_EGRESS_PROXY_ENABLE=1` starts a loopback forward proxy at `127.0.0.1:${ARW_EGRESS_PROXY_PORT:-9080}` supporting HTTP requests and HTTPS `CONNECT` tunnels. Enforces IP‑literal/allowlist guards, DNS‑guard rules, and policy/lease checks; logs to the egress ledger when enabled.
+- Built‑in HTTP effector: `http.fetch` enforces allowlist and optional IP‑literal blocking; logs egress decisions when ledger is enabled.
+ - DNS Guard (preview): When `ARW_DNS_GUARD_ENABLE=1`, the proxy and `http.fetch` block DoH/DoT endpoints (e.g., `dns.google`, `cloudflare-dns.com`, port `853`), `/dns-query` paths, and `application/dns-message` payloads.
+
+Control plane
+- GET `/state/egress/settings` — returns effective posture and egress toggles (allowlist, proxy, ledger, DNS guard, block IP literals).
+- POST `/egress/settings` — admin‑gated; updates runtime env toggles (non‑persistent) and publishes `egress.settings.updated`.
+ - Dynamic proxy: settings updates will start/stop or rebind the proxy (port) without a restart.
+ - Built‑in HTTP effector: when `ARW_EGRESS_PROXY_ENABLE=1`, `http.fetch` automatically routes via the local proxy; otherwise it applies allowlist and optional IP‑literal blocking directly. Decisions log to the ledger when enabled.
+
+Correlation
+- Add `X-ARW-Corr` and `X-ARW-Project` headers to requests that should be tagged for correlation. The proxy annotates ledger entries and SSE events with these fields when present.
+
+Next steps: add DNS guard integration and richer ledger events.
 
 ## Schemas (Preview)
 - Policy: Network Scopes & Leases — see `spec/schemas/policy_network_scopes.json`

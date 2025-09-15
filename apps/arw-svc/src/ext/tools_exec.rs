@@ -294,6 +294,95 @@ fn reg() -> &'static RwLock<HashMap<&'static str, Entry>> {
                 },
             },
         );
+        map.insert(
+            "guardrails.check",
+            Entry {
+                summary: "Heuristic/content guard checks with optional HTTP backend: input {text, policy?, rules?} -> {ok, score, issues[], suggestions[]}",
+                exec: |input| {
+                    let text = input
+                        .get("text")
+                        .and_then(|v| v.as_str())
+                        .ok_or("missing 'text'")?;
+                    // Optional HTTP backend when ARW_GUARDRAILS_URL is set
+                    if let Ok(base) = std::env::var("ARW_GUARDRAILS_URL") {
+                        if !base.trim().is_empty() {
+                            let url = format!("{}/check", base.trim_end_matches('/'));
+                            let mut body = serde_json::json!({"text": text});
+                            if let Some(p) = input.get("policy") {
+                                if let Some(obj) = body.as_object_mut() { obj.insert("policy".into(), p.clone()); }
+                            }
+                            if let Some(r) = input.get("rules") {
+                                if let Some(obj) = body.as_object_mut() { obj.insert("rules".into(), r.clone()); }
+                            }
+                            let resp = ureq::post(&url)
+                                .set("Content-Type", "application/json")
+                                .send_json(body.clone());
+                            if let Ok(r) = resp {
+                                if r.status() >= 200 && r.status() < 300 {
+                                    if let Ok(v) = r.into_json::<serde_json::Value>() {
+                                        let okf = v.get("ok").and_then(|b| b.as_bool()).unwrap_or(true);
+                                        let score = v.get("score").cloned().unwrap_or(serde_json::json!(0.0));
+                                        let issues = v.get("issues").cloned().unwrap_or(serde_json::json!([]));
+                                        let suggestions = v.get("suggestions").cloned().unwrap_or(serde_json::json!([]));
+                                        return Ok(serde_json::json!({"ok": okf, "score": score, "issues": issues, "suggestions": suggestions}));
+                                    }
+                                }
+                            }
+                            // fall through to local heuristics on failure
+                        }
+                    }
+                    // Local heuristic checks
+                    #[derive(serde::Serialize)]
+                    struct Issue { code: String, severity: String, message: String, #[serde(skip_serializing_if = "Option::is_none")] span: Option<(usize,usize)> }
+                    let mut issues: Vec<Issue> = Vec::new();
+                    // Email
+                    let re_email = regex::Regex::new(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}").unwrap();
+                    for m in re_email.find_iter(text) {
+                        issues.push(Issue{ code: "pii.email".into(), severity: "medium".into(), message: "Email address detected".into(), span: Some((m.start(), m.end()))});
+                    }
+                    // AWS Access Key ID
+                    let re_aws = regex::Regex::new(r"AKIA[0-9A-Z]{16}").unwrap();
+                    for m in re_aws.find_iter(text) { issues.push(Issue{ code: "secret.aws_access_key".into(), severity: "high".into(), message: "AWS access key pattern".into(), span: Some((m.start(), m.end()))}); }
+                    // Google API key
+                    let re_gapi = regex::Regex::new(r"AIza[0-9A-Za-z\-_]{35}").unwrap();
+                    for m in re_gapi.find_iter(text) { issues.push(Issue{ code: "secret.gcp_api_key".into(), severity: "high".into(), message: "Google API key pattern".into(), span: Some((m.start(), m.end()))}); }
+                    // Slack token
+                    let re_slack = regex::Regex::new(r"xox[baprs]-[0-9A-Za-z-]{10,}").unwrap();
+                    for m in re_slack.find_iter(text) { issues.push(Issue{ code: "secret.slack_token".into(), severity: "high".into(), message: "Slack token pattern".into(), span: Some((m.start(), m.end()))}); }
+                    // URLs and allowlist
+                    let re_url = regex::Regex::new(r"https?://[^\s)]+").unwrap();
+                    let allowlist: Vec<String> = std::env::var("ARW_GUARDRAILS_ALLOWLIST")
+                        .ok()
+                        .map(|s| s.split(',').map(|t| t.trim().to_lowercase()).filter(|t| !t.is_empty()).collect())
+                        .unwrap_or_else(|| Vec::new());
+                    for m in re_url.find_iter(text) {
+                        let url = m.as_str();
+                        if let Ok(u) = url::Url::parse(url) {
+                            let host = u.host_str().unwrap_or("").to_lowercase();
+                            if !allowlist.is_empty() && !allowlist.iter().any(|h| host==*h || host.ends_with(&format!(".{h}"))) {
+                                issues.push(Issue{ code: "egress.unlisted_host".into(), severity: "medium".into(), message: format!("URL host not in allowlist: {}", host), span: Some((m.start(), m.end()))});
+                            }
+                        }
+                    }
+                    // Basic prompt injection markers
+                    let inj_markers = ["ignore previous", "disregard prior", "override instructions", "exfiltrate"];
+                    let lower = text.to_ascii_lowercase();
+                    for pat in inj_markers.iter() {
+                        if let Some(pos) = lower.find(pat) {
+                            issues.push(Issue{ code: "prompt_injection.marker".into(), severity: "medium".into(), message: format!("Suspicious instruction: '{}'", pat), span: Some((pos, pos+pat.len()))});
+                        }
+                    }
+                    // Score: weighted count
+                    let mut score: f64 = 0.0;
+                    for it in &issues {
+                        score += match it.severity.as_str() { "high" => 3.0, "medium" => 1.0, _ => 0.5 };
+                    }
+                    let ok = issues.iter().all(|i| i.severity != "high");
+                    let issues_val = serde_json::to_value(&issues).unwrap_or(serde_json::json!([]));
+                    Ok(serde_json::json!({ "ok": ok, "score": score, "issues": issues_val, "suggestions": serde_json::Value::Array(Vec::new()) }))
+                },
+            },
+        );
         RwLock::new(map)
     })
 }

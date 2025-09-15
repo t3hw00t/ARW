@@ -4,9 +4,9 @@ title: Network Posture
 
 # Network Posture
 
-Updated: 2025-09-12
+Updated: 2025-09-15
 
-Status: Planned
+Status: Partial (preview API implemented)
 Type: How‑to
 
 Network posture is a per‑project setting that translates policy into enforceable egress controls via a host‑local gateway and DNS guard. It remains opt‑in and aims to keep the local fast‑path fast.
@@ -25,9 +25,14 @@ Network posture is a per‑project setting that translates policy into enforceab
 - Pre‑offload dialog shows destination, payload summary, and estimated cost.
 - Egress ledger records decisions, bytes, and attribution (episode/project/node).
 
-## Planned Configuration (Preview)
+## Configuration (Preview)
 - `ARW_NET_POSTURE`: `off|public|allowlist|custom`
-- `ARW_EGRESS_PROXY_ENABLE`: `1` (per node)
+- `ARW_EGRESS_PROXY_ENABLE`: `1` (per node; preview forward proxy)
 - `ARW_DNS_GUARD_ENABLE`: `1` (per node)
+- `ARW_EGRESS_BLOCK_IP_LITERALS`: `1` (block IP-literal hosts for built‑in `http.fetch`)
+- `ARW_EGRESS_LEDGER_ENABLE`: `1` (log decisions)
+
+Preview endpoint
+- `POST /egress/preview` to test a URL/method against policy and posture before running tools.
 
 See also: Architecture → Egress Firewall; Policy; Security Hardening; Clustering.

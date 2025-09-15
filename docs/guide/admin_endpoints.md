@@ -143,6 +143,16 @@ curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
 - `/admin/emit/test`: emit a test event
 - `/admin/shutdown`: request shutdown
 
+## Egress (Service Endpoints)
+
+These endpoints live under the public service namespace; use admin token for writes.
+
+- `GET /state/egress/settings` — effective settings (posture and toggles)
+- `POST /egress/settings` — update toggles and persist to config (admin‑gated)
+- `POST /egress/preview` — dry‑run a URL against policy/guards and return `{ allow|reason }`
+
+See How‑to → Egress Settings and Architecture → Egress Firewall for details.
+
 Note: Depending on build flags and environment, some endpoints may be unavailable or no‑op.
 
 ## Examples

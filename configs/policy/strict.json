@@ -1,0 +1,13 @@
+{
+  "allow_all": false,
+  "lease_rules": [
+    { "kind_prefix": "net.", "capability": "net" },
+    { "kind_prefix": "fs.", "capability": "fs" },
+    { "kind_prefix": "context.", "capability": "context" },
+    { "kind_prefix": "models.", "capability": "models" },
+    { "kind_prefix": "tools.", "capability": "tools" },
+    { "kind_prefix": "app.", "capability": "app" },
+    { "kind_prefix": "shell.", "capability": "shell" },
+    { "kind_prefix": "system.", "capability": "system" }
+  ]
+}

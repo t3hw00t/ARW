@@ -28,6 +28,8 @@ SSE & Read‑models
 - Subscribe with `GET /events?replay=25&prefix=state.` (or use the launcher Events window).
 - Read‑models publish small JSON Patch deltas. Apply them locally to maintain a snapshot.
 - Route stats stream as `state.read.model.patch` (id: `route_stats`) and are also available at `GET /state/route_stats`.
+- Logic Units and Orchestrator Jobs also publish `state.read.model.patch` with ids `logic_units` and `orchestrator_jobs` (snapshots are available at `GET /logic-units` and `GET /state/orchestrator/jobs`).
+ - Memory recent snapshot publishes `state.read.model.patch` with id `memory_recent` (snapshot available at `GET /state/memory/recent`).
 
 Policy & Context
 - Policy lane reads `GET /state/policy` (active leases). Approvals surface here when enabled.

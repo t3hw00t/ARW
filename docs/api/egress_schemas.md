@@ -9,10 +9,11 @@ Type: Reference
 
 Status: Planned
 
-This page anchors the two minimal JSON Schemas introduced for the policy‑backed egress firewall work:
+This page anchors the JSON Schemas introduced for the policy‑backed egress firewall work:
 
 - Policy: Network Scopes & Leases — spec/schemas/policy_network_scopes.json
 - Egress Ledger Entry — spec/schemas/egress_ledger.json
+- Egress Settings (control plane) — spec/schemas/egress_settings.json
 
 ## Policy: Network Scopes & Leases
 - Defines project‑level network posture (`off|public|allowlist|custom`).

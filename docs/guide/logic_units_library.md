@@ -29,4 +29,9 @@ Metrics panel
 Permissions
 - Units cannot silently widen permissions. If a unit requests capabilities, the Permission Manager prompts inline with TTL leases.
 
+Continuous updates
+- Research feeds → Curators propose → Library lists as Suggested with provenance.
+- Install from a local folder (manifest) or a signed registry (planned).
+- Dry‑run diffs and A/B on saved tasks; promote when effects are net‑positive.
+
 See also: Logic Units (architecture), Evaluation Harness, Permissions & Policies.

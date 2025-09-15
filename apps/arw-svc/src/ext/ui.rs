@@ -49,6 +49,18 @@ pub(crate) async fn projects_ui() -> impl IntoResponse {
     )
 }
 
+#[arw_admin(method = "GET", path = "/admin/ui/flows", summary = "Flows UI (Logic Units)")]
+pub(crate) async fn flows_ui() -> impl IntoResponse {
+    (
+        [
+            (X_CONTENT_TYPE_OPTIONS, "nosniff"),
+            (REFERRER_POLICY, "no-referrer"),
+            (CACHE_CONTROL, "no-store"),
+        ],
+        Html(include_str!("../../assets/flows.html")),
+    )
+}
+
 #[arw_admin(
     method = "GET",
     path = "/admin/ui/assets/tokens.css",

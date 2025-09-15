@@ -1,0 +1,29 @@
+{
+  "$id": "https://arw/spec/schemas/egress_settings.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "ARW Egress Settings",
+  "description": "Runtime egress posture and gateway toggles exposed via the Settings control plane.",
+  "type": "object",
+  "properties": {
+    "posture": { "type": "string", "enum": ["off","public","allowlist","custom","relaxed","standard","strict"] },
+    "allowlist": { "type": "array", "items": { "type": "string" } },
+    "block_ip_literals": { "type": "boolean" },
+    "dns_guard_enable": { "type": "boolean" },
+    "proxy_enable": { "type": "boolean" },
+    "proxy_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+    "ledger_enable": { "type": "boolean" }
+  },
+  "additionalProperties": false,
+  "examples": [
+    {
+      "posture": "standard",
+      "allowlist": ["api.github.com","*.githubusercontent.com"],
+      "block_ip_literals": true,
+      "dns_guard_enable": true,
+      "proxy_enable": true,
+      "proxy_port": 9080,
+      "ledger_enable": true
+    }
+  ]
+}
+

@@ -4,7 +4,7 @@ title: Roadmap
 
 # Roadmap
 
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: Reference
 
 See also: [Backlog](BACKLOG.md) and [Interface Roadmap](INTERFACE_ROADMAP.md).
@@ -27,6 +27,7 @@ Roadmap highlights themes and timelines; Backlog tracks actionable items.
 - Tests + Lint: fixed flaky gating contract tests (serialized shared state); workspace clippy clean with `-D warnings`.
 
 ## Near‑Term (Weeks)
+- Kernel & Triad (in progress): unify to a single SQLite journal + CAS, and expose the triad API (`/actions`, `/events`, `/state`). Initial step: kernel journal with DB‑backed replay on `/triad/events` and dual‑write from the in‑process bus.
 - Stabilization window: limit to bug fixes, docs, tests, and internal cleanups; additive API changes only.
 - Observability & Eventing: event journal tail/readers and metrics/docgen polish — see Backlog → Now.
 - Security & Remote Access: hashed tokens, per‑route gating, TLS profiles, proxy templates — see Backlog → Now.

@@ -1,7 +1,6 @@
 # Gating Keys
 
-Updated: 2025-09-15
-Generated: yes (from code)
+Generated from code.
 
 - `queue:enqueue`
 - `events:task.completed`
@@ -45,6 +44,8 @@ Generated: yes (from code)
 - `introspect:probe`
 - `admin:shutdown`
 - `admin:emit`
+- `rpu:trust:get`
+- `rpu:trust:reload`
 - `projects:file:get`
 - `projects:file:set`
 - `projects:file:patch`

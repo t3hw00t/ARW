@@ -3,11 +3,17 @@ title: Context Working Set (Never‑Out‑Of‑Context)
 ---
 
 # Context Working Set (Never‑Out‑Of‑Context)
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: Explanation
 
 Core idea
 - Keep only what the model needs right now in the prompt; keep everything else in structured memories you can fetch, compress, or rehydrate on demand.
+
+Practical infinite context window
+- Treat the “window” as an on‑demand working set, not a single prompt.
+- Build the set via hybrid retrieval (FTS5 + embeddings + graph), apply MMR/diversity and token budgets.
+- Attach stable pointers to everything; rehydrate to full content on demand.
+- Use CRAG corrective loops and LLMLingua‑style compression to keep recall high within budgets.
 
 Memory layers (each with its own budget + eviction)
 - Working memory (hot, tiny): current user turn, live plan, tool I/O stubs, and a few key “registers” (instructions, constraints, budgets, safety).
