@@ -348,6 +348,7 @@ dependencies = [
  "arw-kernel",
  "arw-otel",
  "arw-policy",
+ "arw-topics",
  "arw-wasi",
  "axum 0.7.9",
  "base64 0.21.7",
@@ -386,6 +387,7 @@ dependencies = [
  "arw-macros",
  "arw-otel",
  "arw-protocol",
+ "arw-topics",
  "axum 0.7.9",
  "base64 0.21.7",
  "chrono",
@@ -447,6 +449,10 @@ dependencies = [
  "tauri-plugin-autostart",
  "urlencoding",
 ]
+
+[[package]]
+name = "arw-topics"
+version = "0.1.4"
 
 [[package]]
 name = "arw-wasi"

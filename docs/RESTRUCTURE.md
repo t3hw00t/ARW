@@ -6,7 +6,7 @@ title: Restructure Handbook (Source of Truth)
 
 This document is the single source of truth for the ongoing ARW restructure. It is written so a new contributor (or a chat without prior context) can pick up work immediately.
 
-Updated: 2025-09-17
+Updated: 2025-09-18
 Owner: Core maintainers
 Scope: Architecture, APIs, modules, migration plan, status, hand‑off tips
 
@@ -156,7 +156,7 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
   - `POST /actions/:id/state`: transitions (queued|running|completed|failed) and emits events.
   - `GET /events`: live SSE stream (bus); kernel dual‑writes events.
   - `GET /state/episodes`: groups recent events by `corr_id`.
-  - `GET /state/route_stats`: bus stats (receivers, delivered, etc.).
+  - `GET /state/route_stats`: combined bus counters, event kind totals, and per-route latency/hit metrics.
   - `GET /state/contributions`: contribution ledger snapshot.
   - File: `apps/arw-server/src/main.rs`
 
@@ -177,6 +177,9 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
     - `POST /actions` — idempotent submission via kernel; emits `actions.submitted`.
   - Files: `apps/arw-svc/src/main.rs`, `apps/arw-svc/src/ext/mod.rs`, `apps/arw-svc/src/ext/actions_api.rs`.
   - Toggle: `ARW_KERNEL_ENABLE=1` (default) enables dual‑write; set `0` to disable.
+- Scripts: `scripts/start.{sh,ps1}` default to the unified server; pass `--legacy` / `-Legacy` to run `arw-svc` (launcher auto-forces legacy until ported).
+- Debug helpers `scripts/debug.{sh,ps1}` now default to the legacy stack (for `/debug`) but accept `--server`/`-Server` to target the unified headless flow.
+  - Containers: new `apps/arw-server/Dockerfile` and `docker-compose.yml` target `arw-server`; legacy image remains available for the debug UI.
 
 ## Migration Plan (High‑level)
 1) Kernel + Triad API complete in `arw-server` (now)
@@ -214,7 +217,7 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
 - `POST /actions/:id/state` → `{ ok: true }` (and event `actions.*`)
 - `GET /events` → SSE (live bus; DB dual‑write)
 - `GET /state/episodes` → `{ items: [{ id, events, start, end }] }`
-- `GET /state/route_stats` → `{ published, delivered, receivers, ... }`
+- `GET /state/route_stats` → `{ bus: {…}, events: { start, total, kinds }, routes: { by_path: { "/path": { hits, errors, ewma_ms, p95_ms, max_ms } } } }`
 - `GET /state/actions` → `{ items: [{ id, kind, state, created, updated }] }`
 - `GET /state/contributions` → `{ items: [...] }`
 - `GET /state/egress` → `{ items: [...] }`

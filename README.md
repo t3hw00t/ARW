@@ -5,7 +5,7 @@
 [![CI](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml/badge.svg)](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml)
 [![Docs Check](https://github.com/t3hw00t/ARW/actions/workflows/docs-check.yml/badge.svg)](https://github.com/t3hw00t/ARW/actions/workflows/docs-check.yml)
 [![Docs](https://img.shields.io/badge/docs-material%20for%20mkdocs-blue)](https://t3hw00t.github.io/ARW/)
-[![Container](https://img.shields.io/badge/ghcr-arw--svc-blue?logo=docker)](https://ghcr.io/t3hw00t/arw-svc)
+[![Container](https://img.shields.io/badge/ghcr-arw--server-blue?logo=docker)](https://ghcr.io/t3hw00t/arw-server)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-informational)](#licensing)
 [![Release](https://img.shields.io/github/v/release/t3hw00t/ARW?display_name=tag)](https://github.com/t3hw00t/ARW/releases)
 [![Windows x64 MSI](https://img.shields.io/badge/Windows%20x64-MSI-blue?logo=windows)](https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-x64.msi)
@@ -16,6 +16,8 @@
 Your private AI control room that can scale and share when you choose.
 
 In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” on your computer to research, plan, write, and build—while you stay in charge. It is local‑first and privacy‑first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.
+
+> **Restructure update:** `arw-server` is the new unified API surface (headless-first). The legacy `arw-svc` remains available with `scripts/start.{sh,ps1} --legacy` while the debug UI and launcher are ported. Docs below call out when a command targets the legacy stack.
 
 Full documentation → https://t3hw00t.github.io/ARW/
 
@@ -83,44 +85,45 @@ The details that make ARW practical in real workflows.
 
 ## Try ARW in 2 Minutes
 
-Windows
+Windows (headless unified server)
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
 ```
 
-- Windows installer: in progress. See Windows Install & Launcher for current paths and the launcher:
-  - docs/guide/windows_install.md
-  - MSI bundles are attached to GitHub Releases (signed when CI secrets are present).
-- The service console now starts minimized to avoid AV heuristics that flag hidden windows; pass `-HideWindow` to restore the
-  previous fully hidden behavior.
+- Need the legacy debug UI? Append `-Legacy` to the second command to launch `arw-svc` on port 8090 instead of the unified server on 8091.
+- Windows installer packages remain available while the launcher is retargeted. See [Windows Install](docs/guide/windows_install.md) for MSI links and tray behavior.
 
-## Download
-
-- Windows (x64): https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-x64.msi
-- Windows (ARM64, when available): https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-arm64.msi
-- All assets and notes: https://github.com/t3hw00t/ARW/releases
-
-Linux / macOS
+Linux / macOS (headless unified server)
 ```bash
 bash scripts/setup.sh
-# Option A: Desktop launcher
-cargo run -p arw-launcher
-# Option B: Headless service only
+# Option A: new unified server
 bash scripts/start.sh --service-only --wait-health
+# Option B: legacy UI
+bash scripts/start.sh --legacy --wait-health
 ```
 
-Open http://127.0.0.1:8090 and visit `/debug` (set `ARW_DEBUG=1` for local dev). The Debug UI includes an Episodes panel (stitched by `corr_id`) and live state snapshots; server read‑models are exposed under `/state/*` (observations, beliefs, world, intents, actions, episodes, self/{agent}). The desktop launcher tray also exposes “Debug” and “Windows” shortcuts.
+The unified server is API-first. Point your client or integration to:
 
-Docker (amd64/arm64); Native binaries: Windows (x64/ARM64), macOS (x64/ARM64), Linux (x64/ARM64)
 ```bash
-docker run --rm -p 8090:8090 ghcr.io/t3hw00t/arw-svc:latest
+curl -sS http://127.0.0.1:8091/healthz
+curl -sS http://127.0.0.1:8091/about | jq
+curl -sS -X POST http://127.0.0.1:8091/actions \
+  -H 'content-type: application/json' \
+  -d '{"kind":"demo.echo","input":{"msg":"hi"}}'
+```
+
+Legacy UI surfaces (debug panels, launcher menus) still require `arw-svc` for the moment; run the legacy option above when you need them and watch `/events` + `/state/*` evolve in the new stack.
+
+Docker (amd64/arm64) — unified server
+```bash
+docker run --rm -p 8091:8091 ghcr.io/t3hw00t/arw-server:latest
 ```
 
 Verify endpoints
 ```bash
-curl -sS http://127.0.0.1:8090/healthz
-curl -sS http://127.0.0.1:8090/about | jq
+curl -sS http://127.0.0.1:8091/healthz
+curl -sS http://127.0.0.1:8091/about | jq
 ```
 
 ### Debug & Audit Helpers
@@ -128,20 +131,28 @@ curl -sS http://127.0.0.1:8090/about | jq
 Quick wrappers exist for common flows:
 
 ```bash
-# Linux/macOS — quick debug run (opens /debug)
-bash scripts/debug.sh --interactive
+# Linux/macOS — quick debug run (legacy UI)
+bash scripts/debug.sh --interactive --legacy
 
 # Linux/macOS — supply-chain audit (cargo-audit + cargo-deny)
 bash scripts/audit.sh --interactive
 ```
 
 ```powershell
-# Windows — quick debug run
-scripts/debug.ps1 -Interactive
+# Windows — quick debug run (legacy UI)
+scripts/debug.ps1 -Interactive -Legacy
 
 # Windows — supply-chain audit
 scripts/audit.ps1 -Interactive
 ```
+
+## Download
+
+- Windows (x64): https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-x64.msi
+- Windows (ARM64): https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-arm64.msi
+- All assets and notes: https://github.com/t3hw00t/ARW/releases
+
+_Note_: MSI bundles currently ship the legacy `arw-svc` service while the launcher UI migrates. After installation, run `scripts/start.ps1` without `-Legacy` (or `scripts/start.sh --service-only`) to switch to the unified server.
 
 ## Architecture at a Glance
 
@@ -157,7 +168,7 @@ scripts/audit.ps1 -Interactive
          │                    │                 │
          ▼                    ▼                 ▼
 ┌────────────────────────────────────────────────────────────────────┐
-│                        arw-svc Runtime                             │
+│                   arw-server Runtime (Unified)                     │
 │ ┌──────────────┐  ┌──────────────────┐  ┌────────────────────────┐ │
 │ │ HTTP Router  │  │ Live Event Bus   │  │ Policy & Gatekeeper    │ │
 │ │ + Middleware │◀▶│ (SSE fan-out)    │◀▶│ (Gating, RPU, admin)   │ │
@@ -183,7 +194,7 @@ scripts/audit.ps1 -Interactive
 └───────────────────────┴──────────────────────────┴────────────────┘
 ```
 
-<i>Screenshot:</i> see the Debug UI at `/debug` (add `ARW_DEBUG=1`).
+<i>Screenshot:</i> legacy debug UI at `/debug` (start with `--legacy` and add `ARW_DEBUG=1`).
 
 Screenshots → https://t3hw00t.github.io/ARW/guide/screenshots/
 
@@ -191,23 +202,25 @@ Screenshots → https://t3hw00t.github.io/ARW/guide/screenshots/
 
 ```bash
 # Build locally
-docker build -f apps/arw-svc/Dockerfile -t arw-svc:dev .
+docker build -f apps/arw-server/Dockerfile -t arw-server:dev .
 
 # Run (dev): binds on localhost unless ARW_BIND set
-docker run --rm -p 8090:8090 \
-  -e ARW_PORT=8090 -e ARW_BIND=0.0.0.0 \
-  -e ARW_DEBUG=1 -e ARW_ADMIN_TOKEN=dev-admin \
-  arw-svc:dev
+docker run --rm -p 8091:8091 \
+  -e ARW_PORT=8091 -e ARW_BIND=0.0.0.0 \
+  -e ARW_ADMIN_TOKEN=dev-admin \
+  arw-server:dev
 
 # Verify
-curl -sS http://127.0.0.1:8090/healthz
+curl -sS http://127.0.0.1:8091/healthz
 ```
 
-Pull from GHCR (on releases): `ghcr.io/t3hw00t/arw-svc:latest`. See the Docker guide for compose and hardening.
+Pull from GHCR (on releases): `ghcr.io/t3hw00t/arw-server:latest`. Need the legacy UI image? Use `ghcr.io/t3hw00t/arw-svc:latest` until the new UI lands. See the Docker guide for compose and hardening.
 
 ## Event Topics (Canonical)
 
-- Source of truth: `apps/arw-svc/src/ext/topics.rs` — centralized constants used by the service.
+> During the restructure these constants still live in the legacy service crate; the unified server publishes the same dot.case topics via `arw-events`.
+
+- Source of truth: `crates/arw-topics/src/lib.rs` — centralized constants shared by the service and unified server.
 - `models.download.progress`: download lifecycle, progress, and errors; optional `budget` and `disk` fields.
 - `models.changed`: models list deltas (add/delete/default/downloaded/error/canceled).
 - `models.refreshed`: emitted after default models refresh with `{count}`.

@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde_json::json;
 
 use crate::{admin_ok, AppState};
+use arw_topics as topics;
 
 pub async fn orchestrator_mini_agents() -> impl IntoResponse {
     Json(json!({"items": []}))
@@ -52,9 +53,10 @@ pub async fn orchestrator_start_training(
             )
         }
     };
-    state
-        .bus
-        .publish("orchestrator.job.created", &json!({"id": id, "goal": goal}));
+    state.bus.publish(
+        topics::TOPIC_ORCHESTRATOR_JOB_CREATED,
+        &json!({"id": id, "goal": goal}),
+    );
     let state2 = state.clone();
     let id_clone = id.clone();
     let goal_clone = goal.clone();
@@ -68,7 +70,7 @@ pub async fn orchestrator_start_training(
                 Some(p),
             );
             state2.bus.publish(
-                "orchestrator.job.progress",
+                topics::TOPIC_ORCHESTRATOR_JOB_PROGRESS,
                 &json!({"id": id_clone, "progress": p}),
             );
             if i < steps {
@@ -76,7 +78,7 @@ pub async fn orchestrator_start_training(
             }
         }
         state2.bus.publish(
-            "orchestrator.job.completed",
+            topics::TOPIC_ORCHESTRATOR_JOB_COMPLETED,
             &json!({"id": id_clone, "ok": true}),
         );
         // Suggest a Logic Unit manifest as an output of the training
@@ -92,7 +94,7 @@ pub async fn orchestrator_start_training(
             .kernel
             .insert_logic_unit(&lu_id, &manifest, "suggested");
         state2.bus.publish(
-            "logic.unit.suggested",
+            topics::TOPIC_LOGICUNIT_SUGGESTED,
             &json!({"id": lu_id, "job_id": id_clone}),
         );
     });

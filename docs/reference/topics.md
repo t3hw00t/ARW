@@ -8,7 +8,7 @@ Type: Reference
 
 Source of truth for event kinds published by the service. These constants are defined once in code and imported where needed to avoid drift:
 
-- Code constants: `apps/arw-svc/src/ext/topics.rs`
+- Code constants: `crates/arw-topics/src/lib.rs`
 
 Related docs:
 - Explanations → Events Vocabulary: `docs/architecture/events_vocabulary.md`

@@ -6,6 +6,7 @@ use serde_json::{json, Value};
 
 use crate::AppState;
 use arw_policy::{AbacRequest, Entity, PolicyEngine};
+use arw_topics as topics;
 
 pub async fn state_policy(State(state): State<AppState>) -> impl axum::response::IntoResponse {
     Json(state.policy.lock().await.snapshot())
@@ -29,7 +30,7 @@ pub async fn policy_reload(
     }
     state
         .bus
-        .publish("policy.reloaded", &json!(newp.snapshot()));
+        .publish(topics::TOPIC_POLICY_RELOADED, &json!(newp.snapshot()));
     (
         axum::http::StatusCode::OK,
         Json(json!({"ok": true, "policy": newp.snapshot()})),

@@ -7,6 +7,7 @@ members = [
   "crates/arw-policy",
   "crates/arw-wasi",
   "crates/arw-macros",
+  "crates/arw-topics",
   "apps/arw-cli",
   "crates/arw-otel",
   "apps/arw-svc",

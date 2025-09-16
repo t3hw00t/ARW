@@ -13,7 +13,7 @@ Microsummary: Pointers to releases, changelog, and upgrade notes. Stable.
 - The service publishes normalized lowercase dot kinds (e.g., `models.download.progress`).
 - Legacy/dual modes have been removed; update any consumers listening to `Models.*` to normalized forms.
 - SSE clients should filter with `?prefix=models.` and update matchers accordingly.
- - Publishers now use centralized constants from `apps/arw-svc/src/ext/topics.rs`.
+ - Publishers now use centralized constants from `crates/arw-topics/src/lib.rs`.
  - Connector publishes both cluster and node subjects in dot.case:
    - Cluster-wide: `arw.events.task.completed`
    - Node-scoped: `arw.events.node.<node_id>.task.completed`

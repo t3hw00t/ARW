@@ -7,6 +7,7 @@ use std::time::Instant;
 use tokio::sync::mpsc;
 use tokio::task::JoinError;
 
+use arw_topics as topics;
 pub(crate) enum ContextIterationEvent {
     Summary {
         iteration: usize,
@@ -82,7 +83,7 @@ impl StreamIterationEmitter {
                     let _ = sender
                         .send(working_set::WorkingSetStreamEvent {
                             iteration,
-                            kind: "working_set.iteration.summary".into(),
+                            kind: topics::TOPIC_WORKING_SET_ITERATION_SUMMARY.into(),
                             payload,
                         })
                         .await;
@@ -93,7 +94,7 @@ impl StreamIterationEmitter {
                     let _ = sender
                         .send(working_set::WorkingSetStreamEvent {
                             iteration,
-                            kind: "working_set.error".into(),
+                            kind: topics::TOPIC_WORKING_SET_ERROR.into(),
                             payload,
                         })
                         .await;
@@ -288,7 +289,10 @@ async fn run_context_iteration(
                 "outcome" => "success",
                 "needs_more" => needs_more_label,
             );
-            bus.publish("working_set.iteration.summary", &summary_payload);
+            bus.publish(
+                topics::TOPIC_WORKING_SET_ITERATION_SUMMARY,
+                &summary_payload,
+            );
             IterationOutcome::Success(Box::new(IterationSuccess {
                 working_set: ws,
                 verdict,
@@ -312,7 +316,7 @@ async fn run_context_iteration(
                 "outcome" => "error",
             );
             counter!("arw_context_iteration_total", 1, "outcome" => "error");
-            bus.publish("working_set.error", &error_payload);
+            bus.publish(topics::TOPIC_WORKING_SET_ERROR, &error_payload);
             IterationOutcome::Error(Box::new(IterationError {
                 payload: error_payload,
                 detail,
@@ -334,7 +338,7 @@ async fn run_context_iteration(
                 "outcome" => "join_error",
             );
             counter!("arw_context_iteration_total", 1, "outcome" => "join_error");
-            bus.publish("working_set.error", &error_payload);
+            bus.publish(topics::TOPIC_WORKING_SET_ERROR, &error_payload);
             IterationOutcome::Error(Box::new(IterationError {
                 payload: error_payload,
                 detail,

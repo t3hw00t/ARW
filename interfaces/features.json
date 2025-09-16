@@ -12,7 +12,7 @@
         {"path": "apps/arw-svc/src/resources/models_service.rs"},
         {"path": "apps/arw-svc/src/ext/models_api.rs"},
         {"path": "apps/arw-svc/src/ext/paths.rs"},
-        {"path": "apps/arw-svc/src/ext/topics.rs"}
+        {"path": "crates/arw-topics/src/lib.rs"}
       ],
       "http": [
         {"method": "GET", "path": "/admin/models/summary"},
@@ -53,7 +53,7 @@
       "ssot": [
         {"path": "apps/arw-svc/src/main.rs"},
         {"path": "apps/arw-svc/src/ext/read_model.rs"},
-        {"path": "apps/arw-svc/src/ext/topics.rs"}
+        {"path": "crates/arw-topics/src/lib.rs"}
       ],
       "http": [
         {"method": "GET", "path": "/admin/events"}
@@ -268,7 +268,7 @@
       "scope": {"surface": "backend", "audience": "admin", "layer": "connectivity", "maturity": "partial"},
       "ssot": [
         {"path": "apps/arw-svc/src/ext/io.rs"},
-        {"path": "apps/arw-svc/src/ext/topics.rs"},
+        {"path": "crates/arw-topics/src/lib.rs"},
         {"path": "docs/architecture/egress_firewall.md"}
       ],
       "http": [],

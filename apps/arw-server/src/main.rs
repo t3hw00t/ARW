@@ -89,6 +89,7 @@ mod api_state;
 mod context_loop;
 mod coverage;
 mod egress_proxy;
+mod metrics;
 mod read_models;
 mod util;
 mod worker;
@@ -105,6 +106,7 @@ pub(crate) struct AppState {
     sse_id_map: std::sync::Arc<Mutex<std::collections::VecDeque<(u64, i64)>>>,
     endpoints: std::sync::Arc<Vec<String>>,
     endpoints_meta: std::sync::Arc<Vec<serde_json::Value>>,
+    metrics: std::sync::Arc<metrics::Metrics>,
 }
 
 type Policy = PolicyEngine;
@@ -120,12 +122,15 @@ async fn main() {
     // dual-write bus events to kernel and track DB ids for SSE
     let sse_id_map =
         std::sync::Arc::new(Mutex::new(std::collections::VecDeque::with_capacity(2048)));
+    let metrics = std::sync::Arc::new(metrics::Metrics::default());
     {
         let mut rx = bus.subscribe();
         let k2 = kernel.clone();
         let sse_ids = sse_id_map.clone();
+        let metrics_clone = metrics.clone();
         tokio::spawn(async move {
             while let Ok(env) = rx.recv().await {
+                metrics_clone.record_event(&env.kind);
                 if let Ok(row_id) = k2.append_event(&env) {
                     let mut hasher = sha2::Sha256::new();
                     hasher.update(env.time.as_bytes());
@@ -553,6 +558,7 @@ async fn main() {
         sse_id_map,
         endpoints: std::sync::Arc::new(endpoints_acc),
         endpoints_meta: std::sync::Arc::new(endpoints_meta_acc),
+        metrics: metrics.clone(),
     };
     // Start a simple local action worker (demo)
     worker::start_local_worker(state.clone());
@@ -561,6 +567,11 @@ async fn main() {
     // Start/stop egress proxy based on current settings
     egress_proxy::apply_current(state.clone()).await;
     let app = app.with_state(state);
+    let metrics_layer = metrics.clone();
+    let app = app.layer(axum::middleware::from_fn(move |req, next| {
+        let metrics = metrics_layer.clone();
+        async move { metrics::track_http(metrics, req, next).await }
+    }));
     // HTTP layers: compression, tracing, and concurrency limit
     let conc: usize = std::env::var("ARW_HTTP_MAX_CONC")
         .ok()

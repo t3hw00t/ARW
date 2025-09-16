@@ -15,6 +15,7 @@ use crate::{
     },
     working_set, AppState,
 };
+use arw_topics as topics;
 
 #[derive(Deserialize)]
 pub(crate) struct AssembleReq {
@@ -342,7 +343,7 @@ pub async fn context_rehydrate(
                     .is_none()
             {
                 state.bus.publish(
-                    "policy.decision",
+                    topics::TOPIC_POLICY_DECISION,
                     &json!({
                         "action": "context.rehydrate",
                         "allow": false,

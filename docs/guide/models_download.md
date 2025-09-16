@@ -10,7 +10,7 @@ Updated: 2025-09-15
 Type: How‑to
 
 See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*).
-Canonical topics used by the service are defined once under `apps/arw-svc/src/ext/topics.rs`.
+Canonical topics used by the service are defined once under `crates/arw-topics/src/lib.rs`.
 
 ## Endpoints
 

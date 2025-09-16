@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::AppState;
+use arw_topics as topics;
 
 #[derive(Deserialize)]
 pub(crate) struct ActionReq {
@@ -53,7 +54,7 @@ pub async fn actions_submit(
             {
                 // emit policy.decision event (denied)
                 state.bus.publish(
-                    "policy.decision",
+                    topics::TOPIC_POLICY_DECISION,
                     &json!({
                         "action": req.kind,
                         "allow": false,
@@ -99,7 +100,7 @@ pub async fn actions_submit(
     let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     let env = arw_events::Envelope {
         time: now,
-        kind: "actions.submitted".into(),
+        kind: topics::TOPIC_ACTIONS_SUBMITTED.into(),
         payload,
         policy: None,
         ce: None,
@@ -170,10 +171,10 @@ pub async fn actions_state_set(
         Ok(true) => {
             // Publish a transition event
             let kind = match req.state.as_str() {
-                "running" => "actions.running",
-                "completed" => "actions.completed",
-                "failed" => "actions.failed",
-                _ => "actions.updated",
+                "running" => topics::TOPIC_ACTIONS_RUNNING,
+                "completed" => topics::TOPIC_ACTIONS_COMPLETED,
+                "failed" => topics::TOPIC_ACTIONS_FAILED,
+                _ => topics::TOPIC_ACTIONS_UPDATED,
             };
             let payload = json!({"id": id, "state": req.state, "error": req.error});
             let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);

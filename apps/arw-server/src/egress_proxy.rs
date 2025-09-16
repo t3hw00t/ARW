@@ -14,6 +14,7 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
+use arw_topics as topics;
 type ProxyBody = BoxBody<Bytes, Infallible>;
 
 #[allow(dead_code)]
@@ -652,7 +653,7 @@ fn maybe_log_egress(
     // Publish SSE event (CloudEvents metadata applied by bus)
     let posture = effective_posture();
     state.bus.publish(
-        "egress.ledger.appended",
+        topics::TOPIC_EGRESS_LEDGER_APPENDED,
         &serde_json::json!({
             "id": if row_id>0 { serde_json::Value::from(row_id) } else { serde_json::Value::Null },
             "decision": decision,

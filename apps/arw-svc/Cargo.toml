@@ -13,6 +13,7 @@ axum = { workspace = true }
 tokio = { workspace = true, features = ["rt-multi-thread","macros","signal","process"] }
 arw-core = { path = "../../crates/arw-core", version = "0.1.4" }
 arw-events = { path = "../../crates/arw-events", version = "0.1.4" }
+arw-topics = { path = "../../crates/arw-topics", version = "0.1.4" }
 arw-otel = { path = "../../crates/arw-otel", version = "0.1.4", default-features = false }
 tokio-stream = { workspace = true }
 arw-macros = { path = "../../crates/arw-macros", version = "0.1.4" }

@@ -8,12 +8,14 @@ use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Duration;
 use std::time::Instant;
 
-pub const STREAM_EVENT_STARTED: &str = "working_set.started";
-pub const STREAM_EVENT_SEED: &str = "working_set.seed";
-pub const STREAM_EVENT_EXPANDED: &str = "working_set.expanded";
-pub const STREAM_EVENT_QUERY_EXPANDED: &str = "working_set.expand_query";
-pub const STREAM_EVENT_SELECTED: &str = "working_set.selected";
-pub const STREAM_EVENT_COMPLETED: &str = "working_set.completed";
+use arw_topics as topics;
+
+pub const STREAM_EVENT_STARTED: &str = topics::TOPIC_WORKING_SET_STARTED;
+pub const STREAM_EVENT_SEED: &str = topics::TOPIC_WORKING_SET_SEED;
+pub const STREAM_EVENT_EXPANDED: &str = topics::TOPIC_WORKING_SET_EXPANDED;
+pub const STREAM_EVENT_QUERY_EXPANDED: &str = topics::TOPIC_WORKING_SET_EXPAND_QUERY;
+pub const STREAM_EVENT_SELECTED: &str = topics::TOPIC_WORKING_SET_SELECTED;
+pub const STREAM_EVENT_COMPLETED: &str = topics::TOPIC_WORKING_SET_COMPLETED;
 
 #[derive(Clone, Debug)]
 pub struct WorkingSetSpec {

@@ -5,7 +5,7 @@ Checks:
 - all feature IDs are unique
 - dependencies point to known feature IDs
 - SSOT file paths exist on disk
-- referenced event topics exist in apps/arw-svc/src/ext/topics.rs
+- referenced event topics exist in crates/arw-topics/src/lib.rs
 - feature catalog covers every feature exactly once
 """
 import json
@@ -17,7 +17,7 @@ from collections import Counter
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FEATURES_JSON = ROOT / "interfaces" / "features.json"
 CATALOG_JSON = ROOT / "interfaces" / "feature_catalog.json"
-TOPICS_RS = ROOT / "apps" / "arw-svc" / "src" / "ext" / "topics.rs"
+TOPICS_RS = ROOT / "crates" / "arw-topics" / "src" / "lib.rs"
 
 
 def load_json(path: pathlib.Path) -> dict:

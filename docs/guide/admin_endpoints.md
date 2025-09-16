@@ -201,7 +201,7 @@ curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?replay=10"
 
 ### Event Examples
 
-Canonical topic names are defined once in `apps/arw-svc/src/ext/topics.rs` and referenced by the service.
+Canonical topic names are defined once in `crates/arw-topics/src/lib.rs` and referenced by the service.
 
 - models.download.progress (progress)
 ```

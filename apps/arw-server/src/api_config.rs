@@ -9,6 +9,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{admin_ok, AppState};
+use arw_topics as topics;
 
 pub async fn state_config(State(state): State<AppState>) -> impl IntoResponse {
     let snap = state.config_state.lock().await.clone();
@@ -303,7 +304,7 @@ pub async fn patch_apply(
             *cur = cfg.clone();
         }
         state.bus.publish(
-            "config.patch.applied",
+            topics::TOPIC_CONFIG_PATCH_APPLIED,
             &json!({"ops": req.patches.len(), "snapshot_id": snapshot_id}),
         );
         let json_patch: Vec<Value> = diffs
@@ -367,7 +368,7 @@ pub async fn patch_revert(
         }
         hist.push((new_id.clone(), snap.clone()));
         state.bus.publish(
-            "logic.unit.reverted",
+            topics::TOPIC_LOGICUNIT_REVERTED,
             &json!({"snapshot_id": req.snapshot_id, "new_snapshot_id": new_id}),
         );
         (

@@ -4,7 +4,7 @@ import json, re, sys, pathlib, datetime
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FEATURES_JSON = ROOT / "interfaces" / "features.json"
 OUT_MD = ROOT / "docs" / "reference" / "feature_matrix.md"
-TOPICS_RS = ROOT / "apps" / "arw-svc" / "src" / "ext" / "topics.rs"
+TOPICS_RS = ROOT / "crates" / "arw-topics" / "src" / "lib.rs"
 
 def load_features():
     with FEATURES_JSON.open("r", encoding="utf-8") as f:

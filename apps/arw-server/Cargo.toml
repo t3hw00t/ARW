@@ -20,6 +20,7 @@ arw-policy = { path = "../../crates/arw-policy" }
 arw-wasi = { path = "../../crates/arw-wasi" }
 arw-otel = { path = "../../crates/arw-otel" }
 arw-core = { path = "../../crates/arw-core" }
+arw-topics = { path = "../../crates/arw-topics" }
 uuid = { version = "1", features = ["v4"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
