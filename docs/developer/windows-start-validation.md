@@ -16,7 +16,7 @@ Quick pre-reqs
 Service + launcher (default)
 - Run: `powershell -ExecutionPolicy Bypass -File scripts\interactive-start-windows.ps1`
 - Pick “Start launcher + service”.
-- Expect: no extra console window for the service (runs hidden), launcher appears with a system tray icon.
+- Expect: service console minimized (new default to reduce AV heuristics), launcher appears with a system tray icon.
 - Check `.arw\run\arw-svc.pid` and `.arw\logs\arw-svc.out.log` exist.
 - Open: `http://127.0.0.1:8090/debug` and `.../spec`.
   - Tip: The Start menu lets you toggle health wait (and timeout) under “Configure runtime”.
@@ -24,6 +24,10 @@ Service + launcher (default)
 Service only (CLI)
 - Set `ARW_NO_LAUNCHER=1` from the menu (or via environment) and start “service only”.
 - Expect: service starts in background; PID/log file present when configured.
+
+**Hidden window regression check**
+- Run: `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -HideWindow -WaitHealth`
+- Expect: service window fully hidden (matches legacy behavior) and `/healthz` polling still succeeds.
 
 Dist bundle
 - Package: `powershell -ExecutionPolicy Bypass -File scripts\package.ps1`

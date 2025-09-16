@@ -10,7 +10,8 @@ param(
   [switch]$NoBuild,
   [switch]$WaitHealth,
   [int]$WaitHealthTimeoutSecs = 30,
-  [switch]$DryRun
+  [switch]$DryRun,
+  [switch]$HideWindow
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -36,6 +37,13 @@ if ($DocsUrl) { if (-not $DryRun) { $env:ARW_DOCS_URL = $DocsUrl } else { Dry "W
 if ($AdminToken) { if (-not $DryRun) { $env:ARW_ADMIN_TOKEN = $AdminToken } else { Dry 'Would set ARW_ADMIN_TOKEN=<redacted>' } }
 if ($TimeoutSecs) { if (-not $DryRun) { $env:ARW_HTTP_TIMEOUT_SECS = "$TimeoutSecs" } else { Dry "Would set ARW_HTTP_TIMEOUT_SECS=$TimeoutSecs" } }
 if ($Port) { if (-not $DryRun) { $env:ARW_PORT = "$Port" } else { Dry "Would set ARW_PORT=$Port" } }
+
+$windowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
+if ($HideWindow) {
+  $windowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
+} elseif ($Debug) {
+  $windowStyle = [System.Diagnostics.ProcessWindowStyle]::Normal
+}
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $exe = 'arw-svc.exe'
@@ -123,7 +131,7 @@ function Wait-For-Health($port, $timeoutSecs) {
 if (-not $skipLauncher -and (Test-Path $launcher)) {
   Info "Launching $svc on http://127.0.0.1:$Port"
   if ($DryRun) {
-    Dry ("Would start: $svc (cwd=$root)")
+    Dry ("Would start: $svc (cwd=$root, windowStyle=$($windowStyle.ToString()))")
     if ($env:ARW_LOG_FILE) { Dry ("Would redirect output to $env:ARW_LOG_FILE") }
     if ($env:ARW_PID_FILE) { Dry ("Would write PID file to $env:ARW_PID_FILE") }
     if ($WaitHealth) { Dry ("Would wait for health at /healthz (timeout ${WaitHealthTimeoutSecs}s)") }
@@ -131,9 +139,9 @@ if (-not $skipLauncher -and (Test-Path $launcher)) {
   } else {
     if ($env:ARW_LOG_FILE) {
       Ensure-ParentDir $env:ARW_LOG_FILE
-      $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $env:ARW_LOG_FILE -RedirectStandardError $env:ARW_LOG_FILE -PassThru
+      $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle $windowStyle -RedirectStandardOutput $env:ARW_LOG_FILE -RedirectStandardError $env:ARW_LOG_FILE -PassThru
     } else {
-      $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle Hidden -PassThru
+      $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle $windowStyle -PassThru
     }
     if ($env:ARW_PID_FILE) {
       Ensure-ParentDir $env:ARW_PID_FILE
@@ -152,7 +160,7 @@ if (-not $skipLauncher -and (Test-Path $launcher)) {
   $msg = if ($skipLauncher) { '(headless env: ARW_NO_LAUNCHER/ARW_NO_TRAY)' } else { '(launcher not found)' }
   Info "Launching $svc on http://127.0.0.1:$Port $msg"
   if ($DryRun) {
-    Dry ("Would start: $svc (cwd=$root)")
+    Dry ("Would start: $svc (cwd=$root, windowStyle=$($windowStyle.ToString()))")
     if ($env:ARW_LOG_FILE) { Dry ("Would redirect output to $env:ARW_LOG_FILE") }
     if ($env:ARW_PID_FILE) { Dry ("Would write PID file to $env:ARW_PID_FILE") }
     if ($WaitHealth) { Dry ("Would wait for health at /healthz (timeout ${WaitHealthTimeoutSecs}s)") }
@@ -160,9 +168,9 @@ if (-not $skipLauncher -and (Test-Path $launcher)) {
     if ($env:ARW_PID_FILE) {
       if ($env:ARW_LOG_FILE) {
         Ensure-ParentDir $env:ARW_LOG_FILE
-        $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle Hidden -RedirectStandardOutput $env:ARW_LOG_FILE -RedirectStandardError $env:ARW_LOG_FILE -PassThru
+        $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle $windowStyle -RedirectStandardOutput $env:ARW_LOG_FILE -RedirectStandardError $env:ARW_LOG_FILE -PassThru
       } else {
-        $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle Hidden -PassThru
+        $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle $windowStyle -PassThru
       }
       Ensure-ParentDir $env:ARW_PID_FILE
       try { $p.Id | Out-File -FilePath $env:ARW_PID_FILE -Encoding ascii -Force } catch {}
