@@ -101,18 +101,13 @@ See Backlog → Now → Feedback Engine for concrete work items.
 - Minimal broker (optional): tiny relay/directory for NAT‑tricky cases; stateless/replaceable.
 
 ## Long‑Term (3–6 Months)
-- Community training interface/simulation:
-  - Online opt‑in interface; privacy‑preserving local preprocessing.
-  - Metrics for “interaction quality” (clarity, helpfulness, faithfulness, novelty).
-  - Value alignment via debate/consensus rounds; transparent rationale graphs.
-  - Weighted participation (democratic/liquid/interest‑group based).
-- Governance & decision systems:
-  - Composable priorities; dynamic hierarchies; fairness and safety constraints.
-  - Argument mapping, counterfactual sandboxing, and policy proofs.
+- Ledger‑driven settlement tooling:
+  - Contribution meter and revenue ledger mature into auditable exports for collaborators.
+  - Opt‑in policy templates help teams review disputes locally without a separate governance simulator.
 - Research‑grade local stack:
   - On‑device accel (CPU/GPU/NPU), quantization, LoRA fine‑tuning, model manifests.
   - Artifact signing/verification, SBOMs, and dependency audits.
-  - Signed policy capsules with Sigstore; optional Bitcoin anchoring for timestamping (opt‑in; renegotiation on restart remains default).
+  - Signed policy capsules with Sigstore; rely on RPU trust store + local timestamping (renegotiation on restart remains default).
 
 ## Guiding Principles
 - Local‑first, open, privacy‑respecting, and comprehensible.

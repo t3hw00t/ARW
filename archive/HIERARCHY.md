@@ -10,6 +10,8 @@ Type: Explanation
 
 See also: [Roadmap](ROADMAP.md)
 
+> **Note (2025-09):** Blockchain tie-ins were explored in earlier drafts. We now focus hierarchy work purely on core-to-core coordination.
+
 ## Goals
 - Allow cores to negotiate roles and relationships dynamically (root/regional/edge/connector/observer).
 - Keep the hot data plane decentralized (queue/bus) while the control plane is light.
@@ -46,6 +48,3 @@ See also: [Roadmap](ROADMAP.md)
 - Leader/lease: optional OpenRaft/etcd only for rare global operations; keep hot path queue-driven.
 - Policy: OPA/Cedar rules gate role changes, parent selection, shard assignments.
 
-## Bitcoin Alignment
-- Identity: use secp256k1-derived identities for mutual auth (SPIFFE/SPIRE or Noise).
-- Event ingress: ZeroMQ bridge from bitcoind -> NATS subjects; region roots filter/aggregate.
