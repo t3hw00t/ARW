@@ -121,7 +121,6 @@ nav:
       - CLI Reference: reference/cli.md
       - Specs Index: reference/specs.md
       - Gating Keys: GATING_KEYS.md
-      - Models Typed Shapes: reference/models_types.md
       - Tools:
           - UI Screenshot Tools: reference/tools/ui_screenshot.md
       - Schemas:
