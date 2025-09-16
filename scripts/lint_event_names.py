@@ -6,7 +6,8 @@ ALLOWLIST = set([
 ])
 
 def is_dot_case(s: str) -> bool:
-    return bool(re.fullmatch(r"[a-z0-9]+(\.[a-z0-9]+)*", s))
+    # Allow dot.case with underscores inside segments to support multiword tokens
+    return bool(re.fullmatch(r"[a-z0-9_]+(\.[a-z0-9_]+)*", s))
 
 def scan_paths(paths):
     bad = []
@@ -44,4 +45,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
