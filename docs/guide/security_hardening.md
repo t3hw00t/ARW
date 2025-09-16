@@ -30,6 +30,7 @@ Capsules & Trust (RPU)
   - `arw-cli capsule gen-ed25519` → save keys securely; put pubkey in `trust_capsules.json`.
   - `arw-cli capsule sign-ed25519 <sk_b64> capsule.json` → add `signature` to the capsule.
 - Adoption: pass a verified capsule via `X-ARW-Gate: <json>` header on admin‑authenticated requests.
+- Roadmap: see Architecture → Asimov Capsule Guard for the always-on capsule refresh plan.
 - Env override: `ARW_TRUST_CAPSULES=/path/to/trust_capsules.json`.
 
 Reverse Proxy

@@ -149,6 +149,7 @@ nav:
       - Experiment Orchestrator: architecture/experiment_orchestrator.md
       - Observability (OTel): architecture/observability_otel.md
       - AppSec Harness: architecture/appsec_harness.md
+      - Asimov Capsule Guard: architecture/asimov_capsule_guard.md
       - Compliance Mode: architecture/compliance_mode.md
       - Supply‑Chain Trust: architecture/supply_chain_trust.md
       - Federated Clustering: architecture/cluster_federation.md

@@ -277,6 +277,26 @@
       "env": ["ARW_EGRESS_LEDGER_ENABLE", "ARW_NET_POSTURE"]
     },
     {
+      "id": "asimov_capsule_guard",
+      "name": "Asimov Capsule Guard",
+      "owner": "platform",
+      "deps": ["guardrail_gateway", "policy_leases", "event_spine"],
+      "description": "Always-enforced capsule propagation that refreshes leases, scopes reversible denies, and instruments adoption across the runtime.",
+      "scope": {"surface": "backend", "audience": "admin", "layer": "security", "maturity": "alpha"},
+      "ssot": [
+        {"path": "crates/arw-core/src/gating.rs"},
+        {"path": "crates/arw-core/src/rpu.rs"},
+        {"path": "apps/arw-svc/src/bootstrap/mod.rs"},
+        {"path": "docs/architecture/asimov_capsule_guard.md"}
+      ],
+      "http": [
+        {"method": "ANY", "path": "/admin/* (X-ARW-Gate)"}
+      ],
+      "read_models": [],
+      "topics": ["policy.decision", "rpu.trust.changed"],
+      "env": ["ARW_TRUST_CAPSULES", "ARW_GATING_DENY"]
+    },
+    {
       "id": "orchestrator_plane",
       "name": "Orchestrator Plane",
       "owner": "platform",

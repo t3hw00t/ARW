@@ -114,6 +114,12 @@ Security & Admin
 - Per‑route gating layers; slim global admin middleware [t-250911230252-9858]
 - Supply‑chain: upgrade GTK/GLib stack to >=0.20 (via wry/gtk/tao/tauri) to resolve RUSTSEC-2024-0429; remove temporary ignore in `deny.toml` and audit script guard once lockfile carries `glib >= 0.20.0`.
 
+- Asimov Capsule Guard (plan)
+ - [t-250916130001-asg01] RPU telemetry + `/state/policy/capsules` read-model surfacing adoption and TTL — todo
+ - [t-250916130002-asg02] Layered gating denies/contracts with lease sweeper + emergency teardown hook — plan
+ - [t-250916130003-asg03] Auto-replay verified capsules before actions/tools/egress/policy evaluation — plan
+ - [t-250916130004-asg04] Admin UX + CLI for capsule presets, rotation, and audit trails — plan
+
 Caching & Performance (High Priority)
 - [t-250913001000-1001] Llama.cpp prompt cache: set `cache_prompt: true` in requests; doc server `--prompt-cache` for persistence — in progress
 - [t-250913001003-1002] CAS HTTP caching: add `ETag`, `Last-Modified`, long‑lived `Cache-Control`, and 304 handling to `/admin/models/by-hash/{sha256}` — done

@@ -34,6 +34,7 @@ Roadmap highlights themes and timelines; Backlog tracks actionable items.
 - UI coherence & routing: canonical admin debug/UI endpoints; launcher open path alignment; SSE reconnection/backoff and status — see Backlog → UI Coherence.
 - Egress Firewall (plan): add policy network scopes + TTL leases; per‑node loopback proxy + DNS guard; route containerized scrapers first; egress ledger and pre‑offload preview; default posture “Public only.”
 - Lightweight mitigations (plan): memory quarantine; project isolation; belief‑diff review queue; hardened headless browsing (disable SW/H3; same‑origin); safe archive jail; DNS guard with anomaly alerts; secrets redaction; security posture presets.
+- Asimov Capsule Guard (plan): lease-based capsules with runtime refresh hooks and telemetry — see Architecture → Asimov Capsule Guard.
 - State & Episodes: observations/beliefs/intents/actions stores; episodes with reactive UI — see Backlog → Now.
 - Services & Orchestration: hierarchy/governor services; queue leases and nack behavior — see Backlog → Now.
 - Specs & Interop: AsyncAPI + MCP artifacts and /spec/* serving — see Backlog → Now.
