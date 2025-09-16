@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::env;
 use std::error::Error;
 use std::fs;
@@ -78,12 +79,7 @@ fn stage_external_bins(manifest_dir: &Path) -> Result<(), Box<dyn Error>> {
 
         copy_file(&source, &bin_dir.join(&file_name))?;
 
-        if !target_triple.is_empty() {
-            let variant = if ext.is_empty() {
-                format!("{}-{}", bin, target_triple)
-            } else {
-                format!("{}-{}{}", file_name, target_triple, ext)
-            };
+        for variant in platform_variants(&file_name, &target_triple) {
             copy_file(&source, &bin_dir.join(variant))?;
         }
     }
@@ -127,6 +123,26 @@ fn locate_binary(
     }
 
     candidates.into_iter().find(|p| p.exists())
+}
+
+fn platform_variants(file_name: &str, target_triple: &str) -> Vec<String> {
+    if target_triple.is_empty() {
+        return Vec::new();
+    }
+    let mut variants = BTreeSet::new();
+    variants.insert(format!("{}-{}", file_name, target_triple));
+
+    let path = Path::new(file_name);
+    if let Some(stem) = path.file_stem().and_then(|s| s.to_str()) {
+        variants.insert(format!("{}-{}", stem, target_triple));
+        if let Some(ext) = path.extension().and_then(|s| s.to_str()) {
+            let ext_with_dot = format!(".{}", ext);
+            variants.insert(format!("{}-{}{}", stem, target_triple, ext_with_dot));
+            variants.insert(format!("{}-{}{}", file_name, target_triple, ext_with_dot));
+        }
+    }
+
+    variants.into_iter().collect()
 }
 
 fn copy_file(src: &Path, dest: &Path) -> Result<(), Box<dyn Error>> {

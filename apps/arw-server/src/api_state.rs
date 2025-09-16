@@ -85,7 +85,7 @@ pub async fn state_egress(
 
 pub async fn state_models() -> impl IntoResponse {
     use tokio::fs as afs;
-    let path = crate::state_dir().join("models.json");
+    let path = crate::util::state_dir().join("models.json");
     let items: Vec<Value> = match afs::read(&path).await {
         Ok(bytes) => serde_json::from_slice(&bytes)
             .ok()
@@ -98,7 +98,7 @@ pub async fn state_models() -> impl IntoResponse {
 
 pub async fn state_self_list() -> impl IntoResponse {
     use tokio::fs as afs;
-    let dir = crate::state_dir().join("self");
+    let dir = crate::util::state_dir().join("self");
     let mut agents: Vec<String> = Vec::new();
     if let Ok(mut rd) = afs::read_dir(&dir).await {
         while let Ok(Some(ent)) = rd.next_entry().await {
@@ -117,7 +117,7 @@ pub async fn state_self_get(
     axum::extract::Path(agent): axum::extract::Path<String>,
 ) -> impl IntoResponse {
     use tokio::fs as afs;
-    let path = crate::state_dir()
+    let path = crate::util::state_dir()
         .join("self")
         .join(format!("{}.json", agent));
     match afs::read(&path).await {

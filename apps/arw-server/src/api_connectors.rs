@@ -4,7 +4,7 @@ use axum::{extract::State, Json};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::{admin_ok, state_dir, AppState};
+use crate::{admin_ok, util, AppState};
 
 #[derive(Deserialize)]
 pub(crate) struct ConnectorManifest {
@@ -19,7 +19,7 @@ pub(crate) struct ConnectorManifest {
 }
 
 fn connectors_dir() -> std::path::PathBuf {
-    state_dir().join("connectors")
+    util::state_dir().join("connectors")
 }
 
 pub async fn state_connectors() -> impl IntoResponse {

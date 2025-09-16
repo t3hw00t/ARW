@@ -6,7 +6,7 @@ title: Restructure Handbook (Source of Truth)
 
 This document is the single source of truth for the ongoing ARW restructure. It is written so a new contributor (or a chat without prior context) can pick up work immediately.
 
-Updated: 2025-09-16
+Updated: 2025-09-17
 Owner: Core maintainers
 Scope: Architecture, APIs, modules, migration plan, status, hand‑off tips
 
@@ -59,7 +59,11 @@ Server modules (in progress)
     - Logic Units: `apps/arw-server/src/api_logic_units.rs`
     - Leases: `apps/arw-server/src/api_leases.rs`
     - Orchestrator: `apps/arw-server/src/api_orchestrator.rs`
-- Helper utilities: `apps/arw-server/src/util.rs` (e.g., `default_models`).
+- Background loops:
+    - Local Worker: `apps/arw-server/src/worker.rs` (lease gating + centralized egress ledger/event helper).
+    - Read-model Publishers: `apps/arw-server/src/read_models.rs` (shared hashed patch scheduler across logic units, orchestrator jobs, memory, route stats).
+- Helper utilities: `apps/arw-server/src/util.rs` (`default_models`, `effective_posture`, `state_dir`).
+- Launcher packaging: `apps/arw-launcher/src-tauri/build.rs` (stages platform-specific binary variants expected by Tauri bundling).
 
 See also: Guide → Interactive Performance and Interactive Bench.
 
