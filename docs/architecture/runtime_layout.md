@@ -1,5 +1,5 @@
 # Runtime Layout
-Updated: 2025-09-14
+Updated: 2024-05-16
 Type: Explanation
 
 Treat latency as a first‑class requirement. Bias the runtime for bursty, interactive work.
@@ -25,3 +25,9 @@ MemoryLow=256M
 Wire/protocol
 - SSE + JSON Patch for read‑models; `Last-Event-ID` acks on connect; best‑effort replay via `?replay=N`.
 - Budget stream cadence: first event ≤150 ms; steady cadence ≤250 ms.
+
+Implementation layout (current)
+- `apps/arw-svc/src/main.rs` only bootstraps telemetry and delegates to `bootstrap::run()`.
+- `bootstrap::run()` wires the bus, resources, read-model fan-out, and HTTP server before spawning background loops.
+- Background workers (models GC, snappy, metrics) are launched from a dedicated helper so control-plane tasks stay short-lived.
+- The event bus remains the nucleus: HTTP handlers, orchestrator queues, and the kernel journal all publish through the same path, keeping the object graph authoritative.

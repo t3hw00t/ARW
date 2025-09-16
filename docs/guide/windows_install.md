@@ -23,6 +23,8 @@ powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -WaitHealth
 - The start script launches the service in the background and, if present, the desktop launcher.
 - If the launcher isn’t built yet, the script attempts a `cargo build -p arw-launcher`.
 - If WebView2 is missing, you’ll see a friendly warning and the launcher may prompt to install it.
+- Service console: starts minimized by default to dodge antivirus heuristics; use `-HideWindow` to keep it fully hidden like
+  previous versions.
 
 Install WebView2 (if needed)
 ```powershell

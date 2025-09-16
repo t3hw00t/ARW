@@ -40,6 +40,8 @@ powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
 # Interactive menu (launcher-first)
 powershell -ExecutionPolicy Bypass -File scripts/interactive-start-windows.ps1
 ```
+- Tip: the service console starts minimized by default to avoid AV heuristics; pass `-HideWindow` to match the previous fully
+  hidden launch mode.
 
 === "Linux / macOS"
 ```bash

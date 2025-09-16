@@ -92,6 +92,8 @@ powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
 - Windows installer: in progress. See Windows Install & Launcher for current paths and the launcher:
   - docs/guide/windows_install.md
   - MSI bundles are attached to GitHub Releases (signed when CI secrets are present).
+- The service console now starts minimized to avoid AV heuristics that flag hidden windows; pass `-HideWindow` to restore the
+  previous fully hidden behavior.
 
 ## Download
 
@@ -144,17 +146,41 @@ scripts/audit.ps1 -Interactive
 ## Architecture at a Glance
 
 ```
-┌──────────────┐    SSE (events)    ┌──────────────┐
-│  arw-svc     │ ─────────────────▶ │  Debug UI    │
-│  HTTP + SSE  │ ◀───────────────── │  (Browser)   │
-└─────┬────────┘    state reads     └─────┬────────┘
-      │                                   │
-      │ CLI (REST/gRPC)                   │ Recipes + Tools
-      ▼                                   ▼
-┌──────────────┐                    ┌──────────────┐
-│  arw-cli     │                    │  Schemas     │
-│  automation  │                    │  JSON Schema │
-└──────────────┘                    └──────────────┘
+                         Surfaces / Clients
+┌────────────────────────────────────────────────────────────────────┐
+│  ┌─────────────┐   ┌─────────────┐   ┌──────────────┐             │
+│  │ Debug UI    │   │ Launcher UI │   │  arw-cli      │             │
+│  │ (Browser)   │   │  (Tauri)    │   │  automations  │             │
+│  └─────▲───────┘   └─────▲───────┘   └─────▲────────┘             │
+│        │ HTTP/SSE           │ HTTP/SSE        │ REST/gRPC         │
+└────────┼────────────────────┼─────────────────┼───────────────────┘
+         │                    │                 │
+         ▼                    ▼                 ▼
+┌────────────────────────────────────────────────────────────────────┐
+│                        arw-svc Runtime                             │
+│ ┌──────────────┐  ┌──────────────────┐  ┌────────────────────────┐ │
+│ │ HTTP Router  │  │ Live Event Bus   │  │ Policy & Gatekeeper    │ │
+│ │ + Middleware │◀▶│ (SSE fan-out)    │◀▶│ (Gating, RPU, admin)   │ │
+│ └─────┬────────┘  └─────────┬────────┘  └────────┬──────────────┘ │
+│       │                     │                    │                │
+│ ┌─────▼────────┐   ┌────────▼────────┐  ┌────────▼──────────────┐ │
+│ │ Unified      │   │ Resource Pools  │  │ Journal & Kernel      │ │
+│ │ Object Graph │   │ (models, memory │  │ (CAS, SQLite, replay) │ │
+│ │ + Readmodels │   │  hierarchy)     │  │                      │ │
+│ └─────┬────────┘   └────────┬────────┘  └────────┬──────────────┘ │
+│       │                     │                    │                │
+│ ┌─────▼────────┐   ┌────────▼────────┐  ┌────────▼──────────────┐ │
+│ │ Logic Units  │   │ Orchestrator    │  │ Observability & Stats │ │
+│ │ + Recipes    │   │ (local + NATS)  │  │ (OTel, budgets, audit)│ │
+│ └─────┬────────┘   └────────┬────────┘  └────────┬──────────────┘ │
+└───────┼─────────────────────┴─────────────────────────────────────┘
+        │                        Event / Task Fabric
+        ▼
+┌───────────────────────┬──────────────────────────┬────────────────┐
+│ Local Task Workers    │ Optional Peer Workers    │ Sandboxed      │
+│ & Tool Runners        │ (federation / clusters)  │ Plugins (MCP,  │
+│                       │                          │ WASM, Logic)   │
+└───────────────────────┴──────────────────────────┴────────────────┘
 ```
 
 <i>Screenshot:</i> see the Debug UI at `/debug` (add `ARW_DEBUG=1`).
