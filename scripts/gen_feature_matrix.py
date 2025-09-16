@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import json, re, sys, pathlib, datetime
+import json, re, sys, pathlib, datetime, os, subprocess
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 FEATURES_JSON = ROOT / "interfaces" / "features.json"
@@ -43,8 +43,25 @@ def check_paths_exist(paths):
 def md_escape(s: str) -> str:
     return s.replace("_", "\\_")
 
+def _stable_now_timestamp(paths):
+    """Return a stable ISO timestamp based on last commit touching given paths.
+    Falls back to REPRO_NOW env or current UTC if git not available.
+    """
+    try:
+        args = ["git", "log", "-1", "--format=%cI", "--"] + [str(p) for p in paths if p]
+        ts = subprocess.check_output(args, text=True).strip()
+        if ts:
+            # Normalize to Z if possible
+            return ts.replace("+00:00", "Z")
+    except Exception:
+        pass
+    env_ts = os.getenv("REPRO_NOW")
+    if env_ts:
+        return env_ts
+    return datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
+
 def render(features_doc, known_topics):
-    now = datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    now = _stable_now_timestamp([FEATURES_JSON])
     out = []
     out.append("---")
     out.append("title: Feature Matrix")
