@@ -82,10 +82,13 @@ def render(features_doc, known_topics):
         out.append(desc + "\n")
         # Scope/maturity
         tags = []
-        if scope.get("surface"): tags.append(scope["surface"]) 
-        if scope.get("audience"): tags.append(scope["audience"]) 
-        if scope.get("layer"): tags.append(scope["layer"]) 
-        if scope.get("maturity"): tags.append(scope["maturity"]) 
+        tier = feat.get("tier")
+        if tier:
+            tags.append(tier)
+        if scope.get("surface"): tags.append(scope["surface"])
+        if scope.get("audience"): tags.append(scope["audience"])
+        if scope.get("layer"): tags.append(scope["layer"])
+        if scope.get("maturity"): tags.append(scope["maturity"])
         if tags:
             out.append(f"- Scope: {' / '.join(tags)}")
         # Owner / deps (optional)
