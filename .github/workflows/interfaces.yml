@@ -98,8 +98,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/ifc-gen
-          # Run in a temp CWD so auxiliary files land outside repo
-          (cd /tmp/ifc-gen && OPENAPI_OUT=/tmp/ifc-gen/openapi.yaml cargo run -p arw-svc --quiet || true)
+          # Run cargo from repo, but output OpenAPI to temp dir
+          (cd "$GITHUB_WORKSPACE" && OPENAPI_OUT=/tmp/ifc-gen/openapi.yaml cargo run -p arw-svc --quiet || true)
           test -s /tmp/ifc-gen/openapi.yaml || { echo '::error::Failed to generate OpenAPI via arw-svc'; exit 1; }
       - name: Compare with spec/openapi.yaml
         run: |
