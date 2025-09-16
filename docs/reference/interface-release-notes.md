@@ -13,8 +13,8 @@ No changes
 ## AsyncAPI (Events)
 
 ```diff
---- /tmp/tmpfjcdp9bq/asyncapi.base.yaml	2025-09-16 14:31:24.208383769 +0200
-+++ /tmp/tmpfjcdp9bq/asyncapi.head.yaml	2025-09-16 14:31:24.208383769 +0200
+--- /tmp/tmpb44tzi7a/asyncapi.base.yaml	2025-09-16 14:34:04.902615625 +0200
++++ /tmp/tmpb44tzi7a/asyncapi.head.yaml	2025-09-16 14:34:04.902615625 +0200
 @@ -150,8 +150,71 @@
          type: object
          properties:
