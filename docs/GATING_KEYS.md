@@ -1,5 +1,4 @@
 # Gating Keys
-Updated: 2025-09-17
 
 Generated from code.
 
