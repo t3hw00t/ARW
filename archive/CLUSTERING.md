@@ -10,6 +10,8 @@ Type: Explanation
 
 See also: [Roadmap](ROADMAP.md)
 
+> **Note (2025-09):** Earlier drafts explored Bitcoin bridges for connectors. The active roadmap drops that scope to keep clustering focused on local-first coordination.
+
 - Default behavior remains single-process using a local in-memory queue and event bus.
 - Medium-depth scale-out uses a pluggable Queue and Bus abstraction with NATS JetStream as the recommended backend.
 
@@ -21,12 +23,6 @@ Egress posture (planned)
 - Simple operational model, low latency, at-least-once with durable consumer groups.
 - Built-in discovery and clustering; easy to add nodes (“connect a second”).
 - Good bridgeability to edge environments and compatible with future p2p overlays.
-- Can co-exist with Bitcoin ecosystem tooling; we can bridge ZMQ publishers from `bitcoind` into NATS subjects for event-driven workflows.
-
-## Bitcoin/Blockchain Alignment
-- Identity: leverage secp256k1 keys (Lightning/Bitcoin-style) for mTLS/Noise handshakes between cores and connectors.
-- Event ingress: optional ZeroMQ adapter to consume `bitcoind` notifications, republish into Bus/Queue.
-- Provenance: sign connector binaries/plugins with Sigstore; attestments can be anchored or mirrored alongside Bitcoin timestamping services if desired.
 
 ## MVP in This Repo
 - `arw-core::orchestrator`: Task model, LocalQueue with leases, and Orchestrator façade.
@@ -48,4 +44,3 @@ queue = "local" # or "nats" (feature: arw-core/nats)
 - Implement JetStream durable queues with consumer groups and ack/nack/delay semantics.
 - Add outbound NATS relay (loop-safe) when needed for cross-node fan-out.
 - Define connector control-plane (gRPC/QUIC) for Hello/Heartbeat/Assignment.
-- Optional ZMQ bridge for Bitcoin Core notifications -> Bus/Queue.
