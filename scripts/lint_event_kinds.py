@@ -30,7 +30,8 @@ def scan_file(p: pathlib.Path):
     if p.name == 'topics.rs' and 'apps/arw-svc/src/ext/topics.rs' in str(p):
         for m in PAT_TOPIC_CONST.finditer(s):
             val = m.group(1)
-            if not re.fullmatch(r"[a-z0-9]+(\.[a-z0-9]+)*", val or ""):
+            # Allow dot.case with underscores inside segments (e.g., working_set.started)
+            if not re.fullmatch(r"[a-z0-9_]+(\.[a-z0-9_]+)*", val or ""):
                 bad.append((p, 'topic_constant_not_dot_case', val))
     # Enforce constants in service (apps/arw-svc) for Bus.publish calls
     if p.suffix == '.rs' and 'apps/arw-svc/src/' in str(p):

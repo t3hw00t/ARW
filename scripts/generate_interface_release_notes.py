@@ -49,12 +49,10 @@ def gen_openapi_diff(base_ref: str, tmpdir: Path) -> str:
         return '_OpenAPI base not found; skipping._\n'
     head.write_text(OPENAPI.read_text())
     if have('docker'):
-        p = run(['bash', '-lc', f'docker run --rm -v {tmpdir}:/tmp -w /tmp tufin/oasdiff:latest -format markdown -fail-on-breaking -base /tmp/{base.name} -revision /tmp/{head.name}'], cwd=REPO)
+        # Newer oasdiff uses subcommands; prefer 'diff -f markdown'.
+        p = run(['bash', '-lc', f'docker run --rm -v {tmpdir}:/tmp -w /tmp tufin/oasdiff:latest diff -f markdown /tmp/{base.name} /tmp/{head.name}'], cwd=REPO)
         if p.returncode == 0 and p.stdout.strip():
             return p.stdout
-        # oasdiff returns non-zero on breaking changes; still capture stdout
-        if p.stdout.strip():
-            return p.stdout + ('\n\n> Note: oasdiff reported breaking changes.\n')
     # fallback: unified diff
     p = run(['bash', '-lc', f'diff -u {base} {head} || true'])
     return '```diff\n' + p.stdout + '\n```\n'
