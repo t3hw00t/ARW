@@ -3,7 +3,7 @@ title: Spec Endpoints
 ---
 
 # Spec Endpoints
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: Reference
 
 The service exposes generated specs under `/spec/*` to help tools and dashboards discover contracts.

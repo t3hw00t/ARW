@@ -4,7 +4,7 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-09-13
+Updated: 2025-09-16
 Type: Tutorial
 
 Run ARW locally in a couple of minutes. It’s your private AI control room: start on one machine, stay in full control, and only scale or share when you choose. See the Features page for what you can do next.

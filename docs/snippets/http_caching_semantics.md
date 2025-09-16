@@ -3,7 +3,7 @@ title: HTTP Caching Semantics (Digest Blobs)
 ---
 
 # HTTP Caching Semantics (Digest Blobs)
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: Reference
 
 For endpoints that serve immutable, digest‑addressed blobs (e.g., `/admin/models/by-hash/{sha256}`):

@@ -6,7 +6,7 @@ title: Windows Start Script Validation
 
 This checklist helps validate ARW startup on Windows after changes to `scripts/start.ps1` and the interactive menus.
 
-Updated: 2025-09-13
+Updated: 2025-09-16
 Type: Reference
 
 Quick pre-reqs

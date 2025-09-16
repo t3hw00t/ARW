@@ -4,7 +4,7 @@ title: Systemd Service
 
 # Systemd Service
 
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: How‑to
 
 Run ARW as a user service, either natively or via Docker.

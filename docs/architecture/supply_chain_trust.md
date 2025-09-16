@@ -3,7 +3,7 @@ title: Supply‑Chain Trust
 ---
 
 # Supply‑Chain Trust
-Updated: 2025-09-12
+Updated: 2025-09-15
 Type: Explanation
 
 Controls

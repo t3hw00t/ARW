@@ -3,7 +3,7 @@ title: Compatibility Notes
 ---
 
 # Compatibility Notes
-Updated: 2025-09-12
+Updated: 2025-09-15
 Type: How‑to
 
 This page summarizes high‑level notes and known issues when running ARW on

@@ -6,7 +6,7 @@ title: Restructure Handbook (Source of Truth)
 
 This document is the single source of truth for the ongoing ARW restructure. It is written so a new contributor (or a chat without prior context) can pick up work immediately.
 
-Updated: 2025-09-17
+Updated: 2025-09-16
 Owner: Core maintainers
 Scope: Architecture, APIs, modules, migration plan, status, hand‑off tips
 

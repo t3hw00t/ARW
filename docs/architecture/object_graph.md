@@ -3,7 +3,7 @@ title: Unified Object Graph
 ---
 
 # Unified Object Graph
-Updated: 2025-09-12
+Updated: 2025-09-15
 Type: Explanation
 
 Core idea: treat the system as two things — a shared object graph (entities + relations) and a single event stream. Every surface (Project Hub, Chat, Training Park, Managers) is just a lens on that graph, driven by the same live events (SSE). This drastically reduces drift and keeps the experience coherent.

@@ -3,7 +3,7 @@ title: Permissions & Policies
 ---
 
 # Permissions & Policies
-Updated: 2025-09-12
+Updated: 2025-09-15
 Type: How‑to
 
 Safe by default, fluid in use. Capabilities are explicit; policies grant/deny with optional TTL leases and audit flags. Tools declare what they need; policy gates appear as inline prompts in the sidecar when escalation is required.

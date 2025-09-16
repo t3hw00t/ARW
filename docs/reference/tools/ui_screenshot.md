@@ -3,7 +3,7 @@ title: UI Screenshot Tools
 ---
 
 # UI Screenshot Tools
-Updated: 2025-09-14
+Updated: 2025-09-15
 Status: Planned
 Type: Reference
 

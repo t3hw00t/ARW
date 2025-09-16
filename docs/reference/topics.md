@@ -3,7 +3,7 @@ title: Event Topics (Canonical)
 ---
 
 # Event Topics (Canonical)
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: Reference
 
 Source of truth for event kinds published by the service. These constants are defined once in code and imported where needed to avoid drift:

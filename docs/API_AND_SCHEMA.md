@@ -5,7 +5,7 @@ title: API and Schema
 # API and Schema
 { .topic-trio style="--exp:.9; --complex:.6; --complicated:.5" data-exp=".9" data-complex=".6" data-complicated=".5" }
 
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: Reference
 
 See also: [Glossary](GLOSSARY.md), [Configuration](CONFIGURATION.md)

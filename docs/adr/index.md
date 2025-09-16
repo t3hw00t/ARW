@@ -4,7 +4,7 @@ title: Architecture Decision Records (ADRs)
 
 # Architecture Decision Records (ADRs)
 
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: Reference
 
 Microsummary: Accepted and proposed architecture decisions with links to full records. Use the template to add new ADRs; submit via PR.

@@ -5,7 +5,7 @@ title: Metrics & Insights
 # Metrics & Insights
 { .topic-trio style="--exp:.6; --complex:.7; --complicated:.6" data-exp=".6" data-complex=".7" data-complicated=".6" }
 
-Updated: 2025-09-12
+Updated: 2025-09-15
 Type: How‑to
 
 ## Overview

@@ -3,7 +3,7 @@ title: Self‑Model (Metacognition)
 ---
 
 # Self‑Model (Metacognition)
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: Explanation
 
 Yes—it’s both possible and useful. ARW adopts a scoped, evaluable self‑model that an agent can read and (with guardrails) propose updates to. Think of it as the agent’s capability map + confidence + cost model + limits, kept honest by continuous measurement and policy.

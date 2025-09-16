@@ -4,7 +4,7 @@ title: Models Typed Shapes
 
 # Models Typed Shapes
 
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: Reference
 
 Microsummary: Stable, typed response shapes for models endpoints used by UIs and clients. These align with the OpenAPI schemas exposed by the service.

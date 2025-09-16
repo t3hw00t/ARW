@@ -6,7 +6,7 @@ title: Design System
 
 This documents the subtle visual language used across ARW UIs: calm, instrument-panel inspired, with copper/teal accents.
 
-Updated: 2025-09-12
+Updated: 2025-09-15
 Type: How‑to
 
 ## Tokens

@@ -3,7 +3,7 @@ title: Plugins & Extensions
 ---
 
 # Plugins & Extensions
-Updated: 2025-09-12
+Updated: 2025-09-15
 Type: How‑to
 
 Plugins install tools and optional UI contributions (panels/commands). ARW’s tool registration generates JSON Schemas, so most UIs can be auto‑built as forms.

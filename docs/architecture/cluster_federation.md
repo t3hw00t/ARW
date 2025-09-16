@@ -3,7 +3,7 @@ title: Federated Clustering
 ---
 
 # Federated Clustering
-Updated: 2025-09-12
+Updated: 2025-09-15
 Type: Explanation
 
 Clustering, live sharing, pooled compute, and optional revenue sharing fit ARW without replacing the single‑node design. Keep a single authoritative Home Node per workspace, invite Workers under strict policy and egress control, share models and “world” diffs (not raw secrets), and meter contributions.

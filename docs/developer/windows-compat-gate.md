@@ -5,7 +5,7 @@ title: Windows Compatibility Gate
 # Windows Compatibility Gate
 { .topic-trio style="--exp:.3; --complex:.6; --complicated:.8" data-exp=".3" data-complex=".6" data-complicated=".8" }
 
-Updated: 2025-09-12
+Updated: 2025-09-15
 Type: Reference
 
 Use this checklist to gate PRs/releases for Windows.

@@ -3,7 +3,7 @@ title: Budgets & Context Economy
 ---
 
 # Budgets & Context Economy
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: Explanation
 
 Motivation

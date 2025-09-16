@@ -1,5 +1,5 @@
 # AI Assistants Index
-Updated: 2025-09-13
+Updated: 2025-09-15
 Type: Reference
 
 Microsummary: Map of repo for AI/code models: purpose, key files, how to run, limits. Stable entrypoint for tooling.

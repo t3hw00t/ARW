@@ -4,7 +4,7 @@ title: Kubernetes (Helm)
 
 # Kubernetes (Helm)
 
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: How‑to
 
 Deploy the ARW service on Kubernetes using the provided Helm chart.

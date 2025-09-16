@@ -4,7 +4,7 @@ title: Reverse Proxy (Caddy/Traefik)
 
 # Reverse Proxy (Caddy/Traefik)
 
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: How‑to
 
 Terminate TLS and proxy to ARW running on `127.0.0.1:8090` or in Docker.

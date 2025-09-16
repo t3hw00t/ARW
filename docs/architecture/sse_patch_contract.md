@@ -1,5 +1,5 @@
 # SSE + JSON Patch Contract
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: Explanation
 
 Purpose: stream deltas, not snapshots, to keep interaction latency low and bytes small. Resume connections without losing context.

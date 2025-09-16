@@ -4,7 +4,7 @@ title: Open Standards & Practices
 
 # Open Standards & Practices
 
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: Reference
 
 This project leans on open, portable standards to improve interoperability, tooling, and longevity.

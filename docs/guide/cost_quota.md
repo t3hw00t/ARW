@@ -3,7 +3,7 @@ title: Cost & Quotas
 ---
 
 # Cost & Quotas
-Updated: 2025-09-12
+Updated: 2025-09-15
 Type: How‑to
 
 Quotas

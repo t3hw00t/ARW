@@ -7,6 +7,7 @@ title: Feature Matrix
 _Last updated: 2025-09-15T19:21:23Z_
 
 # Feature Matrix
+Updated: 2025-09-15
 
 This page is generated from `interfaces/features.json` and validated against code (topics and file paths).
 

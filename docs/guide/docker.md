@@ -4,7 +4,7 @@ title: Docker
 
 # Docker
 
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: How‑to
 
 Run the ARW service in a container. This guide covers local build/run, docker compose, and pulling prebuilt images from GHCR.

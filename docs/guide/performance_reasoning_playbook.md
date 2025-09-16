@@ -4,7 +4,7 @@ title: Performance & Reasoning Playbook
 
 # Performance & Reasoning Playbook
 
-Updated: 2025-09-12
+Updated: 2025-09-15
 Type: How‑to
 
 Goal

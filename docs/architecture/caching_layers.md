@@ -4,7 +4,7 @@ title: Caching Layers
 
 # Caching Layers
 
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: Explanation
 
 This document outlines a multi‑layer caching strategy for ARW, blending research‑informed ideas with practical, incremental implementations. It aims for high ROI first (latency, throughput, stability), while keeping privacy and determinism front‑and‑center.

@@ -6,7 +6,7 @@ title: Troubleshooting
 
 This page lists quick fixes for common issues when starting ARW locally.
 
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: How‑to
 
 ## Port Already in Use

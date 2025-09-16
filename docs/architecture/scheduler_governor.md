@@ -3,7 +3,7 @@ title: Scheduler & Governor
 ---
 
 # Scheduler & Governor
-Updated: 2025-09-12
+Updated: 2025-09-15
 Type: Explanation
 
 Purpose

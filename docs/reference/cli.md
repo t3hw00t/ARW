@@ -1,5 +1,5 @@
 # CLI Reference
-Updated: 2025-09-12
+Updated: 2025-09-15
 Type: Reference
 
 Microsummary: Commands, subcommands, and flags for `arw-cli` with pointers to tutorials. Beta.

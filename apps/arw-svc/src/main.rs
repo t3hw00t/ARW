@@ -9,6 +9,8 @@ mod ext;
 #[cfg(feature = "grpc")]
 mod grpc;
 mod route_recorder;
+#[cfg(test)]
+mod test_support;
 
 #[tokio::main]
 async fn main() {

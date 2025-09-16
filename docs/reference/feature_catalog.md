@@ -7,6 +7,7 @@ title: Universal Feature Catalog
 _Last updated: 2025-09-15T19:21:23Z_
 
 # Universal Feature Catalog
+Updated: 2025-09-15
 
 This catalog maps every shipped capability to the experience pillars we use during the restructure. It extends the shared language in `docs/developer/style.md` and draws from `interfaces/features.json` and `interfaces/feature_catalog.json`.
 

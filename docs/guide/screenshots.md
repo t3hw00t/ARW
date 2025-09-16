@@ -3,7 +3,7 @@ title: Screenshots
 ---
 
 # Screenshots
-Updated: 2025-09-14
+Updated: 2025-09-15
 Status: Enabled (capture), Optional OCR (build‑time)
 Type: How‑to
 

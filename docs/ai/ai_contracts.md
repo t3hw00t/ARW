@@ -1,5 +1,5 @@
 # AI Contracts
-Updated: 2025-09-12
+Updated: 2025-09-15
 Type: Reference
 
 Microsummary: Norms for function/tool specs: names, descriptions, args schema, side effects, permissions. Stable.

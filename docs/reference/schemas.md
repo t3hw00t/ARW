@@ -1,5 +1,5 @@
 # Schema Reference (JSON)
-Updated: 2025-09-13
+Updated: 2025-09-15
 Type: Reference
 
 Microsummary: First‑class JSON Schemas for recipes, tools, and runtime artifacts with links for tooling. Stable anchors.

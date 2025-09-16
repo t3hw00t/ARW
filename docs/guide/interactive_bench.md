@@ -1,5 +1,5 @@
 # Interactive Performance Bench (I2F, First Partial, Cadence)
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: How‑to
 
 A tiny harness to validate the interactive performance budgets against a live service.

@@ -1,5 +1,5 @@
 # Interactive Performance Configuration
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: How‑to
 
 Defaults (can be kept in-repo): `configs/snappy.yaml`.

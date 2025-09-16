@@ -1,5 +1,5 @@
 # Release Notes
-Updated: 2025-09-14
+Updated: 2025-09-15
 Type: Reference
 
 Microsummary: Pointers to releases, changelog, and upgrade notes. Stable.

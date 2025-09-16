@@ -1,5 +1,5 @@
 # How We Write Docs (Diátaxis)
-Updated: 2025-09-13
+Updated: 2025-09-15
 Type: Reference
 
 Microsummary: Our docs follow Diátaxis — Tutorials, How‑to, Reference, Explanations — so readers and tools land on the right page. Stable.
