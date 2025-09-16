@@ -1,5 +1,6 @@
 use serde_json::json;
 use serde_json::Value;
+use std::path::PathBuf;
 
 pub fn default_models() -> Vec<Value> {
     vec![
@@ -16,4 +17,8 @@ pub fn effective_posture() -> String {
         return p;
     }
     "standard".into()
+}
+
+pub fn state_dir() -> PathBuf {
+    PathBuf::from(std::env::var("ARW_STATE_DIR").unwrap_or_else(|_| "state".into()))
 }
