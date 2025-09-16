@@ -4,7 +4,7 @@ title: Handoff Checklist — Policy & Egress Restructure
 
 # Handoff Checklist — Policy & Egress Restructure
 
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: Reference
 
 Scope
