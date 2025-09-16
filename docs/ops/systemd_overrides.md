@@ -1,5 +1,5 @@
 # Systemd Overrides (Interactive Performance)
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 Give the interactive control plane headroom under load via cgroup v2 weights.
@@ -22,4 +22,4 @@ sudo systemctl daemon-reload
 sudo systemctl restart agent-hub
 ```
 
-Adjust per host as needed. See also `docs/guide/interactive_performance.md`.
+Adjust per host as needed. See also [Interactive Performance](../guide/interactive_performance.md).

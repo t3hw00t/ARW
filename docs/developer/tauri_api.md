@@ -3,7 +3,7 @@ title: Tauri API Usage (v2)
 ---
 
 # Tauri API Usage (v2)
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: Reference
 
 This page documents the Tauri 2 APIs used by the Desktop Launcher and common patterns we follow. Tested with Tauri 2.8.x.
@@ -52,9 +52,9 @@ let _tray = TrayIconBuilder::with_id("arw-launcher-tray")
 - Configure via `tauri.conf.json` and initialize in the builder chain.
 
 ## Capabilities & Permissions (Tauri v2)
-- Capability file: `apps/arw-launcher/src-tauri/capabilities/main.json`.
-- App permissions: `apps/arw-launcher/src-tauri/permissions/arw.json`.
-- When exposing a new command from `crates/arw-tauri` (via `#[tauri::command]`):
+- Capability file: [apps/arw-launcher/src-tauri/capabilities/main.json](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri/capabilities/main.json).
+- App permissions: [apps/arw-launcher/src-tauri/permissions/arw.json](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri/permissions/arw.json).
+- When exposing a new command from [crates/arw-tauri](https://github.com/t3hw00t/ARW/blob/main/crates/arw-tauri) (via `#[tauri::command]`):
   1) Add it to the app permission allowlist.
   2) Ensure the capability references that permission.
   3) Rebuild; unused commands are stripped if `removeUnusedCommands` is enabled.
@@ -66,6 +66,6 @@ let _tray = TrayIconBuilder::with_id("arw-launcher-tray")
 - Prefer the new helpers to avoid building a `Menu` solely to pass into a submenu.
 
 ## References
-- Launcher source: `apps/arw-launcher/src-tauri/src/main.rs`
-- Shared plugin: `crates/arw-tauri`
-- Guide: `docs/guide/launcher.md`
+- Launcher source: [apps/arw-launcher/src-tauri/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri/src/main.rs)
+- Shared plugin: [crates/arw-tauri](https://github.com/t3hw00t/ARW/blob/main/crates/arw-tauri)
+- Guide: [Launcher](../guide/launcher.md)

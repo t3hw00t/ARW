@@ -3,13 +3,13 @@ title: Agent Recipes
 ---
 
 # Agent Recipes
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 One‑click bundles that combine prompts, tools, guardrails, and minimal UI into a signed, human‑readable manifest. Install by dropping a folder into `recipes/` and launching from the Gallery.
 
 Manifest schema
-- JSON Schema at `spec/schemas/recipe_manifest.json` (versioned)
+- JSON Schema at [spec/schemas/recipe_manifest.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/recipe_manifest.json) (versioned)
 - Required: id, name, version, model preference, permissions, prompts, tools
 - Optional: workflows (steps), ui (form_from_schema, review_required), notes, tags
 
@@ -60,4 +60,3 @@ UX notes
 - Activity renders in the Episodes timeline; snapshot manifests for reproducibility
 
 See also: UI Architecture, Policy, Context Recipes.
-

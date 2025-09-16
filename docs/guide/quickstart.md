@@ -4,7 +4,7 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-09-18
+Updated: 2025-09-16
 Type: Tutorial
 
 Run the unified ARW server locally in minutes. The new architecture focuses on the `/actions` → `/events` → `/state/*` triad; the legacy `arw-svc` with the classic debug UI remains available behind a `--legacy` flag while the restructure continues.

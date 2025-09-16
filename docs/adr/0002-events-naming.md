@@ -3,7 +3,7 @@ title: ADR 0002: Event Naming — dot.case Only
 status: accepted
 date: 2025-09-14
 ---
-Updated: 2025-09-15
+Updated: 2025-09-16
 
 Context
 - Event kinds previously had mixed naming (CamelCase and dot.case).

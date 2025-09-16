@@ -18,6 +18,8 @@ Centralized reference for ARW environment variables and common flags. Defaults f
  - `ARW_CONFIG`: absolute path to the primary config TOML (overrides discovery).
  - `ARW_CONFIG_DIR`: base directory to search for additional configs (e.g., `configs/gating.toml`, `configs/feedback.toml`). When unset, the service also probes beside the executable and the current directory.
  - `ARW_KERNEL_ENABLE`: enable the SQLite journal/CAS kernel (default `1`). When enabled, the service dual‑writes events to the kernel and exposes `/triad/events?replay=N`.
+ - `ARW_SPEC_DIR`: base directory for spec artifacts served under `/spec/*` (default: `spec`).
+ - `ARW_INTERFACES_DIR`: base directory for the interface catalog served at `/catalog/index` (default: `interfaces`).
 - `ARW_ACTIONS_QUEUE_MAX`: backpressure limit for queued actions (default `1024`). When exceeded, `/actions` returns 429.
 - `ARW_HTTP_MAX_CONC`: global HTTP concurrency limit (default `1024`) applied via Tower layer. Prevents overload and enforces fairness across routes. SSE `/events` is not limited by timeouts but does count toward concurrency.
 
@@ -59,7 +61,12 @@ Notes
 - `ARW_ADMIN_RL`: admin rate limit as `limit/window_secs` (default `60/60`).
 - `ARW_DEBUG`: `1` enables local debug mode; do not use in production.
  - `ARW_SECURITY_POSTURE`: posture preset `relaxed|standard|strict`. If no `ARW_POLICY_FILE` is provided, ARW derives a default policy from this. Default is `standard`.
- - `ARW_SCHEMA_MAP`: path to a JSON file that maps top‑level config segments to JSON Schemas for Patch Engine validation (defaults to `configs/schema_map.json`). Example: `{ "recipes": { "schema_ref": "spec/schemas/recipe_manifest.json", "pointer_prefix": "recipes" } }`
+ - `ARW_SCHEMA_MAP`: path to a JSON file that maps top‑level config segments to JSON Schemas for Patch Engine validation (defaults to [`configs/schema_map.json`](https://github.com/t3hw00t/ARW/blob/main/configs/schema_map.json)). Example: `{ "recipes": { "schema_ref": "spec/schemas/recipe_manifest.json", "pointer_prefix": "recipes" } }`
+
+## Events (SSE)
+- `ARW_EVENTS_SSE_MODE`: payload format for SSE `data:` frames. Options:
+  - `envelope` (default): `{ time, kind, payload }` with optional `ce` metadata
+  - `ce-structured`: CloudEvents 1.0 structured JSON (`data` holds the event payload)
 
 ## Docs & Debug UI
 - `ARW_DOCS_URL`: URL to your hosted docs for UI links. Appears in `GET /about` as `docs_url` so clients can discover your manual.
@@ -186,13 +193,13 @@ These options control the policy‑backed egress gateway; some are implemented a
 - `ARW_NO_TRAY`: deprecated alias for `ARW_NO_LAUNCHER` (still honored).
 - `ARW_HEADLESS`: `1` for headless setup flows in CI.
 
-See also: CLI Guide (guide/cli.md)
+See also: [CLI Guide](guide/cli.md)
 
 ## Trust & Policy
  - `ARW_TRUST_CAPSULES`: path to trusted capsule issuers/keys JSON.
  - `ARW_POLICY_FILE`: JSON file for the ABAC facade (see Guide → Policy (ABAC Facade)). Shape:
    - `{ "allow_all": true|false, "lease_rules": [ { "kind_prefix": "net.http.", "capability": "net:http" } ] }`
-   - Presets provided in‑repo: `configs/policy/relaxed.json`, `configs/policy/standard.json`, `configs/policy/strict.json`. Point `ARW_POLICY_FILE` at one of these to mirror `ARW_SECURITY_POSTURE` explicitly.
+   - Presets provided in‑repo: [configs/policy/relaxed.json](https://github.com/t3hw00t/ARW/blob/main/configs/policy/relaxed.json), [configs/policy/standard.json](https://github.com/t3hw00t/ARW/blob/main/configs/policy/standard.json), [configs/policy/strict.json](https://github.com/t3hw00t/ARW/blob/main/configs/policy/strict.json). Point `ARW_POLICY_FILE` at one of these to mirror `ARW_SECURITY_POSTURE` explicitly.
   - `ARW_GUARDRAILS_URL`: optional base URL for an HTTP guardrails service exposing `POST /check` (tool `guardrails.check`).
   - `ARW_GUARDRAILS_ALLOWLIST`: comma‑separated hostnames considered safe for URL checks (e.g., `example.com, arxiv.org`).
 
@@ -218,7 +225,7 @@ See also: CLI Guide (guide/cli.md)
 - Sensitive routes include `/admin/*`, `/debug`, `/probe`, `/memory*`, `/models*`, `/governor*`, `/introspect*`, `/chat*`, `/feedback*`.
 - Prefer keeping the service bound to `127.0.0.1` or behind a TLS‑terminating reverse proxy.
 ## Egress Settings (Config Block)
-- Persisted settings can live under the top‑level `egress` block and are validated against `spec/schemas/egress_settings.json` via the Patch Engine.
+- Persisted settings can live under the top‑level `egress` block and are validated against [spec/schemas/egress_settings.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/egress_settings.json) via the Patch Engine.
 
 Example (configs/default.toml)
 ```

@@ -3,10 +3,10 @@ title: Desktop Launcher (Tauri 2)
 ---
 
 # Desktop Launcher (Tauri 2)
-Updated: 2025-09-19
+Updated: 2025-09-16
 Type: How‑to
 
-The tray-based launcher lives at `apps/arw-launcher/src-tauri`. It uses Tauri 2 with the capabilities + permissions model.
+The tray-based launcher lives at [apps/arw-launcher/src-tauri](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri). It uses Tauri 2 with the capabilities + permissions model.
 
 Launch
 ```bash
@@ -31,7 +31,7 @@ Menu
 - Quit: exit the launcher
 
 API reference
-- See Developer: `docs/developer/tauri_api.md` for the exact Tauri APIs we use (submenu/menu patterns, tray, notifications) and upgrade notes.
+- See Developer: [Tauri API](../developer/tauri_api.md) for the exact Tauri APIs we use (submenu/menu patterns, tray, notifications) and upgrade notes.
 
 Status
 - Tray tooltip shows “Agent Hub (ARW): online/offline”.
@@ -44,20 +44,20 @@ cargo build -p arw-launcher
 ```
 
 Capabilities and Permissions
-- Capability: `apps/arw-launcher/src-tauri/capabilities/main.json`
+- Capability: [apps/arw-launcher/src-tauri/capabilities/main.json](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri/capabilities/main.json)
   - Grants defaults for core plugins and plugin window state, autostart, and notifications.
   - References an app-defined permission `arw-commands`.
-- App permissions: `apps/arw-launcher/src-tauri/permissions/arw.json`
+- App permissions: [apps/arw-launcher/src-tauri/permissions/arw.json](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri/permissions/arw.json)
   - Explicit allowlist of custom commands exposed by the `arw-tauri` plugin.
 
 When adding new commands to the plugin:
-1) Export the command with `#[tauri::command]` in `crates/arw-tauri`.
+1) Export the command with `#[tauri::command]` in [crates/arw-tauri](https://github.com/t3hw00t/ARW/blob/main/crates/arw-tauri).
 2) Add the command name to `permissions/arw.json` under `commands.allow`.
 3) Rebuild. With `build.removeUnusedCommands: true` in `tauri.conf.json`, non-allowed commands are stripped.
 
 Windows
 - The `tauri.conf.json` sets `bundle.windows.webviewInstallMode: downloadBootstrapper` for WebView2.
- - Quickstart and WebView2 install: see `docs/guide/windows_install.md`.
+ - Quickstart and WebView2 install: see [Windows Install](windows_install.md).
 
 Design & UI
 - Launcher pages include `tokens.css` (design tokens) and `ui-kit.css` (primitives) for consistent visuals.

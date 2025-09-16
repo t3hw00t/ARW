@@ -21,8 +21,8 @@ In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” o
 
 Full documentation → https://t3hw00t.github.io/ARW/
 
-Feature Matrix → docs/reference/feature_matrix.md (living, generated from `interfaces/features.json`).
-Universal Feature Catalog → docs/reference/feature_catalog.md (experience-first map generated from `interfaces/feature_catalog.json`).
+Feature Matrix → https://t3hw00t.github.io/ARW/reference/feature_matrix/ (living, generated from `interfaces/features.json`).
+Universal Feature Catalog → https://t3hw00t.github.io/ARW/reference/feature_catalog/ (experience-first map generated from `interfaces/feature_catalog.json`).
 
 General direction: a unified object graph + a single live event stream (SSE). Every surface—Project Hub, Chat, Training Park, and Managers (Agents/Models/Hardware/Permissions/Containers/Plugins)—is just a different lens on the same shared objects, driven by the same live events. This keeps the system coherent, inspectable, and easy to extend.
 
@@ -75,13 +75,13 @@ If you want AI that is useful, private, and accountable—and that can team up a
 
 The details that make ARW practical in real workflows.
 
-- Local‑first: runs offline by default; portable, per‑user state. See `docs/guide/offline_sync.md`.
-- Unified object graph: consistent state across Hub, Chat, and Training. See `docs/architecture/object_graph.md`.
-- Live events (SSE): one stream drives UIs and tools. See `docs/architecture/events_vocabulary.md` and `docs/architecture/sse_patch_contract.md`.
-- Debug UI: inspect episodes, state snapshots, and traces. See `docs/guide/troubleshooting.md`.
-- Recipes + Schemas: installable strategy packs with JSON Schemas. See `docs/guide/recipes.md` and `spec/schemas/`.
-- Observability: tracing/logging/metrics and journal. See `docs/architecture/observability_otel.md`. CI enforces interactive performance budgets; see `docs/guide/interactive_bench.md`.
- - Caching Layers: Action Cache with CAS and singleflight; digest‑addressed blob serving with strong validators; read‑models over SSE (JSON Patch deltas with coalescing); llama.cpp prompt caching. See `docs/architecture/caching_layers.md`.
+- Local‑first: runs offline by default; portable, per‑user state. See https://t3hw00t.github.io/ARW/guide/offline_sync/
+- Unified object graph: consistent state across Hub, Chat, and Training. See https://t3hw00t.github.io/ARW/architecture/object_graph/
+- Live events (SSE): one stream drives UIs and tools. See https://t3hw00t.github.io/ARW/architecture/events_vocabulary/ and https://t3hw00t.github.io/ARW/architecture/sse_patch_contract/
+- Debug UI: inspect episodes, state snapshots, and traces. See https://t3hw00t.github.io/ARW/guide/troubleshooting/
+- Recipes + Schemas: installable strategy packs with JSON Schemas. See https://t3hw00t.github.io/ARW/guide/recipes/ and https://github.com/t3hw00t/ARW/tree/main/spec/schemas
+- Observability: tracing/logging/metrics and journal. See https://t3hw00t.github.io/ARW/architecture/observability_otel/. CI enforces interactive performance budgets; see https://t3hw00t.github.io/ARW/guide/interactive_bench/
+ - Caching Layers: Action Cache with CAS and singleflight; digest‑addressed blob serving with strong validators; read‑models over SSE (JSON Patch deltas with coalescing); llama.cpp prompt caching. See https://t3hw00t.github.io/ARW/architecture/caching_layers/
 
 ## Try ARW in 2 Minutes
 
@@ -92,7 +92,7 @@ powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
 ```
 
 - Need the legacy debug UI? Append `-Legacy` to the second command to launch `arw-svc` on port 8090 instead of the unified server on 8091.
-- Windows installer packages remain available while the launcher is retargeted. See [Windows Install](docs/guide/windows_install.md) for MSI links and tray behavior.
+- Windows installer packages remain available while the launcher is retargeted. See Windows Install: https://t3hw00t.github.io/ARW/guide/windows_install/ for MSI links and tray behavior.
 
 Linux / macOS (headless unified server)
 ```bash
@@ -232,12 +232,12 @@ Pull from GHCR (on releases): `ghcr.io/t3hw00t/arw-server:latest`. Need the lega
 
 ## What’s Inside
 
-- Service: user‑mode HTTP with debug UI and SSE events. Interactive performance budgets prioritize first feedback within 50 ms and first partial ≤150 ms; see `docs/guide/interactive_performance.md` and `docs/guide/interactive_bench.md`.
+- Service: user‑mode HTTP with debug UI and SSE events. Interactive performance budgets prioritize first feedback within 50 ms and first partial ≤150 ms; see https://t3hw00t.github.io/ARW/guide/interactive_performance/ and https://t3hw00t.github.io/ARW/guide/interactive_bench/
 - Tools: macro‑driven registration with generated JSON Schemas
 - Observability: tracing/logging/metrics and event journal (optional)
 - Packaging: portable installs and per‑user state by default
- - Clustering (design): single Home Node with invited Workers under strict policy and egress control; live sharing and pooled compute remain opt‑in. See `docs/architecture/cluster_federation.md`.
- - Egress Firewall (plan): policy‑backed, per‑node loopback proxy + DNS guard with project‑level network posture (Off/Public/Allowlist/Custom), egress ledger, and pre‑offload previews. See `docs/architecture/egress_firewall.md`.
+ - Clustering (design): single Home Node with invited Workers under strict policy and egress control; live sharing and pooled compute remain opt‑in. See https://t3hw00t.github.io/ARW/architecture/cluster_federation/
+ - Egress Firewall (plan): policy‑backed, per‑node loopback proxy + DNS guard with project‑level network posture (Off/Public/Allowlist/Custom), egress ledger, and pre‑offload previews. See https://t3hw00t.github.io/ARW/architecture/egress_firewall/
 
 Three primary perspectives
 - Project Hub: the center of real‑world work (files/notes/agents/data/runs)
@@ -252,7 +252,7 @@ Logic Units (config‑first strategy packs)
 
 Context Working Set (Never‑Out‑Of‑Context)
 - Treat context as a just‑in‑time working set built from layered memories with fixed slot budgets, diversity, and on‑demand rehydration.
-- Docs: `docs/architecture/context_working_set.md`; see also Context Recipes and Budgets & Context.
+- Docs: https://t3hw00t.github.io/ARW/architecture/context_working_set/; see also Context Recipes and Budgets & Context.
 
 Universal sidecar (always on)
 - Episode timeline (obs → belief → intent → action), streaming tokens
@@ -261,23 +261,22 @@ Universal sidecar (always on)
 
 ## Next Steps
 
-- Quickstart guide: `docs/guide/quickstart.md`
-- Performance & Reasoning Playbook: `docs/guide/performance_reasoning_playbook.md`
-- Design Theme & Tokens: `docs/developer/design_theme.md`
-- Open Standards & Practices: `docs/developer/standards.md`
-- ADRs: `docs/adr/0001-design-tokens-ssot.md`, `docs/adr/0002-events-naming.md`
-- Architecture: `docs/architecture/object_graph.md` and `docs/architecture/events_vocabulary.md`
-- World Model: `docs/WORLD_MODEL.md`
-- Desktop Launcher: `docs/guide/launcher.md`
-- Admin Endpoints: `docs/guide/admin_endpoints.md`
- - Models Download: `docs/guide/models_download.md`
-- Security Hardening: `docs/guide/security_hardening.md`
- - Network Posture: `docs/guide/network_posture.md`
-- Roadmap: `docs/ROADMAP.md`
- - Clustering blueprint: `docs/architecture/cluster_federation.md`
+- Quickstart guide: https://t3hw00t.github.io/ARW/guide/quickstart/
+- Performance & Reasoning Playbook: https://t3hw00t.github.io/ARW/guide/performance_reasoning_playbook/
+- Design Theme & Tokens: https://t3hw00t.github.io/ARW/developer/design_theme/
+- Open Standards & Practices: https://t3hw00t.github.io/ARW/developer/standards/
+- ADRs: https://t3hw00t.github.io/ARW/adr/0001-design-tokens-ssot/ , https://t3hw00t.github.io/ARW/adr/0002-events-naming/
+- Architecture: https://t3hw00t.github.io/ARW/architecture/object_graph/ and https://t3hw00t.github.io/ARW/architecture/events_vocabulary/
+- Desktop Launcher: https://t3hw00t.github.io/ARW/guide/launcher/
+- Admin Endpoints: https://t3hw00t.github.io/ARW/guide/admin_endpoints/
+ - Models Download: https://t3hw00t.github.io/ARW/guide/models_download/
+- Security Hardening: https://t3hw00t.github.io/ARW/guide/security_hardening/
+ - Network Posture: https://t3hw00t.github.io/ARW/guide/network_posture/
+- Roadmap: https://t3hw00t.github.io/ARW/ROADMAP/
+ - Clustering blueprint: https://t3hw00t.github.io/ARW/architecture/cluster_federation/
 
 Commons Kit (what we ship on top)
-- One‑click “agent recipes”: manifest bundles of prompts + tools + guardrails + minimal UI. Install by dropping a folder into `recipes/` and launching. See `docs/guide/recipes.md` and schema under `spec/schemas/recipe_manifest.json`.
+- One‑click “agent recipes”: manifest bundles of prompts + tools + guardrails + minimal UI. Install by dropping a folder into `recipes/` and launching. See https://t3hw00t.github.io/ARW/guide/recipes/ and schema under https://github.com/t3hw00t/ARW/blob/main/spec/schemas/recipe_manifest.json
 - Form‑first tools: ARW tool JSON Schemas render parameter forms automatically; validate before dispatch.
 - Sensible trust boundaries: default‑deny for file write, shell, and network; per‑recipe ask/allow/never with audit events visible in the sidecar.
 
@@ -286,13 +285,13 @@ Commons Kit (what we ship on top)
 ### Assisted, Iterative Coding
 
 If you use an AI pair‑programmer, start here:
-- Working Agreement, Repo Map, and Plan template: `docs/ai/`
+- Working Agreement, Repo Map, and Plan template: https://t3hw00t.github.io/ARW/ai/ai_index/
 - Open a small “AI Task” issue → follow the PLAN → submit a tight PR.
 
 - Enter Nix dev shell: `nix develop`
 - Fast loop: `just dev` (runs `arw-svc` with `ARW_DEBUG=1`)
 - Docs locally: `just docs-serve` → http://127.0.0.1:8000
-- More: `docs/developer/index.md`
+- More: https://t3hw00t.github.io/ARW/developer/
 
 90‑day plan (high‑level)
 - Weeks 0–2: normalize around Episodes + Projects; ship the universal sidecar; recipe gallery.
@@ -305,18 +304,18 @@ If you use an AI pair‑programmer, start here:
   ```bash
   docker run --rm -p 8090:8090 ghcr.io/t3hw00t/arw-svc:latest
   ```
-- Compose/Helm examples: see `docs/DEPLOYMENT.md`
+- Compose/Helm examples: see https://t3hw00t.github.io/ARW/guide/docker/
 
 ## Contributing
 
-See `CONTRIBUTING.md`. Please open issues/PRs and discussions on GitHub.
+See [CONTRIBUTING.md](https://github.com/t3hw00t/ARW/blob/main/CONTRIBUTING.md). Please open issues/PRs and discussions on GitHub.
 
 ## Conventions
 
 - Language: US English (American).
 - Tone: calm, friendly, and action‑oriented.
 - Events: `status` is human‑friendly; `code` is a stable machine hint (e.g., `admission-denied`, `hard-exhausted`, `disk-insufficient`, `canceled-by-user`).
-- More: see `docs/developer/style.md` (Style & Harmony).
+- More: see https://t3hw00t.github.io/ARW/developer/style/ (Style & Harmony).
 
 —
 

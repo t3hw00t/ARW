@@ -6,7 +6,7 @@ title: Troubleshooting
 
 This page lists quick fixes for common issues when starting ARW locally.
 
-Updated: 2025-09-19
+Updated: 2025-09-16
 Type: How‑to
 
 !!! note "Legacy vs. Unified"

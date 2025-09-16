@@ -3,7 +3,7 @@ title: Error & Event Taxonomy
 ---
 
 # Error & Event Taxonomy
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: Explanation
 
 Canonical event types

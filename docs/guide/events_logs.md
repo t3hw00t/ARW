@@ -3,7 +3,7 @@ title: Events & Logs Windows
 ---
 
 # Events & Logs Windows
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 ## Events

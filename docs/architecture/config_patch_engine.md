@@ -28,7 +28,7 @@ See also: Logic Units, Permissions & Policies, Replay & Time Travel.
 
 ## Mapped Segments (Schema Map)
 
-The Patch Engine can infer schemas for top‑level segments via a schema map file (default `configs/schema_map.json`, or set `ARW_SCHEMA_MAP`).
+The Patch Engine can infer schemas for top‑level segments via a schema map file (default [`configs/schema_map.json`](https://github.com/t3hw00t/ARW/blob/main/configs/schema_map.json), or set `ARW_SCHEMA_MAP`).
 
 Example entries
 ```json

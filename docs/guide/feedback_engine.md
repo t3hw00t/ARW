@@ -7,7 +7,7 @@ title: Feedback Engine (Lightweight, Near‑Live)
 
 The feedback engine observes service events and route metrics to propose gentle tuning suggestions (e.g., HTTP timeout hints, memory ring size), without blocking request paths.
 
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 ## Goals
@@ -16,19 +16,19 @@ Type: How‑to
 - Safe by default: suggestions only; applies are policy‑gated and rate‑limited.
 
 ## Runtime
-- Engine cadence: `ARW_FEEDBACK_TICK_MS` (ms) or `tick_ms` in `configs/feedback.toml` (default 500).
+- Engine cadence: `ARW_FEEDBACK_TICK_MS` (ms) or `tick_ms` in [`configs/feedback.toml`](https://github.com/t3hw00t/ARW/blob/main/configs/feedback.toml) (default 500).
 - Suggestions include `id`, `action` (`hint`, `mem_limit`, `profile`), `params`, `rationale`, and `confidence`.
 - Live view: SSE `/admin/events` with `feedback.suggested`, or `GET /feedback/suggestions`.
 
 ## Policy (Guardrails)
-- Caps and bounds are merged from `configs/feedback.toml` and env vars:
+- Caps and bounds are merged from [`configs/feedback.toml`](https://github.com/t3hw00t/ARW/blob/main/configs/feedback.toml) and env vars:
   - `ARW_FEEDBACK_APPLY_PER_HOUR` (default 3)
   - `ARW_FEEDBACK_HTTP_TIMEOUT_MIN/MAX` (default 5..=300)
   - `ARW_FEEDBACK_MEM_LIMIT_MIN/MAX` (default 50..=2000)
 - Effective policy: `GET /feedback/policy` returns the current values.
 - Applies are rejected with a clear reason if caps/bounds are exceeded.
 
-## Config File: `configs/feedback.toml`
+## Config File: [`configs/feedback.toml`](https://github.com/t3hw00t/ARW/blob/main/configs/feedback.toml)
 ```toml
 # tick_ms = 500
 # apply_per_hour = 3

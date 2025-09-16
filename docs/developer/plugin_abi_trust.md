@@ -3,7 +3,7 @@ title: Plugin ABI & Trust
 ---
 
 # Plugin ABI & Trust
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: Reference
 
 Manifests

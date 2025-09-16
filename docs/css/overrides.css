@@ -98,6 +98,13 @@ body{color:var(--ink)}
 .md-typeset a:not(.md-button):hover{
   text-decoration-color: rgba(0,0,0,0.5);
 }
+/* Don’t underline image-only links (badges, logos) */
+.md-typeset a:has(> img){
+  text-decoration: none !important;
+}
+.md-typeset a > img{
+  vertical-align: middle;
+}
 
 /* Content comfort and overflow handling */
 .md-content__inner{

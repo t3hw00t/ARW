@@ -4,7 +4,7 @@ title: UI Kit (Launcher)
 
 # UI Kit (Launcher)
 
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 Microsummary: Reuse small, consistent primitives across launcher pages — cards, buttons, inputs, badges/pills, meters — all styled via shared design tokens.

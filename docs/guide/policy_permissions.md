@@ -3,7 +3,7 @@ title: Permissions & Policies
 ---
 
 # Permissions & Policies
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 Safe by default, fluid in use. Capabilities are explicit; policies grant/deny with optional TTL leases and audit flags. Tools declare what they need; policy gates appear as inline prompts in the sidecar when escalation is required.
@@ -22,8 +22,8 @@ Auditability
 - Every allow/deny decision is an event; sidecar renders a reviewable history for each episode
 
 Related docs
-- Policy internals and capsules: `docs/POLICY.md`
-- Security Hardening: `docs/guide/security_hardening.md`
+- Policy internals and capsules: see [Glossary → Capsule](../GLOSSARY.md) and [Admin Endpoints](admin_endpoints.md)
+- Security Hardening: [security_hardening.md](security_hardening.md)
 
 Tauri v2 mapping
 - Model Tauri’s capabilities/permissions to match ARW policies. Example: expose only `fs:read` and a file picker when ARW grants `fs:read` with an active TTL lease; block APIs otherwise.

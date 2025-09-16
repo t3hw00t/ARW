@@ -37,10 +37,10 @@ Environment (Key)
 Data & Schemas
 - Kernel: egress ledger includes `corr_id`, `proj`, `posture`
 - Schemas:
-  - `spec/schemas/egress_settings.json`
-  - `spec/schemas/policy_network_scopes.json`
-  - `spec/schemas/egress_ledger.json`
-  - `configs/schema_map.json` maps `egress` → `egress_settings.json`
+  - [spec/schemas/egress_settings.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/egress_settings.json)
+  - [spec/schemas/policy_network_scopes.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/policy_network_scopes.json)
+  - [spec/schemas/egress_ledger.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/egress_ledger.json)
+  - [configs/schema_map.json](https://github.com/t3hw00t/ARW/blob/main/configs/schema_map.json) maps `egress` → `egress_settings.json`
 
 Correlation
 - Use headers `X-ARW-Corr` and `X-ARW-Project` for proxy requests to tag ledger rows and events.

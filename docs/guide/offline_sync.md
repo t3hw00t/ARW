@@ -4,7 +4,7 @@ title: Offline & Sync
 
 # Offline & Sync
 
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 Local‑first

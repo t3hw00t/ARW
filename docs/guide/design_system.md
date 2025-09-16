@@ -6,12 +6,12 @@ title: Design System
 
 This documents the subtle visual language used across ARW UIs: calm, instrument-panel inspired, with copper/teal accents.
 
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 ## Tokens
 
-- Source of truth: `assets/design/tokens.css` (synced to docs at `docs/css/tokens.css`).
+- Source of truth: [assets/design/tokens.css](https://github.com/t3hw00t/ARW/blob/main/assets/design/tokens.css) (synced to docs at [docs/css/tokens.css](https://github.com/t3hw00t/ARW/blob/main/docs/css/tokens.css)).
 - Prefer token variables over hex.
 - Colors
   - Primary (Copper): `var(--color-brand-copper)` (dark: `var(--color-brand-copper-dark)`, light: `#dca777`)

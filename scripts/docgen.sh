@@ -16,6 +16,19 @@ python3 scripts/gen_feature_catalog.py
 info "Collecting cargo metadata"
 json=$(cargo metadata --no-deps --locked --format-version 1)
 
+# Figure out repo root and blob base for links
+repo_root=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
+# Try to infer GitHub slug from remote; fallback to known slug
+remote_url=$(git config --get remote.origin.url 2>/dev/null || echo "")
+if [[ "$remote_url" =~ github.com[:/]{1,2}([^/]+)/([^/.]+) ]]; then
+  gh_owner="${BASH_REMATCH[1]}"
+  gh_repo="${BASH_REMATCH[2]}"
+  gh_slug="$gh_owner/$gh_repo"
+else
+  gh_slug="t3hw00t/ARW"
+fi
+REPO_BLOB_BASE=${REPO_BLOB_BASE:-"https://github.com/$gh_slug/blob/main/"}
+
 title='---
 title: Workspace Status
 ---
@@ -25,14 +38,33 @@ title: Workspace Status
 Generated: '$(date -u +"%Y-%m-%d %H:%M")' UTC
 '
 
-libs=$(echo "$json" | jq -r '.packages[] | {name, version, path: .manifest_path, kinds: ([.targets[].kind[]] | unique)} | select((.kinds | tostring) | test("lib")) | "- **\(.name)**: \(.version) — `\(.path)`"' || true)
-bins=$(echo "$json" | jq -r '.packages[] | {name, version, path: .manifest_path, kinds: ([.targets[].kind[]] | unique)} | select((.kinds | tostring) | test("bin")) | "- **\(.name)**: \(.version) — `\(.path)`"' || true)
+libs=$(echo "$json" | jq -r --arg root "$repo_root/" --arg base "$REPO_BLOB_BASE" '
+  .packages[] | {
+    name, version,
+    manifest: .manifest_path,
+    rel: (.manifest_path | sub("^" + $root; "")),
+    kinds: ([.targets[].kind[]] | unique)
+  }
+  | select((.kinds | tostring) | test("lib"))
+  | "- **\(.name)**: \(.version) — [\(.rel)](\($base)\(.rel))"
+' || true)
+bins=$(echo "$json" | jq -r --arg root "$repo_root/" --arg base "$REPO_BLOB_BASE" '
+  .packages[] | {
+    name, version,
+    manifest: .manifest_path,
+    rel: (.manifest_path | sub("^" + $root; "")),
+    kinds: ([.targets[].kind[]] | unique)
+  }
+  | select((.kinds | tostring) | test("bin"))
+  | "- **\(.name)**: \(.version) — [\(.rel)](\($base)\(.rel))"
+' || true)
 
 out="$title\n\n## Libraries\n${libs:-_none_}\n\n## Binaries\n${bins:-_none_}\n"
 
 dest="$(cd "$(dirname "$0")/.." && pwd)/docs/developer/status.md"
 info "Writing $dest"
-printf "%s" "$out" > "$dest"
+# Interpret \n sequences in $out as real newlines
+printf "%b" "$out" > "$dest"
 info "Done."
 
 # --- Tasks page generation ---

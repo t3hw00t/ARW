@@ -6,7 +6,7 @@ title: Restructure Handbook (Source of Truth)
 
 This document is the single source of truth for the ongoing ARW restructure. It is written so a new contributor (or a chat without prior context) can pick up work immediately.
 
-Updated: 2025-09-18
+Updated: 2025-09-16
 Owner: Core maintainers
 Scope: Architecture, APIs, modules, migration plan, status, hand‑off tips
 
@@ -140,7 +140,7 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
 - JSON shapes: lists under `items`, timestamps `created/updated` (RFC3339), stable keys `id/kind/state`.
 - Responses: writes return `202 Accepted` with an id; progress over SSE; errors use RFC 7807 problem shape.
 - Lexicon: Lease (capability grant), Policy (ABAC with leases), Egress Ledger (normalized network record), Working Set (context), Logic Unit (strategy pack), WASI Host (plugins), Decision (allow/require_capability/explain).
-- Prose: US English, concise and friendly; headings in Title Case; keep consistent tone. See `docs/developer/docs_style.md` and `CONTRIBUTING.md`.
+- Prose: US English, concise and friendly; headings in Title Case; keep consistent tone. See [Docs Style](developer/docs_style.md) and [CONTRIBUTING.md](https://github.com/t3hw00t/ARW/blob/main/CONTRIBUTING.md).
 - Code: keep event/topic names and HTTP routes consistent with docs; prefer small, composable modules; avoid unnecessary renames during the restructure.
 - Feature catalog: curate `interfaces/feature_catalog.json` alongside `interfaces/features.json`; run `python3 scripts/check_feature_integrity.py` then `python3 scripts/gen_feature_catalog.py` when capabilities move.
 
@@ -310,7 +310,7 @@ State Views
 - When adding/changing triad endpoints, kernel schemas, or runtime/policy:
   1. Update this file.
   2. Add or adjust `/state/*` views where applicable.
-  3. Document flags/envs in `docs/CONFIGURATION.md`.
+  3. Document flags/envs in [Configuration](CONFIGURATION.md).
   4. If it touches federation/economics, append to Contribution & Splits section.
 
 ## Next Milestones

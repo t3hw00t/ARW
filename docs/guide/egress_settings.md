@@ -10,7 +10,7 @@ Control the egress proxy, DNS guard, IP‑literal blocking, and allowlist at run
 
 Endpoints (service)
 - `GET /state/egress/settings` → effective settings `{ posture?, allowlist, block_ip_literals, dns_guard_enable, proxy_enable, proxy_port, ledger_enable }`
-- `POST /egress/settings` (admin‑gated) → update toggles and persist to config under `egress` (validated against `spec/schemas/egress_settings.json`)
+- `POST /egress/settings` (admin‑gated) → update toggles and persist to config under `egress` (validated against [spec/schemas/egress_settings.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/egress_settings.json))
 - `POST /egress/preview` → dry‑run a URL+method against policy/guards: `{ allow, reason?, host, port, protocol }`
 
 Dynamic proxy
@@ -47,5 +47,4 @@ Notes
 - Add correlation headers (`X-ARW-Corr`, `X-ARW-Project`) to proxy requests to tag ledger rows and events.
 
 Schema
-- See `spec/schemas/egress_settings.json` for the JSON Schema used to validate settings.
-
+- See [spec/schemas/egress_settings.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/egress_settings.json) for the JSON Schema used to validate settings.

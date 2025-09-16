@@ -104,5 +104,5 @@ Correlation
 Next steps: add DNS guard integration and richer ledger events.
 
 ## Schemas (Preview)
-- Policy: Network Scopes & Leases — see `spec/schemas/policy_network_scopes.json`
-- Egress Ledger Entry — see `spec/schemas/egress_ledger.json`
+- Policy: Network Scopes & Leases — see [spec/schemas/policy_network_scopes.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/policy_network_scopes.json)
+- Egress Ledger Entry — see [spec/schemas/egress_ledger.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/egress_ledger.json)

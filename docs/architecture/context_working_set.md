@@ -59,11 +59,11 @@ When to use a long‑context model
 - Rare merge steps (e.g., final synthesis across many sources). Offload to bigger context only for that step, then distill back into summaries/beliefs to return to small prompts immediately.
 
 How this maps into ARW surfaces
-- Context Recipes: formalize the pipeline (layers → retrieval → budgeter → compression). See `docs/guide/context_recipes.md`.
+- Context Recipes: formalize the pipeline (layers → retrieval → budgeter → compression). See [Context Recipes](../guide/context_recipes.md).
 - Training Park: dials for diversity, recency, compression aggressiveness; meters for recall risk and coverage.
 - Project Hub: What’s in context now panel + pointers to the artifacts used.
-- Logic Unit: ship a Never‑Out‑Of‑Context unit with sane defaults for budgets, compression cadence, and rehydrate rules. See `docs/architecture/logic_units.md`.
-- World Model: use the Project Map belief graph for anchored facts and open‑questions; serve top‑K beliefs into assembly. See `docs/WORLD_MODEL.md`.
+- Logic Unit: ship a Never‑Out‑Of‑Context unit with sane defaults for budgets, compression cadence, and rehydrate rules. See [Logic Units](logic_units.md).
+- World Model: use the Project Map belief graph for anchored facts and open‑questions; serve top‑K beliefs into assembly.
 
 Why this works
 - The model sees exactly what it needs for the step at hand.

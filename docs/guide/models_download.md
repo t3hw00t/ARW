@@ -6,11 +6,11 @@ title: Models Download (HTTP)
 
 ARW provides HTTP endpoints (admin‑gated) to manage local models with streaming downloads, live progress via SSE, safe cancel, resume (HTTP Range), and mandatory SHA‑256 verification.
 
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*).
-Canonical topics used by the service are defined once under `crates/arw-topics/src/lib.rs`.
+Canonical topics used by the service are defined once under [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs).
 
 ## Endpoints
 
@@ -180,7 +180,7 @@ Resume:
 
 ### Manifest
 
-On success, a per‑ID manifest is written at `{state_dir}/models/<id>.json` describing the model and its CAS location. Schema: `spec/schemas/model_manifest.json`.
+On success, a per‑ID manifest is written at `{state_dir}/models/<id>.json` describing the model and its CAS location. Schema: [spec/schemas/model_manifest.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/model_manifest.json).
 
 ### Policy & Egress
 

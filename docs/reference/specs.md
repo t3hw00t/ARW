@@ -3,19 +3,21 @@ title: Spec Endpoints
 ---
 
 # Spec Endpoints
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: Reference
 
 The service exposes generated specs under `/spec/*` to help tools and dashboards discover contracts.
 
-Endpoints
+Endpoints (unified server)
 - `GET /spec/openapi.yaml` — OpenAPI for HTTP endpoints
 - `GET /spec/asyncapi.yaml` — AsyncAPI for event topics (bus/SSE)
 - `GET /spec/mcp-tools.json` — MCP tools descriptor
-- `GET /spec` — HTML index linking to available artifacts
-- `GET /spec/health` — JSON health summary for spec artifacts
+- `GET /spec/index.json` — JSON index listing available spec artifacts and JSON Schemas
+- `GET /spec/schemas/{file}` — serve individual JSON Schemas
+- `GET /catalog/index` — Interface catalog YAML (from `interfaces/index.yaml`)
+- `GET /catalog/health` — JSON health summary for spec artifacts
 
-Example: `/spec/health`
+Example: `/catalog/health`
 ```
 {
   "items": [
@@ -29,7 +31,8 @@ Example: `/spec/health`
 Notes
 - Paths are relative to the service’s current working directory; sizes are bytes.
 - If a file is missing, `exists` is false and size is 0.
+- Override locations with `ARW_SPEC_DIR` (for spec files) and `ARW_INTERFACES_DIR` (for the interface catalog).
 
 Related
-- CLI Guide (guide/cli.md)
+- [CLI Guide](../guide/cli.md)
 - API Reference (API_AND_SCHEMA.md)

@@ -4,7 +4,7 @@ title: Docker
 
 # Docker
 
-Updated: 2025-09-18
+Updated: 2025-09-16
 Type: How‑to
 
 Run the unified ARW server in a container. This guide covers local build/run, Docker Compose, and pulling prebuilt images from GHCR. The legacy `arw-svc` image remains available for the debug UI while the restructure completes.

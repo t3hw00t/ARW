@@ -4,12 +4,12 @@ title: Design Theme
 
 # Design Theme
 
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: Reference
 
 Microsummary: A shared visual and language system across docs, apps, and debug UIs — consistent naming, tone, layout, tokens, and colors. Stable.
 
-See also: developer/style.md, architecture/ux_invariants.md, guide/workflow_views.md
+See also: [Style & Harmony](style.md), [UX Invariants](../architecture/ux_invariants.md), [Workflow Views](../guide/workflow_views.md)
 
 ## Naming
 
@@ -139,6 +139,6 @@ Open standards
 
 - CSS tokens: docs/css/tokens.css
 - JSON tokens: docs/design/tokens.json
-- Style & Harmony: docs/developer/style.md
-- UX Invariants: docs/architecture/ux_invariants.md
-- Workflow Views: docs/guide/workflow_views.md
+- Style & Harmony: [style.md](style.md)
+- UX Invariants: [architecture/ux_invariants.md](../architecture/ux_invariants.md)
+- Workflow Views: [guide/workflow_views.md](../guide/workflow_views.md)

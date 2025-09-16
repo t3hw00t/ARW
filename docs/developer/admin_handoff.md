@@ -26,8 +26,8 @@ Correlation
 - Events carry `corr_id`, `proj`, `posture`; `/state/egress` rows include the same.
 
 Config & Patch Engine
-- Persisted settings live under top‑level `egress` (validated by `spec/schemas/egress_settings.json`).
-- Schema map (`configs/schema_map.json`) maps `egress` → `spec/schemas/egress_settings.json`.
+- Persisted settings live under top‑level `egress` (validated by [spec/schemas/egress_settings.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/egress_settings.json)).
+- Schema map ([configs/schema_map.json](https://github.com/t3hw00t/ARW/blob/main/configs/schema_map.json)) maps `egress` → `spec/schemas/egress_settings.json`.
 
 Docs Index
 - How‑to: Egress Settings
@@ -49,4 +49,3 @@ Environment quick ref
 - Policy posture: `ARW_SECURITY_POSTURE`
 - SSE format: `ARW_EVENTS_SSE_MODE=envelope|ce-structured`
 - Performance: `ARW_PERF_PRESET`
-

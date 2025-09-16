@@ -6,5 +6,7 @@ exclude = [
   "https://github.com/t3hw00t/ARW/pull/", # PR links may be transient
   "^http://127\\.0\\.0\\.1(:\\d+)?(/.*)?$", # local dev links
   "^https://ghcr\\.io/.*$",                  # GHCR landing URLs may 404
+  "^https://t3hw00t\\.github\\.io/ARW/.*$", # site paths may lag until gh-pages updates
+  "^https://github\\.com/t3hw00t/ARW/releases/latest/download/.*$", # assets exist only after releases
 ]
 headers = []

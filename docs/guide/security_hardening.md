@@ -7,7 +7,7 @@ title: Security Hardening
 
 This guide summarizes recommended steps to run ARW more securely beyond the local‑dev defaults.
 
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 Baseline
@@ -19,13 +19,13 @@ Baseline
 - Rate limits: adjust admin limiter, e.g. `ARW_ADMIN_RL="60/60"` (limit/window_secs).
 
 Policy & Gating
-- Immutable denies: edit `configs/gating.toml` to add keys like `"tools:*"` or `"models:*"`.
+- Immutable denies: edit [`configs/gating.toml`](https://github.com/t3hw00t/ARW/blob/main/configs/gating.toml) to add keys like `"tools:*"` or `"models:*"`.
 - Contracts: add time‑bound denies with optional auto‑renew and subject filters.
 - Ingress/Egress: use keys like `io:ingress:tools.<id>` and `io:egress:chat` to shape inputs/outputs.
  - Recommended production deny: block introspection endpoints: `deny_user = ["introspect:*"]`.
 
 Capsules & Trust (RPU)
-- Trust store: `configs/trust_capsules.json` lists allowed issuers and public keys.
+- Trust store: [`configs/trust_capsules.json`](https://github.com/t3hw00t/ARW/blob/main/configs/trust_capsules.json) lists allowed issuers and public keys.
 - Generate keys (ed25519) and sign capsules:
   - `arw-cli capsule gen-ed25519` → save keys securely; put pubkey in `trust_capsules.json`.
   - `arw-cli capsule sign-ed25519 <sk_b64> capsule.json` → add `signature` to the capsule.
@@ -112,7 +112,7 @@ Checklist
 - [ ] `ARW_DEBUG` unset
 - [ ] `ARW_ADMIN_TOKEN` set and required
 - [ ] Admin rate‑limit tuned (`ARW_ADMIN_RL`)
-- [ ] Gating policy in `configs/gating.toml`
+- [ ] Gating policy in [`configs/gating.toml`](https://github.com/t3hw00t/ARW/blob/main/configs/gating.toml)
 - [ ] Trust store configured; capsules signed and verified when used
 - [ ] Reverse proxy/TLS if remote
 - [ ] Logs/State directories scoped and monitored

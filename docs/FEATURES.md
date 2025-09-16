@@ -4,7 +4,7 @@ title: Features
 
 # Features
 
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: Explanation
 
 ## Outcomes
@@ -33,7 +33,7 @@ Type: Explanation
 - Interop: MCP (client/server), HTTP/WS with OpenAPI 3.1 + AsyncAPI. See: API and Schema (API_AND_SCHEMA.md).
 - Observability: OpenTelemetry traces/logs/metrics; in‑process event bus (optional journal, SSE replay). See: Admin Endpoints (guide/admin_endpoints.md).
 - Caching layers: Action Cache with CAS and singleflight; digest‑addressed blob serving with strong validators; read‑models over SSE (JSON Patch deltas with coalescing); llama.cpp prompt caching. See: Architecture → Caching Layers.
-- Security & Policy: Central gating keys and deny contracts; ingress/egress guards; Policy Capsules; roadmap RPU for signatures/ABAC. See: Security Hardening (guide/security_hardening.md), Policy (POLICY.md).
+- Security & Policy: Central gating keys and deny contracts; ingress/egress guards; Policy Capsules; roadmap RPU for signatures/ABAC. See: [Security Hardening](guide/security_hardening.md), [Policy & Permissions](guide/policy_permissions.md).
  - Self‑improvement loop: goldens + rewards, A/B runner (with shadow), config patch engine, policy‑aware tuner, calibrated self‑model, nightly distillation, and a persisted experiments scoreboard + winners. See: Experiments (guide/experiments_ab.md).
 - Egress control (planned): policy‑backed, per‑node egress gateway + DNS guard with project‑level network posture and an egress ledger. See: Architecture → Egress Firewall; Guide → Network Posture.
  - Lightweight mitigations (planned): memory quarantine; project isolation; belief‑diff review; cluster manifest pinning; hardened headless browsing; safe archive handling; DNS anomaly guard; accelerator zeroing; event sequencing; context rehydration check. See: Architecture → Lightweight Mitigations.
@@ -41,7 +41,7 @@ Type: Explanation
 - Extensibility: Static Rust plugins and dynamic WASI/WASM plugins; unified tool registry with JSON Schemas.
 - Runtime & Memory: Orchestrator, pluggable Queue/Bus (local; NATS groups; JetStream planned), Run Capsules; layered memory and Memory Lab. See: Memory and Training (MEMORY_AND_TRAINING.md).
 - Safety & Profiles: Sandboxed file/network allowlists; profiles (performance/balanced/power‑saver/custom); secrets and hints.
-- Hardware & Performance: Hardware discovery; governor presets; model daemon + CAS for concurrent access. See: Hardware and Models (HARDWARE_AND_MODELS.md).
+- Hardware & Performance: Hardware discovery; governor presets; model daemon + CAS for concurrent access. See: [Models Download](guide/models_download.md).
 - Connections & Hierarchy: Connection registry, health checks, rate limits, QoS, tracing, policy; roles and negotiation (hello/offer/accept). See: Clustering (CLUSTERING.md), Hierarchy (HIERARCHY.md).
 
 ## Adapters

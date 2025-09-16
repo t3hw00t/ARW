@@ -5,7 +5,7 @@ title: API and Schema
 # API and Schema
 { .topic-trio style="--exp:.9; --complex:.6; --complicated:.5" data-exp=".9" data-complex=".6" data-complicated=".5" }
 
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: Reference
 
 See also: [Glossary](GLOSSARY.md), [Configuration](CONFIGURATION.md)
@@ -55,6 +55,10 @@ cat spec/schemas/dns_anomaly_event.json | jq '.title,.description'
 
 Events (SSE)
 ```bash
+# Unified server (public):
+curl -N "$BASE/events?replay=10"
+
+# Legacy service (admin‑gated):
 curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?replay=10"
 ```
 

@@ -1,9 +1,9 @@
-id: api.legacy.arw
+id: api.arw
 kind: http
-title: ARW Service API (Legacy)
+title: ARW Unified Server API
 owner: platform
-lifecycle: legacy
-stability_since: 2025-01-01
+lifecycle: stable
+stability_since: 2025-09-15
 sunset: null
 review_after: 2026-01-01
 tech:
@@ -27,4 +27,4 @@ drift_checks:
   diff_base_branch: main
 change_policy:
   semver: minor-compatible
-  deprecation_headers: true
+

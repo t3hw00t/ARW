@@ -1,0 +1,86 @@
+---
+title: UI Flows (ASCII)
+---
+
+# UI Flows (ASCII)
+
+Flowcharts for the main user interfaces. Complements UI Architecture and Workflow Views.
+
+Updated: 2025-09-16
+Type: How‑to
+
+## Navigation Overview
+
+```
+               +--------------------+
+               |    Desktop App     |
+               |    Launcher (UI)   |
+               +----------+---------+
+                          |
+             Windows menu |  Command Palette (Ctrl/Cmd-K)
+                          |                     |
+                          v                     v
+   +---------------------+-------------------------------+
+   |                      Main Views                     |
+   |                                                     |
+   |  +-------------+   +-----------+   +--------------+ |
+   |  | Project Hub |   |   Chat    |   | Training Park| |
+   |  +------+------+   +-----+-----+   +------+-------+ |
+   |         |                |                 |        |
+   +---------+----------------+-----------------+--------+
+             |                |                 |
+             v                v                 v
+       Right Sidecar (global: Timeline | Context | Policy | Metrics | Models | Activity)
+
+   Managers (single source of truth)
+     - Agents    - Models    - Hardware    - Permissions    - Containers    - Plugins
+
+Legacy (debug) UI: /debug (enable ARW_DEBUG=1; legacy stack via --legacy)
+```
+
+Notes
+- All views share one live SSE stream and read‑models; the sidecar shows the same state everywhere.
+- Managers own inventories; projects/agents hold references only.
+
+## Typical Project Flow
+
+```
+Start → Launcher → Project Hub
+  |        |
+  |        +--> Create/Open Project
+  |                |
+  |                +--> Attach Agent (profile + policy + mounts + runtime)
+  |                |        |
+  |                |        +--> Start Chat (episode bound to project+agent)
+  |                |        |        |
+  |                |        |        +--> Observe sidecar timeline (tools, prompts, tokens)
+  |                |        |        |
+  |                |        |        +--> Compare outputs (Text/JSON diff, images, CSV)
+  |                |        |
+  |                |        +--> Run Routines / Tasks (from Hub)
+  |                |
+  |                +--> Files/Notes (browse, edit, upload, open in editor)
+  |
+  +--> Command Palette → global search & actions (e.g., set editor, open runtime matrix)
+```
+
+## Projects Admin UI (HTTP)
+
+```
+Enable admin → Start server → Open /admin/ui/projects
+  |
+  +--> Create project  → folder + NOTES.md
+  |
+  +--> Browse tree     → breadcrumbs, filter, open (OS/editor)
+  |
+  +--> Edit notes      → autosave option, inline Saved indicator
+  |
+  +--> Upload files    → drag & drop (size‑guarded)
+
+Endpoints (admin‑gated): /projects/list | /projects/create | /projects/notes | /projects/tree | /projects/file
+```
+
+See also
+- How‑to → UI Architecture (layout, sidecar), Workflow Views & Sidecar, Projects UI
+- Reference → Feature Catalog, Event Topics
+

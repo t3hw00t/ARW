@@ -4,17 +4,17 @@ title: Memory & World Schemas
 
 # Memory & World Schemas
 
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: Reference
 
 Status: Planned
 
 Schemas
-- Memory Quarantine Entry — spec/schemas/memory_quarantine_entry.json
-- World Diff Review Item — spec/schemas/world_diff_review_item.json
-- Secrets Redaction Rule — spec/schemas/secrets_redaction_rule.json
-- Archive Unpack Policy — spec/schemas/archive_unpack_policy.json
-- DNS Anomaly Event — spec/schemas/dns_anomaly_event.json
+- Memory Quarantine Entry — [spec/schemas/memory_quarantine_entry.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/memory_quarantine_entry.json)
+- World Diff Review Item — [spec/schemas/world_diff_review_item.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/world_diff_review_item.json)
+- Secrets Redaction Rule — [spec/schemas/secrets_redaction_rule.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/secrets_redaction_rule.json)
+- Archive Unpack Policy — [spec/schemas/archive_unpack_policy.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/archive_unpack_policy.json)
+- DNS Anomaly Event — [spec/schemas/dns_anomaly_event.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/dns_anomaly_event.json)
 
 Notes
 - Quarantine forms the basis of a small review queue: `/state/memory/quarantine` (planned) with SSE events `memory.quarantined` and `memory.admitted`.

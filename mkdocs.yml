@@ -85,6 +85,7 @@ nav:
       - Security Posture: guide/security_posture.md
       - Threat Model: guide/threat_model.md
       - UI Architecture: guide/ui_architecture.md
+      - UI Flows (ASCII): guide/ui_flows.md
       - Compatibility: guide/compatibility.md
       - Design System: guide/design_system.md
       - gRPC: guide/grpc.md
@@ -137,6 +138,7 @@ nav:
       - Unified Object Graph: architecture/object_graph.md
       - Events Vocabulary: architecture/events_vocabulary.md
       - Restructure Handbook: RESTRUCTURE.md
+      - UI Architecture Options (ASCII): architecture/ui_architecture_options.md
       - Kernel (Journal + CAS): architecture/kernel.md
       - Self‑Model (Metacognition): architecture/self_model.md
       - Logic Units: architecture/logic_units.md

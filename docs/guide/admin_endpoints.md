@@ -7,7 +7,7 @@ title: Admin Endpoints
 
 ARW exposes a unified admin/ops HTTP namespace under `/admin`. All sensitive routes live here so updates can’t miss gating.
 
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 - Base: `/admin`
@@ -201,7 +201,7 @@ curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?replay=10"
 
 ### Event Examples
 
-Canonical topic names are defined once in `crates/arw-topics/src/lib.rs` and referenced by the service.
+Canonical topic names are defined once in [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs) and referenced by the service.
 
 - models.download.progress (progress)
 ```
@@ -352,7 +352,7 @@ Example:
 }
 ```
 
-Schema: see `spec/schemas/model_manifest.json`.
+Schema: see [spec/schemas/model_manifest.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/model_manifest.json).
 
 Notes
 - Downloads promote into CAS under `{state_dir}/models/by-hash/<sha256>[.<ext>]` and write a per‑ID manifest `{state_dir}/models/<id>.json`.

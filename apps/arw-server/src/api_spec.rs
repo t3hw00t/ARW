@@ -118,3 +118,52 @@ pub async fn spec_index() -> impl IntoResponse {
     )
         .into_response()
 }
+
+fn interfaces_dir() -> std::path::PathBuf {
+    std::path::PathBuf::from(
+        std::env::var("ARW_INTERFACES_DIR").unwrap_or_else(|_| "interfaces".into()),
+    )
+}
+
+pub async fn catalog_index() -> impl IntoResponse {
+    let path = interfaces_dir().join("index.yaml");
+    match tokio::fs::read(&path).await {
+        Ok(bytes) => (
+            StatusCode::OK,
+            [(header::CONTENT_TYPE, "application/yaml")],
+            bytes,
+        )
+            .into_response(),
+        Err(_) => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({"type":"about:blank","title":"Not Found","status":404})),
+        )
+            .into_response(),
+    }
+}
+
+pub async fn catalog_health() -> impl IntoResponse {
+    // Report presence/size of spec artifacts
+    let base = spec_dir();
+    let mut items = vec![];
+    let entries = [
+        ("openapi.yaml", "application/yaml"),
+        ("asyncapi.yaml", "application/yaml"),
+        ("mcp-tools.json", "application/json"),
+    ];
+    for (name, ct) in entries {
+        let p = base.join(name);
+        let (exists, size) = match tokio::fs::metadata(&p).await {
+            Ok(m) => (true, m.len()),
+            Err(_) => (false, 0),
+        };
+        items.push(json!({
+            "name": name,
+            "content_type": ct,
+            "path": format!("spec/{}", name),
+            "exists": exists,
+            "size": size
+        }));
+    }
+    (StatusCode::OK, Json(json!({"items": items}))).into_response()
+}

@@ -40,6 +40,8 @@ mod paths {
     pub const SPEC_MCP: &str = "/spec/mcp-tools.json";
     pub const SPEC_SCHEMA: &str = "/spec/schemas/:file";
     pub const SPEC_INDEX: &str = "/spec/index.json";
+    pub const CATALOG_INDEX: &str = "/catalog/index";
+    pub const CATALOG_HEALTH: &str = "/catalog/health";
 }
 
 // Macros to add routes and record them in the endpoints list (avoid drift)
@@ -363,6 +365,22 @@ async fn main() {
         endpoints_meta_acc,
         paths::SPEC_INDEX,
         api_spec::spec_index,
+        "stable"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::CATALOG_INDEX,
+        api_spec::catalog_index,
+        "stable"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::CATALOG_HEALTH,
+        api_spec::catalog_health,
         "stable"
     );
     // Record internal routes as well (no stability tagging for these yet)

@@ -3,7 +3,7 @@ title: UI Architecture
 ---
 
 # UI Architecture
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 Layout
@@ -34,3 +34,5 @@ Anti‑patterns
 Tauri integration
 - Treat the service’s SSE/WS as the source of truth for live data; Tauri’s event bus is for UI‑level signals only.
 - Gate OS integrations through ARW policy prompts; render prompts and decisions inline in the sidecar for continuity.
+
+See also: UI Flows (ASCII) — guide/ui_flows.md; Workflow Views & Sidecar — guide/workflow_views.md; UI Architecture Options (ASCII) — architecture/ui_architecture_options.md.

@@ -55,7 +55,7 @@ Installer status
 - Signing: Code signing is supported in CI when a certificate is provided via secrets; unsigned packages still work but may show SmartScreen prompts.
 
 Winget (optional)
-- See developer guide for winget manifests: `docs/developer/winget.md`.
+- See developer guide for winget manifests: [developer/winget.md](../developer/winget.md).
 
 Uninstall
 - Portable: delete the `dist/arw-*` folder.

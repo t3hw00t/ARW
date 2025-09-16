@@ -1,5 +1,5 @@
 # CLI Reference
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: Reference
 
 Microsummary: Commands, subcommands, and flags for `arw-cli` with pointers to tutorials. Beta.
@@ -17,4 +17,4 @@ Commands (summary)
 - `arw-cli capsule sign-ed25519 <sk_b64> <capsule.json> [--out <file>]` — sign capsule
 - `arw-cli capsule verify-ed25519 <pk_b64> <capsule.json> <sig_b64>` — verify signature
 
-See the CLI Guide (guide/cli.md) for examples. Use `--help` on any command for details.
+See the [CLI Guide](../guide/cli.md) for examples. Use `--help` on any command for details.

@@ -5,8 +5,8 @@ Type: Reference
 
 Microsummary: Public endpoints, admin surfaces, specs, and eventing. Stable/experimental flags are surfaced in specs; deprecations emit standard headers.
 
-- Specs in repo: `spec/openapi.yaml`, `spec/asyncapi.yaml`, `spec/mcp-tools.json`
-- Specs at runtime: `GET /spec/openapi.yaml`, `GET /spec/asyncapi.yaml`, `GET /spec/mcp-tools.json`, `GET /spec/schemas/{file}.json`, `GET /spec/index.json`
+- Specs in repo: [spec/openapi.yaml](https://github.com/t3hw00t/ARW/blob/main/spec/openapi.yaml), [spec/asyncapi.yaml](https://github.com/t3hw00t/ARW/blob/main/spec/asyncapi.yaml), [spec/mcp-tools.json](https://github.com/t3hw00t/ARW/blob/main/spec/mcp-tools.json)
+- Specs at runtime: `GET /spec/openapi.yaml`, `GET /spec/asyncapi.yaml`, `GET /spec/mcp-tools.json`, `GET /spec/schemas/{file}`, `GET /spec/index.json`
 - Catalog: `GET /catalog/index` (YAML) and `GET /catalog/health` (JSON)
 - Auth: Local‑only by default; for admin endpoints set `ARW_ADMIN_TOKEN` and send `Authorization: Bearer <token>` or `X-ARW-Admin`.
 
@@ -19,6 +19,36 @@ Endpoints (selected)
 - `GET /about`: service metadata with endpoints index and counts
   - Fields: `service`, `version`, `http`, `docs_url?`, `security_posture?`, `counts`, `endpoints[]`, `endpoints_meta[]`
   - `endpoints_meta[]` items include `{ method, path, stability }` for curated routes.
+
+Actions (unified server)
+- `POST /actions` — submit action; returns `{ id }` (202)
+- `GET /actions/{id}` — fetch action state
+- `POST /actions/{id}/state` — worker lifecycle update
+
+Memory
+- `POST /memory/put` — insert memory item into a lane
+- `GET /state/memory/select` — query memories (like/fts)
+- `POST /memory/search_embed` — nearest neighbors by embedding
+- `POST /memory/link` — create a link between memory ids
+
+Connectors
+- `GET /state/connectors` — list registered connector manifests (secrets elided)
+- `POST /connectors/register` — register a manifest (admin-gated)
+- `POST /connectors/token` — set/update token/refresh token (admin-gated)
+
+Logic Units & Config
+- `GET /state/logic_units` — list logic units
+- `POST /logic-units/install` — install a logic unit (admin-gated)
+- `POST /logic-units/apply` — apply a patch set with optional schema validation (admin-gated)
+- `POST /logic-units/revert` — revert to a config snapshot (admin-gated)
+- `GET /state/config` — effective config JSON
+- `POST /patch/apply` — apply patches (admin-gated)
+- `POST /patch/revert` — revert to snapshot (admin-gated)
+- `GET /state/config/snapshots` — list config snapshots
+- `GET /state/config/snapshots/{id}` — get a specific snapshot
+- `POST /patch/validate` — validate a config against a JSON Schema
+- `GET /state/schema_map` — current schema mapping used for inference
+- `POST /patch/infer_schema` — map a target path to schema/pointer
 
 Semantics
 - status vs code: RFC 7807 ProblemDetails for errors; otherwise endpoint‑specific JSON.

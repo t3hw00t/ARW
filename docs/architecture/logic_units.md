@@ -3,7 +3,7 @@ title: Logic Units
 ---
 
 # Logic Units
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: Explanation
 
 Logic Units are installable, versioned strategy packs that change how an agent behaves without rewriting the app. Prefer config‑only units; code is optional and sandboxed.

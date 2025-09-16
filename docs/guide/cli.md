@@ -3,7 +3,7 @@ title: CLI Guide
 ---
 
 # CLI Guide
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 Goal-oriented tasks using the `arw-cli` binary. This guide shows common commands with copy‑pasteable examples and flags you’re likely to want.
@@ -71,5 +71,5 @@ Tips
 - The service can adopt gating via capsules; see Security Hardening and Policy guides for how to apply.
 
 Related
-- Reference (commands and flags): `docs/reference/cli.md`
-- Security: `docs/guide/security_hardening.md`, `docs/POLICY.md`, `docs/GATING_KEYS.md`
+- Reference (commands and flags): [CLI Reference](../reference/cli.md)
+- Security: [security_hardening.md](security_hardening.md), [GATING_KEYS.md](../GATING_KEYS.md), see also [Policy & Permissions](policy_permissions.md)

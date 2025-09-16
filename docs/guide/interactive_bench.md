@@ -1,5 +1,5 @@
 # Interactive Performance Bench (I2F, First Partial, Cadence)
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 A tiny harness to validate the interactive performance budgets against a live service.
@@ -29,7 +29,7 @@ CI: see `.github/workflows/snappy.yml` (runs on push and PR). Budgets are enforc
 Notes
 - `/admin/emit/test` publishes a small `service.test` event used by the harness to drive bursts.
 - Admin gate: CI runs with `ARW_DEBUG=1`; in production, pass `Authorization: Bearer`.
-- SSE contract and resume behavior: see `docs/architecture/sse_patch_contract.md`.
+- SSE contract and resume behavior: see [SSE + JSON Patch Contract](../architecture/sse_patch_contract.md).
 
 Cold‑start mode
 

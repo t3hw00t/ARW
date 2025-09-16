@@ -3,7 +3,7 @@ title: Command Palette
 ---
 
 # Command Palette
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 The launcher windows (Hub, Chat, Training) ship a lightweight, keyboard‑first command palette.

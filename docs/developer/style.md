@@ -6,7 +6,7 @@ title: Style & Harmony
 
 We aim for a calm, precise experience. Keep visuals understated; let high-impact interactions shine.
 
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: Reference
 
 Guidelines
@@ -76,7 +76,7 @@ Benefits
 - Links: relative paths within `docs/` so MkDocs resolves them; avoid external URLs when an internal page exists.
 - Avoid duplication: link to canonical pages (Quickstart, Deployment, Configuration, Admin Endpoints).
 - Security: surface a “Minimum Secure Setup” box on Quickstart/Admin pages.
-- Terms: prefer glossary terms; add new ones to `docs/GLOSSARY.md`.
+- Terms: prefer glossary terms; add new ones to [GLOSSARY.md](../GLOSSARY.md).
 - Formatting: keep sections short; prefer 80–100 char lines but don’t force awkward wraps.
 
 ## API Style (OpenAPI/AsyncAPI)

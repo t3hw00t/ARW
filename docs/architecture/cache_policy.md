@@ -4,7 +4,7 @@ title: Cache Policy Manifest
 
 # Cache Policy Manifest
 
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: Explanation
 
 This document describes a small, declarative “cache policy” manifest you can use to express caching behaviors across ARW layers. It reflects research‑informed practices and maps to today’s implementation knobs where available. Some sections are forward‑looking; they are noted as planned.

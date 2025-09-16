@@ -3,18 +3,18 @@ title: Event Topics (Canonical)
 ---
 
 # Event Topics (Canonical)
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: Reference
 
 Source of truth for event kinds published by the service. These constants are defined once in code and imported where needed to avoid drift:
 
-- Code constants: `crates/arw-topics/src/lib.rs`
+- Code constants: [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs)
 
 Related docs:
-- Explanations → Events Vocabulary: `docs/architecture/events_vocabulary.md`
-- Architecture → SSE + JSON Patch Contract: `docs/architecture/sse_patch_contract.md`
-- How‑to → Subscribe to Events (SSE): `docs/guide/events_sse.md`
-- How‑to → Models Download (HTTP): `docs/guide/models_download.md`
+- Explanations → [Events Vocabulary](../architecture/events_vocabulary.md)
+- Architecture → [SSE + JSON Patch Contract](../architecture/sse_patch_contract.md)
+- How‑to → [Subscribe to Events (SSE)](../guide/events_sse.md)
+- How‑to → [Models Download (HTTP)](../guide/models_download.md)
 
 ## Topics Table
 

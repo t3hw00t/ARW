@@ -4,7 +4,7 @@ title: Systemd Service
 
 # Systemd Service
 
-Updated: 2025-09-15
+Updated: 2025-09-16
 Type: How‑to
 
 Run ARW as a user service, either natively or via Docker.
@@ -41,5 +41,4 @@ systemctl --user enable --now arw-svc-container@$(whoami)
 
 ## Hardening
 
-See `docs/ops/systemd_overrides.md` for cgroup weights and additional restrictions. Consider running behind a TLS reverse proxy and keeping `ARW_BIND=127.0.0.1`.
-
+See [Systemd Overrides](systemd_overrides.md) for cgroup weights and additional restrictions. Consider running behind a TLS reverse proxy and keeping `ARW_BIND=127.0.0.1`.
