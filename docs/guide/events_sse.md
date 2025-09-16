@@ -76,7 +76,7 @@ Event model
  - RPU trust change: `rpu.trust.changed` (payload includes `{count, path?, ts_ms}`)
 
 Note: event kinds are normalized. Legacy `Models.*` forms have been removed.
-- See Explanations → Events Vocabulary for the canonical list. For source‑of‑truth topic names used by the service, see `apps/arw-svc/src/ext/topics.rs`.
+- See Explanations → Events Vocabulary for the canonical list. For source‑of‑truth topic names used by the service, see `crates/arw-topics/src/lib.rs`.
 
 Tips
 - Stitch episodes using `corr_id` on each event.

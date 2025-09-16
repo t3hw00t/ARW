@@ -38,13 +38,18 @@ pub async fn state_episodes(State(state): State<AppState>) -> impl IntoResponse 
 }
 
 pub async fn state_route_stats(State(state): State<AppState>) -> impl IntoResponse {
-    let s = state.bus.stats();
+    let bus = state.bus.stats();
+    let metrics = state.metrics.snapshot();
     Json(json!({
-        "published": s.published,
-        "delivered": s.delivered,
-        "lagged": s.lagged,
-        "no_receivers": s.no_receivers,
-        "receivers": s.receivers
+        "bus": {
+            "published": bus.published,
+            "delivered": bus.delivered,
+            "receivers": bus.receivers,
+            "lagged": bus.lagged,
+            "no_receivers": bus.no_receivers
+        },
+        "events": metrics.events,
+        "routes": metrics.routes
     }))
 }
 

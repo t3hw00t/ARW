@@ -89,7 +89,7 @@ PR acceptance checklist
 ## Event & Interface Policy
 
 - Event kinds are dot.case only: `foo.bar.baz`. CamelCase is not allowed anywhere (code, docs, assets, or subjects).
-- Use the single source of truth for event constants: `apps/arw-svc/src/ext/topics.rs`.
+- Use the single source of truth for event constants: `crates/arw-topics/src/lib.rs`.
 - Publishers must use constants from `topics.rs` — do not inline strings.
 - NATS subjects must be dot.case (e.g., `arw.events.task.completed`, `arw.events.node.<node_id>.task.completed`).
 - Run `python3 scripts/lint_event_kinds.py` before submitting to ensure no regressions.

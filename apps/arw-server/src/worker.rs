@@ -4,6 +4,7 @@ use std::time::Duration;
 use tokio::time;
 
 use crate::{util, AppState};
+use arw_topics as topics;
 
 pub(crate) fn start_local_worker(state: AppState) {
     let bus = state.bus.clone();
@@ -17,7 +18,7 @@ pub(crate) fn start_local_worker(state: AppState) {
                     let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
                     let env = arw_events::Envelope {
                         time: now,
-                        kind: "actions.running".into(),
+                        kind: topics::TOPIC_ACTIONS_RUNNING.into(),
                         payload: json!({"id": id}),
                         policy: None,
                         ce: None,
@@ -140,7 +141,7 @@ pub(crate) fn start_local_worker(state: AppState) {
                         };
                         if !allowed {
                             bus.publish(
-                                "policy.decision",
+                                topics::TOPIC_POLICY_DECISION,
                                 &json!({
                                     "action": "fs.patch",
                                     "allow": false,
@@ -155,7 +156,7 @@ pub(crate) fn start_local_worker(state: AppState) {
                                     let path_s =
                                         v.get("path").and_then(|x| x.as_str()).unwrap_or("");
                                     bus.publish(
-                                        "projects.file.written",
+                                        topics::TOPIC_PROJECTS_FILE_WRITTEN,
                                         &json!({"path": path_s, "sha256": v.get("sha256") }),
                                     );
                                     v
@@ -181,7 +182,7 @@ pub(crate) fn start_local_worker(state: AppState) {
                             };
                         if !allowed {
                             bus.publish(
-                                "policy.decision",
+                                topics::TOPIC_POLICY_DECISION,
                                 &json!({
                                     "action": "app.vscode.open",
                                     "allow": false,
@@ -195,7 +196,10 @@ pub(crate) fn start_local_worker(state: AppState) {
                                 Ok(v) => {
                                     let path_s =
                                         input.get("path").and_then(|x| x.as_str()).unwrap_or("");
-                                    bus.publish("apps.vscode.opened", &json!({"path": path_s }));
+                                    bus.publish(
+                                        topics::TOPIC_APPS_VSCODE_OPENED,
+                                        &json!({"path": path_s }),
+                                    );
                                     v
                                 }
                                 Err(e) => json!({"error":"runtime","detail": e.to_string()}),
@@ -214,7 +218,7 @@ pub(crate) fn start_local_worker(state: AppState) {
                     let now2 = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
                     let env2 = arw_events::Envelope {
                         time: now2,
-                        kind: "actions.completed".into(),
+                        kind: topics::TOPIC_ACTIONS_COMPLETED.into(),
                         payload: json!({"id": env.payload["id"], "output": out}),
                         policy: None,
                         ce: None,
@@ -299,7 +303,10 @@ fn publish_egress_event(
     payload.insert("bytes_in".into(), json!(record.bytes_in));
     payload.insert("corr_id".into(), json!(record.corr_id));
     payload.insert("posture".into(), json!(posture));
-    bus.publish("egress.ledger.appended", &Value::Object(payload));
+    bus.publish(
+        topics::TOPIC_EGRESS_LEDGER_APPENDED,
+        &Value::Object(payload),
+    );
 }
 
 fn simulate_action(kind: &str, input: &Value) -> Result<Value, String> {

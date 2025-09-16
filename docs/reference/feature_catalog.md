@@ -53,7 +53,7 @@ _Keep loops under budget with shared event vocabulary and debugging surfaces._
   _Routes_: `GET /admin/events`
   _Signals_: `state.read.model.patch`
   _Env_: `ARW_BUS_CAP`, `ARW_BUS_REPLAY`
-  _Source_: `apps/arw-svc/src/main.rs`, `apps/arw-svc/src/ext/read_model.rs`, `apps/arw-svc/src/ext/topics.rs`
+_Source_: `apps/arw-svc/src/main.rs`, `apps/arw-svc/src/ext/read_model.rs`, `crates/arw-topics/src/lib.rs`
 
 - **Chat Workbench** · backend / admin / auxiliary / complete
   Debug chat UI surface with synthetic replies or llama/OpenAI backends; planner hints, optional self-consistency and verifier (gated).
@@ -125,7 +125,7 @@ _Grant capabilities with leases, previews, and clear denials before anything lea
   Ingress/egress policy gating with previews and append-only egress ledger. Full proxy/DNS guard is planned.
   _Signals_: `egress.preview`, `egress.ledger.appended`
   _Env_: `ARW_EGRESS_LEDGER_ENABLE`, `ARW_NET_POSTURE`
-  _Source_: `apps/arw-svc/src/ext/io.rs`, `apps/arw-svc/src/ext/topics.rs`, `docs/architecture/egress_firewall.md`
+_Source_: `apps/arw-svc/src/ext/io.rs`, `crates/arw-topics/src/lib.rs`, `docs/architecture/egress_firewall.md`
 
 ### Govern Configuration
 _Ship safe defaults, audit runtime tweaks, and keep specs in sync._

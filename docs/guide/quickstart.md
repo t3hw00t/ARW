@@ -4,19 +4,20 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-09-16
+Updated: 2025-09-18
 Type: Tutorial
 
-Run ARW locally in a couple of minutes. It’s your private AI control room: start on one machine, stay in full control, and only scale or share when you choose. See the Features page for what you can do next.
+Run the unified ARW server locally in minutes. The new architecture focuses on the `/actions` → `/events` → `/state/*` triad; the legacy `arw-svc` with the classic debug UI remains available behind a `--legacy` flag while the restructure continues.
 
 !!! warning "Minimum Secure Setup"
     - Set an admin token: `ARW_ADMIN_TOKEN=your-secret`
-    - Don’t enable debug in production: leave `ARW_DEBUG` unset
-    - Keep the service private: bind to `127.0.0.1` or put behind TLS proxy
-    - Send the header on admin calls: `X-ARW-Admin: your-secret`
+    - Keep the service private: bind to `127.0.0.1` or front with TLS
+    - Require the header on sensitive calls: `Authorization: Bearer your-secret` or `X-ARW-Admin`
+    - Leave `ARW_DEBUG` unset in production
 
 ## Prerequisites
 - Rust toolchain (`rustup`): https://rustup.rs
+- `curl` for quick verification (or `Invoke-WebRequest` on Windows)
 
 ## Build and Test
 
@@ -32,83 +33,142 @@ bash scripts/build.sh
 bash scripts/test.sh
 ```
 
-## Run the Service
+## Run the Unified Server (Headless)
+
+The new `arw-server` binary is headless-first. It streams events and state over HTTP/SSE while we finish porting the UI.
 
 === "Windows"
 ```powershell
+# Headless server (8091 by default)
 powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
-# Interactive menu (launcher-first)
-powershell -ExecutionPolicy Bypass -File scripts/interactive-start-windows.ps1
 ```
-- Tip: the service console starts minimized by default to avoid AV heuristics; pass `-HideWindow` to match the previous fully
-  hidden launch mode.
 
 === "Linux / macOS"
 ```bash
-bash scripts/start.sh --wait-health
-# Optional: bind address (default 127.0.0.1)
-# ARW_BIND=0.0.0.0 bash scripts/start.sh --wait-health
-# Interactive menu (launcher-first)
-bash scripts/interactive-start-linux.sh   # Linux
-bash scripts/interactive-start-macos.sh   # macOS
+# Headless server (8091 by default)
+bash scripts/start.sh --service-only --wait-health
 ```
 
-## Verify
+*Need the legacy debug UI?* Pass `-Legacy` (Windows) or `--legacy` (Linux/macOS) to start `arw-svc` instead. See [Legacy UI Bridge](#legacy-ui-bridge) below.
+
+## Verify the Server
+
 ```bash
-curl -sS http://127.0.0.1:8090/healthz
+curl -sS http://127.0.0.1:8091/healthz
+curl -sS http://127.0.0.1:8091/about | jq
 ```
 
-## Open
-- Landing page: http://127.0.0.1:8090/
-- Debug UI (when `ARW_DEBUG=1`): http://127.0.0.1:8090/debug
-- Admin index (requires token or debug): http://127.0.0.1:8090/admin
+You should see metadata that lists the unified endpoints, performance presets, and the current security posture.
 
-## Desktop Launcher (Optional)
+## Try an Action End-to-End
 
-=== "All"
-- Build: `just tauri-launcher-build`
-- Run: `just tauri-launcher-run`
-- Features: system tray (Start/Stop/Open), Events (SSE), Logs, Debug UI opener, prefs & autostart.
+Submit a demo action, watch its lifecycle, then fetch it back:
 
-=== "Linux build deps"
 ```bash
-just tauri-deps-linux
-# or
-nix develop
+curl -s -X POST http://127.0.0.1:8091/actions \
+  -H 'content-type: application/json' \
+  -d '{"kind":"demo.echo","input":{"msg":"hello"}}' | jq
+
+curl -N http://127.0.0.1:8091/events?replay=10
+
+curl -s http://127.0.0.1:8091/state/actions | jq
 ```
 
-## Peek at What's Available
-- Health: `GET /healthz`
-- About: `GET /about` (name, tagline, docs url, key endpoints)
-- Events (SSE): `GET /admin/events` (send `X-ARW-Admin` or Bearer)
-- Tools: `GET /admin/introspect/tools`
-- Schemas: `GET /admin/introspect/schemas/{id}`
-- Debug UI: open `/debug` (if provided by your build)
+The events stream shows `actions.submitted`, `actions.running`, and `actions.completed`. Any client can subscribe to `/events` (optionally with `?prefix=` and `?replay=` filters) to stay in lock-step with the server.
 
-## Debug UI Tips
-- Set `ARW_DEBUG=1` to enable the `/debug` page.
-- Look for small “?” icons beside sections. Click to see a gentle inline tip and a link to the matching docs page.
-- Set `ARW_DOCS_URL` (e.g., your GitHub Pages URL) so the “Docs” button in the header opens your hosted manual.
-- The Orchestration panel groups common actions (Probe, Emit test, Refresh models, Self‑tests, Shutdown) to streamline flows.
-- Profiles: use the profile picker (performance/balanced/power‑saver) to apply a runtime hint. Endpoint: `POST /governor/profile { name }`, check with `GET /governor/profile`.
-- When available locally, the docs can also be served at `/docs` (see Packaging notes).
+## Explore State Views
 
-## Self‑Learning Panel
-- Send a signal (latency/errors/memory/cpu) with a target and confidence to record an observation.
-- Click “Analyze now” to produce suggestions (e.g., increase http timeout, switch profile, raise memory limit mildly).
-- Apply a suggestion by id or toggle “auto‑apply safe” (for conservative changes).
-- The Insights overlay shows live event totals and the top 3 routes by EWMA latency.
+```bash
+curl -s http://127.0.0.1:8091/state/episodes | jq
+curl -s http://127.0.0.1:8091/state/contributions | jq
+curl -s http://127.0.0.1:8091/state/egress/settings | jq
+```
+
+Additional views expose models, self descriptions, memory lanes, logic units, orchestrator jobs, and more as they land during the restructure.
+
+## Policy, Leases, and Context
+
+```bash
+# Inspect the effective policy
+curl -s http://127.0.0.1:8091/state/policy | jq
+
+# Create a lease that allows outbound HTTP for 10 minutes
+curl -s -X POST http://127.0.0.1:8091/leases \
+  -H 'content-type: application/json' \
+  -d '{"capability":"net:http","ttl_secs":600}' | jq
+
+# Assemble context (hybrid retrieval with streaming diagnostics)
+curl -s -X POST http://127.0.0.1:8091/context/assemble \
+  -H 'content-type: application/json' \
+  -d '{"q":"demo","lanes":["semantic","procedural"],"limit":12}' | jq
+```
+
+These flows emit structured `policy.*`, `working_set.*`, and `leases.*` events. Dashboards can follow along via `/events` or state views.
+
+## Legacy UI Bridge
+
+The classic service remains available while we finish porting surfaces to the unified stack.
+
+=== "Windows"
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -Legacy -WaitHealth
+```
+
+=== "Linux / macOS"
+```bash
+bash scripts/start.sh --legacy --wait-health
+```
+
+Legacy mode listens on port `8090`, serves the debug UI, and powers existing launcher workflows. Use it when you need the full GUI today, but prefer the unified server for API-driven integrations, automation, and future features.
+
+## Desktop Launcher (Legacy Bridge)
+
+The Tauri-based launcher currently targets the legacy service bundle. To package or run it:
+
+```bash
+just tauri-launcher-build
+just tauri-launcher-run -- --legacy
+```
+
+On Windows:
+```powershell
+scripts/interactive-start-windows.ps1  # prompts for legacy vs. unified
+```
+
+The launcher will be updated to speak the unified API once the new UI lands. Until then it auto-starts `arw-svc` when invoked without overrides.
+
+## Docker & Compose
+
+A lightweight container image is available for the unified server:
+
+```bash
+# Build locally
+docker build -f apps/arw-server/Dockerfile -t arw-server:dev .
+
+# Run headless (bind 8091)
+docker run --rm -p 8091:8091 \
+  -e ARW_BIND=0.0.0.0 \
+  -e ARW_PORT=8091 \
+  -e ARW_ADMIN_TOKEN=dev-admin \
+  arw-server:dev
+```
+
+`docker compose up` now uses the unified server by default. Set `LEGACY=1` and swap in `apps/arw-svc/Dockerfile` if you must run the legacy stack.
 
 ## Security
-- Sensitive endpoints (`/admin/*` surfaces, incl. `/admin/probe`, `/admin/models*`, `/admin/introspect*`, `/admin/chat*`, `/admin/feedback*`) are gated.
-- Development: set `ARW_DEBUG=1`. Hardened: set `ARW_ADMIN_TOKEN` and send header `X-ARW-Admin: <token>`.
- - Full list of environment variables: see Configuration.
+
+- Require `ARW_ADMIN_TOKEN` before invoking `/leases`, `/egress/settings`, or other admin-grade endpoints.
+- Use leases to gate outbound HTTP, filesystem writes, or app control (`app.vscode.open`).
+- Enable the egress ledger and DNS guard with environment flags (`ARW_EGRESS_LEDGER_ENABLE=1`, `ARW_DNS_GUARD_ENABLE=1`).
+- Keep `/events` behind auth when exposed over the network; it contains action telemetry.
 
 ## Portable Mode
-- Set `ARW_PORTABLE=1` to keep state near the app bundle.
-- Paths and memory layout are reported by `GET /admin/probe`.
+
+- Set `ARW_STATE_DIR` to relocate state (defaults to `./state`).
+- Combine with `ARW_PORTABLE=1` in launchers or scripts to keep all files beside the binaries for USB-style deployment.
 
 ## Next Steps
-- Read the Features page to understand the capabilities.
-- See Deployment to package and share a portable bundle.
-- Having issues? See Troubleshooting.
+
+- Read the [Restructure Handbook](../RESTRUCTURE.md) for the canonical roadmap.
+- Explore [Context Recipes](context_recipes.md) and [Performance Presets](performance_presets.md) to tune retrieval speed and coverage.
+- Run `cargo run -p arw-server` during development for hot reloads and tracing; `ARW_OTEL_EXPORT=stdout` prints spans locally.

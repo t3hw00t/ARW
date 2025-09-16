@@ -12,6 +12,7 @@ use crate::api_config::{
     validate_patch_value,
 };
 use crate::{admin_ok, AppState};
+use arw_topics as topics;
 
 pub async fn logic_units_list(
     State(state): State<AppState>,
@@ -57,7 +58,7 @@ pub async fn logic_units_install(
     let _ = state.kernel.insert_logic_unit(&id, &manifest, "installed");
     state
         .bus
-        .publish("logic.unit.installed", &json!({"id": id}));
+        .publish(topics::TOPIC_LOGICUNIT_INSTALLED, &json!({"id": id}));
     (
         axum::http::StatusCode::CREATED,
         Json(json!({"id": manifest["id"].clone(), "ok": true})),
@@ -205,13 +206,14 @@ pub async fn logic_units_apply(
                 .and_then(|x| x.get("id").and_then(|v| v.as_str()))
                 .map(|s| s.to_string());
             state.bus.publish(
-                "logic.unit.applied",
+                topics::TOPIC_LOGICUNIT_APPLIED,
                 &json!({"id": id, "ops": patches.len(), "snapshot_id": sid}),
             );
         }
-        state
-            .bus
-            .publish("config.patch.applied", &json!({"ops": patches.len()}));
+        state.bus.publish(
+            topics::TOPIC_CONFIG_PATCH_APPLIED,
+            &json!({"ops": patches.len()}),
+        );
         let json_patch: Vec<Value> = diffs
             .iter()
             .filter_map(|d| {
@@ -275,7 +277,7 @@ pub async fn logic_units_revert(
         }
         hist.push((new_id.clone(), cfg.clone()));
         state.bus.publish(
-            "logic.unit.reverted",
+            topics::TOPIC_LOGICUNIT_REVERTED,
             &json!({"snapshot_id": snap, "new_snapshot_id": new_id}),
         );
         (

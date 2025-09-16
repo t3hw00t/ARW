@@ -5,6 +5,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{admin_ok, util, AppState};
+use arw_topics as topics;
 
 #[derive(Deserialize)]
 pub(crate) struct ConnectorManifest {
@@ -94,7 +95,7 @@ pub async fn connector_register(
     }
     // Emit event (no secrets)
     state.bus.publish(
-        "connectors.registered",
+        topics::TOPIC_CONNECTORS_REGISTERED,
         &json!({"id": obj["id"].clone(), "provider": obj["provider"].clone()}),
     );
     (
@@ -157,8 +158,9 @@ pub async fn connector_token_set(
             ),
         );
     }
-    state
-        .bus
-        .publish("connectors.token.updated", &json!({"id": req.id}));
+    state.bus.publish(
+        topics::TOPIC_CONNECTORS_TOKEN_UPDATED,
+        &json!({"id": req.id}),
+    );
     (axum::http::StatusCode::OK, Json(json!({"ok": true})))
 }

@@ -7,6 +7,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{working_set, AppState};
+use arw_topics as topics;
 
 #[derive(Deserialize)]
 pub(crate) struct MemPutReq {
@@ -42,7 +43,7 @@ pub async fn memory_put(
     ) {
         Ok(id) => {
             state.bus.publish(
-                "memory.record.put",
+                topics::TOPIC_MEMORY_RECORD_PUT,
                 &json!({"id": id, "lane": req.lane, "kind": req.kind, "key": req.key}),
             );
             (axum::http::StatusCode::CREATED, Json(json!({"id": id })))
@@ -257,7 +258,15 @@ pub async fn memory_link_put(
         .insert_memory_link(&req.src_id, &req.dst_id, req.rel.as_deref(), req.weight)
     {
         Ok(()) => {
-            state.bus.publish("memory.link.put", &json!({"src_id": req.src_id, "dst_id": req.dst_id, "rel": req.rel, "weight": req.weight}));
+            state.bus.publish(
+                topics::TOPIC_MEMORY_LINK_PUT,
+                &json!({
+                    "src_id": req.src_id,
+                    "dst_id": req.dst_id,
+                    "rel": req.rel,
+                    "weight": req.weight
+                }),
+            );
             (axum::http::StatusCode::CREATED, Json(json!({"ok": true}))).into_response()
         }
         Err(e) => (

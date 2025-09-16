@@ -2,6 +2,7 @@
 import re, sys, pathlib
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+TOPICS_FILE = ROOT / 'crates' / 'arw-topics' / 'src' / 'lib.rs'
 
 PAT_PUBLISH = re.compile(r"publish\(\s*\"([^\"]+)\"")
 # Strict check: disallow string-literal publish on service bus (enforce constants)
@@ -27,7 +28,7 @@ def scan_file(p: pathlib.Path):
         if is_camel(subj):
             bad.append((p, 'subject', subj))
     # Enforce dot.case in topic constants
-    if p.name == 'topics.rs' and 'apps/arw-svc/src/ext/topics.rs' in str(p):
+    if p.resolve() == TOPICS_FILE.resolve():
         for m in PAT_TOPIC_CONST.finditer(s):
             val = m.group(1)
             # Allow dot.case with underscores inside segments (e.g., working_set.started)

@@ -6,8 +6,13 @@ title: Troubleshooting
 
 This page lists quick fixes for common issues when starting ARW locally.
 
-Updated: 2025-09-15
+Updated: 2025-09-19
 Type: How‑to
+
+!!! note "Legacy vs. Unified"
+    The unified `arw-server` (default) listens on port 8091 and exposes `/actions`, `/events`, and `/state/*`.
+    Commands that reference port 8090 or `/admin/*` apply to the legacy `arw-svc` bridge—start it with
+    `scripts/start.{sh,ps1} --legacy` or the debug wrappers.
 
 ## Port Already in Use
 
@@ -28,19 +33,29 @@ Port already in use
 - Fix: set a token and send the header.
   ```bash
   export ARW_ADMIN_TOKEN=secret
-  curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" http://127.0.0.1:8090/admin/introspect/tools
+  curl -sS -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+    http://127.0.0.1:8091/state/policy | jq
+  # Legacy bridge example:
+  curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
+    http://127.0.0.1:8090/admin/introspect/tools | jq
   ```
 
 ## Debug UI Missing
 - Symptom: `/debug` returns 404 or a minimal page.
 - Fix: ensure `ARW_DEBUG=1` for local dev, or run via the Desktop Launcher.
+- Tip: use `scripts/debug.{sh,ps1}` (defaults to legacy UI) or pass `--legacy`/`-Legacy` when calling
+  `scripts/start.{sh,ps1}` directly. The unified server is headless-first.
 - Tip: `GET /about` should still work without debug. It returns name/version and the `docs_url` link; if `/about` fails, check service logs and port.
 
 ## SSE Doesn’t Stream
 - Symptom: `curl` returns headers but shows no lines.
 - Fix: use `curl -N`, disable proxy buffering, try `?replay=10`.
   ```bash
-  curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" http://127.0.0.1:8090/admin/events?replay=10
+  curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+    http://127.0.0.1:8091/events?replay=10
+  # Legacy bridge example:
+  curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
+    http://127.0.0.1:8090/admin/events?replay=10
   ```
 
 ## Model Download Issues

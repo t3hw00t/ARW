@@ -6,6 +6,7 @@ use serde_json::json;
 
 use crate::egress_proxy;
 use crate::AppState;
+use arw_topics as topics;
 use jsonschema::{Draft, JSONSchema};
 
 #[derive(Serialize)]
@@ -179,7 +180,7 @@ pub async fn egress_settings_update(
     }
 
     // publish event, apply proxy toggle, and return effective settings with snapshot id
-    state.bus.publish("egress.settings.updated", &json!({"ts": chrono::Utc::now().to_rfc3339(), "who": "admin", "snapshot_id": snapshot_id }));
+    state.bus.publish(topics::TOPIC_EGRESS_SETTINGS_UPDATED, &json!({"ts": chrono::Utc::now().to_rfc3339(), "who": "admin", "snapshot_id": snapshot_id }));
     egress_proxy::apply_current(state.clone()).await;
     let posture = std::env::var("ARW_NET_POSTURE")
         .ok()

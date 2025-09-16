@@ -23,7 +23,7 @@ Manage local models with safe HTTP download, resume, checksum verification, CAS 
   - `apps/arw-svc/src/resources/models_service.rs`
   - `apps/arw-svc/src/ext/models_api.rs`
   - `apps/arw-svc/src/ext/paths.rs`
-  - `apps/arw-svc/src/ext/topics.rs`
+  - `crates/arw-topics/src/lib.rs`
 - HTTP:
   - `GET /admin/models/summary`
   - `POST /admin/models/download`
@@ -62,7 +62,7 @@ Unified in-process bus + SSE stream; maintains compact read-models and publishes
 - Single Sources of Truth:
   - `apps/arw-svc/src/main.rs`
   - `apps/arw-svc/src/ext/read_model.rs`
-  - `apps/arw-svc/src/ext/topics.rs`
+  - `crates/arw-topics/src/lib.rs`
 - HTTP:
   - `GET /admin/events`
 - Read‑models:
@@ -291,7 +291,7 @@ Ingress/egress policy gating with previews and append-only egress ledger. Full p
   - event_spine
 - Single Sources of Truth:
   - `apps/arw-svc/src/ext/io.rs`
-  - `apps/arw-svc/src/ext/topics.rs`
+  - `crates/arw-topics/src/lib.rs`
   - `docs/architecture/egress_firewall.md`
 - Events:
   - `egress.preview`

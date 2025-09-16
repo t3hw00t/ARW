@@ -7,7 +7,11 @@ set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/.." && pwd)"
 
-PORT=${ARW_PORT:-8090}
+PORT_DEFAULT_LEGACY=8090
+PORT_DEFAULT_SERVER=8091
+PORT=${ARW_PORT:-$PORT_DEFAULT_LEGACY}
+PORT_SPECIFIED=0
+if [[ -n "${ARW_PORT:-}" ]]; then PORT_SPECIFIED=1; fi
 DOCS_URL=${ARW_DOCS_URL:-}
 ADMIN_TOKEN=${ARW_ADMIN_TOKEN:-}
 USE_DIST=0
@@ -16,6 +20,7 @@ OPEN_UI=1
 WAIT_HEALTH=1
 WAIT_HEALTH_TIMEOUT_SECS=${ARW_WAIT_HEALTH_TIMEOUT_SECS:-20}
 INTERACTIVE=0
+LEGACY=1
 
 usage() {
   cat <<'EOF'
@@ -25,9 +30,11 @@ Usage: scripts/debug.sh [options]
 
 Options
   -i, --interactive     Prompt for port/token and run
-  --port N              HTTP port (default: 8090)
+  --port N              HTTP port (default: 8090 legacy / 8091 server)
   --docs-url URL        Docs URL to advertise in UI
   --admin-token TOKEN   Admin token (recommended)
+  --legacy              Run legacy arw-svc (default)
+  --server              Run unified arw-server (headless)
   --dist                Use latest dist/ bundle if present
   --no-build            Do not build if binary missing
   --no-open             Do not open /debug in browser
@@ -44,9 +51,11 @@ EOF
 while [[ $# -gt 0 ]]; do
   case "$1" in
     -i|--interactive) INTERACTIVE=1; shift ;;
-    --port) PORT="$2"; shift 2 ;;
+    --port) PORT="$2"; PORT_SPECIFIED=1; shift 2 ;;
     --docs-url) DOCS_URL="$2"; shift 2 ;;
     --admin-token) ADMIN_TOKEN="$2"; shift 2 ;;
+    --legacy) LEGACY=1; shift ;;
+    --server) LEGACY=0; shift ;;
     --dist) USE_DIST=1; shift ;;
     --no-build) NO_BUILD=1; shift ;;
     --no-open) OPEN_UI=0; shift ;;
@@ -59,7 +68,24 @@ done
 
 prompt_interactive() {
   echo "Agent Hub (ARW) — Debug (interactive)"
+  read -r -p "Stack [legacy/server] (default legacy): " stack
+  case "${stack,,}" in
+    server|headless)
+      LEGACY=0
+      ;;
+    legacy|""|*)
+      LEGACY=1
+      ;;
+  esac
+  if [[ $PORT_SPECIFIED -eq 0 ]]; then
+    if [[ $LEGACY -eq 1 ]]; then
+      PORT=$PORT_DEFAULT_LEGACY
+    else
+      PORT=$PORT_DEFAULT_SERVER
+    fi
+  fi
   read -r -p "HTTP port [$PORT]: " ans; PORT=${ans:-$PORT}
+  if [[ -n "$ans" ]]; then PORT_SPECIFIED=1; fi
   read -r -p "Docs URL (optional) [${DOCS_URL}]: " ans; DOCS_URL=${ans:-$DOCS_URL}
   if [[ -z "${ADMIN_TOKEN:-}" ]]; then
     read -r -p "Generate admin token? (Y/n): " yn; if [[ "${yn,,}" != n* ]]; then
@@ -68,16 +94,34 @@ prompt_interactive() {
     fi
   fi
   read -r -p "Use dist/ if available? (y/N): " yn; [[ "${yn,,}" == y* ]] && USE_DIST=1 || USE_DIST=0
-  read -r -p "Open /debug after start? (Y/n): " yn; [[ "${yn,,}" == n* ]] && OPEN_UI=0 || OPEN_UI=1
+  if [[ $LEGACY -eq 1 ]]; then
+    read -r -p "Open /debug after start? (Y/n): " yn; [[ "${yn,,}" == n* ]] && OPEN_UI=0 || OPEN_UI=1
+  else
+    OPEN_UI=0
+  fi
 }
 
 if [[ $INTERACTIVE -eq 1 ]]; then
   prompt_interactive
 fi
 
+if [[ $LEGACY -eq 1 && $PORT_SPECIFIED -eq 0 ]]; then
+  PORT=$PORT_DEFAULT_LEGACY
+elif [[ $LEGACY -eq 0 && $PORT_SPECIFIED -eq 0 ]]; then
+  PORT=$PORT_DEFAULT_SERVER
+fi
+if [[ $LEGACY -eq 0 ]]; then
+  OPEN_UI=0
+fi
+
 args=( --port "$PORT" --debug )
 [[ -n "${DOCS_URL:-}" ]] && args+=( --docs-url "$DOCS_URL" )
 [[ -n "${ADMIN_TOKEN:-}" ]] && args+=( --admin-token "$ADMIN_TOKEN" )
+if [[ $LEGACY -eq 1 ]]; then
+  args+=( --legacy )
+else
+  args+=( --server --service-only )
+fi
 [[ $USE_DIST -eq 1 ]] && args+=( --dist )
 [[ $NO_BUILD -eq 1 ]] && args+=( --no-build )
 if [[ $WAIT_HEALTH -eq 1 ]]; then args+=( --wait-health --wait-health-timeout-secs "$WAIT_HEALTH_TIMEOUT_SECS" ); fi

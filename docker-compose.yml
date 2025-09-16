@@ -1,19 +1,19 @@
 version: "3.8"
 
 services:
-  arw-svc:
+  arw-server:
     build:
       context: .
-      dockerfile: apps/arw-svc/Dockerfile
-    image: arw-svc:dev
+      dockerfile: apps/arw-server/Dockerfile
+    image: arw-server:dev
     env_file:
       - .env
     environment:
-      - ARW_PORT=${ARW_PORT:-8090}
+      - ARW_PORT=${ARW_PORT:-8091}
       - ARW_DEBUG=${ARW_DEBUG:-0}
       - ARW_BIND=${ARW_BIND:-0.0.0.0}
     ports:
-      - "8090:8090"
+      - "8091:8091"
     volumes:
       - ./configs:/app/configs:ro
     restart: unless-stopped

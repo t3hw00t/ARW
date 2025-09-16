@@ -4,6 +4,7 @@ use std::time::Duration;
 use tokio::time;
 
 use crate::AppState;
+use arw_topics as topics;
 
 pub(crate) fn start_read_models(state: AppState) {
     spawn_read_model(&state, "logic_units", Duration::from_millis(1500), |st| {
@@ -33,13 +34,18 @@ pub(crate) fn start_read_models(state: AppState) {
     });
 
     spawn_read_model(&state, "route_stats", Duration::from_millis(2000), |st| {
-        let stats = st.bus.stats();
+        let bus = st.bus.stats();
+        let metrics = st.metrics.snapshot();
         Some(json!({
-            "published": stats.published,
-            "delivered": stats.delivered,
-            "receivers": stats.receivers,
-            "lagged": stats.lagged,
-            "no_receivers": stats.no_receivers,
+            "bus": {
+                "published": bus.published,
+                "delivered": bus.delivered,
+                "receivers": bus.receivers,
+                "lagged": bus.lagged,
+                "no_receivers": bus.no_receivers,
+            },
+            "events": metrics.events,
+            "routes": metrics.routes,
         }))
     });
 }
@@ -62,7 +68,7 @@ where
                     if is_changed {
                         last_hash = Some(hash);
                         bus.publish(
-                            "state.read.model.patch",
+                            topics::TOPIC_READMODEL_PATCH,
                             &json!({
                                 "id": id,
                                 "patch": [

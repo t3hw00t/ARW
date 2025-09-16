@@ -17,7 +17,7 @@ Environment overrides:
 SSE resume and deltas: see `architecture/sse_patch_contract.md`.
 
 Topics
-- Canonical constants: `apps/arw-svc/src/ext/topics.rs`.
+- Canonical constants: `crates/arw-topics/src/lib.rs`.
 - Read‑model patches on `state.read.model.patch` with id=`snappy`.
 - Notices on breach: `snappy.notice` with `{ p95_max_ms, budget_ms }`.
 - Optional details (if `ARW_SNAPPY_DETAIL_EVERY>0`): `snappy.detail` with `{ p95_by_path: {"/path": p95_ms} }`.
