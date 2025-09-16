@@ -9,7 +9,7 @@ Type: How‑to
 
 Example alerting rules for common resource conditions. Tune thresholds and durations to your environment.
 
-## alerts.yaml
+## Alerts.yaml
 
 ```yaml
 groups:
@@ -51,4 +51,3 @@ groups:
 ```
 
 Tip: Pair alerts with routing labels/receivers (PagerDuty/Slack) in Alertmanager.
-

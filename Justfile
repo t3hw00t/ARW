@@ -99,28 +99,28 @@ docs-check:
   bash scripts/docs_check.sh
 
 # Service
-start port=8090 debug=1:
+start port='8090' debug='1':
   ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 bash scripts/start.sh {{ if debug == "1" { "--debug" } else { "" } }} --port {{port}}
 
-open-debug host="127.0.0.1" port=8090:
+open-debug host='127.0.0.1' port='8090':
   bash scripts/open-url.sh http://{{host}}:{{port}}/debug
 
 hooks-install:
   bash scripts/hooks/install_hooks.sh
 
 # Dev runner (service only)
-dev port=8090:
+dev port='8090':
   ARW_DEBUG=1 ARW_PORT={{port}} cargo run -p arw-svc
 
 # Dev runner with auto-reload (requires cargo-watch)
-dev-watch port=8090:
+dev-watch port='8090':
   ARW_DEBUG=1 ARW_PORT={{port}} cargo watch -x "run -p arw-svc"
 
 # New server (triad slice) — quick dev runners
-dev-server port=8091:
+dev-server port='8091':
   ARW_DEBUG=1 ARW_PORT={{port}} cargo run -p arw-server
 
-dev-server-preset preset="balanced" port=8091:
+dev-server-preset preset='balanced' port='8091':
   ARW_DEBUG=1 ARW_PERF_PRESET={{preset}} ARW_PORT={{port}} cargo run -p arw-server
 
 # Docs dev server
@@ -148,7 +148,7 @@ docs-type-stamp:
   python3 scripts/stamp_docs_type.py
 
 # Run service + docs together (Unix)
-dev-all port=8090 addr="127.0.0.1:8000":
+dev-all port='8090' addr='127.0.0.1:8000':
   ARW_DEBUG=1 ARW_PORT={{port}} ARW_DOCS_URL=http://{{addr}} bash scripts/dev.sh {{port}} {{addr}}
 
 # Tasks
