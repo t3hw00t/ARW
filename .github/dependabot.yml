@@ -1,16 +1,18 @@
 version: 2
 updates:
-  - package-ecosystem: "cargo"
-    directory: "/Agent_Hub"
+  - package-ecosystem: github-actions
+    directory: "/"
     schedule:
-      interval: "weekly"
+      interval: weekly
     open-pull-requests-limit: 5
-    commit-message:
-      prefix: "deps"
-  - package-ecosystem: "github-actions"
-    directory: "/Agent_Hub"
+
+  - package-ecosystem: cargo
+    directory: "/"
     schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 5
-    commit-message:
-      prefix: "ci"
+      interval: weekly
+    open-pull-requests-limit: 10
+    # Avoid excessive splitting: group minor+patch updates
+    groups:
+      rust-minor-patch:
+        applies-to: version-updates
+        update-types: ["minor", "patch"]

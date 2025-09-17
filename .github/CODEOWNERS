@@ -1,0 +1,12 @@
+# Default owners
+* @t3hw00t
+
+# Registries and generators
+/interfaces/* @t3hw00t
+/scripts/gen_* @t3hw00t
+/scripts/check_* @t3hw00t
+/scripts/doc_utils.py @t3hw00t
+
+# Docs structure
+/mkdocs.yml @t3hw00t
+/docs/reference/* @t3hw00t

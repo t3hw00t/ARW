@@ -65,11 +65,11 @@ docker-run-ghcr ghcr="ghcr.io/t3hw00t/arw-svc" tag="latest":
 # Tail latest rolling access log (http.access)
 access-tail:
   bash -ceu '
-    dir="${ARW_ACCESS_LOG_DIR:-${ARW_LOGS_DIR:-./logs}}";
-    prefix="${ARW_ACCESS_LOG_PREFIX:-http-access}";
-    file=$(ls -t "$dir"/"$prefix"* 2>/dev/null | head -n1 || true);
-    if [[ -z "$file" ]]; then echo "No access log file found in $dir (prefix=$prefix)" >&2; exit 1; fi;
-    echo "Tailing $file"; tail -f "$file";
+  dir="${ARW_ACCESS_LOG_DIR:-${ARW_LOGS_DIR:-./logs}}";
+  prefix="${ARW_ACCESS_LOG_PREFIX:-http-access}";
+  file=$(ls -t "$dir"/"$prefix"* 2>/dev/null | head -n1 || true);
+  if [[ -z "$file" ]]; then echo "No access log file found in $dir (prefix=$prefix)" >&2; exit 1; fi;
+  echo "Tailing $file"; tail -f "$file";
   '
 
 compose-up:
@@ -103,7 +103,14 @@ docs-check:
 
 # Service
 start port='8090' debug='1':
-  ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 bash scripts/start.sh {{ if debug == "1" { "--debug" } else { "" } }} --port {{port}}
+  ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 bash -ceu '
+  dbg="$1"; port="$2";
+  if [ "$dbg" = "1" ]; then
+  exec bash scripts/start.sh --debug --port "$port"
+  else
+  exec bash scripts/start.sh --port "$port"
+  fi
+  ' _ {{debug}} {{port}}
 
 open-debug host='127.0.0.1' port='8090':
   bash scripts/open-url.sh http://{{host}}:{{port}}/debug
@@ -156,7 +163,14 @@ dev-all port='8090' addr='127.0.0.1:8000':
 
 # Tasks
 task-add title desc="":
-  bash scripts/tasks.sh add {{title}} {{ if desc != "" { print("--desc \"" + desc + "\"") }}}
+  bash -ceu '
+  title="$1"; desc="$2";
+  if [ -n "$desc" ]; then
+  exec bash scripts/tasks.sh add "$title" --desc "$desc"
+  else
+  exec bash scripts/tasks.sh add "$title"
+  fi
+  ' _ {{title}} {{desc}}
 
 task-start id:
   bash scripts/tasks.sh start {{id}}
@@ -219,14 +233,14 @@ tokens-sd:
 # Release: bump versions are already committed; tag and push
 release-tag v:
   bash -ceu '
-    if git status --porcelain | grep . >/dev/null; then
-      echo "Working tree not clean. Commit or stash first." >&2; exit 1; fi
-    if ! [[ "$v" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-      echo "Invalid tag. Use vX.Y.Z" >&2; exit 2; fi
-    echo "Tagging $v and pushing tags";
-    git tag -s "$v" -m "$v" || git tag -a "$v" -m "$v";
-    git push origin "$v";
-    echo "Done. CI will build/publish artifacts for $v.";
+  if git status --porcelain | grep . >/dev/null; then
+  echo "Working tree not clean. Commit or stash first." >&2; exit 1; fi
+  if ! [[ "$v" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Invalid tag. Use vX.Y.Z" >&2; exit 2; fi
+  echo "Tagging $v and pushing tags";
+  git tag -s "$v" -m "$v" || git tag -a "$v" -m "$v";
+  git push origin "$v";
+  echo "Done. CI will build/publish artifacts for $v.";
   '
 
 # Meta: verify workspace (fmt, clippy, tests, docs, event kinds)
@@ -239,10 +253,24 @@ verify:
 
 # Endpoint scaffolding
 endpoint-new method path tag="":
-  python3 scripts/new_endpoint_template.py {{method}} {{path}} {{ if tag != "" { print("--tag '" + tag + "'") }}}
+  bash -ceu '
+  m="$1"; p="$2"; t="$3";
+  if [ -n "$t" ]; then
+  exec python3 scripts/new_endpoint_template.py "$m" "$p" --tag "$t"
+  else
+  exec python3 scripts/new_endpoint_template.py "$m" "$p"
+  fi
+  ' _ {{method}} {{path}} {{tag}}
 
 endpoint-add method path tag="" summary="" desc="":
-  python3 scripts/new_endpoint_template.py {{method}} {{path}} {{ if tag != "" { print("--tag '" + tag + "'") }}} {{ if summary != "" { print("--summary '" + summary + "'") }}} {{ if desc != "" { print("--description '" + desc + "'") }}} --apply
+  bash -ceu '
+  m="$1"; p="$2"; t="$3"; s="$4"; d="$5";
+  args=()
+  if [ -n "$t" ]; then args+=(--tag "$t"); fi
+  if [ -n "$s" ]; then args+=(--summary "$s"); fi
+  if [ -n "$d" ]; then args+=(--description "$d"); fi
+  exec python3 scripts/new_endpoint_template.py "$m" "$p" "${args[@]}" --apply
+  ' _ {{method}} {{path}} {{tag}} {{summary}} {{desc}}
 egress-get:
   curl -s http://127.0.0.1:8091/state/egress/settings | jq
 
@@ -252,7 +280,7 @@ egress-set json:
     -H "X-ARW-Admin: ${ARW_ADMIN_TOKEN:?set ARW_ADMIN_TOKEN}" \
     -d '{{json}}' | jq
 
-egress-proxy-on port=9080:
+egress-proxy-on port='9080':
   just egress-set '{"proxy_enable":true, "proxy_port": {{port}} }'
 
 egress-proxy-off:

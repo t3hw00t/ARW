@@ -4,6 +4,8 @@ title: Build Efficiency Playbook
 
 # Build Efficiency Playbook
 
+Updated: 2025-09-17
+
 > Tips for keeping local and CI builds fast without sacrificing correctness.
 
 ## Caching & Incremental Builds
@@ -64,4 +66,3 @@ Override per-crate settings when a crate benefits from extra optimization (e.g.,
 - Inspect incremental stats with `cargo build -Zincremental-verify-ich` when diagnosing stale cache issues.
 - Drop `target/` if the compiler version changes or `rustc` reports metadata mismatches; stale metadata can add minutes of unnecessary recompilation.
 - Profile linkers with `perf record --call-graph=dwarf -- cargo build` (Linux) to ensure no unexpected tooling regressions creep in.
-
