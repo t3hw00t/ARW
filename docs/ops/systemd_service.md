@@ -9,6 +9,10 @@ Type: How‑to
 
 Run ARW as a user service, either natively or via Docker.
 
+!!! note "Legacy service"
+    This guide targets the legacy `arw-svc` bridge, which listens on port 8090 and serves the classic debug UI. For the unified
+    headless `arw-server` (default port 8091), use the Docker or service deployment docs under `guide/`.
+
 ## Environment file
 
 `/etc/default/arw-svc` (root) or `~/.config/arw-svc.env` (adjust `EnvironmentFile` accordingly):

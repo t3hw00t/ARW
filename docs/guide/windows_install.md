@@ -62,6 +62,6 @@ Uninstall
 - Developer build: remove `target/` outputs; no registry/service entries are created.
 
 Troubleshooting
-- Health: `http://127.0.0.1:8090/healthz`
+- Health: `http://127.0.0.1:8091/healthz` (legacy bridge listens on 8090)
 - Logs: `.arw\logs\arw-svc.out.log`
 - Interactive start menu: `scripts\interactive-start-windows.ps1`

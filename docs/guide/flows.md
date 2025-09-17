@@ -14,6 +14,9 @@ Type: How‑to
 - Set `ARW_DEBUG=1`
 - Open: `http://127.0.0.1:8090/ui/flows` (or `/admin/ui/flows` with an admin token). In the unified server, planned endpoints live under `/logic-units/*`.
 
+!!! note "Legacy debug UI"
+    The `/ui/flows` surface lives in the legacy `arw-svc` bridge on port 8090. The unified headless server on port 8091 exposes the underlying APIs under `/logic-units/*` instead.
+
 ## What It Does
 
 - Lets you set a Unit ID and optional scope and paste a JSON array of patches

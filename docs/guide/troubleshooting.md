@@ -87,7 +87,7 @@ Hung/idle
 Free space via CAS GC
 - Run a one‑off GC to delete unreferenced blobs older than 14 days:
   ```bash
-  BASE=http://127.0.0.1:8090
+  BASE=http://127.0.0.1:8091  # legacy bridge listens on 8090
   curl -sS -X POST "$BASE/admin/models/cas_gc" \
     -H 'Content-Type: application/json' \
     -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \

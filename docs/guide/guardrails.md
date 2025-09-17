@@ -37,7 +37,7 @@ When `ARW_GUARDRAILS_URL` is set, the tool first POSTs `{ text, policy?, rules? 
 ## Example
 
 ```bash
-curl -sS localhost:8090/admin/tools/run \
+curl -sS localhost:8091/admin/tools/run \
   -H 'X-ARW-Admin: $ARW_ADMIN_TOKEN' \
   -H 'content-type: application/json' \
   -d '{
