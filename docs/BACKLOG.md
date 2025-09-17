@@ -4,7 +4,7 @@ title: Backlog
 
 # Backlog
 
-Updated: 2025-09-15
+Updated: 2025-09-17
 Type: Reference
 
 This backlog captures concrete work items and near-term priorities. The Roadmap focuses on higher‑level themes and time horizons; see About → Roadmap for strategic context.

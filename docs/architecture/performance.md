@@ -4,7 +4,7 @@ title: Performance Guardrails
 
 # Performance Guardrails
 
-Updated: 2025-09-16
+Updated: 2025-09-17
 Type: Explanation
 
 This page expands on the [Roadmap → Performance Guardrails](../ROADMAP.md#performance-guardrails) summary. It documents the guardrails that keep ARW responsive on a single laptop yet ready for shared clusters without runaway resource use. Each section reuses the roadmap terminology so teams can jump between planning notes and implementation details.

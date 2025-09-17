@@ -7,7 +7,7 @@ title: Security Hardening
 
 This guide summarizes recommended steps to run ARW more securely beyond the local‑dev defaults.
 
-Updated: 2025-09-16
+Updated: 2025-09-17
 Type: How‑to
 
 Baseline
@@ -89,8 +89,8 @@ Environment=ARW_DEBUG=0
 Environment=ARW_ADMIN_TOKEN=change-me
 Environment=ARW_HTTP_TIMEOUT_SECS=20
 Environment=ARW_DOCS_URL=https://your-domain/docs
-WorkingDirectory=%h/Agent_Hub
-ExecStart=%h/Agent_Hub/target/release/arw-svc
+WorkingDirectory=%h/ARW
+ExecStart=%h/ARW/target/release/arw-svc
 Restart=on-failure
 RestartSec=2s
 
