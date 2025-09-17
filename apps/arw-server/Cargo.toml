@@ -6,7 +6,7 @@ license.workspace = true
 
 [dependencies]
 anyhow = "1"
-axum = "0.7"
+axum = "0.8"
 tokio = { version = "1", features = ["rt-multi-thread","macros","signal","fs","sync","io-util"] }
 tokio-util = { version = "0.7", features = ["io"] }
 tower-http = { version = "0.6", features = ["trace","cors","compression-br","compression-gzip"] }
@@ -14,7 +14,7 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
-metrics = "0.21"
+metrics = "0.24"
 arw-kernel = { path = "../../crates/arw-kernel", version = "0.1.0" }
 arw-events = { path = "../../crates/arw-events", version = "0.1.4" }
 arw-policy = { path = "../../crates/arw-policy", version = "0.1.0" }
@@ -27,11 +27,11 @@ tokio-stream = { version = "0.1", features = ["sync"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 reqwest = { workspace = true }
 url = "2.5"
-base64 = "0.21"
+base64 = "0.22"
 sha2 = "0.10"
 hex = "0.4"
 jsonschema = { workspace = true }
-tower = { version = "0.4", features = ["limit"] }
+tower = { version = "0.5", features = ["limit"] }
 hyper = { version = "1", features = ["server","http1","http2"] }
 http-body-util = "0.1"
 bytes = "1"
