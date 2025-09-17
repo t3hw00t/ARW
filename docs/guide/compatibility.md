@@ -47,7 +47,7 @@ problems.
     - The compatibility `arw-svc` image (`ghcr.io/<owner>/arw-svc`) remains
       available for the classic debug UI/launcher stack. It binds to 8090 and is
       maintained for legacy workflows only; see the [Docker guide’s legacy UI
-      bridge section](./docker.md#local-build--run-legacy-ui-bridge) for usage
+      bridge section](./docker.md#local-build-run-legacy-ui-bridge) for usage
       details.
   - Desktop Launcher is not intended for headless containers; use a host
     desktop environment or run the Launcher outside the container.
