@@ -15,21 +15,19 @@ Set a base URL and (optionally) an admin token for gated endpoints.
 
 ```bash
 export BASE=http://127.0.0.1:8091
-export ARW_ADMIN_TOKEN=secret   # if set on the server
+export ARW_ADMIN_TOKEN=secret   # legacy bridge only
 H() { curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$@"; }
 ```
 
-Quick checks
+Quick probes
 ```bash
-curl -sS "$BASE/healthz"
-H "$BASE/admin/introspect/tools" | jq '.[0:5]'
+curl -sS "$BASE/about" | jq '.service, .version'
+curl -sS "$BASE/state/route_stats" | jq '.routes | to_entries? // [] | .[:5]'
+curl -sS "$BASE/spec/index.json" | jq '.entries | map(.path)'
 ```
 
 Schemas and specs
 ```bash
-# A specific tool schema (example id)
-H "$BASE/admin/introspect/schemas/memory.probe@1.0.0" | jq
-
 # OpenAPI / AsyncAPI / MCP tool catalog
 curl -sS "$BASE/spec/openapi.yaml" | head -n 20
 curl -sS "$BASE/spec/asyncapi.yaml" | head -n 20
@@ -55,11 +53,7 @@ cat spec/schemas/dns_anomaly_event.json | jq '.title,.description'
 
 Events (SSE)
 ```bash
-# Unified server (public):
 curl -N "$BASE/events?replay=10"
-
-# Legacy service (admin‑gated):
-curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?replay=10"
 ```
 
 !!! warning "Security"
@@ -124,21 +118,81 @@ Validate input → policy check → invoke → emit events → return.
 
 ## HTTP & WS Surface
 
-GET /admin/introspect/tools
+- `GET /healthz`
+- `GET /about`
+- `GET /events`
+- `POST /actions`
+- `GET /actions/:id`
+- `POST /actions/:id/state`
+- `GET /state/episodes`
+- `GET /state/route_stats`
+- `GET /state/actions`
+- `GET /state/contributions`
+- `POST /leases`
+- `GET /state/leases`
+- `GET /state/egress`
+- `GET /state/egress/settings`
+- `POST /egress/settings`
+- `POST /egress/preview`
+- `GET /state/policy`
+- `POST /policy/reload`
+- `POST /policy/simulate`
+- `GET /state/models`
+- `GET /spec/index.json`
+- `GET /spec/openapi.yaml`
+- `GET /spec/asyncapi.yaml`
+- `GET /spec/mcp-tools.json`
+- `GET /spec/schemas/{file}`
+- `GET /catalog/index`
+- `GET /catalog/health`
 
-GET /admin/introspect/schemas/{tool_id}
+## Legacy Admin Surface (`arw-svc`)
 
-POST /tools/{tool_id}:invoke
+To reach the historical `/admin/*` APIs, launch the bridge in legacy mode:
 
-GET /admin/probe?task_id=...&step=...
+```bash
+scripts/start.sh --legacy
+# Windows
+scripts/start.ps1 --legacy
+```
 
-SSE /admin/events
+This boots the legacy `arw-svc` alongside the unified server and serves admin routes on the same `$BASE`. Use the `H` helper above to add `X-ARW-Admin` automatically.
 
-GET /spec/openapi.yaml
+!!! note
+    `/admin/introspect/*` endpoints live only on `arw-svc`. They respond when the bridge runs with `--legacy` and return `404` otherwise.
 
-GET /spec/asyncapi.yaml
+Legacy probes
+```bash
+H "$BASE/admin/introspect/tools" | jq '.[0:5]'
+H "$BASE/admin/introspect/schemas/memory.probe@1.0.0" | jq
+```
 
-GET /spec/mcp-tools.json
+Legacy events (SSE)
+```bash
+curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?replay=10"
+```
+
+Legacy HTTP surface
+- `GET /admin/introspect/tools`
+- `GET /admin/introspect/schemas/{tool_id}`
+- `GET /admin/probe?task_id=...&step=...`
+- `SSE /admin/events`
+
+### Models Admin Endpoints (legacy)
+
+See the Admin Endpoints guide for details and examples. Summary:
+
+- `POST /admin/models/download` — start/resume a download `{id,url,sha256,provider?,budget?}`.
+- `POST /admin/models/download/cancel` — cancel an in-flight download for `{id}`.
+- `POST /admin/models/cas_gc` — CAS GC once `{ttl_days}`; emits `models.cas.gc`.
+- `GET  /admin/models/by-hash/:sha256` — serve a CAS blob by sha256 (egress-gated).
+- `GET  /admin/state/models_hashes` — list installed model hashes and sizes.
+- `GET  /admin/state/models_metrics` — Lightweight metrics `{ ewma_mbps, started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total }`.
+
+Legacy events (AsyncAPI)
+- `models.download.progress`: standardized progress/errors with optional `budget` and `disk`.
+- `models.manifest.written`, `models.cas.gc`, `models.changed`, `models.refreshed`.
+- Egress: `egress.preview`, `egress.ledger.appended`.
 
 ## Connections (New)
 
@@ -230,18 +284,3 @@ GET /state/runtime_matrix
 GET /state/episode/{id}/snapshot
 
 GET /state/policy
-### Models Admin Endpoints
-
-See the Admin Endpoints guide for details and examples. Summary:
-
-- POST `/admin/models/download` — start/resume a download `{id,url,sha256,provider?,budget?}`.
-- POST `/admin/models/download/cancel` — cancel an in‑flight download for `{id}`.
-- POST `/admin/models/cas_gc` — CAS GC once `{ttl_days}`; emits `models.cas.gc`.
-- GET  `/admin/models/by-hash/:sha256` — serve a CAS blob by sha256 (egress‑gated).
-- GET  `/admin/state/models_hashes` — list installed model hashes and sizes.
-- GET  `/admin/state/models_metrics` — Lightweight metrics `{ ewma_mbps, started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total }`.
-
-Events (AsyncAPI)
-- `models.download.progress`: standardized progress/errors with optional `budget` and `disk`.
-- `models.manifest.written`, `models.cas.gc`, `models.changed`, `models.refreshed`.
-- Egress: `egress.preview`, `egress.ledger.appended`.
