@@ -16,7 +16,7 @@ Basics
 - Version and bootstrap
   - `arw-cli` — prints version, calls hello, and shows effective paths
 - Ping
-  - `arw-cli ping --base http://127.0.0.1:8090` — checks `/healthz` and `/about` and prints a JSON summary; `--admin-token` flag or `ARW_ADMIN_TOKEN` env adds Bearer
+  - `arw-cli ping --base http://127.0.0.1:8091` — checks `/events` and `/about` and prints a JSON summary; `--admin-token` flag or `ARW_ADMIN_TOKEN` env adds Bearer
 - Paths
   - `arw-cli paths` — JSON of effective `stateDir/cacheDir/logsDir` etc.
   - `arw-cli paths --pretty` — pretty‑printed JSON
@@ -25,11 +25,13 @@ Basics
   - `arw-cli tools --pretty` — pretty JSON
  
 Specs
-- `arw-cli spec health --base http://127.0.0.1:8090 [--pretty]` — fetch `/spec/health` and print JSON (pretty‑print with `--pretty`)
+- OpenAPI: `curl http://127.0.0.1:8091/spec/openapi.yaml` — served by `apps/arw-server/src/api_spec.rs`, returns the HTTP API contract (YAML)
+- AsyncAPI: `curl http://127.0.0.1:8091/spec/asyncapi.yaml` — event stream schema aligned with the SSE bus
+- Index: `curl http://127.0.0.1:8091/spec/index.json | jq` — lists available spec artifacts and JSON schemas
 
 Events (SSE)
 - Tail live events from the service with optional replay and prefix filters:
-  - `arw-cli events tail --base http://127.0.0.1:8090 --replay 10 --prefix models. --prefix feedback.`
+  - `arw-cli events tail --base http://127.0.0.1:8091 --replay 10 --prefix models. --prefix feedback.`
   - Add `--json-only` to print only the JSON payloads.
 
 Gating Keys
@@ -69,6 +71,7 @@ Install docs & completions (script)
 Tips
 - Keep the private key safe; only commit public keys and signed capsules (with `signature`) as needed.
 - The service can adopt gating via capsules; see Security Hardening and Policy guides for how to apply.
+- Legacy bridge tip: when you need legacy admin surfaces such as `/spec/health`, target the connector bridge with `--base http://127.0.0.1:8090`.
 
 Related
 - Reference (commands and flags): [CLI Reference](../reference/cli.md)
