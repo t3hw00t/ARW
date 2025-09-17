@@ -2,7 +2,8 @@
 title: Admin Endpoints
 ---
 
-# Unified Admin Surface
+# Admin Endpoints
+## Unified Admin Surface
 { .topic-trio style="--exp:.55; --complex:.65; --complicated:.55" data-exp=".55" data-complex=".65" data-complicated=".55" }
 
 The unified `arw-server` binary exposes a single HTTP surface built around the **actions → events → state** triad. Every operation that mutates or inspects the service lives on that surface—there is no `/admin` prefix to keep in sync. New routes are recorded at runtime and streamed into `/about` so that clients can discover the current topology without hard-coding paths.
