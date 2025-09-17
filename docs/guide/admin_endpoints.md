@@ -15,13 +15,15 @@ Type: How‑to
 - Index (JSON): `/admin/index.json`
 - Public endpoints (no auth): `/healthz`, `/metrics`, `/spec/*`, `/version`, `/about`
 
+Unless noted, examples assume the unified `arw-server` on `http://127.0.0.1:8091`. Use port `8090` when interacting with the legacy `arw-svc` bridge.
+
 ### Public: /about
 - Path: `GET /about`
 - Returns a small JSON document with service + branding info and a live endpoint index:
   - `name`: "Agent Hub (ARW)"
   - `tagline`: "Your private AI control room that can scale and share when you choose."
   - `description`: one‑paragraph plain‑terms summary
-  - `service`: binary id (e.g., `arw-svc`)
+  - `service`: binary id (e.g., `arw-server`)
   - `version`: semantic version string
   - `role`: current node role
   - `docs_url`: base docs URL if configured
@@ -37,7 +39,7 @@ Example
   "name": "Agent Hub (ARW)",
   "tagline": "Your private AI control room that can scale and share when you choose.",
   "description": "Agent Hub (ARW) lets you run your own team of AI helpers on your computer to research, plan, write, and build—while you stay in charge.",
-  "service": "arw-svc",
+  "service": "arw-server",
   "version": "0.1.0",
   "role": "Home",
   "docs_url": "https://t3hw00t.github.io/ARW/",
@@ -161,7 +163,7 @@ Setup:
 
 ```bash
 export ARW_ADMIN_TOKEN=secret123
-BASE=http://127.0.0.1:8090
+BASE=http://127.0.0.1:8091  # legacy bridge listens on 8090
 AH() { curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$@"; }
 ```
 

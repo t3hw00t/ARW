@@ -8,6 +8,8 @@ Type: How‑to
 
 Goal-oriented tasks using the `arw-cli` binary. This guide shows common commands with copy‑pasteable examples and flags you’re likely to want.
 
+Examples assume the unified `arw-server` is running on `http://127.0.0.1:8091`. Use port `8090` if you are targeting the legacy `arw-svc` bridge.
+
 Prereqs
 - Build or install the workspace: `cargo build -p arw-cli --release`
 - Ensure the service is built if you plan to interact with it, but most CLI commands are local utilities and do not require the service.
@@ -16,7 +18,7 @@ Basics
 - Version and bootstrap
   - `arw-cli` — prints version, calls hello, and shows effective paths
 - Ping
-  - `arw-cli ping --base http://127.0.0.1:8090` — checks `/healthz` and `/about` and prints a JSON summary; `--admin-token` flag or `ARW_ADMIN_TOKEN` env adds Bearer
+  - `arw-cli ping --base http://127.0.0.1:8091` — checks `/healthz` and `/about` and prints a JSON summary; `--admin-token` flag or `ARW_ADMIN_TOKEN` env adds Bearer
 - Paths
   - `arw-cli paths` — JSON of effective `stateDir/cacheDir/logsDir` etc.
   - `arw-cli paths --pretty` — pretty‑printed JSON
@@ -25,11 +27,11 @@ Basics
   - `arw-cli tools --pretty` — pretty JSON
  
 Specs
-- `arw-cli spec health --base http://127.0.0.1:8090 [--pretty]` — fetch `/spec/health` and print JSON (pretty‑print with `--pretty`)
+- `arw-cli spec health --base http://127.0.0.1:8091 [--pretty]` — fetch `/spec/health` and print JSON (pretty‑print with `--pretty`)
 
 Events (SSE)
 - Tail live events from the service with optional replay and prefix filters:
-  - `arw-cli events tail --base http://127.0.0.1:8090 --replay 10 --prefix models. --prefix feedback.`
+  - `arw-cli events tail --base http://127.0.0.1:8091 --replay 10 --prefix models. --prefix feedback.`
   - Add `--json-only` to print only the JSON payloads.
 
 Gating Keys

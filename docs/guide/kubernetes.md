@@ -9,6 +9,10 @@ Type: How‑to
 
 Deploy the ARW service on Kubernetes using the provided Helm chart.
 
+!!! note "Legacy image"
+    The current Helm chart packages the legacy `arw-svc` bridge (port 8090) so that the classic debug UI and launcher workflows
+    keep working. Use the container instructions under `guide/docker.md` for the headless unified `arw-server` on port 8091.
+
 ## Prerequisites
 - Kubernetes cluster with an ingress controller (optional)
 - Helm 3

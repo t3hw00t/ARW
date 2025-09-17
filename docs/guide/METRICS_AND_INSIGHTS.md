@@ -87,7 +87,7 @@ Example scrape minimal config (Prometheus):
 scrape_configs:
   - job_name: 'arw'
     static_configs:
-      - targets: ['127.0.0.1:8090']
+      - targets: ['127.0.0.1:8091']
         labels:
           instance: 'local'
     metrics_path: /metrics

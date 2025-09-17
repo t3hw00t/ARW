@@ -52,21 +52,28 @@ Envelope
 - Legacy svc honors `Last-Event-ID` and supports `?replay=N`.
 
 Examples
-- Basic subscription (Unix):
+- Basic subscription (unified server):
   ```bash
-  curl -N http://127.0.0.1:8090/admin/events
+  curl -N http://127.0.0.1:8091/events
   ```
 - With admin token and filter:
   ```bash
   curl -N \
     -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
-    "http://127.0.0.1:8090/admin/events?prefix=models.&replay=10"
+    "http://127.0.0.1:8091/events?prefix=models.&replay=10"
   ```
   Watch only RPU trust events:
   ```bash
   curl -N \
     -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
-    "http://127.0.0.1:8090/admin/events?prefix=rpu.&replay=5"
+    "http://127.0.0.1:8091/events?prefix=rpu.&replay=5"
+  ```
+- Legacy bridge (`arw-svc` on 8090):
+  ```bash
+  curl -N http://127.0.0.1:8090/admin/events
+  curl -N \
+    -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
+    "http://127.0.0.1:8090/admin/events?prefix=models.&replay=10"
   ```
 
 Event model

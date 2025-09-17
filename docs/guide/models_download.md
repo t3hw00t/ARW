@@ -104,7 +104,7 @@ UI guidance:
 
 Minimal SSE consumer (bash)
 ```bash
-BASE=http://127.0.0.1:8090
+BASE=http://127.0.0.1:8091  # use 8090 for the legacy bridge
 curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?prefix=models.download.progress&replay=5" \
  | jq -rc 'if .id then {id:.id,status:(.status//""),code:(.code//""),pct:(.progress//null),dl:(.downloaded//null),tot:(.total//null)} else . end'
 ```
@@ -142,7 +142,7 @@ The downloader maintains a lightweight throughput EWMA used for admission checks
 Start a download (with checksum):
 
 ```bash
-BASE=http://127.0.0.1:8090
+BASE=http://127.0.0.1:8091  # use 8090 for the legacy bridge
 curl -sS -X POST "$BASE/admin/models/download" \
   -H 'Content-Type: application/json' \
   -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \

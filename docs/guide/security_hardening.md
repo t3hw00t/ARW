@@ -34,7 +34,7 @@ Capsules & Trust (RPU)
 - Env override: `ARW_TRUST_CAPSULES=/path/to/trust_capsules.json`.
 
 Reverse Proxy
-- Terminate TLS and IP‑restrict at your proxy (Nginx, Caddy, Traefik) and forward to `127.0.0.1:8090`.
+- Terminate TLS and IP‑restrict at your proxy (Nginx, Caddy, Traefik) and forward to `127.0.0.1:8091` (unified server). Use port `8090` only when running the legacy `arw-svc` bridge for the classic debug UI.
 - Set `ARW_DOCS_URL=https://your-domain/docs` so the debug UI can link to your public docs.
 - Keep CORS strict; only enable `ARW_CORS_ANY=1` in development.
 
@@ -52,7 +52,7 @@ server {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
-    proxy_pass http://127.0.0.1:8090;
+    proxy_pass http://127.0.0.1:8091;
   }
 
   # (optional) restrict admin endpoints by path or IP here as a second guard
@@ -63,7 +63,7 @@ Caddy example
 ```
 your-domain {
   encode zstd gzip
-  reverse_proxy 127.0.0.1:8090
+  reverse_proxy 127.0.0.1:8091
   @admin {
     path /admin/debug* /admin/memory* /admin/models* /admin/governor* /admin/introspect* /admin/feedback* /admin/events* /admin/emit* /admin/shutdown
   }
@@ -84,13 +84,13 @@ Description=ARW local service
 After=network.target
 
 [Service]
-Environment=ARW_PORT=8090
+Environment=ARW_PORT=8091
 Environment=ARW_DEBUG=0
 Environment=ARW_ADMIN_TOKEN=change-me
 Environment=ARW_HTTP_TIMEOUT_SECS=20
 Environment=ARW_DOCS_URL=https://your-domain/docs
 WorkingDirectory=%h/ARW
-ExecStart=%h/ARW/target/release/arw-svc
+ExecStart=%h/ARW/target/release/arw-server
 Restart=on-failure
 RestartSec=2s
 

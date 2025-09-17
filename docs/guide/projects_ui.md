@@ -27,6 +27,9 @@ See also: [Keyboard Shortcuts](shortcuts.md)
 - Start `arw-svc` and open:
   - `http://127.0.0.1:8090/admin/ui/projects`
 
+!!! note "Legacy debug UI"
+    Projects UI is part of the legacy `arw-svc` bridge on port 8090. The unified headless server on port 8091 exposes project APIs under `/projects/*` without this UI shell.
+
 All `/projects/*` endpoints are treated as administrative and are protected by the service’s admin gate.
 
 ## Storage

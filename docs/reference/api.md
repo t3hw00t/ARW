@@ -72,15 +72,15 @@ Examples
 
 ```bash
 # Full download
-curl -SsfLO "http://127.0.0.1:8090/models/blob/0123abcd..."
+curl -SsfLO "http://127.0.0.1:8091/models/blob/0123abcd..."
 
 # Conditional
 curl -I -H 'If-None-Match: "0123abcd..."' \
-  "http://127.0.0.1:8090/models/blob/0123abcd..."
+  "http://127.0.0.1:8091/models/blob/0123abcd..."
 
 # Partial
 curl -sS -H 'Range: bytes=0-1048575' \
-  -o part.bin "http://127.0.0.1:8090/models/blob/0123abcd..."
+  -o part.bin "http://127.0.0.1:8091/models/blob/0123abcd..."
 ```
 - Concurrency (admin):
   - `POST /admin/models/concurrency` — Set max concurrency at runtime; response includes `pending_shrink` when non‑blocking shrink leaves a remainder.

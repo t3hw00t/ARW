@@ -15,7 +15,7 @@ ARW exposes an optional gRPC server in `arw-svc` behind the `grpc` feature.
   - Default: `[::1]:50051`
   - Override: `ARW_GRPC_ADDR=0.0.0.0:50051`
 
-The HTTP service remains available on `ARW_PORT` (default 8090).
+The HTTP service remains available on `ARW_PORT` (default 8091; legacy `arw-svc` uses 8090).
 
 ## Health example
 

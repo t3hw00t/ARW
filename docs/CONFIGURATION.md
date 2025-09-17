@@ -12,7 +12,7 @@ See also: [Glossary](GLOSSARY.md), [Admin Endpoints](guide/admin_endpoints.md), 
 Centralized reference for ARW environment variables and common flags. Defaults favor local, private, and portable operation.
 
 ## Service
-- `ARW_PORT`: HTTP listen port (default: `8090`).
+- `ARW_PORT`: HTTP listen port (default: `8091`; legacy `arw-svc` listens on `8090`).
 - `ARW_BIND`: HTTP bind address (default: `127.0.0.1`). Use `0.0.0.0` to listen on all interfaces in trusted environments or behind a TLS proxy.
 - `ARW_PORTABLE`: `1` keeps state/cache/logs near the app bundle.
  - `ARW_CONFIG`: absolute path to the primary config TOML (overrides discovery).

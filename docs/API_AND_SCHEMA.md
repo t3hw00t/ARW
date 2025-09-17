@@ -14,7 +14,7 @@ Explore the API
 Set a base URL and (optionally) an admin token for gated endpoints.
 
 ```bash
-export BASE=http://127.0.0.1:8090
+export BASE=http://127.0.0.1:8091
 export ARW_ADMIN_TOKEN=secret   # if set on the server
 H() { curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$@"; }
 ```

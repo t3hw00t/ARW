@@ -39,8 +39,9 @@ problems.
 ## Containers and Cloud
 
 - Service in containers
-  - `arw-svc` runs fine in Docker/Podman containers; expose the HTTP port
-    (default 8090). Example: `docker run -p 8090:8090 arw-svc:dev`.
+  - `arw-server` runs fine in Docker/Podman containers; expose the HTTP port
+    (default 8091). Example: `docker run -p 8091:8091 arw-server:dev`.
+    Use port 8090 only when running the legacy `arw-svc` image for the classic debug UI.
   - Desktop Launcher is not intended for headless containers; use a host
     desktop environment or run the Launcher outside the container.
   - GPU access in containers requires host support and appropriate device

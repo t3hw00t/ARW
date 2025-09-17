@@ -32,9 +32,9 @@ Examples:
 # HEAD with ETag validator; 304 if unchanged
 curl -I \
   -H 'If-None-Match: "<sha256>"' \
-  http://localhost:8090/admin/models/by-hash/<sha256>
+  http://localhost:8091/admin/models/by-hash/<sha256>
 
 # GET a slice (first 1KB)
 curl -H 'Range: bytes=0-1023' \
-  http://localhost:8090/admin/models/by-hash/<sha256>
+  http://localhost:8091/admin/models/by-hash/<sha256>
 ```

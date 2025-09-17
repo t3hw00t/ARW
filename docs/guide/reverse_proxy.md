@@ -7,7 +7,7 @@ title: Reverse Proxy (Caddy/Traefik)
 Updated: 2025-09-16
 Type: How‑to
 
-Terminate TLS and proxy to ARW running on `127.0.0.1:8090` or in Docker.
+Terminate TLS and proxy to ARW running on `127.0.0.1:8091` (unified server). Legacy `arw-svc` bridge examples (port `8090`) are noted separately when the classic debug UI is required.
 
 ## Caddy
 
@@ -16,7 +16,7 @@ Terminate TLS and proxy to ARW running on `127.0.0.1:8090` or in Docker.
 ```
 arw.example.com {
   encode zstd gzip
-  reverse_proxy 127.0.0.1:8090
+  reverse_proxy 127.0.0.1:8091
 }
 ```
 
@@ -30,12 +30,11 @@ Docker (compose snippet):
 
 ```yaml
 services:
-  arw-svc:
-    image: ghcr.io/<owner>/arw-svc:latest
+  arw-server:
+    image: ghcr.io/<owner>/arw-server:latest
     environment:
       - ARW_BIND=0.0.0.0
-      - ARW_PORT=8090
-      - ARW_DEBUG=0
+      - ARW_PORT=8091
       - ARW_ADMIN_TOKEN=your-secret
       - ARW_TRUST_FORWARD_HEADERS=1
     networks: [web]
@@ -70,19 +69,18 @@ http:
     arw:
       loadBalancer:
         servers:
-          - url: "http://127.0.0.1:8090"
+          - url: "http://127.0.0.1:8091"
 ```
 
 Docker labels example:
 
 ```yaml
 services:
-  arw-svc:
-    image: ghcr.io/<owner>/arw-svc:latest
+  arw-server:
+    image: ghcr.io/<owner>/arw-server:latest
     environment:
       - ARW_BIND=0.0.0.0
-      - ARW_PORT=8090
-      - ARW_DEBUG=0
+      - ARW_PORT=8091
       - ARW_ADMIN_TOKEN=your-secret
       - ARW_TRUST_FORWARD_HEADERS=1
     labels:
@@ -90,7 +88,7 @@ services:
       - "traefik.http.routers.arw.rule=Host(`arw.example.com`)"
       - "traefik.http.routers.arw.entrypoints=websecure"
       - "traefik.http.routers.arw.tls=true"
-      - "traefik.http.services.arw.loadbalancer.server.port=8090"
+      - "traefik.http.services.arw.loadbalancer.server.port=8091"
 ```
 
 ## Security Notes
