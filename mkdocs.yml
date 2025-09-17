@@ -176,6 +176,7 @@ nav:
       - SSE Patch Contract: architecture/sse_patch_contract.md
   - Contribute:
       - Overview: developer/index.md
+      - Build Efficiency: developer/build_efficiency.md
       - Docs Style (Diátaxis): developer/docs_style.md
       - Design Theme: developer/design_theme.md
       - Standards: developer/standards.md

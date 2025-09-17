@@ -1,29 +1,12 @@
 #!/usr/bin/env python3
 import json
-import datetime
 import pathlib
-import os
-import subprocess
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+from doc_utils import ROOT, _stable_now_timestamp, github_blob_base, merge_lists
+
 FEATURES_JSON = ROOT / "interfaces" / "features.json"
 CATALOG_JSON = ROOT / "interfaces" / "feature_catalog.json"
 OUT_MD = ROOT / "docs" / "reference" / "feature_catalog.md"
-
-def github_blob_base() -> str:
-    import subprocess, os, re
-    env_base = os.getenv("REPO_BLOB_BASE")
-    if env_base:
-        return env_base.rstrip('/') + '/'
-    try:
-        remote = subprocess.check_output(["git", "config", "--get", "remote.origin.url"], text=True).strip()
-        m = re.search(r"github\.com[:/]{1,2}([^/]+)/([^/.]+)", remote)
-        if m:
-            owner, repo = m.group(1), m.group(2)
-            return f"https://github.com/{owner}/{repo}/blob/main/"
-    except Exception:
-        pass
-    return "https://github.com/t3hw00t/ARW/blob/main/"
 
 
 def load_json(path: pathlib.Path):
@@ -72,10 +55,12 @@ def render_feature(feature: dict) -> str:
     envs = feature.get("env", [])
     if envs:
         lines.append(f"  _Env_: {join_backtick(envs, limit=8)}")
+    base = github_blob_base()
+    seen_paths = set()
     ssot = feature.get("ssot", [])
     if ssot:
-        base = github_blob_base()
         paths = [entry.get("path") for entry in ssot if entry.get("path")]
+        seen_paths.update(paths)
         if paths:
             # Link docs paths relatively; code/spec paths to GitHub blob
             items = []
@@ -89,24 +74,29 @@ def render_feature(feature: dict) -> str:
             if len(paths) > 3:
                 items.append("…")
             lines.append("  _Source_: " + ", ".join(items))
+    docs = []
+    for entry in feature.get("docs", []) or []:
+        if isinstance(entry, dict):
+            path = entry.get("path")
+        else:
+            path = entry
+        if path and path not in seen_paths:
+            docs.append(path)
+            seen_paths.add(path)
+    if docs:
+        merged = merge_lists(docs)
+        items = []
+        for p in merged[:4]:
+            if p.startswith("docs/"):
+                rel = p[len("docs/"):]
+                items.append(f"[{rel}](../{rel})")
+            else:
+                items.append(f"[{p}]({base}{p})")
+        if len(merged) > 4:
+            items.append("…")
+        lines.append("  _References_: " + ", ".join(items))
     return "\n".join(lines)
 
-
-def _stable_now_timestamp(paths):
-    """Return a stable ISO timestamp based on last commit touching given paths.
-    Falls back to REPRO_NOW env or current UTC if git not available.
-    """
-    try:
-        args = ["git", "log", "-1", "--format=%cI", "--"] + [str(p) for p in paths if p]
-        ts = subprocess.check_output(args, text=True).strip()
-        if ts:
-            return ts.replace("+00:00", "Z")
-    except Exception:
-        pass
-    env_ts = os.getenv("REPRO_NOW")
-    if env_ts:
-        return env_ts
-    return datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 def render_catalog(catalog: dict, features: dict) -> str:
     now = _stable_now_timestamp([FEATURES_JSON, CATALOG_JSON])

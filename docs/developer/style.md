@@ -95,6 +95,7 @@ Benefits
   - Preview: `just endpoint-new METHOD /path tag="Admin/Core"`
   - Apply to spec: `just endpoint-add METHOD /path tag="Admin/Core" summary="..." desc="..."`
 - Release notes: `just docs-release-notes base=origin/main`
+- Registry checks: `just check-system-components` (or `just docgen`) must pass before submitting component/feature doc updates.
 - Interfaces local checks: `just interfaces-index`, `just interfaces-lint`, `just interfaces-diff`
 
 ### Pre‑commit & Pre‑push

@@ -2,12 +2,16 @@
 set -euo pipefail
 
 info() { echo -e "\033[36m[docgen]\033[0m $*"; }
+warn() { echo -e "\033[33m[docgen]\033[0m warning: $*" >&2; }
 die()  { echo "error: $*" >&2; exit 1; }
 
 command -v cargo >/dev/null 2>&1 || die "Rust 'cargo' not found in PATH"
 
 info "Validating feature registry"
 python3 scripts/check_feature_integrity.py
+
+info "Validating system component registry"
+python3 scripts/check_system_components_integrity.py
 
 info "Generating feature docs"
 python3 scripts/gen_feature_matrix.py

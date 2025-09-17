@@ -1,64 +1,22 @@
 #!/usr/bin/env python3
-import json, re, sys, pathlib, datetime, os, subprocess
+import json
+import pathlib
+import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+from doc_utils import (
+    ROOT,
+    _stable_now_timestamp,
+    check_paths_exist,
+    github_blob_base,
+    parse_topics_rs,
+)
+
 FEATURES_JSON = ROOT / "interfaces" / "features.json"
 OUT_MD = ROOT / "docs" / "reference" / "feature_matrix.md"
-
-def github_blob_base() -> str:
-    import subprocess, os, re
-    env_base = os.getenv("REPO_BLOB_BASE")
-    if env_base:
-        return env_base.rstrip('/') + '/'
-    try:
-        remote = subprocess.check_output(["git", "config", "--get", "remote.origin.url"], text=True).strip()
-        m = re.search(r"github\.com[:/]{1,2}([^/]+)/([^/.]+)", remote)
-        if m:
-            owner, repo = m.group(1), m.group(2)
-            return f"https://github.com/{owner}/{repo}/blob/main/"
-    except Exception:
-        pass
-    return "https://github.com/t3hw00t/ARW/blob/main/"
-TOPICS_RS = ROOT / "crates" / "arw-topics" / "src" / "lib.rs"
 
 def load_features():
     with FEATURES_JSON.open("r", encoding="utf-8") as f:
         return json.load(f)
-
-def parse_topics_rs():
-    if not TOPICS_RS.exists():
-        return set()
-    s = TOPICS_RS.read_text(encoding="utf-8", errors="ignore")
-    vals = set(re.findall(r'pub const [A-Z0-9_]+:\s*&str\s*=\s*"([^"]+)";', s))
-    return vals
-
-def check_paths_exist(paths):
-    missing = []
-    for p in paths:
-        pp = ROOT / p
-        if not pp.exists():
-            missing.append(p)
-    return missing
-
-def md_escape(s: str) -> str:
-    return s.replace("_", "\\_")
-
-def _stable_now_timestamp(paths):
-    """Return a stable ISO timestamp based on last commit touching given paths.
-    Falls back to REPRO_NOW env or current UTC if git not available.
-    """
-    try:
-        args = ["git", "log", "-1", "--format=%cI", "--"] + [str(p) for p in paths if p]
-        ts = subprocess.check_output(args, text=True).strip()
-        if ts:
-            # Normalize to Z if possible
-            return ts.replace("+00:00", "Z")
-    except Exception:
-        pass
-    env_ts = os.getenv("REPRO_NOW")
-    if env_ts:
-        return env_ts
-    return datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
 
 def render(features_doc, known_topics):
     now = _stable_now_timestamp([FEATURES_JSON])
@@ -136,6 +94,18 @@ def render(features_doc, known_topics):
             out.append("- Env:")
             for e in envs:
                 out.append(f"  - `{e}`")
+        refs = feat.get("docs", [])
+        if refs:
+            out.append("- References:")
+            for entry in refs:
+                path = entry.get("path") if isinstance(entry, dict) else entry
+                if not path:
+                    continue
+                if path.startswith("docs/"):
+                    rel = path[len("docs/"):]
+                    out.append(f"  - [{rel}](../{rel})")
+                else:
+                    out.append(f"  - [{path}]({base}{path})")
         out.append("")
     return "\n".join(out)
 
@@ -145,7 +115,7 @@ def main():
     except Exception as e:
         print(f"error: cannot read features.json: {e}", file=sys.stderr)
         return 2
-    known_topics = parse_topics_rs()
+    known_topics = parse_topics_rs(include_defaults={"state.read.model.patch"})
     # Path validation
     all_paths = []
     for f in features.get("features", []):

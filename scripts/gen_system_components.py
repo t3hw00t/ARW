@@ -1,11 +1,21 @@
 #!/usr/bin/env python3
-import json, pathlib, datetime, subprocess, os, re, sys
+import json
+import pathlib
+import re
+import sys
 
-ROOT = pathlib.Path(__file__).resolve().parents[1]
+from doc_utils import (
+    ROOT,
+    _stable_now_timestamp,
+    check_paths_exist,
+    github_blob_base,
+    merge_lists,
+    parse_topics_rs,
+)
+
 DATA_JSON = ROOT / "interfaces" / "system_components.json"
 OUT_MD = ROOT / "docs" / "reference" / "system_components.md"
 FEATURES_JSON = ROOT / "interfaces" / "features.json"
-TOPICS_RS = ROOT / "crates" / "arw-topics" / "src" / "lib.rs"
 
 INTERFACE_LABELS = {
     "http": "HTTP",
@@ -19,44 +29,6 @@ INTERFACE_LABELS = {
 }
 
 
-def github_blob_base() -> str:
-    env_base = os.getenv("REPO_BLOB_BASE")
-    if env_base:
-        return env_base.rstrip("/") + "/"
-    try:
-        remote = subprocess.check_output(["git", "config", "--get", "remote.origin.url"], text=True).strip()
-        m = re.search(r"github\\.com[:/]{1,2}([^/]+)/([^/.]+)", remote)
-        if m:
-            owner, repo = m.group(1), m.group(2)
-            return f"https://github.com/{owner}/{repo}/blob/main/"
-    except Exception:
-        pass
-    return "https://github.com/t3hw00t/ARW/blob/main/"
-
-
-def _stable_now_timestamp(paths):
-    try:
-        args = ["git", "log", "-1", "--format=%cI", "--"] + [str(p) for p in paths if p]
-        ts = subprocess.check_output(args, text=True).strip()
-        if ts:
-            return ts.replace("+00:00", "Z")
-    except Exception:
-        pass
-    env_ts = os.getenv("REPRO_NOW")
-    if env_ts:
-        return env_ts
-    return datetime.datetime.utcnow().replace(tzinfo=datetime.timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z")
-
-
-def check_paths_exist(paths):
-    missing = []
-    for p in paths:
-        pp = ROOT / p
-        if not pp.exists():
-            missing.append(p)
-    return missing
-
-
 def load_components():
     with DATA_JSON.open("r", encoding="utf-8") as fh:
         return json.load(fh)
@@ -67,26 +39,6 @@ def load_features():
         return {}
     with FEATURES_JSON.open("r", encoding="utf-8") as fh:
         return json.load(fh)
-
-
-def parse_topics_rs():
-    if not TOPICS_RS.exists():
-        return set()
-    text = TOPICS_RS.read_text(encoding="utf-8", errors="ignore")
-    vals = set(re.findall(r'"([^"]+)"', text))
-    vals.add("state.read.model.patch")
-    return vals
-
-
-def merge_lists(*lists):
-    seen = set()
-    merged = []
-    for lst in lists:
-        for item in lst or []:
-            if item not in seen:
-                merged.append(item)
-                seen.add(item)
-    return merged
 
 
 def merge_scope(feature_scope, component_scope):
@@ -102,6 +54,31 @@ def slugify(name: str) -> str:
     s = name.strip().lower()
     s = re.sub(r"[^a-z0-9]+", "-", s)
     return s.strip("-")
+
+
+def format_scope(feature, comp):
+    scope = merge_scope(feature.get("scope") if feature else {}, comp.get("scope"))
+    parts = []
+    if feature and feature.get("tier"):
+        parts.append(feature["tier"])
+    parts.extend(
+        part
+        for part in [
+            scope.get("surface"),
+            scope.get("audience"),
+            scope.get("layer"),
+            scope.get("maturity"),
+        ]
+        if part
+    )
+    return " / ".join(parts)
+
+
+def join_inline(values, limit=None):
+    items = [v for v in values if v]
+    if limit and len(items) > limit:
+        items = items[:limit] + ["…"]
+    return "<br />".join(items)
 
 
 def render(doc, features, known_topics):
@@ -126,8 +103,93 @@ def render(doc, features, known_topics):
     lines.append(
         f"This page is generated from [interfaces/system_components.json]({base}interfaces/system_components.json) "
         f"and reconciled with [interfaces/features.json]({base}interfaces/features.json) plus topic constants in "
-        f"[`crates/arw-topics`]({base}crates/arw-topics/src/lib.rs).\n"
+        "[`crates/arw-topics`](../../crates/arw-topics/src/lib.rs).\n"
     )
+
+    lines.append("## Component Matrix\n")
+    lines.append(
+        "| Component | Feature | Category | Scope | Owner | Key Interfaces | References |"
+    )
+    lines.append("| --- | --- | --- | --- | --- | --- | --- |")
+
+    for comp in components:
+        name = comp.get("name", comp.get("id", "(unknown)"))
+        feature = None
+        feature_cell = "—"
+        if comp.get("feature_id"):
+            feature = feature_map.get(comp["feature_id"])
+            if feature is None:
+                missing_features.append(comp["feature_id"])
+            else:
+                feat_name = feature.get("name", comp.get("feature_id"))
+                slug = slugify(feat_name)
+                tier = feature.get("tier")
+                tier_suffix = f"<br /><small>{tier}</small>" if tier else ""
+                feature_cell = (
+                    f"[{feat_name}](../feature_matrix.md#{slug}){tier_suffix}"
+                )
+        category = comp.get("category") or "—"
+        scope_summary = format_scope(feature, comp) or "—"
+        owner = comp.get("owner") or (feature.get("owner") if feature else None) or "—"
+
+        feature_interfaces = {
+            "http": [],
+            "topics": feature.get("topics", []) if feature else [],
+            "read_models": feature.get("read_models", []) if feature else [],
+        }
+        if feature:
+            for http in feature.get("http", []):
+                method = (http.get("method") or "").upper()
+                path = http.get("path", "")
+                if method and path:
+                    feature_interfaces["http"].append(f"{method} {path}")
+                elif path:
+                    feature_interfaces["http"].append(path)
+        interfaces = comp.get("interfaces", {})
+        http_list = merge_lists(feature_interfaces.get("http", []), interfaces.get("http"))
+        topic_list = merge_lists(
+            feature_interfaces.get("topics", []), interfaces.get("topics")
+        )
+        http_cell = join_inline(http_list, limit=3)
+        topic_cell = join_inline(topic_list, limit=2)
+        tools_cell = join_inline(interfaces.get("tools", []), limit=2)
+        key_interfaces = join_inline([http_cell, topic_cell, tools_cell]) or "—"
+
+        feature_docs = []
+        if feature:
+            for entry in feature.get("docs", []):
+                path = entry.get("path") if isinstance(entry, dict) else entry
+                if path:
+                    feature_docs.append(path)
+        component_docs = []
+        for entry in comp.get("docs", []):
+            path = entry.get("path") if isinstance(entry, dict) else entry
+            if path:
+                component_docs.append(path)
+        docs = merge_lists(feature_docs, component_docs)
+        doc_links = []
+        for path in docs:
+            if path.startswith("docs/"):
+                rel = path[len("docs/"):]
+                doc_links.append(f"[{rel}](../{rel})")
+            else:
+                doc_links.append(f"[{path}]({base}{path})")
+        docs_cell = join_inline(doc_links, limit=3) or "—"
+
+        lines.append(
+            "| {component} | {feature} | {category} | {scope} | {owner} | {interfaces} | {docs} |".format(
+                component=name,
+                feature=feature_cell,
+                category=category,
+                scope=scope_summary,
+                owner=owner,
+                interfaces=key_interfaces,
+                docs=docs_cell,
+            )
+        )
+
+    lines.append("")
+    lines.append("## Component Details\n")
 
     for comp in components:
         name = comp.get("name", comp.get("id", "(unknown)"))
@@ -137,14 +199,14 @@ def render(doc, features, known_topics):
             feature = feature_map.get(comp["feature_id"])
             if feature is None:
                 missing_features.append(comp["feature_id"])
-        lines.append(f"## {name}\n")
+        lines.append(f"### {name}\n")
         if desc:
             lines.append(desc + "\n")
         if feature:
             feat_name = feature.get("name", comp.get("feature_id"))
             slug = slugify(feat_name)
             lines.append(
-                f"- Feature: [{feat_name}](feature_matrix.md#{slug}) ({feature.get('tier', 'unknown tier')})"
+                f"- Feature: [{feat_name}](../feature_matrix.md#{slug}) ({feature.get('tier', 'unknown tier')})"
             )
         category = comp.get("category")
         scope = merge_scope(feature.get("scope") if feature else {}, comp.get("scope"))
@@ -220,13 +282,21 @@ def render(doc, features, known_topics):
             lines.append("- Storage & Records:")
             for item in storage:
                 lines.append(f"  - `{item}`")
-        docs = comp.get("docs", [])
+        feature_docs = []
+        if feature:
+            for entry in feature.get("docs", []):
+                path = entry.get("path") if isinstance(entry, dict) else entry
+                if path:
+                    feature_docs.append(path)
+        component_docs = []
+        for entry in comp.get("docs", []):
+            path = entry.get("path") if isinstance(entry, dict) else entry
+            if path:
+                component_docs.append(path)
+        docs = merge_lists(feature_docs, component_docs)
         if docs:
             lines.append("- References:")
-            for entry in docs:
-                path = entry.get("path") if isinstance(entry, dict) else entry
-                if not path:
-                    continue
+            for path in docs:
                 if path.startswith("docs/"):
                     rel = path[len("docs/"):]
                     lines.append(f"  - [{rel}](../{rel})")
@@ -251,7 +321,18 @@ def main():
         print(f"error: failed to read system components: {exc}", file=sys.stderr)
         return 2
     paths = []
+    features = load_features()
+    feature_map = {f.get("id"): f for f in features.get("features", []) if f.get("id")}
     for comp in doc.get("components", []):
+        fid = comp.get("feature_id")
+        if fid and fid in feature_map:
+            for ref in feature_map[fid].get("docs", []):
+                if isinstance(ref, dict):
+                    path = ref.get("path")
+                else:
+                    path = ref
+                if path:
+                    paths.append(path)
         for ref in comp.get("docs", []):
             if isinstance(ref, dict):
                 path = ref.get("path")
@@ -262,8 +343,7 @@ def main():
     missing = check_paths_exist(paths)
     if missing:
         print("warning: missing references:\n  - " + "\n  - ".join(missing), file=sys.stderr)
-    features = load_features()
-    known_topics = parse_topics_rs()
+    known_topics = parse_topics_rs(include_defaults={"state.read.model.patch"})
     OUT_MD.parent.mkdir(parents=True, exist_ok=True)
     OUT_MD.write_text(render(doc, features, known_topics), encoding="utf-8")
     print(f"wrote {OUT_MD}")
@@ -272,3 +352,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
+
