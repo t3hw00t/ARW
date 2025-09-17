@@ -6,27 +6,73 @@
       "name": "Model Steward",
       "owner": "platform",
       "tier": "Core kernel",
-      "deps": ["event_spine", "guardrail_gateway"],
+      "deps": [
+        "event_spine",
+        "guardrail_gateway"
+      ],
       "description": "Manage local models with safe HTTP download, resume, checksum verification, CAS storage, quotas, live progress, metrics, and concurrency controls.",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "core", "maturity": "complete"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "core",
+        "maturity": "complete"
+      },
       "ssot": [
-        {"path": "apps/arw-svc/src/resources/models_service.rs"},
-        {"path": "apps/arw-svc/src/ext/models_api.rs"},
-        {"path": "apps/arw-svc/src/ext/paths.rs"},
-        {"path": "crates/arw-topics/src/lib.rs"}
+        {
+          "path": "apps/arw-svc/src/resources/models_service.rs"
+        },
+        {
+          "path": "apps/arw-svc/src/ext/models_api.rs"
+        },
+        {
+          "path": "apps/arw-svc/src/ext/paths.rs"
+        },
+        {
+          "path": "crates/arw-topics/src/lib.rs"
+        }
       ],
       "http": [
-        {"method": "GET", "path": "/admin/models/summary"},
-        {"method": "POST", "path": "/admin/models/download"},
-        {"method": "POST", "path": "/admin/models/download/cancel"},
-        {"method": "POST", "path": "/admin/models/cas_gc"},
-        {"method": "GET", "path": "/admin/models/concurrency"},
-        {"method": "POST", "path": "/admin/models/concurrency"},
-        {"method": "GET", "path": "/admin/models/jobs"},
-        {"method": "GET", "path": "/admin/state/models_metrics"},
-        {"method": "GET", "path": "/state/models"}
+        {
+          "method": "GET",
+          "path": "/admin/models/summary"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/models/download"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/models/download/cancel"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/models/cas_gc"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/models/concurrency"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/models/concurrency"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/models/jobs"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/state/models_metrics"
+        },
+        {
+          "method": "GET",
+          "path": "/state/models"
+        }
       ],
-      "read_models": ["models", "models_metrics"],
+      "read_models": [
+        "models",
+        "models_metrics"
+      ],
       "topics": [
         "models.download.progress",
         "models.changed",
@@ -43,6 +89,11 @@
         "ARW_MODELS_QUOTA_MB",
         "ARW_DL_EWMA_ALPHA",
         "ARW_DL_MIN_MBPS"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/artifacts_provenance.md"
+        }
       ]
     },
     {
@@ -51,42 +102,103 @@
       "owner": "platform",
       "tier": "Core kernel",
       "description": "Unified in-process bus + SSE stream; maintains compact read-models and publishes JSON Patch deltas for low-latency UIs.",
-      "scope": {"surface": "backend", "audience": "dev", "layer": "connectivity", "maturity": "complete"},
+      "scope": {
+        "surface": "backend",
+        "audience": "dev",
+        "layer": "connectivity",
+        "maturity": "complete"
+      },
       "ssot": [
-        {"path": "apps/arw-svc/src/main.rs"},
-        {"path": "apps/arw-svc/src/ext/read_model.rs"},
-        {"path": "crates/arw-topics/src/lib.rs"}
+        {
+          "path": "apps/arw-svc/src/main.rs"
+        },
+        {
+          "path": "apps/arw-svc/src/ext/read_model.rs"
+        },
+        {
+          "path": "crates/arw-topics/src/lib.rs"
+        }
       ],
       "http": [
-        {"method": "GET", "path": "/admin/events"}
+        {
+          "method": "GET",
+          "path": "/admin/events"
+        }
       ],
-      "read_models": ["models", "models_metrics", "route_stats", "snappy"],
-      "topics": ["state.read.model.patch"],
-      "env": ["ARW_BUS_CAP", "ARW_BUS_REPLAY"]
+      "read_models": [
+        "models",
+        "models_metrics",
+        "route_stats",
+        "snappy"
+      ],
+      "topics": [
+        "state.read.model.patch"
+      ],
+      "env": [
+        "ARW_BUS_CAP",
+        "ARW_BUS_REPLAY"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/sse_patch_contract.md"
+        }
+      ]
     },
     {
       "id": "snappy_governor",
       "name": "Snappy Governor",
       "owner": "platform",
       "tier": "Core kernel",
-      "deps": ["event_spine"],
+      "deps": [
+        "event_spine"
+      ],
       "description": "Latency budgets and route observability; publishes budgets vs. measured p95 and breach notices.",
-      "scope": {"surface": "backend", "audience": "dev", "layer": "core", "maturity": "complete"},
+      "scope": {
+        "surface": "backend",
+        "audience": "dev",
+        "layer": "core",
+        "maturity": "complete"
+      },
       "ssot": [
-        {"path": "apps/arw-svc/src/ext/stats.rs"},
-        {"path": "apps/arw-svc/src/ext/snappy.rs"}
+        {
+          "path": "apps/arw-svc/src/ext/stats.rs"
+        },
+        {
+          "path": "apps/arw-svc/src/ext/snappy.rs"
+        }
       ],
       "http": [
-        {"method": "GET", "path": "/metrics"},
-        {"method": "GET", "path": "/admin/state/route_stats"}
+        {
+          "method": "GET",
+          "path": "/metrics"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/state/route_stats"
+        }
       ],
-      "read_models": ["route_stats", "snappy"],
-      "topics": ["snappy.notice", "snappy.detail", "state.read.model.patch"],
+      "read_models": [
+        "route_stats",
+        "snappy"
+      ],
+      "topics": [
+        "snappy.notice",
+        "snappy.detail",
+        "state.read.model.patch"
+      ],
       "env": [
         "ARW_SNAPPY_I2F_P95_MS",
         "ARW_SNAPPY_FIRST_PARTIAL_P95_MS",
         "ARW_SNAPPY_FULL_RESULT_P95_MS",
         "ARW_SNAPPY_PUBLISH_MS"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/runtime_layout.md"
+        },
+        {
+          "path": "docs/architecture/performance.md"
+        }
       ]
     },
     {
@@ -94,132 +206,326 @@
       "name": "Tool Forge",
       "owner": "platform",
       "tier": "Core kernel",
-      "deps": ["event_spine"],
+      "deps": [
+        "event_spine"
+      ],
       "description": "Tool registry with schema introspection and an Action Cache (in-memory TTL + CAS) with singleflight.",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "core", "maturity": "complete"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "core",
+        "maturity": "complete"
+      },
       "ssot": [
-        {"path": "apps/arw-svc/src/ext/tools_exec.rs"},
-        {"path": "apps/arw-svc/src/ext/tools_api.rs"}
+        {
+          "path": "apps/arw-svc/src/ext/tools_exec.rs"
+        },
+        {
+          "path": "apps/arw-svc/src/ext/tools_api.rs"
+        }
       ],
       "http": [
-        {"method": "GET", "path": "/admin/tools"},
-        {"method": "POST", "path": "/admin/tools/run"},
-        {"method": "GET", "path": "/admin/tools/cache_stats"}
+        {
+          "method": "GET",
+          "path": "/admin/tools"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/tools/run"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/tools/cache_stats"
+        },
+        {
+          "method": "GET",
+          "path": "/state/models_metrics"
+        }
       ],
       "read_models": [],
-      "topics": ["task.completed"],
-      "env": ["ARW_TOOLS_CACHE_CAP", "ARW_TOOLS_CACHE_TTL_SECS", "ARW_POLICY_VERSION", "ARW_SECRETS_VERSION"]
+      "topics": [
+        "task.completed"
+      ],
+      "env": [
+        "ARW_TOOLS_CACHE_CAP",
+        "ARW_TOOLS_CACHE_TTL_SECS",
+        "ARW_POLICY_VERSION",
+        "ARW_SECRETS_VERSION"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/cache_policy.md"
+        },
+        {
+          "path": "docs/architecture/caching_layers.md"
+        }
+      ]
     },
     {
       "id": "screenshot_pipeline",
       "name": "Screenshot Capture Pipeline",
       "owner": "platform",
       "tier": "Opt-in pack",
-      "deps": ["tool_forge", "policy_leases", "event_spine"],
+      "deps": [
+        "tool_forge",
+        "policy_leases",
+        "event_spine"
+      ],
       "description": "Screen/window/region capture with annotate/blur, gallery, Save to project, and optional OCR for agents and operators.",
-      "scope": {"surface": "runtime", "audience": "admin", "layer": "auxiliary", "maturity": "complete"},
+      "scope": {
+        "surface": "runtime",
+        "audience": "admin",
+        "layer": "auxiliary",
+        "maturity": "complete"
+      },
       "ssot": [
-        {"path": "apps/arw-svc/src/ext/tools_exec.rs"},
-        {"path": "apps/arw-launcher/src-tauri/ui/common.js"},
-        {"path": "docs/guide/screenshots.md"}
+        {
+          "path": "apps/arw-svc/src/ext/tools_exec.rs"
+        },
+        {
+          "path": "apps/arw-launcher/src-tauri/ui/common.js"
+        },
+        {
+          "path": "docs/guide/screenshots.md"
+        }
       ],
       "http": [
-        {"method": "POST", "path": "/admin/tools/run"}
+        {
+          "method": "POST",
+          "path": "/admin/tools/run"
+        }
       ],
       "read_models": [],
-      "topics": ["screenshots.captured"],
-      "env": []
+      "topics": [
+        "screenshots.captured"
+      ],
+      "env": [],
+      "docs": [
+        {
+          "path": "docs/architecture/screenshot_capture_pipeline.md"
+        },
+        {
+          "path": "docs/guide/screenshots.md"
+        }
+      ]
     },
     {
       "id": "chat_workbench",
       "name": "Chat Workbench",
       "owner": "platform",
       "tier": "Opt-in pack",
-      "deps": ["event_spine"],
+      "deps": [
+        "event_spine"
+      ],
       "description": "Debug chat UI surface with synthetic replies or llama/OpenAI backends; planner hints, optional self-consistency and verifier (gated).",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "auxiliary", "maturity": "complete"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "auxiliary",
+        "maturity": "complete"
+      },
       "ssot": [
-        {"path": "apps/arw-svc/src/ext/chat.rs"},
-        {"path": "apps/arw-svc/src/ext/chat_api.rs"}
+        {
+          "path": "apps/arw-svc/src/ext/chat.rs"
+        },
+        {
+          "path": "apps/arw-svc/src/ext/chat_api.rs"
+        }
       ],
       "http": [
-        {"method": "GET", "path": "/admin/chat"},
-        {"method": "POST", "path": "/admin/chat/send"},
-        {"method": "POST", "path": "/admin/chat/clear"},
-        {"method": "GET", "path": "/admin/chat/status"}
+        {
+          "method": "GET",
+          "path": "/admin/chat"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/chat/send"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/chat/clear"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/chat/status"
+        }
       ],
       "read_models": [],
-      "topics": ["chat.message", "chat.planner", "chat.probe"],
-      "env": ["ARW_LLAMA_URL", "ARW_OPENAI_API_KEY", "ARW_OPENAI_BASE_URL", "ARW_OPENAI_MODEL"]
+      "topics": [
+        "chat.message",
+        "chat.planner",
+        "chat.probe"
+      ],
+      "env": [
+        "ARW_LLAMA_URL",
+        "ARW_OPENAI_API_KEY",
+        "ARW_OPENAI_BASE_URL",
+        "ARW_OPENAI_MODEL"
+      ]
     },
     {
       "id": "memory_lanes",
       "name": "Memory Lanes",
       "owner": "platform",
       "tier": "Core kernel",
-      "deps": ["event_spine"],
+      "deps": [
+        "event_spine"
+      ],
       "description": "Local-first memory with lanes (ephemeral/episodic/semantic/procedural), ring limits, and apply/get/save/load endpoints.",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "core", "maturity": "complete"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "core",
+        "maturity": "complete"
+      },
       "ssot": [
-        {"path": "apps/arw-svc/src/ext/memory.rs"}
+        {
+          "path": "apps/arw-svc/src/ext/memory.rs"
+        }
       ],
       "http": [
-        {"method": "GET", "path": "/admin/memory"},
-        {"method": "POST", "path": "/admin/memory/apply"},
-        {"method": "POST", "path": "/admin/memory/save"},
-        {"method": "POST", "path": "/admin/memory/load"},
-        {"method": "GET", "path": "/admin/memory/limit"},
-        {"method": "POST", "path": "/admin/memory/limit"}
+        {
+          "method": "GET",
+          "path": "/admin/memory"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/memory/apply"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/memory/save"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/memory/load"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/memory/limit"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/memory/limit"
+        }
       ],
       "read_models": [],
-      "topics": ["memory.applied"],
-      "env": ["ARW_MEM_LIMIT"]
+      "topics": [
+        "memory.applied"
+      ],
+      "env": [
+        "ARW_MEM_LIMIT"
+      ]
     },
     {
       "id": "project_hub",
       "name": "Project Hub Primitives",
       "owner": "platform",
       "tier": "Core kernel",
-      "deps": ["event_spine"],
+      "deps": [
+        "event_spine"
+      ],
       "description": "Projects tree/creation/notes and safe file IO (atomic write, SHA precondition), with audit/events.",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "core", "maturity": "complete"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "core",
+        "maturity": "complete"
+      },
       "ssot": [
-        {"path": "apps/arw-svc/src/ext/projects.rs"},
-        {"path": "apps/arw-svc/src/ext/paths.rs"}
+        {
+          "path": "apps/arw-svc/src/ext/projects.rs"
+        },
+        {
+          "path": "apps/arw-svc/src/ext/paths.rs"
+        }
       ],
       "http": [
-        {"method": "GET", "path": "/admin/projects/list"},
-        {"method": "POST", "path": "/admin/projects/create"},
-        {"method": "GET", "path": "/admin/projects/tree"},
-        {"method": "GET", "path": "/admin/projects/notes"},
-        {"method": "POST", "path": "/admin/projects/notes"},
-        {"method": "GET", "path": "/admin/projects/file"},
-        {"method": "POST", "path": "/admin/projects/file"},
-        {"method": "POST", "path": "/admin/projects/patch"}
+        {
+          "method": "GET",
+          "path": "/admin/projects/list"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/projects/create"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/projects/tree"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/projects/notes"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/projects/notes"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/projects/file"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/projects/file"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/projects/patch"
+        }
       ],
       "read_models": [],
-      "topics": ["projects.created", "projects.file.written"],
-      "env": ["ARW_PROJECTS_DIR", "ARW_PROJECT_MAX_FILE_MB"]
+      "topics": [
+        "projects.created",
+        "projects.file.written"
+      ],
+      "env": [
+        "ARW_PROJECTS_DIR",
+        "ARW_PROJECT_MAX_FILE_MB"
+      ]
     },
     {
       "id": "feedback_loop",
       "name": "Feedback Loop",
       "owner": "platform",
       "tier": "Core kernel",
-      "deps": ["event_spine"],
+      "deps": [
+        "event_spine"
+      ],
       "description": "Near-live suggestions and policy with persisted state, supporting guidance to improve runs.",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "helpers", "maturity": "complete"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "helpers",
+        "maturity": "complete"
+      },
       "ssot": [
-        {"path": "apps/arw-svc/src/ext/feedback_engine.rs"},
-        {"path": "apps/arw-svc/src/ext/feedback_engine_api.rs"}
+        {
+          "path": "apps/arw-svc/src/ext/feedback_engine.rs"
+        },
+        {
+          "path": "apps/arw-svc/src/ext/feedback_engine_api.rs"
+        }
       ],
       "http": [
-        {"method": "GET", "path": "/admin/feedback/suggestions"},
-        {"method": "GET", "path": "/admin/feedback/updates"},
-        {"method": "GET", "path": "/admin/feedback/policy"}
+        {
+          "method": "GET",
+          "path": "/admin/feedback/suggestions"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/feedback/updates"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/feedback/policy"
+        }
       ],
       "read_models": [],
-      "topics": ["feedback.suggested", "feedback.updated"],
+      "topics": [
+        "feedback.suggested",
+        "feedback.updated"
+      ],
       "env": []
     },
     {
@@ -227,23 +533,55 @@
       "name": "Experiment Deck",
       "owner": "platform",
       "tier": "Opt-in pack",
-      "deps": ["event_spine"],
+      "deps": [
+        "event_spine"
+      ],
       "description": "Define variants, run A/B on goldens, publish results and winner; apply hints.",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "core", "maturity": "complete"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "core",
+        "maturity": "complete"
+      },
       "ssot": [
-        {"path": "apps/arw-svc/src/ext/experiments_engine.rs"},
-        {"path": "apps/arw-svc/src/ext/experiments_api.rs"}
+        {
+          "path": "apps/arw-svc/src/ext/experiments_engine.rs"
+        },
+        {
+          "path": "apps/arw-svc/src/ext/experiments_api.rs"
+        }
       ],
       "http": [
-        {"method": "POST", "path": "/experiments/start"},
-        {"method": "GET", "path": "/experiments/list"},
-        {"method": "GET", "path": "/experiments/winners"},
-        {"method": "GET", "path": "/experiments/scoreboard"},
-        {"method": "POST", "path": "/experiments/run"},
-        {"method": "POST", "path": "/experiments/activate"}
+        {
+          "method": "POST",
+          "path": "/experiments/start"
+        },
+        {
+          "method": "GET",
+          "path": "/experiments/list"
+        },
+        {
+          "method": "GET",
+          "path": "/experiments/winners"
+        },
+        {
+          "method": "GET",
+          "path": "/experiments/scoreboard"
+        },
+        {
+          "method": "POST",
+          "path": "/experiments/run"
+        },
+        {
+          "method": "POST",
+          "path": "/experiments/activate"
+        }
       ],
       "read_models": [],
-      "topics": ["experiment.result", "experiment.winner"],
+      "topics": [
+        "experiment.result",
+        "experiment.winner"
+      ],
       "env": []
     },
     {
@@ -251,101 +589,256 @@
       "name": "Self Card + Forecasts",
       "owner": "platform",
       "tier": "Core kernel",
-      "deps": ["event_spine"],
+      "deps": [
+        "event_spine"
+      ],
       "description": "Per-agent identity and competence, with periodic aggregates for forecasts and resource curves.",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "helpers", "maturity": "complete"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "helpers",
+        "maturity": "complete"
+      },
       "ssot": [
-        {"path": "apps/arw-svc/src/ext/self_model.rs"},
-        {"path": "apps/arw-svc/src/ext/self_model_agg.rs"},
-        {"path": "apps/arw-svc/src/ext/self_model_api.rs"}
+        {
+          "path": "apps/arw-svc/src/ext/self_model.rs"
+        },
+        {
+          "path": "apps/arw-svc/src/ext/self_model_agg.rs"
+        },
+        {
+          "path": "apps/arw-svc/src/ext/self_model_api.rs"
+        }
       ],
       "http": [
-        {"method": "GET", "path": "/state/self"},
-        {"method": "GET", "path": "/state/self/:agent"}
+        {
+          "method": "GET",
+          "path": "/state/self"
+        },
+        {
+          "method": "GET",
+          "path": "/state/self/:agent"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/self_model/propose"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/self_model/apply"
+        }
       ],
       "read_models": [],
-      "topics": ["self.model.proposed", "self.model.updated"],
-      "env": []
+      "topics": [
+        "self.model.proposed",
+        "self.model.updated"
+      ],
+      "env": [],
+      "docs": [
+        {
+          "path": "docs/architecture/self_model.md"
+        }
+      ]
     },
     {
       "id": "project_map",
       "name": "Project Map (World Model)",
       "owner": "platform",
       "tier": "Core kernel",
-      "deps": ["event_spine"],
+      "deps": [
+        "event_spine"
+      ],
       "description": "Observations folded into beliefs/intents/actions and stitched episodes for a scoped project world model.",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "connectivity", "maturity": "complete"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "connectivity",
+        "maturity": "complete"
+      },
       "ssot": [
-        {"path": "apps/arw-svc/src/ext/state_api.rs"},
-        {"path": "apps/arw-svc/src/ext/world.rs"}
+        {
+          "path": "apps/arw-svc/src/ext/state_api.rs"
+        },
+        {
+          "path": "apps/arw-svc/src/ext/world.rs"
+        }
       ],
       "http": [
-        {"method": "GET", "path": "/admin/state/observations"},
-        {"method": "GET", "path": "/admin/state/beliefs"},
-        {"method": "GET", "path": "/admin/state/intents"},
-        {"method": "GET", "path": "/admin/state/actions"},
-        {"method": "GET", "path": "/admin/state/episodes"}
+        {
+          "method": "GET",
+          "path": "/admin/state/observations"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/state/beliefs"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/state/intents"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/state/actions"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/state/episodes"
+        }
       ],
       "read_models": [],
-      "topics": ["world.updated"],
-      "env": []
+      "topics": [
+        "world.updated"
+      ],
+      "env": [],
+      "docs": [
+        {
+          "path": "docs/architecture/object_graph.md"
+        }
+      ]
     },
     {
       "id": "guardrail_gateway",
       "name": "Guardrail Gateway (Policy + Egress)",
       "owner": "platform",
       "tier": "Remote collaborator pack",
-      "deps": ["event_spine"],
+      "deps": [
+        "event_spine"
+      ],
       "description": "Ingress/egress policy gating with previews and append-only egress ledger. Full proxy/DNS guard is planned.",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "connectivity", "maturity": "partial"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "connectivity",
+        "maturity": "partial"
+      },
       "ssot": [
-        {"path": "apps/arw-svc/src/ext/io.rs"},
-        {"path": "crates/arw-topics/src/lib.rs"},
-        {"path": "docs/architecture/egress_firewall.md"}
+        {
+          "path": "apps/arw-svc/src/ext/io.rs"
+        },
+        {
+          "path": "crates/arw-topics/src/lib.rs"
+        },
+        {
+          "path": "docs/architecture/egress_firewall.md"
+        }
       ],
       "http": [],
       "read_models": [],
-      "topics": ["egress.preview", "egress.ledger.appended"],
-      "env": ["ARW_EGRESS_LEDGER_ENABLE", "ARW_NET_POSTURE"]
+      "topics": [
+        "egress.preview",
+        "egress.ledger.appended"
+      ],
+      "env": [
+        "ARW_EGRESS_LEDGER_ENABLE",
+        "ARW_NET_POSTURE"
+      ]
     },
     {
       "id": "asimov_capsule_guard",
       "name": "Asimov Capsule Guard",
       "owner": "platform",
       "tier": "Future pack",
-      "deps": ["guardrail_gateway", "policy_leases", "event_spine"],
+      "deps": [
+        "guardrail_gateway",
+        "policy_leases",
+        "event_spine"
+      ],
       "description": "Always-enforced capsule propagation that refreshes leases, scopes reversible denies, and instruments adoption across the runtime.",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "security", "maturity": "alpha"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "security",
+        "maturity": "alpha"
+      },
       "ssot": [
-        {"path": "crates/arw-core/src/gating.rs"},
-        {"path": "crates/arw-core/src/rpu.rs"},
-        {"path": "apps/arw-svc/src/bootstrap/mod.rs"},
-        {"path": "docs/architecture/asimov_capsule_guard.md"}
+        {
+          "path": "crates/arw-core/src/gating.rs"
+        },
+        {
+          "path": "crates/arw-core/src/rpu.rs"
+        },
+        {
+          "path": "apps/arw-svc/src/bootstrap/mod.rs"
+        },
+        {
+          "path": "docs/architecture/asimov_capsule_guard.md"
+        }
       ],
       "http": [
-        {"method": "ANY", "path": "/admin/* (X-ARW-Gate)"}
+        {
+          "method": "ANY",
+          "path": "/admin/* (X-ARW-Gate)"
+        }
       ],
       "read_models": [],
-      "topics": ["policy.decision", "rpu.trust.changed"],
-      "env": ["ARW_TRUST_CAPSULES", "ARW_GATING_DENY"]
+      "topics": [
+        "policy.decision",
+        "rpu.trust.changed"
+      ],
+      "env": [
+        "ARW_TRUST_CAPSULES",
+        "ARW_GATING_DENY"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/asimov_capsule_guard.md"
+        }
+      ]
     },
     {
       "id": "orchestrator_plane",
       "name": "Orchestrator Plane",
       "owner": "platform",
       "tier": "Remote collaborator pack",
-      "deps": ["event_spine"],
-      "description": "Local queue for tasks with optional NATS bridge and background worker(s) for offloads.",
-      "scope": {"surface": "backend", "audience": "dev", "layer": "connectivity", "maturity": "complete"},
-      "ssot": [
-        {"path": "apps/arw-svc/src/ext/mod.rs"},
-        {"path": "apps/arw-connector/src/main.rs"},
-        {"path": "apps/arw-server/src/api_orchestrator.rs"}
+      "deps": [
+        "event_spine"
       ],
-      "http": [],
+      "description": "Local queue for tasks with optional NATS bridge and background worker(s) for offloads.",
+      "scope": {
+        "surface": "backend",
+        "audience": "dev",
+        "layer": "connectivity",
+        "maturity": "complete"
+      },
+      "ssot": [
+        {
+          "path": "apps/arw-svc/src/ext/mod.rs"
+        },
+        {
+          "path": "apps/arw-connector/src/main.rs"
+        },
+        {
+          "path": "apps/arw-server/src/api_orchestrator.rs"
+        }
+      ],
+      "http": [
+        {
+          "method": "GET",
+          "path": "/orchestrator/mini_agents"
+        },
+        {
+          "method": "POST",
+          "path": "/orchestrator/mini_agents/start_training"
+        },
+        {
+          "method": "GET",
+          "path": "/state/orchestrator/jobs"
+        }
+      ],
       "read_models": [],
-      "topics": ["task.completed"],
-      "env": ["ARW_NATS_URL", "ARW_NODE_ID", "ARW_NATS_OUT"]
+      "topics": [
+        "task.completed"
+      ],
+      "env": [
+        "ARW_NATS_URL",
+        "ARW_NODE_ID",
+        "ARW_NATS_OUT"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/agent_orchestrator.md"
+        }
+      ]
     },
     {
       "id": "interface_registry",
@@ -353,16 +846,36 @@
       "owner": "platform",
       "tier": "Core kernel",
       "description": "Descriptors and generated OpenAPI/AsyncAPI/MCP schemas with drift checks and deprecation headers.",
-      "scope": {"surface": "dev", "audience": "dev", "layer": "auxiliary", "maturity": "complete"},
+      "scope": {
+        "surface": "dev",
+        "audience": "dev",
+        "layer": "auxiliary",
+        "maturity": "complete"
+      },
       "ssot": [
-        {"path": "interfaces/index.yaml"},
-        {"path": "apps/arw-svc/src/main.rs"},
-        {"path": "apps/arw-server/src/api_spec.rs"}
+        {
+          "path": "interfaces/index.yaml"
+        },
+        {
+          "path": "apps/arw-svc/src/main.rs"
+        },
+        {
+          "path": "apps/arw-server/src/api_spec.rs"
+        }
       ],
       "http": [
-        {"method": "GET", "path": "/spec/openapi.yaml"},
-        {"method": "GET", "path": "/spec/asyncapi.yaml"},
-        {"method": "GET", "path": "/spec/mcp-tools.json"}
+        {
+          "method": "GET",
+          "path": "/spec/openapi.yaml"
+        },
+        {
+          "method": "GET",
+          "path": "/spec/asyncapi.yaml"
+        },
+        {
+          "method": "GET",
+          "path": "/spec/mcp-tools.json"
+        }
       ],
       "read_models": [],
       "topics": [],
@@ -373,95 +886,267 @@
       "name": "Triad Kernel & Unified API",
       "owner": "platform",
       "tier": "Core kernel",
-      "deps": ["event_spine"],
+      "deps": [
+        "event_spine"
+      ],
       "description": "Journal-backed actions/events/state plane with SSE replay, contributions ledger, and discoverable metadata for the new server.",
-      "scope": {"surface": "backend", "audience": "dev", "layer": "core", "maturity": "beta"},
+      "scope": {
+        "surface": "backend",
+        "audience": "dev",
+        "layer": "core",
+        "maturity": "beta"
+      },
       "ssot": [
-        {"path": "apps/arw-server/src/main.rs"},
-        {"path": "apps/arw-server/src/api_actions.rs"},
-        {"path": "apps/arw-server/src/api_events.rs"},
-        {"path": "apps/arw-server/src/api_state.rs"},
-        {"path": "crates/arw-kernel/src/lib.rs"}
+        {
+          "path": "apps/arw-server/src/main.rs"
+        },
+        {
+          "path": "apps/arw-server/src/api_actions.rs"
+        },
+        {
+          "path": "apps/arw-server/src/api_events.rs"
+        },
+        {
+          "path": "apps/arw-server/src/api_state.rs"
+        },
+        {
+          "path": "crates/arw-kernel/src/lib.rs"
+        }
       ],
       "http": [
-        {"method": "POST", "path": "/actions"},
-        {"method": "GET", "path": "/actions/:id"},
-        {"method": "POST", "path": "/actions/:id/state"},
-        {"method": "GET", "path": "/events"},
-        {"method": "GET", "path": "/state/episodes"},
-        {"method": "GET", "path": "/state/actions"},
-        {"method": "GET", "path": "/state/contributions"},
-        {"method": "GET", "path": "/state/route_stats"},
-        {"method": "GET", "path": "/healthz"},
-        {"method": "GET", "path": "/about"}
+        {
+          "method": "POST",
+          "path": "/actions"
+        },
+        {
+          "method": "GET",
+          "path": "/actions/:id"
+        },
+        {
+          "method": "POST",
+          "path": "/actions/:id/state"
+        },
+        {
+          "method": "GET",
+          "path": "/events"
+        },
+        {
+          "method": "GET",
+          "path": "/state/episodes"
+        },
+        {
+          "method": "GET",
+          "path": "/state/actions"
+        },
+        {
+          "method": "GET",
+          "path": "/state/contributions"
+        },
+        {
+          "method": "GET",
+          "path": "/state/route_stats"
+        },
+        {
+          "method": "GET",
+          "path": "/healthz"
+        },
+        {
+          "method": "GET",
+          "path": "/about"
+        }
       ],
       "read_models": [],
-      "topics": ["actions.submitted", "actions.running", "actions.completed", "actions.failed"],
-      "env": ["ARW_ACTIONS_QUEUE_MAX", "ARW_STATE_DIR", "ARW_PORT", "ARW_BIND", "ARW_PERF_PRESET", "ARW_HTTP_MAX_CONC"]
+      "topics": [
+        "actions.submitted",
+        "actions.running",
+        "actions.completed",
+        "actions.failed"
+      ],
+      "env": [
+        "ARW_ACTIONS_QUEUE_MAX",
+        "ARW_STATE_DIR",
+        "ARW_PORT",
+        "ARW_BIND",
+        "ARW_PERF_PRESET",
+        "ARW_HTTP_MAX_CONC"
+      ]
     },
     {
       "id": "policy_leases",
       "name": "Policy & Lease Facade",
       "owner": "platform",
       "tier": "Core kernel",
-      "deps": ["triad_kernel"],
+      "deps": [
+        "triad_kernel"
+      ],
       "description": "ABAC facade with hot reloadable policies, lease issuance, and decision telemetry for capability-gated actions.",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "security", "maturity": "beta"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "security",
+        "maturity": "beta"
+      },
       "ssot": [
-        {"path": "apps/arw-server/src/api_policy.rs"},
-        {"path": "apps/arw-server/src/api_leases.rs"},
-        {"path": "crates/arw-policy/src/lib.rs"}
+        {
+          "path": "apps/arw-server/src/api_policy.rs"
+        },
+        {
+          "path": "apps/arw-server/src/api_leases.rs"
+        },
+        {
+          "path": "crates/arw-policy/src/lib.rs"
+        }
       ],
       "http": [
-        {"method": "GET", "path": "/state/policy"},
-        {"method": "POST", "path": "/policy/reload"},
-        {"method": "POST", "path": "/policy/simulate"},
-        {"method": "POST", "path": "/leases"},
-        {"method": "GET", "path": "/state/leases"}
+        {
+          "method": "GET",
+          "path": "/state/policy"
+        },
+        {
+          "method": "POST",
+          "path": "/policy/reload"
+        },
+        {
+          "method": "POST",
+          "path": "/policy/simulate"
+        },
+        {
+          "method": "POST",
+          "path": "/leases"
+        },
+        {
+          "method": "GET",
+          "path": "/state/leases"
+        }
       ],
       "read_models": [],
-      "topics": ["policy.decision", "policy.reloaded"],
-      "env": ["ARW_POLICY_FILE", "ARW_SECURITY_POSTURE"]
+      "topics": [
+        "policy.decision",
+        "policy.reloaded"
+      ],
+      "env": [
+        "ARW_POLICY_FILE",
+        "ARW_SECURITY_POSTURE"
+      ],
+      "docs": [
+        {
+          "path": "docs/GATING_KEYS.md"
+        },
+        {
+          "path": "docs/guide/policy_permissions.md"
+        },
+        {
+          "path": "crates/arw-core/src/gating.rs"
+        }
+      ]
     },
     {
       "id": "egress_sentinel",
       "name": "Egress Sentinel",
       "owner": "platform",
       "tier": "Core kernel",
-      "deps": ["policy_leases"],
+      "deps": [
+        "policy_leases"
+      ],
       "description": "Preview-first egress guard with allowlists, IP/DNS defenses, ledger logging, and runtime posture controls.",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "security", "maturity": "beta"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "security",
+        "maturity": "beta"
+      },
       "ssot": [
-        {"path": "apps/arw-server/src/api_egress.rs"},
-        {"path": "apps/arw-server/src/api_egress_settings.rs"},
-        {"path": "apps/arw-server/src/egress_proxy.rs"}
+        {
+          "path": "apps/arw-server/src/api_egress.rs"
+        },
+        {
+          "path": "apps/arw-server/src/api_egress_settings.rs"
+        },
+        {
+          "path": "apps/arw-server/src/egress_proxy.rs"
+        }
       ],
       "http": [
-        {"method": "POST", "path": "/egress/preview"},
-        {"method": "POST", "path": "/egress/settings"},
-        {"method": "GET", "path": "/state/egress"},
-        {"method": "GET", "path": "/state/egress/settings"}
+        {
+          "method": "POST",
+          "path": "/egress/preview"
+        },
+        {
+          "method": "POST",
+          "path": "/egress/settings"
+        },
+        {
+          "method": "GET",
+          "path": "/state/egress"
+        },
+        {
+          "method": "GET",
+          "path": "/state/egress/settings"
+        }
       ],
       "read_models": [],
-      "topics": ["egress.ledger.appended", "egress.settings.updated"],
-      "env": ["ARW_NET_POSTURE", "ARW_SECURITY_POSTURE", "ARW_NET_ALLOWLIST", "ARW_EGRESS_BLOCK_IP_LITERALS", "ARW_DNS_GUARD_ENABLE", "ARW_EGRESS_PROXY_ENABLE", "ARW_EGRESS_PROXY_PORT", "ARW_EGRESS_LEDGER_ENABLE"]
+      "topics": [
+        "egress.ledger.appended",
+        "egress.settings.updated"
+      ],
+      "env": [
+        "ARW_NET_POSTURE",
+        "ARW_SECURITY_POSTURE",
+        "ARW_NET_ALLOWLIST",
+        "ARW_EGRESS_BLOCK_IP_LITERALS",
+        "ARW_DNS_GUARD_ENABLE",
+        "ARW_EGRESS_PROXY_ENABLE",
+        "ARW_EGRESS_PROXY_PORT",
+        "ARW_EGRESS_LEDGER_ENABLE"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/egress_firewall.md"
+        },
+        {
+          "path": "docs/guide/network_posture.md"
+        }
+      ]
     },
     {
       "id": "working_set_builder",
       "name": "Working Set Builder",
       "owner": "platform",
       "tier": "Core kernel",
-      "deps": ["triad_kernel"],
+      "deps": [
+        "triad_kernel"
+      ],
       "description": "Hybrid retrieval with coverage loops, streaming diagnostics, and on-demand rehydrate for just-in-time context (stable pointers include `memory` ids and `file` heads).",
-      "scope": {"surface": "backend", "audience": "builder", "layer": "intelligence", "maturity": "beta"},
+      "scope": {
+        "surface": "backend",
+        "audience": "builder",
+        "layer": "intelligence",
+        "maturity": "beta"
+      },
       "ssot": [
-        {"path": "apps/arw-server/src/api_context.rs"},
-        {"path": "apps/arw-server/src/working_set.rs"},
-        {"path": "apps/arw-server/src/coverage.rs"}
+        {
+          "path": "apps/arw-server/src/api_context.rs"
+        },
+        {
+          "path": "apps/arw-server/src/working_set.rs"
+        },
+        {
+          "path": "apps/arw-server/src/coverage.rs"
+        }
       ],
       "http": [
-        {"method": "POST", "path": "/context/assemble"},
-        {"method": "POST", "path": "/context/rehydrate"}
+        {
+          "method": "GET",
+          "path": "/context/assemble"
+        },
+        {
+          "method": "GET",
+          "path": "/admin/context/assemble"
+        },
+        {
+          "method": "POST",
+          "path": "/context/rehydrate"
+        }
       ],
       "read_models": [],
       "topics": [
@@ -486,6 +1171,11 @@
         "ARW_CONTEXT_SCORER",
         "ARW_CONTEXT_COVERAGE_MAX_ITERS",
         "ARW_CONTEXT_STREAM_DEFAULT"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/context_working_set.md"
+        }
       ]
     },
     {
@@ -493,112 +1183,283 @@
       "name": "Memory Atlas",
       "owner": "platform",
       "tier": "Core kernel",
-      "deps": ["triad_kernel"],
+      "deps": [
+        "triad_kernel"
+      ],
       "description": "Kernel-backed memory API with hybrid search, embeddings, coherent selections, and stable pointers (`ptr.kind: \"memory\"`) for durable knowledge.",
-      "scope": {"surface": "backend", "audience": "builder", "layer": "intelligence", "maturity": "beta"},
+      "scope": {
+        "surface": "backend",
+        "audience": "builder",
+        "layer": "intelligence",
+        "maturity": "beta"
+      },
       "ssot": [
-        {"path": "apps/arw-server/src/api_memory.rs"},
-        {"path": "crates/arw-kernel/src/lib.rs"}
+        {
+          "path": "apps/arw-server/src/api_memory.rs"
+        },
+        {
+          "path": "crates/arw-kernel/src/lib.rs"
+        }
       ],
       "http": [
-        {"method": "POST", "path": "/memory/put"},
-        {"method": "GET", "path": "/state/memory/select"},
-        {"method": "POST", "path": "/memory/search_embed"},
-        {"method": "POST", "path": "/state/memory/select_hybrid"},
-        {"method": "POST", "path": "/memory/select_coherent"},
-        {"method": "POST", "path": "/state/memory/explain_coherent"},
-        {"method": "GET", "path": "/state/memory/recent"},
-        {"method": "POST", "path": "/memory/link"},
-        {"method": "GET", "path": "/state/memory/links"}
+        {
+          "method": "POST",
+          "path": "/memory/put"
+        },
+        {
+          "method": "GET",
+          "path": "/state/memory/select"
+        },
+        {
+          "method": "POST",
+          "path": "/memory/search_embed"
+        },
+        {
+          "method": "POST",
+          "path": "/state/memory/select_hybrid"
+        },
+        {
+          "method": "POST",
+          "path": "/memory/select_coherent"
+        },
+        {
+          "method": "POST",
+          "path": "/state/memory/explain_coherent"
+        },
+        {
+          "method": "GET",
+          "path": "/state/memory/recent"
+        },
+        {
+          "method": "POST",
+          "path": "/memory/link"
+        },
+        {
+          "method": "GET",
+          "path": "/state/memory/links"
+        }
       ],
       "read_models": [],
-      "topics": ["memory.record.put", "memory.link.put"],
-      "env": []
+      "topics": [
+        "memory.record.put",
+        "memory.link.put"
+      ],
+      "env": [],
+      "docs": [
+        {
+          "path": "docs/architecture/memory_abstraction.md"
+        },
+        {
+          "path": "docs/architecture/memory_lifecycle.md"
+        }
+      ]
     },
     {
       "id": "config_plane",
       "name": "Config Plane",
       "owner": "platform",
       "tier": "Core kernel",
-      "deps": ["triad_kernel"],
+      "deps": [
+        "triad_kernel"
+      ],
       "description": "Schema-aware config snapshots, diffable patches, and validation helpers for runtime tuning.",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "core", "maturity": "beta"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "core",
+        "maturity": "beta"
+      },
       "ssot": [
-        {"path": "apps/arw-server/src/api_config.rs"}
+        {
+          "path": "apps/arw-server/src/api_config.rs"
+        }
       ],
       "http": [
-        {"method": "GET", "path": "/state/config"},
-        {"method": "GET", "path": "/state/config/snapshots"},
-        {"method": "GET", "path": "/state/config/snapshots/:id"},
-        {"method": "POST", "path": "/patch/apply"},
-        {"method": "POST", "path": "/patch/revert"},
-        {"method": "POST", "path": "/patch/validate"},
-        {"method": "GET", "path": "/state/schema_map"},
-        {"method": "POST", "path": "/patch/infer_schema"}
+        {
+          "method": "GET",
+          "path": "/state/config"
+        },
+        {
+          "method": "GET",
+          "path": "/state/config/snapshots"
+        },
+        {
+          "method": "GET",
+          "path": "/state/config/snapshots/:id"
+        },
+        {
+          "method": "POST",
+          "path": "/patch/apply"
+        },
+        {
+          "method": "POST",
+          "path": "/patch/dry-run"
+        },
+        {
+          "method": "POST",
+          "path": "/patch/revert"
+        },
+        {
+          "method": "POST",
+          "path": "/patch/validate"
+        },
+        {
+          "method": "GET",
+          "path": "/state/schema_map"
+        },
+        {
+          "method": "POST",
+          "path": "/patch/infer_schema"
+        }
       ],
       "read_models": [],
-      "topics": ["config.patch.applied", "logic.unit.reverted"],
-      "env": ["ARW_SCHEMA_MAP"]
+      "topics": [
+        "config.patch.applied",
+        "logic.unit.reverted"
+      ],
+      "env": [
+        "ARW_SCHEMA_MAP"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/config_patch_engine.md"
+        },
+        {
+          "path": "configs/schema_map.json"
+        }
+      ]
     },
     {
       "id": "logic_units_library",
       "name": "Logic Units Library",
       "owner": "platform",
       "tier": "Opt-in pack",
-      "deps": ["config_plane"],
+      "deps": [
+        "config_plane"
+      ],
       "description": "Declarative strategy packs with install/apply/revert flows, schema validation, and audit trails.",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "core", "maturity": "beta"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "core",
+        "maturity": "beta"
+      },
       "ssot": [
-        {"path": "apps/arw-server/src/api_logic_units.rs"},
-        {"path": "apps/arw-server/src/api_config.rs"},
-        {"path": "spec/schemas/logic_unit_manifest.json"}
+        {
+          "path": "apps/arw-server/src/api_logic_units.rs"
+        },
+        {
+          "path": "apps/arw-server/src/api_config.rs"
+        },
+        {
+          "path": "spec/schemas/logic_unit_manifest.json"
+        }
       ],
       "http": [
-        {"method": "GET", "path": "/logic-units"},
-        {"method": "GET", "path": "/state/logic_units"},
-        {"method": "POST", "path": "/logic-units/install"},
-        {"method": "POST", "path": "/logic-units/apply"},
-        {"method": "POST", "path": "/logic-units/revert"}
+        {
+          "method": "GET",
+          "path": "/logic-units"
+        },
+        {
+          "method": "GET",
+          "path": "/state/logic_units"
+        },
+        {
+          "method": "POST",
+          "path": "/logic-units/install"
+        },
+        {
+          "method": "POST",
+          "path": "/logic-units/apply"
+        },
+        {
+          "method": "POST",
+          "path": "/logic-units/revert"
+        }
       ],
       "read_models": [],
-      "topics": ["logic.unit.installed", "logic.unit.applied", "logic.unit.reverted", "config.patch.applied"],
-      "env": ["ARW_SCHEMA_MAP"]
+      "topics": [
+        "logic.unit.installed",
+        "logic.unit.applied",
+        "logic.unit.reverted",
+        "config.patch.applied"
+      ],
+      "env": [
+        "ARW_SCHEMA_MAP"
+      ]
     },
     {
       "id": "connectors_registry",
       "name": "Connectors Registry",
       "owner": "platform",
       "tier": "Remote collaborator pack",
-      "deps": ["policy_leases", "egress_sentinel"],
+      "deps": [
+        "policy_leases",
+        "egress_sentinel"
+      ],
       "description": "Connector manifests with scoped tokens, audit-friendly storage, and events for cloud/local integrations.",
-      "scope": {"surface": "backend", "audience": "admin", "layer": "connectivity", "maturity": "beta"},
+      "scope": {
+        "surface": "backend",
+        "audience": "admin",
+        "layer": "connectivity",
+        "maturity": "beta"
+      },
       "ssot": [
-        {"path": "apps/arw-server/src/api_connectors.rs"}
+        {
+          "path": "apps/arw-server/src/api_connectors.rs"
+        }
       ],
       "http": [
-        {"method": "GET", "path": "/state/connectors"},
-        {"method": "POST", "path": "/connectors/register"},
-        {"method": "POST", "path": "/connectors/token"}
+        {
+          "method": "GET",
+          "path": "/state/connectors"
+        },
+        {
+          "method": "POST",
+          "path": "/connectors/register"
+        },
+        {
+          "method": "POST",
+          "path": "/connectors/token"
+        }
       ],
       "read_models": [],
-      "topics": ["connectors.registered", "connectors.token.updated"],
-      "env": ["ARW_STATE_DIR"]
+      "topics": [
+        "connectors.registered",
+        "connectors.token.updated"
+      ],
+      "env": [
+        "ARW_STATE_DIR"
+      ]
     },
     {
       "id": "wasi_tool_host",
       "name": "WASI Tool Host",
       "owner": "platform",
       "tier": "Future pack",
-      "deps": ["egress_sentinel"],
+      "deps": [
+        "egress_sentinel"
+      ],
       "description": "Embeddable WASI host with http.fetch, connector token injection, and policy-aware allowlists for future plugins.",
-      "scope": {"surface": "runtime", "audience": "dev", "layer": "core", "maturity": "alpha"},
+      "scope": {
+        "surface": "runtime",
+        "audience": "dev",
+        "layer": "core",
+        "maturity": "alpha"
+      },
       "ssot": [
-        {"path": "crates/arw-wasi/src/lib.rs"},
-        {"path": "apps/arw-server/src/main.rs"}
+        {
+          "path": "crates/arw-wasi/src/lib.rs"
+        },
+        {
+          "path": "apps/arw-server/src/main.rs"
+        }
       ],
       "http": [],
       "read_models": [],
-      "topics": ["egress.ledger.appended"],
+      "topics": [
+        "egress.ledger.appended"
+      ],
       "env": [
         "ARW_HTTP_TIMEOUT_SECS",
         "ARW_EGRESS_PROXY_ENABLE",

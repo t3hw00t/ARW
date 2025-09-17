@@ -91,6 +91,9 @@ helm-uninstall release="arw" ns="default":
 docgen:
   bash scripts/docgen.sh
 
+check-system-components:
+  python3 scripts/check_system_components_integrity.py
+
 docs-build: docgen
   mkdocs build --strict
 

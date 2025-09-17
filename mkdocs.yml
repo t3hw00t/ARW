@@ -113,6 +113,7 @@ nav:
       - API Reference: reference/api.md
       - Models Types: reference/models_types.md
       - Feature Matrix: reference/feature_matrix.md
+      - System Components: reference/system_components.md
       - Feature Catalog: reference/feature_catalog.md
       - Event Topics: reference/topics.md
       - Interface Deprecations: reference/deprecations.md
@@ -175,6 +176,7 @@ nav:
       - SSE Patch Contract: architecture/sse_patch_contract.md
   - Contribute:
       - Overview: developer/index.md
+      - Build Efficiency: developer/build_efficiency.md
       - Docs Style (Diátaxis): developer/docs_style.md
       - Design Theme: developer/design_theme.md
       - Standards: developer/standards.md
