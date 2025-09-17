@@ -5,20 +5,53 @@ Type: Reference
 
 Microsummary: Public endpoints, admin surfaces, specs, and eventing. Stable/experimental flags are surfaced in specs; deprecations emit standard headers.
 
+- Default base URL: `http://127.0.0.1:8091` (unified `arw-server`; override with `ARW_PORT`).
 - Specs in repo: [spec/openapi.yaml](https://github.com/t3hw00t/ARW/blob/main/spec/openapi.yaml), [spec/asyncapi.yaml](https://github.com/t3hw00t/ARW/blob/main/spec/asyncapi.yaml), [spec/mcp-tools.json](https://github.com/t3hw00t/ARW/blob/main/spec/mcp-tools.json)
 - Specs at runtime: `GET /spec/openapi.yaml`, `GET /spec/asyncapi.yaml`, `GET /spec/mcp-tools.json`, `GET /spec/schemas/{file}`, `GET /spec/index.json`
 - Catalog: `GET /catalog/index` (YAML) and `GET /catalog/health` (JSON)
-- Auth: Local‑only by default; for admin endpoints set `ARW_ADMIN_TOKEN` and send `Authorization: Bearer <token>` or `X-ARW-Admin`.
+- `/state/*`: read-models for actions, contributions, episodes, leases, egress, policy, models, and self snapshots.
+- Auth: Local-only by default; for admin endpoints set `ARW_ADMIN_TOKEN` and send `Authorization: Bearer <token>` or `X-ARW-Admin`.
 
-Endpoints (selected)
-- `GET /healthz`: service health, returns `ok` when ready.
-- `GET /debug`: Debug UI (when `ARW_DEBUG=1`).
-- `GET /events`: SSE for live updates (unified server). Supports `?replay=N`, `?after=<row_id>`, and `Last-Event-ID` alias. See How‑to → Subscribe to Events (SSE).
-- `GET /admin/events`: SSE (legacy service) with `?replay`.
-- `GET /state/*`: read‑models (observations, beliefs, world, intents, actions, episodes, self/{agent}).
-- `GET /about`: service metadata with endpoints index and counts
-  - Fields: `service`, `version`, `http`, `docs_url?`, `security_posture?`, `counts`, `endpoints[]`, `endpoints_meta[]`
-  - `endpoints_meta[]` items include `{ method, path, stability }` for curated routes.
+## Endpoint overview
+
+### Core triad (served by `arw-server` on 8091)
+
+| Method | Path | Purpose | Stability |
+| --- | --- | --- | --- |
+| GET | `/healthz` | Service readiness probe. | stable |
+| GET | `/about` | Metadata including endpoints index and counts. | stable |
+| POST | `/actions` | Submit an action to the triad queue; returns `{ id }`. | beta |
+| GET | `/actions/{id}` | Fetch action status by identifier. | beta |
+| POST | `/actions/{id}/state` | Worker lifecycle update for a submitted action. | beta |
+| GET | `/events` | SSE stream with optional `?replay=`/`?after=` and `Last-Event-ID`. | stable |
+| GET | `/state/actions` | Recent actions (supports `?limit=`). | beta |
+| GET | `/state/contributions` | Kernel contributions list (latest 200). | beta |
+| GET | `/state/episodes` | Episode rollups grouped by `corr_id`. | beta |
+| GET | `/state/route_stats` | Bus throughput plus per-route counters. | beta |
+| POST | `/leases` | Allocate a capability lease; body supplies `capability`, `scope?`, `ttl_secs?`, `budget?`. | experimental |
+| GET | `/state/leases` | Snapshot of active leases. | experimental |
+| GET | `/state/egress` | Recent egress ledger rows (supports `?limit=`). | beta |
+| GET | `/state/egress/settings` | Effective egress posture and toggles. | beta |
+| POST | `/egress/settings` | Persist posture/toggle updates (admin token required). | beta |
+| POST | `/egress/preview` | Dry-run egress decision for a URL/method. | beta |
+| GET | `/state/policy` | Current ABAC policy snapshot. | experimental |
+| POST | `/policy/reload` | Reload policy from disk/env (admin token required). | experimental |
+| POST | `/policy/simulate` | Evaluate a candidate ABAC request payload. | experimental |
+| GET | `/state/models` | Model catalog read-model (`{"items": [...]}`). | beta |
+
+### Specs and catalog (served by `arw-server` on 8091)
+
+| Method | Path | Purpose | Stability |
+| --- | --- | --- | --- |
+| GET | `/spec/openapi.yaml` | OpenAPI document for the unified server. | stable |
+| GET | `/spec/asyncapi.yaml` | AsyncAPI schema for event streams. | stable |
+| GET | `/spec/mcp-tools.json` | MCP tools manifest. | stable |
+| GET | `/spec/schemas/{file}` | JSON Schemas referenced by the API. | stable |
+| GET | `/spec/index.json` | Index of published specs. | stable |
+| GET | `/catalog/index` | Interface catalog (YAML). | stable |
+| GET | `/catalog/health` | Catalog health probe. | stable |
+
+All endpoints above default to `http://127.0.0.1:8091` unless an alternate bind/port is configured.
 
 Actions (unified server)
 - `POST /actions` — submit action; returns `{ id }` (202)
@@ -30,6 +63,11 @@ Memory
 - `GET /state/memory/select` — query memories (like/fts)
 - `POST /memory/search_embed` — nearest neighbors by embedding
 - `POST /memory/link` — create a link between memory ids
+- `GET /state/memory/links` — list relationships
+- `POST /state/memory/select_hybrid` — hybrid retrieval with filters
+- `POST /memory/select_coherent` — coherence-ranked selection
+- `GET /state/memory/recent` — most recent memories (per lane)
+- `POST /state/memory/explain_coherent` — explainability payload for coherence results
 
 Connectors
 - `GET /state/connectors` — list registered connector manifests (secrets elided)
@@ -37,7 +75,8 @@ Connectors
 - `POST /connectors/token` — set/update token/refresh token (admin-gated)
 
 Logic Units & Config
-- `GET /state/logic_units` — list logic units
+- `GET /logic-units` — catalog installed logic units
+- `GET /state/logic_units` — read-model snapshot
 - `POST /logic-units/install` — install a logic unit (admin-gated)
 - `POST /logic-units/apply` — apply a patch set with optional schema validation (admin-gated)
 - `POST /logic-units/revert` — revert to a config snapshot (admin-gated)
@@ -51,48 +90,88 @@ Logic Units & Config
 - `POST /patch/infer_schema` — map a target path to schema/pointer
 
 Semantics
-- status vs code: RFC 7807 ProblemDetails for errors; otherwise endpoint‑specific JSON.
-- pagination/filtering: available on selected read‑models (e.g., `/state/models_hashes` supports `limit`, `offset`, `provider`, `sort`, `order`).
+- status vs code: RFC 7807 ProblemDetails for errors; otherwise endpoint-specific JSON.
+- pagination/filtering: `GET /state/actions` and `GET /state/egress` support a `limit` query parameter (default 200).
 - stability: experimental → beta → stable → deprecated → sunset (see Interface Catalog and Deprecations pages).
 - deprecations: deprecated operations advertise `Deprecation: true`; `Sunset: <date>` when scheduled; `Link: rel="deprecation"` points to the doc.
-- operationId: snake_case with `_doc` suffix (enforced by Spectral; code‑generated OpenAPI is linted in CI).
+- operationId: snake_case with `_doc` suffix (enforced by Spectral; code-generated OpenAPI is linted in CI).
 
 ## Models
 
-`GET /models/blob/{sha256}`
+`GET /state/models`
 
-- Returns the content‑addressed model blob stored under CAS by hex SHA‑256.
-- Caching: strong validators with `ETag: "{sha256}"` and `Last-Modified`.
-- Clients can send `If-None-Match` to receive `304 Not Modified`.
-- Supports `Range: bytes=...` for partial content; returns `206` with `Content-Range`.
-- Cache policy: `Cache-Control: public, max-age=31536000, immutable` (digest‑addressed).
- - See also: [HTTP Caching Semantics](../snippets/http_caching_semantics.md)
+- Returns the model catalog read-model as `{ "items": [...] }`, loading `state/models.json` when present and falling back to defaults.
+- Items include at minimum `id`, `provider`, and `status`; connectors may extend the shape.
+- Triad read-models follow the same pattern for other slices such as `/state/actions`, `/state/contributions`, `/state/egress`, `/state/leases`, `/state/policy`, `/state/self`, and `/state/orchestrator/jobs`.
 
-Examples
+Example (unified server)
 
 ```bash
-# Full download
-curl -SsfLO "http://127.0.0.1:8090/models/blob/0123abcd..."
-
-# Conditional
-curl -I -H 'If-None-Match: "0123abcd..."' \
-  "http://127.0.0.1:8090/models/blob/0123abcd..."
-
-# Partial
-curl -sS -H 'Range: bytes=0-1048575' \
-  -o part.bin "http://127.0.0.1:8090/models/blob/0123abcd..."
+curl -sS http://127.0.0.1:8091/state/models | jq
 ```
-- Concurrency (admin):
-  - `POST /admin/models/concurrency` — Set max concurrency at runtime; response includes `pending_shrink` when non‑blocking shrink leaves a remainder.
-  - `GET  /admin/models/concurrency` — Snapshot `{ configured_max, available_permits, held_permits, hard_cap, pending_shrink? }`.
-  - `GET  /admin/models/jobs` — Active jobs + inflight hashes; includes a concurrency snapshot for context.
+
+Sample response (defaults)
+
+```json
+{
+  "items": [
+    {
+      "id": "llama-3.1-8b-instruct",
+      "provider": "local",
+      "status": "available"
+    },
+    {
+      "id": "qwen2.5-coder-7b",
+      "provider": "local",
+      "status": "available"
+    }
+  ]
+}
+```
+
+!!! note "Legacy `arw-svc` admin endpoints (CAS, `/admin/*` on 8090)"
+    Launch the legacy service to access CAS downloads and admin surfaces:
+
+    ```bash
+    ARW_PORT=8090 cargo run -p arw-svc
+    ```
+
+    These routes remain implemented in [`apps/arw-svc/src/ext/models_api.rs`](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/models_api.rs) alongside the classic debug UI:
+
+    - `GET /models/blob/{sha256}` — download a content-addressed model blob.
+    - `POST /admin/models/concurrency` — set max concurrency at runtime.
+    - `GET  /admin/models/concurrency` — snapshot `{ configured_max, available_permits, held_permits, hard_cap, pending_shrink? }`.
+    - `GET  /admin/models/jobs` — active jobs plus inflight hashes.
+    - `GET  /admin/events` — legacy SSE with optional `?replay`.
+    - `GET  /debug` — legacy debug UI when `ARW_DEBUG=1`.
+
+    Sample CAS downloads:
+
+    ```bash
+    # Full download
+    curl -SsfLO "http://127.0.0.1:8090/models/blob/0123abcd..."
+
+    # Conditional
+    curl -I -H 'If-None-Match: "0123abcd..."' \
+      "http://127.0.0.1:8090/models/blob/0123abcd..."
+
+    # Partial
+    curl -sS -H 'Range: bytes=0-1048575' \
+      -o part.bin "http://127.0.0.1:8090/models/blob/0123abcd..."
+    ```
+
 Egress
 - `GET /state/egress` — recent egress ledger rows `{ id, time, decision, reason?, dest_host?, dest_port?, protocol?, bytes_in?, bytes_out?, corr_id?, proj?, posture }`
 - `GET /state/egress/settings` — effective egress posture and toggles
-- `POST /egress/settings` — update toggles and persist to config (admin‑gated)
-- `POST /egress/preview` — dry‑run URL+method against policy, allowlist, and guards `{ allow, reason?, host, port, protocol }`
+- `POST /egress/settings` — update toggles and persist to config (admin-gated)
+- `POST /egress/preview` — dry-run URL+method against policy, allowlist, and guards `{ allow, reason?, host, port, protocol }`
 
 Example — `GET /state/egress`
+
+```bash
+curl -sS "http://127.0.0.1:8091/state/egress?limit=1" | jq
+```
+
 ```json
 {
   "items": [
@@ -134,3 +213,5 @@ SSE
     }
   }
   ```
+- Example client: `curl -N http://127.0.0.1:8091/events?prefix=egress.`
+
