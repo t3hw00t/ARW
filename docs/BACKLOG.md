@@ -11,6 +11,18 @@ This backlog captures concrete work items and near-term priorities. The Roadmap 
 
 Status: unless noted, items are todo. Items that have task IDs link to the tracker under Developer → Tasks.
 
+## Scope Badges
+
+We mirror the roadmap's scope badges so every backlog line shows which slice of Complexity Collapse it advances:
+
+- `[Kernel]` — Hardens the runtime, policy, and journal so the “Collapse the Kernel” thrust stays minimal, dependable, and auditable.
+- `[Pack: Collaboration]` — Optional collaboration, UI, and workflow packs that give calm surfaces and governance without bloating the kernel.
+- `[Pack: Research]` — Optional research, experimentation, and memory packs that extend retrieval, clustering, and replay while staying pluggable.
+- `[Pack: Federation]` — Optional federation packs that let multiple installs cooperate under shared policy, budgets, and accountability.
+- `[Future]` — Bets incubating beyond the active quarter; they stay visible but outside the current Complexity Collapse execution window.
+
+Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show both the optional pack and that the work sits beyond the active delivery window.
+
 ## Now (Weeks)
 
 Complexity Collapse (Cross-cutting)
