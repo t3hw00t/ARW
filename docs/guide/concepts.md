@@ -11,35 +11,37 @@ Updated: 2025-09-16
 Type: Explanation
 
 ## Service
-- `arw-svc` is a local HTTP service with a small debug UI. It listens on `127.0.0.1:<port>` by default.
+- `arw-server` is the unified, headless-first API surface. It binds to `127.0.0.1:8091` by default (override via `ARW_BIND`/`ARW_PORT`) and everything flows through the triad: `POST /actions` submits work, `GET /events` streams progress (resume via `Last-Event-ID`, replay via `?replay=`), and `GET /state/*` serves read-model snapshots. The launcher/debug UI sit on top; start with `--legacy` only when you still need `arw-svc`.
 
 ## Tools & Schemas
-- Capabilities are exposed as versioned tools with JSON Schemas for inputs/outputs/errors.
-- Tools surface via HTTP, events, and MCP. See: API and Schema.
+- Capabilities are exposed as versioned tools (submitted as `/actions` `kind`s) with JSON Schemas for inputs/outputs/errors.
+- Tools surface via HTTP, `/events`, and MCP. See: API and Schema.
 
 ## Event Bus
-- Lightweight in‑process bus publishes events (optionally journaling). SSE at `/admin/events` for live streams and replays (admin‑gated).
+- `/events` is the canonical SSE stream. Use `?replay=N` to backfill from the journal and `Last-Event-ID` headers to resume without losing your place.
+
+> Legacy bridge: `/admin/events` stays available for the classic debug UI until the port completes.
 
 Unified model
-- Treat ARW as a shared object graph (entities + relations) plus a single event stream. UIs (Project Hub, Chat, Training Park, Managers) are lenses on the same truth.
+- Treat ARW as a shared object graph (entities + relations) plus the `/events` stream and `/state/*` read models. UIs (Project Hub, Chat, Training Park, Managers) are lenses on the same truth.
 
 ## Connectors, Connections, Links
 - Connectors are providers (HTTP/WS/MCP/local). Connections are configured instances. Links bind connections to services/routes.
 
 ## Gating & Policy
-- Sensitive routes are gated by a central orchestrator. Use `ARW_ADMIN_TOKEN` for admin paths and policy keys to shape ingress/egress.
+- Lease-based ABAC guards sensitive actions. Pick a baseline with `ARW_SECURITY_POSTURE` (`relaxed|standard|strict`), override via `ARW_POLICY_FILE`, and require `ARW_ADMIN_TOKEN` only for privileged calls you explicitly enable.
 
 ## Profiles & Governor
-- Runtime profiles like performance/balanced/power‑saver adjust concurrency and resource hints. Change via `/governor/profile`.
+- Runtime presets (eco/balanced/performance/turbo) tune concurrency and planner hints. Set `ARW_PERF_PRESET` or adjust knobs like `ARW_HTTP_MAX_CONC`, then inspect `/state/route_stats` to verify the effect.
 
 ## State & Portable Mode
-- State, cache, and logs live under derived directories. Set `ARW_PORTABLE=1` to keep everything next to the app folder.
+- State, cache, and logs live under the `state/` directory. Read-model snapshots publish under `/state/*`. Set `ARW_PORTABLE=1` to keep everything beside the install when you need a self-contained folder.
 
 ## Desktop Launcher (Optional)
-- A Tauri app adds a tray, inspector windows (Events, Logs), and quick actions.
+- A Tauri app layers tray controls and inspectors on top of `arw-server`. While it finishes the port, it can still start the legacy stack for the classic debug panes.
 
 ## Learn More
 - Quickstart: guide/quickstart.md
-- Admin Endpoints: guide/admin_endpoints.md
+- Restructure status: docs/RESTRUCTURE.md
 - Security Hardening: guide/security_hardening.md
 - API and Schema: API_AND_SCHEMA.md
