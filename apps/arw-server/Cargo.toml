@@ -2,6 +2,7 @@
 name = "arw-server"
 version = "0.1.0"
 edition = "2021"
+license.workspace = true
 
 [dependencies]
 anyhow = "1"
@@ -14,13 +15,13 @@ serde_json = "1"
 chrono = { version = "0.4", features = ["serde"] }
 tracing = "0.1"
 metrics = "0.21"
-arw-kernel = { path = "../../crates/arw-kernel" }
+arw-kernel = { path = "../../crates/arw-kernel", version = "0.1.0" }
 arw-events = { path = "../../crates/arw-events", version = "0.1.4" }
-arw-policy = { path = "../../crates/arw-policy" }
-arw-wasi = { path = "../../crates/arw-wasi" }
-arw-otel = { path = "../../crates/arw-otel" }
-arw-core = { path = "../../crates/arw-core" }
-arw-topics = { path = "../../crates/arw-topics" }
+arw-policy = { path = "../../crates/arw-policy", version = "0.1.0" }
+arw-wasi = { path = "../../crates/arw-wasi", version = "0.1.0" }
+arw-otel = { path = "../../crates/arw-otel", version = "0.1.4" }
+arw-core = { path = "../../crates/arw-core", version = "0.1.4" }
+arw-topics = { path = "../../crates/arw-topics", version = "0.1.4" }
 uuid = { version = "1", features = ["v4"] }
 tokio-stream = { version = "0.1", features = ["sync"] }
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }

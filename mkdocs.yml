@@ -169,6 +169,7 @@ nav:
       - Naming & IDs: architecture/naming_ids.md
       - UX Invariants: architecture/ux_invariants.md
       - Cache Policy Manifest: architecture/cache_policy.md
+      - Performance Guardrails: architecture/performance.md
       - Caching Layers: architecture/caching_layers.md
       - Runtime Layout: architecture/runtime_layout.md
       - SSE Patch Contract: architecture/sse_patch_contract.md

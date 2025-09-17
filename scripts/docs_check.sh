@@ -46,7 +46,9 @@ for f in "${files[@]}"; do
     fi
   fi
   # Updated or Generated line near top (first 40 lines)
-  head -n 40 "$f" | grep -Eq '^(Updated:|Generated:)' || {
+  # Accept either Updated:, Generated:, the stable generator headers used by
+  # our docgen scripts ("_Generated ..."), and spec diff header ("Base: ")
+  head -n 40 "$f" | grep -Eq '^(Updated:|Generated:|_Generated |Base: )' || {
     warn "$rel: missing Updated:/Generated: information"
     warnings=$((warnings+1))
   }
