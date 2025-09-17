@@ -13,7 +13,7 @@ use crate::{
     context_loop::{
         drive_context_loop, ContextLoopResult, StreamIterationEmitter, SyncIterationCollector,
     },
-    working_set, AppState,
+    util, working_set, AppState,
 };
 use arw_topics as topics;
 
@@ -405,6 +405,92 @@ pub async fn context_rehydrate(
                     Json(
                         json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"not a file"}),
                     ),
+                ),
+            }
+        }
+        "memory" => {
+            let id = match req.ptr.get("id").and_then(|v| v.as_str()) {
+                Some(s) if !s.is_empty() => s.to_string(),
+                _ => {
+                    return (
+                        axum::http::StatusCode::BAD_REQUEST,
+                        Json(
+                            json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"missing id"}),
+                        ),
+                    );
+                }
+            };
+            let decision = state
+                .policy
+                .lock()
+                .await
+                .evaluate_action("context.rehydrate.memory");
+            if !decision.allow {
+                let mut required_caps: Vec<String> = Vec::new();
+                if let Some(cap) = decision.require_capability.clone() {
+                    required_caps.push(cap);
+                }
+                for cap in ["context:rehydrate:memory", "context:rehydrate:file"] {
+                    if !required_caps.iter().any(|c| c == cap) {
+                        required_caps.push(cap.to_string());
+                    }
+                }
+                let mut has_lease = false;
+                for cap in &required_caps {
+                    if state
+                        .kernel
+                        .find_valid_lease("local", cap)
+                        .ok()
+                        .flatten()
+                        .is_some()
+                    {
+                        has_lease = true;
+                        break;
+                    }
+                }
+                if !has_lease {
+                    let require_str = required_caps.join("|");
+                    let require_human = required_caps.join(" or ");
+                    state.bus.publish(
+                        topics::TOPIC_POLICY_DECISION,
+                        &json!({
+                            "action": "context.rehydrate.memory",
+                            "allow": false,
+                            "require_capability": require_str,
+                            "explain": {"reason":"lease_required"}
+                        }),
+                    );
+                    return (
+                        axum::http::StatusCode::FORBIDDEN,
+                        Json(json!({
+                            "type": "about:blank",
+                            "title": "Forbidden",
+                            "status": 403,
+                            "detail": format!("Lease required: {}", require_human)
+                        })),
+                    );
+                }
+            }
+            match state.kernel.get_memory(&id) {
+                Ok(Some(mut record)) => {
+                    util::attach_memory_ptr(&mut record);
+                    (
+                        axum::http::StatusCode::OK,
+                        Json(json!({"ptr": req.ptr, "memory": record})),
+                    )
+                }
+                Ok(None) => (
+                    axum::http::StatusCode::NOT_FOUND,
+                    Json(json!({"type":"about:blank","title":"Not Found","status":404})),
+                ),
+                Err(e) => (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "type": "about:blank",
+                        "title": "Error",
+                        "status": 500,
+                        "detail": e.to_string()
+                    })),
                 ),
             }
         }

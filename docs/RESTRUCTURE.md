@@ -62,7 +62,7 @@ Server modules (in progress)
 - Background loops:
     - Local Worker: `apps/arw-server/src/worker.rs` (lease gating + centralized egress ledger/event helper).
     - Read-model Publishers: `apps/arw-server/src/read_models.rs` (shared hashed patch scheduler across logic units, orchestrator jobs, memory, route stats).
-- Helper utilities: `apps/arw-server/src/util.rs` (`default_models`, `effective_posture`, `state_dir`).
+- Helper utilities: `apps/arw-server/src/util.rs` (`default_models`, `effective_posture`, `state_dir`, `attach_memory_ptr`).
 - Launcher packaging: `apps/arw-launcher/src-tauri/build.rs` (stages platform-specific binary variants expected by Tauri bundling).
 
 See also: Guide → Interactive Performance and Interactive Bench.
@@ -71,7 +71,7 @@ See also: Guide → Interactive Performance and Interactive Bench.
 We implement a practical “infinite context window” by treating context as an on‑demand working set, not a single static prompt. Key ingredients:
 
 - Working Set Builder (WSB): hybrid retrieval over FTS5 + embeddings + graph relations to assemble the minimal, high‑value context for the current step.
-- Stable Pointers + Rehydrate: every item carries a stable pointer (file, belief/claim, episode) so agents can rehydrate full content on demand (pull, don’t stuff).
+- Stable Pointers + Rehydrate: every item carries a stable pointer (file, memory record, belief/claim, episode) so agents can rehydrate full content on demand (pull, don’t stuff).
 - Diversity + Compression: MMR/diversity selection plus LLMLingua‑style compression to fit budgets while preserving signal.
 - Streaming Assembly & Coverage: `/context/assemble` can stream `working_set.*` SSE events (`working_set.seed`, `working_set.expanded`, `working_set.selected`, `working_set.completed`) so clients render context as it lands, and a CRAG-style coverage loop widens lanes or relaxes thresholds before returning. This mirrors incremental retrieval patterns explored in [GraphRAG](https://arxiv.org/abs/2404.16130).
 - Coverage-aware refinement: corrective loops look at the specific `coverage.reasons` (`below_target_limit`, `low_lane_diversity`, `weak_average_score`, etc.) and dial spec knobs accordingly (increase limit/expansion, widen lanes, lower thresholds) before the next pass. Each iteration surfaces the proposed `next_spec` so observers can see the planned adjustments before they run.
@@ -232,7 +232,7 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
 - `GET /state/leases` → `{ items: [...] }`
 - `GET /state/policy` → `{ allow_all, lease_rules[] }`
 - `POST /context/assemble` → assemble working set (hybrid memory retrieval; returns beliefs, seeds, and diagnostics; accepts optional `corr_id` to stitch events and publishes `working_set.*` on the main bus)
-- `POST /context/rehydrate` → return full content head for a pointer (currently file), gated by leases when policy requires
+- `POST /context/rehydrate` → return full content head for a pointer (`file` head bytes or full `memory` record), gated by leases when policy requires
 
 Events
 - Egress ledger appends publish `egress.ledger.appended` with `{ id?, decision, reason?, dest_host?, dest_port?, protocol?, bytes_in?, bytes_out?, corr_id?, proj?, posture }`.
@@ -273,7 +273,7 @@ Environment and server
 
 Policy (ABAC facade)
 - Create `policy.json`:
-  - `{ "allow_all": false, "lease_rules": [ { "kind_prefix": "net.http.", "capability": "net:http" }, { "kind_prefix": "context.rehydrate", "capability": "context:rehydrate:file" } ] }`
+  - `{ "allow_all": false, "lease_rules": [ { "kind_prefix": "net.http.", "capability": "net:http" }, { "kind_prefix": "context.rehydrate.memory", "capability": "context:rehydrate:memory" }, { "kind_prefix": "context.rehydrate", "capability": "context:rehydrate:file" } ] }`
 - Export: `export ARW_POLICY_FILE=policy.json`
 - Check: `curl -s localhost:8091/state/policy | jq`
 - Simulate: `curl -s -X POST localhost:8091/policy/simulate -H 'content-type: application/json' -d '{"kind":"net.http.get"}' | jq`
@@ -284,7 +284,8 @@ Leases
 
 Context
 - Assemble: `curl -s -X POST localhost:8091/context/assemble -H 'content-type: application/json' -d '{"q":"term","lanes":["semantic","procedural"],"limit":18,"include_sources":true,"corr_id":"demo-ctx-1"}' | jq`
-- Rehydrate (lease‑gated): `curl -s -X POST localhost:8091/context/rehydrate -H 'content-type: application/json' -d '{"ptr":{"kind":"file","path":"state/projects/demo/notes.md"}}' | jq`
+- Rehydrate file (lease‑gated): `curl -s -X POST localhost:8091/context/rehydrate -H 'content-type: application/json' -d '{"ptr":{"kind":"file","path":"state/projects/demo/notes.md"}}' | jq`
+- Rehydrate memory (lease‑gated): `curl -s -X POST localhost:8091/context/rehydrate -H 'content-type: application/json' -d '{"ptr":{"kind":"memory","id":"<memory-id>"}}' | jq`  _(use `/state/memory/recent` to find ids)_
 
 Actions and Events
 - Submit: `curl -s -X POST localhost:8091/actions -H 'content-type: application/json' -d '{"kind":"net.http.get","input":{"url":"https://example.com"}}' | jq`

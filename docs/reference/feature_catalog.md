@@ -26,7 +26,7 @@ _Spin up projects with live state, context-on-demand, and predictable response t
   _Source_: [apps/arw-server/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/main.rs), [apps/arw-server/src/api_actions.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_actions.rs), [apps/arw-server/src/api_events.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_events.rs), …
 
 - **Working Set Builder** · backend / builder / intelligence / beta
-  Hybrid retrieval with coverage loops, streaming diagnostics, and on-demand rehydrate for just-in-time context.
+  Hybrid retrieval with coverage loops, streaming diagnostics, and on-demand rehydrate for just-in-time context (stable pointers include `memory` ids and `file` heads).
   _Routes_: `POST /context/assemble`, `POST /context/rehydrate`
   _Signals_: `working_set.started`, `working_set.seed`, `working_set.expanded`, `working_set.expand_query`, `working_set.selected`, `working_set.completed`, `working_set.iteration.summary`, `working_set.error`
   _Env_: `ARW_CONTEXT_LANES_DEFAULT`, `ARW_CONTEXT_K`, `ARW_CONTEXT_EXPAND_PER_SEED`, `ARW_CONTEXT_DIVERSITY_LAMBDA`, `ARW_CONTEXT_MIN_SCORE`, `ARW_CONTEXT_LANE_BONUS`, `ARW_CONTEXT_EXPAND_QUERY`, `ARW_CONTEXT_EXPAND_QUERY_TOP_K`, …
@@ -70,7 +70,7 @@ Every answer carries provenance, memory, and opportunities to improve.
 _Surface the beliefs, files, and links that back each decision._
 
 - **Memory Atlas** · backend / builder / intelligence / beta
-  Kernel-backed memory API with hybrid search, embeddings, and coherent selections for durable knowledge.
+  Kernel-backed memory API with hybrid search, embeddings, coherent selections, and stable pointers (`ptr.kind: "memory"`) for durable knowledge.
   _Routes_: `POST /memory/put`, `GET /state/memory/select`, `POST /memory/search_embed`, `POST /state/memory/select_hybrid`, `POST /memory/select_coherent`, `POST /state/memory/explain_coherent`, `GET /state/memory/recent`, `POST /memory/link`, `GET /state/memory/links`
   _Signals_: `memory.record.put`, `memory.link.put`
   _Source_: [apps/arw-server/src/api_memory.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_memory.rs), [crates/arw-kernel/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-kernel/src/lib.rs)

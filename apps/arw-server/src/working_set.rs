@@ -1,4 +1,4 @@
-use crate::AppState;
+use crate::{util, AppState};
 use anyhow::Result;
 use chrono::SecondsFormat;
 use metrics::{counter, histogram};
@@ -979,7 +979,7 @@ fn build_diagnostics(
 }
 
 impl Candidate {
-    fn from_value(id: String, lane: Option<String>, value: Value, cscore: f32) -> Self {
+    fn from_value(id: String, lane: Option<String>, mut value: Value, cscore: f32) -> Self {
         let key = value
             .get("key")
             .and_then(|v| v.as_str())
@@ -997,6 +997,7 @@ impl Candidate {
             })
             .unwrap_or_default();
         let embed = parse_embed(&value);
+        util::attach_memory_ptr(&mut value);
         Candidate {
             id,
             lane,
