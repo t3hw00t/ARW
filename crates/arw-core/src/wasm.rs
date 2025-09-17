@@ -50,7 +50,7 @@ impl WasmTool {
         // If the component requires WASI or other imports, instantiation will fail
         // and we surface that error to the caller.
         let engine = self.store.engine();
-        let mut linker: Linker<()> = Linker::new(engine);
+        let linker: Linker<()> = Linker::new(engine);
         let instance: Instance = linker.instantiate(&mut self.store, &self.component)?;
 
         // Try a few common exported function names and simple signatures:
@@ -72,12 +72,12 @@ impl WasmTool {
             }
             // (string) -> ()
             if let Ok(f) = instance.get_typed_func::<(String,), ()>(&mut self.store, name) {
-                let _ = f.call(&mut self.store, (input.to_string(),))?;
+                f.call(&mut self.store, (input.to_string(),))?;
                 return Ok(String::new());
             }
             // () -> ()
             if let Ok(f) = instance.get_typed_func::<(), ()>(&mut self.store, name) {
-                let _ = f.call(&mut self.store, ())?;
+                f.call(&mut self.store, ())?;
                 return Ok(String::new());
             }
         }

@@ -103,7 +103,7 @@ def render(doc, features, known_topics):
     lines.append(
         f"This page is generated from [interfaces/system_components.json]({base}interfaces/system_components.json) "
         f"and reconciled with [interfaces/features.json]({base}interfaces/features.json) plus topic constants in "
-        "[`crates/arw-topics`](../../crates/arw-topics/src/lib.rs).\n"
+        f"[`crates/arw-topics`]({base}crates/arw-topics/src/lib.rs).\n"
     )
 
     lines.append("## Component Matrix\n")
@@ -126,7 +126,7 @@ def render(doc, features, known_topics):
                 tier = feature.get("tier")
                 tier_suffix = f"<br /><small>{tier}</small>" if tier else ""
                 feature_cell = (
-                    f"[{feat_name}](../feature_matrix.md#{slug}){tier_suffix}"
+                    f"[{feat_name}](feature_matrix.md#{slug}){tier_suffix}"
                 )
         category = comp.get("category") or "—"
         scope_summary = format_scope(feature, comp) or "—"
@@ -206,7 +206,7 @@ def render(doc, features, known_topics):
             feat_name = feature.get("name", comp.get("feature_id"))
             slug = slugify(feat_name)
             lines.append(
-                f"- Feature: [{feat_name}](../feature_matrix.md#{slug}) ({feature.get('tier', 'unknown tier')})"
+                f"- Feature: [{feat_name}](feature_matrix.md#{slug}) ({feature.get('tier', 'unknown tier')})"
             )
         category = comp.get("category")
         scope = merge_scope(feature.get("scope") if feature else {}, comp.get("scope"))
@@ -352,4 +352,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
