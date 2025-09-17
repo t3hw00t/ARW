@@ -2,66 +2,45 @@
   "version": 1,
   "components": [
     {
-      "id": "policy_gating_core",
-      "feature_id": "policy_leases",
-      "name": "Policy & Gating Core",
+      "id": "agent_orchestrator",
+      "feature_id": "orchestrator_plane",
+      "name": "Agent Orchestrator",
       "owner": "platform",
-      "category": "Security & Policy",
-      "description": "Central gating service with named keys, deny contracts, and capsule adoption so sensitive operations stay lease-gated and auditable across the runtime.",
+      "category": "Runtime",
+      "description": "Manages mini-agent training episodes, evaluates them via the triad, and promotes configurations into Logic Units under policy guardrails.",
       "scope": {
         "surface": "runtime",
-        "audience": "operators",
-        "layer": "guardrails",
-        "maturity": "beta"
-      },
-      "signals": [
-        "policy.decision",
-        "policy.reloaded"
-      ],
-      "interfaces": {
-        "config": [
-          "configs/gating.toml",
-          "ARW_GATING_DENY"
-        ]
-      },
-      "storage": [
-        "policy deny sets",
-        "capsule leases"
-      ],
-      "notes": [
-        "Merges boot denies, runtime contracts, and propagated capsules into a single guardrail surface.",
-        "Ingress middleware validates admin tokens and optional capsules before routing requests."
-      ]
-    },
-    {
-      "id": "asimov_capsule_guard",
-      "feature_id": "asimov_capsule_guard",
-      "name": "Asimov Capsule Guard",
-      "owner": "platform",
-      "category": "Security & Policy",
-      "description": "Planned capsule lifecycle that refreshes reversible denies at runtime boundaries and emits telemetry for active guardrails.",
-      "scope": {
-        "surface": "runtime",
-        "audience": "operators",
-        "layer": "guardrails",
+        "audience": "developers",
+        "layer": "orchestration",
         "maturity": "plan"
       },
       "depends": [
-        "policy_gating_core",
-        "egress_firewall_ledger"
+        "memory_abstraction_layer"
+      ],
+      "signals": [
+        "orchestrator.job.created",
+        "orchestrator.job.progress",
+        "orchestrator.job.completed",
+        "task.completed"
       ],
       "interfaces": {
-        "env": [
-          "ARW_TRUST_CAPSULES",
-          "ARW_GATING_DENY"
-        ],
-        "topics": [
-          "policy.capsule.*"
+        "http": [
+          "GET /orchestrator/mini_agents",
+          "POST /orchestrator/mini_agents/start_training",
+          "GET /state/orchestrator/jobs",
+          "/orchestrator/mini_agents",
+          "/orchestrator/mini_agents/start_training",
+          "/state/orchestrator/jobs"
         ]
       },
       "notes": [
-        "Extends gating capsules with leases so protections renew without restarts.",
-        "Instruments admin middleware, tool execution, and egress to refresh capsules proactively."
+        "Training stays lease-gated and reproducible via corr_id snapshots with budget tracking.",
+        "Future phases add curriculum learning, self-play, and confidence-aware routing."
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/agent_orchestrator.md"
+        }
       ]
     },
     {
@@ -94,34 +73,145 @@
       ]
     },
     {
-      "id": "lightweight_mitigations",
-      "name": "Lightweight Mitigations",
+      "id": "artifacts_provenance_cas",
+      "feature_id": "model_steward",
+      "name": "Artifacts Provenance & Model CAS",
       "owner": "platform",
-      "category": "Security & Policy",
-      "description": "Planned bundle of pragmatic safeguards: memory quarantine, project isolation, manifest pinning, hardened browsing, DNS guard, and accelerator hygiene.",
+      "category": "Runtime",
+      "description": "Tracks artifacts as typed nodes with provenance edges tying inputs, policies, and tools to outputs while storing models in CAS for deduplicated reuse.",
       "scope": {
         "surface": "runtime",
         "audience": "operators",
-        "layer": "assurance",
+        "layer": "data plane",
         "maturity": "plan"
       },
       "depends": [
-        "appsec_harness",
-        "egress_firewall_ledger"
+        "versioning_migration_backbone"
       ],
       "signals": [
-        "memory.quarantined",
-        "world.diff.queued",
-        "world.diff.rejected"
+        "models.manifest.written",
+        "models.cas.gc"
+      ],
+      "notes": [
+        "Reserved provenance events and bundle export endpoints document lineage for audit.",
+        "Downloads honor preflight checks and quotas before admission."
       ],
       "docs": [
         {
-          "path": "docs/architecture/lightweight_mitigations.md"
+          "path": "docs/architecture/artifacts_provenance.md"
+        }
+      ]
+    },
+    {
+      "id": "asimov_capsule_guard",
+      "feature_id": "asimov_capsule_guard",
+      "name": "Asimov Capsule Guard",
+      "owner": "platform",
+      "category": "Security & Policy",
+      "description": "Planned capsule lifecycle that refreshes reversible denies at runtime boundaries and emits telemetry for active guardrails.",
+      "scope": {
+        "surface": "runtime",
+        "audience": "operators",
+        "layer": "guardrails",
+        "maturity": "plan"
+      },
+      "depends": [
+        "policy_gating_core",
+        "egress_firewall_ledger"
+      ],
+      "interfaces": {
+        "env": [
+          "ARW_TRUST_CAPSULES",
+          "ARW_GATING_DENY"
+        ],
+        "topics": [
+          "policy.capsule.*"
+        ],
+        "http": []
+      },
+      "notes": [
+        "Extends gating capsules with leases so protections renew without restarts.",
+        "Instruments admin middleware, tool execution, and egress to refresh capsules proactively."
+      ],
+      "signals": [],
+      "docs": [
+        {
+          "path": "docs/architecture/asimov_capsule_guard.md"
+        }
+      ]
+    },
+    {
+      "id": "cache_policy_action_cache",
+      "feature_id": "tool_forge",
+      "name": "Cache Policy & Action Cache",
+      "owner": "platform",
+      "category": "Runtime",
+      "description": "Declarative cache manifest covering action cache keys, LLM reuse, semantic caching, and SSE delta persistence for predictable behavior across layers.",
+      "scope": {
+        "surface": "runtime",
+        "audience": "developers",
+        "layer": "data plane",
+        "maturity": "plan"
+      },
+      "depends": [
+        "runtime_layout_control_plane"
+      ],
+      "signals": [
+        "tool.cache",
+        "models.changed"
+      ],
+      "interfaces": {
+        "http": [
+          "GET /admin/tools/cache_stats",
+          "GET /state/models_metrics"
+        ],
+        "env": [
+          "ARW_TOOLS_CACHE_CAP",
+          "ARW_TOOLS_CACHE_TTL_SECS",
+          "ARW_TOOLS_CACHE_*",
+          "ARW_MODELS_METRICS_*"
+        ]
+      },
+      "notes": [
+        "CAS-backed action cache pairs with W-TinyLFU fronts and digest-addressed blobs.",
+        "Future RocksDB tiers and resumable SSE streams extend coverage."
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/cache_policy.md"
+        },
+        {
+          "path": "docs/architecture/caching_layers.md"
+        }
+      ]
+    },
+    {
+      "id": "capability_consent_ledger",
+      "name": "Capability & Consent Ledger",
+      "owner": "platform",
+      "category": "Governance",
+      "description": "Issues auditable, time-bound capability leases so the UI can explain why sensitive actions were allowed or denied.",
+      "scope": {
+        "surface": "runtime",
+        "audience": "operators",
+        "layer": "governance",
+        "maturity": "plan"
+      },
+      "depends": [
+        "policy_gating_core"
+      ],
+      "signals": [
+        "policy.decision",
+        "policy.reloaded"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/capability_consent_ledger.md"
         }
       ],
       "notes": [
-        "Security postures (Relaxed/Standard/Strict) gate risky automation and highlight review queues.",
-        "Instrumented events cover quarantine, manifests, secrets hygiene, and network anomalies."
+        "Grants modeled as leases with TTLs feed a planned `/state/policy` read-model showing active permissions.",
+        "Denials and escalations record provenance alongside lease issuance."
       ]
     },
     {
@@ -148,114 +238,8 @@
       "notes": [
         "Requires approvals for risky actions and surfaces active obligations in the UI.",
         "Retains episode artifacts with provenance links for extended audit windows."
-      ]
-    },
-    {
-      "id": "durability_offline",
-      "name": "Durability & Offline Resilience",
-      "owner": "platform",
-      "category": "Runtime",
-      "description": "Event journal plus periodic snapshots, idempotent tool actions, and conflict-aware merges keep work replayable even offline.",
-      "scope": {
-        "surface": "runtime",
-        "audience": "operators",
-        "layer": "infrastructure",
-        "maturity": "plan"
-      },
-      "depends": [
-        "versioning_migration_backbone"
       ],
-      "docs": [
-        {
-          "path": "docs/architecture/durability.md"
-        }
-      ],
-      "notes": [
-        "Local journaling and reconciliation guard against data loss during offline sessions.",
-        "Three-way merges prefer explicit resolution with last-writer-wins limited to low-risk state."
-      ]
-    },
-    {
-      "id": "runtime_layout_control_plane",
-      "feature_id": "snappy_governor",
-      "name": "Runtime Layout & Control Plane Priority",
-      "owner": "platform",
-      "category": "Runtime",
-      "description": "Separates interactive control plane work from background tasks, prioritizing low-latency streaming of earliest useful work.",
-      "scope": {
-        "surface": "runtime",
-        "audience": "developers",
-        "layer": "infrastructure",
-        "maturity": "beta"
-      },
-      "signals": [
-        "snappy.notice",
-        "snappy.detail"
-      ],
-      "notes": [
-        "SSE with JSON Patch keeps updates under 150\u2013250\u202fms cadence while background work yields within loops.",
-        "Systemd weights and queue separation preserve responsiveness for interactive workloads."
-      ]
-    },
-    {
-      "id": "versioning_migration_backbone",
-      "name": "Versioning & Migration Backbone",
-      "owner": "platform",
-      "category": "Runtime",
-      "description": "Add-only versioning for prompts, recipes, policies, flows, and tool schemas so operational changes remain traceable and reversible.",
-      "scope": {
-        "surface": "runtime",
-        "audience": "operators",
-        "layer": "configuration",
-        "maturity": "beta"
-      },
-      "signals": [
-        "logic.unit.installed",
-        "logic.unit.applied",
-        "logic.unit.reverted"
-      ],
-      "docs": [
-        {
-          "path": "docs/architecture/versioning_migration.md"
-        }
-      ],
-      "notes": [
-        "Episodes capture effective configs (model hash, tool versions, policies, seeds) for deterministic replay.",
-        "Migrations stay additive with published deprecation windows to avoid breaking deployed logic units."
-      ]
-    },
-    {
-      "id": "sse_json_patch_contract",
-      "feature_id": "event_spine",
-      "name": "SSE + JSON Patch Streaming Contract",
-      "owner": "platform",
-      "category": "Runtime",
-      "description": "Defines the incremental streaming protocol that delivers RFC\u202f6902 patches over SSE with resume semantics and canonical topics.",
-      "scope": {
-        "surface": "runtime",
-        "audience": "developers",
-        "layer": "data plane",
-        "maturity": "beta"
-      },
-      "depends": [
-        "runtime_layout_control_plane"
-      ],
-      "signals": [
-        "state.read.model.patch"
-      ],
-      "interfaces": {
-        "http": [
-          "GET /admin/events"
-        ],
-        "query": [
-          "?replay=",
-          "Last-Event-ID"
-        ]
-      },
-      "notes": [
-        "Encourages clients to apply patches locally and rely on canonical topic constants shared across surfaces.",
-        "Startup handshake provides resume hints so UI reconnects without fetching full snapshots."
-      ]
+      "signals": []
     },
     {
       "id": "config_patch_engine",
@@ -291,6 +275,64 @@
       "notes": [
         "Validates config deltas against versioned JSON Schemas before widening permissions.",
         "Emits audited events so permission changes stay rollback-ready."
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/config_patch_engine.md"
+        },
+        {
+          "path": "configs/schema_map.json"
+        }
+      ]
+    },
+    {
+      "id": "context_working_set",
+      "feature_id": "working_set_builder",
+      "name": "Context Working Set",
+      "owner": "platform",
+      "category": "Runtime",
+      "description": "Layered retrieval pipeline that assembles working, episodic, semantic, procedural, world, and artifact memories on demand with budgets and diversity guards.",
+      "scope": {
+        "surface": "runtime",
+        "audience": "developers",
+        "layer": "context",
+        "maturity": "plan"
+      },
+      "depends": [
+        "memory_abstraction_layer"
+      ],
+      "signals": [
+        "working_set.started",
+        "working_set.seed",
+        "working_set.expanded",
+        "working_set.expand_query",
+        "working_set.selected",
+        "working_set.completed",
+        "working_set.iteration.summary",
+        "working_set.error"
+      ],
+      "interfaces": {
+        "http": [
+          "GET /context/assemble",
+          "GET /admin/context/assemble",
+          "POST /context/rehydrate",
+          "/admin/context/assemble"
+        ],
+        "env": [
+          "ARW_CONTEXT_K",
+          "ARW_CONTEXT_EXPAND_PER_SEED",
+          "ARW_CONTEXT_DIVERSITY_LAMBDA",
+          "ARW_CONTEXT_MIN_SCORE"
+        ]
+      },
+      "notes": [
+        "Information-gain gates and abstain/escalate rules prevent over-stuffing prompts.",
+        "Telemetry highlights thin coverage or low diversity for planners and dashboards."
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/context_working_set.md"
+        }
       ]
     },
     {
@@ -324,36 +366,11 @@
       ]
     },
     {
-      "id": "identity_tenancy",
-      "name": "Identity & Tenancy",
-      "owner": "platform",
-      "category": "Governance",
-      "description": "Layered principals for User, Project, and AgentInstance scope capabilities, storage, caches, and logs to the narrowest owner.",
-      "scope": {
-        "surface": "workspace",
-        "audience": "operators",
-        "layer": "governance",
-        "maturity": "beta"
-      },
-      "signals": [
-        "policy.decision"
-      ],
-      "docs": [
-        {
-          "path": "docs/architecture/identity_tenancy.md"
-        }
-      ],
-      "notes": [
-        "Default action scope flows from AgentInstance up to Project to User only when necessary.",
-        "Namespaced storage paths (`user://`, `project://`, `agent://`) align data placement with tenancy boundaries."
-      ]
-    },
-    {
-      "id": "federated_clustering",
-      "name": "Federated Clustering",
+      "id": "durability_offline",
+      "name": "Durability & Offline Resilience",
       "owner": "platform",
       "category": "Runtime",
-      "description": "Home node with optional worker/broker roles share compute, filtered world diffs, and manifests while preserving single-node fast paths.",
+      "description": "Event journal plus periodic snapshots, idempotent tool actions, and conflict-aware merges keep work replayable even offline.",
       "scope": {
         "surface": "runtime",
         "audience": "operators",
@@ -361,106 +378,59 @@
         "maturity": "plan"
       },
       "depends": [
-        "identity_tenancy",
-        "egress_firewall_ledger"
-      ],
-      "signals": [
-        "cluster.node.advertise",
-        "cluster.node.changed",
-        "world.diff.rejected"
+        "versioning_migration_backbone"
       ],
       "docs": [
         {
-          "path": "docs/architecture/cluster_federation.md"
+          "path": "docs/architecture/durability.md"
         }
       ],
       "notes": [
-        "Invite-only federation with signed manifests and node identifiers for deterministic replay.",
-        "Egress leases and budget guards meter contributions across nodes."
+        "Local journaling and reconciliation guard against data loss during offline sessions.",
+        "Three-way merges prefer explicit resolution with last-writer-wins limited to low-risk state."
       ]
     },
     {
-      "id": "supply_chain_trust",
-      "name": "Supply-Chain Trust",
+      "id": "egress_firewall_ledger",
+      "feature_id": "egress_sentinel",
+      "name": "Egress Firewall & Ledger",
       "owner": "platform",
       "category": "Security & Policy",
-      "description": "Signed artifacts, manifests, and SBOMs feed sandboxed execution with provenance tracking to anchor plugin and model integrity.",
-      "scope": {
-        "surface": "build",
-        "audience": "operators",
-        "layer": "assurance",
-        "maturity": "plan"
-      },
-      "docs": [
-        {
-          "path": "docs/architecture/supply_chain_trust.md"
-        },
-        {
-          "path": "docs/developer/ci.md"
-        }
-      ],
-      "notes": [
-        "Trust stores for issuers/keys back verification workflows.",
-        "Desktop clients map OS-level capability prompts to ARW policies to avoid privilege escalation."
-      ]
-    },
-    {
-      "id": "agent_orchestrator",
-      "feature_id": "orchestrator_plane",
-      "name": "Agent Orchestrator",
-      "owner": "platform",
-      "category": "Runtime",
-      "description": "Manages mini-agent training episodes, evaluates them via the triad, and promotes configurations into Logic Units under policy guardrails.",
+      "description": "Loopback proxy, DNS guard, filesystem scoping, and leased sensor access enforce explicit network scopes with auditable previews and decisions.",
       "scope": {
         "surface": "runtime",
-        "audience": "developers",
-        "layer": "orchestration",
+        "audience": "operators",
+        "layer": "guardrails",
         "maturity": "plan"
       },
-      "depends": [
-        "memory_abstraction_layer"
-      ],
       "signals": [
-        "orchestrator.job.created",
-        "orchestrator.job.progress",
-        "orchestrator.job.completed",
-        "task.completed"
+        "egress.preview",
+        "egress.ledger.appended",
+        "egress.settings.updated"
       ],
       "interfaces": {
         "http": [
-          "GET /orchestrator/mini_agents",
-          "POST /orchestrator/mini_agents/start_training",
-          "GET /state/orchestrator/jobs"
+          "POST /egress/preview",
+          "GET /state/egress/settings",
+          "POST /egress/settings"
+        ],
+        "env": [
+          "ARW_NET_POSTURE",
+          "ARW_EGRESS_PROXY_ENABLE",
+          "ARW_DNS_GUARD_ENABLE"
         ]
       },
       "notes": [
-        "Training stays lease-gated and reproducible via corr_id snapshots with budget tracking.",
-        "Future phases add curriculum learning, self-play, and confidence-aware routing."
-      ]
-    },
-    {
-      "id": "artifacts_provenance_cas",
-      "feature_id": "model_steward",
-      "name": "Artifacts Provenance & Model CAS",
-      "owner": "platform",
-      "category": "Runtime",
-      "description": "Tracks artifacts as typed nodes with provenance edges tying inputs, policies, and tools to outputs while storing models in CAS for deduplicated reuse.",
-      "scope": {
-        "surface": "runtime",
-        "audience": "operators",
-        "layer": "data plane",
-        "maturity": "plan"
-      },
-      "depends": [
-        "versioning_migration_backbone"
+        "Proxy tags traffic with correlation metadata and records previews plus decisions for audit.",
+        "Default posture keeps outbound access public-only until leases expand scope."
       ],
-      "signals": [
-        "models.manifest.written",
-        "models.cas.gc"
-      ],
-      "notes": [
-        "Reserved provenance events and bundle export endpoints document lineage for audit.",
-        "Downloads honor preflight checks and quotas before admission."
+      "docs": [
+        {
+          "path": "docs/architecture/egress_firewall.md"
+        },
+        {
+          "path": "docs/guide/network_posture.md"
+        }
       ]
     },
     {
@@ -502,32 +472,271 @@
       ]
     },
     {
-      "id": "capability_consent_ledger",
-      "name": "Capability & Consent Ledger",
+      "id": "federated_clustering",
+      "name": "Federated Clustering",
       "owner": "platform",
-      "category": "Governance",
-      "description": "Issues auditable, time-bound capability leases so the UI can explain why sensitive actions were allowed or denied.",
+      "category": "Runtime",
+      "description": "Home node with optional worker/broker roles share compute, filtered world diffs, and manifests while preserving single-node fast paths.",
       "scope": {
         "surface": "runtime",
         "audience": "operators",
-        "layer": "governance",
+        "layer": "infrastructure",
         "maturity": "plan"
       },
       "depends": [
-        "policy_gating_core"
+        "identity_tenancy",
+        "egress_firewall_ledger"
       ],
+      "signals": [
+        "cluster.node.advertise",
+        "cluster.node.changed",
+        "world.diff.rejected"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/cluster_federation.md"
+        }
+      ],
+      "notes": [
+        "Invite-only federation with signed manifests and node identifiers for deterministic replay.",
+        "Egress leases and budget guards meter contributions across nodes."
+      ]
+    },
+    {
+      "id": "identity_tenancy",
+      "name": "Identity & Tenancy",
+      "owner": "platform",
+      "category": "Governance",
+      "description": "Layered principals for User, Project, and AgentInstance scope capabilities, storage, caches, and logs to the narrowest owner.",
+      "scope": {
+        "surface": "workspace",
+        "audience": "operators",
+        "layer": "governance",
+        "maturity": "beta"
+      },
+      "signals": [
+        "policy.decision"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/identity_tenancy.md"
+        }
+      ],
+      "notes": [
+        "Default action scope flows from AgentInstance up to Project to User only when necessary.",
+        "Namespaced storage paths (`user://`, `project://`, `agent://`) align data placement with tenancy boundaries."
+      ]
+    },
+    {
+      "id": "lightweight_mitigations",
+      "name": "Lightweight Mitigations",
+      "owner": "platform",
+      "category": "Security & Policy",
+      "description": "Planned bundle of pragmatic safeguards: memory quarantine, project isolation, manifest pinning, hardened browsing, DNS guard, and accelerator hygiene.",
+      "scope": {
+        "surface": "runtime",
+        "audience": "operators",
+        "layer": "assurance",
+        "maturity": "plan"
+      },
+      "depends": [
+        "appsec_harness",
+        "egress_firewall_ledger"
+      ],
+      "signals": [
+        "memory.quarantined",
+        "world.diff.queued",
+        "world.diff.rejected"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/lightweight_mitigations.md"
+        }
+      ],
+      "notes": [
+        "Security postures (Relaxed/Standard/Strict) gate risky automation and highlight review queues.",
+        "Instrumented events cover quarantine, manifests, secrets hygiene, and network anomalies."
+      ]
+    },
+    {
+      "id": "memory_abstraction_layer",
+      "feature_id": "memory_atlas",
+      "name": "Memory Abstraction Layer & Memory Atlas",
+      "owner": "platform",
+      "category": "Runtime",
+      "description": "Unifies episodic, semantic, procedural, and ephemeral lanes into hashed records with probabilistic scoring and coherent retrieval paths backed by the kernel.",
+      "scope": {
+        "surface": "runtime",
+        "audience": "developers",
+        "layer": "data plane",
+        "maturity": "plan"
+      },
+      "signals": [
+        "memory.record.put",
+        "memory.link.put"
+      ],
+      "interfaces": {
+        "storage": [
+          "memory_records",
+          "memory_fts",
+          "memory_links"
+        ]
+      },
+      "notes": [
+        "Lane-specific budgets, TTLs, and lifecycle policies keep the corpus explainable and auditable.",
+        "Link operations and hybrid selectors assemble coherent sets for agents and tooling."
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/memory_abstraction.md"
+        },
+        {
+          "path": "docs/architecture/memory_lifecycle.md"
+        }
+      ]
+    },
+    {
+      "id": "policy_gating_core",
+      "feature_id": "policy_leases",
+      "name": "Policy & Gating Core",
+      "owner": "platform",
+      "category": "Security & Policy",
+      "description": "Central gating service with named keys, deny contracts, and capsule adoption so sensitive operations stay lease-gated and auditable across the runtime.",
+      "scope": {
+        "surface": "runtime",
+        "audience": "operators",
+        "layer": "guardrails",
+        "maturity": "beta"
+      },
       "signals": [
         "policy.decision",
         "policy.reloaded"
       ],
+      "interfaces": {
+        "config": [
+          "configs/gating.toml",
+          "ARW_GATING_DENY"
+        ]
+      },
+      "storage": [
+        "policy deny sets",
+        "capsule leases"
+      ],
+      "notes": [
+        "Merges boot denies, runtime contracts, and propagated capsules into a single guardrail surface.",
+        "Ingress middleware validates admin tokens and optional capsules before routing requests."
+      ],
       "docs": [
         {
-          "path": "docs/architecture/capability_consent_ledger.md"
+          "path": "docs/GATING_KEYS.md"
+        },
+        {
+          "path": "docs/guide/policy_permissions.md"
+        },
+        {
+          "path": "crates/arw-core/src/gating.rs"
+        }
+      ]
+    },
+    {
+      "id": "replay_observability_stack",
+      "name": "Replay & Observability Stack",
+      "owner": "platform",
+      "category": "Runtime",
+      "description": "Replay bundles pin models, tools, policies, and inputs so reruns compare outputs while telemetry aligns traces, metrics, and logs per corr_id.",
+      "scope": {
+        "surface": "runtime",
+        "audience": "operators",
+        "layer": "assurance",
+        "maturity": "plan"
+      },
+      "depends": [
+        "versioning_migration_backbone",
+        "artifacts_provenance_cas"
+      ],
+      "signals": [
+        "actions.completed",
+        "probe.metrics"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/replay_time_travel.md"
+        },
+        {
+          "path": "docs/architecture/observability_otel.md"
         }
       ],
       "notes": [
-        "Grants modeled as leases with TTLs feed a planned `/state/policy` read-model showing active permissions.",
-        "Denials and escalations record provenance alongside lease issuance."
+        "Episode spans map to OpenTelemetry traces while respecting data governance redaction defaults.",
+        "Policy denials and tool actions remain explainable across audits and migrations."
+      ]
+    },
+    {
+      "id": "runtime_layout_control_plane",
+      "feature_id": "snappy_governor",
+      "name": "Runtime Layout & Control Plane Priority",
+      "owner": "platform",
+      "category": "Runtime",
+      "description": "Separates interactive control plane work from background tasks, prioritizing low-latency streaming of earliest useful work.",
+      "scope": {
+        "surface": "runtime",
+        "audience": "developers",
+        "layer": "infrastructure",
+        "maturity": "beta"
+      },
+      "signals": [
+        "snappy.notice",
+        "snappy.detail"
+      ],
+      "notes": [
+        "SSE with JSON Patch keeps updates under 150\u2013250\u202fms cadence while background work yields within loops.",
+        "Systemd weights and queue separation preserve responsiveness for interactive workloads."
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/runtime_layout.md"
+        },
+        {
+          "path": "docs/architecture/performance.md"
+        }
+      ]
+    },
+    {
+      "id": "sse_json_patch_contract",
+      "feature_id": "event_spine",
+      "name": "SSE + JSON Patch Streaming Contract",
+      "owner": "platform",
+      "category": "Runtime",
+      "description": "Defines the incremental streaming protocol that delivers RFC\u202f6902 patches over SSE with resume semantics and canonical topics.",
+      "scope": {
+        "surface": "runtime",
+        "audience": "developers",
+        "layer": "data plane",
+        "maturity": "beta"
+      },
+      "depends": [
+        "runtime_layout_control_plane"
+      ],
+      "signals": [
+        "state.read.model.patch"
+      ],
+      "interfaces": {
+        "http": [
+          "GET /admin/events"
+        ],
+        "query": [
+          "?replay=",
+          "Last-Event-ID"
+        ]
+      },
+      "notes": [
+        "Encourages clients to apply patches locally and rely on canonical topic constants shared across surfaces.",
+        "Startup handshake provides resume hints so UI reconnects without fetching full snapshots."
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/sse_patch_contract.md"
+        }
       ]
     },
     {
@@ -600,213 +809,38 @@
       "notes": [
         "Keeps evaluation metrics (calibration, risk\u2013coverage, competence) tied to agent decisions.",
         "Proposals require human approval for scope changes and cite provenance for replay."
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/self_model.md"
+        }
       ]
     },
     {
-      "id": "unified_object_graph",
-      "feature_id": "project_map",
-      "name": "Unified Object Graph & Event Stream",
-      "owner": "platform",
-      "category": "Runtime",
-      "description": "Shared object graph and SSE event stream keep Project Hub, Chat, Training Park, and manager views consistent across inventories and live updates.",
-      "scope": {
-        "surface": "ui",
-        "audience": "operators",
-        "layer": "data plane",
-        "maturity": "beta"
-      },
-      "depends": [
-        "sse_json_patch_contract",
-        "runtime_layout_control_plane"
-      ],
-      "signals": [
-        "episodes.*",
-        "tools.*",
-        "policy.*",
-        "models.*"
-      ],
-      "notes": [
-        "Admin-gated `GET /admin/events` streams with corr_id stitching keep timelines authoritative.",
-        "Manager views edit global inventories while projects and agents reference them via scoped belief graphs."
-      ]
-    },
-    {
-      "id": "context_working_set",
-      "feature_id": "working_set_builder",
-      "name": "Context Working Set",
-      "owner": "platform",
-      "category": "Runtime",
-      "description": "Layered retrieval pipeline that assembles working, episodic, semantic, procedural, world, and artifact memories on demand with budgets and diversity guards.",
-      "scope": {
-        "surface": "runtime",
-        "audience": "developers",
-        "layer": "context",
-        "maturity": "plan"
-      },
-      "depends": [
-        "memory_abstraction_layer"
-      ],
-      "signals": [
-        "working_set.started",
-        "working_set.seed",
-        "working_set.expanded",
-        "working_set.expand_query",
-        "working_set.selected",
-        "working_set.completed",
-        "working_set.iteration.summary",
-        "working_set.error"
-      ],
-      "interfaces": {
-        "http": [
-          "GET /context/assemble",
-          "GET /admin/context/assemble",
-          "POST /context/rehydrate"
-        ],
-        "env": [
-          "ARW_CONTEXT_K",
-          "ARW_CONTEXT_EXPAND_PER_SEED",
-          "ARW_CONTEXT_DIVERSITY_LAMBDA",
-          "ARW_CONTEXT_MIN_SCORE"
-        ]
-      },
-      "notes": [
-        "Information-gain gates and abstain/escalate rules prevent over-stuffing prompts.",
-        "Telemetry highlights thin coverage or low diversity for planners and dashboards."
-      ]
-    },
-    {
-      "id": "cache_policy_action_cache",
-      "feature_id": "tool_forge",
-      "name": "Cache Policy & Action Cache",
-      "owner": "platform",
-      "category": "Runtime",
-      "description": "Declarative cache manifest covering action cache keys, LLM reuse, semantic caching, and SSE delta persistence for predictable behavior across layers.",
-      "scope": {
-        "surface": "runtime",
-        "audience": "developers",
-        "layer": "data plane",
-        "maturity": "plan"
-      },
-      "depends": [
-        "runtime_layout_control_plane"
-      ],
-      "signals": [
-        "tool.cache",
-        "models.changed"
-      ],
-      "interfaces": {
-        "http": [
-          "GET /admin/tools/cache_stats",
-          "GET /state/models_metrics"
-        ],
-        "env": [
-          "ARW_TOOLS_CACHE_CAP",
-          "ARW_TOOLS_CACHE_TTL_SECS",
-          "ARW_TOOLS_CACHE_*",
-          "ARW_MODELS_METRICS_*"
-        ]
-      },
-      "notes": [
-        "CAS-backed action cache pairs with W-TinyLFU fronts and digest-addressed blobs.",
-        "Future RocksDB tiers and resumable SSE streams extend coverage."
-      ]
-    },
-    {
-      "id": "egress_firewall_ledger",
-      "feature_id": "egress_sentinel",
-      "name": "Egress Firewall & Ledger",
+      "id": "supply_chain_trust",
+      "name": "Supply-Chain Trust",
       "owner": "platform",
       "category": "Security & Policy",
-      "description": "Loopback proxy, DNS guard, filesystem scoping, and leased sensor access enforce explicit network scopes with auditable previews and decisions.",
+      "description": "Signed artifacts, manifests, and SBOMs feed sandboxed execution with provenance tracking to anchor plugin and model integrity.",
       "scope": {
-        "surface": "runtime",
-        "audience": "operators",
-        "layer": "guardrails",
-        "maturity": "plan"
-      },
-      "signals": [
-        "egress.preview",
-        "egress.ledger.appended",
-        "egress.settings.updated"
-      ],
-      "interfaces": {
-        "http": [
-          "POST /egress/preview",
-          "GET /state/egress/settings",
-          "POST /egress/settings"
-        ],
-        "env": [
-          "ARW_NET_POSTURE",
-          "ARW_EGRESS_PROXY_ENABLE",
-          "ARW_DNS_GUARD_ENABLE"
-        ]
-      },
-      "notes": [
-        "Proxy tags traffic with correlation metadata and records previews plus decisions for audit.",
-        "Default posture keeps outbound access public-only until leases expand scope."
-      ]
-    },
-    {
-      "id": "replay_observability_stack",
-      "name": "Replay & Observability Stack",
-      "owner": "platform",
-      "category": "Runtime",
-      "description": "Replay bundles pin models, tools, policies, and inputs so reruns compare outputs while telemetry aligns traces, metrics, and logs per corr_id.",
-      "scope": {
-        "surface": "runtime",
+        "surface": "build",
         "audience": "operators",
         "layer": "assurance",
         "maturity": "plan"
       },
-      "depends": [
-        "versioning_migration_backbone",
-        "artifacts_provenance_cas"
-      ],
-      "signals": [
-        "actions.completed",
-        "probe.metrics"
-      ],
       "docs": [
         {
-          "path": "docs/architecture/replay_time_travel.md"
+          "path": "docs/architecture/supply_chain_trust.md"
         },
         {
-          "path": "docs/architecture/observability_otel.md"
+          "path": "docs/developer/ci.md"
         }
       ],
       "notes": [
-        "Episode spans map to OpenTelemetry traces while respecting data governance redaction defaults.",
-        "Policy denials and tool actions remain explainable across audits and migrations."
-      ]
-    },
-    {
-      "id": "memory_abstraction_layer",
-      "feature_id": "memory_atlas",
-      "name": "Memory Abstraction Layer & Memory Atlas",
-      "owner": "platform",
-      "category": "Runtime",
-      "description": "Unifies episodic, semantic, procedural, and ephemeral lanes into hashed records with probabilistic scoring and coherent retrieval paths backed by the kernel.",
-      "scope": {
-        "surface": "runtime",
-        "audience": "developers",
-        "layer": "data plane",
-        "maturity": "plan"
-      },
-      "signals": [
-        "memory.record.put",
-        "memory.link.put"
+        "Trust stores for issuers/keys back verification workflows.",
+        "Desktop clients map OS-level capability prompts to ARW policies to avoid privilege escalation."
       ],
-      "interfaces": {
-        "storage": [
-          "memory_records",
-          "memory_fts",
-          "memory_links"
-        ]
-      },
-      "notes": [
-        "Lane-specific budgets, TTLs, and lifecycle policies keep the corpus explainable and auditable.",
-        "Link operations and hybrid selectors assemble coherent sets for agents and tooling."
-      ]
+      "signals": []
     },
     {
       "id": "ui_screenshot_tools",
@@ -840,6 +874,74 @@
       "notes": [
         "Launcher integrations trigger captures and render previews with annotate/OCR quick actions.",
         "Lease gating keeps capture and OCR auditable with Activity lane telemetry."
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/screenshot_capture_pipeline.md"
+        },
+        {
+          "path": "docs/guide/screenshots.md"
+        }
+      ]
+    },
+    {
+      "id": "unified_object_graph",
+      "feature_id": "project_map",
+      "name": "Unified Object Graph & Event Stream",
+      "owner": "platform",
+      "category": "Runtime",
+      "description": "Shared object graph and SSE event stream keep Project Hub, Chat, Training Park, and manager views consistent across inventories and live updates.",
+      "scope": {
+        "surface": "ui",
+        "audience": "operators",
+        "layer": "data plane",
+        "maturity": "beta"
+      },
+      "depends": [
+        "sse_json_patch_contract",
+        "runtime_layout_control_plane"
+      ],
+      "signals": [
+        "episodes.*",
+        "tools.*",
+        "policy.*",
+        "models.*"
+      ],
+      "notes": [
+        "Admin-gated `GET /admin/events` streams with corr_id stitching keep timelines authoritative.",
+        "Manager views edit global inventories while projects and agents reference them via scoped belief graphs."
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/object_graph.md"
+        }
+      ]
+    },
+    {
+      "id": "versioning_migration_backbone",
+      "name": "Versioning & Migration Backbone",
+      "owner": "platform",
+      "category": "Runtime",
+      "description": "Add-only versioning for prompts, recipes, policies, flows, and tool schemas so operational changes remain traceable and reversible.",
+      "scope": {
+        "surface": "runtime",
+        "audience": "operators",
+        "layer": "configuration",
+        "maturity": "beta"
+      },
+      "signals": [
+        "logic.unit.installed",
+        "logic.unit.applied",
+        "logic.unit.reverted"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/versioning_migration.md"
+        }
+      ],
+      "notes": [
+        "Episodes capture effective configs (model hash, tool versions, policies, seeds) for deterministic replay.",
+        "Migrations stay additive with published deprecation windows to avoid breaking deployed logic units."
       ]
     }
   ]
