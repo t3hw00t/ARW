@@ -4,6 +4,13 @@ title: Projects UI
 
 # Projects UI
 
+!!! warning "Legacy bridge only"
+    The Projects UI currently ships only with the legacy `arw-svc` bridge.
+    Start it with `scripts/start.sh --legacy` (Linux/macOS) or
+    `scripts/start.ps1 -Legacy` (Windows) so the `/admin/ui/projects`
+    endpoints are exposed. The unified `arw-server` remains headless-first on
+    port 8091 and does not serve this UI yet.
+
 The Projects UI gives you a simple, secure place to:
 
 Updated: 2025-09-15
@@ -24,8 +31,18 @@ See also: [Keyboard Shortcuts](shortcuts.md)
 ## Enable and Open
 
 - Set `ARW_DEBUG=1` (or provide `X-ARW-Admin` when running in locked mode).
-- Start `arw-svc` and open:
-  - `http://127.0.0.1:8090/admin/ui/projects`
+- Start the legacy bridge so the admin UI is served:
+  - Linux / macOS:
+    ```bash
+    ./scripts/start.sh --legacy
+    ```
+  - Windows:
+    ```powershell
+    powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -Legacy
+    ```
+- Open the legacy admin UI at `http://127.0.0.1:8090/admin/ui/projects`.
+  - If you only need the unified `arw-server` without the Projects UI, it
+    continues to default to `http://127.0.0.1:8091/`.
 
 All `/projects/*` endpoints are treated as administrative and are protected by the service’s admin gate.
 
@@ -76,4 +93,4 @@ To harmonize with orchestration and autonomous workers, the service emits:
 - `projects.created` with `{ name }`
 - `projects.notes.saved` with `{ name }`
 
-Agents can subscribe to `/admin/events` and react to project lifecycle to train, plan, scaffold, or run checks (admin‑gated SSE).
+**Legacy bridge:** Agents can subscribe to `/admin/events` and react to project lifecycle to train, plan, scaffold, or run checks (admin‑gated SSE).
