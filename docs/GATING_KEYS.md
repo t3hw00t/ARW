@@ -1,7 +1,6 @@
 # Gating Keys
 
 Generated from code.
-Updated: 2025-09-17
 
 - `queue:enqueue`
 - `events:task.completed`
