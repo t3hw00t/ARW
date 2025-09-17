@@ -26,13 +26,14 @@ Universal Feature Catalog → https://t3hw00t.github.io/ARW/reference/feature_ca
 
 General direction: a unified object graph + a single live event stream (SSE). Every surface—Project Hub, Chat, Training Park, and Managers (Agents/Models/Hardware/Permissions/Containers/Plugins)—is just a different lens on the same shared objects, driven by the same live events. This keeps the system coherent, inspectable, and easy to extend.
 
-> **How to keep it minimal:** Stick with the [Kernel defaults](#kernel-defaults-core) to run the headless server locally. Anything tagged as an [Opt-in extension](#opt-in-collaboration-extensions) or [Future pack](#future-packs-roadmap) can stay off until you need it.
+> **Staying minimal:** Start with the [Core kernel defaults](#kernel-defaults-core) and stay entirely local. Anything tagged as an [Opt-in pack](#opt-in-pack-tier), a [Remote collaborator pack](#remote-collaborator-pack-tier), or a [Future pack](#future-pack-tier) is optional and stays disabled until you flip it on.
 
 ## Feature Tiers
 
-- **Kernel defaults (Core)** – local-first foundations that run in every install. [Details](#kernel-defaults-core).
-- **Opt-in collaboration (Extensions)** – sharing, federation, and automation extras you enable deliberately. [Details](#opt-in-collaboration-extensions).
-- **Future packs (Roadmap)** – in-flight packs and experiments we’re hardening. [Details](#future-packs-roadmap).
+- <a id="core-kernel-tier"></a>**Core kernel** – local-first foundations that run in every install. [Details](#kernel-defaults-core).
+- <a id="opt-in-pack-tier"></a>**Opt-in packs** – automation and analysis boosts you turn on when you want more throughput without leaving your machine. [Highlights](#opt-in-packs).
+- <a id="remote-collaborator-pack-tier"></a>**Remote collaborator packs** – sharing, federation, and pooled compute that only activate when you invite others. [Details](#remote-collaboration-packs).
+- <a id="future-pack-tier"></a>**Future packs** – in-flight packs and experiments we’re hardening. [Details](#future-packs-roadmap).
 
 ## Kernel defaults (Core)
 
@@ -47,28 +48,43 @@ These ship with `arw-server` out of the box and keep working even when you stay 
 
 ### Safety & Control
 
-- **[Kernel default]** Permission leases with timers and scopes; no silent escalation.
-- **[Kernel default]** A project “world view” tracks key facts, open questions, and constraints so agents act on evidence, not guesses.
-- **[Kernel default]** Budgets for time, tokens, and spend; the system stays within plan and shows the meter.
-- **[Kernel default]** Signed plugins and sandboxed tools by default.
+- **[Core kernel]** Permission leases with timers and scopes; no silent escalation.
+- **[Core kernel]** A project “world view” tracks key facts, open questions, and constraints so agents act on evidence, not guesses.
+- **[Core kernel]** Budgets for time, tokens, and spend; the system stays within plan and shows the meter.
+- **[Core kernel]** Signed plugins and sandboxed tools by default.
+- **[Opt-in pack]** Install Logic Units with schema checks so you can stage, audit, and roll back higher-risk automation before it touches production projects.
+- **[Remote collaborator pack]** Preview and log every outbound request through the Guardrail Gateway before any data leaves your machine.
+- **[Future pack]** Asimov Capsule Guard will add always-on capsule propagation and lease refresh for remote peers.
 
 ## What You Can Do
 
+### Core kernel
+
 - Turn messy folders, PDFs, and links into clean briefs, reports, or knowledge bases.
 - Run a focused research sprint: collect sources, extract facts, compare viewpoints, draft with citations.
-- Watch sites or docs for changes and get short, actionable updates.
 - Turn vague goals into concrete plans, tasks, and next steps.
 - Chat naturally to explore data and export both the answer and the evidence.
 
-## Opt-in collaboration (Extensions)
+### Opt-in packs
+
+- Watch sites or docs for changes and get short, actionable updates after you enable the connectors or watcher packs you trust.
+
+### Remote collaborator packs
+
+- Invite a teammate to co-drive a run or offload heavy steps once you’ve pooled compute with trusted peers.
+
+<a id="opt-in-collaboration-extensions"></a>
+## Remote collaboration packs
 
 These unlock when you choose to collaborate or federate resources.
 
-### Scaling & Sharing (Opt‑In)
+### Scaling & Sharing
 
-- **[Opt-in extension]** Pool compute: add your own GPU box or a trusted friend’s machine as a worker. Heavy jobs offload there under your rules and budget.
-- **[Opt-in extension]** Live co‑drive: share an agent session so others can watch, suggest, or take the wheel with your approval. Risky actions still wait in a staging area for you to approve.
-- **[Opt-in extension]** Clear boundaries: before anything leaves your machine, you see what would be sent, to whom, and the estimated cost. An egress ledger records it all.
+- **[Core kernel]** Start on one machine and keep every workflow local until you explicitly invite more help.
+- **[Opt-in pack]** Install automation packs (Logic Units, experiments, or debugger surfaces) to prep work before you bring collaborators into the loop.
+- **[Remote collaborator pack]** Pool compute: add your own GPU box or a trusted friend’s machine as a worker. Heavy jobs offload there under your rules and budget.
+- **[Remote collaborator pack]** Live co‑drive: share an agent session so others can watch, suggest, or take the wheel with your approval. Risky actions still wait in a staging area for you to approve.
+- **[Remote collaborator pack]** Clear boundaries: before anything leaves your machine, you see what would be sent, to whom, and the estimated cost. An egress ledger records it all.
 - **[Future pack]** Fair splits: contributions (GPU time, tokens, tasks) are metered per collaborator so shared project revenue can be split transparently later.
 
 ## Future packs (Roadmap)
