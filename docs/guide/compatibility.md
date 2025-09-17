@@ -39,9 +39,16 @@ problems.
 ## Containers and Cloud
 
 - Service in containers
-  - `arw-server` runs fine in Docker/Podman containers; expose the HTTP port
-    (default 8091). Example: `docker run -p 8091:8091 arw-server:dev`.
-    Use port 8090 only when running the legacy `arw-svc` image for the classic debug UI.
+  - Default deployment: use the unified `arw-server` image
+    (`ghcr.io/<owner>/arw-server`). It binds to port 8091; publish it with a
+    command such as `docker run -p 8091:8091 ghcr.io/<owner>/arw-server:latest`
+    (set `ARW_BIND=0.0.0.0` or `ARW_PORT=8091` as needed for your environment).
+  - Legacy UI bridge:
+    - The compatibility `arw-svc` image (`ghcr.io/<owner>/arw-svc`) remains
+      available for the classic debug UI/launcher stack. It binds to 8090 and is
+      maintained for legacy workflows only; see the [Docker guide’s legacy UI
+      bridge section](./docker.md#local-build--run-legacy-ui-bridge) for usage
+      details.
   - Desktop Launcher is not intended for headless containers; use a host
     desktop environment or run the Launcher outside the container.
   - GPU access in containers requires host support and appropriate device
