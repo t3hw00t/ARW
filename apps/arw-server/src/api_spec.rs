@@ -2,6 +2,7 @@ use axum::http::{header, StatusCode};
 use axum::Json;
 use axum::{extract::Path, response::IntoResponse};
 use serde_json::json;
+use utoipa::OpenApi;
 
 fn spec_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(std::env::var("ARW_SPEC_DIR").unwrap_or_else(|_| "spec".into()))
@@ -62,6 +63,21 @@ pub async fn spec_mcp() -> impl IntoResponse {
         )
             .into_response(),
     }
+}
+
+/// Generated OpenAPI from annotations (experimental).
+#[utoipa::path(get, path = "/spec/openapi.gen.yaml", tag = "Specs", responses((status = 200, content_type = "application/yaml")))]
+pub async fn spec_openapi_gen() -> impl IntoResponse {
+    let yaml = crate::openapi::ApiDoc::openapi()
+        .to_yaml()
+        .unwrap_or_else(|_| "openapi: 3.0.3".into())
+        .into_bytes();
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/yaml")],
+        yaml,
+    )
+        .into_response()
 }
 
 /// JSON Schemas referenced by the API.

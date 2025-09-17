@@ -107,6 +107,12 @@ jobs:
           # Run cargo from repo, but output OpenAPI to temp dir
           (cd "$GITHUB_WORKSPACE" && OPENAPI_OUT=/tmp/ifc-gen/openapi.yaml cargo run -p arw-server --quiet || true)
           test -s /tmp/ifc-gen/openapi.yaml || { echo '::error::Failed to generate OpenAPI via arw-server'; exit 1; }
+      - name: Generate OpenAPI from annotations (server)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/ifc-gen
+          (cd "$GITHUB_WORKSPACE" && OPENAPI_GEN=1 OPENAPI_OUT=/tmp/ifc-gen/openapi.annot.yaml cargo run -p arw-server --quiet || true)
+          test -s /tmp/ifc-gen/openapi.annot.yaml || { echo '::warning::Failed to produce annotated OpenAPI'; }
       - name: Compare with spec/openapi.yaml
         run: |
           set -euo pipefail
@@ -135,11 +141,38 @@ jobs:
         run: |
           npm install --no-save @stoplight/spectral-cli
           npx spectral lint -r quality/openapi-spectral.yaml /tmp/ifc-gen/openapi.yaml
+          if [ -s /tmp/ifc-gen/openapi.annot.yaml ]; then npx spectral lint -r quality/openapi-spectral.yaml /tmp/ifc-gen/openapi.annot.yaml; fi
+      - name: Diff curated vs annotated (informational)
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          if [ -s /tmp/ifc-gen/openapi.annot.yaml ]; then
+            python - << 'PY' /tmp/ifc-gen/openapi.annot.yaml > /tmp/gen.annot.norm.yaml
+import sys, yaml
+print(yaml.safe_dump(yaml.safe_load(open(sys.argv[1])), sort_keys=True), end='')
+PY
+            python - << 'PY' spec/openapi.yaml > /tmp/spec.curated.norm.yaml
+import sys, yaml
+print(yaml.safe_dump(yaml.safe_load(open(sys.argv[1])), sort_keys=True), end='')
+PY
+            diff -u /tmp/spec.curated.norm.yaml /tmp/gen.annot.norm.yaml > /tmp/ifc-gen/openapi.annot.diff || true
+            if [ -s /tmp/ifc-gen/openapi.annot.diff ]; then
+              echo '::notice::Annotated OpenAPI differs from curated; see artifact openapi.annot.diff'
+              sed -n '1,200p' /tmp/ifc-gen/openapi.annot.diff || true
+            fi
+          fi
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
           name: openapi-diff
           path: /tmp/openapi.diff
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: openapi-annotated
+          path: |
+            /tmp/ifc-gen/openapi.annot.yaml
+            /tmp/ifc-gen/openapi.annot.diff
 
   api-diff:
     name: Diff OpenAPI & AsyncAPI

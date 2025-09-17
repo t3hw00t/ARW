@@ -12,6 +12,7 @@ use tower_http::{compression::CompressionLayer, trace::TraceLayer};
 // jsonschema moved to modules
 use sha2::Digest as _;
 use tokio::sync::Mutex;
+use utoipa::OpenApi;
 
 // Route path constants (single source to reduce drift)
 mod paths {
@@ -121,22 +122,37 @@ type Policy = PolicyEngine;
 async fn main() {
     // OpenAPI/spec export mode for CI/docs sync (no server startup).
     if let Ok(path) = std::env::var("OPENAPI_OUT") {
-        // Write curated OpenAPI from spec/ to the requested path to keep
-        // CI's codegen-vs-curated comparison stable while we migrate.
-        let src = std::path::Path::new("spec").join("openapi.yaml");
+        // If OPENAPI_GEN=1, emit generated OpenAPI from annotations; otherwise copy curated spec.
+        let gen = std::env::var("OPENAPI_GEN").ok().as_deref() == Some("1");
         if let Some(parent) = std::path::Path::new(&path).parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        match std::fs::read(&src) {
-            Ok(bytes) => {
-                if let Err(e) = std::fs::write(&path, bytes) {
-                    eprintln!("error: failed to write OPENAPI_OUT ({}): {}", path, e);
+        if gen {
+            let yaml = crate::openapi::ApiDoc::openapi()
+                .to_yaml()
+                .unwrap_or_else(|_| "openapi: 3.0.3".into());
+            if let Err(e) = std::fs::write(&path, yaml) {
+                eprintln!(
+                    "error: failed to write generated OPENAPI_OUT ({}): {}",
+                    path, e
+                );
+                std::process::exit(2);
+            }
+        } else {
+            // Write curated OpenAPI from spec/ to the requested path to keep
+            // CI's codegen-vs-curated comparison stable while we migrate.
+            let src = std::path::Path::new("spec").join("openapi.yaml");
+            match std::fs::read(&src) {
+                Ok(bytes) => {
+                    if let Err(e) = std::fs::write(&path, bytes) {
+                        eprintln!("error: failed to write OPENAPI_OUT ({}): {}", path, e);
+                        std::process::exit(2);
+                    }
+                }
+                Err(e) => {
+                    eprintln!("error: missing spec/openapi.yaml: {}", e);
                     std::process::exit(2);
                 }
-            }
-            Err(e) => {
-                eprintln!("error: missing spec/openapi.yaml: {}", e);
-                std::process::exit(2);
             }
         }
         // Emit selected schemas used in docs (gating contract & capsule)
@@ -418,6 +434,15 @@ async fn main() {
         paths::SPEC_INDEX,
         api_spec::spec_index,
         "stable"
+    );
+    // Generated OpenAPI (experimental)
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        "/spec/openapi.gen.yaml",
+        api_spec::spec_openapi_gen,
+        "experimental"
     );
     app = route_get_tag!(
         app,
