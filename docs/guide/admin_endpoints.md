@@ -2,19 +2,20 @@
 title: Admin Endpoints
 ---
 
-# Admin Endpoints
-{ .topic-trio style="--exp:.5; --complex:.7; --complicated:.6" data-exp=".5" data-complex=".7" data-complicated=".6" }
+# Unified Admin Surface
+{ .topic-trio style="--exp:.55; --complex:.65; --complicated:.55" data-exp=".55" data-complex=".65" data-complicated=".55" }
 
-ARW exposes a unified admin/ops HTTP namespace under `/admin`. All sensitive routes live here so updates can’t miss gating.
+The unified `arw-server` binary exposes a single HTTP surface built around the **actions → events → state** triad. Every operation that mutates or inspects the service lives on that surface—there is no `/admin` prefix to keep in sync. New routes are recorded at runtime and streamed into `/about` so that clients can discover the current topology without hard-coding paths.
 
-Updated: 2025-09-16
-Type: How‑to
+Updated: 2025-03-08  
+Type: How-to
 
-- Base: `/admin`
-- Index (HTML): `/admin`
-- Index (JSON): `/admin/index.json`
-- Public endpoints (no auth): `/healthz`, `/metrics`, `/spec/*`, `/version`, `/about`
+- Service: `arw-server` (default bind `127.0.0.1:8091`)
+- Core triad: `POST /actions` (mutations) → `GET /events` (SSE feed) → `GET /state/*` (materialized views)
+- Public entrypoints: `/healthz`, `/about`, `/spec/*`, `/catalog/index`, `/catalog/health`
+- Supporting surfaces: connectors, config, context, leases, memory, orchestrator, policy, and egress controls (documented below)
 
+<<<<<<< HEAD
 Unless noted, examples assume the unified `arw-server` on `http://127.0.0.1:8091`. Use port `8090` when interacting with the legacy `arw-svc` bridge.
 
 ### Public: /about
@@ -56,106 +57,151 @@ Example
 
 !!! warning "Minimum Secure Setup"
     - Set `ARW_ADMIN_TOKEN` and require it on all admin calls
-    - Keep the service bound to `127.0.0.1` or place behind TLS proxy
+    - Keep the service bound to `127.0.0.1` or place behind a TLS proxy
     - Tune rate limits with `ARW_ADMIN_RL` (e.g., `60/60`)
     - Avoid `ARW_DEBUG=1` outside local development
+=======
+!!! warning "Minimum secure setup"
+    - Set `ARW_ADMIN_TOKEN` and require it on every call that mutates configuration, connectors, egress posture, logic units, or policy.
+    - Keep the service bound to `127.0.0.1` (or place it behind a TLS reverse proxy with mTLS/OIDC at the edge).
+    - Avoid exporting `ARW_DEBUG=1` outside of local experiments; several guardrails disable themselves when debug mode is enabled.
+>>>>>>> pr-57
 
 ## Authentication
 
-- Header: `X-ARW-Admin: <token>`
-- Env var: set `ARW_ADMIN_TOKEN` to the expected token value for the service.
-- Local dev: set `ARW_DEBUG=1` to allow admin access without a token.
-- Optional gating capsule: send JSON in `x-arw-gate` header to adopt a gating context for the request.
+- Header: `Authorization: Bearer <token>` **or** `X-ARW-Admin: <token>`.
+- Server toggle: set `ARW_ADMIN_TOKEN` to the expected token; if it is unset or blank, the surface behaves as development/open.
+- Mutating endpoints that require the token today include:
+  - Configuration and schema helpers (`POST /patch/*`).
+  - Connector lifecycle (`POST /connectors/register`, `POST /connectors/token`).
+  - Egress posture updates (`POST /egress/settings`).
+  - Policy reloads (`POST /policy/reload`).
+  - Logic unit management (`POST /logic-units/*`).
+  - Any helper that calls out to the filesystem (for example `POST /context/rehydrate`).
+- Set `ARW_ACTIONS_QUEUE_MAX` to gate the number of queued actions; requests beyond the limit receive HTTP `429`.
 
-Rate limiting:
-- Env var `ARW_ADMIN_RL` as `limit/window_secs` (default `60/60`).
+## Public entrypoints
 
-## Common Admin Paths
+- `GET /healthz` — simple `{ "ok": true }` readiness probe.
+- `GET /about` — runtime metadata, perf hints, and the live endpoint index.
+- Specs: `GET /spec/openapi.yaml`, `GET /spec/asyncapi.yaml`, `GET /spec/mcp-tools.json`, `GET /spec/schemas/:file`, `GET /spec/index.json`.
+- Catalog helpers: `GET /catalog/index`, `GET /catalog/health`.
 
-- `/admin/introspect/tools`: list available tools
-- `/admin/introspect/schemas/{id}`: schema for a known tool id
-- `/admin/introspect/stats`: runtime & route stats (JSON)
-- `/admin/tools/cache_stats`: tool Action Cache stats (hit/miss/coalesced, capacity, ttl)
-- `/admin/events`: SSE event stream
-- `/admin/probe`: effective paths & memory snapshot (read‑only)
-- `/admin/memory[/*]`: memory get/apply/save/load/limit
-- Quarantine review (planned MVP):
-  - `POST /admin/memory/quarantine` — add a quarantined item (provenance, risk markers, evidence score, extractor)
-  - `POST /admin/memory/quarantine/admit` — admit (remove) a quarantined item by id
-- `/admin/models[/*]`: list/save/load/add/delete/default/download
-- `/admin/tools[/*]`: list and run tools
-- `/admin/feedback[/*]`: feedback engine state & policy
-- `/admin/self_model/propose` (POST): propose a self‑model update; emits `self.model.proposed`
-- `/admin/self_model/apply` (POST): apply a proposal; emits `self.model.updated`
-- `/admin/state/*`: observations, beliefs, world, intents, actions
-  - `/admin/state/models_metrics`: models download counters + EWMA (read‑model). Shape matches the metrics used in `/admin/models/summary`.
-  - `/admin/state/route_stats`: per‑route latency/hit/error read‑model
-  - `/admin/state/world`: Project Map snapshot (scoped belief graph)
-  - `/admin/state/world/select`: top‑K beliefs (claims) with trace
-  - `/admin/context/assemble`: minimal context assembly (beliefs + policy/model)
-    - Returns `context_preview` (formatted evidence) and `aux.context` (packing metrics)
-    - Supports non‑persistent overrides via query params:
-      - `context_format` = bullets|jsonl|inline|custom
-      - `include_provenance` = true|false
-      - `context_item_template` = string (custom format)
-      - `context_header` / `context_footer` / `joiner`
-      - `context_budget_tokens` / `context_item_budget_tokens`
-- `/admin/governor/*`: governor profile & hints
-  - Hints include retrieval/formatting knobs: `retrieval_k`, `mmr_lambda`, `compression_aggr`, `vote_k`, `context_budget_tokens`, `context_item_budget_tokens`, `context_format`, `include_provenance`, `context_item_template`, `context_header`, `context_footer`, `joiner`.
-- `/admin/hierarchy/*`: negotiation & role/state helpers
-- RPU (Regulatory Provenance Unit): trust store
-  - `GET /admin/rpu/trust` — redacted trust issuers (id, alg)
-  - `POST /admin/rpu/reload` — reload trust store from disk (publishes `rpu.trust.changed`)
-  - Gating keys: `rpu:trust:get`, `rpu:trust:reload`
+### `/about` and endpoint discovery
 
-Examples
-```bash
-# Trust summary
-curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
-  "$BASE/admin/rpu/trust" | jq
+`/about` surfaces what the triad recorder knows about the running binary. Each router mount calls `route_get_tag!` / `route_post_tag!` (or their recording counterparts) to push an entry into the in-memory registry. The response exposes that registry alongside build metadata and counts so you can programmatically discover capabilities and stability levels.
 
-# Reload trust (emits rpu.trust.changed)
-curl -sS -X POST -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
-  "$BASE/admin/rpu/reload" | jq
+Example (truncated for brevity):
 
-# Watch only trust events (SSE)
-curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
-  "$BASE/admin/events?prefix=rpu.&replay=5"
+```json
+{
+  "service": "arw-server",
+  "version": "0.1.0",
+  "http": { "bind": "127.0.0.1", "port": 8091 },
+  "docs_url": "https://t3hw00t.github.io/ARW/",
+  "security_posture": null,
+  "counts": { "public": 59, "admin": 0, "total": 59 },
+  "endpoints": [
+    "GET /healthz",
+    "GET /about",
+    "POST /actions",
+    "GET /state/actions",
+    "GET /events"
+  ],
+  "endpoints_meta": [
+    { "method": "GET", "path": "/healthz", "stability": "stable" },
+    { "method": "POST", "path": "/actions", "stability": "beta" }
+  ],
+  "perf_preset": { "tier": null, "http_max_conc": 1024, "actions_queue_max": 1024 }
+}
 ```
-- World diffs review (planned MVP):
-  - `POST /admin/world_diffs/queue` — queue a world diff from collaborators for review
-  - `POST /admin/world_diffs/decision` — decide queued diff {apply|reject|defer}
-- `/admin/projects/*`: project list/tree/notes
-- `/admin/chat[/*]`: chat inspection and send/clear
-- Goldens & Experiments
-  - `/admin/goldens/list?proj=NAME` — list goldens for a project
-  - `/admin/goldens/add` (POST) — add a golden item `{proj,kind:"chat",input:{prompt},expect:{contains|equals|regex}}`
-  - `/admin/goldens/run` (POST) — run evaluator `{proj,limit?,temperature?,vote_k?}` (uses retrieval/formatting hints if set)
-  - `/admin/experiments/define` (POST) — define variants with knobs
-  - `/admin/experiments/run` (POST) — A/B on goldens `{id,proj,variants:["A","B"]}`; emits `experiment.result` and `experiment.winner`
-  - `/admin/experiments/activate` (POST) — apply a variant’s knobs to live hints `{id,variant}`
-  - `/admin/experiments/list` (GET) — list experiment definitions
-  - `/admin/experiments/scoreboard` (GET) — persisted scoreboard (last‑run snapshot per variant)
-  - `/admin/experiments/winners` (GET) — persisted winners (last known)
-- Patch Safety
-  - `/admin/safety/checks` (POST) — static red‑team checks for proposed patches; returns issues (SSRF patterns, prompt‑injection phrasing, secrets markers, permission widenings)
-  - `ARW_PATCH_SAFETY=1` — enforce checks in `/admin/patch/apply`
-- Distillation
-  - `/admin/distill/run` (POST) — run distillation once (beliefs/playbooks/index hygiene); emits `distill.completed`
-- `/admin/emit/test`: emit a test event
-- `/admin/shutdown`: request shutdown
 
-## Egress (Service Endpoints)
+## Triad surface
 
-These endpoints live under the public service namespace; use admin token for writes.
+The triad groups operations by intent:
 
-- `GET /state/egress/settings` — effective settings (posture and toggles)
-- `POST /egress/settings` — update toggles and persist to config (admin‑gated)
-- `POST /egress/preview` — dry‑run a URL against policy/guards and return `{ allow|reason }`
+| Plane  | Purpose | Representative endpoints |
+| ------ | ------- | ------------------------ |
+| Actions | Submit work and mutate state | `POST /actions`, `POST /leases`, `POST /egress/settings`, `POST /patch/apply` |
+| Events | Subscribe to live changes | `GET /events` |
+| State  | Read materialized views and history | `GET /state/actions`, `GET /state/egress`, `GET /state/config` |
 
-See How‑to → Egress Settings and Architecture → Egress Firewall for details.
+### Actions plane (mutations)
 
-Note: Depending on build flags and environment, some endpoints may be unavailable or no‑op.
+- **Action queue**
+  - `POST /actions` — enqueue a new action; policy and lease checks fire before the job enters the queue.
+  - `GET /actions/:id` — retrieve the current state, IO payloads, and timestamps for an action.
+  - `POST /actions/:id/state` — transition an action (`queued|running|completed|failed`), emitting bus events for downstream consumers.
+- **Leases**
+  - `POST /leases` — mint an expiring capability lease (for example `context:rehydrate:file`), returning the id and expiry timestamp.
+- **Policy controls**
+  - `POST /policy/reload` — hot-reload the policy engine from environment configuration; emits `policy.reloaded` and requires the admin token.
+  - `POST /policy/simulate` — evaluate a prospective ABAC request without persisting state; returns the decision payload.
+- **Egress posture**
+  - `POST /egress/settings` — patch the effective posture/allowlist/toggles, validate against `spec/schemas/egress_settings.json`, persist a snapshot, and publish `egress.settings.updated` (token required).
+  - `POST /egress/preview` — dry-run a URL against the allowlist, posture, and lease policy to see whether it would be allowed.
+- **Configuration & schema helpers**
+  - `POST /patch/apply` — apply one or more JSON merge/set patches to the runtime config, validate against an optional schema, snapshot, and emit a config patch event.
+  - `POST /patch/revert` — roll back to an earlier snapshot by id (requires token).
+  - `POST /patch/validate` — validate payloads against schemas without applying them.
+  - `POST /patch/infer_schema` — attempt to infer which schema/pointer applies to a dotted path and return guidance.
+- **Logic units**
+  - `POST /logic-units/install` — register a logic unit package on disk (token required).
+  - `POST /logic-units/apply` — activate a logic unit version across the runtime.
+  - `POST /logic-units/revert` — roll back to a previous logic unit snapshot.
+- **Context assembly**
+  - `POST /context/assemble` — drive the working-set loop once or stream each iteration (set `stream=true`) to build retrieval context, including diagnostics and coverage metadata.
+  - `POST /context/rehydrate` — rehydrate context pointers (currently file heads) with lease-aware guardrails and policy enforcement.
+- **Memory writes & advanced retrieval**
+  - `POST /memory/put` — insert a memory record (optionally with embeddings/tags) and emit `memory.record.put`.
+  - `POST /memory/search_embed` — vector search by embedding.
+  - `POST /memory/link` — create a link between memory items.
+  - `POST /state/memory/select_hybrid` — hybrid lexical/vector search with optional filters.
+  - `POST /memory/select_coherent` — assemble a coherent working set across lanes with optional evidence expansion.
+  - `POST /state/memory/explain_coherent` — request explanations for coherent selections (debug-oriented).
+- **Connectors**
+  - `POST /connectors/register` — write a connector manifest to disk and emit `connectors.registered` (token required).
+  - `POST /connectors/token` — store or rotate connector tokens/secrets and emit `connectors.token.updated` (token required).
+- **Orchestrator**
+  - `POST /orchestrator/mini_agents/start_training` — kick off training for mini agents; the read model exposes progress via `/state/orchestrator/jobs`.
+
+### Events plane (observation)
+
+- `GET /events` — Server-Sent Events stream of every bus publication. Supports `after`, `replay`, and `prefix` query parameters along with `Last-Event-ID` headers for resume. Set `ARW_EVENTS_SSE_MODE=ce-structured` to emit CloudEvents JSON instead of envelopes.
+
+### State plane (materialized views)
+
+- **Actions & activity**
+  - `GET /state/actions` — recent actions (capped by `limit`, default 200).
+  - `GET /state/episodes` — roll up recent events by correlation id for quick timeline inspection.
+  - `GET /state/route_stats` — per-route counters plus bus metrics.
+  - `GET /state/contributions` — last 200 contribution entries.
+- **Leases & policy**
+  - `GET /state/leases` — active leases with capability, scope, and expiry.
+  - `GET /state/policy` — current policy snapshot (rules, defaults, capabilities).
+- **Egress**
+  - `GET /state/egress` — recent ledger entries (size controlled by `limit`).
+  - `GET /state/egress/settings` — effective posture, allowlist, proxy toggle, and ledger state derived from env vars.
+- **Models**
+  - `GET /state/models` — models metadata from `state/models.json` (with defaults when the file is absent).
+- **Configuration & schemas**
+  - `GET /state/config` — effective configuration tree (post-patch).
+  - `GET /state/config/snapshots` — snapshot history (id + metadata).
+  - `GET /state/config/snapshots/:id` — retrieve a specific snapshot by id.
+  - `GET /state/schema_map` — discover schema references indexed by dotted path.
+- **Logic units & orchestrator**
+  - `GET /logic-units` — installed logic units (read-only catalog).
+  - `GET /state/logic_units` — read-model summary of logic unit jobs/status.
+  - `GET /state/orchestrator/jobs` — orchestrator jobs snapshot for mini agents.
+- **Connectors**
+  - `GET /state/connectors` — connector manifests with secrets scrubbed.
+- **Memory & context**
+  - `GET /state/memory/select` — textual search across memory lanes (`q`, `mode`, `limit`).
+  - `GET /state/memory/links` — list memory links for inspection.
+  - `GET /state/memory/recent` — most recent memory inserts per lane.
+- **Self introspection**
+  - `GET /state/self` — list available self models on disk.
+  - `GET /state/self/:agent` — fetch a specific self model JSON snapshot.
 
 ## Examples
 
@@ -164,199 +210,73 @@ Setup:
 ```bash
 export ARW_ADMIN_TOKEN=secret123
 BASE=http://127.0.0.1:8091  # legacy bridge listens on 8090
-AH() { curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$@"; }
+AUTH=(-H "Authorization: Bearer $ARW_ADMIN_TOKEN")
 ```
 
-- List tools
-```bash
-AH "$BASE/admin/tools" | jq
-```
+Queue an action:
 
-- Run a tool
 ```bash
-curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
+curl -sS "${BASE}/actions" \
+  "${AUTH[@]}" \
   -H 'Content-Type: application/json' \
-  -d '{"id":"math.add","input":{"a":2,"b":3}}' \
-  "$BASE/admin/tools/run" | jq
+  -d '{"kind":"demo.echo","input":{"message":"hello"}}' | jq
 ```
 
-- Apply memory item (accepted)
+Inspect recent actions:
+
 ```bash
-curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"kind":"episodic","value":{"note":"hello"}}' \
-  -X POST "$BASE/admin/memory/apply" -i
+curl -sS "${BASE}/state/actions?limit=5" | jq '.items[] | {id,kind,state}'
 ```
 
-- Enqueue a task
+Dry-run an egress request:
+
 ```bash
-curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
+curl -sS "${BASE}/egress/preview" \
+  "${AUTH[@]}" \
   -H 'Content-Type: application/json' \
-  -d '{"kind":"math.add","payload":{"a":1,"b":4}}' \
-  -X POST "$BASE/admin/tasks/enqueue" | jq
+  -d '{"url":"https://example.com/model.gguf","method":"GET"}' | jq
 ```
 
-- Stream events (SSE)
+Stream events (replay the last 5 first):
+
 ```bash
-curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?replay=10"
+curl -N "${BASE}/events?replay=5"
 ```
 
-### Event Examples
+### Event samples
 
-Canonical topic names are defined once in [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs) and referenced by the service.
+- `actions.submitted`
 
-- models.download.progress (progress)
-```
-{ "id": "qwen2.5-coder-7b", "status": "downloading", "code": "progress", "progress": 42, "downloaded": 12582912, "total": 30000000 }
-```
-
-- models.download.progress (complete)
-```
-{ "id": "qwen2.5-coder-7b", "status": "complete", "code": "complete", "file": "qwen.gguf", "provider": "local", "cas_file": "<sha256>.gguf" }
-```
-
-- models.download.progress (error)
-```
-{ "id": "qwen2.5-coder-7b", "error": "checksum mismatch", "code": "checksum-mismatch", "expected": "<hex>", "actual": "<hex>" }
-```
-
-- models.download.progress (canceled)
-```
-{ "id": "qwen2.5-coder-7b", "status": "canceled", "code": "canceled-by-user" }
-```
-
-- models.cas.gc (summary)
-```
-{ "scanned": 12, "kept": 9, "deleted": 3, "deleted_bytes": 8796093022, "ttl_days": 14 }
-```
-
-- egress.preview (pre-offload)
-```
-{ "id": "qwen2.5-coder-7b", "url": "https://example/model.gguf", "dest": { "host": "example", "port": 443, "protocol": "https" }, "provider": "local", "corr_id": "..." }
-```
-
-- egress.ledger.appended (allow)
-```
-{ "decision": "allow", "reason_code": "models.download", "posture": "off", "project_id": "default", "episode_id": null, "corr_id": "...", "node_id": null, "tool_id": "models.download", "dest": { "host": "example", "port": 443, "protocol": "https" }, "bytes_out": 0, "bytes_in": 1048576, "duration_ms": 1200 }
-```
-
-See also: Developer → [Egress Ledger Helper (Builder)](../developer/style.md#egress-ledger-helper-builder)
-
-## OpenAPI
-
-- `/spec/openapi.yaml` provides an OpenAPI document for many admin endpoints (includes Models admin routes).
-- The `/admin` index is the authoritative, live source of admin paths from the running binary.
-
-## Security Guidance
-
-- Keep `ARW_ADMIN_TOKEN` secret and rotate routinely.
-- Avoid `ARW_DEBUG=1` outside local dev.
-- Place ARW behind a reverse proxy with TLS and IP allowlists where possible.
-- Consider additional auth at the proxy (mTLS, OIDC) for defense in depth.
-Quarantine an item (example)
-```bash
-curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"project_id":"demo","content_type":"text/html","content_preview":"<html>...</html>","provenance":"https://example.com","risk_markers":["html","script"],"evidence_score":0.3}' \
-  -X POST "$BASE/admin/memory/quarantine" | jq
-```
-
-World diff queue/decision (example)
-```bash
-curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"project_id":"demo","from_node":"peer-1","summary":"update beliefs","changes":[{"op":"add","path":"/beliefs/x","value":1}]}' \
-  -X POST "$BASE/admin/world_diffs/queue" | jq
-
-curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{"id":"<id-from-queue>","decision":"apply","note":"looks good"}' \
-  -X POST "$BASE/admin/world_diffs/decision" | jq
-```
-### Models
-
-- `POST /admin/models/download` — Start or resume a model download.
-  - Body: `{id,url,sha256,provider?,budget?}` where `budget` can override `{soft_ms,hard_ms,class}` for this request.
-  - Requires a 64‑char hex `sha256`.
-  - Emits standardized `models.download.progress` events.
-  
-  Example request/response
-  ```bash
-  curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
-    -H 'Content-Type: application/json' \
-    -d '{"id":"llama3.1:8b-instruct-q4_K_M","url":"https://example/model.bin","sha256":"7f2e4c0f9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e","provider":"hf"}' \
-    -X POST "$BASE/admin/models/download" | jq
-  # {
-  #   "ok": true
-  # }
+  ```json
+  {
+    "time": "2025-03-08T18:22:11.112Z",
+    "kind": "actions.submitted",
+    "payload": { "id": "act-123", "kind": "demo.echo", "status": "queued" }
+  }
   ```
-- `POST /admin/models/download/cancel` — Cancel an in‑flight download for `{id}`. Emits `cancel-requested` then `canceled` when complete (or `no-active-job`).
-- `POST /admin/models/cas_gc` — Run a one‑off CAS GC sweep: `{ttl_days}`. Emits `models.cas.gc`.
-- `GET  /state/models` — Public, read‑only models list.
-- `GET  /admin/state/models_hashes` — Admin summary of installed hashes and sizes.
 
-Notes
-- Success responses use a consistent envelope `{ ok: true, data: ... }`.
-- Errors return RFC‑7807 ProblemDetails with HTTP status codes. Missing services and unexpected errors are mapped to `500` with a structured JSON body.
-- `GET  /admin/models/by-hash/:sha256` — Serve a CAS blob by hash (egress‑gated; `io:egress:models.peer`).
-- `GET  /admin/state/models_metrics` — Lightweight downloads metrics used for admission checks; returns `{ ewma_mbps: number|null, started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total }`.
-- `GET  /admin/state/egress/ledger` — Last N ledger entries (JSONL → JSON array).
-- `GET  /admin/state/egress/ledger/summary` — Summary with optional filters (`since_ms`, `decision`, `reason_code`, `project_id`); returns `{ count, scanned, bytes_in, bytes_out, by_decision, top_reasons, sample }`.
- - `GET  /admin/state/models_metrics` — Read‑model counters `{ started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total, ewma_mbps }`.
-- SSE: `state.read.model.patch` with id=`models_metrics` publishes RFC‑6902 JSON Patches with coalescing.
-- `POST /admin/models/concurrency` — Set models download concurrency at runtime. Body: `{ max: number, block?: boolean }`. When `block` is `true` (default), shrinking waits for permits; when `false`, it shrinks opportunistically.
-- `GET  /admin/models/concurrency` — Get current concurrency, including `{ configured_max, available_permits, held_permits, hard_cap, pending_shrink? }`.
-  - `GET  /admin/models/jobs` — Snapshot of active jobs and inflight hashes for observability.
-    
-    Example response
-    ```json
-    {
-      "active": [
-        { "model_id": "llama3.1:8b-instruct-q4_K_M", "job_id": "dl-5f45c0a1" }
-      ],
-      "inflight_hashes": [
-        "7f2e4c0f9b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e"
-      ],
-      "concurrency": { "configured_max": 2, "available_permits": 1, "held_permits": 0 }
+- `egress.ledger.appended`
+
+  ```json
+  {
+    "time": "2025-03-08T18:25:41.009Z",
+    "kind": "egress.ledger.appended",
+    "payload": {
+      "decision": "allow",
+      "reason": "preview",
+      "host": "example.com",
+      "protocol": "https"
     }
-    ```
+  }
+  ```
 
-See also
-- Reference → Models Typed Shapes for the stable response schemas used by these endpoints.
+## Security guidance
 
-### Tools
+- Keep `ARW_ADMIN_TOKEN` secret and rotate regularly; many high-impact helpers reject requests without it.
+- Place the service behind TLS and IP allowlists when exposing it beyond localhost.
+- Enable `ARW_EGRESS_LEDGER_ENABLE=1` to persist outbound decisions and audit them via `/state/egress`.
+- Use leases to scope dangerous operations (`POST /leases` → `context:rehydrate:file` capability) and require the lease before invoking filesystem helpers.
 
-- `GET /admin/tools/cache_stats` — Tool Action Cache stats `{ hit, miss, coalesced, entries, ttl_secs, capacity }`.
-- Events: `tool.cache` per run `{ id, outcome:hit|miss|coalesced, elapsed_ms, key, digest, age_secs }`.
+## Legacy `arw-svc` surface (deprecated)
 
-### Route Stats (Read‑model)
-
-- `GET /admin/state/route_stats` — `{ by_path: { "/path": { hits, errors, ewma_ms, p95_ms, max_ms } } }`.
-- SSE: `state.read.model.patch` with id=`route_stats` (coalesced).
-
-#### Models Manifest
-
-After a successful download and verification, ARW writes a per‑ID manifest next to the CAS store: `{state_dir}/models/<id>.json`.
-
-Example:
-```
-{
-  "id": "qwen2.5-coder-7b",
-  "file": "<sha256>.gguf",
-  "name": "original_name.gguf",
-  "path": "/path/to/state/models/by-hash/<sha256>.gguf",
-  "url": "https://example.com/model.gguf",
-  "sha256": "<64-hex>",
-  "cas": "sha256",
-  "bytes": 123456789,
-  "provider": "local",
-  "verified": true
-}
-```
-
-Schema: see [spec/schemas/model_manifest.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/model_manifest.json).
-
-Notes
-- Downloads promote into CAS under `{state_dir}/models/by-hash/<sha256>[.<ext>]` and write a per‑ID manifest `{state_dir}/models/<id>.json`.
-- When `ARW_DL_PREFLIGHT=1`, a HEAD preflight enforces `ARW_MODELS_MAX_MB` and optional `ARW_MODELS_QUOTA_MB` before transfer.
-- See Guide → Models Download for event schema, budgets, progress, and error codes.
+The classic `arw-svc` bridge still exists for workflows that depend on the legacy debug UI and the historical `/admin/*` namespace. Launch it explicitly with `scripts/start.sh --legacy` on macOS/Linux or `scripts/start.ps1 -Legacy` on Windows. The `/admin` prefix is deprecated; new features ship only on the unified triad surface, and `/about` will continue to advertise every supported endpoint. Keep the bridge isolated and plan migrations toward the `arw-server` routes above.
