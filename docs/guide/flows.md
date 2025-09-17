@@ -12,7 +12,8 @@ Type: How‑to
 ## Open the Page
 
 - Set `ARW_DEBUG=1`
-- Open: `http://127.0.0.1:8090/ui/flows` (or `/admin/ui/flows` with an admin token). In the unified server, planned endpoints live under `/logic-units/*`.
+- Unified server (default local dev port `http://127.0.0.1:8091`): open `http://127.0.0.1:8091/ui/flows` (or `/admin/ui/flows` with an admin token).
+- Legacy standalone UI builds still serve the page on `http://127.0.0.1:8090/ui/flows`; use that port only when running the split UI stack.
 
 !!! note "Legacy debug UI"
     The `/ui/flows` surface lives in the legacy `arw-svc` bridge on port 8090. The unified headless server on port 8091 exposes the underlying APIs under `/logic-units/*` instead.
@@ -20,7 +21,7 @@ Type: How‑to
 ## What It Does
 
 - Lets you set a Unit ID and optional scope and paste a JSON array of patches
-- Dry‑run or Apply via `POST /admin/logic-units/apply`
+- Dry‑run or Apply via `POST /logic-units/apply`
 - Shows the result payload for quick iteration
 
 ## Patch Example
@@ -39,10 +40,10 @@ This updates planner/governor hints to favor a verified mode with stronger retri
 
 ## Programmatic Use
 
-You can call Logic Units endpoints directly from clients:
+You can call the shipped Logic Units endpoints directly from clients:
 
-- `POST /admin/logic-units/apply` — apply patches
-- `POST /admin/logic-units/install` — register a unit manifest
-- `POST /admin/logic-units/revert` — revert by snapshot id
+- `POST /logic-units/apply` — apply patches
+- `POST /logic-units/install` — register a unit manifest
+- `POST /logic-units/revert` — revert by snapshot id
 
 See also: Guide → Logic Units Library; Architecture → Config Patch Engine.
