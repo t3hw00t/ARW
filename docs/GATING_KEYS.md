@@ -1,6 +1,6 @@
 # Gating Keys
 
-Generated: this list is produced from code.
+Generated from code.
 
 - `queue:enqueue`
 - `events:task.completed`
