@@ -45,16 +45,19 @@ Roadmap highlights themes and timelines; Backlog tracks actionable items.
  - Logic Units (config‑first): manifest/schema, Library UI with diff preview, apply/revert/promote, initial sample units
  - Research Watcher (read‑only): draft Suggested units from curated feeds; human review flow
 
-## Caching & Performance
-- Inference‑level: enable llama.cpp prompt cache; plan vLLM prefix/KV reuse when we add that backend.
-- Exact CAS HTTP caching: strong validators and long‑lived `Cache-Control` for immutable model blobs served by sha256.
-- Action Cache (Bazel‑style): deterministic keys (tool id, version, canonical input, env signature) → CAS’d outputs; in‑memory front (W‑TinyLFU), disk CAS backing.
-- Request coalescing: singleflight on identical tool calls and expensive reads to prevent stampedes.
-- Read‑models over SSE: stream JSON Patch deltas with Last‑Event‑ID resume; avoid snapshot retransmits.
-- Semantic caches (design): per‑user/project Q→A cache with verifier; negative cache for retrieval misses; SimHash prefilter.
-- Storage: RocksDB tiers for persistent caches; optional flash secondary cache; Zstd dictionaries for small JSON blobs.
-- Measurement: layer hit ratios, latency/bytes saved, stampede suppression, semantic false‑hit rate; expose in `/state/*`.
- - Cache Policy: author a declarative cache policy manifest and loader; map to current knobs incrementally; document fallbacks and scope privacy defaults.
+## Guiding Initiatives
+
+### Performance Guardrails
+The stack scales by refusing to recompute or resend the same work twice and by bounding how much memory, CPU, or bandwidth each layer may consume. See [Architecture → Performance Guardrails](architecture/performance.md) for implementation details and operating guidance.
+
+- **Prompt reuse for inference** keeps llama.cpp KV blocks on disk and plans vLLM prefix/KV sharing so repeated scaffolds skip token recompute, bounding GPU minutes per task.
+- **Action Cache (Bazel-style)** deduplicates deterministic tool calls via hashed inputs and a CAS-backed store; fronted by a W-TinyLFU cache with TTL and capacity caps so CPU time and disk grow only within declared budgets.
+- **Digest-addressed HTTP caching** serves model blobs and other immutable artifacts by sha256 with strong validators, keeping bandwidth predictable and capping repeated egress.
+- **Request coalescing** applies singleflight around identical tool invocations and heavy reads, collapsing surges so concurrency stays within worker limits instead of stampeding.
+- **Read-model SSE deltas** stream RFC-6902 patches with burst coalescing and Last-Event-ID resume so dashboards stay live while network and client JSON patching stay bounded.
+- **Semantic and negative caches (planned)** keep per-project Q→A matches plus "no hit" markers with verifier gates, reducing redundant inference while privacy scopes and eviction policies pin their memory footprint.
+- **Tiered storage & compression** layers in-memory caches with RocksDB and optional flash tiers, pairing Zstd dictionaries for small JSON blobs so hot data stays fast without unbounded disk churn.
+- **Instrumentation & policy manifests** publish hit ratios, latency savings, and suppression counters in `/state/*` and `/metrics`, then feed declarative cache policy files that enforce privacy scopes and fallbacks before limits are exceeded.
 
 ## Heuristic Feedback Engine
 Scope: Lightweight, near‑live suggestions with guardrails.

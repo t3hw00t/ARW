@@ -81,7 +81,7 @@ The details that make ARW practical in real workflows.
 - Debug UI: inspect episodes, state snapshots, and traces. See https://t3hw00t.github.io/ARW/guide/troubleshooting/
 - Recipes + Schemas: installable strategy packs with JSON Schemas. See https://t3hw00t.github.io/ARW/guide/recipes/ and https://github.com/t3hw00t/ARW/tree/main/spec/schemas
 - Observability: tracing/logging/metrics and journal. See https://t3hw00t.github.io/ARW/architecture/observability_otel/. CI enforces interactive performance budgets; see https://t3hw00t.github.io/ARW/guide/interactive_bench/
- - Caching Layers: Action Cache with CAS and singleflight; digest‑addressed blob serving with strong validators; read‑models over SSE (JSON Patch deltas with coalescing); llama.cpp prompt caching. See https://t3hw00t.github.io/ARW/architecture/caching_layers/
+- Performance guardrails: dedupe work via the Action Cache + singleflight, serve digest‑addressed blobs with strong validators, stream read‑model deltas, and reuse llama.cpp prompts. See [Roadmap → Performance Guardrails](docs/ROADMAP.md#performance-guardrails), [Architecture → Performance Guardrails](docs/architecture/performance.md), and https://t3hw00t.github.io/ARW/architecture/caching_layers/
 
 ## Try ARW in 2 Minutes
 
