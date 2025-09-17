@@ -3,6 +3,7 @@
 <div align="left">
 
 [![CI](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml/badge.svg)](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml)
+[![Docs](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml/badge.svg?event=pull_request)](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml)
 [![Docs Check](https://github.com/t3hw00t/ARW/actions/workflows/docs-check.yml/badge.svg)](https://github.com/t3hw00t/ARW/actions/workflows/docs-check.yml)
 [![Docs](https://img.shields.io/badge/docs-material%20for%20mkdocs-blue)](https://t3hw00t.github.io/ARW/)
 [![Container](https://img.shields.io/badge/ghcr-arw--server-blue?logo=docker)](https://ghcr.io/t3hw00t/arw-server)

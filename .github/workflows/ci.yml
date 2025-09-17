@@ -69,6 +69,13 @@ jobs:
       - name: Build docs (strict)
         run: mkdocs build --strict
 
+      - name: Upload docs artifact (PR preview)
+        if: ${{ github.event_name == 'pull_request' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: mkdocs-site
+          path: site/
+
       - name: Rust format
         run: cargo fmt --all --check
 
@@ -77,4 +84,3 @@ jobs:
 
       - name: Tests (core server + svc)
         run: cargo nextest run -p arw-server -p arw-svc
-

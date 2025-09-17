@@ -53,18 +53,33 @@ else
   cargo test --workspace --locked
 fi
 
-# Docs: stamp Updated/Type and build check if docs changed
+# Docs: always validate registry-generated docs are up-to-date when
+# registry or generator files change (drift guard), otherwise only when docs changed
+if git diff --cached --name-only | grep -E '^(interfaces/|scripts/gen_|scripts/check_system_components_integrity.py|scripts/check_feature_integrity.py)' >/dev/null 2>&1; then
+  echo "[pre-commit] Registry or generators changed — regenerating and verifying docs"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 scripts/gen_feature_matrix.py
+    python3 scripts/gen_feature_catalog.py
+    python3 scripts/gen_system_components.py
+  fi
+  if ! git diff --quiet -- docs/reference/feature_matrix.md docs/reference/feature_catalog.md docs/reference/system_components.md; then
+    echo "::error::Generated docs changed; commit the regenerated files" >&2
+    git --no-pager diff -- docs/reference/feature_matrix.md | sed -n '1,80p'
+    git --no-pager diff -- docs/reference/feature_catalog.md | sed -n '1,80p'
+    git --no-pager diff -- docs/reference/system_components.md | sed -n '1,80p'
+    exit 1
+  fi
+fi
+
+# If docs or mkdocs config changed, stamp metadata and build
 if git diff --cached --name-only | grep -E '^(docs/|mkdocs.yml)' >/dev/null 2>&1; then
   echo "[pre-commit] Docs changed — stamping metadata and building"
   if command -v python3 >/dev/null 2>&1; then
     python3 scripts/stamp_docs_updated.py || true
     python3 scripts/stamp_docs_type.py || true
-    # stage any modified docs files
     git add docs/**/*.md 2>/dev/null || true
   fi
-  if command -v bash >/dev/null 2>&1; then
-    bash scripts/docs_check.sh
-  fi
+  bash scripts/docs_check.sh
 fi
 EOF
 chmod +x .git/hooks/pre-commit
