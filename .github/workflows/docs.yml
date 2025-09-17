@@ -74,7 +74,7 @@ jobs:
           nohup python3 -m http.server 8000 -d site >/dev/null 2>&1 &
           sleep 2
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '20'
       - name: Axe a11y (optional)
