@@ -1216,7 +1216,8 @@ fn env_flag(key: &str) -> Option<bool> {
     })
 }
 
-pub const CONTEXT_ENV_KEYS: &[&str] = &[
+#[cfg(test)]
+const CONTEXT_ENV_KEYS: &[&str] = &[
     "ARW_CONTEXT_COVERAGE_MAX_ITERS",
     "ARW_CONTEXT_DIVERSITY_LAMBDA",
     "ARW_CONTEXT_EXPAND_PER_SEED",
