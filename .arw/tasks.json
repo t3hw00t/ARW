@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-17 21:58 UTC",
+  "updated": "2025-09-17 22:44 UTC",
   "tasks": [
     {
       "id": "t-250914050900-ev10",
@@ -1072,8 +1072,13 @@
       "title": "Retarget launcher to unified server",
       "desc": "Launcher still targets legacy bridge; migrate UI + service mgmt.",
       "status": "todo",
-      "notes": [],
-      "updated": "2025-09-17 21:58:17 UTC"
+      "notes": [
+        {
+          "time": "2025-09-17 22:44:29 UTC",
+          "text": "Launcher now prefers arw-server if present; defaults to port 8091; keeps legacy fallback."
+        }
+      ],
+      "updated": "2025-09-17 22:44:29 UTC"
     },
     {
       "id": "t-250917235818-8075",

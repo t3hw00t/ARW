@@ -10,7 +10,7 @@ use std::time::Duration;
 use tauri::Manager; // for get_webview_window on AppHandle
 use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
 
-/// Shared state holder for managing a spawned `arw-svc` child process.
+/// Shared state holder for managing a spawned service child process.
 #[derive(Clone)]
 pub struct ServiceState {
     inner: Arc<Mutex<Option<Child>>>,
@@ -28,7 +28,7 @@ fn default_port() -> u16 {
     std::env::var("ARW_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
-        .unwrap_or(8090)
+        .unwrap_or(8091)
 }
 
 fn effective_port(port: Option<u16>) -> u16 {
@@ -79,41 +79,89 @@ fn admin_token() -> Option<String> {
     None
 }
 
-/// Locate the `arw-svc` binary near the app or in the workspace target dir.
-pub fn locate_svc_binary() -> Option<PathBuf> {
+/// Locate the service binary (`arw-server` preferred, fallback to `arw-svc`).
+pub fn locate_service_binary() -> Option<(PathBuf, &'static str)> {
     // 1) next to this exe (packaged dist)
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            let candidate = dir.join("arw-svc");
-            let candidate_win = dir.join("arw-svc.exe");
-            if candidate.exists() {
-                return Some(candidate);
-            }
-            if candidate_win.exists() {
-                return Some(candidate_win);
+            for name in [
+                if cfg!(windows) {
+                    "arw-server.exe"
+                } else {
+                    "arw-server"
+                },
+                if cfg!(windows) {
+                    "arw-svc.exe"
+                } else {
+                    "arw-svc"
+                },
+            ] {
+                let candidate = dir.join(name);
+                if candidate.exists() {
+                    return Some((
+                        candidate,
+                        if name.contains("server") {
+                            "server"
+                        } else {
+                            "legacy"
+                        },
+                    ));
+                }
             }
             // packaged layout may be bin/ alongside
             let bin = dir.join("bin");
-            let c2 = bin.join("arw-svc");
-            let c2w = bin.join("arw-svc.exe");
-            if c2.exists() {
-                return Some(c2);
-            }
-            if c2w.exists() {
-                return Some(c2w);
+            for name in [
+                if cfg!(windows) {
+                    "arw-server.exe"
+                } else {
+                    "arw-server"
+                },
+                if cfg!(windows) {
+                    "arw-svc.exe"
+                } else {
+                    "arw-svc"
+                },
+            ] {
+                let candidate = bin.join(name);
+                if candidate.exists() {
+                    return Some((
+                        candidate,
+                        if name.contains("server") {
+                            "server"
+                        } else {
+                            "legacy"
+                        },
+                    ));
+                }
             }
         }
     }
     // 2) workspace target/release
     let mut path = std::env::current_dir().ok()?;
     for _ in 0..3 {
-        let p = path.join("target").join("release").join(if cfg!(windows) {
-            "arw-svc.exe"
-        } else {
-            "arw-svc"
-        });
-        if p.exists() {
-            return Some(p);
+        for name in [
+            if cfg!(windows) {
+                "arw-server.exe"
+            } else {
+                "arw-server"
+            },
+            if cfg!(windows) {
+                "arw-svc.exe"
+            } else {
+                "arw-svc"
+            },
+        ] {
+            let p = path.join("target").join("release").join(name);
+            if p.exists() {
+                return Some((
+                    p,
+                    if name.contains("server") {
+                        "server"
+                    } else {
+                        "legacy"
+                    },
+                ));
+            }
         }
         path = path.parent()?.to_path_buf();
     }
@@ -450,10 +498,14 @@ mod cmds {
                 }
             }
         }
-        let svc_bin = locate_svc_binary().ok_or_else(|| "arw-svc binary not found".to_string())?;
+        let (svc_bin, kind) =
+            locate_service_binary().ok_or_else(|| "service binary not found".to_string())?;
         let mut cmd = Command::new(svc_bin);
-        cmd.env("ARW_DEBUG", "1")
-            .env("ARW_PORT", format!("{}", effective_port(port)))
+        // Only force ARW_DEBUG for legacy UI; unified server runs headless.
+        if kind == "legacy" {
+            cmd.env("ARW_DEBUG", "1");
+        }
+        cmd.env("ARW_PORT", format!("{}", effective_port(port)))
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -467,16 +519,19 @@ mod cmds {
         state: tauri::State<'_, ServiceState>,
         port: Option<u16>,
     ) -> Result<(), String> {
-        // try graceful shutdown (async client)
-        let url = service_url("shutdown", port);
-        static HTTP: OnceCell<reqwest::Client> = OnceCell::new();
-        let client = HTTP.get_or_init(|| {
-            reqwest::Client::builder()
-                .timeout(Duration::from_millis(900))
-                .build()
-                .unwrap()
-        });
-        let _ = client.get(url).send().await;
+        // try graceful shutdown for legacy service only (server lacks /shutdown)
+        let _ = async {
+            let url = service_url("shutdown", port);
+            static HTTP: OnceCell<reqwest::Client> = OnceCell::new();
+            let client = HTTP.get_or_init(|| {
+                reqwest::Client::builder()
+                    .timeout(Duration::from_millis(900))
+                    .build()
+                    .unwrap()
+            });
+            let _ = client.get(url).send().await;
+        }
+        .await;
         // then kill if needed
         if let Some(mut child) = state.inner.lock().map_err(|e| e.to_string())?.take() {
             let _ = child.kill();
