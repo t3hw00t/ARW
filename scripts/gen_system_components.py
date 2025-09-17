@@ -126,7 +126,7 @@ def render(doc, features, known_topics):
     lines.append(
         f"This page is generated from [interfaces/system_components.json]({base}interfaces/system_components.json) "
         f"and reconciled with [interfaces/features.json]({base}interfaces/features.json) plus topic constants in "
-        "[`crates/arw-topics`](../../crates/arw-topics/src/lib.rs).\n"
+        f"[`crates/arw-topics`]({base}crates/arw-topics/src/lib.rs).\n"
     )
 
     for comp in components:
@@ -144,7 +144,7 @@ def render(doc, features, known_topics):
             feat_name = feature.get("name", comp.get("feature_id"))
             slug = slugify(feat_name)
             lines.append(
-                f"- Feature: [{feat_name}](../feature_matrix.md#{slug}) ({feature.get('tier', 'unknown tier')})"
+                f"- Feature: [{feat_name}](feature_matrix.md#{slug}) ({feature.get('tier', 'unknown tier')})"
             )
         category = comp.get("category")
         scope = merge_scope(feature.get("scope") if feature else {}, comp.get("scope"))
