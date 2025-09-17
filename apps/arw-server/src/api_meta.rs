@@ -1,3 +1,4 @@
+use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use axum::{extract::State, Json};
 use serde_json::json;
@@ -58,4 +59,26 @@ pub async fn about(State(state): State<crate::AppState>) -> impl IntoResponse {
             "actions_queue_max": actions_queue_max
         }
     }))
+}
+
+/// Graceful shutdown (admin/debug only). For development convenience.
+#[utoipa::path(
+    get,
+    path = "/shutdown",
+    tag = "Meta",
+    responses((status = 200, description = "Exiting soon", body = serde_json::Value), (status = 401))
+)]
+pub async fn shutdown(headers: HeaderMap) -> impl IntoResponse {
+    if !crate::admin_ok(&headers) {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
+    tokio::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        std::process::exit(0);
+    });
+    (axum::http::StatusCode::OK, Json(json!({"ok": true}))).into_response()
 }

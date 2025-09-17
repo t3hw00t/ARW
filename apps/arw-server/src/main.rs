@@ -250,6 +250,14 @@ async fn main() {
         api_meta::about,
         "stable"
     );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        "/shutdown",
+        api_meta::shutdown,
+        "experimental"
+    );
     app = route_post_tag!(
         app,
         endpoints_acc,
