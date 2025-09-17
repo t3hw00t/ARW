@@ -79,9 +79,15 @@ jobs:
 
   openapi-sync:
     name: OpenAPI in sync with code
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+      - name: Install system dependencies (X11/Wayland/DBus libs)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libdbus-1-dev libxcb1-dev libxrandr-dev libxfixes-dev \
+            libwayland-dev libxkbcommon-dev libx11-dev
       - uses: actions/setup-python@v5
         with:
           python-version: '3.x'
@@ -160,8 +166,9 @@ jobs:
       - name: Diff OpenAPI (oasdiff)
         if: steps.prep.outputs.base_openapi
         run: |
+          # oasdiff v3 uses subcommands; 'breaking' exits non-zero for errors at or above the given level
           docker run --rm -v /tmp/ifc:/tmp -w /tmp tufin/oasdiff:latest \
-            -format markdown -fail-on-breaking -base /tmp/base.yaml -revision /tmp/rev.yaml \
+            breaking /tmp/base.yaml /tmp/rev.yaml -f markdown -o ERR \
             > /tmp/ifc/openapi-diff.md || (echo '::error::Breaking changes in OpenAPI'; cat /tmp/ifc/openapi-diff.md; exit 1)
       - name: Install AsyncAPI diff
         if: steps.prep.outputs.base_asyncapi

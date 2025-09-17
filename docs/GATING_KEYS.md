@@ -1,6 +1,4 @@
 # Gating Keys
-Updated: 2025-09-17
-Type: Reference
 
 Generated from code.
 
