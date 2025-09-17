@@ -1216,6 +1216,20 @@ fn env_flag(key: &str) -> Option<bool> {
     })
 }
 
+pub const CONTEXT_ENV_KEYS: &[&str] = &[
+    "ARW_CONTEXT_COVERAGE_MAX_ITERS",
+    "ARW_CONTEXT_DIVERSITY_LAMBDA",
+    "ARW_CONTEXT_EXPAND_PER_SEED",
+    "ARW_CONTEXT_EXPAND_QUERY",
+    "ARW_CONTEXT_EXPAND_QUERY_TOP_K",
+    "ARW_CONTEXT_K",
+    "ARW_CONTEXT_LANE_BONUS",
+    "ARW_CONTEXT_LANES_DEFAULT",
+    "ARW_CONTEXT_MIN_SCORE",
+    "ARW_CONTEXT_SCORER",
+    "ARW_CONTEXT_STREAM_DEFAULT",
+];
+
 pub fn default_lanes() -> Vec<String> {
     std::env::var("ARW_CONTEXT_LANES_DEFAULT")
         .ok()
@@ -1305,4 +1319,169 @@ pub fn default_max_iterations() -> usize {
 
 pub fn default_streaming_enabled() -> bool {
     env_flag("ARW_CONTEXT_STREAM_DEFAULT").unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use std::sync::Mutex;
+
+    static ENV_LOCK: once_cell::sync::Lazy<Mutex<()>> =
+        once_cell::sync::Lazy::new(|| Mutex::new(()));
+
+    struct ContextEnvGuard {
+        saved: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl ContextEnvGuard {
+        fn new() -> Self {
+            let saved = CONTEXT_ENV_KEYS
+                .iter()
+                .map(|&key| {
+                    let prev = std::env::var(key).ok();
+                    std::env::remove_var(key);
+                    (key, prev)
+                })
+                .collect();
+            Self { saved }
+        }
+    }
+
+    impl Drop for ContextEnvGuard {
+        fn drop(&mut self) {
+            for (key, value) in self.saved.iter() {
+                if let Some(value) = value {
+                    std::env::set_var(key, value);
+                } else {
+                    std::env::remove_var(key);
+                }
+            }
+        }
+    }
+
+    fn base_spec() -> WorkingSetSpec {
+        WorkingSetSpec {
+            query: None,
+            embed: None,
+            lanes: Vec::new(),
+            limit: 0,
+            expand_per_seed: 0,
+            diversity_lambda: f32::NAN,
+            min_score: f32::NAN,
+            project: None,
+            lane_bonus: f32::NAN,
+            scorer: None,
+            expand_query: default_expand_query(),
+            expand_query_top_k: 0,
+        }
+    }
+
+    #[test]
+    fn normalize_applies_defaults_when_missing() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let _env = ContextEnvGuard::new();
+        let mut spec = base_spec();
+        spec.expand_per_seed = 99;
+        spec.normalize();
+
+        assert_eq!(spec.lanes, default_lanes());
+        assert_eq!(spec.limit, default_limit());
+        assert_eq!(spec.expand_per_seed, 16);
+        assert_eq!(spec.diversity_lambda, default_diversity_lambda());
+        assert_eq!(spec.min_score, default_min_score());
+        assert_eq!(spec.lane_bonus, default_lane_bonus());
+        assert_eq!(spec.scorer_label(), default_scorer());
+        assert_eq!(spec.expand_query_top_k, default_expand_query_top_k());
+    }
+
+    #[test]
+    fn normalize_trims_and_clamps_inputs() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let _env = ContextEnvGuard::new();
+        let mut spec = WorkingSetSpec {
+            lanes: vec![
+                " procedural ".into(),
+                "semantic".into(),
+                "".into(),
+                "episodic".into(),
+                "semantic".into(),
+            ],
+            limit: 300,
+            expand_per_seed: 8,
+            diversity_lambda: 0.4,
+            min_score: 0.2,
+            project: Some("demo".into()),
+            lane_bonus: 0.7,
+            scorer: Some("  CONFIDENCE  ".into()),
+            expand_query: false,
+            expand_query_top_k: 100,
+            ..base_spec()
+        };
+        spec.normalize();
+
+        assert_eq!(spec.lanes, vec!["episodic", "procedural", "semantic"]);
+        assert_eq!(spec.limit, 256);
+        assert_eq!(spec.expand_per_seed, 8);
+        assert_eq!(spec.scorer_label(), "confidence");
+        assert_eq!(spec.expand_query_top_k, 32);
+    }
+
+    #[test]
+    fn snapshot_reflects_normalized_state() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let _env = ContextEnvGuard::new();
+        let mut spec = base_spec();
+        spec.lanes = vec!["semantic".into()];
+        spec.limit = 12;
+        spec.expand_per_seed = 2;
+        spec.min_score = 0.3;
+        spec.scorer = Some("mmrd".into());
+        spec.expand_query = true;
+        spec.expand_query_top_k = 6;
+        spec.normalize();
+
+        let snap = spec.snapshot();
+        assert_eq!(snap["limit"], json!(12));
+        assert_eq!(snap["lanes"], json!(vec!["semantic".to_string()]));
+        assert_eq!(snap["expand_query"], json!(true));
+        assert_eq!(snap["expand_query_top_k"], json!(6));
+        assert_eq!(snap["min_score"], json!(spec.min_score));
+        assert_eq!(snap["scorer"], json!(spec.scorer));
+    }
+
+    #[test]
+    fn env_overrides_expand_query_default() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let _env = ContextEnvGuard::new();
+        std::env::set_var("ARW_CONTEXT_EXPAND_QUERY", "true");
+
+        assert!(default_expand_query());
+
+        let spec = base_spec();
+        assert!(spec.expand_query);
+    }
+
+    #[test]
+    fn env_overrides_expand_query_top_k_default() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let _env = ContextEnvGuard::new();
+        std::env::set_var("ARW_CONTEXT_EXPAND_QUERY_TOP_K", "7");
+
+        assert_eq!(default_expand_query_top_k(), 7);
+
+        let mut spec = base_spec();
+        spec.expand_query_top_k = 0;
+        spec.normalize();
+        assert_eq!(spec.expand_query_top_k, 7);
+    }
+
+    #[test]
+    fn env_overrides_streaming_default() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let _env = ContextEnvGuard::new();
+        std::env::set_var("ARW_CONTEXT_STREAM_DEFAULT", "1");
+
+        assert!(default_streaming_enabled());
+    }
 }
