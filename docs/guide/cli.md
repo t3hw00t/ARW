@@ -28,6 +28,9 @@ Basics
  
 Specs
 - `arw-cli spec health --base http://127.0.0.1:8091 [--pretty]` — fetch `/spec/health` and print JSON (pretty‑print with `--pretty`)
+- OpenAPI: `curl http://127.0.0.1:8091/spec/openapi.yaml` — served by `apps/arw-server/src/api_spec.rs`, returns the HTTP API contract (YAML)
+- AsyncAPI: `curl http://127.0.0.1:8091/spec/asyncapi.yaml` — event stream schema aligned with the SSE bus
+- Index: `curl http://127.0.0.1:8091/spec/index.json | jq` — lists available spec artifacts and JSON schemas
 
 Events (SSE)
 - Tail live events from the service with optional replay and prefix filters:
@@ -71,6 +74,7 @@ Install docs & completions (script)
 Tips
 - Keep the private key safe; only commit public keys and signed capsules (with `signature`) as needed.
 - The service can adopt gating via capsules; see Security Hardening and Policy guides for how to apply.
+- Legacy bridge tip: when you need legacy admin surfaces such as `/spec/health`, target the connector bridge with `--base http://127.0.0.1:8090`.
 
 Related
 - Reference (commands and flags): [CLI Reference](../reference/cli.md)
