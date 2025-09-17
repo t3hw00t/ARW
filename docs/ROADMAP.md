@@ -17,6 +17,20 @@ Roadmap highlights themes and timelines; Backlog tracks actionable items.
 
 ## Kernel Hardening
 
+### Guiding Initiatives
+
+#### Performance Guardrails
+The stack scales by refusing to recompute or resend the same work twice and by bounding how much memory, CPU, or bandwidth each layer may consume. See [Architecture → Performance Guardrails](architecture/performance.md) for implementation details and operating guidance.
+
+- **Prompt reuse for inference** keeps llama.cpp KV blocks on disk and plans vLLM prefix/KV sharing so repeated scaffolds skip token recompute, bounding GPU minutes per task.
+- **Action Cache (Bazel-style)** deduplicates deterministic tool calls via hashed inputs and a CAS-backed store; fronted by a W-TinyLFU cache with TTL and capacity caps so CPU time and disk grow only within declared budgets.
+- **Digest-addressed HTTP caching** serves model blobs and other immutable artifacts by sha256 with strong validators, keeping bandwidth predictable and capping repeated egress.
+- **Request coalescing** applies singleflight around identical tool invocations and heavy reads, collapsing surges so concurrency stays within worker limits instead of stampeding.
+- **Read-model SSE deltas** stream RFC-6902 patches with burst coalescing and Last-Event-ID resume so dashboards stay live while network and client JSON patching stay bounded.
+- **Semantic and negative caches (planned)** keep per-project Q→A matches plus "no hit" markers with verifier gates, reducing redundant inference while privacy scopes and eviction policies pin their memory footprint.
+- **Tiered storage & compression** layers in-memory caches with RocksDB and optional flash tiers, pairing Zstd dictionaries for small JSON blobs so hot data stays fast without unbounded disk churn.
+- **Instrumentation & policy manifests** publish hit ratios, latency savings, and suppression counters in `/state/*` and `/metrics`, then feed declarative cache policy files that enforce privacy scopes and fallbacks before limits are exceeded.
+
 ### Recently Shipped (Sep 2025)
 - [Kernel] Stability baseline (v0.1.0-beta): consolidation freeze, clippy-clean core, docs freeze checklist, CHANGELOG + release script.
 - [Kernel] Optional gRPC server for arw-svc (feature-flagged; ARW_GRPC=1).
