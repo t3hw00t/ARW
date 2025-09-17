@@ -1,5 +1,4 @@
-use serde_json::json;
-use serde_json::Value;
+use serde_json::{json, Value};
 use std::path::PathBuf;
 
 pub fn default_models() -> Vec<Value> {
@@ -21,4 +20,16 @@ pub fn effective_posture() -> String {
 
 pub fn state_dir() -> PathBuf {
     PathBuf::from(std::env::var("ARW_STATE_DIR").unwrap_or_else(|_| "state".into()))
+}
+
+pub fn attach_memory_ptr(value: &mut Value) {
+    let Some(obj) = value.as_object_mut() else {
+        return;
+    };
+    if obj.contains_key("ptr") {
+        return;
+    }
+    if let Some(id) = obj.get("id").and_then(|v| v.as_str()) {
+        obj.insert("ptr".into(), json!({"kind": "memory", "id": id}));
+    }
 }

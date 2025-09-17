@@ -6,8 +6,18 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::{working_set, AppState};
+use crate::{util, working_set, AppState};
 use arw_topics as topics;
+
+fn attach_memory_ptrs(items: Vec<Value>) -> Vec<Value> {
+    items
+        .into_iter()
+        .map(|mut item| {
+            util::attach_memory_ptr(&mut item);
+            item
+        })
+        .collect()
+}
 
 #[derive(Deserialize)]
 pub(crate) struct MemPutReq {
@@ -74,7 +84,10 @@ pub async fn state_memory_select(
         state.kernel.search_memory(&query, lane, limit)
     };
     match res {
-        Ok(items) => Json(json!({"items": items, "mode": mode})),
+        Ok(items) => {
+            let items = attach_memory_ptrs(items);
+            Json(json!({"items": items, "mode": mode}))
+        }
         Err(e) => Json(json!({"items": [], "error": e.to_string()})),
     }
 }
@@ -97,11 +110,14 @@ pub async fn memory_search_embed(
         .kernel
         .search_memory_by_embedding(&req.embed, lane_opt, limit);
     match res {
-        Ok(items) => (
-            axum::http::StatusCode::OK,
-            Json(json!({"items": items, "mode": "embed"})),
-        )
-            .into_response(),
+        Ok(items) => {
+            let items = attach_memory_ptrs(items);
+            (
+                axum::http::StatusCode::OK,
+                Json(json!({"items": items, "mode": "embed"})),
+            )
+                .into_response()
+        }
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(
@@ -134,11 +150,14 @@ pub async fn memory_select_hybrid(
             .kernel
             .select_memory_hybrid(req.q.as_deref(), req.embed.as_deref(), lane_opt, limit);
     match res {
-        Ok(items) => (
-            axum::http::StatusCode::OK,
-            Json(json!({"items": items, "mode": "hybrid"})),
-        )
-            .into_response(),
+        Ok(items) => {
+            let items = attach_memory_ptrs(items);
+            (
+                axum::http::StatusCode::OK,
+                Json(json!({"items": items, "mode": "hybrid"})),
+            )
+                .into_response()
+        }
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(
@@ -196,6 +215,9 @@ pub async fn memory_select_coherent(
                 diagnostics,
                 ..
             } = ws;
+            let items = attach_memory_ptrs(items);
+            let seeds = attach_memory_ptrs(seeds);
+            let expanded = attach_memory_ptrs(expanded);
             let mut body = json!({"items": items, "mode": "coherent"});
             if req.include_sources.unwrap_or(false) {
                 body["seeds"] = json!(seeds);
@@ -229,7 +251,10 @@ pub async fn state_memory_recent(
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(100);
     match state.kernel.list_recent_memory(lane, limit) {
-        Ok(items) => (axum::http::StatusCode::OK, Json(json!({"items": items}))).into_response(),
+        Ok(items) => {
+            let items = attach_memory_ptrs(items);
+            (axum::http::StatusCode::OK, Json(json!({"items": items}))).into_response()
+        }
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(
@@ -314,6 +339,9 @@ pub async fn memory_explain_coherent(
                 diagnostics,
                 ..
             } = ws;
+            let items = attach_memory_ptrs(items);
+            let seeds = attach_memory_ptrs(seeds);
+            let expanded = attach_memory_ptrs(expanded);
             (
                 axum::http::StatusCode::OK,
                 Json(json!({

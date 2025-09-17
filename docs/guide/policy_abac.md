@@ -22,6 +22,7 @@ Set `ARW_POLICY_FILE` to a JSON file:
   "allow_all": false,
   "lease_rules": [
     { "kind_prefix": "net.http.", "capability": "net:http" },
+    { "kind_prefix": "context.rehydrate.memory", "capability": "context:rehydrate:memory" },
     { "kind_prefix": "context.rehydrate", "capability": "context:rehydrate:file" },
     { "kind_prefix": "fs.", "capability": "fs" },
     { "kind_prefix": "app.vscode.", "capability": "io:app:vscode" }
@@ -41,7 +42,7 @@ Presets
 
 ## Server Integration
 - `POST /actions`: evaluates policy for the action kind. If a capability is required, verifies a valid lease for subject `local`.
-- `POST /context/rehydrate`: when policy says context rehydrate requires a lease, checks for `context:rehydrate:file` or a generic `fs` lease.
+- `POST /context/rehydrate`: when policy says context rehydrate requires a lease, checks for `context:rehydrate:memory` (memory pointers), `context:rehydrate:file`, or a generic `fs` lease.
 - `GET /state/policy`: returns the current policy snapshot (from `ARW_POLICY_FILE` or defaults).
 - `fs.patch` action: lease‑gated when `fs.*` requires a capability; writes atomically under `state/projects` and emits `projects.file.written`.
  - `app.vscode.open` action: lease‑gated when `app.vscode.*` requires a capability; spawns VS Code to open a path under `state/projects`; emits `apps.vscode.opened`.
