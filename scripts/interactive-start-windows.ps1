@@ -38,7 +38,7 @@ Banner 'Agent Hub (ARW) — Start Menu (Windows)' 'Start services, tools, and de
 Write-Host '  Agent Hub (ARW) — local-first Rust workspace for personal AI agents.'
 Write-Host '  Highlights: user-mode HTTP service + debug UI; macro-driven tools; event stream; portable packaging.'
 
-$Port = if ($env:ARW_PORT) { [int]$env:ARW_PORT } else { 8090 }
+$Port = if ($env:ARW_PORT) { [int]$env:ARW_PORT } else { 8091 }
 $Debug = if ($env:ARW_DEBUG -eq '1') { $true } else { $false }
 $DocsUrl = $env:ARW_DOCS_URL
 $AdminToken = $env:ARW_ADMIN_TOKEN
@@ -85,12 +85,12 @@ function Start-ServiceOnly {
   $env:ARW_NO_TRAY = '1'
   if ($CfgPath) { $env:ARW_CONFIG = $CfgPath }
   $runDir = Join-Path $root '.arw\run'; New-Item -ItemType Directory -Force $runDir | Out-Null
-  $env:ARW_PID_FILE = (Join-Path $runDir 'arw-svc.pid')
+  $env:ARW_PID_FILE = (Join-Path $runDir 'arw-server.pid')
   $logs = Join-Path $root '.arw\logs'; New-Item -ItemType Directory -Force $logs | Out-Null
-  $env:ARW_LOG_FILE = (Join-Path $logs 'arw-svc.out.log')
-  $svc = Join-Path $root 'target\release\arw-svc.exe'
+  $env:ARW_LOG_FILE = (Join-Path $logs 'arw-server.out.log')
+  $svc = Join-Path $root 'target\release\arw-server.exe'
   if (-not (Test-Path $svc) -and -not (Get-Command cargo -ErrorAction SilentlyContinue)) {
-    Warn 'Service binary missing and Rust not installed. Run Setup → Dependencies → Install Rust.'
+    Warn 'Unified server binary missing and Rust not installed. Run Setup → Dependencies → Install Rust.'
   }
   if (-not (Security-Preflight)) { Warn 'Start canceled'; return }
   $svcArgs = @('-Port', $Port, '-TimeoutSecs', 20)
@@ -108,9 +108,9 @@ function Start-LauncherPlusService {
   $env:ARW_NO_TRAY = ''
   if ($CfgPath) { $env:ARW_CONFIG = $CfgPath }
   $runDir = Join-Path $root '.arw\run'; New-Item -ItemType Directory -Force $runDir | Out-Null
-  $env:ARW_PID_FILE = (Join-Path $runDir 'arw-svc.pid')
+  $env:ARW_PID_FILE = (Join-Path $runDir 'arw-server.pid')
   $logs = Join-Path $root '.arw\logs'; New-Item -ItemType Directory -Force $logs | Out-Null
-  $env:ARW_LOG_FILE = (Join-Path $logs 'arw-svc.out.log')
+  $env:ARW_LOG_FILE = (Join-Path $logs 'arw-server.out.log')
   $svcArgs = @('-Port', $Port, '-TimeoutSecs', 20)
   if ($Debug) { $svcArgs += '-Debug' }
   if ($DocsUrl) { $svcArgs += @('-DocsUrl', $DocsUrl) }
@@ -319,15 +319,16 @@ function Main-Menu {
 
 function Force-Stop {
   Section 'Force stop'
-  $pidFile = Join-Path $root '.arw\run\arw-svc.pid'
+  $pidFile = Join-Path $root '.arw\run\arw-server.pid'
   if (Test-Path $pidFile) {
     try {
       $pid = Get-Content -Path $pidFile | Select-Object -First 1
       if ($pid) { Stop-Process -Id $pid -Force -ErrorAction SilentlyContinue; Info "Stopped PID $pid" } else { Warn 'PID file empty' }
     } catch { Warn 'Failed to stop PID from file' }
   } else {
+    Stop-Process -Name 'arw-server' -Force -ErrorAction SilentlyContinue
     Stop-Process -Name 'arw-svc' -Force -ErrorAction SilentlyContinue
-    Warn 'PID file missing; attempted Stop-Process arw-svc'
+    Warn 'PID file missing; attempted Stop-Process arw-server/arw-svc'
   }
   # Also stop optional companion processes
   try { Stop-Process -Name 'arw-launcher' -Force -ErrorAction SilentlyContinue } catch {}
@@ -336,7 +337,7 @@ function Force-Stop {
 
 function Logs-Menu {
   $logs = Join-Path $root '.arw\logs'; New-Item -ItemType Directory -Force $logs | Out-Null
-  $svcLog = Join-Path $logs 'arw-svc.out.log'
+  $svcLog = Join-Path $logs 'arw-server.out.log'
   $natsOut = Join-Path $logs 'nats-server.out.log'
   $natsErr = Join-Path $logs 'nats-server.err.log'
   Banner 'Logs' $logs
@@ -510,7 +511,7 @@ function Session-Summary {
   $ts = Get-Date -Format yyyyMMdd_HHmmss
   $out = Join-Path $sup ("session_" + $ts + '.md')
   $nOk = $false; try { $nOk = (Test-NetConnection -ComputerName 127.0.0.1 -Port 4222 -WarningAction SilentlyContinue).TcpTestSucceeded } catch {}
-  $svcLog = Join-Path $root '.arw\logs\arw-svc.out.log'
+  $svcLog = Join-Path $root '.arw\logs\arw-server.out.log'
   $caddyPid = Join-Path $root '.arw\run\caddy.pid'
   $txt = @(
     "# ARW Session Summary ($ts)",
@@ -532,7 +533,7 @@ function Session-Summary {
 
 function Stop-All {
   if ($script:GlobalDryRun) {
-    Dry 'Would force-stop arw-svc, arw-launcher, arw-connector'
+    Dry 'Would force-stop arw-server (and legacy arw-svc), arw-launcher, arw-connector'
     Dry 'Would stop Caddy (and remove pid file)'
     Dry 'Would stop nats-server'
   } else {
@@ -651,7 +652,8 @@ function Doctor {
   if ($jq) { Info ("jq " + (& $jq.Path --version)) } else { Warn 'jq not found' }
   $mk = Get-Command mkdocs -ErrorAction SilentlyContinue
   if ($mk) { Info (mkdocs --version) } else { Warn 'mkdocs not found (docs optional)' }
-  $svc = Join-Path $root 'target\release\arw-svc.exe'; if (Test-Path $svc) { Info ("arw-svc: " + $svc) } else { Warn 'arw-svc not built' }
+  $server = Join-Path $root 'target\release\arw-server.exe'; if (Test-Path $server) { Info ("arw-server: " + $server) } else { Warn 'arw-server not built' }
+  $legacySvc = Join-Path $root 'target\release\arw-svc.exe'; if (Test-Path $legacySvc) { Info ("arw-svc (legacy bridge): " + $legacySvc) } else { Info 'arw-svc (legacy bridge) not built (optional)' }
   $launcher = Join-Path $root 'target\release\arw-launcher.exe'; if (Test-Path $launcher) { Info ("arw-launcher: " + $launcher) } else { Warn 'launcher not built (optional)' }
   try { $ok = (Test-NetConnection -ComputerName 127.0.0.1 -Port 4222 -WarningAction SilentlyContinue).TcpTestSucceeded; if ($ok) { Info 'NATS reachable on 127.0.0.1:4222' } else { Warn 'NATS not reachable' } } catch { }
   Read-Host 'Continue' | Out-Null

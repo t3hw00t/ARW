@@ -13,44 +13,89 @@ This checklist helps validate ARW startup on Windows after changes to `scripts/s
 Updated: 2025-09-16
 Type: Reference
 
-Quick pre-reqs
+## Quick pre-reqs
 - Install Rust toolchain (rustup): https://rustup.rs
 - Optional: build once `powershell -ExecutionPolicy Bypass -File scripts\build.ps1`
 
-Service + launcher (default)
-- Run: `powershell -ExecutionPolicy Bypass -File scripts\interactive-start-windows.ps1`
-- Pick “Start launcher + service”.
-- Expect: service console minimized (new default to reduce AV heuristics), launcher appears with a system tray icon.
-- Check `.arw\run\arw-svc.pid` and `.arw\logs\arw-svc.out.log` exist.
-- Open: `http://127.0.0.1:8090/debug` and `.../spec`.
-  - Tip: The Start menu lets you toggle health wait (and timeout) under “Configure runtime”.
+## Unified `arw-server` validation (default)
 
-Service only (CLI)
-- Set `ARW_NO_LAUNCHER=1` from the menu (or via environment) and start “service only”.
-- Expect: service starts in background; PID/log file present when configured.
+### 1. Launch the start menu
+- Run: `powershell -ExecutionPolicy Bypass -File scripts\interactive-start-windows.ps1`.
+- Expect the banner to show `Agent Hub (ARW) — Start Menu (Windows)` with the status line `Port=8091 Debug=False Dist=False HealthWait=True/20 s DryRun=False`.
+- Confirm the menu lists the options used below (full menu is longer):
+  - `1) Configure runtime (port/docs/token)`
+  - `3) Start service only`
+  - `9) Stop service (/shutdown)`
+  - `12) View logs`
+  - `13) Save preferences`
 
-**Hidden window regression check**
-- Run: `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -HideWindow -WaitHealth`
-- Expect: service window fully hidden (matches legacy behavior) and `/healthz` polling still succeeds.
+### 2. Confirm runtime prompts
+- Select `1) Configure runtime (port/docs/token)` and press Enter through the prompts to keep defaults.
+- Verify each prompt matches the script:
+  - `HTTP port [8091]`
+  - `Enable debug endpoints? (y/N)`
+  - `Docs URL (optional) []`
+  - `Admin token (optional) []`
+  - `Use packaged dist/ bundle when present? (y/N)`
+  - `Wait for /healthz after start? (Y/n) [Y]`
+  - `Health wait timeout secs [20]`
 
-Dist bundle
-- Package: `powershell -ExecutionPolicy Bypass -File scripts\package.ps1`
-- Start with bundle: `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -UseDist -WaitHealth`
-- Expect: service from `dist\arw-...\bin\arw-svc.exe` and health check completes.
+### 3. Start the unified server (headless)
+- Pick `3) Start service only`.
+- The menu sets `ARW_NO_LAUNCHER=1`, `ARW_PID_FILE=./.arw/run/arw-server.pid`, and `ARW_LOG_FILE=./.arw/logs/arw-server.out.log` before invoking `scripts/start.ps1`.
+- Expected CLI output from `start.ps1`:
+  - `[start] Launching ... arw-server.exe ... (headless env or unified server)`
+  - `[start] Health OK after … → http://127.0.0.1:8091/healthz`
+  - A warning about WebView2 is acceptable; the launcher is skipped for the unified server.
 
-NoBuild behavior
-- Remove or rename `target\release\arw-svc.exe`.
-- Run: `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -NoBuild`
-- Expect: script errors out early with “Service binary not found and -NoBuild specified”.
+### 4. Validate PID/log files and process
+- Confirm files exist: `Test-Path .\.arw\run\arw-server.pid` and `Test-Path .\.arw\logs\arw-server.out.log`.
+- Inspect the PID and running process:
+  - `Get-Content .\.arw\run\arw-server.pid`
+  - `Get-Process -Id (Get-Content .\.arw\run\arw-server.pid) | Select-Object ProcessName, Id, Path`
+- In the menu, choose `12) View logs → 1) Tail service log (if available)` to ensure it follows `.arw\logs\arw-server.out.log`.
 
-Health check
-- Use `-WaitHealth -WaitHealthTimeoutSecs 20` to have the script poll `http://127.0.0.1:<port>/healthz` after starting in background.
-- Expect: info message “Health OK …” on success; warning if not ready within timeout.
+### 5. HTTP smoke tests on port 8091
+- `Test-NetConnection -ComputerName 127.0.0.1 -Port 8091` should report `TcpTestSucceeded : True`.
+- Use `Invoke-RestMethod` for JSON endpoints (PowerShell 5 requires `-UseBasicParsing`):
+  - `Invoke-RestMethod http://127.0.0.1:8091/actions`
+  - `Invoke-RestMethod http://127.0.0.1:8091/state`
+- Stream a short event sample (Ctrl+C after seeing output):
+  - `curl --max-time 5 http://127.0.0.1:8091/events?tail=1`
+- Expect HTTP 200 responses. `/actions` and `/state` return JSON payloads; `/events` should emit at least one NDJSON/SSE line.
 
-Preferences file
-- From the start menu, “Save preferences”.
-- Verify `./.arw/env.ps1` contains literal lines like `$env:ARW_PORT = '8090'` (not expanded values).
+### 6. Shutdown cleanup
+- From the menu choose `9) Stop service (/shutdown)`.
+- Confirm `Get-Process -Name arw-server` fails and `.\.arw\run\arw-server.pid` no longer matches a running process.
 
-Notes
-- The launcher is optional; use CLI-only mode or `ARW_NO_LAUNCHER=1` (alias: `ARW_NO_TRAY=1`) to skip it.
-- For clean logs, delete `./.arw/logs/*` between runs.
+## CLI toggles and packaging checks
+- **Hidden window regression**: `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -HideWindow -WaitHealth`. Expect no console window flashes and `[start] Health OK … → http://127.0.0.1:8091/healthz`.
+- **Dist bundle**: package with `powershell -ExecutionPolicy Bypass -File scripts\package.ps1`, then run `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -UseDist -WaitHealth`. Confirm it launches `dist\arw-...\bin\arw-server.exe`.
+- **NoBuild guard**: temporarily rename `target\release\arw-server.exe`, run `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -NoBuild`, and expect `Service binary not found and -NoBuild specified`.
+- **WaitHealth timeout**: `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -WaitHealth -WaitHealthTimeoutSecs 20` should report success when the server is reachable, or warn if it times out.
+
+## Preferences file
+- In the menu select `13) Save preferences`.
+- Verify `./.arw/env.ps1` contains literal assignments (values reflect your prompts):
+  ```powershell
+  # ARW env (project-local)
+  # dot-source this file to apply preferences
+  $env:ARW_PORT = '8091'
+  $env:ARW_DOCS_URL = ''
+  $env:ARW_ADMIN_TOKEN = ''
+  $env:ARW_CONFIG = ''
+  $env:ARW_WAIT_HEALTH = '1'
+  $env:ARW_WAIT_HEALTH_TIMEOUT_SECS = '20'
+  ```
+- Re-run the menu to ensure the saved values pre-populate the prompts.
+
+## Optional: legacy `arw-svc` bridge mode (`-Legacy`)
+- Only run these checks when compatibility with the legacy launcher/bridge is required.
+- Launch with: `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -Legacy -WaitHealth` (default port falls back to 8090 unless `-Port` is provided).
+- Expect `arw-svc.exe` to start, with `.arw\run\arw-svc.pid` and `.arw\logs\arw-svc.out.log` populated.
+- Validate legacy endpoints: `http://127.0.0.1:8090/debug`, `http://127.0.0.1:8090/spec`, and `http://127.0.0.1:8090/healthz`.
+- Use `-Legacy -UseDist` when validating packaged builds that must drive the old launcher (`dist\arw-...\bin\arw-svc.exe`).
+
+## Notes
+- The unified server skips the launcher; `start.ps1` prints `Unified server runs headless; launcher requires -Legacy to target the old UI.` to confirm this path.
+- For clean logs between runs, remove `./.arw/logs/*` and `./.arw/run/*`.
