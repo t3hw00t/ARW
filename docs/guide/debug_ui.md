@@ -100,6 +100,7 @@ You can replace the placeholder images with real screenshots of your environment
 2) From the Tauri Launcher window
 - Open the Debug UI from the tray.
 - Use the OS screenshot tool to capture just the relevant panel.
+- Or use the launcher capture buttons (screen/window/region) to run `ui.screenshot.capture`; saved files land under `.arw/screenshots/…` with Activity/Gallery previews.
 
 3) Developer Tools (optional precision)
 - In the browser, open DevTools → Run a full‑page capture extension or use the device toolbar to emulate widths.

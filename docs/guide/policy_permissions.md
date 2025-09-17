@@ -10,6 +10,7 @@ Safe by default, fluid in use. Capabilities are explicit; policies grant/deny wi
 
 Capabilities (examples)
 - `fs:read`, `fs:write`, `net:http`, `shell:exec`, `mic`, `cam`, `gpu`, `sandbox:<kind>`
+- `io:screenshot` (screen/window/region capture + annotate), `io:ocr`
 
 Modes
 - `ask` (prompt), `allow` (auto), `never` (hard deny), with optional TTLs (e.g., 15 min)
@@ -20,6 +21,7 @@ Scopes
 
 Auditability
 - Every allow/deny decision is an event; sidecar renders a reviewable history for each episode
+- Screenshot captures publish `screenshots.captured`; annotate/OCR runs log alongside the lease so Activity + Gallery show who requested them.
 
 Related docs
 - Policy internals and capsules: see [Glossary → Capsule](../GLOSSARY.md) and [Admin Endpoints](admin_endpoints.md)

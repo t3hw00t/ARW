@@ -25,6 +25,7 @@ Type: How‑to
   - Drag‑and‑drop upload into the current folder (≤10 MiB)
   - Open with OS handler or your preferred editor (global or per‑project)
   - Inline edit with conflict‑aware merge and visual diff
+- Save captured screenshots from the launcher/gallery (the “Save to project” quick action targets this UI).
 
 See also: [Keyboard Shortcuts](shortcuts.md)
 

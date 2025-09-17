@@ -41,6 +41,7 @@ Legacy (debug) UI: /debug (enable ARW_DEBUG=1; legacy stack via --legacy)
 Notes
 - All views share one live SSE stream and read‑models; the sidecar shows the same state everywhere.
 - Managers own inventories; projects/agents hold references only.
+- Command palette screenshot actions (`ui.screenshot.capture`) publish `screenshots.captured`; chat buttons reuse the same pipeline so Activity and Gallery stay in sync.
 
 ## Typical Project Flow
 
