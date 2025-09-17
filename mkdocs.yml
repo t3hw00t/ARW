@@ -113,6 +113,7 @@ nav:
       - API Reference: reference/api.md
       - Models Types: reference/models_types.md
       - Feature Matrix: reference/feature_matrix.md
+      - System Components: reference/system_components.md
       - Feature Catalog: reference/feature_catalog.md
       - Event Topics: reference/topics.md
       - Interface Deprecations: reference/deprecations.md

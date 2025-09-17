@@ -12,6 +12,7 @@ python3 scripts/check_feature_integrity.py
 info "Generating feature docs"
 python3 scripts/gen_feature_matrix.py
 python3 scripts/gen_feature_catalog.py
+python3 scripts/gen_system_components.py
 
 info "Collecting cargo metadata"
 json=$(cargo metadata --no-deps --locked --format-version 1)
