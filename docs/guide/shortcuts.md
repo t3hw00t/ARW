@@ -55,6 +55,7 @@ Compare tabs
 ## Chat
 
 - Enter: Send message (from input)
+- C: Focus Capture → Capture window → Capture region buttons (cycles)
 
 ## Launcher (Index)
 

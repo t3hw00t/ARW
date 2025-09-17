@@ -11,6 +11,7 @@ Type: How‑to
 - Include/Exclude body filters (substring match)
 - Controls: Replay 50, Pretty JSON, Wrap, Pause, Clear, Copy last
 - One SSE stream; capped buffer (300 entries)
+- Watch capture activity by filtering `screenshots.`; the Activity lane/gallery subscribe to the same events.
 
 ## Logs (Introspection)
 - Top routes table (hits, p95, ewma, max), route filter, SLO coloring

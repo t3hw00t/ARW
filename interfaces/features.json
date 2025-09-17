@@ -111,6 +111,26 @@
       "env": ["ARW_TOOLS_CACHE_CAP", "ARW_TOOLS_CACHE_TTL_SECS", "ARW_POLICY_VERSION", "ARW_SECRETS_VERSION"]
     },
     {
+      "id": "screenshot_pipeline",
+      "name": "Screenshot Capture Pipeline",
+      "owner": "platform",
+      "tier": "Opt-in pack",
+      "deps": ["tool_forge", "policy_leases", "event_spine"],
+      "description": "Screen/window/region capture with annotate/blur, gallery, Save to project, and optional OCR for agents and operators.",
+      "scope": {"surface": "runtime", "audience": "admin", "layer": "auxiliary", "maturity": "complete"},
+      "ssot": [
+        {"path": "apps/arw-svc/src/ext/tools_exec.rs"},
+        {"path": "apps/arw-launcher/src-tauri/ui/common.js"},
+        {"path": "docs/guide/screenshots.md"}
+      ],
+      "http": [
+        {"method": "POST", "path": "/admin/tools/run"}
+      ],
+      "read_models": [],
+      "topics": ["screenshots.captured"],
+      "env": []
+    },
+    {
       "id": "chat_workbench",
       "name": "Chat Workbench",
       "owner": "platform",
@@ -432,7 +452,7 @@
       "owner": "platform",
       "tier": "Core kernel",
       "deps": ["triad_kernel"],
-      "description": "Hybrid retrieval with coverage loops, streaming diagnostics, and on-demand rehydrate for just-in-time context.",
+      "description": "Hybrid retrieval with coverage loops, streaming diagnostics, and on-demand rehydrate for just-in-time context (stable pointers include `memory` ids and `file` heads).",
       "scope": {"surface": "backend", "audience": "builder", "layer": "intelligence", "maturity": "beta"},
       "ssot": [
         {"path": "apps/arw-server/src/api_context.rs"},
@@ -474,7 +494,7 @@
       "owner": "platform",
       "tier": "Core kernel",
       "deps": ["triad_kernel"],
-      "description": "Kernel-backed memory API with hybrid search, embeddings, and coherent selections for durable knowledge.",
+      "description": "Kernel-backed memory API with hybrid search, embeddings, coherent selections, and stable pointers (`ptr.kind: \"memory\"`) for durable knowledge.",
       "scope": {"surface": "backend", "audience": "builder", "layer": "intelligence", "maturity": "beta"},
       "ssot": [
         {"path": "apps/arw-server/src/api_memory.rs"},

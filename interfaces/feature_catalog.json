@@ -16,7 +16,7 @@
           "id": "stay_in_flow",
           "name": "Stay in Flow",
           "promise": "Keep loops under budget with shared event vocabulary and debugging surfaces.",
-          "features": ["snappy_governor", "event_spine", "chat_workbench"]
+          "features": ["snappy_governor", "event_spine", "chat_workbench", "screenshot_pipeline"]
         }
       ]
     },

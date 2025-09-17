@@ -3,23 +3,30 @@ title: Screenshots
 ---
 
 # Screenshots
-Updated: 2025-09-16
-Status: Enabled (capture), Optional OCR (build‑time)
+Updated: 2025-09-18
+Status: Enabled (capture + annotate), Optional OCR (build‑time)
 Type: How‑to
 
 Purpose: allow AI agents and the user to capture the screen or a window region, attach it to a conversation, and optionally run OCR for instruction generation.
 
+The capability is live end‑to‑end:
+- Service exposes `ui.screenshot.capture`, `ui.screenshot.annotate_burn`, and (optional) `ui.screenshot.ocr`.
+- The launcher and chat clients surface palette shortcuts, chat buttons, and the Screenshots Gallery.
+- `screenshots.captured` SSE events fan out previews immediately so the UI can react in real time.
+
 Security & policy
+- Explicit user consent: the agent must be prompted ("Show me what you see") before triggering a capture.
 - Gated under `io:screenshot` with TTL leases and scopes (display/window/region)
 - Every capture is audited; scope and TTL are visible in the Policy lane
 - OCR gated under `io:ocr` with its own TTL lease
 
-Tool interface (proposed)
-`ui.screenshot.capture(scope, format, downscale, annotate?) → { path, width, height, preview_b64 }`
-- `scope`: `screen` | `display:n` | `window:<id>` | `region:x,y,w,h`
+Tool interface
+`ui.screenshot.capture(scope?, format?, downscale?) → { path, width, height, preview_b64 }`
+- `scope`: `screen` (default) | `display:n` | `window:<id>` | `region:x,y,w,h`
 - `format`: `png` (default) or `jpg`
 - `downscale`: optional max width for the preview (e.g., 640)
-- `annotate`: optional rectangles/labels
+
+Use `ui.screenshot.annotate_burn(path, annotate[], downscale?)` to blur/highlight regions after capture.
 
 Events
 - On success, emit `screenshots.captured` with metadata for UI thumbnails
@@ -33,11 +40,11 @@ Storage
 - Default save directory: `.arw/screenshots/YYYY/MM/DD/<ts>_<scope>.png`
 
 UI integration
-- Sidecar Activity lane shows recent screenshots as thumbnails; click to open (launcher open path)
-- Palette: “Capture screen (preview)” and “Capture this window (preview)”
-- Chat: buttons for “Capture” and “Capture window”; inserts preview + path inline
+- Sidecar Activity lane shows recent screenshots as thumbnails; click to open (launcher `open_path`).
+- Palette: “Capture screen (preview)”, “Capture this window (preview)”, and “Capture region (drag)”.
+- Chat: buttons for “Capture”, “Capture window”, and “Capture region”; inserts preview + path inline.
 - Auto OCR: toggle under the Chat composer; when on, OCR runs after capture and inserts extracted text under the preview.
-- Gallery: open from the palette; shows recent captures with Open/Copy actions; “Save to project” copies the image into a selected project path (e.g., `images/…`).
+- Gallery: open from the palette; shows recent captures with Open/Copy/Copy Markdown/Annotate/Save to project actions.
 
 Window capture
 - Bounds: obtained via a Tauri command (`active_window_bounds`) that reports `x,y,w,h` for the active window.
@@ -49,9 +56,7 @@ Region capture (drag)
 - The app translates the selection to absolute screen coordinates using the window bounds and devicePixelRatio before invoking `ui.screenshot.capture` with a `region:x,y,w,h` scope.
 
 Annotations
-- Click Annotate under a captured image (Chat or Gallery) to draw rectangles.
+- Click Annotate under a captured image (Chat, Gallery, or Activity lane) to draw rectangles.
 - On Apply, ARW writes a non‑destructive sidecar JSON (`.ann.json`) and saves a burned‑in annotated sibling image (`*.ann.png/jpg`).
 - Blur is applied to annotated rectangles; a teal border is rendered for visibility.
 - Copy Markdown: use the button to copy a Markdown image link. Alt text defaults to “screenshot”; consider pasting OCR’s first line as alt text.
-
-Notes: design accepted; tooling stubs and UI thumbnails planned.

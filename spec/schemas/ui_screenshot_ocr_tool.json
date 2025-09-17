@@ -1,7 +1,7 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://arw/spec/schemas/ui_screenshot_ocr_tool.json",
-  "title": "ui.screenshot.ocr (planned)",
+  "title": "ui.screenshot.ocr",
   "type": "object",
   "properties": {
     "path": { "type": "string" }

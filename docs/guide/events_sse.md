@@ -74,6 +74,7 @@ Examples
 Event model
 - Events use a compact envelope with `status` (human) and `code` (machine) conventions.
 - Common kinds: `models.download.progress`, `egress.ledger.appended`, `task.completed`, `feedback.suggested`.
+  - `screenshots.captured` includes `{ path, width, height, preview_b64? }` for Activity lane/Gallery thumbnails.
   - `egress.ledger.appended` includes `{ id?, decision, reason?, dest_host?, dest_port?, protocol?, bytes_in?, bytes_out?, corr_id?, proj?, posture }`.
  - RPU trust change: `rpu.trust.changed` (payload includes `{count, path?, ts_ms}`)
 

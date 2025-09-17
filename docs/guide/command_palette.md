@@ -22,6 +22,7 @@ Built‑in actions
 - Theme: Auto / Light / Dark — persisted per device; overrides neutrals only
 - Capture screen (preview) — calls `ui.screenshot.capture` (requires admin token + `io:screenshot` lease)
 - Capture this window (preview) — uses `active_window_bounds` to pass a region to `ui.screenshot.capture`
+- Capture region (drag) — overlays a selection box then calls `ui.screenshot.capture` with a `region:x,y,w,h` scope
 - Toggle Auto OCR — flips a launcher preference; Chat reflects it and will OCR after capture when enabled
 
 Notes

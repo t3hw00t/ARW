@@ -22,6 +22,7 @@ Windows
 Compare
 - Hub: Compare panel for Text/JSON (pretty + Only changes + Wrap + Copy), Image slider, and CSV/Table diff (key‑based, Only changes, Copy summary, Export CSV). CSV export supports two modes: wide (after values only) and two‑row (chg‑before/chg‑after rows).
 - Chat: Pin any message to A/B and run the same Text/JSON diff below; after image capture, consistent toolbar (Annotate, Copy MD, Save to project).
+- Activity lane listens for `screenshots.captured`; thumbnails expose annotate/blur, copy Markdown, save-to-project, and open actions for recent captures.
 - Future: “Pin to compare” from runs/artifacts; side‑by‑side, timeline scrubber, and image slider.
 
 SSE & Read‑models

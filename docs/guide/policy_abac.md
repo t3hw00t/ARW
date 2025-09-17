@@ -25,6 +25,8 @@ Set `ARW_POLICY_FILE` to a JSON file:
     { "kind_prefix": "context.rehydrate.memory", "capability": "context:rehydrate:memory" },
     { "kind_prefix": "context.rehydrate", "capability": "context:rehydrate:file" },
     { "kind_prefix": "fs.", "capability": "fs" },
+    { "kind_prefix": "ui.screenshot.", "capability": "io:screenshot" },
+    { "kind_prefix": "ui.screenshot.ocr", "capability": "io:ocr" },
     { "kind_prefix": "app.vscode.", "capability": "io:app:vscode" }
   ]
 }
@@ -32,6 +34,7 @@ Set `ARW_POLICY_FILE` to a JSON file:
 
 - `allow_all`: when true, decisions default to allow.
 - `lease_rules`: list of `{ kind_prefix, capability }`. If an action `kind` starts with `kind_prefix`, a valid lease for `capability` is required.
+  - Example: gate screenshot tools by mapping `ui.screenshot.` to `io:screenshot` (and `ui.screenshot.ocr` to `io:ocr`).
 
 Presets
 - Ready‑to‑use presets are available in this repo:

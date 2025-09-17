@@ -59,6 +59,12 @@ Windows
 - The `tauri.conf.json` sets `bundle.windows.webviewInstallMode: downloadBootstrapper` for WebView2.
  - Quickstart and WebView2 install: see [Windows Install](windows_install.md).
 
+Screenshots & Gallery
+- Command palette exposes “Capture screen/window/region” actions that invoke `ui.screenshot.capture` with preview downscaling; annotate and OCR follow-ups surface automatically when the tool returns `preview_b64`.
+- Chat toolbar mirrors the palette with Capture, Capture window, and Capture region buttons plus inline Annotate/OCR toggles so agents can share their current view on request.
+- Activity lane thumbnails and the Screenshots Gallery subscribe to `screenshots.captured`; recent captures gain quick actions (Open, Copy MD, Save to project, Annotate).
+- Requires leases: capture/annotate prompt for `io:screenshot`, OCR additionally needs `io:ocr`.
+
 Design & UI
 - Launcher pages include `tokens.css` (design tokens) and `ui-kit.css` (primitives) for consistent visuals.
 - See Developer → Design Theme and Developer → UI Kit for details.
