@@ -3,11 +3,12 @@ use axum::response::IntoResponse;
 use axum::{extract::State, Json};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use utoipa::ToSchema;
 
 use crate::{admin_ok, util, AppState};
 use arw_topics as topics;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct ConnectorManifest {
     #[serde(default)]
     pub id: Option<String>,
@@ -23,6 +24,8 @@ fn connectors_dir() -> std::path::PathBuf {
     util::state_dir().join("connectors")
 }
 
+/// List registered connector manifests (secrets elided).
+#[utoipa::path(get, path = "/state/connectors", tag = "Connectors", responses((status = 200, body = serde_json::Value)))]
 pub async fn state_connectors() -> impl IntoResponse {
     use tokio::fs as afs;
     let dir = connectors_dir();
@@ -51,6 +54,8 @@ pub async fn state_connectors() -> impl IntoResponse {
     Json(json!({"items": items}))
 }
 
+/// Register a connector manifest (admin).
+#[utoipa::path(post, path = "/connectors/register", tag = "Connectors", request_body = ConnectorManifest, responses((status = 201, body = serde_json::Value), (status = 401)))]
 pub async fn connector_register(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -104,7 +109,7 @@ pub async fn connector_register(
     )
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct ConnectorTokenReq {
     pub id: String,
     #[serde(default)]
@@ -114,6 +119,8 @@ pub(crate) struct ConnectorTokenReq {
     #[serde(default)]
     pub expires_at: Option<String>,
 }
+/// Set/update connector tokens (admin).
+#[utoipa::path(post, path = "/connectors/token", tag = "Connectors", request_body = ConnectorTokenReq, responses((status = 200, body = serde_json::Value), (status = 401)))]
 pub async fn connector_token_set(
     headers: HeaderMap,
     State(state): State<AppState>,

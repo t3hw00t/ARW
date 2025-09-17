@@ -1,4 +1,4 @@
-name: Docker Images (manual)
+name: Docker Images (manual, arw-server)
 
 on:
   workflow_dispatch:
@@ -8,12 +8,12 @@ permissions:
   packages: write
 
 jobs:
-  build-arw-svc:
-    name: Build arw-svc (no push)
+  build-arw-server:
+    name: Build arw-server (no push)
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -21,11 +21,11 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Build (no push)
+      - name: Build (no push) arw-server
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: apps/arw-svc/Dockerfile
+          file: apps/arw-server/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: false
           cache-from: type=gha

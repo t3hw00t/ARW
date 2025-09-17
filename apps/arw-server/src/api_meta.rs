@@ -2,10 +2,28 @@ use axum::response::IntoResponse;
 use axum::{extract::State, Json};
 use serde_json::json;
 
+/// Health probe.
+#[utoipa::path(
+    get,
+    path = "/healthz",
+    tag = "Meta",
+    responses(
+        (status = 200, description = "Service healthy", body = crate::openapi::HealthOk)
+    )
+)]
 pub async fn healthz() -> impl IntoResponse {
     Json(json!({"ok": true}))
 }
 
+/// Service metadata and endpoints index.
+#[utoipa::path(
+    get,
+    path = "/about",
+    tag = "Meta",
+    responses(
+        (status = 200, description = "Service metadata", body = crate::openapi::AboutResponse)
+    )
+)]
 pub async fn about(State(state): State<crate::AppState>) -> impl IntoResponse {
     let version = env!("CARGO_PKG_VERSION");
     let name = env!("CARGO_PKG_NAME");

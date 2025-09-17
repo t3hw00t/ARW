@@ -27,7 +27,7 @@ jobs:
 
       - name: Build native (x86_64)
         run: |
-          cargo build --release -p arw-svc -p arw-cli --locked || true
+          cargo build --release -p arw-server -p arw-cli --locked || true
           bash scripts/package.sh
 
       - name: Install Linux ARM64 cross toolchain
@@ -41,7 +41,7 @@ jobs:
           CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
         run: |
           rustup target add aarch64-unknown-linux-gnu
-          cargo build --release -p arw-svc -p arw-cli --target aarch64-unknown-linux-gnu --locked || true
+          cargo build --release -p arw-server -p arw-cli --target aarch64-unknown-linux-gnu --locked || true
           bash scripts/package.sh --no-build --target aarch64-unknown-linux-gnu
 
       - name: Upload release assets
@@ -69,14 +69,14 @@ jobs:
       - name: Build native (x86_64)
         shell: pwsh
         run: |
-          cargo build --release -p arw-svc -p arw-cli --locked
+          cargo build --release -p arw-server -p arw-cli --locked
           ./scripts/package.ps1
 
       - name: Build cross (aarch64-pc-windows-msvc)
         shell: pwsh
         run: |
           rustup target add aarch64-pc-windows-msvc
-          cargo build --release -p arw-svc -p arw-cli --target aarch64-pc-windows-msvc --locked
+          cargo build --release -p arw-server -p arw-cli --target aarch64-pc-windows-msvc --locked
           ./scripts/package.ps1 -NoBuild -Target aarch64-pc-windows-msvc
 
       - name: Upload release assets
@@ -103,7 +103,7 @@ jobs:
 
       - name: Build native
         run: |
-          cargo build --release -p arw-svc -p arw-cli --locked || true
+          cargo build --release -p arw-server -p arw-cli --locked || true
           bash scripts/package.sh
 
       - name: Upload release assets

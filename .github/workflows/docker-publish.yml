@@ -1,4 +1,4 @@
-name: Docker Publish
+name: Docker Publish (arw-server)
 
 on:
   push:
@@ -11,14 +11,14 @@ permissions:
   packages: write
 
 env:
-  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/arw-svc
+  IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/arw-server
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -47,11 +47,11 @@ jobs:
             type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=sha,format=short,prefix=sha-
 
-      - name: Build and push
+      - name: Build and push (arw-server)
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: apps/arw-svc/Dockerfile
+          file: apps/arw-server/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}

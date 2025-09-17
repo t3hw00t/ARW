@@ -774,50 +774,69 @@ async fn tasks_enqueue(
 pub fn start_local_task_worker(state: AppState) {
     let bus = state.bus.clone();
     let q = state.queue.clone();
-    tokio::spawn(async move {
-        loop {
-            match q.dequeue("workers").await {
-                Ok((t, lease)) => {
-                    let t0 = std::time::Instant::now();
-                    // Ingress gating for task execution
-                    let ingress_key = format!("io:ingress:task.{}", t.kind);
-                    if !arw_core::gating::allowed(&ingress_key) {
-                        let _ = q.ack(lease).await;
-                        if arw_core::gating::allowed(arw_core::gating_keys::EVENTS_TASK_COMPLETED) {
-                            bus.publish(
-                                crate::ext::topics::TOPIC_TASK_COMPLETED,
-                                &json!({"id": t.id, "ok": false, "error": "gated:ingress"}),
-                            );
+    let max_inflight: usize = std::env::var("ARW_ORCH_MAX_INFLIGHT")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(1)
+        .max(1);
+    let nack_delay_ms: u64 = std::env::var("ARW_ORCH_NACK_DELAY_MS")
+        .ok()
+        .and_then(|s| s.parse().ok())
+        .unwrap_or(2_000);
+    for _i in 0..max_inflight {
+        let bus = bus.clone();
+        let q = q.clone();
+        tokio::spawn(async move {
+            loop {
+                match q.dequeue("workers").await {
+                    Ok((t, lease)) => {
+                        let t0 = std::time::Instant::now();
+                        // Ingress gating for task execution
+                        let ingress_key = format!("io:ingress:task.{}", t.kind);
+                        if !arw_core::gating::allowed(&ingress_key) {
+                            let _ = q.ack(lease).await;
+                            if arw_core::gating::allowed(
+                                arw_core::gating_keys::EVENTS_TASK_COMPLETED,
+                            ) {
+                                bus.publish(
+                                    crate::ext::topics::TOPIC_TASK_COMPLETED,
+                                    &json!({"id": t.id, "ok": false, "error": "gated:ingress"}),
+                                );
+                            }
+                            continue;
                         }
-                        continue;
+                        let (ok, out, err) = match run_tool_internal(&t.kind, &t.payload) {
+                            Ok(v) => (true, v, None),
+                            Err(e) => (false, json!({}), Some(e)),
+                        };
+                        if ok {
+                            let _ = q.ack(lease).await;
+                        } else {
+                            let _ = q.nack(lease, Some(nack_delay_ms)).await;
+                        }
+                        let dt = t0.elapsed().as_millis() as u64;
+                        // Egress gating for task output (policy-level)
+                        let egress_key = format!("io:egress:task.{}", t.kind);
+                        if gating::allowed(arw_core::gating_keys::EVENTS_TASK_COMPLETED)
+                            && arw_core::gating::allowed(&egress_key)
+                        {
+                            let mut payload = json!({"id": t.id, "ok": ok, "latency_ms": dt, "error": err, "output": out});
+                            crate::ext::corr::ensure_corr(&mut payload);
+                            bus.publish(crate::ext::topics::TOPIC_TASK_COMPLETED, &payload);
+                        } else if gating::allowed(arw_core::gating_keys::EVENTS_TASK_COMPLETED) {
+                            let mut payload = json!({"id": t.id, "ok": false, "latency_ms": dt, "error": "gated:egress"});
+                            crate::ext::corr::ensure_corr(&mut payload);
+                            bus.publish(crate::ext::topics::TOPIC_TASK_COMPLETED, &payload);
+                        }
                     }
-                    let (ok, out, err) = match run_tool_internal(&t.kind, &t.payload) {
-                        Ok(v) => (true, v, None),
-                        Err(e) => (false, json!({}), Some(e)),
-                    };
-                    let _ = q.ack(lease).await;
-                    let dt = t0.elapsed().as_millis() as u64;
-                    // Egress gating for task output (policy-level)
-                    let egress_key = format!("io:egress:task.{}", t.kind);
-                    if gating::allowed(arw_core::gating_keys::EVENTS_TASK_COMPLETED)
-                        && arw_core::gating::allowed(&egress_key)
-                    {
-                        let mut payload = json!({"id": t.id, "ok": ok, "latency_ms": dt, "error": err, "output": out});
-                        crate::ext::corr::ensure_corr(&mut payload);
-                        bus.publish(crate::ext::topics::TOPIC_TASK_COMPLETED, &payload);
-                    } else if gating::allowed(arw_core::gating_keys::EVENTS_TASK_COMPLETED) {
-                        let mut payload = json!({"id": t.id, "ok": false, "latency_ms": dt, "error": "gated:egress"});
-                        crate::ext::corr::ensure_corr(&mut payload);
-                        bus.publish(crate::ext::topics::TOPIC_TASK_COMPLETED, &payload);
+                    Err(_e) => {
+                        // backoff a bit on unexpected errors
+                        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                     }
-                }
-                Err(_e) => {
-                    // backoff a bit on unexpected errors
-                    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 }
             }
-        }
-    });
+        });
+    }
 }
 
 // ---- Tests moved to file end ----

@@ -7,24 +7,23 @@ title: Kubernetes (Helm)
 Updated: 2025-09-16
 Type: How‑to
 
-Deploy the ARW service on Kubernetes using the provided Helm chart.
+Deploy the unified ARW server on Kubernetes using the provided Helm chart.
 
-!!! note "Legacy image"
-    The current Helm chart packages the legacy `arw-svc` bridge (port 8090) so that the classic debug UI and launcher workflows
-    keep working. Use the container instructions under `guide/docker.md` for the headless unified `arw-server` on port 8091.
+!!! note "Legacy chart"
+    The legacy `arw-svc` chart (port 8090) is still available for the classic debug UI. Prefer the unified `arw-server` chart (port 8091) below.
 
 ## Prerequisites
 - Kubernetes cluster with an ingress controller (optional)
 - Helm 3
 - (Optional) GHCR auth if pulling a private image
 
-## Install
+## Install (Unified Server)
 
 ```bash
 # From repo root (local chart)
-helm upgrade --install arw deploy/charts/arw-svc \
+helm upgrade --install arw deploy/charts/arw-server \
   --namespace arw --create-namespace \
-  --set image.repository=ghcr.io/<owner>/arw-svc \
+  --set image.repository=ghcr.io/<owner>/arw-server \
   --set image.tag=latest \
   --set env.ARW_DEBUG=0 \
   --set env.ARW_BIND=0.0.0.0 \
@@ -43,9 +42,9 @@ kubectl create secret docker-registry ghcr \
   --namespace arw
 
 # Reference the secret in values
-helm upgrade --install arw deploy/charts/arw-svc \
+helm upgrade --install arw deploy/charts/arw-server \
   --namespace arw --create-namespace \
-  --set image.repository=ghcr.io/<owner>/arw-svc \
+  --set image.repository=ghcr.io/<owner>/arw-server \
   --set image.tag=main \
   --set image.pullSecrets={ghcr} \
   --set env.ARW_DEBUG=0 \
@@ -58,13 +57,13 @@ helm upgrade --install arw deploy/charts/arw-svc \
 Alternatively, template and review:
 
 ```bash
-helm template arw deploy/charts/arw-svc --namespace arw | less
+helm template arw deploy/charts/arw-server --namespace arw | less
 ```
 
 ## Ingress (optional)
 
 ```bash
-helm upgrade --install arw deploy/charts/arw-svc \
+helm upgrade --install arw deploy/charts/arw-server \
   --namespace arw --create-namespace \
   --set ingress.enabled=true \
   --set ingress.className=traefik \
@@ -77,7 +76,7 @@ helm upgrade --install arw deploy/charts/arw-svc \
 Enable structured access logs and rolling files:
 
 ```bash
-helm upgrade --install arw deploy/charts/arw-svc \
+helm upgrade --install arw deploy/charts/arw-server \
   --namespace arw --create-namespace \
   --set env.ARW_ACCESS_LOG=1 \
   --set env.ARW_ACCESS_SAMPLE_N=1 \
@@ -94,8 +93,8 @@ Optional extra fields: add `--set env.ARW_ACCESS_UA=1 --set env.ARW_ACCESS_UA_HA
 
 ```bash
 kubectl -n arw get pods
-kubectl -n arw port-forward deploy/arw-svc 8090:8090 &
-curl -sS http://127.0.0.1:8090/healthz
+kubectl -n arw port-forward deploy/arw-server 8091:8091 &
+curl -sS http://127.0.0.1:8091/healthz
 ```
 
 ## Security Notes

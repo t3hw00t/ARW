@@ -89,7 +89,7 @@ start_service_only() {
   ic_section "Start: service only"
   if ! security_preflight; then ic_warn "Start canceled"; return; fi
   ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 ARW_PORT="$PORT" ARW_DOCS_URL="$DOCS_URL" ARW_ADMIN_TOKEN="$ADMIN_TOKEN" \
-  ARW_CONFIG="$CFG_PATH" ARW_PID_FILE="$PID_FILE" ARW_LOG_FILE="$LOGS_DIR/arw-svc.out.log" \
+  ARW_CONFIG="$CFG_PATH" ARW_PID_FILE="$PID_FILE" ARW_LOG_FILE="$LOGS_DIR/arw-server.out.log" \
   readarray -t _ARGS < <(env_args); bash "$DIR/start.sh" "${_ARGS[@]}" || true
 }
 
@@ -97,7 +97,7 @@ start_launcher_plus_service() {
   ic_section "Start: launcher + service"
   if ! security_preflight; then ic_warn "Start canceled"; return; fi
   ARW_PORT="$PORT" ARW_DOCS_URL="$DOCS_URL" ARW_ADMIN_TOKEN="$ADMIN_TOKEN" \
-  ARW_CONFIG="$CFG_PATH" ARW_PID_FILE="$PID_FILE" ARW_LOG_FILE="$LOGS_DIR/arw-svc.out.log" \
+  ARW_CONFIG="$CFG_PATH" ARW_PID_FILE="$PID_FILE" ARW_LOG_FILE="$LOGS_DIR/arw-server.out.log" \
   readarray -t _ARGS < <(env_args); bash "$DIR/start.sh" "${_ARGS[@]}" || true
   # If launcher missing, hint a build
   local launcher
@@ -472,8 +472,8 @@ launcher_build_check() {
 
 spec_export() {
   ic_section "Export OpenAPI + schemas"
-  local svc; svc=$(ic_detect_bin arw-svc)
-  if [[ ! -x "$svc" ]]; then ic_warn "arw-svc not built"; return; fi
+  local svc; svc=$(ic_detect_bin arw-server)
+  if [[ ! -x "$svc" ]]; then ic_warn "arw-server not built"; return; fi
   mkdir -p "$ROOT/spec"
   OPENAPI_OUT="$ROOT/spec/openapi.yaml" "$svc" || true
   ic_info "Wrote $ROOT/spec/openapi.yaml and schemas under spec/schemas if supported"
@@ -485,7 +485,7 @@ troubleshoot() {
   local tlog="$ROOT/.arw/logs/launcher-build.log"; if [[ -f "$tlog" ]]; then
     if grep -qi 'error' "$tlog"; then ic_warn "Launcher build errors detected. Open the log for details (.arw/logs/launcher-build.log)."; fi
   fi
-  local slog="$ROOT/.arw/logs/arw-svc.out.log"; if [[ -f "$slog" ]]; then
+  local slog="$ROOT/.arw/logs/arw-server.out.log"; if [[ -f "$slog" ]]; then
     if grep -qi 'failed to bind' "$slog"; then ic_warn "Port in use; configure a new port."; fi
     if grep -qi 'nats queue unavailable' "$slog"; then ic_warn "NATS unreachable; start NATS (NATS manager)."; fi
   fi
@@ -494,7 +494,7 @@ troubleshoot() {
 
 logs_menu() {
   local logs="$ROOT/.arw/logs"; mkdir -p "$logs"
-  local svc_log="$logs/arw-svc.out.log"
+  local svc_log="$logs/arw-server.out.log"
   local nats_out="$logs/nats-server.out.log"
   local nats_err="$logs/nats-server.err.log"
   ic_banner "Logs" "$logs"

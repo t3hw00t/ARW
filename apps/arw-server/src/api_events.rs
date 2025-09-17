@@ -10,6 +10,20 @@ use tokio_stream::StreamExt as _;
 use crate::AppState;
 use sha2::Digest as _;
 
+/// Server‑Sent Events stream of envelopes.
+#[utoipa::path(
+    get,
+    path = "/events",
+    tag = "Events",
+    params(
+        ("after" = Option<i64>, Query, description = "Resume after id or Last-Event-ID header"),
+        ("replay" = Option<usize>, Query, description = "Replay the last N events (when after not set)"),
+        ("prefix" = Option<String>, Query, description = "CSV of event kind prefixes to include")
+    ),
+    responses(
+        (status = 200, description = "SSE stream of events", content_type = "text/event-stream")
+    )
+)]
 pub async fn events_sse(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,

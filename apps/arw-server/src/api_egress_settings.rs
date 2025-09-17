@@ -3,13 +3,14 @@ use axum::response::IntoResponse;
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use utoipa::ToSchema;
 
 use crate::egress_proxy;
 use crate::AppState;
 use arw_topics as topics;
 use jsonschema::{Draft, JSONSchema};
 
-#[derive(Serialize)]
+#[derive(Serialize, ToSchema)]
 pub(crate) struct EgressSettings {
     pub posture: Option<String>,
     pub allowlist: Vec<String>,
@@ -20,7 +21,7 @@ pub(crate) struct EgressSettings {
     pub ledger_enable: bool,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct EgressSettingsPatch {
     #[serde(default)]
     pub posture: Option<String>,
@@ -42,6 +43,13 @@ fn get_env_flag(key: &str) -> bool {
     std::env::var(key).ok().as_deref() == Some("1")
 }
 
+/// Effective egress settings snapshot.
+#[utoipa::path(
+    get,
+    path = "/state/egress/settings",
+    tag = "Egress",
+    responses((status = 200, description = "Egress settings", body = serde_json::Value))
+)]
 pub async fn state_egress_settings() -> impl IntoResponse {
     let posture = std::env::var("ARW_NET_POSTURE")
         .ok()
@@ -70,6 +78,18 @@ pub async fn state_egress_settings() -> impl IntoResponse {
     Json(json!({"egress": out}))
 }
 
+/// Update egress settings (admin token required).
+#[utoipa::path(
+    post,
+    path = "/egress/settings",
+    tag = "Egress",
+    request_body = EgressSettingsPatch,
+    responses(
+        (status = 200, description = "Updated settings", body = serde_json::Value),
+        (status = 401, description = "Unauthorized"),
+        (status = 400, description = "Validation error")
+    )
+)]
 pub async fn egress_settings_update(
     State(state): State<AppState>,
     headers: HeaderMap,

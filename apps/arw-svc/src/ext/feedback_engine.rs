@@ -46,42 +46,20 @@ pub fn start_feedback_engine(state: AppState) {
             tick.tick().await;
             // Gather minimal features from stats module (bounded, cheap)
             let routes_map = stats::routes_for_analysis().await;
-            let mut out: Vec<Value> = Vec::new();
-
-            // Heuristic 1: HTTP timeout hint from worst route EWMA
-            if let Some((path, (ewma_ms, _hits, _errs))) = routes_map.iter().max_by(|a, b| {
-                a.1 .0
-                    .partial_cmp(&b.1 .0)
-                    .unwrap_or(std::cmp::Ordering::Equal)
-            }) {
-                if *ewma_ms > 800.0 {
-                    let desired = (((ewma_ms / 1000.0) * 2.0) + 10.0).clamp(20.0, 180.0) as u64;
-                    out.push(json!({
-                        "id": format!("hint-{}", path),
-                        "action": "hint",
-                        "params": {"http_timeout_secs": desired},
-                        "rationale": format!("High latency on {} (~{:.0} ms)", path, ewma_ms),
-                        "confidence": 0.6
-                    }));
-                }
+            let mut f = arw_heuristics::Features::default();
+            for (k, (ewma, hits, errs)) in routes_map.into_iter() {
+                f.routes.insert(
+                    k,
+                    arw_heuristics::RouteStat {
+                        ewma_ms: ewma,
+                        hits,
+                        errors: errs,
+                    },
+                );
             }
-
-            // Heuristic 2: Memory pressure
-            // Use number of memory.applied events as proxy (from stats counters)
-            let mem_applied = stats::event_kind_count("memory.applied").await;
-            if mem_applied > 200 {
-                let cur = { *mem_limit().read().await } as u64;
-                if cur < 300 {
-                    let new = (cur * 3 / 2).clamp(200, 600);
-                    out.push(json!({
-                        "id": "mem-limit",
-                        "action": "mem_limit",
-                        "params": {"limit": new},
-                        "rationale": format!("Frequent memory updates ({}); suggest {}", mem_applied, new),
-                        "confidence": 0.5
-                    }));
-                }
-            }
+            f.mem_applied_count = stats::event_kind_count("memory.applied").await;
+            f.cur_mem_limit = Some({ *mem_limit().read().await } as u64);
+            let out: Vec<Value> = arw_heuristics::evaluate(&f);
 
             // Publish deltas if changed
             {

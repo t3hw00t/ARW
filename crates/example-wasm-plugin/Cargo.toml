@@ -8,5 +8,3 @@ crate-type = ["cdylib"]
 
 [dependencies]
 wit-bindgen = { version = "0.45.1", default-features = false, features = ["realloc"] }
-
-[workspace]

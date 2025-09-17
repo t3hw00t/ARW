@@ -31,10 +31,10 @@ jobs:
           workspaces: |
             .
 
-      - name: Build arw-svc (release)
+      - name: Build arw-server (release)
         shell: pwsh
         run: |
-          cargo build --release -p arw-svc --locked
+          cargo build --release -p arw-server --locked
 
       - name: Run Windows Advanced Gate (informational by default)
         shell: pwsh

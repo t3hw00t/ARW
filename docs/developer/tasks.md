@@ -4,30 +4,45 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-17 18:39 UTC
+Updated: 2025-09-17 21:58 UTC
 
 
 ## To Do
-- [t-250911230333-9794] RPU: watch trust store and strengthen verification — todo (updated: 2025-09-14 23:17:01 UTC)
-    - 2025-09-14 23:17:01 UTC: Added /admin/rpu/trust and /admin/rpu/reload endpoints; gating keys rpu:trust:get and rpu:trust:reload; will add file watch next.
-- [t-250914223250-ui11] Route SLO selector — todo (updated: 2025-09-14 22:38:50 UTC)
-- [t-250914223240-ui10] Export CSV: logs/table diffs — todo (updated: 2025-09-14 22:38:40 UTC)
-- [t-250914223230-ui09] Runs: pin artifacts to compare — todo (updated: 2025-09-14 22:38:30 UTC)
-- [t-250909224102-9629] Spec: AsyncAPI+MCP artifacts + /spec/* — todo (updated: 2025-09-14 17:54:55 UTC)
-    - 2025-09-14 17:54:55 UTC: Spec endpoints covered: openapi/asyncapi/mcp and index return 200 and correct content-type; added unit checks for token extraction, sha256 match, and IP key. Tests write temp spec files for isolation.
-- [t-250911230308-0779] Orchestrator: configurable lease, nack delay, and max in-flight — todo (updated: 2025-09-11 21:03:08 UTC)
+- [t-250917235820-3900] Decommission legacy artifacts — todo (updated: 2025-09-17 21:58:20 UTC)
+- [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — todo (updated: 2025-09-17 21:58:18 UTC)
+- [t-250917235817-3181] Retarget launcher to unified server — todo (updated: 2025-09-17 21:58:17 UTC)
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-11 21:02:19 UTC)
-- [t-250909224102-8952] Plan: Heuristic engine crate + integration — todo (updated: 2025-09-09 20:41:02 UTC)
 
 ## In Progress
-- [t-250914223220-cap03] OCR for screenshots (optional) — in_progress (updated: 2025-09-14 23:05:00 UTC)
+- [t-250914223220-cap03] OCR for screenshots (optional) — in_progress (updated: 2025-09-17 20:19:01 UTC)
     - 2025-09-14 23:05:00 UTC: Tool stub added using leptess behind feature ocr_tesseract; Chat can auto-run OCR if enabled.
-- [t-250914223100-ui08] Templates: save/load (prefs) — in_progress (updated: 2025-09-14 22:37:00 UTC)
-    - 2025-09-14 22:37:00 UTC: Hub saves focused flag + lanes; next: per‑project file persistence.
+  - 2025-09-17 20:19:01 UTC: Fixed parameter use in ocr_image_text (leptess set_image now receives path). Feature remains optional (enable with --features ocr_tesseract).
 
 ## Paused
 
 ## Done
+- [t-250917235814-0001] Add Helm chart for arw-server — done (updated: 2025-09-17 21:58:16 UTC)
+- [t-250917235812-8254] Switch CI OpenAPI codegen to arw-server — done (updated: 2025-09-17 21:58:13 UTC)
+- [t-250917235747-3348] Annotate server handlers with utoipa — done (updated: 2025-09-17 21:58:04 UTC)
+- [t-250909224102-8952] Plan: Heuristic engine crate + integration — done (updated: 2025-09-17 21:05:00 UTC)
+    - 2025-09-17 21:05:00 UTC: Added crate arw-heuristics with Features and evaluate(); svc feedback_engine now delegates (timeout hint + memory pressure). Preserved snapshots, events, and versioning.
+- [t-250914223230-ui09] Runs: pin artifacts to compare — done (updated: 2025-09-17 20:55:00 UTC)
+    - 2025-09-17 20:55:00 UTC: Hub shows artifacts table from run snapshot (outputs/payloads) with Pin A/B buttons feeding Compare. Added deep-link: cmpA/cmpB base64 in URL hash; auto-applies on load.
+- [t-250911230333-9794] RPU: watch trust store and strengthen verification — done (updated: 2025-09-17 20:44:00 UTC)
+    - 2025-09-14 23:17:01 UTC: Added /admin/rpu/trust and /admin/rpu/reload endpoints; gating keys rpu:trust:get and rpu:trust:reload; will add file watch next.
+  - 2025-09-17 20:44:00 UTC: Unified server now exposes /admin/rpu/trust and /admin/rpu/reload (admin token required) and watches ARW_TRUST_CAPSULES for changes, emitting rpu.trust.changed. Verification supports ed25519 and secp256k1 with ABAC check.
+- [t-250911230308-0779] Orchestrator: configurable lease, nack delay, and max in-flight — done (updated: 2025-09-17 20:29:00 UTC)
+    - 2025-09-17 20:29:00 UTC: LocalQueue supports configurable lease TTL (ARW_ORCH_LEASE_MS). Worker honors ARW_ORCH_NACK_DELAY_MS and ARW_ORCH_MAX_INFLIGHT for retry delay and concurrency.
+- [t-250914223250-ui11] Route SLO selector — done (updated: 2025-09-17 20:19:01 UTC)
+    - 2025-09-17 20:19:01 UTC: SLO input present in logs/events (launcher) and header badge in debug UI; SLO persisted in prefs (sloP95) and used for p95 highlighting.
+- [t-250914223240-ui10] Export CSV: logs/table diffs — done (updated: 2025-09-17 20:19:01 UTC)
+    - 2025-09-17 20:19:01 UTC: Logs UI adds Export CSV for top routes and event kinds (launcher logs.js); docs call out CSV/Table diff export in Workflow Views.
+- [t-250914223100-ui08] Templates: save/load (prefs) — done (updated: 2025-09-17 20:19:01 UTC)
+    - 2025-09-14 22:37:00 UTC: Hub saves focused flag + lanes; next: per‑project file persistence.
+  - 2025-09-17 20:19:01 UTC: Launcher exposes ARW.templates.save/load bound to prefs (namespaced), with debounced writes; per‑project overrides via get/setPrefs(ns).
+- [t-250909224102-9629] Spec: AsyncAPI+MCP artifacts + /spec/* — done (updated: 2025-09-17 20:19:01 UTC)
+    - 2025-09-14 17:54:55 UTC: Spec endpoints covered: openapi/asyncapi/mcp and index return 200 and correct content-type; added unit checks for token extraction, sha256 match, and IP key. Tests write temp spec files for isolation.
+  - 2025-09-17 20:19:01 UTC: Unified server wires /spec/* (openapi/asyncapi/mcp, schemas, index); Dockerfile copies spec/; docgen generates asyncapi.yaml + mcp-tools.json.
 - [t-250914230010-ui13] Auto OCR preference + toggle — done (updated: 2025-09-14 23:07:00 UTC)
     - 2025-09-14 23:07:00 UTC: Chat toggle added; palette action updates prefs and Chat checkbox.
 - [t-250914230000-ui12] Activity thumbnails: Open/Copy actions — done (updated: 2025-09-14 23:06:00 UTC)

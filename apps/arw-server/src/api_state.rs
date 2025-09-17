@@ -7,6 +7,13 @@ use serde_json::{json, Value};
 
 use crate::AppState;
 
+/// Episode rollups grouped by correlation id.
+#[utoipa::path(
+    get,
+    path = "/state/episodes",
+    tag = "State",
+    responses((status = 200, description = "Episode rollups", body = serde_json::Value))
+)]
 pub async fn state_episodes(State(state): State<AppState>) -> impl IntoResponse {
     // Simple episode rollup: group last 1000 events by corr_id
     let rows = state.kernel.recent_events(1000, None).unwrap_or_default();
@@ -37,6 +44,13 @@ pub async fn state_episodes(State(state): State<AppState>) -> impl IntoResponse 
     Json(json!({"items": items}))
 }
 
+/// Bus and per-route counters snapshot.
+#[utoipa::path(
+    get,
+    path = "/state/route_stats",
+    tag = "State",
+    responses((status = 200, description = "Route stats", body = serde_json::Value))
+)]
 pub async fn state_route_stats(State(state): State<AppState>) -> impl IntoResponse {
     let bus = state.bus.stats();
     let metrics = state.metrics.snapshot();
@@ -53,11 +67,28 @@ pub async fn state_route_stats(State(state): State<AppState>) -> impl IntoRespon
     }))
 }
 
+/// Kernel contributions snapshot.
+#[utoipa::path(
+    get,
+    path = "/state/contributions",
+    tag = "State",
+    responses((status = 200, description = "Contributions list", body = serde_json::Value))
+)]
 pub async fn state_contributions(State(state): State<AppState>) -> impl IntoResponse {
     let items = state.kernel.list_contributions(200).unwrap_or_default();
     Json(json!({"items": items}))
 }
 
+/// Recent actions list.
+#[utoipa::path(
+    get,
+    path = "/state/actions",
+    tag = "State",
+    params(
+        ("limit" = Option<i64>, Query, description = "Max items (1-2000)")
+    ),
+    responses((status = 200, description = "Actions list", body = serde_json::Value))
+)]
 pub async fn state_actions(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
@@ -73,6 +104,14 @@ pub async fn state_actions(
     Json(json!({"items": items}))
 }
 
+/// Recent egress ledger list.
+#[utoipa::path(
+    get,
+    path = "/state/egress",
+    tag = "State",
+    params(("limit" = Option<i64>, Query, description = "Max items (1-2000)")),
+    responses((status = 200, description = "Egress ledger", body = serde_json::Value))
+)]
 pub async fn state_egress(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
@@ -88,6 +127,13 @@ pub async fn state_egress(
     Json(json!({"items": items}))
 }
 
+/// Model catalog read‑model.
+#[utoipa::path(
+    get,
+    path = "/state/models",
+    tag = "State",
+    responses((status = 200, description = "Model catalog", body = serde_json::Value))
+)]
 pub async fn state_models() -> impl IntoResponse {
     use tokio::fs as afs;
     let path = crate::util::state_dir().join("models.json");
@@ -101,6 +147,13 @@ pub async fn state_models() -> impl IntoResponse {
     Json(json!({"items": items}))
 }
 
+/// Self model index.
+#[utoipa::path(
+    get,
+    path = "/state/self",
+    tag = "State",
+    responses((status = 200, description = "Agents list", body = serde_json::Value))
+)]
 pub async fn state_self_list() -> impl IntoResponse {
     use tokio::fs as afs;
     let dir = crate::util::state_dir().join("self");
@@ -118,6 +171,17 @@ pub async fn state_self_list() -> impl IntoResponse {
     Json(json!({"agents": agents}))
 }
 
+/// Self model by id.
+#[utoipa::path(
+    get,
+    path = "/state/self/{agent}",
+    tag = "State",
+    params(("agent" = String, Path, description = "Agent id")),
+    responses(
+        (status = 200, description = "Agent self model", body = serde_json::Value),
+        (status = 404, description = "Not found")
+    )
+)]
 pub async fn state_self_get(
     axum::extract::Path(agent): axum::extract::Path<String>,
 ) -> impl IntoResponse {

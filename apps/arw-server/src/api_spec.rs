@@ -7,6 +7,8 @@ fn spec_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(std::env::var("ARW_SPEC_DIR").unwrap_or_else(|_| "spec".into()))
 }
 
+/// Static OpenAPI (curated) file.
+#[utoipa::path(get, path = "/spec/openapi.yaml", tag = "Specs", responses((status = 200, content_type = "application/yaml")))]
 pub async fn spec_openapi() -> impl IntoResponse {
     let path = spec_dir().join("openapi.yaml");
     match tokio::fs::read(&path).await {
@@ -24,6 +26,8 @@ pub async fn spec_openapi() -> impl IntoResponse {
     }
 }
 
+/// Static AsyncAPI file.
+#[utoipa::path(get, path = "/spec/asyncapi.yaml", tag = "Specs", responses((status = 200, content_type = "application/yaml")))]
 pub async fn spec_asyncapi() -> impl IntoResponse {
     let path = spec_dir().join("asyncapi.yaml");
     match tokio::fs::read(&path).await {
@@ -41,6 +45,8 @@ pub async fn spec_asyncapi() -> impl IntoResponse {
     }
 }
 
+/// Static MCP tools manifest.
+#[utoipa::path(get, path = "/spec/mcp-tools.json", tag = "Specs", responses((status = 200, content_type = "application/json")))]
 pub async fn spec_mcp() -> impl IntoResponse {
     let path = spec_dir().join("mcp-tools.json");
     match tokio::fs::read(&path).await {
@@ -58,6 +64,8 @@ pub async fn spec_mcp() -> impl IntoResponse {
     }
 }
 
+/// JSON Schemas referenced by the API.
+#[utoipa::path(get, path = "/spec/schemas/{file}", tag = "Specs", params(("file" = String, Path)), responses((status = 200, content_type = "application/json")))]
 pub async fn spec_schema(Path(file): Path<String>) -> impl IntoResponse {
     // Basic guard: only allow .json under spec/schemas
     if !file.ends_with(".json") || file.contains("..") || file.contains('/') || file.contains('\\')
@@ -84,6 +92,8 @@ pub async fn spec_schema(Path(file): Path<String>) -> impl IntoResponse {
     }
 }
 
+/// Index of published specs and schemas.
+#[utoipa::path(get, path = "/spec/index.json", tag = "Specs", responses((status = 200, body = serde_json::Value)))]
 pub async fn spec_index() -> impl IntoResponse {
     let mut entries = vec![];
     let base = spec_dir();
@@ -125,6 +135,8 @@ fn interfaces_dir() -> std::path::PathBuf {
     )
 }
 
+/// Interface catalog YAML (generated).
+#[utoipa::path(get, path = "/catalog/index", tag = "Specs", responses((status = 200, content_type = "application/yaml")))]
 pub async fn catalog_index() -> impl IntoResponse {
     let path = interfaces_dir().join("index.yaml");
     match tokio::fs::read(&path).await {
@@ -142,6 +154,8 @@ pub async fn catalog_index() -> impl IntoResponse {
     }
 }
 
+/// Catalog/spec artifacts presence/size report.
+#[utoipa::path(get, path = "/catalog/health", tag = "Specs", responses((status = 200, body = serde_json::Value)))]
 pub async fn catalog_health() -> impl IntoResponse {
     // Report presence/size of spec artifacts
     let base = spec_dir();

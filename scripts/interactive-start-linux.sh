@@ -12,7 +12,7 @@ ic_project_overview
 ic_feature_matrix
 ic_host_summary
 
-PORT=${ARW_PORT:-8090}
+PORT=${ARW_PORT:-8091}
 DEBUG=${ARW_DEBUG:-0}
 DOCS_URL=${ARW_DOCS_URL:-}
 ADMIN_TOKEN=${ARW_ADMIN_TOKEN:-}
@@ -26,7 +26,7 @@ WAIT_HEALTH_TIMEOUT_SECS=${ARW_WAIT_HEALTH_TIMEOUT_SECS:-20}
 ic_env_load
 
 RUN_DIR="$ROOT/.arw/run"
-PID_FILE="$RUN_DIR/arw-svc.pid"
+PID_FILE="$RUN_DIR/arw-server.pid"
 mkdir -p "$RUN_DIR" && ic_log_dir_rel ".arw/run"
 LOGS_DIR="$ROOT/.arw/logs"; mkdir -p "$LOGS_DIR" && ic_log_dir_rel ".arw/logs"
 
@@ -40,14 +40,14 @@ http_get() { # $1=url
 preflight() {
   ic_section "Preflight"
   local svc
-  svc=$(ic_detect_bin arw-svc)
+  svc=$(ic_detect_bin arw-server)
   if [[ ! -x "$svc" ]]; then
     if ! command -v cargo >/dev/null 2>&1; then
-      ic_warn "No arw-svc binary and Rust not installed. Attempting rustup…"
+      ic_warn "No arw-server binary and Rust not installed. Attempting rustup…"
       ic_ensure_rust || { ic_err "Rust install failed; cannot build. Use portable dist/ bundle if available."; return 1; }
     fi
-    ic_info "Building arw-svc (release)"
-    (cd "$ROOT" && ic_cargo build --release -p arw-svc) || { ic_err "Build failed"; return 1; }
+    ic_info "Building arw-server (release)"
+    (cd "$ROOT" && ic_cargo build --release -p arw-server) || { ic_err "Build failed"; return 1; }
   fi
 }
 
@@ -89,7 +89,7 @@ start_service_only() {
   ic_section "Start: service only"
   if ! security_preflight; then ic_warn "Start canceled"; return; fi
   ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 ARW_PORT="$PORT" ARW_DOCS_URL="$DOCS_URL" ARW_ADMIN_TOKEN="$ADMIN_TOKEN" \
-  ARW_CONFIG="$CFG_PATH" ARW_PID_FILE="$PID_FILE" ARW_LOG_FILE="$LOGS_DIR/arw-svc.out.log" \
+  ARW_CONFIG="$CFG_PATH" ARW_PID_FILE="$PID_FILE" ARW_LOG_FILE="$LOGS_DIR/arw-server.out.log" \
   readarray -t _ARGS < <(env_args); bash "$DIR/start.sh" "${_ARGS[@]}" || true
 }
 
@@ -97,7 +97,7 @@ start_launcher_plus_service() {
   ic_section "Start: launcher + service"
   if ! security_preflight; then ic_warn "Start canceled"; return; fi
   ARW_PORT="$PORT" ARW_DOCS_URL="$DOCS_URL" ARW_ADMIN_TOKEN="$ADMIN_TOKEN" \
-  ARW_CONFIG="$CFG_PATH" ARW_PID_FILE="$PID_FILE" ARW_LOG_FILE="$LOGS_DIR/arw-svc.out.log" \
+  ARW_CONFIG="$CFG_PATH" ARW_PID_FILE="$PID_FILE" ARW_LOG_FILE="$LOGS_DIR/arw-server.out.log" \
   readarray -t _ARGS < <(env_args); bash "$DIR/start.sh" "${_ARGS[@]}" || true
   # If launcher missing or fails to build, hint Linux WebKitGTK deps for Tauri
   local launcher
@@ -486,8 +486,8 @@ launcher_build_check() {
 
 spec_export() {
   ic_section "Export OpenAPI + schemas"
-  local svc; svc=$(ic_detect_bin arw-svc)
-  if [[ ! -x "$svc" ]]; then ic_warn "arw-svc not built"; return; fi
+  local svc; svc=$(ic_detect_bin arw-server)
+  if [[ ! -x "$svc" ]]; then ic_warn "arw-server not built"; return; fi
   mkdir -p "$ROOT/spec"
   OPENAPI_OUT="$ROOT/spec/openapi.yaml" "$svc" || true
   ic_info "Wrote $ROOT/spec/openapi.yaml and schemas under spec/schemas if supported"
@@ -501,7 +501,7 @@ troubleshoot() {
       ic_warn "Missing WebKitGTK 4.1 / JavaScriptCoreGTK / libsoup3 dev packages. Run scripts/install-tauri-deps.sh."
     fi
   fi
-  local slog="$ROOT/.arw/logs/arw-svc.out.log"; if [[ -f "$slog" ]]; then
+  local slog="$ROOT/.arw/logs/arw-server.out.log"; if [[ -f "$slog" ]]; then
     if grep -qi 'failed to bind' "$slog"; then ic_warn "Port in use; configure a new port."; fi
     if grep -qi 'nats queue unavailable' "$slog"; then ic_warn "NATS unreachable; start NATS (NATS manager)."; fi
   fi

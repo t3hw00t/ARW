@@ -263,8 +263,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "arw-heuristics"
+version = "0.1.4"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "arw-kernel"
-version = "0.1.0"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "arw-events",
@@ -321,7 +329,7 @@ dependencies = [
 
 [[package]]
 name = "arw-policy"
-version = "0.1.0"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "serde",
@@ -340,7 +348,7 @@ dependencies = [
 
 [[package]]
 name = "arw-server"
-version = "0.1.0"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "arw-core",
@@ -348,10 +356,11 @@ dependencies = [
  "arw-kernel",
  "arw-otel",
  "arw-policy",
+ "arw-protocol",
  "arw-topics",
  "arw-wasi",
  "axum 0.7.9",
- "base64 0.21.7",
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "hex",
@@ -362,6 +371,7 @@ dependencies = [
  "metrics",
  "once_cell",
  "reqwest 0.12.23",
+ "schemars 0.8.22",
  "serde",
  "serde_json",
  "sha2",
@@ -373,6 +383,7 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "url",
+ "utoipa",
  "uuid",
 ]
 
@@ -383,13 +394,14 @@ dependencies = [
  "anyhow",
  "arw-core",
  "arw-events",
+ "arw-heuristics",
  "arw-kernel",
  "arw-macros",
  "arw-otel",
  "arw-protocol",
  "arw-topics",
  "axum 0.7.9",
- "base64 0.21.7",
+ "base64 0.22.1",
  "chrono",
  "fs2",
  "futures-util",
@@ -456,11 +468,11 @@ version = "0.1.4"
 
 [[package]]
 name = "arw-wasi"
-version = "0.1.0"
+version = "0.1.4"
 dependencies = [
  "anyhow",
  "async-trait",
- "base64 0.21.7",
+ "base64 0.22.1",
  "reqwest 0.12.23",
  "serde",
  "serde_json",

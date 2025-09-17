@@ -48,19 +48,19 @@ package:
   bash scripts/package.sh --no-build
 
 docker-build:
-  docker build -f apps/arw-svc/Dockerfile -t arw-svc:dev .
+  docker build -f apps/arw-server/Dockerfile -t arw-server:dev .
 
 docker-run:
-  docker run --rm -p 8090:8090 -e ARW_PORT=8090 -e ARW_BIND=0.0.0.0 arw-svc:dev
+  docker run --rm -p 8091:8091 -e ARW_PORT=8091 -e ARW_BIND=0.0.0.0 arw-server:dev
 
 # Build and push multi-arch image to GHCR (requires docker login to GHCR)
-docker-push ghcr="ghcr.io/t3hw00t/arw-svc" tag="dev":
+docker-push ghcr="ghcr.io/t3hw00t/arw-server" tag="dev":
   docker buildx build --platform linux/amd64,linux/arm64 \
-    -t {{ghcr}}:{{tag}} -f apps/arw-svc/Dockerfile --push .
+    -t {{ghcr}}:{{tag}} -f apps/arw-server/Dockerfile --push .
 
 # Run published image from GHCR
-docker-run-ghcr ghcr="ghcr.io/t3hw00t/arw-svc" tag="latest":
-  docker run --rm -p 8090:8090 -e ARW_PORT=8090 -e ARW_BIND=0.0.0.0 {{ghcr}}:{{tag}}
+docker-run-ghcr ghcr="ghcr.io/t3hw00t/arw-server" tag="latest":
+  docker run --rm -p 8091:8091 -e ARW_PORT=8091 -e ARW_BIND=0.0.0.0 {{ghcr}}:{{tag}}
 
 # Tail latest rolling access log (http.access)
 access-tail:
@@ -79,13 +79,19 @@ compose-down:
   docker compose down -v
 
 helm-template release="arw" ns="default":
-  helm template {{release}} deploy/charts/arw-svc --namespace {{ns}}
+  helm template {{release}} deploy/charts/arw-server --namespace {{ns}}
 
 helm-install release="arw" ns="default":
-  helm upgrade --install {{release}} deploy/charts/arw-svc --namespace {{ns}} --create-namespace
+  helm upgrade --install {{release}} deploy/charts/arw-server --namespace {{ns}} --create-namespace
 
 helm-uninstall release="arw" ns="default":
   helm uninstall {{release}} --namespace {{ns}}
+
+helm-template-legacy release="arw" ns="default":
+  helm template {{release}} deploy/charts/arw-svc --namespace {{ns}}
+
+helm-install-legacy release="arw" ns="default":
+  helm upgrade --install {{release}} deploy/charts/arw-svc --namespace {{ns}} --create-namespace
 
 # Docs
 docgen:
@@ -118,12 +124,18 @@ open-debug host='127.0.0.1' port='8090':
 hooks-install:
   bash scripts/hooks/install_hooks.sh
 
-# Dev runner (service only)
-dev port='8090':
+## Unified server dev runners (default)
+dev port='8091':
+  ARW_DEBUG=1 ARW_PORT={{port}} cargo run -p arw-server
+
+dev-watch port='8091':
+  ARW_DEBUG=1 ARW_PORT={{port}} cargo watch -x "run -p arw-server"
+
+## Legacy (temporary) — keep while launcher migrates
+dev-legacy port='8090':
   ARW_DEBUG=1 ARW_PORT={{port}} cargo run -p arw-svc
 
-# Dev runner with auto-reload (requires cargo-watch)
-dev-watch port='8090':
+dev-watch-legacy port='8090':
   ARW_DEBUG=1 ARW_PORT={{port}} cargo watch -x "run -p arw-svc"
 
 # New server (triad slice) — quick dev runners

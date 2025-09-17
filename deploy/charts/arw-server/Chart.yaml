@@ -1,0 +1,7 @@
+apiVersion: v2
+name: arw-server
+description: Agent Hub (ARW) unified server Helm chart (arw-server)
+type: application
+version: 0.1.0
+appVersion: "0.1.4"
+

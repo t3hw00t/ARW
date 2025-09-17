@@ -5,6 +5,7 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
+use utoipa::ToSchema;
 
 use crate::{util, working_set, AppState};
 use arw_topics as topics;
@@ -19,7 +20,7 @@ fn attach_memory_ptrs(items: Vec<Value>) -> Vec<Value> {
         .collect()
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct MemPutReq {
     pub lane: String,
     #[serde(default)]
@@ -36,6 +37,8 @@ pub(crate) struct MemPutReq {
     #[serde(default)]
     pub prob: Option<f64>,
 }
+/// Insert a memory item into a lane.
+#[utoipa::path(post, path = "/memory/put", tag = "Memory", request_body = MemPutReq, responses((status = 201, body = serde_json::Value)))]
 pub async fn memory_put(
     State(state): State<AppState>,
     Json(req): Json<MemPutReq>,
@@ -92,7 +95,7 @@ pub async fn state_memory_select(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct MemEmbedReq {
     pub embed: Vec<f32>,
     #[serde(default)]
@@ -100,6 +103,8 @@ pub(crate) struct MemEmbedReq {
     #[serde(default)]
     pub limit: Option<i64>,
 }
+/// Nearest neighbors by embedding.
+#[utoipa::path(post, path = "/memory/search_embed", tag = "Memory", request_body = MemEmbedReq, responses((status = 200, body = serde_json::Value)))]
 pub async fn memory_search_embed(
     State(state): State<AppState>,
     Json(req): Json<MemEmbedReq>,
@@ -128,7 +133,7 @@ pub async fn memory_search_embed(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct MemHybridReq {
     #[serde(default)]
     pub q: Option<String>,
@@ -139,6 +144,8 @@ pub(crate) struct MemHybridReq {
     #[serde(default)]
     pub limit: Option<i64>,
 }
+/// Hybrid retrieval with filters.
+#[utoipa::path(post, path = "/state/memory/select_hybrid", tag = "Memory", request_body = MemHybridReq, responses((status = 200, body = serde_json::Value)))]
 pub async fn memory_select_hybrid(
     State(state): State<AppState>,
     Json(req): Json<MemHybridReq>,
@@ -168,7 +175,7 @@ pub async fn memory_select_hybrid(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct MemCoherentReq {
     #[serde(default)]
     pub q: Option<String>,
@@ -201,6 +208,8 @@ pub(crate) struct MemCoherentReq {
     #[serde(default)]
     pub scorer: Option<String>,
 }
+/// Coherence-ranked selection (optionally show sources and diagnostics).
+#[utoipa::path(post, path = "/memory/select_coherent", tag = "Memory", request_body = MemCoherentReq, responses((status = 200, body = serde_json::Value)))]
 pub async fn memory_select_coherent(
     State(state): State<AppState>,
     Json(req): Json<MemCoherentReq>,
@@ -241,6 +250,8 @@ pub async fn memory_select_coherent(
     response.into_response()
 }
 
+/// Most recent memories (per lane).
+#[utoipa::path(get, path = "/state/memory/recent", tag = "Memory", params(("lane" = Option<String>, Query), ("limit" = Option<i64>, Query)), responses((status = 200, body = serde_json::Value)))]
 pub async fn state_memory_recent(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
@@ -265,7 +276,7 @@ pub async fn state_memory_recent(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct MemLinkReq {
     pub src_id: String,
     pub dst_id: String,
@@ -274,6 +285,8 @@ pub(crate) struct MemLinkReq {
     #[serde(default)]
     pub weight: Option<f64>,
 }
+/// Create a link between memory ids.
+#[utoipa::path(post, path = "/memory/link", tag = "Memory", request_body = MemLinkReq, responses((status = 201, body = serde_json::Value)))]
 pub async fn memory_link_put(
     State(state): State<AppState>,
     Json(req): Json<MemLinkReq>,
@@ -304,6 +317,8 @@ pub async fn memory_link_put(
     }
 }
 
+/// List relationships for a memory id.
+#[utoipa::path(get, path = "/state/memory/links", tag = "Memory", params(("id" = String, Query), ("limit" = Option<i64>, Query)), responses((status = 200, body = serde_json::Value)))]
 pub async fn state_memory_links(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
@@ -325,6 +340,8 @@ pub async fn state_memory_links(
     }
 }
 
+/// Explainability payload for coherence results.
+#[utoipa::path(post, path = "/state/memory/explain_coherent", tag = "Memory", request_body = MemCoherentReq, responses((status = 200, body = serde_json::Value)))]
 pub async fn memory_explain_coherent(
     State(state): State<AppState>,
     Json(req): Json<MemCoherentReq>,

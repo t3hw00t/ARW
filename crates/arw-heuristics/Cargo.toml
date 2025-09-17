@@ -1,0 +1,9 @@
+[package]
+name = "arw-heuristics"
+version = "0.1.4"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }

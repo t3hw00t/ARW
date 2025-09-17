@@ -2,16 +2,19 @@ use axum::response::IntoResponse;
 use axum::{extract::State, Json};
 use serde::Deserialize;
 use serde_json::json;
+use utoipa::ToSchema;
 
 use crate::AppState;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct EgressPreviewReq {
     pub url: String,
     #[serde(default)]
     pub method: Option<String>,
 }
 
+/// Dry‑run egress decision for a URL/method.
+#[utoipa::path(post, path = "/egress/preview", tag = "Egress", request_body = EgressPreviewReq, responses((status = 200, body = serde_json::Value)))]
 pub async fn egress_preview(
     State(state): State<AppState>,
     Json(req): Json<EgressPreviewReq>,

@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elRunErrOnly = document.getElementById('runErrOnly');
   const elRunSnap = document.getElementById('runSnap');
   const elRunSnapMeta = document.getElementById('runSnapMeta');
+  const elArtifactsTbl = document.getElementById('artifactsTbl');
   function setRunsStat(txt){ if (elRunsStat){ elRunsStat.textContent = txt||''; if (txt) setTimeout(()=>{ if (elRunsStat.textContent===txt) elRunsStat.textContent=''; }, 1200); } }
   function ms(n){ return Number.isFinite(n) ? n : 0 }
   function renderRuns(){
@@ -61,6 +62,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       runSnapshot = j;
       if (elRunSnap) elRunSnap.textContent = JSON.stringify(j, null, 2);
       if (elRunSnapMeta) elRunSnapMeta.textContent = 'episode: ' + id;
+      renderArtifacts();
     }catch(e){ console.error(e); runSnapshot=null; if (elRunSnap) elRunSnap.textContent=''; }
   }
   document.getElementById('btnRunsRefresh')?.addEventListener('click', loadRuns);
@@ -68,8 +70,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   elRunFilter?.addEventListener('input', ()=>{ renderRuns(); });
   elRunErrOnly?.addEventListener('change', ()=>{ renderRuns(); });
   document.getElementById('btnRunCopy')?.addEventListener('click', ()=>{ if (runSnapshot) ARW.copy(JSON.stringify(runSnapshot, null, 2)); });
-  document.getElementById('btnRunPinA')?.addEventListener('click', ()=>{ if (runSnapshot){ const ta=document.getElementById('cmpA'); if (ta) ta.value = JSON.stringify(runSnapshot, null, 2); } });
-  document.getElementById('btnRunPinB')?.addEventListener('click', ()=>{ if (runSnapshot){ const tb=document.getElementById('cmpB'); if (tb) tb.value = JSON.stringify(runSnapshot, null, 2); } });
+  document.getElementById('btnRunPinA')?.addEventListener('click', ()=>{ if (runSnapshot){ const ta=document.getElementById('cmpA'); if (ta){ ta.value = JSON.stringify(runSnapshot, null, 2); updateCompareLink('text'); } } });
+  document.getElementById('btnRunPinB')?.addEventListener('click', ()=>{ if (runSnapshot){ const tb=document.getElementById('cmpB'); if (tb){ tb.value = JSON.stringify(runSnapshot, null, 2); updateCompareLink('text'); } } });
   await loadRuns();
   // Throttle SSE-driven refresh on episode-related activity
   let _lastRunsAt = 0;
@@ -793,3 +795,78 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Command palette
   ARW.palette.mount({ base });
 });
+  // ---------- Compare deep-link (Text/JSON) ----------
+  function enc64(s){ try{ return btoa(unescape(encodeURIComponent(String(s||'')))); }catch{ return '' } }
+  function dec64(s){ try{ return decodeURIComponent(escape(atob(String(s||'')))); }catch{ return '' } }
+  function updateCompareLink(tab){
+    try{
+      const a = document.getElementById('cmpA')?.value||'';
+      const b = document.getElementById('cmpB')?.value||'';
+      const t = tab || (document.getElementById('tab-image')?.getAttribute('aria-selected')==='true'? 'image' : (document.getElementById('tab-csv')?.getAttribute('aria-selected')==='true'? 'csv' : 'text'));
+      const params = new URLSearchParams();
+      if (a) params.set('cmpA', enc64(a));
+      if (b) params.set('cmpB', enc64(b));
+      if (t) params.set('tab', t);
+      const hash = params.toString();
+      if (hash) { history.replaceState(null, '', '#' + hash); }
+      else { history.replaceState(null, '', window.location.pathname); }
+    }catch{}
+  }
+  function applyCompareFromLink(){
+    try{
+      const h = window.location.hash.replace(/^#/, ''); if (!h) return;
+      const p = new URLSearchParams(h);
+      const a = dec64(p.get('cmpA')||''); const b = dec64(p.get('cmpB')||'');
+      const tab = p.get('tab')||'text';
+      if (a){ const ta=document.getElementById('cmpA'); if (ta) ta.value=a; }
+      if (b){ const tb=document.getElementById('cmpB'); if (tb) tb.value=b; }
+      // Switch tabs only for text compare (safe default)
+      if (tab==='text'){ document.getElementById('tab-text')?.click?.(); }
+    }catch{}
+  }
+  // Update link when user clicks Diff or types in compare boxes
+  document.getElementById('btn-diff')?.addEventListener('click', ()=> updateCompareLink('text'));
+  document.getElementById('cmpA')?.addEventListener('input', ()=> updateCompareLink('text'));
+  document.getElementById('cmpB')?.addEventListener('input', ()=> updateCompareLink('text'));
+  applyCompareFromLink();
+
+  // ---------- Artifacts rendering from run snapshot ----------
+  function summarizeValue(v){
+    if (v == null) return 'null';
+    if (typeof v === 'string') return v.length <= 60 ? v : (v.slice(0,57) + '…');
+    if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+    try{ const s = JSON.stringify(v); return s.length <= 60 ? s : (s.slice(0,57) + '…'); }catch{ return '[object]' }
+  }
+  function collectArtifactsFromSnapshot(snap){
+    const out = [];
+    try{
+      const items = Array.isArray(snap?.items) ? snap.items : [];
+      for (const it of items){
+        const kind = it?.kind || 'event';
+        const p = it?.payload || {};
+        if (p && typeof p === 'object'){
+          if (p.output !== undefined){ out.push({ kind, text: JSON.stringify(p.output, null, 2), summary: summarizeValue(p.output) }); }
+          else { out.push({ kind, text: JSON.stringify(p, null, 2), summary: summarizeValue(p) }); }
+        } else if (typeof p === 'string') {
+          out.push({ kind, text: p, summary: summarizeValue(p) });
+        }
+      }
+    }catch{}
+    return out;
+  }
+  function renderArtifacts(){
+    if (!elArtifactsTbl) return;
+    elArtifactsTbl.innerHTML='';
+    const arts = collectArtifactsFromSnapshot(runSnapshot).slice(0, 50);
+    for (const a of arts){
+      const tr = document.createElement('tr');
+      const tdK = document.createElement('td'); tdK.className='mono'; tdK.textContent = a.kind || '';
+      const tdS = document.createElement('td'); tdS.className='mono'; tdS.textContent = a.summary || '';
+      const tdA = document.createElement('td');
+      const pa = document.createElement('button'); pa.className='ghost'; pa.textContent='Pin A'; pa.addEventListener('click', ()=>{ const ta=document.getElementById('cmpA'); if (ta){ ta.value = a.text||''; updateCompareLink('text'); } });
+      const pb = document.createElement('button'); pb.className='ghost'; pb.textContent='Pin B'; pb.addEventListener('click', ()=>{ const tb=document.getElementById('cmpB'); if (tb){ tb.value = a.text||''; updateCompareLink('text'); } });
+      tdA.appendChild(pa); tdA.appendChild(pb);
+      tr.appendChild(tdK); tr.appendChild(tdS); tr.appendChild(tdA);
+      elArtifactsTbl.appendChild(tr);
+    }
+  }

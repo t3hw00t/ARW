@@ -96,10 +96,10 @@ trap 'rm -rf "$tmp"' EXIT
   # Ensure codegen runs from the repo root so Cargo and relative paths resolve
   ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
   cd "$ROOT"
-  OPENAPI_OUT="$tmp/codegen.yaml" cargo run -p arw-svc --bin arw-svc --quiet || true
+  OPENAPI_OUT="$tmp/codegen.yaml" cargo run -p arw-server --quiet || true
 )
 if [[ ! -s "$tmp/codegen.yaml" ]]; then
-  echo "::error::Failed to generate OpenAPI via arw-svc (OPENAPI_OUT)" >&2
+  echo "::error::Failed to generate OpenAPI via arw-server (OPENAPI_OUT)" >&2
   exit 1
 fi
 py=$(command -v python3 || true)

@@ -2,10 +2,11 @@ use axum::response::IntoResponse;
 use axum::{extract::State, Json};
 use serde::Deserialize;
 use serde_json::json;
+use utoipa::ToSchema;
 
 use crate::AppState;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct LeaseReq {
     pub capability: String,
     #[serde(default)]
@@ -16,6 +17,14 @@ pub(crate) struct LeaseReq {
     pub budget: Option<f64>,
 }
 
+/// Allocate a capability lease.
+#[utoipa::path(
+    post,
+    path = "/leases",
+    tag = "Leases",
+    request_body = LeaseReq,
+    responses((status = 201, description = "Created", body = serde_json::Value))
+)]
 pub async fn leases_create(
     State(state): State<AppState>,
     Json(req): Json<LeaseReq>,
@@ -46,6 +55,8 @@ pub async fn leases_create(
     )
 }
 
+/// Snapshot of active leases.
+#[utoipa::path(get, path = "/state/leases", tag = "Leases", responses((status = 200, body = serde_json::Value)))]
 pub async fn state_leases(State(state): State<AppState>) -> impl IntoResponse {
     let items = state.kernel.list_leases(200).unwrap_or_default();
     Json(json!({"items": items}))

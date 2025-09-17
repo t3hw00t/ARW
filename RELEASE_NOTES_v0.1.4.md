@@ -39,8 +39,9 @@ Adds durable request correlation, safer default headers, CSP controls, and riche
 - SSE decoration: `ARW_EVENTS_SSE_DECORATE`
 
 ## Install
-- Docker: `ghcr.io/<owner>/arw-svc:v0.1.4`
-- Helm: set `image.repository=ghcr.io/<owner>/arw-svc` and `image.tag=v0.1.4`
+- Docker (unified): `ghcr.io/<owner>/arw-server:v0.1.4`
+- Docker (legacy UI bridge): `ghcr.io/<owner>/arw-svc:v0.1.4`
+- Helm (legacy chart): set `image.repository=ghcr.io/<owner>/arw-svc` and `image.tag=v0.1.4` (unified server chart forthcoming)
 - Binaries: build from source with `cargo build --workspace --release`
 
 ## Verification

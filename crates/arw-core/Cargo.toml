@@ -16,7 +16,7 @@ async-trait = "0.1"
 tokio = { workspace = true }
 uuid = { workspace = true }
 futures-util = { workspace = true }
-base64 = "0.22"
+base64 = { workspace = true }
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 k256 = { version = "0.13", default-features = false, features = ["ecdsa"] }
 

@@ -8,6 +8,7 @@ use std::future::ready;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tokio_stream::StreamExt;
+use utoipa::ToSchema;
 
 use crate::{
     context_loop::{
@@ -17,7 +18,7 @@ use crate::{
 };
 use arw_topics as topics;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct AssembleReq {
     #[serde(default)]
     pub proj: Option<String>,
@@ -55,6 +56,14 @@ pub(crate) struct AssembleReq {
     pub corr_id: Option<String>,
 }
 
+/// Assemble context working set; optionally stream iterations via SSE.
+#[utoipa::path(
+    post,
+    path = "/context/assemble",
+    tag = "Context",
+    request_body = AssembleReq,
+    responses((status = 200, description = "Assembled context", body = serde_json::Value))
+)]
 pub async fn context_assemble(
     State(state): State<AppState>,
     Json(req): Json<AssembleReq>,
@@ -312,10 +321,12 @@ fn build_spec(req: &AssembleReq) -> working_set::WorkingSetSpec {
     spec
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct RehydrateReq {
     pub ptr: Value,
 }
+/// Rehydrate a pointer (file head or memory record), gated by policy/leases.
+#[utoipa::path(post, path = "/context/rehydrate", tag = "Context", request_body = RehydrateReq, responses((status = 200, body = serde_json::Value), (status = 403), (status = 400), (status = 404)))]
 pub async fn context_rehydrate(
     State(state): State<AppState>,
     Json(req): Json<RehydrateReq>,

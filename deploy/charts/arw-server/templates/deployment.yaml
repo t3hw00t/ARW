@@ -1,0 +1,95 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "arw-server.fullname" . }}
+  labels:
+    {{- include "arw-server.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "arw-server.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "arw-server.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+        {{- range .Values.image.pullSecrets }}
+        - name: {{ . | quote }}
+        {{- end }}
+      {{- end }}
+      {{- if .Values.securityContext.enabled }}
+      securityContext:
+        {{- toYaml .Values.securityContext.pod | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: arw-server
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+          {{- if .Values.securityContext.enabled }}
+          securityContext:
+            {{- toYaml .Values.securityContext.container | nindent 12 }}
+          {{- end }}
+          env:
+            - name: ARW_PORT
+              value: "{{ .Values.env.ARW_PORT }}"
+            - name: ARW_BIND
+              value: "{{ .Values.env.ARW_BIND }}"
+            - name: ARW_DEBUG
+              value: "{{ .Values.env.ARW_DEBUG }}"
+            - name: ARW_TRUST_FORWARD_HEADERS
+              value: "{{ .Values.env.ARW_TRUST_FORWARD_HEADERS }}"
+            - name: ARW_ACCESS_LOG
+              value: "{{ .Values.env.ARW_ACCESS_LOG }}"
+            - name: ARW_ACCESS_SAMPLE_N
+              value: "{{ .Values.env.ARW_ACCESS_SAMPLE_N }}"
+            - name: ARW_ACCESS_UA
+              value: "{{ .Values.env.ARW_ACCESS_UA }}"
+            - name: ARW_ACCESS_UA_HASH
+              value: "{{ .Values.env.ARW_ACCESS_UA_HASH }}"
+            - name: ARW_ACCESS_REF
+              value: "{{ .Values.env.ARW_ACCESS_REF }}"
+            - name: ARW_ACCESS_REF_STRIP_QS
+              value: "{{ .Values.env.ARW_ACCESS_REF_STRIP_QS }}"
+            - name: ARW_ACCESS_LOG_ROLL
+              value: "{{ .Values.env.ARW_ACCESS_LOG_ROLL }}"
+            - name: ARW_ACCESS_LOG_DIR
+              value: "{{ .Values.env.ARW_ACCESS_LOG_DIR }}"
+            - name: ARW_ACCESS_LOG_PREFIX
+              value: "{{ .Values.env.ARW_ACCESS_LOG_PREFIX }}"
+            - name: ARW_ACCESS_LOG_ROTATION
+              value: "{{ .Values.env.ARW_ACCESS_LOG_ROTATION }}"
+            {{- with .Values.env.extra }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 2
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: http
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          {{- if .Values.state.enabled }}
+          volumeMounts:
+            - name: state
+              mountPath: {{ .Values.state.mountPath | quote }}
+          {{- end }}
+      {{- if .Values.state.enabled }}
+      volumes:
+        - name: state
+          persistentVolumeClaim:
+            claimName: {{ include "arw-server.fullname" . }}-state
+      {{- end }}
+

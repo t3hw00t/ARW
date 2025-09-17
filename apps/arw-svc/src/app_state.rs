@@ -12,8 +12,13 @@ pub struct AppState {
 impl Default for AppState {
     fn default() -> Self {
         let bus = arw_events::Bus::new_with_replay(128, 128);
-        let queue: Arc<dyn arw_core::orchestrator::Queue> =
-            Arc::new(arw_core::orchestrator::LocalQueue::new());
+        let lease_ttl = std::env::var("ARW_ORCH_LEASE_MS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(30_000);
+        let queue: Arc<dyn arw_core::orchestrator::Queue> = Arc::new(
+            arw_core::orchestrator::LocalQueue::with_lease_ttl(lease_ttl),
+        );
         Self {
             bus,
             stop_tx: None,
@@ -54,9 +59,15 @@ impl AppStateBuilder {
     }
     pub fn build(self) -> AppState {
         let bus = arw_events::Bus::new_with_replay(self.bus_cap, self.bus_replay);
-        let queue = self
-            .queue
-            .unwrap_or_else(|| Arc::new(arw_core::orchestrator::LocalQueue::new()));
+        let queue = self.queue.unwrap_or_else(|| {
+            let lease_ttl = std::env::var("ARW_ORCH_LEASE_MS")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .unwrap_or(30_000);
+            Arc::new(arw_core::orchestrator::LocalQueue::with_lease_ttl(
+                lease_ttl,
+            ))
+        });
         AppState {
             bus,
             stop_tx: self.stop_tx,

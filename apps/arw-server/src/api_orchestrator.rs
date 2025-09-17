@@ -6,15 +6,18 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::json;
+use utoipa::ToSchema;
 
 use crate::{admin_ok, AppState};
 use arw_topics as topics;
 
+/// List available mini-agents (placeholder).
+#[utoipa::path(get, path = "/state/orchestrator/mini_agents", tag = "Orchestrator", responses((status = 200, body = serde_json::Value)))]
 pub async fn orchestrator_mini_agents() -> impl IntoResponse {
     Json(json!({"items": []}))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct OrchestratorStartReq {
     #[serde(default)]
     #[allow(dead_code)]
@@ -27,6 +30,8 @@ pub(crate) struct OrchestratorStartReq {
     pub budget: Option<serde_json::Value>,
 }
 
+/// Start a training job that results in a suggested Logic Unit (admin).
+#[utoipa::path(post, path = "/orchestrator/start_training", tag = "Orchestrator", request_body = OrchestratorStartReq, responses((status = 202, body = serde_json::Value), (status = 401)))]
 pub async fn orchestrator_start_training(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -104,6 +109,8 @@ pub async fn orchestrator_start_training(
     )
 }
 
+/// Orchestrator jobs snapshot.
+#[utoipa::path(get, path = "/state/orchestrator/jobs", tag = "Orchestrator", params(("limit" = Option<i64>, Query)), responses((status = 200, body = serde_json::Value)))]
 pub async fn state_orchestrator_jobs(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,

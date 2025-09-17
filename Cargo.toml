@@ -8,6 +8,7 @@ members = [
   "crates/arw-wasi",
   "crates/arw-macros",
   "crates/arw-topics",
+  "crates/arw-heuristics",
   "apps/arw-cli",
   "crates/arw-otel",
   "apps/arw-svc",
@@ -52,6 +53,7 @@ futures-util = "0.3"
 fs2 = "0.4"
 sysinfo = "0.30"
 os_info = "3"
+base64 = "0.22"
 
 [profile.dev]
 opt-level = 1

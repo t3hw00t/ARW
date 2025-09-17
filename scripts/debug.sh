@@ -9,7 +9,7 @@ ROOT="$(cd "$DIR/.." && pwd)"
 
 PORT_DEFAULT_LEGACY=8090
 PORT_DEFAULT_SERVER=8091
-PORT=${ARW_PORT:-$PORT_DEFAULT_LEGACY}
+PORT=${ARW_PORT:-$PORT_DEFAULT_SERVER}
 PORT_SPECIFIED=0
 if [[ -n "${ARW_PORT:-}" ]]; then PORT_SPECIFIED=1; fi
 DOCS_URL=${ARW_DOCS_URL:-}
@@ -20,7 +20,7 @@ OPEN_UI=1
 WAIT_HEALTH=1
 WAIT_HEALTH_TIMEOUT_SECS=${ARW_WAIT_HEALTH_TIMEOUT_SECS:-20}
 INTERACTIVE=0
-LEGACY=1
+LEGACY=0
 
 usage() {
   cat <<'EOF'
@@ -68,13 +68,13 @@ done
 
 prompt_interactive() {
   echo "Agent Hub (ARW) — Debug (interactive)"
-  read -r -p "Stack [legacy/server] (default legacy): " stack
+  read -r -p "Stack [server/legacy] (default server): " stack
   case "${stack,,}" in
-    server|headless)
-      LEGACY=0
-      ;;
-    legacy|""|*)
+    legacy)
       LEGACY=1
+      ;;
+    server|headless|""|*)
+      LEGACY=0
       ;;
   esac
   if [[ $PORT_SPECIFIED -eq 0 ]]; then

@@ -1,0 +1,21 @@
+[Unit]
+Description=ARW Unified Server (container)
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+EnvironmentFile=-/etc/default/arw-server
+User=%i
+ExecStart=/usr/bin/docker run --rm \
+  --name arw-server-%i \
+  -p ${ARW_PORT:-8091}:${ARW_PORT:-8091} \
+  -e ARW_PORT=${ARW_PORT:-8091} \
+  -e ARW_DEBUG=${ARW_DEBUG:-0} \
+  -e ARW_ADMIN_TOKEN=${ARW_ADMIN_TOKEN:-} \
+  ghcr.io/${ARW_IMAGE_OWNER:-t3hw00t}/arw-server:${ARW_IMAGE_TAG:-latest}
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=default.target
+

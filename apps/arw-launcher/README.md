@@ -12,6 +12,7 @@ Build and run (from repo root):
 - Run `target/debug/arw-launcher` (or `target/release/arw-launcher`)
 
 Notes
+- Currently targets the legacy bridge (`arw-svc`) to power the classic Debug UI. The unified server (`arw-server`, default port 8091) runs headless; the launcher will be retargeted in a future update.
 - Defaults to port 8090 unless `ARW_PORT` is set.
 - Uses `crates/arw-tauri` for shared commands and service management.
 - For now, no Node/bundler is required; UI is a simple static page served by Tauri.

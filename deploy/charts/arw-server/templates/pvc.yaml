@@ -1,0 +1,14 @@
+{{- if .Values.state.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "arw-server.fullname" . }}-state
+  labels:
+    {{- include "arw-server.labels" . | nindent 4 }}
+spec:
+  accessModes: [ "ReadWriteOnce" ]
+  resources:
+    requests:
+      storage: {{ .Values.state.size }}
+{{- end }}
+

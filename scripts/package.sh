@@ -19,9 +19,11 @@ command -v cargo >/dev/null || { echo 'cargo not found'; exit 1; }
 if [[ $nobuild -eq 0 ]]; then
   echo '[package] Building (release)'
   if [[ -n "$target_triple" ]]; then
-    cargo build --release --locked --target "$target_triple" -p arw-svc -p arw-cli || true
+    cargo build --release --locked --target "$target_triple" -p arw-server -p arw-cli || true
     # Try launcher too, but don't fail the packaging if it doesn't build
     cargo build --release --locked --target "$target_triple" -p arw-launcher || true
+    # Legacy (optional)
+    cargo build --release --locked --target "$target_triple" -p arw-svc || true
   else
     cargo build --workspace --release --locked || true
   fi
@@ -70,7 +72,12 @@ rm -rf "$out" && mkdir -p "$out/bin" "$out/configs"
 exe=''
 [[ "$os" == windows ]] && exe='.exe'
 
-cp "$bin_dir/arw-svc$exe" "$out/bin/arw-svc$exe"
+if [[ -f "$bin_dir/arw-server$exe" ]]; then
+  cp "$bin_dir/arw-server$exe" "$out/bin/arw-server$exe"
+fi
+if [[ -f "$bin_dir/arw-svc$exe" ]]; then
+  cp "$bin_dir/arw-svc$exe" "$out/bin/arw-svc$exe"
+fi
 cp "$bin_dir/arw-cli$exe" "$out/bin/arw-cli$exe" 2>/dev/null || true
 if [[ -f "$bin_dir/arw-launcher$exe" ]]; then
   cp "$bin_dir/arw-launcher$exe" "$out/bin/arw-launcher$exe"
@@ -88,16 +95,20 @@ cat > "$out/README.txt" << EOF
 ARW portable bundle ($name)
 
 Contents
-- bin/        arw-svc, arw-cli, (optional) arw-launcher
+- bin/        arw-server (unified), arw-cli, (optional) arw-launcher; legacy arw-svc may be present
 - configs/    default.toml (portable state paths)
 - docs/       project docs
 - sandbox/    Windows Sandbox config (Windows only)
 
-Usage
-- Run service: bin/arw-svc$exe
-- Debug UI:    http://127.0.0.1:8090/debug
+Usage (Unified)
+- Run server:  bin/arw-server$exe (default port 8091)
+- API:         http://127.0.0.1:8091/healthz
 - CLI sanity:  bin/arw-cli$exe
- - Launcher:    bin/arw-launcher$exe (tray + windows UI)
+- Launcher:    bin/arw-launcher$exe (tray + windows UI)
+
+Legacy (temporary)
+- Run legacy:  bin/arw-svc$exe (classic debug UI on 8090)
+- Debug UI:    http://127.0.0.1:8090/debug
 
 Notes
 - To force portable mode: export ARW_PORTABLE=1

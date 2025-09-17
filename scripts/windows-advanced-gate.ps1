@@ -33,8 +33,8 @@ function Find-Tool($names){
 
 # Collect candidate artifacts
 $distDir = Join-Path $root 'dist'
-$targetExe = Join-Path $root 'target\release\arw-svc.exe'
-$targetExeArm = Join-Path $root 'target\aarch64-pc-windows-msvc\release\arw-svc.exe'
+$targetExe = Join-Path $root 'target\release\arw-server.exe'
+$targetExeArm = Join-Path $root 'target\aarch64-pc-windows-msvc\release\arw-server.exe'
 $artifacts = @()
 if (Test-Path $distDir) { $artifacts += Get-ChildItem -Path $distDir -Recurse -Include *.exe,*.msi -File -ErrorAction SilentlyContinue }
 if (Test-Path $targetExe) { $artifacts += Get-Item $targetExe }
@@ -107,7 +107,7 @@ if ($appverif) {
     Write-Host ("  `"$appverif`" -save log.xml -xml")
     Write-Host 'After enabling, run the app briefly to collect issues.'
   } else {
-    Warn 'arw-svc.exe not built; skip AppVerifier hints.'
+    Warn 'arw-server.exe not built; skip AppVerifier hints.'
   }
 } else {
   Warn 'AppVerifier not found; install Windows SDK App Verifier to enable dynamic checks.'

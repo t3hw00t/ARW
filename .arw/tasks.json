@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-17 18:39 UTC",
+  "updated": "2025-09-17 21:58 UTC",
   "tasks": [
     {
       "id": "t-250914050900-ev10",
@@ -375,23 +375,34 @@
     {
       "id": "t-250909224102-8952",
       "title": "Plan: Heuristic engine crate + integration",
-      "desc": "Create arw-feedback crate; actor with O(1) stats; bus deltas; snapshot+persistence; wire /feedback/*",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-09 20:41:02 UTC"
+      "desc": "Create arw-heuristics crate; actor with O(1) stats; bus deltas; snapshot+persistence; wire /feedback/*",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-17 21:05:00 UTC",
+          "text": "Added crate arw-heuristics with Features and evaluate(); svc feedback_engine now delegates (timeout hint + memory pressure). Preserved snapshots, events, and versioning."
+        }
+      ],
+      "updated": "2025-09-17 21:05:00 UTC",
+      "done_at": "2025-09-17 21:05:00 UTC"
     },
     {
       "id": "t-250909224102-9629",
       "title": "Spec: AsyncAPI+MCP artifacts + /spec/*",
       "desc": "Generate /spec/asyncapi.yaml and /spec/mcp-tools.json in CI and serve endpoints",
-      "status": "todo",
+      "status": "done",
       "notes": [
         {
           "time": "2025-09-14 17:54:55 UTC",
           "text": "Spec endpoints covered: openapi/asyncapi/mcp and index return 200 and correct content-type; added unit checks for token extraction, sha256 match, and IP key. Tests write temp spec files for isolation."
+        },
+        {
+          "time": "2025-09-17 20:19:01 UTC",
+          "text": "Unified server wires /spec/* (openapi/asyncapi/mcp, schemas, index); Dockerfile copies spec/; docgen generates asyncapi.yaml + mcp-tools.json."
         }
       ],
-      "updated": "2025-09-14 17:54:55 UTC"
+      "updated": "2025-09-17 20:19:01 UTC",
+      "done_at": "2025-09-17 20:19:01 UTC"
     },
     {
       "id": "t-250909224103-5251",
@@ -574,10 +585,16 @@
     {
       "id": "t-250911230308-0779",
       "title": "Orchestrator: configurable lease, nack delay, and max in-flight",
-      "desc": "Expose ARW_TASK_LEASE_MS and group max in-flight; implement lease extension and nack(retry_after_ms) paths; add unit tests for lease expiry and re-enqueue; update connector example to honor nack delay.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-11 21:03:08 UTC"
+      "desc": "Expose ARW_ORCH_LEASE_MS and ARW_ORCH_MAX_INFLIGHT; implement nack(retry_after_ms) with ARW_ORCH_NACK_DELAY_MS; add unit tests for lease expiry and re-enqueue; update connector example to honor nack delay.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-17 20:29:00 UTC",
+          "text": "LocalQueue supports configurable lease TTL (ARW_ORCH_LEASE_MS). Worker honors ARW_ORCH_NACK_DELAY_MS and ARW_ORCH_MAX_INFLIGHT for retry delay and concurrency."
+        }
+      ],
+      "updated": "2025-09-17 20:29:00 UTC",
+      "done_at": "2025-09-17 20:29:00 UTC"
     },
     {
       "id": "t-250911230312-0863",
@@ -657,14 +674,19 @@
       "id": "t-250911230333-9794",
       "title": "RPU: watch trust store and strengthen verification",
       "desc": "Add fs-watch for ARW_TRUST_CAPSULES to hot-reload issuers; enrich ABAC checks; expose /introspect/trust for debugging; tests with sample ed25519 and secp256k1 keys/capsules.",
-      "status": "todo",
+      "status": "done",
       "notes": [
         {
           "time": "2025-09-14 23:17:01 UTC",
           "text": "Added /admin/rpu/trust and /admin/rpu/reload endpoints; gating keys rpu:trust:get and rpu:trust:reload; will add file watch next."
+        },
+        {
+          "time": "2025-09-17 20:44:00 UTC",
+          "text": "Unified server now exposes /admin/rpu/trust and /admin/rpu/reload (admin token required) and watches ARW_TRUST_CAPSULES for changes, emitting rpu.trust.changed. Verification supports ed25519 and secp256k1 with ABAC check."
         }
       ],
-      "updated": "2025-09-14 23:17:01 UTC"
+      "updated": "2025-09-17 20:44:00 UTC",
+      "done_at": "2025-09-17 20:44:00 UTC"
     },
     {
       "id": "t-250912001055-0044",
@@ -889,14 +911,19 @@
       "id": "t-250914223100-ui08",
       "title": "Templates: save/load (prefs)",
       "desc": "Persist focused/layout lanes under namespaced prefs; apply on load.",
-      "status": "in_progress",
+      "status": "done",
       "notes": [
         {
           "time": "2025-09-14 22:37:00 UTC",
           "text": "Hub saves focused flag + lanes; next: per‑project file persistence."
+        },
+        {
+          "time": "2025-09-17 20:19:01 UTC",
+          "text": "Launcher exposes ARW.templates.save/load bound to prefs (namespaced), with debounced writes; per‑project overrides via get/setPrefs(ns)."
         }
       ],
-      "updated": "2025-09-14 22:37:00 UTC"
+      "updated": "2025-09-17 20:19:01 UTC",
+      "done_at": "2025-09-17 20:19:01 UTC"
     },
     {
       "id": "t-250914223200-cap01",
@@ -935,9 +962,13 @@
         {
           "time": "2025-09-14 23:05:00 UTC",
           "text": "Tool stub added using leptess behind feature ocr_tesseract; Chat can auto-run OCR if enabled."
+        },
+        {
+          "time": "2025-09-17 20:19:01 UTC",
+          "text": "Fixed parameter use in ocr_image_text (leptess set_image now receives path). Feature remains optional (enable with --features ocr_tesseract)."
         }
       ],
-      "updated": "2025-09-14 23:05:00 UTC"
+      "updated": "2025-09-17 20:19:01 UTC"
     },
     {
       "id": "t-250914230000-ui12",
@@ -971,25 +1002,94 @@
       "id": "t-250914223230-ui09",
       "title": "Runs: pin artifacts to compare",
       "desc": "Enable pin‑to‑compare from runs/artifacts list in Hub; deep‑link compare sets.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-14 22:38:30 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-17 20:55:00 UTC",
+          "text": "Hub shows artifacts table from run snapshot (outputs/payloads) with Pin A/B buttons feeding Compare. Added deep-link: cmpA/cmpB base64 in URL hash; auto-applies on load."
+        }
+      ],
+      "updated": "2025-09-17 20:55:00 UTC",
+      "done_at": "2025-09-17 20:55:00 UTC"
     },
     {
       "id": "t-250914223240-ui10",
       "title": "Export CSV: logs/table diffs",
       "desc": "Add Export CSV for top routes and for CSV/Table diff results.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-14 22:38:40 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-17 20:19:01 UTC",
+          "text": "Logs UI adds Export CSV for top routes and event kinds (launcher logs.js); docs call out CSV/Table diff export in Workflow Views."
+        }
+      ],
+      "updated": "2025-09-17 20:19:01 UTC",
+      "done_at": "2025-09-17 20:19:01 UTC"
     },
     {
       "id": "t-250914223250-ui11",
       "title": "Route SLO selector",
       "desc": "Allow changing SLO threshold (P95) in Metrics lane and Logs tables.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-17 20:19:01 UTC",
+          "text": "SLO input present in logs/events (launcher) and header badge in debug UI; SLO persisted in prefs (sloP95) and used for p95 highlighting."
+        }
+      ],
+      "updated": "2025-09-17 20:19:01 UTC",
+      "done_at": "2025-09-17 20:19:01 UTC"
+    },
+    {
+      "id": "t-250917235747-3348",
+      "title": "Annotate server handlers with utoipa",
+      "desc": "Initial sweep over meta/state/events/actions/policy/egress/connectors/leases/context/spec.",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-17 21:58:04 UTC",
+      "done_at": "2025-09-17 21:58:04 UTC"
+    },
+    {
+      "id": "t-250917235812-8254",
+      "title": "Switch CI OpenAPI codegen to arw-server",
+      "desc": "interfaces.yml + hooks now run OPENAPI_OUT via server.",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-17 21:58:13 UTC",
+      "done_at": "2025-09-17 21:58:13 UTC"
+    },
+    {
+      "id": "t-250917235814-0001",
+      "title": "Add Helm chart for arw-server",
+      "desc": "New chart at deploy/charts/arw-server; Justfile defaults switched.",
+      "status": "done",
+      "notes": [],
+      "updated": "2025-09-17 21:58:16 UTC",
+      "done_at": "2025-09-17 21:58:16 UTC"
+    },
+    {
+      "id": "t-250917235817-3181",
+      "title": "Retarget launcher to unified server",
+      "desc": "Launcher still targets legacy bridge; migrate UI + service mgmt.",
       "status": "todo",
       "notes": [],
-      "updated": "2025-09-14 22:38:50 UTC"
+      "updated": "2025-09-17 21:58:17 UTC"
+    },
+    {
+      "id": "t-250917235818-8075",
+      "title": "Replace static OpenAPI with ApiDoc emission",
+      "desc": "Emit generated OpenAPI and reconcile curated overlay; update CI to use ApiDoc.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-17 21:58:18 UTC"
+    },
+    {
+      "id": "t-250917235820-3900",
+      "title": "Decommission legacy artifacts",
+      "desc": "Remove arw-svc chart and docker publish once launcher retargeted and docs updated.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-17 21:58:20 UTC"
     }
   ]
 }

@@ -6,11 +6,12 @@ use axum::{
 use chrono::SecondsFormat;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use utoipa::ToSchema;
 
 use crate::AppState;
 use arw_topics as topics;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct ActionReq {
     pub kind: String,
     #[serde(default)]
@@ -19,6 +20,14 @@ pub(crate) struct ActionReq {
     pub idem_key: Option<String>,
 }
 
+/// Submit an action to the triad queue.
+#[utoipa::path(
+    post,
+    path = "/actions",
+    tag = "Actions",
+    request_body = ActionReq,
+    responses((status = 202, description = "Accepted", body = serde_json::Value))
+)]
 pub async fn actions_submit(
     State(state): State<AppState>,
     Json(req): Json<ActionReq>,
@@ -116,6 +125,17 @@ pub async fn actions_submit(
     )
 }
 
+/// Get action details by id.
+#[utoipa::path(
+    get,
+    path = "/actions/{id}",
+    tag = "Actions",
+    params(("id" = String, Path, description = "Action id")),
+    responses(
+        (status = 200, description = "Action", body = serde_json::Value),
+        (status = 404, description = "Not found")
+    )
+)]
 pub async fn actions_get(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -147,12 +167,25 @@ pub async fn actions_get(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct ActionStateReq {
     pub state: String,
     #[serde(default)]
     pub error: Option<String>,
 }
+/// Update lifecycle state of an action.
+#[utoipa::path(
+    post,
+    path = "/actions/{id}/state",
+    tag = "Actions",
+    params(("id" = String, Path, description = "Action id")),
+    request_body = ActionStateReq,
+    responses(
+        (status = 200, description = "Updated", body = serde_json::Value),
+        (status = 404, description = "Not found"),
+        (status = 400, description = "Invalid state")
+    )
+)]
 pub async fn actions_state_set(
     State(state): State<AppState>,
     Path(id): Path<String>,

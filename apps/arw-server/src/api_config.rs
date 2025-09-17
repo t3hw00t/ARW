@@ -7,16 +7,19 @@ use axum::{
 use jsonschema::{Draft, JSONSchema};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use utoipa::ToSchema;
 
 use crate::{admin_ok, AppState};
 use arw_topics as topics;
 
+/// Effective config JSON.
+#[utoipa::path(get, path = "/state/config", tag = "Config", responses((status = 200, body = serde_json::Value)))]
 pub async fn state_config(State(state): State<AppState>) -> impl IntoResponse {
     let snap = state.config_state.lock().await.clone();
     Json(json!({"config": snap}))
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct ApplyReq {
     #[serde(default)]
     #[allow(dead_code)]
@@ -30,7 +33,7 @@ pub(crate) struct ApplyReq {
     pub schema_pointer: Option<String>,
 }
 
-#[derive(Deserialize, Clone)]
+#[derive(Deserialize, Clone, ToSchema)]
 pub(crate) struct PatchOp {
     pub target: String,
     pub op: String,
@@ -189,6 +192,8 @@ pub(crate) fn validate_patch_value(v: &Value) -> Result<(), Vec<Value>> {
     }
 }
 
+/// Apply config patches with optional schema validation (admin).
+#[utoipa::path(post, path = "/patch/apply", tag = "Config", request_body = ApplyReq, responses((status = 200, body = serde_json::Value), (status = 401), (status = 400)))]
 pub async fn patch_apply(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -338,11 +343,13 @@ pub async fn patch_apply(
     )
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct RevertReq {
     pub snapshot_id: String,
 }
 
+/// Revert to a snapshot id (admin).
+#[utoipa::path(post, path = "/patch/revert", tag = "Config", request_body = RevertReq, responses((status = 200, body = serde_json::Value), (status = 404), (status = 401)))]
 pub async fn patch_revert(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -383,6 +390,8 @@ pub async fn patch_revert(
     }
 }
 
+/// List recent config snapshots.
+#[utoipa::path(get, path = "/state/config/snapshots", tag = "Config", params(("limit" = Option<i64>, Query)), responses((status = 200, body = serde_json::Value)))]
 pub async fn state_config_snapshots(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
@@ -398,6 +407,8 @@ pub async fn state_config_snapshots(
     (axum::http::StatusCode::OK, Json(json!({"items": items}))).into_response()
 }
 
+/// Get a specific config snapshot by id.
+#[utoipa::path(get, path = "/state/config/snapshots/{id}", tag = "Config", params(("id" = String, Path)), responses((status = 200, body = serde_json::Value), (status = 404)))]
 pub async fn state_config_snapshot_get(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -419,7 +430,7 @@ pub async fn state_config_snapshot_get(
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct ValidateReq {
     pub schema_ref: String,
     #[serde(default)]
@@ -427,6 +438,8 @@ pub(crate) struct ValidateReq {
     #[serde(default)]
     pub config: Option<Value>,
 }
+/// Validate a config against a JSON Schema.
+#[utoipa::path(post, path = "/patch/validate", tag = "Config", request_body = ValidateReq, responses((status = 200, body = serde_json::Value), (status = 400)))]
 pub async fn patch_validate(Json(req): Json<ValidateReq>) -> impl IntoResponse {
     let schema_path = req.schema_ref.as_str();
     let to_validate = req.config.unwrap_or(json!({}));
@@ -453,6 +466,8 @@ pub async fn patch_validate(Json(req): Json<ValidateReq>) -> impl IntoResponse {
     }
 }
 
+/// Current schema mapping used for inference.
+#[utoipa::path(get, path = "/state/schema_map", tag = "Config", responses((status = 200, body = serde_json::Value)))]
 pub async fn state_schema_map() -> impl IntoResponse {
     let path = std::env::var("ARW_SCHEMA_MAP")
         .ok()
@@ -475,10 +490,12 @@ pub async fn state_schema_map() -> impl IntoResponse {
     }
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct InferReq {
     pub target: String,
 }
+/// Infer a JSON Schema ref and pointer for a target path.
+#[utoipa::path(post, path = "/patch/infer_schema", tag = "Config", request_body = InferReq, responses((status = 200, body = serde_json::Value), (status = 404)))]
 pub async fn patch_infer_schema(Json(req): Json<InferReq>) -> impl IntoResponse {
     match infer_schema_for_target(&req.target) {
         Some((schema_ref, pointer)) => (axum::http::StatusCode::OK, Json(json!({"schema_ref": schema_ref, "schema_pointer": pointer}))).into_response(),

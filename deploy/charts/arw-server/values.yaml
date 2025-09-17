@@ -1,0 +1,60 @@
+image:
+  repository: ghcr.io/t3hw00t/arw-server
+  tag: latest
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+
+service:
+  type: ClusterIP
+  port: 8091
+
+env:
+  ARW_PORT: 8091
+  ARW_BIND: 0.0.0.0
+  ARW_DEBUG: 0
+  ARW_TRUST_FORWARD_HEADERS: 0
+  # Access logs (structured)
+  ARW_ACCESS_LOG: 0
+  ARW_ACCESS_SAMPLE_N: 1
+  ARW_ACCESS_UA: 0
+  ARW_ACCESS_UA_HASH: 0
+  ARW_ACCESS_REF: 0
+  ARW_ACCESS_REF_STRIP_QS: 1
+  # Rolling access log files
+  ARW_ACCESS_LOG_ROLL: 0
+  ARW_ACCESS_LOG_DIR: ""
+  ARW_ACCESS_LOG_PREFIX: ""
+  ARW_ACCESS_LOG_ROTATION: daily
+  extra: [] # list of { name: FOO, value: BAR }
+
+resources: {}
+
+securityContext:
+  enabled: true
+  pod:
+    runAsNonRoot: true
+    runAsUser: 10001
+    runAsGroup: 10001
+    fsGroup: 10001
+  container:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: true
+    capabilities:
+      drop: ["ALL"]
+
+state:
+  enabled: false
+  mountPath: /app/state
+  size: 1Gi
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: arw.local
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+

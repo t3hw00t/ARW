@@ -3,15 +3,33 @@ use axum::response::IntoResponse;
 use axum::{extract::State, Json};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use utoipa::ToSchema;
 
 use crate::AppState;
 use arw_policy::{AbacRequest, Entity, PolicyEngine};
 use arw_topics as topics;
 
+/// Current ABAC policy snapshot.
+#[utoipa::path(
+    get,
+    path = "/state/policy",
+    tag = "Policy",
+    responses((status = 200, description = "Policy snapshot", body = serde_json::Value))
+)]
 pub async fn state_policy(State(state): State<AppState>) -> impl axum::response::IntoResponse {
     Json(state.policy.lock().await.snapshot())
 }
 
+/// Reload policy from env/config (admin token required).
+#[utoipa::path(
+    post,
+    path = "/policy/reload",
+    tag = "Policy",
+    responses(
+        (status = 200, description = "Reloaded", body = serde_json::Value),
+        (status = 401, description = "Unauthorized")
+    )
+)]
 pub async fn policy_reload(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -38,7 +56,7 @@ pub async fn policy_reload(
         .into_response()
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, ToSchema)]
 pub(crate) struct PolicySimReq {
     #[serde(default)]
     kind: Option<String>,
@@ -50,6 +68,14 @@ pub(crate) struct PolicySimReq {
     resource: Option<Value>,
 }
 
+/// Evaluate a candidate ABAC request payload.
+#[utoipa::path(
+    post,
+    path = "/policy/simulate",
+    tag = "Policy",
+    request_body = PolicySimReq,
+    responses((status = 200, description = "Decision", body = serde_json::Value))
+)]
 pub async fn policy_simulate(
     State(state): State<AppState>,
     Json(req): Json<PolicySimReq>,

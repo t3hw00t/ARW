@@ -69,24 +69,36 @@ pub trait Queue: Send + Sync {
 }
 
 /// In-memory queue for single-process testing and defaults.
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct LocalQueue {
     inner: Arc<LocalInner>,
 }
 
-#[derive(Default)]
 struct LocalInner {
     // simple FIFO per priority; lowest key is highest priority (i.e. -10 runs before 0)
     queues: Mutex<HashMap<i32, VecDeque<Task>>>,
     pending: Mutex<HashMap<String, (Task, u64)>>, // lease_id -> (task, expires_at_ms)
     notify: Notify,
+    lease_ttl_ms: u64,
 }
 
 impl LocalQueue {
     pub fn new() -> Self {
-        let this = Self::default();
+        Self::with_lease_ttl(30_000)
+    }
+
+    pub fn with_lease_ttl(ttl_ms: u64) -> Self {
+        let inner = Arc::new(LocalInner {
+            queues: Mutex::new(HashMap::new()),
+            pending: Mutex::new(HashMap::new()),
+            notify: Notify::new(),
+            lease_ttl_ms: ttl_ms.max(1_000), // clamp to >=1s
+        });
+        let this = Self {
+            inner: inner.clone(),
+        };
         // Start lease sweeper to re-enqueue expired leases
-        let inner = this.inner.clone();
+        let inner = inner.clone();
         tokio::spawn(async move {
             loop {
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
@@ -118,6 +130,12 @@ impl LocalQueue {
             }
         });
         this
+    }
+}
+
+impl Default for LocalQueue {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -162,7 +180,7 @@ impl Queue for LocalQueue {
             if let Some((_k, task)) = sel {
                 let lease_id = Uuid::new_v4().to_string();
                 let now_ms = now_millis();
-                let ttl_ms = 30_000; // default 30s lease
+                let ttl_ms = self.inner.lease_ttl_ms; // configurable lease ttl
                 let exp = now_ms + ttl_ms;
                 {
                     let mut pend = self.inner.pending.lock().await;

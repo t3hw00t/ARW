@@ -3,7 +3,6 @@
 <div align="left">
 
 [![CI](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml/badge.svg)](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml)
-[![Docs](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml/badge.svg?event=pull_request)](https://github.com/t3hw00t/ARW/actions/workflows/ci.yml)
 [![Docs Check](https://github.com/t3hw00t/ARW/actions/workflows/docs-check.yml/badge.svg)](https://github.com/t3hw00t/ARW/actions/workflows/docs-check.yml)
 [![Docs](https://img.shields.io/badge/docs-material%20for%20mkdocs-blue)](https://t3hw00t.github.io/ARW/)
 [![Container](https://img.shields.io/badge/ghcr-arw--server-blue?logo=docker)](https://ghcr.io/t3hw00t/arw-server)
@@ -18,7 +17,7 @@ Your private AI control room that can scale and share when you choose.
 
 In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” on your computer to research, plan, write, and build—while you stay in charge. It is local‑first and privacy‑first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.
 
-> **Restructure update:** `arw-server` is the new unified API surface (headless-first). The legacy `arw-svc` remains available with `scripts/start.{sh,ps1} --legacy` while the debug UI and launcher are ported. Docs below call out when a command targets the legacy stack.
+> **Restructure update:** `arw-server` is the unified API surface (headless‑first) and the default everywhere. The legacy `arw-svc` bridge is deprecated and will be removed; use `--legacy` only if you still rely on the classic debug UI during the transition.
 
 Full documentation → https://t3hw00t.github.io/ARW/
 
@@ -150,7 +149,7 @@ curl -sS -X POST http://127.0.0.1:8091/actions \
   -d '{"kind":"demo.echo","input":{"msg":"hi"}}'
 ```
 
-Legacy UI surfaces (debug panels, launcher menus) still require `arw-svc` for the moment; run the legacy option above when you need them and watch `/events` + `/state/*` evolve in the new stack.
+Legacy UI surfaces (debug panels, launcher menus) still rely on `arw-svc` for the moment; use `--legacy` only when needed during the transition.
 
 Docker (amd64/arm64) — unified server
 ```bash
@@ -168,8 +167,8 @@ curl -sS http://127.0.0.1:8091/about | jq
 Quick wrappers exist for common flows:
 
 ```bash
-# Linux/macOS — quick debug run (legacy UI)
-bash scripts/debug.sh --interactive --legacy
+# Linux/macOS — quick dev server
+just dev
 
 # Linux/macOS — supply-chain audit (cargo-audit + cargo-deny)
 bash scripts/audit.sh --interactive
@@ -189,7 +188,7 @@ scripts/audit.ps1 -Interactive
 - Windows (ARM64): https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-arm64.msi
 - All assets and notes: https://github.com/t3hw00t/ARW/releases
 
-_Note_: MSI bundles currently ship the legacy `arw-svc` service while the launcher UI migrates. After installation, run `scripts/start.ps1` without `-Legacy` (or `scripts/start.sh --service-only`) to switch to the unified server.
+_Note_: MSI bundles may still target legacy internals while the launcher migrates. Prefer running the unified server (`scripts/start.ps1` without `-Legacy`, or `scripts/start.sh --service-only`).
 
 ## Architecture at a Glance
 
@@ -326,7 +325,7 @@ If you use an AI pair‑programmer, start here:
 - Open a small “AI Task” issue → follow the PLAN → submit a tight PR.
 
 - Enter Nix dev shell: `nix develop`
-- Fast loop: `just dev` (runs `arw-svc` with `ARW_DEBUG=1`)
+- Fast loop: `just dev` (runs `arw-server` with `ARW_DEBUG=1`)
 - Docs locally: `just docs-serve` → http://127.0.0.1:8000
 - More: https://t3hw00t.github.io/ARW/developer/
 
@@ -339,7 +338,7 @@ If you use an AI pair‑programmer, start here:
 
 - Run latest image:
   ```bash
-  docker run --rm -p 8090:8090 ghcr.io/t3hw00t/arw-svc:latest
+  docker run --rm -p 8091:8091 ghcr.io/t3hw00t/arw-server:latest
   ```
 - Compose/Helm examples: see https://t3hw00t.github.io/ARW/guide/docker/
 

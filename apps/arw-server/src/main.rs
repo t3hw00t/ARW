@@ -42,6 +42,8 @@ mod paths {
     pub const SPEC_INDEX: &str = "/spec/index.json";
     pub const CATALOG_INDEX: &str = "/catalog/index";
     pub const CATALOG_HEALTH: &str = "/catalog/health";
+    pub const ADMIN_RPU_TRUST: &str = "/admin/rpu/trust";
+    pub const ADMIN_RPU_RELOAD: &str = "/admin/rpu/reload";
 }
 
 // Macros to add routes and record them in the endpoints list (avoid drift)
@@ -86,12 +88,14 @@ mod api_memory;
 mod api_meta;
 mod api_orchestrator;
 mod api_policy;
+mod api_rpu;
 mod api_spec;
 mod api_state;
 mod context_loop;
 mod coverage;
 mod egress_proxy;
 mod metrics;
+mod openapi;
 mod read_models;
 mod util;
 mod worker;
@@ -115,6 +119,54 @@ type Policy = PolicyEngine;
 
 #[tokio::main]
 async fn main() {
+    // OpenAPI/spec export mode for CI/docs sync (no server startup).
+    if let Ok(path) = std::env::var("OPENAPI_OUT") {
+        // Write curated OpenAPI from spec/ to the requested path to keep
+        // CI's codegen-vs-curated comparison stable while we migrate.
+        let src = std::path::Path::new("spec").join("openapi.yaml");
+        if let Some(parent) = std::path::Path::new(&path).parent() {
+            let _ = std::fs::create_dir_all(parent);
+        }
+        match std::fs::read(&src) {
+            Ok(bytes) => {
+                if let Err(e) = std::fs::write(&path, bytes) {
+                    eprintln!("error: failed to write OPENAPI_OUT ({}): {}", path, e);
+                    std::process::exit(2);
+                }
+            }
+            Err(e) => {
+                eprintln!("error: missing spec/openapi.yaml: {}", e);
+                std::process::exit(2);
+            }
+        }
+        // Emit selected schemas used in docs (gating contract & capsule)
+        {
+            use schemars::schema_for;
+            let dir = std::path::Path::new("spec/schemas");
+            let _ = std::fs::create_dir_all(dir);
+            let contract_schema = schema_for!(arw_core::gating::ContractCfg);
+            let capsule_schema = schema_for!(arw_protocol::GatingCapsule);
+            let _ = std::fs::write(
+                dir.join("gating_contract.json"),
+                serde_json::to_string_pretty(&contract_schema).unwrap(),
+            );
+            let _ = std::fs::write(
+                dir.join("gating_capsule.json"),
+                serde_json::to_string_pretty(&capsule_schema).unwrap(),
+            );
+        }
+        // Gating keys index for docs convenience
+        {
+            let keys_path = std::path::Path::new("docs/GATING_KEYS.md");
+            let mut out = String::from("# Gating Keys\n\nGenerated from code.\n\n");
+            for k in arw_core::gating_keys::list() {
+                out.push_str(&format!("- `{}`\n", k));
+            }
+            let _ = std::fs::write(keys_path, out);
+        }
+        return;
+    }
+
     arw_otel::init();
     // Apply performance presets early so env-based tunables pick up sensible defaults.
     // Explicit env vars still take precedence over these seeded values.
@@ -383,6 +435,23 @@ async fn main() {
         api_spec::catalog_health,
         "stable"
     );
+    // Admin: RPU trust endpoints (admin token required)
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_RPU_TRUST,
+        api_rpu::rpu_trust_get,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_RPU_RELOAD,
+        api_rpu::rpu_reload_post,
+        "experimental"
+    );
     // Record internal routes as well (no stability tagging for these yet)
     app = route_get_rec!(
         app,
@@ -584,6 +653,39 @@ async fn main() {
     read_models::start_read_models(state.clone());
     // Start/stop egress proxy based on current settings
     egress_proxy::apply_current(state.clone()).await;
+    // Watch trust store file and publish rpu.trust.changed on reloads
+    {
+        let bus = state.bus.clone();
+        tokio::spawn(async move {
+            use std::time::Duration;
+            let path = std::env::var("ARW_TRUST_CAPSULES")
+                .ok()
+                .unwrap_or_else(|| "configs/trust_capsules.json".to_string());
+            let mut last_mtime: Option<std::time::SystemTime> = None;
+            loop {
+                let mut changed = false;
+                if let Ok(md) = std::fs::metadata(&path) {
+                    if let Ok(mt) = md.modified() {
+                        if last_mtime.map(|t| t < mt).unwrap_or(true) {
+                            last_mtime = Some(mt);
+                            changed = true;
+                        }
+                    }
+                }
+                if changed {
+                    arw_core::rpu::reload_trust();
+                    let count = arw_core::rpu::trust_snapshot().len();
+                    let payload = serde_json::json!({
+                        "count": count,
+                        "path": path,
+                        "ts_ms": arw_core::rpu::trust_last_reload_ms()
+                    });
+                    bus.publish(arw_topics::TOPIC_RPU_TRUST_CHANGED, &payload);
+                }
+                tokio::time::sleep(Duration::from_secs(5)).await;
+            }
+        });
+    }
     let app = app.with_state(state);
     let metrics_layer = metrics.clone();
     let app = app.layer(axum::middleware::from_fn(move |req, next| {

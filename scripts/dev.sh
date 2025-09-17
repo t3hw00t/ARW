@@ -2,9 +2,9 @@
 set -euo pipefail
 
 # Usage: scripts/dev.sh [PORT] [DOCS_ADDR]
-# Defaults: PORT=8090, DOCS_ADDR=127.0.0.1:8000
+# Defaults: PORT=8091, DOCS_ADDR=127.0.0.1:8000
 
-PORT=${1:-${ARW_PORT:-8090}}
+PORT=${1:-${ARW_PORT:-8091}}
 DOCS_ADDR=${2:-${DOCS_ADDR:-127.0.0.1:8000}}
 DOCS_URL="http://${DOCS_ADDR}"
 
@@ -25,12 +25,11 @@ echo "[dev] Starting docs: mkdocs serve -a ${DOCS_ADDR}"
 mkdocs serve -a "${DOCS_ADDR}" &
 pids+=($!)
 
-echo "[dev] Starting service: ARW_DEBUG=1 ARW_DOCS_URL=${DOCS_URL} ARW_PORT=${PORT} cargo run -p arw-svc"
-ARW_DEBUG=1 ARW_DOCS_URL="${DOCS_URL}" ARW_PORT="${PORT}" cargo run -p arw-svc &
+echo "[dev] Starting unified server: ARW_DEBUG=1 ARW_DOCS_URL=${DOCS_URL} ARW_PORT=${PORT} cargo run -p arw-server"
+ARW_DEBUG=1 ARW_DOCS_URL="${DOCS_URL}" ARW_PORT="${PORT}" cargo run -p arw-server &
 pids+=($!)
 
 wait -n "${pids[@]}"
 echo "[dev] One process exited; shutting down..."
 cleanup
 wait || true
-

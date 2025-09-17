@@ -561,7 +561,7 @@ fn ocr_image_text(_path: &str) -> Result<String, String> {
     #[cfg(feature = "ocr_tesseract")]
     {
         let mut lt = leptess::LepTess::new(None, "eng").map_err(|e| e.to_string())?;
-        lt.set_image(path);
+        lt.set_image(_path);
         let text = lt.get_utf8_text().map_err(|e| e.to_string())?;
         return Ok(text);
     }

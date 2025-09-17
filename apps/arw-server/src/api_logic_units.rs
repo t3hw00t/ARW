@@ -14,6 +14,8 @@ use crate::api_config::{
 use crate::{admin_ok, AppState};
 use arw_topics as topics;
 
+/// Catalog installed logic units.
+#[utoipa::path(get, path = "/logic-units", tag = "Logic Units", params(("limit" = Option<i64>, Query)), responses((status = 200, body = serde_json::Value)))]
 pub async fn logic_units_list(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
@@ -26,6 +28,8 @@ pub async fn logic_units_list(
     Json(json!({"items": items}))
 }
 
+/// Read-model snapshot of logic units.
+#[utoipa::path(get, path = "/state/logic_units", tag = "Logic Units", params(("limit" = Option<i64>, Query)), responses((status = 200, body = serde_json::Value)))]
 pub async fn state_logic_units(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
@@ -38,6 +42,8 @@ pub async fn state_logic_units(
     Json(json!({"items": items}))
 }
 
+/// Install a logic unit manifest (admin).
+#[utoipa::path(post, path = "/logic-units/install", tag = "Logic Units", request_body = serde_json::Value, responses((status = 201, body = serde_json::Value), (status = 401)))]
 pub async fn logic_units_install(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -65,6 +71,8 @@ pub async fn logic_units_install(
     )
 }
 
+/// Apply a logic unit patch set (admin).
+#[utoipa::path(post, path = "/logic-units/apply", tag = "Logic Units", request_body = serde_json::Value, responses((status = 200, body = serde_json::Value), (status = 401), (status = 400)))]
 pub async fn logic_units_apply(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -245,6 +253,8 @@ pub async fn logic_units_apply(
     )
 }
 
+/// Revert to a config snapshot (admin).
+#[utoipa::path(post, path = "/logic-units/revert", tag = "Logic Units", request_body = serde_json::Value, responses((status = 200, body = serde_json::Value), (status = 404), (status = 401)))]
 pub async fn logic_units_revert(
     State(state): State<AppState>,
     headers: HeaderMap,
