@@ -26,12 +26,31 @@ Universal Feature Catalog → https://t3hw00t.github.io/ARW/reference/feature_ca
 
 General direction: a unified object graph + a single live event stream (SSE). Every surface—Project Hub, Chat, Training Park, and Managers (Agents/Models/Hardware/Permissions/Containers/Plugins)—is just a different lens on the same shared objects, driven by the same live events. This keeps the system coherent, inspectable, and easy to extend.
 
-## Why It’s Different
+> **How to keep it minimal:** Stick with the [Kernel defaults](#kernel-defaults-core) to run the headless server locally. Anything tagged as an [Opt-in extension](#opt-in-collaboration-extensions) or [Future pack](#future-packs-roadmap) can stay off until you need it.
+
+## Feature Tiers
+
+- **Kernel defaults (Core)** – local-first foundations that run in every install. [Details](#kernel-defaults-core).
+- **Opt-in collaboration (Extensions)** – sharing, federation, and automation extras you enable deliberately. [Details](#opt-in-collaboration-extensions).
+- **Future packs (Roadmap)** – in-flight packs and experiments we’re hardening. [Details](#future-packs-roadmap).
+
+## Kernel defaults (Core)
+
+These ship with `arw-server` out of the box and keep working even when you stay on the minimal, local-only profile.
+
+### Why It’s Different
 
 - You decide access: files, web, mic, and camera are off until you grant time‑limited permission.
 - You can see and replay everything: each result shows sources, steps, tools used, and cost; any run can be snapshotted and compared later.
 - It grows with you: start on one laptop; when needed, invite other machines to help or co‑drive an agent in real time.
 - It is configurable, not brittle: frontier techniques arrive as “Logic Units” (safe strategy packs) you can turn on, A/B test, and roll back in one click.
+
+### Safety & Control
+
+- **[Kernel default]** Permission leases with timers and scopes; no silent escalation.
+- **[Kernel default]** A project “world view” tracks key facts, open questions, and constraints so agents act on evidence, not guesses.
+- **[Kernel default]** Budgets for time, tokens, and spend; the system stays within plan and shows the meter.
+- **[Kernel default]** Signed plugins and sandboxed tools by default.
 
 ## What You Can Do
 
@@ -41,25 +60,26 @@ General direction: a unified object graph + a single live event stream (SSE). Ev
 - Turn vague goals into concrete plans, tasks, and next steps.
 - Chat naturally to explore data and export both the answer and the evidence.
 
-## Scaling & Sharing (Opt‑In)
+## Opt-in collaboration (Extensions)
 
-- Pool compute: add your own GPU box or a trusted friend’s machine as a worker. Heavy jobs offload there under your rules and budget.
-- Live co‑drive: share an agent session so others can watch, suggest, or take the wheel with your approval. Risky actions still wait in a staging area for you to approve.
-- Clear boundaries: before anything leaves your machine, you see what would be sent, to whom, and the estimated cost. An egress ledger records it all.
-- Fair splits: contributions (GPU time, tokens, tasks) are metered per collaborator so shared project revenue can be split transparently later.
+These unlock when you choose to collaborate or federate resources.
 
-## Safety & Control
+### Scaling & Sharing (Opt‑In)
 
-- Permission leases with timers and scopes; no silent escalation.
-- A project “world view” tracks key facts, open questions, and constraints so agents act on evidence, not guesses.
-- Budgets for time, tokens, and spend; the system stays within plan and shows the meter.
-- Signed plugins and sandboxed tools by default.
+- **[Opt-in extension]** Pool compute: add your own GPU box or a trusted friend’s machine as a worker. Heavy jobs offload there under your rules and budget.
+- **[Opt-in extension]** Live co‑drive: share an agent session so others can watch, suggest, or take the wheel with your approval. Risky actions still wait in a staging area for you to approve.
+- **[Opt-in extension]** Clear boundaries: before anything leaves your machine, you see what would be sent, to whom, and the estimated cost. An egress ledger records it all.
+- **[Future pack]** Fair splits: contributions (GPU time, tokens, tasks) are metered per collaborator so shared project revenue can be split transparently later.
 
-## Improves Over Time
+## Future packs (Roadmap)
 
-- Logic Units library adds strategies like better retrieval, cautious tool use, or alternative reasoning styles—without code.
-- An experiment mode runs quick A/B checks on saved tasks so changes are data‑driven, not vibes‑driven.
-- A curated research watcher suggests new, safe‑to‑try configurations when something promising appears in the wild.
+The packs and expansions we’re hardening next.
+
+### Improves Over Time
+
+- **[Future pack]** Logic Units library continues to add strategies like better retrieval, cautious tool use, or alternative reasoning styles—without code.
+- **[Future pack]** An experiment mode runs quick A/B checks on saved tasks so changes are data‑driven, not vibes‑driven.
+- **[Future pack]** A curated research watcher suggests new, safe‑to‑try configurations when something promising appears in the wild.
 
 ## Who It’s For
 

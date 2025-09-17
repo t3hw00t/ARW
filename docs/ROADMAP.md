@@ -10,44 +10,16 @@ Type: Reference
 See also: [Backlog](BACKLOG.md) and [Interface Roadmap](INTERFACE_ROADMAP.md).
 Roadmap highlights themes and timelines; Backlog tracks actionable items.
 
-## Recently Shipped (Sep 2025)
-- Stability baseline (v0.1.0-beta): consolidation freeze, clippy-clean core, docs freeze checklist, CHANGELOG + release script.
-- Optional gRPC server for arw-svc (feature-flagged; ARW_GRPC=1).
-- CI hardening: cargo-audit, cargo-deny, CodeQL, Nix build/test, docs link-check (lychee), Windows Pester tests; concurrency cancellation.
-- Containers & Ops: multi-stage Dockerfile (non-root), docker-compose, Helm chart (readiness/liveness, securityContext, optional PVC), Justfile helpers.
-- Dev environment: Nix devshell, VS Code devcontainer.
-- Docs: training research + wiki structure pages; gRPC guide; stability checklist; docgen updates; OpenAPI regeneration in CI.
-- Repo hygiene: Dependabot for Cargo and Actions; .gitattributes for line endings.
-- Persistence hardening: atomic JSON/bytes writes with per‑path async locks; best‑effort cross‑process advisory locks; audit log rotation.
-- Event bus upgrades: counters (published/delivered/lagged/no_receivers), configurable capacity/replay, lag surfaced as `bus.gap`, subscribe‑filtered API, SSE replay and prefix filters, optional persistent JSONL journal with rotation, Prometheus `/metrics`.
-- Debug/Launcher UIs: metrics quick‑link, SSE presets (Replay 50, Models‑only), insights wired to route stats, download progress.
-- Workflow Views: universal right‑sidecar across Hub/Chat/Training with Timeline/Context/Policy/Metrics/Models; command palette; Compare panels (Text/JSON, Image, CSV) in Hub; Chat A/B pin‑to‑compare; Events window presets + filters; Logs focus mode and route filter; P95 sparklines.
-- Episodes & State: live read‑models under `/state/*` (observations, beliefs, world, intents, actions, episodes) with corr_id stitching, duration and error rollups; Episodes panel with filters and details in Debug UI. The `world` view is a scoped belief graph (Project Map) built from the event stream with a selector endpoint for top‑K beliefs.
-- Resources pattern: unified AppState with typed `Resources`; moved Governor/Hierarchy/Memory/Models logic behind services; endpoints prefer services while preserving behavior.
-- Tests + Lint: fixed flaky gating contract tests (serialized shared state); workspace clippy clean with `-D warnings`.
+## Scope Badges
+- `[Kernel]` — Hardening the core runtime (journal, security, orchestration) so the "Collapse the Kernel" thread of the Complexity Collapse initiative stays lean and dependable.
+- `[Pack: Collaboration]` — Optional collaboration and UI packs that sit on top of the kernel; they align with Complexity Collapse goals around a shared sidecar, calm surfaces, and multi-user governance.
+- `[Pack: Research]` — Optional research, experimentation, and memory packs that extend the kernel with advanced retrieval, clustering, or replay capabilities envisioned in Complexity Collapse.
 
-## Near‑Term (Weeks)
-- Kernel & Triad (in progress): unify to a single SQLite journal + CAS, and expose the triad API (`/actions`, `/events`, `/state`). Initial step: kernel journal with DB‑backed replay on `/triad/events` and dual‑write from the in‑process bus.
-- Stabilization window: limit to bug fixes, docs, tests, and internal cleanups; additive API changes only.
-- Observability & Eventing: event journal tail/readers and metrics/docgen polish — see Backlog → Now.
-- Security & Remote Access: hashed tokens, per‑route gating, TLS profiles, proxy templates — see Backlog → Now.
-- UI coherence & routing: canonical admin debug/UI endpoints; launcher open path alignment; SSE reconnection/backoff and status — see Backlog → UI Coherence.
-- Egress Firewall (plan): add policy network scopes + TTL leases; per‑node loopback proxy + DNS guard; route containerized scrapers first; egress ledger and pre‑offload preview; default posture “Public only.”
-- Lightweight mitigations (plan): memory quarantine; project isolation; belief‑diff review queue; hardened headless browsing (disable SW/H3; same‑origin); safe archive jail; DNS guard with anomaly alerts; secrets redaction; security posture presets.
-- Asimov Capsule Guard (plan): lease-based capsules with runtime refresh hooks and telemetry — see Architecture → Asimov Capsule Guard.
-- State & Episodes: observations/beliefs/intents/actions stores; episodes with reactive UI — see Backlog → Now.
-- Services & Orchestration: hierarchy/governor services; queue leases and nack behavior — see Backlog → Now.
-- Specs & Interop: AsyncAPI + MCP artifacts and /spec/* serving — see Backlog → Now.
-- Docs & Showcase: gating keys docgen; packaging and installer polish — see Backlog → Next.
- - Visual capture: screenshot tool (OS‑level) with optional window crop; OCR (optional); SSE events + thumbnails; sidecar Activity integration.
- - UI coherence: universal right‑sidecar across Hub/Chat/Training; command palette
- - Recipes MVP: schema + gallery + runner (local‑first, default‑deny permissions)
- - Logic Units (config‑first): manifest/schema, Library UI with diff preview, apply/revert/promote, initial sample units
- - Research Watcher (read‑only): draft Suggested units from curated feeds; human review flow
+## Kernel Hardening
 
-## Guiding Initiatives
+### Guiding Initiatives
 
-### Performance Guardrails
+#### Performance Guardrails
 The stack scales by refusing to recompute or resend the same work twice and by bounding how much memory, CPU, or bandwidth each layer may consume. See [Architecture → Performance Guardrails](architecture/performance.md) for implementation details and operating guidance.
 
 - **Prompt reuse for inference** keeps llama.cpp KV blocks on disk and plans vLLM prefix/KV sharing so repeated scaffolds skip token recompute, bounding GPU minutes per task.
@@ -59,66 +31,117 @@ The stack scales by refusing to recompute or resend the same work twice and by b
 - **Tiered storage & compression** layers in-memory caches with RocksDB and optional flash tiers, pairing Zstd dictionaries for small JSON blobs so hot data stays fast without unbounded disk churn.
 - **Instrumentation & policy manifests** publish hit ratios, latency savings, and suppression counters in `/state/*` and `/metrics`, then feed declarative cache policy files that enforce privacy scopes and fallbacks before limits are exceeded.
 
-## Heuristic Feedback Engine
-Scope: Lightweight, near‑live suggestions with guardrails.
-See Backlog → Now → Feedback Engine for concrete work items.
+### Recently Shipped (Sep 2025)
+- [Kernel] Stability baseline (v0.1.0-beta): consolidation freeze, clippy-clean core, docs freeze checklist, CHANGELOG + release script.
+- [Kernel] Optional gRPC server for arw-svc (feature-flagged; ARW_GRPC=1).
+- [Kernel] CI hardening: cargo-audit, cargo-deny, CodeQL, Nix build/test, docs link-check (lychee), Windows Pester tests; concurrency cancellation.
+- [Kernel] Containers & Ops: multi-stage Dockerfile (non-root), docker-compose, Helm chart (readiness/liveness, securityContext, optional PVC), Justfile helpers.
+- [Kernel] Dev environment: Nix devshell, VS Code devcontainer.
+- [Kernel] Repo hygiene: Dependabot for Cargo and Actions; .gitattributes for line endings.
+- [Kernel] Persistence hardening: atomic JSON/bytes writes with per-path async locks; best-effort cross-process advisory locks; audit log rotation.
+- [Kernel] Event bus upgrades: counters (published/delivered/lagged/no_receivers), configurable capacity/replay, lag surfaced as `bus.gap`, subscribe-filtered API, SSE replay and prefix filters, optional persistent JSONL journal with rotation, Prometheus `/metrics`.
+- [Kernel] Episodes & State: live read-models under `/state/*` (observations, beliefs, world, intents, actions, episodes) with corr_id stitching, duration and error rollups; Episodes panel with filters and details in Debug UI. The `world` view is a scoped belief graph (Project Map) built from the event stream with a selector endpoint for top-K beliefs.
+- [Kernel] Resources pattern: unified AppState with typed `Resources`; moved Governor/Hierarchy/Memory/Models logic behind services; endpoints prefer services while preserving behavior.
+- [Kernel] Tests + Lint: fixed flaky gating contract tests (serialized shared state); workspace clippy clean with `-D warnings`.
 
-## Complexity Collapse Initiative
-- Collapse surfaces to one API (`/state`, `/events`, `/actions`), one SQLite journal + content-addressed blobs, one job scheduler, one plugin ABI, and a shared UI sidecar/form builder.
-- Schema-first patches for Project/AgentProfile/Policy/etc. with a documented event taxonomy; flows and errors modeled as data.
-- Unified engines: retrieval pipeline, memory abstraction, runtime/cluster matrix, and capability/lease security.
-- Goal: keep the kernel tiny; push features into declarative packs and reusable executors.
+### Near-Term (Weeks)
+- [Kernel] Kernel & Triad (in progress): unify to a single SQLite journal + CAS, and expose the triad API (`/actions`, `/events`, `/state`). Initial step: kernel journal with DB-backed replay on `/triad/events` and dual-write from the in-process bus.
+- [Kernel] Stabilization window: limit to bug fixes, docs, tests, and internal cleanups; additive API changes only.
+- [Kernel] Observability & Eventing: event journal tail/readers and metrics/docgen polish — see Backlog → Now.
+- [Kernel] Security & Remote Access: hashed tokens, per-route gating, TLS profiles, proxy templates — see Backlog → Now.
+- [Kernel] Egress Firewall (plan): add policy network scopes + TTL leases; per-node loopback proxy + DNS guard; route containerized scrapers first; egress ledger and pre-offload preview; default posture “Public only.”
+- [Kernel] Lightweight mitigations (plan): memory quarantine; project isolation; belief-diff review queue; hardened headless browsing (disable SW/H3; same-origin); safe archive jail; DNS guard with anomaly alerts; secrets redaction; security posture presets.
+- [Kernel] Asimov Capsule Guard (plan): lease-based capsules with runtime refresh hooks and telemetry — see Architecture → Asimov Capsule Guard.
+- [Kernel] State & Episodes: observations/beliefs/intents/actions stores; episodes with reactive UI — see Backlog → Now.
+- [Kernel] Services & Orchestration: hierarchy/governor services; queue leases and nack behavior — see Backlog → Now.
+- [Kernel] Specs & Interop: AsyncAPI + MCP artifacts and /spec/* serving — see Backlog → Now.
 
-## Mid‑Term (1–2 Months)
-- UI app to manage various project types.
-- WASI plugin sandbox: capability‑based tools with explicit permissions.
-- Policy engine integration: Cedar bindings; per‑tool permission manifests.
-- Model orchestration: adapters (llama.cpp, ONNX Runtime) with pooling and profiles.
-  - vLLM adapter with PagedAttention and prefix cache; share KV across sessions.
-  - GPU/CPU KV memory policy hints for long‑context batching and prefix sharing.
-- Capsules: record inputs/outputs/events/hints; export/import; deterministic replay.
-- Dataset & memory lab: local pipelines, tags, audits, and reproducible reports.
- - Commons Kit: ship 5 public‑goods recipes with signed index and exportable memories.
- - Logic Units v2: scripted transforms (sandboxed) and plugin units (with contract tests); policy‑gated installation; compatibility matrix
-- Tests: feature‑gated HTTP oneshot tests; policy and capability contract tests.
-- AsyncAPI + MCP artifacts: generate `/spec/asyncapi.yaml` and `/spec/mcp-tools.json` in CI; serve `/spec/*` endpoints.
-- Policy hooks for feedback auto‑apply decisions (shadow mode → guarded auto).
-- Cluster trust (plan): node manifest pinning; mTLS; event sequencing and dedupe keys; scheduler targets only trusted manifests.
-- Regulatory Provenance Unit (RPU): trust store, signature verification, Cedar ABAC for capsule adoption, hop TTL/propagation, adoption ledger (ephemeral by default).
-- JetStream durable queue backend with acks, delay/nack, and subject mapping (keep core NATS for fast lane).
- - Peer/edge CAS: gated `by-digest` endpoints for tool artifacts; optional gossip in multi‑host dev.
-- Remote core connections (secure multi‑node):
-  - mTLS between nodes/connectors and a remote coordinator; certificate rotation strategy.
-  - NATS TLS profiles and client auth options for WAN clusters; local default remains plaintext loopback.
-  - Policy‑gated remote admin surface; proxy headers validation; optional IP allowlists.
-- Budgets/Quotas: optional allow-with-budgets with per-window counters persisted to state; deny precedence.
+### Caching & Performance
+- [Kernel] Inference-level: enable llama.cpp prompt cache; plan vLLM prefix/KV reuse when we add that backend.
+- [Kernel] Exact CAS HTTP caching: strong validators and long-lived `Cache-Control` for immutable model blobs served by sha256.
+- [Kernel] Action Cache (Bazel-style): deterministic keys (tool id, version, canonical input, env signature) → CAS’d outputs; in-memory front (W-TinyLFU), disk CAS backing.
+- [Kernel] Request coalescing: singleflight on identical tool calls and expensive reads to prevent stampedes.
+- [Kernel] Read-models over SSE: stream JSON Patch deltas with Last-Event-ID resume; avoid snapshot retransmits.
+- [Kernel] Semantic caches (design): per-user/project Q→A cache with verifier; negative cache for retrieval misses; SimHash prefilter.
+- [Kernel] Storage: RocksDB tiers for persistent caches; optional flash secondary cache; Zstd dictionaries for small JSON blobs.
+- [Kernel] Measurement: layer hit ratios, latency/bytes saved, stampede suppression, semantic false-hit rate; expose in `/state/*`.
+- [Kernel] Cache Policy: author a declarative cache policy manifest and loader; map to current knobs incrementally; document fallbacks and scope privacy defaults.
 
-### Federated Clustering (MVP Path)
-- Remote runner (one extra box): register Worker, accept jobs, stream results; enforce policies/budgets at Home.
-- Cluster Matrix + scheduler: show nodes; route simple offloads (long‑context inference, heavy tools); per‑node queues.
-- Live session sharing: invite guest with roles (view/suggest/drive); staging approvals remain on Home.
-- Egress ledger + previews: show payload summary/cost before offload; record to ledger.
-- Content‑addressed models: Workers announce hashes; Home instructs fetch from allowed peers or registry; verify on load.
-- World diffs: export “public beliefs” with provenance; review conflicts on import.
-- Contribution meter + revenue ledger: track contributions per node; settlement report (CSV) with clear math.
-- Minimal broker (optional): tiny relay/directory for NAT‑tricky cases; stateless/replaceable.
+### Complexity Collapse Initiative
+- [Kernel] Collapse surfaces to one API (`/state`, `/events`, `/actions`), one SQLite journal + content-addressed blobs, one job scheduler, one plugin ABI, and a shared UI sidecar/form builder.
+- [Kernel] Schema-first patches for Project/AgentProfile/Policy/etc. with a documented event taxonomy; flows and errors modeled as data.
+- [Kernel] Unified engines: retrieval pipeline, memory abstraction, runtime/cluster matrix, and capability/lease security.
+- [Kernel] Goal: keep the kernel tiny; push features into declarative packs and reusable executors.
 
-## Long‑Term (3–6 Months)
-- Ledger‑driven settlement tooling:
-  - Contribution meter and revenue ledger mature into auditable exports for collaborators.
-  - Opt‑in policy templates help teams review disputes locally without a separate governance simulator.
-- Research‑grade local stack:
-  - On‑device accel (CPU/GPU/NPU), quantization, LoRA fine‑tuning, model manifests.
-  - Artifact signing/verification, SBOMs, and dependency audits.
-  - Signed policy capsules with Sigstore; rely on RPU trust store + local timestamping (renegotiation on restart remains default).
+### Mid-Term (1–2 Months)
+- [Kernel] WASI plugin sandbox: capability-based tools with explicit permissions.
+- [Kernel] Policy engine integration: Cedar bindings; per-tool permission manifests.
+- [Kernel] Model orchestration: adapters (llama.cpp, ONNX Runtime) with pooling and profiles, plus a vLLM adapter with PagedAttention and prefix cache and GPU/CPU KV memory policy hints for long-context batching and prefix sharing.
+- [Kernel] Tests: feature-gated HTTP oneshot tests; policy and capability contract tests.
+- [Kernel] AsyncAPI + MCP artifacts: generate `/spec/asyncapi.yaml` and `/spec/mcp-tools.json` in CI; serve `/spec/*` endpoints.
+- [Kernel] Policy hooks for feedback auto-apply decisions (shadow mode → guarded auto).
+- [Kernel] JetStream durable queue backend with acks, delay/nack, and subject mapping (keep core NATS for fast lane); add peer/edge CAS with gated `by-digest` endpoints for tool artifacts and optional gossip in multi-host dev.
+- [Kernel] Budgets/Quotas: optional allow-with-budgets with per-window counters persisted to state; deny precedence.
 
-## Guiding Principles
-- Local‑first, open, privacy‑respecting, and comprehensible.
-- Calm defaults; explicit opt‑in for power features.
-- One truth for schemas & keys (central registry); reproducibility over hype.
+### Guiding Principles
+- [Kernel] Local-first, open, privacy-respecting, and comprehensible.
+- [Kernel] Calm defaults; explicit opt-in for power features.
+- [Kernel] One truth for schemas & keys (central registry); reproducibility over hype.
 
-## MVP Acceptance Checks
-- Logic Units: install/apply/revert with diff preview; events visible; snapshot records active units.
-- Read‑models: `/state/logic_units`, `/state/experiments`, `/state/runtime_matrix`, `/state/episode/{id}/snapshot` respond.
-- Evaluation: A/B dry‑run flow produces metrics and renders in UI.
-- Policy: permission prompts surface as leases; visible in sidecar and `/state/policy`.
+### MVP Acceptance Checks
+- [Kernel] Logic Units: install/apply/revert with diff preview; events visible; snapshot records active units.
+- [Kernel] Read-models: `/state/logic_units`, `/state/experiments`, `/state/runtime_matrix`, `/state/episode/{id}/snapshot` respond.
+- [Kernel] Evaluation: A/B dry-run flow produces metrics and renders in UI.
+- [Kernel] Policy: permission prompts surface as leases; visible in sidecar and `/state/policy`.
+
+## Optional Packs
+
+### Pack: Collaboration
+
+#### Recently Shipped
+- [Pack: Collaboration] Debug/Launcher UIs: metrics quick-link, SSE presets (Replay 50, Models-only), insights wired to route stats, download progress.
+- [Pack: Collaboration] Workflow Views: universal right-sidecar across Hub/Chat/Training with Timeline/Context/Policy/Metrics/Models; command palette; Compare panels (Text/JSON, Image, CSV) in Hub; Chat A/B pin-to-compare; Events window presets + filters; Logs focus mode and route filter; P95 sparklines.
+
+#### Near-Term (Weeks)
+- [Pack: Collaboration] UI coherence & routing: canonical admin debug/UI endpoints; launcher open path alignment; SSE reconnection/backoff and status; universal right-sidecar across Hub/Chat/Training; command palette.
+- [Pack: Collaboration] Docs & Showcase: gating keys docgen; packaging and installer polish — see Backlog → Next.
+- [Pack: Collaboration] Visual capture: screenshot tool (OS-level) with optional window crop; OCR (optional); SSE events + thumbnails; sidecar Activity integration.
+- [Pack: Collaboration] Recipes MVP: schema + gallery + runner (local-first, default-deny permissions).
+- [Pack: Collaboration] Heuristic Feedback Engine: lightweight, near-live suggestions with guardrails — see Backlog → Now → Feedback Engine for concrete work items.
+
+#### Mid-Term (1–2 Months)
+- [Pack: Collaboration] UI app to manage various project types.
+- [Pack: Collaboration] Regulatory Provenance Unit (RPU): trust store, signature verification, Cedar ABAC for capsule adoption, hop TTL/propagation, adoption ledger (ephemeral by default).
+
+#### Long-Term (3–6 Months)
+- [Pack: Collaboration] Ledger-driven settlement tooling: contribution meter and revenue ledger mature into auditable exports for collaborators, and opt-in policy templates help teams review disputes locally without a separate governance simulator.
+
+### Pack: Research
+
+#### Recently Shipped
+- [Pack: Research] Docs: training research + wiki structure pages; gRPC guide; stability checklist; docgen updates; OpenAPI regeneration in CI.
+
+#### Near-Term (Weeks)
+- [Pack: Research] Logic Units (config-first): manifest/schema, Library UI with diff preview, apply/revert/promote, initial sample units.
+- [Pack: Research] Research Watcher (read-only): draft Suggested units from curated feeds; human review flow.
+
+#### Mid-Term (1–2 Months)
+- [Pack: Research] Capsules: record inputs/outputs/events/hints; export/import; deterministic replay.
+- [Pack: Research] Dataset & memory lab: local pipelines, tags, audits, and reproducible reports.
+- [Pack: Research] Commons Kit: ship 5 public-goods recipes with signed index and exportable memories.
+- [Pack: Research] Logic Units v2: scripted transforms (sandboxed) and plugin units (with contract tests); policy-gated installation; compatibility matrix.
+- [Pack: Research] Cluster trust (plan): node manifest pinning; mTLS; event sequencing and dedupe keys; scheduler targets only trusted manifests.
+- [Pack: Research] Remote core connections (secure multi-node): mTLS between nodes/connectors and a remote coordinator with certificate rotation, NATS TLS profiles and client auth options for WAN clusters (local default remains plaintext loopback), policy-gated remote admin surface with proxy headers validation, and optional IP allowlists.
+
+#### Federated Clustering (MVP Path)
+- [Pack: Research] Remote runner (one extra box): register Worker, accept jobs, stream results; enforce policies/budgets at Home.
+- [Pack: Research] Cluster Matrix + scheduler: show nodes; route simple offloads (long-context inference, heavy tools); per-node queues.
+- [Pack: Research] Live session sharing: invite guest with roles (view/suggest/drive); staging approvals remain on Home.
+- [Pack: Research] Egress ledger + previews: show payload summary/cost before offload; record to ledger.
+- [Pack: Research] Content-addressed models: Workers announce hashes; Home instructs fetch from allowed peers or registry; verify on load.
+- [Pack: Research] World diffs: export “public beliefs” with provenance; review conflicts on import.
+- [Pack: Research] Contribution meter + revenue ledger: track contributions per node; settlement report (CSV) with clear math.
+- [Pack: Research] Minimal broker (optional): tiny relay/directory for NAT-tricky cases; stateless/replaceable.
+
+#### Long-Term (3–6 Months)
+- [Pack: Research] Research-grade local stack: on-device accel (CPU/GPU/NPU), quantization, LoRA fine-tuning, model manifests, artifact signing/verification, SBOMs, dependency audits, and signed policy capsules with Sigstore that rely on the RPU trust store plus local timestamping (renegotiation on restart remains default).
