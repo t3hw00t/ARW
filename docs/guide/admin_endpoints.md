@@ -15,7 +15,6 @@ Type: How-to
 - Public entrypoints: `/healthz`, `/about`, `/spec/*`, `/catalog/index`, `/catalog/health`
 - Supporting surfaces: connectors, config, context, leases, memory, orchestrator, policy, and egress controls (documented below)
 
-<<<<<<< HEAD
 Unless noted, examples assume the unified `arw-server` on `http://127.0.0.1:8091`. Use port `8090` when interacting with the legacy `arw-svc` bridge.
 
 ### Public: /about
@@ -60,12 +59,6 @@ Example
     - Keep the service bound to `127.0.0.1` or place behind a TLS proxy
     - Tune rate limits with `ARW_ADMIN_RL` (e.g., `60/60`)
     - Avoid `ARW_DEBUG=1` outside local development
-=======
-!!! warning "Minimum secure setup"
-    - Set `ARW_ADMIN_TOKEN` and require it on every call that mutates configuration, connectors, egress posture, logic units, or policy.
-    - Keep the service bound to `127.0.0.1` (or place it behind a TLS reverse proxy with mTLS/OIDC at the edge).
-    - Avoid exporting `ARW_DEBUG=1` outside of local experiments; several guardrails disable themselves when debug mode is enabled.
->>>>>>> pr-57
 
 ## Authentication
 
