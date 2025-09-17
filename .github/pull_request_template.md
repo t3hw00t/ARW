@@ -1,20 +1,14 @@
 ## Summary
 
-Describe the change and why it’s needed.
-
-## Changes
-
--
-
-## Testing
-
-- [ ] `cargo build --workspace`
-- [ ] `cargo test --workspace`
-- [ ] Docs build (if docs changed)
+Describe the change and motivation.
 
 ## Checklist
 
-- [ ] Clippy clean (`cargo clippy --workspace --all-targets`)
-- [ ] Formatted (`cargo fmt --all`)
-- [ ] CI passes
-- [ ] Stability window respected (no breaking HTTP/SSE changes; docs/specs updated)
+- [ ] Registry integrity: `python3 scripts/check_feature_integrity.py` and `python3 scripts/check_system_components_integrity.py`
+- [ ] Docs generated and committed: `just docs-build` (or `scripts/docgen.sh` + `mkdocs build --strict`)
+- [ ] Lints/tests (targeted): `cargo clippy -p arw-core -p arw-server -p arw-svc -- -D warnings` and `cargo nextest run -p arw-server -p arw-svc`
+- [ ] For registry edits: referenced docs/paths exist
+- [ ] Changelog/notes updated if user‑visible
+
+## Screenshots / Notes
+
