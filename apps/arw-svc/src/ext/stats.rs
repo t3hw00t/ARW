@@ -342,6 +342,17 @@ pub(crate) async fn stats_get(State(state): State<AppState>) -> impl IntoRespons
     super::ok(json!({ "events": events, "routes": routes, "bus": bus })).into_response()
 }
 
+#[arw_admin(
+    method = "GET",
+    path = "/admin/state/guardrails_metrics",
+    summary = "Guardrails HTTP retries/errors and circuit breaker state"
+)]
+#[arw_gate("state:guardrails_metrics:get")]
+pub(crate) async fn guardrails_metrics_get() -> impl IntoResponse {
+    let v = super::tools_exec::guardrails_metrics_value();
+    super::ok(v).into_response()
+}
+
 // Simple Prometheus exposition for core counters and route timings
 pub(crate) async fn metrics_get(State(state): State<AppState>) -> impl IntoResponse {
     let events = stats_cell().read().await.clone();
