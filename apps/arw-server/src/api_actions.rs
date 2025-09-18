@@ -38,7 +38,7 @@ pub async fn actions_submit(
         .and_then(|s| s.parse().ok())
         .unwrap_or(1024);
     if max_q > 0 {
-        if let Ok(nq) = state.kernel.count_actions_by_state("queued") {
+        if let Ok(nq) = state.kernel.count_actions_by_state_async("queued").await {
             if nq >= max_q {
                 return (
                     axum::http::StatusCode::TOO_MANY_REQUESTS,
@@ -56,7 +56,8 @@ pub async fn actions_submit(
         if let Some(cap) = decision.require_capability.as_deref() {
             if state
                 .kernel
-                .find_valid_lease("local", cap)
+                .find_valid_lease_async("local", cap)
+                .await
                 .ok()
                 .flatten()
                 .is_none()
@@ -83,25 +84,29 @@ pub async fn actions_submit(
         }
     }
     let id = if let Some(idem) = &req.idem_key {
-        if let Ok(Some(existing)) = state.kernel.find_action_by_idem(idem) {
+        if let Ok(Some(existing)) = state.kernel.find_action_by_idem_async(idem).await {
             existing
         } else {
             let id = uuid::Uuid::new_v4().to_string();
-            let _ = state.kernel.insert_action(
-                &id,
-                &req.kind,
-                &req.input,
-                None,
-                Some(idem.as_str()),
-                "queued",
-            );
+            let _ = state
+                .kernel
+                .insert_action_async(
+                    &id,
+                    &req.kind,
+                    &req.input,
+                    None,
+                    Some(idem.as_str()),
+                    "queued",
+                )
+                .await;
             id
         }
     } else {
         let id = uuid::Uuid::new_v4().to_string();
         let _ = state
             .kernel
-            .insert_action(&id, &req.kind, &req.input, None, None, "queued");
+            .insert_action_async(&id, &req.kind, &req.input, None, None, "queued")
+            .await;
         id
     };
     // Publish submitted event
@@ -118,7 +123,8 @@ pub async fn actions_submit(
     // Contribution scaffold: record a task submit (qty=1 task)
     let _ = state
         .kernel
-        .append_contribution("local", "task.submit", 1.0, "task", None, None, None);
+        .append_contribution_async("local", "task.submit", 1.0, "task", None, None, None)
+        .await;
     (
         axum::http::StatusCode::ACCEPTED,
         Json(json!({"id": env.payload["id"], "ok": true})),
@@ -140,7 +146,7 @@ pub async fn actions_get(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match state.kernel.get_action(&id) {
+    match state.kernel.get_action_async(&id).await {
         Ok(Some(a)) => (
             axum::http::StatusCode::OK,
             Json(json!({
@@ -200,7 +206,7 @@ pub async fn actions_state_set(
             ),
         );
     }
-    match state.kernel.set_action_state(&id, &req.state) {
+    match state.kernel.set_action_state_async(&id, &req.state).await {
         Ok(true) => {
             // Publish a transition event
             let kind = match req.state.as_str() {

@@ -15,6 +15,8 @@ use sha2::Digest as _;
     get,
     path = "/events",
     tag = "Events",
+    operation_id = "events_sse_doc",
+    description = "Server‑Sent Events stream of envelopes; supports replay and prefix filters.",
     params(
         ("after" = Option<i64>, Query, description = "Resume after id or Last-Event-ID header"),
         ("replay" = Option<usize>, Query, description = "Replay the last N events (when after not set)"),
@@ -29,6 +31,15 @@ pub async fn events_sse(
     Query(q): Query<std::collections::HashMap<String, String>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
+    if !crate::admin_ok(&headers) {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            axum::Json(serde_json::json!({
+                "type":"about:blank","title":"Unauthorized","status":401
+            })),
+        )
+            .into_response();
+    }
     let (tx, rx) = tokio::sync::mpsc::channel::<(arw_events::Envelope, Option<String>)>(128);
     // Optional resume: prioritize after=ID or Last-Event-ID over replay
     let mut did_replay = false;
@@ -38,7 +49,7 @@ pub async fn events_sse(
         .map(|s| s.to_string());
     if let Some(after_s) = q.get("after").cloned().or(last_event_id_hdr) {
         if let Ok(aid) = after_s.parse::<i64>() {
-            if let Ok(rows) = state.kernel.recent_events(1000, Some(aid)) {
+            if let Ok(rows) = state.kernel.recent_events_async(1000, Some(aid)).await {
                 let tx2 = tx.clone();
                 tokio::spawn(async move {
                     for r in rows {
@@ -61,7 +72,7 @@ pub async fn events_sse(
         if let Some(replay_s) = q.get("replay") {
             if let Ok(n) = replay_s.parse::<usize>() {
                 if n > 0 {
-                    if let Ok(rows) = state.kernel.recent_events(n as i64, None) {
+                    if let Ok(rows) = state.kernel.recent_events_async(n as i64, None).await {
                         let tx2 = tx.clone();
                         tokio::spawn(async move {
                             for r in rows {
@@ -108,11 +119,8 @@ pub async fn events_sse(
                     digest[7],
                 ]);
                 let id_opt = {
-                    let dq = sse_ids.lock().await;
-                    dq.iter()
-                        .rev()
-                        .find(|(k, _)| *k == key)
-                        .map(|(_, v)| v.to_string())
+                    let cache = sse_ids.lock().await;
+                    cache.get(key).map(|v| v.to_string())
                 };
                 let _ = tx.send((env, id_opt)).await;
             }
@@ -151,9 +159,11 @@ pub async fn events_sse(
         ev = ev.data(data);
         Result::<SseEvent, std::convert::Infallible>::Ok(ev)
     });
-    Sse::new(stream).keep_alive(
-        KeepAlive::new()
-            .interval(std::time::Duration::from_secs(10))
-            .text("keep-alive"),
-    )
+    Sse::new(stream)
+        .keep_alive(
+            KeepAlive::new()
+                .interval(std::time::Duration::from_secs(10))
+                .text("keep-alive"),
+        )
+        .into_response()
 }

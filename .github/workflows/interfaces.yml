@@ -104,8 +104,8 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/ifc-gen
-          # Run cargo from repo, but output OpenAPI to temp dir
-          (cd "$GITHUB_WORKSPACE" && OPENAPI_OUT=/tmp/ifc-gen/openapi.yaml cargo run -p arw-server --quiet || true)
+          # Generate from in-code annotations (preferred)
+          (cd "$GITHUB_WORKSPACE" && OPENAPI_GEN=1 OPENAPI_OUT=/tmp/ifc-gen/openapi.yaml cargo run -p arw-server --quiet || true)
           test -s /tmp/ifc-gen/openapi.yaml || { echo '::error::Failed to generate OpenAPI via arw-server'; exit 1; }
       - name: Generate OpenAPI from annotations (server)
         run: |

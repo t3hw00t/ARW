@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -40,8 +40,31 @@ impl Kernel {
         let db_path = dir.join("events.sqlite");
         let need_init = !db_path.exists();
         let conn = Connection::open(&db_path)?;
+        // Pragmas tuned for async server usage
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "synchronous", "NORMAL")?;
+        // Busy timeout (default 5000ms; override with ARW_SQLITE_BUSY_MS)
+        let busy_ms: u64 = std::env::var("ARW_SQLITE_BUSY_MS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(5000);
+        conn.busy_timeout(std::time::Duration::from_millis(busy_ms))?;
+        // Cache size: negative = KB units. Default ~= 20MB (20000 KB pages)
+        let cache_pages: i64 = std::env::var("ARW_SQLITE_CACHE_PAGES")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(-20000);
+        let _ = conn.pragma_update(None, "cache_size", cache_pages);
+        // Keep temp tables in memory
+        let _ = conn.pragma_update(None, "temp_store", "MEMORY");
+        // mmap_size in bytes (default 128MB), skip on platforms not supporting it
+        if let Some(mb) = std::env::var("ARW_SQLITE_MMAP_MB")
+            .ok()
+            .and_then(|s| s.parse::<i64>().ok())
+        {
+            let bytes: i64 = mb.max(0) * 1024 * 1024;
+            let _ = conn.pragma_update(None, "mmap_size", bytes);
+        }
         if need_init {
             Self::init_schema(&conn)?;
         }
@@ -565,6 +588,19 @@ impl Kernel {
         } else {
             Ok(None)
         }
+    }
+
+    pub async fn find_valid_lease_async(
+        &self,
+        subject: &str,
+        capability: &str,
+    ) -> Result<Option<serde_json::Value>> {
+        let k = self.clone();
+        let s = subject.to_string();
+        let c = capability.to_string();
+        tokio::task::spawn_blocking(move || k.find_valid_lease(&s, &c))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1313,5 +1349,144 @@ impl Kernel {
             }));
         }
         Ok(out)
+    }
+
+    // ---------------- Async wrappers (spawn_blocking) ----------------
+    // These helpers offload rusqlite work from async executors.
+
+    pub async fn append_event_async(&self, env: &arw_events::Envelope) -> Result<i64> {
+        let k = self.clone();
+        let env = env.clone();
+        tokio::task::spawn_blocking(move || k.append_event(&env))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn recent_events_async(
+        &self,
+        limit: i64,
+        after_id: Option<i64>,
+    ) -> Result<Vec<EventRow>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.recent_events(limit, after_id))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn count_actions_by_state_async(&self, state: &str) -> Result<i64> {
+        let k = self.clone();
+        let s = state.to_string();
+        tokio::task::spawn_blocking(move || k.count_actions_by_state(&s))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn find_action_by_idem_async(&self, idem: &str) -> Result<Option<String>> {
+        let k = self.clone();
+        let s = idem.to_string();
+        tokio::task::spawn_blocking(move || k.find_action_by_idem(&s))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn insert_action_async(
+        &self,
+        id: &str,
+        kind: &str,
+        input: &serde_json::Value,
+        policy_ctx: Option<&serde_json::Value>,
+        idem_key: Option<&str>,
+        state: &str,
+    ) -> Result<()> {
+        let k = self.clone();
+        let id = id.to_string();
+        let kind = kind.to_string();
+        let input = input.clone();
+        let policy_ctx = policy_ctx.cloned();
+        let idem_key = idem_key.map(|s| s.to_string());
+        let state_s = state.to_string();
+        tokio::task::spawn_blocking(move || {
+            k.insert_action(
+                &id,
+                &kind,
+                &input,
+                policy_ctx.as_ref(),
+                idem_key.as_deref(),
+                &state_s,
+            )
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn get_action_async(&self, id: &str) -> Result<Option<ActionRow>> {
+        let k = self.clone();
+        let s = id.to_string();
+        tokio::task::spawn_blocking(move || k.get_action(&s))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn set_action_state_async(&self, id: &str, state: &str) -> Result<bool> {
+        let k = self.clone();
+        let id_s = id.to_string();
+        let st = state.to_string();
+        tokio::task::spawn_blocking(move || k.set_action_state(&id_s, &st))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn append_contribution_async(
+        &self,
+        subject: &str,
+        kind: &str,
+        qty: f64,
+        unit: &str,
+        corr_id: Option<&str>,
+        proj: Option<&str>,
+        meta: Option<&serde_json::Value>,
+    ) -> Result<i64> {
+        let k = self.clone();
+        let subject = subject.to_string();
+        let kind = kind.to_string();
+        let unit = unit.to_string();
+        let corr_id = corr_id.map(|s| s.to_string());
+        let proj = proj.map(|s| s.to_string());
+        let meta = meta.cloned();
+        tokio::task::spawn_blocking(move || {
+            k.append_contribution(
+                &subject,
+                &kind,
+                qty,
+                &unit,
+                corr_id.as_deref(),
+                proj.as_deref(),
+                meta.as_ref(),
+            )
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn list_contributions_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.list_contributions(limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn list_actions_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.list_actions(limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn list_egress_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.list_egress(limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
     }
 }

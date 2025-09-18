@@ -38,7 +38,7 @@ async function loadStats() {
   }
   const out = document.getElementById('out');
   out.innerHTML = '';
-  const port = ARW.getPortFromInput('port') || 8090;
+  const port = ARW.getPortFromInput('port') || 8091;
   const base = ARW.base(port);
   document.getElementById('stat').textContent = 'Loading…';
   try {
@@ -56,7 +56,7 @@ async function loadStats() {
     document.getElementById('stat').textContent = 'OK';
     // Update system badges
     try{
-      const port = ARW.getPortFromInput('port') || 8090;
+      const port = ARW.getPortFromInput('port') || 8091;
       const resp = await fetch(base + '/admin/probe/metrics');
       const dj = await resp.json(); const d = dj?.data || dj;
       const cpu = d?.cpu?.avg || 0; setCpuBadge(cpu);

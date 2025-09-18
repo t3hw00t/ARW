@@ -262,7 +262,7 @@ function setJobsAuto(on){
 }
 
 function sse() {
-  const p = port() || 8090;
+  const p = port() || 8091;
   const es = new EventSource(ARW.base(p) + '/events?prefix=models.');
   const last = {}; // id -> { t: ms, bytes: number }
   let lastJobsAt = 0;

@@ -545,6 +545,41 @@ pub(crate) async fn metrics_get(State(state): State<AppState>) -> impl IntoRespo
     let _ = writeln!(out, "arw_tools_cache_ttl_seconds {}", ttl);
     let _ = writeln!(out, "arw_tools_cache_capacity_max {}", cap);
 
+    // Guardrails metrics
+    out.push_str("# HELP arw_guardrails_retries_total Guardrails HTTP retries\n# TYPE arw_guardrails_retries_total counter\n");
+    out.push_str("# HELP arw_guardrails_http_errors_total Guardrails HTTP/parse errors\n# TYPE arw_guardrails_http_errors_total counter\n");
+    out.push_str("# HELP arw_guardrails_cb_trips_total Guardrails circuit breaker trips\n# TYPE arw_guardrails_cb_trips_total counter\n");
+    out.push_str("# HELP arw_guardrails_cb_open Circuit breaker open (1/0)\n# TYPE arw_guardrails_cb_open gauge\n");
+    out.push_str("# HELP arw_guardrails_cb_open_until_ms Circuit breaker open-until timestamp (ms)\n# TYPE arw_guardrails_cb_open_until_ms gauge\n");
+    let g = super::tools_exec::guardrails_metrics_value();
+    let _ = writeln!(
+        out,
+        "arw_guardrails_retries_total {}",
+        g.get("retries").and_then(|x| x.as_u64()).unwrap_or(0)
+    );
+    let _ = writeln!(
+        out,
+        "arw_guardrails_http_errors_total {}",
+        g.get("http_errors").and_then(|x| x.as_u64()).unwrap_or(0)
+    );
+    let _ = writeln!(
+        out,
+        "arw_guardrails_cb_trips_total {}",
+        g.get("cb_trips").and_then(|x| x.as_u64()).unwrap_or(0)
+    );
+    let _ = writeln!(
+        out,
+        "arw_guardrails_cb_open {}",
+        g.get("cb_open").and_then(|x| x.as_u64()).unwrap_or(0)
+    );
+    let _ = writeln!(
+        out,
+        "arw_guardrails_cb_open_until_ms {}",
+        g.get("cb_open_until_ms")
+            .and_then(|x| x.as_u64())
+            .unwrap_or(0)
+    );
+
     // Route stats
     out.push_str("# HELP arw_http_route_hits_total HTTP hits by route\n# TYPE arw_http_route_hits_total counter\n");
     out.push_str("# HELP arw_http_route_errors_total HTTP errors by route\n# TYPE arw_http_route_errors_total counter\n");

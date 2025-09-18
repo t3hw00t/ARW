@@ -18,9 +18,9 @@ Type: Explanation
 - Tools surface via HTTP, `/events`, and MCP. See: API and Schema.
 
 ## Event Bus
-- `/events` is the canonical SSE stream. Use `?replay=N` to backfill from the journal and `Last-Event-ID` headers to resume without losing your place.
+- `/events` is the canonical SSE stream. Use `?replay=N` to backfill from the journal and `Last-Event-ID` headers to resume without losing your place. When `ARW_ADMIN_TOKEN` is set, `/events` requires the token.
 
-> Legacy bridge: `/admin/events` stays available for the classic debug UI until the port completes.
+> Legacy bridge: `/admin/events` remains available for the classic debug UI during transition.
 
 Unified model
 - Treat ARW as a shared object graph (entities + relations) plus the `/events` stream and `/state/*` read models. UIs (Project Hub, Chat, Training Park, Managers) are lenses on the same truth.

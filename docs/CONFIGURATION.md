@@ -13,11 +13,11 @@ Centralized reference for ARW environment variables and common flags. Defaults f
 
 ## Service
 - `ARW_PORT`: HTTP listen port (default: `8091`; legacy `arw-svc` listens on `8090`).
-- `ARW_BIND`: HTTP bind address (default: `127.0.0.1`). Use `0.0.0.0` to listen on all interfaces in trusted environments or behind a TLS proxy.
+- `ARW_BIND`: HTTP bind address (default: `127.0.0.1`). Use `0.0.0.0` to listen on all interfaces in trusted environments or behind a TLS proxy. The server refuses to start if bound to a non‑loopback address without an admin token (see `ARW_ADMIN_TOKEN`), to avoid accidental public exposure.
 - `ARW_PORTABLE`: `1` keeps state/cache/logs near the app bundle.
  - `ARW_CONFIG`: absolute path to the primary config TOML (overrides discovery).
  - `ARW_CONFIG_DIR`: base directory to search for additional configs (e.g., `configs/gating.toml`, `configs/feedback.toml`). When unset, the service also probes beside the executable and the current directory.
- - `ARW_KERNEL_ENABLE`: enable the SQLite journal/CAS kernel (default `1`). When enabled, the service dual‑writes events to the kernel and exposes `/triad/events?replay=N`.
+- `ARW_KERNEL_ENABLE`: enable the SQLite journal/CAS kernel (default `1`). When enabled, the service dual‑writes events to the kernel and exposes `/events?replay=N`.
  - `ARW_SPEC_DIR`: base directory for spec artifacts served under `/spec/*` (default: `spec`).
  - `ARW_INTERFACES_DIR`: base directory for the interface catalog served at `/catalog/index` (default: `interfaces`).
 - `ARW_ACTIONS_QUEUE_MAX`: backpressure limit for queued actions (default `1024`). When exceeded, `/actions` returns 429.
@@ -51,7 +51,8 @@ Notes
 - Build profiles already offer `release` vs `maxperf` for build‑time tuning; presets target runtime behavior.
 
 ## Admin & Security
-- `ARW_ADMIN_TOKEN`: required token for admin endpoints.
+- `ARW_ADMIN_TOKEN`: required token for admin endpoints; when set, also required for `/events` and sensitive `/state/*` endpoints.
+- `ARW_ADMIN_TOKEN_SHA256`: hex‑encoded SHA‑256 of the admin token. Prefer this in environments where passing plaintext envs is undesirable. When both are set, either value is accepted.
  - `ARW_TOOLS_CACHE_TTL_SECS`: Action Cache TTL (seconds; default 600).
  - `ARW_TOOLS_CACHE_CAP`: Action Cache max entries (default 2048).
  - `ARW_ROUTE_STATS_COALESCE_MS`: coalesce window for route stats read‑model patches (default 250ms; min 10ms).
@@ -60,6 +61,8 @@ Notes
  - `ARW_MODELS_METRICS_PUBLISH_MS`: idle publish cadence for models metrics (default 2000ms; min 200ms).
 - `ARW_ADMIN_RL`: admin rate limit as `limit/window_secs` (default `60/60`).
 - `ARW_DEBUG`: `1` enables local debug mode; do not use in production.
+- `ARW_REFERRER_POLICY`: referrer policy header value (default `no-referrer`).
+- `ARW_HSTS`: `1` to enable `Strict-Transport-Security` header (only when served behind HTTPS).
  - `ARW_SECURITY_POSTURE`: posture preset `relaxed|standard|strict`. If no `ARW_POLICY_FILE` is provided, ARW derives a default policy from this. Default is `standard`.
  - `ARW_SCHEMA_MAP`: path to a JSON file that maps top‑level config segments to JSON Schemas for Patch Engine validation (defaults to [`configs/schema_map.json`](https://github.com/t3hw00t/ARW/blob/main/configs/schema_map.json)). Example: `{ "recipes": { "schema_ref": "spec/schemas/recipe_manifest.json", "pointer_prefix": "recipes" } }`
 
@@ -165,8 +168,18 @@ SSE contract: see `architecture/sse_patch_contract.md` for `Last-Event-ID` and J
 - `ARW_DXCORE_NPU`: `1` enables DXCore probe for NPUs on Windows when built with `npu_dxcore` feature.
 - `ARW_METRICS_INTERVAL_SECS`: background SSE `probe.metrics` interval seconds (default `10`, min `2`).
 
-## CORS & Networking
+## CORS, Headers & Networking
 - `ARW_CORS_ANY`: `1` to relax CORS during development only.
+- `ARW_CSP_AUTO`: `1` to auto‑inject a CSP for `text/html` responses (default `1`).
+- `ARW_CSP_PRESET`: CSP preset `relaxed|strict` (default `relaxed`).
+- `ARW_CSP`: explicit CSP policy string; set to `off`/`0` to disable.
+- `ARW_TRUST_FORWARD_HEADERS`: `1` to trust `X-Forwarded-For`/`Forwarded` (access log client IP) when behind a trusted proxy.
+
+### Access Logs (stdout)
+- `ARW_ACCESS_LOG`: `1` to enable JSON access logs to stdout.
+- `ARW_ACCESS_SAMPLE_N`: sample every Nth request (default `1`).
+- `ARW_ACCESS_UA`: `1` to include User‑Agent; `ARW_ACCESS_UA_HASH=1` to include only a SHA‑256 hash.
+- `ARW_ACCESS_REF`: `1` to include Referer; `ARW_ACCESS_REF_STRIP_QS=1` to drop the query string.
 
 ### Network Posture & Egress (Planned)
 These options control the policy‑backed egress gateway; some are implemented as noted.

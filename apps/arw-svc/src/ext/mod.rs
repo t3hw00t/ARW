@@ -1398,7 +1398,19 @@ async fn run_tool_endpoint(
     if req.id == "ui.screenshot.ocr" && !arw_core::gating::allowed("io:ocr") {
         return ApiError::forbidden("gated:ocr").into_response();
     }
-    match tools_exec::run_with_cache_stats(&req.id, &req.input) {
+    // End-to-end async for guardrails; others use blocking tool engine with spawn_blocking
+    let res = if req.id == "guardrails.check" {
+        tools_exec::run_guardrails_async(&req.input).await
+    } else {
+        tokio::task::spawn_blocking({
+            let id = req.id.clone();
+            let input = req.input.clone();
+            move || tools_exec::run_with_cache_stats(&id, &input)
+        })
+        .await
+        .unwrap_or_else(|e| Err(format!("join error: {}", e)))
+    };
+    match res {
         Ok((out, outcome, digest, key, age)) => {
             // Cache event
             let mut cache_evt = json!({

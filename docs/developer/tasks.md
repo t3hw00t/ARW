@@ -4,14 +4,11 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-17 22:44 UTC
+Updated: 2025-09-18 01:15 UTC
 
 
 ## To Do
-- [t-250917235817-3181] Retarget launcher to unified server — todo (updated: 2025-09-17 22:44:29 UTC)
-    - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; keeps legacy fallback.
 - [t-250917235820-3900] Decommission legacy artifacts — todo (updated: 2025-09-17 21:58:20 UTC)
-- [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — todo (updated: 2025-09-17 21:58:18 UTC)
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-11 21:02:19 UTC)
 
 ## In Progress
@@ -22,6 +19,11 @@ Updated: 2025-09-17 22:44 UTC
 ## Paused
 
 ## Done
+- [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — done (updated: 2025-09-18 01:15:00 UTC)
+    - 2025-09-18 01:15:00 UTC: `/spec/openapi.yaml` now emits generated `ApiDoc`; CI and scripts use `OPENAPI_GEN=1`; regenerated curated spec; Spectral lint passes.
+- [t-250917235817-3181] Retarget launcher to unified server — done (updated: 2025-09-18 01:15:00 UTC)
+    - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; keeps legacy fallback.
+    - 2025-09-18 01:15:00 UTC: Switched UI defaults to 8091 across pages; bundling stages `arw-server` (keeps `arw-svc` optional); README and Windows config updated.
 - [t-250917235814-0001] Add Helm chart for arw-server — done (updated: 2025-09-17 21:58:16 UTC)
 - [t-250917235812-8254] Switch CI OpenAPI codegen to arw-server — done (updated: 2025-09-17 21:58:13 UTC)
 - [t-250917235747-3348] Annotate server handlers with utoipa — done (updated: 2025-09-17 21:58:04 UTC)
@@ -167,4 +169,3 @@ Updated: 2025-09-17 22:44 UTC
 - [t-250909170247-6008] Start service and verify /about — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
-

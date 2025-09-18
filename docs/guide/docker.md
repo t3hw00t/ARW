@@ -60,7 +60,9 @@ docker compose up --build -d
 curl -sS http://127.0.0.1:8091/healthz
 ```
 
-The compose file defaults to the unified server on port 8091. To run the legacy image, override `services.arw-server.build.dockerfile` to `apps/arw-svc/Dockerfile` and adjust the port/env mapping.
+The compose file defaults to the unified server on port 8091 and binds to `127.0.0.1` by default. To expose it externally, override `ARW_BIND=0.0.0.0` and set a strong `ARW_ADMIN_TOKEN`. The server refuses to start on a public bind without a token to prevent accidental exposure.
+
+To run the legacy image, override `services.arw-server.build.dockerfile` to `apps/arw-svc/Dockerfile` and adjust the port/env mapping.
 
 ## Rolling Access Logs
 

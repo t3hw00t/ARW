@@ -1,7 +1,9 @@
 use base64::Engine;
 use chrono::Datelike;
 use moka::sync::Cache;
+use once_cell::sync::Lazy;
 use once_cell::sync::OnceCell;
+use regex::Regex;
 use serde_json::{json, Map, Value};
 use sha2::Digest as _;
 use std::collections::HashMap;
@@ -14,12 +16,55 @@ use std::sync::{
 };
 use std::time::{Duration, SystemTime, UNIX_EPOCH}; // for base64::engine::general_purpose::STANDARD.encode
 
+// Guardrails runtime counters (process-wide)
+static GUARD_RETRIES: AtomicU64 = AtomicU64::new(0);
+static GUARD_HTTP_ERRORS: AtomicU64 = AtomicU64::new(0);
+static GUARD_CB_TRIPS: AtomicU64 = AtomicU64::new(0);
+
+// Simple circuit-breaker state for remote guardrails
+struct CbState {
+    fail_count: AtomicU64,
+    open_until_ms: AtomicU64,
+}
+static CB: OnceCell<CbState> = OnceCell::new();
+
+pub fn guardrails_metrics_value() -> Value {
+    let cb = CB.get_or_init(|| CbState {
+        fail_count: AtomicU64::new(0),
+        open_until_ms: AtomicU64::new(0),
+    });
+    let now_ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0);
+    let open_until = cb.open_until_ms.load(Ordering::Relaxed);
+    json!({
+        "retries": GUARD_RETRIES.load(Ordering::Relaxed),
+        "http_errors": GUARD_HTTP_ERRORS.load(Ordering::Relaxed),
+        "cb_trips": GUARD_CB_TRIPS.load(Ordering::Relaxed),
+        "cb_open": if now_ms < open_until { 1 } else { 0 },
+        "cb_open_until_ms": open_until,
+    })
+}
+
 struct Entry {
     summary: &'static str,
     exec: fn(&Value) -> Result<Value, String>,
 }
 
 static REG: OnceCell<RwLock<HashMap<&'static str, Entry>>> = OnceCell::new();
+
+// Precompiled guardrails regexes (used by guardrails.check)
+static RE_EMAIL: Lazy<Regex> = Lazy::new(|| {
+    Regex::new(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}").expect("email regex")
+});
+static RE_AWS: Lazy<Regex> = Lazy::new(|| Regex::new(r"AKIA[0-9A-Z]{16}").expect("aws regex"));
+static RE_GAPI: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"AIza[0-9A-Za-z\-_]{35}").expect("gapi regex"));
+static RE_SLACK: Lazy<Regex> =
+    Lazy::new(|| Regex::new(r"xox[baprs]-[0-9A-Za-z-]{10,}").expect("slack regex"));
+static RE_URL: Lazy<Regex> = Lazy::new(|| Regex::new(r"https?://[^\s)]+").expect("url regex"));
 
 fn reg() -> &'static RwLock<HashMap<&'static str, Entry>> {
     REG.get_or_init(|| {
@@ -336,21 +381,21 @@ fn reg() -> &'static RwLock<HashMap<&'static str, Entry>> {
                     struct Issue { code: String, severity: String, message: String, #[serde(skip_serializing_if = "Option::is_none")] span: Option<(usize,usize)> }
                     let mut issues: Vec<Issue> = Vec::new();
                     // Email
-                    let re_email = regex::Regex::new(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}").unwrap();
+                    let re_email = &*RE_EMAIL;
                     for m in re_email.find_iter(text) {
                         issues.push(Issue{ code: "pii.email".into(), severity: "medium".into(), message: "Email address detected".into(), span: Some((m.start(), m.end()))});
                     }
                     // AWS Access Key ID
-                    let re_aws = regex::Regex::new(r"AKIA[0-9A-Z]{16}").unwrap();
+                    let re_aws = &*RE_AWS;
                     for m in re_aws.find_iter(text) { issues.push(Issue{ code: "secret.aws_access_key".into(), severity: "high".into(), message: "AWS access key pattern".into(), span: Some((m.start(), m.end()))}); }
                     // Google API key
-                    let re_gapi = regex::Regex::new(r"AIza[0-9A-Za-z\-_]{35}").unwrap();
+                    let re_gapi = &*RE_GAPI;
                     for m in re_gapi.find_iter(text) { issues.push(Issue{ code: "secret.gcp_api_key".into(), severity: "high".into(), message: "Google API key pattern".into(), span: Some((m.start(), m.end()))}); }
                     // Slack token
-                    let re_slack = regex::Regex::new(r"xox[baprs]-[0-9A-Za-z-]{10,}").unwrap();
+                    let re_slack = &*RE_SLACK;
                     for m in re_slack.find_iter(text) { issues.push(Issue{ code: "secret.slack_token".into(), severity: "high".into(), message: "Slack token pattern".into(), span: Some((m.start(), m.end()))}); }
                     // URLs and allowlist
-                    let re_url = regex::Regex::new(r"https?://[^\s)]+").unwrap();
+                    let re_url = &*RE_URL;
                     let allowlist: Vec<String> = std::env::var("ARW_GUARDRAILS_ALLOWLIST")
                         .ok()
                         .map(|s| s.split(',').map(|t| t.trim().to_lowercase()).filter(|t| !t.is_empty()).collect())
@@ -555,6 +600,286 @@ fn sf_end(key: &str) {
 pub fn run(id: &str, input: &Value) -> Result<Value, String> {
     let (out, _, _, _, _) = run_with_cache_stats(id, input)?;
     Ok(out)
+}
+
+/// Local heuristic implementation for guardrails.check (non-network fallback)
+fn guardrails_local(input: &Value) -> Result<Value, String> {
+    let text = input
+        .get("text")
+        .and_then(|v| v.as_str())
+        .ok_or("missing 'text'")?;
+    #[derive(serde::Serialize)]
+    struct Issue {
+        code: String,
+        severity: String,
+        message: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        span: Option<(usize, usize)>,
+    }
+    let mut issues: Vec<Issue> = Vec::new();
+    for m in RE_EMAIL.find_iter(text) {
+        issues.push(Issue {
+            code: "pii.email".into(),
+            severity: "medium".into(),
+            message: "Email address detected".into(),
+            span: Some((m.start(), m.end())),
+        });
+    }
+    for m in RE_AWS.find_iter(text) {
+        issues.push(Issue {
+            code: "secret.aws_access_key".into(),
+            severity: "high".into(),
+            message: "AWS access key pattern".into(),
+            span: Some((m.start(), m.end())),
+        });
+    }
+    for m in RE_GAPI.find_iter(text) {
+        issues.push(Issue {
+            code: "secret.gcp_api_key".into(),
+            severity: "high".into(),
+            message: "Google API key pattern".into(),
+            span: Some((m.start(), m.end())),
+        });
+    }
+    for m in RE_SLACK.find_iter(text) {
+        issues.push(Issue {
+            code: "secret.slack_token".into(),
+            severity: "high".into(),
+            message: "Slack token pattern".into(),
+            span: Some((m.start(), m.end())),
+        });
+    }
+    let allowlist: Vec<String> = std::env::var("ARW_GUARDRAILS_ALLOWLIST")
+        .ok()
+        .map(|s| {
+            s.split(',')
+                .map(|t| t.trim().to_lowercase())
+                .filter(|t| !t.is_empty())
+                .collect()
+        })
+        .unwrap_or_default();
+    for m in RE_URL.find_iter(text) {
+        let url = m.as_str();
+        if let Ok(u) = url::Url::parse(url) {
+            let host = u.host_str().unwrap_or("").to_lowercase();
+            if !allowlist.is_empty()
+                && !allowlist
+                    .iter()
+                    .any(|h| host == *h || host.ends_with(&format!(".{h}")))
+            {
+                issues.push(Issue {
+                    code: "egress.unlisted_host".into(),
+                    severity: "medium".into(),
+                    message: format!("URL host not in allowlist: {}", host),
+                    span: Some((m.start(), m.end())),
+                });
+            }
+        }
+    }
+    let inj_markers = [
+        "ignore previous",
+        "disregard prior",
+        "override instructions",
+        "exfiltrate",
+    ];
+    let lower = text.to_ascii_lowercase();
+    for pat in inj_markers.iter() {
+        if let Some(pos) = lower.find(pat) {
+            issues.push(Issue {
+                code: "prompt_injection.marker".into(),
+                severity: "medium".into(),
+                message: format!("Suspicious instruction: '{}'", pat),
+                span: Some((pos, pos + pat.len())),
+            });
+        }
+    }
+    let mut score: f64 = 0.0;
+    for it in &issues {
+        score += match it.severity.as_str() {
+            "high" => 3.0,
+            "medium" => 1.0,
+            _ => 0.5,
+        };
+    }
+    let ok = issues.iter().all(|i| i.severity != "high");
+    Ok(json!({
+        "ok": ok,
+        "score": score,
+        "issues": issues,
+        "suggestions": []
+    }))
+}
+
+/// Async path for guardrails.check with reqwest + shared cache/CAS
+pub async fn run_guardrails_async(input: &Value) -> Result<ToolRunOutcome, String> {
+    use tokio::fs as afs;
+
+    let id = "guardrails.check";
+    let ver = tool_version(id);
+    let key = compute_action_key(id, ver, input);
+
+    if let Some(digest) = action_mem().get(&key) {
+        let path = tools_cas_dir().join(format!("{}.json", digest));
+        if let Ok(bytes) = afs::read(&path).await {
+            if let Ok(v) = serde_json::from_slice::<Value>(&bytes) {
+                CACHE_HIT.fetch_add(1, Ordering::Relaxed);
+                let age_secs = afs::metadata(&path)
+                    .await
+                    .ok()
+                    .and_then(|m| m.modified().ok())
+                    .and_then(|t| SystemTime::now().duration_since(t).ok())
+                    .map(|d| d.as_secs());
+                return Ok((v, "hit", Some(digest), key, age_secs));
+            }
+        }
+    }
+
+    // Circuit breaker state (simple, process-wide)
+    let cb = CB.get_or_init(|| CbState {
+        fail_count: AtomicU64::new(0),
+        open_until_ms: AtomicU64::new(0),
+    });
+
+    // Try remote backend when configured; else local heuristics
+    let out = match std::env::var("ARW_GUARDRAILS_URL")
+        .ok()
+        .filter(|s| !s.is_empty())
+    {
+        Some(base) => {
+            let now_ms = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .ok()
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            let open_until = cb.open_until_ms.load(Ordering::Relaxed);
+            if now_ms < open_until {
+                // breaker open → local path
+                guardrails_local(input)?
+            } else {
+                let url = format!("{}/check", base.trim_end_matches('/'));
+                static HTTP: OnceCell<reqwest::Client> = OnceCell::new();
+                let timeout_ms: u64 = std::env::var("ARW_GUARDRAILS_TIMEOUT_MS")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(3000);
+                let cli = HTTP.get_or_init(|| {
+                    reqwest::Client::builder()
+                        .pool_idle_timeout(Duration::from_secs(90))
+                        .tcp_keepalive(Duration::from_secs(60))
+                        .connect_timeout(Duration::from_millis(1000))
+                        .timeout(Duration::from_millis(timeout_ms.max(1)))
+                        .build()
+                        .expect("client")
+                });
+                let mut body =
+                    json!({"text": input.get("text").and_then(|v| v.as_str()).unwrap_or("")});
+                if let Some(p) = input.get("policy") {
+                    if let Some(obj) = body.as_object_mut() {
+                        obj.insert("policy".into(), p.clone());
+                    }
+                }
+                if let Some(r) = input.get("rules") {
+                    if let Some(obj) = body.as_object_mut() {
+                        obj.insert("rules".into(), r.clone());
+                    }
+                }
+                // Simple retry with backoff
+                let max_retries: u32 = std::env::var("ARW_GUARDRAILS_RETRIES")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(2);
+                let mut attempt: u32 = 0;
+                let mut out_opt: Option<Value> = None;
+                while attempt <= max_retries {
+                    let res = cli.post(&url).json(&body).send().await;
+                    match res {
+                        Ok(resp) if resp.status().is_success() => {
+                            match resp.json::<Value>().await {
+                                Ok(v) => {
+                                    out_opt = Some(json!({
+                                        "ok": v.get("ok").and_then(|b| b.as_bool()).unwrap_or(true),
+                                        "score": v.get("score").cloned().unwrap_or(json!(0.0)),
+                                        "issues": v.get("issues").cloned().unwrap_or(json!([])),
+                                        "suggestions": v.get("suggestions").cloned().unwrap_or(json!([])),
+                                    }));
+                                    // reset breaker on success
+                                    cb.fail_count.store(0, Ordering::Relaxed);
+                                    cb.open_until_ms.store(0, Ordering::Relaxed);
+                                    break;
+                                }
+                                Err(_) => {
+                                    // parse error counts as HTTP error for metrics
+                                    GUARD_HTTP_ERRORS.fetch_add(1, Ordering::Relaxed);
+                                    // fall through to retry
+                                }
+                            }
+                        }
+                        _ => {
+                            // request error or non-success status
+                            GUARD_HTTP_ERRORS.fetch_add(1, Ordering::Relaxed);
+                            // retry
+                        }
+                    }
+                    attempt += 1;
+                    if attempt <= max_retries {
+                        GUARD_RETRIES.fetch_add(1, Ordering::Relaxed);
+                        let base = 100u64 * (1u64 << (attempt - 1).min(4));
+                        let jitter = {
+                            let now = SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .ok()
+                                .map(|d| d.subsec_millis() as u64)
+                                .unwrap_or(0);
+                            let cap = (base / 2).max(1);
+                            now % cap
+                        };
+                        tokio::time::sleep(Duration::from_millis(base + jitter)).await;
+                    }
+                }
+                match out_opt {
+                    Some(v) => v,
+                    None => {
+                        // increment failures and maybe open breaker
+                        let n = cb.fail_count.fetch_add(1, Ordering::Relaxed) + 1;
+                        let thresh: u64 = std::env::var("ARW_GUARDRAILS_CB_THRESHOLD")
+                            .ok()
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or(5);
+                        let cool_ms: u64 = std::env::var("ARW_GUARDRAILS_CB_COOLDOWN_MS")
+                            .ok()
+                            .and_then(|s| s.parse().ok())
+                            .unwrap_or(30_000);
+                        if n >= thresh.max(1) {
+                            let now = SystemTime::now()
+                                .duration_since(UNIX_EPOCH)
+                                .ok()
+                                .map(|d| d.as_millis() as u64)
+                                .unwrap_or(0);
+                            cb.open_until_ms
+                                .store(now.saturating_add(cool_ms), Ordering::Relaxed);
+                            GUARD_CB_TRIPS.fetch_add(1, Ordering::Relaxed);
+                            cb.fail_count.store(0, Ordering::Relaxed);
+                        }
+                        guardrails_local(input)?
+                    }
+                }
+            }
+        }
+        None => guardrails_local(input)?,
+    };
+
+    // Persist to CAS and memoize key -> digest
+    let bytes = serde_json::to_vec(&out).map_err(|e| e.to_string())?;
+    let digest = compute_digest(&bytes);
+    let dir = tools_cas_dir();
+    let _ = afs::create_dir_all(&dir).await;
+    let path = dir.join(format!("{}.json", &digest));
+    if afs::metadata(&path).await.is_err() {
+        let _ = afs::write(&path, &bytes).await;
+    }
+    action_mem().insert(key.clone(), digest.clone());
+    CACHE_MISS.fetch_add(1, Ordering::Relaxed);
+    Ok((out, "miss", Some(digest), key, Some(0)))
 }
 
 fn ocr_image_text(_path: &str) -> Result<String, String> {

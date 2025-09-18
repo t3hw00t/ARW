@@ -8,23 +8,19 @@ fn spec_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(std::env::var("ARW_SPEC_DIR").unwrap_or_else(|_| "spec".into()))
 }
 
-/// Static OpenAPI (curated) file.
+/// OpenAPI document generated from in-code annotations.
 #[utoipa::path(get, path = "/spec/openapi.yaml", tag = "Specs", responses((status = 200, content_type = "application/yaml")))]
 pub async fn spec_openapi() -> impl IntoResponse {
-    let path = spec_dir().join("openapi.yaml");
-    match tokio::fs::read(&path).await {
-        Ok(bytes) => (
-            StatusCode::OK,
-            [(header::CONTENT_TYPE, "application/yaml")],
-            bytes,
-        )
-            .into_response(),
-        Err(_) => (
-            StatusCode::NOT_FOUND,
-            Json(serde_json::json!({"type":"about:blank","title":"Not Found","status":404})),
-        )
-            .into_response(),
-    }
+    let yaml = crate::openapi::ApiDoc::openapi()
+        .to_yaml()
+        .unwrap_or_else(|_| "openapi: 3.0.3".into())
+        .into_bytes();
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "application/yaml")],
+        yaml,
+    )
+        .into_response()
 }
 
 /// Static AsyncAPI file.
@@ -65,19 +61,10 @@ pub async fn spec_mcp() -> impl IntoResponse {
     }
 }
 
-/// Generated OpenAPI from annotations (experimental).
+/// Generated OpenAPI from annotations (alias to /spec/openapi.yaml).
 #[utoipa::path(get, path = "/spec/openapi.gen.yaml", tag = "Specs", responses((status = 200, content_type = "application/yaml")))]
 pub async fn spec_openapi_gen() -> impl IntoResponse {
-    let yaml = crate::openapi::ApiDoc::openapi()
-        .to_yaml()
-        .unwrap_or_else(|_| "openapi: 3.0.3".into())
-        .into_bytes();
-    (
-        StatusCode::OK,
-        [(header::CONTENT_TYPE, "application/yaml")],
-        yaml,
-    )
-        .into_response()
+    spec_openapi().await
 }
 
 /// JSON Schemas referenced by the API.

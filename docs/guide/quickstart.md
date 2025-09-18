@@ -69,19 +69,24 @@ curl -s -X POST http://127.0.0.1:8091/actions \
   -H 'content-type: application/json' \
   -d '{"kind":"demo.echo","input":{"msg":"hello"}}' | jq
 
-curl -N http://127.0.0.1:8091/events?replay=10
+curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+  http://127.0.0.1:8091/events?replay=10
 
-curl -s http://127.0.0.1:8091/state/actions | jq
+curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+  http://127.0.0.1:8091/state/actions | jq
 ```
 
-The events stream shows `actions.submitted`, `actions.running`, and `actions.completed`. Any client can subscribe to `/events` (optionally with `?prefix=` and `?replay=` filters) to stay in lock-step with the server.
+The events stream shows `actions.submitted`, `actions.running`, and `actions.completed`. When `ARW_ADMIN_TOKEN` is set, `/events` and sensitive `/state/*` views require the token; this is recommended for any non‑local setup.
 
 ## Explore State Views
 
 ```bash
-curl -s http://127.0.0.1:8091/state/episodes | jq
-curl -s http://127.0.0.1:8091/state/contributions | jq
-curl -s http://127.0.0.1:8091/state/egress/settings | jq
+curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+  http://127.0.0.1:8091/state/episodes | jq
+curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+  http://127.0.0.1:8091/state/contributions | jq
+curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+  http://127.0.0.1:8091/state/egress/settings | jq
 ```
 
 Additional views expose models, self descriptions, memory lanes, logic units, orchestrator jobs, and more as they land during the restructure.
@@ -160,7 +165,7 @@ docker run --rm -p 8091:8091 \
 - Require `ARW_ADMIN_TOKEN` before invoking `/leases`, `/egress/settings`, or other admin-grade endpoints.
 - Use leases to gate outbound HTTP, filesystem writes, or app control (`app.vscode.open`).
 - Enable the egress ledger and DNS guard with environment flags (`ARW_EGRESS_LEDGER_ENABLE=1`, `ARW_DNS_GUARD_ENABLE=1`).
-- Keep `/events` behind auth when exposed over the network; it contains action telemetry.
+- Keep `/events` and `/state/*` behind auth when exposed over the network; they contain action telemetry and internal state.
 
 ## Portable Mode
 

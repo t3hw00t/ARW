@@ -7,8 +7,8 @@ Microsummary: Public endpoints, admin surfaces, specs, and eventing. Stable/expe
 
 - Default base URL: `http://127.0.0.1:8091` (unified `arw-server`; override with `ARW_PORT`).
 - Specs in repo: [spec/openapi.yaml](https://github.com/t3hw00t/ARW/blob/main/spec/openapi.yaml), [spec/asyncapi.yaml](https://github.com/t3hw00t/ARW/blob/main/spec/asyncapi.yaml), [spec/mcp-tools.json](https://github.com/t3hw00t/ARW/blob/main/spec/mcp-tools.json)
-- Specs at runtime: `GET /spec/openapi.yaml`, `GET /spec/asyncapi.yaml`, `GET /spec/mcp-tools.json`, `GET /spec/schemas/{file}`, `GET /spec/index.json`
-  - Experimental generated doc from annotations: `GET /spec/openapi.gen.yaml`
+- Specs at runtime: `GET /spec/openapi.yaml` (generated from code annotations), `GET /spec/asyncapi.yaml`, `GET /spec/mcp-tools.json`, `GET /spec/schemas/{file}`, `GET /spec/index.json`
+  - Alias: `GET /spec/openapi.gen.yaml` (same as `/spec/openapi.yaml`)
 - Catalog: `GET /catalog/index` (YAML) and `GET /catalog/health` (JSON)
 - `/state/*`: read-models for actions, contributions, episodes, leases, egress, policy, models, and self snapshots.
 - Auth: Local-only by default; for admin endpoints set `ARW_ADMIN_TOKEN` and send `Authorization: Bearer <token>` or `X-ARW-Admin`.

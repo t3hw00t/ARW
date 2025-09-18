@@ -1,0 +1,22 @@
+name: Link Check
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+jobs:
+  lychee:
+    name: Check docs links
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Run lychee
+        uses: lycheeverse/lychee-action@v1
+        with:
+          # Use repo-configured exclusions and headers
+          args: --config .lychee.toml --no-progress --verbose docs/**/*.md README.md
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

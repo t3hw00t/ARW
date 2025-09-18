@@ -15,6 +15,7 @@ Baseline
 - Admin endpoints: set an admin token and require it on sensitive routes.
   - Env: `ARW_ADMIN_TOKEN=your-secret`
   - Header: `X-ARW-Admin: your-secret`
+- Events & State: when `ARW_ADMIN_TOKEN` is set, `/events` and sensitive `/state/*` endpoints require the token. Keep these behind auth and a reverse proxy if exposed.
 - Debug mode: unset `ARW_DEBUG` in production. With `ARW_DEBUG=1`, sensitive endpoints are open locally.
 - Rate limits: adjust admin limiter, e.g. `ARW_ADMIN_RL="60/60"` (limit/window_secs).
 
@@ -119,7 +120,7 @@ Checklist
 - [ ] Logs/State directories scoped and monitored
 
 ## Security Headers & CSP
-- Default response headers are set by middleware:
+- Default response headers are set by middleware in the unified server:
   - `X-Content-Type-Options: nosniff`
   - `Referrer-Policy: no-referrer`
   - `X-Frame-Options: DENY`
@@ -128,6 +129,7 @@ Checklist
   - Auto-add for `text/html` unless disabled. Env: `ARW_CSP_AUTO=1` (default).
   - Presets: `ARW_CSP_PRESET=relaxed|strict` (default relaxed). Strict disables inline JS/CSS used by small pages.
   - Override: set `ARW_CSP` to a full policy string, or set to `off`/`0` to disable.
+  - HSTS: enable `Strict-Transport-Security` with `ARW_HSTS=1` when serving over HTTPS.
 
 ## Access Logs (Optional)
 - Enable structured access logs: `ARW_ACCESS_LOG=1` (target: `http.access`).

@@ -119,7 +119,7 @@ window.ARW = {
   },
   base(port) {
     try { if (window.__ARW_BASE_OVERRIDE && typeof window.__ARW_BASE_OVERRIDE === 'string') return window.__ARW_BASE_OVERRIDE; } catch {}
-    const p = Number.isFinite(port) && port > 0 ? port : 8090
+    const p = Number.isFinite(port) && port > 0 ? port : 8091
     return `http://127.0.0.1:${p}`
   },
   // Theme override (Auto/Light/Dark) — OS-first when 'auto'

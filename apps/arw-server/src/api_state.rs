@@ -1,3 +1,4 @@
+use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use axum::{
     extract::{Query, State},
@@ -14,9 +15,23 @@ use crate::AppState;
     tag = "State",
     responses((status = 200, description = "Episode rollups", body = serde_json::Value))
 )]
-pub async fn state_episodes(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn state_episodes(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if !crate::admin_ok(&headers) {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
     // Simple episode rollup: group last 1000 events by corr_id
-    let rows = state.kernel.recent_events(1000, None).unwrap_or_default();
+    let rows = state
+        .kernel
+        .recent_events_async(1000, None)
+        .await
+        .unwrap_or_default();
     use std::collections::BTreeMap;
     let mut by_corr: BTreeMap<String, Vec<Value>> = BTreeMap::new();
     for r in rows {
@@ -41,7 +56,7 @@ pub async fn state_episodes(State(state): State<AppState>) -> impl IntoResponse 
             .unwrap_or(json!(null));
         items.push(json!({"id": cid, "events": evs, "start": start, "end": end}));
     }
-    Json(json!({"items": items}))
+    Json(json!({"items": items})).into_response()
 }
 
 /// Bus and per-route counters snapshot.
@@ -74,9 +89,23 @@ pub async fn state_route_stats(State(state): State<AppState>) -> impl IntoRespon
     tag = "State",
     responses((status = 200, description = "Contributions list", body = serde_json::Value))
 )]
-pub async fn state_contributions(State(state): State<AppState>) -> impl IntoResponse {
-    let items = state.kernel.list_contributions(200).unwrap_or_default();
-    Json(json!({"items": items}))
+pub async fn state_contributions(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if !crate::admin_ok(&headers) {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
+    let items = state
+        .kernel
+        .list_contributions_async(200)
+        .await
+        .unwrap_or_default();
+    Json(json!({"items": items})).into_response()
 }
 
 /// Recent actions list.
@@ -84,24 +113,35 @@ pub async fn state_contributions(State(state): State<AppState>) -> impl IntoResp
     get,
     path = "/state/actions",
     tag = "State",
+    operation_id = "state_actions_doc",
+    description = "Recent actions list (most recent first).",
     params(
         ("limit" = Option<i64>, Query, description = "Max items (1-2000)")
     ),
     responses((status = 200, description = "Actions list", body = serde_json::Value))
 )]
 pub async fn state_actions(
+    headers: HeaderMap,
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
+    if !crate::admin_ok(&headers) {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
     let limit = q
         .get("limit")
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(200);
     let items = state
         .kernel
-        .list_actions(limit.clamp(1, 2000))
+        .list_actions_async(limit.clamp(1, 2000))
+        .await
         .unwrap_or_default();
-    Json(json!({"items": items}))
+    Json(json!({"items": items})).into_response()
 }
 
 /// Recent egress ledger list.
@@ -113,18 +153,27 @@ pub async fn state_actions(
     responses((status = 200, description = "Egress ledger", body = serde_json::Value))
 )]
 pub async fn state_egress(
+    headers: HeaderMap,
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
+    if !crate::admin_ok(&headers) {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
     let limit = q
         .get("limit")
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(200);
     let items = state
         .kernel
-        .list_egress(limit.clamp(1, 2000))
+        .list_egress_async(limit.clamp(1, 2000))
+        .await
         .unwrap_or_default();
-    Json(json!({"items": items}))
+    Json(json!({"items": items})).into_response()
 }
 
 /// Model catalog read‑model.
@@ -132,6 +181,8 @@ pub async fn state_egress(
     get,
     path = "/state/models",
     tag = "State",
+    operation_id = "state_models_doc",
+    description = "Model catalog read‑model (defaults when state/models.json missing).",
     responses((status = 200, description = "Model catalog", body = serde_json::Value))
 )]
 pub async fn state_models() -> impl IntoResponse {

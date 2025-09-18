@@ -38,7 +38,7 @@ function miniDownloads() {
   const root=document.getElementById('dlmini');
   if(!root) return;
   const last={};
-  const getPort = ()=> ARW.getPortFromInput('port') || 8090;
+  const getPort = ()=> ARW.getPortFromInput('port') || 8091;
   (async ()=>{
     try{
       const es = new EventSource(ARW.base(getPort()) + '/events?prefix=models.');

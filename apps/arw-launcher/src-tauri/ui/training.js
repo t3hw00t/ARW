@@ -1,6 +1,6 @@
 document.addEventListener('DOMContentLoaded', async () => {
   await ARW.applyPortFromPrefs('port');
-  const port = ARW.getPortFromInput('port') || 8090;
+  const port = ARW.getPortFromInput('port') || 8091;
   const base = ARW.base(port);
   const sc = ARW.sidecar.mount('sidecar', ['timeline','context','policy','metrics','models'], { base });
   ARW.sse.subscribe('*open*', ()=> document.getElementById('sseStat').textContent = 'SSE: on');
@@ -15,7 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }, 200);
   });
   document.getElementById('port').addEventListener('change', async ()=>{
-    const p = ARW.getPortFromInput('port') || 8090;
+    const p = ARW.getPortFromInput('port') || 8091;
     await ARW.setPrefs('launcher', { ...(await ARW.getPrefs('launcher')), port: p });
     ARW.sse.connect(ARW.base(p), { replay: 5 });
   });

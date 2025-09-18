@@ -8,6 +8,8 @@ use serde_json::json;
     get,
     path = "/healthz",
     tag = "Meta",
+    operation_id = "healthz_doc",
+    description = "Service readiness probe.",
     responses(
         (status = 200, description = "Service healthy", body = crate::openapi::HealthOk)
     )
@@ -21,6 +23,8 @@ pub async fn healthz() -> impl IntoResponse {
     get,
     path = "/about",
     tag = "Meta",
+    operation_id = "about_doc",
+    description = "Service metadata, endpoints index, and performance preset.",
     responses(
         (status = 200, description = "Service metadata", body = crate::openapi::AboutResponse)
     )

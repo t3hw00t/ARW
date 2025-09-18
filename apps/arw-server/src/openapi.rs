@@ -64,6 +64,7 @@ pub struct AboutResponse {
         (name = "Meta", description = "Service metadata and health"),
         (name = "State", description = "Read‑models (actions, models, egress, episodes)"),
         (name = "Events", description = "Server‑Sent Events stream")
-    )
+    ),
+    info(description = "Unified ARW server API surface (headless-first).")
 )]
 pub struct ApiDoc;

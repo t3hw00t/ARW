@@ -23,7 +23,7 @@ Connector / Connection / Link
 - Connector: a provider type (HTTP/WS/MCP/local). Connection: a configured instance of a connector. Link: a binding between a connection and a service/route. See: [API and Schema](API_AND_SCHEMA.md).
 
 Bus / Event Journal
-- In‑process pub/sub for events. Optional on‑disk JSONL journal with replay and filters. Accessible via SSE at `/admin/events` (admin‑gated). See: [Admin Endpoints](guide/admin_endpoints.md).
+- In‑process pub/sub for events. Optional on‑disk JSONL journal with replay and filters. Accessible via SSE at `/events` (admin‑gated when `ARW_ADMIN_TOKEN` is set). See: [Admin Endpoints](guide/admin_endpoints.md).
 
 Tool
 - A versioned capability with JSON Schemas for input/output/error, exposed across HTTP, events, and MCP. See: [API and Schema](API_AND_SCHEMA.md).

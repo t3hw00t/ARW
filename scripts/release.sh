@@ -10,7 +10,7 @@ cargo clippy -p arw-protocol -p arw-events -p arw-core -p arw-macros -p arw-cli 
 cargo test --workspace --locked --exclude arw-tauri --exclude arw-launcher
 
 echo "[release] regenerating specs/docs"
-OPENAPI_OUT=spec/openapi.yaml cargo run -q -p arw-server
+OPENAPI_GEN=1 OPENAPI_OUT=spec/openapi.yaml cargo run -q -p arw-server
 bash scripts/docgen.sh
 
 echo "[release] tagging ${version}"

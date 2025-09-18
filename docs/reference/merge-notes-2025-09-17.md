@@ -50,6 +50,8 @@ This batch consolidates documentation and guidance around the unified `arw-serve
   docs/architecture/kernel.md:1
 - #52 Add memory pointer support to context rehydrate  
   crates/arw-core:1
+\- #67 Switch /spec/openapi.yaml to generated ApiDoc + update CI/scripts  
+  apps/arw-server/src/api_spec.rs:1, .github/workflows/interfaces.yml:1, scripts/release.sh:1, scripts/hooks/install_hooks.sh:1, docs/reference/api.md:1
 
 ## Notes for Operators
 
@@ -60,4 +62,4 @@ This batch consolidates documentation and guidance around the unified `arw-serve
 
 - Consider bumping/transitively removing `screenshots` crate if upstream publishes fixes for future-incompat warnings.
 - Add a CI link-checker job to enforce relative link health in `docs/`.
-
+  - Update 2025-09-18: Added `.github/workflows/link-check.yml` (lychee) to lint docs links on PRs and pushes.

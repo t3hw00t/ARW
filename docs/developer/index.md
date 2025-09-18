@@ -21,7 +21,7 @@ cargo install cargo-nextest
 cargo build --workspace --all-targets --locked
 cargo nextest run --workspace --locked
 # Regenerate OpenAPI from code (writes spec/openapi.yaml)
-(cd Agent_Hub && OPENAPI_OUT=spec/openapi.yaml cargo run -p arw-server)
+(cd Agent_Hub && OPENAPI_GEN=1 OPENAPI_OUT=spec/openapi.yaml cargo run -p arw-server)
 # Optional: regenerate static JSON preview for docs/static/openapi.json
 python3 scripts/generate_openapi_json.py
 ```

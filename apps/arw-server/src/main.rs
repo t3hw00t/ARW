@@ -76,6 +76,7 @@ macro_rules! route_post_tag {
     }};
 }
 
+mod access_log;
 mod api_actions;
 mod api_config;
 mod api_connectors;
@@ -98,6 +99,8 @@ mod egress_proxy;
 mod metrics;
 mod openapi;
 mod read_models;
+mod security;
+mod sse_cache;
 mod util;
 mod worker;
 mod working_set;
@@ -110,7 +113,7 @@ pub(crate) struct AppState {
     host: std::sync::Arc<dyn ToolHost>,
     config_state: std::sync::Arc<Mutex<serde_json::Value>>, // effective config (demo)
     config_history: std::sync::Arc<Mutex<Vec<(String, serde_json::Value)>>>, // snapshots
-    sse_id_map: std::sync::Arc<Mutex<std::collections::VecDeque<(u64, i64)>>>,
+    sse_id_map: std::sync::Arc<Mutex<sse_cache::SseIdCache>>,
     endpoints: std::sync::Arc<Vec<String>>,
     endpoints_meta: std::sync::Arc<Vec<serde_json::Value>>,
     metrics: std::sync::Arc<metrics::Metrics>,
@@ -190,8 +193,7 @@ async fn main() {
     let bus = arw_events::Bus::new_with_replay(256, 256);
     let kernel = arw_kernel::Kernel::open(&crate::util::state_dir()).expect("init kernel");
     // dual-write bus events to kernel and track DB ids for SSE
-    let sse_id_map =
-        std::sync::Arc::new(Mutex::new(std::collections::VecDeque::with_capacity(2048)));
+    let sse_id_map = std::sync::Arc::new(Mutex::new(sse_cache::SseIdCache::with_capacity(2048)));
     let metrics = std::sync::Arc::new(metrics::Metrics::default());
     {
         let mut rx = bus.subscribe();
@@ -201,7 +203,7 @@ async fn main() {
         tokio::spawn(async move {
             while let Ok(env) = rx.recv().await {
                 metrics_clone.record_event(&env.kind);
-                if let Ok(row_id) = k2.append_event(&env) {
+                if let Ok(row_id) = k2.append_event_async(&env).await {
                     let mut hasher = sha2::Sha256::new();
                     hasher.update(env.time.as_bytes());
                     hasher.update(env.kind.as_bytes());
@@ -213,11 +215,8 @@ async fn main() {
                         digest[0], digest[1], digest[2], digest[3], digest[4], digest[5],
                         digest[6], digest[7],
                     ]);
-                    let mut dq = sse_ids.lock().await;
-                    if dq.len() >= 2048 {
-                        dq.pop_front();
-                    }
-                    dq.push_back((key, row_id));
+                    let mut cache = sse_ids.lock().await;
+                    cache.insert(key, row_id);
                 }
             }
         });
@@ -740,7 +739,29 @@ async fn main() {
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(8091);
+    // Security: refuse public bind without an admin token
+    let token_set = std::env::var("ARW_ADMIN_TOKEN")
+        .ok()
+        .is_some_and(|v| !v.is_empty())
+        || std::env::var("ARW_ADMIN_TOKEN_SHA256")
+            .ok()
+            .is_some_and(|v| !v.is_empty());
+    let is_loopback = {
+        let b = bind.trim().to_ascii_lowercase();
+        b == "127.0.0.1" || b == "::1" || b == "[::1]" || b == "localhost"
+    };
+    if !is_loopback && !token_set {
+        eprintln!(
+            "error: ARW_BIND={} is public and ARW_ADMIN_TOKEN/ARW_ADMIN_TOKEN_SHA256 not set; refusing to start",
+            bind
+        );
+        std::process::exit(2);
+    }
     let addr: SocketAddr = format!("{}:{}", bind, port).parse().unwrap();
+    // Global middleware: security headers, optional access log, then app
+    let app = app
+        .layer(axum::middleware::from_fn(security::headers_mw))
+        .layer(axum::middleware::from_fn(access_log::access_log_mw));
     axum::serve(
         tokio::net::TcpListener::bind(addr).await.unwrap(),
         app.into_make_service_with_connect_info::<SocketAddr>(),
@@ -750,25 +771,59 @@ async fn main() {
 }
 
 pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
-    // When ARW_ADMIN_TOKEN is set, require it in Authorization: Bearer or X-ARW-Admin
-    let token = match std::env::var("ARW_ADMIN_TOKEN") {
-        Ok(t) if !t.is_empty() => t,
-        _ => return true,
-    };
+    // When ARW_ADMIN_TOKEN or ARW_ADMIN_TOKEN_SHA256 is set, require it in Authorization: Bearer or X-ARW-Admin
+    let token_plain = std::env::var("ARW_ADMIN_TOKEN")
+        .ok()
+        .filter(|t| !t.is_empty());
+    let token_hash = std::env::var("ARW_ADMIN_TOKEN_SHA256")
+        .ok()
+        .filter(|t| !t.is_empty());
+    if token_plain.is_none() && token_hash.is_none() {
+        return true;
+    }
+    // Extract presented token
+    let mut presented: Option<String> = None;
     if let Some(hv) = headers
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
     {
         if let Some(bearer) = hv.strip_prefix("Bearer ") {
-            if bearer == token {
-                return true;
-            }
+            presented = Some(bearer.to_string());
         }
     }
-    if let Some(hv) = headers.get("X-ARW-Admin").and_then(|h| h.to_str().ok()) {
-        if hv == token {
-            return true;
+    if presented.is_none() {
+        if let Some(hv) = headers.get("X-ARW-Admin").and_then(|h| h.to_str().ok()) {
+            presented = Some(hv.to_string());
         }
+    }
+    let Some(ptok) = presented else { return false };
+    // Constant-time eq helper
+    fn ct_eq(a: &[u8], b: &[u8]) -> bool {
+        if a.len() != b.len() {
+            return false;
+        }
+        let mut diff: u8 = 0;
+        for i in 0..a.len() {
+            diff |= a[i] ^ b[i];
+        }
+        diff == 0
+    }
+    if let Some(ref hpref) = token_hash {
+        let want = hpref.trim().to_ascii_lowercase();
+        let got_hex = {
+            let mut hasher = sha2::Sha256::new();
+            hasher.update(ptok.as_bytes());
+            let digest = hasher.finalize();
+            hex::encode(digest)
+        };
+        return ct_eq(want.as_bytes(), got_hex.as_bytes())
+            || token_plain
+                .as_ref()
+                .map(|p| ct_eq(p.as_bytes(), ptok.as_bytes()))
+                .unwrap_or(false);
+    }
+    if let Some(ref p) = token_plain {
+        return ct_eq(p.as_bytes(), ptok.as_bytes());
     }
     false
 }
