@@ -4,7 +4,8 @@
     "title": "Agent Hub (ARW) Service API",
     "description": "Your private AI control room that can scale and share when you choose.\n\nIn plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” on your computer to research, plan, write, and build—while you stay in charge. It is local‑first and privacy‑first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.\n",
     "license": {
-      "name": ""
+      "name": "MIT OR Apache-2.0",
+      "url": "https://github.com/t3hw00t/ARW#licensing"
     },
     "version": "0.1.0"
   },
