@@ -5,7 +5,7 @@
     "description": "Unified ARW server API surface (headless-first).",
     "license": {
       "name": "MIT OR Apache-2.0",
-      "identifier": "MIT OR Apache-2.0"
+      "url": "https://github.com/t3hw00t/ARW#licensing"
     },
     "version": "0.1.4"
   },
