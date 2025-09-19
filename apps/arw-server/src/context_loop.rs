@@ -366,6 +366,79 @@ fn format_join_error(join_err: JoinError) -> String {
     }
 }
 
+#[cfg(test)]
+#[allow(clippy::items_after_test_module)]
+mod tests {
+    use super::*;
+    use crate::working_set::{WorkingSet, WorkingSetSpec, WorkingSetSummary};
+    use serde_json::json;
+    use std::collections::{BTreeMap, HashSet};
+
+    fn base_spec() -> WorkingSetSpec {
+        WorkingSetSpec {
+            query: None,
+            embed: None,
+            lanes: vec!["docs".to_string()],
+            limit: 8,
+            expand_per_seed: 2,
+            diversity_lambda: 0.5,
+            min_score: 0.6,
+            project: None,
+            lane_bonus: 0.3,
+            scorer: Some("mmrd".into()),
+            expand_query: false,
+            expand_query_top_k: 6,
+        }
+    }
+
+    fn working_set_with_summary(summary: WorkingSetSummary) -> WorkingSet {
+        WorkingSet {
+            items: Vec::new(),
+            seeds: vec![json!({"lane": "analysis"})],
+            expanded: vec![json!({"lane": "code"})],
+            diagnostics: json!({}),
+            summary,
+        }
+    }
+
+    #[test]
+    fn adjust_spec_reacts_to_coverage_reasons() {
+        let mut lane_counts = BTreeMap::new();
+        lane_counts.insert("docs".to_string(), 3usize);
+        let summary = WorkingSetSummary {
+            target_limit: 8,
+            lanes_requested: 3,
+            selected: 3,
+            avg_cscore: 0.32,
+            max_cscore: 0.35,
+            min_cscore: 0.1,
+            threshold_hits: 0,
+            total_candidates: 11,
+            lane_counts,
+            min_score: 0.6,
+            scorer: "mmrd".into(),
+        };
+        let ws = working_set_with_summary(summary);
+        let verdict = coverage::assess(&ws);
+        let reasons: HashSet<_> = verdict.reasons.iter().map(|s| s.as_str()).collect();
+        assert!(reasons.contains("below_target_limit"));
+        assert!(reasons.contains("low_lane_diversity"));
+        assert!(reasons.contains("weak_average_score"));
+        assert!(reasons.contains("no_items_above_threshold"));
+
+        let next = adjust_spec_for_iteration(0, &base_spec(), &ws, &verdict);
+        assert_eq!(next.limit, 12);
+        assert_eq!(next.expand_per_seed, 4);
+        assert!(next.expand_query);
+        assert_eq!(next.expand_query_top_k, 10);
+        assert!((next.min_score - 0.45).abs() < f32::EPSILON);
+
+        let mut lanes = next.lanes.clone();
+        lanes.sort();
+        assert_eq!(lanes, vec!["analysis", "code", "docs"]);
+    }
+}
+
 fn build_iteration_summary_payload(
     iteration: usize,
     spec: &working_set::WorkingSetSpec,

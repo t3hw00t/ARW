@@ -161,7 +161,7 @@ impl ToolHost for LocalHost {
                     let cpath = std::path::Path::new(&base)
                         .join("connectors")
                         .join(format!("{}.json", cid));
-                    if let Ok(bytes) = std::fs::read(&cpath) {
+                    if let Ok(bytes) = tokio::fs::read(&cpath).await {
                         if let Ok(v) = serde_json::from_slice::<serde_json::Value>(&bytes) {
                             auth_token = v
                                 .get("token")

@@ -3,7 +3,7 @@ use axum::http::{HeaderName, HeaderValue, Request};
 use axum::middleware::Next;
 use axum::response::Response;
 use serde::Serialize;
-use std::collections::{BTreeMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -222,6 +222,26 @@ impl Metrics {
             })
             .unwrap_or_default();
         MetricsSummary { events, routes }
+    }
+
+    pub fn routes_for_analysis(&self) -> HashMap<String, (f64, u64, u64)> {
+        self.routes
+            .lock()
+            .map(|stats| {
+                stats
+                    .by_path
+                    .iter()
+                    .map(|(path, stat)| (path.clone(), (stat.ewma_ms, stat.hits, stat.errors)))
+                    .collect::<HashMap<_, _>>()
+            })
+            .unwrap_or_default()
+    }
+
+    pub fn event_kind_count(&self, kind: &str) -> u64 {
+        self.events
+            .lock()
+            .map(|stats| stats.kinds.get(kind).copied().unwrap_or(0))
+            .unwrap_or(0)
     }
 }
 

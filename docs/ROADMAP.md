@@ -35,6 +35,14 @@ Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show bo
 - [Kernel] State & Episodes: observations/beliefs/intents/actions stores; episodes with reactive UI — see Backlog → Now.
 - [Kernel] Services & Orchestration: hierarchy/governor services; queue leases and nack behavior — see Backlog → Now.
 - [Kernel] Specs & Interop: AsyncAPI + MCP artifacts and /spec/* serving — see Backlog → Now.
+- [Kernel] Legacy feature migration (unified server): follow Phases A–E (see Restructure Handbook) with a bias toward vertical slices that unlock UI swaps quickly. Phase A (core services) is in-flight now; Phase B (memory + projects) begins once Tool Forge lands (Model Steward ✅).
+
+##### Legacy Feature Migration Phases (Kernel Owner)
+- **Phase A · Core services (Now)** — Model Steward ✅, Tool Forge, Snappy Governor, Event Spine patch streaming.
+- **Phase B · Memory + projects (Next)** — Memory Lanes, Project Hub primitives, Project Map read models.
+- **Phase C · Feedback & experiments (Soon)** — Feedback Loop, Experiment Deck, Self Card.
+- **Phase D · Operator experience (UI)** — Chat Workbench, Screenshot Pipeline, launcher → SPA/right-sidecar.
+- **Phase E · Policy & guardrails** — Guardrail Gateway, Asimov Capsule Guard, removal of `/admin/*` fallbacks.
 
 #### [Pack: Collaboration] Calm collaboration surfaces
 - [Pack: Collaboration] UI coherence & routing: canonical admin debug/UI endpoints; launcher open path alignment; SSE reconnection/backoff and status; universal right-sidecar across Hub/Chat/Training; command palette.
@@ -42,10 +50,12 @@ Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show bo
 - [Pack: Collaboration] Visual capture: screenshot tool (OS-level) with optional window crop; OCR (optional); SSE events + thumbnails; sidecar Activity integration.
 - [Pack: Collaboration] Recipes MVP: schema + gallery + runner (local-first, default-deny permissions).
 - [Pack: Collaboration] Heuristic Feedback Engine: lightweight, near-live suggestions with guardrails — see Backlog → Now → Feedback Engine for concrete work items.
+- [Pack: Collaboration] Human-in-the-loop staging: queue pending actions in `arw-server`, surface approvals in the sidecar, and ship per-project review modes.
 
 #### [Pack: Research] Research & memory packs
 - [Pack: Research] Logic Units (config-first): manifest/schema, Library UI with diff preview, apply/revert/promote, initial sample units.
-- [Pack: Research] Research Watcher (read-only): draft Suggested units from curated feeds; human review flow.
+- [Pack: Research] Research Watcher (read-only): build `arw-server` ingestion + read-models so curated feeds land in Suggested units with human review.
+- [Pack: Research] Training Park telemetry: expose retrieval/context/tool metrics from `arw-server` and upgrade the launcher view from stub to live controls.
 
 ## Mid-Term (1–2 Months)
 

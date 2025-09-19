@@ -35,6 +35,12 @@ Complexity Collapse (Cross-cutting)
 - [Kernel] Unified retrieval pipeline and memory abstraction (vector/graph/kv/doc) with shared CRUD/stats and index hygiene
 - [Kernel] Capability/lease system with node-local egress proxy; remove per-tool allowlists
 - [Kernel] UI: shared right-sidecar, schema-generated forms, and global command palette
+- [Kernel] Legacy feature migration (Phases A–E)
+  - A · Core services (Now): Model Steward (`/state/models` + admin suite ✅), Tool Forge (tool runs/cache stats ✅), Snappy Governor, Event Spine patch streaming — owners + timelines to be linked from Tasks.
+  - B · Memory + projects (Next): Memory Lanes, Project Hub primitives, Project Map read models.
+  - C · Feedback & experiments (Soon): Feedback Loop, Experiment Deck, Self Card snapshots.
+  - D · Operator experience (UI): Chat Workbench, Screenshot Pipeline, launcher SPA/right-sidecar swap.
+  - E · Policy & guardrails: Guardrail Gateway on `arw-server`, Asimov Capsule Guard, retire remaining `/admin/*` fallbacks.
 
 Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143001-0001] Context Working Set doc + mkdocs nav — done (this change)
@@ -46,6 +52,8 @@ Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143025-0007] Logic Unit: ship config‑only Never‑Out‑Of‑Context defaults (budgets, diversity, rehydrate rules) — todo
 - [Pack: Research] [t-250912143029-0008] UI: Project Hub panel “What’s in context now” with artifact pointers and rehydrate actions — todo
 - [Pack: Research] [t-250912143033-0009] Training Park: dials for diversity/recency/compression; recall‑risk and coverage meters — todo
+- [Pack: Research] [t-250918120201-tp01] Training telemetry read-models in `arw-server` (context/memory/tool success stats) powering Training Park — plan
+- [Pack: Research] [t-250918120205-tp02] Launcher Training Park window: replace stub UI with live metrics + control bindings — plan
 
 UI Coherence
 - [Pack: Collaboration] Universal right‑sidecar across Hub/Chat/Training; subscribe once to `/events` — done (initial lanes)
@@ -73,6 +81,8 @@ UI Coherence
 - [Pack: Collaboration] Export CSV: route/kind tables — done; table diff export — done (two‑row or wide)
 - [Pack: Collaboration] Next: labels/arrows in annotator; redaction presets (regex+OCR); append Markdown to NOTES.md; Pin‑to‑compare from Runs; retention/tagging for gallery; guided countdown for capture.
  - [Pack: Collaboration] Next: keyboard shortcuts (global) cheatsheet and discoverability; ARIA polish for Agents/Runs actions; skip‑links across pages; unit tests for /projects/file content_b64 path; virtualize large trees.
+- [Pack: Collaboration] [t-250918120301-hitl01] Human-in-the-loop staging queue in `arw-server` with `/state/staging/actions` read-model and leases — plan
+- [Pack: Collaboration] [t-250918120305-hitl02] Sidecar approvals UI: replace placeholder copy with live staging actions + evidence preview — plan
 
 Kernel & Triad (NOW)
 - [Kernel] [t-250915090001-kern01] Add `arw-kernel` crate with SQLite/WAL schema (events, artifacts, actions) and CAS helpers — done
@@ -109,7 +119,9 @@ Logic Units (High Priority)
 - [Pack: Research] Library UI: tabs (Installed/Experimental/Suggested/Archived), diff preview, apply/revert/promote
 - [Pack: Research] Agent Profile slots + compatibility checks (design + stubs)
 - [Pack: Research] A/B dry‑run pipeline wired to Evaluation Harness; per‑unit metrics panel
-- [Pack: Research] Research Watcher: ingest feeds; draft config‑only units; Suggested tab source
+- [Pack: Research] [t-250918120101-rw01] Research Watcher ingestion service in `arw-server` (RSS/OpenReview adapters queued to kernel-backed jobs) — plan
+- [Pack: Research] [t-250918120105-rw02] `/state/research_watcher` read-model + `state.read.model.patch` stream for Suggested tab — plan
+- [Pack: Research] [t-250918120109-rw03] Launcher Library integration: surface Suggested units with approve/archive actions wired to new endpoints — plan
 
 Last‑mile Structures
 - [Pack: Research] Config Patch Engine: dry‑run/apply/revert endpoints; schema validation; audited permission widening

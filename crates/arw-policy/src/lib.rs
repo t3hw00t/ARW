@@ -217,3 +217,75 @@ fn posture_to_config(posture: &str) -> PolicyConfig {
         _ => posture_to_config("standard"),
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn allow_all_short_circuits() {
+        let engine = PolicyEngine {
+            cfg: PolicyConfig {
+                allow_all: true,
+                lease_rules: vec![LeaseRule {
+                    kind_prefix: "net.".into(),
+                    capability: "net".into(),
+                }],
+            },
+        };
+        let decision = engine.evaluate_action("net.http.get");
+        assert!(decision.allow);
+        assert!(decision.require_capability.is_none());
+        assert_eq!(decision.explain["mode"], "allow_all");
+    }
+
+    #[test]
+    fn lease_rules_gate_disallowed_actions() {
+        let engine = PolicyEngine {
+            cfg: PolicyConfig {
+                allow_all: false,
+                lease_rules: vec![LeaseRule {
+                    kind_prefix: "net.http.".into(),
+                    capability: "net:http".into(),
+                }],
+            },
+        };
+        let decision = engine.evaluate_action("net.http.get");
+        assert!(!decision.allow);
+        assert_eq!(decision.require_capability.as_deref(), Some("net:http"));
+        assert_eq!(decision.explain["reason"], "lease_required");
+
+        let default_ok = engine.evaluate_action("fs.read");
+        assert!(default_ok.allow);
+        assert!(default_ok.require_capability.is_none());
+    }
+
+    #[test]
+    fn abac_response_includes_model_context() {
+        let engine = PolicyEngine {
+            cfg: PolicyConfig {
+                allow_all: false,
+                lease_rules: vec![],
+            },
+        };
+        let req = AbacRequest {
+            action: "context.rehydrate.file".into(),
+            subject: Some(Entity {
+                kind: "agent".into(),
+                id: "tester".into(),
+                attrs: json!({"role": "builder"}),
+            }),
+            resource: Some(Entity {
+                kind: "project".into(),
+                id: "alpha".into(),
+                attrs: json!({"sensitivity": "private"}),
+            }),
+        };
+        let decision = engine.evaluate_abac(&req);
+        assert!(decision.allow);
+        let model = decision.model.expect("model populated");
+        assert_eq!(model["principal"]["id"], "tester");
+        assert_eq!(model["resource"]["id"], "alpha");
+        assert_eq!(model["action"]["id"], "context.rehydrate.file");
+    }
+}

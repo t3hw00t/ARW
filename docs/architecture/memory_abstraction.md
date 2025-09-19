@@ -3,35 +3,109 @@ title: Memory Abstraction Layer
 ---
 
 # Memory Abstraction Layer
-Updated: 2025-09-15
+Updated: 2025-01-14
 Type: Explanation
 
-Microsummary: A stable centerpoint for coherent thinking — unify episodic/semantic/procedural memory into abstract records with stable hashing, probabilistic value, and simple retrieval, backed by the kernel.
+Microsummary: The Memory Abstraction Layer (MAL) is the canonical schema and lifecycle for all memories (ephemeral, episodic, semantic, profile) in ARW. The new Memory Overlay Service builds on MAL to provide hybrid retrieval, explainable packing, and model-agnostic context delivery.
 
-Goals
-- Stable centerpoint: self‑image + identity anchor the agent’s reasoning across episodes.
-- Abstract storage: records have `{ lane, kind, key, value, tags, hash, score, prob }`.
-- Hashing: canonical hash over `{lane,kind,key,value}` for dedupe and attribution.
-- Value/probability: `score` and `prob` fields capture utility and belief; calibrate with evaluation.
-- Retrieval: fast LIKE search now; FTS/embeddings later; compose by lane and recency.
+## Role inside ARW
+- Acts as the single source of truth for agent memories inside the unified object graph (`memory_items`).
+- Normalises provenance, durability, and trust metadata so every surface can reason about recall and retention.
+- Powers the Memory Overlay Service, which exposes `memory.*` actions and feeds the context working set builder.
+- Keeps compatibility with legacy `/memory/*` endpoints while the new action-based overlay rolls out.
 
-API (initial)
-- `POST /memory/put` — put/merge a record; emits `memory.record.put`.
-- `GET /state/memory/select?q=...&lane=...&limit=50[&mode=fts]` — retrieval; use `mode=fts` to search via FTS.
-- `POST /memory/search_embed` — embedding search (cosine) over recent records with `embed` set.
-- `POST /state/memory/select_hybrid` — hybrid selection that blends FTS hit, embedding similarity, recency (6h half‑life), and utility `score`.
-- `POST /memory/link` — add a link `{ src_id, dst_id, rel?, weight? }`; emits `memory.link.put`.
-- `GET /state/memory/links?id=...` — list outgoing links for a record.
-- `POST /memory/select_coherent` — returns a coherent working set by taking hybrid seeds and expanding top links per seed.
-- `POST /state/memory/explain_coherent` — like `select_coherent` but each item includes an `explain` block with component scores and link paths.
+## Canonical record
+Every memory item shares the same canonical shape; lanes (ephemeral/episodic/semantic/profile) live inside metadata rather than separate tables.
 
-Kernel schema
-- `memory_records`: `id`, `lane`, `kind`, `key`, `value(JSON)`, `tags`, `hash`, `score`, `prob`, `created`, `updated` with indexes.
+| Field | Purpose |
+| --- | --- |
+| `id` (`uuid`) | Stable pointer used in context packs, links, and journal events. |
+| `ts` (`unix_ms`) | Ingestion timestamp for recency scoring and TTL enforcement. |
+| `agent_id`, `project_id` | Scope and tenancy controls; align with policy leases. |
+| `kind` | `fact`, `obs`, `result`, `pref`, `plan`, `summary` – typed budgeting. |
+| `text` | Human-readable memory excerpt or distilled summary. |
+| `keywords`, `entities` | Optional JSON arrays used for lexical boosting and UI facets. |
+| `source` | Structured provenance (`uri`, `tool`, `trace_id`). |
+| `durability` | `ephemeral`, `short`, or `long`; informs TTL and recall boosts. |
+| `trust` | Confidence 0.0–1.0 used for weighting results. |
+| `privacy` | `private`, `project`, or `shared`; guards egress. |
+| `ttl_s` | Optional override for GC cadence. |
+| `links` | Graph edges to parents/children memories. |
+| `extra` | Arbitrary adapter payload (e.g., `{ "lane": "episodic", "score": 0.42, "prob": 0.91 }`). |
+| `vec` (derived) | Row in `memory_vec` / remote vector store used for ANN search. |
 
-Design notes
-- Lanes correspond to earlier memory types (ephemeral/episodic/semantic/procedural) but MAL treats them uniformly.
-- Hashing ensures dedupe and stable references; provenance attaches via events.
-- FTS5 index is available for `mode=fts`; hybrid uses weights `0.5*sim + 0.2*fts + 0.2*recency + 0.1*utility`. Future: vector indexes, link graph (`memory_links`), learned weights.
-  - Coherent expansion uses: `0.5*seed_score + 0.3*link_weight + 0.2*recency`. The `explain` block returns these parts for transparency.
+See [memory_overlay_service.md](memory_overlay_service.md#data-model) for full schema and indices.
 
-See also: Context Working Set, Self‑Model, Logic Units, Evaluation Harness.
+### Hashing & dedupe
+- MAL continues to hash `(agent_id, project_id, kind, text)` with SHA256 for dedupe and attribution; the hash is stored in `extra.hash`.
+- `memory.upsert` accepts `dedupe=true` to reuse existing IDs when the hash matches; events include `dedupe: true` for audit trails.
+
+## Memory lanes & durability
+| Lane | Default durability | Notes |
+| --- | --- | --- |
+| `ephemeral` | `ephemeral` | Scratchpad for the current turn; never packs into long-term context unless explicitly promoted. |
+| `episodic` | `short` | Summaries of recent turns, tool outputs, and micro plans. |
+| `semantic` | `long` | Durable facts, docs, source snippets; chunked + indexed. |
+| `profile` | `long` | Preferences, API scopes, user/agent traits. |
+
+Durability drives TTLs (minutes, hours, or months) and recency boosts during retrieval. Background janitors in `arw-memory-core` enforce expiry and publish `memory.item.expired` events.
+
+## API surfaces
+### Legacy REST (compatibility)
+- `POST /memory/put`
+- `GET /state/memory/select`
+- `POST /memory/search_embed`
+- `POST /state/memory/select_hybrid`
+- `POST /memory/link`
+- `POST /memory/select_coherent`
+- `POST /state/memory/explain_coherent`
+
+These routes now delegate to the overlay implementation and will be removed once downstream callers migrate.
+
+### Memory Overlay actions (preferred)
+- `memory.upsert` → Upsert item, update indices, emit `memory.item.upserted`.
+- `memory.search` → Hybrid lexical/vector retrieval with RRF + MMR + scoring.
+- `memory.pack` → Build context packs from ranked items using per-kind token budgets.
+
+Every action is invoked via `POST /actions` and participates in the unified journaling/metrics pipeline. Responses include explainability payloads (scores, diversity decisions, token counts).
+
+### Read-models & events
+- `/state/memory` (SSE JSON Patch) shows incremental inserts, expirations, and latest pack preview per agent/project.
+- Event topics: `memory.item.upserted`, `memory.item.expired`, `memory.pack.journaled`, `memory.overlay.metrics`.
+
+## Retrieval & packing
+- Candidate generation runs lexical (SQLite FTS or Tantivy) and vector (sqlite-vec or Qdrant) searches in parallel.
+- Fusion uses Reciprocal Rank Fusion; diversity filtering applies Maximal Marginal Relevance with configurable similarity thresholds.
+- Scoring blends RRF, recency, durability, and trust; boosts for `summary` and `plan` kinds keep strategic context present.
+- Packing enforces a `PackBudget` with global `max_tokens` and per-kind ceilings (e.g., `summary:2`, `fact:6`).
+- Token counting is model-aware via `TokenCounter` trait; default uses `tiktoken-rs` with heuristics fallback.
+
+See [memory_overlay_service.md#retrieval-pipeline](memory_overlay_service.md#retrieval-pipeline) for the detailed algorithm and observability signals.
+
+## Integration with other subsystems
+- **Context Working Set**: `memory.pack` feeds `apps/arw-server/src/working_set.rs`; the working set loop can trigger additional packs when coverage is low.
+- **Self-model & Belief graph**: semantic memories referencing entities feed the world model; `links.parents` connect to beliefs and artifacts.
+- **Logic Units**: strategies can register custom packers or scoring tweaks by implementing the `ContextPacker` trait and providing pack presets.
+- **Policy & Gating**: privacy scope and TTL drive policy checks before data leaves the node or remote collaborators request context.
+
+## Migration status
+| Phase | Status | Highlights |
+| --- | --- | --- |
+| Phase 0 | In progress | `arw-memory-core` crate carved out of `arw-kernel`; schema renamed to `memory_items` + vector map. |
+| Phase 1 | Planned | Action handlers for `memory.upsert` / `memory.search`; `/state/memory` read-model scaffolding. |
+| Phase 2 | Planned | `memory.pack`, retrieval fusion, token budgeting, working set integration. |
+| Phase 3 | Future | Optional Tantivy/Qdrant backends, journaling tables, remote federation guardrails. |
+
+Legacy docs and UI panels stay accurate because the new overlay reuses the same MAL data. Feature catalog entries now point at the overlay plan.
+
+## Related documents
+- [Memory Overlay Service](memory_overlay_service.md)
+- [Memory Lifecycle](memory_lifecycle.md)
+- [Context Working Set](context_working_set.md)
+- [Object Graph](object_graph.md)
+- [Durability](durability.md)
+
+## Open items
+- Finalise JSON Schema (`spec/schemas/memory_item.json`) once Phase 0 lands.
+- Update SDKs and connectors to call the action interface; remove direct SQLite access in tooling.
+- Decide whether to expose `memory.pack` as a Logic Unit hook for custom agents.

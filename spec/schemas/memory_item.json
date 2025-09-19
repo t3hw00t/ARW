@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/t3hw00t/ARW/spec/schemas/memory_item.json",
+  "title": "MemoryItem",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "ts",
+    "agent_id",
+    "project_id",
+    "kind",
+    "text",
+    "durability",
+    "trust",
+    "privacy"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "format": "uuid"
+    },
+    "ts": {
+      "type": "integer",
+      "description": "Unix epoch milliseconds when the item was written"
+    },
+    "agent_id": {
+      "type": "string",
+      "description": "Stable pointer to the agent that produced the item"
+    },
+    "project_id": {
+      "type": "string",
+      "description": "Stable pointer to the project owning the memory"
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["fact", "obs", "result", "pref", "plan", "summary"],
+      "description": "Logical category used for budgeting"
+    },
+    "text": {
+      "type": "string",
+      "description": "Primary human-readable content"
+    },
+    "keywords": {
+      "type": "array",
+      "items": {"type": "string"},
+      "description": "Optional keyword hints for lexical retrieval"
+    },
+    "entities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["type", "value"],
+        "properties": {
+          "type": {"type": "string"},
+          "value": {"type": "string"},
+          "confidence": {
+            "type": "number",
+            "minimum": 0.0,
+            "maximum": 1.0
+          }
+        }
+      },
+      "description": "Structured entities referenced by the memory"
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "uri": {"type": "string"},
+        "tool": {"type": "string"},
+        "trace_id": {"type": "string"}
+      },
+      "description": "Provenance metadata"
+    },
+    "durability": {
+      "type": "string",
+      "enum": ["ephemeral", "short", "long"],
+      "description": "Retention tier"
+    },
+    "trust": {
+      "type": "number",
+      "minimum": 0.0,
+      "maximum": 1.0,
+      "description": "Calibrated belief in the content"
+    },
+    "privacy": {
+      "type": "string",
+      "enum": ["private", "project", "shared"],
+      "description": "Visibility scope"
+    },
+    "ttl_s": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Optional per-item TTL override in seconds"
+    },
+    "links": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "parents": {
+          "type": "array",
+          "items": {"type": "string"}
+        },
+        "children": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      },
+      "description": "Graph relationships to other memory items"
+    },
+    "vec": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dim": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "ref": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Row reference in the vector table or remote index"
+        }
+      },
+      "description": "Vector indexing metadata"
+    },
+    "extra": {
+      "type": "object",
+      "description": "Adapter-specific payload (lane, score, probabilistic annotations, etc.)"
+    }
+  }
+}

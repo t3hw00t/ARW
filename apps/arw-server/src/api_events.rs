@@ -23,7 +23,8 @@ use sha2::Digest as _;
         ("prefix" = Option<String>, Query, description = "CSV of event kind prefixes to include")
     ),
     responses(
-        (status = 200, description = "SSE stream of events", content_type = "text/event-stream")
+        (status = 200, description = "SSE stream of events", content_type = "text/event-stream"),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
     )
 )]
 pub async fn events_sse(
@@ -40,6 +41,22 @@ pub async fn events_sse(
         )
             .into_response();
     }
+    if !state.kernel_enabled()
+        && (q.contains_key("after")
+            || q.contains_key("replay")
+            || headers.get("last-event-id").is_some())
+    {
+        return (
+            axum::http::StatusCode::NOT_IMPLEMENTED,
+            axum::Json(serde_json::json!({
+                "type":"about:blank",
+                "title":"Kernel Disabled",
+                "status":501,
+                "detail":"Event replay is unavailable when ARW_KERNEL_ENABLE=0"
+            })),
+        )
+            .into_response();
+    }
     let (tx, rx) = tokio::sync::mpsc::channel::<(arw_events::Envelope, Option<String>)>(128);
     // Optional resume: prioritize after=ID or Last-Event-ID over replay
     let mut did_replay = false;
@@ -49,7 +66,7 @@ pub async fn events_sse(
         .map(|s| s.to_string());
     if let Some(after_s) = q.get("after").cloned().or(last_event_id_hdr) {
         if let Ok(aid) = after_s.parse::<i64>() {
-            if let Ok(rows) = state.kernel.recent_events_async(1000, Some(aid)).await {
+            if let Ok(rows) = state.kernel().recent_events_async(1000, Some(aid)).await {
                 let tx2 = tx.clone();
                 tokio::spawn(async move {
                     for r in rows {
@@ -72,7 +89,7 @@ pub async fn events_sse(
         if let Some(replay_s) = q.get("replay") {
             if let Ok(n) = replay_s.parse::<usize>() {
                 if n > 0 {
-                    if let Ok(rows) = state.kernel.recent_events_async(n as i64, None).await {
+                    if let Ok(rows) = state.kernel().recent_events_async(n as i64, None).await {
                         let tx2 = tx.clone();
                         tokio::spawn(async move {
                             for r in rows {

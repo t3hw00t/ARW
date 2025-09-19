@@ -44,3 +44,71 @@ pub fn assess(ws: &WorkingSet) -> CoverageVerdict {
         reasons,
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::working_set::{WorkingSet, WorkingSetSummary};
+    use serde_json::json;
+    use std::collections::BTreeMap;
+
+    fn empty_ws(summary: WorkingSetSummary) -> WorkingSet {
+        WorkingSet {
+            items: Vec::new(),
+            seeds: Vec::new(),
+            expanded: Vec::new(),
+            diagnostics: json!({}),
+            summary,
+        }
+    }
+
+    #[test]
+    fn satisfied_when_targets_met() {
+        let mut lanes = BTreeMap::new();
+        lanes.insert("semantic".to_string(), 3usize);
+        lanes.insert("procedural".to_string(), 2usize);
+        let summary = WorkingSetSummary {
+            target_limit: 5,
+            lanes_requested: 2,
+            selected: 5,
+            avg_cscore: 0.75,
+            max_cscore: 0.82,
+            min_cscore: 0.6,
+            threshold_hits: 3,
+            total_candidates: 7,
+            lane_counts: lanes,
+            min_score: 0.6,
+            scorer: "mmrd".into(),
+        };
+        let verdict = assess(&empty_ws(summary));
+        assert!(!verdict.needs_more);
+        assert!(verdict.reasons.is_empty());
+    }
+
+    #[test]
+    fn flags_common_coverage_gaps() {
+        let mut lanes = BTreeMap::new();
+        lanes.insert("semantic".to_string(), 4usize);
+        let summary = WorkingSetSummary {
+            target_limit: 8,
+            lanes_requested: 3,
+            selected: 3,
+            avg_cscore: 0.32,
+            max_cscore: 0.35,
+            min_cscore: 0.1,
+            threshold_hits: 0,
+            total_candidates: 12,
+            lane_counts: lanes,
+            min_score: 0.6,
+            scorer: "mmrd".into(),
+        };
+        let verdict = assess(&empty_ws(summary));
+        let reasons: std::collections::HashSet<_> =
+            verdict.reasons.iter().map(|s| s.as_str()).collect();
+        assert!(verdict.needs_more);
+        assert!(reasons.contains("below_target_limit"));
+        assert!(reasons.contains("low_lane_diversity"));
+        assert!(reasons.contains("weak_average_score"));
+        assert!(reasons.contains("no_items_above_threshold"));
+    }
+}

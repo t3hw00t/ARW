@@ -20,9 +20,9 @@ Manage local models with safe HTTP download, resume, checksum verification, CAS 
   - event_spine
   - guardrail_gateway
 - Single Sources of Truth:
-  - [apps/arw-svc/src/resources/models_service.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/resources/models_service.rs)
-  - [apps/arw-svc/src/ext/models_api.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/models_api.rs)
-  - [apps/arw-svc/src/ext/paths.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/paths.rs)
+  - [apps/arw-server/src/models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/models.rs)
+  - [apps/arw-server/src/api_models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_models.rs)
+  - [apps/arw-server/src/util.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/util.rs)
   - [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs)
 - HTTP:
   - `GET /admin/models/summary`
@@ -62,8 +62,9 @@ Unified in-process bus + SSE stream; maintains compact read-models and publishes
 - Scope: Core kernel / backend / dev / connectivity / complete
 - Owner: platform
 - Single Sources of Truth:
-  - [apps/arw-svc/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/main.rs)
-  - [apps/arw-svc/src/ext/read_model.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/read_model.rs)
+  - [apps/arw-server/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/main.rs)
+  - [apps/arw-server/src/api_events.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_events.rs)
+  - [apps/arw-server/src/read_models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/read_models.rs)
   - [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs)
 - HTTP:
   - `GET /admin/events`
@@ -89,8 +90,8 @@ Latency budgets and route observability; publishes budgets vs. measured p95 and 
 - Depends on:
   - event_spine
 - Single Sources of Truth:
-  - [apps/arw-svc/src/ext/stats.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/stats.rs)
-  - [apps/arw-svc/src/ext/snappy.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/snappy.rs)
+  - [apps/arw-server/src/api_metrics.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_metrics.rs)
+  - [apps/arw-server/src/metrics.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/metrics.rs)
 - HTTP:
   - `GET /metrics`
   - `GET /admin/state/route_stats`
@@ -119,8 +120,8 @@ Tool registry with schema introspection and an Action Cache (in-memory TTL + CAS
 - Depends on:
   - event_spine
 - Single Sources of Truth:
-  - [apps/arw-svc/src/ext/tools_exec.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/tools_exec.rs)
-  - [apps/arw-svc/src/ext/tools_api.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/tools_api.rs)
+  - [apps/arw-server/src/tools.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/tools.rs)
+  - [apps/arw-server/src/api_tools.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_tools.rs)
 - HTTP:
   - `GET /admin/tools`
   - `POST /admin/tools/run`
@@ -148,7 +149,7 @@ Screen/window/region capture with annotate/blur, gallery, Save to project, and o
   - policy_leases
   - event_spine
 - Single Sources of Truth:
-  - [apps/arw-svc/src/ext/tools_exec.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/tools_exec.rs)
+  - [apps/arw-server/src/tools.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/tools.rs)
   - [apps/arw-launcher/src-tauri/ui/common.js](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri/ui/common.js)
   - [guide/screenshots.md](../guide/screenshots.md)
 - HTTP:
@@ -168,17 +169,15 @@ Debug chat UI surface with synthetic replies or llama/OpenAI backends; planner h
 - Depends on:
   - event_spine
 - Single Sources of Truth:
-  - [apps/arw-svc/src/ext/chat.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/chat.rs)
-  - [apps/arw-svc/src/ext/chat_api.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/chat_api.rs)
+  - [apps/arw-server/src/context_loop.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/context_loop.rs)
+  - [apps/arw-server/src/api_context.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_context.rs)
 - HTTP:
-  - `GET /admin/chat`
-  - `POST /admin/chat/send`
-  - `POST /admin/chat/clear`
-  - `GET /admin/chat/status`
+  - `POST /context/assemble`
+  - `POST /context/rehydrate`
 - Events:
-  - `chat.message`
-  - `chat.planner`
-  - `chat.probe`
+  - `working_set.started`
+  - `working_set.iteration.summary`
+  - `working_set.error`
 - Env:
   - `ARW_LLAMA_URL`
   - `ARW_OPENAI_API_KEY`
@@ -194,16 +193,20 @@ Local-first memory with lanes (ephemeral/episodic/semantic/procedural), ring lim
 - Depends on:
   - event_spine
 - Single Sources of Truth:
-  - [apps/arw-svc/src/ext/memory.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/memory.rs)
+  - [apps/arw-server/src/api_memory.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_memory.rs)
 - HTTP:
-  - `GET /admin/memory`
-  - `POST /admin/memory/apply`
-  - `POST /admin/memory/save`
-  - `POST /admin/memory/load`
-  - `GET /admin/memory/limit`
-  - `POST /admin/memory/limit`
+  - `POST /memory/put`
+  - `POST /memory/search_embed`
+  - `POST /memory/select_coherent`
+  - `POST /memory/link`
+  - `GET /state/memory/select_hybrid`
+  - `GET /state/memory/recent`
+  - `GET /state/memory/links`
+  - `GET /state/memory/explain_coherent`
 - Events:
   - `memory.applied`
+  - `memory.record.put`
+  - `memory.link.put`
 - Env:
   - `ARW_MEM_LIMIT`
 
@@ -216,8 +219,8 @@ Projects tree/creation/notes and safe file IO (atomic write, SHA precondition), 
 - Depends on:
   - event_spine
 - Single Sources of Truth:
-  - [apps/arw-svc/src/ext/projects.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/projects.rs)
-  - [apps/arw-svc/src/ext/paths.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/paths.rs)
+  - [apps/arw-server/src/api_projects.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_projects.rs)
+  - [apps/arw-server/src/util.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/util.rs)
 - HTTP:
   - `GET /admin/projects/list`
   - `POST /admin/projects/create`
@@ -243,15 +246,38 @@ Near-live suggestions and policy with persisted state, supporting guidance to im
 - Depends on:
   - event_spine
 - Single Sources of Truth:
-  - [apps/arw-svc/src/ext/feedback_engine.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/feedback_engine.rs)
-  - [apps/arw-svc/src/ext/feedback_engine_api.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/feedback_engine_api.rs)
+  - [apps/arw-server/src/feedback.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/feedback.rs)
+  - [apps/arw-server/src/api_feedback.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_feedback.rs)
 - HTTP:
+  - `GET /admin/feedback/state`
+  - `POST /admin/feedback/signal`
+  - `POST /admin/feedback/analyze`
+  - `POST /admin/feedback/apply`
+  - `POST /admin/feedback/auto`
+  - `POST /admin/feedback/reset`
   - `GET /admin/feedback/suggestions`
   - `GET /admin/feedback/updates`
   - `GET /admin/feedback/policy`
+  - `GET /admin/feedback/versions`
+  - `POST /admin/feedback/rollback`
 - Events:
   - `feedback.suggested`
-  - `feedback.updated`
+  - `feedback.applied`
+
+## Federated Clustering
+
+Near-live view of cluster nodes and advertised capabilities for shared deployments.
+
+- Scope: Runtime / operators / infrastructure / plan
+- Owner: platform
+- Single Sources of Truth:
+  - [apps/arw-server/src/cluster.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/cluster.rs)
+  - Read-model `cluster_nodes`
+- HTTP:
+  - `GET /admin/state/cluster`
+- Events:
+  - `cluster.node.advertise`
+  - `cluster.node.changed`
 
 ## Experiment Deck
 
@@ -262,15 +288,16 @@ Define variants, run A/B on goldens, publish results and winner; apply hints.
 - Depends on:
   - event_spine
 - Single Sources of Truth:
-  - [apps/arw-svc/src/ext/experiments_engine.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/experiments_engine.rs)
-  - [apps/arw-svc/src/ext/experiments_api.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/experiments_api.rs)
+  - [apps/arw-server/src/experiments.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/experiments.rs)
+  - [apps/arw-server/src/api_experiments.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_experiments.rs)
 - HTTP:
-  - `POST /experiments/start`
-  - `GET /experiments/list`
-  - `GET /experiments/winners`
-  - `GET /experiments/scoreboard`
-  - `POST /experiments/run`
-  - `POST /experiments/activate`
+  - `POST /admin/experiments/start`
+  - `POST /admin/experiments/define`
+  - `GET /admin/experiments/list`
+  - `GET /admin/experiments/winners`
+  - `GET /admin/experiments/scoreboard`
+  - `POST /admin/experiments/run`
+  - `POST /admin/experiments/activate`
 - Events:
   - `experiment.result`
   - `experiment.winner`
@@ -284,9 +311,9 @@ Per-agent identity and competence, with periodic aggregates for forecasts and re
 - Depends on:
   - event_spine
 - Single Sources of Truth:
-  - [apps/arw-svc/src/ext/self_model.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/self_model.rs)
-  - [apps/arw-svc/src/ext/self_model_agg.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/self_model_agg.rs)
-  - [apps/arw-svc/src/ext/self_model_api.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/self_model_api.rs)
+  - [apps/arw-server/src/api_state.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_state.rs)
+  - [apps/arw-server/src/self_model.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/self_model.rs)
+  - [apps/arw-server/src/api_self_model.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_self_model.rs)
 - HTTP:
   - `GET /state/self`
   - `GET /state/self/:agent`
@@ -307,8 +334,9 @@ Observations folded into beliefs/intents/actions and stitched episodes for a sco
 - Depends on:
   - event_spine
 - Single Sources of Truth:
-  - [apps/arw-svc/src/ext/state_api.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/state_api.rs)
-  - [apps/arw-svc/src/ext/world.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/world.rs)
+  - [apps/arw-server/src/api_state.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_state.rs)
+  - [apps/arw-server/src/state_observer.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/state_observer.rs)
+  - [apps/arw-server/src/world.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/world.rs)
 - HTTP:
   - `GET /admin/state/observations`
   - `GET /admin/state/beliefs`
@@ -329,7 +357,7 @@ Ingress/egress policy gating with previews and append-only egress ledger. Full p
 - Depends on:
   - event_spine
 - Single Sources of Truth:
-  - [apps/arw-svc/src/ext/io.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/io.rs)
+  - [apps/arw-server/src/egress_proxy.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/egress_proxy.rs)
   - [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs)
   - [architecture/egress_firewall.md](../architecture/egress_firewall.md)
 - Events:
@@ -352,7 +380,7 @@ Always-enforced capsule propagation that refreshes leases, scopes reversible den
 - Single Sources of Truth:
   - [crates/arw-core/src/gating.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/src/gating.rs)
   - [crates/arw-core/src/rpu.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/src/rpu.rs)
-  - [apps/arw-svc/src/bootstrap/mod.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/bootstrap/mod.rs)
+  - [apps/arw-server/src/security.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/security.rs)
   - [architecture/asimov_capsule_guard.md](../architecture/asimov_capsule_guard.md)
 - HTTP:
   - `ANY /admin/* (X-ARW-Gate)`
@@ -374,7 +402,7 @@ Local queue for tasks with optional NATS bridge and background worker(s) for off
 - Depends on:
   - event_spine
 - Single Sources of Truth:
-  - [apps/arw-svc/src/ext/mod.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/mod.rs)
+  - [apps/arw-server/src/worker.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/worker.rs)
   - [apps/arw-connector/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-connector/src/main.rs)
   - [apps/arw-server/src/api_orchestrator.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_orchestrator.rs)
 - HTTP:
@@ -398,7 +426,7 @@ Descriptors and generated OpenAPI/AsyncAPI/MCP schemas with drift checks and dep
 - Owner: platform
 - Single Sources of Truth:
   - [interfaces/index.yaml](https://github.com/t3hw00t/ARW/blob/main/interfaces/index.yaml)
-  - [apps/arw-svc/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/main.rs)
+  - [apps/arw-server/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/main.rs)
   - [apps/arw-server/src/api_spec.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_spec.rs)
 - HTTP:
   - `GET /spec/openapi.yaml`
@@ -547,31 +575,32 @@ Hybrid retrieval with coverage loops, streaming diagnostics, and on-demand rehyd
 
 ## Memory Atlas
 
-Kernel-backed memory API with hybrid search, embeddings, coherent selections, and stable pointers (`ptr.kind: "memory"`) for durable knowledge.
+Memory overlay service on top of the MAL store with hybrid retrieval, explainable context packing, and stable pointers (`ptr.kind: "memory"`).
 
 - Scope: Core kernel / backend / builder / intelligence / beta
 - Owner: platform
 - Depends on:
   - triad_kernel
 - Single Sources of Truth:
+  - [apps/arw-server/src/api_actions.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_actions.rs)
+  - [apps/arw-server/src/read_models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/read_models.rs)
+  - [apps/arw-server/src/working_set.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/working_set.rs)
   - [apps/arw-server/src/api_memory.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_memory.rs)
-  - [crates/arw-kernel/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-kernel/src/lib.rs)
-- HTTP:
-  - `POST /memory/put`
-  - `GET /state/memory/select`
-  - `POST /memory/search_embed`
-  - `POST /state/memory/select_hybrid`
-  - `POST /memory/select_coherent`
-  - `POST /state/memory/explain_coherent`
-  - `GET /state/memory/recent`
-  - `POST /memory/link`
-  - `GET /state/memory/links`
+- HTTP & Actions:
+  - `POST /actions (memory.upsert)`
+  - `POST /actions (memory.search)`
+  - `POST /actions (memory.pack)`
+  - `GET /state/memory`
+  - `POST /memory/select_coherent` *(legacy wrapper)*
+  - `POST /state/memory/explain_coherent` *(legacy wrapper)*
 - Events:
-  - `memory.record.put`
-  - `memory.link.put`
+  - `memory.item.upserted`
+  - `memory.item.expired`
+  - `memory.pack.journaled`
 - References:
   - [architecture/memory_abstraction.md](../architecture/memory_abstraction.md)
   - [architecture/memory_lifecycle.md](../architecture/memory_lifecycle.md)
+  - [architecture/memory_overlay_service.md](../architecture/memory_overlay_service.md)
 
 ## Config Plane
 

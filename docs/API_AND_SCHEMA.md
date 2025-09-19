@@ -100,14 +100,20 @@ Each operation declares: Input, Output, Error types; capabilities; stability (st
 
 ## Declaration Style (Rust)
 
-New endpoints (introspection & feedback)
+New endpoints (introspection, feedback, distill)
 - `GET /introspect/stats`: returns event totals and per‑route metrics (hits, errors, EWMA, last/max ms).
-- `POST /feedback/signal`: record a signal `{ kind, target, confidence, severity, note }`.
-- `POST /feedback/analyze`: produce suggestions from signals and stats.
-- `POST /feedback/apply`: apply a suggestion `{ id }` (updates hints/profile/memory limit conservatively).
-- `GET /feedback/state`: feedback state (signals, suggestions, auto_apply).
-- `POST /feedback/auto`: toggle `auto_apply`.
-- `POST /feedback/reset`: clear signals & suggestions.
+- `POST /admin/feedback/signal`: record a signal `{ kind, target, confidence, severity, note }`.
+- `POST /admin/feedback/analyze`: produce suggestions from signals and stats.
+- `POST /admin/feedback/apply`: apply a suggestion `{ id }` (updates hints/profile/memory limit conservatively).
+- `GET /admin/feedback/state`: feedback state (signals, suggestions, auto_apply).
+- `POST /admin/feedback/auto`: toggle `auto_apply`.
+- `POST /admin/feedback/reset`: clear signals & suggestions.
+- `GET /admin/feedback/suggestions`: latest suggestions snapshot (versioned).
+- `GET /admin/feedback/updates?since=N`: return suggestions when the version advances.
+- `GET /admin/feedback/policy`: effective caps and bounds for auto/apply decisions.
+- `GET /admin/feedback/versions`: available feedback_engine snapshots on disk.
+- `POST /admin/feedback/rollback?to=N`: restore a previous snapshot (or the `.bak` when omitted).
+- `POST /admin/distill`: run an on-demand distillation pass (playbooks snapshot, beliefs export, world version hygiene).
 
 ## Security Notes
 - Sensitive endpoints are gated; see Developer Security Notes.
@@ -128,6 +134,9 @@ Validate input → policy check → invoke → emit events → return.
 - `GET /state/route_stats`
 - `GET /state/actions`
 - `GET /state/contributions`
+- `GET /admin/state/cluster`
+- `GET /admin/goldens/list`, `POST /admin/goldens/add`, `POST /admin/goldens/run`
+- `POST /admin/experiments/define`, `POST /admin/experiments/run`, `POST /admin/experiments/activate`, `GET /admin/experiments/list`, `GET /admin/experiments/scoreboard`, `GET /admin/experiments/winners`, `POST /admin/experiments/start`, `POST /admin/experiments/stop`, `POST /admin/experiments/assign`
 - `POST /leases`
 - `GET /state/leases`
 - `GET /state/egress`

@@ -1,3 +1,4 @@
+use anyhow::anyhow;
 use axum::response::IntoResponse;
 use axum::{
     extract::{Query, State},
@@ -38,42 +39,69 @@ pub(crate) struct MemPutReq {
     pub prob: Option<f64>,
 }
 /// Insert a memory item into a lane.
-#[utoipa::path(post, path = "/memory/put", tag = "Memory", request_body = MemPutReq, responses((status = 201, body = serde_json::Value)))]
+#[utoipa::path(
+    post,
+    path = "/memory/put",
+    tag = "Memory",
+    request_body = MemPutReq,
+    responses(
+        (status = 201, body = serde_json::Value),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn memory_put(
     State(state): State<AppState>,
     Json(req): Json<MemPutReq>,
-) -> impl IntoResponse {
-    match state.kernel.insert_memory(
-        None,
-        &req.lane,
-        req.kind.as_deref(),
-        req.key.as_deref(),
-        &req.value,
-        req.embed.as_deref(),
-        req.tags.as_deref(),
-        req.score,
-        req.prob,
-    ) {
+) -> axum::response::Response {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
+    let MemPutReq {
+        lane,
+        kind,
+        key,
+        value,
+        embed,
+        tags,
+        score,
+        prob,
+    } = req;
+    match state
+        .kernel()
+        .insert_memory_async(
+            None,
+            lane.clone(),
+            kind.clone(),
+            key.clone(),
+            value.clone(),
+            embed.clone(),
+            tags.clone(),
+            score,
+            prob,
+        )
+        .await
+    {
         Ok(id) => {
             state.bus.publish(
                 topics::TOPIC_MEMORY_RECORD_PUT,
-                &json!({"id": id, "lane": req.lane, "kind": req.kind, "key": req.key}),
+                &json!({"id": id, "lane": lane, "kind": kind, "key": key}),
             );
-            (axum::http::StatusCode::CREATED, Json(json!({"id": id })))
+            (axum::http::StatusCode::CREATED, Json(json!({"id": id }))).into_response()
         }
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(
                 json!({"type":"about:blank","title":"Error","status":500, "detail": e.to_string()}),
             ),
-        ),
+        )
+            .into_response(),
     }
 }
 
 pub async fn state_memory_select(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
-) -> impl IntoResponse {
+) -> axum::response::Response {
     let query = q.get("q").cloned().unwrap_or_default();
     let lane = q.get("lane").map(|s| s.as_str());
     let limit = q
@@ -81,18 +109,28 @@ pub async fn state_memory_select(
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(50);
     let mode = q.get("mode").map(|s| s.as_str()).unwrap_or("like");
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
     let res = if mode == "fts" {
-        state.kernel.fts_search_memory(&query, lane, limit)
+        state
+            .kernel()
+            .fts_search_memory_async(query.clone(), lane.map(|s| s.to_string()), limit)
+            .await
     } else {
-        state.kernel.search_memory(&query, lane, limit)
+        state
+            .kernel()
+            .search_memory_async(query.clone(), lane.map(|s| s.to_string()), limit)
+            .await
     };
-    match res {
+    let body = match res {
         Ok(items) => {
             let items = attach_memory_ptrs(items);
             Json(json!({"items": items, "mode": mode}))
         }
         Err(e) => Json(json!({"items": [], "error": e.to_string()})),
-    }
+    };
+    body.into_response()
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -104,16 +142,28 @@ pub(crate) struct MemEmbedReq {
     pub limit: Option<i64>,
 }
 /// Nearest neighbors by embedding.
-#[utoipa::path(post, path = "/memory/search_embed", tag = "Memory", request_body = MemEmbedReq, responses((status = 200, body = serde_json::Value)))]
+#[utoipa::path(
+    post,
+    path = "/memory/search_embed",
+    tag = "Memory",
+    request_body = MemEmbedReq,
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn memory_search_embed(
     State(state): State<AppState>,
     Json(req): Json<MemEmbedReq>,
-) -> impl IntoResponse {
-    let lane_opt = req.lane.as_deref();
+) -> axum::response::Response {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
     let limit = req.limit.unwrap_or(20);
     let res = state
-        .kernel
-        .search_memory_by_embedding(&req.embed, lane_opt, limit);
+        .kernel()
+        .search_memory_by_embedding_async(req.embed.clone(), req.lane.clone(), limit)
+        .await;
     match res {
         Ok(items) => {
             let items = attach_memory_ptrs(items);
@@ -145,17 +195,28 @@ pub(crate) struct MemHybridReq {
     pub limit: Option<i64>,
 }
 /// Hybrid retrieval with filters.
-#[utoipa::path(post, path = "/state/memory/select_hybrid", tag = "Memory", request_body = MemHybridReq, responses((status = 200, body = serde_json::Value)))]
+#[utoipa::path(
+    post,
+    path = "/state/memory/select_hybrid",
+    tag = "Memory",
+    request_body = MemHybridReq,
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn memory_select_hybrid(
     State(state): State<AppState>,
     Json(req): Json<MemHybridReq>,
-) -> impl IntoResponse {
-    let lane_opt = req.lane.as_deref();
+) -> axum::response::Response {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
     let limit = req.limit.unwrap_or(20);
-    let res =
-        state
-            .kernel
-            .select_memory_hybrid(req.q.as_deref(), req.embed.as_deref(), lane_opt, limit);
+    let res = state
+        .kernel()
+        .select_memory_hybrid_async(req.q.clone(), req.embed.clone(), req.lane.clone(), limit)
+        .await;
     match res {
         Ok(items) => {
             let items = attach_memory_ptrs(items);
@@ -209,13 +270,34 @@ pub(crate) struct MemCoherentReq {
     pub scorer: Option<String>,
 }
 /// Coherence-ranked selection (optionally show sources and diagnostics).
-#[utoipa::path(post, path = "/memory/select_coherent", tag = "Memory", request_body = MemCoherentReq, responses((status = 200, body = serde_json::Value)))]
+#[utoipa::path(
+    post,
+    path = "/memory/select_coherent",
+    tag = "Memory",
+    request_body = MemCoherentReq,
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn memory_select_coherent(
     State(state): State<AppState>,
     Json(req): Json<MemCoherentReq>,
-) -> impl IntoResponse {
+) -> axum::response::Response {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
     let spec = spec_from_req(&req);
-    let response = match working_set::assemble(&state, &spec) {
+    let include_sources = req.include_sources.unwrap_or(false);
+    let debug = req.debug.unwrap_or(false);
+    let state_clone = state.clone();
+    let spec_clone = spec.clone();
+    let result =
+        tokio::task::spawn_blocking(move || working_set::assemble(&state_clone, &spec_clone))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))
+            .and_then(|res| res);
+    let response = match result {
         Ok(ws) => {
             let working_set::WorkingSet {
                 items,
@@ -228,14 +310,14 @@ pub async fn memory_select_coherent(
             let seeds = attach_memory_ptrs(seeds);
             let expanded = attach_memory_ptrs(expanded);
             let mut body = json!({"items": items, "mode": "coherent"});
-            if req.include_sources.unwrap_or(false) {
+            if include_sources {
                 body["seeds"] = json!(seeds);
                 body["expanded"] = json!(expanded);
             }
-            if req.debug.unwrap_or(false) {
+            if debug {
                 body["diagnostics"] = diagnostics;
             }
-            (axum::http::StatusCode::OK, Json(body))
+            (axum::http::StatusCode::OK, Json(body)).into_response()
         }
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -245,23 +327,41 @@ pub async fn memory_select_coherent(
                 "status": 500,
                 "detail": e.to_string()
             })),
-        ),
+        )
+            .into_response(),
     };
     response.into_response()
 }
 
 /// Most recent memories (per lane).
-#[utoipa::path(get, path = "/state/memory/recent", tag = "Memory", params(("lane" = Option<String>, Query), ("limit" = Option<i64>, Query)), responses((status = 200, body = serde_json::Value)))]
+#[utoipa::path(
+    get,
+    path = "/state/memory/recent",
+    tag = "Memory",
+    params(("lane" = Option<String>, Query), ("limit" = Option<i64>, Query)),
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn state_memory_recent(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
     let lane = q.get("lane").map(|s| s.as_str());
     let limit = q
         .get("limit")
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(100);
-    match state.kernel.list_recent_memory(lane, limit) {
+    let lane_owned = lane.map(|s| s.to_string());
+    match state
+        .kernel()
+        .list_recent_memory_async(lane_owned, limit)
+        .await
+    {
         Ok(items) => {
             let items = attach_memory_ptrs(items);
             (axum::http::StatusCode::OK, Json(json!({"items": items}))).into_response()
@@ -286,14 +386,32 @@ pub(crate) struct MemLinkReq {
     pub weight: Option<f64>,
 }
 /// Create a link between memory ids.
-#[utoipa::path(post, path = "/memory/link", tag = "Memory", request_body = MemLinkReq, responses((status = 201, body = serde_json::Value)))]
+#[utoipa::path(
+    post,
+    path = "/memory/link",
+    tag = "Memory",
+    request_body = MemLinkReq,
+    responses(
+        (status = 201, body = serde_json::Value),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn memory_link_put(
     State(state): State<AppState>,
     Json(req): Json<MemLinkReq>,
 ) -> impl IntoResponse {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
     match state
-        .kernel
-        .insert_memory_link(&req.src_id, &req.dst_id, req.rel.as_deref(), req.weight)
+        .kernel()
+        .insert_memory_link_async(
+            req.src_id.clone(),
+            req.dst_id.clone(),
+            req.rel.clone(),
+            req.weight,
+        )
+        .await
     {
         Ok(()) => {
             state.bus.publish(
@@ -318,17 +436,33 @@ pub async fn memory_link_put(
 }
 
 /// List relationships for a memory id.
-#[utoipa::path(get, path = "/state/memory/links", tag = "Memory", params(("id" = String, Query), ("limit" = Option<i64>, Query)), responses((status = 200, body = serde_json::Value)))]
+#[utoipa::path(
+    get,
+    path = "/state/memory/links",
+    tag = "Memory",
+    params(("id" = String, Query), ("limit" = Option<i64>, Query)),
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn state_memory_links(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
     let src_id = match q.get("id").cloned() { Some(v) => v, None => return (axum::http::StatusCode::BAD_REQUEST, Json(json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"missing id"}))).into_response() };
     let limit = q
         .get("limit")
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(50);
-    match state.kernel.list_memory_links(&src_id, limit) {
+    match state
+        .kernel()
+        .list_memory_links_async(src_id.clone(), limit)
+        .await
+    {
         Ok(items) => (axum::http::StatusCode::OK, Json(json!({"items": items}))).into_response(),
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -341,13 +475,32 @@ pub async fn state_memory_links(
 }
 
 /// Explainability payload for coherence results.
-#[utoipa::path(post, path = "/state/memory/explain_coherent", tag = "Memory", request_body = MemCoherentReq, responses((status = 200, body = serde_json::Value)))]
+#[utoipa::path(
+    post,
+    path = "/state/memory/explain_coherent",
+    tag = "Memory",
+    request_body = MemCoherentReq,
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn memory_explain_coherent(
     State(state): State<AppState>,
     Json(req): Json<MemCoherentReq>,
 ) -> impl IntoResponse {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
     let spec = spec_from_req(&req);
-    let response = match working_set::assemble(&state, &spec) {
+    let state_clone = state.clone();
+    let spec_clone = spec.clone();
+    let result =
+        tokio::task::spawn_blocking(move || working_set::assemble(&state_clone, &spec_clone))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))
+            .and_then(|res| res);
+    let response = match result {
         Ok(ws) => {
             let working_set::WorkingSet {
                 items,

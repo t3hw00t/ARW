@@ -96,7 +96,7 @@ Updated: 2025-09-18 01:15 UTC
 - [t-250912024838-4137] UI: Episodes filters + details toggle — done (updated: 2025-09-14 17:12:11 UTC)
     - 2025-09-14 17:12:10 UTC: Episodes filters (errors-only + substring) and details toggle exist; confirmed and kept live refresh.
 - [t-250909224103-5251] Policy: hook feedback auto-apply — done (updated: 2025-09-14 17:12:10 UTC)
-    - 2025-09-14 17:12:10 UTC: Auto-apply wired: toggle /feedback/auto drives automatic apply of policy-approved suggestions; emits intents/actions events and persists state.
+    - 2025-09-14 17:12:10 UTC: Auto-apply wired: toggle /admin/feedback/auto drives automatic apply of policy-approved suggestions; emits intents/actions events and persists state.
 - [t-250909224103-0211] UI: near-live feedback in /debug — done (updated: 2025-09-14 17:12:09 UTC)
     - 2025-09-14 17:12:08 UTC: Debug UI already renders live feedback.suggested; added auto-apply hook: when enabled, safe suggestions are auto-applied on feedback.suggested events (policy-gated).
 - [t-250912001105-7850] Phase 3: Episodes + Debug UI reactive views — done (updated: 2025-09-14 17:02:37 UTC)
@@ -110,7 +110,7 @@ Updated: 2025-09-18 01:15 UTC
 - [t-250914050900-ev10] Events: topics.rs dot.case only — done (updated: 2025-09-14 16:59:12 UTC)
     - 2025-09-14 16:59:11 UTC: Enforced dot.case: linter checks topic constants and blocks string-literal publishes in service; topics.rs audited.
 - [t-250914050904-ev12] Debug UI: dot.case listeners — done (updated: 2025-09-14 16:59:11 UTC)
-    - 2025-09-14 16:59:11 UTC: Debug UI binds dot.case topics: added handlers for experiment.activated and generic listeners for task.completed/feedback.updated/catalog.updated; SSE filters already use dot.case prefixes.
+    - 2025-09-14 16:59:11 UTC: Debug UI binds dot.case topics: added handlers for experiment.activated and generic listeners for task.completed/feedback.applied/catalog.updated; SSE filters already use dot.case prefixes.
 - [t-250914050916-ev18] Release notes: dot.case migration — done (updated: 2025-09-14 16:53:02 UTC)
     - 2025-09-14 16:53:01 UTC: Release notes expanded: dot.case constants, connector subjects, new experiment.activated topic.
 - [t-250914050914-ev17] Gating keys: events:task.completed — done (updated: 2025-09-14 16:53:02 UTC)

@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use utoipa::ToSchema;
 
-use crate::AppState;
+use crate::{staging, AppState};
 use arw_topics as topics;
 
 #[derive(Deserialize, ToSchema)]
@@ -26,36 +26,24 @@ pub(crate) struct ActionReq {
     path = "/actions",
     tag = "Actions",
     request_body = ActionReq,
-    responses((status = 202, description = "Accepted", body = serde_json::Value))
+    responses(
+        (status = 202, description = "Accepted", body = serde_json::Value),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
 )]
 pub async fn actions_submit(
     State(state): State<AppState>,
     Json(req): Json<ActionReq>,
-) -> impl IntoResponse {
-    // Backpressure: deny if too many queued
-    let max_q: i64 = std::env::var("ARW_ACTIONS_QUEUE_MAX")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(1024);
-    if max_q > 0 {
-        if let Ok(nq) = state.kernel.count_actions_by_state_async("queued").await {
-            if nq >= max_q {
-                return (
-                    axum::http::StatusCode::TOO_MANY_REQUESTS,
-                    Json(json!({
-                        "type":"about:blank","title":"Too Many Requests","status":429,
-                        "detail":"queue is full","limit": max_q, "queued": nq
-                    })),
-                );
-            }
-        }
+) -> axum::response::Response {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
     }
     // Policy check: enforce lease rules when allow_all=false
     let decision = state.policy.lock().await.evaluate_action(&req.kind);
     if !decision.allow {
         if let Some(cap) = decision.require_capability.as_deref() {
             if state
-                .kernel
+                .kernel()
                 .find_valid_lease_async("local", cap)
                 .await
                 .ok()
@@ -79,17 +67,63 @@ pub async fn actions_submit(
                         "detail":"Denied (lease required)",
                         "explain": decision.explain
                     })),
-                );
+                )
+                    .into_response();
+            }
+        }
+    }
+    let idem_key = req.idem_key.clone();
+    let mut reuse_id: Option<String> = None;
+    if let Some(ref idem) = idem_key {
+        if let Ok(Some(existing)) = state.kernel().find_action_by_idem_async(idem).await {
+            reuse_id = Some(existing);
+        }
+    }
+    if reuse_id.is_none() {
+        match staging::maybe_stage_action(&state, &req.kind, &req.input).await {
+            Ok(Some(staging_id)) => {
+                return (
+                    axum::http::StatusCode::ACCEPTED,
+                    Json(json!({
+                        "staged": true,
+                        "id": staging_id,
+                        "mode": staging::mode_label()
+                    })),
+                )
+                    .into_response();
+            }
+            Ok(None) => {}
+            Err(err) => {
+                tracing::warn!(target: "staging", "failed to stage action: {err:?}");
+            }
+        }
+        // Backpressure: deny if too many queued (only when enqueuing)
+        let max_q: i64 = std::env::var("ARW_ACTIONS_QUEUE_MAX")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1024);
+        if max_q > 0 {
+            if let Ok(nq) = state.kernel().count_actions_by_state_async("queued").await {
+                if nq >= max_q {
+                    return (
+                        axum::http::StatusCode::TOO_MANY_REQUESTS,
+                        Json(json!({
+                            "type":"about:blank","title":"Too Many Requests","status":429,
+                            "detail":"queue is full","limit": max_q, "queued": nq
+                        })),
+                    )
+                        .into_response();
+                }
             }
         }
     }
     let id = if let Some(idem) = &req.idem_key {
-        if let Ok(Some(existing)) = state.kernel.find_action_by_idem_async(idem).await {
+        if let Some(existing) = reuse_id.clone() {
             existing
         } else {
             let id = uuid::Uuid::new_v4().to_string();
             let _ = state
-                .kernel
+                .kernel()
                 .insert_action_async(
                     &id,
                     &req.kind,
@@ -104,7 +138,7 @@ pub async fn actions_submit(
     } else {
         let id = uuid::Uuid::new_v4().to_string();
         let _ = state
-            .kernel
+            .kernel()
             .insert_action_async(&id, &req.kind, &req.input, None, None, "queued")
             .await;
         id
@@ -122,13 +156,18 @@ pub async fn actions_submit(
     state.bus.publish(&env.kind, &env.payload);
     // Contribution scaffold: record a task submit (qty=1 task)
     let _ = state
-        .kernel
+        .kernel()
         .append_contribution_async("local", "task.submit", 1.0, "task", None, None, None)
         .await;
     (
         axum::http::StatusCode::ACCEPTED,
-        Json(json!({"id": env.payload["id"], "ok": true})),
+        Json(json!({
+            "id": env.payload["id"],
+            "ok": true,
+            "staged": false
+        })),
     )
+        .into_response()
 }
 
 /// Get action details by id.
@@ -139,14 +178,18 @@ pub async fn actions_submit(
     params(("id" = String, Path, description = "Action id")),
     responses(
         (status = 200, description = "Action", body = serde_json::Value),
-        (status = 404, description = "Not found")
+        (status = 404, description = "Not found"),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
     )
 )]
 pub async fn actions_get(
     State(state): State<AppState>,
     Path(id): Path<String>,
-) -> impl IntoResponse {
-    match state.kernel.get_action_async(&id).await {
+) -> axum::response::Response {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
+    match state.kernel().get_action_async(&id).await {
         Ok(Some(a)) => (
             axum::http::StatusCode::OK,
             Json(json!({
@@ -159,17 +202,20 @@ pub async fn actions_get(
                 "created": a.created,
                 "updated": a.updated
             })),
-        ),
+        )
+            .into_response(),
         Ok(None) => (
             axum::http::StatusCode::NOT_FOUND,
             Json(json!({"type":"about:blank","title":"Not Found","status":404})),
-        ),
+        )
+            .into_response(),
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(
                 json!({"type":"about:blank","title":"Error","status":500, "detail": e.to_string()}),
             ),
-        ),
+        )
+            .into_response(),
     }
 }
 
@@ -189,14 +235,18 @@ pub(crate) struct ActionStateReq {
     responses(
         (status = 200, description = "Updated", body = serde_json::Value),
         (status = 404, description = "Not found"),
-        (status = 400, description = "Invalid state")
+        (status = 400, description = "Invalid state"),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
     )
 )]
 pub async fn actions_state_set(
     State(state): State<AppState>,
     Path(id): Path<String>,
     Json(req): Json<ActionStateReq>,
-) -> impl IntoResponse {
+) -> axum::response::Response {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
     let allowed = ["queued", "running", "completed", "failed"];
     if !allowed.contains(&req.state.as_str()) {
         return (
@@ -204,9 +254,10 @@ pub async fn actions_state_set(
             Json(
                 json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"invalid state"}),
             ),
-        );
+        )
+            .into_response();
     }
-    match state.kernel.set_action_state_async(&id, &req.state).await {
+    match state.kernel().set_action_state_async(&id, &req.state).await {
         Ok(true) => {
             // Publish a transition event
             let kind = match req.state.as_str() {
@@ -225,17 +276,19 @@ pub async fn actions_state_set(
                 ce: None,
             };
             state.bus.publish(&env.kind, &env.payload);
-            (axum::http::StatusCode::OK, Json(json!({"ok": true})))
+            (axum::http::StatusCode::OK, Json(json!({"ok": true}))).into_response()
         }
         Ok(false) => (
             axum::http::StatusCode::NOT_FOUND,
             Json(json!({"type":"about:blank","title":"Not Found","status":404})),
-        ),
+        )
+            .into_response(),
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             Json(
                 json!({"type":"about:blank","title":"Error","status":500, "detail": e.to_string()}),
             ),
-        ),
+        )
+            .into_response(),
     }
 }

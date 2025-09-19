@@ -19,13 +19,13 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-svc/src/resources/models_service.rs"
+          "path": "apps/arw-server/src/models.rs"
         },
         {
-          "path": "apps/arw-svc/src/ext/models_api.rs"
+          "path": "apps/arw-server/src/api_models.rs"
         },
         {
-          "path": "apps/arw-svc/src/ext/paths.rs"
+          "path": "apps/arw-server/src/util.rs"
         },
         {
           "path": "crates/arw-topics/src/lib.rs"
@@ -110,10 +110,13 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-svc/src/main.rs"
+          "path": "apps/arw-server/src/main.rs"
         },
         {
-          "path": "apps/arw-svc/src/ext/read_model.rs"
+          "path": "apps/arw-server/src/api_events.rs"
+        },
+        {
+          "path": "apps/arw-server/src/read_models.rs"
         },
         {
           "path": "crates/arw-topics/src/lib.rs"
@@ -161,10 +164,10 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-svc/src/ext/stats.rs"
+          "path": "apps/arw-server/src/api_metrics.rs"
         },
         {
-          "path": "apps/arw-svc/src/ext/snappy.rs"
+          "path": "apps/arw-server/src/metrics.rs"
         }
       ],
       "http": [
@@ -218,10 +221,10 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-svc/src/ext/tools_exec.rs"
+          "path": "apps/arw-server/src/tools.rs"
         },
         {
-          "path": "apps/arw-svc/src/ext/tools_api.rs"
+          "path": "apps/arw-server/src/api_tools.rs"
         }
       ],
       "http": [
@@ -280,7 +283,7 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-svc/src/ext/tools_exec.rs"
+          "path": "apps/arw-server/src/tools.rs"
         },
         {
           "path": "apps/arw-launcher/src-tauri/ui/common.js"
@@ -326,10 +329,10 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-svc/src/ext/chat.rs"
+          "path": "apps/arw-server/src/context_loop.rs"
         },
         {
-          "path": "apps/arw-svc/src/ext/chat_api.rs"
+          "path": "apps/arw-server/src/api_context.rs"
         }
       ],
       "http": [
@@ -380,7 +383,7 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-svc/src/ext/memory.rs"
+          "path": "apps/arw-server/src/api_memory.rs"
         }
       ],
       "http": [
@@ -434,10 +437,10 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-svc/src/ext/projects.rs"
+          "path": "apps/arw-server/src/api_projects.rs"
         },
         {
-          "path": "apps/arw-svc/src/ext/paths.rs"
+          "path": "apps/arw-server/src/util.rs"
         }
       ],
       "http": [
@@ -501,10 +504,10 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-svc/src/ext/feedback_engine.rs"
+          "path": "apps/arw-server/src/feedback.rs"
         },
         {
-          "path": "apps/arw-svc/src/ext/feedback_engine_api.rs"
+          "path": "apps/arw-server/src/api_feedback.rs"
         }
       ],
       "http": [
@@ -524,7 +527,45 @@
       "read_models": [],
       "topics": [
         "feedback.suggested",
-        "feedback.updated"
+        "feedback.applied"
+      ],
+      "env": []
+    },
+    {
+      "id": "federated_clustering",
+      "name": "Federated Clustering",
+      "owner": "platform",
+      "tier": "Core kernel",
+      "deps": [
+        "identity_tenancy"
+      ],
+      "description": "Shared node registry and adverts for optional multi-node deployments.",
+      "scope": {
+        "surface": "runtime",
+        "audience": "operators",
+        "layer": "infrastructure",
+        "maturity": "plan"
+      },
+      "ssot": [
+        {
+          "path": "apps/arw-server/src/cluster.rs"
+        },
+        {
+          "path": "apps/arw-server/src/api_state.rs"
+        }
+      ],
+      "http": [
+        {
+          "method": "GET",
+          "path": "/admin/state/cluster"
+        }
+      ],
+      "read_models": [
+        "cluster_nodes"
+      ],
+      "topics": [
+        "cluster.node.advertise",
+        "cluster.node.changed"
       ],
       "env": []
     },
@@ -545,36 +586,36 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-svc/src/ext/experiments_engine.rs"
+          "path": "apps/arw-server/src/experiments.rs"
         },
         {
-          "path": "apps/arw-svc/src/ext/experiments_api.rs"
+          "path": "apps/arw-server/src/api_experiments.rs"
         }
       ],
       "http": [
         {
           "method": "POST",
-          "path": "/experiments/start"
+          "path": "/admin/experiments/start"
         },
         {
           "method": "GET",
-          "path": "/experiments/list"
+          "path": "/admin/experiments/list"
         },
         {
           "method": "GET",
-          "path": "/experiments/winners"
+          "path": "/admin/experiments/winners"
         },
         {
           "method": "GET",
-          "path": "/experiments/scoreboard"
+          "path": "/admin/experiments/scoreboard"
         },
         {
           "method": "POST",
-          "path": "/experiments/run"
+          "path": "/admin/experiments/run"
         },
         {
           "method": "POST",
-          "path": "/experiments/activate"
+          "path": "/admin/experiments/activate"
         }
       ],
       "read_models": [],
@@ -601,13 +642,13 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-svc/src/ext/self_model.rs"
+          "path": "apps/arw-server/src/api_state.rs"
         },
         {
-          "path": "apps/arw-svc/src/ext/self_model_agg.rs"
+          "path": "apps/arw-server/src/self_model.rs"
         },
         {
-          "path": "apps/arw-svc/src/ext/self_model_api.rs"
+          "path": "apps/arw-server/src/api_self_model.rs"
         }
       ],
       "http": [
@@ -657,10 +698,13 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-svc/src/ext/state_api.rs"
+          "path": "apps/arw-server/src/api_state.rs"
         },
         {
-          "path": "apps/arw-svc/src/ext/world.rs"
+          "path": "apps/arw-server/src/state_observer.rs"
+        },
+        {
+          "path": "apps/arw-server/src/world.rs"
         }
       ],
       "http": [
@@ -713,7 +757,7 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-svc/src/ext/io.rs"
+          "path": "apps/arw-server/src/egress_proxy.rs"
         },
         {
           "path": "crates/arw-topics/src/lib.rs"
@@ -758,7 +802,7 @@
           "path": "crates/arw-core/src/rpu.rs"
         },
         {
-          "path": "apps/arw-svc/src/bootstrap/mod.rs"
+          "path": "apps/arw-server/src/security.rs"
         },
         {
           "path": "docs/architecture/asimov_capsule_guard.md"
@@ -802,7 +846,7 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-svc/src/ext/mod.rs"
+          "path": "apps/arw-server/src/worker.rs"
         },
         {
           "path": "apps/arw-connector/src/main.rs"
@@ -857,7 +901,7 @@
           "path": "interfaces/index.yaml"
         },
         {
-          "path": "apps/arw-svc/src/main.rs"
+          "path": "apps/arw-server/src/main.rs"
         },
         {
           "path": "apps/arw-server/src/api_spec.rs"
@@ -1186,7 +1230,7 @@
       "deps": [
         "triad_kernel"
       ],
-      "description": "Kernel-backed memory API with hybrid search, embeddings, coherent selections, and stable pointers (`ptr.kind: \"memory\"`) for durable knowledge.",
+      "description": "Memory overlay service backed by the canonical MAL store with hybrid retrieval, explainable packing, and stable pointers (`ptr.kind: \"memory\"`).",
       "scope": {
         "surface": "backend",
         "audience": "builder",
@@ -1195,54 +1239,43 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-server/src/api_memory.rs"
+          "path": "apps/arw-server/src/api_actions.rs"
         },
         {
-          "path": "crates/arw-kernel/src/lib.rs"
+          "path": "apps/arw-server/src/read_models.rs"
+        },
+        {
+          "path": "apps/arw-server/src/working_set.rs"
+        },
+        {
+          "path": "apps/arw-server/src/api_memory.rs"
         }
       ],
       "http": [
         {
           "method": "POST",
-          "path": "/memory/put"
+          "path": "/actions (memory.upsert)"
+        },
+        {
+          "method": "POST",
+          "path": "/actions (memory.search)"
+        },
+        {
+          "method": "POST",
+          "path": "/actions (memory.pack)"
         },
         {
           "method": "GET",
-          "path": "/state/memory/select"
-        },
-        {
-          "method": "POST",
-          "path": "/memory/search_embed"
-        },
-        {
-          "method": "POST",
-          "path": "/state/memory/select_hybrid"
-        },
-        {
-          "method": "POST",
-          "path": "/memory/select_coherent"
-        },
-        {
-          "method": "POST",
-          "path": "/state/memory/explain_coherent"
-        },
-        {
-          "method": "GET",
-          "path": "/state/memory/recent"
-        },
-        {
-          "method": "POST",
-          "path": "/memory/link"
-        },
-        {
-          "method": "GET",
-          "path": "/state/memory/links"
+          "path": "/state/memory"
         }
       ],
-      "read_models": [],
+      "read_models": [
+        "memory"
+      ],
       "topics": [
-        "memory.record.put",
-        "memory.link.put"
+        "memory.item.upserted",
+        "memory.item.expired",
+        "memory.pack.journaled"
       ],
       "env": [],
       "docs": [
@@ -1251,6 +1284,9 @@
         },
         {
           "path": "docs/architecture/memory_lifecycle.md"
+        },
+        {
+          "path": "docs/architecture/memory_overlay_service.md"
         }
       ]
     },

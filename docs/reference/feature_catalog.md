@@ -37,7 +37,7 @@ _Spin up projects with live state, context-on-demand, and predictable response t
   _Routes_: `GET /admin/projects/list`, `POST /admin/projects/create`, `GET /admin/projects/tree`, `GET /admin/projects/notes`, `POST /admin/projects/notes`, `GET /admin/projects/file`, `POST /admin/projects/file`, `POST /admin/projects/patch`
   _Signals_: `projects.created`, `projects.file.written`
   _Env_: `ARW_PROJECTS_DIR`, `ARW_PROJECT_MAX_FILE_MB`
-  _Source_: [apps/arw-svc/src/ext/projects.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/projects.rs), [apps/arw-svc/src/ext/paths.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/paths.rs)
+  _Source_: [apps/arw-server/src/api_projects.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_projects.rs), [apps/arw-server/src/util.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/util.rs)
 
 ### Stay in Flow
 _Keep loops under budget with shared event vocabulary and debugging surfaces._
@@ -47,7 +47,7 @@ _Keep loops under budget with shared event vocabulary and debugging surfaces._
   _Routes_: `GET /metrics`, `GET /admin/state/route_stats`
   _Signals_: `snappy.notice`, `snappy.detail`, `state.read.model.patch`
   _Env_: `ARW_SNAPPY_I2F_P95_MS`, `ARW_SNAPPY_FIRST_PARTIAL_P95_MS`, `ARW_SNAPPY_FULL_RESULT_P95_MS`, `ARW_SNAPPY_PUBLISH_MS`
-  _Source_: [apps/arw-svc/src/ext/stats.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/stats.rs), [apps/arw-svc/src/ext/snappy.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/snappy.rs)
+  _Source_: [apps/arw-server/src/api_metrics.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_metrics.rs), [apps/arw-server/src/metrics.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/metrics.rs)
   _References_: [architecture/runtime_layout.md](../architecture/runtime_layout.md), [architecture/performance.md](../architecture/performance.md)
 
 - **Event Spine** · backend / dev / connectivity / complete
@@ -55,7 +55,7 @@ _Keep loops under budget with shared event vocabulary and debugging surfaces._
   _Routes_: `GET /admin/events`
   _Signals_: `state.read.model.patch`
   _Env_: `ARW_BUS_CAP`, `ARW_BUS_REPLAY`
-  _Source_: [apps/arw-svc/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/main.rs), [apps/arw-svc/src/ext/read_model.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/read_model.rs), [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs)
+  _Source_: [apps/arw-server/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/main.rs), [apps/arw-server/src/api_events.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_events.rs), [apps/arw-server/src/read_models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/read_models.rs), …
   _References_: [architecture/sse_patch_contract.md](../architecture/sse_patch_contract.md)
 
 - **Chat Workbench** · backend / admin / auxiliary / complete
@@ -63,13 +63,13 @@ _Keep loops under budget with shared event vocabulary and debugging surfaces._
   _Routes_: `GET /admin/chat`, `POST /admin/chat/send`, `POST /admin/chat/clear`, `GET /admin/chat/status`
   _Signals_: `chat.message`, `chat.planner`, `chat.probe`
   _Env_: `ARW_LLAMA_URL`, `ARW_OPENAI_API_KEY`, `ARW_OPENAI_BASE_URL`, `ARW_OPENAI_MODEL`
-  _Source_: [apps/arw-svc/src/ext/chat.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/chat.rs), [apps/arw-svc/src/ext/chat_api.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/chat_api.rs)
+  _Source_: [apps/arw-server/src/context_loop.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/context_loop.rs), [apps/arw-server/src/api_context.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_context.rs)
 
 - **Screenshot Capture Pipeline** · runtime / admin / auxiliary / complete
   Screen/window/region capture with annotate/blur, gallery, Save to project, and optional OCR for agents and operators.
   _Routes_: `POST /admin/tools/run`
   _Signals_: `screenshots.captured`
-  _Source_: [apps/arw-svc/src/ext/tools_exec.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/tools_exec.rs), [apps/arw-launcher/src-tauri/ui/common.js](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri/ui/common.js), [guide/screenshots.md](../guide/screenshots.md)
+  _Source_: [apps/arw-server/src/tools.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/tools.rs), [apps/arw-launcher/src-tauri/ui/common.js](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri/ui/common.js), [guide/screenshots.md](../guide/screenshots.md)
   _References_: [architecture/screenshot_capture_pipeline.md](../architecture/screenshot_capture_pipeline.md)
 
 ## Evidence & Insight
@@ -79,24 +79,24 @@ Every answer carries provenance, memory, and opportunities to improve.
 _Surface the beliefs, files, and links that back each decision._
 
 - **Memory Atlas** · backend / builder / intelligence / beta
-  Kernel-backed memory API with hybrid search, embeddings, coherent selections, and stable pointers (`ptr.kind: "memory"`) for durable knowledge.
-  _Routes_: `POST /memory/put`, `GET /state/memory/select`, `POST /memory/search_embed`, `POST /state/memory/select_hybrid`, `POST /memory/select_coherent`, `POST /state/memory/explain_coherent`, `GET /state/memory/recent`, `POST /memory/link`, `GET /state/memory/links`
-  _Signals_: `memory.record.put`, `memory.link.put`
-  _Source_: [apps/arw-server/src/api_memory.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_memory.rs), [crates/arw-kernel/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-kernel/src/lib.rs)
-  _References_: [architecture/memory_abstraction.md](../architecture/memory_abstraction.md), [architecture/memory_lifecycle.md](../architecture/memory_lifecycle.md)
+  Memory overlay service backed by the canonical MAL store with hybrid retrieval, explainable packing, and stable pointers (`ptr.kind: "memory"`).
+  _Routes_: `POST /actions (memory.upsert)`, `POST /actions (memory.search)`, `POST /actions (memory.pack)`, `GET /state/memory`
+  _Signals_: `memory.item.upserted`, `memory.item.expired`, `memory.pack.journaled`
+  _Source_: [apps/arw-server/src/api_actions.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_actions.rs), [apps/arw-server/src/read_models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/read_models.rs), [apps/arw-server/src/working_set.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/working_set.rs), …
+  _References_: [architecture/memory_abstraction.md](../architecture/memory_abstraction.md), [architecture/memory_lifecycle.md](../architecture/memory_lifecycle.md), [architecture/memory_overlay_service.md](../architecture/memory_overlay_service.md)
 
 - **Project Map (World Model)** · backend / admin / connectivity / complete
   Observations folded into beliefs/intents/actions and stitched episodes for a scoped project world model.
   _Routes_: `GET /admin/state/observations`, `GET /admin/state/beliefs`, `GET /admin/state/intents`, `GET /admin/state/actions`, `GET /admin/state/episodes`
   _Signals_: `world.updated`
-  _Source_: [apps/arw-svc/src/ext/state_api.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/state_api.rs), [apps/arw-svc/src/ext/world.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/world.rs)
+  _Source_: [apps/arw-server/src/api_state.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_state.rs), [apps/arw-server/src/state_observer.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/state_observer.rs), [apps/arw-server/src/world.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/world.rs)
   _References_: [architecture/object_graph.md](../architecture/object_graph.md)
 
 - **Self Card + Forecasts** · backend / admin / helpers / complete
   Per-agent identity and competence, with periodic aggregates for forecasts and resource curves.
   _Routes_: `GET /state/self`, `GET /state/self/:agent`, `POST /admin/self_model/propose`, `POST /admin/self_model/apply`
   _Signals_: `self.model.proposed`, `self.model.updated`
-  _Source_: [apps/arw-svc/src/ext/self_model.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/self_model.rs), [apps/arw-svc/src/ext/self_model_agg.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/self_model_agg.rs), [apps/arw-svc/src/ext/self_model_api.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/self_model_api.rs)
+  _Source_: [apps/arw-server/src/api_state.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_state.rs), [apps/arw-server/src/self_model.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/self_model.rs), [apps/arw-server/src/api_self_model.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_self_model.rs)
   _References_: [architecture/self_model.md](../architecture/self_model.md)
 
 ### Improve Results
@@ -105,14 +105,14 @@ _Capture feedback and experiments so better instincts become reusable defaults._
 - **Feedback Loop** · backend / admin / helpers / complete
   Near-live suggestions and policy with persisted state, supporting guidance to improve runs.
   _Routes_: `GET /admin/feedback/suggestions`, `GET /admin/feedback/updates`, `GET /admin/feedback/policy`
-  _Signals_: `feedback.suggested`, `feedback.updated`
-  _Source_: [apps/arw-svc/src/ext/feedback_engine.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/feedback_engine.rs), [apps/arw-svc/src/ext/feedback_engine_api.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/feedback_engine_api.rs)
+  _Signals_: `feedback.suggested`, `feedback.applied`
+  _Source_: [apps/arw-server/src/feedback.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/feedback.rs), [apps/arw-server/src/api_feedback.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_feedback.rs)
 
 - **Experiment Deck** · backend / admin / core / complete
   Define variants, run A/B on goldens, publish results and winner; apply hints.
-  _Routes_: `POST /experiments/start`, `GET /experiments/list`, `GET /experiments/winners`, `GET /experiments/scoreboard`, `POST /experiments/run`, `POST /experiments/activate`
+  _Routes_: `POST /admin/experiments/start`, `GET /admin/experiments/list`, `GET /admin/experiments/winners`, `GET /admin/experiments/scoreboard`, `POST /admin/experiments/run`, `POST /admin/experiments/activate`
   _Signals_: `experiment.result`, `experiment.winner`
-  _Source_: [apps/arw-svc/src/ext/experiments_engine.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/experiments_engine.rs), [apps/arw-svc/src/ext/experiments_api.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/experiments_api.rs)
+  _Source_: [apps/arw-server/src/experiments.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/experiments.rs), [apps/arw-server/src/api_experiments.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_experiments.rs)
 
 ## Safety & Control
 Explicit permissions, reviewable changes, and opt-in networking.
@@ -140,14 +140,14 @@ _Grant capabilities with leases, previews, and clear denials before anything lea
   Ingress/egress policy gating with previews and append-only egress ledger. Full proxy/DNS guard is planned.
   _Signals_: `egress.preview`, `egress.ledger.appended`
   _Env_: `ARW_EGRESS_LEDGER_ENABLE`, `ARW_NET_POSTURE`
-  _Source_: [apps/arw-svc/src/ext/io.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/io.rs), [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs), [architecture/egress_firewall.md](../architecture/egress_firewall.md)
+  _Source_: [apps/arw-server/src/egress_proxy.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/egress_proxy.rs), [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs), [architecture/egress_firewall.md](../architecture/egress_firewall.md)
 
 - **Asimov Capsule Guard** · backend / admin / security / alpha
   Always-enforced capsule propagation that refreshes leases, scopes reversible denies, and instruments adoption across the runtime.
   _Routes_: `ANY /admin/* (X-ARW-Gate)`
   _Signals_: `policy.decision`, `rpu.trust.changed`
   _Env_: `ARW_TRUST_CAPSULES`, `ARW_GATING_DENY`
-  _Source_: [crates/arw-core/src/gating.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/src/gating.rs), [crates/arw-core/src/rpu.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/src/rpu.rs), [apps/arw-svc/src/bootstrap/mod.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/bootstrap/mod.rs), …
+  _Source_: [crates/arw-core/src/gating.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/src/gating.rs), [crates/arw-core/src/rpu.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/src/rpu.rs), [apps/arw-server/src/security.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/security.rs), …
 
 ### Govern Configuration
 _Ship safe defaults, audit runtime tweaks, and keep specs in sync._
@@ -165,13 +165,13 @@ _Ship safe defaults, audit runtime tweaks, and keep specs in sync._
   _Routes_: `GET /admin/models/summary`, `POST /admin/models/download`, `POST /admin/models/download/cancel`, `POST /admin/models/cas_gc`, `GET /admin/models/concurrency`, `POST /admin/models/concurrency`, `GET /admin/models/jobs`, `GET /admin/state/models_metrics`, `GET /state/models`
   _Signals_: `models.download.progress`, `models.changed`, `models.manifest.written`, `models.cas.gc`, `models.refreshed`, `state.read.model.patch`
   _Env_: `ARW_MODELS_MAX_MB`, `ARW_MODELS_DISK_RESERVE_MB`, `ARW_MODELS_MAX_CONC`, `ARW_MODELS_MAX_CONC_HARD`, `ARW_MODELS_QUOTA_MB`, `ARW_DL_EWMA_ALPHA`, `ARW_DL_MIN_MBPS`
-  _Source_: [apps/arw-svc/src/resources/models_service.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/resources/models_service.rs), [apps/arw-svc/src/ext/models_api.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/models_api.rs), [apps/arw-svc/src/ext/paths.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/paths.rs), …
+  _Source_: [apps/arw-server/src/models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/models.rs), [apps/arw-server/src/api_models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_models.rs), [apps/arw-server/src/util.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/util.rs), …
   _References_: [architecture/artifacts_provenance.md](../architecture/artifacts_provenance.md)
 
 - **Interface Registry & Specs** · dev / dev / auxiliary / complete
   Descriptors and generated OpenAPI/AsyncAPI/MCP schemas with drift checks and deprecation headers.
   _Routes_: `GET /spec/openapi.yaml`, `GET /spec/asyncapi.yaml`, `GET /spec/mcp-tools.json`
-  _Source_: [interfaces/index.yaml](https://github.com/t3hw00t/ARW/blob/main/interfaces/index.yaml), [apps/arw-svc/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/main.rs), [apps/arw-server/src/api_spec.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_spec.rs)
+  _Source_: [interfaces/index.yaml](https://github.com/t3hw00t/ARW/blob/main/interfaces/index.yaml), [apps/arw-server/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/main.rs), [apps/arw-server/src/api_spec.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_spec.rs)
 
 ## Scale & Extend
 Grow from a single laptop to shared runs and custom tooling without losing clarity.
@@ -184,7 +184,7 @@ _Queue, schedule, and observe heavier jobs as the team or workload grows._
   _Routes_: `GET /orchestrator/mini_agents`, `POST /orchestrator/mini_agents/start_training`, `GET /state/orchestrator/jobs`
   _Signals_: `task.completed`
   _Env_: `ARW_NATS_URL`, `ARW_NODE_ID`, `ARW_NATS_OUT`
-  _Source_: [apps/arw-svc/src/ext/mod.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/mod.rs), [apps/arw-connector/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-connector/src/main.rs), [apps/arw-server/src/api_orchestrator.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_orchestrator.rs)
+  _Source_: [apps/arw-server/src/worker.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/worker.rs), [apps/arw-connector/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-connector/src/main.rs), [apps/arw-server/src/api_orchestrator.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_orchestrator.rs)
   _References_: [architecture/agent_orchestrator.md](../architecture/agent_orchestrator.md)
 
 - **Connectors Registry** · backend / admin / connectivity / beta
@@ -199,7 +199,7 @@ _Queue, schedule, and observe heavier jobs as the team or workload grows._
   _Routes_: `GET /admin/tools`, `POST /admin/tools/run`, `GET /admin/tools/cache_stats`, `GET /state/models_metrics`
   _Signals_: `task.completed`
   _Env_: `ARW_TOOLS_CACHE_CAP`, `ARW_TOOLS_CACHE_TTL_SECS`, `ARW_POLICY_VERSION`, `ARW_SECRETS_VERSION`
-  _Source_: [apps/arw-svc/src/ext/tools_exec.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/tools_exec.rs), [apps/arw-svc/src/ext/tools_api.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/tools_api.rs)
+  _Source_: [apps/arw-server/src/tools.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/tools.rs), [apps/arw-server/src/api_tools.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_tools.rs)
   _References_: [architecture/cache_policy.md](../architecture/cache_policy.md), [architecture/caching_layers.md](../architecture/caching_layers.md)
 
 ### Extend the Runtime
@@ -223,4 +223,4 @@ _Bring new skills online through declarative packs, WASI tools, and memory layer
   _Routes_: `GET /admin/memory`, `POST /admin/memory/apply`, `POST /admin/memory/save`, `POST /admin/memory/load`, `GET /admin/memory/limit`, `POST /admin/memory/limit`
   _Signals_: `memory.applied`
   _Env_: `ARW_MEM_LIMIT`
-  _Source_: [apps/arw-svc/src/ext/memory.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/memory.rs)
+  _Source_: [apps/arw-server/src/api_memory.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_memory.rs)

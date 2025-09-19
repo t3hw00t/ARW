@@ -4,9 +4,9 @@ title: Models Download (HTTP)
 
 # Models Download (HTTP)
 
-ARW provides HTTP endpoints (admin‑gated) to manage local models with streaming downloads, live progress via SSE, safe cancel, resume (HTTP Range), and mandatory SHA‑256 verification.
+ARW provides HTTP endpoints (admin‑gated) to manage local models with streaming downloads, live progress via SSE, safe cancel, and mandatory SHA‑256 verification. HTTP Range resume will return in an upcoming update.
 
-Updated: 2025-09-16
+Updated: 2025-09-17
 Type: How‑to
 
 See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*).
@@ -14,20 +14,20 @@ Canonical topics used by the service are defined once under [crates/arw-topics/s
 
 ## Endpoints
 
-- POST `/admin/models/download` — Start or resume a download.
+- POST `/admin/models/download` — Start a download (requires `sha256`).
 - POST `/admin/models/download/cancel` — Cancel an in‑flight download.
 - GET  `/admin/events` — Listen for `models.download.progress` events (SSE; supports `?replay=N` and repeated `prefix=` filters).
 - GET  `/state/models` — Public, read‑only models list (no admin token required).
 - GET  `/admin/models/summary` — Aggregated summary for UIs: `{ items, default, concurrency, metrics }`.
-- POST `/admin/models/cas_gc` — Run a one‑off CAS GC sweep; deletes unreferenced blobs older than `ttl_days`.
+- POST `/admin/models/cas_gc` — Run a one‑off CAS GC sweep; deletes unreferenced blobs older than `ttl_hours` (default `24`).
 - GET  `/admin/state/models_hashes` — Admin summary of installed model hashes and sizes.
 - GET  `/admin/models/by-hash/:sha256` — Serve a CAS blob by hash (egress‑gated; `io:egress:models.peer`).
   - Emits strong validators and immutable caching for digest‑addressed blobs:
     - `ETag: "<sha256>"`, `Last-Modified`, `Cache-Control: public, max-age=31536000, immutable`.
     - Honors `If-None-Match` (304 Not Modified) for repeat requests.
   - See also: [HTTP Caching Semantics](../snippets/http_caching_semantics.md)
-- POST `/admin/models/concurrency` — Set download concurrency at runtime. Body: `{ max: number, block?: boolean }`.
-- GET  `/admin/models/concurrency` — Get the current concurrency settings and limits. Includes optional `pending_shrink` when a previous non‑blocking shrink left remainder.
+- POST `/admin/models/concurrency` — Set download concurrency at runtime. Body: `{ max?: number, hard_cap?: number }`.
+- GET  `/admin/models/concurrency` — Get the current concurrency settings and limits (`configured_max`, `available_permits`, `held_permits`, `hard_cap`).
 - GET  `/admin/models/jobs` — Snapshot of active jobs and inflight hashes for troubleshooting.
 
 ## Request
@@ -41,12 +41,7 @@ Body:
   "id": "<model-id>",
   "url": "https://.../model.gguf",
   "provider": "local",            // optional
-  "sha256": "<hex>",             // required (fail-closed)
-  "budget": {                      // optional override
-    "soft_ms": 15000,
-    "hard_ms": 60000,
-    "class":   "interactive"      // or "batch"
-  }
+  "sha256": "<hex>"               // required (fail-closed)
 }
 ```
 
@@ -54,10 +49,8 @@ Behavior:
 - Creates a temporary file `{state_dir}/models/<name>.part` and appends chunks.
 - On completion and checksum verification, promotes into the content‑addressable store under `{state_dir}/models/by-hash/<sha256>[.<ext>]` and writes a manifest `{state_dir}/models/<id>.json` describing the model (`file`, `path`, `sha256`, `bytes`, `provider`, `verified`).
 - If a model with the same content hash already exists in CAS, the download short‑circuits and finishes immediately with `code: "cached"`.
-- Honors `Content-Disposition: attachment; filename=...` and `filename*=` (RFC 5987) to pick a server-provided filename; names are sanitized cross‑platform.
 - Verifies the file against `sha256` and removes it on mismatch.
-- If a `.part` exists and the server supports HTTP Range, ARW resumes from the saved offset.
-  - Uses `If-Range` with previously observed `ETag`/`Last-Modified` to avoid corrupt resumes when the remote file changed.
+- Resume support (HTTP Range + If-Range) will return in a follow-up port; currently downloads always start from byte zero.
 
 Filename handling:
 - Cross‑platform sanitization avoids path separators, control/reserved characters, trailing dots/spaces, and Windows reserved device names (`CON`, `AUX`, `PRN`, `NUL`, `COM1..9`, `LPT1..9`).
@@ -74,7 +67,6 @@ POST /admin/models/download/cancel
 Cancels the active download and removes the partial `.part` file.
 
 Events related to cancel:
-- `status: "cancel-requested"` (immediate acknowledgment),
 - `status: "canceled"` when the worker exits,
 - if there is no active job, `status: "no-active-job"` is emitted.
 
@@ -83,30 +75,26 @@ Events related to cancel:
 Subscribe to `GET /admin/events` and filter `models.download.progress` events. Examples:
 
 ```
-{ "id": "qwen2.5-coder-7b", "progress": 42, "downloaded": 12345678, "total": 30000000 }
-{ "id": "qwen2.5-coder-7b", "status": "resumed", "offset": 102400 }
-{ "id": "qwen2.5-coder-7b", "status": "complete", "file": "qwen.gguf", "provider": "local" }
-{ "id": "qwen2.5-coder-7b", "error": "checksum mismatch", "expected": "...", "actual": "..." }
+{ "id": "qwen2.5-coder-7b", "status": "started", "url": "https://example/model.gguf" }
+{ "id": "qwen2.5-coder-7b", "status": "downloading", "bytes": 26214400, "downloaded": 26214400, "total": 5347737600, "percent": 0.49 }
+{ "id": "qwen2.5-coder-7b", "status": "complete", "sha256": "…", "bytes": 5347737600, "downloaded": 5347737600, "cached": false }
 { "id": "qwen2.5-coder-7b", "status": "canceled" }
+{ "id": "qwen2.5-coder-7b", "status": "no-active-job" }
+{ "id": "qwen2.5-coder-7b", "status": "error", "code": "sha256_mismatch", "error": "expected …" }
 
-Schema notes (best effort):
-- Always includes: `id`.
-- Progress: `progress` (0–100), `downloaded`, `total` (optional).
-- Status: `status` (e.g., started, resumed, resync, downloading, degraded, complete, canceled, no-active-job, cache-mismatch).
-- Codes: `code` provides a stable machine hint for complex statuses (e.g., `admission-denied`, `hard-exhausted`, `disk-insufficient(-stream)`, `size-limit(-stream)`, `checksum-mismatch`, `canceled-by-user`, `quota-exceeded`, `cached`, `already-in-progress-hash`, `resync`).
-- Budget snapshot: `budget` object with `soft_ms`, `hard_ms`, `spent_ms`, `remaining_*` when available.
-- Disk snapshot: `disk` object `{available,total,reserve}` when available.
-
-UI guidance:
-- Simple statuses (started/downloading/resumed/complete/canceled) should use compact single icons.
-- Complex codes can show a small, subtle icon set (e.g., `lock+timer` for `admission-denied`).
+Schema notes:
+- Always includes `id`.
+- `status` is one of `started`, `downloading`, `complete`, `canceled`, `no-active-job`, or `error`.
+- `code` provides a machine hint on failures (e.g., `sha256_mismatch`, `http`, `io`, `size_limit`, `quota_exceeded`, `disk_insufficient`).
+- `bytes`/`downloaded` report cumulative bytes fetched; `total` and `percent` are present when the server provided `Content-Length`.
+- Completion events include `sha256`, `bytes`, `downloaded`, `cached`, and `total`.
 ```
 
 Minimal SSE consumer (bash)
 ```bash
 BASE=http://127.0.0.1:8091  # use 8090 for the legacy bridge
 curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?prefix=models.download.progress&replay=5" \
- | jq -rc 'if .id then {id:.id,status:(.status//""),code:(.code//""),pct:(.progress//null),dl:(.downloaded//null),tot:(.total//null)} else . end'
+ | jq -rc 'if .id then {id:.id,status:(.status//""),code:(.code//""),bytes:(.bytes//null),cached:(.cached//null)} else . end'
 ```
 
 Tip: use repeated `prefix=` to follow multiple channels: `...&prefix=models.download.progress&prefix=models.cas.gc`.
@@ -158,25 +146,13 @@ curl -sS -X POST "$BASE/admin/models/download/cancel" \
   -d '{"id":"qwen2.5-coder-7b"}'
 ```
 
-Resume:
-- Re-issue the same `POST /admin/models/download` request. If the server honors `Range: bytes=<offset>-`, ARW resumes from the existing `.part` file.
-
 ## Notes
-- When `total` is unknown, events may omit it and include only `downloaded`.
 - On failure, the model list is updated to `status: "error"` with `error_code` to avoid stuck "downloading" states.
 - State directory is shown in `GET /admin/probe`.
-- Concurrency: set `ARW_MODELS_MAX_CONC` (default 2) to limit simultaneous downloads. When saturated, a download emits `status: "queued"` and then `"admitted"` once it starts.
- - Live counters: `started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total` are exported to Prometheus at `/metrics` as `arw_models_download_*` and to the read‑model at `/state/models_metrics`.
-- Disk safety: the downloader reserves space to avoid filling the disk. Set `ARW_MODELS_DISK_RESERVE_MB` (default 256) to control the reserved free‑space buffer. If there isn’t enough free space for the download, it aborts with an error event.
-- Size caps: set `ARW_MODELS_MAX_MB` (default 4096) to cap the maximum allowed size per download. The cap is enforced using the `Content-Length` when available and during streaming when it isn’t.
-- Checksum: when `sha256` is provided, it must be a 64‑char hex string; invalid values are rejected up front.
-- Progress payloads can include a budget snapshot (`budget`) and disk info (`disk`) when enabled via env:
-  - `ARW_DL_PROGRESS_INCLUDE_BUDGET=1`
-  - `ARW_DL_PROGRESS_INCLUDE_DISK=1`
-  Related tuning knobs: `ARW_MODELS_MAX_MB`, `ARW_MODELS_DISK_RESERVE_MB`, `ARW_DL_MIN_MBPS`, `ARW_DL_EWMA_ALPHA`, `ARW_DL_SEND_RETRIES`, `ARW_DL_STREAM_RETRIES`, `ARW_DL_IDLE_TIMEOUT_SECS`, `ARW_BUDGET_SOFT_DEGRADE_PCT`.
- - Admission checks: when `total` is known, the downloader estimates if it can finish within the remaining hard budget using a throughput baseline `ARW_DL_MIN_MBPS` and a persisted EWMA. If not, it emits `code: "admission-denied"`.
- - Idle safety: when no hard budget is set, `ARW_DL_IDLE_TIMEOUT_SECS` applies an idle timeout to avoid hung transfers.
-- Quota & preflight: when `ARW_DL_PREFLIGHT=1`, a HEAD request captures `Content-Length` and validators. If `ARW_MODELS_QUOTA_MB` is set, the preflight denies downloads whose projected CAS size would exceed the quota, emitting `code: "quota-exceeded"`. Early size checks also enforce `ARW_MODELS_MAX_MB`.
+- Concurrency: set `ARW_MODELS_MAX_CONC` (default 2) or `ARW_MODELS_MAX_CONC_HARD` to limit simultaneous downloads. When all permits are taken the caller waits for a free slot.
+- Metrics: counters (`started`, `queued`, `admitted`, `canceled`, `completed`, `completed_cached`, `errors`, `bytes_total`) and throughput EWMA are exposed at `/admin/state/models_metrics` and streamed via read‑model patches (`id: models_metrics`).
+- Checksum: `sha256` is mandatory and must be a 64‑char hex string; invalid values are rejected up front.
+- Legacy features such as budgets, disk-reserve enforcement, HTTP Range resume, and quota preflight are still tracked in the backlog and will return once the remaining ports land.
 
 ### Manifest
 
@@ -194,10 +170,10 @@ GC unused blobs:
 curl -sS -X POST "$BASE/admin/models/cas_gc" \
   -H 'Content-Type: application/json' \
   -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
-  -d '{"ttl_days":14}'
+ -d '{"ttl_hours":24}'
 ```
 
-GC emits a compact `models.cas.gc` event with `{scanned, kept, deleted, deleted_bytes, ttl_days}`.
+GC emits a compact `models.cas.gc` event with `{scanned, kept, deleted, deleted_bytes, ttl_hours}`.
 
 Note: kinds are normalized; legacy CamelCase forms have been removed.
 Get a summary suitable for dashboards:
@@ -225,4 +201,4 @@ Example response (wrapped in `{ ok, data }`):
 ```
 
 Concurrency notes
-- Non‑blocking shrink (`block=false`) reduces availability opportunistically and may report a `pending_shrink` remainder in both the set response and subsequent `GET /admin/models/concurrency` (and in the Jobs snapshot’s concurrency). Use a blocking call or wait for running jobs to finish to bring `pending_shrink` to zero.
+- `max` adjusts the soft target; `hard_cap` enforces an upper bound even if `max` is higher.

@@ -218,9 +218,6 @@ check-enums:
 docs-deprecations:
   python3 scripts/generate_deprecations.py
 
-docs-release-notes base="origin/main":
-  BASE_REF={{base}} python3 scripts/generate_interface_release_notes.py
-
 # Design tokens
 tokens-sync:
   bash scripts/sync_tokens.sh

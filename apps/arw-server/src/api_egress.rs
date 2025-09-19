@@ -5,6 +5,7 @@ use serde_json::json;
 use utoipa::ToSchema;
 
 use crate::AppState;
+use tracing::warn;
 
 #[derive(Deserialize, ToSchema)]
 pub(crate) struct EgressPreviewReq {
@@ -14,11 +15,23 @@ pub(crate) struct EgressPreviewReq {
 }
 
 /// Dry‑run egress decision for a URL/method.
-#[utoipa::path(post, path = "/egress/preview", tag = "Egress", request_body = EgressPreviewReq, responses((status = 200, body = serde_json::Value)))]
+#[utoipa::path(
+    post,
+    path = "/egress/preview",
+    tag = "Egress",
+    request_body = EgressPreviewReq,
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn egress_preview(
     State(state): State<AppState>,
     Json(req): Json<EgressPreviewReq>,
 ) -> impl IntoResponse {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
     // Parse URL and derive action kind (method-specific)
     let method = req
         .method
@@ -34,6 +47,7 @@ pub async fn egress_preview(
                     json!({"type":"about:blank","title":"Bad Request","status":400, "detail": e.to_string()}),
                 ),
             )
+                .into_response();
         }
     };
     let host = url.host_str().map(|s| s.to_string());
@@ -48,7 +62,7 @@ pub async fn egress_preview(
     {
         if let Some(h) = &host {
             if h.parse::<std::net::IpAddr>().is_ok() {
-                let _ = maybe_log_egress(
+                if let Err(err) = maybe_log_egress(
                     &state,
                     "deny",
                     Some("ip_literal"),
@@ -57,13 +71,18 @@ pub async fn egress_preview(
                     Some(&scheme),
                     None,
                     None,
-                );
+                )
+                .await
+                {
+                    warn!(?err, "failed to record denied egress preview");
+                }
                 return (
                     axum::http::StatusCode::OK,
                     Json(
                         json!({"allow": false, "reason": "ip_literal", "host": host, "port": port, "protocol": scheme}),
                     ),
-                );
+                )
+                    .into_response();
             }
         }
     }
@@ -84,7 +103,7 @@ pub async fn egress_preview(
                     hlow == plow || hlow.ends_with(&format!(".{plow}"))
                 });
                 if !ok {
-                    let _ = maybe_log_egress(
+                    if let Err(err) = maybe_log_egress(
                         &state,
                         "deny",
                         Some("allowlist"),
@@ -93,13 +112,18 @@ pub async fn egress_preview(
                         Some(&scheme),
                         None,
                         None,
-                    );
+                    )
+                    .await
+                    {
+                        warn!(?err, "failed to record allowlist-denied egress preview");
+                    }
                     return (
                         axum::http::StatusCode::OK,
                         Json(
                             json!({"allow": false, "reason": "allowlist", "host": host, "port": port, "protocol": scheme}),
                         ),
-                    );
+                    )
+                        .into_response();
                 }
             }
         }
@@ -109,14 +133,18 @@ pub async fn egress_preview(
     let decision = state.policy.lock().await.evaluate_action(&kind);
     if !decision.allow {
         if let Some(cap) = decision.require_capability.as_deref() {
-            if state
-                .kernel
-                .find_valid_lease("local", cap)
-                .ok()
-                .flatten()
-                .is_none()
-            {
-                let _ = maybe_log_egress(
+            let lease_ok = if let Some(kernel) = state.kernel_if_enabled() {
+                kernel
+                    .find_valid_lease_async("local", cap)
+                    .await
+                    .ok()
+                    .flatten()
+                    .is_some()
+            } else {
+                false
+            };
+            if !lease_ok {
+                if let Err(err) = maybe_log_egress(
                     &state,
                     "deny",
                     Some("lease_required"),
@@ -125,17 +153,22 @@ pub async fn egress_preview(
                     Some(&scheme),
                     None,
                     None,
-                );
+                )
+                .await
+                {
+                    warn!(?err, "failed to record lease-required egress preview");
+                }
                 return (
                     axum::http::StatusCode::OK,
                     Json(
                         json!({"allow": false, "reason": "lease_required", "require_capability": cap, "host": host, "port": port, "protocol": scheme}),
                     ),
-                );
+                )
+                    .into_response();
             }
         }
     }
-    let _ = maybe_log_egress(
+    if let Err(err) = maybe_log_egress(
         &state,
         "allow",
         Some("preview"),
@@ -144,11 +177,16 @@ pub async fn egress_preview(
         Some(&scheme),
         None,
         None,
-    );
+    )
+    .await
+    {
+        warn!(?err, "failed to record egress preview decision");
+    }
     (
         axum::http::StatusCode::OK,
         Json(json!({"allow": true, "host": host, "port": port, "protocol": scheme})),
     )
+        .into_response()
 }
 
 fn net_posture() -> String {
@@ -156,7 +194,7 @@ fn net_posture() -> String {
 }
 
 #[allow(clippy::too_many_arguments)]
-fn maybe_log_egress(
+async fn maybe_log_egress(
     state: &AppState,
     decision: &str,
     reason: Option<&str>,
@@ -166,19 +204,25 @@ fn maybe_log_egress(
     bytes_in: Option<i64>,
     bytes_out: Option<i64>,
 ) -> anyhow::Result<i64> {
-    if std::env::var("ARW_EGRESS_LEDGER_ENABLE").ok().as_deref() == Some("1") {
-        return state.kernel.append_egress(
-            decision,
-            reason,
-            host,
-            port.map(|p| p as i64).as_ref().copied(),
-            proto,
-            bytes_in,
-            bytes_out,
-            None,
-            None,
-            Some(&net_posture()),
-        );
+    if std::env::var("ARW_EGRESS_LEDGER_ENABLE").ok().as_deref() == Some("1")
+        && state.kernel_enabled()
+    {
+        if let Some(kernel) = state.kernel_if_enabled() {
+            return kernel
+                .append_egress_async(
+                    decision.to_string(),
+                    reason.map(|s| s.to_string()),
+                    host.map(|s| s.to_string()),
+                    port.map(|p| p as i64),
+                    proto.map(|s| s.to_string()),
+                    bytes_in,
+                    bytes_out,
+                    None,
+                    None,
+                    Some(net_posture()),
+                )
+                .await;
+        }
     }
     Ok(0)
 }

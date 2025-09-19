@@ -17,10 +17,23 @@ Centralized reference for ARW environment variables and common flags. Defaults f
 - `ARW_PORTABLE`: `1` keeps state/cache/logs near the app bundle.
  - `ARW_CONFIG`: absolute path to the primary config TOML (overrides discovery).
  - `ARW_CONFIG_DIR`: base directory to search for additional configs (e.g., `configs/gating.toml`, `configs/feedback.toml`). When unset, the service also probes beside the executable and the current directory.
-- `ARW_KERNEL_ENABLE`: enable the SQLite journal/CAS kernel (default `1`). When enabled, the service dual‑writes events to the kernel and exposes `/events?replay=N`.
- - `ARW_SPEC_DIR`: base directory for spec artifacts served under `/spec/*` (default: `spec`).
+- `ARW_KERNEL_ENABLE`: enable the SQLite journal/CAS kernel (default `1`). When enabled, the service dual‑writes events to the kernel and exposes `/events?replay=N`. When disabled (`0`/`false`), journaling and replay endpoints fall back to in-memory delivery only and `/events?replay` returns `501 Not Implemented`.
+- `ARW_SQLITE_POOL_SIZE`: starting target for SQLite connections in the pool (default `8`). Requests beyond the current limit block until a handle is returned.
+- `ARW_SQLITE_POOL_MIN`: lower bound for the autotuner/shrinker (default `2`).
+- `ARW_SQLITE_POOL_MAX`: absolute ceiling for pool expansion (default `32`).
+- `ARW_SQLITE_BUSY_MS`: busy timeout applied to each SQLite handle before returning `SQLITE_BUSY` (default `5000`).
+- `ARW_SQLITE_CACHE_PAGES`: cache size pragma expressed in pages (default `-20000`, which lets SQLite size the cache relative to available memory).
+- `ARW_SQLITE_MMAP_MB`: optional mmap window in MiB. Values ≤ `0` disable the setting; positive values are converted to bytes and passed to `PRAGMA mmap_size`.
+- `ARW_SQLITE_CHECKPOINT_SEC`: when set to a positive integer, spawns a background WAL checkpoint loop that runs every `N` seconds using `PRAGMA wal_checkpoint(TRUNCATE)`.
+- `ARW_SQLITE_POOL_AUTOTUNE`: set to `1` to enable adaptive tuning of the pool target based on observed wait times (default `0`).
+- `ARW_SQLITE_POOL_AUTOTUNE_INTERVAL_SEC`: evaluation interval for the autotuner (default `30`).
+- `ARW_SQLITE_POOL_AUTOTUNE_WAIT_MS`: average wait threshold (in ms) that triggers pool growth (default `50`). Shrink decisions use one quarter of this threshold.
+- `ARW_SPEC_DIR`: base directory for spec artifacts served under `/spec/*` (default: `spec`).
  - `ARW_INTERFACES_DIR`: base directory for the interface catalog served at `/catalog/index` (default: `interfaces`).
 - `ARW_ACTIONS_QUEUE_MAX`: backpressure limit for queued actions (default `1024`). When exceeded, `/actions` returns 429.
+- `ARW_ACTION_STAGING_MODE`: staging policy for `/actions` submissions. Options: `auto` (default, queue immediately), `ask` (stage unless action kind appears in `ARW_ACTION_STAGING_ALLOW`), or `always` (stage every action for manual approval).
+- `ARW_ACTION_STAGING_ALLOW`: comma‑delimited list of action kinds that bypass staging when `ARW_ACTION_STAGING_MODE=ask`.
+- `ARW_ACTION_STAGING_ACTOR`: label recorded on staging entries for audit trails (defaults to `local`).
 - `ARW_HTTP_MAX_CONC`: global HTTP concurrency limit (default `1024`) applied via Tower layer. Prevents overload and enforces fairness across routes. SSE `/events` is not limited by timeouts but does count toward concurrency.
 
 ## Performance Presets
@@ -40,6 +53,9 @@ Presets seed defaults for hot‑path tunables if you haven’t set them explicit
 - `ARW_CONTEXT_EXPAND_QUERY_TOP_K`: number of top seeds considered when synthesizing the expansion embedding.
 - `ARW_CONTEXT_SCORER`: working-set scorer (`mmrd`, `confidence`, or custom implementations).
 - `ARW_CONTEXT_STREAM_DEFAULT`: enable SSE streaming by default for `/context/assemble` (`0|1`).
+- `ARW_RESEARCH_WATCHER_SEED`: optional path to a JSON file containing seed suggestions for the Research Watcher (`[{ "source_id": ..., "title": ... }]`).
+- `ARW_RESEARCH_WATCHER_FEEDS`: comma-separated list of HTTP(S) endpoints returning Research Watcher items in JSON (`{ "items": [...] }` or `[ ... ]`).
+- `ARW_RESEARCH_WATCHER_INTERVAL_SECS`: poll interval for Research Watcher feeds (default `900`, minimum `300`).
 - `ARW_CONTEXT_COVERAGE_MAX_ITERS`: maximum iterations allowed for the coverage (CRAG) refinement loop.
 - `ARW_REHYDRATE_FILE_HEAD_KB`: preview bytes for `/context/rehydrate`.
 - `ARW_ROUTE_STATS_*`: coalesce/publish cadences for route stats.
@@ -85,6 +101,11 @@ Notes
   - `ARW_ACCESS_LOG_DIR`: directory for rolled logs (default `${ARW_LOGS_DIR:-./logs}`)
   - `ARW_ACCESS_LOG_PREFIX`: file prefix (default `http-access`)
   - `ARW_ACCESS_LOG_ROTATION`: `daily|hourly|minutely` (default `daily`)
+- Kernel emits the following metrics (when the `metrics` feature is enabled, on by default via `arw-server`):
+  - Gauges: `arw_kernel_pool_available`, `arw_kernel_pool_in_use`, `arw_kernel_pool_total`.
+  - Wait telemetry: `arw_kernel_pool_wait_total` (counter) and `arw_kernel_pool_wait_ms` (histogram, milliseconds).
+  - Checkpoint loop counters (enabled when `ARW_SQLITE_CHECKPOINT_SEC` > `0`): `arw_kernel_checkpoint_runs`, `arw_kernel_checkpoint_failures`.
+  - Autotune loop counters (enabled when `ARW_SQLITE_POOL_AUTOTUNE=1`): `arw_kernel_pool_autotune_grow`, `arw_kernel_pool_autotune_shrink`.
 
 ## State & Paths
 - `ARW_STATE_DIR`: override state directory.
@@ -104,14 +125,14 @@ Config discovery (CWD‑independent)
 - `ARW_OPENAI_API_KEY`: OpenAI‑compatible API key.
 - `ARW_OPENAI_BASE_URL`: custom base URL for OpenAI‑compatible servers.
 - `ARW_OPENAI_MODEL`: default model name when using OpenAI‑compatible backend.
- - `ARW_HTTP_TIMEOUT_SECS`: HTTP client timeout in seconds (default `20`) for built‑in effectors.
- - `ARW_HTTP_BODY_HEAD_KB`: number of KB of response body retained in memory for previews (default `64`).
- - `ARW_NET_ALLOWLIST`: comma‑separated hostnames allowed for HTTP effectors (optional).
- - `ARW_LITELLM_BASE_URL`: LiteLLM server base URL (OpenAI‑compatible). When set, it takes precedence over `ARW_OPENAI_BASE_URL`.
+- `ARW_HTTP_TIMEOUT_SECS`: shared HTTP timeout in seconds (default `20`). The unified server seeds this value on startup and governor hints update it live.
+- `ARW_HTTP_BODY_HEAD_KB`: number of KB of response body retained in memory for previews (default `64`).
+- `ARW_NET_ALLOWLIST`: comma‑separated hostnames allowed for HTTP effectors (optional).
+- `ARW_LITELLM_BASE_URL`: LiteLLM server base URL (OpenAI‑compatible). When set, it takes precedence over `ARW_OPENAI_BASE_URL`.
  - `ARW_LITELLM_API_KEY`: API key for LiteLLM (optional; send only if set).
  - `ARW_LITELLM_MODEL`: model name for LiteLLM (falls back to `ARW_OPENAI_MODEL` if unset).
-- `ARW_MODELS_MAX_MB`: hard cap for single model download size in MiB (default `4096`).
-- `ARW_MODELS_DISK_RESERVE_MB`: reserve free space during downloads in MiB (default `256`).
+- `ARW_MODELS_MAX_MB`: hard cap for single model download size in MiB (default `4096`). _Legacy bridge; unified server support planned._
+- `ARW_MODELS_DISK_RESERVE_MB`: reserve free space during downloads in MiB (default `256`). _Legacy bridge; unified server support planned._
 - `ARW_MODELS_MAX_CONC`: max concurrent model downloads (default `2`; `0` or `<1` treated as `1`).
 - `ARW_MODELS_QUOTA_MB`: optional total on‑disk quota for all models stored in CAS (sum of `state/models/by-hash/*`) in MiB. When set, downloads are denied if projected total would exceed the quota.
 
@@ -125,8 +146,8 @@ Config discovery (CWD‑independent)
 - `ARW_DL_IDLE_TIMEOUT_SECS`: idle fallback timeout when no hard budget is set (default `300`; set `0` to disable).
 - `ARW_DL_EWMA_ALPHA`: smoothing factor for throughput EWMA used in admission decisions (default `0.3`).
 - `ARW_DL_PREFLIGHT`: when `1`, perform a HEAD preflight to capture `Content-Length` and resume validators (ETag/Last-Modified). Enables early enforcement of `ARW_MODELS_MAX_MB` and `ARW_MODELS_QUOTA_MB` before starting the transfer.
-- `ARW_DL_PROGRESS_INCLUDE_BUDGET`: when `1`, include a `budget` snapshot in `models.download.progress` events.
-- `ARW_DL_PROGRESS_INCLUDE_DISK`: when `1`, include a `disk` snapshot `{available,total,reserve}` in progress events.
+- `ARW_DL_PROGRESS_INCLUDE_BUDGET`: when `1`, include a `budget` snapshot in `models.download.progress` events. _Legacy bridge; unified server support planned._
+- `ARW_DL_PROGRESS_INCLUDE_DISK`: when `1`, include a `disk` snapshot `{available,total,reserve}` in progress events. _Legacy bridge; unified server support planned._
 - `ARW_DL_PROGRESS_VALIDATE`: when `1`, validate progress `status`/`code` against the known vocabulary and log warnings for unknown values (helps catch drift).
  
 HTTP client (downloads)
@@ -215,10 +236,11 @@ See also: [CLI Guide](guide/cli.md)
    - Presets provided in‑repo: [configs/policy/relaxed.json](https://github.com/t3hw00t/ARW/blob/main/configs/policy/relaxed.json), [configs/policy/standard.json](https://github.com/t3hw00t/ARW/blob/main/configs/policy/standard.json), [configs/policy/strict.json](https://github.com/t3hw00t/ARW/blob/main/configs/policy/strict.json). Point `ARW_POLICY_FILE` at one of these to mirror `ARW_SECURITY_POSTURE` explicitly.
   - `ARW_GUARDRAILS_URL`: optional base URL for an HTTP guardrails service exposing `POST /check` (tool `guardrails.check`).
   - `ARW_GUARDRAILS_ALLOWLIST`: comma‑separated hostnames considered safe for URL checks (e.g., `example.com, arxiv.org`).
+  - `ARW_PATCH_SAFETY`: when set to `1`, `true`, or `enforce`, reject config/logic-unit patches that trip the built-in red-team heuristics (permission widening, SSRF markers, prompt-injection bait, secret keywords). When unset, findings are reported in responses and events but do not block writes.
 
 ## Tuning Hints
-- `ARW_HTTP_TIMEOUT_SECS`: hint for HTTP timeouts used by components that support it.
- - Downloader persists a lightweight throughput EWMA in `{state_dir}/downloads.metrics.json` to improve admission checks across runs.
+- `ARW_HTTP_TIMEOUT_SECS`: runtime-adjustable HTTP timeout applied across built-in HTTP clients; governor hints persist updates back to this environment variable.
+- Downloader persists a lightweight throughput EWMA in `{state_dir}/downloads.metrics.json` to improve admission checks across runs.
 
 ## Context & Snappy Defaults
 - `ARW_CONTEXT_K`: default working set size for `/context/assemble` (preset driven).

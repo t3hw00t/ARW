@@ -42,7 +42,6 @@ def detect_type(path: Path) -> str:
         'clustering.md': 'Explanation',
         'arrow_ingestion.md': 'How‑to',
         'training_research.md': 'Explanation',
-        'wiki_structure.md': 'Explanation',
     }
     return root_map.get(name, 'Explanation')
 
@@ -115,4 +114,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-

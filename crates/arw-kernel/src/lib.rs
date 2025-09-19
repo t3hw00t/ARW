@@ -1,11 +1,233 @@
 use anyhow::{anyhow, Result};
+use arw_memory_core::MemoryStore;
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
+use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+use std::sync::{Arc, Condvar, Mutex, Weak};
+use std::thread;
+use std::time::{Duration, Instant};
 
 #[derive(Clone)]
 pub struct Kernel {
     db_path: PathBuf,
+    pragmas: Arc<KernelPragmas>,
+    pool: Arc<PoolShared>,
+    checkpoint: Option<Arc<CheckpointCtl>>,
+    autotune: Option<Arc<AutotuneCtl>>,
+}
+
+#[derive(Clone)]
+struct KernelPragmas {
+    journal_mode: String,
+    synchronous: String,
+    busy_timeout_ms: u64,
+    cache_pages: i64,
+    temp_store: String,
+    mmap_bytes: Option<i64>,
+}
+
+struct PoolShared {
+    state: Mutex<PoolState>,
+    wait_stats: Mutex<WaitStats>,
+    cvar: Condvar,
+    target_size: AtomicUsize,
+    min_size: usize,
+    max_ceiling: usize,
+}
+
+struct PoolState {
+    conns: Vec<Connection>,
+    created: usize,
+}
+
+#[derive(Default)]
+struct WaitStats {
+    count: u64,
+    total_ms: f64,
+}
+
+struct ManagedConnection {
+    conn: Option<Connection>,
+    pool: Arc<PoolShared>,
+}
+
+struct CheckpointCtl {
+    stop: Arc<AtomicBool>,
+    handle: Mutex<Option<thread::JoinHandle<()>>>,
+}
+
+struct AutotuneCtl {
+    stop: Arc<AtomicBool>,
+    handle: Mutex<Option<thread::JoinHandle<()>>>,
+}
+
+impl PoolShared {
+    fn record_metrics(&self, state: &PoolState) {
+        #[cfg(feature = "metrics")]
+        {
+            let available = state.conns.len() as f64;
+            let total = state.created as f64;
+            let in_use = total - available;
+            metrics::gauge!("arw_kernel_pool_available", available);
+            metrics::gauge!("arw_kernel_pool_total", total);
+            metrics::gauge!("arw_kernel_pool_in_use", in_use);
+        }
+        #[cfg(not(feature = "metrics"))]
+        let _ = state;
+    }
+
+    fn record_wait(&self, waited: Duration) {
+        {
+            let mut stats = self
+                .wait_stats
+                .lock()
+                .expect("pool wait stats mutex poisoned");
+            stats.count = stats.count.saturating_add(1);
+            stats.total_ms += waited.as_secs_f64() * 1000.0;
+        }
+        #[cfg(feature = "metrics")]
+        {
+            metrics::counter!("arw_kernel_pool_wait_total", 1);
+            metrics::histogram!("arw_kernel_pool_wait_ms", waited.as_secs_f64() * 1000.0);
+        }
+    }
+
+    fn shrink_to(&self, target: usize) {
+        let mut guard = self.state.lock().expect("pool mutex poisoned");
+        while guard.created > target {
+            if guard.conns.pop().is_some() {
+                guard.created -= 1;
+            } else {
+                break;
+            }
+        }
+        self.record_metrics(&guard);
+        drop(guard);
+        self.cvar.notify_all();
+    }
+}
+
+impl Deref for ManagedConnection {
+    type Target = Connection;
+
+    fn deref(&self) -> &Self::Target {
+        self.conn.as_ref().expect("connection already taken")
+    }
+}
+
+impl DerefMut for ManagedConnection {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        self.conn.as_mut().expect("connection already taken")
+    }
+}
+
+impl Drop for ManagedConnection {
+    fn drop(&mut self) {
+        if let Some(conn) = self.conn.take() {
+            let mut guard = self.pool.state.lock().expect("pool mutex poisoned");
+            guard.conns.push(conn);
+            let target = self.pool.target_size.load(Ordering::Relaxed);
+            while guard.created > target {
+                if guard.conns.pop().is_some() {
+                    guard.created -= 1;
+                } else {
+                    break;
+                }
+            }
+            self.pool.record_metrics(&guard);
+            drop(guard);
+            self.pool.cvar.notify_one();
+        } else {
+            let mut guard = self.pool.state.lock().expect("pool mutex poisoned");
+            if guard.created > 0 {
+                guard.created -= 1;
+            }
+            let target = self.pool.target_size.load(Ordering::Relaxed);
+            while guard.created > target {
+                if guard.conns.pop().is_some() {
+                    guard.created -= 1;
+                } else {
+                    break;
+                }
+            }
+            self.pool.record_metrics(&guard);
+            drop(guard);
+            self.pool.cvar.notify_one();
+        }
+    }
+}
+
+impl CheckpointCtl {
+    fn new(stop: Arc<AtomicBool>, handle: thread::JoinHandle<()>) -> Self {
+        Self {
+            stop,
+            handle: Mutex::new(Some(handle)),
+        }
+    }
+}
+
+impl Drop for CheckpointCtl {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(handle) = self
+            .handle
+            .lock()
+            .expect("checkpoint join mutex poisoned")
+            .take()
+        {
+            let _ = handle.join();
+        }
+    }
+}
+
+impl AutotuneCtl {
+    fn new(stop: Arc<AtomicBool>, handle: thread::JoinHandle<()>) -> Self {
+        Self {
+            stop,
+            handle: Mutex::new(Some(handle)),
+        }
+    }
+}
+
+impl Drop for AutotuneCtl {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::Relaxed);
+        if let Some(handle) = self
+            .handle
+            .lock()
+            .expect("autotune join mutex poisoned")
+            .take()
+        {
+            let _ = handle.join();
+        }
+    }
+}
+
+impl KernelPragmas {
+    fn from_env() -> Self {
+        let busy_timeout_ms: u64 = std::env::var("ARW_SQLITE_BUSY_MS")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(5000);
+        let cache_pages: i64 = std::env::var("ARW_SQLITE_CACHE_PAGES")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(-20000);
+        let mmap_bytes = std::env::var("ARW_SQLITE_MMAP_MB")
+            .ok()
+            .and_then(|s| s.parse::<i64>().ok())
+            .map(|mb| mb.max(0) * 1024 * 1024);
+        Self {
+            journal_mode: "WAL".to_string(),
+            synchronous: "NORMAL".to_string(),
+            busy_timeout_ms,
+            cache_pages,
+            temp_store: "MEMORY".to_string(),
+            mmap_bytes,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -35,40 +257,229 @@ pub struct ActionRow {
     pub updated: String,
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct ResearchWatcherItem {
+    pub id: String,
+    pub source: Option<String>,
+    pub source_id: Option<String>,
+    pub title: Option<String>,
+    pub summary: Option<String>,
+    pub url: Option<String>,
+    pub payload: Option<serde_json::Value>,
+    pub status: String,
+    pub note: Option<String>,
+    pub created: String,
+    pub updated: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct StagingAction {
+    pub id: String,
+    pub action_kind: String,
+    pub action_input: serde_json::Value,
+    pub project: Option<String>,
+    pub requested_by: Option<String>,
+    pub evidence: Option<serde_json::Value>,
+    pub status: String,
+    pub decision: Option<String>,
+    pub decided_by: Option<String>,
+    pub decided_at: Option<String>,
+    pub action_id: Option<String>,
+    pub created: String,
+    pub updated: String,
+}
+
 impl Kernel {
     pub fn open(dir: &Path) -> Result<Self> {
         let db_path = dir.join("events.sqlite");
         let need_init = !db_path.exists();
+        let pragmas = Arc::new(KernelPragmas::from_env());
+        let pool_min_size = std::env::var("ARW_SQLITE_POOL_MIN")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(2);
+        let pool_max_ceiling = std::env::var("ARW_SQLITE_POOL_MAX")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(32)
+            .max(pool_min_size);
+        let initial_target = std::env::var("ARW_SQLITE_POOL_SIZE")
+            .ok()
+            .and_then(|s| s.parse::<usize>().ok())
+            .filter(|v| *v > 0)
+            .unwrap_or(8)
+            .clamp(pool_min_size, pool_max_ceiling);
         let conn = Connection::open(&db_path)?;
-        // Pragmas tuned for async server usage
-        conn.pragma_update(None, "journal_mode", "WAL")?;
-        conn.pragma_update(None, "synchronous", "NORMAL")?;
-        // Busy timeout (default 5000ms; override with ARW_SQLITE_BUSY_MS)
-        let busy_ms: u64 = std::env::var("ARW_SQLITE_BUSY_MS")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(5000);
-        conn.busy_timeout(std::time::Duration::from_millis(busy_ms))?;
-        // Cache size: negative = KB units. Default ~= 20MB (20000 KB pages)
-        let cache_pages: i64 = std::env::var("ARW_SQLITE_CACHE_PAGES")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(-20000);
-        let _ = conn.pragma_update(None, "cache_size", cache_pages);
-        // Keep temp tables in memory
-        let _ = conn.pragma_update(None, "temp_store", "MEMORY");
-        // mmap_size in bytes (default 128MB), skip on platforms not supporting it
-        if let Some(mb) = std::env::var("ARW_SQLITE_MMAP_MB")
-            .ok()
-            .and_then(|s| s.parse::<i64>().ok())
-        {
-            let bytes: i64 = mb.max(0) * 1024 * 1024;
-            let _ = conn.pragma_update(None, "mmap_size", bytes);
-        }
+        Kernel::apply_pragmas(&conn, &pragmas)?;
         if need_init {
             Self::init_schema(&conn)?;
         }
-        Ok(Self { db_path })
+        let pool = Arc::new(PoolShared {
+            state: Mutex::new(PoolState {
+                conns: vec![conn],
+                created: 1,
+            }),
+            wait_stats: Mutex::new(WaitStats::default()),
+            cvar: Condvar::new(),
+            target_size: AtomicUsize::new(initial_target),
+            min_size: pool_min_size,
+            max_ceiling: pool_max_ceiling,
+        });
+        {
+            let guard = pool.state.lock().expect("pool mutex poisoned");
+            pool.record_metrics(&guard);
+        }
+        let mut kernel = Self {
+            db_path,
+            pragmas,
+            pool,
+            checkpoint: None,
+            autotune: None,
+        };
+        if let Ok(secs) = std::env::var("ARW_SQLITE_CHECKPOINT_SEC") {
+            if let Ok(interval) = secs.parse::<u64>() {
+                if interval > 0 {
+                    let _ = kernel.start_checkpoint_loop(Duration::from_secs(interval));
+                }
+            }
+        }
+        if std::env::var("ARW_SQLITE_POOL_AUTOTUNE")
+            .map(|v| v != "0")
+            .unwrap_or(false)
+        {
+            let interval = std::env::var("ARW_SQLITE_POOL_AUTOTUNE_INTERVAL_SEC")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .filter(|v| *v > 0)
+                .map(Duration::from_secs)
+                .unwrap_or_else(|| Duration::from_secs(30));
+            let wait_threshold_ms = std::env::var("ARW_SQLITE_POOL_AUTOTUNE_WAIT_MS")
+                .ok()
+                .and_then(|s| s.parse::<f64>().ok())
+                .filter(|v| *v > 0.0)
+                .unwrap_or(50.0);
+            let _ = kernel.start_autotune_loop(interval, wait_threshold_ms);
+        }
+        Ok(kernel)
+    }
+
+    fn start_checkpoint_loop(&mut self, interval: Duration) -> Result<()> {
+        if interval.is_zero() || self.checkpoint.is_some() {
+            return Ok(());
+        }
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let pool_weak: Weak<PoolShared> = Arc::downgrade(&self.pool);
+        let db_path = self.db_path.clone();
+        let pragmas = self.pragmas.clone();
+        let stop_clone = stop_flag.clone();
+        let handle = thread::Builder::new()
+            .name("arw-kernel-checkpoint".into())
+            .spawn(move || loop {
+                if stop_clone.load(Ordering::Relaxed) {
+                    break;
+                }
+                thread::sleep(interval);
+                if stop_clone.load(Ordering::Relaxed) {
+                    break;
+                }
+                let Some(pool) = pool_weak.upgrade() else {
+                    break;
+                };
+                match Kernel::checkout_connection(&db_path, &pragmas, &pool) {
+                    Ok(conn) => {
+                        #[cfg(feature = "metrics")]
+                        metrics::counter!("arw_kernel_checkpoint_runs", 1);
+                        let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
+                    }
+                    Err(_) => {
+                        #[cfg(feature = "metrics")]
+                        metrics::counter!("arw_kernel_checkpoint_failures", 1);
+                    }
+                }
+            })
+            .map_err(|e| anyhow!("failed to spawn checkpoint thread: {e}"))?;
+        self.checkpoint = Some(Arc::new(CheckpointCtl::new(stop_flag, handle)));
+        Ok(())
+    }
+
+    fn start_autotune_loop(&mut self, interval: Duration, wait_threshold_ms: f64) -> Result<()> {
+        if interval.is_zero() || wait_threshold_ms <= 0.0 || self.autotune.is_some() {
+            return Ok(());
+        }
+        let stop_flag = Arc::new(AtomicBool::new(false));
+        let pool_weak: Weak<PoolShared> = Arc::downgrade(&self.pool);
+        let stop_clone = stop_flag.clone();
+        let handle = thread::Builder::new()
+            .name("arw-kernel-autotune".into())
+            .spawn(move || loop {
+                if stop_clone.load(Ordering::Relaxed) {
+                    break;
+                }
+                thread::sleep(interval);
+                if stop_clone.load(Ordering::Relaxed) {
+                    break;
+                }
+                let Some(pool) = pool_weak.upgrade() else {
+                    break;
+                };
+                let avg_wait = {
+                    let mut stats = pool
+                        .wait_stats
+                        .lock()
+                        .expect("pool wait stats mutex poisoned");
+                    let avg = if stats.count > 0 {
+                        stats.total_ms / stats.count as f64
+                    } else {
+                        0.0
+                    };
+                    stats.count = 0;
+                    stats.total_ms = 0.0;
+                    avg
+                };
+                let target = pool.target_size.load(Ordering::Relaxed);
+                if avg_wait > wait_threshold_ms && target < pool.max_ceiling {
+                    let new_target = (target + 1).min(pool.max_ceiling);
+                    pool.target_size.store(new_target, Ordering::Relaxed);
+                    #[cfg(feature = "metrics")]
+                    metrics::counter!("arw_kernel_pool_autotune_grow", 1);
+                    continue;
+                }
+                if avg_wait <= wait_threshold_ms * 0.25 {
+                    let available = {
+                        let guard = pool.state.lock().expect("pool mutex poisoned");
+                        let available = guard.conns.len();
+                        pool.record_metrics(&guard);
+                        available
+                    };
+                    let current_target = pool.target_size.load(Ordering::Relaxed);
+                    if available >= 2 && current_target > pool.min_size {
+                        let new_target = current_target.saturating_sub(1).max(pool.min_size);
+                        if new_target < current_target {
+                            pool.target_size.store(new_target, Ordering::Relaxed);
+                            pool.shrink_to(new_target);
+                            #[cfg(feature = "metrics")]
+                            metrics::counter!("arw_kernel_pool_autotune_shrink", 1);
+                        }
+                    }
+                }
+            })
+            .map_err(|e| anyhow!("failed to spawn pool autotune thread: {e}"))?;
+        self.autotune = Some(Arc::new(AutotuneCtl::new(stop_flag, handle)));
+        Ok(())
+    }
+
+    fn apply_pragmas(conn: &Connection, pragmas: &KernelPragmas) -> rusqlite::Result<()> {
+        conn.pragma_update(None, "journal_mode", &pragmas.journal_mode)?;
+        conn.pragma_update(None, "synchronous", &pragmas.synchronous)?;
+        conn.busy_timeout(std::time::Duration::from_millis(pragmas.busy_timeout_ms))?;
+        let _ = conn.pragma_update(None, "cache_size", pragmas.cache_pages);
+        let _ = conn.pragma_update(None, "temp_store", &pragmas.temp_store);
+        if let Some(bytes) = pragmas.mmap_bytes {
+            let _ = conn.pragma_update(None, "mmap_size", bytes);
+        }
+        Ok(())
     }
 
     fn init_schema(conn: &Connection) -> Result<()> {
@@ -137,6 +548,38 @@ impl Kernel {
             CREATE INDEX IF NOT EXISTS idx_leases_subject ON leases(subject);
             CREATE INDEX IF NOT EXISTS idx_leases_cap ON leases(capability);
 
+            CREATE TABLE IF NOT EXISTS research_watcher_items (
+              id TEXT PRIMARY KEY,
+              source TEXT,
+              source_id TEXT,
+              title TEXT,
+              summary TEXT,
+              url TEXT,
+              payload TEXT,
+              status TEXT NOT NULL,
+              note TEXT,
+              created TEXT NOT NULL,
+              updated TEXT NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_research_watcher_source_id ON research_watcher_items(source_id);
+
+            CREATE TABLE IF NOT EXISTS staging_actions (
+              id TEXT PRIMARY KEY,
+              action_kind TEXT NOT NULL,
+              action_input TEXT NOT NULL,
+              project TEXT,
+              requested_by TEXT,
+              evidence TEXT,
+              status TEXT NOT NULL,
+              decision TEXT,
+              decided_by TEXT,
+              decided_at TEXT,
+              action_id TEXT,
+              created TEXT NOT NULL,
+              updated TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_staging_actions_status ON staging_actions(status);
+
             -- Egress ledger: normalized, append-only record of network egress decisions and attribution
             CREATE TABLE IF NOT EXISTS egress_ledger (
               id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -153,46 +596,6 @@ impl Kernel {
               posture TEXT
             );
             CREATE INDEX IF NOT EXISTS idx_egress_time ON egress_ledger(time);
-
-            -- Memory records: abstract, multi-lane store with simple search fields
-            CREATE TABLE IF NOT EXISTS memory_records (
-              id TEXT PRIMARY KEY,
-              lane TEXT NOT NULL,
-              kind TEXT,
-              key TEXT,
-              value TEXT NOT NULL,
-              tags TEXT,
-              hash TEXT,
-              embed TEXT,
-              score REAL,
-              prob REAL,
-              created TEXT NOT NULL,
-              updated TEXT NOT NULL
-            );
-            CREATE INDEX IF NOT EXISTS idx_mem_lane ON memory_records(lane);
-            CREATE INDEX IF NOT EXISTS idx_mem_key ON memory_records(key);
-            CREATE INDEX IF NOT EXISTS idx_mem_hash ON memory_records(hash);
-
-            -- Memory FTS (contentless): index key/value/tags for fast retrieval
-            CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
-              id UNINDEXED,
-              lane UNINDEXED,
-              key,
-              value,
-              tags
-            );
-
-            -- Memory links: graph edges between records
-            CREATE TABLE IF NOT EXISTS memory_links (
-              src_id TEXT NOT NULL,
-              dst_id TEXT NOT NULL,
-              rel TEXT NOT NULL,
-              weight REAL,
-              created TEXT NOT NULL,
-              updated TEXT NOT NULL,
-              PRIMARY KEY (src_id,dst_id,rel)
-            );
-            CREATE INDEX IF NOT EXISTS idx_mem_links_src ON memory_links(src_id);
 
             -- Config snapshots: persisted effective config for Patch Engine
             CREATE TABLE IF NOT EXISTS config_snapshots (
@@ -223,11 +626,62 @@ impl Kernel {
             );
             "#,
         )?;
+        MemoryStore::migrate(conn)?;
         Ok(())
     }
 
-    fn conn(&self) -> Result<Connection> {
-        Ok(Connection::open(&self.db_path)?)
+    fn conn(&self) -> Result<ManagedConnection> {
+        Self::checkout_connection(&self.db_path, &self.pragmas, &self.pool)
+    }
+
+    fn checkout_connection(
+        db_path: &Path,
+        pragmas: &Arc<KernelPragmas>,
+        pool: &Arc<PoolShared>,
+    ) -> Result<ManagedConnection> {
+        let mut guard = pool.state.lock().expect("pool mutex poisoned");
+        let mut wait_start: Option<Instant> = None;
+        loop {
+            if let Some(conn) = guard.conns.pop() {
+                pool.record_metrics(&guard);
+                drop(guard);
+                if let Some(start) = wait_start {
+                    pool.record_wait(start.elapsed());
+                }
+                return Ok(ManagedConnection {
+                    conn: Some(conn),
+                    pool: pool.clone(),
+                });
+            }
+            let target = pool.target_size.load(Ordering::Relaxed);
+            if guard.created < target {
+                guard.created += 1;
+                pool.record_metrics(&guard);
+                drop(guard);
+                let conn = Connection::open(db_path)?;
+                if let Err(e) = Kernel::apply_pragmas(&conn, pragmas) {
+                    let mut guard = pool.state.lock().expect("pool mutex poisoned");
+                    if guard.created > 0 {
+                        guard.created -= 1;
+                    }
+                    pool.record_metrics(&guard);
+                    drop(guard);
+                    pool.cvar.notify_one();
+                    return Err(anyhow!(e));
+                }
+                if let Some(start) = wait_start {
+                    pool.record_wait(start.elapsed());
+                }
+                return Ok(ManagedConnection {
+                    conn: Some(conn),
+                    pool: pool.clone(),
+                });
+            }
+            if wait_start.is_none() {
+                wait_start = Some(Instant::now());
+            }
+            guard = pool.cvar.wait(guard).expect("pool condvar poisoned");
+        }
     }
 
     pub fn append_event(&self, env: &arw_events::Envelope) -> Result<i64> {
@@ -556,6 +1010,325 @@ impl Kernel {
         Ok(out)
     }
 
+    // ---------- Research watcher ----------
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn upsert_research_watcher_item(
+        &self,
+        source: Option<&str>,
+        source_id: Option<&str>,
+        title: Option<&str>,
+        summary: Option<&str>,
+        url: Option<&str>,
+        payload: Option<&serde_json::Value>,
+    ) -> Result<String> {
+        let conn = self.conn()?;
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let payload_s = payload.map(|v| serde_json::to_string(v).unwrap_or("{}".into()));
+        let existing_id: Option<String> = if let Some(src_id) = source_id {
+            conn.query_row(
+                "SELECT id FROM research_watcher_items WHERE source_id = ? LIMIT 1",
+                params![src_id],
+                |r| r.get(0),
+            )
+            .optional()?
+        } else {
+            None
+        };
+        let (id, existed) = if let Some(existing) = existing_id {
+            (existing, true)
+        } else {
+            (uuid::Uuid::new_v4().to_string(), false)
+        };
+        if existed {
+            conn.execute(
+                "UPDATE research_watcher_items SET source=?, title=?, summary=?, url=?, payload=?, updated=? WHERE id=?",
+                params![source, title, summary, url, payload_s, now, id],
+            )?;
+        } else {
+            conn.execute(
+                "INSERT INTO research_watcher_items(id,source,source_id,title,summary,url,payload,status,note,created,updated) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+                params![
+                    id,
+                    source,
+                    source_id,
+                    title,
+                    summary,
+                    url,
+                    payload_s,
+                    "pending",
+                    Option::<String>::None,
+                    now.clone(),
+                    now
+                ],
+            )?;
+        }
+        Ok(id)
+    }
+
+    pub fn list_research_watcher_items(
+        &self,
+        status: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
+        let conn = self.conn()?;
+        let limit = limit.clamp(1, 500);
+        let mut out = Vec::new();
+        if let Some(stat) = status {
+            let mut stmt = conn.prepare(
+                "SELECT id,source,source_id,title,summary,url,payload,status,note,created,updated FROM research_watcher_items WHERE status=? ORDER BY updated DESC LIMIT ?",
+            )?;
+            let mut rows = stmt.query(params![stat, limit])?;
+            while let Some(r) = rows.next()? {
+                let payload_s: Option<String> = r.get(6)?;
+                let payload_v = payload_s
+                    .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                    .unwrap_or(serde_json::json!({}));
+                out.push(serde_json::json!({
+                    "id": r.get::<_, String>(0)?,
+                    "source": r.get::<_, Option<String>>(1)?,
+                    "source_id": r.get::<_, Option<String>>(2)?,
+                    "title": r.get::<_, Option<String>>(3)?,
+                    "summary": r.get::<_, Option<String>>(4)?,
+                    "url": r.get::<_, Option<String>>(5)?,
+                    "payload": payload_v,
+                    "status": r.get::<_, String>(7)?,
+                    "note": r.get::<_, Option<String>>(8)?,
+                    "created": r.get::<_, String>(9)?,
+                    "updated": r.get::<_, String>(10)?
+                }));
+            }
+        } else {
+            let mut stmt = conn.prepare(
+                "SELECT id,source,source_id,title,summary,url,payload,status,note,created,updated FROM research_watcher_items ORDER BY updated DESC LIMIT ?",
+            )?;
+            let mut rows = stmt.query([limit])?;
+            while let Some(r) = rows.next()? {
+                let payload_s: Option<String> = r.get(6)?;
+                let payload_v = payload_s
+                    .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                    .unwrap_or(serde_json::json!({}));
+                out.push(serde_json::json!({
+                    "id": r.get::<_, String>(0)?,
+                    "source": r.get::<_, Option<String>>(1)?,
+                    "source_id": r.get::<_, Option<String>>(2)?,
+                    "title": r.get::<_, Option<String>>(3)?,
+                    "summary": r.get::<_, Option<String>>(4)?,
+                    "url": r.get::<_, Option<String>>(5)?,
+                    "payload": payload_v,
+                    "status": r.get::<_, String>(7)?,
+                    "note": r.get::<_, Option<String>>(8)?,
+                    "created": r.get::<_, String>(9)?,
+                    "updated": r.get::<_, String>(10)?
+                }));
+            }
+        }
+        Ok(out)
+    }
+
+    pub fn update_research_watcher_status(
+        &self,
+        id: &str,
+        status: &str,
+        note: Option<&str>,
+    ) -> Result<bool> {
+        let conn = self.conn()?;
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let n = conn.execute(
+            "UPDATE research_watcher_items SET status=?, note=?, updated=? WHERE id=?",
+            params![status, note, now, id],
+        )?;
+        Ok(n > 0)
+    }
+
+    pub fn get_research_watcher_item(&self, id: &str) -> Result<Option<ResearchWatcherItem>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(
+            "SELECT id,source,source_id,title,summary,url,payload,status,note,created,updated FROM research_watcher_items WHERE id=? LIMIT 1",
+        )?;
+        let mut rows = stmt.query([id])?;
+        if let Some(r) = rows.next()? {
+            let payload_s: Option<String> = r.get(6)?;
+            let payload_v =
+                payload_s.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
+            Ok(Some(ResearchWatcherItem {
+                id: r.get(0)?,
+                source: r.get(1)?,
+                source_id: r.get(2)?,
+                title: r.get(3)?,
+                summary: r.get(4)?,
+                url: r.get(5)?,
+                payload: payload_v,
+                status: r.get(7)?,
+                note: r.get(8)?,
+                created: r.get(9)?,
+                updated: r.get(10)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    // ---------- Staging actions ----------
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_staging_action(
+        &self,
+        action_kind: &str,
+        action_input: &serde_json::Value,
+        project: Option<&str>,
+        requested_by: Option<&str>,
+        evidence: Option<&serde_json::Value>,
+    ) -> Result<String> {
+        let conn = self.conn()?;
+        let id = uuid::Uuid::new_v4().to_string();
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let input_s = serde_json::to_string(action_input).unwrap_or("{}".into());
+        let evidence_s = evidence.map(|v| serde_json::to_string(v).unwrap_or("{}".into()));
+        conn.execute(
+            "INSERT INTO staging_actions(id,action_kind,action_input,project,requested_by,evidence,status,decision,decided_by,decided_at,action_id,created,updated) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            params![
+                id,
+                action_kind,
+                input_s,
+                project,
+                requested_by,
+                evidence_s,
+                "pending",
+                Option::<String>::None,
+                Option::<String>::None,
+                Option::<String>::None,
+                Option::<String>::None,
+                now.clone(),
+                now
+            ],
+        )?;
+        Ok(id)
+    }
+
+    pub fn list_staging_actions(
+        &self,
+        status: Option<&str>,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
+        let conn = self.conn()?;
+        let limit = limit.clamp(1, 500);
+        let mut out = Vec::new();
+        if let Some(stat) = status {
+            let mut stmt = conn.prepare(
+                "SELECT id,action_kind,action_input,project,requested_by,evidence,status,decision,decided_by,decided_at,action_id,created,updated FROM staging_actions WHERE status=? ORDER BY created ASC LIMIT ?",
+            )?;
+            let mut rows = stmt.query(params![stat, limit])?;
+            while let Some(r) = rows.next()? {
+                let input_s: String = r.get(2)?;
+                let evidence_s: Option<String> = r.get(5)?;
+                let input_v = serde_json::from_str::<serde_json::Value>(&input_s)
+                    .unwrap_or(serde_json::json!({}));
+                let evidence_v = evidence_s
+                    .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                    .unwrap_or(serde_json::json!({}));
+                out.push(serde_json::json!({
+                    "id": r.get::<_, String>(0)?,
+                    "action_kind": r.get::<_, String>(1)?,
+                    "action_input": input_v,
+                    "project": r.get::<_, Option<String>>(3)?,
+                    "requested_by": r.get::<_, Option<String>>(4)?,
+                    "evidence": evidence_v,
+                    "status": r.get::<_, String>(6)?,
+                    "decision": r.get::<_, Option<String>>(7)?,
+                    "decided_by": r.get::<_, Option<String>>(8)?,
+                    "decided_at": r.get::<_, Option<String>>(9)?,
+                    "action_id": r.get::<_, Option<String>>(10)?,
+                    "created": r.get::<_, String>(11)?,
+                    "updated": r.get::<_, String>(12)?
+                }));
+            }
+        } else {
+            let mut stmt = conn.prepare(
+                "SELECT id,action_kind,action_input,project,requested_by,evidence,status,decision,decided_by,decided_at,action_id,created,updated FROM staging_actions ORDER BY created ASC LIMIT ?",
+            )?;
+            let mut rows = stmt.query([limit])?;
+            while let Some(r) = rows.next()? {
+                let input_s: String = r.get(2)?;
+                let evidence_s: Option<String> = r.get(5)?;
+                let input_v = serde_json::from_str::<serde_json::Value>(&input_s)
+                    .unwrap_or(serde_json::json!({}));
+                let evidence_v = evidence_s
+                    .and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok())
+                    .unwrap_or(serde_json::json!({}));
+                out.push(serde_json::json!({
+                    "id": r.get::<_, String>(0)?,
+                    "action_kind": r.get::<_, String>(1)?,
+                    "action_input": input_v,
+                    "project": r.get::<_, Option<String>>(3)?,
+                    "requested_by": r.get::<_, Option<String>>(4)?,
+                    "evidence": evidence_v,
+                    "status": r.get::<_, String>(6)?,
+                    "decision": r.get::<_, Option<String>>(7)?,
+                    "decided_by": r.get::<_, Option<String>>(8)?,
+                    "decided_at": r.get::<_, Option<String>>(9)?,
+                    "action_id": r.get::<_, Option<String>>(10)?,
+                    "created": r.get::<_, String>(11)?,
+                    "updated": r.get::<_, String>(12)?
+                }));
+            }
+        }
+        Ok(out)
+    }
+
+    pub fn get_staging_action(&self, id: &str) -> Result<Option<StagingAction>> {
+        let conn = self.conn()?;
+        let mut stmt = conn.prepare(
+            "SELECT id,action_kind,action_input,project,requested_by,evidence,status,decision,decided_by,decided_at,action_id,created,updated FROM staging_actions WHERE id=? LIMIT 1",
+        )?;
+        let mut rows = stmt.query([id])?;
+        if let Some(r) = rows.next()? {
+            let input_s: String = r.get(2)?;
+            let evidence_s: Option<String> = r.get(5)?;
+            let input_v = serde_json::from_str::<serde_json::Value>(&input_s)
+                .unwrap_or(serde_json::json!({}));
+            let evidence_v =
+                evidence_s.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok());
+            Ok(Some(StagingAction {
+                id: r.get(0)?,
+                action_kind: r.get(1)?,
+                action_input: input_v,
+                project: r.get(3)?,
+                requested_by: r.get(4)?,
+                evidence: evidence_v,
+                status: r.get(6)?,
+                decision: r.get(7)?,
+                decided_by: r.get(8)?,
+                decided_at: r.get(9)?,
+                action_id: r.get(10)?,
+                created: r.get(11)?,
+                updated: r.get(12)?,
+            }))
+        } else {
+            Ok(None)
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_staging_action_status(
+        &self,
+        id: &str,
+        status: &str,
+        decision: Option<&str>,
+        decided_by: Option<&str>,
+        decided_at: Option<&str>,
+        action_id: Option<&str>,
+    ) -> Result<bool> {
+        let conn = self.conn()?;
+        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let decided_ts = decided_at.map(|s| s.to_string());
+        let n = conn.execute(
+            "UPDATE staging_actions SET status=?, decision=?, decided_by=?, decided_at=COALESCE(?,decided_at), action_id=?, updated=? WHERE id=?",
+            params![status, decision, decided_by, decided_ts, action_id, now, id],
+        )?;
+        Ok(n > 0)
+    }
+
     pub fn find_valid_lease(
         &self,
         subject: &str,
@@ -678,60 +1451,8 @@ impl Kernel {
         prob: Option<f64>,
     ) -> Result<String> {
         let conn = self.conn()?;
-        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let value_s = serde_json::to_string(value).unwrap_or("{}".to_string());
-        let embed_s = embed.map(|v| {
-            let arr: Vec<String> = v.iter().map(|f| f.to_string()).collect();
-            format!("[{}]", arr.join(","))
-        });
-        // Compute a stable hash of lane+kind+key+value
-        use sha2::Digest as _;
-        let mut h = sha2::Sha256::new();
-        h.update(lane.as_bytes());
-        if let Some(k) = kind {
-            h.update(k.as_bytes());
-        }
-        if let Some(k) = key {
-            h.update(k.as_bytes());
-        }
-        h.update(value_s.as_bytes());
-        let hash = format!("{:x}", h.finalize());
-        let id = id_opt
-            .map(|s| s.to_string())
-            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-        let tags_s = tags.map(|ts| ts.join(","));
-        conn.execute(
-            "INSERT OR REPLACE INTO memory_records(id,lane,kind,key,value,tags,hash,embed,score,prob,created,updated) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
-            params![
-                id,
-                lane,
-                kind,
-                key,
-                value_s,
-                tags_s,
-                hash,
-                embed_s,
-                score,
-                prob,
-                now,
-                now,
-            ],
-        )?;
-        // Upsert into FTS index
-        let _ = conn.execute(
-            "INSERT INTO memory_fts(id,lane,key,value,tags) VALUES(?,?,?,?,?)",
-            params![
-                id,
-                lane,
-                key.unwrap_or(""),
-                value_s,
-                match tags {
-                    Some(ts) => ts.join(","),
-                    None => String::new(),
-                }
-            ],
-        );
-        Ok(id)
+        let store = MemoryStore::new(&conn);
+        store.insert_memory(id_opt, lane, kind, key, value, embed, tags, score, prob)
     }
 
     pub fn search_memory(
@@ -741,58 +1462,8 @@ impl Kernel {
         limit: i64,
     ) -> Result<Vec<serde_json::Value>> {
         let conn = self.conn()?;
-        let like = format!("%{}%", q);
-        let mut out = Vec::new();
-        if let Some(l) = lane {
-            let mut stmt = conn.prepare(
-                "SELECT id,lane,kind,key,value,tags,hash,score,prob,updated FROM memory_records \
-                 WHERE lane=? AND (COALESCE(key,'') LIKE ? OR COALESCE(value,'') LIKE ? OR COALESCE(tags,'') LIKE ?) \
-                 ORDER BY updated DESC LIMIT ?",
-            )?;
-            let mut rows = stmt.query(params![l, like, like, like, limit])?;
-            while let Some(r) = rows.next()? {
-                let value_s: String = r.get(4)?;
-                let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
-                    .unwrap_or(serde_json::json!({}));
-                out.push(serde_json::json!({
-                    "id": r.get::<_, String>(0)?,
-                    "lane": r.get::<_, String>(1)?,
-                    "kind": r.get::<_, Option<String>>(2)?,
-                    "key": r.get::<_, Option<String>>(3)?,
-                    "value": value_v,
-                    "tags": r.get::<_, Option<String>>(5)?,
-                    "hash": r.get::<_, Option<String>>(6)?,
-                    "score": r.get::<_, Option<f64>>(7)?,
-                    "prob": r.get::<_, Option<f64>>(8)?,
-                    "updated": r.get::<_, String>(9)?,
-                }));
-            }
-        } else {
-            let mut stmt = conn.prepare(
-                "SELECT id,lane,kind,key,value,tags,hash,score,prob,updated FROM memory_records \
-                 WHERE (COALESCE(key,'') LIKE ? OR COALESCE(value,'') LIKE ? OR COALESCE(tags,'') LIKE ?) \
-                 ORDER BY updated DESC LIMIT ?",
-            )?;
-            let mut rows = stmt.query(params![like, like, like, limit])?;
-            while let Some(r) = rows.next()? {
-                let value_s: String = r.get(4)?;
-                let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
-                    .unwrap_or(serde_json::json!({}));
-                out.push(serde_json::json!({
-                    "id": r.get::<_, String>(0)?,
-                    "lane": r.get::<_, String>(1)?,
-                    "kind": r.get::<_, Option<String>>(2)?,
-                    "key": r.get::<_, Option<String>>(3)?,
-                    "value": value_v,
-                    "tags": r.get::<_, Option<String>>(5)?,
-                    "hash": r.get::<_, Option<String>>(6)?,
-                    "score": r.get::<_, Option<f64>>(7)?,
-                    "prob": r.get::<_, Option<f64>>(8)?,
-                    "updated": r.get::<_, String>(9)?,
-                }));
-            }
-        }
-        Ok(out)
+        let store = MemoryStore::new(&conn);
+        store.search_memory(q, lane, limit)
     }
 
     pub fn fts_search_memory(
@@ -802,59 +1473,8 @@ impl Kernel {
         limit: i64,
     ) -> Result<Vec<serde_json::Value>> {
         let conn = self.conn()?;
-        let mut out = Vec::new();
-        if let Some(l) = lane {
-            let mut stmt = conn.prepare(
-                "SELECT r.id,r.lane,r.kind,r.key,r.value,r.tags,r.hash,r.score,r.prob,r.updated \
-                 FROM memory_records r JOIN memory_fts f ON f.id=r.id \
-                 WHERE f.memory_fts MATCH ? AND f.lane=? \
-                 LIMIT ?",
-            )?;
-            let mut rows = stmt.query(params![q, l, limit])?;
-            while let Some(rw) = rows.next()? {
-                let value_s: String = rw.get(4)?;
-                let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
-                    .unwrap_or(serde_json::json!({}));
-                out.push(serde_json::json!({
-                    "id": rw.get::<_, String>(0)?,
-                    "lane": rw.get::<_, String>(1)?,
-                    "kind": rw.get::<_, Option<String>>(2)?,
-                    "key": rw.get::<_, Option<String>>(3)?,
-                    "value": value_v,
-                    "tags": rw.get::<_, Option<String>>(5)?,
-                    "hash": rw.get::<_, Option<String>>(6)?,
-                    "score": rw.get::<_, Option<f64>>(7)?,
-                    "prob": rw.get::<_, Option<f64>>(8)?,
-                    "updated": rw.get::<_, String>(9)?,
-                }));
-            }
-        } else {
-            let mut stmt = conn.prepare(
-                "SELECT r.id,r.lane,r.kind,r.key,r.value,r.tags,r.hash,r.score,r.prob,r.updated \
-                 FROM memory_records r JOIN memory_fts f ON f.id=r.id \
-                 WHERE f.memory_fts MATCH ? \
-                 LIMIT ?",
-            )?;
-            let mut rows = stmt.query(params![q, limit])?;
-            while let Some(rw) = rows.next()? {
-                let value_s: String = rw.get(4)?;
-                let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
-                    .unwrap_or(serde_json::json!({}));
-                out.push(serde_json::json!({
-                    "id": rw.get::<_, String>(0)?,
-                    "lane": rw.get::<_, String>(1)?,
-                    "kind": rw.get::<_, Option<String>>(2)?,
-                    "key": rw.get::<_, Option<String>>(3)?,
-                    "value": value_v,
-                    "tags": rw.get::<_, Option<String>>(5)?,
-                    "hash": rw.get::<_, Option<String>>(6)?,
-                    "score": rw.get::<_, Option<f64>>(7)?,
-                    "prob": rw.get::<_, Option<f64>>(8)?,
-                    "updated": rw.get::<_, String>(9)?,
-                }));
-            }
-        }
-        Ok(out)
+        let store = MemoryStore::new(&conn);
+        store.fts_search_memory(q, lane, limit)
     }
 
     pub fn search_memory_by_embedding(
@@ -863,79 +1483,9 @@ impl Kernel {
         lane: Option<&str>,
         limit: i64,
     ) -> Result<Vec<serde_json::Value>> {
-        // Naive scan: consider recent records with non-null embed and same length vector.
         let conn = self.conn()?;
-        let mut out: Vec<(f32, serde_json::Value)> = Vec::new();
-        let sql = if lane.is_some() {
-            "SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated FROM memory_records WHERE lane=? ORDER BY updated DESC LIMIT 1000"
-        } else {
-            "SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated FROM memory_records ORDER BY updated DESC LIMIT 1000"
-        };
-        let mut stmt = conn.prepare(sql)?;
-        let mut rows = if let Some(l) = lane {
-            stmt.query([l])?
-        } else {
-            stmt.query([])?
-        };
-        while let Some(r) = rows.next()? {
-            let embed_s: Option<String> = r.get(7)?;
-            if let Some(es) = embed_s {
-                if let Ok(vec_json) = serde_json::from_str::<serde_json::Value>(&es) {
-                    if let Some(arr) = vec_json.as_array() {
-                        let mut v2: Vec<f32> = Vec::with_capacity(arr.len());
-                        for v in arr.iter() {
-                            if let Some(f) = v.as_f64() {
-                                v2.push(f as f32);
-                            }
-                        }
-                        if v2.len() == embed.len() && !embed.is_empty() {
-                            let sim = Self::cosine_sim(embed, &v2);
-                            let value_s: String = r.get(4)?;
-                            let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
-                                .unwrap_or(serde_json::json!({}));
-                            let item = serde_json::json!({
-                                "id": r.get::<_, String>(0)?,
-                                "lane": r.get::<_, String>(1)?,
-                                "kind": r.get::<_, Option<String>>(2)?,
-                                "key": r.get::<_, Option<String>>(3)?,
-                                "value": value_v,
-                                "tags": r.get::<_, Option<String>>(5)?,
-                                "hash": r.get::<_, Option<String>>(6)?,
-                                "score": r.get::<_, Option<f64>>(8)?,
-                                "prob": r.get::<_, Option<f64>>(9)?,
-                                "updated": r.get::<_, String>(10)?,
-                                "sim": sim,
-                            });
-                            out.push((sim, item));
-                        }
-                    }
-                }
-            }
-        }
-        // sort by sim desc, take limit
-        out.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-        let items: Vec<serde_json::Value> = out
-            .into_iter()
-            .take(limit as usize)
-            .map(|(_, v)| v)
-            .collect();
-        Ok(items)
-    }
-
-    fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
-        let mut dot = 0f32;
-        let mut na = 0f32;
-        let mut nb = 0f32;
-        for i in 0..a.len() {
-            dot += a[i] * b[i];
-            na += a[i] * a[i];
-            nb += b[i] * b[i];
-        }
-        if na == 0f32 || nb == 0f32 {
-            0f32
-        } else {
-            dot / (na.sqrt() * nb.sqrt())
-        }
+        let store = MemoryStore::new(&conn);
+        store.search_memory_by_embedding(embed, lane, limit)
     }
 
     pub fn select_memory_hybrid(
@@ -946,146 +1496,8 @@ impl Kernel {
         k: i64,
     ) -> Result<Vec<serde_json::Value>> {
         let conn = self.conn()?;
-        // Candidate set via FTS when q present, else recent by updated
-        let mut candidates: Vec<serde_json::Value> = Vec::new();
-        if let Some(qs) = q {
-            if !qs.is_empty() {
-                let mut stmt = if lane.is_some() {
-                    conn.prepare(
-                        "SELECT r.id,r.lane,r.kind,r.key,r.value,r.tags,r.hash,r.embed,r.score,r.prob,r.updated \
-                         FROM memory_records r JOIN memory_fts f ON f.id=r.id \
-                         WHERE f.memory_fts MATCH ? AND f.lane=? \
-                         ORDER BY r.updated DESC LIMIT 400",
-                    )?
-                } else {
-                    conn.prepare(
-                        "SELECT r.id,r.lane,r.kind,r.key,r.value,r.tags,r.hash,r.embed,r.score,r.prob,r.updated \
-                         FROM memory_records r JOIN memory_fts f ON f.id=r.id \
-                         WHERE f.memory_fts MATCH ? \
-                         ORDER BY r.updated DESC LIMIT 400",
-                    )?
-                };
-                let mut rows = if let Some(l) = lane {
-                    stmt.query(params![qs, l])?
-                } else {
-                    stmt.query(params![qs])?
-                };
-                while let Some(r) = rows.next()? {
-                    let value_s: String = r.get(4)?;
-                    let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
-                        .unwrap_or(serde_json::json!({}));
-                    candidates.push(serde_json::json!({
-                        "id": r.get::<_, String>(0)?,
-                        "lane": r.get::<_, String>(1)?,
-                        "kind": r.get::<_, Option<String>>(2)?,
-                        "key": r.get::<_, Option<String>>(3)?,
-                        "value": value_v,
-                        "tags": r.get::<_, Option<String>>(5)?,
-                        "hash": r.get::<_, Option<String>>(6)?,
-                        "embed": r.get::<_, Option<String>>(7)?,
-                        "score": r.get::<_, Option<f64>>(8)?,
-                        "prob": r.get::<_, Option<f64>>(9)?,
-                        "updated": r.get::<_, String>(10)?,
-                        "_fts_hit": true,
-                    }));
-                }
-            }
-        }
-        // If no FTS candidates or to enrich, fetch recent
-        if candidates.is_empty() {
-            let mut stmt = if lane.is_some() {
-                conn.prepare(
-                    "SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated FROM memory_records WHERE lane=? ORDER BY updated DESC LIMIT 400",
-                )?
-            } else {
-                conn.prepare("SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated FROM memory_records ORDER BY updated DESC LIMIT 400")?
-            };
-            let mut rows = if let Some(l) = lane {
-                stmt.query(params![l])?
-            } else {
-                stmt.query([])?
-            };
-            while let Some(r) = rows.next()? {
-                let value_s: String = r.get(4)?;
-                let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
-                    .unwrap_or(serde_json::json!({}));
-                candidates.push(serde_json::json!({
-                    "id": r.get::<_, String>(0)?,
-                    "lane": r.get::<_, String>(1)?,
-                    "kind": r.get::<_, Option<String>>(2)?,
-                    "key": r.get::<_, Option<String>>(3)?,
-                    "value": value_v,
-                    "tags": r.get::<_, Option<String>>(5)?,
-                    "hash": r.get::<_, Option<String>>(6)?,
-                    "embed": r.get::<_, Option<String>>(7)?,
-                    "score": r.get::<_, Option<f64>>(8)?,
-                    "prob": r.get::<_, Option<f64>>(9)?,
-                    "updated": r.get::<_, String>(10)?,
-                    "_fts_hit": false,
-                }));
-            }
-        }
-        // Score and sort
-        let now = chrono::Utc::now();
-        let mut scored: Vec<(f32, serde_json::Value)> = Vec::new();
-        for mut item in candidates {
-            let mut sim = 0f32;
-            if let (Some(es), Some(e)) = (item.get("embed").and_then(|v| v.as_str()), embed) {
-                if let Ok(vec_json) = serde_json::from_str::<serde_json::Value>(es) {
-                    if let Some(arr) = vec_json.as_array() {
-                        let mut v2: Vec<f32> = Vec::with_capacity(arr.len());
-                        for v in arr.iter() {
-                            if let Some(f) = v.as_f64() {
-                                v2.push(f as f32);
-                            }
-                        }
-                        if v2.len() == e.len() && !e.is_empty() {
-                            sim = Self::cosine_sim(e, &v2);
-                        }
-                    }
-                }
-            }
-            let fts_hit = item
-                .get("_fts_hit")
-                .and_then(|v| v.as_bool())
-                .unwrap_or(false);
-            let recency = item
-                .get("updated")
-                .and_then(|v| v.as_str())
-                .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
-                .map(|t| {
-                    let age = now
-                        .signed_duration_since(t.with_timezone(&chrono::Utc))
-                        .num_seconds()
-                        .max(0) as f64;
-                    let hl = 3600f64 * 6f64; // 6h half-life
-                    ((-age / hl).exp()) as f32
-                })
-                .unwrap_or(0.5);
-            let util = item
-                .get("score")
-                .and_then(|v| v.as_f64())
-                .map(|s| s.clamp(0.0, 1.0) as f32)
-                .unwrap_or(0.0);
-            let w_sim = 0.5f32;
-            let w_fts = 0.2f32;
-            let w_rec = 0.2f32;
-            let w_util = 0.1f32;
-            let fts_score = if fts_hit { 1.0 } else { 0.0 };
-            let cscore = w_sim * sim + w_fts * fts_score + w_rec * recency + w_util * util;
-            if let Some(obj) = item.as_object_mut() {
-                obj.insert("cscore".into(), serde_json::json!(cscore));
-                obj.insert("sim".into(), serde_json::json!(sim));
-            }
-            scored.push((cscore, item));
-        }
-        scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
-        let items: Vec<serde_json::Value> = scored
-            .into_iter()
-            .take(k as usize)
-            .map(|(_, v)| v)
-            .collect();
-        Ok(items)
+        let store = MemoryStore::new(&conn);
+        store.select_memory_hybrid(q, embed, lane, k)
     }
 
     pub fn insert_memory_link(
@@ -1096,55 +1508,20 @@ impl Kernel {
         weight: Option<f64>,
     ) -> Result<()> {
         let conn = self.conn()?;
-        let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let relv = rel.unwrap_or("");
-        conn.execute(
-            "INSERT OR REPLACE INTO memory_links(src_id,dst_id,rel,weight,created,updated) VALUES(?,?,?,?,?,?)",
-            params![src_id, dst_id, relv, weight, now, now],
-        )?;
-        Ok(())
+        let store = MemoryStore::new(&conn);
+        store.insert_memory_link(src_id, dst_id, rel, weight)
     }
 
     pub fn list_memory_links(&self, src_id: &str, limit: i64) -> Result<Vec<serde_json::Value>> {
         let conn = self.conn()?;
-        let mut stmt = conn.prepare("SELECT dst_id,rel,weight,updated FROM memory_links WHERE src_id=? ORDER BY updated DESC LIMIT ?")?;
-        let mut rows = stmt.query(params![src_id, limit])?;
-        let mut out = Vec::new();
-        while let Some(r) = rows.next()? {
-            out.push(serde_json::json!({
-                "dst_id": r.get::<_, String>(0)?,
-                "rel": r.get::<_, String>(1)?,
-                "weight": r.get::<_, Option<f64>>(2)?,
-                "updated": r.get::<_, String>(3)?,
-            }));
-        }
-        Ok(out)
+        let store = MemoryStore::new(&conn);
+        store.list_memory_links(src_id, limit)
     }
 
     pub fn get_memory(&self, id: &str) -> Result<Option<serde_json::Value>> {
         let conn = self.conn()?;
-        let mut stmt = conn.prepare("SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated FROM memory_records WHERE id=? LIMIT 1")?;
-        let mut rows = stmt.query(params![id])?;
-        if let Some(r) = rows.next()? {
-            let value_s: String = r.get(4)?;
-            let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
-                .unwrap_or(serde_json::json!({}));
-            Ok(Some(serde_json::json!({
-                "id": r.get::<_, String>(0)?,
-                "lane": r.get::<_, String>(1)?,
-                "kind": r.get::<_, Option<String>>(2)?,
-                "key": r.get::<_, Option<String>>(3)?,
-                "value": value_v,
-                "tags": r.get::<_, Option<String>>(5)?,
-                "hash": r.get::<_, Option<String>>(6)?,
-                "embed": r.get::<_, Option<String>>(7)?,
-                "score": r.get::<_, Option<f64>>(8)?,
-                "prob": r.get::<_, Option<f64>>(9)?,
-                "updated": r.get::<_, String>(10)?,
-            })))
-        } else {
-            Ok(None)
-        }
+        let store = MemoryStore::new(&conn);
+        store.get_memory(id)
     }
 
     pub fn list_recent_memory(
@@ -1153,55 +1530,8 @@ impl Kernel {
         limit: i64,
     ) -> Result<Vec<serde_json::Value>> {
         let conn = self.conn()?;
-        let mut out = Vec::new();
-        if let Some(l) = lane {
-            let mut stmt = conn.prepare(
-                "SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated FROM memory_records WHERE lane=? ORDER BY updated DESC LIMIT ?",
-            )?;
-            let mut rows = stmt.query(params![l, limit])?;
-            while let Some(r) = rows.next()? {
-                let value_s: String = r.get(4)?;
-                let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
-                    .unwrap_or(serde_json::json!({}));
-                out.push(serde_json::json!({
-                    "id": r.get::<_, String>(0)?,
-                    "lane": r.get::<_, String>(1)?,
-                    "kind": r.get::<_, Option<String>>(2)?,
-                    "key": r.get::<_, Option<String>>(3)?,
-                    "value": value_v,
-                    "tags": r.get::<_, Option<String>>(5)?,
-                    "hash": r.get::<_, Option<String>>(6)?,
-                    "embed": r.get::<_, Option<String>>(7)?,
-                    "score": r.get::<_, Option<f64>>(8)?,
-                    "prob": r.get::<_, Option<f64>>(9)?,
-                    "updated": r.get::<_, String>(10)?,
-                }));
-            }
-        } else {
-            let mut stmt = conn.prepare(
-                "SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated FROM memory_records ORDER BY updated DESC LIMIT ?",
-            )?;
-            let mut rows = stmt.query(params![limit])?;
-            while let Some(r) = rows.next()? {
-                let value_s: String = r.get(4)?;
-                let value_v = serde_json::from_str::<serde_json::Value>(&value_s)
-                    .unwrap_or(serde_json::json!({}));
-                out.push(serde_json::json!({
-                    "id": r.get::<_, String>(0)?,
-                    "lane": r.get::<_, String>(1)?,
-                    "kind": r.get::<_, Option<String>>(2)?,
-                    "key": r.get::<_, Option<String>>(3)?,
-                    "value": value_v,
-                    "tags": r.get::<_, Option<String>>(5)?,
-                    "hash": r.get::<_, Option<String>>(6)?,
-                    "embed": r.get::<_, Option<String>>(7)?,
-                    "score": r.get::<_, Option<f64>>(8)?,
-                    "prob": r.get::<_, Option<f64>>(9)?,
-                    "updated": r.get::<_, String>(10)?,
-                }));
-            }
-        }
-        Ok(out)
+        let store = MemoryStore::new(&conn);
+        store.list_recent_memory(lane, limit)
     }
 
     // ---------- Config snapshots ----------
@@ -1354,6 +1684,302 @@ impl Kernel {
     // ---------------- Async wrappers (spawn_blocking) ----------------
     // These helpers offload rusqlite work from async executors.
 
+    #[allow(clippy::too_many_arguments)]
+    pub async fn insert_memory_async(
+        &self,
+        id_opt: Option<String>,
+        lane: String,
+        kind: Option<String>,
+        key: Option<String>,
+        value: serde_json::Value,
+        embed: Option<Vec<f32>>,
+        tags: Option<Vec<String>>,
+        score: Option<f64>,
+        prob: Option<f64>,
+    ) -> Result<String> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || {
+            let embed_ref = embed.as_deref();
+            let tags_ref = tags.as_deref();
+            k.insert_memory(
+                id_opt.as_deref(),
+                &lane,
+                kind.as_deref(),
+                key.as_deref(),
+                &value,
+                embed_ref,
+                tags_ref,
+                score,
+                prob,
+            )
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn search_memory_async(
+        &self,
+        q: String,
+        lane: Option<String>,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.search_memory(&q, lane.as_deref(), limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn fts_search_memory_async(
+        &self,
+        q: String,
+        lane: Option<String>,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.fts_search_memory(&q, lane.as_deref(), limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn search_memory_by_embedding_async(
+        &self,
+        embed: Vec<f32>,
+        lane: Option<String>,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || {
+            k.search_memory_by_embedding(&embed, lane.as_deref(), limit)
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn select_memory_hybrid_async(
+        &self,
+        q: Option<String>,
+        embed: Option<Vec<f32>>,
+        lane: Option<String>,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || {
+            k.select_memory_hybrid(q.as_deref(), embed.as_deref(), lane.as_deref(), limit)
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn list_recent_memory_async(
+        &self,
+        lane: Option<String>,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.list_recent_memory(lane.as_deref(), limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn insert_memory_link_async(
+        &self,
+        src_id: String,
+        dst_id: String,
+        rel: Option<String>,
+        weight: Option<f64>,
+    ) -> Result<()> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || {
+            k.insert_memory_link(&src_id, &dst_id, rel.as_deref(), weight)
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn list_memory_links_async(
+        &self,
+        src_id: String,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.list_memory_links(&src_id, limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn get_memory_async(&self, id: String) -> Result<Option<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.get_memory(&id))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn insert_lease_async(
+        &self,
+        id: String,
+        subject: String,
+        capability: String,
+        scope: Option<String>,
+        ttl_until: String,
+        budget: Option<f64>,
+        policy_ctx: Option<serde_json::Value>,
+    ) -> Result<()> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || {
+            k.insert_lease(
+                &id,
+                &subject,
+                &capability,
+                scope.as_deref(),
+                &ttl_until,
+                budget,
+                policy_ctx.as_ref(),
+            )
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn list_leases_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.list_leases(limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn insert_config_snapshot_async(&self, config: serde_json::Value) -> Result<String> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.insert_config_snapshot(&config))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn get_config_snapshot_async(&self, id: String) -> Result<Option<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.get_config_snapshot(&id))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn list_config_snapshots_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.list_config_snapshots(limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn insert_logic_unit_async(
+        &self,
+        id: String,
+        manifest: serde_json::Value,
+        status: String,
+    ) -> Result<()> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.insert_logic_unit(&id, &manifest, &status))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn list_logic_units_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.list_logic_units(limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn insert_orchestrator_job_async(
+        &self,
+        goal: &str,
+        data: Option<&serde_json::Value>,
+    ) -> Result<String> {
+        let k = self.clone();
+        let goal_owned = goal.to_string();
+        let data_clone = data.cloned();
+        tokio::task::spawn_blocking(move || {
+            k.insert_orchestrator_job(&goal_owned, data_clone.as_ref())
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn update_orchestrator_job_async(
+        &self,
+        id: String,
+        status: Option<String>,
+        progress: Option<f64>,
+    ) -> Result<bool> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || {
+            k.update_orchestrator_job(&id, status.as_deref(), progress)
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn list_orchestrator_jobs_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.list_orchestrator_jobs(limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn update_action_result_async(
+        &self,
+        id: String,
+        output: Option<serde_json::Value>,
+        error: Option<String>,
+    ) -> Result<bool> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || {
+            k.update_action_result(&id, output.as_ref(), error.as_deref())
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub async fn append_egress_async(
+        &self,
+        decision: String,
+        reason: Option<String>,
+        dest_host: Option<String>,
+        dest_port: Option<i64>,
+        protocol: Option<String>,
+        bytes_in: Option<i64>,
+        bytes_out: Option<i64>,
+        corr_id: Option<String>,
+        proj: Option<String>,
+        posture: Option<String>,
+    ) -> Result<i64> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || {
+            k.append_egress(
+                &decision,
+                reason.as_deref(),
+                dest_host.as_deref(),
+                dest_port,
+                protocol.as_deref(),
+                bytes_in,
+                bytes_out,
+                corr_id.as_deref(),
+                proj.as_deref(),
+                posture.as_deref(),
+            )
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn dequeue_one_queued_async(
+        &self,
+    ) -> Result<Option<(String, String, serde_json::Value)>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.dequeue_one_queued())
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
     pub async fn append_event_async(&self, env: &arw_events::Envelope) -> Result<i64> {
         let k = self.clone();
         let env = env.clone();
@@ -1469,6 +2095,129 @@ impl Kernel {
         .map_err(|e| anyhow!("join error: {}", e))?
     }
 
+    pub async fn upsert_research_watcher_item_async(
+        &self,
+        source: Option<String>,
+        source_id: Option<String>,
+        title: Option<String>,
+        summary: Option<String>,
+        url: Option<String>,
+        payload: Option<serde_json::Value>,
+    ) -> Result<String> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || {
+            k.upsert_research_watcher_item(
+                source.as_deref(),
+                source_id.as_deref(),
+                title.as_deref(),
+                summary.as_deref(),
+                url.as_deref(),
+                payload.as_ref(),
+            )
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn list_research_watcher_items_async(
+        &self,
+        status: Option<String>,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.list_research_watcher_items(status.as_deref(), limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn update_research_watcher_status_async(
+        &self,
+        id: String,
+        status: String,
+        note: Option<String>,
+    ) -> Result<bool> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || {
+            k.update_research_watcher_status(&id, &status, note.as_deref())
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn get_research_watcher_item_async(
+        &self,
+        id: String,
+    ) -> Result<Option<ResearchWatcherItem>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.get_research_watcher_item(&id))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn insert_staging_action_async(
+        &self,
+        action_kind: String,
+        action_input: serde_json::Value,
+        project: Option<String>,
+        requested_by: Option<String>,
+        evidence: Option<serde_json::Value>,
+    ) -> Result<String> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || {
+            k.insert_staging_action(
+                &action_kind,
+                &action_input,
+                project.as_deref(),
+                requested_by.as_deref(),
+                evidence.as_ref(),
+            )
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn list_staging_actions_async(
+        &self,
+        status: Option<String>,
+        limit: i64,
+    ) -> Result<Vec<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.list_staging_actions(status.as_deref(), limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn get_staging_action_async(&self, id: String) -> Result<Option<StagingAction>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.get_staging_action(&id))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn update_staging_action_status_async(
+        &self,
+        id: String,
+        status: String,
+        decision: Option<String>,
+        decided_by: Option<String>,
+        decided_at: Option<String>,
+        action_id: Option<String>,
+    ) -> Result<bool> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || {
+            k.update_staging_action_status(
+                &id,
+                &status,
+                decision.as_deref(),
+                decided_by.as_deref(),
+                decided_at.as_deref(),
+                action_id.as_deref(),
+            )
+        })
+        .await
+        .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
     pub async fn list_contributions_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
         let k = self.clone();
         tokio::task::spawn_blocking(move || k.list_contributions(limit))
@@ -1488,5 +2237,184 @@ impl Kernel {
         tokio::task::spawn_blocking(move || k.list_egress(limit))
             .await
             .map_err(|e| anyhow!("join error: {}", e))?
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{SecondsFormat, Utc};
+    use serde_json::json;
+    use tempfile::TempDir;
+
+    #[tokio::test]
+    async fn research_watcher_upsert_and_status() {
+        let dir = TempDir::new().expect("temp dir");
+        let kernel = Kernel::open(dir.path()).expect("kernel open");
+
+        let id = kernel
+            .upsert_research_watcher_item_async(
+                Some("arxiv".to_string()),
+                Some("arxiv:2309".to_string()),
+                Some("Original title".to_string()),
+                Some("Initial summary".to_string()),
+                Some("https://example.test/paper".to_string()),
+                Some(json!({"authors": ["Ada"]})),
+            )
+            .await
+            .expect("insert research watcher item");
+
+        let pending = kernel
+            .list_research_watcher_items_async(Some("pending".to_string()), 10)
+            .await
+            .expect("list pending");
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0]["id"], id);
+
+        // Upsert with same source_id should update the existing record.
+        let same_id = kernel
+            .upsert_research_watcher_item_async(
+                Some("arxiv".to_string()),
+                Some("arxiv:2309".to_string()),
+                Some("Updated title".to_string()),
+                Some("Refined summary".to_string()),
+                Some("https://example.test/paper".to_string()),
+                None,
+            )
+            .await
+            .expect("update research watcher item");
+        assert_eq!(id, same_id);
+
+        let note = Some("Looks promising".to_string());
+        let changed = kernel
+            .update_research_watcher_status_async(id.clone(), "approved".to_string(), note.clone())
+            .await
+            .expect("update status");
+        assert!(changed);
+
+        let item = kernel
+            .get_research_watcher_item_async(id.clone())
+            .await
+            .expect("fetch item")
+            .expect("item present");
+        assert_eq!(item.status, "approved");
+        assert_eq!(item.note, note);
+
+        let still_pending = kernel
+            .list_research_watcher_items_async(Some("pending".to_string()), 10)
+            .await
+            .expect("list pending after status change");
+        assert!(still_pending.is_empty());
+
+        // Unknown id returns false
+        let changed = kernel
+            .update_research_watcher_status_async(
+                "missing".to_string(),
+                "archived".to_string(),
+                None,
+            )
+            .await
+            .expect("update missing");
+        assert!(!changed);
+    }
+
+    #[tokio::test]
+    async fn staging_actions_lifecycle() {
+        let dir = TempDir::new().expect("temp dir");
+        let kernel = Kernel::open(dir.path()).expect("kernel open");
+        let payload = json!({
+            "project": "demo",
+            "evidence": {"link": "https://example.test"}
+        });
+
+        let staging_id = kernel
+            .insert_staging_action_async(
+                "fs.patch".to_string(),
+                payload.clone(),
+                Some("demo".to_string()),
+                Some("alice@example.test".to_string()),
+                payload.get("evidence").cloned(),
+            )
+            .await
+            .expect("insert staging action");
+
+        let pending = kernel
+            .list_staging_actions_async(Some("pending".to_string()), 10)
+            .await
+            .expect("list pending");
+        assert_eq!(pending.len(), 1);
+        assert_eq!(pending[0]["id"], staging_id);
+
+        let review_time = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+        let approved = kernel
+            .update_staging_action_status_async(
+                staging_id.clone(),
+                "approved".to_string(),
+                Some("approved".to_string()),
+                Some("reviewer".to_string()),
+                Some(review_time.clone()),
+                Some("action-1".to_string()),
+            )
+            .await
+            .expect("approve staging");
+        assert!(approved);
+
+        let record = kernel
+            .get_staging_action_async(staging_id.clone())
+            .await
+            .expect("get staging action")
+            .expect("staging exists");
+        assert_eq!(record.status, "approved");
+        assert_eq!(record.action_id.as_deref(), Some("action-1"));
+        assert_eq!(record.decided_by.as_deref(), Some("reviewer"));
+
+        let history = kernel
+            .list_staging_actions_async(None, 10)
+            .await
+            .expect("list all");
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0]["status"], json!("approved"));
+    }
+
+    #[tokio::test]
+    async fn staging_actions_denied() {
+        let dir = TempDir::new().expect("temp dir");
+        let kernel = Kernel::open(dir.path()).expect("kernel open");
+        let payload = json!({"project": "lab"});
+        let id = kernel
+            .insert_staging_action_async(
+                "net.http.get".to_string(),
+                payload.clone(),
+                payload
+                    .get("project")
+                    .and_then(|p| p.as_str())
+                    .map(|s| s.to_string()),
+                None,
+                None,
+            )
+            .await
+            .expect("insert staging");
+
+        let denied = kernel
+            .update_staging_action_status_async(
+                id.clone(),
+                "denied".to_string(),
+                Some("unsupported".to_string()),
+                Some("reviewer".to_string()),
+                Some(Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)),
+                None,
+            )
+            .await
+            .expect("deny staging");
+        assert!(denied);
+
+        let record = kernel
+            .get_staging_action_async(id.clone())
+            .await
+            .expect("get staging")
+            .expect("staging exists");
+        assert_eq!(record.status, "denied");
+        assert_eq!(record.decision.as_deref(), Some("unsupported"));
+        assert_eq!(record.action_id, None);
     }
 }

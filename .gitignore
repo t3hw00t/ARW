@@ -28,3 +28,4 @@ apps/arw-launcher/src-tauri/gen/
 apps/arw-launcher/src-tauri/bin/
 __pycache__/
 *.pyc
+apps/arw-server/state/

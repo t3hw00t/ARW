@@ -17,4 +17,4 @@ Microsummary: Pointers to releases, changelog, and upgrade notes. Stable.
  - Connector publishes both cluster and node subjects in dot.case:
    - Cluster-wide: `arw.events.task.completed`
    - Node-scoped: `arw.events.node.<node_id>.task.completed`
- - New topic: `experiment.activated` (emitted when an experiment variant is applied via `/experiments/activate`).
+- New topic: `experiment.activated` (emitted when an experiment variant is applied via `/admin/experiments/activate`).

@@ -18,14 +18,14 @@ Type: How‑to
 ## Runtime
 - Engine cadence: `ARW_FEEDBACK_TICK_MS` (ms) or `tick_ms` in [`configs/feedback.toml`](https://github.com/t3hw00t/ARW/blob/main/configs/feedback.toml) (default 500).
 - Suggestions include `id`, `action` (`hint`, `mem_limit`, `profile`), `params`, `rationale`, and `confidence`.
-- Live view: SSE `/admin/events` with `feedback.suggested`, or `GET /feedback/suggestions`.
+- Live view: SSE `/admin/events` with `feedback.suggested`, or `GET /admin/feedback/suggestions`.
 
 ## Policy (Guardrails)
 - Caps and bounds are merged from [`configs/feedback.toml`](https://github.com/t3hw00t/ARW/blob/main/configs/feedback.toml) and env vars:
   - `ARW_FEEDBACK_APPLY_PER_HOUR` (default 3)
   - `ARW_FEEDBACK_HTTP_TIMEOUT_MIN/MAX` (default 5..=300)
   - `ARW_FEEDBACK_MEM_LIMIT_MIN/MAX` (default 50..=2000)
-- Effective policy: `GET /feedback/policy` returns the current values.
+- Effective policy: `GET /admin/feedback/policy` returns the current values.
 - Applies are rejected with a clear reason if caps/bounds are exceeded.
 
 ## Config File: [`configs/feedback.toml`](https://github.com/t3hw00t/ARW/blob/main/configs/feedback.toml)
@@ -39,10 +39,17 @@ Type: How‑to
 ```
 
 ## APIs
-- `GET /feedback/suggestions` → { version, suggestions }
-- `GET /feedback/updates?since=N` → 204 if unchanged
-- `POST /feedback/apply` → { ok, reason? } (policy‑gated)
-- `GET /feedback/policy` → effective caps/bounds
+- `GET /admin/feedback/state` → feedback state (signals, suggestions, auto_apply)
+- `POST /admin/feedback/signal` → record a signal `{ kind, target, confidence, severity, note }`
+- `POST /admin/feedback/analyze` → recompute suggestions immediately
+- `POST /admin/feedback/apply` → `{ ok }` (policy‑gated; emits intents/events)
+- `POST /admin/feedback/auto` → toggle auto-apply
+- `POST /admin/feedback/reset` → clear signals & suggestions
+- `GET /admin/feedback/suggestions` → `{ version, suggestions }`
+- `GET /admin/feedback/updates?since=N` → 204 when unchanged
+- `GET /admin/feedback/policy` → effective caps/bounds
+- `GET /admin/feedback/versions` → available snapshots
+- `POST /admin/feedback/rollback?to=N` → restore a previous snapshot (omit `to` for `.bak`)
 
 ## Specs
 - OpenAPI: `/spec/openapi.yaml`
@@ -55,4 +62,4 @@ Type: How‑to
 
 ## Notes
 - Keep `ARW_DEBUG=1` for local development; secure admin endpoints with `ARW_ADMIN_TOKEN` otherwise.
-- For heavy loads, the engine drops/samples events rather than blocking; consumers can resync via `GET /feedback/suggestions`.
+- For heavy loads, the engine drops/samples events rather than blocking; consumers can resync via `GET /admin/feedback/suggestions`.

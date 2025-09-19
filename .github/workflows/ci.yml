@@ -79,8 +79,8 @@ jobs:
       - name: Rust format
         run: cargo fmt --all --check
 
-      - name: Clippy (core/server/svc)
-        run: cargo clippy -p arw-core -p arw-server -p arw-svc -- -D warnings
+      - name: Clippy (workspace)
+        run: cargo clippy --workspace --all-targets -- -D warnings
 
-      - name: Tests (core server + svc)
-        run: cargo nextest run -p arw-server -p arw-svc
+      - name: Tests (workspace)
+        run: cargo nextest run --workspace

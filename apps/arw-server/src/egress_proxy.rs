@@ -1,4 +1,4 @@
-use crate::{util::effective_posture, AppState};
+use crate::{http_timeout, util::effective_posture, AppState};
 use bytes::Bytes;
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt as _, Empty, Full};
@@ -88,7 +88,7 @@ pub async fn apply(enable: bool, port: u16, state: AppState) {
     let bind = format!("127.0.0.1:{}", port);
     info!("egress proxy listening on {} (preview)", bind);
     let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
+        .timeout(http_timeout::get_duration())
         .build()
         .expect("reqwest client");
     let cancel = CancellationToken::new();
@@ -176,7 +176,7 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
         == Some("1")
         && host.parse::<std::net::IpAddr>().is_ok()
     {
-        let _ = maybe_log_egress(
+        log_egress_event(
             &state,
             "deny",
             Some("ip_literal"),
@@ -187,14 +187,15 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
             None,
             corr_id_hdr.as_deref(),
             proj_hdr.as_deref(),
-        );
+        )
+        .await;
         return Response::builder()
             .status(StatusCode::FORBIDDEN)
             .body(Full::new(Bytes::from_static(b"IP literal blocked")).boxed())
             .unwrap();
     }
     if dns_guard() && (port == 853 || is_doh_host(&host)) {
-        let _ = maybe_log_egress(
+        log_egress_event(
             &state,
             "deny",
             Some("dns_guard"),
@@ -205,7 +206,8 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
             None,
             corr_id_hdr.as_deref(),
             proj_hdr.as_deref(),
-        );
+        )
+        .await;
         return Response::builder()
             .status(StatusCode::FORBIDDEN)
             .body(Full::new(Bytes::from_static(b"DNS guard")).boxed())
@@ -225,7 +227,7 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
                 hlow == plow || hlow.ends_with(&format!(".{plow}"))
             });
             if !ok {
-                let _ = maybe_log_egress(
+                log_egress_event(
                     &state,
                     "deny",
                     Some("allowlist"),
@@ -236,7 +238,8 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
                     None,
                     corr_id_hdr.as_deref(),
                     proj_hdr.as_deref(),
-                );
+                )
+                .await;
                 return Response::builder()
                     .status(StatusCode::FORBIDDEN)
                     .body(Full::new(Bytes::from_static(b"Host not in allowlist")).boxed())
@@ -248,14 +251,18 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
     let dec = state.policy.lock().await.evaluate_action("net.tcp.connect");
     if !dec.allow {
         if let Some(cap) = dec.require_capability.as_deref() {
-            if state
-                .kernel
-                .find_valid_lease("local", cap)
-                .ok()
-                .flatten()
-                .is_none()
-            {
-                let _ = maybe_log_egress(
+            let lease_ok = if let Some(kernel) = state.kernel_if_enabled() {
+                kernel
+                    .find_valid_lease_async("local", cap)
+                    .await
+                    .ok()
+                    .flatten()
+                    .is_some()
+            } else {
+                false
+            };
+            if !lease_ok {
+                log_egress_event(
                     &state,
                     "deny",
                     Some("lease_required"),
@@ -266,7 +273,8 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
                     None,
                     corr_id_hdr.as_deref(),
                     proj_hdr.as_deref(),
-                );
+                )
+                .await;
                 return Response::builder()
                     .status(StatusCode::FORBIDDEN)
                     .body(Full::new(Bytes::from_static(b"Lease required")).boxed())
@@ -280,7 +288,7 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
         Ok(s) => s,
         Err(e) => {
             warn!("connect failed: {}", e);
-            let _ = maybe_log_egress(
+            log_egress_event(
                 &state,
                 "error",
                 Some("connect"),
@@ -291,7 +299,8 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
                 None,
                 corr_id_hdr.as_deref(),
                 proj_hdr.as_deref(),
-            );
+            )
+            .await;
             return Response::builder()
                 .status(StatusCode::BAD_GATEWAY)
                 .body(Full::new(Bytes::from_static(b"Connect failed")).boxed())
@@ -342,7 +351,7 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
                     let _ = cw.shutdown().await;
                 };
                 let _ = tokio::join!(c2s, s2c);
-                let _ = maybe_log_egress(
+                log_egress_event(
                     &st,
                     "allow",
                     Some("connect"),
@@ -353,7 +362,8 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
                     Some(c2s_bytes as i64),
                     corr_id_hdr.as_deref(),
                     proj_hdr.as_deref(),
-                );
+                )
+                .await;
             }
             Err(e) => {
                 warn!("upgrade failed: {}", e);
@@ -400,7 +410,7 @@ async fn handle_http_forward(
     {
         if let Some(h) = &host {
             if h.parse::<std::net::IpAddr>().is_ok() {
-                let _ = maybe_log_egress(
+                log_egress_event(
                     &state,
                     "deny",
                     Some("ip_literal"),
@@ -415,7 +425,8 @@ async fn handle_http_forward(
                     req.headers()
                         .get("x-arw-project")
                         .and_then(|h| h.to_str().ok()),
-                );
+                )
+                .await;
                 return Response::builder()
                     .status(StatusCode::FORBIDDEN)
                     .body(Full::new(Bytes::from_static(b"IP literal blocked")).boxed())
@@ -440,7 +451,7 @@ async fn handle_http_forward(
                 .map(|s| s.contains("application/dns-message"))
                 .unwrap_or(false);
         if doh_like || wants_dns_message {
-            let _ = maybe_log_egress(
+            log_egress_event(
                 &state,
                 "deny",
                 Some("dns_guard"),
@@ -455,7 +466,8 @@ async fn handle_http_forward(
                 req.headers()
                     .get("x-arw-project")
                     .and_then(|h| h.to_str().ok()),
-            );
+            )
+            .await;
             return Response::builder()
                 .status(StatusCode::FORBIDDEN)
                 .body(Full::new(Bytes::from_static(b"DNS guard")).boxed())
@@ -477,7 +489,7 @@ async fn handle_http_forward(
                     hlow == plow || hlow.ends_with(&format!(".{plow}"))
                 });
                 if !ok {
-                    let _ = maybe_log_egress(
+                    log_egress_event(
                         &state,
                         "deny",
                         Some("allowlist"),
@@ -492,7 +504,8 @@ async fn handle_http_forward(
                         req.headers()
                             .get("x-arw-project")
                             .and_then(|h| h.to_str().ok()),
-                    );
+                    )
+                    .await;
                     return Response::builder()
                         .status(StatusCode::FORBIDDEN)
                         .body(Full::new(Bytes::from_static(b"Host not in allowlist")).boxed())
@@ -505,14 +518,18 @@ async fn handle_http_forward(
     let dec = state.policy.lock().await.evaluate_action("net.http.proxy");
     if !dec.allow {
         if let Some(cap) = dec.require_capability.as_deref() {
-            if state
-                .kernel
-                .find_valid_lease("local", cap)
-                .ok()
-                .flatten()
-                .is_none()
-            {
-                let _ = maybe_log_egress(
+            let lease_ok = if let Some(kernel) = state.kernel_if_enabled() {
+                kernel
+                    .find_valid_lease_async("local", cap)
+                    .await
+                    .ok()
+                    .flatten()
+                    .is_some()
+            } else {
+                false
+            };
+            if !lease_ok {
+                log_egress_event(
                     &state,
                     "deny",
                     Some("lease_required"),
@@ -527,7 +544,8 @@ async fn handle_http_forward(
                     req.headers()
                         .get("x-arw-project")
                         .and_then(|h| h.to_str().ok()),
-                );
+                )
+                .await;
                 return Response::builder()
                     .status(StatusCode::FORBIDDEN)
                     .body(Full::new(Bytes::from_static(b"Lease required")).boxed())
@@ -570,7 +588,7 @@ async fn handle_http_forward(
     let out = match rb.send().await {
         Ok(r) => r,
         Err(e) => {
-            let _ = maybe_log_egress(
+            log_egress_event(
                 &state,
                 "error",
                 Some("forward"),
@@ -581,7 +599,8 @@ async fn handle_http_forward(
                 Some(body_len),
                 corr_id_hdr.as_deref(),
                 proj_hdr.as_deref(),
-            );
+            )
+            .await;
             return Response::builder()
                 .status(StatusCode::BAD_GATEWAY)
                 .body(Full::new(Bytes::from(format!("Forward error: {}", e))).boxed())
@@ -595,20 +614,19 @@ async fn handle_http_forward(
         Err(_) => Bytes::new(),
     };
     let bytes_in = resp_bytes.len() as i64;
-    if std::env::var("ARW_EGRESS_LEDGER_ENABLE").ok().as_deref() == Some("1") {
-        let _ = state.kernel.append_egress(
-            "allow",
-            Some("http"),
-            host.as_deref(),
-            Some(port as i64).as_ref().copied(),
-            Some(&scheme),
-            Some(bytes_in),
-            Some(body_len),
-            corr_id_hdr.as_deref(),
-            proj_hdr.as_deref(),
-            Some(&effective_posture()),
-        );
-    }
+    log_egress_event(
+        &state,
+        "allow",
+        Some("http"),
+        host.as_deref(),
+        Some(port),
+        Some(&scheme),
+        Some(bytes_in),
+        Some(body_len),
+        corr_id_hdr.as_deref(),
+        proj_hdr.as_deref(),
+    )
+    .await;
     let mut builder = Response::builder().status(status);
     // Copy a few safe headers
     if let Some(ct) = out_headers.get(reqwest::header::CONTENT_TYPE) {
@@ -623,7 +641,7 @@ async fn handle_http_forward(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn maybe_log_egress(
+async fn maybe_log_egress(
     state: &AppState,
     decision: &str,
     reason: Option<&str>,
@@ -636,26 +654,32 @@ fn maybe_log_egress(
     proj: Option<&str>,
 ) -> anyhow::Result<i64> {
     let mut row_id: i64 = 0;
-    if std::env::var("ARW_EGRESS_LEDGER_ENABLE").ok().as_deref() == Some("1") {
-        row_id = state.kernel.append_egress(
-            decision,
-            reason,
-            host,
-            port.map(|p| p as i64).as_ref().copied(),
-            proto,
-            bytes_in,
-            bytes_out,
-            corr_id,
-            proj,
-            Some(&effective_posture()),
-        )?;
+    if std::env::var("ARW_EGRESS_LEDGER_ENABLE").ok().as_deref() == Some("1")
+        && state.kernel_enabled()
+    {
+        if let Some(kernel) = state.kernel_if_enabled() {
+            row_id = kernel
+                .append_egress_async(
+                    decision.to_string(),
+                    reason.map(|s| s.to_string()),
+                    host.map(|s| s.to_string()),
+                    port.map(|p| p as i64),
+                    proto.map(|s| s.to_string()),
+                    bytes_in,
+                    bytes_out,
+                    corr_id.map(|s| s.to_string()),
+                    proj.map(|s| s.to_string()),
+                    Some(effective_posture()),
+                )
+                .await?;
+        }
     }
     // Publish SSE event (CloudEvents metadata applied by bus)
     let posture = effective_posture();
     state.bus.publish(
         topics::TOPIC_EGRESS_LEDGER_APPENDED,
         &serde_json::json!({
-            "id": if row_id>0 { serde_json::Value::from(row_id) } else { serde_json::Value::Null },
+            "id": if row_id > 0 { serde_json::Value::from(row_id) } else { serde_json::Value::Null },
             "decision": decision,
             "reason": reason,
             "dest_host": host,
@@ -669,4 +693,26 @@ fn maybe_log_egress(
         }),
     );
     Ok(row_id)
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn log_egress_event(
+    state: &AppState,
+    decision: &str,
+    reason: Option<&str>,
+    host: Option<&str>,
+    port: Option<u16>,
+    proto: Option<&str>,
+    bytes_in: Option<i64>,
+    bytes_out: Option<i64>,
+    corr_id: Option<&str>,
+    proj: Option<&str>,
+) {
+    if let Err(err) = maybe_log_egress(
+        state, decision, reason, host, port, proto, bytes_in, bytes_out, corr_id, proj,
+    )
+    .await
+    {
+        warn!(?err, "failed to append egress ledger entry");
+    }
 }

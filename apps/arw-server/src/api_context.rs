@@ -62,12 +62,18 @@ pub(crate) struct AssembleReq {
     path = "/context/assemble",
     tag = "Context",
     request_body = AssembleReq,
-    responses((status = 200, description = "Assembled context", body = serde_json::Value))
+    responses(
+        (status = 200, description = "Assembled context", body = serde_json::Value),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
 )]
 pub async fn context_assemble(
     State(state): State<AppState>,
     Json(req): Json<AssembleReq>,
 ) -> axum::response::Response {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
     let include_sources = req.include_sources.unwrap_or(false);
     let debug = req.debug.unwrap_or(false);
     let base_spec = build_spec(&req);
@@ -214,6 +220,9 @@ async fn stream_working_set(
     max_iterations: usize,
     corr_id: Option<String>,
 ) -> axum::response::Response {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
     let (tx, rx) = mpsc::channel::<working_set::WorkingSetStreamEvent>(128);
     let state_clone = state.clone();
     let spec_clone = base_spec.clone();
@@ -326,48 +335,72 @@ pub(crate) struct RehydrateReq {
     pub ptr: Value,
 }
 /// Rehydrate a pointer (file head or memory record), gated by policy/leases.
-#[utoipa::path(post, path = "/context/rehydrate", tag = "Context", request_body = RehydrateReq, responses((status = 200, body = serde_json::Value), (status = 403), (status = 400), (status = 404)))]
+#[utoipa::path(
+    post,
+    path = "/context/rehydrate",
+    tag = "Context",
+    request_body = RehydrateReq,
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 403),
+        (status = 400),
+        (status = 404),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn context_rehydrate(
     State(state): State<AppState>,
     Json(req): Json<RehydrateReq>,
-) -> impl IntoResponse {
+) -> axum::response::Response {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
     let kind = req.ptr.get("kind").and_then(|v| v.as_str()).unwrap_or("");
     match kind {
         "file" => {
-            if !state
+            let allow_action = state
                 .policy
                 .lock()
                 .await
                 .evaluate_action("context.rehydrate")
-                .allow
-                && state
-                    .kernel
-                    .find_valid_lease("local", "context:rehydrate:file")
+                .allow;
+            if !allow_action {
+                let has_file_lease = state
+                    .kernel()
+                    .find_valid_lease_async("local", "context:rehydrate:file")
+                    .await
                     .ok()
                     .flatten()
-                    .is_none()
-                && state
-                    .kernel
-                    .find_valid_lease("local", "fs")
-                    .ok()
-                    .flatten()
-                    .is_none()
-            {
-                state.bus.publish(
-                    topics::TOPIC_POLICY_DECISION,
-                    &json!({
-                        "action": "context.rehydrate",
-                        "allow": false,
-                        "require_capability": "context:rehydrate:file|fs",
-                        "explain": {"reason":"lease_required"}
-                    }),
-                );
-                return (
-                    axum::http::StatusCode::FORBIDDEN,
-                    Json(
-                        json!({"type":"about:blank","title":"Forbidden","status":403, "detail":"Lease required: context:rehydrate:file or fs"}),
-                    ),
-                );
+                    .is_some();
+                let has_fs_lease = if has_file_lease {
+                    true
+                } else {
+                    state
+                        .kernel()
+                        .find_valid_lease_async("local", "fs")
+                        .await
+                        .ok()
+                        .flatten()
+                        .is_some()
+                };
+                if !has_file_lease && !has_fs_lease {
+                    state.bus.publish(
+                        topics::TOPIC_POLICY_DECISION,
+                        &json!({
+                            "action": "context.rehydrate",
+                            "allow": false,
+                            "require_capability": "context:rehydrate:file|fs",
+                            "explain": {"reason":"lease_required"}
+                        }),
+                    );
+                    return (
+                        axum::http::StatusCode::FORBIDDEN,
+                        Json(
+                            json!({"type":"about:blank","title":"Forbidden","status":403, "detail":"Lease required: context:rehydrate:file or fs"}),
+                        ),
+                    )
+                        .into_response();
+                }
             }
             let path = match req.ptr.get("path").and_then(|v| v.as_str()) {
                 Some(s) => std::path::PathBuf::from(s),
@@ -377,7 +410,8 @@ pub async fn context_rehydrate(
                         Json(
                             json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"missing path"}),
                         ),
-                    );
+                    )
+                        .into_response();
                 }
             };
             let cap_kb: u64 = std::env::var("ARW_REHYDRATE_FILE_HEAD_KB")
@@ -395,7 +429,8 @@ pub async fn context_rehydrate(
                                 Json(
                                     json!({"type":"about:blank","title":"Not Found","status":404}),
                                 ),
-                            );
+                            )
+                                .into_response();
                         }
                     };
                     let mut buf = vec![0u8; take as usize];
@@ -410,13 +445,15 @@ pub async fn context_rehydrate(
                             json!({"ptr": req.ptr, "file": {"path": path.to_string_lossy(), "size": m.len(), "head_bytes": n as u64, "truncated": (m.len() as usize) > n }, "content": content}),
                         ),
                     )
+                        .into_response()
                 }
                 _ => (
                     axum::http::StatusCode::BAD_REQUEST,
                     Json(
                         json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"not a file"}),
                     ),
-                ),
+                )
+                    .into_response(),
             }
         }
         "memory" => {
@@ -428,7 +465,8 @@ pub async fn context_rehydrate(
                         Json(
                             json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"missing id"}),
                         ),
-                    );
+                    )
+                        .into_response();
                 }
             };
             let decision = state
@@ -449,8 +487,9 @@ pub async fn context_rehydrate(
                 let mut has_lease = false;
                 for cap in &required_caps {
                     if state
-                        .kernel
-                        .find_valid_lease("local", cap)
+                        .kernel()
+                        .find_valid_lease_async("local", cap)
+                        .await
                         .ok()
                         .flatten()
                         .is_some()
@@ -479,21 +518,24 @@ pub async fn context_rehydrate(
                             "status": 403,
                             "detail": format!("Lease required: {}", require_human)
                         })),
-                    );
+                    )
+                        .into_response();
                 }
             }
-            match state.kernel.get_memory(&id) {
+            match state.kernel().get_memory_async(id.clone()).await {
                 Ok(Some(mut record)) => {
                     util::attach_memory_ptr(&mut record);
                     (
                         axum::http::StatusCode::OK,
                         Json(json!({"ptr": req.ptr, "memory": record})),
                     )
+                        .into_response()
                 }
                 Ok(None) => (
                     axum::http::StatusCode::NOT_FOUND,
                     Json(json!({"type":"about:blank","title":"Not Found","status":404})),
-                ),
+                )
+                    .into_response(),
                 Err(e) => (
                     axum::http::StatusCode::INTERNAL_SERVER_ERROR,
                     Json(json!({
@@ -502,7 +544,8 @@ pub async fn context_rehydrate(
                         "status": 500,
                         "detail": e.to_string()
                     })),
-                ),
+                )
+                    .into_response(),
             }
         }
         _ => (
@@ -510,6 +553,7 @@ pub async fn context_rehydrate(
             Json(
                 json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"unsupported ptr kind"}),
             ),
-        ),
+        )
+            .into_response(),
     }
 }

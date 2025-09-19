@@ -1,9 +1,9 @@
 use chrono::SecondsFormat;
 use serde_json::{json, Value};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::time;
 
-use crate::{util, AppState};
+use crate::{tool_cache::StoreOutcome, util, AppState};
 use arw_topics as topics;
 
 pub(crate) fn start_local_worker(state: AppState) {
@@ -11,9 +11,10 @@ pub(crate) fn start_local_worker(state: AppState) {
     let kernel = state.kernel.clone();
     let policy = state.policy.clone();
     let host = state.host.clone();
+    let tool_cache = state.tool_cache();
     tokio::spawn(async move {
         loop {
-            match kernel.dequeue_one_queued() {
+            match kernel.dequeue_one_queued_async().await {
                 Ok(Some((id, kind, input))) => {
                     let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
                     let env = arw_events::Envelope {
@@ -39,19 +40,25 @@ pub(crate) fn start_local_worker(state: AppState) {
                         let allowed = if policy_allows {
                             true
                         } else {
-                            kernel
-                                .find_valid_lease("local", "net:http")
+                            let has_http = kernel
+                                .find_valid_lease_async("local", "net:http")
+                                .await
                                 .ok()
                                 .flatten()
-                                .is_some()
-                                || kernel
-                                    .find_valid_lease("local", "io:egress")
+                                .is_some();
+                            if has_http {
+                                true
+                            } else {
+                                kernel
+                                    .find_valid_lease_async("local", "io:egress")
+                                    .await
                                     .ok()
                                     .flatten()
                                     .is_some()
+                            }
                         };
                         if !allowed {
-                            append_egress_entry(
+                            append_egress_entry_async(
                                 &kernel,
                                 None,
                                 &EgressRecord {
@@ -65,7 +72,8 @@ pub(crate) fn start_local_worker(state: AppState) {
                                     corr_id: None,
                                 },
                                 true,
-                            );
+                            )
+                            .await;
                             json!({"error":"lease required: net:http or io:egress"})
                         } else {
                             match host.run_tool("http.fetch", &input2).await {
@@ -85,12 +93,13 @@ pub(crate) fn start_local_worker(state: AppState) {
                                         bytes_out: Some(0),
                                         corr_id: Some(id.as_str()),
                                     };
-                                    let entry = append_egress_entry(
+                                    let entry = append_egress_entry_async(
                                         &kernel,
                                         Some(posture.as_str()),
                                         &record,
                                         false,
-                                    );
+                                    )
+                                    .await;
                                     publish_egress_event(&bus, &posture, entry, &record);
                                     v
                                 }
@@ -112,12 +121,13 @@ pub(crate) fn start_local_worker(state: AppState) {
                                         bytes_out: None,
                                         corr_id: Some(id.as_str()),
                                     };
-                                    let entry = append_egress_entry(
+                                    let entry = append_egress_entry_async(
                                         &kernel,
                                         Some(posture.as_str()),
                                         &record,
                                         false,
-                                    );
+                                    )
+                                    .await;
                                     publish_egress_event(&bus, &posture, entry, &record);
                                     json!({"error":"denied","reason": reason})
                                 }
@@ -126,16 +136,22 @@ pub(crate) fn start_local_worker(state: AppState) {
                         }
                     } else if kind == "fs.patch" {
                         let allowed = if !policy.lock().await.evaluate_action("fs.patch").allow {
-                            kernel
-                                .find_valid_lease("local", "fs")
+                            let has_fs = kernel
+                                .find_valid_lease_async("local", "fs")
+                                .await
                                 .ok()
                                 .flatten()
-                                .is_some()
-                                || kernel
-                                    .find_valid_lease("local", "fs:patch")
+                                .is_some();
+                            if has_fs {
+                                true
+                            } else {
+                                kernel
+                                    .find_valid_lease_async("local", "fs:patch")
+                                    .await
                                     .ok()
                                     .flatten()
                                     .is_some()
+                            }
                         } else {
                             true
                         };
@@ -167,16 +183,22 @@ pub(crate) fn start_local_worker(state: AppState) {
                     } else if kind == "app.vscode.open" {
                         let allowed =
                             if !policy.lock().await.evaluate_action("app.vscode.open").allow {
-                                kernel
-                                    .find_valid_lease("local", "io:app:vscode")
+                                let has_vscode = kernel
+                                    .find_valid_lease_async("local", "io:app:vscode")
+                                    .await
                                     .ok()
                                     .flatten()
-                                    .is_some()
-                                    || kernel
-                                        .find_valid_lease("local", "io:app")
+                                    .is_some();
+                                if has_vscode {
+                                    true
+                                } else {
+                                    kernel
+                                        .find_valid_lease_async("local", "io:app")
+                                        .await
                                         .ok()
                                         .flatten()
                                         .is_some()
+                                }
                             } else {
                                 true
                             };
@@ -206,15 +228,107 @@ pub(crate) fn start_local_worker(state: AppState) {
                             }
                         }
                     } else {
-                        simulate_action(&kind, &input).unwrap_or(json!({"ok": true}))
+                        let mut cache_event: Option<Value> = None;
+                        let output_value: Value;
+                        if tool_cache.enabled() && tool_cache.is_cacheable(&kind) {
+                            let cache_key = tool_cache.action_key(&kind, &input);
+                            let lookup_start = Instant::now();
+                            if let Some(hit) = tool_cache.lookup(&cache_key).await {
+                                let elapsed_ms = lookup_start.elapsed().as_millis() as u64;
+                                metrics::counter!("arw_tools_cache_hits", 1);
+                                cache_event = Some(json!({
+                                    "action_id": id.clone(),
+                                    "tool": kind.clone(),
+                                    "outcome": "hit",
+                                    "elapsed_ms": elapsed_ms,
+                                    "key": cache_key,
+                                    "digest": hit.digest,
+                                    "cached": true,
+                                    "age_secs": hit.age_secs,
+                                }));
+                                output_value = hit.value;
+                            } else {
+                                let run_start = Instant::now();
+                                let simulated = simulate_action(&kind, &input)
+                                    .unwrap_or_else(|_| json!({"ok": true}));
+                                let elapsed_ms = run_start.elapsed().as_millis() as u64;
+                                let store_outcome = tool_cache.store(&cache_key, &simulated).await;
+                                let (outcome_label, digest_opt, cached_flag, reason_opt) =
+                                    match store_outcome {
+                                        Some(StoreOutcome {
+                                            digest,
+                                            cached: true,
+                                        }) => {
+                                            metrics::counter!("arw_tools_cache_miss", 1);
+                                            ("miss", Some(digest), true, None)
+                                        }
+                                        Some(StoreOutcome {
+                                            digest,
+                                            cached: false,
+                                        }) => {
+                                            metrics::counter!("arw_tools_cache_error", 1);
+                                            (
+                                                "error",
+                                                Some(digest),
+                                                false,
+                                                Some("store_failed".to_string()),
+                                            )
+                                        }
+                                        None => {
+                                            metrics::counter!("arw_tools_cache_error", 1);
+                                            (
+                                                "error",
+                                                None,
+                                                false,
+                                                Some("serialize_failed".to_string()),
+                                            )
+                                        }
+                                    };
+                                let mut payload = json!({
+                                    "action_id": id.clone(),
+                                    "tool": kind.clone(),
+                                    "outcome": outcome_label,
+                                    "elapsed_ms": elapsed_ms,
+                                    "key": cache_key,
+                                    "digest": digest_opt,
+                                    "cached": cached_flag,
+                                    "age_secs": Value::Null,
+                                });
+                                if let Some(reason) = reason_opt {
+                                    payload["reason"] = Value::String(reason);
+                                }
+                                cache_event = Some(payload);
+                                output_value = simulated;
+                            }
+                        } else {
+                            let run_start = Instant::now();
+                            let simulated = simulate_action(&kind, &input)
+                                .unwrap_or_else(|_| json!({"ok": true}));
+                            let elapsed_ms = run_start.elapsed().as_millis() as u64;
+                            if tool_cache.enabled() {
+                                let cache_key = tool_cache.action_key(&kind, &input);
+                                metrics::counter!("arw_tools_cache_bypass", 1);
+                                cache_event = Some(json!({
+                                    "action_id": id.clone(),
+                                    "tool": kind.clone(),
+                                    "outcome": "not_cacheable",
+                                    "elapsed_ms": elapsed_ms,
+                                    "key": cache_key,
+                                    "cached": false,
+                                    "reason": "not_cacheable",
+                                }));
+                            }
+                            output_value = simulated;
+                        }
+                        if let Some(evt) = cache_event {
+                            bus.publish(topics::TOPIC_TOOL_CACHE, &evt);
+                        }
+                        output_value
                     };
-                    let _ = kernel.update_action_result(
-                        env.payload["id"].as_str().unwrap_or(""),
-                        Some(&out),
-                        None,
-                    );
                     let _ = kernel
-                        .set_action_state(env.payload["id"].as_str().unwrap_or(""), "completed");
+                        .update_action_result_async(id.clone(), Some(out.clone()), None)
+                        .await;
+                    let _ = kernel.set_action_state_async(&id, "completed").await;
                     let now2 = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
                     let env2 = arw_events::Envelope {
                         time: now2,
@@ -224,15 +338,17 @@ pub(crate) fn start_local_worker(state: AppState) {
                         ce: None,
                     };
                     bus.publish(&env2.kind, &env2.payload);
-                    let _ = kernel.append_contribution(
-                        "local",
-                        "task.complete",
-                        1.0,
-                        "task",
-                        None,
-                        None,
-                        None,
-                    );
+                    let _ = kernel
+                        .append_contribution_async(
+                            "local",
+                            "task.complete",
+                            1.0,
+                            "task",
+                            None,
+                            None,
+                            None,
+                        )
+                        .await;
                 }
                 Ok(None) => time::sleep(Duration::from_millis(200)).await,
                 Err(_) => time::sleep(Duration::from_millis(500)).await,
@@ -259,7 +375,7 @@ fn ledger_enabled() -> bool {
     )
 }
 
-fn append_egress_entry(
+async fn append_egress_entry_async(
     kernel: &arw_kernel::Kernel,
     posture: Option<&str>,
     record: &EgressRecord<'_>,
@@ -267,18 +383,19 @@ fn append_egress_entry(
 ) -> Option<i64> {
     if force || ledger_enabled() {
         kernel
-            .append_egress(
-                record.decision,
-                record.reason,
-                record.dest_host,
+            .append_egress_async(
+                record.decision.to_string(),
+                record.reason.map(|s| s.to_string()),
+                record.dest_host.map(|s| s.to_string()),
                 record.dest_port,
-                record.protocol,
+                record.protocol.map(|s| s.to_string()),
                 record.bytes_in,
                 record.bytes_out,
-                record.corr_id,
+                record.corr_id.map(|s| s.to_string()),
                 None,
-                posture,
+                posture.map(|s| s.to_string()),
             )
+            .await
             .ok()
     } else {
         None

@@ -9,6 +9,7 @@ members = [
   "crates/arw-macros",
   "crates/arw-topics",
   "crates/arw-heuristics",
+  "crates/arw-memory-core",
   "apps/arw-cli",
   "crates/arw-otel",
   "apps/arw-svc",

@@ -35,15 +35,15 @@ Type: Explanation
 - Caching layers: Action Cache with CAS and singleflight; digest‑addressed blob serving with strong validators; read‑models over SSE (JSON Patch deltas with coalescing); llama.cpp prompt caching. See: Architecture → Caching Layers.
 - Security & Policy: Central gating keys and deny contracts; ingress/egress guards; Policy Capsules; roadmap RPU for signatures/ABAC. See: [Security Hardening](guide/security_hardening.md), [Policy & Permissions](guide/policy_permissions.md).
 - Visual capture: Agents and UIs call `ui.screenshot.capture` for screen/window/region snapshots with Activity lane previews, gallery management, annotation tooling, and optional OCR. See: [Screenshots](guide/screenshots.md).
- - Self‑improvement loop: goldens + rewards, A/B runner (with shadow), config patch engine, policy‑aware tuner, calibrated self‑model, nightly distillation, and a persisted experiments scoreboard + winners. See: Experiments (guide/experiments_ab.md).
+ - Self‑improvement loop: goldens + rewards, A/B runner (with shadow), config patch engine, policy‑aware tuner, calibrated self‑model, nightly distillation (and on-demand via `POST /admin/distill`), and a persisted experiments scoreboard + winners. See: Experiments (guide/experiments_ab.md).
 - Egress control (planned): policy‑backed, per‑node egress gateway + DNS guard with project‑level network posture and an egress ledger. See: Architecture → Egress Firewall; Guide → Network Posture.
  - Lightweight mitigations (planned): memory quarantine; project isolation; belief‑diff review; cluster manifest pinning; hardened headless browsing; safe archive handling; DNS anomaly guard; accelerator zeroing; event sequencing; context rehydration check. See: Architecture → Lightweight Mitigations.
  - Models: enhanced downloader with resume, checksum, EWMA admission, disk reserve checks, content‑disposition filenames, cross‑platform finalize, and a simple concurrency limiter (`ARW_MODELS_MAX_CONC`).
 - Extensibility: Static Rust plugins and dynamic WASI/WASM plugins; unified tool registry with JSON Schemas.
-- Runtime & Memory: Orchestrator, pluggable Queue/Bus (local; NATS groups; JetStream planned), Run Capsules; layered memory and Memory Lab. See: Memory and Training (MEMORY_AND_TRAINING.md).
+- Runtime & Memory: Orchestrator, pluggable Queue/Bus (local; NATS groups; JetStream planned), Run Capsules; layered memory and Memory Lab. See: Memory Lifecycle (architecture/memory_lifecycle.md).
 - Safety & Profiles: Sandboxed file/network allowlists; profiles (performance/balanced/power‑saver/custom); secrets and hints.
 - Hardware & Performance: Hardware discovery; governor presets; model daemon + CAS for concurrent access. See: [Models Download](guide/models_download.md).
-- Connections & Hierarchy: Connection registry, health checks, rate limits, QoS, tracing, policy; roles and negotiation (hello/offer/accept). See: Clustering (CLUSTERING.md), Hierarchy (HIERARCHY.md).
+- Connections & Hierarchy: Connection registry, health checks, rate limits, QoS, tracing, policy; roles and negotiation (hello/offer/accept). See: Federated Clustering (architecture/cluster_federation.md).
 
 ## Adapters
 - llama.cpp (GGUF; CPU/GPU/NPU offload), ONNX Runtime (DirectML/CUDA/ROCm/OpenVINO/CoreML), OpenAI‑compatible HTTP. CPU fallback is mandatory.
@@ -60,6 +60,6 @@ Type: Explanation
 ## See Also
 - API and Schema (API_AND_SCHEMA.md)
 - Security Hardening (guide/security_hardening.md)
-- Deployment (DEPLOYMENT.md)
+- Deployment (guide/deployment.md)
 - Configuration (CONFIGURATION.md)
 - Universal Feature Catalog (reference/feature_catalog.md)

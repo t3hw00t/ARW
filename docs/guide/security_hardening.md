@@ -113,6 +113,7 @@ Clustering & Connectors
 Checklist
 - [ ] `ARW_DEBUG` unset
 - [ ] `ARW_ADMIN_TOKEN` set and required
+- [ ] Patch safety enforcement enabled (`ARW_PATCH_SAFETY`) where risky patches must be rejected outright
 - [ ] Admin rate‑limit tuned (`ARW_ADMIN_RL`)
 - [ ] Gating policy in [`configs/gating.toml`](https://github.com/t3hw00t/ARW/blob/main/configs/gating.toml)
 - [ ] Trust store configured; capsules signed and verified when used

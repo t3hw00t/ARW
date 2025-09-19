@@ -15,35 +15,83 @@ use crate::{admin_ok, AppState};
 use arw_topics as topics;
 
 /// Catalog installed logic units.
-#[utoipa::path(get, path = "/logic-units", tag = "Logic Units", params(("limit" = Option<i64>, Query)), responses((status = 200, body = serde_json::Value)))]
+#[utoipa::path(
+    get,
+    path = "/logic-units",
+    tag = "Logic Units",
+    params(("limit" = Option<i64>, Query)),
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn logic_units_list(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
-) -> impl IntoResponse {
+) -> axum::response::Response {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
     let limit = q
         .get("limit")
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(200);
-    let items = state.kernel.list_logic_units(limit).unwrap_or_default();
-    Json(json!({"items": items}))
+    match state.kernel().list_logic_units_async(limit).await {
+        Ok(items) => Json(json!({"items": items})).into_response(),
+        Err(e) => Json(json!({
+            "items": Vec::<Value>::new(),
+            "error": e.to_string()
+        }))
+        .into_response(),
+    }
 }
 
 /// Read-model snapshot of logic units.
-#[utoipa::path(get, path = "/state/logic_units", tag = "Logic Units", params(("limit" = Option<i64>, Query)), responses((status = 200, body = serde_json::Value)))]
+#[utoipa::path(
+    get,
+    path = "/state/logic_units",
+    tag = "Logic Units",
+    params(("limit" = Option<i64>, Query)),
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn state_logic_units(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
     let limit = q
         .get("limit")
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(200);
-    let items = state.kernel.list_logic_units(limit).unwrap_or_default();
-    Json(json!({"items": items}))
+    match state.kernel().list_logic_units_async(limit).await {
+        Ok(items) => Json(json!({"items": items})).into_response(),
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(
+                json!({"type":"about:blank","title":"Error","status":500, "detail": e.to_string()}),
+            ),
+        )
+            .into_response(),
+    }
 }
 
 /// Install a logic unit manifest (admin).
-#[utoipa::path(post, path = "/logic-units/install", tag = "Logic Units", request_body = serde_json::Value, responses((status = 201, body = serde_json::Value), (status = 401)))]
+#[utoipa::path(
+    post,
+    path = "/logic-units/install",
+    tag = "Logic Units",
+    request_body = serde_json::Value,
+    responses(
+        (status = 201, body = serde_json::Value),
+        (status = 401),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn logic_units_install(
     State(state): State<AppState>,
     headers: HeaderMap,
@@ -53,7 +101,11 @@ pub async fn logic_units_install(
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        );
+        )
+            .into_response();
+    }
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
     }
     let id = manifest
         .get("id")
@@ -61,7 +113,10 @@ pub async fn logic_units_install(
         .map(|s| s.to_string())
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
     manifest["id"] = json!(id);
-    let _ = state.kernel.insert_logic_unit(&id, &manifest, "installed");
+    let _ = state
+        .kernel()
+        .insert_logic_unit_async(id.clone(), manifest.clone(), "installed".to_string())
+        .await;
     state
         .bus
         .publish(topics::TOPIC_LOGICUNIT_INSTALLED, &json!({"id": id}));
@@ -69,20 +124,36 @@ pub async fn logic_units_install(
         axum::http::StatusCode::CREATED,
         Json(json!({"id": manifest["id"].clone(), "ok": true})),
     )
+        .into_response()
 }
 
 /// Apply a logic unit patch set (admin).
-#[utoipa::path(post, path = "/logic-units/apply", tag = "Logic Units", request_body = serde_json::Value, responses((status = 200, body = serde_json::Value), (status = 401), (status = 400)))]
+#[utoipa::path(
+    post,
+    path = "/logic-units/apply",
+    tag = "Logic Units",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 401),
+        (status = 400),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn logic_units_apply(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<Value>,
-) -> impl IntoResponse {
+) -> axum::response::Response {
     if !admin_ok(&headers) {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        );
+        )
+            .into_response();
+    }
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
     }
     if let Err(errs) = validate_patch_value(&body) {
         return (
@@ -90,7 +161,8 @@ pub async fn logic_units_apply(
             Json(
                 json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"invalid patch body", "errors": errs}),
             ),
-        );
+        )
+            .into_response();
     }
     let id = body
         .get("id")
@@ -114,6 +186,14 @@ pub async fn logic_units_apply(
         .and_then(|v| v.as_array())
         .cloned()
         .unwrap_or_default();
+    let safety_issues = crate::patch_guard::check_patches_for_risks(&patches);
+    if crate::patch_guard::safety_enforced() && !safety_issues.is_empty() {
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(json!({"type":"about:blank","title":"Bad Request","status":400,"detail":"patch safety checks failed","issues": safety_issues})),
+        )
+            .into_response();
+    }
     let current_cfg = state.config_state.lock().await.clone();
     let mut cfg = current_cfg.clone();
     let mut diffs: Vec<Value> = Vec::new();
@@ -169,7 +249,8 @@ pub async fn logic_units_apply(
                                 Json(
                                     json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"schema validation failed", "errors": errs}),
                                 ),
-                            );
+                            )
+                                .into_response();
                         }
                     }
                     Err(e) => {
@@ -179,6 +260,7 @@ pub async fn logic_units_apply(
                                 json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"invalid schema", "error": e.to_string()}),
                             ),
                         )
+                            .into_response()
                     }
                 },
                 Err(e) => {
@@ -188,6 +270,7 @@ pub async fn logic_units_apply(
                             json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"invalid schema json", "error": e.to_string()}),
                         ),
                     )
+                        .into_response()
                 }
             },
             Err(e) => {
@@ -197,6 +280,7 @@ pub async fn logic_units_apply(
                         json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"schema not found", "error": e.to_string()}),
                     ),
                 )
+                    .into_response()
             }
         }
     }
@@ -206,22 +290,30 @@ pub async fn logic_units_apply(
             *cur = cfg.clone();
         }
         if !id.is_empty() {
-            let sid = state
-                .kernel
-                .list_config_snapshots(1)
-                .unwrap_or_default()
+            let snapshot_items: Vec<Value> = state
+                .kernel()
+                .list_config_snapshots_async(1)
+                .await
+                .unwrap_or_default();
+            let sid = snapshot_items
                 .first()
                 .and_then(|x| x.get("id").and_then(|v| v.as_str()))
                 .map(|s| s.to_string());
-            state.bus.publish(
-                topics::TOPIC_LOGICUNIT_APPLIED,
-                &json!({"id": id, "ops": patches.len(), "snapshot_id": sid}),
-            );
+            let mut applied_payload = json!({"id": id, "ops": patches.len(), "snapshot_id": sid});
+            if !safety_issues.is_empty() {
+                applied_payload["safety_issues"] = Value::Array(safety_issues.clone());
+            }
+            state
+                .bus
+                .publish(topics::TOPIC_LOGICUNIT_APPLIED, &applied_payload);
         }
-        state.bus.publish(
-            topics::TOPIC_CONFIG_PATCH_APPLIED,
-            &json!({"ops": patches.len()}),
-        );
+        let mut cfg_event = json!({"ops": patches.len()});
+        if !safety_issues.is_empty() {
+            cfg_event["safety_issues"] = Value::Array(safety_issues.clone());
+        }
+        state
+            .bus
+            .publish(topics::TOPIC_CONFIG_PATCH_APPLIED, &cfg_event);
         let json_patch: Vec<Value> = diffs
             .iter()
             .filter_map(|d| {
@@ -233,9 +325,10 @@ pub async fn logic_units_apply(
         return (
             axum::http::StatusCode::OK,
             Json(
-                json!({"ok": true, "id": if id.is_empty(){Value::Null}else{json!(id)}, "dry_run": false, "config": cfg, "diff_summary": diffs, "json_patch": json_patch }),
+                json!({"ok": true, "id": if id.is_empty(){Value::Null}else{json!(id)}, "dry_run": false, "config": cfg, "diff_summary": diffs, "json_patch": json_patch, "safety_issues": safety_issues }),
             ),
-        );
+        )
+            .into_response();
     }
     let json_patch: Vec<Value> = diffs
         .iter()
@@ -248,23 +341,39 @@ pub async fn logic_units_apply(
     (
         axum::http::StatusCode::OK,
         Json(
-            json!({"ok": true, "id": if id.is_empty(){Value::Null}else{json!(id)}, "dry_run": true, "config": cfg, "diff_summary": diffs, "json_patch": json_patch }),
+            json!({"ok": true, "id": if id.is_empty(){Value::Null}else{json!(id)}, "dry_run": true, "config": cfg, "diff_summary": diffs, "json_patch": json_patch, "safety_issues": safety_issues }),
         ),
     )
+        .into_response()
 }
 
 /// Revert to a config snapshot (admin).
-#[utoipa::path(post, path = "/logic-units/revert", tag = "Logic Units", request_body = serde_json::Value, responses((status = 200, body = serde_json::Value), (status = 404), (status = 401)))]
+#[utoipa::path(
+    post,
+    path = "/logic-units/revert",
+    tag = "Logic Units",
+    request_body = serde_json::Value,
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 404),
+        (status = 401),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn logic_units_revert(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<Value>,
-) -> impl IntoResponse {
+) -> axum::response::Response {
     if !admin_ok(&headers) {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        );
+        )
+            .into_response();
+    }
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
     }
     let snap = body
         .get("snapshot_id")
@@ -276,7 +385,8 @@ pub async fn logic_units_revert(
             Json(
                 json!({"type":"about:blank","title":"Bad Request","status":400, "detail":"missing snapshot_id"}),
             ),
-        );
+        )
+            .into_response();
     }
     let mut hist = state.config_history.lock().await;
     if let Some((_, cfg)) = hist.iter().rev().find(|(id, _)| id == snap).cloned() {
@@ -294,10 +404,12 @@ pub async fn logic_units_revert(
             axum::http::StatusCode::OK,
             Json(json!({"ok": true, "snapshot_id": new_id, "config": cfg})),
         )
+            .into_response()
     } else {
         (
             axum::http::StatusCode::NOT_FOUND,
             Json(json!({"type":"about:blank","title":"Not Found","status":404})),
         )
+            .into_response()
     }
 }

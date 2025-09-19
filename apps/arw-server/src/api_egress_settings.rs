@@ -180,15 +180,19 @@ pub async fn egress_settings_update(
     }
     // Apply and snapshot
     cfg["egress"] = egress.clone();
-    let snapshot_id = match state.kernel.insert_config_snapshot(&cfg) {
-        Ok(id) => id,
-        Err(e) => return (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(
-                json!({"type":"about:blank","title":"Error","status":500, "detail": e.to_string()}),
-            ),
-        )
-            .into_response(),
+    let snapshot_id = if state.kernel_enabled() {
+        match state.kernel().insert_config_snapshot_async(cfg.clone()).await {
+            Ok(id) => id,
+            Err(e) => return (
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                Json(
+                    json!({"type":"about:blank","title":"Error","status":500, "detail": e.to_string()}),
+                ),
+            )
+                .into_response(),
+        }
+    } else {
+        "kernel-disabled".to_string()
     };
     {
         let mut cur = state.config_state.lock().await;

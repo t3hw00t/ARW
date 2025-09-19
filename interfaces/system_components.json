@@ -352,7 +352,8 @@
         "memory_abstraction_layer"
       ],
       "signals": [
-        "memory.record.put",
+        "memory.item.upserted",
+        "memory.item.expired",
         "memory.link.put"
       ],
       "docs": [
@@ -564,7 +565,7 @@
       "name": "Memory Abstraction Layer & Memory Atlas",
       "owner": "platform",
       "category": "Runtime",
-      "description": "Unifies episodic, semantic, procedural, and ephemeral lanes into hashed records with probabilistic scoring and coherent retrieval paths backed by the kernel.",
+      "description": "Memory overlay service on top of the MAL schema that exposes `memory.*` actions, hybrid recall, and explainable context packs for every agent.",
       "scope": {
         "surface": "runtime",
         "audience": "developers",
@@ -572,19 +573,30 @@
         "maturity": "plan"
       },
       "signals": [
-        "memory.record.put",
-        "memory.link.put"
+        "memory.item.upserted",
+        "memory.item.expired",
+        "memory.pack.journaled"
       ],
       "interfaces": {
+        "http": [
+          "POST /actions (memory.upsert)",
+          "POST /actions (memory.search)",
+          "POST /actions (memory.pack)",
+          "GET /state/memory",
+          "POST /memory/select_coherent (legacy)",
+          "POST /state/memory/explain_coherent (legacy)"
+        ],
         "storage": [
-          "memory_records",
-          "memory_fts",
-          "memory_links"
+          "memory_items",
+          "memory_vec",
+          "memory_vec_map",
+          "memory_keywords"
         ]
       },
       "notes": [
         "Lane-specific budgets, TTLs, and lifecycle policies keep the corpus explainable and auditable.",
-        "Link operations and hybrid selectors assemble coherent sets for agents and tooling."
+        "Overlay actions serve both new agents and legacy clients; `/memory/*` routes retire once migrations finish.",
+        "Retrieval journaling captures scores/diversity decisions for working-set diagnostics."
       ],
       "docs": [
         {
@@ -592,6 +604,9 @@
         },
         {
           "path": "docs/architecture/memory_lifecycle.md"
+        },
+        {
+          "path": "docs/architecture/memory_overlay_service.md"
         }
       ]
     },

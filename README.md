@@ -96,6 +96,7 @@ The packs and expansions we’re hardening next.
 - **[Future pack]** Logic Units library continues to add strategies like better retrieval, cautious tool use, or alternative reasoning styles—without code.
 - **[Future pack]** An experiment mode runs quick A/B checks on saved tasks so changes are data‑driven, not vibes‑driven.
 - **[Future pack]** A curated research watcher suggests new, safe‑to‑try configurations when something promising appears in the wild.
+- **[Future pack]** Memory Overlay Service layers `memory.*` actions, hybrid recall (lexical + vector), and explainable context packs onto the unified object graph.
 
 ## Who It’s For
 

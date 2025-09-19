@@ -40,9 +40,8 @@ Related
 - Enables transparent revenue splits for shared projects later.
 
 Status
-- Some components are in active development or planned. See the roadmap and clustering/egress design docs for current status and interfaces.
+- Some components are in active development or planned. See the roadmap and clustering/egress design docs for current status and interfaces. For a live snapshot of known nodes and their advertised capabilities, call `GET /admin/state/cluster` (or watch the `cluster_nodes` read-model).
 
 See also
 - Features — `FEATURES.md`
 - Roadmap — `ROADMAP.md`
-

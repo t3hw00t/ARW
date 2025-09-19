@@ -147,12 +147,11 @@ The triad groups operations by intent:
   - `POST /context/assemble` — drive the working-set loop once or stream each iteration (set `stream=true`) to build retrieval context, including diagnostics and coverage metadata.
   - `POST /context/rehydrate` — rehydrate context pointers (currently file heads) with lease-aware guardrails and policy enforcement.
 - **Memory writes & advanced retrieval**
-  - `POST /memory/put` — insert a memory record (optionally with embeddings/tags) and emit `memory.record.put`.
-  - `POST /memory/search_embed` — vector search by embedding.
-  - `POST /memory/link` — create a link between memory items.
-  - `POST /state/memory/select_hybrid` — hybrid lexical/vector search with optional filters.
-  - `POST /memory/select_coherent` — assemble a coherent working set across lanes with optional evidence expansion.
-  - `POST /state/memory/explain_coherent` — request explanations for coherent selections (debug-oriented).
+  - `POST /actions (memory.upsert)` — insert or merge a memory item; emits `memory.item.upserted` and updates `/state/memory`.
+  - `POST /actions (memory.search)` — hybrid lexical/vector search with filters and RRF/MMR metadata.
+  - `POST /actions (memory.pack)` — build a context pack respecting token/slot budgets; journals decisions via `memory.pack.journaled`.
+  - `POST /memory/link` — create a link between memory items *(legacy wrapper; emits `memory.link.put` until the new graph API lands)*.
+  - `POST /memory/select_coherent` / `POST /state/memory/explain_coherent` — legacy coherent selectors that call into the overlay while UIs migrate.
 - **Connectors**
   - `POST /connectors/register` — write a connector manifest to disk and emit `connectors.registered` (token required).
   - `POST /connectors/token` — store or rotate connector tokens/secrets and emit `connectors.token.updated` (token required).
@@ -190,9 +189,9 @@ The triad groups operations by intent:
 - **Connectors**
   - `GET /state/connectors` — connector manifests with secrets scrubbed.
 - **Memory & context**
-  - `GET /state/memory/select` — textual search across memory lanes (`q`, `mode`, `limit`).
-  - `GET /state/memory/links` — list memory links for inspection.
-  - `GET /state/memory/recent` — most recent memory inserts per lane.
+  - `GET /state/memory` — JSON Patch stream of inserts, expirations, and packed context previews.
+  - `GET /state/memory/select` — legacy textual search across memory lanes (`q`, `mode`, `limit`).
+  - `GET /state/memory/links` — list memory links for inspection (legacy graph view).
 - **Self introspection**
   - `GET /state/self` — list available self models on disk.
   - `GET /state/self/:agent` — fetch a specific self model JSON snapshot.

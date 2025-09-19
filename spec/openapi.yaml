@@ -21,12 +21,1636 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/AboutResponse'
+  /admin/distill:
+    post:
+      tags:
+      - Distill
+      summary: Trigger a manual distillation pass.
+      operationId: distill_run_doc
+      responses:
+        '200':
+          description: Distillation summary
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: Trigger a manual distillation pass.
+  /admin/experiments/activate:
+    post:
+      tags:
+      - Admin/Experiments
+      operationId: experiments_activate_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentActivateRequest'
+        required: true
+      responses:
+        '200':
+          description: Variant activated
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+        '404':
+          description: Unknown experiment
+      description: 'Experiments: POST /admin/experiments/activate.'
+  /admin/experiments/assign:
+    post:
+      tags:
+      - Admin/Experiments
+      operationId: experiments_assign_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentAssignRequest'
+        required: true
+      responses:
+        '200':
+          description: Assignment event emitted
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Experiments: POST /admin/experiments/assign.'
+  /admin/experiments/define:
+    post:
+      tags:
+      - Admin/Experiments
+      operationId: experiments_define_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentDefineRequest'
+        required: true
+      responses:
+        '200':
+          description: Experiment defined
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Experiments: POST /admin/experiments/define.'
+  /admin/experiments/list:
+    get:
+      tags:
+      - Admin/Experiments
+      operationId: experiments_list_doc
+      responses:
+        '200':
+          description: Experiments
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Experiments: GET /admin/experiments/list.'
+  /admin/experiments/run:
+    post:
+      tags:
+      - Admin/Experiments
+      operationId: experiments_run_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentRunRequest'
+        required: true
+      responses:
+        '200':
+          description: Run outcome
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RunOutcome'
+        '401':
+          description: Unauthorized
+      description: 'Experiments: POST /admin/experiments/run.'
+  /admin/experiments/scoreboard:
+    get:
+      tags:
+      - Admin/Experiments
+      operationId: experiments_scoreboard_doc
+      responses:
+        '200':
+          description: Scoreboard
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Experiments: GET /admin/experiments/scoreboard.'
+  /admin/experiments/start:
+    post:
+      tags:
+      - Admin/Experiments
+      operationId: experiments_start_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentStartRequest'
+        required: true
+      responses:
+        '200':
+          description: Experiment started
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Experiments: POST /admin/experiments/start.'
+  /admin/experiments/stop:
+    post:
+      tags:
+      - Admin/Experiments
+      operationId: experiments_stop_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExperimentStopRequest'
+        required: true
+      responses:
+        '200':
+          description: Experiment stopped
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Experiments: POST /admin/experiments/stop.'
+  /admin/experiments/winners:
+    get:
+      tags:
+      - Admin/Experiments
+      operationId: experiments_winners_doc
+      responses:
+        '200':
+          description: Winners
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Experiments: GET /admin/experiments/winners.'
+  /admin/feedback/analyze:
+    post:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_analyze_doc
+      responses:
+        '200':
+          description: Recomputed suggestions
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackState'
+        '401':
+          description: Unauthorized
+      description: 'Feedback: POST /admin/feedback/analyze.'
+  /admin/feedback/apply:
+    post:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_apply_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackApplyRequest'
+        required: true
+      responses:
+        '200':
+          description: Suggestion applied
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid suggestion payload
+        '401':
+          description: Unauthorized
+        '403':
+          description: Policy denied
+        '404':
+          description: Unknown suggestion
+      description: 'Feedback: POST /admin/feedback/apply.'
+  /admin/feedback/auto:
+    post:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_auto_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackAutoRequest'
+        required: true
+      responses:
+        '200':
+          description: Auto-apply updated
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Feedback: POST /admin/feedback/auto.'
+  /admin/feedback/policy:
+    get:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_policy_doc
+      responses:
+        '200':
+          description: Effective policy
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Feedback: GET /admin/feedback/policy.'
+  /admin/feedback/reset:
+    post:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_reset_doc
+      responses:
+        '200':
+          description: Feedback state cleared
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Feedback: POST /admin/feedback/reset.'
+  /admin/feedback/rollback:
+    post:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_rollback_doc
+      parameters:
+      - name: to
+        in: query
+        description: Restore to version (or latest backup when omitted)
+        required: false
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      responses:
+        '200':
+          description: Snapshot restored
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+        '404':
+          description: Snapshot not found
+      description: 'Feedback: POST /admin/feedback/rollback.'
+  /admin/feedback/signal:
+    post:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_signal_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackSignalRequest'
+        required: true
+      responses:
+        '200':
+          description: Signal recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackState'
+        '401':
+          description: Unauthorized
+      description: 'Feedback: POST /admin/feedback/signal.'
+  /admin/feedback/state:
+    get:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_state_doc
+      responses:
+        '200':
+          description: Feedback engine state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FeedbackState'
+        '401':
+          description: Unauthorized
+      description: 'Feedback: GET /admin/feedback/state.'
+  /admin/feedback/suggestions:
+    get:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_suggestions_doc
+      responses:
+        '200':
+          description: Current suggestions
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Feedback: GET /admin/feedback/suggestions.'
+  /admin/feedback/updates:
+    get:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_updates_doc
+      parameters:
+      - name: since
+        in: query
+        description: Return suggestions if newer than this version
+        required: false
+        schema:
+          type: integer
+          format: int64
+          minimum: 0
+      responses:
+        '200':
+          description: Suggestions updated
+          content:
+            application/json:
+              schema: {}
+        '204':
+          description: No changes since provided version
+        '401':
+          description: Unauthorized
+      description: 'Feedback: GET /admin/feedback/updates.'
+  /admin/feedback/versions:
+    get:
+      tags:
+      - Admin/Feedback
+      operationId: feedback_versions_doc
+      responses:
+        '200':
+          description: Available snapshots
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Feedback: GET /admin/feedback/versions.'
+  /admin/goldens/add:
+    post:
+      tags:
+      - Admin/Experiments
+      operationId: goldens_add_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoldensAddRequest'
+        required: true
+      responses:
+        '200':
+          description: Golden added
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Persist failed
+        '401':
+          description: Unauthorized
+      description: 'Experiments: POST /admin/goldens/add.'
+  /admin/goldens/list:
+    get:
+      tags:
+      - Admin/Experiments
+      operationId: goldens_list_doc
+      parameters:
+      - name: proj
+        in: query
+        description: Project name
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Project goldens
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Experiments: GET /admin/goldens/list.'
+  /admin/goldens/run:
+    post:
+      tags:
+      - Admin/Experiments
+      operationId: goldens_run_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GoldensRunRequest'
+        required: true
+      responses:
+        '200':
+          description: Evaluation summary
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Experiments: POST /admin/goldens/run.'
+  /admin/governor/hints:
+    get:
+      tags:
+      - Admin/Introspect
+      operationId: governor_hints_get_doc
+      responses:
+        '200':
+          description: Governor hints
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Hints'
+        '401':
+          description: Unauthorized
+      description: 'Introspect: GET /admin/governor/hints.'
+    post:
+      tags:
+      - Admin/Introspect
+      operationId: governor_hints_set_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernorHintsRequest'
+        required: true
+      responses:
+        '200':
+          description: Hints updated
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Introspect: POST /admin/governor/hints.'
+  /admin/governor/profile:
+    get:
+      tags:
+      - Admin/Introspect
+      operationId: governor_profile_get_doc
+      responses:
+        '200':
+          description: Governor profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GovernorProfileResponse'
+        '401':
+          description: Unauthorized
+      description: 'Introspect: GET /admin/governor/profile.'
+    post:
+      tags:
+      - Admin/Introspect
+      operationId: governor_profile_set_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GovernorProfileRequest'
+        required: true
+      responses:
+        '200':
+          description: Profile updated
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Introspect: POST /admin/governor/profile.'
+  /admin/hierarchy/accept:
+    post:
+      tags:
+      - Admin/Hierarchy
+      operationId: hierarchy_accept_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoreAccept'
+        required: true
+      responses:
+        '200':
+          description: Accept processed
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Hierarchy: POST /admin/hierarchy/accept.'
+  /admin/hierarchy/hello:
+    post:
+      tags:
+      - Admin/Hierarchy
+      operationId: hierarchy_hello_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoreHello'
+        required: true
+      responses:
+        '200':
+          description: Hello processed
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Hierarchy: POST /admin/hierarchy/hello.'
+  /admin/hierarchy/offer:
+    post:
+      tags:
+      - Admin/Hierarchy
+      operationId: hierarchy_offer_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoreOffer'
+        required: true
+      responses:
+        '200':
+          description: Offer processed
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Hierarchy: POST /admin/hierarchy/offer.'
+  /admin/hierarchy/role:
+    post:
+      tags:
+      - Admin/Hierarchy
+      operationId: hierarchy_role_set_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleRequest'
+        required: true
+      responses:
+        '200':
+          description: Role updated
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Hierarchy: POST /admin/hierarchy/role.'
+  /admin/hierarchy/state:
+    get:
+      tags:
+      - Admin/Hierarchy
+      operationId: hierarchy_state_doc
+      responses:
+        '200':
+          description: Hierarchy state
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Hierarchy: GET /admin/hierarchy/state.'
+  /admin/introspect/stats:
+    get:
+      tags:
+      - Admin/Introspect
+      operationId: metrics_overview_doc
+      responses:
+        '200':
+          description: Metrics snapshot
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Introspect: GET /admin/introspect/stats.'
+  /admin/memory/quarantine:
+    post:
+      tags:
+      - Review
+      operationId: memory_quarantine_queue_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryQuarantineRequest'
+        required: true
+      responses:
+        '200':
+          description: Queued for review
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+        '500':
+          description: Storage error
+      description: 'Review: POST /admin/memory/quarantine.'
+  /admin/memory/quarantine/admit:
+    post:
+      tags:
+      - Review
+      operationId: memory_quarantine_admit_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MemoryQuarantineAdmit'
+        required: true
+      responses:
+        '200':
+          description: Entry removed
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+        '500':
+          description: Storage error
+      description: 'Review: POST /admin/memory/quarantine/admit.'
+  /admin/models:
+    get:
+      tags:
+      - Models
+      operationId: models_list_doc
+      responses:
+        '200':
+          description: Models list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {}
+        '401':
+          description: Unauthorized
+      description: 'Models: GET /admin/models.'
+  /admin/models/add:
+    post:
+      tags:
+      - Models
+      operationId: models_add_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelEntry'
+        required: true
+      responses:
+        '200':
+          description: Added
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid input
+      description: 'Models: POST /admin/models/add.'
+  /admin/models/cas_gc:
+    post:
+      tags:
+      - Models
+      operationId: models_cas_gc_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CasGcRequest'
+        required: true
+      responses:
+        '200':
+          description: GC summary
+          content:
+            application/json:
+              schema: {}
+        '501':
+          description: CAS GC unavailable
+      description: 'Models: POST /admin/models/cas_gc.'
+  /admin/models/concurrency:
+    get:
+      tags:
+      - Models
+      operationId: models_concurrency_get_doc
+      responses:
+        '200':
+          description: Concurrency
+          content:
+            application/json:
+              schema: {}
+      description: 'Models: GET /admin/models/concurrency.'
+    post:
+      tags:
+      - Models
+      operationId: models_concurrency_set_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ConcurrencyUpdate'
+        required: true
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema: {}
+      description: 'Models: POST /admin/models/concurrency.'
+  /admin/models/default:
+    get:
+      tags:
+      - Models
+      operationId: models_default_get_doc
+      responses:
+        '200':
+          description: Default model
+          content:
+            application/json:
+              schema: {}
+      description: 'Models: GET /admin/models/default.'
+    post:
+      tags:
+      - Models
+      operationId: models_default_set_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelId'
+        required: true
+      responses:
+        '200':
+          description: Set
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Unknown model
+      description: 'Models: POST /admin/models/default.'
+  /admin/models/download:
+    post:
+      tags:
+      - Models
+      operationId: models_download_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DownloadRequest'
+        required: true
+      responses:
+        '200':
+          description: Download accepted
+          content:
+            application/json:
+              schema: {}
+        '501':
+          description: Download unavailable
+      description: 'Models: POST /admin/models/download.'
+  /admin/models/download/cancel:
+    post:
+      tags:
+      - Models
+      operationId: models_download_cancel_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelId'
+        required: true
+      responses:
+        '200':
+          description: Cancellation requested
+          content:
+            application/json:
+              schema: {}
+        '501':
+          description: Cancel unavailable
+      description: 'Models: POST /admin/models/download/cancel.'
+  /admin/models/jobs:
+    get:
+      tags:
+      - Models
+      operationId: models_jobs_doc
+      responses:
+        '200':
+          description: Jobs
+          content:
+            application/json:
+              schema: {}
+      description: 'Models: GET /admin/models/jobs.'
+  /admin/models/load:
+    post:
+      tags:
+      - Models
+      operationId: models_load_doc
+      responses:
+        '200':
+          description: Loaded list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {}
+        '404':
+          description: Missing models.json
+      description: 'Models: POST /admin/models/load.'
+  /admin/models/refresh:
+    post:
+      tags:
+      - Models
+      operationId: models_refresh_doc
+      responses:
+        '200':
+          description: Refreshed list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: {}
+      description: 'Models: POST /admin/models/refresh.'
+  /admin/models/remove:
+    post:
+      tags:
+      - Models
+      operationId: models_remove_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModelId'
+        required: true
+      responses:
+        '200':
+          description: Removed
+          content:
+            application/json:
+              schema: {}
+      description: 'Models: POST /admin/models/remove.'
+  /admin/models/save:
+    post:
+      tags:
+      - Models
+      operationId: models_save_doc
+      responses:
+        '200':
+          description: Saved
+          content:
+            application/json:
+              schema: {}
+      description: 'Models: POST /admin/models/save.'
+  /admin/models/summary:
+    get:
+      tags:
+      - Models
+      operationId: models_summary_doc
+      responses:
+        '200':
+          description: Models summary
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Models: GET /admin/models/summary.'
+  /admin/probe:
+    get:
+      tags:
+      - Admin/Introspect
+      summary: Effective path probe (mirrors legacy `/admin/probe`).
+      operationId: probe_effective_paths_doc
+      responses:
+        '200':
+          description: Effective paths
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: Effective path probe (mirrors legacy `/admin/probe`).
+  /admin/probe/hw:
+    get:
+      tags:
+      - Admin/Introspect
+      summary: Hardware/software probe (`/admin/probe/hw`).
+      operationId: probe_hw_doc
+      responses:
+        '200':
+          description: Hardware and software info
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: Hardware/software probe (`/admin/probe/hw`).
+  /admin/probe/metrics:
+    get:
+      tags:
+      - Admin/Introspect
+      summary: Metrics snapshot probe (`/admin/probe/metrics`).
+      operationId: probe_metrics_doc
+      responses:
+        '200':
+          description: System metrics
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: Metrics snapshot probe (`/admin/probe/metrics`).
+  /admin/projects/create:
+    post:
+      tags:
+      - Admin/Projects
+      operationId: projects_create_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreateRequest'
+        required: true
+      responses:
+        '200':
+          description: Project created
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '500':
+          description: Error
+      description: 'Projects: POST /admin/projects/create.'
+  /admin/projects/file:
+    get:
+      tags:
+      - Admin/Projects
+      operationId: projects_file_get_doc
+      parameters:
+      - name: proj
+        in: query
+        description: Project name
+        required: true
+        schema:
+          type: string
+      - name: path
+        in: query
+        description: Relative path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Project file
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+      description: 'Projects: GET /admin/projects/file.'
+    post:
+      tags:
+      - Admin/Projects
+      operationId: projects_file_set_doc
+      parameters:
+      - name: proj
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectFileWrite'
+        required: true
+      responses:
+        '200':
+          description: File written
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '409':
+          description: Conflict
+        '500':
+          description: Error
+      description: 'Projects: POST /admin/projects/file.'
+  /admin/projects/import:
+    post:
+      tags:
+      - Admin/Projects
+      operationId: projects_import_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectImportRequest'
+        required: true
+      responses:
+        '200':
+          description: Imported
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '500':
+          description: Error
+      description: 'Projects: POST /admin/projects/import.'
+  /admin/projects/list:
+    get:
+      tags:
+      - Admin/Projects
+      operationId: projects_list_doc
+      responses:
+        '200':
+          description: Projects list
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Projects: GET /admin/projects/list.'
+  /admin/projects/notes:
+    get:
+      tags:
+      - Admin/Projects
+      operationId: projects_notes_get_doc
+      parameters:
+      - name: proj
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Project notes
+          content:
+            text/plain:
+              schema:
+                type: string
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+      description: 'Projects: GET /admin/projects/notes.'
+    post:
+      tags:
+      - Admin/Projects
+      operationId: projects_notes_set_doc
+      parameters:
+      - name: proj
+        in: query
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Notes saved
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '500':
+          description: Error
+      description: 'Projects: POST /admin/projects/notes.'
+  /admin/projects/patch:
+    post:
+      tags:
+      - Admin/Projects
+      operationId: projects_file_patch_doc
+      parameters:
+      - name: proj
+        in: query
+        required: true
+        schema:
+          type: string
+      - name: path
+        in: query
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectPatchRequest'
+        required: true
+      responses:
+        '200':
+          description: Patched
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '409':
+          description: Conflict
+        '500':
+          description: Error
+      description: 'Projects: POST /admin/projects/patch.'
+  /admin/projects/tree:
+    get:
+      tags:
+      - Admin/Projects
+      operationId: projects_tree_doc
+      parameters:
+      - name: proj
+        in: query
+        description: Project name
+        required: false
+        schema:
+          type: string
+      - name: path
+        in: query
+        description: Relative path
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Project tree
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+      description: 'Projects: GET /admin/projects/tree.'
+  /admin/self_model/apply:
+    post:
+      tags:
+      - Admin/SelfModel
+      operationId: self_model_apply_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelfModelApplyRequest'
+        required: true
+      responses:
+        '200':
+          description: Proposal applied
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: {}
+        '404':
+          description: Proposal not found
+          content:
+            application/json:
+              schema: {}
+      description: 'SelfModel: POST /admin/self_model/apply.'
+  /admin/self_model/propose:
+    post:
+      tags:
+      - Admin/SelfModel
+      operationId: self_model_propose_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SelfModelProposeRequest'
+        required: true
+      responses:
+        '200':
+          description: Proposal created
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: {}
+      description: 'SelfModel: POST /admin/self_model/propose.'
+  /admin/state/actions:
+    get:
+      tags:
+      - Admin/State
+      summary: Recent actions stream (rolling window).
+      operationId: admin_state_actions_doc
+      responses:
+        '200':
+          description: Recent actions
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: {}
+      description: Recent actions stream (rolling window).
+  /admin/state/beliefs:
+    get:
+      tags:
+      - Admin/State
+      summary: Current beliefs snapshot derived from events.
+      operationId: admin_state_beliefs_doc
+      responses:
+        '200':
+          description: Beliefs snapshot
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: {}
+      description: Current beliefs snapshot derived from events.
+  /admin/state/cluster:
+    get:
+      tags:
+      - Admin/State
+      summary: Cluster nodes snapshot (admin-only).
+      operationId: admin_state_cluster_doc
+      responses:
+        '200':
+          description: Cluster nodes
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: {}
+      description: Cluster nodes snapshot (admin-only).
+  /admin/state/guardrails_metrics:
+    get:
+      tags:
+      - Admin/State
+      operationId: admin_state_guardrails_metrics_doc
+      responses:
+        '200':
+          description: Guardrails metrics
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: {}
+      description: 'State: GET /admin/state/guardrails_metrics.'
+  /admin/state/intents:
+    get:
+      tags:
+      - Admin/State
+      summary: Recent intents stream (rolling window).
+      operationId: admin_state_intents_doc
+      responses:
+        '200':
+          description: Recent intents
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: {}
+      description: Recent intents stream (rolling window).
+  /admin/state/memory/quarantine:
+    get:
+      tags:
+      - Review
+      operationId: memory_quarantine_get_doc
+      responses:
+        '200':
+          description: Memory quarantine entries
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Review: GET /admin/state/memory/quarantine.'
+  /admin/state/models_hashes:
+    get:
+      tags:
+      - Models
+      operationId: models_hashes_doc
+      parameters:
+      - name: limit
+        in: query
+        description: Page size (default 100)
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+      - name: offset
+        in: query
+        description: Start offset
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+      - name: provider
+        in: query
+        description: Filter by provider
+        required: false
+        schema:
+          type: string
+      - name: sort
+        in: query
+        description: Sort key (bytes|sha256|path|providers_count)
+        required: false
+        schema:
+          type: string
+      - name: order
+        in: query
+        description: Order asc|desc
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Installed hashes
+          content:
+            application/json:
+              schema: {}
+      description: 'Models: GET /admin/state/models_hashes.'
+  /admin/state/models_metrics:
+    get:
+      tags:
+      - Models
+      operationId: models_metrics_doc
+      responses:
+        '200':
+          description: Metrics
+          content:
+            application/json:
+              schema: {}
+      description: 'Models: GET /admin/state/models_metrics.'
+  /admin/state/observations:
+    get:
+      tags:
+      - Admin/State
+      summary: Recent observations from the event bus.
+      operationId: admin_state_observations_doc
+      responses:
+        '200':
+          description: Recent observations
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: {}
+      description: Recent observations from the event bus.
+  /admin/state/world:
+    get:
+      tags:
+      - Admin/State
+      summary: Project world model snapshot (belief graph view).
+      operationId: admin_state_world_doc
+      parameters:
+      - name: proj
+        in: query
+        description: Project id
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: World model
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: {}
+      description: Project world model snapshot (belief graph view).
+  /admin/state/world/select:
+    get:
+      tags:
+      - Admin/State
+      summary: Select top-k claims for a query.
+      operationId: admin_state_world_select_doc
+      parameters:
+      - name: proj
+        in: query
+        description: Project id
+        required: false
+        schema:
+          type: string
+      - name: q
+        in: query
+        description: Query string
+        required: false
+        schema:
+          type: string
+      - name: k
+        in: query
+        description: Top K
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+      - name: lambda
+        in: query
+        description: Diversity weight (0-1)
+        required: false
+        schema:
+          type: number
+          format: double
+      responses:
+        '200':
+          description: Selected claims
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: {}
+      description: Select top-k claims for a query.
+  /admin/state/world_diffs:
+    get:
+      tags:
+      - Review
+      operationId: world_diffs_get_doc
+      responses:
+        '200':
+          description: Queued world diffs
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Review: GET /admin/state/world_diffs.'
+  /admin/tools:
+    get:
+      tags:
+      - Admin/Tools
+      operationId: tools_list_doc
+      responses:
+        '200':
+          description: Registered tools
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Tools: GET /admin/tools.'
+  /admin/tools/cache_stats:
+    get:
+      tags:
+      - Admin/Tools
+      operationId: tools_cache_stats_doc
+      responses:
+        '200':
+          description: Cache statistics
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: 'Tools: GET /admin/tools/cache_stats.'
+  /admin/tools/run:
+    post:
+      tags:
+      - Admin/Tools
+      operationId: tools_run_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ToolRunRequest'
+        required: true
+      responses:
+        '200':
+          description: Tool output
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '404':
+          description: Unknown tool
+        '500':
+          description: Tool runtime error
+      description: 'Tools: POST /admin/tools/run.'
+  /admin/world_diffs/decision:
+    post:
+      tags:
+      - Review
+      operationId: world_diffs_decision_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorldDiffDecision'
+        required: true
+      responses:
+        '200':
+          description: Decision recorded
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+        '404':
+          description: Diff not found
+        '500':
+          description: Storage error
+      description: 'Review: POST /admin/world_diffs/decision.'
+  /admin/world_diffs/queue:
+    post:
+      tags:
+      - Review
+      operationId: world_diffs_queue_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WorldDiffQueueRequest'
+        required: true
+      responses:
+        '200':
+          description: Diff queued
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+        '500':
+          description: Storage error
+      description: 'Review: POST /admin/world_diffs/queue.'
   /events:
     get:
       tags:
       - Events
-      summary: Server‑Sent Events stream of envelopes.
-      description: Server‑Sent Events stream of envelopes; supports replay and prefix filters.
+      summary: "Server\u2011Sent Events stream of envelopes."
+      description: "Server\u2011Sent Events stream of envelopes; supports replay and\
+        \ prefix filters."
       operationId: events_sse_doc
       parameters:
       - name: after
@@ -54,6 +1678,11 @@ paths:
           description: SSE stream of events
           content:
             text/event-stream: {}
+        '501':
+          description: Kernel disabled
+          content:
+            application/json:
+              schema: {}
   /healthz:
     get:
       tags:
@@ -68,6 +1697,143 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthOk'
+  /metrics:
+    get:
+      tags:
+      - Public
+      operationId: metrics_prometheus_doc
+      responses:
+        '200':
+          description: Prometheus metrics
+          content:
+            text/plain:
+              schema:
+                type: string
+      description: 'Public: GET /metrics.'
+  /research_watcher/{id}/approve:
+    post:
+      tags:
+      - Research
+      operationId: research_watcher_approve_doc
+      parameters:
+      - name: id
+        in: path
+        description: Watcher item id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WatcherDecision'
+        required: true
+      responses:
+        '200':
+          description: Updated item
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+        '500':
+          description: Error
+      description: 'Research: POST /research_watcher/{id}/approve.'
+  /research_watcher/{id}/archive:
+    post:
+      tags:
+      - Research
+      operationId: research_watcher_archive_doc
+      parameters:
+      - name: id
+        in: path
+        description: Watcher item id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/WatcherDecision'
+        required: true
+      responses:
+        '200':
+          description: Updated item
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+        '500':
+          description: Error
+      description: 'Research: POST /research_watcher/{id}/archive.'
+  /staging/actions/{id}/approve:
+    post:
+      tags:
+      - Staging
+      operationId: staging_action_approve_doc
+      parameters:
+      - name: id
+        in: path
+        description: Staging entry id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StagingDecision'
+        required: true
+      responses:
+        '200':
+          description: Action queued
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+        '500':
+          description: Error
+      description: 'Staging: POST /staging/actions/{id}/approve.'
+  /staging/actions/{id}/deny:
+    post:
+      tags:
+      - Staging
+      operationId: staging_action_deny_doc
+      parameters:
+      - name: id
+        in: path
+        description: Staging entry id
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StagingDecision'
+        required: true
+      responses:
+        '200':
+          description: Action denied
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+        '500':
+          description: Error
+      description: 'Staging: POST /staging/actions/{id}/deny.'
   /state/actions:
     get:
       tags:
@@ -89,12 +1855,30 @@ paths:
           content:
             application/json:
               schema: {}
+        '501':
+          description: Kernel disabled
+          content:
+            application/json:
+              schema: {}
+  /state/experiments:
+    get:
+      tags:
+      - State
+      summary: Experiment events snapshot (public read-model).
+      operationId: state_experiments_doc
+      responses:
+        '200':
+          description: Experiment events
+          content:
+            application/json:
+              schema: {}
+      description: Experiment events snapshot (public read-model).
   /state/models:
     get:
       tags:
       - State
-      summary: Model catalog read‑model.
-      description: Model catalog read‑model (defaults when state/models.json missing).
+      summary: Model catalog read-model.
+      description: Model catalog read-model.
       operationId: state_models_doc
       responses:
         '200':
@@ -102,6 +1886,107 @@ paths:
           content:
             application/json:
               schema: {}
+  /state/research_watcher:
+    get:
+      tags:
+      - State
+      summary: Research watcher queue snapshot.
+      operationId: state_research_watcher_doc
+      parameters:
+      - name: status
+        in: query
+        description: Filter by status
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        description: Max items (1-500)
+        required: false
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Research watcher items
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+        '501':
+          description: Kernel disabled
+          content:
+            application/json:
+              schema: {}
+      description: Research watcher queue snapshot.
+  /state/runtime_matrix:
+    get:
+      tags:
+      - State
+      summary: Runtime matrix snapshot.
+      operationId: state_runtime_matrix_doc
+      responses:
+        '200':
+          description: Runtime matrix
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: {}
+      description: Runtime matrix snapshot.
+  /state/staging/actions:
+    get:
+      tags:
+      - State
+      summary: Staging queue snapshot.
+      operationId: state_staging_actions_doc
+      parameters:
+      - name: status
+        in: query
+        description: Filter by status
+        required: false
+        schema:
+          type: string
+      - name: limit
+        in: query
+        description: Max items (1-500)
+        required: false
+        schema:
+          type: integer
+          format: int64
+      responses:
+        '200':
+          description: Staging actions
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+        '501':
+          description: Kernel disabled
+          content:
+            application/json:
+              schema: {}
+      description: Staging queue snapshot.
+  /state/training/telemetry:
+    get:
+      tags:
+      - State
+      summary: Training telemetry snapshot.
+      operationId: state_training_telemetry_doc
+      responses:
+        '200':
+          description: Training metrics
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+      description: Training telemetry snapshot.
 components:
   schemas:
     AboutCounts:
@@ -159,6 +2044,636 @@ components:
           type: string
         version:
           type: string
+    CasGcRequest:
+      type: object
+      properties:
+        ttl_hours:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+    ClusterNode:
+      type: object
+      required:
+      - id
+      - role
+      properties:
+        capabilities: {}
+        health:
+          type:
+          - string
+          - 'null'
+        id:
+          type: string
+        name:
+          type:
+          - string
+          - 'null'
+        role:
+          type: string
+    ConcurrencyUpdate:
+      type: object
+      properties:
+        hard_cap:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        max:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+    CoreAccept:
+      type: object
+      required:
+      - child_id
+      - parent_id
+      - role
+      - epoch
+      properties:
+        child_id:
+          type: string
+        epoch:
+          type: integer
+          format: int64
+          minimum: 0
+        parent_id:
+          type: string
+        role:
+          $ref: '#/components/schemas/CoreRole'
+    CoreHello:
+      type: object
+      required:
+      - id
+      - role
+      - capabilities
+      - scope_tags
+      - epoch
+      - nonce
+      properties:
+        capabilities:
+          type: array
+          items:
+            type: string
+        epoch:
+          type: integer
+          format: int64
+          minimum: 0
+        id:
+          type: string
+        nonce:
+          type: string
+        role:
+          $ref: '#/components/schemas/CoreRole'
+        scope_tags:
+          type: array
+          items:
+            type: string
+    CoreOffer:
+      type: object
+      required:
+      - from_id
+      - proposed_role
+      - shard_ranges
+      properties:
+        capacity_hint:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+        from_id:
+          type: string
+        parent_hint:
+          type:
+          - string
+          - 'null'
+        proposed_role:
+          $ref: '#/components/schemas/CoreRole'
+        shard_ranges:
+          type: array
+          items:
+            type: string
+    CoreRole:
+      type: string
+      enum:
+      - root
+      - regional
+      - edge
+      - connector
+      - observer
+    DownloadRequest:
+      type: object
+      required:
+      - id
+      - sha256
+      properties:
+        id:
+          type: string
+        provider:
+          type:
+          - string
+          - 'null'
+        sha256:
+          type: string
+        url:
+          type:
+          - string
+          - 'null'
+    EvalOptions:
+      type: object
+      properties:
+        compression_aggr:
+          type:
+          - number
+          - 'null'
+          format: double
+        context_budget_tokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        context_footer:
+          type:
+          - string
+          - 'null'
+        context_format:
+          type:
+          - string
+          - 'null'
+        context_header:
+          type:
+          - string
+          - 'null'
+        context_item_budget_tokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        context_item_template:
+          type:
+          - string
+          - 'null'
+        include_provenance:
+          type:
+          - boolean
+          - 'null'
+        joiner:
+          type:
+          - string
+          - 'null'
+        limit:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        mmr_lambda:
+          type:
+          - number
+          - 'null'
+          format: double
+        retrieval_k:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        temperature:
+          type:
+          - number
+          - 'null'
+          format: double
+        vote_k:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+    EvalResultItem:
+      type: object
+      required:
+      - id
+      - ok
+      - latency_ms
+      properties:
+        id:
+          type: string
+        latency_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        note:
+          type:
+          - string
+          - 'null'
+        ok:
+          type: boolean
+    EvalSummary:
+      type: object
+      required:
+      - total
+      - passed
+      - failed
+      - avg_latency_ms
+      - items
+      properties:
+        avg_ctx_items:
+          type: integer
+          format: int64
+          minimum: 0
+        avg_ctx_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        avg_latency_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        failed:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/EvalResultItem'
+        passed:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
+    Experiment:
+      type: object
+      required:
+      - id
+      - name
+      - variants
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        variants:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/VariantCfg'
+          propertyNames:
+            type: string
+    ExperimentActivateRequest:
+      type: object
+      required:
+      - id
+      - variant
+      properties:
+        id:
+          type: string
+        variant:
+          type: string
+    ExperimentAssignRequest:
+      type: object
+      required:
+      - id
+      - variant
+      properties:
+        agent:
+          type:
+          - string
+          - 'null'
+        id:
+          type: string
+        variant:
+          type: string
+    ExperimentDefineRequest:
+      type: object
+      required:
+      - id
+      - name
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        variants:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/VariantCfg'
+          propertyNames:
+            type: string
+    ExperimentRunRequest:
+      type: object
+      required:
+      - id
+      - proj
+      - variants
+      properties:
+        budget_total_ms:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        id:
+          type: string
+        proj:
+          type: string
+        variants:
+          type: array
+          items:
+            type: string
+    ExperimentStartRequest:
+      type: object
+      required:
+      - name
+      properties:
+        assignment: {}
+        budgets: {}
+        name:
+          type: string
+        variants:
+          type: array
+          items:
+            type: string
+    ExperimentStopRequest:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
+    FeedbackApplyRequest:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
+    FeedbackAutoRequest:
+      type: object
+      required:
+      - enabled
+      properties:
+        enabled:
+          type: boolean
+    FeedbackRollbackQuery:
+      type: object
+      properties:
+        to:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+    FeedbackSignal:
+      type: object
+      required:
+      - id
+      - ts
+      - kind
+      - target
+      - confidence
+      - severity
+      properties:
+        confidence:
+          type: number
+          format: double
+        id:
+          type: string
+        kind:
+          type: string
+        note:
+          type:
+          - string
+          - 'null'
+        severity:
+          type: integer
+          format: int32
+          minimum: 0
+        target:
+          type: string
+        ts:
+          type: string
+    FeedbackSignalRequest:
+      type: object
+      required:
+      - kind
+      - target
+      - confidence
+      - severity
+      properties:
+        confidence:
+          type: number
+          format: double
+        kind:
+          type: string
+        note:
+          type:
+          - string
+          - 'null'
+        severity:
+          type: integer
+          format: int32
+          minimum: 0
+        target:
+          type: string
+    FeedbackState:
+      type: object
+      properties:
+        auto_apply:
+          type: boolean
+        signals:
+          type: array
+          items:
+            $ref: '#/components/schemas/FeedbackSignal'
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Suggestion'
+    FeedbackUpdatesQuery:
+      type: object
+      properties:
+        since:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+    GoldenItem:
+      type: object
+      required:
+      - id
+      - kind
+      properties:
+        expect: {}
+        id:
+          type: string
+        input: {}
+        kind:
+          type: string
+    GoldensAddRequest:
+      type: object
+      required:
+      - proj
+      - kind
+      properties:
+        expect: {}
+        id:
+          type:
+          - string
+          - 'null'
+        input: {}
+        kind:
+          type: string
+        proj:
+          type: string
+    GoldensListQuery:
+      type: object
+      properties:
+        proj:
+          type:
+          - string
+          - 'null'
+    GoldensRunRequest:
+      type: object
+      required:
+      - proj
+      properties:
+        compression_aggr:
+          type:
+          - number
+          - 'null'
+          format: double
+        limit:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        mmr_lambda:
+          type:
+          - number
+          - 'null'
+          format: double
+        proj:
+          type: string
+        retrieval_k:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        temperature:
+          type:
+          - number
+          - 'null'
+          format: double
+        vote_k:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+    GovernorHintsRequest:
+      type: object
+      properties:
+        compression_aggr:
+          type:
+          - number
+          - 'null'
+          format: double
+        context_budget_tokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        context_footer:
+          type:
+          - string
+          - 'null'
+        context_format:
+          type:
+          - string
+          - 'null'
+        context_header:
+          type:
+          - string
+          - 'null'
+        context_item_budget_tokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        context_item_template:
+          type:
+          - string
+          - 'null'
+        event_buffer:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        http_timeout_secs:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        include_provenance:
+          type:
+          - boolean
+          - 'null'
+        joiner:
+          type:
+          - string
+          - 'null'
+        max_concurrency:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        mmr_lambda:
+          type:
+          - number
+          - 'null'
+          format: double
+        mode:
+          type:
+          - string
+          - 'null'
+        retrieval_div:
+          type:
+          - number
+          - 'null'
+          format: double
+        retrieval_k:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        slo_ms:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        vote_k:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
+    GovernorProfileRequest:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+    GovernorProfileResponse:
+      type: object
+      required:
+      - profile
+      properties:
+        profile:
+          type: string
     HealthOk:
       type: object
       required:
@@ -166,6 +2681,95 @@ components:
       properties:
         ok:
           type: boolean
+    Hints:
+      type: object
+      properties:
+        compression_aggr:
+          type:
+          - number
+          - 'null'
+          format: double
+        context_budget_tokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        context_footer:
+          type:
+          - string
+          - 'null'
+        context_format:
+          type:
+          - string
+          - 'null'
+        context_header:
+          type:
+          - string
+          - 'null'
+        context_item_budget_tokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        context_item_template:
+          type:
+          - string
+          - 'null'
+        event_buffer:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        http_timeout_secs:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        include_provenance:
+          type:
+          - boolean
+          - 'null'
+        joiner:
+          type:
+          - string
+          - 'null'
+        max_concurrency:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        mmr_lambda:
+          type:
+          - number
+          - 'null'
+          format: double
+        mode:
+          type:
+          - string
+          - 'null'
+        retrieval_div:
+          type:
+          - number
+          - 'null'
+          format: double
+        retrieval_k:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        slo_ms:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        vote_k:
+          type:
+          - integer
+          - 'null'
+          format: int32
+          minimum: 0
     HttpInfo:
       type: object
       required:
@@ -178,6 +2782,81 @@ components:
           type: integer
           format: int32
           minimum: 0
+    MemoryQuarantineAdmit:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
+    MemoryQuarantineRequest:
+      type: object
+      properties:
+        content_preview:
+          type:
+          - string
+          - 'null'
+        content_type:
+          type:
+          - string
+          - 'null'
+        evidence_score:
+          type:
+          - number
+          - 'null'
+          format: double
+        extractor:
+          type:
+          - string
+          - 'null'
+        id:
+          type:
+          - string
+          - 'null'
+        project_id:
+          type:
+          - string
+          - 'null'
+        provenance:
+          type:
+          - string
+          - 'null'
+        risk_markers:
+          type:
+          - array
+          - 'null'
+          items:
+            type: string
+    ModelEntry:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
+        path:
+          type:
+          - string
+          - 'null'
+        provider:
+          type:
+          - string
+          - 'null'
+        sha256:
+          type:
+          - string
+          - 'null'
+        status:
+          type:
+          - string
+          - 'null'
+    ModelId:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
     PerfPreset:
       type: object
       properties:
@@ -195,10 +2874,415 @@ components:
           type:
           - string
           - 'null'
+    ProjectCreateRequest:
+      type: object
+      required:
+      - name
+      properties:
+        name:
+          type: string
+    ProjectFileWrite:
+      type: object
+      properties:
+        content:
+          type:
+          - string
+          - 'null'
+        content_b64:
+          type:
+          - string
+          - 'null'
+        prev_sha256:
+          type:
+          - string
+          - 'null'
+    ProjectImportRequest:
+      type: object
+      required:
+      - proj
+      - dest
+      - src_path
+      properties:
+        dest:
+          type: string
+        mode:
+          type:
+          - string
+          - 'null'
+        proj:
+          type: string
+        src_path:
+          type: string
+    ProjectPatchRequest:
+      type: object
+      required:
+      - mode
+      - content
+      properties:
+        content:
+          type: string
+        mode:
+          type: string
+        prev_sha256:
+          type:
+          - string
+          - 'null'
+    RoleRequest:
+      type: object
+      required:
+      - role
+      properties:
+        role:
+          type: string
+    RunOutcome:
+      type: object
+      required:
+      - exp_id
+      - proj
+      - results
+      properties:
+        exp_id:
+          type: string
+        proj:
+          type: string
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RunOutcomeVariant'
+        winner:
+          type:
+          - string
+          - 'null'
+    RunOutcomeVariant:
+      type: object
+      required:
+      - variant
+      - total
+      - passed
+      - failed
+      - avg_latency_ms
+      properties:
+        avg_latency_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        failed:
+          type: integer
+          minimum: 0
+        passed:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
+        variant:
+          type: string
+    RunPlan:
+      type: object
+      required:
+      - proj
+      - exp_id
+      - variants
+      properties:
+        budget_total_ms:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        exp_id:
+          type: string
+        proj:
+          type: string
+        variants:
+          type: array
+          items:
+            type: string
+    ScoreEntry:
+      type: object
+      required:
+      - passed
+      - total
+      - failed
+      - avg_latency_ms
+      properties:
+        avg_ctx_items:
+          type: integer
+          format: int64
+          minimum: 0
+        avg_ctx_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        avg_latency_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        failed:
+          type: integer
+          minimum: 0
+        passed:
+          type: integer
+          minimum: 0
+        time:
+          type: string
+        total:
+          type: integer
+          minimum: 0
+    ScoreRow:
+      type: object
+      required:
+      - exp_id
+      - proj
+      - variant
+      - score
+      properties:
+        exp_id:
+          type: string
+        proj:
+          type: string
+        score:
+          $ref: '#/components/schemas/ScoreEntry'
+        variant:
+          type: string
+    SelfModelApplyRequest:
+      type: object
+      required:
+      - proposal_id
+      properties:
+        proposal_id:
+          type: string
+    SelfModelProposeRequest:
+      type: object
+      required:
+      - agent
+      properties:
+        agent:
+          type: string
+        patch: {}
+        rationale:
+          type:
+          - string
+          - 'null'
+    StagingDecision:
+      type: object
+      properties:
+        decided_by:
+          type:
+          - string
+          - 'null'
+        reason:
+          type:
+          - string
+          - 'null'
+    Suggestion:
+      type: object
+      required:
+      - id
+      - action
+      - params
+      properties:
+        action:
+          type: string
+        confidence:
+          type: number
+          format: double
+        id:
+          type: string
+        params: {}
+        rationale:
+          type: string
+    ToolRunRequest:
+      type: object
+      required:
+      - id
+      properties:
+        id:
+          type: string
+        input: {}
+    VariantCfg:
+      type: object
+      properties:
+        compression_aggr:
+          type:
+          - number
+          - 'null'
+          format: double
+        context_budget_tokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        context_footer:
+          type:
+          - string
+          - 'null'
+        context_format:
+          type:
+          - string
+          - 'null'
+        context_header:
+          type:
+          - string
+          - 'null'
+        context_item_budget_tokens:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        context_item_template:
+          type:
+          - string
+          - 'null'
+        include_provenance:
+          type:
+          - boolean
+          - 'null'
+        joiner:
+          type:
+          - string
+          - 'null'
+        mmr_lambda:
+          type:
+          - number
+          - 'null'
+          format: double
+        retrieval_div:
+          type:
+          - number
+          - 'null'
+          format: double
+        retrieval_k:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+        temperature:
+          type:
+          - number
+          - 'null'
+          format: double
+        vote_k:
+          type:
+          - integer
+          - 'null'
+          minimum: 0
+    WatcherDecision:
+      type: object
+      properties:
+        note:
+          type:
+          - string
+          - 'null'
+    WinnerInfo:
+      type: object
+      required:
+      - exp_id
+      - proj
+      - variant
+      - time
+      - passed
+      - total
+      - failed
+      - avg_latency_ms
+      properties:
+        avg_ctx_items:
+          type: integer
+          format: int64
+          minimum: 0
+        avg_ctx_tokens:
+          type: integer
+          format: int64
+          minimum: 0
+        avg_latency_ms:
+          type: integer
+          format: int64
+          minimum: 0
+        exp_id:
+          type: string
+        failed:
+          type: integer
+          minimum: 0
+        passed:
+          type: integer
+          minimum: 0
+        proj:
+          type: string
+        time:
+          type: string
+        total:
+          type: integer
+          minimum: 0
+        variant:
+          type: string
+    WorldDiffDecision:
+      type: object
+      required:
+      - id
+      - decision
+      properties:
+        decision:
+          type: string
+        id:
+          type: string
+        note:
+          type:
+          - string
+          - 'null'
+    WorldDiffQueueRequest:
+      type: object
+      properties:
+        changes: {}
+        from_node:
+          type:
+          - string
+          - 'null'
+        id:
+          type:
+          - string
+          - 'null'
+        project_id:
+          type:
+          - string
+          - 'null'
+        summary:
+          type:
+          - string
+          - 'null'
 tags:
 - name: Meta
   description: Service metadata and health
 - name: State
-  description: Read‑models (actions, models, egress, episodes)
+  description: "Read\u2011models (actions, models, egress, episodes)"
 - name: Events
-  description: Server‑Sent Events stream
+  description: "Server\u2011Sent Events stream"
+- name: Models
+  description: Model steward admin endpoints
+- name: Admin/Introspect
+  description: Administrative probes and telemetry
+- name: Admin/Hierarchy
+  description: Hierarchy coordination endpoints
+- name: Admin/SelfModel
+  description: Self-model lifecycle endpoints
+- name: Admin/Projects
+  description: Project workspace management
+- name: Admin/Review
+  description: Memory quarantine and world diff review queue
+- name: Admin/State
+  description: Administrative state read-models
+- name: Admin/Feedback
+  description: Feedback engine signals and suggestions
+- name: Admin/Tools
+  description: Tool Forge and action cache
+- name: Research
+  description: Research watcher workflow
+- name: Staging
+  description: Human-in-the-loop approvals queue
+- name: Admin/Experiments
+  description: Admin/Experiments endpoints
+- name: Distill
+  description: Distill endpoints
+- name: Public
+  description: Public endpoints
+- name: Review
+  description: Review endpoints

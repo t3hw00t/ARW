@@ -110,18 +110,17 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
 - Logic Unit suggestions: completed jobs emit `logic.unit.suggested` with a candidate manifest (stored in the kernel); evaluate then `POST /logic-units/apply` (dry‑run first) to stage.
 - See: Architecture → Agent Orchestrator.
 
-## Memory Abstraction Layer (Initial)
-- Abstract records with `{ lane, kind, key, value, tags, hash, score, prob }` persisted in the kernel.
-- Endpoints:
-  - `POST /memory/put` (emits `memory.record.put`)
-  - `GET /state/memory/select?q=...&lane=...[&mode=fts]`
-  - `POST /memory/search_embed` (cosine over embedded records)
-  - `POST /state/memory/select_hybrid` (blended FTS/sim/recency/utility)
-  - `POST /memory/link` (emits `memory.link.put`)
-  - `GET /state/memory/links?id=...`
-  - `POST /memory/select_coherent` (hybrid seeds + link expansion per seed)
-- Purpose: stable centerpoint (self‑image and identity), dedupe via hashes, and a coherent retrieval strategy; later FTS/embeddings.
-- See: Architecture → Memory Abstraction Layer.
+## Memory Abstraction Layer → Memory Overlay Service
+- Canonical record now lives in `memory_items` with `{ id, ts, agent_id, project_id, kind, text, durability, trust, privacy, extra }` plus optional embeddings/links.
+- Preferred interface (overlay):
+  - `POST /actions (memory.upsert)` → emits `memory.item.upserted`
+  - `POST /actions (memory.search)`
+  - `POST /actions (memory.pack)` → journals decisions via `memory.pack.journaled`
+  - `GET /state/memory` (JSON Patch stream of inserts/expirations/pack previews)
+- Legacy REST (still wired through the new core while clients migrate):
+  - `POST /memory/put`, `GET /state/memory/select`, `POST /memory/search_embed`, `POST /state/memory/select_hybrid`, `POST /memory/link`, `GET /state/memory/links`, `POST /memory/select_coherent`
+- Purpose: stable centerpoint (self‑image and identity), dedupe via hashes, explainable hybrid retrieval (lexical + vector), and budget-aware context packs.
+- See: Architecture → Memory Abstraction Layer, Memory Overlay Service, Memory Lifecycle.
 
 ## Connectors (Cloud & Local Apps)
 - Purpose: let agents safely access cloud apps/storage (GitHub, Slack, Google/Microsoft 365, Notion, etc.) and local apps (VS Code, Word, Mail) through explicit, lease‑gated connectors.
@@ -173,10 +172,29 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
 - Legacy coexistence (temporary bridge)
   - `apps/arw-svc` still serves the current feature set while we port capabilities.
   - Bridge endpoints (compat/dev only):
-    - `GET /triad/events` — kernel‑backed SSE replay + live stream.
+    - `GET /triad/events` — kernel-backed SSE replay + live stream.
     - `POST /actions` — idempotent submission via kernel; emits `actions.submitted`.
   - Files: `apps/arw-svc/src/main.rs`, `apps/arw-svc/src/ext/mod.rs`, `apps/arw-svc/src/ext/actions_api.rs`.
-  - Toggle: `ARW_KERNEL_ENABLE=1` (default) enables dual‑write; set `0` to disable.
+  - Toggle: `ARW_KERNEL_ENABLE=1` (default) enables dual-write; set `0` to disable.
+- Legacy feature migration (unified target — all todo unless noted)
+  - Core services: port Model Steward (models download/CAS GC ✅), Tool Forge (tool runs/cache ✅), Feedback Loop, Experiment Deck, Memory Lanes, Project Hub primitives, Project Map read models, Snappy Governor, Event Spine patch streaming.
+  - UI/experience: migrate Chat Workbench, Screenshot Pipeline, Self Card + forecasts to the new SPA/right-sidecar flow once endpoints land.
+  - Policy & safety: unify Guardrail Gateway and Asimov Capsule Guard enforcement on `arw-server` (rely on upcoming policy/egress work) and remove launcher fallbacks to `/admin/*` once replacements ship.
+
+### Legacy Feature Migration Track (runs parallel to phases 2–8)
+
+| Phase | Focus | Features/Deliverables | Dependencies |
+| --- | --- | --- | --- |
+| A (Now) | Core services | Model Steward (models download/CAS GC ✅), Tool Forge (tool runs/cache metrics ✅), Snappy Governor (route stats view), Event Spine patch streaming | Triad kernel, metrics plumbing |
+| B (Next) | Memory + projects | Memory Lanes (lane CRUD/save/load), Project Hub primitives (notes/files/patch), Project Map read models (observations/beliefs/intents) | Phase A storage, policy leases |
+| C (Soon) | Feedback & experiments | Feedback Loop surfaces, Experiment Deck APIs, Self Card snapshots | Phase B data wiring |
+| D (UI) | Operator experience | Chat Workbench, Screenshot Pipeline, launcher shift to SPA/right-sidecar, retire `/admin/*` debug windows | Phase A endpoints, UI unification groundwork |
+| E (Safety) | Policy + guardrails | Guardrail Gateway on `arw-server`, Asimov Capsule Guard enforcement, final removal of legacy `/admin/*` shims | Policy & egress firewall phase |
+
+Notes
+- Each phase should ship parity (endpoints, state views, topics, docs, tests) before removing the corresponding `arw-svc` module.
+- Phases can overlap if dependencies are satisfied; track owners and dates in the backlog so the matrix stays current.
+- Update this section with status markers as phases complete (e.g., `A ✅`).
 - Scripts: `scripts/start.{sh,ps1}` default to the unified server; pass `--legacy` / `-Legacy` to run `arw-svc` (launcher auto-forces legacy until ported).
 - Debug helpers `scripts/debug.{sh,ps1}` now default to the legacy stack (for `/debug`) but accept `--server`/`-Server` to target the unified headless flow.
   - Containers: new `apps/arw-server/Dockerfile` and `docker-compose.yml` target `arw-server`; legacy image remains available for the debug UI.
@@ -315,9 +333,11 @@ State Views
   4. If it touches federation/economics, append to Contribution & Splits section.
 
 ## Next Milestones
-- Cedar ABAC scaffold (entities, allow‑default, explainers on `/actions`)
+- Cedar ABAC scaffold (entities, allow-default, explainers on `/actions`)
 - WASI runtime host + first plugins (http.fetch, fs.patch, process.exec, guardrails.check)
 - Egress proxy + DNS guard skeleton + ledger hooks
+- Unified legacy capabilities on `arw-server` (Model Steward, Tool Forge, Snappy Governor, Event Spine patches, Feedback Loop, Experiment Deck, Memory Lanes, Project Hub/Map, Chat Workbench, Self Card, Screenshot Pipeline, Guardrail Gateway, Asimov Capsule Guard)
+- Memory quarantine + world diff review queues now ship directly on `arw-server` (`/admin/state/memory/quarantine`, `/admin/state/world_diffs`).
 
 ## Logic Units (Continuous Updates)
 - Strategy packs: Logic Units provide a safe way to adopt the latest research as config‑first bundles, with opt‑in code when necessary.

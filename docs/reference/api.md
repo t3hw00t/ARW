@@ -26,6 +26,7 @@ Microsummary: Public endpoints, admin surfaces, specs, and eventing. Stable/expe
 | POST | `/actions/{id}/state` | Worker lifecycle update for a submitted action. | beta |
 | GET | `/events` | SSE stream with optional `?replay=`/`?after=` and `Last-Event-ID`. | stable |
 | GET | `/state/actions` | Recent actions (supports `?limit=`). | beta |
+| GET | `/state/experiments` | Recent experiment events snapshot. | beta |
 | GET | `/state/contributions` | Kernel contributions list (latest 200). | beta |
 | GET | `/state/episodes` | Episode rollups grouped by `corr_id`. | beta |
 | GET | `/state/route_stats` | Bus throughput plus per-route counters. | beta |
@@ -69,6 +70,8 @@ Memory
 - `POST /memory/select_coherent` — coherence-ranked selection
 - `GET /state/memory/recent` — most recent memories (per lane)
 - `POST /state/memory/explain_coherent` — explainability payload for coherence results
+- Review queue (admin): `GET /admin/state/memory/quarantine`, `POST /admin/memory/quarantine`, `POST /admin/memory/quarantine/admit` — track quarantined extracts before admitting to world/memory lanes.
+- World diff decisions (admin): `GET /admin/state/world_diffs`, `POST /admin/world_diffs/queue`, `POST /admin/world_diffs/decision` — queue diffs, record human decisions, and emit `world.diff.*` events.
 
 Connectors
 - `GET /state/connectors` — list registered connector manifests (secrets elided)
@@ -89,6 +92,26 @@ Logic Units & Config
 - `POST /patch/validate` — validate a config against a JSON Schema
 - `GET /state/schema_map` — current schema mapping used for inference
 - `POST /patch/infer_schema` — map a target path to schema/pointer
+
+Goldens & Experiments (admin token required)
+- `GET /admin/goldens/list` — list stored goldens (`?proj=default`)
+- `POST /admin/goldens/add` — append a golden `{ proj, kind, input, expect }`
+- `POST /admin/goldens/run` — evaluate goldens and emit `goldens.evaluated`
+- `POST /admin/experiments/define` — register experiment variants and knobs
+- `POST /admin/experiments/start` — emit `experiment.started` with assignment/budget hints
+- `POST /admin/experiments/stop` — emit `experiment.completed`
+- `POST /admin/experiments/assign` — emit `experiment.variant.chosen`
+- `POST /admin/experiments/run` — run A/B/n on goldens and emit `experiment.result`
+- `POST /admin/experiments/activate` — apply winner hints (emits `experiment.activated`)
+- `GET /admin/experiments/list` — list experiment definitions
+- `GET /admin/experiments/scoreboard` — last-run metrics per variant
+- `GET /admin/experiments/winners` — persisted winners snapshot
+
+Tool Forge & Guardrails (admin token required)
+- `GET /admin/tools` — enumerate registered tools with metadata from `arw_core::introspect_tools()`.
+- `POST /admin/tools/run` — invoke a tool (e.g., `ui.screenshot.capture`, `guardrails.check`); honors ingress/egress gates.
+- `GET /admin/tools/cache_stats` — action cache counters (hit/miss/coalesced/errors/bypass plus capacity/ttl/entries).
+- `GET /admin/state/guardrails_metrics` — guardrails circuit-breaker and retry counters for observability.
 
 Semantics
 - status vs code: RFC 7807 ProblemDetails for errors; otherwise endpoint-specific JSON.
@@ -137,7 +160,7 @@ Sample response (defaults)
     ARW_PORT=8090 cargo run -p arw-svc
     ```
 
-    These routes remain implemented in [`apps/arw-svc/src/ext/models_api.rs`](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/ext/models_api.rs) alongside the classic debug UI:
+    These routes now live in [`apps/arw-server/src/api_projects.rs`](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_projects.rs):
 
     - `GET /models/blob/{sha256}` — download a content-addressed model blob.
     - `POST /admin/models/concurrency` — set max concurrency at runtime.

@@ -207,6 +207,20 @@ pub async fn patch_apply(
     }
     let dry = req.dry_run.unwrap_or(false);
     let current_cfg = state.config_state.lock().await.clone();
+    let patch_values: Vec<Value> = req
+        .patches
+        .iter()
+        .map(|op| json!({"target": op.target, "op": op.op, "value": op.value }))
+        .collect();
+    let safety_issues = crate::patch_guard::check_patches_for_risks(&patch_values);
+    if crate::patch_guard::safety_enforced() && !safety_issues.is_empty() {
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(
+                json!({"type":"about:blank","title":"Bad Request","status":400,"detail":"patch safety checks failed","issues": safety_issues}),
+            ),
+        );
+    }
     let mut cfg = current_cfg.clone();
     let mut diffs: Vec<Value> = Vec::new();
     for op in &req.patches {
@@ -289,16 +303,24 @@ pub async fn patch_apply(
         }
     }
     if !dry {
-        let snapshot_id = match state.kernel.insert_config_snapshot(&cfg) {
-            Ok(id) => id,
-            Err(e) => {
-                return (
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    Json(
-                        json!({"type":"about:blank","title":"Error","status":500, "detail": e.to_string()}),
-                    ),
-                )
+        let snapshot_id = if state.kernel_enabled() {
+            match state
+                .kernel()
+                .insert_config_snapshot_async(cfg.clone())
+                .await
+            {
+                Ok(id) => id,
+                Err(e) => {
+                    return (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(
+                            json!({"type":"about:blank","title":"Error","status":500, "detail": e.to_string()}),
+                        ),
+                    )
+                }
             }
+        } else {
+            "kernel-disabled".to_string()
         };
         {
             let mut hist = state.config_history.lock().await;
@@ -308,10 +330,13 @@ pub async fn patch_apply(
             let mut cur = state.config_state.lock().await;
             *cur = cfg.clone();
         }
-        state.bus.publish(
-            topics::TOPIC_CONFIG_PATCH_APPLIED,
-            &json!({"ops": req.patches.len(), "snapshot_id": snapshot_id}),
-        );
+        let mut event_payload = json!({"ops": req.patches.len(), "snapshot_id": snapshot_id});
+        if !safety_issues.is_empty() {
+            event_payload["safety_issues"] = Value::Array(safety_issues.clone());
+        }
+        state
+            .bus
+            .publish(topics::TOPIC_CONFIG_PATCH_APPLIED, &event_payload);
         let json_patch: Vec<Value> = diffs
             .iter()
             .filter_map(|d| {
@@ -323,7 +348,7 @@ pub async fn patch_apply(
         return (
             axum::http::StatusCode::OK,
             Json(
-                json!({"ok": true, "dry_run": false, "config": cfg, "diff_summary": diffs, "json_patch": json_patch }),
+                json!({"ok": true, "dry_run": false, "config": cfg, "diff_summary": diffs, "json_patch": json_patch, "safety_issues": safety_issues }),
             ),
         );
     }
@@ -338,7 +363,7 @@ pub async fn patch_apply(
     (
         axum::http::StatusCode::OK,
         Json(
-            json!({"ok": true, "dry_run": true, "config": cfg, "diff_summary": diffs, "json_patch": json_patch }),
+            json!({"ok": true, "dry_run": true, "config": cfg, "diff_summary": diffs, "json_patch": json_patch, "safety_issues": safety_issues }),
         ),
     )
 }
@@ -391,7 +416,16 @@ pub async fn patch_revert(
 }
 
 /// List recent config snapshots.
-#[utoipa::path(get, path = "/state/config/snapshots", tag = "Config", params(("limit" = Option<i64>, Query)), responses((status = 200, body = serde_json::Value)))]
+#[utoipa::path(
+    get,
+    path = "/state/config/snapshots",
+    tag = "Config",
+    params(("limit" = Option<i64>, Query)),
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn state_config_snapshots(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
@@ -400,20 +434,41 @@ pub async fn state_config_snapshots(
         .get("limit")
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(50);
-    let items = state
-        .kernel
-        .list_config_snapshots(limit)
-        .unwrap_or_default();
-    (axum::http::StatusCode::OK, Json(json!({"items": items}))).into_response()
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
+    match state.kernel().list_config_snapshots_async(limit).await {
+        Ok(items) => (axum::http::StatusCode::OK, Json(json!({"items": items}))).into_response(),
+        Err(e) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(
+                json!({"type":"about:blank","title":"Error","status":500, "detail": e.to_string()}),
+            ),
+        )
+            .into_response(),
+    }
 }
 
 /// Get a specific config snapshot by id.
-#[utoipa::path(get, path = "/state/config/snapshots/{id}", tag = "Config", params(("id" = String, Path)), responses((status = 200, body = serde_json::Value), (status = 404)))]
+#[utoipa::path(
+    get,
+    path = "/state/config/snapshots/{id}",
+    tag = "Config",
+    params(("id" = String, Path)),
+    responses(
+        (status = 200, body = serde_json::Value),
+        (status = 404),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
 pub async fn state_config_snapshot_get(
     State(state): State<AppState>,
     Path(id): Path<String>,
 ) -> impl IntoResponse {
-    match state.kernel.get_config_snapshot(&id) {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
+    match state.kernel().get_config_snapshot_async(id.clone()).await {
         Ok(Some(cfg)) => (axum::http::StatusCode::OK, Json(cfg)).into_response(),
         Ok(None) => (
             axum::http::StatusCode::NOT_FOUND,

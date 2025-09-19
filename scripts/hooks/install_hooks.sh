@@ -170,17 +170,6 @@ else
   echo "[pre-push] npx unavailable; skipping spectral"
 fi
 
-# Generate interface release notes and warn if changed
-echo "[pre-push] Generating Interface Release Notes"
-if command -v python3 >/dev/null 2>&1; then
-  BASE_REF=${BASE_REF:-origin/main} python3 scripts/generate_interface_release_notes.py || true
-  if ! git diff --quiet -- docs/reference/interface-release-notes.md; then
-    echo "::warning::interface-release-notes changed; commit if you want it in this push"
-    git --no-pager diff -- docs/reference/interface-release-notes.md | sed -n '1,160p'
-  fi
-else
-  echo "[pre-push] python3 unavailable; skipping release notes generation"
-fi
 EOF
 chmod +x .git/hooks/pre-push
 echo "[hooks] Installed .git/hooks/pre-push"

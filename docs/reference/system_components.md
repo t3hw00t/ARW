@@ -30,7 +30,7 @@ This page is generated from [interfaces/system_components.json](https://github.c
 | Federated Clustering | — | Runtime | runtime / operators / infrastructure / plan | platform | — | [architecture/cluster_federation.md](../architecture/cluster_federation.md) |
 | Identity & Tenancy | — | Governance | workspace / operators / governance / beta | platform | — | [architecture/identity_tenancy.md](../architecture/identity_tenancy.md) |
 | Lightweight Mitigations | — | Security & Policy | runtime / operators / assurance / plan | platform | — | [architecture/lightweight_mitigations.md](../architecture/lightweight_mitigations.md) |
-| Memory Abstraction Layer & Memory Atlas | [Memory Atlas](feature_matrix.md#memory-atlas)<br /><small>Core kernel</small> | Runtime | Core kernel / runtime / developers / data plane / plan | platform | POST /memory/put<br />GET /state/memory/select<br />POST /memory/search_embed<br />…<br />memory.record.put<br />memory.link.put | [architecture/memory_abstraction.md](../architecture/memory_abstraction.md)<br />[architecture/memory_lifecycle.md](../architecture/memory_lifecycle.md) |
+| Memory Abstraction Layer & Memory Atlas | [Memory Atlas](feature_matrix.md#memory-atlas)<br /><small>Core kernel</small> | Runtime | Core kernel / runtime / developers / data plane / plan | platform | POST /actions (memory.upsert)<br />POST /actions (memory.search)<br />POST /actions (memory.pack)<br />…<br />memory.item.upserted<br />memory.item.expired<br />… | [architecture/memory_abstraction.md](../architecture/memory_abstraction.md)<br />[architecture/memory_lifecycle.md](../architecture/memory_lifecycle.md)<br />[architecture/memory_overlay_service.md](../architecture/memory_overlay_service.md) |
 | Policy & Gating Core | [Policy & Lease Facade](feature_matrix.md#policy-lease-facade)<br /><small>Core kernel</small> | Security & Policy | Core kernel / runtime / operators / guardrails / beta | platform | GET /state/policy<br />POST /policy/reload<br />POST /policy/simulate<br />…<br />policy.decision<br />policy.reloaded | [GATING_KEYS.md](../GATING_KEYS.md)<br />[guide/policy_permissions.md](../guide/policy_permissions.md)<br />[crates/arw-core/src/gating.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/src/gating.rs) |
 | Replay & Observability Stack | — | Runtime | runtime / operators / assurance / plan | platform | — | [architecture/replay_time_travel.md](../architecture/replay_time_travel.md)<br />[architecture/observability_otel.md](../architecture/observability_otel.md) |
 | Runtime Layout & Control Plane Priority | [Snappy Governor](feature_matrix.md#snappy-governor)<br /><small>Core kernel</small> | Runtime | Core kernel / runtime / developers / infrastructure / beta | platform | GET /metrics<br />GET /admin/state/route_stats<br />snappy.notice<br />snappy.detail<br />… | [architecture/runtime_layout.md](../architecture/runtime_layout.md)<br />[architecture/performance.md](../architecture/performance.md) |
@@ -351,7 +351,8 @@ Classification-driven handling that propagates tags across policies, memories, c
   - Policy & Gating Core
   - Memory Abstraction Layer & Memory Atlas
 - Signals & Telemetry:
-  - `memory.record.put`
+  - `memory.item.upserted`
+  - `memory.item.expired`
   - `memory.link.put`
 - References:
   - [architecture/data_governance.md](../architecture/data_governance.md)
@@ -493,7 +494,7 @@ Planned bundle of pragmatic safeguards: memory quarantine, project isolation, ma
 
 ### Memory Abstraction Layer & Memory Atlas
 
-Unifies episodic, semantic, procedural, and ephemeral lanes into hashed records with probabilistic scoring and coherent retrieval paths backed by the kernel.
+Memory overlay service on top of the MAL schema that exposes `memory.*` actions, hybrid recall, and explainable context packs for every agent.
 
 - Feature: [Memory Atlas](feature_matrix.md#memory-atlas) (Core kernel)
 - Category: Runtime
@@ -502,31 +503,35 @@ Unifies episodic, semantic, procedural, and ephemeral lanes into hashed records 
 - Depends on:
   - Triad Kernel & Unified API
 - Signals & Telemetry:
-  - `memory.record.put`
-  - `memory.link.put`
+  - `memory.item.upserted`
+  - `memory.item.expired`
+  - `memory.pack.journaled`
 - HTTP:
-  - `POST /memory/put`
-  - `GET /state/memory/select`
-  - `POST /memory/search_embed`
-  - `POST /state/memory/select_hybrid`
-  - `POST /memory/select_coherent`
-  - `POST /state/memory/explain_coherent`
-  - `GET /state/memory/recent`
-  - `POST /memory/link`
-  - `GET /state/memory/links`
+  - `POST /actions (memory.upsert)`
+  - `POST /actions (memory.search)`
+  - `POST /actions (memory.pack)`
+  - `GET /state/memory`
+  - `POST /memory/select_coherent (legacy)`
+  - `POST /state/memory/explain_coherent (legacy)`
 - Topics:
-  - `memory.record.put`
-  - `memory.link.put`
+  - `memory.item.upserted`
+  - `memory.item.expired`
+  - `memory.pack.journaled`
 - Storage:
-  - `memory_records`
-  - `memory_fts`
-  - `memory_links`
+  - `memory_items`
+  - `memory_vec`
+  - `memory_vec_map`
+  - `memory_keywords`
+- Read-models:
+  - `memory`
 - References:
   - [architecture/memory_abstraction.md](../architecture/memory_abstraction.md)
   - [architecture/memory_lifecycle.md](../architecture/memory_lifecycle.md)
+  - [architecture/memory_overlay_service.md](../architecture/memory_overlay_service.md)
 - Notes:
   - Lane-specific budgets, TTLs, and lifecycle policies keep the corpus explainable and auditable.
-  - Link operations and hybrid selectors assemble coherent sets for agents and tooling.
+  - Overlay actions serve both new agents and legacy clients; `/memory/*` routes retire once migrations finish.
+  - Retrieval journaling captures scores/diversity decisions for working-set diagnostics.
 
 ### Policy & Gating Core
 

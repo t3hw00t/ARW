@@ -19,6 +19,7 @@ mod paths {
     pub const HEALTHZ: &str = "/healthz";
     pub const ABOUT: &str = "/about";
     pub const EVENTS: &str = "/events";
+    pub const METRICS: &str = "/metrics";
     pub const ACTIONS: &str = "/actions";
     pub const ACTIONS_ID: &str = "/actions/:id";
     pub const ACTIONS_ID_STATE: &str = "/actions/:id/state";
@@ -26,6 +27,13 @@ mod paths {
     pub const STATE_ROUTE_STATS: &str = "/state/route_stats";
     pub const STATE_ACTIONS: &str = "/state/actions";
     pub const STATE_CONTRIBS: &str = "/state/contributions";
+    pub const STATE_RESEARCH_WATCHER: &str = "/state/research_watcher";
+    pub const STATE_STAGING_ACTIONS: &str = "/state/staging/actions";
+    pub const STATE_TRAINING_TELEMETRY: &str = "/state/training/telemetry";
+    pub const STATE_RUNTIME_MATRIX: &str = "/state/runtime_matrix";
+    pub const STATE_SELF: &str = "/state/self";
+    pub const STATE_SELF_AGENT: &str = "/state/self/:agent";
+    pub const STATE_EXPERIMENTS: &str = "/state/experiments";
     pub const LEASES: &str = "/leases";
     pub const STATE_LEASES: &str = "/state/leases";
     pub const STATE_EGRESS: &str = "/state/egress";
@@ -41,10 +49,92 @@ mod paths {
     pub const SPEC_MCP: &str = "/spec/mcp-tools.json";
     pub const SPEC_SCHEMA: &str = "/spec/schemas/:file";
     pub const SPEC_INDEX: &str = "/spec/index.json";
+    pub const ADMIN_EVENTS: &str = "/admin/events";
+    pub const ADMIN_STATE_ROUTE_STATS: &str = "/admin/state/route_stats";
+    pub const ADMIN_MODELS: &str = "/admin/models";
+    pub const ADMIN_MODELS_SUMMARY: &str = "/admin/models/summary";
+    pub const ADMIN_MODELS_REFRESH: &str = "/admin/models/refresh";
+    pub const ADMIN_MODELS_SAVE: &str = "/admin/models/save";
+    pub const ADMIN_MODELS_LOAD: &str = "/admin/models/load";
+    pub const ADMIN_MODELS_ADD: &str = "/admin/models/add";
+    pub const ADMIN_MODELS_REMOVE: &str = "/admin/models/remove";
+    pub const ADMIN_MODELS_DEFAULT: &str = "/admin/models/default";
+    pub const ADMIN_MODELS_CONCURRENCY: &str = "/admin/models/concurrency";
+    pub const ADMIN_MODELS_DOWNLOAD: &str = "/admin/models/download";
+    pub const ADMIN_MODELS_DOWNLOAD_CANCEL: &str = "/admin/models/download/cancel";
+    pub const ADMIN_MODELS_CAS_GC: &str = "/admin/models/cas_gc";
+    pub const ADMIN_MODELS_JOBS: &str = "/admin/models/jobs";
+    pub const ADMIN_STATE_MODELS_METRICS: &str = "/admin/state/models_metrics";
+    pub const ADMIN_STATE_MODELS_HASHES: &str = "/admin/state/models_hashes";
+    pub const ADMIN_STATE_GUARDRAILS_METRICS: &str = "/admin/state/guardrails_metrics";
+    pub const ADMIN_TOOLS: &str = "/admin/tools";
+    pub const ADMIN_TOOLS_RUN: &str = "/admin/tools/run";
+    pub const ADMIN_TOOLS_CACHE_STATS: &str = "/admin/tools/cache_stats";
+    pub const ADMIN_GOVERNOR_PROFILE: &str = "/admin/governor/profile";
+    pub const ADMIN_GOVERNOR_HINTS: &str = "/admin/governor/hints";
+    pub const ADMIN_STATE_MEMORY_QUARANTINE: &str = "/admin/state/memory/quarantine";
+    pub const ADMIN_MEMORY_QUARANTINE: &str = "/admin/memory/quarantine";
+    pub const ADMIN_MEMORY_QUARANTINE_ADMIT: &str = "/admin/memory/quarantine/admit";
+    pub const ADMIN_STATE_WORLD_DIFFS: &str = "/admin/state/world_diffs";
+    pub const ADMIN_WORLD_DIFFS_QUEUE: &str = "/admin/world_diffs/queue";
+    pub const ADMIN_WORLD_DIFFS_DECISION: &str = "/admin/world_diffs/decision";
+    pub const ADMIN_PROBE: &str = "/admin/probe";
+    pub const ADMIN_PROBE_HW: &str = "/admin/probe/hw";
+    pub const ADMIN_PROBE_METRICS: &str = "/admin/probe/metrics";
+    pub const ADMIN_INTROSPECT_STATS: &str = "/admin/introspect/stats";
+    pub const ADMIN_HIERARCHY_STATE: &str = "/admin/hierarchy/state";
+    pub const ADMIN_HIERARCHY_ROLE: &str = "/admin/hierarchy/role";
+    pub const ADMIN_HIERARCHY_HELLO: &str = "/admin/hierarchy/hello";
+    pub const ADMIN_HIERARCHY_OFFER: &str = "/admin/hierarchy/offer";
+    pub const ADMIN_HIERARCHY_ACCEPT: &str = "/admin/hierarchy/accept";
+    pub const ADMIN_SELF_MODEL_PROPOSE: &str = "/admin/self_model/propose";
+    pub const ADMIN_SELF_MODEL_APPLY: &str = "/admin/self_model/apply";
+    pub const ADMIN_STATE_OBSERVATIONS: &str = "/admin/state/observations";
+    pub const ADMIN_STATE_BELIEFS: &str = "/admin/state/beliefs";
+    pub const ADMIN_STATE_INTENTS: &str = "/admin/state/intents";
+    pub const ADMIN_STATE_ACTIONS: &str = "/admin/state/actions";
+    pub const ADMIN_STATE_CLUSTER: &str = "/admin/state/cluster";
+    pub const ADMIN_STATE_WORLD: &str = "/admin/state/world";
+    pub const ADMIN_STATE_WORLD_SELECT: &str = "/admin/state/world/select";
+    pub const ADMIN_PROJECTS_LIST: &str = "/admin/projects/list";
+    pub const ADMIN_PROJECTS_CREATE: &str = "/admin/projects/create";
+    pub const ADMIN_PROJECTS_TREE: &str = "/admin/projects/tree";
+    pub const ADMIN_PROJECTS_NOTES: &str = "/admin/projects/notes";
+    pub const ADMIN_PROJECTS_FILE: &str = "/admin/projects/file";
+    pub const ADMIN_PROJECTS_PATCH: &str = "/admin/projects/patch";
+    pub const ADMIN_PROJECTS_IMPORT: &str = "/admin/projects/import";
     pub const CATALOG_INDEX: &str = "/catalog/index";
     pub const CATALOG_HEALTH: &str = "/catalog/health";
     pub const ADMIN_RPU_TRUST: &str = "/admin/rpu/trust";
     pub const ADMIN_RPU_RELOAD: &str = "/admin/rpu/reload";
+    pub const ADMIN_FEEDBACK_STATE: &str = "/admin/feedback/state";
+    pub const ADMIN_FEEDBACK_SIGNAL: &str = "/admin/feedback/signal";
+    pub const ADMIN_FEEDBACK_ANALYZE: &str = "/admin/feedback/analyze";
+    pub const ADMIN_FEEDBACK_APPLY: &str = "/admin/feedback/apply";
+    pub const ADMIN_FEEDBACK_AUTO: &str = "/admin/feedback/auto";
+    pub const ADMIN_FEEDBACK_RESET: &str = "/admin/feedback/reset";
+    pub const ADMIN_DISTILL: &str = "/admin/distill";
+    pub const ADMIN_FEEDBACK_SUGGESTIONS: &str = "/admin/feedback/suggestions";
+    pub const ADMIN_FEEDBACK_UPDATES: &str = "/admin/feedback/updates";
+    pub const ADMIN_FEEDBACK_POLICY: &str = "/admin/feedback/policy";
+    pub const ADMIN_FEEDBACK_VERSIONS: &str = "/admin/feedback/versions";
+    pub const ADMIN_FEEDBACK_ROLLBACK: &str = "/admin/feedback/rollback";
+    pub const ADMIN_EXPERIMENTS_DEFINE: &str = "/admin/experiments/define";
+    pub const ADMIN_EXPERIMENTS_RUN: &str = "/admin/experiments/run";
+    pub const ADMIN_EXPERIMENTS_ACTIVATE: &str = "/admin/experiments/activate";
+    pub const ADMIN_EXPERIMENTS_LIST: &str = "/admin/experiments/list";
+    pub const ADMIN_EXPERIMENTS_SCOREBOARD: &str = "/admin/experiments/scoreboard";
+    pub const ADMIN_EXPERIMENTS_WINNERS: &str = "/admin/experiments/winners";
+    pub const ADMIN_EXPERIMENTS_START: &str = "/admin/experiments/start";
+    pub const ADMIN_EXPERIMENTS_STOP: &str = "/admin/experiments/stop";
+    pub const ADMIN_EXPERIMENTS_ASSIGN: &str = "/admin/experiments/assign";
+    pub const ADMIN_GOLDENS_LIST: &str = "/admin/goldens/list";
+    pub const ADMIN_GOLDENS_ADD: &str = "/admin/goldens/add";
+    pub const ADMIN_GOLDENS_RUN: &str = "/admin/goldens/run";
+    pub const RESEARCH_WATCHER_APPROVE: &str = "/research_watcher/:id/approve";
+    pub const RESEARCH_WATCHER_ARCHIVE: &str = "/research_watcher/:id/archive";
+    pub const STAGING_ACTION_APPROVE: &str = "/staging/actions/:id/approve";
+    pub const STAGING_ACTION_DENY: &str = "/staging/actions/:id/deny";
 }
 
 // Macros to add routes and record them in the endpoints list (avoid drift)
@@ -81,29 +171,65 @@ mod api_actions;
 mod api_config;
 mod api_connectors;
 mod api_context;
+mod api_distill;
 mod api_egress;
 mod api_egress_settings;
 mod api_events;
+mod api_experiments;
+mod api_feedback;
+mod api_goldens;
+mod api_governor;
+mod api_hierarchy;
 mod api_leases;
 mod api_logic_units;
 mod api_memory;
 mod api_meta;
+mod api_metrics;
+mod api_models;
 mod api_orchestrator;
 mod api_policy;
+mod api_probe;
+mod api_projects;
+mod api_research_watcher;
+mod api_review;
 mod api_rpu;
+mod api_self_model;
 mod api_spec;
+mod api_staging;
 mod api_state;
+mod api_tools;
+mod cluster;
+pub mod config;
 mod context_loop;
 mod coverage;
+mod distill;
 mod egress_proxy;
+mod experiments;
+mod feedback;
+mod goldens;
+mod governor;
+mod http_timeout;
 mod metrics;
+mod models;
 mod openapi;
+mod patch_guard;
 mod read_models;
+mod research_watcher;
+mod responses;
+mod review;
+mod runtime_matrix;
 mod security;
+mod self_model;
 mod sse_cache;
+mod staging;
+mod state_observer;
+mod tool_cache;
+mod tools;
+mod training;
 mod util;
 mod worker;
 mod working_set;
+mod world;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
@@ -117,9 +243,70 @@ pub(crate) struct AppState {
     endpoints: std::sync::Arc<Vec<String>>,
     endpoints_meta: std::sync::Arc<Vec<serde_json::Value>>,
     metrics: std::sync::Arc<metrics::Metrics>,
+    kernel_enabled: bool,
+    models: std::sync::Arc<models::ModelStore>,
+    tool_cache: std::sync::Arc<tool_cache::ToolCache>,
+    governor: std::sync::Arc<governor::GovernorState>,
+    feedback: std::sync::Arc<feedback::FeedbackHub>,
+    cluster: std::sync::Arc<cluster::ClusterRegistry>,
+    experiments: std::sync::Arc<experiments::Experiments>,
 }
 
 type Policy = PolicyEngine;
+
+impl AppState {
+    pub fn kernel_enabled(&self) -> bool {
+        self.kernel_enabled
+    }
+
+    pub fn kernel(&self) -> &arw_kernel::Kernel {
+        &self.kernel
+    }
+
+    pub fn kernel_if_enabled(&self) -> Option<&arw_kernel::Kernel> {
+        if self.kernel_enabled {
+            Some(&self.kernel)
+        } else {
+            None
+        }
+    }
+
+    pub fn models(&self) -> std::sync::Arc<models::ModelStore> {
+        self.models.clone()
+    }
+
+    pub fn tool_cache(&self) -> std::sync::Arc<tool_cache::ToolCache> {
+        self.tool_cache.clone()
+    }
+
+    pub fn host(&self) -> std::sync::Arc<dyn ToolHost> {
+        self.host.clone()
+    }
+
+    pub fn metrics(&self) -> std::sync::Arc<metrics::Metrics> {
+        self.metrics.clone()
+    }
+
+    pub fn bus(&self) -> arw_events::Bus {
+        self.bus.clone()
+    }
+
+    pub fn governor(&self) -> std::sync::Arc<governor::GovernorState> {
+        self.governor.clone()
+    }
+
+    pub fn feedback(&self) -> std::sync::Arc<feedback::FeedbackHub> {
+        self.feedback.clone()
+    }
+
+    pub fn cluster(&self) -> std::sync::Arc<cluster::ClusterRegistry> {
+        self.cluster.clone()
+    }
+
+    pub fn experiments(&self) -> std::sync::Arc<experiments::Experiments> {
+        self.experiments.clone()
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -190,12 +377,14 @@ async fn main() {
     // Apply performance presets early so env-based tunables pick up sensible defaults.
     // Explicit env vars still take precedence over these seeded values.
     let _tier = arw_core::perf::apply_performance_preset();
+    http_timeout::init_from_env();
     let bus = arw_events::Bus::new_with_replay(256, 256);
     let kernel = arw_kernel::Kernel::open(&crate::util::state_dir()).expect("init kernel");
-    // dual-write bus events to kernel and track DB ids for SSE
+    let kernel_enabled = config::kernel_enabled_from_env();
+    // dual-write bus events to kernel and track DB ids for SSE when enabled
     let sse_id_map = std::sync::Arc::new(Mutex::new(sse_cache::SseIdCache::with_capacity(2048)));
     let metrics = std::sync::Arc::new(metrics::Metrics::default());
-    {
+    if kernel_enabled {
         let mut rx = bus.subscribe();
         let k2 = kernel.clone();
         let sse_ids = sse_id_map.clone();
@@ -220,8 +409,17 @@ async fn main() {
                 }
             }
         });
+    } else {
+        let mut rx = bus.subscribe();
+        let metrics_clone = metrics.clone();
+        tokio::spawn(async move {
+            while let Ok(env) = rx.recv().await {
+                metrics_clone.record_event(&env.kind);
+            }
+        });
     }
     let policy = PolicyEngine::load_from_env();
+    let policy_arc = std::sync::Arc::new(Mutex::new(policy));
     // Initialize simple WASI host with http.fetch support
     let host: std::sync::Arc<dyn ToolHost> = {
         match arw_wasi::LocalHost::new() {
@@ -229,6 +427,10 @@ async fn main() {
             Err(_) => std::sync::Arc::new(arw_wasi::NoopHost),
         }
     };
+    let models_store = std::sync::Arc::new(models::ModelStore::new(bus.clone()));
+    let governor_state = governor::GovernorState::new().await;
+    models_store.bootstrap().await;
+    let tool_cache = std::sync::Arc::new(tool_cache::ToolCache::new());
     // Curated endpoints list recorded as routes are added (avoid drift)
     let mut endpoints_acc: Vec<String> = Vec::new();
     let mut endpoints_meta_acc: Vec<serde_json::Value> = Vec::new();
@@ -293,9 +495,673 @@ async fn main() {
         app,
         endpoints_acc,
         endpoints_meta_acc,
+        paths::METRICS,
+        api_metrics::metrics_prometheus,
+        "stable"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_EVENTS,
+        api_events::events_sse,
+        "legacy"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MODELS_SUMMARY,
+        api_models::models_summary,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MODELS,
+        api_models::models_list,
+        "beta"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MODELS_REFRESH,
+        api_models::models_refresh,
+        "beta"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MODELS_SAVE,
+        api_models::models_save,
+        "beta"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MODELS_LOAD,
+        api_models::models_load,
+        "beta"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MODELS_ADD,
+        api_models::models_add,
+        "beta"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MODELS_REMOVE,
+        api_models::models_remove,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MODELS_DEFAULT,
+        api_models::models_default_get,
+        "beta"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MODELS_DEFAULT,
+        api_models::models_default_set,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MODELS_CONCURRENCY,
+        api_models::models_concurrency_get,
+        "beta"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MODELS_CONCURRENCY,
+        api_models::models_concurrency_set,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MODELS_JOBS,
+        api_models::models_jobs,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_STATE_MODELS_METRICS,
+        api_models::models_metrics,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_STATE_MODELS_HASHES,
+        api_models::models_hashes,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_TOOLS,
+        api_tools::tools_list,
+        "beta"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_TOOLS_RUN,
+        api_tools::tools_run,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_TOOLS_CACHE_STATS,
+        api_tools::tools_cache_stats,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_STATE_MEMORY_QUARANTINE,
+        api_review::memory_quarantine_get,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MEMORY_QUARANTINE,
+        api_review::memory_quarantine_queue,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MEMORY_QUARANTINE_ADMIT,
+        api_review::memory_quarantine_admit,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_STATE_WORLD_DIFFS,
+        api_review::world_diffs_get,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_WORLD_DIFFS_QUEUE,
+        api_review::world_diffs_queue,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_WORLD_DIFFS_DECISION,
+        api_review::world_diffs_decision,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_GOVERNOR_PROFILE,
+        api_governor::governor_profile_get,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_GOVERNOR_PROFILE,
+        api_governor::governor_profile_set,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_GOVERNOR_HINTS,
+        api_governor::governor_hints_get,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_GOVERNOR_HINTS,
+        api_governor::governor_hints_set,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_FEEDBACK_STATE,
+        api_feedback::feedback_state,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_FEEDBACK_SIGNAL,
+        api_feedback::feedback_signal,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_FEEDBACK_ANALYZE,
+        api_feedback::feedback_analyze,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_FEEDBACK_APPLY,
+        api_feedback::feedback_apply,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_FEEDBACK_AUTO,
+        api_feedback::feedback_auto,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_FEEDBACK_RESET,
+        api_feedback::feedback_reset,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_DISTILL,
+        api_distill::distill_run,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_FEEDBACK_SUGGESTIONS,
+        api_feedback::feedback_suggestions,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_FEEDBACK_UPDATES,
+        api_feedback::feedback_updates,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_FEEDBACK_POLICY,
+        api_feedback::feedback_policy,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_FEEDBACK_VERSIONS,
+        api_feedback::feedback_versions,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_FEEDBACK_ROLLBACK,
+        api_feedback::feedback_rollback,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_EXPERIMENTS_DEFINE,
+        api_experiments::experiments_define,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_EXPERIMENTS_RUN,
+        api_experiments::experiments_run,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_EXPERIMENTS_ACTIVATE,
+        api_experiments::experiments_activate,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_EXPERIMENTS_LIST,
+        api_experiments::experiments_list,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_EXPERIMENTS_SCOREBOARD,
+        api_experiments::experiments_scoreboard,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_EXPERIMENTS_WINNERS,
+        api_experiments::experiments_winners,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_EXPERIMENTS_START,
+        api_experiments::experiments_start,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_EXPERIMENTS_STOP,
+        api_experiments::experiments_stop,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_EXPERIMENTS_ASSIGN,
+        api_experiments::experiments_assign,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_GOLDENS_LIST,
+        api_goldens::goldens_list,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_GOLDENS_ADD,
+        api_goldens::goldens_add,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_GOLDENS_RUN,
+        api_goldens::goldens_run,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_HIERARCHY_STATE,
+        api_hierarchy::hierarchy_state,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_HIERARCHY_ROLE,
+        api_hierarchy::hierarchy_role_set,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_HIERARCHY_HELLO,
+        api_hierarchy::hierarchy_hello,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_HIERARCHY_OFFER,
+        api_hierarchy::hierarchy_offer,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_HIERARCHY_ACCEPT,
+        api_hierarchy::hierarchy_accept,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_PROBE,
+        api_probe::probe_effective_paths,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_PROBE_HW,
+        api_probe::probe_hw,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_PROBE_METRICS,
+        api_probe::probe_metrics,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_INTROSPECT_STATS,
+        api_metrics::metrics_overview,
+        "legacy"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MODELS_DOWNLOAD,
+        api_models::models_download,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MODELS_DOWNLOAD_CANCEL,
+        api_models::models_download_cancel,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MODELS_CAS_GC,
+        api_models::models_cas_gc,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
         paths::STATE_EPISODES,
         api_state::state_episodes,
         "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_STATE_ROUTE_STATS,
+        api_state::state_route_stats_admin,
+        "legacy"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_STATE_OBSERVATIONS,
+        api_state::admin_state_observations,
+        "legacy"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_STATE_BELIEFS,
+        api_state::admin_state_beliefs,
+        "legacy"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_STATE_INTENTS,
+        api_state::admin_state_intents,
+        "legacy"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_STATE_ACTIONS,
+        api_state::admin_state_actions,
+        "legacy"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_STATE_GUARDRAILS_METRICS,
+        api_state::admin_state_guardrails_metrics,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_STATE_CLUSTER,
+        api_state::admin_state_cluster,
+        "legacy"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_STATE_WORLD,
+        api_state::admin_state_world,
+        "legacy"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_STATE_WORLD_SELECT,
+        api_state::admin_state_world_select,
+        "legacy"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_PROJECTS_LIST,
+        api_projects::projects_list,
+        "legacy"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_PROJECTS_CREATE,
+        api_projects::projects_create,
+        "legacy"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_PROJECTS_TREE,
+        api_projects::projects_tree,
+        "legacy"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_PROJECTS_NOTES,
+        api_projects::projects_notes_get,
+        "legacy"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_PROJECTS_NOTES,
+        api_projects::projects_notes_set,
+        "legacy"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_PROJECTS_FILE,
+        api_projects::projects_file_get,
+        "legacy"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_PROJECTS_FILE,
+        api_projects::projects_file_set,
+        "legacy"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_PROJECTS_PATCH,
+        api_projects::projects_file_patch,
+        "legacy"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_PROJECTS_IMPORT,
+        api_projects::projects_import,
+        "legacy"
     );
     app = route_get_tag!(
         app,
@@ -320,6 +1186,30 @@ async fn main() {
         paths::STATE_CONTRIBS,
         api_state::state_contributions,
         "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::STATE_RESEARCH_WATCHER,
+        api_state::state_research_watcher,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::STATE_STAGING_ACTIONS,
+        api_state::state_staging_actions,
+        "experimental"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::STATE_TRAINING_TELEMETRY,
+        api_state::state_training_telemetry,
+        "experimental"
     );
     app = route_post_tag!(
         app,
@@ -558,17 +1448,53 @@ async fn main() {
         "/patch/infer_schema",
         api_config::patch_infer_schema
     );
-    app = route_get_rec!(
+    app = route_get_tag!(
         app,
         endpoints_acc,
-        "/state/self",
-        api_state::state_self_list
+        endpoints_meta_acc,
+        paths::STATE_RUNTIME_MATRIX,
+        api_state::state_runtime_matrix,
+        "beta"
     );
-    app = route_get_rec!(
+    app = route_get_tag!(
         app,
         endpoints_acc,
-        "/state/self/:agent",
-        api_state::state_self_get
+        endpoints_meta_acc,
+        paths::STATE_EXPERIMENTS,
+        api_state::state_experiments,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::STATE_SELF,
+        api_state::state_self_list,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::STATE_SELF_AGENT,
+        api_state::state_self_get,
+        "beta"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_SELF_MODEL_PROPOSE,
+        api_self_model::self_model_propose,
+        "beta"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_SELF_MODEL_APPLY,
+        api_self_model::self_model_apply,
+        "beta"
     );
     app = route_post_rec!(
         app,
@@ -667,10 +1593,47 @@ async fn main() {
         "/state/orchestrator/jobs",
         api_orchestrator::state_orchestrator_jobs
     );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::RESEARCH_WATCHER_APPROVE,
+        api_research_watcher::research_watcher_approve,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::RESEARCH_WATCHER_ARCHIVE,
+        api_research_watcher::research_watcher_archive,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::STAGING_ACTION_APPROVE,
+        api_staging::staging_action_approve,
+        "experimental"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::STAGING_ACTION_DENY,
+        api_staging::staging_action_deny,
+        "experimental"
+    );
+    let cluster_state = cluster::ClusterRegistry::new(bus.clone());
+    let feedback_hub =
+        feedback::FeedbackHub::new(bus.clone(), metrics.clone(), governor_state.clone()).await;
+    let experiments_state =
+        experiments::Experiments::new(bus.clone(), governor_state.clone()).await;
     let state = AppState {
         bus,
         kernel,
-        policy: std::sync::Arc::new(Mutex::new(policy)),
+        policy: policy_arc.clone(),
         host,
         config_state: std::sync::Arc::new(Mutex::new(json!({}))),
         config_history: std::sync::Arc::new(Mutex::new(Vec::new())),
@@ -678,11 +1641,28 @@ async fn main() {
         endpoints: std::sync::Arc::new(endpoints_acc),
         endpoints_meta: std::sync::Arc::new(endpoints_meta_acc),
         metrics: metrics.clone(),
+        kernel_enabled,
+        models: models_store.clone(),
+        tool_cache: tool_cache.clone(),
+        governor: governor_state.clone(),
+        feedback: feedback_hub.clone(),
+        cluster: cluster_state.clone(),
+        experiments: experiments_state.clone(),
     };
+    world::load_persisted().await;
     // Start a simple local action worker (demo)
-    worker::start_local_worker(state.clone());
+    if state.kernel_enabled() {
+        worker::start_local_worker(state.clone());
+    }
     // Start read-model publishers (logic units, orchestrator jobs)
     read_models::start_read_models(state.clone());
+    cluster::start(state.clone());
+    runtime_matrix::start(state.clone());
+    state_observer::start(state.clone());
+    world::start(state.clone());
+    distill::start(state.clone());
+    self_model::start_aggregators(state.clone());
+    research_watcher::start(state.clone());
     // Start/stop egress proxy based on current settings
     egress_proxy::apply_current(state.clone()).await;
     // Watch trust store file and publish rpu.trust.changed on reloads
@@ -768,6 +1748,130 @@ async fn main() {
     )
     .await
     .unwrap();
+}
+
+#[cfg(test)]
+#[allow(clippy::items_after_test_module)]
+mod http_tests {
+    use super::*;
+    use axum::{
+        body::Body,
+        http::{Request, StatusCode},
+        routing::{get, post},
+        Router,
+    };
+    use http_body_util::BodyExt;
+    use serde_json::{json, Value};
+    use std::{path::Path, sync::Arc, time::Duration};
+    use tempfile::tempdir;
+    use tower::util::ServiceExt;
+
+    async fn build_state(dir: &Path) -> AppState {
+        std::env::set_var("ARW_STATE_DIR", dir.display().to_string());
+        let bus = arw_events::Bus::new_with_replay(64, 64);
+        let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
+        let policy = PolicyEngine::load_from_env();
+        let policy_arc = Arc::new(Mutex::new(policy));
+        let host: Arc<dyn ToolHost> = Arc::new(arw_wasi::NoopHost);
+        let models_store = Arc::new(models::ModelStore::new(bus.clone()));
+        models_store.bootstrap().await;
+        let tool_cache = Arc::new(tool_cache::ToolCache::new());
+        let governor_state = governor::GovernorState::new().await;
+        let metrics = Arc::new(metrics::Metrics::default());
+        let cluster_state = cluster::ClusterRegistry::new(bus.clone());
+        let feedback_hub =
+            feedback::FeedbackHub::new(bus.clone(), metrics.clone(), governor_state.clone()).await;
+        let experiments_state =
+            experiments::Experiments::new(bus.clone(), governor_state.clone()).await;
+        AppState {
+            bus,
+            kernel,
+            policy: policy_arc,
+            host,
+            config_state: Arc::new(Mutex::new(json!({}))),
+            config_history: Arc::new(Mutex::new(Vec::new())),
+            sse_id_map: Arc::new(Mutex::new(sse_cache::SseIdCache::with_capacity(64))),
+            endpoints: Arc::new(Vec::new()),
+            endpoints_meta: Arc::new(Vec::new()),
+            metrics,
+            kernel_enabled: true,
+            models: models_store,
+            tool_cache,
+            governor: governor_state,
+            feedback: feedback_hub,
+            cluster: cluster_state,
+            experiments: experiments_state,
+        }
+    }
+
+    fn router_with_actions(state: AppState) -> Router {
+        Router::new()
+            .route(paths::ACTIONS, post(api_actions::actions_submit))
+            .route(paths::ACTIONS_ID, get(api_actions::actions_get))
+            .with_state(state)
+    }
+
+    #[tokio::test]
+    async fn http_action_roundtrip_completes() {
+        let temp = tempdir().expect("tempdir");
+        let state_dir = temp.path().to_path_buf();
+
+        let state = build_state(&state_dir).await;
+        worker::start_local_worker(state.clone());
+        let app = router_with_actions(state);
+
+        let submit_body = json!({
+            "kind": "demo.echo",
+            "input": { "msg": "hello-roundtrip" }
+        });
+        let submit_req = Request::builder()
+            .method("POST")
+            .uri(paths::ACTIONS)
+            .header(axum::http::header::CONTENT_TYPE, "application/json")
+            .body(Body::from(submit_body.to_string()))
+            .expect("submit request");
+        let submit_resp = app
+            .clone()
+            .oneshot(submit_req)
+            .await
+            .expect("submit response");
+        assert_eq!(submit_resp.status(), StatusCode::ACCEPTED);
+        let submit_bytes = submit_resp
+            .into_body()
+            .collect()
+            .await
+            .expect("submit body collect")
+            .to_bytes();
+        let submit_json: Value = serde_json::from_slice(&submit_bytes).expect("submit body json");
+        let action_id = submit_json["id"].as_str().expect("action id").to_string();
+
+        let mut completed: Option<Value> = None;
+        for _ in 0..30 {
+            let get_req = Request::builder()
+                .method("GET")
+                .uri(format!("{}/{}", paths::ACTIONS, action_id))
+                .body(Body::empty())
+                .expect("get request");
+            let get_resp = app.clone().oneshot(get_req).await.expect("get response");
+            assert_eq!(get_resp.status(), StatusCode::OK);
+            let body_bytes = get_resp
+                .into_body()
+                .collect()
+                .await
+                .expect("get body collect")
+                .to_bytes();
+            let payload: Value = serde_json::from_slice(&body_bytes).expect("get body json");
+            if payload["state"] == "completed" {
+                completed = Some(payload);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(100)).await;
+        }
+
+        let payload = completed.expect("action completed");
+        assert_eq!(payload["state"], "completed");
+        assert_eq!(payload["output"]["echo"]["msg"], json!("hello-roundtrip"));
+    }
 }
 
 pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {

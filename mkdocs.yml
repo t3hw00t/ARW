@@ -54,6 +54,7 @@ nav:
       - Shortcuts: guide/shortcuts.md
   - How‑to:
       - Docker: guide/docker.md
+      - Deployment & Isolation: guide/deployment.md
       - Kubernetes (Helm): guide/kubernetes.md
       - Reverse Proxy: guide/reverse_proxy.md
       - Models Download: guide/models_download.md
@@ -144,6 +145,7 @@ nav:
       - Logic Units: architecture/logic_units.md
       - Agent Orchestrator: architecture/agent_orchestrator.md
       - Memory Abstraction Layer: architecture/memory_abstraction.md
+      - Memory Overlay Service: architecture/memory_overlay_service.md
       - Egress Firewall: architecture/egress_firewall.md
       - Lightweight Mitigations: architecture/lightweight_mitigations.md
       - Config Patch Engine: architecture/config_patch_engine.md
@@ -224,5 +226,4 @@ nav:
       - Release Notes: release_notes.md
       - Roadmap: ROADMAP.md
       - Interface Roadmap: INTERFACE_ROADMAP.md
-      - Interface Release Notes: reference/interface-release-notes.md
       - Backlog: BACKLOG.md

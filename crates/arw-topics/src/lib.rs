@@ -14,6 +14,10 @@ pub const TOPIC_CONCURRENCY_CHANGED: &str = "models.concurrency.changed";
 pub const TOPIC_READMODEL_PATCH: &str = "state.read.model.patch";
 pub const TOPIC_MODELS_REFRESHED: &str = "models.refreshed";
 pub const TOPIC_MODELS_CAS_GC: &str = "models.cas.gc";
+pub const TOPIC_RESEARCH_WATCHER_UPDATED: &str = "research.watcher.updated";
+pub const TOPIC_TRAINING_METRICS_UPDATED: &str = "training.metrics.updated";
+pub const TOPIC_STAGING_PENDING: &str = "staging.pending";
+pub const TOPIC_STAGING_DECIDED: &str = "staging.decided";
 
 // Interactive performance (snappy)
 pub const TOPIC_SNAPPY_NOTICE: &str = "snappy.notice";
@@ -30,6 +34,9 @@ pub const TOPIC_MEMORY_QUARANTINED: &str = "memory.quarantined";
 pub const TOPIC_MEMORY_ADMITTED: &str = "memory.admitted";
 pub const TOPIC_MEMORY_RECORD_PUT: &str = "memory.record.put";
 pub const TOPIC_MEMORY_LINK_PUT: &str = "memory.link.put";
+pub const TOPIC_MEMORY_ITEM_UPSERTED: &str = "memory.item.upserted";
+pub const TOPIC_MEMORY_ITEM_EXPIRED: &str = "memory.item.expired";
+pub const TOPIC_MEMORY_PACK_JOURNALED: &str = "memory.pack.journaled";
 
 // Beliefs (read-model summaries)
 pub const TOPIC_BELIEFS_UPDATED: &str = "beliefs.updated";
