@@ -1,5 +1,5 @@
 # Gating Keys
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: Reference
 
 Generated from code.
