@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-20 15:13 UTC",
+  "updated": "2025-09-20 22:53 UTC",
   "tasks": [
     {
       "id": "t-250914050900-ev10",
@@ -1095,6 +1095,19 @@
       "status": "todo",
       "notes": [],
       "updated": "2025-09-17 21:58:20 UTC"
+    },
+    {
+      "id": "t-250921010500-bench",
+      "title": "Implement unified snappy bench",
+      "desc": "Recreate the snappy performance load tester against arw-server (actions + SSE).",
+      "status": "todo",
+      "notes": [
+        {
+          "time": "2025-09-21 01:05:00 UTC",
+          "text": "Legacy snappy_bench in arw-svc depended on retired /admin bridges. Need a new CLI that hits /actions and /events directly, reports p95 targets, and can run in CI."
+        }
+      ],
+      "updated": "2025-09-21 01:05:00 UTC"
     }
   ]
 }

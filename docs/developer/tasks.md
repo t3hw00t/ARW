@@ -4,15 +4,17 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: Reference
 
 
 ## To Do
+- [t-250921010500-bench] Implement unified snappy bench — todo (updated: 2025-09-21 01:05:00 UTC)
+    - 2025-09-21 01:05:00 UTC: Legacy snappy_bench in arw-svc depended on retired /admin bridges. Need a new CLI that hits /actions and /events directly, reports p95 targets, and can run in CI.
 - [t-250917235817-3181] Retarget launcher to unified server — todo (updated: 2025-09-17 22:44:29 UTC)
     - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; keeps legacy fallback.
 - [t-250917235820-3900] Decommission legacy artifacts — todo (updated: 2025-09-17 21:58:20 UTC)
-- [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — done (updated: 2025-09-20 11:30:00 UTC)
+- [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — todo (updated: 2025-09-17 21:58:18 UTC)
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-11 21:02:19 UTC)
 
 ## In Progress
@@ -168,3 +170,4 @@ Type: Reference
 - [t-250909170247-6008] Start service and verify /about — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
+
