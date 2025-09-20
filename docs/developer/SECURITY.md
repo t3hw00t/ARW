@@ -5,7 +5,7 @@ title: Developer Security Notes
 # Developer Security Notes
 { .topic-trio style="--exp:.4; --complex:.6; --complicated:.8" data-exp=".4" data-complex=".6" data-complicated=".8" }
 
-Updated: 2025-09-16
+Updated: 2025-09-20
 Type: Reference
 
 ## Surface

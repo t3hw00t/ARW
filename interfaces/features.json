@@ -852,6 +852,9 @@
           "path": "apps/arw-server/src/security.rs"
         },
         {
+          "path": "apps/arw-svc/src/bootstrap/mod.rs"
+        },
+        {
           "path": "docs/architecture/asimov_capsule_guard.md"
         }
       ],

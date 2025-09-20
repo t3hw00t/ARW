@@ -100,19 +100,29 @@ jobs:
         with:
           workspaces: |
             . -> target
-      - name: Generate OpenAPI from code (server)
+      - name: Generate OpenAPI from code (server/service)
         run: |
           set -euo pipefail
           mkdir -p /tmp/ifc-gen
-          # Generate from in-code annotations (preferred)
-          (cd "$GITHUB_WORKSPACE" && OPENAPI_GEN=1 OPENAPI_OUT=/tmp/ifc-gen/openapi.yaml cargo run -p arw-server --quiet || true)
-          test -s /tmp/ifc-gen/openapi.yaml || { echo '::error::Failed to generate OpenAPI via arw-server'; exit 1; }
+          if [ -f "$GITHUB_WORKSPACE/apps/arw-svc/Cargo.toml" ]; then
+            # Run the new service crate when available
+            (cd "$GITHUB_WORKSPACE" && OPENAPI_OUT=/tmp/ifc-gen/openapi.yaml cargo run -p arw-svc --bin arw-svc --quiet || true)
+          else
+            # Fallback to legacy arw-server annotations
+            (cd "$GITHUB_WORKSPACE" && OPENAPI_GEN=1 OPENAPI_OUT=/tmp/ifc-gen/openapi.yaml cargo run -p arw-server --quiet || true)
+          fi
+          test -s /tmp/ifc-gen/openapi.yaml || { echo '::error::Failed to generate OpenAPI document from service crate'; exit 1; }
       - name: Generate OpenAPI from annotations (server)
         run: |
           set -euo pipefail
           mkdir -p /tmp/ifc-gen
-          (cd "$GITHUB_WORKSPACE" && OPENAPI_GEN=1 OPENAPI_OUT=/tmp/ifc-gen/openapi.annot.yaml cargo run -p arw-server --quiet || true)
-          test -s /tmp/ifc-gen/openapi.annot.yaml || { echo '::warning::Failed to produce annotated OpenAPI'; }
+          if [ -f "$GITHUB_WORKSPACE/apps/arw-svc/Cargo.toml" ]; then
+            : > /tmp/ifc-gen/openapi.annot.yaml
+            echo '::notice::Skipping annotated OpenAPI generation; arw-svc does not expose OPENAPI_GEN.'
+          else
+            (cd "$GITHUB_WORKSPACE" && OPENAPI_GEN=1 OPENAPI_OUT=/tmp/ifc-gen/openapi.annot.yaml cargo run -p arw-server --quiet || true)
+            test -s /tmp/ifc-gen/openapi.annot.yaml || { echo '::warning::Failed to produce annotated OpenAPI'; }
+          fi
       - name: Compare with spec/openapi.yaml
         run: |
           set -euo pipefail
