@@ -90,3 +90,6 @@ targets = [
     "aarch64-pc-windows-msvc"
 ]
 installers = ["shell", "powershell", "msi", "pkg"]
+
+[patch.crates-io]
+screenshots = { path = "vendor/screenshots" }
