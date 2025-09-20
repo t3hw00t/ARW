@@ -5,7 +5,7 @@ title: Egress Firewall
 # Egress Firewall
 { .topic-trio style="--exp:.5; --complex:.6; --complicated:.7" data-exp=".5" data-complex=".6" data-complicated=".7" }
 
-Updated: 2025-09-16
+Updated: 2025-09-20
 Type: Explanation
 
 This plan adds a lightweight, enforceable egress gateway backed by project policy, with DNS guardrails, filesystem scoping, and leased sensor access. It keeps the fast local path fast and is maintainable by one person per cluster.
@@ -88,7 +88,7 @@ See also: Guide → Network Posture, Policy, Security Hardening, Clustering.
 
 ## What’s Implemented (Initial)
 - Egress Preview API: `POST /egress/preview` → `{ allow, reason?, host, port, protocol }`. Applies allowlist, IP‑literal guard, and policy/lease rules. When `ARW_EGRESS_LEDGER_ENABLE=1`, logs preview decisions.
-- Egress Proxy (preview): `ARW_EGRESS_PROXY_ENABLE=1` starts a loopback forward proxy at `127.0.0.1:${ARW_EGRESS_PROXY_PORT:-9080}` supporting HTTP requests and HTTPS `CONNECT` tunnels. Enforces IP‑literal/allowlist guards, DNS‑guard rules, and policy/lease checks; logs to the egress ledger when enabled.
+- Egress Proxy (preview): `ARW_EGRESS_PROXY_ENABLE=1` starts a loopback forward proxy at `127.0.0.1:${ARW_EGRESS_PROXY_PORT:-9080}` supporting HTTP requests and HTTPS `CONNECT` tunnels. Enforces posture-aware allowlists, DNS guard rules, and policy/lease checks; logs to the egress ledger when enabled.
 - Built‑in HTTP effector: `http.fetch` enforces allowlist and optional IP‑literal blocking; logs egress decisions when ledger is enabled.
  - DNS Guard (preview): When `ARW_DNS_GUARD_ENABLE=1`, the proxy and `http.fetch` block DoH/DoT endpoints (e.g., `dns.google`, `cloudflare-dns.com`, port `853`), `/dns-query` paths, and `application/dns-message` payloads.
 

@@ -82,7 +82,7 @@ _Surface the beliefs, files, and links that back each decision._
 
 - **Memory Atlas** · backend / builder / intelligence / beta
   Memory overlay service backed by the canonical MAL store with hybrid retrieval, explainable packing, and stable pointers (`ptr.kind: "memory"`).
-  _Routes_: `POST /actions (memory.upsert)`, `POST /actions (memory.search)`, `POST /actions (memory.pack)`, `GET /state/memory`
+  _Routes_: `POST /actions (memory.upsert)`, `POST /actions (memory.search)`, `POST /actions (memory.pack)`, `GET /state/memory`, `POST /memory/select_coherent (legacy)`, `POST /state/memory/explain_coherent (legacy)`
   _Signals_: `memory.item.upserted`, `memory.item.expired`, `memory.pack.journaled`
   _Source_: [apps/arw-server/src/api_actions.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_actions.rs), [apps/arw-server/src/read_models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/read_models.rs), [apps/arw-server/src/working_set.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/working_set.rs), …
   _References_: [architecture/memory_abstraction.md](../architecture/memory_abstraction.md), [architecture/memory_lifecycle.md](../architecture/memory_lifecycle.md), [architecture/memory_overlay_service.md](../architecture/memory_overlay_service.md)
@@ -129,6 +129,14 @@ _Grant capabilities with leases, previews, and clear denials before anything lea
   _Env_: `ARW_POLICY_FILE`, `ARW_SECURITY_POSTURE`
   _Source_: [apps/arw-server/src/api_policy.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_policy.rs), [apps/arw-server/src/api_leases.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_leases.rs), [crates/arw-policy/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-policy/src/lib.rs)
   _References_: [GATING_KEYS.md](../GATING_KEYS.md), [guide/policy_permissions.md](../guide/policy_permissions.md), [crates/arw-core/src/gating.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/src/gating.rs)
+
+- **Identity & Tenancy** · workspace / operators / governance / beta
+  Layered principals align policies, storage, and audit scopes to User, Project, and AgentInstance boundaries.
+  _Routes_: `GET /state/policy`
+  _Signals_: `policy.decision`, `policy.capsule.applied`, `policy.capsule.failed`
+  _Env_: `ARW_SECURITY_POSTURE`
+  _Source_: [apps/arw-server/src/capsule_guard.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/capsule_guard.rs), [crates/arw-core/src/gating.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/src/gating.rs)
+  _References_: [architecture/identity_tenancy.md](../architecture/identity_tenancy.md), [guide/policy_permissions.md](../guide/policy_permissions.md), [architecture/capability_consent_ledger.md](../architecture/capability_consent_ledger.md)
 
 - **Egress Sentinel** · backend / admin / security / beta
   Preview-first egress guard with allowlists, IP/DNS defenses, ledger logging, and runtime posture controls.
@@ -188,6 +196,13 @@ _Queue, schedule, and observe heavier jobs as the team or workload grows._
   _Env_: `ARW_NATS_URL`, `ARW_NODE_ID`, `ARW_NATS_OUT`
   _Source_: [apps/arw-server/src/worker.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/worker.rs), [apps/arw-connector/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-connector/src/main.rs), [apps/arw-server/src/api_orchestrator.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_orchestrator.rs)
   _References_: [architecture/agent_orchestrator.md](../architecture/agent_orchestrator.md)
+
+- **Federated Clustering** · runtime / operators / infrastructure / plan
+  Shared node registry and adverts for optional multi-node deployments.
+  _Routes_: `GET /admin/state/cluster`
+  _Signals_: `cluster.node.advertise`, `cluster.node.changed`
+  _Source_: [apps/arw-server/src/cluster.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/cluster.rs), [apps/arw-server/src/api_state.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_state.rs)
+  _References_: [architecture/cluster_federation.md](../architecture/cluster_federation.md)
 
 - **Connectors Registry** · backend / admin / connectivity / beta
   Connector manifests with scoped tokens, audit-friendly storage, and events for cloud/local integrations.

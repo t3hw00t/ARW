@@ -9,7 +9,10 @@ Type: Reference
 
 
 ## To Do
+- [t-250917235817-3181] Retarget launcher to unified server — todo (updated: 2025-09-17 22:44:29 UTC)
+    - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; keeps legacy fallback.
 - [t-250917235820-3900] Decommission legacy artifacts — todo (updated: 2025-09-17 21:58:20 UTC)
+- [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — todo (updated: 2025-09-17 21:58:18 UTC)
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-11 21:02:19 UTC)
 
 ## In Progress
@@ -20,11 +23,6 @@ Type: Reference
 ## Paused
 
 ## Done
-- [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — done (updated: 2025-09-18 01:15:00 UTC)
-    - 2025-09-18 01:15:00 UTC: `/spec/openapi.yaml` now emits generated `ApiDoc`; CI and scripts use `OPENAPI_GEN=1`; regenerated curated spec; Spectral lint passes.
-- [t-250917235817-3181] Retarget launcher to unified server — done (updated: 2025-09-18 01:15:00 UTC)
-    - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; keeps legacy fallback.
-    - 2025-09-18 01:15:00 UTC: Switched UI defaults to 8091 across pages; bundling stages `arw-server` (keeps `arw-svc` optional); README and Windows config updated.
 - [t-250917235814-0001] Add Helm chart for arw-server — done (updated: 2025-09-17 21:58:16 UTC)
 - [t-250917235812-8254] Switch CI OpenAPI codegen to arw-server — done (updated: 2025-09-17 21:58:13 UTC)
 - [t-250917235747-3348] Annotate server handlers with utoipa — done (updated: 2025-09-17 21:58:04 UTC)
@@ -97,7 +95,7 @@ Type: Reference
 - [t-250912024838-4137] UI: Episodes filters + details toggle — done (updated: 2025-09-14 17:12:11 UTC)
     - 2025-09-14 17:12:10 UTC: Episodes filters (errors-only + substring) and details toggle exist; confirmed and kept live refresh.
 - [t-250909224103-5251] Policy: hook feedback auto-apply — done (updated: 2025-09-14 17:12:10 UTC)
-    - 2025-09-14 17:12:10 UTC: Auto-apply wired: toggle /admin/feedback/auto drives automatic apply of policy-approved suggestions; emits intents/actions events and persists state.
+    - 2025-09-14 17:12:10 UTC: Auto-apply wired: toggle /feedback/auto drives automatic apply of policy-approved suggestions; emits intents/actions events and persists state.
 - [t-250909224103-0211] UI: near-live feedback in /debug — done (updated: 2025-09-14 17:12:09 UTC)
     - 2025-09-14 17:12:08 UTC: Debug UI already renders live feedback.suggested; added auto-apply hook: when enabled, safe suggestions are auto-applied on feedback.suggested events (policy-gated).
 - [t-250912001105-7850] Phase 3: Episodes + Debug UI reactive views — done (updated: 2025-09-14 17:02:37 UTC)
@@ -111,7 +109,7 @@ Type: Reference
 - [t-250914050900-ev10] Events: topics.rs dot.case only — done (updated: 2025-09-14 16:59:12 UTC)
     - 2025-09-14 16:59:11 UTC: Enforced dot.case: linter checks topic constants and blocks string-literal publishes in service; topics.rs audited.
 - [t-250914050904-ev12] Debug UI: dot.case listeners — done (updated: 2025-09-14 16:59:11 UTC)
-    - 2025-09-14 16:59:11 UTC: Debug UI binds dot.case topics: added handlers for experiment.activated and generic listeners for task.completed/feedback.applied/catalog.updated; SSE filters already use dot.case prefixes.
+    - 2025-09-14 16:59:11 UTC: Debug UI binds dot.case topics: added handlers for experiment.activated and generic listeners for task.completed/feedback.updated/catalog.updated; SSE filters already use dot.case prefixes.
 - [t-250914050916-ev18] Release notes: dot.case migration — done (updated: 2025-09-14 16:53:02 UTC)
     - 2025-09-14 16:53:01 UTC: Release notes expanded: dot.case constants, connector subjects, new experiment.activated topic.
 - [t-250914050914-ev17] Gating keys: events:task.completed — done (updated: 2025-09-14 16:53:02 UTC)
@@ -170,3 +168,4 @@ Type: Reference
 - [t-250909170247-6008] Start service and verify /about — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
+

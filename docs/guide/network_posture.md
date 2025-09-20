@@ -4,18 +4,23 @@ title: Network Posture
 
 # Network Posture
 
-Updated: 2025-09-15
+Updated: 2025-09-20
 
-Status: Partial (preview API implemented)
+Status: Partial (gateway + posture enforcement implemented)
 Type: How‑to
 
 Network posture is a per‑project setting that translates policy into enforceable egress controls via a host‑local gateway and DNS guard. It remains opt‑in and aims to keep the local fast‑path fast.
 
 ## Modes (Per Project)
-- Off: no gateway enforcement (dev only).
-- Public only: allow common public domains (package registries, docs, model hubs); block private/risky destinations.
-- Allowlist: only explicitly permitted domains/ports are allowed.
-- Custom: start from allowlist and add scoped exceptions with TTL leases.
+- Off / Relaxed: no hostname enforcement (dev only).
+- Public / Standard: allow a curated set of public registries (GitHub, crates.io, PyPI, npm, Hugging Face, container registries) plus any host explicitly listed in settings.
+- Allowlist / Custom / Strict: only hosts listed in settings are permitted; non-standard ports require explicit entries.
+
+The effective posture is resolved from `PATCH /egress/settings` or the corresponding `ARW_NET_POSTURE` env var. Hosts are matched case-insensitively with wildcard support (`*.example.com`).
+
+## Lease Overrides
+- When posture blocks a host or port, the gateway checks `net:*` leases before denying the egress. Granting a lease such as `net:host:internal.example.com` or `net:port:8443` temporarily widens scope.
+- Capsule leases (see Asimov Capsule Guard) can refresh these capabilities automatically once adopted.
 
 ## Leases & Prompts
 - Prompts request a lease (duration + scope) when a tool needs broader access.
@@ -25,7 +30,7 @@ Network posture is a per‑project setting that translates policy into enforceab
 - Pre‑offload dialog shows destination, payload summary, and estimated cost.
 - Egress ledger records decisions, bytes, and attribution (episode/project/node).
 
-## Configuration (Preview)
+## Configuration
 - `ARW_NET_POSTURE`: `off|public|allowlist|custom`
 - `ARW_EGRESS_PROXY_ENABLE`: `1` (per node; preview forward proxy)
 - `ARW_DNS_GUARD_ENABLE`: `1` (per node)
@@ -33,6 +38,6 @@ Network posture is a per‑project setting that translates policy into enforceab
 - `ARW_EGRESS_LEDGER_ENABLE`: `1` (log decisions)
 
 Preview endpoint
-- `POST /egress/preview` to test a URL/method against policy and posture before running tools.
+- `POST /egress/preview` dry-runs posture, allowlist, leases, and policy evaluation for a URL/method before running tools.
 
 See also: Architecture → Egress Firewall; Policy; Security Hardening; Clustering.

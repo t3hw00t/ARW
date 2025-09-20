@@ -48,7 +48,7 @@
           "id": "permissioning",
           "name": "Permissioning",
           "promise": "Grant capabilities with leases, previews, and clear denials before anything leaves.",
-          "features": ["policy_leases", "egress_sentinel", "guardrail_gateway", "asimov_capsule_guard"]
+          "features": ["policy_leases", "identity_tenancy", "egress_sentinel", "guardrail_gateway", "asimov_capsule_guard"]
         },
         {
           "id": "govern_configuration",
@@ -67,7 +67,7 @@
           "id": "scale_work",
           "name": "Scale Work",
           "promise": "Queue, schedule, and observe heavier jobs as the team or workload grows.",
-          "features": ["orchestrator_plane", "connectors_registry", "tool_forge"]
+          "features": ["orchestrator_plane", "federated_clustering", "connectors_registry", "tool_forge"]
         },
         {
           "id": "extend_runtime",

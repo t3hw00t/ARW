@@ -4,6 +4,7 @@ use serde::Deserialize;
 use serde_json::json;
 use utoipa::ToSchema;
 
+use crate::egress_policy::{self, capability_candidates, lease_allows, reason_code, DenyReason};
 use crate::AppState;
 use tracing::warn;
 
@@ -51,83 +52,45 @@ pub async fn egress_preview(
         }
     };
     let host = url.host_str().map(|s| s.to_string());
-    let port = url.port();
+    let port = url.port_or_known_default();
     let scheme = url.scheme().to_string();
 
-    // IP-literal check
-    if std::env::var("ARW_EGRESS_BLOCK_IP_LITERALS")
-        .ok()
-        .as_deref()
-        == Some("1")
-    {
-        if let Some(h) = &host {
-            if h.parse::<std::net::IpAddr>().is_ok() {
-                if let Err(err) = maybe_log_egress(
-                    &state,
-                    "deny",
-                    Some("ip_literal"),
-                    host.as_deref(),
-                    port,
-                    Some(&scheme),
-                    None,
-                    None,
-                )
-                .await
-                {
-                    warn!(?err, "failed to record denied egress preview");
-                }
-                return (
-                    axum::http::StatusCode::OK,
-                    Json(
-                        json!({"allow": false, "reason": "ip_literal", "host": host, "port": port, "protocol": scheme}),
-                    ),
-                )
-                    .into_response();
-            }
-        }
-    }
+    let policy = egress_policy::resolve_policy(&state).await;
+    let decision = egress_policy::evaluate(&policy, host.as_deref(), port, &scheme);
 
-    // Allowlist (env-based) quick check
-    if let Ok(list) = std::env::var("ARW_NET_ALLOWLIST") {
-        if !list.trim().is_empty() {
-            let hosts: Vec<String> = list
-                .split(',')
-                .map(|s| s.trim().to_ascii_lowercase())
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .collect();
-            if let Some(h) = &host {
-                let hlow = h.to_ascii_lowercase();
-                let ok = hosts.iter().any(|p| {
-                    let plow = p.to_ascii_lowercase();
-                    hlow == plow || hlow.ends_with(&format!(".{plow}"))
-                });
-                if !ok {
-                    if let Err(err) = maybe_log_egress(
-                        &state,
-                        "deny",
-                        Some("allowlist"),
-                        host.as_deref(),
-                        port,
-                        Some(&scheme),
-                        None,
-                        None,
-                    )
-                    .await
-                    {
-                        warn!(?err, "failed to record allowlist-denied egress preview");
-                    }
-                    return (
-                        axum::http::StatusCode::OK,
-                        Json(
-                            json!({"allow": false, "reason": "allowlist", "host": host, "port": port, "protocol": scheme}),
-                        ),
-                    )
-                        .into_response();
-                }
+    let (allow, reason) = if decision.allow {
+        (true, None)
+    } else {
+        let reason = decision.reason.unwrap_or(DenyReason::HostNotAllowed);
+        let capability_candidates = capability_candidates(host.as_deref(), port, &scheme);
+        if lease_allows(&state, &capability_candidates).await {
+            (true, Some("lease".to_string()))
+        } else {
+            let code = reason_code(reason);
+            if let Err(err) = maybe_log_egress(
+                &state,
+                "deny",
+                Some(code),
+                host.as_deref(),
+                port,
+                Some(&scheme),
+                None,
+                None,
+            )
+            .await
+            {
+                warn!(?err, "failed to record denied egress preview");
             }
+            let body = json!({
+                "allow": false,
+                "reason": code,
+                "host": host,
+                "port": port,
+                "protocol": scheme,
+            });
+            return (axum::http::StatusCode::OK, Json(body)).into_response();
         }
-    }
+    };
 
     // Policy evaluation (ABAC facade)
     let decision = state.policy.lock().await.evaluate_action(&kind);
@@ -168,10 +131,11 @@ pub async fn egress_preview(
             }
         }
     }
+    let log_reason = reason.as_deref().unwrap_or("preview");
     if let Err(err) = maybe_log_egress(
         &state,
         "allow",
-        Some("preview"),
+        Some(log_reason),
         host.as_deref(),
         port,
         Some(&scheme),
@@ -184,7 +148,7 @@ pub async fn egress_preview(
     }
     (
         axum::http::StatusCode::OK,
-        Json(json!({"allow": true, "host": host, "port": port, "protocol": scheme})),
+        Json(json!({"allow": allow, "host": host, "port": port, "protocol": scheme})),
     )
         .into_response()
 }

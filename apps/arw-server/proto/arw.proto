@@ -1,0 +1,63 @@
+syntax = "proto3";
+
+package arw.v1;
+
+import "google/protobuf/struct.proto";
+
+message HealthCheckRequest {}
+
+message HealthCheckResponse {
+  bool ok = 1;
+  string version = 2;
+}
+
+message SubmitActionRequest {
+  string kind = 1;
+  google.protobuf.Value input = 2;
+  string idem_key = 3;
+}
+
+message SubmitActionResponse {
+  string id = 1;
+  bool staged = 2;
+  string mode = 3;
+  bool reused = 4;
+}
+
+message GetActionRequest {
+  string id = 1;
+}
+
+message Action {
+  string id = 1;
+  string kind = 2;
+  string state = 3;
+  google.protobuf.Value input = 4;
+  google.protobuf.Value output = 5;
+  string error = 6;
+  string created = 7;
+  string updated = 8;
+  google.protobuf.Value policy_ctx = 9;
+  string idem_key = 10;
+}
+
+message EventStreamRequest {
+  repeated string prefix = 1;
+  uint64 replay = 2;
+  string after = 3;
+}
+
+message EventEnvelope {
+  string time = 1;
+  string kind = 2;
+  google.protobuf.Value payload = 3;
+  string id = 4;
+  google.protobuf.Value policy = 5;
+}
+
+service ArwService {
+  rpc Healthz(HealthCheckRequest) returns (HealthCheckResponse);
+  rpc SubmitAction(SubmitActionRequest) returns (SubmitActionResponse);
+  rpc GetAction(GetActionRequest) returns (Action);
+  rpc StreamEvents(EventStreamRequest) returns (stream EventEnvelope);
+}

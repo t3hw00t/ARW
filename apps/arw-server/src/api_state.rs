@@ -210,6 +210,17 @@ pub async fn admin_state_guardrails_metrics(headers: HeaderMap) -> impl IntoResp
     Json(crate::tools::guardrails_metrics_value()).into_response()
 }
 
+/// Active policy capsules snapshot.
+#[utoipa::path(
+    get,
+    path = "/state/policy/capsules",
+    tag = "Policy",
+    responses((status = 200, description = "Active capsules", body = serde_json::Value))
+)]
+pub async fn state_policy_capsules(State(state): State<AppState>) -> impl IntoResponse {
+    Json(state.capsules().snapshot().await)
+}
+
 /// Cluster nodes snapshot (admin-only).
 #[utoipa::path(
     get,

@@ -191,16 +191,17 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
   - ⏭ Publish migration notice (README + release notes) highlighting the `arw-svc` retirement timeline and unified entry points.
 - **UI follow-ups**
   - ⏭ Wire the admin models UI to the new statuses (`resumed`, `degraded`, `cancel-requested`) and link ledger previews for operators.
+  - ✅ Debug Models/Agents/Projects pages (and launcher mirrors) now call `/admin/*` endpoints with admin headers. Legacy `/models/*` shims are no longer required.
 
 ### Legacy Feature Migration Track (runs parallel to phases 2–8)
 
-| Phase | Focus | Features/Deliverables | Dependencies |
-| --- | --- | --- | --- |
-| A (Now) | Core services | Model Steward (models download/CAS GC ✅), Tool Forge (tool runs/cache metrics ✅), Snappy Governor (route stats view), Event Spine patch streaming | Triad kernel, metrics plumbing |
-| B (Next) | Memory + projects | Memory Lanes (lane CRUD/save/load), Project Hub primitives (notes/files/patch), Project Map read models (observations/beliefs/intents) | Phase A storage, policy leases |
-| C (Soon) | Feedback & experiments | Feedback Loop surfaces, Experiment Deck APIs, Self Card snapshots | Phase B data wiring |
-| D (UI) | Operator experience | Chat Workbench, Screenshot Pipeline, launcher shift to SPA/right-sidecar, retire `/admin/*` debug windows | Phase A endpoints, UI unification groundwork |
-| E (Safety) | Policy + guardrails | Guardrail Gateway on `arw-server`, Asimov Capsule Guard enforcement, final removal of legacy `/admin/*` shims | Policy & egress firewall phase |
+| Phase | Focus | Features/Deliverables | Dependencies | Status |
+| --- | --- | --- | --- | --- |
+| A | Core services | Model Steward (models download/CAS GC ✅), Tool Forge (tool runs/cache metrics ✅), Snappy Governor (route stats view), Event Spine patch streaming | Triad kernel, metrics plumbing | ✅ Backend landed in unified server |
+| B | Memory + projects | Memory Lanes (lane CRUD/save/load), Project Hub primitives (notes/files/patch), Project Map read models (observations/beliefs/intents) | Phase A storage, policy leases | ✅ APIs live; UI still points at legacy routes (see Regression priority) |
+| C | Feedback & experiments | Feedback Loop surfaces, Experiment Deck APIs, Self Card snapshots | Phase B data wiring | ✅ Services emitting; UI polish tracked with Phase D |
+| D | Operator experience | Chat Workbench, Screenshot Pipeline, launcher shift to SPA/right-sidecar, retire `/admin/*` debug windows | Phase A endpoints, UI unification groundwork | ⏳ Debug surfaces still rely on arw-svc-era endpoints |
+| E | Safety | Guardrail Gateway on `arw-server`, Asimov Capsule Guard enforcement, final removal of legacy `/admin/*` shims | Policy & egress firewall phase | ⏳ Partial proxy shipped; firewall + capsules outstanding |
 
 Notes
 - Phases can overlap if dependencies are satisfied; track owners and dates in the backlog so the matrix stays current.
@@ -208,6 +209,20 @@ Notes
 - Scripts: `scripts/start.{sh,ps1}` launch the unified server (launcher included). Use `ARW_NO_LAUNCHER=1` / `--service-only` for headless mode.
 - Debug helpers `scripts/debug.{sh,ps1}` default to the unified stack and can open `/debug` when `ARW_DEBUG=1`.
   - Containers target `arw-server`; the legacy image is no longer published.
+
+### Regression priority (Unified server)
+
+| Priority | Feature | Problem | Suggested Work |
+| --- | --- | --- | --- |
+| High | Admin debug surfaces (Models/Agents/Projects) | ✅ Static pages now target `/admin/*` and include admin-token handling; keep an eye out for remaining legacy calls in automation. | Monitor for CLI/scripts still pointing at legacy paths; add regression tests if gaps appear. |
+| High | gRPC surface | ✅ Feature-gated gRPC listener (health/actions/events) now ships with `arw-server` (see `docs/guide/grpc.md`). | Track follow-up RPC coverage (leases, tools, rich event replay) once consumers signal demand. |
+| High | Guardrail Gateway & capsules | Proxy preview exists; DNS guard and capsule adoption landed, but policy leases and capsule renewals remain unimplemented `docs/architecture/egress_firewall.md`. | Finish network scope enforcement + lease refresh, propagate capsules to tools/orchestrator, and surface posture presets in UI/CLI. |
+| High | Model Steward resilience | ✅ HEAD preflight + single-flight hash guard restored; `/admin/state/models_metrics` now surfaces inflight hashes and concurrency snapshots. | Track admin UI updates to render new metrics and expose preflight status; monitor ledger previews for multi-tenant downloads. |
+| Medium | Chat Workbench | Debug UI shows chat badge but `/admin/chat*` endpoints were not ported; planner loop runs but API surface is missing `docs/reference/feature_matrix.md`. | Recreate REST handlers (status/send/clear), bind to context loop, add auth, and refresh debug assets + OpenAPI. |
+| Medium | Human-in-the-loop staging | Backend staging queue exists, yet UI, per-project modes, and evidence review remain planned `docs/guide/human_in_loop.md`. | Build `/state/staging/actions` panel, approvals UI, lease policy toggles, and sidecar notifications. |
+| Medium | Research Watcher | Legacy ingestion feeds still stubbed; launcher Suggested tab is static `docs/guide/research_watcher.md`. | Implement polling worker, CAS-backed storage, read-model patches, and approve/archive endpoints. |
+| Medium | Training Park metrics | Launcher pane is a stub with no dedicated telemetry `docs/guide/training_park.md`. | Publish training read-model, expose adjustments via actions, and bind UI charts. |
+| Medium | Interactive snappy bench | `snappy_bench` harness vanished with arw-svc; no built-in load tester `docs/guide/interactive_bench.md`. | Stand up new bench binary (http load + SSE replay), wire to Justfile, and document expected baselines. |
 
 ## Migration Plan (High‑level)
 1) Kernel + Triad API complete in `arw-server` (now)

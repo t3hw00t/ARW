@@ -3,13 +3,13 @@ use arw_topics as topics;
 use chrono::{DateTime, Utc};
 use fs2::available_space;
 use futures_util::StreamExt;
-use reqwest::{header, Client};
+use reqwest::{header, Client, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Number, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex as StdMutex};
 use std::time::{Duration, Instant};
 use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter};
@@ -70,6 +70,10 @@ struct MetricsState {
     errors: u64,
     bytes_total: u64,
     ewma_mbps: Option<f64>,
+    preflight_ok: u64,
+    preflight_denied: u64,
+    preflight_skipped: u64,
+    coalesced: u64,
 }
 
 impl MetricsState {
@@ -85,6 +89,10 @@ impl MetricsState {
             "errors": self.errors,
             "bytes_total": self.bytes_total,
             "ewma_mbps": self.ewma_mbps,
+            "preflight_ok": self.preflight_ok,
+            "preflight_denied": self.preflight_denied,
+            "preflight_skipped": self.preflight_skipped,
+            "coalesced": self.coalesced,
         })
     }
 
@@ -125,6 +133,22 @@ impl MetricsState {
 
     fn record_canceled(&mut self) {
         self.canceled = self.canceled.saturating_add(1);
+    }
+
+    fn record_preflight_ok(&mut self) {
+        self.preflight_ok = self.preflight_ok.saturating_add(1);
+    }
+
+    fn record_preflight_denied(&mut self) {
+        self.preflight_denied = self.preflight_denied.saturating_add(1);
+    }
+
+    fn record_preflight_skipped(&mut self) {
+        self.preflight_skipped = self.preflight_skipped.saturating_add(1);
+    }
+
+    fn record_coalesced(&mut self) {
+        self.coalesced = self.coalesced.saturating_add(1);
     }
 }
 
@@ -243,12 +267,136 @@ impl DownloadsState {
     }
 }
 
+#[derive(Default)]
+struct HashGuardEntry {
+    primary: String,
+    followers: HashSet<String>,
+}
+
+#[derive(Default)]
+struct HashGuardState {
+    by_sha: HashMap<String, HashGuardEntry>,
+    model_to_sha: HashMap<String, String>,
+}
+
+enum HashGuardRole {
+    Primary,
+    Coalesced { primary: String },
+}
+
+#[derive(Debug, Clone, Default)]
+struct PreflightInfo {
+    content_length: Option<u64>,
+    etag: Option<String>,
+    last_modified: Option<String>,
+}
+
+enum PreflightError {
+    Skip(String),
+    Denied { code: String, message: String },
+}
+
+impl HashGuardState {
+    fn register(&mut self, model_id: &str, sha: &str) -> HashGuardRole {
+        match self.by_sha.get_mut(sha) {
+            Some(entry) => {
+                entry.followers.insert(model_id.to_string());
+                self.model_to_sha
+                    .insert(model_id.to_string(), sha.to_string());
+                HashGuardRole::Coalesced {
+                    primary: entry.primary.clone(),
+                }
+            }
+            None => {
+                let entry = HashGuardEntry {
+                    primary: model_id.to_string(),
+                    followers: HashSet::new(),
+                };
+                self.by_sha.insert(sha.to_string(), entry);
+                self.model_to_sha
+                    .insert(model_id.to_string(), sha.to_string());
+                HashGuardRole::Primary
+            }
+        }
+    }
+
+    fn release_primary(&mut self, model_id: &str) -> Vec<String> {
+        let Some(sha) = self.model_to_sha.remove(model_id) else {
+            return Vec::new();
+        };
+        let Some(entry) = self.by_sha.remove(&sha) else {
+            return Vec::new();
+        };
+        for follower in &entry.followers {
+            self.model_to_sha.remove(follower);
+        }
+        entry.followers.into_iter().collect()
+    }
+
+    fn release_model(&mut self, model_id: &str) {
+        let Some(sha) = self.model_to_sha.remove(model_id) else {
+            return;
+        };
+        let mut remove_entry = false;
+        if let Some(entry) = self.by_sha.get_mut(&sha) {
+            entry.followers.remove(model_id);
+            if entry.primary == model_id {
+                if let Some(next_primary) = entry.followers.iter().next().cloned() {
+                    entry.followers.remove(&next_primary);
+                    entry.primary = next_primary;
+                } else {
+                    remove_entry = true;
+                }
+            }
+        }
+        if remove_entry {
+            self.by_sha.remove(&sha);
+        }
+    }
+
+    fn progress_targets(&self, model_id: &str) -> Vec<String> {
+        let mut targets = vec![model_id.to_string()];
+        if let Some(sha) = self.model_to_sha.get(model_id) {
+            if let Some(entry) = self.by_sha.get(sha) {
+                if entry.primary == model_id {
+                    targets.extend(entry.followers.iter().cloned());
+                }
+            }
+        }
+        targets
+    }
+
+    fn inflight_snapshot(&self) -> Vec<Value> {
+        self.by_sha
+            .iter()
+            .map(|(sha, entry)| {
+                let followers: Vec<String> = entry.followers.iter().cloned().collect();
+                json!({
+                    "sha256": sha,
+                    "primary": entry.primary,
+                    "followers": followers,
+                    "count": 1 + entry.followers.len(),
+                })
+            })
+            .collect()
+    }
+
+    fn followers_of_primary(&self, model_id: &str) -> Vec<String> {
+        self.by_sha
+            .values()
+            .find(|entry| entry.primary == model_id)
+            .map(|entry| entry.followers.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+}
+
 pub struct ModelStore {
     items: RwLock<Vec<Value>>,
     default_id: RwLock<String>,
     concurrency: RwLock<ConcurrencyState>,
     metrics: RwLock<MetricsState>,
     downloads: DownloadsState,
+    hash_guard: StdMutex<HashGuardState>,
     http_client: Client,
     bus: Bus,
     kernel: Option<arw_kernel::Kernel>,
@@ -262,6 +410,7 @@ impl ModelStore {
             concurrency: RwLock::new(ConcurrencyState::new()),
             metrics: RwLock::new(MetricsState::default()),
             downloads: DownloadsState::new(),
+            hash_guard: StdMutex::new(HashGuardState::default()),
             http_client: Client::new(),
             bus,
             kernel,
@@ -422,15 +571,25 @@ impl ModelStore {
     }
 
     pub async fn metrics_value(&self) -> Value {
-        self.metrics.read().await.clone().snapshot()
+        let mut snapshot = self.metrics.read().await.clone().snapshot();
+        let inflight = self.inflight_snapshot();
+        let concurrency = self.concurrency_snapshot().await;
+        let jobs = self.downloads.job_snapshot().await;
+        if let Value::Object(ref mut map) = snapshot {
+            map.insert("inflight".into(), Value::Array(inflight));
+            map.insert("concurrency".into(), concurrency);
+            map.insert("jobs".into(), Value::Array(jobs));
+        }
+        snapshot
     }
 
     pub async fn jobs_snapshot(&self) -> Value {
         let active = self.downloads.job_snapshot().await;
+        let inflight = self.inflight_snapshot();
         let concurrency = self.concurrency_snapshot().await;
         json!({
             "active": active,
-            "inflight_hashes": [],
+            "inflight": inflight,
             "concurrency": concurrency,
         })
     }
@@ -549,15 +708,113 @@ impl ModelStore {
 
         let dest = Self::dest_info(&url);
         let started_at = Instant::now();
+        let corr_id = uuid::Uuid::new_v4().to_string();
+
+        let role = self.register_hash_role(id, &sha_hint);
+        if let HashGuardRole::Coalesced { primary } = role {
+            self.with_metrics(|m| m.record_coalesced()).await;
+            self.upsert_model_status(id, "coalesced", provider.clone(), Some(url.clone()))
+                .await;
+            let extra = self.progress_extra_with_hints(
+                Some(json!({"mode": "coalesced", "primary": primary})),
+                Some(Duration::from_secs(0)),
+                None,
+                None,
+            );
+            self.publish_progress(id, Some("coalesced"), Some("hash-guard"), extra, None, None);
+            return Ok(());
+        }
+
+        let mut preflight_bytes: Option<u64> = None;
+        if Self::preflight_enabled() {
+            match self.run_preflight(id, &url).await {
+                Ok(info) => {
+                    preflight_bytes = info.content_length;
+                    self.with_metrics(|m| m.record_preflight_ok()).await;
+                    let extra = self.progress_extra_with_hints(
+                        Some(json!({
+                            "mode": "ok",
+                            "content_length": info.content_length,
+                            "etag": info.etag,
+                            "last_modified": info.last_modified
+                        })),
+                        Some(Duration::from_secs(0)),
+                        None,
+                        info.content_length,
+                    );
+                    self.publish_progress(
+                        id,
+                        Some("preflight"),
+                        None,
+                        extra,
+                        None,
+                        Some(corr_id.clone()),
+                    );
+                }
+                Err(PreflightError::Skip(reason)) => {
+                    self.with_metrics(|m| m.record_preflight_skipped()).await;
+                    let extra = self.progress_extra_with_hints(
+                        Some(json!({"mode": "skip", "reason": reason})),
+                        Some(Duration::from_secs(0)),
+                        None,
+                        None,
+                    );
+                    self.publish_progress(
+                        id,
+                        Some("preflight"),
+                        Some("skipped"),
+                        extra,
+                        None,
+                        Some(corr_id.clone()),
+                    );
+                }
+                Err(PreflightError::Denied { code, message }) => {
+                    self.with_metrics(|m| m.record_preflight_denied()).await;
+                    let extra = self.progress_extra_with_hints(
+                        Some(json!({"error": message.clone()})),
+                        Some(Duration::from_secs(0)),
+                        None,
+                        None,
+                    );
+                    self.publish_progress(
+                        id,
+                        Some("error"),
+                        Some(&code),
+                        extra,
+                        Some(code.clone()),
+                        Some(corr_id.clone()),
+                    );
+                    self.mark_error(id, &code, &message).await;
+                    self.append_egress_event(
+                        "deny",
+                        &code,
+                        &dest,
+                        &corr_id,
+                        None,
+                        Some(Duration::from_secs(0)),
+                    )
+                    .await;
+                    self.release_primary_hash(id);
+                    return Err(message);
+                }
+            }
+        }
+
         self.with_metrics(|m| m.record_started()).await;
         let start_extra = self.progress_extra_with_hints(
-            Some(json!({"url": url})),
+            Some(json!({"url": url, "content_length": preflight_bytes})),
             Some(Duration::from_secs(0)),
             None,
-            None,
+            preflight_bytes,
         );
-        let corr_id = uuid::Uuid::new_v4().to_string();
-        self.publish_progress(id, Some("started"), None, start_extra, None, Some(&corr_id));
+        self.publish_progress(
+            id,
+            Some("started"),
+            None,
+            start_extra,
+            None,
+            Some(corr_id.clone()),
+        );
         self.upsert_model_status(id, "queued", provider.clone(), Some(url.clone()))
             .await;
 
@@ -570,6 +827,7 @@ impl ModelStore {
                 }
             })
             .await;
+            self.release_primary_hash(id);
             return Err("download canceled".into());
         }
 
@@ -594,10 +852,10 @@ impl ModelStore {
             started_at,
         };
 
-        self.downloads
-            .insert_job(id, handle)
-            .await
-            .map_err(|_| "download already in progress".to_string())?;
+        if self.downloads.insert_job(id, handle).await.is_err() {
+            self.release_primary_hash(id);
+            return Err("download already in progress".into());
+        }
 
         self.publish_preview(id, &url, provider.as_deref(), &dest, &corr_id);
 
@@ -633,12 +891,20 @@ impl ModelStore {
         }
         if let Some((corr_id, _dest)) = self.downloads.cancel_job(id).await {
             let extra = self.progress_extra_with_hints(None, None, None, None);
-            self.publish_progress(id, Some("canceled"), None, extra, None, Some(&corr_id));
+            self.publish_progress(
+                id,
+                Some("canceled"),
+                None,
+                extra,
+                None,
+                Some(corr_id.clone()),
+            );
             self.with_metrics(|m| m.record_canceled()).await;
             self.upsert_model_status(id, "canceled", None, None).await;
             Ok(())
         } else {
             let extra = self.progress_extra_with_hints(None, None, None, None);
+            self.release_hash_for_model(id);
             self.publish_progress(id, Some("no-active-job"), None, extra, None, None);
             Err("no active download".into())
         }
@@ -840,7 +1106,7 @@ impl ModelStore {
                 Some("resumed"),
                 extra,
                 None,
-                Some(&corr_id),
+                Some(corr_id.clone()),
             );
             match tokio::fs::OpenOptions::new()
                 .append(true)
@@ -1107,7 +1373,7 @@ impl ModelStore {
                     None,
                     extra,
                     None,
-                    Some(&corr_id),
+                    Some(corr_id.clone()),
                 );
                 last_emit_bytes = downloaded;
                 last_emit_at = Instant::now();
@@ -1237,22 +1503,35 @@ impl ModelStore {
         }
     }
     async fn finish_download(&self, model_id: String, outcome: DownloadOutcome) {
+        let followers = self.followers_for(&model_id);
         match outcome {
             DownloadOutcome::Completed {
                 info,
                 dest,
                 corr_id,
             } => {
-                self.handle_success(&model_id, info, false, dest, corr_id)
+                let info_clone = info.clone();
+                let corr_clone = corr_id.clone();
+                self.handle_success(&model_id, info, false, dest, corr_id.clone())
                     .await;
+                for follower in &followers {
+                    self.handle_coalesced_success(follower, &info_clone, &corr_clone)
+                        .await;
+                }
             }
             DownloadOutcome::Cached {
                 info,
                 dest,
                 corr_id,
             } => {
-                self.handle_success(&model_id, info, true, dest, corr_id)
+                let info_clone = info.clone();
+                let corr_clone = corr_id.clone();
+                self.handle_success(&model_id, info, true, dest, corr_id.clone())
                     .await;
+                for follower in &followers {
+                    self.handle_coalesced_success(follower, &info_clone, &corr_clone)
+                        .await;
+                }
             }
             DownloadOutcome::Canceled {
                 elapsed,
@@ -1267,7 +1546,7 @@ impl ModelStore {
                     None,
                     extra,
                     None,
-                    Some(&corr_id),
+                    Some(corr_id.clone()),
                 );
                 self.upsert_model_status(&model_id, "canceled", None, None)
                     .await;
@@ -1280,6 +1559,10 @@ impl ModelStore {
                     Some(elapsed),
                 )
                 .await;
+                for follower in &followers {
+                    self.handle_coalesced_canceled(follower, elapsed, &corr_id)
+                        .await;
+                }
             }
             DownloadOutcome::Failed {
                 code,
@@ -1302,7 +1585,7 @@ impl ModelStore {
                     Some(&code),
                     extra,
                     Some(code.clone()),
-                    Some(&corr_id),
+                    Some(corr_id.clone()),
                 );
                 self.mark_error(&model_id, &code, &message).await;
                 self.append_egress_event(
@@ -1314,8 +1597,13 @@ impl ModelStore {
                     Some(elapsed),
                 )
                 .await;
+                for follower in &followers {
+                    self.handle_coalesced_error(follower, &code, &message, elapsed, &corr_id)
+                        .await;
+                }
             }
         }
+        self.release_primary_hash(&model_id);
         self.downloads.remove_job(&model_id).await;
         self.emit_patch().await;
     }
@@ -1365,7 +1653,7 @@ impl ModelStore {
             None,
             extra,
             None,
-            Some(&corr_id),
+            Some(corr_id.clone()),
         );
         let elapsed = info.elapsed;
         let bytes_for_ledger = if cached { 0 } else { info.bytes };
@@ -1381,6 +1669,85 @@ impl ModelStore {
         if let Err(err) = self.record_success(model_id, &info, &corr_id).await {
             warn!("record success failed: {err}");
         }
+    }
+
+    async fn handle_coalesced_success(
+        &self,
+        model_id: &str,
+        info: &CompletedDownload,
+        corr_id: &str,
+    ) {
+        let mut follower_info = info.clone();
+        follower_info.cached = true;
+        let mut extra = json!({
+            "sha256": follower_info.sha256,
+            "bytes": follower_info.bytes,
+            "downloaded": follower_info.bytes,
+            "cached": true,
+            "source": "coalesced",
+        });
+        if let Value::Object(ref mut map) = extra {
+            map.insert("total".into(), Value::from(follower_info.bytes));
+            if let Some(num) = Number::from_f64(100.0) {
+                map.insert("percent".into(), Value::Number(num));
+            }
+        }
+        let extra = self.progress_extra_with_hints(
+            Some(extra),
+            Some(follower_info.elapsed),
+            Some(follower_info.bytes),
+            Some(follower_info.bytes),
+        );
+        self.publish_progress(
+            model_id,
+            Some("complete"),
+            None,
+            extra,
+            None,
+            Some(corr_id.to_string()),
+        );
+        if let Err(err) = self.record_success(model_id, &follower_info, corr_id).await {
+            warn!("record success follower failed: {err}");
+        }
+    }
+
+    async fn handle_coalesced_canceled(&self, model_id: &str, elapsed: Duration, corr_id: &str) {
+        let extra = self.progress_extra_with_hints(None, Some(elapsed), None, None);
+        self.publish_progress(
+            model_id,
+            Some("canceled"),
+            None,
+            extra,
+            None,
+            Some(corr_id.to_string()),
+        );
+        self.upsert_model_status(model_id, "canceled", None, None)
+            .await;
+    }
+
+    async fn handle_coalesced_error(
+        &self,
+        model_id: &str,
+        code: &str,
+        message: &str,
+        elapsed: Duration,
+        corr_id: &str,
+    ) {
+        let extra = self.progress_extra_with_hints(
+            Some(json!({"error": message})),
+            Some(elapsed),
+            None,
+            None,
+        );
+        self.publish_progress(
+            model_id,
+            Some("error"),
+            Some(code),
+            extra,
+            Some(code.to_string()),
+            Some(corr_id.to_string()),
+        );
+        self.mark_error(model_id, code, message).await;
     }
 
     async fn record_success(
@@ -1742,6 +2109,143 @@ impl ModelStore {
         read_models::publish_read_model_patch(&self.bus, "models_metrics", &snapshot);
     }
 
+    fn register_hash_role(&self, model_id: &str, sha: &str) -> HashGuardRole {
+        let mut guard = self.hash_guard.lock().expect("hash guard poisoned");
+        guard.register(model_id, sha)
+    }
+
+    fn release_primary_hash(&self, model_id: &str) -> Vec<String> {
+        let mut guard = self.hash_guard.lock().expect("hash guard poisoned");
+        guard.release_primary(model_id)
+    }
+
+    fn release_hash_for_model(&self, model_id: &str) {
+        let mut guard = self.hash_guard.lock().expect("hash guard poisoned");
+        guard.release_model(model_id);
+    }
+
+    fn progress_targets(&self, model_id: &str) -> Vec<String> {
+        let guard = self.hash_guard.lock().expect("hash guard poisoned");
+        guard.progress_targets(model_id)
+    }
+
+    fn inflight_snapshot(&self) -> Vec<Value> {
+        let guard = self.hash_guard.lock().expect("hash guard poisoned");
+        guard.inflight_snapshot()
+    }
+
+    fn followers_for(&self, model_id: &str) -> Vec<String> {
+        let guard = self.hash_guard.lock().expect("hash guard poisoned");
+        guard.followers_of_primary(model_id)
+    }
+
+    fn preflight_enabled() -> bool {
+        env_flag("ARW_DL_PREFLIGHT")
+    }
+
+    async fn run_preflight(
+        &self,
+        model_id: &str,
+        url: &str,
+    ) -> Result<PreflightInfo, PreflightError> {
+        let request = self
+            .http_client
+            .head(url)
+            .timeout(http_timeout::get_duration());
+        let response = match request.send().await {
+            Ok(resp) => resp,
+            Err(err) => {
+                warn!("model preflight HEAD failed for {model_id}: {err}; skipping preflight");
+                return Err(PreflightError::Skip(err.to_string()));
+            }
+        };
+
+        if matches!(
+            response.status(),
+            StatusCode::METHOD_NOT_ALLOWED | StatusCode::NOT_IMPLEMENTED
+        ) {
+            return Err(PreflightError::Skip(format!(
+                "server does not support HEAD (status {})",
+                response.status()
+            )));
+        }
+
+        if !response.status().is_success() {
+            return Err(PreflightError::Denied {
+                code: "preflight-http".into(),
+                message: format!("HEAD {} failed with status {}", url, response.status()),
+            });
+        }
+
+        let headers = response.headers();
+        let content_length = headers
+            .get(header::CONTENT_LENGTH)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.parse::<u64>().ok());
+        let etag = headers
+            .get(header::ETAG)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.trim().to_string());
+        let last_modified = headers
+            .get(header::LAST_MODIFIED)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        if let Some(max) = Self::max_download_bytes() {
+            if let Some(len) = content_length {
+                if len > max {
+                    return Err(PreflightError::Denied {
+                        code: "size_limit".into(),
+                        message: format!(
+                            "download size {} exceeds max {} (ARW_MODELS_MAX_MB)",
+                            len, max
+                        ),
+                    });
+                }
+            }
+        }
+
+        if let Some(quota) = Self::quota_bytes() {
+            if let Some(len) = content_length {
+                let usage = self.cas_usage_bytes().await.unwrap_or(0);
+                if usage.saturating_add(len) > quota {
+                    return Err(PreflightError::Denied {
+                        code: "quota_exceeded".into(),
+                        message: format!(
+                            "quota {} bytes would be exceeded by download ({} bytes in CAS)",
+                            quota, usage
+                        ),
+                    });
+                }
+            }
+        }
+
+        if let Some(len) = content_length {
+            let reserve = Self::disk_reserve_bytes();
+            match Self::available_space(self.state_dir()) {
+                Ok(avail) => {
+                    if avail <= reserve || avail.saturating_sub(reserve) < len {
+                        return Err(PreflightError::Denied {
+                            code: "disk_insufficient".into(),
+                            message: format!(
+                                "not enough free space (available {}, reserve {}, need {})",
+                                avail, reserve, len
+                            ),
+                        });
+                    }
+                }
+                Err(err) => {
+                    warn!("disk space check failed during preflight: {err}");
+                }
+            }
+        }
+
+        Ok(PreflightInfo {
+            content_length,
+            etag,
+            last_modified,
+        })
+    }
     fn publish_progress(
         &self,
         id: &str,
@@ -1749,30 +2253,40 @@ impl ModelStore {
         code: Option<&str>,
         extra: Option<Value>,
         error_code: Option<String>,
-        corr_id: Option<&str>,
+        corr_id: Option<String>,
     ) {
-        let mut obj = Map::new();
-        obj.insert("id".into(), Value::String(id.to_string()));
-        if let Some(status) = status {
-            obj.insert("status".into(), Value::String(status.into()));
-        }
-        if let Some(code) = code {
-            obj.insert("code".into(), Value::String(code.into()));
-        }
-        if let Some(Value::Object(map)) = extra {
-            for (k, v) in map {
-                obj.insert(k, v);
+        let targets = self.progress_targets(id);
+        for target in targets {
+            let mut obj = Map::new();
+            obj.insert("id".into(), Value::String(target));
+            if let Some(status) = status {
+                obj.insert("status".into(), Value::String(status.into()));
             }
-        }
-        if let Some(code) = error_code {
-            obj.insert("error_code".into(), Value::String(code));
-        }
-        if let Some(cid) = corr_id {
-            if !cid.is_empty() {
-                obj.insert("corr_id".into(), Value::String(cid.to_string()));
+            if let Some(code) = code {
+                obj.insert("code".into(), Value::String(code.into()));
             }
+            if let Some(extra_val) = extra.clone() {
+                match extra_val {
+                    Value::Object(map) => {
+                        for (k, v) in map {
+                            obj.insert(k, v);
+                        }
+                    }
+                    other => {
+                        obj.insert("extra".into(), other);
+                    }
+                }
+            }
+            if let Some(err) = error_code.clone() {
+                obj.insert("error_code".into(), Value::String(err));
+            }
+            if let Some(cid) = corr_id.clone() {
+                if !cid.is_empty() {
+                    obj.insert("corr_id".into(), Value::String(cid));
+                }
+            }
+            self.bus.publish(DOWNLOAD_EVENT_KIND, &Value::Object(obj));
         }
-        self.bus.publish(DOWNLOAD_EVENT_KIND, &Value::Object(obj));
     }
 
     fn publish_preview(
@@ -2312,7 +2826,7 @@ impl BudgetNotifier {
             Some("soft-budget"),
             extra,
             None,
-            Some(corr_id),
+            Some(corr_id.to_string()),
         );
         self.degraded_sent = true;
     }
@@ -2328,6 +2842,45 @@ fn duration_to_millis(duration: Duration) -> u64 {
         u64::MAX
     } else {
         millis as u64
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn hash_guard_coalesces_followers() {
+        let bus = arw_events::Bus::new_with_replay(16, 16);
+        let store = Arc::new(ModelStore::new(bus, None));
+
+        let role_primary = store.register_hash_role("model-a", "hash-one");
+        assert!(matches!(role_primary, HashGuardRole::Primary));
+
+        let role_follower = store.register_hash_role("model-b", "hash-one");
+        match role_follower {
+            HashGuardRole::Coalesced { primary } => assert_eq!(primary, "model-a"),
+            _ => panic!("expected follower to coalesce"),
+        }
+
+        let targets = store.progress_targets("model-a");
+        assert!(targets.contains(&"model-a".to_string()));
+        assert!(targets.contains(&"model-b".to_string()));
+
+        let followers = store.followers_for("model-a");
+        assert_eq!(followers, vec!["model-b".to_string()]);
+
+        let metrics = store.metrics_value().await;
+        let inflight = metrics
+            .get("inflight")
+            .and_then(|v| v.as_array())
+            .expect("metrics inflight array");
+        assert_eq!(inflight.len(), 1);
+
+        let released = store.release_primary_hash("model-a");
+        assert_eq!(released, vec!["model-b".to_string()]);
+        let targets_after = store.progress_targets("model-a");
+        assert_eq!(targets_after, vec!["model-a".to_string()]);
     }
 }
 

@@ -56,6 +56,9 @@ image = { version = "0.24", default-features = false, features = ["png","jpeg"] 
 leptess = { version = "0.14", optional = true }
 nvml-wrapper = { version = "0.9", optional = true }
 wgpu = { version = "0.19", optional = true }
+tonic = { version = "0.11", optional = true, features = ["transport"] }
+prost = { version = "0.12", optional = true }
+prost-types = { version = "0.12", optional = true }
 
 [dev-dependencies]
 tempfile = "3"
@@ -67,6 +70,10 @@ gpu_wgpu = ["dep:wgpu"]
 npu_dxcore = []
 ocr_tesseract = ["dep:leptess"]
 docgen = []
+grpc = ["dep:tonic", "dep:prost", "dep:prost-types"]
 
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.57", features = ["Win32_Graphics_DXCore","Win32_Graphics_Dxgi"] }
+
+[build-dependencies]
+tonic-build = "0.11"

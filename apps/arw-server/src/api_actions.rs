@@ -1,3 +1,4 @@
+use anyhow::Error;
 use axum::response::IntoResponse;
 use axum::{
     extract::{Path, State},
@@ -6,6 +7,7 @@ use axum::{
 use chrono::SecondsFormat;
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tracing::warn;
 use utoipa::ToSchema;
 
 use crate::{staging, AppState};
@@ -18,6 +20,164 @@ pub(crate) struct ActionReq {
     pub input: Value,
     #[serde(default)]
     pub idem_key: Option<String>,
+}
+
+#[derive(Debug, Clone)]
+pub(crate) struct ActionSubmitOutcome {
+    pub id: String,
+    pub staged: bool,
+    pub stage_mode: Option<String>,
+    pub reused: bool,
+}
+
+#[derive(Debug)]
+pub(crate) enum SubmitActionError {
+    KernelDisabled,
+    PolicyDenied {
+        require_capability: Option<String>,
+        explain: serde_json::Value,
+    },
+    QueueFull {
+        limit: i64,
+        queued: i64,
+    },
+    Internal(Error),
+}
+
+pub(crate) async fn submit_action(
+    state: &AppState,
+    req: ActionReq,
+) -> Result<ActionSubmitOutcome, SubmitActionError> {
+    let _ = state.capsules().replay_all().await;
+    if !state.kernel_enabled() {
+        return Err(SubmitActionError::KernelDisabled);
+    }
+
+    let decision = state.policy.lock().await.evaluate_action(&req.kind);
+    if !decision.allow {
+        if let Some(cap) = decision.require_capability.as_deref() {
+            let lease = state
+                .kernel()
+                .find_valid_lease_async("local", cap)
+                .await
+                .map_err(|e| SubmitActionError::Internal(e.into()))?;
+            if lease.is_none() {
+                state.bus.publish(
+                    topics::TOPIC_POLICY_DECISION,
+                    &json!({
+                        "action": req.kind,
+                        "allow": false,
+                        "require_capability": cap,
+                        "explain": decision.explain,
+                    }),
+                );
+                return Err(SubmitActionError::PolicyDenied {
+                    require_capability: Some(cap.to_string()),
+                    explain: decision.explain,
+                });
+            }
+        }
+    }
+
+    let mut reuse_id: Option<String> = None;
+    if let Some(ref idem) = req.idem_key {
+        match state.kernel().find_action_by_idem_async(idem).await {
+            Ok(Some(existing)) => reuse_id = Some(existing),
+            Ok(None) => {}
+            Err(err) => {
+                warn!(target: "actions", "find_action_by_idem failed: {err:?}");
+            }
+        }
+    }
+
+    if reuse_id.is_none() {
+        match staging::maybe_stage_action(&state, &req.kind, &req.input).await {
+            Ok(Some(staging_id)) => {
+                return Ok(ActionSubmitOutcome {
+                    id: staging_id,
+                    staged: true,
+                    stage_mode: Some(staging::mode_label().to_string()),
+                    reused: false,
+                });
+            }
+            Ok(None) => {}
+            Err(err) => {
+                warn!(target: "staging", "failed to stage action: {err:?}");
+            }
+        }
+        let max_q: i64 = std::env::var("ARW_ACTIONS_QUEUE_MAX")
+            .ok()
+            .and_then(|s| s.parse().ok())
+            .unwrap_or(1024);
+        if max_q > 0 {
+            if let Ok(nq) = state.kernel().count_actions_by_state_async("queued").await {
+                if nq >= max_q {
+                    return Err(SubmitActionError::QueueFull {
+                        limit: max_q,
+                        queued: nq,
+                    });
+                }
+            }
+        }
+    }
+
+    let (id, reused) = if let Some(ref idem) = req.idem_key {
+        if let Some(existing) = reuse_id.clone() {
+            (existing, true)
+        } else {
+            let id = uuid::Uuid::new_v4().to_string();
+            if let Err(err) = state
+                .kernel()
+                .insert_action_async(
+                    &id,
+                    &req.kind,
+                    &req.input,
+                    None,
+                    Some(idem.as_str()),
+                    "queued",
+                )
+                .await
+            {
+                return Err(SubmitActionError::Internal(err.into()));
+            }
+            (id, false)
+        }
+    } else {
+        let id = uuid::Uuid::new_v4().to_string();
+        if let Err(err) = state
+            .kernel()
+            .insert_action_async(&id, &req.kind, &req.input, None, None, "queued")
+            .await
+        {
+            return Err(SubmitActionError::Internal(err.into()));
+        }
+        (id, false)
+    };
+
+    let payload = json!({"id": id, "kind": req.kind, "status": "queued"});
+    let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    let env = arw_events::Envelope {
+        time: now,
+        kind: topics::TOPIC_ACTIONS_SUBMITTED.into(),
+        payload,
+        policy: None,
+        ce: None,
+    };
+    state.bus.publish(&env.kind, &env.payload);
+    if let Err(err) = state
+        .kernel()
+        .append_contribution_async("local", "task.submit", 1.0, "task", None, None, None)
+        .await
+    {
+        warn!(target: "actions", "append_contribution failed: {err:?}");
+    }
+
+    Ok(ActionSubmitOutcome {
+        id,
+        staged: false,
+        stage_mode: None,
+        reused,
+    })
 }
 
 /// Submit an action to the triad queue.
@@ -35,139 +195,56 @@ pub async fn actions_submit(
     State(state): State<AppState>,
     Json(req): Json<ActionReq>,
 ) -> axum::response::Response {
-    if !state.kernel_enabled() {
-        return crate::responses::kernel_disabled();
+    match submit_action(&state, req).await {
+        Ok(outcome) if outcome.staged => (
+            axum::http::StatusCode::ACCEPTED,
+            Json(json!({
+                "staged": true,
+                "id": outcome.id,
+                "mode": outcome.stage_mode.unwrap_or_else(|| staging::mode_label().to_string())
+            })),
+        )
+            .into_response(),
+        Ok(outcome) => (
+            axum::http::StatusCode::ACCEPTED,
+            Json(json!({
+                "id": outcome.id,
+                "ok": true,
+                "staged": false
+            })),
+        )
+            .into_response(),
+        Err(SubmitActionError::KernelDisabled) => crate::responses::kernel_disabled(),
+        Err(SubmitActionError::PolicyDenied {
+            require_capability,
+            explain,
+        }) => (
+            axum::http::StatusCode::FORBIDDEN,
+            Json(json!({
+                "type":"about:blank","title":"Forbidden","status":403,
+                "detail":"Denied (lease required)",
+                "explain": explain,
+                "require_capability": require_capability
+            })),
+        )
+            .into_response(),
+        Err(SubmitActionError::QueueFull { limit, queued }) => (
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            Json(json!({
+                "type":"about:blank","title":"Too Many Requests","status":429,
+                "detail":"queue is full","limit": limit, "queued": queued
+            })),
+        )
+            .into_response(),
+        Err(SubmitActionError::Internal(err)) => (
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            Json(json!({
+                "type":"about:blank","title":"Error","status":500,
+                "detail": err.to_string()
+            })),
+        )
+            .into_response(),
     }
-    // Policy check: enforce lease rules when allow_all=false
-    let decision = state.policy.lock().await.evaluate_action(&req.kind);
-    if !decision.allow {
-        if let Some(cap) = decision.require_capability.as_deref() {
-            if state
-                .kernel()
-                .find_valid_lease_async("local", cap)
-                .await
-                .ok()
-                .flatten()
-                .is_none()
-            {
-                // emit policy.decision event (denied)
-                state.bus.publish(
-                    topics::TOPIC_POLICY_DECISION,
-                    &json!({
-                        "action": req.kind,
-                        "allow": false,
-                        "require_capability": cap,
-                        "explain": decision.explain,
-                    }),
-                );
-                return (
-                    axum::http::StatusCode::FORBIDDEN,
-                    Json(json!({
-                        "type":"about:blank","title":"Forbidden","status":403,
-                        "detail":"Denied (lease required)",
-                        "explain": decision.explain
-                    })),
-                )
-                    .into_response();
-            }
-        }
-    }
-    let idem_key = req.idem_key.clone();
-    let mut reuse_id: Option<String> = None;
-    if let Some(ref idem) = idem_key {
-        if let Ok(Some(existing)) = state.kernel().find_action_by_idem_async(idem).await {
-            reuse_id = Some(existing);
-        }
-    }
-    if reuse_id.is_none() {
-        match staging::maybe_stage_action(&state, &req.kind, &req.input).await {
-            Ok(Some(staging_id)) => {
-                return (
-                    axum::http::StatusCode::ACCEPTED,
-                    Json(json!({
-                        "staged": true,
-                        "id": staging_id,
-                        "mode": staging::mode_label()
-                    })),
-                )
-                    .into_response();
-            }
-            Ok(None) => {}
-            Err(err) => {
-                tracing::warn!(target: "staging", "failed to stage action: {err:?}");
-            }
-        }
-        // Backpressure: deny if too many queued (only when enqueuing)
-        let max_q: i64 = std::env::var("ARW_ACTIONS_QUEUE_MAX")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(1024);
-        if max_q > 0 {
-            if let Ok(nq) = state.kernel().count_actions_by_state_async("queued").await {
-                if nq >= max_q {
-                    return (
-                        axum::http::StatusCode::TOO_MANY_REQUESTS,
-                        Json(json!({
-                            "type":"about:blank","title":"Too Many Requests","status":429,
-                            "detail":"queue is full","limit": max_q, "queued": nq
-                        })),
-                    )
-                        .into_response();
-                }
-            }
-        }
-    }
-    let id = if let Some(idem) = &req.idem_key {
-        if let Some(existing) = reuse_id.clone() {
-            existing
-        } else {
-            let id = uuid::Uuid::new_v4().to_string();
-            let _ = state
-                .kernel()
-                .insert_action_async(
-                    &id,
-                    &req.kind,
-                    &req.input,
-                    None,
-                    Some(idem.as_str()),
-                    "queued",
-                )
-                .await;
-            id
-        }
-    } else {
-        let id = uuid::Uuid::new_v4().to_string();
-        let _ = state
-            .kernel()
-            .insert_action_async(&id, &req.kind, &req.input, None, None, "queued")
-            .await;
-        id
-    };
-    // Publish submitted event
-    let payload = json!({"id": id, "kind": req.kind, "status": "queued"});
-    let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-    let env = arw_events::Envelope {
-        time: now,
-        kind: topics::TOPIC_ACTIONS_SUBMITTED.into(),
-        payload,
-        policy: None,
-        ce: None,
-    };
-    state.bus.publish(&env.kind, &env.payload);
-    // Contribution scaffold: record a task submit (qty=1 task)
-    let _ = state
-        .kernel()
-        .append_contribution_async("local", "task.submit", 1.0, "task", None, None, None)
-        .await;
-    (
-        axum::http::StatusCode::ACCEPTED,
-        Json(json!({
-            "id": env.payload["id"],
-            "ok": true,
-            "staged": false
-        })),
-    )
-        .into_response()
 }
 
 /// Get action details by id.

@@ -1,4 +1,5 @@
-use crate::{http_timeout, util::effective_posture, AppState};
+use crate::egress_policy::{capability_candidates, lease_allows, reason_code, DenyReason};
+use crate::{egress_policy, http_timeout, util::effective_posture, AppState};
 use bytes::Bytes;
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt as _, Empty, Full};
@@ -169,82 +170,54 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
     let mut parts = authority.split(':');
     let host = parts.next().unwrap_or("").to_string();
     let port: u16 = parts.next().and_then(|p| p.parse().ok()).unwrap_or(443);
-    // Guards
-    if std::env::var("ARW_EGRESS_BLOCK_IP_LITERALS")
-        .ok()
-        .as_deref()
-        == Some("1")
-        && host.parse::<std::net::IpAddr>().is_ok()
-    {
-        log_egress_event(
-            &state,
-            "deny",
-            Some("ip_literal"),
-            Some(&host),
-            Some(port),
-            Some("tcp"),
-            None,
-            None,
-            corr_id_hdr.as_deref(),
-            proj_hdr.as_deref(),
-        )
-        .await;
-        return Response::builder()
-            .status(StatusCode::FORBIDDEN)
-            .body(Full::new(Bytes::from_static(b"IP literal blocked")).boxed())
-            .unwrap();
+    let policy = egress_policy::resolve_policy(&state).await;
+    let posture_decision = egress_policy::evaluate(&policy, Some(&host), Some(port), "https");
+    if !posture_decision.allow {
+        let reason = posture_decision
+            .reason
+            .unwrap_or(DenyReason::HostNotAllowed);
+        let caps = capability_candidates(Some(&host), Some(port), "https");
+        if !lease_allows(&state, &caps).await {
+            let code = reason_code(reason);
+            log_egress_event(
+                &state,
+                "deny",
+                Some(code),
+                Some(&host),
+                Some(port),
+                Some("tcp"),
+                None,
+                None,
+                corr_id_hdr.as_deref(),
+                proj_hdr.as_deref(),
+            )
+            .await;
+            return Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .body(Full::new(Bytes::from_static(b"Egress blocked")).boxed())
+                .unwrap();
+        }
     }
     if dns_guard() && (port == 853 || is_doh_host(&host)) {
-        log_egress_event(
-            &state,
-            "deny",
-            Some("dns_guard"),
-            Some(&host),
-            Some(port),
-            Some("tcp"),
-            None,
-            None,
-            corr_id_hdr.as_deref(),
-            proj_hdr.as_deref(),
-        )
-        .await;
-        return Response::builder()
-            .status(StatusCode::FORBIDDEN)
-            .body(Full::new(Bytes::from_static(b"DNS guard")).boxed())
-            .unwrap();
-    }
-    if let Ok(list) = std::env::var("ARW_NET_ALLOWLIST") {
-        if !list.trim().is_empty() {
-            let hosts: Vec<String> = list
-                .split(',')
-                .map(|s| s.trim().to_ascii_lowercase())
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .collect();
-            let hlow = host.to_ascii_lowercase();
-            let ok = hosts.iter().any(|p| {
-                let plow = p.to_ascii_lowercase();
-                hlow == plow || hlow.ends_with(&format!(".{plow}"))
-            });
-            if !ok {
-                log_egress_event(
-                    &state,
-                    "deny",
-                    Some("allowlist"),
-                    Some(&host),
-                    Some(port),
-                    Some("tcp"),
-                    None,
-                    None,
-                    corr_id_hdr.as_deref(),
-                    proj_hdr.as_deref(),
-                )
-                .await;
-                return Response::builder()
-                    .status(StatusCode::FORBIDDEN)
-                    .body(Full::new(Bytes::from_static(b"Host not in allowlist")).boxed())
-                    .unwrap();
-            }
+        let caps = capability_candidates(Some(&host), Some(port), "https");
+        if !lease_allows(&state, &caps).await {
+            log_egress_event(
+                &state,
+                "deny",
+                Some("dns_guard"),
+                Some(&host),
+                Some(port),
+                Some("tcp"),
+                None,
+                None,
+                corr_id_hdr.as_deref(),
+                proj_hdr.as_deref(),
+            )
+            .await;
+            return Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .body(Full::new(Bytes::from_static(b"DNS guard")).boxed())
+                .unwrap();
         }
     }
     // Policy
@@ -402,36 +375,37 @@ async fn handle_http_forward(
     let host = url.host_str().map(|s| s.to_string());
     let port: u16 = url.port_or_known_default().unwrap_or(80);
     let scheme = url.scheme().to_string();
-    // Guards
-    if std::env::var("ARW_EGRESS_BLOCK_IP_LITERALS")
-        .ok()
-        .as_deref()
-        == Some("1")
-    {
-        if let Some(h) = &host {
-            if h.parse::<std::net::IpAddr>().is_ok() {
-                log_egress_event(
-                    &state,
-                    "deny",
-                    Some("ip_literal"),
-                    host.as_deref(),
-                    Some(port),
-                    Some(&scheme),
-                    None,
-                    None,
-                    req.headers()
-                        .get("x-arw-corr")
-                        .and_then(|h| h.to_str().ok()),
-                    req.headers()
-                        .get("x-arw-project")
-                        .and_then(|h| h.to_str().ok()),
-                )
-                .await;
-                return Response::builder()
-                    .status(StatusCode::FORBIDDEN)
-                    .body(Full::new(Bytes::from_static(b"IP literal blocked")).boxed())
-                    .unwrap();
-            }
+
+    let policy = egress_policy::resolve_policy(&state).await;
+    let posture_decision = egress_policy::evaluate(&policy, host.as_deref(), Some(port), &scheme);
+    if !posture_decision.allow {
+        let reason = posture_decision
+            .reason
+            .unwrap_or(DenyReason::HostNotAllowed);
+        let caps = capability_candidates(host.as_deref(), Some(port), &scheme);
+        if !lease_allows(&state, &caps).await {
+            let code = reason_code(reason);
+            log_egress_event(
+                &state,
+                "deny",
+                Some(code),
+                host.as_deref(),
+                Some(port),
+                Some(&scheme),
+                None,
+                None,
+                req.headers()
+                    .get("x-arw-corr")
+                    .and_then(|h| h.to_str().ok()),
+                req.headers()
+                    .get("x-arw-project")
+                    .and_then(|h| h.to_str().ok()),
+            )
+            .await;
+            return Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .body(Full::new(Bytes::from_static(b"Egress blocked")).boxed())
+                .unwrap();
         }
     }
     if dns_guard() {
@@ -451,66 +425,29 @@ async fn handle_http_forward(
                 .map(|s| s.contains("application/dns-message"))
                 .unwrap_or(false);
         if doh_like || wants_dns_message {
-            log_egress_event(
-                &state,
-                "deny",
-                Some("dns_guard"),
-                host.as_deref(),
-                Some(port),
-                Some(&scheme),
-                None,
-                None,
-                req.headers()
-                    .get("x-arw-corr")
-                    .and_then(|h| h.to_str().ok()),
-                req.headers()
-                    .get("x-arw-project")
-                    .and_then(|h| h.to_str().ok()),
-            )
-            .await;
-            return Response::builder()
-                .status(StatusCode::FORBIDDEN)
-                .body(Full::new(Bytes::from_static(b"DNS guard")).boxed())
-                .unwrap();
-        }
-    }
-    if let Ok(list) = std::env::var("ARW_NET_ALLOWLIST") {
-        if !list.trim().is_empty() {
-            let hosts: Vec<String> = list
-                .split(',')
-                .map(|s| s.trim().to_ascii_lowercase())
-                .filter(|s| !s.is_empty())
-                .map(|s| s.to_string())
-                .collect();
-            if let Some(h) = &host {
-                let hlow = h.to_ascii_lowercase();
-                let ok = hosts.iter().any(|p| {
-                    let plow = p.to_ascii_lowercase();
-                    hlow == plow || hlow.ends_with(&format!(".{plow}"))
-                });
-                if !ok {
-                    log_egress_event(
-                        &state,
-                        "deny",
-                        Some("allowlist"),
-                        host.as_deref(),
-                        Some(port),
-                        Some(&scheme),
-                        None,
-                        None,
-                        req.headers()
-                            .get("x-arw-corr")
-                            .and_then(|h| h.to_str().ok()),
-                        req.headers()
-                            .get("x-arw-project")
-                            .and_then(|h| h.to_str().ok()),
-                    )
-                    .await;
-                    return Response::builder()
-                        .status(StatusCode::FORBIDDEN)
-                        .body(Full::new(Bytes::from_static(b"Host not in allowlist")).boxed())
-                        .unwrap();
-                }
+            let caps = capability_candidates(host.as_deref(), Some(port), &scheme);
+            if !lease_allows(&state, &caps).await {
+                log_egress_event(
+                    &state,
+                    "deny",
+                    Some("dns_guard"),
+                    host.as_deref(),
+                    Some(port),
+                    Some(&scheme),
+                    None,
+                    None,
+                    req.headers()
+                        .get("x-arw-corr")
+                        .and_then(|h| h.to_str().ok()),
+                    req.headers()
+                        .get("x-arw-project")
+                        .and_then(|h| h.to_str().ok()),
+                )
+                .await;
+                return Response::builder()
+                    .status(StatusCode::FORBIDDEN)
+                    .body(Full::new(Bytes::from_static(b"DNS guard")).boxed())
+                    .unwrap();
             }
         }
     }

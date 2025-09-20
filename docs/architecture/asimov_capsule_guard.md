@@ -11,7 +11,7 @@ Type: Plan
 The Asimov Capsule Guard turns the "mind virus" idea into an enforceable feature: a lightweight policy capsule that refreshes itself at every critical runtime boundary, keeping safety rules and leases in effect without piling up irreversible denies.
 
 ## Current Behavior & Gaps
-- Capsule adoption only runs inside the admin middleware when `X-ARW-Gate` is present, so the agent execution loop never re-applies policy automatically. The middleware simply hands the JSON header to `arw_core::rpu::adopt_from_header_json` after the admin token check.
+- Capsule adoption now runs in the unified server’s capsule middleware: any request carrying `X-ARW-Capsule` (or the legacy `X-ARW-Gate`) is verified via the RPU, cached, and published to `/state/policy/capsules`. The guard still needs auto-replay hooks for tools/orchestrator and richer TTL semantics.
 - `gating::adopt_capsule` copies every deny into the immutable hierarchy set and expands contracts into the shared contract list, making each capsule permanent until the process restarts; only test helpers can reset state.【F:crates/arw-core/src/gating.rs†L309-L353】
 - The Regulatory Provenance Unit (RPU) skeleton verifies a capsule and pushes it into gating but does not emit telemetry beyond existing `policy.decision` events, leaving adoption opaque to the UI and ledger.【F:crates/arw-core/src/rpu.rs†L200-L231】
 
@@ -25,7 +25,7 @@ These gaps prevent capsules from acting like an "always-enforced" guardrail and 
 ## Integration Plan
 ### Phase 0 — Observability & Data Contracts
 1. Extend `arw-protocol::GatingCapsule` with explicit lease semantics (renewal window, scoped denies) and document them in OpenAPI/MCP specs.
-2. Add structured events (`policy.capsule.*`) in the RPU, backed by a minimal read-model under `/state/policy/capsules` so UI surfaces can show active guards.
+2. Structured events (`policy.capsule.applied`/`policy.capsule.failed`) now fire from the capsule middleware, and `/state/policy/capsules` exposes the cached view; RPU telemetry still needs adoption for runtime refresh and expiring leases.
 3. Instrument admin middleware and existing policy decisions with correlation IDs linking capsule adoption to downstream allows/denies.
 
 ### Phase 1 — Gating Runtime Rework

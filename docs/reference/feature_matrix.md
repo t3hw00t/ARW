@@ -256,6 +256,30 @@ Near-live suggestions and policy with persisted state, supporting guidance to im
   - `feedback.suggested`
   - `feedback.applied`
 
+## Identity & Tenancy
+
+Layered principals align policies, storage, and audit scopes to User, Project, and AgentInstance boundaries.
+
+- Scope: Core kernel / workspace / operators / governance / beta
+- Owner: platform
+- Depends on:
+  - policy_leases
+- Single Sources of Truth:
+  - [apps/arw-server/src/capsule_guard.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/capsule_guard.rs)
+  - [crates/arw-core/src/gating.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/src/gating.rs)
+- HTTP:
+  - `GET /state/policy`
+- Events:
+  - `policy.decision`
+  - `policy.capsule.applied`
+  - `policy.capsule.failed`
+- Env:
+  - `ARW_SECURITY_POSTURE`
+- References:
+  - [architecture/identity_tenancy.md](../architecture/identity_tenancy.md)
+  - [guide/policy_permissions.md](../guide/policy_permissions.md)
+  - [architecture/capability_consent_ledger.md](../architecture/capability_consent_ledger.md)
+
 ## Federated Clustering
 
 Shared node registry and adverts for optional multi-node deployments.
@@ -274,6 +298,8 @@ Shared node registry and adverts for optional multi-node deployments.
 - Events:
   - `cluster.node.advertise`
   - `cluster.node.changed`
+- References:
+  - [architecture/cluster_federation.md](../architecture/cluster_federation.md)
 
 ## Experiment Deck
 
@@ -586,6 +612,8 @@ Memory overlay service backed by the canonical MAL store with hybrid retrieval, 
   - `POST /actions (memory.search)`
   - `POST /actions (memory.pack)`
   - `GET /state/memory`
+  - `POST /memory/select_coherent (legacy)`
+  - `POST /state/memory/explain_coherent (legacy)`
 - Read‑models:
   - `memory`
 - Events:

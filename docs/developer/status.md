@@ -6,7 +6,7 @@ title: Workspace Status
 Updated: 2025-09-20
 Type: Reference
 
-Generated: 2025-09-17 22:44 UTC
+Generated: 2025-09-20 15:13 UTC
 
 
 ## Libraries
@@ -14,6 +14,7 @@ Generated: 2025-09-17 22:44 UTC
 - **arw-events**: 0.1.4 — [crates/arw-events/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-events/Cargo.toml)
 - **arw-core**: 0.1.4 — [crates/arw-core/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/Cargo.toml)
 - **arw-kernel**: 0.1.4 — [crates/arw-kernel/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-kernel/Cargo.toml)
+- **arw-memory-core**: 0.1.4 — [crates/arw-memory-core/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-memory-core/Cargo.toml)
 - **arw-policy**: 0.1.4 — [crates/arw-policy/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-policy/Cargo.toml)
 - **arw-wasi**: 0.1.4 — [crates/arw-wasi/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-wasi/Cargo.toml)
 - **arw-topics**: 0.1.4 — [crates/arw-topics/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/Cargo.toml)

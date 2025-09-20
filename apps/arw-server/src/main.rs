@@ -41,6 +41,7 @@ mod paths {
     pub const EGRESS_SETTINGS: &str = "/egress/settings";
     pub const EGRESS_PREVIEW: &str = "/egress/preview";
     pub const STATE_POLICY: &str = "/state/policy";
+    pub const STATE_POLICY_CAPSULES: &str = "/state/policy/capsules";
     pub const POLICY_RELOAD: &str = "/policy/reload";
     pub const POLICY_SIMULATE: &str = "/policy/simulate";
     pub const STATE_MODELS: &str = "/state/models";
@@ -206,16 +207,20 @@ mod api_staging;
 mod api_state;
 mod api_tools;
 mod api_ui;
+mod capsule_guard;
 mod cluster;
 pub mod config;
 mod context_loop;
 mod coverage;
 mod distill;
+mod egress_policy;
 mod egress_proxy;
 mod experiments;
 mod feedback;
 mod goldens;
 mod governor;
+#[cfg(feature = "grpc")]
+mod grpc;
 mod http_timeout;
 mod metrics;
 mod models;
@@ -258,6 +263,7 @@ pub(crate) struct AppState {
     feedback: std::sync::Arc<feedback::FeedbackHub>,
     cluster: std::sync::Arc<cluster::ClusterRegistry>,
     experiments: std::sync::Arc<experiments::Experiments>,
+    capsules: std::sync::Arc<capsule_guard::CapsuleStore>,
 }
 
 type Policy = PolicyEngine;
@@ -297,6 +303,14 @@ impl AppState {
 
     pub fn bus(&self) -> arw_events::Bus {
         self.bus.clone()
+    }
+
+    pub fn capsules(&self) -> std::sync::Arc<capsule_guard::CapsuleStore> {
+        self.capsules.clone()
+    }
+
+    pub fn sse_cache(&self) -> std::sync::Arc<Mutex<sse_cache::SseIdCache>> {
+        self.sse_id_map.clone()
     }
 
     pub fn governor(&self) -> std::sync::Arc<governor::GovernorState> {
@@ -1338,6 +1352,14 @@ async fn main() {
         api_policy::state_policy,
         "experimental"
     );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::STATE_POLICY_CAPSULES,
+        api_state::state_policy_capsules,
+        "experimental"
+    );
     app = route_post_tag!(
         app,
         endpoints_acc,
@@ -1701,6 +1723,7 @@ async fn main() {
         feedback::FeedbackHub::new(bus.clone(), metrics.clone(), governor_state.clone()).await;
     let experiments_state =
         experiments::Experiments::new(bus.clone(), governor_state.clone()).await;
+    let capsules_store = std::sync::Arc::new(capsule_guard::CapsuleStore::new());
     let state = AppState {
         bus,
         kernel,
@@ -1719,7 +1742,13 @@ async fn main() {
         feedback: feedback_hub.clone(),
         cluster: cluster_state.clone(),
         experiments: experiments_state.clone(),
+        capsules: capsules_store.clone(),
     };
+    read_models::publish_read_model_patch(
+        &state.bus(),
+        "policy_capsules",
+        &json!({"items": [], "count": 0}),
+    );
     world::load_persisted().await;
     // Start a simple local action worker (demo)
     if state.kernel_enabled() {
@@ -1769,7 +1798,14 @@ async fn main() {
             }
         });
     }
+    #[cfg(feature = "grpc")]
+    let _grpc_task = crate::grpc::spawn(state.clone());
+    let capsule_mw_state = state.clone();
     let app = app.with_state(state);
+    let app = app.layer(axum::middleware::from_fn(move |req, next| {
+        let st = capsule_mw_state.clone();
+        async move { capsule_guard::capsule_mw(st, req, next).await }
+    }));
     let metrics_layer = metrics.clone();
     let app = app.layer(axum::middleware::from_fn(move |req, next| {
         let metrics = metrics_layer.clone();
@@ -1854,6 +1890,7 @@ mod http_tests {
             feedback::FeedbackHub::new(bus.clone(), metrics.clone(), governor_state.clone()).await;
         let experiments_state =
             experiments::Experiments::new(bus.clone(), governor_state.clone()).await;
+        let capsules_store = Arc::new(capsule_guard::CapsuleStore::new());
         AppState {
             bus,
             kernel,
@@ -1872,6 +1909,7 @@ mod http_tests {
             feedback: feedback_hub,
             cluster: cluster_state,
             experiments: experiments_state,
+            capsules: capsules_store,
         }
     }
 

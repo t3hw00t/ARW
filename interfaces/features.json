@@ -532,6 +532,60 @@
       "env": []
     },
     {
+      "id": "identity_tenancy",
+      "name": "Identity & Tenancy",
+      "owner": "platform",
+      "tier": "Core kernel",
+      "deps": [
+        "policy_leases"
+      ],
+      "description": "Layered principals align policies, storage, and audit scopes to User, Project, and AgentInstance boundaries.",
+      "scope": {
+        "surface": "workspace",
+        "audience": "operators",
+        "layer": "governance",
+        "maturity": "beta"
+      },
+      "ssot": [
+        {
+          "path": "apps/arw-server/src/capsule_guard.rs"
+        },
+        {
+          "path": "crates/arw-core/src/gating.rs"
+        }
+      ],
+      "http": [
+        {
+          "method": "GET",
+          "path": "/state/policy"
+        }
+      ],
+      "read_models": [],
+      "topics": [
+        "policy.decision",
+        "policy.capsule.applied",
+        "policy.capsule.failed"
+      ],
+      "env": [
+        "ARW_SECURITY_POSTURE"
+      ],
+      "docs": [
+        {
+          "path": "docs/architecture/identity_tenancy.md"
+        },
+        {
+          "path": "docs/guide/policy_permissions.md"
+        },
+        {
+          "path": "docs/architecture/capability_consent_ledger.md"
+        }
+      ],
+      "notes": [
+        "Principals cascade AgentInstance -> Project -> User to scope storage, caches, and audit trails.",
+        "Capsule guard adopts gating capsules and publishes applied/failure telemetry for auditability."
+      ]
+    },
+    {
       "id": "federated_clustering",
       "name": "Federated Clustering",
       "owner": "platform",
@@ -567,7 +621,16 @@
         "cluster.node.advertise",
         "cluster.node.changed"
       ],
-      "env": []
+      "env": [],
+      "docs": [
+        {
+          "path": "docs/architecture/cluster_federation.md"
+        }
+      ],
+      "notes": [
+        "Home node keeps authoritative policy, budgets, and leases; workers advertise capabilities and stream results back.",
+        "Optional broker aids NAT traversal while capsules and egress guards enforce federation policy."
+      ]
     },
     {
       "id": "experiment_deck",
@@ -1267,6 +1330,14 @@
         {
           "method": "GET",
           "path": "/state/memory"
+        },
+        {
+          "method": "POST",
+          "path": "/memory/select_coherent (legacy)"
+        },
+        {
+          "method": "POST",
+          "path": "/state/memory/explain_coherent (legacy)"
         }
       ],
       "read_models": [

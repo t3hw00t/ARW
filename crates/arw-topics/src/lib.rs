@@ -93,6 +93,8 @@ pub const TOPIC_CATALOG_UPDATED: &str = "catalog.updated";
 pub const TOPIC_CONFIG_PATCH_APPLIED: &str = "config.patch.applied";
 pub const TOPIC_POLICY_DECISION: &str = "policy.decision";
 pub const TOPIC_POLICY_RELOADED: &str = "policy.reloaded";
+pub const TOPIC_POLICY_CAPSULE_APPLIED: &str = "policy.capsule.applied";
+pub const TOPIC_POLICY_CAPSULE_FAILED: &str = "policy.capsule.failed";
 
 // Apps / desktop integration
 pub const TOPIC_APPS_VSCODE_OPENED: &str = "apps.vscode.opened";

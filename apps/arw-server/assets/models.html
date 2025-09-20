@@ -20,23 +20,40 @@
   <span id='statusBadges' style='margin-left:8px'></span>
   </div>
 <div class="card">
+  <div class="row" role="toolbar" aria-label="Admin token">
+    <input id="adminTok" placeholder="admin token" style="width:240px" autocomplete="off">
+    <button onclick="setAdminToken()">Apply</button>
+    <span id="authBadge" class="badge warn"><span class="dot"></span> Admin: off</span>
+  </div>
   <div class="row" role="toolbar" aria-label="Models actions"><input id="mId" placeholder="model id" style="width:240px"><input id="mProv" placeholder="provider (local)" style="width:160px"></div>
-  <div class="row" role="toolbar" aria-label="Models actions"><button onclick="listM()">List</button><button onclick="addM()">Add</button><button onclick="delM()">Delete</button><button onclick="defGet()">Get default</button><button onclick="defSet()">Set default</button></div>
+  <div class="row" role="toolbar" aria-label="Models actions"><button onclick="listM()">List</button><button onclick="metricsM()">Metrics</button><button onclick="addM()">Add</button><button onclick="delM()">Delete</button><button onclick="defGet()">Get default</button><button onclick="defSet()">Set default</button></div>
   <pre id="out">[]</pre>
 </div>
 <script>
 const base = location.origin;
+const ADMIN_STORAGE_KEY = 'arw_admin_token';
+let adminToken = '';
 // Lightweight SSE status indicator
 try{
   const es = new EventSource(base + '/events');
   es.onopen = ()=>{ const el=document.getElementById('sseBadge'); if (el){ el.innerHTML = "<span class='dot ok'></span> SSE: on"; } };
   es.onerror = ()=>{ const el=document.getElementById('sseBadge'); if (el){ el.innerHTML = "<span class='dot bad'></span> SSE: off"; } };
 }catch{}
-async function call(method,path,body){ const r=await fetch(base+path,{method,headers:{'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined}); const t=await r.text(); try{ return JSON.parse(t);}catch{ return t; } }
-async function listM(){ const j=await call('GET','/models'); const b=document.getElementById('mdlBadge'); if(Array.isArray(j)&&b){ b.className='badge ok'; b.innerHTML='<span class="dot"></span> '+j.length; } document.getElementById('out').textContent=JSON.stringify(j,null,2); }
-async function addM(){ const id=document.getElementById('mId').value.trim(); if(!id) return; const provider=(document.getElementById('mProv').value||'local').trim(); await call('POST','/models/add',{id,provider}); await listM(); }
-async function delM(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await call('POST','/models/delete',{id}); await listM(); }
-async function defGet(){ const j=await call('GET','/models/default'); document.getElementById('out').textContent=JSON.stringify(j,null,2); }
-async function defSet(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await call('POST','/models/default',{id}); await listM(); }
-document.addEventListener('DOMContentLoaded', listM);
+function setAdminBadge(ok){ const el=document.getElementById('authBadge'); if(!el) return; el.className = 'badge ' + (ok?'ok':'warn'); el.innerHTML = '<span class="dot"></span> Admin: ' + (ok?'on':'off'); }
+function setAdminToken(){ const input=document.getElementById('adminTok'); const value=(input?.value||'').trim(); adminToken = value; if(value){ try{ localStorage.setItem(ADMIN_STORAGE_KEY,value); }catch(_){} } else { try{ localStorage.removeItem(ADMIN_STORAGE_KEY); }catch(_){} } setAdminBadge(!!value); }
+function loadAdminToken(){ try{ const stored = localStorage.getItem(ADMIN_STORAGE_KEY); if(stored){ adminToken = stored; const input=document.getElementById('adminTok'); if(input) input.value = stored; setAdminBadge(true); return; } }catch(_){} setAdminBadge(false); }
+async function call(method,path,body){ const init={ method, headers:{} }; if(body!==undefined){ init.body=JSON.stringify(body); init.headers['Content-Type']='application/json'; }
+  if(adminToken){ init.headers['X-ARW-Admin']=adminToken; }
+  const resp = await fetch(base+path, init);
+  if(resp.status===401){ setAdminBadge(false); throw new Error('unauthorized'); }
+  const text = await resp.text();
+  try{ return JSON.parse(text); }catch{ return text; }
+}
+async function listM(){ try{ const j=await call('GET','/admin/models'); const b=document.getElementById('mdlBadge'); if(Array.isArray(j)&&b){ b.className='badge ok'; b.innerHTML='<span class="dot"></span> '+j.length; } document.getElementById('out').textContent=JSON.stringify(j,null,2); setAdminBadge(!!adminToken); }catch(err){ document.getElementById('out').textContent = `error: ${err.message}`; } }
+async function addM(){ const id=document.getElementById('mId').value.trim(); if(!id) return; const provider=(document.getElementById('mProv').value||'local').trim(); await call('POST','/admin/models/add',{id,provider}); await listM(); }
+async function delM(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await call('POST','/admin/models/remove',{id}); await listM(); }
+async function defGet(){ const j=await call('GET','/admin/models/default'); document.getElementById('out').textContent=JSON.stringify(j,null,2); }
+async function defSet(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await call('POST','/admin/models/default',{id}); await listM(); }
+async function metricsM(){ try{ const j=await call('GET','/admin/state/models_metrics'); document.getElementById('out').textContent=JSON.stringify(j,null,2); }catch(err){ document.getElementById('out').textContent = `error: ${err.message}`; } }
+document.addEventListener('DOMContentLoaded', ()=>{ loadAdminToken(); listM(); });
 </script>
