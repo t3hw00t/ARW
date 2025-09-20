@@ -4,7 +4,7 @@ title: Roadmap
 
 # Roadmap
 
-Updated: 2025-09-19
+Updated: 2025-09-20
 Type: Reference
 
 See also: [Backlog](BACKLOG.md) and [Interface Roadmap](INTERFACE_ROADMAP.md).

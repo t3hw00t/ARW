@@ -4,7 +4,7 @@ title: Keyboard Shortcuts
 
 # Keyboard Shortcuts
 
-Updated: 2025-09-17
+Updated: 2025-09-20
 Type: How‑to
 
 This page lists common shortcuts available across the launcher windows and per‑page accelerators.

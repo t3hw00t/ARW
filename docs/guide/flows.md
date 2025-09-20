@@ -6,7 +6,7 @@ title: Flows (Logic Units)
 
 A minimal “Flows” page is available in debug builds to compose and apply Logic Unit patches visually. It emits JSON patches to the existing Logic Units API.
 
-Updated: 2025-09-17
+Updated: 2025-09-20
 Type: How‑to
 
 ## Open the Page

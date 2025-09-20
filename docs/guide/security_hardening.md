@@ -7,7 +7,7 @@ title: Security Hardening
 
 This guide summarizes recommended steps to run ARW more securely beyond the local‑dev defaults.
 
-Updated: 2025-09-19
+Updated: 2025-09-20
 Type: How‑to
 
 Baseline

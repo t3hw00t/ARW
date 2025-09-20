@@ -5,7 +5,7 @@ title: Asimov Capsule Guard
 # Asimov Capsule Guard
 { .topic-trio style="--exp:.5; --complex:.7; --complicated:.6" data-exp=".5" data-complex=".7" data-complicated=".6" }
 
-Updated: 2025-09-17
+Updated: 2025-09-20
 Type: Plan
 
 The Asimov Capsule Guard turns the "mind virus" idea into an enforceable feature: a lightweight policy capsule that refreshes itself at every critical runtime boundary, keeping safety rules and leases in effect without piling up irreversible denies.

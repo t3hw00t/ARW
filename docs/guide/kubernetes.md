@@ -4,7 +4,7 @@ title: Kubernetes (Helm)
 
 # Kubernetes (Helm)
 
-Updated: 2025-09-18
+Updated: 2025-09-20
 Type: How‑to
 
 Deploy the unified ARW server on Kubernetes using the provided Helm chart.

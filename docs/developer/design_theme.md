@@ -4,7 +4,7 @@ title: Design Theme
 
 # Design Theme
 
-Updated: 2025-09-16
+Updated: 2025-09-20
 Type: Reference
 
 Microsummary: A shared visual and language system across docs, apps, and debug UIs — consistent naming, tone, layout, tokens, and colors. Stable.

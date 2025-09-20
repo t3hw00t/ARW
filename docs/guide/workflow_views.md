@@ -6,7 +6,7 @@ title: Workflow Views & Sidecar
 
 ARW ships focused, modular workflow views — Project Hub, Chat, and Training Park — with a universal right‑sidecar that shows the same live state everywhere.
 
-Updated: 2025-09-18
+Updated: 2025-09-20
 Type: How‑to
 
 Key ideas

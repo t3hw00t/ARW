@@ -8,7 +8,7 @@ title: Admin Endpoints
 
 The unified `arw-server` binary exposes a single HTTP surface built around the **actions → events → state** triad. Every operation that mutates or inspects the service lives on that surface—there is no `/admin` prefix to keep in sync. New routes are recorded at runtime and streamed into `/about` so that clients can discover the current topology without hard-coding paths.
 
-Updated: 2025-09-19
+Updated: 2025-09-20
 Type: How-to
 
 - Service: `arw-server` (default bind `127.0.0.1:8091`)

@@ -4,7 +4,7 @@ title: Systemd Service
 
 # Systemd Service
 
-Updated: 2025-09-18
+Updated: 2025-09-20
 Type: How‑to
 
 Run the unified ARW server (`arw-server`) as a user service, either natively or via Docker.

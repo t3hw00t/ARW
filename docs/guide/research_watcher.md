@@ -3,7 +3,7 @@ title: Research Watcher
 ---
 
 # Research Watcher
-Updated: 2025-09-19
+Updated: 2025-09-20
 Type: How‑to
 
 Status: **Planned.** No ingestion service or read-models ship in `arw-server` yet; the Launcher Library still shows static lists.

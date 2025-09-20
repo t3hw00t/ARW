@@ -7,7 +7,7 @@ title: Kernel (SQLite Journal + CAS)
 The Kernel provides a single append-only event journal (SQLite/WAL) and content-addressed storage (CAS) co-located in the state
 directory. All state views derive from the journal.
 
-Updated: 2025-09-17
+Updated: 2025-09-20
 Type: Explanation
 
 ## Goals

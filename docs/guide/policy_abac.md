@@ -4,7 +4,7 @@ title: Policy (ABAC Facade)
 
 # Policy (ABAC Facade)
 
-Updated: 2025-09-17
+Updated: 2025-09-20
 Type: How‑to
 
 This page documents the interim ABAC (attribute‑based access control) facade used by the unified server. It provides a small, JSON‑based policy engine that can be replaced by Cedar later without changing server call sites.

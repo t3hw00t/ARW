@@ -3,7 +3,7 @@ title: ADR NNNN: Title
 status: proposed
 date: 2025-09-14
 ---
-Updated: 2025-09-16
+Updated: 2025-09-20
 Type: Explanation
 
 Context

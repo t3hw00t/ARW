@@ -6,7 +6,7 @@ title: Restructure Handbook (Source of Truth)
 
 This document is the single source of truth for the ongoing ARW restructure. It is written so a new contributor (or a chat without prior context) can pick up work immediately.
 
-Updated: 2025-09-19
+Updated: 2025-09-20
 Type: Explanation
 Owner: Core maintainers
 Scope: Architecture, APIs, modules, migration plan, status, hand‑off tips
@@ -177,6 +177,20 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
   - Core services: port Model Steward (models download/CAS GC ✅), Tool Forge (tool runs/cache ✅), Feedback Loop, Experiment Deck, Memory Lanes, Project Hub primitives, Project Map read models, Snappy Governor, Event Spine patch streaming.
   - UI/experience: migrate Chat Workbench, Screenshot Pipeline, Self Card + forecasts to the new SPA/right-sidecar flow once endpoints land.
   - Policy & safety: unify Guardrail Gateway and Asimov Capsule Guard enforcement on `arw-server` (rely on upcoming policy/egress work) and remove launcher fallbacks to `/admin/*` once replacements ship.
+
+### Immediate Reintegration Backlog
+- **Models & egress**
+  - ✅ Resume support (Range/If-Range, `.part` reuse) now ships in `arw-server`.
+  - ⏭ Re-introduce the optional HEAD quota preflight and single-flight hash guard so duplicate downloads coalesce before the GET.
+  - ⏭ Surface idle-timeout/retry tuneables (`ARW_DL_IDLE_TIMEOUT_SECS`, backoff policy) and expose resumable error hints in `/admin/ui/models`.
+- **Events & telemetry**
+  - ✅ `egress.preview`/`egress.ledger.appended` emit from unified downloads with `corr_id` and posture metadata.
+  - ⏭ Expand `/admin/state/models_metrics` with resume counters, in-flight hash stats, and EWMA visibility for dashboards.
+- **Docs & rollout**
+  - ✅ Guide updates cover resume semantics and correlation IDs.
+  - ⏭ Publish migration notice (README + release notes) highlighting the `arw-svc` retirement timeline and unified entry points.
+- **UI follow-ups**
+  - ⏭ Wire the admin models UI to the new statuses (`resumed`, `degraded`, `cancel-requested`) and link ledger previews for operators.
 
 ### Legacy Feature Migration Track (runs parallel to phases 2–8)
 

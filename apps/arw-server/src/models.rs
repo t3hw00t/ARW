@@ -3,16 +3,16 @@ use arw_topics as topics;
 use chrono::{DateTime, Utc};
 use fs2::available_space;
 use futures_util::StreamExt;
-use reqwest::Client;
+use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Number, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::fs;
-use tokio::io::AsyncWriteExt;
+use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::sync::{Mutex, Notify, RwLock};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
@@ -100,6 +100,10 @@ impl MetricsState {
         self.admitted = self.admitted.saturating_add(1);
     }
 
+    fn record_resumed(&mut self) {
+        self.resumed = self.resumed.saturating_add(1);
+    }
+
     fn record_completed(&mut self, bytes: u64, mbps: Option<f64>, cached: bool) {
         if cached {
             self.completed_cached = self.completed_cached.saturating_add(1);
@@ -124,11 +128,20 @@ impl MetricsState {
     }
 }
 
+#[derive(Clone)]
+struct DestInfo {
+    host: String,
+    port: u16,
+    protocol: String,
+}
+
 struct DownloadHandle {
     cancel: CancellationToken,
     task: Option<JoinHandle<()>>,
     job_id: String,
-    url: Option<String>,
+    url_display: String,
+    corr_id: String,
+    dest: DestInfo,
     started_at: Instant,
 }
 
@@ -185,22 +198,24 @@ impl DownloadsState {
         removed
     }
 
-    async fn cancel_job(&self, model_id: &str) -> Option<()> {
+    async fn cancel_job(&self, model_id: &str) -> Option<(String, DestInfo)> {
         let handle = {
             let mut jobs = self.jobs.lock().await;
             jobs.remove(model_id)
         };
-        if let Some(handle) = handle {
+        if let Some(mut handle) = handle {
+            let corr_id = handle.corr_id.clone();
+            let dest = handle.dest.clone();
             handle.cancel.cancel();
             self.notify.notify_waiters();
-            if let Some(task) = handle.task {
+            if let Some(task) = handle.task.take() {
                 tokio::spawn(async move {
                     if let Err(err) = task.await {
                         warn!("cancelled download join err: {err}");
                     }
                 });
             }
-            Some(())
+            Some((corr_id, dest))
         } else {
             None
         }
@@ -210,10 +225,17 @@ impl DownloadsState {
         let jobs = self.jobs.lock().await;
         jobs.iter()
             .map(|(model_id, handle)| {
+                let dest = &handle.dest;
                 json!({
                     "model_id": model_id,
                     "job_id": handle.job_id,
-                    "url": handle.url,
+                    "url": handle.url_display,
+                    "corr_id": handle.corr_id,
+                    "dest": {
+                        "host": &dest.host,
+                        "port": dest.port,
+                        "protocol": &dest.protocol,
+                    },
                     "started_at": handle.started_at.elapsed().as_secs(),
                 })
             })
@@ -229,10 +251,11 @@ pub struct ModelStore {
     downloads: DownloadsState,
     http_client: Client,
     bus: Bus,
+    kernel: Option<arw_kernel::Kernel>,
 }
 
 impl ModelStore {
-    pub fn new(bus: Bus) -> Self {
+    pub fn new(bus: Bus, kernel: Option<arw_kernel::Kernel>) -> Self {
         Self {
             items: RwLock::new(Vec::new()),
             default_id: RwLock::new(String::new()),
@@ -241,6 +264,7 @@ impl ModelStore {
             downloads: DownloadsState::new(),
             http_client: Client::new(),
             bus,
+            kernel,
         }
     }
 
@@ -523,6 +547,7 @@ impl ModelStore {
             return Err("download already in progress".into());
         }
 
+        let dest = Self::dest_info(&url);
         let started_at = Instant::now();
         self.with_metrics(|m| m.record_started()).await;
         let start_extra = self.progress_extra_with_hints(
@@ -531,7 +556,8 @@ impl ModelStore {
             None,
             None,
         );
-        self.publish_progress(id, Some("started"), None, start_extra, None);
+        let corr_id = uuid::Uuid::new_v4().to_string();
+        self.publish_progress(id, Some("started"), None, start_extra, None, Some(&corr_id));
         self.upsert_model_status(id, "queued", provider.clone(), Some(url.clone()))
             .await;
 
@@ -555,12 +581,16 @@ impl ModelStore {
         let provider_clone = provider.clone();
         let sha_clone = sha_hint.clone();
         let cancel_clone = cancel.clone();
+        let dest_clone = dest.clone();
+        let corr_clone = corr_id.clone();
 
         let handle = DownloadHandle {
             cancel,
             task: None,
             job_id: job_id.clone(),
-            url: req.url.clone(),
+            url_display: Self::redact_url_for_logs(&url),
+            corr_id: corr_id.clone(),
+            dest: dest.clone(),
             started_at,
         };
 
@@ -568,6 +598,8 @@ impl ModelStore {
             .insert_job(id, handle)
             .await
             .map_err(|_| "download already in progress".to_string())?;
+
+        self.publish_preview(id, &url, provider.as_deref(), &dest, &corr_id);
 
         let job_handle = tokio::spawn(async move {
             let outcome = runner
@@ -578,6 +610,8 @@ impl ModelStore {
                     sha_clone,
                     cancel_clone,
                     started_at,
+                    corr_clone,
+                    dest_clone,
                 )
                 .await;
             finisher.finish_download(model_id, outcome).await;
@@ -597,15 +631,15 @@ impl ModelStore {
         if id.trim().is_empty() {
             return Err("id is required".into());
         }
-        if self.downloads.cancel_job(id).await.is_some() {
+        if let Some((corr_id, _dest)) = self.downloads.cancel_job(id).await {
             let extra = self.progress_extra_with_hints(None, None, None, None);
-            self.publish_progress(id, Some("canceled"), None, extra, None);
+            self.publish_progress(id, Some("canceled"), None, extra, None, Some(&corr_id));
             self.with_metrics(|m| m.record_canceled()).await;
             self.upsert_model_status(id, "canceled", None, None).await;
             Ok(())
         } else {
             let extra = self.progress_extra_with_hints(None, None, None, None);
-            self.publish_progress(id, Some("no-active-job"), None, extra, None);
+            self.publish_progress(id, Some("no-active-job"), None, extra, None, None);
             Err("no active download".into())
         }
     }
@@ -674,6 +708,7 @@ impl ModelStore {
         Ok(payload)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn run_download_job(
         self: Arc<Self>,
         model_id: String,
@@ -682,70 +717,188 @@ impl ModelStore {
         sha_hint: String,
         cancel: CancellationToken,
         started_at: Instant,
+        corr_id: String,
+        dest: DestInfo,
     ) -> DownloadOutcome {
         self.with_metrics(|m| m.record_admitted()).await;
-        let initial_extra =
-            self.progress_extra_with_hints(None, Some(started_at.elapsed()), None, None);
-        self.publish_progress(&model_id, Some("downloading"), None, initial_extra, None);
 
-        let start = started_at;
-        let limits = DownloadBudgetLimits::global();
-        let mut budget_notifier = BudgetNotifier::new(limits);
         let tmp_dir = self.models_dir().join("tmp");
         if let Err(err) = fs::create_dir_all(&tmp_dir).await {
             error!("models tmp dir create failed: {err}");
             return DownloadOutcome::Failed {
                 code: "io".into(),
                 message: err.to_string(),
-                elapsed: start.elapsed(),
+                elapsed: started_at.elapsed(),
+                dest,
+                corr_id,
+                bytes_in: 0,
             };
         }
-        let tmp_path = tmp_dir.join(format!("{}.part", uuid::Uuid::new_v4()));
 
-        let response = match self
+        let (tmp_path, meta_path) = Self::tmp_paths(&tmp_dir, &model_id, &sha_hint);
+        let mut resume_from = fs::metadata(&tmp_path)
+            .await
+            .ok()
+            .map(|m| m.len())
+            .unwrap_or(0);
+        let mut downloaded = resume_from;
+        let mut hasher = Sha256::new();
+        let mut last_emit_bytes = downloaded;
+        let mut last_emit_at = Instant::now();
+
+        if resume_from > 0 {
+            if let Err(err) = Self::hash_existing(&tmp_path, &mut hasher).await {
+                warn!("failed to hash existing partial download: {err}; restarting");
+                let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
+                resume_from = 0;
+                downloaded = 0;
+                hasher = Sha256::new();
+            }
+        }
+
+        let mut request = self
             .http_client
             .get(&url)
-            .timeout(http_timeout::get_duration())
-            .send()
-            .await
-            .and_then(|r| r.error_for_status())
-        {
-            Ok(resp) => resp,
+            .timeout(http_timeout::get_duration());
+
+        if resume_from > 0 {
+            request = request.header(reqwest::header::RANGE, format!("bytes={}-", resume_from));
+            if let Some(if_range) = Self::load_resume_ifrange(&meta_path).await {
+                request = request.header(reqwest::header::IF_RANGE, if_range);
+            }
+        }
+
+        let response = match request.send().await {
+            Ok(resp) => match resp.error_for_status() {
+                Ok(ok) => ok,
+                Err(err) => {
+                    error!("model download http error: {err}");
+                    let code = if err.is_timeout() {
+                        "request-timeout"
+                    } else {
+                        "http"
+                    };
+                    let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
+                    return DownloadOutcome::Failed {
+                        code: code.into(),
+                        message: err.to_string(),
+                        elapsed: started_at.elapsed(),
+                        dest,
+                        corr_id,
+                        bytes_in: downloaded,
+                    };
+                }
+            },
             Err(err) => {
-                error!("model download http error: {err}");
+                error!("model download request error: {err}");
                 let code = if err.is_timeout() {
                     "request-timeout"
                 } else {
                     "http"
                 };
+                let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                 return DownloadOutcome::Failed {
                     code: code.into(),
                     message: err.to_string(),
-                    elapsed: start.elapsed(),
+                    elapsed: started_at.elapsed(),
+                    dest,
+                    corr_id,
+                    bytes_in: downloaded,
                 };
             }
         };
 
-        let total = response.content_length();
-        let mut stream = response.bytes_stream();
-        let mut file = match fs::File::create(&tmp_path).await {
-            Ok(f) => f,
-            Err(err) => {
-                error!("model download file create failed: {err}");
+        Self::save_resume_validators(&meta_path, response.headers()).await;
+
+        let status = response.status();
+        let content_len = response.content_length();
+        let mut total = content_len.map(|len| resume_from + len);
+
+        let file_base = if resume_from > 0 && status == reqwest::StatusCode::PARTIAL_CONTENT {
+            if !Self::validate_resume_content_range(resume_from, response.headers()) {
+                warn!("Content-Range mismatch when resuming model {model_id}; aborting resume");
+                let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                 return DownloadOutcome::Failed {
-                    code: "io".into(),
-                    message: err.to_string(),
-                    elapsed: start.elapsed(),
+                    code: "resume-content-range".into(),
+                    message: "server provided mismatched Content-Range for resume".into(),
+                    elapsed: started_at.elapsed(),
+                    dest,
+                    corr_id,
+                    bytes_in: resume_from,
                 };
+            }
+            self.with_metrics(|m| m.record_resumed()).await;
+            let extra = self.progress_extra_with_hints(
+                Some(json!({"offset": resume_from})),
+                Some(started_at.elapsed()),
+                Some(resume_from),
+                total,
+            );
+            self.publish_progress(
+                &model_id,
+                Some("resumed"),
+                Some("resumed"),
+                extra,
+                None,
+                Some(&corr_id),
+            );
+            match tokio::fs::OpenOptions::new()
+                .append(true)
+                .open(&tmp_path)
+                .await
+            {
+                Ok(file) => file,
+                Err(err) => {
+                    error!("failed to open tmp for append: {err}");
+                    let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
+                    return DownloadOutcome::Failed {
+                        code: "io".into(),
+                        message: err.to_string(),
+                        elapsed: started_at.elapsed(),
+                        dest,
+                        corr_id,
+                        bytes_in: resume_from,
+                    };
+                }
+            }
+        } else {
+            if resume_from > 0 && status == reqwest::StatusCode::OK {
+                let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
+                downloaded = 0;
+                total = content_len;
+            } else if resume_from > 0 && status != reqwest::StatusCode::PARTIAL_CONTENT {
+                let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
+                return DownloadOutcome::Failed {
+                    code: "resume-http-status".into(),
+                    message: format!("unexpected status {} for resume", status),
+                    elapsed: started_at.elapsed(),
+                    dest,
+                    corr_id,
+                    bytes_in: resume_from,
+                };
+            }
+            match tokio::fs::File::create(&tmp_path).await {
+                Ok(file) => {
+                    hasher = Sha256::new();
+                    file
+                }
+                Err(err) => {
+                    error!("model download file create failed: {err}");
+                    let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
+                    return DownloadOutcome::Failed {
+                        code: "io".into(),
+                        message: err.to_string(),
+                        elapsed: started_at.elapsed(),
+                        dest,
+                        corr_id,
+                        bytes_in: downloaded,
+                    };
+                }
             }
         };
 
-        let mut hasher = Sha256::new();
-        let mut downloaded: u64 = 0;
-        let mut last_emit_bytes = 0u64;
-        let mut last_emit_at = Instant::now();
-        let mut last_disk_check = Instant::now();
-
+        let mut file = BufWriter::new(file_base);
+        let mut stream = response.bytes_stream();
         let reserve_bytes = Self::disk_reserve_bytes();
         let max_bytes = Self::max_download_bytes();
         let quota_bytes = Self::quota_bytes();
@@ -758,12 +911,17 @@ impl ModelStore {
         if let Some(max) = max_bytes {
             if let Some(total_bytes) = total {
                 if total_bytes > max {
+                    let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                     return DownloadOutcome::Failed {
                         code: "size_limit".into(),
                         message: format!(
-                            "download size {total_bytes} exceeds max {max} (ARW_MODELS_MAX_MB)"
+                            "download size {} exceeds max {} (ARW_MODELS_MAX_MB)",
+                            total_bytes, max
                         ),
-                        elapsed: start.elapsed(),
+                        elapsed: started_at.elapsed(),
+                        dest,
+                        corr_id,
+                        bytes_in: downloaded,
                     };
                 }
             }
@@ -771,12 +929,17 @@ impl ModelStore {
         if let Some(quota) = quota_bytes {
             if let Some(total_bytes) = total {
                 if cas_usage_bytes.saturating_add(total_bytes) > quota {
+                    let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                     return DownloadOutcome::Failed {
                         code: "quota_exceeded".into(),
                         message: format!(
-                            "quota {quota} bytes would be exceeded by download ({total_bytes} bytes)"
+                            "quota {} bytes would be exceeded by download ({} bytes)",
+                            quota, total_bytes
                         ),
-                        elapsed: start.elapsed(),
+                        elapsed: started_at.elapsed(),
+                        dest,
+                        corr_id,
+                        bytes_in: downloaded,
                     };
                 }
             }
@@ -784,35 +947,51 @@ impl ModelStore {
         if reserve_bytes > 0 {
             if let Ok(avail) = Self::available_space(self.state_dir()) {
                 if avail <= reserve_bytes {
+                    let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                     return DownloadOutcome::Failed {
                         code: "disk_insufficient".into(),
                         message: format!(
-                            "available disk {avail} <= reserve {reserve_bytes} (ARW_MODELS_DISK_RESERVE_MB)"
+                            "available disk {} <= reserve {} (ARW_MODELS_DISK_RESERVE_MB)",
+                            avail, reserve_bytes
                         ),
-                        elapsed: start.elapsed(),
+                        elapsed: started_at.elapsed(),
+                        dest,
+                        corr_id,
+                        bytes_in: downloaded,
                     };
                 }
                 if let Some(total_bytes) = total {
                     if avail.saturating_sub(reserve_bytes) < total_bytes {
+                        let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                         return DownloadOutcome::Failed {
                             code: "disk_insufficient".into(),
                             message: format!(
-                                "not enough free space for download: need {total_bytes} + reserve {reserve_bytes}, only {avail} available"
+                                "not enough free space for download: need {} + reserve {}, only {} available",
+                                total_bytes, reserve_bytes, avail
                             ),
-                            elapsed: start.elapsed(),
+                            elapsed: started_at.elapsed(),
+                            dest,
+                            corr_id,
+                            bytes_in: downloaded,
                         };
                     }
                 }
             }
         }
 
+        let limits = DownloadBudgetLimits::global();
+        let mut budget_notifier = BudgetNotifier::new(limits);
+        let start = started_at;
+
         loop {
             let next = tokio::select! {
                 chunk = stream.next() => chunk,
                 _ = cancel.cancelled() => {
-                    let _ = fs::remove_file(&tmp_path).await;
+                    let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                     return DownloadOutcome::Canceled {
                         elapsed: start.elapsed(),
+                        dest,
+                        corr_id,
                     };
                 }
             };
@@ -823,21 +1002,27 @@ impl ModelStore {
                 Ok(c) => c,
                 Err(err) => {
                     error!("model download chunk error: {err}");
-                    let _ = fs::remove_file(&tmp_path).await;
+                    let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                     return DownloadOutcome::Failed {
                         code: "http".into(),
                         message: err.to_string(),
                         elapsed: start.elapsed(),
+                        dest,
+                        corr_id,
+                        bytes_in: downloaded,
                     };
                 }
             };
             if let Err(err) = file.write_all(&chunk).await {
                 error!("model download write error: {err}");
-                let _ = fs::remove_file(&tmp_path).await;
+                let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                 return DownloadOutcome::Failed {
                     code: "io".into(),
                     message: err.to_string(),
                     elapsed: start.elapsed(),
+                    dest,
+                    corr_id,
+                    bytes_in: downloaded,
                 };
             }
             hasher.update(&chunk);
@@ -845,40 +1030,50 @@ impl ModelStore {
 
             if let Some(max) = max_bytes {
                 if downloaded > max {
-                    let _ = fs::remove_file(&tmp_path).await;
+                    let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                     return DownloadOutcome::Failed {
                         code: "size_limit".into(),
-                        message: format!("download exceeded max size {max} (ARW_MODELS_MAX_MB)"),
+                        message: format!("download exceeded max size {} (ARW_MODELS_MAX_MB)", max),
                         elapsed: start.elapsed(),
+                        dest,
+                        corr_id,
+                        bytes_in: downloaded,
                     };
                 }
             }
             if let Some(quota) = quota_bytes {
                 if cas_usage_bytes.saturating_add(downloaded) > quota {
-                    let _ = fs::remove_file(&tmp_path).await;
+                    let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                     return DownloadOutcome::Failed {
                         code: "quota_exceeded".into(),
                         message: format!(
-                            "quota {quota} bytes exceeded (downloaded {downloaded}, existing {cas_usage_bytes})"
+                            "quota {} bytes exceeded (downloaded {}, existing {})",
+                            quota, downloaded, cas_usage_bytes
                         ),
                         elapsed: start.elapsed(),
+                        dest,
+                        corr_id,
+                        bytes_in: downloaded,
                     };
                 }
             }
-            if reserve_bytes > 0 && last_disk_check.elapsed() >= Duration::from_secs(1) {
+            if reserve_bytes > 0 {
                 if let Ok(avail) = Self::available_space(self.state_dir()) {
                     if avail <= reserve_bytes {
-                        let _ = fs::remove_file(&tmp_path).await;
+                        let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                         return DownloadOutcome::Failed {
                             code: "disk_insufficient".into(),
                             message: format!(
-                                "download aborted: free space {avail} <= reserve {reserve_bytes}"
+                                "download aborted: free space {} <= reserve {}",
+                                avail, reserve_bytes
                             ),
                             elapsed: start.elapsed(),
+                            dest,
+                            corr_id,
+                            bytes_in: downloaded,
                         };
                     }
                 }
-                last_disk_check = Instant::now();
             }
 
             if downloaded.saturating_sub(last_emit_bytes) >= PROGRESS_EMIT_BYTES
@@ -906,7 +1101,14 @@ impl ModelStore {
                     Some(downloaded),
                     total,
                 );
-                self.publish_progress(&model_id, Some("downloading"), None, extra, None);
+                self.publish_progress(
+                    &model_id,
+                    Some("downloading"),
+                    None,
+                    extra,
+                    None,
+                    Some(&corr_id),
+                );
                 last_emit_bytes = downloaded;
                 last_emit_at = Instant::now();
             }
@@ -918,39 +1120,62 @@ impl ModelStore {
                 elapsed_now,
                 Some(downloaded),
                 total,
+                &corr_id,
             );
 
             if let Some(hard_ms) = limits.hard_ms {
                 if duration_to_millis(elapsed_now) >= hard_ms {
-                    let _ = fs::remove_file(&tmp_path).await;
+                    let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                     return DownloadOutcome::Failed {
                         code: "hard-budget".into(),
                         message: format!(
-                            "download exceeded hard budget {hard_ms} ms (ARW_BUDGET_DOWNLOAD_HARD_MS)"
+                            "download exceeded hard budget {} ms (ARW_BUDGET_DOWNLOAD_HARD_MS)",
+                            hard_ms
                         ),
                         elapsed: elapsed_now,
+                        dest,
+                        corr_id,
+                        bytes_in: downloaded,
                     };
                 }
             }
         }
 
-        if let Err(err) = file.sync_all().await {
-            error!("model download sync error: {err}");
-            let _ = fs::remove_file(&tmp_path).await;
+        if let Err(err) = file.flush().await {
+            error!("model download flush error: {err}");
+            let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
             return DownloadOutcome::Failed {
                 code: "io".into(),
                 message: err.to_string(),
                 elapsed: start.elapsed(),
+                dest,
+                corr_id,
+                bytes_in: downloaded,
+            };
+        }
+        if let Err(err) = file.get_mut().sync_all().await {
+            error!("model download sync error: {err}");
+            let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
+            return DownloadOutcome::Failed {
+                code: "io".into(),
+                message: err.to_string(),
+                elapsed: start.elapsed(),
+                dest,
+                corr_id,
+                bytes_in: downloaded,
             };
         }
 
         let sha256 = format!("{:x}", hasher.finalize());
         if !sha_hint.eq_ignore_ascii_case(&sha256) {
-            let _ = fs::remove_file(&tmp_path).await;
+            let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
             return DownloadOutcome::Failed {
                 code: "sha256_mismatch".into(),
-                message: format!("expected {sha_hint}, got {sha256}"),
+                message: format!("expected {}, got {}", sha_hint, sha256),
                 elapsed: start.elapsed(),
+                dest,
+                corr_id,
+                bytes_in: downloaded,
             };
         }
 
@@ -960,26 +1185,33 @@ impl ModelStore {
             if let Some(parent) = cas_path.parent() {
                 if let Err(err) = fs::create_dir_all(parent).await {
                     error!("cas dir create failed: {err}");
-                    let _ = fs::remove_file(&tmp_path).await;
+                    let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                     return DownloadOutcome::Failed {
                         code: "io".into(),
                         message: err.to_string(),
                         elapsed: start.elapsed(),
+                        dest,
+                        corr_id,
+                        bytes_in: downloaded,
                     };
                 }
             }
             if let Err(err) = fs::rename(&tmp_path, &cas_path).await {
                 error!("cas rename failed: {err}");
-                let _ = fs::remove_file(&tmp_path).await;
+                let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
                 return DownloadOutcome::Failed {
                     code: "io".into(),
                     message: err.to_string(),
                     elapsed: start.elapsed(),
+                    dest,
+                    corr_id,
+                    bytes_in: downloaded,
                 };
             }
         } else if let Err(err) = fs::remove_file(&tmp_path).await {
             warn!("tmp cleanup failed: {err}");
         }
+        let _ = fs::remove_file(&meta_path).await;
 
         let elapsed = start.elapsed();
         let success = CompletedDownload {
@@ -991,35 +1223,75 @@ impl ModelStore {
             cached: cas_exists,
         };
         if cas_exists {
-            DownloadOutcome::Cached(success)
+            DownloadOutcome::Cached {
+                info: success,
+                dest,
+                corr_id,
+            }
         } else {
-            DownloadOutcome::Completed(success)
+            DownloadOutcome::Completed {
+                info: success,
+                dest,
+                corr_id,
+            }
         }
     }
-
     async fn finish_download(&self, model_id: String, outcome: DownloadOutcome) {
         match outcome {
-            DownloadOutcome::Completed(info) => {
-                self.handle_success(&model_id, info, false).await;
+            DownloadOutcome::Completed {
+                info,
+                dest,
+                corr_id,
+            } => {
+                self.handle_success(&model_id, info, false, dest, corr_id)
+                    .await;
             }
-            DownloadOutcome::Cached(info) => {
-                self.handle_success(&model_id, info, true).await;
+            DownloadOutcome::Cached {
+                info,
+                dest,
+                corr_id,
+            } => {
+                self.handle_success(&model_id, info, true, dest, corr_id)
+                    .await;
             }
-            DownloadOutcome::Canceled { elapsed } => {
+            DownloadOutcome::Canceled {
+                elapsed,
+                dest,
+                corr_id,
+            } => {
                 self.with_metrics(|m| m.record_canceled()).await;
                 let extra = self.progress_extra_with_hints(None, Some(elapsed), None, None);
-                self.publish_progress(&model_id, Some("canceled"), None, extra, None);
+                self.publish_progress(
+                    &model_id,
+                    Some("canceled"),
+                    None,
+                    extra,
+                    None,
+                    Some(&corr_id),
+                );
                 self.upsert_model_status(&model_id, "canceled", None, None)
                     .await;
+                self.append_egress_event(
+                    "deny",
+                    "canceled",
+                    &dest,
+                    &corr_id,
+                    Some(0),
+                    Some(elapsed),
+                )
+                .await;
             }
             DownloadOutcome::Failed {
                 code,
                 message,
                 elapsed,
+                dest,
+                corr_id,
+                bytes_in,
             } => {
                 self.with_metrics(|m| m.record_error()).await;
                 let extra = self.progress_extra_with_hints(
-                    Some(json!({"error": message})),
+                    Some(json!({"error": message.clone()})),
                     Some(elapsed),
                     None,
                     None,
@@ -1030,15 +1302,32 @@ impl ModelStore {
                     Some(&code),
                     extra,
                     Some(code.clone()),
+                    Some(&corr_id),
                 );
                 self.mark_error(&model_id, &code, &message).await;
+                self.append_egress_event(
+                    "deny",
+                    &code,
+                    &dest,
+                    &corr_id,
+                    Some(bytes_in),
+                    Some(elapsed),
+                )
+                .await;
             }
         }
         self.downloads.remove_job(&model_id).await;
         self.emit_patch().await;
     }
 
-    async fn handle_success(&self, model_id: &str, info: CompletedDownload, cached: bool) {
+    async fn handle_success(
+        &self,
+        model_id: &str,
+        info: CompletedDownload,
+        cached: bool,
+        dest: DestInfo,
+        corr_id: String,
+    ) {
         let mbps = if info.elapsed.as_secs_f64() > 0.0 {
             Some((info.bytes as f64 / 1_048_576.0) / info.elapsed.as_secs_f64())
         } else {
@@ -1070,13 +1359,36 @@ impl ModelStore {
             Some(info.bytes),
             Some(info.bytes),
         );
-        self.publish_progress(model_id, Some("complete"), None, extra, None);
-        if let Err(err) = self.record_success(model_id, &info).await {
+        self.publish_progress(
+            model_id,
+            Some("complete"),
+            None,
+            extra,
+            None,
+            Some(&corr_id),
+        );
+        let elapsed = info.elapsed;
+        let bytes_for_ledger = if cached { 0 } else { info.bytes };
+        self.append_egress_event(
+            "allow",
+            "models.download",
+            &dest,
+            &corr_id,
+            Some(bytes_for_ledger),
+            Some(elapsed),
+        )
+        .await;
+        if let Err(err) = self.record_success(model_id, &info, &corr_id).await {
             warn!("record success failed: {err}");
         }
     }
 
-    async fn record_success(&self, model_id: &str, info: &CompletedDownload) -> Result<(), String> {
+    async fn record_success(
+        &self,
+        model_id: &str,
+        info: &CompletedDownload,
+        corr_id: &str,
+    ) -> Result<(), String> {
         let cas_path = self.cas_dir().join(&info.sha256);
         let manifest = json!({
             "id": model_id,
@@ -1091,8 +1403,14 @@ impl ModelStore {
         self.upsert_model_available(model_id, &manifest, info.cached)
             .await;
         self.write_manifest(model_id, &manifest).await?;
+        let mut event_body = manifest.clone();
+        if !corr_id.is_empty() {
+            event_body
+                .as_object_mut()
+                .map(|map| map.insert("corr_id".into(), Value::String(corr_id.to_string())));
+        }
         self.bus
-            .publish(topics::TOPIC_MODELS_MANIFEST_WRITTEN, &manifest);
+            .publish(topics::TOPIC_MODELS_MANIFEST_WRITTEN, &event_body);
         Ok(())
     }
 
@@ -1128,6 +1446,7 @@ impl ModelStore {
         if let Err(err) = self.persist_items_snapshot().await {
             warn!("persist models after error failed: {err}");
         }
+        self.emit_patch().await;
     }
 
     async fn upsert_model_status(
@@ -1174,6 +1493,7 @@ impl ModelStore {
         if let Err(err) = self.persist_items_snapshot().await {
             warn!("persist models after status update failed: {err}");
         }
+        self.emit_patch().await;
     }
 
     async fn upsert_model_available(&self, id: &str, manifest: &Value, cached: bool) {
@@ -1429,6 +1749,7 @@ impl ModelStore {
         code: Option<&str>,
         extra: Option<Value>,
         error_code: Option<String>,
+        corr_id: Option<&str>,
     ) {
         let mut obj = Map::new();
         obj.insert("id".into(), Value::String(id.to_string()));
@@ -1446,7 +1767,276 @@ impl ModelStore {
         if let Some(code) = error_code {
             obj.insert("error_code".into(), Value::String(code));
         }
+        if let Some(cid) = corr_id {
+            if !cid.is_empty() {
+                obj.insert("corr_id".into(), Value::String(cid.to_string()));
+            }
+        }
         self.bus.publish(DOWNLOAD_EVENT_KIND, &Value::Object(obj));
+    }
+
+    fn publish_preview(
+        &self,
+        id: &str,
+        url: &str,
+        provider: Option<&str>,
+        dest: &DestInfo,
+        corr_id: &str,
+    ) {
+        let mut obj = Map::new();
+        obj.insert("id".into(), Value::String(id.to_string()));
+        obj.insert("url".into(), Value::String(Self::redact_url_for_logs(url)));
+        if let Some(provider) = provider {
+            obj.insert("provider".into(), Value::String(provider.to_string()));
+        }
+        obj.insert(
+            "dest".into(),
+            json!({
+                "host": dest.host.clone(),
+                "port": dest.port,
+                "protocol": dest.protocol.clone(),
+            }),
+        );
+        if !corr_id.is_empty() {
+            obj.insert("corr_id".into(), Value::String(corr_id.to_string()));
+        }
+        obj.insert("posture".into(), Value::String(util::effective_posture()));
+        self.bus
+            .publish(topics::TOPIC_EGRESS_PREVIEW, &Value::Object(obj));
+    }
+
+    async fn append_egress_event(
+        &self,
+        decision: &str,
+        reason: &str,
+        dest: &DestInfo,
+        corr_id: &str,
+        bytes_in: Option<u64>,
+        elapsed: Option<Duration>,
+    ) {
+        let posture = util::effective_posture();
+        let project_id = std::env::var("ARW_PROJECT_ID").ok();
+        let ledger_id = if let Some(kernel) = &self.kernel {
+            let dest_host = if dest.host.is_empty() {
+                None
+            } else {
+                Some(dest.host.clone())
+            };
+            let dest_port = if dest.port > 0 {
+                Some(dest.port as i64)
+            } else {
+                None
+            };
+            let protocol = if dest.protocol.is_empty() {
+                None
+            } else {
+                Some(dest.protocol.clone())
+            };
+            let corr = if corr_id.is_empty() {
+                None
+            } else {
+                Some(corr_id.to_string())
+            };
+            let bytes_in_i64 = bytes_in.map(|b| b as i64);
+            match kernel
+                .clone()
+                .append_egress_async(
+                    decision.to_string(),
+                    Some(reason.to_string()),
+                    dest_host,
+                    dest_port,
+                    protocol,
+                    bytes_in_i64,
+                    Some(0),
+                    corr,
+                    project_id.clone(),
+                    Some(posture.clone()),
+                )
+                .await
+            {
+                Ok(id) => Some(id),
+                Err(err) => {
+                    warn!("append egress ledger failed: {err}");
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        let mut payload = Map::new();
+        payload.insert("id".into(), json!(ledger_id));
+        payload.insert("decision".into(), json!(decision));
+        if !reason.is_empty() {
+            payload.insert("reason".into(), json!(reason));
+        }
+        if !dest.host.is_empty() {
+            payload.insert("dest_host".into(), json!(dest.host.clone()));
+        }
+        if dest.port > 0 {
+            payload.insert("dest_port".into(), json!(dest.port as i64));
+        }
+        if !dest.protocol.is_empty() {
+            payload.insert("protocol".into(), json!(dest.protocol.clone()));
+        }
+        if let Some(bytes) = bytes_in {
+            payload.insert("bytes_in".into(), json!(bytes as i64));
+        }
+        payload.insert("bytes_out".into(), json!(0));
+        if !corr_id.is_empty() {
+            payload.insert("corr_id".into(), json!(corr_id));
+        }
+        if let Some(ms) = elapsed.map(|d| d.as_millis() as u64) {
+            payload.insert("duration_ms".into(), json!(ms));
+        }
+        payload.insert("posture".into(), json!(posture));
+        if let Some(proj) = project_id {
+            payload.insert("project_id".into(), json!(proj));
+        }
+        payload.insert("tool_id".into(), json!("models.download"));
+        self.bus.publish(
+            topics::TOPIC_EGRESS_LEDGER_APPENDED,
+            &Value::Object(payload),
+        );
+    }
+
+    fn tmp_paths(tmp_dir: &Path, model_id: &str, sha_hint: &str) -> (PathBuf, PathBuf) {
+        let base = if !sha_hint.is_empty() {
+            sha_hint.to_string()
+        } else {
+            format!("{}-{}", model_id, uuid::Uuid::new_v4())
+        };
+        let tmp = tmp_dir.join(format!("{}.part", base));
+        let meta = tmp.with_extension("part.meta");
+        (tmp, meta)
+    }
+
+    async fn hash_existing(path: &Path, hasher: &mut Sha256) -> Result<(), String> {
+        let file = tokio::fs::File::open(path)
+            .await
+            .map_err(|e| e.to_string())?;
+        let mut reader = BufReader::new(file);
+        let mut buf = [0u8; 64 * 1024];
+        loop {
+            let n = reader.read(&mut buf).await.map_err(|e| e.to_string())?;
+            if n == 0 {
+                break;
+            }
+            hasher.update(&buf[..n]);
+        }
+        Ok(())
+    }
+
+    async fn remove_resume_artifacts(tmp_path: &Path, meta_path: &Path) {
+        if tokio::fs::remove_file(tmp_path).await.is_err() {
+            // ignore missing file
+        }
+        let _ = tokio::fs::remove_file(meta_path).await;
+    }
+
+    async fn save_resume_validators(meta_path: &Path, headers: &header::HeaderMap) {
+        let etag = headers
+            .get(header::ETAG)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        let last_modified = headers
+            .get(header::LAST_MODIFIED)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+        if etag.is_none() && last_modified.is_none() {
+            return;
+        }
+        let mut map = Map::new();
+        if let Some(e) = etag {
+            map.insert("etag".into(), Value::String(e));
+        }
+        if let Some(lm) = last_modified {
+            map.insert("last_modified".into(), Value::String(lm));
+        }
+        let value = Value::Object(map);
+        if let Some(parent) = meta_path.parent() {
+            let _ = fs::create_dir_all(parent).await;
+        }
+        if let Ok(bytes) = serde_json::to_vec(&value) {
+            let _ = fs::write(meta_path, bytes).await;
+        }
+    }
+
+    async fn load_resume_ifrange(meta_path: &Path) -> Option<String> {
+        let bytes = fs::read(meta_path).await.ok()?;
+        let value: Value = serde_json::from_slice(&bytes).ok()?;
+        if let Some(etag) = value.get("etag").and_then(|v| v.as_str()) {
+            Some(etag.to_string())
+        } else {
+            value
+                .get("last_modified")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+        }
+    }
+
+    fn validate_resume_content_range(resume_from: u64, headers: &header::HeaderMap) -> bool {
+        let Some(value) = headers
+            .get(header::CONTENT_RANGE)
+            .and_then(|v| v.to_str().ok())
+        else {
+            return false;
+        };
+        let value = value.trim();
+        let Some(rest) = value.strip_prefix("bytes ") else {
+            return false;
+        };
+        let Some(range_part) = rest.split('/').next() else {
+            return false;
+        };
+        let mut parts = range_part.split('-');
+        let Some(start) = parts.next() else {
+            return false;
+        };
+        match start.parse::<u64>() {
+            Ok(start_offset) => start_offset == resume_from,
+            Err(_) => false,
+        }
+    }
+
+    fn dest_info(url: &str) -> DestInfo {
+        if let Ok(parsed) = reqwest::Url::parse(url) {
+            let host = parsed.host_str().unwrap_or("").to_string();
+            let port = parsed.port().unwrap_or_else(|| match parsed.scheme() {
+                "https" => 443,
+                "http" => 80,
+                _ => 0,
+            });
+            let protocol = parsed.scheme().to_string();
+            DestInfo {
+                host,
+                port,
+                protocol,
+            }
+        } else {
+            DestInfo {
+                host: String::new(),
+                port: 0,
+                protocol: "http".into(),
+            }
+        }
+    }
+
+    fn redact_url_for_logs(u: &str) -> String {
+        if let Ok(mut url) = reqwest::Url::parse(u) {
+            let _ = url.set_username("");
+            let _ = url.set_password(None);
+            url.set_query(None);
+            url.set_fragment(None);
+            url.to_string()
+        } else {
+            let no_fragment = u.split('#').next().unwrap_or(u);
+            no_fragment
+                .split('?')
+                .next()
+                .unwrap_or(no_fragment)
+                .to_string()
+        }
     }
 
     async fn concurrency_snapshot(&self) -> Value {
@@ -1703,6 +2293,7 @@ impl BudgetNotifier {
         elapsed: Duration,
         downloaded: Option<u64>,
         total: Option<u64>,
+        corr_id: &str,
     ) {
         if self.degraded_sent {
             return;
@@ -1715,7 +2306,14 @@ impl BudgetNotifier {
             return;
         }
         let extra = store.progress_extra_with_hints(None, Some(elapsed), downloaded, total);
-        store.publish_progress(model_id, Some("degraded"), Some("soft-budget"), extra, None);
+        store.publish_progress(
+            model_id,
+            Some("degraded"),
+            Some("soft-budget"),
+            extra,
+            None,
+            Some(corr_id),
+        );
         self.degraded_sent = true;
     }
 }
@@ -1749,6 +2347,7 @@ fn env_u64(name: &str) -> Option<u64> {
         .filter(|value| *value > 0)
 }
 
+#[derive(Clone)]
 struct CompletedDownload {
     sha256: String,
     bytes: u64,
@@ -1759,15 +2358,28 @@ struct CompletedDownload {
 }
 
 enum DownloadOutcome {
-    Completed(CompletedDownload),
-    Cached(CompletedDownload),
+    Completed {
+        info: CompletedDownload,
+        dest: DestInfo,
+        corr_id: String,
+    },
+    Cached {
+        info: CompletedDownload,
+        dest: DestInfo,
+        corr_id: String,
+    },
     Canceled {
         elapsed: Duration,
+        dest: DestInfo,
+        corr_id: String,
     },
     Failed {
         code: String,
         message: String,
         elapsed: Duration,
+        dest: DestInfo,
+        corr_id: String,
+        bytes_in: u64,
     },
 }
 

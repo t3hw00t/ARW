@@ -435,7 +435,14 @@ async fn main() {
             Err(_) => std::sync::Arc::new(arw_wasi::NoopHost),
         }
     };
-    let models_store = std::sync::Arc::new(models::ModelStore::new(bus.clone()));
+    let models_store = std::sync::Arc::new(models::ModelStore::new(
+        bus.clone(),
+        if kernel_enabled {
+            Some(kernel.clone())
+        } else {
+            None
+        },
+    ));
     let governor_state = governor::GovernorState::new().await;
     models_store.bootstrap().await;
     let tool_cache = std::sync::Arc::new(tool_cache::ToolCache::new());
@@ -1837,7 +1844,7 @@ mod http_tests {
         let policy = PolicyEngine::load_from_env();
         let policy_arc = Arc::new(Mutex::new(policy));
         let host: Arc<dyn ToolHost> = Arc::new(arw_wasi::NoopHost);
-        let models_store = Arc::new(models::ModelStore::new(bus.clone()));
+        let models_store = Arc::new(models::ModelStore::new(bus.clone(), Some(kernel.clone())));
         models_store.bootstrap().await;
         let tool_cache = Arc::new(tool_cache::ToolCache::new());
         let governor_state = governor::GovernorState::new().await;

@@ -4,7 +4,7 @@ title: Human‑in‑the‑Loop
 
 # Human‑in‑the‑Loop
 
-Updated: 2025-09-19
+Updated: 2025-09-20
 Type: How‑to
 
 Status: **Planned.** The unified `arw-server` will reintroduce the staging queue; the legacy bridge has been removed. The launcher sidecar shows static copy until the new workflow lands.

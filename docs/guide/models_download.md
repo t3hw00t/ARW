@@ -6,7 +6,7 @@ title: Models Download (HTTP)
 
 ARW provides HTTP endpoints (admin‑gated) to manage local models with streaming downloads, live progress via SSE, safe cancel, and mandatory SHA‑256 verification. HTTP Range resume will return in an upcoming update.
 
-Updated: 2025-09-19
+Updated: 2025-09-20
 Type: How‑to
 
 See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*).
@@ -77,6 +77,7 @@ Subscribe to `GET /admin/events` and filter `models.download.progress` events. E
 ```
 { "id": "qwen2.5-coder-7b", "status": "started", "url": "https://example/model.gguf" }
 { "id": "qwen2.5-coder-7b", "status": "downloading", "bytes": 26214400, "downloaded": 26214400, "total": 5347737600, "percent": 0.49 }
+{ "id": "qwen2.5-coder-7b", "status": "resumed", "offset": 104857600 }
 { "id": "qwen2.5-coder-7b", "status": "complete", "sha256": "…", "bytes": 5347737600, "downloaded": 5347737600, "cached": false }
 { "id": "qwen2.5-coder-7b", "status": "canceled" }
 { "id": "qwen2.5-coder-7b", "status": "no-active-job" }
@@ -84,10 +85,11 @@ Subscribe to `GET /admin/events` and filter `models.download.progress` events. E
 
 Schema notes:
 - Always includes `id`.
-- `status` is one of `started`, `downloading`, `complete`, `canceled`, `no-active-job`, or `error`.
-- `code` provides a machine hint on failures (e.g., `sha256_mismatch`, `http`, `io`, `size_limit`, `quota_exceeded`, `disk_insufficient`).
+- `status` is one of `started`, `queued`, `admitted`, `downloading`, `resumed`, `degraded`, `complete`, `canceled`, `cancel-requested`, `no-active-job`, or `error`.
+- `code` provides a machine hint on progress/failure (e.g., `resumed`, `soft-budget`, `sha256_mismatch`, `http`, `io`, `size_limit`, `quota_exceeded`, `disk_insufficient`).
 - `bytes`/`downloaded` report cumulative bytes fetched; `total` and `percent` are present when the server provided `Content-Length`.
 - Completion events include `sha256`, `bytes`, `downloaded`, `cached`, and `total`.
+- Every payload includes `corr_id`; use it to join egress ledger entries and `/events` flows.
 ```
 
 Minimal SSE consumer (bash)
@@ -97,7 +99,14 @@ curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?prefix=models.dow
  | jq -rc 'if .id then {id:.id,status:(.status//""),code:(.code//""),bytes:(.bytes//null),cached:(.cached//null)} else . end'
 ```
 
-Tip: use repeated `prefix=` to follow multiple channels: `...&prefix=models.download.progress&prefix=models.cas.gc`.
+Tip: use repeated `prefix=` to follow multiple channels: `...&prefix=models.download.progress&prefix=models.cas.gc`. `Last-Event-ID` resumes from the last journal row (equivalent to `?after=`).
+
+### Resume behaviour
+- Partial downloads are stored as `state/models/tmp/<hash>.part` with validators in `<hash>.part.meta` (ETag/Last-Modified). Removing either file forces a clean restart.
+- On restart the worker verifies `Content-Range` matches the saved offset; mismatches produce `code:"resume-content-range"` and clean up the partial.
+- `resumed` progress events include the prior offset; subsequent `downloading` events continue from that byte position.
+- The ledger entry for the final decision includes the union of cached bytes and any resumed progress (`bytes_in`).
+- `cancel-requested` signals when `POST /admin/models/download/cancel` is accepted; a follow-up `canceled` arrives when the worker exits.
 
 ## Egress Events
 
@@ -155,7 +164,7 @@ curl -sS -X POST "$BASE/admin/models/download/cancel" \
 - Budgets and disk-reserve enforcement now run in the unified server so long downloads surface `models.download.progress` events with optional `budget`/`disk` payloads (enable via `ARW_DL_PROGRESS_INCLUDE_*`).
 - When elapsed time crosses `ARW_BUDGET_SOFT_DEGRADE_PCT` of the soft budget the server emits a one-time `status:"degraded"` progress event (`code:"soft-budget"`) before the soft limit is breached.
 - When elapsed time reaches `ARW_BUDGET_DOWNLOAD_HARD_MS` the server cancels the transfer and emits an error progress event with `code:"hard-budget"`.
-- HTTP Range resume and quota preflight remain tracked for a future slice.
+- Range resume is supported: ensure upstream responses provide `ETag` or `Last-Modified` so retries can be validated. The server retries automatically when the peer honours `If-Range`.
 
 ### Manifest
 

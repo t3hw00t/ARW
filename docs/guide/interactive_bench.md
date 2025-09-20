@@ -3,7 +3,7 @@ title: Interactive Performance Bench
 ---
 
 # Interactive Performance Bench
-Updated: 2025-09-16
+Updated: 2025-09-20
 Type: How‑to
 
 Status: **Pending rework.** The `snappy_bench` harness previously lived in the legacy

@@ -11,7 +11,7 @@ title: Projects UI
 
 The Projects UI gives you a simple, secure place to:
 
-Updated: 2025-09-17
+Updated: 2025-09-20
 Type: How‑to
 
 - Create projects under a local folder.

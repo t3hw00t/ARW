@@ -4,7 +4,7 @@ title: Federated Clustering
 
 # Federated Clustering
 
-Updated: 2025-09-19
+Updated: 2025-09-20
 Type: Explanation
 
 Clustering, live sharing, pooled compute, and optional revenue sharing let ARW grow beyond a single machine without losing the solo fast path. This page now merges the legacy “Clustering” and “Hierarchy” drafts so the active plan is tracked in one place.

@@ -4,7 +4,7 @@ title: Memory Lifecycle
 
 # Memory Lifecycle
 
-Updated: 2025-09-19
+Updated: 2025-09-20
 Type: Explanation
 
 Memory is a first-class surface in the unified server: the kernel (via `arw-memory-core`) stores layered memories, the `memory.*` actions manage them, and `/state/memory` patches plus events keep UIs and tools in sync. This page folds in the legacy `Memory & Training` content so we do not lose important details as the overlay service replaces the older `/memory/*` REST endpoints.

@@ -3,7 +3,7 @@ title: Subscribe to Events (SSE)
 ---
 
 # Subscribe to Events (SSE)
-Updated: 2025-09-17
+Updated: 2025-09-20
 Type: How‑to
 
 Microsummary: Connect to the live Server‑Sent Events stream, filter by prefix, and replay recent events. Admin‑gated. Stable.
@@ -16,6 +16,7 @@ Overview
 - Filters: `?prefix=models.` (or any event kind prefix, e.g., `rpu.` for RPU trust events)
 - Replay: `?replay=N` to emit the last N events on connect (best-effort)
 - Resume: `?after=<row_id>` (or `Last-Event-ID`) to replay events after a given journal id (unified server)
+- Correlation: producers set `payload.corr_id` whenever a job/request ID exists (e.g., downloads, egress ledger, actions) so downstream systems can stitch streams together.
 
 Envelope
 - Default mode: Each SSE message `data:` is a JSON envelope with at least `time`, `kind`, and `payload`. CloudEvents metadata (`ce`) is omitted unless the producer enriches the envelope:
