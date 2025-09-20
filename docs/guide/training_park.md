@@ -3,7 +3,7 @@ title: Training Park
 ---
 
 # Training Park
-Updated: 2025-09-18
+Updated: 2025-09-19
 Type: How‑to
 
 Status: **Prototype (stub).** The launcher window renders controls, but it emits toast placeholders and the service does not publish dedicated Training Park metrics yet.

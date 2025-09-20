@@ -12,7 +12,7 @@ ic_project_overview
 ic_feature_matrix
 ic_host_summary
 
-PORT=${ARW_PORT:-8090}
+PORT=${ARW_PORT:-8091}
 DEBUG=${ARW_DEBUG:-0}
 DOCS_URL=${ARW_DOCS_URL:-}
 ADMIN_TOKEN=${ARW_ADMIN_TOKEN:-}
@@ -29,7 +29,7 @@ ic_path_add_local_bin
 ic_env_load
 
 RUN_DIR="$ROOT/.arw/run"
-PID_FILE="$RUN_DIR/arw-svc.pid"
+PID_FILE="$RUN_DIR/arw-server.pid"
 mkdir -p "$RUN_DIR" && ic_log_dir_rel ".arw/run"
 LOGS_DIR="$ROOT/.arw/logs"; mkdir -p "$LOGS_DIR" && ic_log_dir_rel ".arw/logs"
 
@@ -40,14 +40,14 @@ http_get() { # $1=url
 preflight() {
   ic_section "Preflight"
   local svc
-  svc=$(ic_detect_bin arw-svc)
+  svc=$(ic_detect_bin arw-server)
   if [[ ! -x "$svc" ]]; then
     if ! command -v cargo >/dev/null 2>&1; then
-      ic_warn "No arw-svc binary and Rust not installed. Attempting rustup…"
+      ic_warn "No arw-server binary and Rust not installed. Attempting rustup…"
       ic_ensure_rust || { ic_err "Rust install failed; cannot build. Use portable dist/ bundle if available."; return 1; }
     fi
-    ic_info "Building arw-svc (release)"
-    (cd "$ROOT" && ic_cargo build --release -p arw-svc) || { ic_err "Build failed"; return 1; }
+    ic_info "Building arw-server (release)"
+    (cd "$ROOT" && ic_cargo build --release -p arw-server) || { ic_err "Build failed"; return 1; }
   fi
 }
 
@@ -203,8 +203,8 @@ force_stop() {
       ic_warn "No running PID found in $PID_FILE"
     fi
   else
-    pkill -f "arw-svc" || true
-    ic_warn "PID file missing; attempted pkill arw-svc"
+    pkill -f "arw-server" || true
+    ic_warn "PID file missing; attempted pkill arw-server"
   fi
   ic_press_enter
 }
@@ -347,7 +347,7 @@ EOF
 gen_launchagent() {
   ic_section "LaunchAgent (user)"
   local svc
-  svc=$(ic_detect_bin arw-svc)
+  svc=$(ic_detect_bin arw-server)
   if [[ -z "$svc" ]]; then ic_warn "Service binary not found; build first"; ic_press_enter; return; fi
   local plist_dir="$HOME/Library/LaunchAgents"
   mkdir -p "$plist_dir"
@@ -373,8 +373,8 @@ gen_launchagent() {
   </dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><true/>
-  <key>StandardOutPath</key><string>$logs/arw-svc.out.log</string>
-  <key>StandardErrorPath</key><string>$logs/arw-svc.err.log</string>
+  <key>StandardOutPath</key><string>$logs/arw-server.out.log</string>
+  <key>StandardErrorPath</key><string>$logs/arw-server.err.log</string>
 </dict>
 </plist>
 PLIST
@@ -635,7 +635,7 @@ session_summary() {
     echo "- Docs URL: ${DOCS_URL:-}"
     echo "- Admin token set: $([[ -n "${ADMIN_TOKEN:-}" ]] && echo yes || echo no)"
     echo "- NATS reachable ($nats): $([[ $(ic_port_test "$h" "$p"; echo $?) -eq 0 ]] && echo yes || echo no)"
-    echo "- Service log: $LOGS_DIR/arw-svc.out.log"
+    echo "- Service log: $LOGS_DIR/arw-server.out.log"
     echo "- Caddy running: $([[ -f "$RUN_DIR/caddy.pid" ]] && echo yes || echo no)"
     echo "- Nginx pid file: $([[ -f "$RUN_DIR/nginx.pid" ]] && echo "$RUN_DIR/nginx.pid" || echo none)"
     echo

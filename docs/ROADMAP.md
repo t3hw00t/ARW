@@ -4,7 +4,7 @@ title: Roadmap
 
 # Roadmap
 
-Updated: 2025-09-17
+Updated: 2025-09-19
 Type: Reference
 
 See also: [Backlog](BACKLOG.md) and [Interface Roadmap](INTERFACE_ROADMAP.md).
@@ -109,7 +109,7 @@ The stack scales by refusing to recompute or resend the same work twice and by b
 
 ### Recently Shipped (Sep 2025)
 - [Kernel] Stability baseline (v0.1.0-beta): consolidation freeze, clippy-clean core, docs freeze checklist, CHANGELOG + release script.
-- [Kernel] Optional gRPC server for arw-svc (feature-flagged; ARW_GRPC=1).
+- [Kernel] Optional gRPC server for the unified stack (tracked under Services & Orchestration).
 - [Kernel] CI hardening: cargo-audit, cargo-deny, CodeQL, Nix build/test, docs link-check (lychee), Windows Pester tests; concurrency cancellation.
 - [Kernel] Containers & Ops: multi-stage Dockerfile (non-root), docker-compose, Helm chart (readiness/liveness, securityContext, optional PVC), Justfile helpers.
 - [Kernel] Dev environment: Nix devshell, VS Code devcontainer.

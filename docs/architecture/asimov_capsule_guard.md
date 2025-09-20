@@ -11,7 +11,7 @@ Type: Plan
 The Asimov Capsule Guard turns the "mind virus" idea into an enforceable feature: a lightweight policy capsule that refreshes itself at every critical runtime boundary, keeping safety rules and leases in effect without piling up irreversible denies.
 
 ## Current Behavior & Gaps
-- Capsule adoption only runs inside the admin middleware when `X-ARW-Gate` is present, so the agent execution loop never re-applies policy automatically. The middleware simply hands the JSON header to `arw_core::rpu::adopt_from_header_json` after the admin token check.【F:apps/arw-svc/src/bootstrap/mod.rs†L792-L833】
+- Capsule adoption only runs inside the admin middleware when `X-ARW-Gate` is present, so the agent execution loop never re-applies policy automatically. The middleware simply hands the JSON header to `arw_core::rpu::adopt_from_header_json` after the admin token check.
 - `gating::adopt_capsule` copies every deny into the immutable hierarchy set and expands contracts into the shared contract list, making each capsule permanent until the process restarts; only test helpers can reset state.【F:crates/arw-core/src/gating.rs†L309-L353】
 - The Regulatory Provenance Unit (RPU) skeleton verifies a capsule and pushes it into gating but does not emit telemetry beyond existing `policy.decision` events, leaving adoption opaque to the UI and ledger.【F:crates/arw-core/src/rpu.rs†L200-L231】
 

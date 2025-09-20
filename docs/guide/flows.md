@@ -6,17 +6,17 @@ title: Flows (Logic Units)
 
 A minimal “Flows” page is available in debug builds to compose and apply Logic Unit patches visually. It emits JSON patches to the existing Logic Units API.
 
-Updated: 2025-09-15
+Updated: 2025-09-17
 Type: How‑to
 
 ## Open the Page
 
 - Set `ARW_DEBUG=1`
 - Unified server (default local dev port `http://127.0.0.1:8091`): open `http://127.0.0.1:8091/ui/flows` (or `/admin/ui/flows` with an admin token).
-- Legacy standalone UI builds still serve the page on `http://127.0.0.1:8090/ui/flows`; use that port only when running the split UI stack.
+- The legacy 8090 bridge has been retired; run the unified server instead.
 
 !!! note "Legacy debug UI"
-    The `/ui/flows` surface lives in the legacy `arw-svc` bridge on port 8090. The unified headless server on port 8091 exposes the underlying APIs under `/logic-units/*` instead.
+    The `/admin/ui/flows` surface ships with `arw-server` (enable `ARW_DEBUG=1`). The underlying APIs continue to live under `/logic-units/*`.
 
 ## What It Does
 

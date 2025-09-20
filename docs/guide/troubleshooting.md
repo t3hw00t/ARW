@@ -6,13 +6,12 @@ title: Troubleshooting
 
 This page lists quick fixes for common issues when starting ARW locally.
 
-Updated: 2025-09-16
+Updated: 2025-09-17
 Type: How‑to
 
-!!! note "Legacy vs. Unified"
-    The unified `arw-server` (default) listens on port 8091 and exposes `/actions`, `/events`, and `/state/*`.
-    Commands that reference port 8090 or `/admin/*` apply to the legacy `arw-svc` bridge—start it with
-    `scripts/start.{sh,ps1} --legacy` or the debug wrappers.
+!!! note "Unified defaults"
+    The unified `arw-server` listens on port 8091 and exposes `/actions`, `/events`, and `/state/*`.
+    Set `ARW_DEBUG=1` (or use `scripts/debug.{sh,ps1} --open`) when you need the browser-based debug panels under `/admin/ui/*` or `/debug`.
 
 ## Port Already in Use
 
@@ -35,16 +34,12 @@ Port already in use
   export ARW_ADMIN_TOKEN=secret
   curl -sS -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
     http://127.0.0.1:8091/state/policy | jq
-  # Legacy bridge example:
-  curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
-    http://127.0.0.1:8090/admin/introspect/tools | jq
   ```
 
 ## Debug UI Missing
 - Symptom: `/debug` returns 404 or a minimal page.
 - Fix: ensure `ARW_DEBUG=1` for local dev, or run via the Desktop Launcher.
-- Tip: use `scripts/debug.{sh,ps1}` (defaults to legacy UI) or pass `--legacy`/`-Legacy` when calling
-  `scripts/start.{sh,ps1}` directly. The unified server is headless-first.
+- Tip: use `scripts/debug.{sh,ps1} --open` to start the service, wait for `/healthz`, and open `/debug` automatically.
 - Tip: `GET /about` should still work without debug. It returns name/version and the `docs_url` link; if `/about` fails, check service logs and port.
 
 ## SSE Doesn’t Stream
@@ -53,31 +48,36 @@ Port already in use
   ```bash
   curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
     http://127.0.0.1:8091/events?replay=10
-  # Legacy bridge example:
-  curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
-    http://127.0.0.1:8090/admin/events?replay=10
   ```
 
 ## Model Download Issues
 
 Disk insufficient (preflight)
-- Symptom: `models.download.progress` with `code: "disk-insufficient"` and a `need/available/reserve` payload.
+- Symptom: `models.download.progress` with `code: "disk_insufficient"` and a `need/available/reserve` payload.
 - Fix: free space or reduce `ARW_MODELS_DISK_RESERVE_MB` (default 256). Consider GC below.
 
-Disk insufficient (stream)
-- Symptom: `code: "disk-insufficient-stream"` mid‑transfer.
+Disk insufficient during transfer
+- Symptom: repeated `code: "disk_insufficient"` events mid‑transfer.
 - Fix: free up space; retry the same request to resume.
 
 Size exceeds limit
-- Symptom: `code: "size-limit"` or `"size-limit-stream"`.
+- Symptom: `code: "size_limit"`.
 - Fix: increase `ARW_MODELS_MAX_MB` (MiB) or choose a smaller model.
 
 Quota exceeded
-- Symptom: `code: "quota-exceeded"` with CAS totals in payload.
+- Symptom: `code: "quota_exceeded"` with CAS totals in payload.
 - Fix: increase `ARW_MODELS_QUOTA_MB` or remove unused models; see GC.
 
+Soft budget warning
+- Symptom: `status: "degraded"` with `code: "soft-budget"` and a `budget` payload (elapsed vs soft window).
+- Fix: raise `ARW_BUDGET_DOWNLOAD_SOFT_MS`, lower `ARW_BUDGET_SOFT_DEGRADE_PCT`, or plan for slower mirrors (download continues unless the hard budget is hit).
+
+Hard budget cancel
+- Symptom: error event with `code: "hard-budget"`; download stops and the partial file is removed.
+- Fix: raise `ARW_BUDGET_DOWNLOAD_HARD_MS` or split the artifact; consider adjusting `ARW_DL_MIN_MBPS`/mirror to stay within the window.
+
 Checksum mismatch
-- Symptom: `code: "checksum-mismatch"` at the end.
+- Symptom: `code: "sha256_mismatch"` at the end.
 - Fix: verify the source and SHA‑256; retry; switch mirror.
 
 Hung/idle
@@ -87,7 +87,7 @@ Hung/idle
 Free space via CAS GC
 - Run a one‑off GC to delete unreferenced blobs older than 14 days:
   ```bash
-  BASE=http://127.0.0.1:8091  # legacy bridge listens on 8090
+  BASE=http://127.0.0.1:8091
   curl -sS -X POST "$BASE/admin/models/cas_gc" \
     -H 'Content-Type: application/json' \
     -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \

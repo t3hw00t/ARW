@@ -1,5 +1,5 @@
 # Interface Catalog
-Updated: 2025-09-16
+Updated: 2025-09-18
 Type: Reference
 
 This repo keeps a single, machine‑readable catalog of every interface (HTTP, events/SSE, and MCP tools) under `interfaces/`. Each interface has a small descriptor with ownership, lifecycle, and a pointer to the full spec.
@@ -11,8 +11,7 @@ This repo keeps a single, machine‑readable catalog of every interface (HTTP, e
 
 Descriptors (examples):
 
-- `interfaces/http/arw-server/descriptor.yaml` → ARW unified server API (canonical), points to `spec/openapi.yaml`
-- `interfaces/http/arw-svc/descriptor.yaml` → ARW service API (legacy), points to `spec/openapi.yaml`
+- `interfaces/http/arw-server/descriptor.yaml` → ARW unified server API, points to `spec/openapi.yaml`
 - `interfaces/events/arw/descriptor.yaml` → ARW event channels (SSE), points to `spec/asyncapi.yaml`
 - `interfaces/tools/arw/descriptor.yaml` → MCP toolset, points to `spec/mcp-tools.json`
 

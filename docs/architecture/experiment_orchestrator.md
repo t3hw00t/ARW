@@ -3,7 +3,7 @@ title: Experiment Orchestrator
 ---
 
 # Experiment Orchestrator
-Updated: 2025-09-16
+Updated: 2025-09-19
 Type: Explanation
 
 First‑class A/B/n and shadow runs with assignment rules, per‑run budgets, and deltas reported to `/state/experiments`.

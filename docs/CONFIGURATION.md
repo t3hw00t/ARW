@@ -4,7 +4,7 @@ title: Configuration
 
 # Configuration
 { .topic-trio style="--exp:.7; --complex:.5; --complicated:.3" data-exp=".7" data-complex=".5" data-complicated=".3" }
-Updated: 2025-09-16
+Updated: 2025-09-19
 Type: Reference
 
 See also: [Glossary](GLOSSARY.md), [Admin Endpoints](guide/admin_endpoints.md), [Quickstart](guide/quickstart.md)
@@ -12,7 +12,7 @@ See also: [Glossary](GLOSSARY.md), [Admin Endpoints](guide/admin_endpoints.md), 
 Centralized reference for ARW environment variables and common flags. Defaults favor local, private, and portable operation.
 
 ## Service
-- `ARW_PORT`: HTTP listen port (default: `8091`; legacy `arw-svc` listens on `8090`).
+- `ARW_PORT`: HTTP listen port (default: `8091`).
 - `ARW_BIND`: HTTP bind address (default: `127.0.0.1`). Use `0.0.0.0` to listen on all interfaces in trusted environments or behind a TLS proxy. The server refuses to start if bound to a non‑loopback address without an admin token (see `ARW_ADMIN_TOKEN`), to avoid accidental public exposure.
 - `ARW_PORTABLE`: `1` keeps state/cache/logs near the app bundle.
  - `ARW_CONFIG`: absolute path to the primary config TOML (overrides discovery).
@@ -131,14 +131,14 @@ Config discovery (CWD‑independent)
 - `ARW_LITELLM_BASE_URL`: LiteLLM server base URL (OpenAI‑compatible). When set, it takes precedence over `ARW_OPENAI_BASE_URL`.
  - `ARW_LITELLM_API_KEY`: API key for LiteLLM (optional; send only if set).
  - `ARW_LITELLM_MODEL`: model name for LiteLLM (falls back to `ARW_OPENAI_MODEL` if unset).
-- `ARW_MODELS_MAX_MB`: hard cap for single model download size in MiB (default `4096`). _Legacy bridge; unified server support planned._
-- `ARW_MODELS_DISK_RESERVE_MB`: reserve free space during downloads in MiB (default `256`). _Legacy bridge; unified server support planned._
+- `ARW_MODELS_MAX_MB`: hard cap for single model download size in MiB (default `4096`). Enforced by the unified server before and during transfers.
+- `ARW_MODELS_DISK_RESERVE_MB`: reserve free space during downloads in MiB (default `256`). The unified server aborts downloads if free space drops below this reserve.
 - `ARW_MODELS_MAX_CONC`: max concurrent model downloads (default `2`; `0` or `<1` treated as `1`).
 - `ARW_MODELS_QUOTA_MB`: optional total on‑disk quota for all models stored in CAS (sum of `state/models/by-hash/*`) in MiB. When set, downloads are denied if projected total would exceed the quota.
 
 ### Downloads & Budgets
 - `ARW_BUDGET_DOWNLOAD_SOFT_MS`: soft budget window in ms (0 = unbounded).
-- `ARW_BUDGET_DOWNLOAD_HARD_MS`: hard budget window in ms (0 = unbounded).
+- `ARW_BUDGET_DOWNLOAD_HARD_MS`: hard budget window in ms (0 = unbounded). When elapsed time reaches this window the unified server aborts the download and emits `models.download.progress` with `status:"error"` and `code:"hard-budget"`.
 - `ARW_BUDGET_SOFT_DEGRADE_PCT`: percentage of soft budget used before a “degraded” status is emitted (default `80`).
 - `ARW_DL_MIN_MBPS`: minimum expected throughput used for admission checks when total size is known (default `2.0`).
 - `ARW_DL_SEND_RETRIES`: HTTP request retries for initial send before failing (default `2`).
@@ -146,8 +146,8 @@ Config discovery (CWD‑independent)
 - `ARW_DL_IDLE_TIMEOUT_SECS`: idle fallback timeout when no hard budget is set (default `300`; set `0` to disable).
 - `ARW_DL_EWMA_ALPHA`: smoothing factor for throughput EWMA used in admission decisions (default `0.3`).
 - `ARW_DL_PREFLIGHT`: when `1`, perform a HEAD preflight to capture `Content-Length` and resume validators (ETag/Last-Modified). Enables early enforcement of `ARW_MODELS_MAX_MB` and `ARW_MODELS_QUOTA_MB` before starting the transfer.
-- `ARW_DL_PROGRESS_INCLUDE_BUDGET`: when `1`, include a `budget` snapshot in `models.download.progress` events. _Legacy bridge; unified server support planned._
-- `ARW_DL_PROGRESS_INCLUDE_DISK`: when `1`, include a `disk` snapshot `{available,total,reserve}` in progress events. _Legacy bridge; unified server support planned._
+- `ARW_DL_PROGRESS_INCLUDE_BUDGET`: when `1`, include a `budget` snapshot (soft/hard ms, elapsed, remaining, state) in unified `models.download.progress` events.
+- `ARW_DL_PROGRESS_INCLUDE_DISK`: when `1`, include a `disk` snapshot `{reserve,available,need}` (bytes) in unified `models.download.progress` events.
 - `ARW_DL_PROGRESS_VALIDATE`: when `1`, validate progress `status`/`code` against the known vocabulary and log warnings for unknown values (helps catch drift).
  
 HTTP client (downloads)

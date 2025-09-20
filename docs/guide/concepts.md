@@ -7,11 +7,11 @@ title: Core Concepts
 
 This page orients you to ARW’s moving parts so the rest of the guide makes sense.
 
-Updated: 2025-09-16
+Updated: 2025-09-18
 Type: Explanation
 
 ## Service
-- `arw-server` is the unified, headless-first API surface. It binds to `127.0.0.1:8091` by default (override via `ARW_BIND`/`ARW_PORT`) and everything flows through the triad: `POST /actions` submits work, `GET /events` streams progress (resume via `Last-Event-ID`, replay via `?replay=`), and `GET /state/*` serves read-model snapshots. The launcher/debug UI sit on top; start with `--legacy` only when you still need `arw-svc`.
+- `arw-server` is the unified, headless-first API surface. It binds to `127.0.0.1:8091` by default (override via `ARW_BIND`/`ARW_PORT`) and everything flows through the triad: `POST /actions` submits work, `GET /events` streams progress (resume via `Last-Event-ID`, replay via `?replay=`), and `GET /state/*` serves read-model snapshots. The launcher/debug UI sit on top; enable `ARW_DEBUG=1` when you need the browser panels.
 
 ## Tools & Schemas
 - Capabilities are exposed as versioned tools (submitted as `/actions` `kind`s) with JSON Schemas for inputs/outputs/errors.

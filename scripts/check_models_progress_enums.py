@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Verify that spec/asyncapi.yaml ModelsDownloadProgress status/code enums
-match the single source of truth in
-apps/arw-svc/src/resources/models_service.rs (PROGRESS_STATUS/CODES).
+match the set of values emitted by the unified server in
+apps/arw-server/src/models.rs (publish_progress + DownloadOutcome::Failed).
 Exits non-zero if mismatched.
 """
 from __future__ import annotations
@@ -13,25 +13,30 @@ from pathlib import Path
 import yaml
 
 REPO = Path(__file__).resolve().parents[1]
-RUST = REPO / 'apps' / 'arw-svc' / 'src' / 'resources' / 'models_service.rs'
+RUST = REPO / 'apps' / 'arw-server' / 'src' / 'models.rs'
 ASYNCAPI = REPO / 'spec' / 'asyncapi.yaml'
 
-def parse_enum(name: str, text: str) -> list[str]:
-    # e.g., pub const PROGRESS_STATUS: [&'static str; N] = [ "a", "b", ];
-    m = re.search(rf"{name}\s*:\s*\[\s*&'static\s+str[^\]]*\]\s*=\s*\[(.*?)\];",
-                  text, re.S)
-    if not m:
-        raise RuntimeError(f"array {name} not found")
-    inner = m.group(1)
-    items = []
-    for s in re.findall(r'"([^"]+)"', inner):
-        items.append(s)
-    return items
+STATUS_RE = re.compile(r"publish_progress\([^,]+,\s*Some\(\"([^\"]+)\"\)", re.S)
+FAILED_CODE_RE = re.compile(r"DownloadOutcome::Failed\s*\{[^}]*code:\s*\"([^\"]+)\"", re.S)
+PROGRESS_CODE_RE = re.compile(r"publish_progress\([^,]+,\s*Some\(\"[^\"]+\"\),\s*Some\(\"([^\"]+)\"\)")
+
+
+def parse_statuses(text: str) -> list[str]:
+    return sorted(set(STATUS_RE.findall(text)))
+
+
+def parse_codes(text: str) -> list[str]:
+    return sorted(set(FAILED_CODE_RE.findall(text)))
+
 
 def main() -> int:
     rs = RUST.read_text(encoding='utf-8')
-    status = parse_enum('PROGRESS_STATUS', rs)
-    codes = parse_enum('PROGRESS_CODES', rs)
+    status = parse_statuses(rs)
+    codes = set(parse_codes(rs))
+    codes.update(PROGRESS_CODE_RE.findall(rs))
+    if '"request-timeout"' in rs:
+        codes.add('request-timeout')
+    codes = sorted(codes)
 
     doc = yaml.safe_load(ASYNCAPI.read_text(encoding='utf-8'))
     msg = doc['components']['messages']['ModelsDownloadProgress']
@@ -56,4 +61,3 @@ def main() -> int:
 
 if __name__ == '__main__':
     sys.exit(main())
-

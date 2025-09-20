@@ -6,7 +6,8 @@ title: Restructure Handbook (Source of Truth)
 
 This document is the single source of truth for the ongoing ARW restructure. It is written so a new contributor (or a chat without prior context) can pick up work immediately.
 
-Updated: 2025-09-16
+Updated: 2025-09-19
+Type: Explanation
 Owner: Core maintainers
 Scope: Architecture, APIs, modules, migration plan, status, hand‑off tips
 
@@ -169,13 +170,9 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
   - Provides a `ToolHost` trait and a `NoopHost` implementation as a placeholder.
   - Future: host WASI Component plugins (tools) declared by WIT; enforce capability manifests and policy at spawn.
 
-- Legacy coexistence (temporary bridge)
-  - `apps/arw-svc` still serves the current feature set while we port capabilities.
-  - Bridge endpoints (compat/dev only):
-    - `GET /triad/events` — kernel-backed SSE replay + live stream.
-    - `POST /actions` — idempotent submission via kernel; emits `actions.submitted`.
-  - Files: `apps/arw-svc/src/main.rs`, `apps/arw-svc/src/ext/mod.rs`, `apps/arw-svc/src/ext/actions_api.rs`.
-  - Toggle: `ARW_KERNEL_ENABLE=1` (default) enables dual-write; set `0` to disable.
+- Legacy bridge (status)
+  - `apps/arw-svc` and its launch flags have been removed. Debug UI assets now live under `apps/arw-server/assets` and render when `ARW_DEBUG=1`.
+  - Compatibility routes such as `/admin/events?replay=` remain available in `arw-server` for clients that still depend on them.
 - Legacy feature migration (unified target — all todo unless noted)
   - Core services: port Model Steward (models download/CAS GC ✅), Tool Forge (tool runs/cache ✅), Feedback Loop, Experiment Deck, Memory Lanes, Project Hub primitives, Project Map read models, Snappy Governor, Event Spine patch streaming.
   - UI/experience: migrate Chat Workbench, Screenshot Pipeline, Self Card + forecasts to the new SPA/right-sidecar flow once endpoints land.
@@ -192,12 +189,11 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
 | E (Safety) | Policy + guardrails | Guardrail Gateway on `arw-server`, Asimov Capsule Guard enforcement, final removal of legacy `/admin/*` shims | Policy & egress firewall phase |
 
 Notes
-- Each phase should ship parity (endpoints, state views, topics, docs, tests) before removing the corresponding `arw-svc` module.
 - Phases can overlap if dependencies are satisfied; track owners and dates in the backlog so the matrix stays current.
 - Update this section with status markers as phases complete (e.g., `A ✅`).
-- Scripts: `scripts/start.{sh,ps1}` default to the unified server; pass `--legacy` / `-Legacy` to run `arw-svc` (launcher auto-forces legacy until ported).
-- Debug helpers `scripts/debug.{sh,ps1}` now default to the legacy stack (for `/debug`) but accept `--server`/`-Server` to target the unified headless flow.
-  - Containers: new `apps/arw-server/Dockerfile` and `docker-compose.yml` target `arw-server`; legacy image remains available for the debug UI.
+- Scripts: `scripts/start.{sh,ps1}` launch the unified server (launcher included). Use `ARW_NO_LAUNCHER=1` / `--service-only` for headless mode.
+- Debug helpers `scripts/debug.{sh,ps1}` default to the unified stack and can open `/debug` when `ARW_DEBUG=1`.
+  - Containers target `arw-server`; the legacy image is no longer published.
 
 ## Migration Plan (High‑level)
 1) Kernel + Triad API complete in `arw-server` (now)

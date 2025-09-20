@@ -1,5 +1,5 @@
 # Stability Freeze Checklist
-Updated: 2025-09-16
+Updated: 2025-09-18
 Type: Reference
 
 This project is in a stability/consolidation phase. Use this checklist before
@@ -7,7 +7,7 @@ adding new features.
 
 ## Scope (what we stabilize now)
 - Core crates: `arw-protocol`, `arw-events`, `arw-core`, `arw-otel`
-- Binaries: `arw-svc`, `arw-cli`, `arw-connector`
+- Binaries: `arw-server`, `arw-cli`, `arw-connector`
 - CI: build/test, clippy, audit, deny, docs+link-check
 - Docs: generated specs, guides, and nav
 
@@ -23,7 +23,7 @@ and can evolve independently while core stabilizes.
 
 ## Release checklist
 - Format: `cargo fmt --all -- --check`
-- Lint: `cargo clippy -p arw-protocol -p arw-events -p arw-core -p arw-macros -p arw-cli -p arw-otel -p arw-svc -p arw-connector --all-targets -- -D warnings`
+- Lint: `cargo clippy -p arw-protocol -p arw-events -p arw-core -p arw-macros -p arw-cli -p arw-otel -p arw-connector --all-targets -- -D warnings`
 - Build: `cargo build --workspace --locked --exclude arw-tauri --exclude arw-launcher`
 - Test: `cargo test --workspace --locked --exclude arw-tauri --exclude arw-launcher`
 

@@ -1,9 +1,5 @@
 #!powershell
 Set-StrictMode -Version Latest
-$ErrorActionPreference = 'Stop'
-
-# Agent Hub (ARW) — Quick debug runner (PowerShell)
-
 param(
   [switch]$Interactive,
   [int]$Port = 0,
@@ -11,22 +7,17 @@ param(
   [string]$AdminToken,
   [switch]$Dist,
   [switch]$NoBuild,
+  [switch]$Open,
   [switch]$NoOpen,
   [switch]$NoHealth,
-  [int]$HealthTimeout = 20,
-  [switch]$Legacy,
-  [switch]$Server
+  [int]$HealthTimeout = 20
 )
 
 function Info($t){ Write-Host "[debug] $t" -ForegroundColor Cyan }
 function Warn($t){ Write-Host "[debug] $t" -ForegroundColor Yellow }
 
-$Root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$portDefaultLegacy = 8090
-$portDefaultServer = 8091
-$legacyMode = $true
-if ($PSBoundParameters.ContainsKey('Server')) { $legacyMode = $false }
-elseif ($PSBoundParameters.ContainsKey('Legacy')) { $legacyMode = $true }
+$root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+$PORT_DEFAULT = 8091
 $portWasSpecified = $PSBoundParameters.ContainsKey('Port') -and $Port -ne 0
 if (-not $portWasSpecified -and $env:ARW_PORT) {
   $parsedPort = 0
@@ -35,17 +26,14 @@ if (-not $portWasSpecified -and $env:ARW_PORT) {
     $portWasSpecified = $true
   }
 }
-if (-not $portWasSpecified) {
-  $Port = if ($legacyMode) { $portDefaultLegacy } else { $portDefaultServer }
-}
+$openUi = $false
+if ($Open) { $openUi = $true }
+if ($NoOpen) { $openUi = $false }
+
+if (-not $portWasSpecified) { $Port = $PORT_DEFAULT }
 
 if ($Interactive) {
   Write-Host 'Agent Hub (ARW) — Debug (interactive)' -ForegroundColor White
-  $stack = Read-Host 'Stack [legacy/server] (default legacy)'
-  if ($stack -and ($stack.ToLower() -match 'server|headless')) { $legacyMode = $false } else { $legacyMode = $true }
-  if (-not $portWasSpecified) {
-    $Port = if ($legacyMode) { $portDefaultLegacy } else { $portDefaultServer }
-  }
   $ans = Read-Host "HTTP port [$Port]"; if ($ans) { $Port = [int]$ans; $portWasSpecified = $true }
   $ans = Read-Host "Docs URL (optional) [$DocsUrl]"; if ($ans -ne '') { $DocsUrl = $ans }
   if (-not $AdminToken) {
@@ -56,15 +44,11 @@ if ($Interactive) {
       Info "Token: $AdminToken"
     }
   }
-  $yn = Read-Host 'Use dist/ if available? (y/N)'; if ($yn -match '^[yY]') { $Dist = $true }
-  if ($legacyMode) {
-    $yn = Read-Host 'Open /debug after start? (Y/n)'; if ($yn -match '^[nN]') { $NoOpen = $true } else { $NoOpen = $false }
-  } else {
-    $NoOpen = $true
-  }
+  $yn = Read-Host 'Use dist/ if available? (y/N)'; if ($yn -match '^[yY]') { $Dist = $true } else { $Dist = $false }
+  $yn = Read-Host 'Open /debug after start? (y/N)'; if ($yn -match '^[yY]') { $openUi = $true } else { $openUi = $false }
 }
 
-if (-not $legacyMode) { $NoOpen = $true }
+if (-not $portWasSpecified) { $Port = $PORT_DEFAULT }
 
 $env:ARW_DEBUG = '1'
 $env:ARW_PORT = "$Port"
@@ -74,18 +58,13 @@ if ($AdminToken) { $env:ARW_ADMIN_TOKEN = $AdminToken }
 $argsList = @('--port', "$Port", '--debug')
 if ($DocsUrl) { $argsList += @('--docs-url', $DocsUrl) }
 if ($AdminToken) { $argsList += @('--admin-token', $AdminToken) }
-if ($legacyMode) {
-  $argsList += '--legacy'
-} else {
-  $argsList += @('--server', '--service-only')
-}
 if ($Dist) { $argsList += '--dist' }
 if ($NoBuild) { $argsList += '--no-build' }
 if (-not $NoHealth) { $argsList += @('--wait-health', '--wait-health-timeout-secs', "$HealthTimeout") }
 
 & (Join-Path $PSScriptRoot 'start.ps1') @argsList
 
-if ($legacyMode -and -not $NoOpen) {
+if ($openUi) {
   $base = "http://127.0.0.1:$Port/debug"
   try { Start-Process $base | Out-Null } catch {}
 }

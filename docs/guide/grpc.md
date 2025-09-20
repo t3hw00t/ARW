@@ -1,25 +1,13 @@
 # gRPC (optional)
-Updated: 2025-09-16
+Updated: 2025-09-17
 Type: How‑to
-{ .topic-trio style="--exp:.5; --complex:.7; --complicated:.5" data-exp=".5" data-complex=".7" data-complicated=".5" }
+{ .topic-trio style="--exp:.5; --complex:.7; --complicated:.5" data-exp=.5 data-complex=.7 data-complicated=.5 }
 
-ARW exposes an optional gRPC server in `arw-svc` behind the `grpc` feature.
+ARW previously exposed an optional gRPC server via the legacy bridge. That implementation has been retired alongside `arw-svc`. This page tracks the incoming unified gRPC surface; until it lands, HTTP remains the canonical interface.
 
-## Enable and run
+## Historical health example
 
-- Build with the feature:
-  - `cargo build -p arw-svc --features grpc`
-- Run with gRPC enabled:
-  - `ARW_GRPC=1 cargo run -p arw-svc --features grpc`
-- Address (overridable):
-  - Default: `[::1]:50051`
-  - Override: `ARW_GRPC_ADDR=0.0.0.0:50051`
-
-The HTTP service remains available on `ARW_PORT` (default 8091; legacy `arw-svc` uses 8090).
-
-## Health example
-
-Proto is in `apps/arw-svc/proto/arw.proto`. Health RPC:
+Legacy proto (for reference) lived in `apps/arw-svc/proto/arw.proto` with:
 
 ```
 service ArwService {
@@ -48,5 +36,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 ## Notes
 
-- The gRPC server publishes a `service.health` event on each `healthz` call.
-- gRPC is opt-in and not required for core HTTP functionality.
+- Track [Roadmap → Services & Orchestration](../ROADMAP.md#services--orchestration) for the unified gRPC rollout.
+- HTTP remains the supported interface for production.
+

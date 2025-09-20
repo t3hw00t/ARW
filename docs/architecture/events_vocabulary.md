@@ -42,13 +42,13 @@ Minimal event envelope
 ```
 
 Notes
-- `status` is human‑friendly; `code` is a stable machine hint (e.g., `admission-denied`, `hard-exhausted`).
+- `status` is human‑friendly; `code` is a stable machine hint (e.g., `admission-denied`, `hard-budget`).
 - Vocabulary is small on purpose; keep renderers simple and deterministic.
 
 Mapping from existing ARW events
 - Observations/Beliefs/Intents/Actions are already exposed under `/state/*` and emitted in debug builds; clients can mirror or subscribe.
-- `models.download.progress` supports `{ id, status|error, code, budget?, disk? }` — see `apps/arw-svc/src/resources/models_service.rs`.
-  - Common `code` values: `admission-denied`, `hard-exhausted`, `disk-insufficient(-stream)`, `size-limit(-stream)`, `checksum-mismatch`, `cache-mismatch`, `canceled-by-user`, `already-in-progress-hash`, `quota-exceeded`, `cached`, `resync`.
+- `models.download.progress` supports `{ id, status|error, code, budget?, disk? }` — see `apps/arw-server/src/models.rs`.
+  - Common `code` values: `admission-denied`, `disk_insufficient`, `size_limit`, `sha256_mismatch`, `cache-mismatch`, `canceled-by-user`, `already-in-progress-hash`, `quota_exceeded`, `cached`, `resync`, `soft-budget`, `hard-budget`.
 - Download start is represented via `models.download.progress` with `status:"started"`.
 - `models.manifest.written` is emitted after a successful write of `<state>/models/<id>.json`.
 - `models.cas.gc` emits `{scanned, kept, deleted, deleted_bytes, ttl_days}` after a GC sweep.

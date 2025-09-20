@@ -11,7 +11,7 @@ Canonical event types
 
 Error catalog
 - Categories: user, tool, policy, runtime, network, model.
-- Stable codes: e.g., `admission-denied`, `hard-exhausted`, `disk-insufficient`, `checksum-mismatch`, `policy_denied`, `timeout`, `rate_limited`.
+- Stable codes: e.g., `admission-denied`, `hard-budget`, `disk_insufficient`, `sha256_mismatch`, `policy_denied`, `timeout`, `rate_limited`.
 
 Problem details
 - RFC 7807 with `{ type, title, status, detail, instance, trace_id, code }`.

@@ -523,8 +523,15 @@ impl ModelStore {
             return Err("download already in progress".into());
         }
 
+        let started_at = Instant::now();
         self.with_metrics(|m| m.record_started()).await;
-        self.publish_progress(id, Some("started"), None, Some(json!({"url": url})), None);
+        let start_extra = self.progress_extra_with_hints(
+            Some(json!({"url": url})),
+            Some(Duration::from_secs(0)),
+            None,
+            None,
+        );
+        self.publish_progress(id, Some("started"), None, start_extra, None);
         self.upsert_model_status(id, "queued", provider.clone(), Some(url.clone()))
             .await;
 
@@ -549,13 +556,12 @@ impl ModelStore {
         let sha_clone = sha_hint.clone();
         let cancel_clone = cancel.clone();
 
-        let start_time = Instant::now();
         let handle = DownloadHandle {
             cancel,
             task: None,
             job_id: job_id.clone(),
             url: req.url.clone(),
-            started_at: start_time,
+            started_at,
         };
 
         self.downloads
@@ -571,6 +577,7 @@ impl ModelStore {
                     provider_clone,
                     sha_clone,
                     cancel_clone,
+                    started_at,
                 )
                 .await;
             finisher.finish_download(model_id, outcome).await;
@@ -591,12 +598,14 @@ impl ModelStore {
             return Err("id is required".into());
         }
         if self.downloads.cancel_job(id).await.is_some() {
-            self.publish_progress(id, Some("canceled"), None, None, None);
+            let extra = self.progress_extra_with_hints(None, None, None, None);
+            self.publish_progress(id, Some("canceled"), None, extra, None);
             self.with_metrics(|m| m.record_canceled()).await;
             self.upsert_model_status(id, "canceled", None, None).await;
             Ok(())
         } else {
-            self.publish_progress(id, Some("no-active-job"), None, None, None);
+            let extra = self.progress_extra_with_hints(None, None, None, None);
+            self.publish_progress(id, Some("no-active-job"), None, extra, None);
             Err("no active download".into())
         }
     }
@@ -672,17 +681,23 @@ impl ModelStore {
         provider: Option<String>,
         sha_hint: String,
         cancel: CancellationToken,
+        started_at: Instant,
     ) -> DownloadOutcome {
         self.with_metrics(|m| m.record_admitted()).await;
-        self.publish_progress(&model_id, Some("downloading"), None, None, None);
+        let initial_extra =
+            self.progress_extra_with_hints(None, Some(started_at.elapsed()), None, None);
+        self.publish_progress(&model_id, Some("downloading"), None, initial_extra, None);
 
-        let start = Instant::now();
+        let start = started_at;
+        let limits = DownloadBudgetLimits::global();
+        let mut budget_notifier = BudgetNotifier::new(limits);
         let tmp_dir = self.models_dir().join("tmp");
         if let Err(err) = fs::create_dir_all(&tmp_dir).await {
             error!("models tmp dir create failed: {err}");
             return DownloadOutcome::Failed {
                 code: "io".into(),
                 message: err.to_string(),
+                elapsed: start.elapsed(),
             };
         }
         let tmp_path = tmp_dir.join(format!("{}.part", uuid::Uuid::new_v4()));
@@ -706,6 +721,7 @@ impl ModelStore {
                 return DownloadOutcome::Failed {
                     code: code.into(),
                     message: err.to_string(),
+                    elapsed: start.elapsed(),
                 };
             }
         };
@@ -719,6 +735,7 @@ impl ModelStore {
                 return DownloadOutcome::Failed {
                     code: "io".into(),
                     message: err.to_string(),
+                    elapsed: start.elapsed(),
                 };
             }
         };
@@ -746,6 +763,7 @@ impl ModelStore {
                         message: format!(
                             "download size {total_bytes} exceeds max {max} (ARW_MODELS_MAX_MB)"
                         ),
+                        elapsed: start.elapsed(),
                     };
                 }
             }
@@ -758,6 +776,7 @@ impl ModelStore {
                         message: format!(
                             "quota {quota} bytes would be exceeded by download ({total_bytes} bytes)"
                         ),
+                        elapsed: start.elapsed(),
                     };
                 }
             }
@@ -770,6 +789,7 @@ impl ModelStore {
                         message: format!(
                             "available disk {avail} <= reserve {reserve_bytes} (ARW_MODELS_DISK_RESERVE_MB)"
                         ),
+                        elapsed: start.elapsed(),
                     };
                 }
                 if let Some(total_bytes) = total {
@@ -779,6 +799,7 @@ impl ModelStore {
                             message: format!(
                                 "not enough free space for download: need {total_bytes} + reserve {reserve_bytes}, only {avail} available"
                             ),
+                            elapsed: start.elapsed(),
                         };
                     }
                 }
@@ -790,7 +811,9 @@ impl ModelStore {
                 chunk = stream.next() => chunk,
                 _ = cancel.cancelled() => {
                     let _ = fs::remove_file(&tmp_path).await;
-                    return DownloadOutcome::Canceled;
+                    return DownloadOutcome::Canceled {
+                        elapsed: start.elapsed(),
+                    };
                 }
             };
             let Some(next) = next else {
@@ -804,6 +827,7 @@ impl ModelStore {
                     return DownloadOutcome::Failed {
                         code: "http".into(),
                         message: err.to_string(),
+                        elapsed: start.elapsed(),
                     };
                 }
             };
@@ -813,6 +837,7 @@ impl ModelStore {
                 return DownloadOutcome::Failed {
                     code: "io".into(),
                     message: err.to_string(),
+                    elapsed: start.elapsed(),
                 };
             }
             hasher.update(&chunk);
@@ -824,6 +849,7 @@ impl ModelStore {
                     return DownloadOutcome::Failed {
                         code: "size_limit".into(),
                         message: format!("download exceeded max size {max} (ARW_MODELS_MAX_MB)"),
+                        elapsed: start.elapsed(),
                     };
                 }
             }
@@ -835,6 +861,7 @@ impl ModelStore {
                         message: format!(
                             "quota {quota} bytes exceeded (downloaded {downloaded}, existing {cas_usage_bytes})"
                         ),
+                        elapsed: start.elapsed(),
                     };
                 }
             }
@@ -847,6 +874,7 @@ impl ModelStore {
                             message: format!(
                                 "download aborted: free space {avail} <= reserve {reserve_bytes}"
                             ),
+                            elapsed: start.elapsed(),
                         };
                     }
                 }
@@ -872,9 +900,37 @@ impl ModelStore {
                         }
                     }
                 }
-                self.publish_progress(&model_id, Some("downloading"), None, Some(extra), None);
+                let extra = self.progress_extra_with_hints(
+                    Some(extra),
+                    Some(start.elapsed()),
+                    Some(downloaded),
+                    total,
+                );
+                self.publish_progress(&model_id, Some("downloading"), None, extra, None);
                 last_emit_bytes = downloaded;
                 last_emit_at = Instant::now();
+            }
+
+            let elapsed_now = start.elapsed();
+            budget_notifier.maybe_emit(
+                self.as_ref(),
+                &model_id,
+                elapsed_now,
+                Some(downloaded),
+                total,
+            );
+
+            if let Some(hard_ms) = limits.hard_ms {
+                if duration_to_millis(elapsed_now) >= hard_ms {
+                    let _ = fs::remove_file(&tmp_path).await;
+                    return DownloadOutcome::Failed {
+                        code: "hard-budget".into(),
+                        message: format!(
+                            "download exceeded hard budget {hard_ms} ms (ARW_BUDGET_DOWNLOAD_HARD_MS)"
+                        ),
+                        elapsed: elapsed_now,
+                    };
+                }
             }
         }
 
@@ -884,6 +940,7 @@ impl ModelStore {
             return DownloadOutcome::Failed {
                 code: "io".into(),
                 message: err.to_string(),
+                elapsed: start.elapsed(),
             };
         }
 
@@ -893,6 +950,7 @@ impl ModelStore {
             return DownloadOutcome::Failed {
                 code: "sha256_mismatch".into(),
                 message: format!("expected {sha_hint}, got {sha256}"),
+                elapsed: start.elapsed(),
             };
         }
 
@@ -906,6 +964,7 @@ impl ModelStore {
                     return DownloadOutcome::Failed {
                         code: "io".into(),
                         message: err.to_string(),
+                        elapsed: start.elapsed(),
                     };
                 }
             }
@@ -915,6 +974,7 @@ impl ModelStore {
                 return DownloadOutcome::Failed {
                     code: "io".into(),
                     message: err.to_string(),
+                    elapsed: start.elapsed(),
                 };
             }
         } else if let Err(err) = fs::remove_file(&tmp_path).await {
@@ -945,19 +1005,30 @@ impl ModelStore {
             DownloadOutcome::Cached(info) => {
                 self.handle_success(&model_id, info, true).await;
             }
-            DownloadOutcome::Canceled => {
+            DownloadOutcome::Canceled { elapsed } => {
                 self.with_metrics(|m| m.record_canceled()).await;
-                self.publish_progress(&model_id, Some("canceled"), None, None, None);
+                let extra = self.progress_extra_with_hints(None, Some(elapsed), None, None);
+                self.publish_progress(&model_id, Some("canceled"), None, extra, None);
                 self.upsert_model_status(&model_id, "canceled", None, None)
                     .await;
             }
-            DownloadOutcome::Failed { code, message } => {
+            DownloadOutcome::Failed {
+                code,
+                message,
+                elapsed,
+            } => {
                 self.with_metrics(|m| m.record_error()).await;
+                let extra = self.progress_extra_with_hints(
+                    Some(json!({"error": message})),
+                    Some(elapsed),
+                    None,
+                    None,
+                );
                 self.publish_progress(
                     &model_id,
                     Some("error"),
                     Some(&code),
-                    Some(json!({"error": message})),
+                    extra,
                     Some(code.clone()),
                 );
                 self.mark_error(&model_id, &code, &message).await;
@@ -993,7 +1064,13 @@ impl ModelStore {
                 map.insert("percent".into(), Value::Number(num));
             }
         }
-        self.publish_progress(model_id, Some("complete"), None, Some(extra), None);
+        let extra = self.progress_extra_with_hints(
+            Some(extra),
+            Some(info.elapsed),
+            Some(info.bytes),
+            Some(info.bytes),
+        );
+        self.publish_progress(model_id, Some("complete"), None, extra, None);
         if let Err(err) = self.record_success(model_id, &info).await {
             warn!("record success failed: {err}");
         }
@@ -1192,6 +1269,73 @@ impl ModelStore {
     async fn emit_metrics_patch(&self) {
         let snapshot = self.metrics.read().await.clone().snapshot();
         read_models::publish_read_model_patch(&self.bus, "models_metrics", &snapshot);
+    }
+
+    fn progress_extra_with_hints(
+        &self,
+        extra: Option<Value>,
+        elapsed: Option<Duration>,
+        downloaded: Option<u64>,
+        total: Option<u64>,
+    ) -> Option<Value> {
+        let hints = *ProgressHintsConfig::global();
+        if !hints.include_budget && !hints.include_disk {
+            return extra;
+        }
+
+        let mut map = match extra {
+            Some(Value::Object(map)) => map,
+            Some(other) => return Some(other),
+            None => Map::new(),
+        };
+
+        if hints.include_budget {
+            if let Some(budget) = DownloadBudgetLimits::global().snapshot(elapsed) {
+                map.insert("budget".into(), budget);
+            }
+        }
+
+        if hints.include_disk {
+            if let Some(disk) = self.disk_snapshot(downloaded, total) {
+                map.insert("disk".into(), disk);
+            }
+        }
+
+        if map.is_empty() {
+            None
+        } else {
+            Some(Value::Object(map))
+        }
+    }
+
+    fn disk_snapshot(&self, downloaded: Option<u64>, total: Option<u64>) -> Option<Value> {
+        let reserve = Self::disk_reserve_bytes();
+        let available = Self::available_space(self.state_dir()).ok();
+        let need = match (total, downloaded) {
+            (Some(total), Some(done)) => Some(total.saturating_sub(done)),
+            (Some(total), None) => Some(total),
+            _ => None,
+        };
+
+        if reserve == 0 && available.is_none() && need.is_none() {
+            return None;
+        }
+
+        let mut map = Map::new();
+        map.insert("reserve".into(), Value::from(reserve));
+        match available {
+            Some(bytes) => {
+                map.insert("available".into(), Value::from(bytes));
+            }
+            None => {
+                map.insert("available".into(), Value::Null);
+            }
+        }
+        if let Some(bytes) = need {
+            map.insert("need".into(), Value::from(bytes));
+        }
+
+        Some(Value::Object(map))
     }
 
     fn disk_reserve_bytes() -> u64 {
@@ -1422,6 +1566,189 @@ impl ModelStore {
     }
 }
 
+#[derive(Clone, Copy)]
+struct ProgressHintsConfig {
+    include_budget: bool,
+    include_disk: bool,
+}
+
+impl ProgressHintsConfig {
+    fn global() -> &'static Self {
+        static CONFIG: OnceCell<ProgressHintsConfig> = OnceCell::new();
+        CONFIG.get_or_init(|| ProgressHintsConfig {
+            include_budget: env_flag("ARW_DL_PROGRESS_INCLUDE_BUDGET"),
+            include_disk: env_flag("ARW_DL_PROGRESS_INCLUDE_DISK"),
+        })
+    }
+}
+
+#[derive(Clone, Copy)]
+struct DownloadBudgetLimits {
+    soft_ms: Option<u64>,
+    hard_ms: Option<u64>,
+    soft_degrade_pct: u64,
+}
+
+impl DownloadBudgetLimits {
+    fn global() -> &'static Self {
+        static LIMITS: OnceCell<DownloadBudgetLimits> = OnceCell::new();
+        LIMITS.get_or_init(|| DownloadBudgetLimits {
+            soft_ms: env_u64("ARW_BUDGET_DOWNLOAD_SOFT_MS"),
+            hard_ms: env_u64("ARW_BUDGET_DOWNLOAD_HARD_MS"),
+            soft_degrade_pct: std::env::var("ARW_BUDGET_SOFT_DEGRADE_PCT")
+                .ok()
+                .and_then(|s| s.parse::<u64>().ok())
+                .map(|pct| pct.min(100))
+                .unwrap_or(80),
+        })
+    }
+
+    fn snapshot(&self, elapsed: Option<Duration>) -> Option<Value> {
+        if self.soft_ms.is_none() && self.hard_ms.is_none() && elapsed.is_none() {
+            return None;
+        }
+
+        let elapsed_ms = elapsed.map(duration_to_millis);
+        let mut map = Map::new();
+
+        match self.soft_ms {
+            Some(ms) => {
+                map.insert("soft_ms".into(), Value::from(ms));
+            }
+            None => {
+                map.insert("soft_ms".into(), Value::Null);
+            }
+        }
+
+        match self.hard_ms {
+            Some(ms) => {
+                map.insert("hard_ms".into(), Value::from(ms));
+            }
+            None => {
+                map.insert("hard_ms".into(), Value::Null);
+            }
+        }
+
+        match elapsed_ms {
+            Some(ms) => {
+                map.insert("elapsed_ms".into(), Value::from(ms));
+            }
+            None => {
+                map.insert("elapsed_ms".into(), Value::Null);
+            }
+        }
+
+        if let (Some(soft), Some(elapsed_ms)) = (self.soft_ms, elapsed_ms) {
+            let remaining = soft as i128 - elapsed_ms as i128;
+            map.insert(
+                "soft_remaining_ms".into(),
+                Value::from(clamp_i128_to_i64(remaining)),
+            );
+        } else {
+            map.insert("soft_remaining_ms".into(), Value::Null);
+        }
+
+        if let (Some(hard), Some(elapsed_ms)) = (self.hard_ms, elapsed_ms) {
+            let remaining = hard as i128 - elapsed_ms as i128;
+            map.insert(
+                "hard_remaining_ms".into(),
+                Value::from(clamp_i128_to_i64(remaining)),
+            );
+        } else {
+            map.insert("hard_remaining_ms".into(), Value::Null);
+        }
+
+        let state = match elapsed_ms {
+            Some(ms) if self.hard_ms.is_some_and(|hard| ms >= hard) => "hard_exceeded",
+            Some(ms) if self.soft_ms.is_some_and(|soft| ms >= soft) => "soft_exceeded",
+            Some(_) => "ok",
+            None => "unknown",
+        };
+        map.insert("state".into(), Value::from(state));
+
+        Some(Value::Object(map))
+    }
+
+    fn degrade_threshold_ms(&self) -> Option<u64> {
+        let soft = self.soft_ms?;
+        let pct = self.soft_degrade_pct;
+        if pct == 0 {
+            return None;
+        }
+        let threshold = ((soft as u128) * pct as u128) / 100;
+        let threshold = threshold.min(soft as u128);
+        let threshold = threshold.max(1);
+        Some(threshold as u64)
+    }
+}
+
+struct BudgetNotifier {
+    limits: &'static DownloadBudgetLimits,
+    degraded_sent: bool,
+}
+
+impl BudgetNotifier {
+    fn new(limits: &'static DownloadBudgetLimits) -> Self {
+        let degraded_sent = limits.degrade_threshold_ms().is_none();
+        Self {
+            limits,
+            degraded_sent,
+        }
+    }
+
+    fn maybe_emit(
+        &mut self,
+        store: &ModelStore,
+        model_id: &str,
+        elapsed: Duration,
+        downloaded: Option<u64>,
+        total: Option<u64>,
+    ) {
+        if self.degraded_sent {
+            return;
+        }
+        let Some(trigger_ms) = self.limits.degrade_threshold_ms() else {
+            self.degraded_sent = true;
+            return;
+        };
+        if duration_to_millis(elapsed) < trigger_ms {
+            return;
+        }
+        let extra = store.progress_extra_with_hints(None, Some(elapsed), downloaded, total);
+        store.publish_progress(model_id, Some("degraded"), Some("soft-budget"), extra, None);
+        self.degraded_sent = true;
+    }
+}
+
+fn clamp_i128_to_i64(value: i128) -> i64 {
+    value.max(i128::from(i64::MIN)).min(i128::from(i64::MAX)) as i64
+}
+
+fn duration_to_millis(duration: Duration) -> u64 {
+    let millis = duration.as_millis();
+    if millis > u128::from(u64::MAX) {
+        u64::MAX
+    } else {
+        millis as u64
+    }
+}
+
+fn env_flag(name: &str) -> bool {
+    matches!(
+        std::env::var(name)
+            .ok()
+            .map(|v| v.trim().to_ascii_lowercase()),
+        Some(val) if matches!(val.as_str(), "1" | "true" | "yes" | "on")
+    )
+}
+
+fn env_u64(name: &str) -> Option<u64> {
+    std::env::var(name)
+        .ok()
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|value| *value > 0)
+}
+
 struct CompletedDownload {
     sha256: String,
     bytes: u64,
@@ -1434,8 +1761,14 @@ struct CompletedDownload {
 enum DownloadOutcome {
     Completed(CompletedDownload),
     Cached(CompletedDownload),
-    Canceled,
-    Failed { code: String, message: String },
+    Canceled {
+        elapsed: Duration,
+    },
+    Failed {
+        code: String,
+        message: String,
+        elapsed: Duration,
+    },
 }
 
 #[derive(Clone, Deserialize, ToSchema)]

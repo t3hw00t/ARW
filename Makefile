@@ -25,4 +25,4 @@ docs-build: docgen
 	mkdocs build --strict
 
 start:
-	ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 bash scripts/start.sh --debug --port 8090
+	ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 bash scripts/start.sh --debug --port 8091

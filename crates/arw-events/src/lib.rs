@@ -222,7 +222,7 @@ impl EventBus for LocalBus {
             ce: Some(CloudEventMeta {
                 specversion: "1.0".into(),
                 type_name: norm.clone(),
-                source: std::env::var("ARW_EVENT_SOURCE").unwrap_or_else(|_| "arw-svc".into()),
+                source: std::env::var("ARW_EVENT_SOURCE").unwrap_or_else(|_| "arw-server".into()),
                 id: now.clone(),
                 time: now.clone(),
                 datacontenttype: Some("application/json".into()),
@@ -248,7 +248,7 @@ impl EventBus for LocalBus {
             ce: Some(CloudEventMeta {
                 specversion: "1.0".into(),
                 type_name: norm.clone(),
-                source: std::env::var("ARW_EVENT_SOURCE").unwrap_or_else(|_| "arw-svc".into()),
+                source: std::env::var("ARW_EVENT_SOURCE").unwrap_or_else(|_| "arw-server".into()),
                 id: now.clone(),
                 time: now.clone(),
                 datacontenttype: Some("application/json".into()),

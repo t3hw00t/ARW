@@ -6,7 +6,7 @@ title: UI Flows (ASCII)
 
 Flowcharts for the main user interfaces. Complements UI Architecture and Workflow Views.
 
-Updated: 2025-09-16
+Updated: 2025-09-17
 Type: How‑to
 
 ## Navigation Overview
@@ -35,7 +35,7 @@ Type: How‑to
    Managers (single source of truth)
      - Agents    - Models    - Hardware    - Permissions    - Containers    - Plugins
 
-Legacy (debug) UI: /debug (enable ARW_DEBUG=1; legacy stack via --legacy)
+Debug UI: /debug (enable `ARW_DEBUG=1`)
 ```
 
 Notes
@@ -84,4 +84,3 @@ Endpoints (admin‑gated): /projects/list | /projects/create | /projects/notes |
 See also
 - How‑to → UI Architecture (layout, sidecar), Workflow Views & Sidecar, Projects UI
 - Reference → Feature Catalog, Event Topics
-

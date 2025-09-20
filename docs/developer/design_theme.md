@@ -13,7 +13,7 @@ See also: [Style & Harmony](style.md), [UX Invariants](../architecture/ux_invari
 
 ## Naming
 
-- Product: Agent Hub (ARW). Use “Launcher” for the Tauri app, “Service” for `arw-svc`, and “CLI” for `arw-cli`.
+- Product: Agent Hub (ARW). Use “Launcher” for the Tauri app, “Service” for `arw-server`, and “CLI” for `arw-cli`.
 - Views: Project Hub, Chat, Training Park, Events, Logs, Debug.
 - Actions: use verbs users know (Open, Start, Stop, Refresh, Copy, Replay). Avoid jargon.
 - Events: dot‑case with segments, past/present tense by kind: `models.download.progress`, `models.changed`, `feedback.suggested`, `actions.applied`.

@@ -79,89 +79,39 @@ fn admin_token() -> Option<String> {
     None
 }
 
-/// Locate the service binary (`arw-server` preferred, fallback to `arw-svc`).
-pub fn locate_service_binary() -> Option<(PathBuf, &'static str)> {
-    // 1) next to this exe (packaged dist)
+/// Locate the unified service binary (`arw-server`).
+pub fn locate_service_binary() -> Option<PathBuf> {
+    // 1) packaged layout (next to launcher or in ./bin)
     if let Ok(exe) = std::env::current_exe() {
         if let Some(dir) = exe.parent() {
-            for name in [
-                if cfg!(windows) {
-                    "arw-server.exe"
-                } else {
-                    "arw-server"
-                },
-                if cfg!(windows) {
-                    "arw-svc.exe"
-                } else {
-                    "arw-svc"
-                },
-            ] {
-                let candidate = dir.join(name);
-                if candidate.exists() {
-                    return Some((
-                        candidate,
-                        if name.contains("server") {
-                            "server"
-                        } else {
-                            "legacy"
-                        },
-                    ));
-                }
-            }
-            // packaged layout may be bin/ alongside
-            let bin = dir.join("bin");
-            for name in [
-                if cfg!(windows) {
-                    "arw-server.exe"
-                } else {
-                    "arw-server"
-                },
-                if cfg!(windows) {
-                    "arw-svc.exe"
-                } else {
-                    "arw-svc"
-                },
-            ] {
-                let candidate = bin.join(name);
-                if candidate.exists() {
-                    return Some((
-                        candidate,
-                        if name.contains("server") {
-                            "server"
-                        } else {
-                            "legacy"
-                        },
-                    ));
-                }
-            }
-        }
-    }
-    // 2) workspace target/release
-    let mut path = std::env::current_dir().ok()?;
-    for _ in 0..3 {
-        for name in [
-            if cfg!(windows) {
+            let name = if cfg!(windows) {
                 "arw-server.exe"
             } else {
                 "arw-server"
-            },
-            if cfg!(windows) {
-                "arw-svc.exe"
-            } else {
-                "arw-svc"
-            },
-        ] {
-            let p = path.join("target").join("release").join(name);
-            if p.exists() {
-                return Some((
-                    p,
-                    if name.contains("server") {
-                        "server"
-                    } else {
-                        "legacy"
-                    },
-                ));
+            };
+            let candidate = dir.join(name);
+            if candidate.exists() {
+                return Some(candidate);
             }
+            let bin = dir.join("bin");
+            let candidate = bin.join(name);
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+
+    // 2) workspace builds (target/release)
+    let mut path = std::env::current_dir().ok()?;
+    for _ in 0..3 {
+        let name = if cfg!(windows) {
+            "arw-server.exe"
+        } else {
+            "arw-server"
+        };
+        let candidate = path.join("target").join("release").join(name);
+        if candidate.exists() {
+            return Some(candidate);
         }
         path = path.parent()?.to_path_buf();
     }
@@ -498,13 +448,9 @@ mod cmds {
                 }
             }
         }
-        let (svc_bin, kind) =
+        let svc_bin =
             locate_service_binary().ok_or_else(|| "service binary not found".to_string())?;
         let mut cmd = Command::new(svc_bin);
-        // Only force ARW_DEBUG for legacy UI; unified server runs headless.
-        if kind == "legacy" {
-            cmd.env("ARW_DEBUG", "1");
-        }
         cmd.env("ARW_PORT", format!("{}", effective_port(port)))
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -517,22 +463,8 @@ mod cmds {
     #[tauri::command]
     pub async fn stop_service(
         state: tauri::State<'_, ServiceState>,
-        port: Option<u16>,
+        _port: Option<u16>,
     ) -> Result<(), String> {
-        // try graceful shutdown for legacy service only (server lacks /shutdown)
-        let _ = async {
-            let url = service_url("shutdown", port);
-            static HTTP: OnceCell<reqwest::Client> = OnceCell::new();
-            let client = HTTP.get_or_init(|| {
-                reqwest::Client::builder()
-                    .timeout(Duration::from_millis(900))
-                    .build()
-                    .unwrap()
-            });
-            let _ = client.get(url).send().await;
-        }
-        .await;
-        // then kill if needed
         if let Some(mut child) = state.inner.lock().map_err(|e| e.to_string())?.take() {
             let _ = child.kill();
         }

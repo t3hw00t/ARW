@@ -25,7 +25,7 @@ Type: Reference
 
 ### Windows Launcher Bundles
 - Workflow: `.github/workflows/tauri-windows.yml` builds launcher MSIs via a two‑arch matrix (x64 primary; ARM64 best‑effort) and uploads them with svc/cli.
-- MSI content: includes `arw-svc.exe` and `arw-cli.exe` so service autostart works out‑of‑the‑box.
+- MSI content: includes `arw-server.exe` and `arw-cli.exe` so service autostart works out‑of‑the‑box.
 - Optional code signing: enable by adding `WINDOWS_CERT_PFX` (base64 PFX) and `WINDOWS_CERT_PASSWORD` secrets; artifacts are signed with `signtool`.
 - Release: on tagged pushes (`v*.*.*`), x64 MSI always publishes; ARM64 MSI publishes when the toolchain supports cross‑bundling.
 - Smoke test: x64 only — installs the MSI on the runner, verifies files, launches briefly, polls `/healthz`, then uninstalls (non‑blocking).

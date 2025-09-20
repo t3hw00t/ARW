@@ -17,8 +17,6 @@ if (-not $NoBuild) {
     cargo build --release --locked --target $Target -p arw-server -p arw-cli | Out-Null
     # Try launcher too; ignore failures
     try { cargo build --release --locked --target $Target -p arw-launcher | Out-Null } catch {}
-    # Legacy (optional)
-    try { cargo build --release --locked --target $Target -p arw-svc | Out-Null } catch {}
   } else {
     Info 'Building workspace (release)'
     cargo build --workspace --release --locked | Out-Null
@@ -68,13 +66,11 @@ New-Item -ItemType Directory -Force $binDir | Out-Null
 $exe = ''
 if ($isWindows) { $exe = '.exe' }
 $serverSrc = Join-Path $binRoot "arw-server$exe"
-$svcSrc    = Join-Path $binRoot "arw-svc$exe"
 $cliSrc = Join-Path $binRoot "arw-cli$exe"
 $launcherSrc = Join-Path $binRoot "arw-launcher$exe"
 if (-not (Test-Path $serverSrc)) { Die "Missing binary: $serverSrc (did the build succeed?)" }
 if (-not (Test-Path $cliSrc)) { Die "Missing binary: $cliSrc (did the build succeed?)" }
 Copy-Item $serverSrc -Destination (Join-Path $binDir ("arw-server$exe"))
-if (Test-Path $svcSrc) { Copy-Item $svcSrc -Destination (Join-Path $binDir ("arw-svc$exe")) }
 Copy-Item $cliSrc -Destination (Join-Path $binDir ("arw-cli$exe"))
 if (Test-Path $launcherSrc) { Copy-Item $launcherSrc -Destination (Join-Path $binDir ("arw-launcher$exe")) }
 
@@ -100,20 +96,16 @@ $readme = @"
 ARW portable bundle ($name)
 
 Contents
-- bin/        arw-server (unified), arw-cli, (optional) arw-launcher; legacy arw-svc may be present
+- bin/        arw-server (unified), arw-cli, (optional) arw-launcher
 - configs/    default.toml (portable state paths)
 - docs/       project docs
 - sandbox/    Windows Sandbox config (Windows only)
 
-Usage (Unified)
+Usage
 - Run server:  bin/arw-server$exe (default port 8091)
 - API:         http://127.0.0.1:8091/healthz
 - CLI sanity:  bin/arw-cli$exe
 - Launcher:    bin/arw-launcher$exe (tray + windows UI)
-
-Legacy (temporary)
-- Run legacy:  bin/arw-svc$exe (classic debug UI on 8090)
-- Debug UI:    http://127.0.0.1:8090/debug
 
 Notes
 - To force portable mode: set environment variable ARW_PORTABLE=1

@@ -4,10 +4,10 @@ title: Human‑in‑the‑Loop
 
 # Human‑in‑the‑Loop
 
-Updated: 2025-09-18
+Updated: 2025-09-19
 Type: How‑to
 
-Status: **Planned.** The legacy `arw-svc` carried a staging queue, but the unified `arw-server` has not yet reintroduced it. The launcher sidecar shows only static copy.
+Status: **Planned.** The unified `arw-server` will reintroduce the staging queue; the legacy bridge has been removed. The launcher sidecar shows static copy until the new workflow lands.
 
 This page tracks the migration plan for Human-in-the-loop approvals on the new stack.
 

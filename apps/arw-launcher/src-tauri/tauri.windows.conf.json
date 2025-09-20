@@ -4,7 +4,6 @@
     "targets": ["msi"],
     "externalBin": [
       "bin/arw-server.exe",
-      "bin/arw-svc.exe",
       "bin/arw-cli.exe"
     ]
   }

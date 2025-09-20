@@ -3,7 +3,7 @@ title: Glossary
 ---
 
 # Glossary
-Updated: 2025-09-16
+Updated: 2025-09-18
 Type: Reference
 
 See also: [Configuration](CONFIGURATION.md)

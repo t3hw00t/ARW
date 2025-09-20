@@ -3,6 +3,8 @@ title: Interface Deprecations
 ---
 
 # Interface Deprecations
+Updated: 2025-09-18
+Type: Reference
 
 _Generated from spec/openapi.yaml (sha256:a4679303f068). Do not edit._
 

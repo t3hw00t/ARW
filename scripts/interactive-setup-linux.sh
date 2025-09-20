@@ -20,7 +20,7 @@ printf "  - Build the workspace (release) and optionally run tests\n"
 printf "  - Optionally generate docs and package a portable bundle\n"
 printf "  - Optionally help configure clustering (NATS)\n\n"
 
-PORT=${ARW_PORT:-8090}
+PORT=${ARW_PORT:-8091}
 DOCS_URL=${ARW_DOCS_URL:-}
 ADMIN_TOKEN=${ARW_ADMIN_TOKEN:-}
 RUN_TESTS=0

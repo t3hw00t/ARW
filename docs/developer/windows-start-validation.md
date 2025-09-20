@@ -6,11 +6,11 @@ title: Windows Start Script Validation
 
 This checklist helps validate ARW startup on Windows after changes to `scripts/start.ps1` and the interactive menus.
 
-!!! note "Legacy launcher path"
-    The interactive launcher workflow still boots the legacy `arw-svc` bridge on port 8090. For the headless unified `arw-server`
-    default (port 8091), follow the server-specific docs.
+!!! note "Launcher defaults"
+    The interactive launcher workflow boots `arw-server` on port 8091. For headless validation use `scripts/start.ps1 -ServiceOnly`
+    or set `ARW_NO_LAUNCHER=1`.
 
-Updated: 2025-09-16
+Updated: 2025-09-17
 Type: Reference
 
 ## Quick pre-reqs
@@ -89,13 +89,5 @@ Type: Reference
   ```
 - Re-run the menu to ensure the saved values pre-populate the prompts.
 
-## Optional: legacy `arw-svc` bridge mode (`-Legacy`)
-- Only run these checks when compatibility with the legacy launcher/bridge is required.
-- Launch with: `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -Legacy -WaitHealth` (default port falls back to 8090 unless `-Port` is provided).
-- Expect `arw-svc.exe` to start, with `.arw\run\arw-svc.pid` and `.arw\logs\arw-svc.out.log` populated.
-- Validate legacy endpoints: `http://127.0.0.1:8090/debug`, `http://127.0.0.1:8090/spec`, and `http://127.0.0.1:8090/healthz`.
-- Use `-Legacy -UseDist` when validating packaged builds that must drive the old launcher (`dist\arw-...\bin\arw-svc.exe`).
-
 ## Notes
-- The unified server skips the launcher; `start.ps1` prints `Unified server runs headless; launcher requires -Legacy to target the old UI.` to confirm this path.
 - For clean logs between runs, remove `./.arw/logs/*` and `./.arw/run/*`.

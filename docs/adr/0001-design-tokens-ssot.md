@@ -4,6 +4,7 @@ status: accepted
 date: 2025-09-14
 ---
 Updated: 2025-09-16
+Type: Explanation
 
 Context
 - Tokens (colors, spacing, radii, shadows) were duplicated across docs and apps.

@@ -17,7 +17,7 @@ Your private AI control room that can scale and share when you choose.
 
 In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” on your computer to research, plan, write, and build—while you stay in charge. It is local‑first and privacy‑first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.
 
-> **Restructure update:** `arw-server` is the unified API surface (headless‑first) and the default everywhere. The legacy `arw-svc` bridge is deprecated and will be removed; use `--legacy` only if you still rely on the classic debug UI during the transition.
+> **Restructure update:** `arw-server` is now the sole API surface (headless-first) across every deployment. The legacy `arw-svc` bridge and its launch flags have been removed in favour of the unified stack.
 
 Full documentation → https://t3hw00t.github.io/ARW/
 
@@ -128,16 +128,12 @@ powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
 powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
 ```
 
-- Need the legacy debug UI? Append `-Legacy` to the second command to launch `arw-svc` on port 8090 instead of the unified server on 8091.
-- Windows installer packages remain available while the launcher is retargeted. See Windows Install: https://t3hw00t.github.io/ARW/guide/windows_install/ for MSI links and tray behavior.
+- Windows installer packages ship the launcher with `arw-server` + `arw-cli`. See Windows Install: https://t3hw00t.github.io/ARW/guide/windows_install/ for MSI links and tray behavior.
 
 Linux / macOS (headless unified server)
 ```bash
 bash scripts/setup.sh
-# Option A: new unified server
-bash scripts/start.sh --service-only --wait-health
-# Option B: legacy UI
-bash scripts/start.sh --legacy --wait-health
+bash scripts/start.sh --wait-health
 ```
 
 The unified server is API-first. Point your client or integration to:
@@ -149,8 +145,6 @@ curl -sS -X POST http://127.0.0.1:8091/actions \
   -H 'content-type: application/json' \
   -d '{"kind":"demo.echo","input":{"msg":"hi"}}'
 ```
-
-Legacy UI surfaces (debug panels, launcher menus) still rely on `arw-svc` for the moment; use `--legacy` only when needed during the transition.
 
 Docker (amd64/arm64) — unified server
 ```bash
@@ -231,7 +225,7 @@ _Note_: MSI bundles may still target legacy internals while the launcher migrate
 └───────────────────────┴──────────────────────────┴────────────────┘
 ```
 
-<i>Screenshot:</i> legacy debug UI at `/debug` (start with `--legacy` and add `ARW_DEBUG=1`).
+<i>Screenshot:</i> debug UI at `/debug` (start with `ARW_DEBUG=1`).
 
 Screenshots → https://t3hw00t.github.io/ARW/guide/screenshots/
 
@@ -251,11 +245,11 @@ docker run --rm -p 8091:8091 \
 curl -sS http://127.0.0.1:8091/healthz
 ```
 
-Pull from GHCR (on releases): `ghcr.io/t3hw00t/arw-server:latest`. Need the legacy UI image? Use `ghcr.io/t3hw00t/arw-svc:latest` until the new UI lands. See the Docker guide for compose and hardening.
+Pull from GHCR (on releases): `ghcr.io/t3hw00t/arw-server:latest`. See the Docker guide for compose and hardening.
 
 ## Event Topics (Canonical)
 
-> During the restructure these constants still live in the legacy service crate; the unified server publishes the same dot.case topics via `arw-events`.
+> Topics are authored in `crates/arw-topics`; `arw-server` emits the same dot.case events consumed by all surfaces.
 
 - Source of truth: `crates/arw-topics/src/lib.rs` — centralized constants shared by the service and unified server.
 - `models.download.progress`: download lifecycle, progress, and errors; optional `budget` and `disk` fields.
@@ -351,7 +345,7 @@ See [CONTRIBUTING.md](https://github.com/t3hw00t/ARW/blob/main/CONTRIBUTING.md).
 
 - Language: US English (American).
 - Tone: calm, friendly, and action‑oriented.
-- Events: `status` is human‑friendly; `code` is a stable machine hint (e.g., `admission-denied`, `hard-exhausted`, `disk-insufficient`, `canceled-by-user`).
+- Events: `status` is human‑friendly; `code` is a stable machine hint (e.g., `admission-denied`, `hard-budget`, `disk_insufficient`, `canceled-by-user`).
 - More: see https://t3hw00t.github.io/ARW/developer/style/ (Style & Harmony).
 
 —

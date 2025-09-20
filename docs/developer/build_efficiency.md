@@ -5,6 +5,7 @@ title: Build Efficiency Playbook
 # Build Efficiency Playbook
 
 Updated: 2025-09-17
+Type: Reference
 
 > Tips for keeping local and CI builds fast without sacrificing correctness.
 

@@ -12,7 +12,6 @@ members = [
   "crates/arw-memory-core",
   "apps/arw-cli",
   "crates/arw-otel",
-  "apps/arw-svc",
   "apps/arw-server",
   "apps/arw-connector",
   "crates/arw-tauri",

@@ -4,13 +4,13 @@ title: Kubernetes (Helm)
 
 # Kubernetes (Helm)
 
-Updated: 2025-09-16
+Updated: 2025-09-18
 Type: How‑to
 
 Deploy the unified ARW server on Kubernetes using the provided Helm chart.
 
 !!! note "Legacy chart"
-    The legacy `arw-svc` chart (port 8090) is still available for the classic debug UI. Prefer the unified `arw-server` chart (port 8091) below.
+    Use the unified `arw-server` chart (port 8091). Legacy charts have been retired.
 
 ## Prerequisites
 - Kubernetes cluster with an ingress controller (optional)

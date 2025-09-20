@@ -1,6 +1,6 @@
 # API Reference
 
-Updated: 2025-09-16
+Updated: 2025-09-19
 Type: Reference
 
 Microsummary: Public endpoints, admin surfaces, specs, and eventing. Stable/experimental flags are surfaced in specs; deprecations emit standard headers.
@@ -153,35 +153,29 @@ Sample response (defaults)
 }
 ```
 
-!!! note "Legacy `arw-svc` admin endpoints (CAS, `/admin/*` on 8090)"
-    Launch the legacy service to access CAS downloads and admin surfaces:
-
-    ```bash
-    ARW_PORT=8090 cargo run -p arw-svc
-    ```
-
-    These routes now live in [`apps/arw-server/src/api_projects.rs`](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_projects.rs):
+!!! note "Admin downloads and CAS endpoints"
+    `arw-server` hosts the historical admin surface directly:
 
     - `GET /models/blob/{sha256}` — download a content-addressed model blob.
     - `POST /admin/models/concurrency` — set max concurrency at runtime.
     - `GET  /admin/models/concurrency` — snapshot `{ configured_max, available_permits, held_permits, hard_cap, pending_shrink? }`.
     - `GET  /admin/models/jobs` — active jobs plus inflight hashes.
-    - `GET  /admin/events` — legacy SSE with optional `?replay`.
-    - `GET  /debug` — legacy debug UI when `ARW_DEBUG=1`.
+    - `GET  /admin/events` — SSE with optional `?replay`.
+    - `GET  /debug` — debug UI when `ARW_DEBUG=1`.
 
     Sample CAS downloads:
 
     ```bash
     # Full download
-    curl -SsfLO "http://127.0.0.1:8090/models/blob/0123abcd..."
+    curl -SsfLO "http://127.0.0.1:8091/models/blob/0123abcd..."
 
     # Conditional
     curl -I -H 'If-None-Match: "0123abcd..."' \
-      "http://127.0.0.1:8090/models/blob/0123abcd..."
+      "http://127.0.0.1:8091/models/blob/0123abcd..."
 
     # Partial
     curl -sS -H 'Range: bytes=0-1048575' \
-      -o part.bin "http://127.0.0.1:8090/models/blob/0123abcd..."
+      -o part.bin "http://127.0.0.1:8091/models/blob/0123abcd..."
     ```
 
 Egress

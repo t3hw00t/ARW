@@ -4,13 +4,13 @@ title: Systemd Service
 
 # Systemd Service
 
-Updated: 2025-09-16
+Updated: 2025-09-18
 Type: How‑to
 
 Run the unified ARW server (`arw-server`) as a user service, either natively or via Docker.
 
 !!! note "Legacy"
-    The legacy `arw-svc` bridge (port 8090) remains available for a short transition period and will be removed. Prefer `arw-server` (default port 8091) for all new deployments.
+    The unified `arw-server` (default port 8091) replaces the legacy bridge. All new deployments should run this service directly.
 
 ## Environment file
 

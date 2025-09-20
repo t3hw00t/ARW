@@ -87,12 +87,6 @@ helm-install release="arw" ns="default":
 helm-uninstall release="arw" ns="default":
   helm uninstall {{release}} --namespace {{ns}}
 
-helm-template-legacy release="arw" ns="default":
-  helm template {{release}} deploy/charts/arw-svc --namespace {{ns}}
-
-helm-install-legacy release="arw" ns="default":
-  helm upgrade --install {{release}} deploy/charts/arw-svc --namespace {{ns}} --create-namespace
-
 # Docs
 docgen:
   bash scripts/docgen.sh
@@ -108,7 +102,7 @@ docs-check:
   bash scripts/docs_check.sh
 
 # Service
-start port='8090' debug='1':
+start port='8091' debug='1':
   ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 bash -ceu '
   dbg="$1"; port="$2";
   if [ "$dbg" = "1" ]; then
@@ -118,7 +112,7 @@ start port='8090' debug='1':
   fi
   ' _ {{debug}} {{port}}
 
-open-debug host='127.0.0.1' port='8090':
+open-debug host='127.0.0.1' port='8091':
   bash scripts/open-url.sh http://{{host}}:{{port}}/debug
 
 hooks-install:
@@ -130,13 +124,6 @@ dev port='8091':
 
 dev-watch port='8091':
   ARW_DEBUG=1 ARW_PORT={{port}} cargo watch -x "run -p arw-server"
-
-## Legacy (temporary) — keep while launcher migrates
-dev-legacy port='8090':
-  ARW_DEBUG=1 ARW_PORT={{port}} cargo run -p arw-svc
-
-dev-watch-legacy port='8090':
-  ARW_DEBUG=1 ARW_PORT={{port}} cargo watch -x "run -p arw-svc"
 
 # New server (triad slice) — quick dev runners
 dev-server port='8091':
@@ -170,7 +157,7 @@ docs-type-stamp:
   python3 scripts/stamp_docs_type.py
 
 # Run service + docs together (Unix)
-dev-all port='8090' addr='127.0.0.1:8000':
+dev-all port='8091' addr='127.0.0.1:8000':
   ARW_DEBUG=1 ARW_PORT={{port}} ARW_DOCS_URL=http://{{addr}} bash scripts/dev.sh {{port}} {{addr}}
 
 # Tasks

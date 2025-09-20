@@ -3,12 +3,12 @@ title: CLI Guide
 ---
 
 # CLI Guide
-Updated: 2025-09-16
+Updated: 2025-09-17
 Type: How‑to
 
 Goal-oriented tasks using the `arw-cli` binary. This guide shows common commands with copy‑pasteable examples and flags you’re likely to want.
 
-Examples assume the unified `arw-server` is running on `http://127.0.0.1:8091`. Use port `8090` if you are targeting the legacy `arw-svc` bridge.
+Examples assume the unified `arw-server` is running on `http://127.0.0.1:8091`.
 
 Prereqs
 - Build or install the workspace: `cargo build -p arw-cli --release`
@@ -74,7 +74,7 @@ Install docs & completions (script)
 Tips
 - Keep the private key safe; only commit public keys and signed capsules (with `signature`) as needed.
 - The service can adopt gating via capsules; see Security Hardening and Policy guides for how to apply.
-- Legacy bridge tip: when you need legacy admin surfaces such as `/spec/health`, target the connector bridge with `--base http://127.0.0.1:8090`.
+- Admin surfaces live on the unified server; use `--base http://127.0.0.1:8091` when interacting with `/admin/*` or `/spec/*` routes locally.
 
 Related
 - Reference (commands and flags): [CLI Reference](../reference/cli.md)

@@ -94,7 +94,7 @@ ic_env_save() { # save known keys to .arw/env.sh
     echo "# ARW env (project-local). Source this file to apply preferences."
     echo "export ARW_USE_NIX=${ARW_USE_NIX:-0}"
     echo "export ARW_ALLOW_SYSTEM_PKGS=${ARW_ALLOW_SYSTEM_PKGS:-0}"
-    echo "export ARW_PORT=${ARW_PORT:-8090}"
+    echo "export ARW_PORT=${ARW_PORT:-8091}"
     echo "export ARW_DOCS_URL=${ARW_DOCS_URL:-}"
     echo "export ARW_ADMIN_TOKEN=${ARW_ADMIN_TOKEN:-}"
     echo "export ARW_CONFIG=${ARW_CONFIG:-}"
@@ -295,7 +295,7 @@ ic_port_in_use() { # $1=port
   return 1
 }
 ic_next_free_port() { # $1=start
-  local p=${1:-8090}
+  local p=${1:-8091}
   local limit=$((p+100))
   while [[ $p -lt $limit ]]; do
     if ! ic_port_in_use "$p"; then echo "$p"; return 0; fi
@@ -437,7 +437,7 @@ ic_doctor() {
   command -v cargo >/dev/null 2>&1 && ic_info "cargo: $(cargo --version)" || ic_warn "cargo not found"
   command -v jq >/dev/null 2>&1 && ic_info "jq: $(jq --version)" || ic_warn "jq not found"
   command -v mkdocs >/dev/null 2>&1 && ic_info "mkdocs: $(mkdocs --version 2>/dev/null | head -n1)" || ic_warn "mkdocs not found (docs optional)"
-  local svc; svc=$(ic_detect_bin arw-svc); [[ -x "$svc" ]] && ic_info "arw-svc: $svc" || ic_warn "arw-svc not built"
+  local svc; svc=$(ic_detect_bin arw-server); [[ -x "$svc" ]] && ic_info "arw-server: $svc" || ic_warn "arw-server not built"
   local launcher; launcher=$(ic_detect_bin arw-launcher); [[ -x "$launcher" ]] && ic_info "arw-launcher: $launcher" || ic_warn "launcher not built (Tauri)"
   local nats="${ARW_NATS_URL:-nats://127.0.0.1:4222}"; read -r h p < <(ic_parse_host_port "$nats");
   if ic_port_test "$h" "$p"; then ic_info "NATS reachable at $h:$p"; else ic_warn "NATS not reachable at $h:$p"; fi
@@ -561,14 +561,14 @@ ic_project_overview() {
 
 ic_feature_matrix() {
   ic_section "Feature Matrix"
-  printf "  • Service:    arw-svc (HTTP, /debug UI)\n"
+  printf "  • Service:    arw-server (HTTP, /debug UI)\n"
   printf "  • CLI:        arw-cli (tools, capsules, gates)\n"
   printf "  • Launcher:   arw-launcher (Tauri; Linux needs WebKitGTK 4.1 + libsoup3)\n"
   printf "  • Connector:  arw-connector (optional; NATS feature)\n"
   printf "  • Docs:       MkDocs site under docs/ (optional)\n"
 }
 
-ic_detect_bin() { # $1=bin-name (arw-svc|arw-cli|...)
+ic_detect_bin() { # $1=bin-name (arw-server|arw-cli|...)
   local root; root=$(ic_root)
   local exe="$1"; [[ "${OS:-}" == "Windows_NT" ]] && exe+=".exe"
   local path="$root/target/release/$exe"

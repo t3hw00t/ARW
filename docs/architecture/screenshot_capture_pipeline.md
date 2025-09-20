@@ -4,7 +4,7 @@ title: Screenshot Capture Pipeline
 
 # Screenshot Capture Pipeline
 
-Updated: 2025-09-18
+Updated: 2025-09-17
 Type: Plan
 
 ## Goals

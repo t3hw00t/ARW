@@ -4,10 +4,10 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-09-16
+Updated: 2025-09-18
 Type: Tutorial
 
-Run the unified ARW server locally in minutes. The new architecture focuses on the `/actions` → `/events` → `/state/*` triad; the legacy `arw-svc` with the classic debug UI remains available behind a `--legacy` flag while the restructure continues.
+Run the unified ARW server locally in minutes. The architecture centres on the `/actions` → `/events` → `/state/*` triad; enable `ARW_DEBUG=1` to serve the browser debug panels.
 
 !!! warning "Minimum Secure Setup"
     - Set an admin token: `ARW_ADMIN_TOKEN=your-secret`
@@ -48,8 +48,6 @@ powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
 # Headless server (8091 by default)
 bash scripts/start.sh --service-only --wait-health
 ```
-
-*Need the legacy debug UI?* Pass `-Legacy` (Windows) or `--legacy` (Linux/macOS) to start `arw-svc` instead. See [Legacy UI Bridge](#legacy-ui-bridge) below.
 
 ## Verify the Server
 
@@ -110,37 +108,30 @@ curl -s -X POST http://127.0.0.1:8091/context/assemble \
 
 These flows emit structured `policy.*`, `working_set.*`, and `leases.*` events. Dashboards can follow along via `/events` or state views.
 
-## Legacy UI Bridge
+## Debug UI
 
-The classic service remains available while we finish porting surfaces to the unified stack.
+Enable `ARW_DEBUG=1` to expose the debug panels at `/debug`.
 
 === "Windows"
 ```powershell
-powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -Legacy -WaitHealth
+scripts/debug.ps1 -Interactive -Open
 ```
 
 === "Linux / macOS"
 ```bash
-bash scripts/start.sh --legacy --wait-health
+scripts/debug.sh --interactive --open
 ```
 
-Legacy mode listens on port `8090`, serves the debug UI, and powers existing launcher workflows. Use it when you need the full GUI today, but prefer the unified server for API-driven integrations, automation, and future features.
+These helpers prompt for admin tokens, wait for `/healthz`, and launch the UI once ready.
 
-## Desktop Launcher (Legacy Bridge)
+## Desktop Launcher
 
-The Tauri-based launcher currently targets the legacy service bundle. To package or run it:
+The Tauri-based launcher targets the unified server. To package or run it:
 
 ```bash
 just tauri-launcher-build
-just tauri-launcher-run -- --legacy
+just tauri-launcher-run
 ```
-
-On Windows:
-```powershell
-scripts/interactive-start-windows.ps1  # prompts for legacy vs. unified
-```
-
-The launcher will be updated to speak the unified API once the new UI lands. Until then it auto-starts `arw-svc` when invoked without overrides.
 
 ## Docker & Compose
 
@@ -158,7 +149,7 @@ docker run --rm -p 8091:8091 \
   arw-server:dev
 ```
 
-`docker compose up` now uses the unified server by default. Set `LEGACY=1` and swap in `apps/arw-svc/Dockerfile` if you must run the legacy stack.
+`docker compose up` uses the unified server by default.
 
 ## Security
 

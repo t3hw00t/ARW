@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-# shellcheck disable=SC2012
 set -euo pipefail
 
 port=""
@@ -13,10 +12,8 @@ no_build=0
 wait_health=0
 wait_health_timeout_secs=30
 pid_file="${ARW_PID_FILE:-}"
-# New modes: prefer launcher-first by default
 service_only=0
 launcher_only=0
-legacy=0
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -25,28 +22,50 @@ while [[ $# -gt 0 ]]; do
       port_set=1
       shift 2
       ;;
-    --debug) debug=1; shift;;
-    --docs-url) docs_url="$2"; shift 2;;
-    --admin-token) admin_token="$2"; shift 2;;
-    --timeout-secs) timeout_secs="$2"; shift 2;;
-    --dist) use_dist=1; shift;;
-    --no-build) no_build=1; shift;;
-    --wait-health) wait_health=1; shift;;
-    --wait-health-timeout-secs) wait_health_timeout_secs="$2"; shift 2;;
-    --service-only) service_only=1; shift;;
-    --launcher-only) launcher_only=1; shift;;
-    --legacy)
-      legacy=1
+    --debug)
+      debug=1
       shift
       ;;
-    --server)
-      legacy=0
+    --docs-url)
+      docs_url="$2"
+      shift 2
+      ;;
+    --admin-token)
+      admin_token="$2"
+      shift 2
+      ;;
+    --timeout-secs)
+      timeout_secs="$2"
+      shift 2
+      ;;
+    --dist)
+      use_dist=1
+      shift
+      ;;
+    --no-build)
+      no_build=1
+      shift
+      ;;
+    --wait-health)
+      wait_health=1
+      shift
+      ;;
+    --wait-health-timeout-secs)
+      wait_health_timeout_secs="$2"
+      shift 2
+      ;;
+    --service-only)
+      service_only=1
+      shift
+      ;;
+    --launcher-only)
+      launcher_only=1
       shift
       ;;
     -h|--help)
-      cat <<EOF
+      cat <<USAGE
 Usage: $0 [options]
-  --port N                      Override HTTP port (default 8091, or 8090 when --legacy)
+  --port N                      Override HTTP port (default 8091)
   --debug                       Export ARW_DEBUG=1
   --docs-url URL                Export ARW_DOCS_URL
   --admin-token TOKEN           Export ARW_ADMIN_TOKEN
@@ -57,22 +76,23 @@ Usage: $0 [options]
   --wait-health-timeout-secs N  Override health wait timeout (default 30)
   --service-only                Run the service binary only (no launcher)
   --launcher-only               Run launcher without starting service
-  --legacy                      Run the legacy arw-svc service (port 8090)
-  --server                      Force the new unified arw-server (default)
-EOF
+USAGE
       exit 0
       ;;
-    *) echo "Unknown option: $1"; exit 1;;
+    *)
+      echo "Unknown option: $1" >&2
+      exit 1
+      ;;
   esac
 done
 
-# Default port if not specified
+if [[ $service_only -eq 1 && $launcher_only -eq 1 ]]; then
+  echo "[start] --service-only and --launcher-only cannot be combined" >&2
+  exit 1
+fi
+
 if [[ $port_set -eq 0 ]]; then
-  if [[ $legacy -eq 1 ]]; then
-    port=8090
-  else
-    port=8091
-  fi
+  port=8091
 fi
 
 export ARW_PORT="$port"
@@ -85,13 +105,18 @@ DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/.." && pwd)"
 
 exe="arw-server"
-if [[ $legacy -eq 1 ]]; then
-  exe="arw-svc"
+launcher_exe="arw-launcher"
+if [[ "${OS:-}" == "Windows_NT" ]]; then
+  exe+=".exe"
+  launcher_exe+=".exe"
 fi
-[[ "${OS:-}" == "Windows_NT" ]] && exe+=".exe"
-launcher_exe="arw-launcher"; [[ "${OS:-}" == "Windows_NT" ]] && launcher_exe+=".exe"
+
 if [[ $use_dist -eq 1 ]]; then
   base=$(ls -td "$ROOT"/dist/arw-* 2>/dev/null | head -n1 || true)
+  if [[ -z "$base" ]]; then
+    echo "[start] dist bundle not found; build a release package first or omit --dist" >&2
+    exit 1
+  fi
   svc="$base/bin/$exe"
   launcher="$base/bin/$launcher_exe"
 else
@@ -99,39 +124,52 @@ else
   launcher="$ROOT/target/release/$launcher_exe"
 fi
 
-if [[ $service_only -eq 1 ]]; then
-  # Ensure service exists (build if allowed)
-  if [[ ! -x "$svc" ]]; then
-    if [[ $no_build -eq 1 ]]; then
-      echo "[start] Service binary not found and --no-build specified. Build first or omit --no-build." >&2
+ensure_service() {
+  if [[ -x "$svc" ]]; then
+    return 0
+  fi
+  if [[ $use_dist -eq 1 ]]; then
+    echo "[start] Service binary missing in dist bundle ($svc). Re-run packaging or drop --dist." >&2
+    exit 1
+  fi
+  if [[ $no_build -eq 1 ]]; then
+    echo "[start] Service binary not found and --no-build specified. Build first or omit --no-build." >&2
+    exit 1
+  fi
+  echo "[start] Service binary not found ($svc). Building release..."
+  (cd "$ROOT" && cargo build --release -p arw-server)
+}
+
+ensure_launcher() {
+  if [[ -x "$launcher" ]]; then
+    return 0
+  fi
+  if [[ $launcher_only -eq 1 ]]; then
+    if [[ $use_dist -eq 1 ]]; then
+      echo "[start] Launcher binary missing in dist bundle ($launcher). Re-run packaging or drop --dist." >&2
       exit 1
     fi
-    echo "[start] Service binary not found ($svc). Building release..."
-    if [[ $legacy -eq 1 ]]; then
-      (cd "$ROOT" && cargo build --release -p arw-svc)
-    else
-      (cd "$ROOT" && cargo build --release -p arw-server)
-    fi
-    svc="$ROOT/target/release/$exe"
-  fi
-else
-  # Ensure launcher exists (build if allowed)
-  if [[ ! -x "$launcher" ]]; then
     if [[ $no_build -eq 1 ]]; then
       echo "[start] Launcher binary not found and --no-build specified. Build first or omit --no-build." >&2
-    else
-      echo "[start] Launcher binary not found ($launcher). Attempting build..."
-      (cd "$ROOT" && cargo build --release -p arw-launcher) || true
-      launcher="$ROOT/target/release/$launcher_exe"
+      exit 1
     fi
+    echo "[start] Launcher binary not found ($launcher). Building release..."
+    (cd "$ROOT" && cargo build --release -p arw-launcher)
+  else
+    if [[ $use_dist -eq 1 ]]; then
+      echo "[start] Launcher binary missing in dist bundle ($launcher); falling back to service only." >&2
+      launcher_only=0
+      return 1
+    fi
+    if [[ $no_build -eq 1 ]]; then
+      echo "[start] Launcher binary not found and --no-build specified; falling back to service only." >&2
+      launcher_only=0
+      return 1
+    fi
+    echo "[start] Launcher binary not found ($launcher). Attempting build..."
+    (cd "$ROOT" && cargo build --release -p arw-launcher) || true
   fi
-fi
-
-# Unified server currently runs headless; fall back to service-only when launcher would target legacy UI.
-if [[ $legacy -eq 0 && $service_only -eq 0 && $launcher_only -eq 0 ]]; then
-  echo "[start] Launcher currently targets the legacy service; forcing --service-only for arw-server." >&2
-  service_only=1
-fi
+}
 
 wait_for_health() {
   local base="http://127.0.0.1:$ARW_PORT"
@@ -141,11 +179,13 @@ wait_for_health() {
     attempts=$((attempts+1))
     if command -v curl >/dev/null 2>&1; then
       if curl -fsS "$base/healthz" >/dev/null 2>&1; then
-        echo "[start] Health OK after $attempts checks → $base/healthz"; return 0
+        echo "[start] Health OK after $attempts checks → $base/healthz"
+        return 0
       fi
     elif command -v wget >/dev/null 2>&1; then
       if wget -qO- "$base/healthz" >/dev/null 2>&1; then
-        echo "[start] Health OK after $attempts checks → $base/healthz"; return 0
+        echo "[start] Health OK after $attempts checks → $base/healthz"
+        return 0
       fi
     fi
     sleep 0.5
@@ -153,6 +193,13 @@ wait_for_health() {
   echo "[start] Health not reachable within ${wait_health_timeout_secs}s → $base/healthz" >&2
   return 1
 }
+
+if [[ $launcher_only -eq 0 ]]; then
+  ensure_service
+fi
+if [[ $launcher_only -eq 1 || $service_only -eq 0 ]]; then
+  ensure_launcher || true
+fi
 
 if [[ $service_only -eq 1 ]]; then
   echo "[start] Starting service only on http://127.0.0.1:$ARW_PORT"
@@ -171,7 +218,6 @@ if [[ $service_only -eq 1 ]]; then
   if [[ $wait_health -eq 1 ]]; then
     wait_for_health || true
   fi
-  # Stay in foreground to keep service attached when logs are not redirected
   wait
 else
   if [[ "${ARW_NO_LAUNCHER:-0}" == "1" || "${ARW_NO_TRAY:-0}" == "1" ]]; then
@@ -183,9 +229,8 @@ else
     exec "$0" --service-only "$@"
   fi
   if [[ $launcher_only -eq 0 ]]; then
-    # Hint the launcher to auto-start the service
     export ARW_AUTOSTART=1
   fi
-  echo "[start] Launching launcher $launcher (port $ARW_PORT)"
+  echo "[start] Launching $launcher (port $ARW_PORT)"
   exec "$launcher"
 fi

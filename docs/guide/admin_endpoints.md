@@ -8,7 +8,7 @@ title: Admin Endpoints
 
 The unified `arw-server` binary exposes a single HTTP surface built around the **actions → events → state** triad. Every operation that mutates or inspects the service lives on that surface—there is no `/admin` prefix to keep in sync. New routes are recorded at runtime and streamed into `/about` so that clients can discover the current topology without hard-coding paths.
 
-Updated: 2025-03-08  
+Updated: 2025-09-19
 Type: How-to
 
 - Service: `arw-server` (default bind `127.0.0.1:8091`)
@@ -16,7 +16,7 @@ Type: How-to
 - Public entrypoints: `/healthz`, `/about`, `/spec/*`, `/catalog/index`, `/catalog/health`
 - Supporting surfaces: connectors, config, context, leases, memory, orchestrator, policy, and egress controls (documented below)
 
-Unless noted, examples assume the unified `arw-server` on `http://127.0.0.1:8091`. Use port `8090` when interacting with the legacy `arw-svc` bridge.
+Unless noted, examples assume the unified `arw-server` on `http://127.0.0.1:8091`.
 
 ### Public: /about
 - Path: `GET /about`
@@ -202,7 +202,7 @@ Setup:
 
 ```bash
 export ARW_ADMIN_TOKEN=secret123
-BASE=http://127.0.0.1:8091  # legacy bridge listens on 8090
+BASE=http://127.0.0.1:8091
 AUTH=(-H "Authorization: Bearer $ARW_ADMIN_TOKEN")
 ```
 
@@ -270,6 +270,6 @@ curl -N "${BASE}/events?replay=5"
 - Enable `ARW_EGRESS_LEDGER_ENABLE=1` to persist outbound decisions and audit them via `/state/egress`.
 - Use leases to scope dangerous operations (`POST /leases` → `context:rehydrate:file` capability) and require the lease before invoking filesystem helpers.
 
-## Legacy `arw-svc` surface (deprecated)
+## Legacy bridge (historical)
 
-The classic `arw-svc` bridge still exists for workflows that depend on the legacy debug UI and the historical `/admin/*` namespace. Launch it explicitly with `scripts/start.sh --legacy` on macOS/Linux or `scripts/start.ps1 -Legacy` on Windows. The `/admin` prefix is deprecated; new features ship only on the unified triad surface, and `/about` will continue to advertise every supported endpoint. Keep the bridge isolated and plan migrations toward the `arw-server` routes above.
+The former `arw-svc` bridge has been removed. All `/admin/*` routes now live in the unified `arw-server`; enable `ARW_DEBUG=1` when you need the browser UI surfaces.

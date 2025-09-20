@@ -3,7 +3,7 @@ title: Desktop Launcher (Tauri 2)
 ---
 
 # Desktop Launcher (Tauri 2)
-Updated: 2025-09-16
+Updated: 2025-09-17
 Type: How‑to
 
 The tray-based launcher lives at [apps/arw-launcher/src-tauri](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri). It uses Tauri 2 with the capabilities + permissions model.
@@ -13,11 +13,11 @@ Launch
 # Dev run (hot)
 cargo run -p arw-launcher
 
-# Scripted run (launcher-first; auto-starts legacy service)
-bash scripts/start.sh --legacy --port 8090
+# Scripted run (launcher + unified server)
+bash scripts/start.sh --wait-health
 
 # Headless (service only)
-bash scripts/start.sh --server --service-only --wait-health
+bash scripts/start.sh --service-only --wait-health
 ```
 
 Linux dependencies (Tauri)

@@ -1652,7 +1652,7 @@ async function initDocs(){
   try{
     const r = await fetch(base + '/about');
     const a = await r.json();
-    const port = location.port || '8090';
+    const port = location.port || '8091';
     document.getElementById('port').textContent = port;
     if (a && a.docs_url){
       docsBase = (a.docs_url || '').replace(/\/$/, '');

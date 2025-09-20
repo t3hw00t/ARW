@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="760" height="300" viewBox="0 0 760 300" role="img" aria-labelledby="title desc">
   <title>ARW Architecture Overview</title>
-  <desc>arw-svc provides HTTP and SSE; Debug UI (browser) and CLI consume; Schemas define contracts.</desc>
+  <desc>arw-server provides HTTP and SSE; Debug UI (browser) and CLI consume; Schemas define contracts.</desc>
   <defs>
     <style>
       .box{fill:#ffffff;stroke:#111827;stroke-width:2;rx:10;ry:10}
@@ -14,7 +14,7 @@
     </marker>
   </defs>
   <rect x="40" y="110" width="200" height="80" class="box"/>
-  <text x="140" y="140" text-anchor="middle" class="label">arw-svc</text>
+  <text x="140" y="140" text-anchor="middle" class="label">arw-server</text>
   <text x="140" y="160" text-anchor="middle" class="muted">HTTP + SSE</text>
 
   <rect x="320" y="40" width="200" height="80" class="box"/>

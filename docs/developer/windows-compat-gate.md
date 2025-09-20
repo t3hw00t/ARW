@@ -29,7 +29,7 @@ Auto-audit tools (optional to strict)
 - MSIX Packaging/Validation + PSF: if adopting MSIX, validate and use shims for runtime quirks.
 - MSI ICE validation (if shipping MSI via cargo‑dist): run with Orca/MsiVal2 and keep the report.
 - SignTool verification: ensure all EXEs/MSIs are Authenticode‑signed and verify clean to minimize SmartScreen friction.
-- Application Verifier: run basic heap/handle/LUA checks against `arw-svc.exe` (and UI EXEs).
+- Application Verifier: run basic heap/handle/LUA checks against `arw-server.exe` (and UI EXEs).
 - SUA + Compatibility Administrator (ADK): scan for UAC write/registry issues; apply shims if needed.
 
 Sysinternals (runtime drift)

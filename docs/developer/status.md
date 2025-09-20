@@ -3,6 +3,8 @@ title: Workspace Status
 ---
 
 # Workspace Status
+Updated: 2025-09-18
+Type: Reference
 
 Generated: 2025-09-17 22:44 UTC
 
@@ -17,12 +19,10 @@ Generated: 2025-09-17 22:44 UTC
 - **arw-topics**: 0.1.4 — [crates/arw-topics/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/Cargo.toml)
 - **arw-heuristics**: 0.1.4 — [crates/arw-heuristics/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-heuristics/Cargo.toml)
 - **arw-otel**: 0.1.4 — [crates/arw-otel/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-otel/Cargo.toml)
-- **arw-svc**: 0.1.4 — [apps/arw-svc/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/Cargo.toml)
 - **arw-tauri**: 0.1.4 — [crates/arw-tauri/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-tauri/Cargo.toml)
 
 ## Binaries
 - **arw-cli**: 0.1.4 — [apps/arw-cli/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/arw-cli/Cargo.toml)
-- **arw-svc**: 0.1.4 — [apps/arw-svc/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/Cargo.toml)
 - **arw-server**: 0.1.4 — [apps/arw-server/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/Cargo.toml)
 - **arw-connector**: 0.1.4 — [apps/arw-connector/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/arw-connector/Cargo.toml)
 - **arw-launcher**: 0.1.4 — [apps/arw-launcher/src-tauri/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri/Cargo.toml)

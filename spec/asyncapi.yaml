@@ -1,8 +1,8 @@
 asyncapi: 2.6.0
 info:
-  title: "arw-svc events"
+  title: "arw-server events"
   version: "0.1.0"
-  description: "Normalized dot.case event channels for arw-svc."
+  description: "Normalized dot.case event channels for the unified server."
   license:
     name: "MIT OR Apache-2.0"
   contact:
@@ -154,67 +154,24 @@ components:
             type: string
             enum:
               - started
-              - queued
-              - admitted
               - downloading
-              - resumed
-              - resync
               - degraded
               - canceled
               - complete
-              - cancel-requested
               - no-active-job
-              - cache-mismatch
               - error
           code:
             type: string
             enum:
-              # lifecycle & progress codes
-              - started
-              - queued
-              - admitted
-              - downloading
-              - progress
-              - resumed
-              - resync
-              - degraded
-              - canceled-by-user
-              - complete
-              - cached
-              - already-in-progress
-              - already-in-progress-hash
-              - cache-mismatch
-              - soft-exhausted
-              - cancel-requested
-              - no-active-job
-              # error/guard codes
-              - request-failed
-              - concurrency-closed
-              - downstream-http-status
-              - upstream-changed
-              - resume-no-content-range
-              - resume-http-status
-              - resume-failed
-              - resync-failed
-              - quota-exceeded
-              - size-limit
-              - idle-timeout
-              - hard-exhausted
-              - io-read
-              - io-write
-              - flush-failed
-              - mkdir-failed
-              - open-failed
-              - create-failed
-              - verify-open-failed
-              - verify-read-failed
-              - checksum-mismatch
-              - size-mismatch
-              - finalize-failed
-              - admission-denied
-              - disk-insufficient
-              - size-limit-stream
-              - disk-insufficient-stream
+              - soft-budget
+              - hard-budget
+              - request-timeout
+              - http
+              - io
+              - size_limit
+              - quota_exceeded
+              - disk_insufficient
+              - sha256_mismatch
           error: { type: string }
           progress: { type: integer }
           downloaded: { type: integer }

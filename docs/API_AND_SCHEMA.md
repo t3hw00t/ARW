@@ -5,7 +5,7 @@ title: API and Schema
 # API and Schema
 { .topic-trio style="--exp:.9; --complex:.6; --complicated:.5" data-exp=".9" data-complex=".6" data-complicated=".5" }
 
-Updated: 2025-09-16
+Updated: 2025-09-19
 Type: Reference
 
 See also: [Glossary](GLOSSARY.md), [Configuration](CONFIGURATION.md)
@@ -155,39 +155,30 @@ Validate input → policy check → invoke → emit events → return.
 - `GET /catalog/index`
 - `GET /catalog/health`
 
-## Legacy Admin Surface (`arw-svc`)
+## Admin Surface (`/admin/*`)
 
-To reach the historical `/admin/*` APIs, launch the bridge in legacy mode:
+The unified `arw-server` exposes the historical admin APIs directly. Set
+`ARW_ADMIN_TOKEN` (or use the `H` helper above) to send the `X-ARW-Admin`
+header when calling these endpoints.
 
-```bash
-scripts/start.sh --legacy
-# Windows
-scripts/start.ps1 --legacy
-```
-
-This boots the legacy `arw-svc` alongside the unified server and serves admin routes on the same `$BASE`. Use the `H` helper above to add `X-ARW-Admin` automatically.
-
-!!! note
-    `/admin/introspect/*` endpoints live only on `arw-svc`. They respond when the bridge runs with `--legacy` and return `404` otherwise.
-
-Legacy probes
+Admin probes
 ```bash
 H "$BASE/admin/introspect/tools" | jq '.[0:5]'
 H "$BASE/admin/introspect/schemas/memory.probe@1.0.0" | jq
 ```
 
-Legacy events (SSE)
+Admin event stream (SSE)
 ```bash
 curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?replay=10"
 ```
 
-Legacy HTTP surface
+Key admin endpoints
 - `GET /admin/introspect/tools`
 - `GET /admin/introspect/schemas/{tool_id}`
 - `GET /admin/probe?task_id=...&step=...`
 - `SSE /admin/events`
 
-### Models Admin Endpoints (legacy)
+### Models Admin Endpoints
 
 See the Admin Endpoints guide for details and examples. Summary:
 
@@ -198,7 +189,7 @@ See the Admin Endpoints guide for details and examples. Summary:
 - `GET  /admin/state/models_hashes` — list installed model hashes and sizes.
 - `GET  /admin/state/models_metrics` — Lightweight metrics `{ ewma_mbps, started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total }`.
 
-Legacy events (AsyncAPI)
+Admin events (AsyncAPI)
 - `models.download.progress`: standardized progress/errors with optional `budget` and `disk`.
 - `models.manifest.written`, `models.cas.gc`, `models.changed`, `models.refreshed`.
 - Egress: `egress.preview`, `egress.ledger.appended`.

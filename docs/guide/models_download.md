@@ -6,7 +6,7 @@ title: Models Download (HTTP)
 
 ARW provides HTTP endpoints (admin‑gated) to manage local models with streaming downloads, live progress via SSE, safe cancel, and mandatory SHA‑256 verification. HTTP Range resume will return in an upcoming update.
 
-Updated: 2025-09-17
+Updated: 2025-09-19
 Type: How‑to
 
 See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*).
@@ -92,7 +92,7 @@ Schema notes:
 
 Minimal SSE consumer (bash)
 ```bash
-BASE=http://127.0.0.1:8091  # use 8090 for the legacy bridge
+BASE=http://127.0.0.1:8091
 curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?prefix=models.download.progress&replay=5" \
  | jq -rc 'if .id then {id:.id,status:(.status//""),code:(.code//""),bytes:(.bytes//null),cached:(.cached//null)} else . end'
 ```
@@ -130,7 +130,7 @@ The downloader maintains a lightweight throughput EWMA used for admission checks
 Start a download (with checksum):
 
 ```bash
-BASE=http://127.0.0.1:8091  # use 8090 for the legacy bridge
+BASE=http://127.0.0.1:8091
 curl -sS -X POST "$BASE/admin/models/download" \
   -H 'Content-Type: application/json' \
   -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
@@ -152,7 +152,10 @@ curl -sS -X POST "$BASE/admin/models/download/cancel" \
 - Concurrency: set `ARW_MODELS_MAX_CONC` (default 2) or `ARW_MODELS_MAX_CONC_HARD` to limit simultaneous downloads. When all permits are taken the caller waits for a free slot.
 - Metrics: counters (`started`, `queued`, `admitted`, `canceled`, `completed`, `completed_cached`, `errors`, `bytes_total`) and throughput EWMA are exposed at `/admin/state/models_metrics` and streamed via read‑model patches (`id: models_metrics`).
 - Checksum: `sha256` is mandatory and must be a 64‑char hex string; invalid values are rejected up front.
-- Legacy features such as budgets, disk-reserve enforcement, HTTP Range resume, and quota preflight are still tracked in the backlog and will return once the remaining ports land.
+- Budgets and disk-reserve enforcement now run in the unified server so long downloads surface `models.download.progress` events with optional `budget`/`disk` payloads (enable via `ARW_DL_PROGRESS_INCLUDE_*`).
+- When elapsed time crosses `ARW_BUDGET_SOFT_DEGRADE_PCT` of the soft budget the server emits a one-time `status:"degraded"` progress event (`code:"soft-budget"`) before the soft limit is breached.
+- When elapsed time reaches `ARW_BUDGET_DOWNLOAD_HARD_MS` the server cancels the transfer and emits an error progress event with `code:"hard-budget"`.
+- HTTP Range resume and quota preflight remain tracked for a future slice.
 
 ### Manifest
 

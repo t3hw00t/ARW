@@ -7,8 +7,7 @@ Shared helper crate for ARW Tauri apps. Provides:
   - `open_debug_ui(port?)`
   - `start_service(port?)`
   - `stop_service(port?)`
-- Utility to locate the `arw-svc` binary in packaged or dev layouts.
+- Utility to locate the `arw-server` binary in packaged or dev layouts.
 
 Used by `apps/arw-launcher` and future Tauri companion apps (Debug UI,
 Model Manager, Connection Manager).
-

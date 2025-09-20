@@ -7,7 +7,7 @@ set -euo pipefail
 ROOT_DIR=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT_DIR"
 
-PORT=${ARW_PORT:-8090}
+PORT=${ARW_PORT:-8091}
 ISSUER=${ISSUER:-local-admin}
 CAP_JSON=${CAP_JSON:-/tmp/arw-capsule.json}
 

@@ -64,7 +64,7 @@ fn stage_external_bins(manifest_dir: &Path) -> Result<(), Box<dyn Error>> {
 
     let mut missing: Vec<String> = Vec::new();
 
-    // Required binaries: unified server + CLI. Legacy svc is optional fallback.
+    // Required binaries: unified server + CLI.
     for bin in ["arw-server", "arw-cli"] {
         let file_name = format!("{}{}", bin, ext);
         let Some(source) = locate_binary(&target_dir, &target_triple, &profile, &file_name) else {
@@ -82,22 +82,6 @@ fn stage_external_bins(manifest_dir: &Path) -> Result<(), Box<dyn Error>> {
 
         for variant in platform_variants(&file_name, &target_triple) {
             copy_file(&source, &bin_dir.join(variant))?;
-        }
-    }
-
-    // Optionally stage legacy bridge if present
-    {
-        let bin = "arw-svc";
-        let file_name = format!("{}{}", bin, ext);
-        if let Some(source) = locate_binary(&target_dir, &target_triple, &profile, &file_name) {
-            copy_file(&source, &bin_dir.join(&file_name))?;
-            for variant in platform_variants(&file_name, &target_triple) {
-                copy_file(&source, &bin_dir.join(variant))?;
-            }
-        } else {
-            println!(
-                "cargo:warning=optional legacy binary missing: {file_name}; build `cargo build -p {bin}` to include it (fallback only)"
-            );
         }
     }
 

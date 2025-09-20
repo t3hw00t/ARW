@@ -3,7 +3,7 @@ title: Compatibility Notes
 ---
 
 # Compatibility Notes
-Updated: 2025-09-16
+Updated: 2025-09-17
 Type: How‑to
 
 This page summarizes high‑level notes and known issues when running ARW on
@@ -43,12 +43,6 @@ problems.
     (`ghcr.io/<owner>/arw-server`). It binds to port 8091; publish it with a
     command such as `docker run -p 8091:8091 ghcr.io/<owner>/arw-server:latest`
     (set `ARW_BIND=0.0.0.0` or `ARW_PORT=8091` as needed for your environment).
-  - Legacy UI bridge:
-    - The compatibility `arw-svc` image (`ghcr.io/<owner>/arw-svc`) remains
-      available for the classic debug UI/launcher stack. It binds to 8090 and is
-      maintained for legacy workflows only; see the [Docker guide’s legacy UI
-      bridge section](./docker.md#local-build-run-legacy-ui-bridge) for usage
-      details.
   - Desktop Launcher is not intended for headless containers; use a host
     desktop environment or run the Launcher outside the container.
   - GPU access in containers requires host support and appropriate device
@@ -119,7 +113,7 @@ ARW collects a best‑effort hardware snapshot for display in the Debug UI and f
 
 - GPUs
   - Linux: probes `/sys/class/drm` for discrete adapters and, when available, enriches vendor‑specific hints (e.g., NVIDIA model, AMD VRAM totals). If `ARW_ROCM_SMI=1`, ARW attempts an ROCm SMI JSON probe for metrics.
-  - Cross‑platform: when built with the `gpu_wgpu` feature (default in `arw-svc`), ARW enumerates adapters via `wgpu` across Vulkan/Metal/DX12/GL to report name/vendor/device/backend/type.
+  - Cross-platform: when built with the `gpu_wgpu` feature, ARW enumerates adapters via `wgpu` across Vulkan/Metal/DX12/GL to report name/vendor/device/backend/type.
   - Windows/macOS: the `wgpu` probe provides a portable fallback. Additional platform probes may appear over time.
 
 - NPUs

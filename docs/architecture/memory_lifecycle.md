@@ -4,7 +4,7 @@ title: Memory Lifecycle
 
 # Memory Lifecycle
 
-Updated: 2025-01-14
+Updated: 2025-09-19
 Type: Explanation
 
 Memory is a first-class surface in the unified server: the kernel (via `arw-memory-core`) stores layered memories, the `memory.*` actions manage them, and `/state/memory` patches plus events keep UIs and tools in sync. This page folds in the legacy `Memory & Training` content so we do not lose important details as the overlay service replaces the older `/memory/*` REST endpoints.
@@ -61,12 +61,12 @@ Run `python3 scripts/gen_feature_catalog.py` after schema updates to keep the in
 - Legacy REST (still supported for now): `/memory/put`, `/memory/search`, `/memory/search_embed`, `/state/memory/select`, `/memory/link`, `/memory/select_coherent`, `/state/memory/explain_coherent` – these wrap the action handlers and will be retired in the Phase 3 window.
 - `/state/memory` SSE view exposes the latest items, expirations, and packed context previews as JSON Patch deltas. Legacy `/state/memory_*` routes redirect here.
 - `/context/assemble` and `/context/rehydrate` consume `memory.pack` internally and keep their streaming contract intact.
-- `/training/*` endpoints (legacy today) remain in `arw-svc` until the training executor ports to the unified server. Episodes still capture the resulting capsules so nothing is lost.
+- `/training/*` endpoints are being ported to the unified server; until they land, the executor remains internal and episodes capture resulting capsules.
 
 ## Interplay with Hardware & Governor
 The governor publishes `GovernorChanged` events that memory planners listen to (for example, reducing expansion depth on low-power profiles). Hardware probes inform offload choices for embedding search and vector workloads.
 
 ## Legacy Coverage
-`memory.probe`, `feedback.evaluate`, and `feedback.apply` tooling is still packaged with `arw-svc`. The unified server exposes equivalent kernels and events; as soon as the new sidecar ships we will retire the legacy UI without losing probes or training flows.
+`memory.probe`, `feedback.evaluate`, and `feedback.apply` tooling now run on the unified server (tool IDs match previous bridge behaviour). The new sidecar will surface these flows without the legacy UI.
 
 See also: Context Working Set, Data Governance, Context Recipes, Training Park.

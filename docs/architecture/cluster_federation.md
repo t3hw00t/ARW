@@ -4,7 +4,7 @@ title: Federated Clustering
 
 # Federated Clustering
 
-Updated: 2025-09-17
+Updated: 2025-09-19
 Type: Explanation
 
 Clustering, live sharing, pooled compute, and optional revenue sharing let ARW grow beyond a single machine without losing the solo fast path. This page now merges the legacy “Clustering” and “Hierarchy” drafts so the active plan is tracked in one place.
@@ -74,18 +74,17 @@ Contribution meters track accepted work per node (token usage, GPU-seconds, tool
 - Experiments annotate results by execution target (local vs specific remote).
 - Model ads include `{count, preview_hashes[]}` so peers can request CAS blobs via gated admin routes.
 
-## Legacy vs Unified Coverage
-| Capability | Legacy `arw-svc` | Unified `arw-server` status |
-| --- | --- | --- |
-| `/hierarchy/role`, `/hierarchy/state` | yes | yes (HTTP, experimental) |
-| `/hierarchy/hello\|offer\|accept` | yes | yes (HTTP, experimental) |
-| `/tasks/enqueue` debug queue | yes | replaced by `/actions` + worker lanes |
-| Local bus ↔ NATS aggregator | yes | yes (`arw-core/nats` feature) |
-| Optional gRPC control plane | yes (`--features grpc`) | not ported yet; HTTP remains primary |
-| Worker ledger & contribution meter | partial (events only) | planned; ledger schema lives in kernel |
-| Live guest session routing | legacy UI only | porting to shared sidecar |
+## Unified Coverage
+| Capability | Unified `arw-server` status |
+| --- | --- |
+| `/hierarchy/role`, `/hierarchy/state` | yes (HTTP, experimental) |
+| `/hierarchy/hello\|offer\|accept` | yes (HTTP, experimental) |
+| `/actions` queue (`/triad`) | yes; replaces legacy debug queue |
+| Local bus ↔ NATS aggregator | yes (`arw-core/nats` feature) |
+| gRPC control plane | planned (track in Roadmap) |
+| Worker ledger & contribution meter | planned; ledger schema lives in kernel |
+| Live guest session routing | porting to shared sidecar |
 
-Use `arw-svc` only when you need the legacy UI during the restructure; the unified server already hosts the kernel, CAS, leases, policy engines, and event journal.
 
 ## MVP Path (Solo-Friendly)
 1. Remote runner (one extra box) registers as Worker, accepts jobs, streams back results. Policies enforced on Home.

@@ -327,8 +327,7 @@ function Force-Stop {
     } catch { Warn 'Failed to stop PID from file' }
   } else {
     Stop-Process -Name 'arw-server' -Force -ErrorAction SilentlyContinue
-    Stop-Process -Name 'arw-svc' -Force -ErrorAction SilentlyContinue
-    Warn 'PID file missing; attempted Stop-Process arw-server/arw-svc'
+    Warn 'PID file missing; attempted Stop-Process arw-server'
   }
   # Also stop optional companion processes
   try { Stop-Process -Name 'arw-launcher' -Force -ErrorAction SilentlyContinue } catch {}
@@ -533,7 +532,7 @@ function Session-Summary {
 
 function Stop-All {
   if ($script:GlobalDryRun) {
-    Dry 'Would force-stop arw-server (and legacy arw-svc), arw-launcher, arw-connector'
+    Dry 'Would force-stop arw-server, arw-launcher, arw-connector'
     Dry 'Would stop Caddy (and remove pid file)'
     Dry 'Would stop nats-server'
   } else {
@@ -653,7 +652,7 @@ function Doctor {
   $mk = Get-Command mkdocs -ErrorAction SilentlyContinue
   if ($mk) { Info (mkdocs --version) } else { Warn 'mkdocs not found (docs optional)' }
   $server = Join-Path $root 'target\release\arw-server.exe'; if (Test-Path $server) { Info ("arw-server: " + $server) } else { Warn 'arw-server not built' }
-  $legacySvc = Join-Path $root 'target\release\arw-svc.exe'; if (Test-Path $legacySvc) { Info ("arw-svc (legacy bridge): " + $legacySvc) } else { Info 'arw-svc (legacy bridge) not built (optional)' }
+  $svcPath = Join-Path $root 'target\release\arw-server.exe'; if (Test-Path $svcPath) { Info ("arw-server: " + $svcPath) } else { Warn 'arw-server.exe not built yet' }
   $launcher = Join-Path $root 'target\release\arw-launcher.exe'; if (Test-Path $launcher) { Info ("arw-launcher: " + $launcher) } else { Warn 'launcher not built (optional)' }
   try { $ok = (Test-NetConnection -ComputerName 127.0.0.1 -Port 4222 -WarningAction SilentlyContinue).TcpTestSucceeded; if ($ok) { Info 'NATS reachable on 127.0.0.1:4222' } else { Warn 'NATS not reachable' } } catch { }
   Read-Host 'Continue' | Out-Null

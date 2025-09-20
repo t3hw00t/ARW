@@ -4,10 +4,10 @@ title: Deployment & Isolation
 
 # Deployment & Isolation
 
-Updated: 2025-09-17
+Updated: 2025-09-19
 Type: How‑to
 
-Run the unified `arw-server` in the environment that fits your workflow while keeping state portable and scoped. These recipes replace the legacy `arw-svc` guidance and focus on the new `/actions` -> `/events` -> `/state/*` stack.
+Run the unified `arw-server` in the environment that fits your workflow while keeping state portable and scoped. These recipes focus on the `/actions` → `/events` → `/state/*` stack.
 
 ## Goals
 - Keep installs per-user and easy to remove.
@@ -68,7 +68,7 @@ Overrides:
 ## Tauri Launcher (Legacy bridge)
 - Launcher bundles continue to target the legacy debug UI until the new surfaces land.
 - Linux builds need `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `libjavascriptcoregtk-4.1-dev`, and `libsoup-3.0-dev` (or the Nix shell via `nix develop`).
-- Use `just tauri-launcher-run -- --legacy` if you still depend on the UI during the transition.
+- Use `just tauri-launcher-run -- --open` to launch the UI with `/debug` enabled during development.
 
 ## Containers
 
@@ -89,7 +89,7 @@ docker build -f apps/arw-server/Dockerfile -t arw-server:dev .
 docker run --rm -p 8091:8091 arw-server:dev
 ```
 
-Legacy `arw-svc` images remain available as a bridge for the debug UI, but new deployments should target `arw-server`.
+Unified images replace the legacy bridge; new deployments should target `arw-server`.
 
 ### Docker Compose
 
@@ -115,7 +115,7 @@ Key values:
 - `env.ARW_BIND=0.0.0.0` and `env.ARW_ADMIN_TOKEN` for any externally reachable deployment
 - `env.ARW_EGRESS_LEDGER_ENABLE=1` and `env.ARW_DNS_GUARD_ENABLE=1` to enforce outbound policy in cluster environments
 
-To keep a legacy environment alive during migration, deploy `deploy/charts/arw-svc` side-by-side and point dependent clients at it explicitly.
+Legacy charts have been removed; use `deploy/charts/arw-server` for Kubernetes deployments.
 
 ## Rolling Access Logs
 

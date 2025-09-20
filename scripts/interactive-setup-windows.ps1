@@ -68,7 +68,7 @@ Write-Host "  • Memory:    $([Math]::Round($os.TotalVisibleMemorySize/1MB,1)) 
 if ($disk) { Write-Host "  • Disk:      $([Math]::Round($disk.Free/1GB,1)) GB free" }
 if ($gpu) { Write-Host "  • GPU:       $($gpu.Name)" }
 
-$Port = $env:ARW_PORT; if (-not $Port) { $Port = 8090 }
+$Port = $env:ARW_PORT; if (-not $Port) { $Port = 8091 }
 $DocsUrl = $env:ARW_DOCS_URL
 $AdminToken = $env:ARW_ADMIN_TOKEN
 $RunTests = $false

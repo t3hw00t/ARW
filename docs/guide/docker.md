@@ -4,15 +4,14 @@ title: Docker
 
 # Docker
 
-Updated: 2025-09-16
+Updated: 2025-09-18
 Type: How‑to
 
-Run the unified ARW server in a container. This guide covers local build/run, Docker Compose, and pulling prebuilt images from GHCR. The legacy `arw-svc` image remains available for the debug UI while the restructure completes.
+Run the unified ARW server in a container. This guide covers local build/run, Docker Compose, and pulling prebuilt images from GHCR.
 
 ## Images
 
 - Registry (unified server): `ghcr.io/<owner>/arw-server`
-- Legacy image (UI bridge): `ghcr.io/<owner>/arw-svc`
 - Tags: `main`, `vX.Y.Z`, `latest` (on release), and `sha-<shortsha>`
 
 ## Local Build & Run (Unified Server)
@@ -33,23 +32,6 @@ curl -sS http://127.0.0.1:8091/healthz
 curl -sS http://127.0.0.1:8091/about | jq
 ```
 
-## Local Build & Run (Legacy UI Bridge)
-
-Need the classic debug UI or launcher bundle? Build the legacy image instead:
-
-```bash
-# Build legacy service
-docker build -f apps/arw-svc/Dockerfile -t arw-svc:dev .
-
-# Run legacy stack (UI on 8090)
-docker run --rm -p 8090:8090 \
-  -e ARW_BIND=0.0.0.0 \
-  -e ARW_PORT=8090 \
-  -e ARW_DEBUG=1 \
-  -e ARW_ADMIN_TOKEN=dev-admin \
-  arw-svc:dev
-```
-
 ## Docker Compose
 
 ```bash
@@ -61,8 +43,6 @@ curl -sS http://127.0.0.1:8091/healthz
 ```
 
 The compose file defaults to the unified server on port 8091 and binds to `127.0.0.1` by default. To expose it externally, override `ARW_BIND=0.0.0.0` and set a strong `ARW_ADMIN_TOKEN`. The server refuses to start on a public bind without a token to prevent accidental exposure.
-
-To run the legacy image, override `services.arw-server.build.dockerfile` to `apps/arw-svc/Dockerfile` and adjust the port/env mapping.
 
 ## Rolling Access Logs
 
@@ -85,7 +65,7 @@ Optional fields: add `ARW_ACCESS_UA=1 ARW_ACCESS_UA_HASH=1 ARW_ACCESS_REF=1`.
 Set in `.env` (see `.env.example`):
 - `ARW_PORT=8091`
 - `ARW_BIND=0.0.0.0` (or `127.0.0.1` when behind a reverse proxy)
-- `ARW_DEBUG=0` (set `1` only for legacy troubleshooting)
+- `ARW_DEBUG=0` (set `1` only when you intentionally expose the debug UI)
 - `ARW_ADMIN_TOKEN=<your-secret>`
 
 ## Pull from GHCR
@@ -103,7 +83,6 @@ docker run --rm -p 8091:8091 \
 
 Legacy image:
 ```bash
-IMG=ghcr.io/<owner>/arw-svc:latest
 ```
 
 ## Security Notes

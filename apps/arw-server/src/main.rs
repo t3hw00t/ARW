@@ -49,6 +49,7 @@ mod paths {
     pub const SPEC_MCP: &str = "/spec/mcp-tools.json";
     pub const SPEC_SCHEMA: &str = "/spec/schemas/:file";
     pub const SPEC_INDEX: &str = "/spec/index.json";
+    pub const ADMIN_DEBUG: &str = "/admin/debug";
     pub const ADMIN_EVENTS: &str = "/admin/events";
     pub const ADMIN_STATE_ROUTE_STATS: &str = "/admin/state/route_stats";
     pub const ADMIN_MODELS: &str = "/admin/models";
@@ -103,6 +104,12 @@ mod paths {
     pub const ADMIN_PROJECTS_FILE: &str = "/admin/projects/file";
     pub const ADMIN_PROJECTS_PATCH: &str = "/admin/projects/patch";
     pub const ADMIN_PROJECTS_IMPORT: &str = "/admin/projects/import";
+    pub const ADMIN_UI_MODELS: &str = "/admin/ui/models";
+    pub const ADMIN_UI_AGENTS: &str = "/admin/ui/agents";
+    pub const ADMIN_UI_PROJECTS: &str = "/admin/ui/projects";
+    pub const ADMIN_UI_FLOWS: &str = "/admin/ui/flows";
+    pub const ADMIN_UI_TOKENS: &str = "/admin/ui/assets/tokens.css";
+    pub const ADMIN_UI_KIT: &str = "/admin/ui/assets/ui-kit.css";
     pub const CATALOG_INDEX: &str = "/catalog/index";
     pub const CATALOG_HEALTH: &str = "/catalog/health";
     pub const ADMIN_RPU_TRUST: &str = "/admin/rpu/trust";
@@ -198,6 +205,7 @@ mod api_spec;
 mod api_staging;
 mod api_state;
 mod api_tools;
+mod api_ui;
 mod cluster;
 pub mod config;
 mod context_loop;
@@ -506,6 +514,62 @@ async fn main() {
         paths::ADMIN_EVENTS,
         api_events::events_sse,
         "legacy"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_DEBUG,
+        api_ui::debug_ui,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_UI_MODELS,
+        api_ui::models_ui,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_UI_AGENTS,
+        api_ui::agents_ui,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_UI_PROJECTS,
+        api_ui::projects_ui,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_UI_FLOWS,
+        api_ui::flows_ui,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_UI_TOKENS,
+        api_ui::ui_tokens_css,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_UI_KIT,
+        api_ui::ui_kit_css,
+        "beta"
     );
     app = route_get_tag!(
         app,

@@ -6,7 +6,7 @@ title: Style & Harmony
 
 We aim for a calm, precise experience. Keep visuals understated; let high-impact interactions shine.
 
-Updated: 2025-09-16
+Updated: 2025-09-17
 Type: Reference
 
 Guidelines
@@ -25,7 +25,7 @@ Guidelines
 - Language: US English (American). Examples: canceled, color, disk.
 - Tone: calm and helpful; avoid blame. Offer a next step or link.
 - Errors: one‑line summary + cause + suggestion. Prefer “couldn’t connect (timeout)” over vague “failed”.
-- Events: `status` is human‑friendly (started, downloading, degraded, complete, canceled). `code` is a stable machine hint (e.g., `admission-denied`, `hard-exhausted`, `disk-insufficient`, `canceled-by-user`). Add codes additively; don’t change existing meanings.
+- Events: `status` is human‑friendly (started, downloading, degraded, complete, canceled). `code` is a stable machine hint (e.g., `admission-denied`, `hard-budget`, `disk_insufficient`, `canceled-by-user`). Add codes additively; don’t change existing meanings.
 - Consistency: reuse nouns/verbs across UI, events, and APIs (download, resume, cancel).
 - Brevity: keep messages short; include context only when it changes a decision.
 

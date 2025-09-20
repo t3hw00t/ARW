@@ -11,8 +11,7 @@ param(
   [switch]$WaitHealth,
   [int]$WaitHealthTimeoutSecs = 30,
   [switch]$DryRun,
-  [switch]$HideWindow,
-  [switch]$Legacy
+  [switch]$HideWindow
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -34,7 +33,6 @@ function Info($m){ Write-Host "[start] $m" -ForegroundColor DarkCyan }
 function Dry($m){ if ($DryRun) { Write-Host "[dryrun] $m" -ForegroundColor Yellow } }
 
 $portWasSpecified = $PSBoundParameters.ContainsKey('Port')
-if ($Legacy -and -not $portWasSpecified) { $Port = 8090 }
 
 if ($Debug) { if (-not $DryRun) { $env:ARW_DEBUG = '1' } else { Dry 'Would set ARW_DEBUG=1' } }
 if ($DocsUrl) { if (-not $DryRun) { $env:ARW_DOCS_URL = $DocsUrl } else { Dry "Would set ARW_DOCS_URL=$DocsUrl" } }
@@ -50,7 +48,7 @@ if ($HideWindow) {
 }
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$exe = if ($Legacy) { 'arw-svc.exe' } else { 'arw-server.exe' }
+$exe = 'arw-server.exe'
 $launcherExe = 'arw-launcher.exe'
 $svc = if ($UseDist) {
   $zipBase = Get-ChildItem -Path (Join-Path $root 'dist') -Filter 'arw-*-windows-*' -Directory -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending | Select-Object -First 1
@@ -62,8 +60,7 @@ $launcher = if ($UseDist) {
 
 if (-not $svc -or -not (Test-Path $svc)) {
   if ($DryRun) {
-    $name = if ($Legacy) { 'arw-svc' } else { 'arw-server' }
-    Write-Warning "Service binary not found ($svc). [dryrun] would build release ($name)."
+    Write-Warning "Service binary not found ($svc). [dryrun] would build release (arw-server)."
     $svc = Join-Path (Join-Path $root 'target\release') $exe
   } elseif ($NoBuild) {
     Write-Error "Service binary not found and -NoBuild specified. Build first or remove -NoBuild."
@@ -73,14 +70,9 @@ if (-not $svc -or -not (Test-Path $svc)) {
     try {
       Push-Location $root
       if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { throw "Rust 'cargo' not found in PATH. Install Rust from https://rustup.rs" }
-      if ($Legacy) {
-        cargo build --release -p arw-svc
-      } else {
-        cargo build --release -p arw-server
-      }
+      cargo build --release -p arw-server
     } catch {
-      $name = if ($Legacy) { 'arw-svc' } else { 'arw-server' }
-      Write-Error ("Failed to build $name: " + $_.Exception.Message)
+      Write-Error ("Failed to build arw-server: " + $_.Exception.Message)
       Pop-Location
       exit 1
     } finally {
@@ -114,10 +106,6 @@ if (-not $launcher -or -not (Test-Path $launcher)) {
 # Respect ARW_NO_LAUNCHER/ARW_NO_TRAY=1 for CLI-only environments
 $skipLauncher = $false
 if (($env:ARW_NO_LAUNCHER -and $env:ARW_NO_LAUNCHER -eq '1') -or ($env:ARW_NO_TRAY -and $env:ARW_NO_TRAY -eq '1')) { $skipLauncher = $true }
-if (-not $Legacy) {
-  $skipLauncher = $true
-  Info 'Unified server runs headless; launcher requires -Legacy to target the old UI.'
-}
 
 function Ensure-ParentDir($path) {
   try {

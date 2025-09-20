@@ -11,7 +11,7 @@ import hashlib
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SPEC = os.path.join(REPO, 'spec', 'openapi.yaml')
-DESC = os.path.join(REPO, 'interfaces', 'http', 'arw-svc', 'descriptor.yaml')
+DESC = os.path.join(REPO, 'interfaces', 'http', 'arw-server', 'descriptor.yaml')
 OUT = os.path.join(REPO, 'docs', 'reference', 'deprecations.md')
 
 

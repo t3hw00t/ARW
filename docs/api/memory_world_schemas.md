@@ -4,7 +4,7 @@ title: Memory & World Schemas
 
 # Memory & World Schemas
 
-Updated: 2025-09-16
+Updated: 2025-09-19
 Type: Reference
 
 Status: Beta

@@ -3,7 +3,7 @@ title: Windows Install & Launcher
 ---
 
 # Windows Install & Launcher
-Updated: 2025-09-16
+Updated: 2025-09-17
 Type: How‑to
 
 This guide covers running ARW on Windows with the desktop launcher and the headless service. It also notes the current installer status and the path to a signed MSI.
@@ -38,7 +38,7 @@ powershell -ExecutionPolicy Bypass -File scripts\package.ps1
 powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -UseDist -WaitHealth
 ```
 This creates `dist/arw-<version>-windows-<arch>.zip` with:
-- `bin/` — `arw-svc.exe`, `arw-cli.exe`, optional `arw-launcher.exe`
+- `bin/` — `arw-server.exe`, `arw-cli.exe`, optional `arw-launcher.exe`
 - `docs/` and configs
 
 Launcher details
@@ -51,7 +51,7 @@ Installer status
 - Launcher MSIs: CI builds Windows MSIs for x64 (primary) and ARM64 (best‑effort). Stable filenames on Releases:
   - `arw-launcher-x64.msi`
   - `arw-launcher-arm64.msi` (when built)
-  Each MSI includes `arw-svc.exe` and `arw-cli.exe` so the launcher can start the service out‑of‑the‑box.
+  Each MSI includes `arw-server.exe` and `arw-cli.exe` so the launcher can start the service out-of-the-box.
 - Signing: Code signing is supported in CI when a certificate is provided via secrets; unsigned packages still work but may show SmartScreen prompts.
 
 Winget (optional)
@@ -62,6 +62,6 @@ Uninstall
 - Developer build: remove `target/` outputs; no registry/service entries are created.
 
 Troubleshooting
-- Health: `http://127.0.0.1:8091/healthz` (legacy bridge listens on 8090)
-- Logs: `.arw\logs\arw-svc.out.log`
+- Health: `http://127.0.0.1:8091/healthz`
+- Logs: `.arw\logs\arw-server.out.log`
 - Interactive start menu: `scripts\interactive-start-windows.ps1`

@@ -126,8 +126,8 @@ struct CompletionsArgs {
 
 #[derive(Args)]
 struct PingArgs {
-    /// Base URL of the service (e.g., http://127.0.0.1:8090)
-    #[arg(long, default_value = "http://127.0.0.1:8090")]
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
     base: String,
     /// Admin token; falls back to ARW_ADMIN_TOKEN env
     #[arg(long)]
@@ -146,7 +146,7 @@ enum SpecCmd {
 #[derive(Args)]
 struct SpecHealthArgs {
     /// Base URL of the service
-    #[arg(long, default_value = "http://127.0.0.1:8090")]
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
     base: String,
     /// Pretty-print JSON
     #[arg(long)]

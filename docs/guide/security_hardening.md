@@ -7,7 +7,7 @@ title: Security Hardening
 
 This guide summarizes recommended steps to run ARW more securely beyond the local‑dev defaults.
 
-Updated: 2025-09-17
+Updated: 2025-09-19
 Type: How‑to
 
 Baseline
@@ -35,7 +35,7 @@ Capsules & Trust (RPU)
 - Env override: `ARW_TRUST_CAPSULES=/path/to/trust_capsules.json`.
 
 Reverse Proxy
-- Terminate TLS and IP‑restrict at your proxy (Nginx, Caddy, Traefik) and forward to `127.0.0.1:8091` (unified server). Use port `8090` only when running the legacy `arw-svc` bridge for the classic debug UI.
+- Terminate TLS and IP-restrict at your proxy (Nginx, Caddy, Traefik) and forward to `127.0.0.1:8091` (unified server). Enable `ARW_DEBUG=1` only when you explicitly need `/debug`.
 - Set `ARW_DOCS_URL=https://your-domain/docs` so the debug UI can link to your public docs.
 - Keep CORS strict; only enable `ARW_CORS_ANY=1` in development.
 
@@ -152,7 +152,7 @@ Checklist
   ARW_ACCESS_LOG_DIR=/var/log/arw \
   ARW_ACCESS_LOG_PREFIX=http-access \
   ARW_ACCESS_LOG_ROTATION=daily \
-  arw-svc
+  arw-server
   ```
 
 ## Proxy Awareness

@@ -58,9 +58,9 @@ if ($MaxPerf) {
   Info 'Opt-in: maxperf profile enabled'
   # Override global jobs=1 to allow parallel builds for maxperf
   try { $env:CARGO_BUILD_JOBS = [Environment]::ProcessorCount } catch {}
-  & cargo build --profile maxperf --locked -p arw-svc -p arw-cli
+  & cargo build --profile maxperf --locked -p arw-server -p arw-cli
 } else {
-  & cargo build --release --locked -p arw-svc -p arw-cli
+  & cargo build --release --locked -p arw-server -p arw-cli
 }
 
 # Try to build the optional Desktop Launcher (Tauri) best-effort.

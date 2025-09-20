@@ -21,6 +21,7 @@ arw-policy = { path = "../../crates/arw-policy", version = "0.1.4" }
 arw-wasi = { path = "../../crates/arw-wasi", version = "0.1.4" }
 arw-otel = { path = "../../crates/arw-otel", version = "0.1.4" }
 arw-core = { path = "../../crates/arw-core", version = "0.1.4" }
+arw-macros = { path = "../../crates/arw-macros", version = "0.1.4" }
 arw-topics = { path = "../../crates/arw-topics", version = "0.1.4" }
 arw-protocol = { path = "../../crates/arw-protocol", version = "0.1.4" }
 arw-heuristics = { path = "../../crates/arw-heuristics", version = "0.1.4" }
@@ -34,6 +35,7 @@ futures-util = { workspace = true }
 sha2 = "0.10"
 hex = "0.4"
 jsonschema = { workspace = true }
+inventory = { workspace = true }
 schemars = { workspace = true }
 utoipa = { workspace = true }
 tower = { version = "0.4", features = ["limit","util"] }

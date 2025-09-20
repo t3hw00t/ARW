@@ -225,8 +225,8 @@ force_stop() {
       ic_warn "No running PID found in $PID_FILE"
     fi
   else
-    pkill -f "arw-svc" || true
-    ic_warn "PID file missing; attempted pkill arw-svc"
+    pkill -f "arw-server" || true
+    ic_warn "PID file missing; attempted pkill arw-server"
   fi
   ic_press_enter
 }
@@ -371,7 +371,7 @@ EOF
 gen_systemd_service() {
   ic_section "Systemd user service"
   local svc
-  svc=$(ic_detect_bin arw-svc)
+  svc=$(ic_detect_bin arw-server)
   if [[ -z "$svc" ]]; then ic_warn "Service binary not found; build first"; ic_press_enter; return; fi
   local unit_dir="$HOME/.config/systemd/user"
   mkdir -p "$unit_dir"
@@ -611,7 +611,7 @@ session_summary() {
     echo "- Docs URL: ${DOCS_URL:-}"
     echo "- Admin token set: $([[ -n "${ADMIN_TOKEN:-}" ]] && echo yes || echo no)"
     echo "- NATS reachable ($nats): $([[ $(ic_port_test "$h" "$p"; echo $?) -eq 0 ]] && echo yes || echo no)"
-    echo "- Service log: $LOGS_DIR/arw-svc.out.log"
+    echo "- Service log: $LOGS_DIR/arw-server.out.log"
     echo "- Caddy running: $([[ -f "$RUN_DIR/caddy.pid" ]] && echo yes || echo no)"
     echo "- Nginx pid file: $([[ -f "$RUN_DIR/nginx.pid" ]] && echo "$RUN_DIR/nginx.pid" || echo none)"
     echo
@@ -736,7 +736,7 @@ CADDY
 
 logs_menu() {
   local logs="$ROOT/.arw/logs"; mkdir -p "$logs"
-  local svc_log="$logs/arw-svc.out.log"
+  local svc_log="$logs/arw-server.out.log"
   local nats_out="$logs/nats-server.out.log"
   local nats_err="$logs/nats-server.err.log"
   ic_banner "Logs" "$logs"

@@ -7,9 +7,6 @@ interfaces:
 - id: api.arw
   kind: http
   path: interfaces/http/arw-server
-- id: api.legacy.arw
-  kind: http
-  path: interfaces/http/arw-svc
 - id: toolset.arw
   kind: mcp
   path: interfaces/tools/arw
