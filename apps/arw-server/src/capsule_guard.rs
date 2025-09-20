@@ -34,6 +34,8 @@ pub struct CapsuleSnapshot {
     pub denies: usize,
     pub contracts: usize,
     pub remaining_hops: Option<u32>,
+    pub lease_until_ms: Option<u64>,
+    pub renew_within_ms: Option<u64>,
 }
 
 struct CapsuleEntry {
@@ -42,6 +44,8 @@ struct CapsuleEntry {
     last_event_ms: u64,
     capsule: arw_protocol::GatingCapsule,
     remaining_hops: Option<u32>,
+    lease_until_ms: Option<u64>,
+    renew_within_ms: Option<u64>,
 }
 
 #[derive(Clone)]
@@ -54,6 +58,10 @@ pub struct AdoptOutcome {
     pub notify: bool,
 }
 
+pub struct ReplayOutcome {
+    pub expired: Vec<CapsuleSnapshot>,
+}
+
 impl CapsuleStore {
     pub fn new() -> Self {
         Self {
@@ -61,7 +69,12 @@ impl CapsuleStore {
         }
     }
 
-    pub async fn adopt(&self, capsule: &GatingCapsule, now_ms: u64) -> AdoptOutcome {
+    pub async fn adopt(
+        &self,
+        capsule: &GatingCapsule,
+        now_ms: u64,
+        lease: arw_core::gating::CapsuleLeaseState,
+    ) -> AdoptOutcome {
         let fingerprint = fingerprint_capsule(capsule);
         let mut guard = self.inner.lock().await;
         match guard.entry(capsule.id.clone()) {
@@ -77,9 +90,13 @@ impl CapsuleStore {
                 entry.snapshot.contracts = capsule.contracts.len();
                 entry.snapshot.applied_ms = now_ms;
                 entry.snapshot.remaining_hops = capsule.hop_ttl.and_then(|ttl| ttl.checked_sub(1));
+                entry.snapshot.lease_until_ms = lease.lease_until_ms;
+                entry.snapshot.renew_within_ms = lease.renew_within_ms;
                 entry.fingerprint = fingerprint;
                 entry.capsule = capsule.clone();
                 entry.remaining_hops = capsule.hop_ttl.and_then(|ttl| ttl.checked_sub(1));
+                entry.lease_until_ms = lease.lease_until_ms;
+                entry.renew_within_ms = lease.renew_within_ms;
                 let should_notify =
                     changed || now_ms.saturating_sub(entry.last_event_ms) >= EVENT_THROTTLE_MS;
                 if should_notify {
@@ -100,6 +117,8 @@ impl CapsuleStore {
                     denies: capsule.denies.len(),
                     contracts: capsule.contracts.len(),
                     remaining_hops: capsule.hop_ttl.and_then(|ttl| ttl.checked_sub(1)),
+                    lease_until_ms: lease.lease_until_ms,
+                    renew_within_ms: lease.renew_within_ms,
                 };
                 vac.insert(CapsuleEntry {
                     snapshot: snapshot.clone(),
@@ -107,6 +126,8 @@ impl CapsuleStore {
                     last_event_ms: now_ms,
                     capsule: capsule.clone(),
                     remaining_hops: capsule.hop_ttl.and_then(|ttl| ttl.checked_sub(1)),
+                    lease_until_ms: lease.lease_until_ms,
+                    renew_within_ms: lease.renew_within_ms,
                 });
                 AdoptOutcome {
                     snapshot,
@@ -126,25 +147,72 @@ impl CapsuleStore {
         })
     }
 
-    pub async fn replay_all(&self) -> bool {
+    pub async fn replay_all(&self) -> ReplayOutcome {
+        let now = now_ms();
         let mut guard = self.inner.lock().await;
-        let mut capsules: Vec<arw_protocol::GatingCapsule> = Vec::new();
-        for entry in guard.values_mut() {
+        let mut apply: Vec<(String, arw_protocol::GatingCapsule)> = Vec::new();
+        let mut to_remove: Vec<String> = Vec::new();
+        let mut expired: Vec<CapsuleSnapshot> = Vec::new();
+        for (id, entry) in guard.iter_mut() {
+            if let Some(expire) = entry.lease_until_ms {
+                if now >= expire {
+                    to_remove.push(id.clone());
+                    expired.push(entry.snapshot.clone());
+                    continue;
+                }
+            }
+
+            let mut should_apply = false;
             match entry.remaining_hops {
-                Some(0) => continue,
+                Some(0) => {}
                 Some(ref mut hops) => {
-                    capsules.push(entry.capsule.clone());
+                    should_apply = true;
                     *hops = hops.saturating_sub(1);
                     entry.snapshot.remaining_hops = Some(*hops);
                 }
-                None => continue,
+                None => {
+                    if let Some(expire) = entry.lease_until_ms {
+                        if let Some(window) = entry.renew_within_ms {
+                            if expire.saturating_sub(now) <= window {
+                                should_apply = true;
+                            }
+                        }
+                    }
+                }
+            }
+            if should_apply {
+                apply.push((id.clone(), entry.capsule.clone()));
             }
         }
-        drop(guard);
-        for cap in &capsules {
-            arw_core::gating::adopt_capsule(cap);
+        for id in to_remove {
+            guard.remove(&id);
         }
-        !capsules.is_empty()
+        drop(guard);
+
+        if apply.is_empty() {
+            return ReplayOutcome { expired };
+        }
+
+        let mut leases: HashMap<String, arw_core::gating::CapsuleLeaseState> = HashMap::new();
+        for (id, capsule) in &apply {
+            let lease = arw_core::gating::adopt_capsule(capsule);
+            leases.insert(id.clone(), lease);
+        }
+
+        let mut guard = self.inner.lock().await;
+        for (id, _) in apply.into_iter() {
+            if let Some(entry) = guard.get_mut(&id) {
+                if let Some(lease) = leases.get(&id) {
+                    entry.snapshot.applied_ms = now;
+                    entry.snapshot.lease_until_ms = lease.lease_until_ms;
+                    entry.snapshot.renew_within_ms = lease.renew_within_ms;
+                    entry.lease_until_ms = lease.lease_until_ms;
+                    entry.renew_within_ms = lease.renew_within_ms;
+                    entry.last_event_ms = now;
+                }
+            }
+        }
+        ReplayOutcome { expired }
     }
 }
 
@@ -172,9 +240,9 @@ async fn apply_capsule(state: &AppState, headers: &HeaderMap) -> Result<(), Resp
             return Err(resp);
         }
     };
-    let adopted = match arw_core::rpu::verify_and_adopt(&capsule) {
-        true => true,
-        false => {
+    let lease = match arw_core::rpu::verify_and_adopt(&capsule) {
+        Some(lease) => lease,
+        None => {
             publish_failure(state, Some(&capsule.id), "verification failed").await;
             return Err(error_response(
                 StatusCode::FORBIDDEN,
@@ -183,16 +251,8 @@ async fn apply_capsule(state: &AppState, headers: &HeaderMap) -> Result<(), Resp
             ));
         }
     };
-    if !adopted {
-        publish_failure(state, Some(&capsule.id), "verification rejected").await;
-        return Err(error_response(
-            StatusCode::FORBIDDEN,
-            "capsule_rejected",
-            "Capsule rejected by guardrails",
-        ));
-    }
     let now = now_ms();
-    let outcome = state.capsules().adopt(&capsule, now).await;
+    let outcome = state.capsules().adopt(&capsule, now, lease).await;
     if outcome.notify {
         state.bus().publish(
             TOPIC_POLICY_CAPSULE_APPLIED,
@@ -204,6 +264,8 @@ async fn apply_capsule(state: &AppState, headers: &HeaderMap) -> Result<(), Resp
                 "hop_ttl": outcome.snapshot.hop_ttl,
                 "denies": outcome.snapshot.denies,
                 "contracts": outcome.snapshot.contracts,
+                "lease_until_ms": outcome.snapshot.lease_until_ms,
+                "renew_within_ms": outcome.snapshot.renew_within_ms,
             }),
         );
         let snapshot = state.capsules().snapshot().await;
@@ -316,6 +378,8 @@ mod tests {
             propagate: None,
             denies: vec![],
             contracts: vec![],
+            lease_duration_ms: None,
+            renew_within_ms: None,
             signature: None,
         };
         let raw = serde_json::to_string(&cap).unwrap();
@@ -334,6 +398,8 @@ mod tests {
             propagate: None,
             denies: vec![],
             contracts: vec![],
+            lease_duration_ms: None,
+            renew_within_ms: None,
             signature: None,
         };
         let raw = serde_json::to_vec(&cap).unwrap();

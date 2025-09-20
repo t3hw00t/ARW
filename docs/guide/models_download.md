@@ -16,7 +16,7 @@ Canonical topics used by the service are defined once under [crates/arw-topics/s
 
 - POST `/admin/models/download` — Start a download (requires `sha256`).
 - POST `/admin/models/download/cancel` — Cancel an in‑flight download.
-- GET  `/admin/events` — Listen for `models.download.progress` events (SSE; supports `?replay=N` and repeated `prefix=` filters).
+- GET  `/events` — Listen for `models.download.progress` events (SSE; supports `?replay=N` and repeated `prefix=` filters).
 - GET  `/state/models` — Public, read‑only models list (no admin token required).
 - GET  `/admin/models/summary` — Aggregated summary for UIs: `{ items, default, concurrency, metrics }`.
 - POST `/admin/models/cas_gc` — Run a one‑off CAS GC sweep; deletes unreferenced blobs older than `ttl_hours` (default `24`).
@@ -72,7 +72,7 @@ Events related to cancel:
 
 ## Progress (SSE)
 
-Subscribe to `GET /admin/events` and filter `models.download.progress` events. Examples:
+Subscribe to `GET /events` and filter `models.download.progress` events. Examples:
 
 ```
 { "id": "qwen2.5-coder-7b", "status": "started", "url": "https://example/model.gguf" }
@@ -95,7 +95,7 @@ Schema notes:
 Minimal SSE consumer (bash)
 ```bash
 BASE=http://127.0.0.1:8091
-curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?prefix=models.download.progress&replay=5" \
+curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/events?prefix=models.download.progress&replay=5" \
  | jq -rc 'if .id then {id:.id,status:(.status//""),code:(.code//""),bytes:(.bytes//null),cached:(.cached//null)} else . end'
 ```
 

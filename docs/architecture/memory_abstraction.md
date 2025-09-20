@@ -12,7 +12,7 @@ Microsummary: The Memory Abstraction Layer (MAL) is the canonical schema and lif
 - Acts as the single source of truth for agent memories inside the unified object graph (`memory_items`).
 - Normalises provenance, durability, and trust metadata so every surface can reason about recall and retention.
 - Powers the Memory Overlay Service, which exposes `memory.*` actions and feeds the context working set builder.
-- Keeps compatibility with legacy `/memory/*` endpoints while the new action-based overlay rolls out.
+- Legacy `/memory/*` endpoints have been removed; the overlay exposes `/actions (memory.*)`, `/admin/memory/*` helpers, and `/state/memory` read-models instead.
 
 ## Canonical record
 Every memory item shares the same canonical shape; lanes (ephemeral/episodic/semantic/profile) live inside metadata rather than separate tables.
@@ -51,16 +51,12 @@ See [memory_overlay_service.md](memory_overlay_service.md#data-model) for full s
 Durability drives TTLs (minutes, hours, or months) and recency boosts during retrieval. Background janitors in `arw-memory-core` enforce expiry and publish `memory.item.expired` events.
 
 ## API surfaces
-### Legacy REST (compatibility)
-- `POST /memory/put`
-- `GET /state/memory/select`
-- `POST /memory/search_embed`
-- `POST /state/memory/select_hybrid`
-- `POST /memory/link`
-- `POST /memory/select_coherent`
-- `POST /state/memory/explain_coherent`
+### Admin helpers
+- `POST /admin/memory/apply` — convenience helper that inserts/updates memory items via the overlay.
+- `GET /admin/memory` — quick snapshot of recent records (lane/limit filters); ideal for debugging.
+- Quarantine endpoints: `GET /admin/state/memory/quarantine`, `POST /admin/memory/quarantine`, `POST /admin/memory/quarantine/admit`.
 
-These routes now delegate to the overlay implementation and will be removed once downstream callers migrate.
+Legacy `/memory/*` routes have been removed; rely on the action-based flow below for all production-facing behavior.
 
 ### Memory Overlay actions (preferred)
 - `memory.upsert` → Upsert item, update indices, emit `memory.item.upserted`.

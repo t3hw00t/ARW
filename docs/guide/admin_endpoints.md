@@ -49,7 +49,7 @@ Example
     "GET /healthz",
     "GET /version",
     "GET /spec/openapi.yaml",
-    "GET /admin/events",
+    "GET /events",
     "GET /admin/probe"
   ]
 }
@@ -150,8 +150,9 @@ The triad groups operations by intent:
   - `POST /actions (memory.upsert)` — insert or merge a memory item; emits `memory.item.upserted` and updates `/state/memory`.
   - `POST /actions (memory.search)` — hybrid lexical/vector search with filters and RRF/MMR metadata.
   - `POST /actions (memory.pack)` — build a context pack respecting token/slot budgets; journals decisions via `memory.pack.journaled`.
-  - `POST /memory/link` — create a link between memory items *(legacy wrapper; emits `memory.link.put` until the new graph API lands)*.
-  - `POST /memory/select_coherent` / `POST /state/memory/explain_coherent` — legacy coherent selectors that call into the overlay while UIs migrate.
+  - `POST /admin/memory/apply` — lightweight helper to upsert a record directly via the kernel (admin token required).
+  - `GET /admin/memory` — quick snapshot of recent records (supports `lane` and `limit` filters).
+  - Legacy `/memory/*` selectors have been removed; use the action-based flow and `GET /state/memory/recent` for inspection.
 - **Connectors**
   - `POST /connectors/register` — write a connector manifest to disk and emit `connectors.registered` (token required).
   - `POST /connectors/token` — store or rotate connector tokens/secrets and emit `connectors.token.updated` (token required).
@@ -190,8 +191,7 @@ The triad groups operations by intent:
   - `GET /state/connectors` — connector manifests with secrets scrubbed.
 - **Memory & context**
   - `GET /state/memory` — JSON Patch stream of inserts, expirations, and packed context previews.
-  - `GET /state/memory/select` — legacy textual search across memory lanes (`q`, `mode`, `limit`).
-  - `GET /state/memory/links` — list memory links for inspection (legacy graph view).
+  - `GET /state/memory/recent` — snapshot of recent records (lane/limit filters).
 - **Self introspection**
   - `GET /state/self` — list available self models on disk.
   - `GET /state/self/:agent` — fetch a specific self model JSON snapshot.

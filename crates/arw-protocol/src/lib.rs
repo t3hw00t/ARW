@@ -86,6 +86,10 @@ pub struct GatingCapsule {
     #[serde(default)]
     pub contracts: Vec<GatingContract>,
     #[serde(default)]
+    pub lease_duration_ms: Option<u64>,
+    #[serde(default)]
+    pub renew_within_ms: Option<u64>,
+    #[serde(default)]
     pub signature: Option<String>,
 }
 

@@ -32,10 +32,40 @@ struct RuntimeState {
     expires: HashMap<String, u64>, // contract_id -> valid_to_ms (runtime override)
     // Budget counters: (contract_id, key) -> (window_start_ms, count)
     budgets: HashMap<(String, String), (u64, u64)>,
+    capsules: HashMap<String, CapsuleRuntime>,
 }
 
 fn runtime_cell() -> &'static RwLock<RuntimeState> {
     RUNTIME.get_or_init(|| RwLock::new(RuntimeState::default()))
+}
+
+#[derive(Clone)]
+struct CapsuleRuntime {
+    denies: Vec<String>,
+    contracts: Vec<Contract>,
+    lease_until_ms: Option<u64>,
+}
+
+impl RuntimeState {
+    fn prune_expired(&mut self, now: u64) {
+        let expired: Vec<String> = self
+            .capsules
+            .iter()
+            .filter_map(|(id, cap)| match cap.lease_until_ms {
+                Some(until) if now >= until => Some(id.clone()),
+                _ => None,
+            })
+            .collect();
+        for id in expired {
+            self.capsules.remove(&id);
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct CapsuleLeaseState {
+    pub lease_until_ms: Option<u64>,
+    pub renew_within_ms: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -175,13 +205,25 @@ pub fn allowed(key: &str) -> bool {
             }
         }
     }
+    // Runtime capsules (lease-based denies/contracts)
+    let mut runtime = runtime_cell().write().unwrap();
+    runtime.prune_expired(now);
+    for cap in runtime.capsules.values() {
+        for p in &cap.denies {
+            if wildcard_match(p, key) {
+                return false;
+            }
+        }
+    }
     // Contracts (deny with conditions, auto-renew)
     let role = crate::hierarchy::get_state().self_node.role;
     let role_s = format!("{:?}", role).to_lowercase();
     let node_id = std::env::var("ARW_NODE_ID").unwrap_or_else(|_| "local".into());
     let tags = crate::hierarchy::get_state().self_node.tags;
-    let mut runtime = runtime_cell().write().unwrap();
-    let list = contracts_cell().read().unwrap().clone();
+    let mut list = contracts_cell().read().unwrap().clone();
+    for cap in runtime.capsules.values() {
+        list.extend(cap.contracts.clone());
+    }
     for c in list.iter() {
         // Match pattern
         if !c.patterns.iter().any(|p| wildcard_match(p, key)) {
@@ -338,12 +380,16 @@ pub fn add_contract_cfg(c: ContractCfg) {
 }
 
 /// Adopt a GatingCapsule from the wire (policy propagation). Trust policy is caller's responsibility.
-pub fn adopt_capsule(cap: &arw_protocol::GatingCapsule) {
-    if !cap.denies.is_empty() {
-        deny_hierarchy(cap.denies.clone());
-    }
-    for c in &cap.contracts {
-        add_contract_cfg(ContractCfg {
+pub fn adopt_capsule(cap: &arw_protocol::GatingCapsule) -> CapsuleLeaseState {
+    let now = now_ms();
+    let lease_until = cap.lease_duration_ms.map(|dur| now.saturating_add(dur));
+    let renew_within = cap.renew_within_ms;
+
+    let mut runtime = runtime_cell().write().unwrap();
+    let contracts: Vec<Contract> = cap
+        .contracts
+        .iter()
+        .map(|c| Contract {
             id: format!("{}::{}", cap.id, c.id),
             patterns: c.patterns.clone(),
             subject_role: c.subject_role.clone(),
@@ -352,10 +398,24 @@ pub fn adopt_capsule(cap: &arw_protocol::GatingCapsule) {
             valid_from_ms: c.valid_from_ms,
             valid_to_ms: c.valid_to_ms,
             auto_renew_secs: c.auto_renew_secs,
-            immutable: c.immutable,
+            immutable: c.immutable.unwrap_or(true),
             quota_limit: None,
             quota_window_secs: None,
-        });
+        })
+        .collect();
+
+    runtime.capsules.insert(
+        cap.id.clone(),
+        CapsuleRuntime {
+            denies: cap.denies.clone(),
+            contracts,
+            lease_until_ms: lease_until,
+        },
+    );
+
+    CapsuleLeaseState {
+        lease_until_ms: lease_until,
+        renew_within_ms: renew_within,
     }
 }
 

@@ -220,7 +220,7 @@ All new endpoints ship via the unified action bus (`/actions`) and the SSE state
   - `metrics.rs`: new histograms (`memory.retrieval.latency_ms`, `memory.pack.tokens`).
 - **arw-kernel**
   - Deprecate inline memory SQL; wrap the new crates.
-  - Provide compatibility shims for legacy `/memory/*` endpoints until we remove them.
+  - Legacy `/memory/*` shims have been removed from `arw-server`; only `/admin/memory/*` helpers remain for debugging.
 - **Context working set**
   - Replace ad-hoc queries with `memory.pack` under the hood.
   - Keep iterative CRAG flow: if coverage alarms fire, re-run `memory.pack` with widened budget.
@@ -257,9 +257,9 @@ All new endpoints ship via the unified action bus (`/actions`) and the SSE state
 - Introduce journaling table for pack decisions (SQLite `memory_pack_journal`).
 
 ### Migration + compatibility
-- Keep existing `/memory/*` REST endpoints operational by wrapping the action handlers until clients move over.
+- Legacy `/memory/*` REST endpoints have been removed from `arw-server`; rely on `/actions (memory.*)` and `/admin/memory/*` helpers instead.
 - Provide schema upgrade script (Rust migration + SQL) to move from `memory_records` to `memory_items`.
-- Update `memory_abstraction.md` and `memory_lifecycle.md` to explain the overlay; mark old endpoints as legacy.
+- Update `memory_abstraction.md` and `memory_lifecycle.md` to explain the overlay; highlight `/admin/memory/*` helpers instead of legacy routes.
 
 ## Related documents
 - [architecture/memory_abstraction.md](memory_abstraction.md) – conceptual lanes & hashing (to be aligned with this plan).
@@ -275,4 +275,4 @@ All new endpoints ship via the unified action bus (`/actions`) and the SSE state
 ## Next actions
 - Land Phase 0 PR (crate carve-out + delegation).
 - Draft end-to-end tests proving `memory.pack` respects per-kind quotas and token limits.
-- Update CLI/SDK consumers to call action endpoints instead of legacy `/memory/*` routes once phase 1 lands.
+- Update CLI/SDK consumers to call the action endpoints (`memory.*`) or the `/admin/memory/*` helpers when diagnosing issues.

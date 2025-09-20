@@ -20,5 +20,5 @@ Type: How‑to
 - Wrap toggle and Copy JSON available
 
 Endpoints
-- Events stream: `GET /admin/events?prefix=...&replay=50`
+- Events stream: `GET /events?prefix=...&replay=50`
 - Introspection: `GET /admin/introspect/stats`

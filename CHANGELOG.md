@@ -4,7 +4,10 @@ This project follows Keep a Changelog and Semantic Versioning. All notable chang
 
 ## [Unreleased]
 
-- Pending changes
+- Added lease-aware capsule adoption (`policy.capsule.expired` telemetry, read-model patches) and tightened guardrail gateway refresh behaviour.
+- Restored unified server chat endpoints (`/admin/chat*`) with debug UI panels for staging approvals, research watcher, and training telemetry.
+- Retired legacy `/memory/*` REST shims and the `/admin/events` alias; new admin helpers live at `/admin/memory/*` and SSE streams at `/events`.
+- Regenerated OpenAPI/JSON artifacts to reflect the updated surface and removed legacy routes.
 
 ## [0.1.4] - 2025-09-15
 

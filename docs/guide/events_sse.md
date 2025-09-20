@@ -10,7 +10,7 @@ Microsummary: Connect to the live Server‑Sent Events stream, filter by prefix,
 
 Overview
 - Endpoint (unified server): `GET /events` (text/event-stream)
-- Endpoint (admin alias): `GET /admin/events` (text/event-stream)
+- Endpoint: `GET /events` (text/event-stream)
 - Base URL: `http://127.0.0.1:8091` for local development.
 - Auth: requires admin access; set `ARW_ADMIN_TOKEN` and send `Authorization: Bearer <token>` if configured.
 - Filters: `?prefix=models.` (or any event kind prefix, e.g., `rpu.` for RPU trust events)
@@ -43,7 +43,7 @@ Envelope
 
 - Resume & replay
 - Unified server supports `?after=<row_id>` to replay after a specific journal id; also honors `Last-Event-ID` as an alias for `after` when present. SSE `id:` is set for replayed rows and best-effort for live events (mapped from the journal), enabling clients to resume using numeric row ids.
-- The `/admin/events` alias also honors `Last-Event-ID` and supports `?replay=N`.
+- The stream honors `Last-Event-ID` and supports `?replay=N`.
 
 Examples
 - Unified server (basic subscription with replay):

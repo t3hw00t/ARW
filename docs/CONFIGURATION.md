@@ -165,7 +165,7 @@ These knobs prioritize perceived latency and streaming cadence.
 - `ARW_SNAPPY_CADENCE_MS`: steady stream cadence budget (default `250`)
 - `ARW_SNAPPY_COLD_START_MS`: cold start budget for control plane (default `500`)
 - `ARW_SNAPPY_FULL_RESULT_P95_MS`: p95 full result target (default `2000`)
-- `ARW_SNAPPY_PROTECTED_ENDPOINTS`: CSV prefixes for interactive surface (default `/debug,/state/,/chat/,/admin/events`)
+- `ARW_SNAPPY_PROTECTED_ENDPOINTS`: CSV prefixes for interactive surface (default `/debug,/state/,/chat/,/events`)
 - `ARW_ROUTE_HIST_MS`: CSV millisecond buckets for route latency histograms (default `5,10,25,50,100,200,500,1000,2000,5000,10000`)
 - `ARW_NATS_URL`: NATS URL, e.g. `nats://127.0.0.1:4222`
 - `ARW_NODE_ID`: node identifier for NATS subjects (defaults to hostname)
@@ -257,7 +257,7 @@ See also: [CLI Guide](guide/cli.md)
 - `ARW_REHYDRATE_FILE_HEAD_KB`: head bytes returned for file rehydrate (default `64`).
 
 ## Notes
-- Sensitive routes include `/admin/*`, `/debug`, `/probe`, `/memory*`, `/models*`, `/governor*`, `/introspect*`, `/chat*`, `/feedback*`.
+- Sensitive routes include `/admin/*`, `/debug`, `/probe`, `/admin/memory*`, `/state/memory*`, `/models*`, `/governor*`, `/introspect*`, `/chat*`, `/feedback*`.
 - Prefer keeping the service bound to `127.0.0.1` or behind a TLS‑terminating reverse proxy.
 ## Egress Settings (Config Block)
 - Persisted settings can live under the top‑level `egress` block and are validated against [spec/schemas/egress_settings.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/egress_settings.json) via the Patch Engine.

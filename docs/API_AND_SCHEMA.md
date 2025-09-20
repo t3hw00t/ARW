@@ -169,14 +169,14 @@ H "$BASE/admin/introspect/schemas/memory.probe@1.0.0" | jq
 
 Admin event stream (SSE)
 ```bash
-curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/admin/events?replay=10"
+curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/events?replay=10"
 ```
 
 Key admin endpoints
 - `GET /admin/introspect/tools`
 - `GET /admin/introspect/schemas/{tool_id}`
 - `GET /admin/probe?task_id=...&step=...`
-- `SSE /admin/events`
+- `SSE /events`
 
 ### Models Admin Endpoints
 

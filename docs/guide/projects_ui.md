@@ -86,4 +86,4 @@ To harmonize with orchestration and autonomous workers, the service emits:
 - `projects.created` with `{ name }`
 - `projects.notes.saved` with `{ name }`
 
-Agents can subscribe to `/admin/events` and react to project lifecycle to train, plan, scaffold, or run checks (admin-gated SSE).
+Agents can subscribe to `/events` and react to project lifecycle to train, plan, scaffold, or run checks (SSE requires admin token).

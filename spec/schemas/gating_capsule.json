@@ -46,12 +46,30 @@
         "null"
       ]
     },
+    "lease_duration_ms": {
+      "default": null,
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0.0
+    },
     "propagate": {
       "default": null,
       "type": [
         "string",
         "null"
       ]
+    },
+    "renew_within_ms": {
+      "default": null,
+      "type": [
+        "integer",
+        "null"
+      ],
+      "format": "uint64",
+      "minimum": 0.0
     },
     "signature": {
       "default": null,

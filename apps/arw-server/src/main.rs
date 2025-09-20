@@ -51,7 +51,6 @@ mod paths {
     pub const SPEC_SCHEMA: &str = "/spec/schemas/:file";
     pub const SPEC_INDEX: &str = "/spec/index.json";
     pub const ADMIN_DEBUG: &str = "/admin/debug";
-    pub const ADMIN_EVENTS: &str = "/admin/events";
     pub const ADMIN_STATE_ROUTE_STATS: &str = "/admin/state/route_stats";
     pub const ADMIN_MODELS: &str = "/admin/models";
     pub const ADMIN_MODELS_SUMMARY: &str = "/admin/models/summary";
@@ -77,6 +76,8 @@ mod paths {
     pub const ADMIN_STATE_MEMORY_QUARANTINE: &str = "/admin/state/memory/quarantine";
     pub const ADMIN_MEMORY_QUARANTINE: &str = "/admin/memory/quarantine";
     pub const ADMIN_MEMORY_QUARANTINE_ADMIT: &str = "/admin/memory/quarantine/admit";
+    pub const ADMIN_MEMORY: &str = "/admin/memory";
+    pub const ADMIN_MEMORY_APPLY: &str = "/admin/memory/apply";
     pub const ADMIN_STATE_WORLD_DIFFS: &str = "/admin/state/world_diffs";
     pub const ADMIN_WORLD_DIFFS_QUEUE: &str = "/admin/world_diffs/queue";
     pub const ADMIN_WORLD_DIFFS_DECISION: &str = "/admin/world_diffs/decision";
@@ -143,6 +144,10 @@ mod paths {
     pub const RESEARCH_WATCHER_ARCHIVE: &str = "/research_watcher/:id/archive";
     pub const STAGING_ACTION_APPROVE: &str = "/staging/actions/:id/approve";
     pub const STAGING_ACTION_DENY: &str = "/staging/actions/:id/deny";
+    pub const ADMIN_CHAT: &str = "/admin/chat";
+    pub const ADMIN_CHAT_SEND: &str = "/admin/chat/send";
+    pub const ADMIN_CHAT_CLEAR: &str = "/admin/chat/clear";
+    pub const ADMIN_CHAT_STATUS: &str = "/admin/chat/status";
 }
 
 // Macros to add routes and record them in the endpoints list (avoid drift)
@@ -176,6 +181,7 @@ macro_rules! route_post_tag {
 
 mod access_log;
 mod api_actions;
+mod api_chat;
 mod api_config;
 mod api_connectors;
 mod api_context;
@@ -208,6 +214,7 @@ mod api_state;
 mod api_tools;
 mod api_ui;
 mod capsule_guard;
+mod chat;
 mod cluster;
 pub mod config;
 mod context_loop;
@@ -264,6 +271,7 @@ pub(crate) struct AppState {
     cluster: std::sync::Arc<cluster::ClusterRegistry>,
     experiments: std::sync::Arc<experiments::Experiments>,
     capsules: std::sync::Arc<capsule_guard::CapsuleStore>,
+    chat: std::sync::Arc<chat::ChatState>,
 }
 
 type Policy = PolicyEngine;
@@ -328,6 +336,10 @@ impl AppState {
 
     pub fn experiments(&self) -> std::sync::Arc<experiments::Experiments> {
         self.experiments.clone()
+    }
+
+    pub fn chat(&self) -> std::sync::Arc<chat::ChatState> {
+        self.chat.clone()
     }
 }
 
@@ -528,14 +540,6 @@ async fn main() {
         paths::METRICS,
         api_metrics::metrics_prometheus,
         "stable"
-    );
-    app = route_get_tag!(
-        app,
-        endpoints_acc,
-        endpoints_meta_acc,
-        paths::ADMIN_EVENTS,
-        api_events::events_sse,
-        "legacy"
     );
     app = route_get_tag!(
         app,
@@ -1620,54 +1624,27 @@ async fn main() {
         "/connectors/token",
         api_connectors::connector_token_set
     );
-    app = route_post_rec!(app, endpoints_acc, "/memory/put", api_memory::memory_put);
-    app = route_get_rec!(
-        app,
-        endpoints_acc,
-        "/state/memory/select",
-        api_memory::state_memory_select
-    );
-    app = route_post_rec!(
-        app,
-        endpoints_acc,
-        "/memory/search_embed",
-        api_memory::memory_search_embed
-    );
-    app = route_post_rec!(
-        app,
-        endpoints_acc,
-        "/memory/link",
-        api_memory::memory_link_put
-    );
-    app = route_get_rec!(
-        app,
-        endpoints_acc,
-        "/state/memory/links",
-        api_memory::state_memory_links
-    );
-    app = route_post_rec!(
-        app,
-        endpoints_acc,
-        "/state/memory/select_hybrid",
-        api_memory::memory_select_hybrid
-    );
-    app = route_post_rec!(
-        app,
-        endpoints_acc,
-        "/memory/select_coherent",
-        api_memory::memory_select_coherent
-    );
     app = route_get_rec!(
         app,
         endpoints_acc,
         "/state/memory/recent",
         api_memory::state_memory_recent
     );
-    app = route_post_rec!(
+    app = route_get_tag!(
         app,
         endpoints_acc,
-        "/state/memory/explain_coherent",
-        api_memory::memory_explain_coherent
+        endpoints_meta_acc,
+        paths::ADMIN_MEMORY,
+        api_memory::admin_memory_list,
+        "beta"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_MEMORY_APPLY,
+        api_memory::admin_memory_apply,
+        "beta"
     );
     app = route_get_rec!(
         app,
@@ -1719,12 +1696,45 @@ async fn main() {
         api_staging::staging_action_deny,
         "experimental"
     );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_CHAT,
+        api_chat::chat_history,
+        "beta"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_CHAT_SEND,
+        api_chat::chat_send,
+        "beta"
+    );
+    app = route_post_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_CHAT_CLEAR,
+        api_chat::chat_clear,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::ADMIN_CHAT_STATUS,
+        api_chat::chat_status,
+        "beta"
+    );
     let cluster_state = cluster::ClusterRegistry::new(bus.clone());
     let feedback_hub =
         feedback::FeedbackHub::new(bus.clone(), metrics.clone(), governor_state.clone()).await;
     let experiments_state =
         experiments::Experiments::new(bus.clone(), governor_state.clone()).await;
     let capsules_store = std::sync::Arc::new(capsule_guard::CapsuleStore::new());
+    let chat_state = std::sync::Arc::new(chat::ChatState::new());
     let state = AppState {
         bus,
         kernel,
@@ -1744,6 +1754,7 @@ async fn main() {
         cluster: cluster_state.clone(),
         experiments: experiments_state.clone(),
         capsules: capsules_store.clone(),
+        chat: chat_state.clone(),
     };
     read_models::publish_read_model_patch(
         &state.bus(),
@@ -1892,6 +1903,7 @@ mod http_tests {
         let experiments_state =
             experiments::Experiments::new(bus.clone(), governor_state.clone()).await;
         let capsules_store = Arc::new(capsule_guard::CapsuleStore::new());
+        let chat_state = Arc::new(chat::ChatState::new());
         AppState {
             bus,
             kernel,
@@ -1911,6 +1923,7 @@ mod http_tests {
             cluster: cluster_state,
             experiments: experiments_state,
             capsules: capsules_store,
+            chat: chat_state,
         }
     }
 

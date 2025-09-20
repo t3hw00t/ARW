@@ -90,6 +90,8 @@ pub struct AboutResponse {
         crate::api_tools::tools_list,
         crate::api_tools::tools_run,
         crate::api_tools::tools_cache_stats,
+        crate::api_memory::admin_memory_list,
+        crate::api_memory::admin_memory_apply,
         crate::api_probe::probe_effective_paths,
         crate::api_probe::probe_hw,
         crate::api_probe::probe_metrics,
@@ -148,6 +150,10 @@ pub struct AboutResponse {
         crate::api_review::world_diffs_decision,
         crate::api_staging::staging_action_approve,
         crate::api_staging::staging_action_deny,
+        crate::api_chat::chat_history,
+        crate::api_chat::chat_send,
+        crate::api_chat::chat_clear,
+        crate::api_chat::chat_status,
     ),
     components(
         schemas(
@@ -182,6 +188,7 @@ pub struct AboutResponse {
             crate::api_goldens::GoldensListQuery,
             crate::api_goldens::GoldensAddRequest,
             crate::api_goldens::GoldensRunRequest,
+            crate::api_memory::MemoryApplyReq,
             crate::experiments::VariantCfg,
             crate::experiments::Experiment,
             crate::experiments::WinnerInfo,
@@ -198,6 +205,11 @@ pub struct AboutResponse {
             crate::api_experiments::ExperimentAssignRequest,
             crate::review::MemoryQuarantineRequest,
             crate::review::MemoryQuarantineAdmit,
+            crate::api_chat::ChatSendReq,
+            crate::api_chat::ChatSendResp,
+            crate::api_chat::ChatHistory,
+            crate::api_chat::ChatStatusResp,
+            crate::chat::ChatMessage,
             crate::review::WorldDiffQueueRequest,
             crate::review::WorldDiffDecision
         )

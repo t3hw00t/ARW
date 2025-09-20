@@ -10,7 +10,7 @@ use serde_json::{json, Value};
 use tracing::warn;
 use utoipa::ToSchema;
 
-use crate::{staging, AppState};
+use crate::{read_models, staging, AppState};
 use arw_topics as topics;
 
 #[derive(Deserialize, ToSchema)]
@@ -48,7 +48,25 @@ pub(crate) async fn submit_action(
     state: &AppState,
     req: ActionReq,
 ) -> Result<ActionSubmitOutcome, SubmitActionError> {
-    let _ = state.capsules().replay_all().await;
+    let replay = state.capsules().replay_all().await;
+    if !replay.expired.is_empty() {
+        let expired_ms = chrono::Utc::now().timestamp_millis().max(0) as u64;
+        for snapshot in &replay.expired {
+            state.bus.publish(
+                topics::TOPIC_POLICY_CAPSULE_EXPIRED,
+                &json!({
+                    "id": snapshot.id,
+                    "version": snapshot.version,
+                    "issuer": snapshot.issuer,
+                    "expired_ms": expired_ms,
+                    "applied_ms": snapshot.applied_ms,
+                    "lease_until_ms": snapshot.lease_until_ms,
+                }),
+            );
+        }
+        let snapshot = state.capsules().snapshot().await;
+        read_models::publish_read_model_patch(&state.bus(), "policy_capsules", &snapshot);
+    }
     if !state.kernel_enabled() {
         return Err(SubmitActionError::KernelDisabled);
     }

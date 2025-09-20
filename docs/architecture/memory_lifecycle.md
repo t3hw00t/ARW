@@ -58,8 +58,7 @@ Run `python3 scripts/gen_feature_catalog.py` after schema updates to keep the in
 
 ## APIs & Events
 - Actions (`POST /actions`): `memory.upsert`, `memory.search`, `memory.pack` are the preferred interface. They emit `memory.item.upserted`, `memory.item.expired`, and `memory.pack.journaled` topics.
-- Legacy REST (still supported for now): `/memory/put`, `/memory/search`, `/memory/search_embed`, `/state/memory/select`, `/memory/link`, `/memory/select_coherent`, `/state/memory/explain_coherent` – these wrap the action handlers and will be retired in the Phase 3 window.
-- `/state/memory` SSE view exposes the latest items, expirations, and packed context previews as JSON Patch deltas. Legacy `/state/memory_*` routes redirect here.
+- `/state/memory` and `/state/memory/recent` expose read models for inspection. Legacy `/memory/*` REST shims have been removed.
 - `/context/assemble` and `/context/rehydrate` consume `memory.pack` internally and keep their streaming contract intact.
 - `/training/*` endpoints are being ported to the unified server; until they land, the executor remains internal and episodes capture resulting capsules.
 

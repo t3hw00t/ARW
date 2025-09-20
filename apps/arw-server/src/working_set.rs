@@ -262,6 +262,7 @@ where
     }
 }
 
+#[allow(dead_code)]
 pub fn assemble(state: &AppState, spec: &WorkingSetSpec) -> Result<WorkingSet> {
     let mut observer = (); // no-op
     assemble_with_observer(state, spec, &mut observer)

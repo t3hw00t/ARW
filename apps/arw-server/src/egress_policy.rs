@@ -1,6 +1,8 @@
 use serde_json::Value;
 
-use crate::AppState;
+use crate::{read_models, AppState};
+use arw_topics as topics;
+use chrono::Utc;
 
 fn domain_suffix(host: &str) -> Option<String> {
     host.find('.').and_then(|idx| {
@@ -201,7 +203,25 @@ fn merge_allowlists(base: Vec<String>, extra: Vec<String>) -> Vec<AllowRule> {
 }
 
 pub async fn resolve_policy(state: &AppState) -> ResolvedPolicy {
-    let _ = state.capsules().replay_all().await;
+    let replay = state.capsules().replay_all().await;
+    if !replay.expired.is_empty() {
+        let expired_ms = Utc::now().timestamp_millis().max(0) as u64;
+        for snapshot in &replay.expired {
+            state.bus.publish(
+                topics::TOPIC_POLICY_CAPSULE_EXPIRED,
+                &serde_json::json!({
+                    "id": snapshot.id,
+                    "version": snapshot.version,
+                    "issuer": snapshot.issuer,
+                    "expired_ms": expired_ms,
+                    "applied_ms": snapshot.applied_ms,
+                    "lease_until_ms": snapshot.lease_until_ms,
+                }),
+            );
+        }
+        let snapshot = state.capsules().snapshot().await;
+        read_models::publish_read_model_patch(&state.bus(), "policy_capsules", &snapshot);
+    }
     let cfg = state.config_state.lock().await.clone();
     let posture_str = env_posture()
         .or_else(|| config_posture(&cfg))

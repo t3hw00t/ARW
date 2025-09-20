@@ -202,19 +202,18 @@ pub fn verify_capsule(cap: &arw_protocol::GatingCapsule) -> bool {
     }
 }
 
-/// Verify and adopt a capsule. Returns true if adopted.
-pub fn verify_and_adopt(cap: &arw_protocol::GatingCapsule) -> bool {
+/// Verify and adopt a capsule. Returns lease state when adopted.
+pub fn verify_and_adopt(cap: &arw_protocol::GatingCapsule) -> Option<gating::CapsuleLeaseState> {
     if !verify_capsule(cap) {
-        return false;
+        return None;
     }
-    gating::adopt_capsule(cap);
-    true
+    Some(gating::adopt_capsule(cap))
 }
 
 /// Helper: parse header JSON and adopt if verified.
 pub fn adopt_from_header_json(s: &str) -> bool {
     match serde_json::from_str::<arw_protocol::GatingCapsule>(s) {
-        Ok(cap) => verify_and_adopt(&cap),
+        Ok(cap) => verify_and_adopt(&cap).is_some(),
         Err(_) => false,
     }
 }

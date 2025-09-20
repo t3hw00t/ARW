@@ -61,15 +61,10 @@ Actions (unified server)
 - `POST /actions/{id}/state` — worker lifecycle update
 
 Memory
-- `POST /memory/put` — insert memory item into a lane
-- `GET /state/memory/select` — query memories (like/fts)
-- `POST /memory/search_embed` — nearest neighbors by embedding
-- `POST /memory/link` — create a link between memory ids
-- `GET /state/memory/links` — list relationships
-- `POST /state/memory/select_hybrid` — hybrid retrieval with filters
-- `POST /memory/select_coherent` — coherence-ranked selection
+- `POST /admin/memory/apply` — insert or update a memory item (admin helper)
+- `GET /admin/memory` — list recent memory items (admin helper; supports `lane`/`limit`)
 - `GET /state/memory/recent` — most recent memories (per lane)
-- `POST /state/memory/explain_coherent` — explainability payload for coherence results
+- Action-first interface: `POST /actions (memory.upsert|memory.search|memory.pack)` handles durable updates, retrieval, and packing with event telemetry.
 - Review queue (admin): `GET /admin/state/memory/quarantine`, `POST /admin/memory/quarantine`, `POST /admin/memory/quarantine/admit` — track quarantined extracts before admitting to world/memory lanes.
 - World diff decisions (admin): `GET /admin/state/world_diffs`, `POST /admin/world_diffs/queue`, `POST /admin/world_diffs/decision` — queue diffs, record human decisions, and emit `world.diff.*` events.
 
@@ -160,7 +155,7 @@ Sample response (defaults)
     - `POST /admin/models/concurrency` — set max concurrency at runtime.
     - `GET  /admin/models/concurrency` — snapshot `{ configured_max, available_permits, held_permits, hard_cap, pending_shrink? }`.
     - `GET  /admin/models/jobs` — active jobs plus inflight hashes.
-    - `GET  /admin/events` — SSE with optional `?replay`.
+    - `GET  /events` — SSE with optional `?replay`.
     - `GET  /debug` — debug UI when `ARW_DEBUG=1`.
 
     Sample CAS downloads:

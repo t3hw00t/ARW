@@ -6,7 +6,7 @@ title: Events Vocabulary
 Updated: 2025-09-20
 Type: Explanation
 
-Normalize ARW events into a small internal vocabulary. Drive all live UI from this stream via `GET /admin/events` (SSE; admin‑gated). Use `corr_id` to stitch episodes.
+Normalize ARW events into a small internal vocabulary. Drive all live UI from this stream via `GET /events` (SSE; admin‑gated). Use `corr_id` to stitch episodes.
 
 Reference
 - Canonical topic names are centralized as constants in `crates/arw-topics/src/lib.rs` and used throughout the service and unified server for consistency.

@@ -204,6 +204,24 @@
       <div class="row" role="toolbar" aria-label="Chat actions"><button onclick="chatSend()">Send</button> <button onclick="chatClear()">Clear</button></div>
       <pre id="chatOut">[]</pre>
     </div>
+    <div class="card" data-collapsed="1">
+      <h3>Staging Queue <a href="#" class="help" data-doc="human_in_loop" data-tip="Approve or deny human-in-the-loop actions awaiting review." title="Staging docs">?</a></h3>
+      <div class="row" role="toolbar" aria-label="Staging actions">
+        <button onclick="stagingFetch()">Refresh</button>
+      </div>
+      <div id="stagingList" class="mtable" style="max-height:32vh;overflow:auto"></div>
+    </div>
+    <div class="card" data-collapsed="1">
+      <h3>Research Watcher <a href="#" class="help" data-doc="research_watcher" data-tip="Approve or archive suggested logic units and research items." title="Research watcher">?</a></h3>
+      <div class="row" role="toolbar" aria-label="Research watcher actions">
+        <button onclick="rwFetch()">Refresh</button>
+      </div>
+      <div id="rwPending" style="display:flex;flex-direction:column;gap:8px;max-height:32vh;overflow:auto"></div>
+      <details style="margin-top:8px">
+        <summary class="key">Recent decisions</summary>
+        <div id="rwRecent" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
+      </details>
+    </div>
     <div class="card">
       <h3>Orchestration <a href="#" class="help" data-doc="orchestrator" data-tip="Common actions to manage the local agent service." title="Orchestration docs">?</a></h3>
       <div class="row" role="toolbar" aria-label="Orchestration actions">
@@ -260,8 +278,6 @@
       <h3>Memory <a href="#" class="help" data-doc="memory" data-tip="Understand memory kinds and how /memory endpoints work." title="Memory docs">?</a> <span id="memHdrBadge" class="badge ok" style="margin-left:6px"><span class="dot"></span> Mem: –</span></h3>
       <div class="row">
         <button onclick="refreshMemory()">Refresh</button>
-        <button onclick="saveMemory()">Save</button>
-        <button onclick="loadMemory()">Load</button>
         <select id="memKind">
           <option value="ephemeral">ephemeral</option>
           <option value="episodic">episodic</option>
@@ -271,11 +287,6 @@
         <button class="primary" onclick="quickApply()">Apply</button>
       </div>
       <div class="row"><span class="key">time</span> <code id="rt-mem">–</code></div>
-      <div class="row">
-        <button onclick="getLimit()">Get limit</button>
-        <button onclick="setLimit()">Set limit</button>
-        <input id="limitVal" type="number" min="1" value="200" style="width: 90px;">
-      </div>
       <textarea id="memBody">{ "msg": "hello from debug UI", "t": Date.now() }</textarea>
       <div class="row"><button class="iconbtn" id="copyJsonMem" title="Copy JSON">Copy</button></div>
       <pre id="memOut">{}</pre>
@@ -299,6 +310,13 @@
         <button class="iconbtn" id="egClear">Clear</button>
       </div>
       <div id="egOut" style="max-height:28vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
+    </div>
+    <div class="card" data-collapsed="1">
+      <h3>Training Telemetry <a href="#" class="help" data-doc="training_park" data-tip="Live metrics feeding the Training Park." title="Training telemetry">?</a></h3>
+      <div class="row" role="toolbar" aria-label="Training telemetry actions">
+        <button class="iconbtn" onclick="trainingFetch()">Refresh</button>
+      </div>
+      <pre id="trainingOut">{}</pre>
     </div>
     <div class="card" data-collapsed="1">
       <h3>System <a href="#" class="help" data-doc="events" data-tip="Live metrics via SSE (probe.metrics)." title="System metrics">?</a></h3>
@@ -590,7 +608,7 @@ document.getElementById('copyCurlBtn').addEventListener('click', async ()=>{
 async function req(method, path, body, outId, rtId){
   let p = path;
   // Auto-prefix admin for sensitive paths unless explicitly public
-  if (!(p.startsWith('/admin') || p.startsWith('/metrics') || p.startsWith('/version') || p.startsWith('/about') || p.startsWith('/spec'))) {
+  if (!(p.startsWith('/admin') || p.startsWith('/metrics') || p.startsWith('/version') || p.startsWith('/about') || p.startsWith('/spec') || p.startsWith('/state') || p.startsWith('/events'))) {
     p = '/admin' + p;
   }
   const url = base + p; const init = { method, headers: {}, body: undefined };
@@ -620,19 +638,15 @@ async function req(method, path, body, outId, rtId){
 async function hit(path){ await req('GET', path, null, 'out', 'rt-main'); }
 async function post(path, body){ await req('POST', path, body, 'out', 'rt-main'); }
 async function refreshMemory(){
-  const txt = await req('GET', '/memory', null, 'memOut', 'rt-mem'); return txt;
+  const txt = await req('GET', '/state/memory/recent?limit=200', null, 'memOut', 'rt-mem'); return txt;
 }
-async function saveMemory(){ await post('/memory/save'); await refreshMemory(); }
-async function loadMemory(){ await post('/memory/load'); await refreshMemory(); }
 async function quickApply(){
   let kind = document.getElementById('memKind').value;
   let bodyTxt = document.getElementById('memBody').value;
   let value; try{ value = JSON.parse(bodyTxt); }catch(e){ alert('Invalid JSON'); return; }
-  await req('POST', '/memory/apply', { kind, value }, 'out', 'rt-main');
+  await req('POST', '/admin/memory/apply', { lane: kind, value }, 'out', 'rt-main');
   await refreshMemory();
 }
-async function getLimit(){ await req('GET', '/memory/limit', null, 'out', 'rt-main'); }
-async function setLimit(){ const n = parseInt(document.getElementById('limitVal').value||'200',10); await req('POST', '/memory/limit', { limit: n }, 'out', 'rt-main'); await getLimit(); }
 
 // Tools
 async function runTool(){
@@ -814,7 +828,7 @@ async function modelsMaybeShowHint(force){
 let es = null;
 function startSSE(replay, prefixes){
   try{ es?.close(); }catch{}
-  let url = base + '/admin/events';
+  let url = base + '/events';
   const qp = [];
   if (replay && replay > 0) qp.push('replay=' + encodeURIComponent(String(replay)));
   if (Array.isArray(prefixes)) {
@@ -1494,8 +1508,20 @@ function logT(msg, cls){
   line.textContent = msg; if(cls) line.className = cls;
   el.appendChild(line);
 }
-async function jget(path){ const r = await fetch(base+path); if(!r.ok) throw new Error(r.status); return r.json(); }
-async function jpost(path, body){ const r = await fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body||{})}); if(!r.ok) throw new Error(r.status); return r.json(); }
+async function jget(path){
+  const headers = {};
+  if (__adminHeader) headers['X-ARW-Admin'] = __adminHeader;
+  const r = await fetch(base+path,{ headers });
+  if(!r.ok) throw new Error(r.status);
+  return r.json();
+}
+async function jpost(path, body){
+  const headers = { 'Content-Type': 'application/json' };
+  if (__adminHeader) headers['X-ARW-Admin'] = __adminHeader;
+  const r = await fetch(base+path,{method:'POST',headers,body:JSON.stringify(body||{})});
+  if(!r.ok) throw new Error(r.status);
+  return r.json();
+}
 function extractTestId(obj){
   try{
     if (obj?.payload?.payload?.value?.test_id) return obj.payload.payload.value.test_id;
@@ -1535,12 +1561,12 @@ async function runSelfTests(){
   try { const a = await jget('/about'); if(Array.isArray(a.endpoints)){ pass('/about'); } else { fail('/about','missing endpoints'); } } catch(e){ fail('/about',e); }
   try { const t = await jget('/introspect/tools'); if(Array.isArray(t) && t.length>=2){ pass('/introspect/tools'); } else { fail('/introspect/tools','unexpected'); } } catch(e){ fail('/introspect/tools',e); }
 
-  try { await jpost('/memory/apply',{kind:'ephemeral',value:{ from:'selftest', t: Date.now() }}); const m = await jget('/memory'); if(m && m.ephemeral){ pass('POST /memory/apply + GET /memory'); } else { fail('memory','unexpected'); } } catch(e){ fail('memory',e); }
+  try { await jpost('/admin/memory/apply',{lane:'ephemeral',value:{ from:'selftest', t: Date.now() }}); const m = await jget('/admin/memory?limit=5'); if(m && (m.items||m.data?.items)){ pass('POST /admin/memory/apply + GET /admin/memory'); } else { fail('memory','unexpected'); } } catch(e){ fail('memory',e); }
 
   try {
     const target = 'ui_selftest_' + Date.now();
     const waiter = waitForMemoryApplied(target, 3500);
-    await jpost('/memory/apply',{kind:'ephemeral',value:{ test:'selftest', test_id: target, t: Date.now() }});
+    await jpost('/admin/memory/apply',{lane:'ephemeral',value:{ test:'selftest', test_id: target, t: Date.now() }});
     const ok = await waiter;
     if(ok){ pass('SSE memory.applied'); } else { fail('SSE memory.applied','timeout'); }
   } catch(e){ fail('SSE memory.applied',e); }
@@ -1689,9 +1715,121 @@ function setSSE(on){ const b=document.getElementById('sseBadge'); if(!b) return;
 function setChat(name, ok){ const b=document.getElementById('chatBadge'); if(!b) return; const cls = ok ? (name==='synthetic'?'warn':'ok') : 'bad'; b.className = 'badge ' + cls; b.innerHTML = '<span class="dot"></span> Chat: ' + name; }
 async function chatProbe(){ try{ const r=await fetch(base + '/chat/status?probe=1'); const j=await r.json(); setChat(j.backend||'synthetic', !!j.ok); showToast('Chat ' + (j.backend||'synthetic') + ': ' + (j.ok?'ok':'fail') + (j.latency_ms?(' · '+j.latency_ms+' ms') : '')); }catch{ setChat('synthetic', false); showToast('Chat probe failed'); } }
 async function chatInit(){ try{ const r=await fetch(base + '/chat/status'); const j=await r.json(); setChat(j.backend||'synthetic', !!j.ok); }catch{ setChat('synthetic', false); } }
+function adminHeaders(json){ const h = {}; if(__adminHeader){ h['X-ARW-Admin'] = __adminHeader; } if(json){ h['Content-Type'] = 'application/json'; } return h; }
+function chatRender(history){ try{ const out = document.getElementById('chatOut'); if(out){ out.textContent = JSON.stringify(history||[], null, 2); } }catch(e){} }
+async function chatFetch(){ try{ const r = await fetch(base + '/admin/chat', { headers: adminHeaders(false) }); if(!r.ok) return; const j = await r.json(); chatRender(j?.items || j?.data || []); }catch(e){ console.warn('chat fetch failed', e); } }
+async function chatSend(){ try{
+  const input = document.getElementById('chatInput'); if(!input) return; const prompt = input.value.trim();
+  const body = { prompt };
+  const r = await fetch(base + '/admin/chat/send', { method:'POST', headers: adminHeaders(true), body: JSON.stringify(body) });
+  if(!r.ok){ showToast('chat send failed ('+r.status+')'); return; }
+  const j = await r.json();
+  chatRender(j?.history || j?.data || []);
+  input.value = '';
+}catch(e){ console.error(e); showToast('chat send failed'); }}
+async function chatClear(){ try{
+  const r = await fetch(base + '/admin/chat/clear', { method:'POST', headers: adminHeaders(true) });
+  if(r.ok){ chatRender([]); showToast('chat cleared'); }
+  else { showToast('chat clear failed ('+r.status+')'); }
+}catch(e){ console.error(e); showToast('chat clear failed'); }}
+function stagingRender(items){
+  const host = document.getElementById('stagingList');
+  if(!host) return;
+  if(!items || !items.length){ host.innerHTML = '<div class="hint">No pending actions.</div>'; return; }
+  const rows = items.map(it=>{
+    const id = it.id || '-';
+    const kind = it.action_kind || '-';
+    const proj = it.project || 'local';
+    const by = it.requested_by || 'system';
+    const status = it.status || '-';
+    const created = it.created ? new Date(it.created).toISOString() : '–';
+    return `<div class="mrow">
+      <div class="mcell id">${id}</div>
+      <div class="mcell">${kind}</div>
+      <div class="mcell">${proj}</div>
+      <div class="mcell">${by}</div>
+      <div class="mcell">${status}</div>
+      <div class="mcell">${created}</div>
+      <div class="mcell actions"><button class="iconbtn" onclick="stagingAct('${id}','approve')">Approve</button><button class="iconbtn" onclick="stagingAct('${id}','deny')">Deny</button></div>
+    </div>`;
+  }).join('');
+  host.innerHTML = `<div class="mrow mhead"><div class="mcell id">id</div><div class="mcell">kind</div><div class="mcell">project</div><div class="mcell">requested</div><div class="mcell">status</div><div class="mcell">created</div><div class="mcell actions">actions</div></div>${rows}`;
+}
+async function stagingFetch(){ try{
+  const r = await fetch(base + '/state/staging/actions?status=pending&limit=100', { headers: adminHeaders(false) });
+  if(!r.ok){ if(r.status===401) showToast('set admin token for staging'); return; }
+  const j = await r.json();
+  stagingRender(j?.items || j?.data || []);
+}catch(e){ console.error(e); showToast('staging fetch failed'); }}
+async function stagingAct(id, action){
+  if(!id) return;
+  const target = `${base}/staging/actions/${encodeURIComponent(id)}/${action}`;
+  try{
+    const r = await fetch(target, { method:'POST', headers: adminHeaders(true) });
+    if(r.ok){ showToast(`staging ${action}`); stagingFetch(); }
+    else { showToast(`staging ${action} failed (${r.status})`); }
+  }catch(e){ console.error(e); showToast(`staging ${action} failed`); }
+}
+function rwRender(data){
+  const host = document.getElementById('rwPending');
+  if(host){
+    const pending = (data && data.pending) || [];
+    if(!pending.length){ host.innerHTML = '<div class="hint">No pending research items.</div>'; }
+    else {
+      host.innerHTML = pending.map(it => {
+        const title = it.title || it.source_id || it.id || 'Untitled';
+        const source = it.source || 'feed';
+        const summary = it.summary || (it.payload ? JSON.stringify(it.payload).slice(0, 280) : '');
+        const url = it.url ? `<a href="${it.url}" target="_blank">open</a>` : '';
+        const project = it.project || 'library';
+        return `<div style="border:1px solid var(--line);border-radius:8px;padding:8px;background:#fff;">
+          <div style="font-weight:600;margin-bottom:4px">${title}</div>
+          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">${source} · ${project}</div>
+          <div style="font-size:13px;margin-bottom:8px">${summary || '(no summary)'}${url ? ' · ' + url : ''}</div>
+          <div class="row" style="margin:0">
+            <button class="iconbtn" onclick="rwAct('${it.id}','approve')">Approve</button>
+            <button class="iconbtn" onclick="rwAct('${it.id}','archive')">Archive</button>
+          </div>
+        </div>`;
+      }).join('');
+    }
+  }
+  const recent = document.getElementById('rwRecent');
+  if(recent){
+    const approved = ((data && data.approved_recent) || []).slice(0,5).map(it=>it.title||it.id).join(', ');
+    const archived = ((data && data.archived_recent) || []).slice(0,5).map(it=>it.title||it.id).join(', ');
+    recent.innerHTML = `<div><strong>Approved:</strong> ${approved || '–'}</div><div><strong>Archived:</strong> ${archived || '–'}</div>`;
+  }
+}
+async function rwFetch(){ try{
+  const r = await fetch(base + '/state/research_watcher', { headers: adminHeaders(false) });
+  if(!r.ok){ if(r.status===401){ const host=document.getElementById('rwPending'); if(host){ host.innerHTML = '<div class="hint">Set admin token to inspect research items.</div>'; } } return; }
+  const j = await r.json();
+  rwRender(j?.data || j);
+}catch(e){ console.error(e); showToast('research watcher fetch failed'); }}
+async function rwAct(id, action){
+  if(!id) return;
+  let note = '';
+  try{ note = prompt(`${action} note?`, '') || ''; }catch{}
+  try{
+    const r = await fetch(`${base}/research_watcher/${encodeURIComponent(id)}/${action}`, { method:'POST', headers: adminHeaders(true), body: JSON.stringify({ note }) });
+    if(r.ok){ showToast(`research ${action}`); rwFetch(); }
+    else { showToast(`research ${action} failed (${r.status})`); }
+  }catch(e){ console.error(e); showToast(`research ${action} failed`); }
+}
+async function trainingFetch(){ try{
+  const r = await fetch(base + '/state/training/telemetry', { headers: adminHeaders(false) });
+  if(!r.ok){ return; }
+  const j = await r.json();
+  const out = document.getElementById('trainingOut');
+  if(out){ out.textContent = JSON.stringify(j?.data || j, null, 2); }
+}catch(e){ console.error(e); showToast('training fetch failed'); }}
 async function probeAdmin(){ try{ const r = await fetch(base + '/introspect/tools'); setAdmin(r.ok); }catch{ setAdmin(false); } }
 document.addEventListener('DOMContentLoaded', probeAdmin);
-document.addEventListener('DOMContentLoaded', ()=>{ var b=document.getElementById('chatTestBtn'); if(b){ b.addEventListener('click', chatProbe); } chatInit(); });
+document.addEventListener('DOMContentLoaded', ()=>{ var b=document.getElementById('chatTestBtn'); if(b){ b.addEventListener('click', chatProbe); } chatInit(); chatFetch(); });
+document.addEventListener('DOMContentLoaded', stagingFetch);
+document.addEventListener('DOMContentLoaded', rwFetch);
+document.addEventListener('DOMContentLoaded', trainingFetch);
 document.addEventListener('DOMContentLoaded', ()=>{ try{ initBadges(); }catch(e){} });
 document.addEventListener('DOMContentLoaded', ()=>{ try{ updateModelsCount(); }catch(e){} });
 document.addEventListener('DOMContentLoaded', ()=>{ try{ renderDownloads(); }catch(e){} });
@@ -1715,7 +1853,7 @@ async function rpuReload(){ try{
 document.addEventListener('DOMContentLoaded', ()=>{
   const rb=document.getElementById('rpuRefreshBtn'); if(rb){ rb.addEventListener('click', rpuRefresh); }
   const rl=document.getElementById('rpuReloadBtn'); if(rl){ rl.addEventListener('click', rpuReload); }
-  const re=document.getElementById('rpuEventsBtn'); if(re){ re.href = base + '/admin/events?prefix=' + encodeURIComponent('rpu.'); re.title='Open Events (rpu.*)'; }
+  const re=document.getElementById('rpuEventsBtn'); if(re){ re.href = base + '/events?prefix=' + encodeURIComponent('rpu.'); re.title='Open Events (rpu.*)'; }
   rpuRefresh();
 });
 // Pull policy bounds for display

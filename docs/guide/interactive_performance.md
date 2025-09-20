@@ -10,7 +10,7 @@ Environment overrides:
 - `ARW_SNAPPY_FIRST_PARTIAL_P95_MS`: p95 first useful partial target (default `150`)
 - `ARW_SNAPPY_CADENCE_MS`: steady stream cadence budget (default `250`)
 - `ARW_SNAPPY_FULL_RESULT_P95_MS`: p95 full result target (default `2000`)
-- `ARW_SNAPPY_PROTECTED_ENDPOINTS`: CSV prefixes treated as interactive (default `/debug,/state/,/chat/,/admin/events`)
+- `ARW_SNAPPY_PROTECTED_ENDPOINTS`: CSV prefixes treated as interactive (default `/debug,/state/,/chat/,/events`)
 - `ARW_SNAPPY_PUBLISH_MS`: interactive read‑model publish interval ms (default `2000`)
 - `ARW_SNAPPY_DETAIL_EVERY`: seconds between detailed p95 breakdown events (optional)
 

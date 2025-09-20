@@ -119,7 +119,7 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
   - `POST /actions (memory.pack)` → journals decisions via `memory.pack.journaled`
   - `GET /state/memory` (JSON Patch stream of inserts/expirations/pack previews)
 - Legacy REST (still wired through the new core while clients migrate):
-  - `POST /memory/put`, `GET /state/memory/select`, `POST /memory/search_embed`, `POST /state/memory/select_hybrid`, `POST /memory/link`, `GET /state/memory/links`, `POST /memory/select_coherent`
+- ✅ Legacy `/memory/*` REST shims (put/search_embed/select/link/coherent) removed — rely on `/actions` (`memory.*`) and `GET /state/memory/recent`.
 - Purpose: stable centerpoint (self‑image and identity), dedupe via hashes, explainable hybrid retrieval (lexical + vector), and budget-aware context packs.
 - See: Architecture → Memory Abstraction Layer, Memory Overlay Service, Memory Lifecycle.
 
@@ -172,7 +172,7 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
 
 - Legacy bridge (status)
   - `apps/arw-svc` and its launch flags have been removed. Debug UI assets now live under `apps/arw-server/assets` and render when `ARW_DEBUG=1`.
-  - Compatibility routes such as `/admin/events?replay=` remain available in `arw-server` for clients that still depend on them.
+- `/events` is the canonical SSE endpoint; the legacy `/admin/events` alias has been removed.
 - Legacy feature migration (unified target — all todo unless noted)
   - Core services: port Model Steward (models download/CAS GC ✅), Tool Forge (tool runs/cache ✅), Feedback Loop, Experiment Deck, Memory Lanes, Project Hub primitives, Project Map read models, Snappy Governor, Event Spine patch streaming.
   - UI/experience: migrate Chat Workbench, Screenshot Pipeline, Self Card + forecasts to the new SPA/right-sidecar flow once endpoints land.

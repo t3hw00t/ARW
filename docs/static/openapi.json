@@ -5,7 +5,7 @@
     "description": "Unified ARW server API surface (headless-first).",
     "license": {
       "name": "MIT OR Apache-2.0",
-      "url": "https://github.com/t3hw00t/ARW#licensing"
+      "identifier": "MIT OR Apache-2.0"
     },
     "version": "0.1.4"
   },
@@ -30,6 +30,121 @@
             }
           }
         }
+      }
+    },
+    "/admin/chat": {
+      "get": {
+        "tags": [
+          "Admin/Chat"
+        ],
+        "operationId": "chat_history_doc",
+        "responses": {
+          "200": {
+            "description": "Current chat history",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatHistory"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "description": "Chat: GET /admin/chat."
+      }
+    },
+    "/admin/chat/clear": {
+      "post": {
+        "tags": [
+          "Admin/Chat"
+        ],
+        "operationId": "chat_clear_doc",
+        "responses": {
+          "200": {
+            "description": "Cleared",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "description": "Chat: POST /admin/chat/clear."
+      }
+    },
+    "/admin/chat/send": {
+      "post": {
+        "tags": [
+          "Admin/Chat"
+        ],
+        "operationId": "chat_send_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatSendReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Synthetic reply",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatSendResp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "description": "Chat: POST /admin/chat/send."
+      }
+    },
+    "/admin/chat/status": {
+      "get": {
+        "tags": [
+          "Admin/Chat"
+        ],
+        "operationId": "chat_status_doc",
+        "parameters": [
+          {
+            "name": "probe",
+            "in": "query",
+            "description": "Trigger latency probe",
+            "required": false,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Backend status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatStatusResp"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "description": "Chat: GET /admin/chat/status."
       }
     },
     "/admin/distill": {
@@ -1015,6 +1130,97 @@
           }
         },
         "description": "Introspect: GET /admin/introspect/stats."
+      }
+    },
+    "/admin/memory": {
+      "get": {
+        "tags": [
+          "Admin/Memory"
+        ],
+        "summary": "List recent memory items (admin helper).",
+        "operationId": "admin_memory_list_doc",
+        "parameters": [
+          {
+            "name": "lane",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Memory snapshot",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "501": {
+            "description": "Kernel disabled",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "description": "List recent memory items (admin helper)."
+      }
+    },
+    "/admin/memory/apply": {
+      "post": {
+        "tags": [
+          "Admin/Memory"
+        ],
+        "summary": "Insert a memory item (admin helper).",
+        "operationId": "admin_memory_apply_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MemoryApplyReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Created",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "501": {
+            "description": "Kernel disabled",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "description": "Insert a memory item (admin helper)."
       }
     },
     "/admin/memory/quarantine": {
@@ -3214,6 +3420,111 @@
           }
         }
       },
+      "ChatHistory": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            }
+          }
+        }
+      },
+      "ChatMessage": {
+        "type": "object",
+        "required": [
+          "id",
+          "role",
+          "content",
+          "ts_ms"
+        ],
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "ts_ms": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
+      "ChatSendReq": {
+        "type": "object",
+        "required": [
+          "prompt"
+        ],
+        "properties": {
+          "prompt": {
+            "type": "string"
+          }
+        }
+      },
+      "ChatSendResp": {
+        "type": "object",
+        "required": [
+          "ok",
+          "backend",
+          "reply",
+          "history"
+        ],
+        "properties": {
+          "backend": {
+            "type": "string"
+          },
+          "history": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            }
+          },
+          "ok": {
+            "type": "boolean"
+          },
+          "reply": {
+            "$ref": "#/components/schemas/ChatMessage"
+          }
+        }
+      },
+      "ChatStatusResp": {
+        "type": "object",
+        "required": [
+          "ok",
+          "backend",
+          "messages"
+        ],
+        "properties": {
+          "backend": {
+            "type": "string"
+          },
+          "latency_ms": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64",
+            "minimum": 0
+          },
+          "messages": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "ok": {
+            "type": "boolean"
+          }
+        }
+      },
       "ClusterNode": {
         "type": "object",
         "required": [
@@ -4262,6 +4573,64 @@
           }
         }
       },
+      "MemoryApplyReq": {
+        "type": "object",
+        "required": [
+          "lane",
+          "value"
+        ],
+        "properties": {
+          "embed": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "number",
+              "format": "float"
+            }
+          },
+          "key": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lane": {
+            "type": "string"
+          },
+          "prob": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "score": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "tags": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
+          "value": {}
+        }
+      },
       "MemoryQuarantineAdmit": {
         "type": "object",
         "required": [
@@ -5001,8 +5370,16 @@
       "description": "Human-in-the-loop approvals queue"
     },
     {
+      "name": "Admin/Chat",
+      "description": "Admin/Chat endpoints"
+    },
+    {
       "name": "Admin/Experiments",
       "description": "Admin/Experiments endpoints"
+    },
+    {
+      "name": "Admin/Memory",
+      "description": "Admin/Memory endpoints"
     },
     {
       "name": "Distill",

@@ -11,11 +11,12 @@ Type: Plan
 The Asimov Capsule Guard turns the "mind virus" idea into an enforceable feature: a lightweight policy capsule that refreshes itself at every critical runtime boundary, keeping safety rules and leases in effect without piling up irreversible denies.
 
 ## Current Behavior & Gaps
-- Capsule adoption now runs in the unified server’s capsule middleware: any request carrying `X-ARW-Capsule` (or the legacy `X-ARW-Gate`) is verified via the RPU, cached, and published to `/state/policy/capsules`. The guard still needs auto-replay hooks for tools/orchestrator and richer TTL semantics.
-- `gating::adopt_capsule` copies every deny into the immutable hierarchy set and expands contracts into the shared contract list, making each capsule permanent until the process restarts; only test helpers can reset state.【F:crates/arw-core/src/gating.rs†L309-L353】
-- The Regulatory Provenance Unit (RPU) skeleton verifies a capsule and pushes it into gating but does not emit telemetry beyond existing `policy.decision` events, leaving adoption opaque to the UI and ledger.【F:crates/arw-core/src/rpu.rs†L200-L231】
+- ✅ Capsule adoption runs in the unified server middleware: any request carrying `X-ARW-Capsule` (or the legacy `X-ARW-Gate`) is verified via the RPU, cached, and published to `/state/policy/capsules`. Lease metadata (`lease_duration_ms`, `renew_within_ms`) now travels with the capsule and surfaces in the read model.
+- ✅ `gating::adopt_capsule` keeps capsule denies and contracts in a runtime lease layer instead of the immutable hierarchy list, so guardrails expire or renew without a restart.【F:crates/arw-core/src/gating.rs†L248-L353】
+- ✅ The Regulatory Provenance Unit returns a lease outcome and the middleware emits `policy.capsule.applied` and `policy.capsule.expired`; the capsules read model patches whenever adoption or expiry occurs.【F:crates/arw-core/src/rpu.rs†L205-L220】【F:apps/arw-server/src/api_actions.rs†L19-L42】
+- ⚠️ Capsule propagation still needs tighter integration with downstream executors (connectors, logic units) so every tool hop refreshes leases automatically.
 
-These gaps prevent capsules from acting like an "always-enforced" guardrail and make experimentation risky—misconfigured denies stick forever.
+The remaining gap is operational coverage: workers and higher-level runners still require passive refresh hooks so a capsule keeps renewing even when no HTTP request crosses the middleware.
 
 ## Feature Shape
 - **Capsule lifecycle leasing.** Capsules carry reversible denies and contract windows that refresh when the runtime replays them, keeping protections alive without mutating the immutable deny sets.
@@ -24,14 +25,14 @@ These gaps prevent capsules from acting like an "always-enforced" guardrail and 
 
 ## Integration Plan
 ### Phase 0 — Observability & Data Contracts
-1. Extend `arw-protocol::GatingCapsule` with explicit lease semantics (renewal window, scoped denies) and document them in OpenAPI/MCP specs.
-2. Structured events (`policy.capsule.applied`/`policy.capsule.failed`) now fire from the capsule middleware, and `/state/policy/capsules` exposes the cached view; RPU telemetry still needs adoption for runtime refresh and expiring leases.
-3. Instrument admin middleware and existing policy decisions with correlation IDs linking capsule adoption to downstream allows/denies.
+1. ✅ Extend `arw-protocol::GatingCapsule` with explicit lease semantics (renewal window, scoped denies) and document them in OpenAPI/MCP specs.
+2. ✅ Structured events (`policy.capsule.applied`/`policy.capsule.failed`/`policy.capsule.expired`) fire from the middleware, and `/state/policy/capsules` patches whenever adoption, renewal, or expiry occurs.
+3. ⚠️ Instrument admin middleware and policy decisions with correlation IDs linking capsule adoption to downstream allows/denies.
 
 ### Phase 1 — Gating Runtime Rework
-1. Replace immutable hierarchy denies in `arw_core::gating` with a layered view: boot config denies, capsule leases, and user runtime toggles (all with TTL/renewal).
-2. Add a scheduler inside gating that sweeps expired capsule leases and downgrades contracts safely without requiring a restart.
-3. Expose APIs for snapshotting effective policy (config + capsules + leases) so `/state/policy` can render consolidated guardrails.
+1. ✅ Replace immutable hierarchy denies in `arw_core::gating` with a layered view: boot config denies, capsule leases, and user runtime toggles (all with TTL/renewal).
+2. ✅ Add a lightweight sweeper inside gating that drops expired capsule leases and refreshes contracts without requiring a restart.
+3. ✅ Expose APIs for snapshotting effective policy (config + capsules + leases) so `/state/policy` and the admin UI render consolidated guardrails.
 
 ### Phase 2 — Capsule Propagation Hooks
 1. Cache the last verified capsule per session (admin token, project) and replay it automatically before `tools_exec::run`, orchestrator task dispatch, and policy evaluation entry points.

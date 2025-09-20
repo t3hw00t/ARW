@@ -125,7 +125,7 @@
       "http": [
         {
           "method": "GET",
-          "path": "/admin/events"
+          "path": "/events"
         }
       ],
       "read_models": [
@@ -374,7 +374,7 @@
       "deps": [
         "event_spine"
       ],
-      "description": "Local-first memory with lanes (ephemeral/episodic/semantic/procedural), ring limits, and apply/get/save/load endpoints.",
+      "description": "Local-first memory with lanes (ephemeral/episodic/semantic/procedural) plus admin helpers to inspect and apply items.",
       "scope": {
         "surface": "backend",
         "audience": "admin",
@@ -394,22 +394,6 @@
         {
           "method": "POST",
           "path": "/admin/memory/apply"
-        },
-        {
-          "method": "POST",
-          "path": "/admin/memory/save"
-        },
-        {
-          "method": "POST",
-          "path": "/admin/memory/load"
-        },
-        {
-          "method": "GET",
-          "path": "/admin/memory/limit"
-        },
-        {
-          "method": "POST",
-          "path": "/admin/memory/limit"
         }
       ],
       "read_models": [],
@@ -1332,12 +1316,8 @@
           "path": "/state/memory"
         },
         {
-          "method": "POST",
-          "path": "/memory/select_coherent (legacy)"
-        },
-        {
-          "method": "POST",
-          "path": "/state/memory/explain_coherent (legacy)"
+          "method": "GET",
+          "path": "/state/memory/recent"
         }
       ],
       "read_models": [

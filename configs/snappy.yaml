@@ -6,5 +6,4 @@ snappy:
     full_result_p95_ms: 2000
   gating:
     fail_on_regressions: true
-    protected_endpoints: ["/debug", "/state/*", "/chat/*", "/admin/events"]
-
+    protected_endpoints: ["/debug", "/state/*", "/chat/*", "/events"]

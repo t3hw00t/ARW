@@ -66,7 +66,7 @@ your-domain {
   encode zstd gzip
   reverse_proxy 127.0.0.1:8091
   @admin {
-    path /admin/debug* /admin/memory* /admin/models* /admin/governor* /admin/introspect* /admin/feedback* /admin/events* /admin/emit* /admin/shutdown
+    path /admin/debug* /admin/memory* /admin/models* /admin/governor* /admin/introspect* /admin/feedback* /events* /admin/emit* /admin/shutdown
   }
   # optional: restrict @admin by client IPs
 }
