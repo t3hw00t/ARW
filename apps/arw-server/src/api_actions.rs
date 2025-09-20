@@ -60,7 +60,7 @@ pub(crate) async fn submit_action(
                 .kernel()
                 .find_valid_lease_async("local", cap)
                 .await
-                .map_err(|e| SubmitActionError::Internal(e.into()))?;
+                .map_err(SubmitActionError::Internal)?;
             if lease.is_none() {
                 state.bus.publish(
                     topics::TOPIC_POLICY_DECISION,
@@ -91,7 +91,7 @@ pub(crate) async fn submit_action(
     }
 
     if reuse_id.is_none() {
-        match staging::maybe_stage_action(&state, &req.kind, &req.input).await {
+        match staging::maybe_stage_action(state, &req.kind, &req.input).await {
             Ok(Some(staging_id)) => {
                 return Ok(ActionSubmitOutcome {
                     id: staging_id,
@@ -138,7 +138,7 @@ pub(crate) async fn submit_action(
                 )
                 .await
             {
-                return Err(SubmitActionError::Internal(err.into()));
+                return Err(SubmitActionError::Internal(err));
             }
             (id, false)
         }
@@ -149,7 +149,7 @@ pub(crate) async fn submit_action(
             .insert_action_async(&id, &req.kind, &req.input, None, None, "queued")
             .await
         {
-            return Err(SubmitActionError::Internal(err.into()));
+            return Err(SubmitActionError::Internal(err));
         }
         (id, false)
     };
@@ -210,7 +210,8 @@ pub async fn actions_submit(
             Json(json!({
                 "id": outcome.id,
                 "ok": true,
-                "staged": false
+                "staged": false,
+                "reused": outcome.reused
             })),
         )
             .into_response(),

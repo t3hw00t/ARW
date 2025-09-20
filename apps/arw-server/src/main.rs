@@ -309,6 +309,7 @@ impl AppState {
         self.capsules.clone()
     }
 
+    #[cfg(feature = "grpc")]
     pub fn sse_cache(&self) -> std::sync::Arc<Mutex<sse_cache::SseIdCache>> {
         self.sse_id_map.clone()
     }

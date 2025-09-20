@@ -80,15 +80,11 @@ impl CapsuleStore {
                 entry.fingerprint = fingerprint;
                 entry.capsule = capsule.clone();
                 entry.remaining_hops = capsule.hop_ttl.and_then(|ttl| ttl.checked_sub(1));
-                let should_notify = if changed {
+                let should_notify =
+                    changed || now_ms.saturating_sub(entry.last_event_ms) >= EVENT_THROTTLE_MS;
+                if should_notify {
                     entry.last_event_ms = now_ms;
-                    true
-                } else if now_ms.saturating_sub(entry.last_event_ms) >= EVENT_THROTTLE_MS {
-                    entry.last_event_ms = now_ms;
-                    true
-                } else {
-                    false
-                };
+                }
                 AdoptOutcome {
                     snapshot: entry.snapshot.clone(),
                     notify: should_notify,
