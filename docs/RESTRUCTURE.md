@@ -188,7 +188,7 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
   - ⏭ Expand `/admin/state/models_metrics` with resume counters, in-flight hash stats, and EWMA visibility for dashboards.
 - **Docs & rollout**
   - ✅ Guide updates cover resume semantics and correlation IDs.
-  - ⏭ Publish migration notice (README + release notes) highlighting the `arw-svc` retirement timeline and unified entry points.
+  - ✅ README and release notes highlight the `arw-svc` retirement and unified entry points; subsequent releases reference the unified server exclusively.
 - **UI follow-ups**
   - ⏭ Wire the admin models UI to the new statuses (`resumed`, `degraded`, `cancel-requested`) and link ledger previews for operators.
   - ✅ Debug Models/Agents/Projects pages (and launcher mirrors) now call `/admin/*` endpoints with admin headers. Legacy `/models/*` shims are no longer required.
@@ -200,7 +200,7 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
 | A | Core services | Model Steward (models download/CAS GC ✅), Tool Forge (tool runs/cache metrics ✅), Snappy Governor (route stats view), Event Spine patch streaming | Triad kernel, metrics plumbing | ✅ Backend landed in unified server |
 | B | Memory + projects | Memory Lanes (lane CRUD/save/load), Project Hub primitives (notes/files/patch), Project Map read models (observations/beliefs/intents) | Phase A storage, policy leases | ✅ APIs live; UI still points at legacy routes (see Regression priority) |
 | C | Feedback & experiments | Feedback Loop surfaces, Experiment Deck APIs, Self Card snapshots | Phase B data wiring | ✅ Services emitting; UI polish tracked with Phase D |
-| D | Operator experience | Chat Workbench, Screenshot Pipeline, launcher shift to SPA/right-sidecar, retire `/admin/*` debug windows | Phase A endpoints, UI unification groundwork | ⏳ Debug surfaces still rely on arw-svc-era endpoints |
+| D | Operator experience | Chat Workbench, Screenshot Pipeline, launcher shift to SPA/right-sidecar, retire `/admin/*` debug windows | Phase A endpoints, UI unification groundwork | 🔄 Debug surfaces now ship from `arw-server`; SPA/right-sidecar migration tracked as follow-up |
 | E | Safety | Guardrail Gateway on `arw-server`, Asimov Capsule Guard enforcement, final removal of legacy `/admin/*` shims | Policy & egress firewall phase | ⏳ Partial proxy shipped; firewall + capsules outstanding |
 
 Notes
@@ -244,13 +244,13 @@ Notes
    - Contribution ledger roll‑up; split capsules; negotiation flows; model cards with splits
 8) UI Unification
    - SPA (Memory Canvas, World Map, Influence Console); retire legacy UI
-9) Decommission legacy `arw-svc`
+9) Decommission legacy `arw-svc` ✅
 
 ## What’s Implemented (Quick Index)
 - Kernel + CAS: `crates/arw-kernel/src/lib.rs`
 - New server (triad slice): `apps/arw-server/src/main.rs`
-- SSE replay bridge (legacy): `apps/arw-svc/src/ext/mod.rs: triad_events_sse`
-- Actions bridge (legacy): `apps/arw-svc/src/ext/actions_api.rs`
+- SSE replay bridge: `apps/arw-server/src/api_events.rs`
+- Actions API: `apps/arw-server/src/api_actions.rs`
 - Contribution ledger view: `GET /state/contributions` (new server)
  - Local worker (demo): dequeues queued → running → completed; appends `task.complete` to contributions.
 
