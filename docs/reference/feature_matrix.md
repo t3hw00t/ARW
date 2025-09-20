@@ -398,7 +398,6 @@ Always-enforced capsule propagation that refreshes leases, scopes reversible den
   - [crates/arw-core/src/gating.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/src/gating.rs)
   - [crates/arw-core/src/rpu.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/src/rpu.rs)
   - [apps/arw-server/src/security.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/security.rs)
-  - [apps/arw-svc/src/bootstrap/mod.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-svc/src/bootstrap/mod.rs)
   - [architecture/asimov_capsule_guard.md](../architecture/asimov_capsule_guard.md)
 - HTTP:
   - `ANY /admin/* (X-ARW-Gate)`
