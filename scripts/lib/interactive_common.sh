@@ -456,7 +456,7 @@ ic_clipboard_copy() { # $1=text
 ic_security_tips() {
   ic_banner "Security Tips" "Protect admin endpoints"
   cat <<TIPS
-  • Sensitive endpoints: /debug, /probe, /admin/memory*, /state/memory*, /models/*, /governor/*, /introspect/*, /chat/*, /feedback/*
+  • Sensitive endpoints: /admin/debug (and the /debug alias), /probe, /admin/memory*, /state/memory*, /models/*, /governor/*, /introspect/*, /chat/*, /feedback/*
   • In development, set ARW_DEBUG=1 to simplify. In production, disable it.
   • Set ARW_ADMIN_TOKEN and send header: X-ARW-Admin: <token>
   • Rate limiting for admin endpoints can be adjusted via ARW_ADMIN_RL (default 60/60).
@@ -561,7 +561,7 @@ ic_project_overview() {
 
 ic_feature_matrix() {
   ic_section "Feature Matrix"
-  printf "  • Service:    arw-server (HTTP, /debug UI)\n"
+  printf "  • Service:    arw-server (HTTP, /admin/debug UI)\n"
   printf "  • CLI:        arw-cli (tools, capsules, gates)\n"
   printf "  • Launcher:   arw-launcher (Tauri; Linux needs WebKitGTK 4.1 + libsoup3)\n"
   printf "  • Connector:  arw-connector (optional; NATS feature)\n"

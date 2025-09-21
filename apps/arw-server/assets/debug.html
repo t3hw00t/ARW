@@ -8,18 +8,6 @@
   <style>
     :root{
       color-scheme:light dark;
-      --bg:#fafaf9;           /* panel bg */
-      --ink:#111827;          /* primary text */
-      --muted:#6b7280;        /* secondary text */
-      --line:#e5e7eb;         /* separators */
-      --accent:#b87333;       /* subtle copper accent */
-      --neon:#1bb3a3;         /* cyberdeck teal (muted) */
-      --ok:#22c55e;           /* status ok */
-      --warn:#f59e0b;         /* status warn */
-      --bad:#ef4444;          /* status bad */
-      --noise:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0.04'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-      /* spacing rhythm */
-      --sp2: 8px; --sp3: 12px; --sp4: 16px; --sp5: 24px;
     }
     body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;line-height:1.45;color:var(--ink);background: var(--surface)}
     /* manual theme override */
@@ -33,26 +21,26 @@
     .iconbtn{padding:6px 8px;font-size:12px}
     .cols{display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px}
     .card>h3{margin:4px 0 8px 0; cursor:pointer; display:flex; align-items:center; gap:8px}
-    .card>h3::after{ content:"▾"; font-size:12px; color:#6b7280 }
+    .card>h3::after{ content:"▾"; font-size:12px; color:var(--color-muted) }
     .card[data-collapsed="1"]>h3::after{ content:"▸" }
     .card[data-collapsed="1"]>:not(h3){ display:none }
     #log{max-height:40vh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px;background:linear-gradient(180deg,#ffffff,#fafafa);box-shadow:inset 0 1px 0 rgba(255,255,255,0.6)}
     .evt{padding:4px 6px;border-bottom:1px dashed #eee;font-family:ui-monospace,Menlo,Consolas,monospace}
     .key{color:var(--muted)}
     textarea{width:100%;min-height:100px}
-    .pass{color:var(--ok)}.fail{color:var(--bad)}
+    .pass{color:var(--status-ok)}.fail{color:var(--status-bad)}
     /* badges/dots/tones provided by shared UI kit */
     /* Iconography */
     .icons{ display:inline-flex; gap:6px; align-items:center; margin-right:6px }
     .ico{ width:14px; height:14px; display:inline-block; vertical-align:-2px; color:currentColor; opacity:.9 }
-    .ico.ok{ color:#22c55e }
-    .ico.warn{ color:#f59e0b }
-    .ico.bad{ color:#ef4444 }
-    .ico.info{ color:#6b7280 }
-    .ico.accent{ color: var(--neon) }
+    .ico.ok{ color:var(--status-ok) }
+    .ico.warn{ color:var(--status-warn) }
+    .ico.bad{ color:var(--status-bad) }
+    .ico.info{ color:var(--color-muted) }
+    .ico.accent{ color: var(--color-accent-teal) }
     /* Subtle hint block */
     .hint{ font-size:12px; color:#374151; background:#f8fafc; border:1px solid var(--line); border-left:3px solid var(--color-accent-teal); padding:8px 10px; border-radius:8px; margin:6px 0 }
-    .hint .dismiss{ float:right; text-decoration:none; color:#6b7280; font-weight:600 }
+    .hint .dismiss{ float:right; text-decoration:none; color:var(--color-muted); font-weight:600 }
     /* Downloads list */
     .dlrow{ display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px dashed #eee }
     /* Models compact table */
@@ -69,9 +57,9 @@
     .dlstat{ font-size:12px; color:var(--muted); min-width:90px }
     .dlmeta{ font-size:12px; color:var(--muted) }
     .pbar{ width:180px; height:8px; background:var(--line); border-radius:999px; overflow:hidden; box-shadow:inset 0 1px 0 rgba(255,255,255,0.6) }
-    .pfill{ height:100%; background:linear-gradient(90deg, var(--neon), #22c55e); width:0% }
+    .pfill{ height:100%; background:linear-gradient(90deg, var(--color-accent-teal), #22c55e); width:0% }
     .ghost{ padding:6px 10px; border:1px dashed #cfd6de; background:#fff; border-radius:6px; cursor:pointer }
-    a.help{display:inline-block;margin-left:8px;width:18px;height:18px;border-radius:50%;border:1px solid #d1d5db;color:#6b7280;text-align:center;line-height:16px;text-decoration:none;font-weight:600;font-size:12px}
+    a.help{display:inline-block;margin-left:8px;width:18px;height:18px;border-radius:50%;border:1px solid #d1d5db;color:var(--color-muted);text-align:center;line-height:16px;text-decoration:none;font-weight:600;font-size:12px}
     a.help:hover{background:#f3f4f6;color:#374151}
     .tip{position:fixed;z-index:50;max-width:360px;background:#ffffff;border:1px solid var(--line);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,0.14);padding:10px 12px}
     .tip .t-title{font-weight:600;margin-bottom:4px}
@@ -87,7 +75,7 @@
     .pal-list{max-height:50vh;overflow:auto}
     .pal-item{padding:8px 12px;border-top:1px solid #f1f5f9;cursor:pointer;display:flex;justify-content:space-between}
     .pal-item.sel{background:var(--surface-muted)}
-    .pal-item .hint{color:#6b7280;font-size:12px}
+    .pal-item .hint{color:var(--color-muted);font-size:12px}
     @media (max-width:900px){ .cols{grid-template-columns:1fr} }
     @media (pointer: coarse){ button{ padding:12px 16px } .iconbtn{ padding:10px 12px; font-size:14px } }
     button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{ outline:2px solid rgba(184,115,51,0.55); outline-offset:2px }

@@ -14,7 +14,7 @@ use arw_topics as topics;
 /// List available mini-agents (placeholder).
 #[utoipa::path(
     get,
-    path = "/state/orchestrator/mini_agents",
+    path = "/orchestrator/mini_agents",
     tag = "Orchestrator",
     responses(
         (status = 200, body = serde_json::Value),
@@ -41,7 +41,7 @@ pub(crate) struct OrchestratorStartReq {
 /// Start a training job that results in a suggested Logic Unit (admin).
 #[utoipa::path(
     post,
-    path = "/orchestrator/start_training",
+    path = "/orchestrator/mini_agents/start_training",
     tag = "Orchestrator",
     request_body = OrchestratorStartReq,
     responses(

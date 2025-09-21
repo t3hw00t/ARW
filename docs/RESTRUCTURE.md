@@ -207,7 +207,7 @@ Notes
 - Phases can overlap if dependencies are satisfied; track owners and dates in the backlog so the matrix stays current.
 - Update this section with status markers as phases complete (e.g., `A ✅`).
 - Scripts: `scripts/start.{sh,ps1}` launch the unified server (launcher included). Use `ARW_NO_LAUNCHER=1` / `--service-only` for headless mode.
-- Debug helpers `scripts/debug.{sh,ps1}` default to the unified stack and can open `/debug` when `ARW_DEBUG=1`.
+- Debug helpers `scripts/debug.{sh,ps1}` default to the unified stack and can open `/admin/debug` (a `/debug` alias remains) when `ARW_DEBUG=1`.
   - Containers target `arw-server`; the legacy image is no longer published.
 
 ### Regression priority (Unified server)

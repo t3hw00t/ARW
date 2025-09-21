@@ -126,7 +126,7 @@ open_links_menu() {
   while true; do
     ic_banner "Open / Probe" "$base"
     cat <<EOF
-  1) Open Debug UI (/debug)
+  1) Open Debug UI (/admin/debug)
   2) Open API Spec (/spec)
   3) Open Tools JSON (/introspect/tools)
   4) Curl health (/healthz)
@@ -140,13 +140,13 @@ open_links_menu() {
 EOF
     read -r -p "Select: " pick || true
     case "$pick" in
-      1) ic_open_url "$base/debug" ;;
+      1) ic_open_url "$base/admin/debug" ;;
       2) ic_open_url "$base/spec" ;;
       3) ic_open_url "$base/introspect/tools" ;;
       4) http_get "$base/healthz" || true; echo; ic_press_enter ;;
       5) http_get "$base/emit/test" || true; echo; ic_press_enter ;;
       6) read -r -p "NATS URL [nats://127.0.0.1:4222]: " u; u=${u:-nats://127.0.0.1:4222}; read -r h p < <(ic_parse_host_port "$u"); if ic_port_test "$h" "$p"; then ic_info "NATS reachable at $h:$p"; else ic_warn "Cannot reach $h:$p"; fi; ic_press_enter ;;
-      7) ic_clipboard_copy "$base/debug"; ic_info "Copied $base/debug"; ic_press_enter ;;
+      7) ic_clipboard_copy "$base/admin/debug"; ic_info "Copied $base/admin/debug"; ic_press_enter ;;
       8) ic_clipboard_copy "$base/spec"; ic_info "Copied $base/spec"; ic_press_enter ;;
       9) {
            local tok="$ADMIN_TOKEN"; if [[ -z "$tok" ]]; then
@@ -640,7 +640,7 @@ session_summary() {
     echo "- Nginx pid file: $([[ -f "$RUN_DIR/nginx.pid" ]] && echo "$RUN_DIR/nginx.pid" || echo none)"
     echo
     echo "## Useful URLs"
-    echo "- Debug: http://127.0.0.1:$PORT/debug"
+    echo "- Debug: http://127.0.0.1:$PORT/admin/debug"
     echo "- Spec:  http://127.0.0.1:$PORT/spec"
   } > "$out"
   ic_info "Wrote $out"

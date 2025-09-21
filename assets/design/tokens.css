@@ -1,3 +1,8 @@
+/*
+ * Shared design tokens.
+ * Source of truth: assets/design/tokens.css (sync via `just tokens-sync`).
+ */
+
 :root{
   /* Brand */
   --color-brand-copper:        #b87333; /* primary */

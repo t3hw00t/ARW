@@ -13,6 +13,7 @@ ADMIN_TOKEN=${ARW_ADMIN_TOKEN:-}
 USE_DIST=0
 NO_BUILD=0
 OPEN_UI=0
+DEBUG_PATH="/admin/debug"
 WAIT_HEALTH=1
 WAIT_HEALTH_TIMEOUT_SECS=${ARW_WAIT_HEALTH_TIMEOUT_SECS:-20}
 INTERACTIVE=0
@@ -30,8 +31,8 @@ Options
   --admin-token TOKEN   Admin token (recommended)
   --dist                Use latest dist/ bundle if present
   --no-build            Do not build if binary missing
-  --open                Open /debug in browser after start
-  --no-open             Do not open /debug in browser (default)
+  --open                Open admin debug UI after start
+  --no-open             Do not open admin debug UI (default)
   --no-health           Do not wait for /healthz
   --health-timeout N    Health wait timeout seconds (default: 20)
   -h, --help            Show help
@@ -75,7 +76,7 @@ prompt_interactive() {
     fi
   fi
   read -r -p "Use dist/ if available? (y/N): " yn; [[ "${yn,,}" == y* ]] && USE_DIST=1 || USE_DIST=0
-  read -r -p "Open /debug after start? (y/N): " yn; [[ "${yn,,}" == y* ]] && OPEN_UI=1 || OPEN_UI=0
+  read -r -p "Open admin debug UI after start? (y/N): " yn; [[ "${yn,,}" == y* ]] && OPEN_UI=1 || OPEN_UI=0
 }
 
 if [[ $INTERACTIVE -eq 1 ]]; then
@@ -104,7 +105,8 @@ bash "$DIR/start.sh" "${args[@]}"
 
 if [[ $OPEN_UI -eq 1 ]]; then
   base="http://127.0.0.1:$PORT"
-  if command -v xdg-open >/dev/null 2>&1; then xdg-open "$base/debug" >/dev/null 2>&1 || true
-  elif command -v open >/dev/null 2>&1; then open "$base/debug" || true
-  else "$DIR/open-url.sh" "$base/debug" || true; fi
+  target="$base$DEBUG_PATH"
+  if command -v xdg-open >/dev/null 2>&1; then xdg-open "$target" >/dev/null 2>&1 || true
+  elif command -v open >/dev/null 2>&1; then open "$target" || true
+  else "$DIR/open-url.sh" "$target" || true; fi
 fi

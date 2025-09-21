@@ -225,7 +225,7 @@ _Note_: MSI bundles may still target legacy internals while the launcher migrate
 └───────────────────────┴──────────────────────────┴────────────────┘
 ```
 
-<i>Screenshot:</i> debug UI at `/debug` (start with `ARW_DEBUG=1`).
+<i>Screenshot:</i> debug UI at `/admin/debug` (a `/debug` alias is still provided when `ARW_DEBUG=1`).
 
 Screenshots → https://t3hw00t.github.io/ARW/guide/screenshots/
 

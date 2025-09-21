@@ -3,7 +3,7 @@ title: Connectors (Cloud & Local Apps)
 ---
 
 # Connectors (Cloud & Local Apps)
-Updated: 2025-09-15
+Updated: 2025-09-21
 Type: How‑to
 
 Safely connect agents to cloud apps and local desktop apps with explicit scopes and leases.
@@ -59,8 +59,7 @@ curl -s -X POST localhost:8091/leases -H 'content-type: application/json' \
 curl -s -X POST localhost:8091/actions -H 'content-type: application/json' \
   -d '{"kind":"app.vscode.open","input":{"path":"projects/demo"}}' | jq
 ```
-- `app.word.open` — opens a document (lease: `io:app:word`).
-- `app.mail.compose` — drafts a message in the default mail client (lease: `io:app:mail`).
+- Planned additions: `app.word.open`, `app.mail.compose`, and other desktop bridges will ship with the capability leases noted above once hardened. Track progress in the Restructure Handbook.
 
 Notes
 - OAuth helpers are planned; today tokens are set directly via `POST /connectors/token`.

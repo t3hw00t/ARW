@@ -50,7 +50,9 @@ mod paths {
     pub const SPEC_MCP: &str = "/spec/mcp-tools.json";
     pub const SPEC_SCHEMA: &str = "/spec/schemas/:file";
     pub const SPEC_INDEX: &str = "/spec/index.json";
+    pub const SPEC_HEALTH: &str = "/spec/health";
     pub const ADMIN_DEBUG: &str = "/admin/debug";
+    pub const DEBUG_ALIAS: &str = "/debug";
     pub const ADMIN_STATE_ROUTE_STATS: &str = "/admin/state/route_stats";
     pub const ADMIN_MODELS: &str = "/admin/models";
     pub const ADMIN_MODELS_SUMMARY: &str = "/admin/models/summary";
@@ -549,6 +551,8 @@ async fn main() {
         api_ui::debug_ui,
         "beta"
     );
+    // Local developer alias for backward compatibility (not included in OpenAPI)
+    app = route_get_rec!(app, endpoints_acc, paths::DEBUG_ALIAS, api_ui::debug_ui);
     app = route_get_tag!(
         app,
         endpoints_acc,
@@ -1428,6 +1432,14 @@ async fn main() {
         endpoints_meta_acc,
         paths::SPEC_INDEX,
         api_spec::spec_index,
+        "stable"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::SPEC_HEALTH,
+        api_spec::spec_health,
         "stable"
     );
     // Generated OpenAPI (experimental)

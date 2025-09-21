@@ -4,7 +4,7 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: Tutorial
 
 Run the unified ARW server locally in minutes. The architecture centres on the `/actions` → `/events` → `/state/*` triad; enable `ARW_DEBUG=1` to serve the browser debug panels.
@@ -110,7 +110,7 @@ These flows emit structured `policy.*`, `working_set.*`, and `leases.*` events. 
 
 ## Debug UI
 
-Enable `ARW_DEBUG=1` to expose the debug panels at `/debug`.
+Enable `ARW_DEBUG=1` to expose the debug panels at `/admin/debug` (a local `/debug` alias remains for convenience in dev builds).
 
 === "Windows"
 ```powershell

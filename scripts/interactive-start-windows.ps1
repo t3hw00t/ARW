@@ -138,7 +138,7 @@ function Open-ProbeMenu {
   while ($true) {
     Banner 'Open / Probe' $base
     Write-Host @'
-  1) Open Debug UI (/debug)
+  1) Open Debug UI (/admin/debug)
   2) Open API Spec (/spec)
   3) Open Tools JSON (/introspect/tools)
   4) Invoke health (/healthz)
@@ -152,13 +152,13 @@ function Open-ProbeMenu {
 '@
     $pick = Read-Host 'Select'
     switch ($pick) {
-      '1' { Start-Process -FilePath "$base/debug" | Out-Null }
+      '1' { Start-Process -FilePath "$base/admin/debug" | Out-Null }
       '2' { Start-Process -FilePath "$base/spec" | Out-Null }
       '3' { Start-Process -FilePath "$base/introspect/tools" | Out-Null }
       '4' { try { (Invoke-WebRequest @IwrArgs "$base/healthz").Content | Write-Host } catch {} ; Read-Host 'Continue' | Out-Null }
       '5' { try { (Invoke-WebRequest @IwrArgs "$base/emit/test").Content | Write-Host } catch {} ; Read-Host 'Continue' | Out-Null }
       '6' { $u = Read-Host 'NATS URL [nats://127.0.0.1:4222]'; if (-not $u) { $u = 'nats://127.0.0.1:4222' }; $rest = $u -replace '^.*?://',''; $parts = $rest.Split(':'); $h=$parts[0]; $p=if ($parts.Length -gt 1) { [int]$parts[1] } else { 4222 }; try { $ok = (Test-NetConnection -ComputerName $h -Port $p -WarningAction SilentlyContinue).TcpTestSucceeded; if ($ok) { Info ("NATS reachable at $($h):$p") } else { Warn ("Cannot reach $($h):$p") } } catch { Warn 'Test failed' }; Read-Host 'Continue' | Out-Null }
-      '7' { try { Set-Clipboard -Value "$base/debug"; Info 'Copied Debug URL' } catch { } }
+      '7' { try { Set-Clipboard -Value "$base/admin/debug"; Info 'Copied Debug URL' } catch { } }
       '8' { try { Set-Clipboard -Value "$base/spec"; Info 'Copied Spec URL' } catch { } }
       '9' {
         $tok = $env:ARW_ADMIN_TOKEN
@@ -524,7 +524,7 @@ function Session-Summary {
     "- Caddy running: $([bool](Test-Path $caddyPid))",
     '',
     '## Useful URLs',
-    ("- Debug: http://127.0.0.1:" + $Port + "/debug"),
+    ("- Debug: http://127.0.0.1:" + $Port + "/admin/debug"),
     ("- Spec:  http://127.0.0.1:" + $Port + "/spec")
   )
   if ($script:GlobalDryRun) { Dry ("Would write " + $out) } else { $txt | Set-Content -Path $out -Encoding utf8; Info ("Wrote " + $out) }
@@ -914,7 +914,7 @@ function Wsl-Set-Default {
 
 function Security-Tips {
   Banner 'Security Tips' 'Protect admin endpoints'
-  Write-Host '  • Sensitive endpoints: /debug, /probe, /admin/memory*, /state/memory*, /models/*, /governor/*, /introspect/*, /chat/*, /feedback/*'
+  Write-Host '  • Sensitive endpoints: /admin/debug (and the /debug alias), /probe, /admin/memory*, /state/memory*, /models/*, /governor/*, /introspect/*, /chat/*, /feedback/*'
   Write-Host '  • In development, ARW_DEBUG=1 is convenient; disable it otherwise.'
   Write-Host '  • Set ARW_ADMIN_TOKEN and send header: X-ARW-Admin: <token>'
   Write-Host '  • Adjust admin rate limiting via ARW_ADMIN_RL (default 60/60).'

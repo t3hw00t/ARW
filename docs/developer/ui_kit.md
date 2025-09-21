@@ -4,7 +4,7 @@ title: UI Kit (Launcher)
 
 # UI Kit (Launcher)
 
-Updated: 2025-09-16
+Updated: 2025-09-21
 Type: How‑to
 
 Microsummary: Reuse small, consistent primitives across launcher pages — cards, buttons, inputs, badges/pills, meters — all styled via shared design tokens.
@@ -33,7 +33,8 @@ See also: developer/design_theme.md
 
 ## Tokens
 
-- Source of truth: `assets/design/tokens.css` (synced to `apps/arw-launcher/src-tauri/ui/tokens.css`)
+- Source of truth: `assets/design/tokens.css` (synced to `apps/arw-launcher/src-tauri/ui/tokens.css` and `apps/arw-server/assets/ui/tokens.css`)
+- UI kit primitives: `assets/design/ui-kit.css` (synced to `apps/arw-launcher/src-tauri/ui/ui-kit.css` and `apps/arw-server/assets/ui/ui-kit.css`)
 - Use tokens instead of hex colors. Key variables:
   - Brand: `--color-brand-copper`, `--color-brand-copper-dark`, `--color-accent-teal`, `--color-accent-teal-light`
   - Neutrals: `--color-ink`, `--color-muted`, `--color-line`

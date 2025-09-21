@@ -1,4 +1,7 @@
-/* UI Kit primitives (shared across launcher pages) */
+/*
+ * Shared UI Kit primitives.
+ * Source of truth: assets/design/ui-kit.css (sync via `just tokens-sync`).
+ */
 
 /* Containers */
 .card{

@@ -83,6 +83,7 @@ pub const TOPIC_ACTIONS_FAILED: &str = "actions.failed";
 pub const TOPIC_ACTIONS_UPDATED: &str = "actions.updated";
 
 // Service lifecycle and misc
+pub const TOPIC_SERVICE_CONNECTED: &str = "service.connected";
 pub const TOPIC_SERVICE_START: &str = "service.start";
 pub const TOPIC_SERVICE_HEALTH: &str = "service.health";
 pub const TOPIC_SERVICE_TEST: &str = "service.test";

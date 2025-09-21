@@ -1,6 +1,6 @@
 # API Reference
 
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: Reference
 
 Microsummary: Public endpoints, admin surfaces, specs, and eventing. Stable/experimental flags are surfaced in specs; deprecations emit standard headers.
@@ -48,6 +48,7 @@ Microsummary: Public endpoints, admin surfaces, specs, and eventing. Stable/expe
 | GET | `/spec/openapi.yaml` | OpenAPI document for the unified server. | stable |
 | GET | `/spec/asyncapi.yaml` | AsyncAPI schema for event streams. | stable |
 | GET | `/spec/mcp-tools.json` | MCP tools manifest. | stable |
+| GET | `/spec/health` | Presence/size summary for published spec artifacts. | stable |
 | GET | `/spec/schemas/{file}` | JSON Schemas referenced by the API. | stable |
 | GET | `/spec/index.json` | Index of published specs. | stable |
 | GET | `/catalog/index` | Interface catalog (YAML). | stable |
@@ -149,28 +150,31 @@ Sample response (defaults)
 ```
 
 !!! note "Admin downloads and CAS endpoints"
-    `arw-server` hosts the historical admin surface directly:
+    `arw-server` exposes model orchestration helpers under `/admin/models/*`:
 
-    - `GET /models/blob/{sha256}` — download a content-addressed model blob.
-    - `POST /admin/models/concurrency` — set max concurrency at runtime.
-    - `GET  /admin/models/concurrency` — snapshot `{ configured_max, available_permits, held_permits, hard_cap, pending_shrink? }`.
-    - `GET  /admin/models/jobs` — active jobs plus inflight hashes.
-    - `GET  /events` — SSE with optional `?replay`.
-    - `GET  /debug` — debug UI when `ARW_DEBUG=1`.
+    - `POST /admin/models/download` — queue a download `{ id, source_url?, resume? }` and stream progress over `models.download.progress` events.
+    - `POST /admin/models/download/cancel` — request cancellation for a queued or running download `{ "id": "<model-id>" }`.
+    - `POST /admin/models/concurrency` / `GET /admin/models/concurrency` — manage runtime concurrency limits.
+    - `GET  /admin/models/jobs` — inspect active jobs and inflight hashes.
+    - `POST /admin/models/cas_gc` — trigger garbage collection for stored CAS blobs (returns a summary).
+    - `GET  /events` — subscribe for progress/errors (filter with `?prefix=models.` for model activity).
+    - `GET  /admin/debug` — debug UI when `ARW_DEBUG=1` (a `/debug` alias remains for local builds).
 
-    Sample CAS downloads:
+    Example download flow:
 
     ```bash
-    # Full download
-    curl -SsfLO "http://127.0.0.1:8091/models/blob/0123abcd..."
+    curl -sS -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+      -H 'content-type: application/json' \
+      -d '{"id":"llama-3.1-8b-instruct"}' \
+      http://127.0.0.1:8091/admin/models/download | jq
 
-    # Conditional
-    curl -I -H 'If-None-Match: "0123abcd..."' \
-      "http://127.0.0.1:8091/models/blob/0123abcd..."
+    # Inspect active jobs
+    curl -sS -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+      http://127.0.0.1:8091/admin/models/jobs | jq
 
-    # Partial
-    curl -sS -H 'Range: bytes=0-1048575' \
-      -o part.bin "http://127.0.0.1:8091/models/blob/0123abcd..."
+    # Watch progress
+    curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+      "http://127.0.0.1:8091/events?prefix=models.download"
     ```
 
 Egress

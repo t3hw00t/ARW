@@ -1,354 +1,963 @@
 asyncapi: 2.6.0
 info:
   title: "arw-server events"
-  version: "0.1.0"
+  version: "0.1.4"
   description: "Normalized dot.case event channels for the unified server."
   license:
     name: "MIT OR Apache-2.0"
-  contact:
-    name: "ARW"
-    url: "https://github.com/t3hw00t/ARW"
-    email: "noreply@example.com"
 defaultContentType: application/json
-tags:
-  - name: CloudEvents
-    description: Events include CloudEvents 1.0 metadata under `ce`.
 channels:
-  service.start:
+  'actions.applied':
     subscribe:
-      operationId: service_start
-      description: Service emitted start event
+      operationId: actions_applied_event
+      summary: "actions.applied event"
       message:
-        $ref: '#/components/messages/ServiceStart'
-  service.health:
+        name: 'actions.applied'
+        payload:
+          type: object
+          additionalProperties: true
+  'actions.completed':
     subscribe:
-      operationId: service_health
-      description: Periodic health heartbeat
+      operationId: actions_completed_event
+      summary: "actions.completed event"
       message:
-        $ref: '#/components/messages/ServiceHealth'
-  service.test:
+        name: 'actions.completed'
+        payload:
+          type: object
+          additionalProperties: true
+  'actions.failed':
     subscribe:
-      operationId: service_test
-      description: Test event emission
+      operationId: actions_failed_event
+      summary: "actions.failed event"
       message:
-        $ref: '#/components/messages/ServiceTest'
-  governor.changed:
+        name: 'actions.failed'
+        payload:
+          type: object
+          additionalProperties: true
+  'actions.hint.applied':
     subscribe:
-      operationId: governor_changed
-      description: Governor profile changed
+      operationId: actions_hint_applied_event
+      summary: "actions.hint.applied event"
       message:
-        $ref: '#/components/messages/GovernorChanged'
-  memory.applied:
+        name: 'actions.hint.applied'
+        payload:
+          type: object
+          additionalProperties: true
+  'actions.running':
     subscribe:
-      operationId: memory_applied
-      description: Memory applied to working set
+      operationId: actions_running_event
+      summary: "actions.running event"
       message:
-        $ref: '#/components/messages/MemoryApplied'
-  models.changed:
+        name: 'actions.running'
+        payload:
+          type: object
+          additionalProperties: true
+  'actions.submitted':
     subscribe:
-      operationId: models_changed
-      description: Models list/default changed
+      operationId: actions_submitted_event
+      summary: "actions.submitted event"
       message:
-        $ref: '#/components/messages/ModelsChanged'
-  models.download.progress:
+        name: 'actions.submitted'
+        payload:
+          type: object
+          additionalProperties: true
+  'actions.updated':
     subscribe:
-      operationId: models_download_progress
-      description: Download progress, status codes, metrics snapshots
+      operationId: actions_updated_event
+      summary: "actions.updated event"
       message:
-        $ref: '#/components/messages/ModelsDownloadProgress'
-  models.manifest.written:
+        name: 'actions.updated'
+        payload:
+          type: object
+          additionalProperties: true
+  'apps.vscode.opened':
     subscribe:
-      operationId: models_manifest_written
-      description: A model manifest has been written
+      operationId: apps_vscode_opened_event
+      summary: "apps.vscode.opened event"
       message:
-        $ref: '#/components/messages/ModelsManifestWritten'
-  models.cas.gc:
+        name: 'apps.vscode.opened'
+        payload:
+          type: object
+          additionalProperties: true
+  'beliefs.updated':
     subscribe:
-      operationId: models_cas_gc
-      description: CAS GC run summary
+      operationId: beliefs_updated_event
+      summary: "beliefs.updated event"
       message:
-        $ref: '#/components/messages/ModelsCasGc'
-  egress.preview:
+        name: 'beliefs.updated'
+        payload:
+          type: object
+          additionalProperties: true
+  'catalog.updated':
     subscribe:
-      operationId: egress_preview
-      description: Egress preflight summary
+      operationId: catalog_updated_event
+      summary: "catalog.updated event"
       message:
-        $ref: '#/components/messages/EgressPreview'
-  egress.ledger.appended:
+        name: 'catalog.updated'
+        payload:
+          type: object
+          additionalProperties: true
+  'chat.message':
     subscribe:
-      operationId: egress_ledger_appended
-      description: Egress decision appended to ledger
+      operationId: chat_message_event
+      summary: "chat.message event"
       message:
-        $ref: '#/components/messages/EgressLedgerAppended'
-  tool.ran:
+        name: 'chat.message'
+        payload:
+          type: object
+          additionalProperties: true
+  'chat.planner':
     subscribe:
-      operationId: tool_ran
-      description: Tool execution completed
+      operationId: chat_planner_event
+      summary: "chat.planner event"
       message:
-        $ref: '#/components/messages/ToolRan'
-  feedback.signal:
+        name: 'chat.planner'
+        payload:
+          type: object
+          additionalProperties: true
+  'chat.probe':
     subscribe:
-      operationId: feedback_signal
-      description: Feedback signal recorded
+      operationId: chat_probe_event
+      summary: "chat.probe event"
       message:
-        $ref: '#/components/messages/FeedbackSignal'
-  feedback.suggested:
+        name: 'chat.probe'
+        payload:
+          type: object
+          additionalProperties: true
+  'cluster.node.advertise':
     subscribe:
-      operationId: feedback_suggested
-      description: Feedback suggestion produced
+      operationId: cluster_node_advertise_event
+      summary: "cluster.node.advertise event"
       message:
-        $ref: '#/components/messages/FeedbackSuggested'
-  feedback.applied:
+        name: 'cluster.node.advertise'
+        payload:
+          type: object
+          additionalProperties: true
+  'cluster.node.changed':
     subscribe:
-      operationId: feedback_applied
-      description: Feedback suggestion applied
+      operationId: cluster_node_changed_event
+      summary: "cluster.node.changed event"
       message:
-        $ref: '#/components/messages/FeedbackApplied'
-  rpu.trust.changed:
+        name: 'cluster.node.changed'
+        payload:
+          type: object
+          additionalProperties: true
+  'config.patch.applied':
     subscribe:
-      operationId: rpu_trust_changed
-      description: Trust store changed/reloaded
+      operationId: config_patch_applied_event
+      summary: "config.patch.applied event"
       message:
-        $ref: '#/components/messages/RpuTrustChanged'
-components:
-  messages:
-    ServiceStart:
-      name: service.start
-      payload:
-        type: object
-        additionalProperties: true
-    ServiceHealth:
-      name: service.health
-      payload:
-        type: object
-        properties:
-          ok: { type: boolean }
-    ServiceTest:
-      name: service.test
-      payload:
-        type: object
-        additionalProperties: true
-    GovernorChanged:
-      name: governor.changed
-      payload:
-        type: object
-        properties:
-          profile: { type: string }
-    MemoryApplied:
-      name: memory.applied
-      payload:
-        type: object
-        additionalProperties: true
-    ModelsChanged:
-      name: models.changed
-      payload:
-        type: object
-        additionalProperties: true
-    ModelsDownloadProgress:
-      name: models.download.progress
-      payload:
-        type: object
-        properties:
-          id: { type: string }
-          status:
-            type: string
-            enum:
-              - queued
-              - admitted
-              - downloading
-              - resumed
-              - resync
-              - degraded
-              - canceled
-              - complete
-              - cancel-requested
-              - no-active-job
-              - cache-mismatch
-              - error
-          code:
-            type: string
-            enum:
-              # lifecycle & progress codes
-              - started
-              - queued
-              - admitted
-              - downloading
-              - progress
-              - resumed
-              - resync
-              - degraded
-              - canceled-by-user
-              - complete
-              - cached
-              - already-in-progress
-              - already-in-progress-hash
-              - cache-mismatch
-              - soft-budget
-              - soft-exhausted
-              - cancel-requested
-              - no-active-job
-              # error/guard codes
-              - request-timeout
-              - request-failed
-              - concurrency-closed
-              - downstream-http-status
-              - upstream-changed
-              - resume-no-content-range
-              - resume-http-status
-              - resume-failed
-              - resync-failed
-              - quota-exceeded
-              - quota_exceeded
-              - size-limit
-              - size_limit
-              - idle-timeout
-              - hard-budget
-              - hard-exhausted
-              - io
-              - io-read
-              - io-write
-              - flush-failed
-              - mkdir-failed
-              - open-failed
-              - create-failed
-              - verify-open-failed
-              - verify-read-failed
-              - checksum-mismatch
-              - sha256_mismatch
-              - size-mismatch
-              - finalize-failed
-              - admission-denied
-              - disk-insufficient
-              - disk_insufficient
-              - size-limit-stream
-              - disk-insufficient-stream
-          error: { type: string }
-          progress: { type: integer }
-          downloaded: { type: integer }
-          total: { type: integer }
-          file: { type: string }
-          provider: { type: string }
-          cas_file: { type: string }
-          budget:
-            type: object
-            properties:
-              soft_ms: { type: integer }
-              hard_ms: { type: integer }
-              spent_ms: { type: integer }
-              remaining_soft_ms: { type: integer }
-              remaining_hard_ms: { type: integer }
-          disk:
-            type: object
-            properties:
-              available: { type: integer }
-              total: { type: integer }
-              reserve: { type: integer }
-        additionalProperties: true
-    ModelsManifestWritten:
-      name: models.manifest.written
-      payload:
-        type: object
-        properties:
-          id: { type: string }
-          manifest_path: { type: string }
-          sha256: { type: ["string","null"] }
-          cas: { type: ["string","null"] }
-    ModelsCasGc:
-      name: models.cas.gc
-      payload:
-        type: object
-        properties:
-          scanned: { type: integer }
-          kept: { type: integer }
-          deleted: { type: integer }
-          deleted_bytes: { type: integer }
-          ttl_days: { type: integer }
-    EgressPreview:
-      name: egress.preview
-      payload:
-        type: object
-        properties:
-          id: { type: string }
-          url: { type: string }
-          dest:
-            type: object
-            properties:
-              host: { type: string }
-              port: { type: integer }
-              protocol: { type: string }
-          provider: { type: string }
-          corr_id: { type: string }
-        additionalProperties: true
-    EgressLedgerAppended:
-      name: egress.ledger.appended
-      payload:
-        type: object
-        properties:
-          decision: { type: string }
-          reason_code: { type: string }
-          posture: { type: string }
-          project_id: { type: string }
-          episode_id: { type: ["string","null"] }
-          corr_id: { type: string }
-          node_id: { type: ["string","null"] }
-          tool_id: { type: string }
-          dest:
-            type: object
-            properties:
-              host: { type: string }
-              port: { type: integer }
-              protocol: { type: string }
-          bytes_out: { type: integer }
-          bytes_in: { type: integer }
-          duration_ms: { type: integer }
-    ToolRan:
-      name: tool.ran
-      payload:
-        type: object
-        properties:
-          id: { type: string }
-          output: { type: object }
-    FeedbackSignal:
-      name: feedback.signal
-      payload:
-        type: object
-        properties:
-          signal:
-            type: object
-            properties:
-              id: { type: string }
-              kind: { type: string }
-              target: { type: string }
-              confidence: { type: number }
-              severity: { type: integer }
-    FeedbackSuggested:
-      name: feedback.suggested
-      payload:
-        type: object
-        properties:
-          version: { type: integer }
-          suggestions:
-            type: array
-            items:
-              type: object
-              properties:
-                id: { type: string }
-                action: { type: string }
-                params: { type: object }
-                rationale: { type: string }
-                confidence: { type: number }
-    FeedbackApplied:
-      name: feedback.applied
-      payload:
-        type: object
-        properties:
-          id: { type: string }
-          action: { type: string }
-          params: { type: object }
-    RpuTrustChanged:
-      name: rpu.trust.changed
-      payload:
-        type: object
-        properties:
-          count: { type: integer }
-          path: { type: string }
+        name: 'config.patch.applied'
+        payload:
+          type: object
+          additionalProperties: true
+  'connectors.registered':
+    subscribe:
+      operationId: connectors_registered_event
+      summary: "connectors.registered event"
+      message:
+        name: 'connectors.registered'
+        payload:
+          type: object
+          additionalProperties: true
+  'connectors.token.updated':
+    subscribe:
+      operationId: connectors_token_updated_event
+      summary: "connectors.token.updated event"
+      message:
+        name: 'connectors.token.updated'
+        payload:
+          type: object
+          additionalProperties: true
+  'context.assembled':
+    subscribe:
+      operationId: context_assembled_event
+      summary: "context.assembled event"
+      message:
+        name: 'context.assembled'
+        payload:
+          type: object
+          additionalProperties: true
+  'context.coverage':
+    subscribe:
+      operationId: context_coverage_event
+      summary: "context.coverage event"
+      message:
+        name: 'context.coverage'
+        payload:
+          type: object
+          additionalProperties: true
+  'distill.completed':
+    subscribe:
+      operationId: distill_completed_event
+      summary: "distill.completed event"
+      message:
+        name: 'distill.completed'
+        payload:
+          type: object
+          additionalProperties: true
+  'egress.ledger.appended':
+    subscribe:
+      operationId: egress_ledger_appended_event
+      summary: "egress.ledger.appended event"
+      message:
+        name: 'egress.ledger.appended'
+        payload:
+          type: object
+          additionalProperties: true
+  'egress.preview':
+    subscribe:
+      operationId: egress_preview_event
+      summary: "egress.preview event"
+      message:
+        name: 'egress.preview'
+        payload:
+          type: object
+          additionalProperties: true
+  'egress.settings.updated':
+    subscribe:
+      operationId: egress_settings_updated_event
+      summary: "egress.settings.updated event"
+      message:
+        name: 'egress.settings.updated'
+        payload:
+          type: object
+          additionalProperties: true
+  'experiment.activated':
+    subscribe:
+      operationId: experiment_activated_event
+      summary: "experiment.activated event"
+      message:
+        name: 'experiment.activated'
+        payload:
+          type: object
+          additionalProperties: true
+  'experiment.completed':
+    subscribe:
+      operationId: experiment_completed_event
+      summary: "experiment.completed event"
+      message:
+        name: 'experiment.completed'
+        payload:
+          type: object
+          additionalProperties: true
+  'experiment.result':
+    subscribe:
+      operationId: experiment_result_event
+      summary: "experiment.result event"
+      message:
+        name: 'experiment.result'
+        payload:
+          type: object
+          additionalProperties: true
+  'experiment.started':
+    subscribe:
+      operationId: experiment_started_event
+      summary: "experiment.started event"
+      message:
+        name: 'experiment.started'
+        payload:
+          type: object
+          additionalProperties: true
+  'experiment.variant.chosen':
+    subscribe:
+      operationId: experiment_variant_chosen_event
+      summary: "experiment.variant.chosen event"
+      message:
+        name: 'experiment.variant.chosen'
+        payload:
+          type: object
+          additionalProperties: true
+  'experiment.winner':
+    subscribe:
+      operationId: experiment_winner_event
+      summary: "experiment.winner event"
+      message:
+        name: 'experiment.winner'
+        payload:
+          type: object
+          additionalProperties: true
+  'feedback.applied':
+    subscribe:
+      operationId: feedback_applied_event
+      summary: "feedback.applied event"
+      message:
+        name: 'feedback.applied'
+        payload:
+          type: object
+          additionalProperties: true
+  'feedback.signal':
+    subscribe:
+      operationId: feedback_signal_event
+      summary: "feedback.signal event"
+      message:
+        name: 'feedback.signal'
+        payload:
+          type: object
+          additionalProperties: true
+  'feedback.suggested':
+    subscribe:
+      operationId: feedback_suggested_event
+      summary: "feedback.suggested event"
+      message:
+        name: 'feedback.suggested'
+        payload:
+          type: object
+          additionalProperties: true
+  'feedback.updated':
+    subscribe:
+      operationId: feedback_updated_event
+      summary: "feedback.updated event"
+      message:
+        name: 'feedback.updated'
+        payload:
+          type: object
+          additionalProperties: true
+  'goldens.evaluated':
+    subscribe:
+      operationId: goldens_evaluated_event
+      summary: "goldens.evaluated event"
+      message:
+        name: 'goldens.evaluated'
+        payload:
+          type: object
+          additionalProperties: true
+  'governor.changed':
+    subscribe:
+      operationId: governor_changed_event
+      summary: "governor.changed event"
+      message:
+        name: 'governor.changed'
+        payload:
+          type: object
+          additionalProperties: true
+  'hierarchy.accepted':
+    subscribe:
+      operationId: hierarchy_accepted_event
+      summary: "hierarchy.accepted event"
+      message:
+        name: 'hierarchy.accepted'
+        payload:
+          type: object
+          additionalProperties: true
+  'hierarchy.hello':
+    subscribe:
+      operationId: hierarchy_hello_event
+      summary: "hierarchy.hello event"
+      message:
+        name: 'hierarchy.hello'
+        payload:
+          type: object
+          additionalProperties: true
+  'hierarchy.offer':
+    subscribe:
+      operationId: hierarchy_offer_event
+      summary: "hierarchy.offer event"
+      message:
+        name: 'hierarchy.offer'
+        payload:
+          type: object
+          additionalProperties: true
+  'hierarchy.role.changed':
+    subscribe:
+      operationId: hierarchy_role_changed_event
+      summary: "hierarchy.role.changed event"
+      message:
+        name: 'hierarchy.role.changed'
+        payload:
+          type: object
+          additionalProperties: true
+  'hierarchy.state':
+    subscribe:
+      operationId: hierarchy_state_event
+      summary: "hierarchy.state event"
+      message:
+        name: 'hierarchy.state'
+        payload:
+          type: object
+          additionalProperties: true
+  'intents.approved':
+    subscribe:
+      operationId: intents_approved_event
+      summary: "intents.approved event"
+      message:
+        name: 'intents.approved'
+        payload:
+          type: object
+          additionalProperties: true
+  'intents.proposed':
+    subscribe:
+      operationId: intents_proposed_event
+      summary: "intents.proposed event"
+      message:
+        name: 'intents.proposed'
+        payload:
+          type: object
+          additionalProperties: true
+  'intents.rejected':
+    subscribe:
+      operationId: intents_rejected_event
+      summary: "intents.rejected event"
+      message:
+        name: 'intents.rejected'
+        payload:
+          type: object
+          additionalProperties: true
+  'logic.unit.applied':
+    subscribe:
+      operationId: logic_unit_applied_event
+      summary: "logic.unit.applied event"
+      message:
+        name: 'logic.unit.applied'
+        payload:
+          type: object
+          additionalProperties: true
+  'logic.unit.installed':
+    subscribe:
+      operationId: logic_unit_installed_event
+      summary: "logic.unit.installed event"
+      message:
+        name: 'logic.unit.installed'
+        payload:
+          type: object
+          additionalProperties: true
+  'logic.unit.reverted':
+    subscribe:
+      operationId: logic_unit_reverted_event
+      summary: "logic.unit.reverted event"
+      message:
+        name: 'logic.unit.reverted'
+        payload:
+          type: object
+          additionalProperties: true
+  'logic.unit.suggested':
+    subscribe:
+      operationId: logic_unit_suggested_event
+      summary: "logic.unit.suggested event"
+      message:
+        name: 'logic.unit.suggested'
+        payload:
+          type: object
+          additionalProperties: true
+  'memory.admitted':
+    subscribe:
+      operationId: memory_admitted_event
+      summary: "memory.admitted event"
+      message:
+        name: 'memory.admitted'
+        payload:
+          type: object
+          additionalProperties: true
+  'memory.applied':
+    subscribe:
+      operationId: memory_applied_event
+      summary: "memory.applied event"
+      message:
+        name: 'memory.applied'
+        payload:
+          type: object
+          additionalProperties: true
+  'memory.item.expired':
+    subscribe:
+      operationId: memory_item_expired_event
+      summary: "memory.item.expired event"
+      message:
+        name: 'memory.item.expired'
+        payload:
+          type: object
+          additionalProperties: true
+  'memory.item.upserted':
+    subscribe:
+      operationId: memory_item_upserted_event
+      summary: "memory.item.upserted event"
+      message:
+        name: 'memory.item.upserted'
+        payload:
+          type: object
+          additionalProperties: true
+  'memory.link.put':
+    subscribe:
+      operationId: memory_link_put_event
+      summary: "memory.link.put event"
+      message:
+        name: 'memory.link.put'
+        payload:
+          type: object
+          additionalProperties: true
+  'memory.pack.journaled':
+    subscribe:
+      operationId: memory_pack_journaled_event
+      summary: "memory.pack.journaled event"
+      message:
+        name: 'memory.pack.journaled'
+        payload:
+          type: object
+          additionalProperties: true
+  'memory.quarantined':
+    subscribe:
+      operationId: memory_quarantined_event
+      summary: "memory.quarantined event"
+      message:
+        name: 'memory.quarantined'
+        payload:
+          type: object
+          additionalProperties: true
+  'memory.record.put':
+    subscribe:
+      operationId: memory_record_put_event
+      summary: "memory.record.put event"
+      message:
+        name: 'memory.record.put'
+        payload:
+          type: object
+          additionalProperties: true
+  'models.cas.gc':
+    subscribe:
+      operationId: models_cas_gc_event
+      summary: "models.cas.gc event"
+      message:
+        name: 'models.cas.gc'
+        payload:
+          type: object
+          additionalProperties: true
+  'models.changed':
+    subscribe:
+      operationId: models_changed_event
+      summary: "models.changed event"
+      message:
+        name: 'models.changed'
+        payload:
+          type: object
+          additionalProperties: true
+  'models.concurrency.changed':
+    subscribe:
+      operationId: models_concurrency_changed_event
+      summary: "models.concurrency.changed event"
+      message:
+        name: 'models.concurrency.changed'
+        payload:
+          type: object
+          additionalProperties: true
+  'models.download.progress':
+    subscribe:
+      operationId: models_download_progress_event
+      summary: "models.download.progress event"
+      message:
+        name: 'models.download.progress'
+        payload:
+          type: object
+          additionalProperties: true
+  'models.manifest.written':
+    subscribe:
+      operationId: models_manifest_written_event
+      summary: "models.manifest.written event"
+      message:
+        name: 'models.manifest.written'
+        payload:
+          type: object
+          additionalProperties: true
+  'models.refreshed':
+    subscribe:
+      operationId: models_refreshed_event
+      summary: "models.refreshed event"
+      message:
+        name: 'models.refreshed'
+        payload:
+          type: object
+          additionalProperties: true
+  'orchestrator.job.completed':
+    subscribe:
+      operationId: orchestrator_job_completed_event
+      summary: "orchestrator.job.completed event"
+      message:
+        name: 'orchestrator.job.completed'
+        payload:
+          type: object
+          additionalProperties: true
+  'orchestrator.job.created':
+    subscribe:
+      operationId: orchestrator_job_created_event
+      summary: "orchestrator.job.created event"
+      message:
+        name: 'orchestrator.job.created'
+        payload:
+          type: object
+          additionalProperties: true
+  'orchestrator.job.progress':
+    subscribe:
+      operationId: orchestrator_job_progress_event
+      summary: "orchestrator.job.progress event"
+      message:
+        name: 'orchestrator.job.progress'
+        payload:
+          type: object
+          additionalProperties: true
+  'policy.capsule.applied':
+    subscribe:
+      operationId: policy_capsule_applied_event
+      summary: "policy.capsule.applied event"
+      message:
+        name: 'policy.capsule.applied'
+        payload:
+          type: object
+          additionalProperties: true
+  'policy.capsule.expired':
+    subscribe:
+      operationId: policy_capsule_expired_event
+      summary: "policy.capsule.expired event"
+      message:
+        name: 'policy.capsule.expired'
+        payload:
+          type: object
+          additionalProperties: true
+  'policy.capsule.failed':
+    subscribe:
+      operationId: policy_capsule_failed_event
+      summary: "policy.capsule.failed event"
+      message:
+        name: 'policy.capsule.failed'
+        payload:
+          type: object
+          additionalProperties: true
+  'policy.decision':
+    subscribe:
+      operationId: policy_decision_event
+      summary: "policy.decision event"
+      message:
+        name: 'policy.decision'
+        payload:
+          type: object
+          additionalProperties: true
+  'policy.reloaded':
+    subscribe:
+      operationId: policy_reloaded_event
+      summary: "policy.reloaded event"
+      message:
+        name: 'policy.reloaded'
+        payload:
+          type: object
+          additionalProperties: true
+  'probe.hw':
+    subscribe:
+      operationId: probe_hw_event
+      summary: "probe.hw event"
+      message:
+        name: 'probe.hw'
+        payload:
+          type: object
+          additionalProperties: true
+  'probe.metrics':
+    subscribe:
+      operationId: probe_metrics_event
+      summary: "probe.metrics event"
+      message:
+        name: 'probe.metrics'
+        payload:
+          type: object
+          additionalProperties: true
+  'projects.created':
+    subscribe:
+      operationId: projects_created_event
+      summary: "projects.created event"
+      message:
+        name: 'projects.created'
+        payload:
+          type: object
+          additionalProperties: true
+  'projects.file.written':
+    subscribe:
+      operationId: projects_file_written_event
+      summary: "projects.file.written event"
+      message:
+        name: 'projects.file.written'
+        payload:
+          type: object
+          additionalProperties: true
+  'projects.notes.saved':
+    subscribe:
+      operationId: projects_notes_saved_event
+      summary: "projects.notes.saved event"
+      message:
+        name: 'projects.notes.saved'
+        payload:
+          type: object
+          additionalProperties: true
+  'research.watcher.updated':
+    subscribe:
+      operationId: research_watcher_updated_event
+      summary: "research.watcher.updated event"
+      message:
+        name: 'research.watcher.updated'
+        payload:
+          type: object
+          additionalProperties: true
+  'rpu.trust.changed':
+    subscribe:
+      operationId: rpu_trust_changed_event
+      summary: "rpu.trust.changed event"
+      message:
+        name: 'rpu.trust.changed'
+        payload:
+          type: object
+          additionalProperties: true
+  'screenshots.captured':
+    subscribe:
+      operationId: screenshots_captured_event
+      summary: "screenshots.captured event"
+      message:
+        name: 'screenshots.captured'
+        payload:
+          type: object
+          additionalProperties: true
+  'self.model.proposed':
+    subscribe:
+      operationId: self_model_proposed_event
+      summary: "self.model.proposed event"
+      message:
+        name: 'self.model.proposed'
+        payload:
+          type: object
+          additionalProperties: true
+  'self.model.updated':
+    subscribe:
+      operationId: self_model_updated_event
+      summary: "self.model.updated event"
+      message:
+        name: 'self.model.updated'
+        payload:
+          type: object
+          additionalProperties: true
+  'service.connected':
+    subscribe:
+      operationId: service_connected_event
+      summary: "service.connected event"
+      message:
+        name: 'service.connected'
+        payload:
+          type: object
+          additionalProperties: true
+  'service.health':
+    subscribe:
+      operationId: service_health_event
+      summary: "service.health event"
+      message:
+        name: 'service.health'
+        payload:
+          type: object
+          additionalProperties: true
+  'service.start':
+    subscribe:
+      operationId: service_start_event
+      summary: "service.start event"
+      message:
+        name: 'service.start'
+        payload:
+          type: object
+          additionalProperties: true
+  'service.stop':
+    subscribe:
+      operationId: service_stop_event
+      summary: "service.stop event"
+      message:
+        name: 'service.stop'
+        payload:
+          type: object
+          additionalProperties: true
+  'service.test':
+    subscribe:
+      operationId: service_test_event
+      summary: "service.test event"
+      message:
+        name: 'service.test'
+        payload:
+          type: object
+          additionalProperties: true
+  'snappy.detail':
+    subscribe:
+      operationId: snappy_detail_event
+      summary: "snappy.detail event"
+      message:
+        name: 'snappy.detail'
+        payload:
+          type: object
+          additionalProperties: true
+  'snappy.notice':
+    subscribe:
+      operationId: snappy_notice_event
+      summary: "snappy.notice event"
+      message:
+        name: 'snappy.notice'
+        payload:
+          type: object
+          additionalProperties: true
+  'staging.decided':
+    subscribe:
+      operationId: staging_decided_event
+      summary: "staging.decided event"
+      message:
+        name: 'staging.decided'
+        payload:
+          type: object
+          additionalProperties: true
+  'staging.pending':
+    subscribe:
+      operationId: staging_pending_event
+      summary: "staging.pending event"
+      message:
+        name: 'staging.pending'
+        payload:
+          type: object
+          additionalProperties: true
+  'state.read.model.patch':
+    subscribe:
+      operationId: state_read_model_patch_event
+      summary: "state.read.model.patch event"
+      message:
+        name: 'state.read.model.patch'
+        payload:
+          type: object
+          additionalProperties: true
+  'task.completed':
+    subscribe:
+      operationId: task_completed_event
+      summary: "task.completed event"
+      message:
+        name: 'task.completed'
+        payload:
+          type: object
+          additionalProperties: true
+  'tool.cache':
+    subscribe:
+      operationId: tool_cache_event
+      summary: "tool.cache event"
+      message:
+        name: 'tool.cache'
+        payload:
+          type: object
+          additionalProperties: true
+  'tool.ran':
+    subscribe:
+      operationId: tool_ran_event
+      summary: "tool.ran event"
+      message:
+        name: 'tool.ran'
+        payload:
+          type: object
+          additionalProperties: true
+  'training.metrics.updated':
+    subscribe:
+      operationId: training_metrics_updated_event
+      summary: "training.metrics.updated event"
+      message:
+        name: 'training.metrics.updated'
+        payload:
+          type: object
+          additionalProperties: true
+  'working_set.completed':
+    subscribe:
+      operationId: working_set_completed_event
+      summary: "working_set.completed event"
+      message:
+        name: 'working_set.completed'
+        payload:
+          type: object
+          additionalProperties: true
+  'working_set.error':
+    subscribe:
+      operationId: working_set_error_event
+      summary: "working_set.error event"
+      message:
+        name: 'working_set.error'
+        payload:
+          type: object
+          additionalProperties: true
+  'working_set.expand_query':
+    subscribe:
+      operationId: working_set_expand_query_event
+      summary: "working_set.expand_query event"
+      message:
+        name: 'working_set.expand_query'
+        payload:
+          type: object
+          additionalProperties: true
+  'working_set.expanded':
+    subscribe:
+      operationId: working_set_expanded_event
+      summary: "working_set.expanded event"
+      message:
+        name: 'working_set.expanded'
+        payload:
+          type: object
+          additionalProperties: true
+  'working_set.iteration.summary':
+    subscribe:
+      operationId: working_set_iteration_summary_event
+      summary: "working_set.iteration.summary event"
+      message:
+        name: 'working_set.iteration.summary'
+        payload:
+          type: object
+          additionalProperties: true
+  'working_set.seed':
+    subscribe:
+      operationId: working_set_seed_event
+      summary: "working_set.seed event"
+      message:
+        name: 'working_set.seed'
+        payload:
+          type: object
+          additionalProperties: true
+  'working_set.selected':
+    subscribe:
+      operationId: working_set_selected_event
+      summary: "working_set.selected event"
+      message:
+        name: 'working_set.selected'
+        payload:
+          type: object
+          additionalProperties: true
+  'working_set.started':
+    subscribe:
+      operationId: working_set_started_event
+      summary: "working_set.started event"
+      message:
+        name: 'working_set.started'
+        payload:
+          type: object
+          additionalProperties: true
+  'world.diff.applied':
+    subscribe:
+      operationId: world_diff_applied_event
+      summary: "world.diff.applied event"
+      message:
+        name: 'world.diff.applied'
+        payload:
+          type: object
+          additionalProperties: true
+  'world.diff.queued':
+    subscribe:
+      operationId: world_diff_queued_event
+      summary: "world.diff.queued event"
+      message:
+        name: 'world.diff.queued'
+        payload:
+          type: object
+          additionalProperties: true
+  'world.diff.rejected':
+    subscribe:
+      operationId: world_diff_rejected_event
+      summary: "world.diff.rejected event"
+      message:
+        name: 'world.diff.rejected'
+        payload:
+          type: object
+          additionalProperties: true
+  'world.updated':
+    subscribe:
+      operationId: world_updated_event
+      summary: "world.updated event"
+      message:
+        name: 'world.updated'
+        payload:
+          type: object
+          additionalProperties: true

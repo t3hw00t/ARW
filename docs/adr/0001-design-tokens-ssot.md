@@ -3,7 +3,7 @@ title: ADR 0001: Single Source of Truth for Design Tokens
 status: accepted
 date: 2025-09-14
 ---
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: Explanation
 
 Context
@@ -13,6 +13,8 @@ Context
 Decision
 - Create a single source of truth under `assets/design/` and sync to consumers.
 - Formats: W3C tokens (`tokens.w3c.json`) + generated CSS (`tokens.css`) + JSON mirror (`tokens.json`).
+- UI primitives live alongside tokens (`assets/design/ui-kit.css`) so launcher/server share one build artifact.
+- Sync tooling writes generated CSS to `apps/arw-launcher/src-tauri/ui/` and `apps/arw-server/assets/ui/` so each surface stays buildable in isolation.
 - Consumers import `tokens.css`; launcher pages include it before `ui-kit.css` and `common.css`.
 - CI enforces sync via `scripts/check_tokens_sync.sh`.
 

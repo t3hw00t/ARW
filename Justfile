@@ -113,7 +113,7 @@ start port='8091' debug='1':
   ' _ {{debug}} {{port}}
 
 open-debug host='127.0.0.1' port='8091':
-  bash scripts/open-url.sh http://{{host}}:{{port}}/debug
+  bash scripts/open-url.sh http://{{host}}:{{port}}/admin/debug
 
 hooks-install:
   bash scripts/hooks/install_hooks.sh

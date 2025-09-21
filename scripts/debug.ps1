@@ -45,7 +45,7 @@ if ($Interactive) {
     }
   }
   $yn = Read-Host 'Use dist/ if available? (y/N)'; if ($yn -match '^[yY]') { $Dist = $true } else { $Dist = $false }
-  $yn = Read-Host 'Open /debug after start? (y/N)'; if ($yn -match '^[yY]') { $openUi = $true } else { $openUi = $false }
+  $yn = Read-Host 'Open admin debug UI after start? (y/N)'; if ($yn -match '^[yY]') { $openUi = $true } else { $openUi = $false }
 }
 
 if (-not $portWasSpecified) { $Port = $PORT_DEFAULT }
@@ -65,6 +65,6 @@ if (-not $NoHealth) { $argsList += @('--wait-health', '--wait-health-timeout-sec
 & (Join-Path $PSScriptRoot 'start.ps1') @argsList
 
 if ($openUi) {
-  $base = "http://127.0.0.1:$Port/debug"
+  $base = "http://127.0.0.1:$Port/admin/debug"
   try { Start-Process $base | Out-Null } catch {}
 }

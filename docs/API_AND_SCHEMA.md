@@ -5,7 +5,7 @@ title: API and Schema
 # API and Schema
 { .topic-trio style="--exp:.9; --complex:.6; --complicated:.5" data-exp=".9" data-complex=".6" data-complicated=".5" }
 
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: Reference
 
 See also: [Glossary](GLOSSARY.md), [Configuration](CONFIGURATION.md)
@@ -15,7 +15,7 @@ Set a base URL and (optionally) an admin token for gated endpoints.
 
 ```bash
 export BASE=http://127.0.0.1:8091
-export ARW_ADMIN_TOKEN=secret   # legacy bridge only
+export ARW_ADMIN_TOKEN=secret   # optional admin token for /admin and /spec routes
 H() { curl -sS -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$@"; }
 ```
 
@@ -24,6 +24,7 @@ Quick probes
 curl -sS "$BASE/about" | jq '.service, .version'
 curl -sS "$BASE/state/route_stats" | jq '.routes | to_entries? // [] | .[:5]'
 curl -sS "$BASE/spec/index.json" | jq '.entries | map(.path)'
+curl -sS "$BASE/spec/health" | jq
 ```
 
 Schemas and specs
@@ -55,6 +56,8 @@ Events (SSE)
 ```bash
 curl -N "$BASE/events?replay=10"
 ```
+
+The stream opens with a `service.connected` envelope that carries `request_id`, `resume_from`, and replay metadata before historical events (when requested) and live traffic.
 
 !!! warning "Security"
     Many `introspect/*`, `feedback/*`, `tools/*`, and related endpoints are gated. In production, set `ARW_ADMIN_TOKEN` on the service and include `X-ARW-Admin` in requests. See: guide/security_hardening.md
@@ -194,49 +197,25 @@ Admin events (AsyncAPI)
 - `models.manifest.written`, `models.cas.gc`, `models.changed`, `models.refreshed`.
 - Egress: `egress.preview`, `egress.ledger.appended`.
 
-## Connections (New)
+## Connectors (Shipped)
 
-GET /connectors — list available connector types/providers
+- `GET /state/connectors` — list connector manifests (secrets elided).
+- `POST /connectors/register` — register a connector (admin token required).
+- `POST /connectors/token` — set tokens/refresh tokens for an existing connector (admin token required).
 
-POST /connectors/register — add/register a custom connector (policy-gated)
-
-GET /connections — list connections in the registry
-
-POST /connections — create a connection (disabled by default, optional dry-run)
-
-GET /connections/{id}
-
-PATCH /connections/{id} — update tuning (rate limit, retry, QoS, notes)
-
-POST /connections/{id}/toggle — enable/disable
-
-POST /connections/{id}/test — active health check + trace
-
-POST /connections/{id}/set-policy — bind a policy id
-
-POST /connections/{id}/bind-secret — bind auth/secret reference
-
-DELETE /connections/{id}
-
-GET /links — list active links (connection ↔ service bindings)
-
-POST /links — create a link (policy checked), optional auto-enable
-
-DELETE /links/{id}
+Future “Connection Manager” surfaces (dedicated `/connections` and `/links` routes) remain on the roadmap and will land with a guarded flag once implementation stabilises. Until then, integrations rely on registered connectors plus capability leases.
 
 ## Events (AsyncAPI)
 
 Versioned event types; include time, task_id, span_id, severity.
 
-Connections: ConnectionAdded, ConnectionUpdated, ConnectionRemoved, ConnectionPolicyChanged, ConnectionSecretBound
-
-Links: LinkUp, LinkDown, LinkHealthChanged, RateLimitHit, BackoffApplied
+Connections/links events are planned to accompany the future manager; today the event bus focuses on connector registration and token updates (`connectors.registered`, `connectors.token.updated`).
 
 ## MCP Bridge
 
 All registered tools appear to MCP clients with the same ids and schemas.
 
-Admin MCP tools for connections: conn.list, conn.create, conn.update, conn.toggle, conn.test.
+Admin MCP tooling for the connection manager will ship alongside the HTTP surfaces. Current MCP exports match the connector endpoints above.
 
 ## Pagination & IDs
 

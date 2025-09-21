@@ -2896,6 +2896,75 @@
         "description": "Public: GET /metrics."
       }
     },
+    "/orchestrator/mini_agents": {
+      "get": {
+        "tags": [
+          "Orchestrator"
+        ],
+        "summary": "List available mini-agents (placeholder).",
+        "operationId": "orchestrator_mini_agents_doc",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "Kernel disabled",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "description": "List available mini-agents (placeholder)."
+      }
+    },
+    "/orchestrator/mini_agents/start_training": {
+      "post": {
+        "tags": [
+          "Orchestrator"
+        ],
+        "summary": "Start a training job that results in a suggested Logic Unit (admin).",
+        "operationId": "orchestrator_start_training_doc",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OrchestratorStartReq"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": ""
+          },
+          "501": {
+            "description": "Kernel disabled",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "description": "Start a training job that results in a suggested Logic Unit (admin)."
+      }
+    },
     "/research_watcher/{id}/approve": {
       "post": {
         "tags": [
@@ -2992,6 +3061,26 @@
           }
         },
         "description": "Research: POST /research_watcher/{id}/archive."
+      }
+    },
+    "/spec/health": {
+      "get": {
+        "tags": [
+          "Specs"
+        ],
+        "summary": "Health summary for spec artifacts (presence/size).",
+        "operationId": "spec_health_doc",
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "description": "Health summary for spec artifacts (presence/size)."
       }
     },
     "/staging/actions/{id}/approve": {
@@ -3170,6 +3259,45 @@
             }
           }
         }
+      }
+    },
+    "/state/orchestrator/jobs": {
+      "get": {
+        "tags": [
+          "Orchestrator"
+        ],
+        "summary": "Orchestrator jobs snapshot.",
+        "operationId": "state_orchestrator_jobs_doc",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "501": {
+            "description": "Kernel disabled",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "description": "Orchestrator jobs snapshot."
       }
     },
     "/state/research_watcher": {
@@ -4745,6 +4873,25 @@
           }
         }
       },
+      "OrchestratorStartReq": {
+        "type": "object",
+        "required": [
+          "goal"
+        ],
+        "properties": {
+          "budget": {},
+          "data": {},
+          "goal": {
+            "type": "string"
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "PerfPreset": {
         "type": "object",
         "properties": {
@@ -5386,12 +5533,20 @@
       "description": "Distill endpoints"
     },
     {
+      "name": "Orchestrator",
+      "description": "Orchestrator endpoints"
+    },
+    {
       "name": "Public",
       "description": "Public endpoints"
     },
     {
       "name": "Review",
       "description": "Review endpoints"
+    },
+    {
+      "name": "Specs",
+      "description": "Specs endpoints"
     }
   ]
 }

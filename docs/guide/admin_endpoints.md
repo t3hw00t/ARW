@@ -6,9 +6,9 @@ title: Admin Endpoints
 ## Unified Admin Surface
 { .topic-trio style="--exp:.55; --complex:.65; --complicated:.55" data-exp=".55" data-complex=".65" data-complicated=".55" }
 
-The unified `arw-server` binary exposes a single HTTP surface built around the **actions → events → state** triad. Every operation that mutates or inspects the service lives on that surface—there is no `/admin` prefix to keep in sync. New routes are recorded at runtime and streamed into `/about` so that clients can discover the current topology without hard-coding paths.
+The unified `arw-server` binary exposes an HTTP surface built around the **actions → events → state** triad. Administrative tooling — debug panels, orchestration helpers, policy/config writers — lives under the `/admin/*` namespace so it is easy to secure as a group. The server records every mounted route at build time and streams a live index from `/about`, which keeps clients and docs in sync without hand-maintained tables.
 
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: How-to
 
 - Service: `arw-server` (default bind `127.0.0.1:8091`)
@@ -47,10 +47,10 @@ Example
   "counts": { "public": 12, "admin": 48, "total": 60 },
   "endpoints": [
     "GET /healthz",
-    "GET /version",
     "GET /spec/openapi.yaml",
     "GET /events",
-    "GET /admin/probe"
+    "GET /admin/probe",
+    "GET /admin/debug"
   ]
 }
 ```

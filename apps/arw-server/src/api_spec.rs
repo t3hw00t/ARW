@@ -132,6 +132,69 @@ pub async fn spec_index() -> impl IntoResponse {
         .into_response()
 }
 
+/// Health summary for spec artifacts (presence/size).
+#[utoipa::path(get, path = "/spec/health", tag = "Specs", responses((status = 200, body = serde_json::Value)))]
+pub async fn spec_health() -> impl IntoResponse {
+    let base = spec_dir();
+    let entries = [
+        ("openapi.yaml", "application/yaml"),
+        ("asyncapi.yaml", "application/yaml"),
+        ("mcp-tools.json", "application/json"),
+    ];
+    let mut items = Vec::with_capacity(entries.len());
+    for (name, content_type) in entries {
+        let path = base.join(name);
+        let (exists, size, modified_ms) = match tokio::fs::metadata(&path).await {
+            Ok(meta) => {
+                let modified = meta
+                    .modified()
+                    .ok()
+                    .and_then(|m| m.duration_since(std::time::SystemTime::UNIX_EPOCH).ok())
+                    .map(|d| d.as_millis() as u64);
+                (true, meta.len(), modified)
+            }
+            Err(_) => (false, 0, None),
+        };
+        items.push(json!({
+            "name": name,
+            "content_type": content_type,
+            "path": format!("spec/{}", name),
+            "exists": exists,
+            "size": size,
+            "modified_ms": modified_ms,
+        }));
+    }
+    let schemas_dir = base.join("schemas");
+    let (schemas_exists, schema_files) = if schemas_dir.exists() {
+        let mut names = Vec::new();
+        if let Ok(rd) = std::fs::read_dir(&schemas_dir) {
+            for entry in rd.flatten() {
+                if let Some(name) = entry.file_name().to_str() {
+                    if name.ends_with(".json") {
+                        names.push(name.to_string());
+                    }
+                }
+            }
+        }
+        names.sort();
+        (true, names)
+    } else {
+        (false, Vec::new())
+    };
+    (
+        StatusCode::OK,
+        Json(json!({
+            "items": items,
+            "schemas": {
+                "exists": schemas_exists,
+                "count": schema_files.len(),
+                "files": schema_files,
+            }
+        })),
+    )
+        .into_response()
+}
+
 fn interfaces_dir() -> std::path::PathBuf {
     std::path::PathBuf::from(
         std::env::var("ARW_INTERFACES_DIR").unwrap_or_else(|_| "interfaces".into()),
