@@ -84,3 +84,6 @@ jobs:
 
       - name: Tests (workspace)
         run: cargo nextest run --workspace
+
+      - name: Snappy bench (sanity)
+        run: bash scripts/ci_snappy_bench.sh

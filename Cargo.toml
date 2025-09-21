@@ -14,6 +14,7 @@ members = [
   "crates/arw-otel",
   "apps/arw-server",
   "apps/arw-connector",
+  "apps/snappy-bench",
   "crates/arw-tauri",
   "apps/arw-launcher/src-tauri"
 ]

@@ -6959,6 +6959,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "snappy-bench"
+version = "0.1.4"
+dependencies = [
+ "anyhow",
+ "clap",
+ "futures-util",
+ "reqwest 0.12.23",
+ "serde",
+ "serde_json",
+ "tokio",
+]
+
+[[package]]
 name = "socket2"
 version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"

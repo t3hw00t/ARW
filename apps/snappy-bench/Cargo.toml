@@ -1,0 +1,14 @@
+[package]
+name = "snappy-bench"
+version = "0.1.4"
+edition = "2021"
+license.workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { version = "4", features = ["derive"] }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+tokio = { workspace = true }
+reqwest = { workspace = true, default-features = false, features = ["json", "stream", "rustls-tls"] }
+futures-util = { workspace = true }

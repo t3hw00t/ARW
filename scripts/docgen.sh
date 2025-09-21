@@ -150,3 +150,12 @@ fi
 if command -v python3 >/dev/null 2>&1; then
   python3 "$root_dir/scripts/generate_openapi_json.py" || true
 fi
+
+info "Generating interface release notes"
+if command -v python3 >/dev/null 2>&1; then
+  base_ref="${BASE_REF:-origin/main}"
+  BASE_REF="$base_ref" python3 "$root_dir/scripts/generate_interface_release_notes.py" || \
+    warn "interface release notes generation failed"
+else
+  warn "python3 unavailable; skipping interface release notes"
+fi

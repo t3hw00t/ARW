@@ -222,7 +222,7 @@ Notes
 | Medium | Human-in-the-loop staging | Backend staging queue exists, yet UI, per-project modes, and evidence review remain planned `docs/guide/human_in_loop.md`. | Build `/state/staging/actions` panel, approvals UI, lease policy toggles, and sidecar notifications. |
 | Medium | Research Watcher | Legacy ingestion feeds still stubbed; launcher Suggested tab is static `docs/guide/research_watcher.md`. | Implement polling worker, CAS-backed storage, read-model patches, and approve/archive endpoints. |
 | Medium | Training Park metrics | Launcher pane is a stub with no dedicated telemetry `docs/guide/training_park.md`. | Publish training read-model, expose adjustments via actions, and bind UI charts. |
-| Medium | Interactive snappy bench | `snappy_bench` harness vanished with arw-svc; no built-in load tester `docs/guide/interactive_bench.md`. | Stand up new bench binary (http load + SSE replay), wire to Justfile, and document expected baselines. |
+| Medium | Interactive snappy bench | ✅ `snappy-bench` CLI hits `/actions` + `/events`, enforces budgets, and publishes quick-start docs. | ✅ CI runs `scripts/ci_snappy_bench.sh` (queue budget 500 ms); capture long-term baselines per performance preset. |
 
 ## Migration Plan (High‑level)
 1) Kernel + Triad API complete in `arw-server` (now)

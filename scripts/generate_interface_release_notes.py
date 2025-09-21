@@ -24,6 +24,9 @@ OPENAPI = REPO / 'spec' / 'openapi.yaml'
 ASYNCAPI = REPO / 'spec' / 'asyncapi.yaml'
 OUT = REPO / 'docs' / 'reference' / 'interface-release-notes.md'
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from doc_utils import _stable_now_timestamp  # type: ignore  # noqa: E402
+
 
 def run(cmd, **kw):
     return sp.run(cmd, stdout=sp.PIPE, stderr=sp.PIPE, text=True, **kw)
@@ -38,6 +41,17 @@ def git_show(refpath: str) -> str:
     if p.returncode != 0:
         raise RuntimeError(f'git show failed: {refpath}: {p.stderr.strip()}')
     return p.stdout
+
+
+def _normalize_unified_diff(text: str, base_label: str, head_label: str) -> str:
+    """Rewrite leading diff headers so temp paths/timestamps don't churn."""
+    lines = text.splitlines()
+    if lines:
+        if lines[0].startswith('--- '):
+            lines[0] = f'--- {base_label}'
+        if len(lines) > 1 and lines[1].startswith('+++ '):
+            lines[1] = f'+++ {head_label}'
+    return '\n'.join(lines)
 
 
 def gen_openapi_diff(base_ref: str, tmpdir: Path) -> str:
@@ -55,7 +69,10 @@ def gen_openapi_diff(base_ref: str, tmpdir: Path) -> str:
             return p.stdout
     # fallback: unified diff
     p = run(['bash', '-lc', f'diff -u {base} {head} || true'])
-    return '```diff\n' + p.stdout + '\n```\n'
+    normalized = _normalize_unified_diff(p.stdout, base.name, head.name)
+    if not normalized.strip():
+        return 'No changes\n'
+    return '```diff\n' + normalized + '\n```\n'
 
 
 def gen_asyncapi_diff(base_ref: str, tmpdir: Path) -> str:
@@ -72,7 +89,10 @@ def gen_asyncapi_diff(base_ref: str, tmpdir: Path) -> str:
             return p.stdout
     # fallback: unified diff
     p = run(['bash', '-lc', f'diff -u {base} {head} || true'])
-    return '```diff\n' + p.stdout + '\n```\n'
+    normalized = _normalize_unified_diff(p.stdout, base.name, head.name)
+    if not normalized.strip():
+        return 'No changes\n'
+    return '```diff\n' + normalized + '\n```\n'
 
 
 def main():
@@ -87,6 +107,9 @@ def main():
     lines.append('---')
     lines.append('')
     lines.append('# Interface Release Notes')
+    updated_iso = _stable_now_timestamp([OPENAPI, ASYNCAPI])
+    lines.append(f'Updated: {updated_iso.split("T")[0]}')
+    lines.append('Type: Reference')
     lines.append('')
     # Avoid per-commit churn by omitting dynamic HEAD rev
     lines.append(f'Base: `{base_ref}`')

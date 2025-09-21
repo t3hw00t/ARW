@@ -43,6 +43,9 @@ test-fast:
 test-watch:
   cargo watch -x "test --workspace"
 
+bench-snappy *params:
+  cargo run -p snappy-bench -- {{params}}
+
 # Package
 package:
   bash scripts/package.sh --no-build

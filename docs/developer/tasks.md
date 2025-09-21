@@ -9,8 +9,6 @@ Type: Reference
 
 
 ## To Do
-- [t-250921010500-bench] Implement unified snappy bench — todo (updated: 2025-09-21 01:05:00 UTC)
-    - 2025-09-21 01:05:00 UTC: Legacy snappy_bench in arw-svc depended on retired /admin bridges. Need a new CLI that hits /actions and /events directly, reports p95 targets, and can run in CI.
 - [t-250917235817-3181] Retarget launcher to unified server — todo (updated: 2025-09-17 22:44:29 UTC)
     - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; keeps legacy fallback.
 - [t-250917235820-3900] Decommission legacy artifacts — todo (updated: 2025-09-17 21:58:20 UTC)
@@ -25,6 +23,8 @@ Type: Reference
 ## Paused
 
 ## Done
+- [t-250921010500-bench] Implement unified snappy bench — done (updated: 2025-09-21 03:05:00 UTC)
+    - 2025-09-21 03:05:00 UTC: Added `snappy-bench` CLI (apps/snappy-bench); exercises `/actions` while tailing `/events`, enforces snappy budgets, and integrates via `just bench-snappy`.
 - [t-250917235814-0001] Add Helm chart for arw-server — done (updated: 2025-09-17 21:58:16 UTC)
 - [t-250917235812-8254] Switch CI OpenAPI codegen to arw-server — done (updated: 2025-09-17 21:58:13 UTC)
 - [t-250917235747-3348] Annotate server handlers with utoipa — done (updated: 2025-09-17 21:58:04 UTC)
@@ -170,4 +170,3 @@ Type: Reference
 - [t-250909170247-6008] Start service and verify /about — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
-

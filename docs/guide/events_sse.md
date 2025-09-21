@@ -10,7 +10,6 @@ Microsummary: Connect to the live Server‑Sent Events stream, filter by prefix,
 
 Overview
 - Endpoint (unified server): `GET /events` (text/event-stream)
-- Endpoint: `GET /events` (text/event-stream)
 - Base URL: `http://127.0.0.1:8091` for local development.
 - Auth: requires admin access; set `ARW_ADMIN_TOKEN` and send `Authorization: Bearer <token>` if configured.
 - Filters: `?prefix=models.` (or any event kind prefix, e.g., `rpu.` for RPU trust events)
