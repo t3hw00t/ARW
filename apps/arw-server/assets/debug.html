@@ -9,10 +9,10 @@
     :root{
       color-scheme:light dark;
     }
-    body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;line-height:1.45;color:var(--ink);background: var(--surface)}
+    body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;line-height:1.45;color:var(--color-ink);background: var(--surface)}
     /* manual theme override */
-    [data-theme="dark"]{ --bg:#0b0b0f; --ink:#e5e7eb; --line:#1f232a; --muted:#889 }
-    header{display:flex;gap:12px;align-items:center;margin-bottom:16px;position:sticky;top:0;background:rgba(255,255,255,0.7);backdrop-filter:saturate(140%) blur(6px);padding:8px 12px;border:1px solid var(--line);border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,0.06)}
+    [data-theme="dark"]{ --bg:#0b0b0f; --color-ink:#e5e7eb; --color-line:#1f232a; --color-muted:#889 }
+    header{display:flex;gap:12px;align-items:center;margin-bottom:16px;position:sticky;top:0;background:rgba(255,255,255,0.7);backdrop-filter:saturate(140%) blur(6px);padding:8px 12px;border:1px solid var(--color-line);border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,0.06)}
     code,pre{background:#0b0b0c10;padding:2px 4px;border-radius:4px}
     .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
     button,input,select,textarea{font:inherit}
@@ -24,9 +24,9 @@
     .card>h3::after{ content:"▾"; font-size:12px; color:var(--color-muted) }
     .card[data-collapsed="1"]>h3::after{ content:"▸" }
     .card[data-collapsed="1"]>:not(h3){ display:none }
-    #log{max-height:40vh;overflow:auto;border:1px solid var(--line);border-radius:10px;padding:8px;background:linear-gradient(180deg,#ffffff,#fafafa);box-shadow:inset 0 1px 0 rgba(255,255,255,0.6)}
+    #log{max-height:40vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;padding:8px;background:linear-gradient(180deg,#ffffff,#fafafa);box-shadow:inset 0 1px 0 rgba(255,255,255,0.6)}
     .evt{padding:4px 6px;border-bottom:1px dashed #eee;font-family:ui-monospace,Menlo,Consolas,monospace}
-    .key{color:var(--muted)}
+    .key{color:var(--color-muted)}
     textarea{width:100%;min-height:100px}
     .pass{color:var(--status-ok)}.fail{color:var(--status-bad)}
     /* badges/dots/tones provided by shared UI kit */
@@ -39,7 +39,7 @@
     .ico.info{ color:var(--color-muted) }
     .ico.accent{ color: var(--color-accent-teal) }
     /* Subtle hint block */
-    .hint{ font-size:12px; color:#374151; background:#f8fafc; border:1px solid var(--line); border-left:3px solid var(--color-accent-teal); padding:8px 10px; border-radius:8px; margin:6px 0 }
+    .hint{ font-size:12px; color:#374151; background:#f8fafc; border:1px solid var(--color-line); border-left:3px solid var(--color-accent-teal); padding:8px 10px; border-radius:8px; margin:6px 0 }
     .hint .dismiss{ float:right; text-decoration:none; color:var(--color-muted); font-weight:600 }
     /* Downloads list */
     .dlrow{ display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px dashed #eee }
@@ -48,29 +48,29 @@
     .mrow{ display:flex; align-items:center; gap:10px; padding:4px 0; border-bottom:1px dashed #eee }
     .mcell{ min-width:80px }
     .mcell.id{ font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:600; min-width:180px }
-    .mcell.sha{ font-family:ui-monospace,Menlo,Consolas,monospace; color:var(--muted); min-width:110px }
+    .mcell.sha{ font-family:ui-monospace,Menlo,Consolas,monospace; color:var(--color-muted); min-width:110px }
     .mhead{ font-weight:700; color:#555 }
     .badge.small{ font-size:10px; padding:2px 6px }
     .mcell.actions{ margin-left:auto; display:flex; align-items:center; gap:6px }
     .mini{ font-size:12px; padding:2px 6px; width:180px }
     .dlid{ font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:600; min-width:140px }
-    .dlstat{ font-size:12px; color:var(--muted); min-width:90px }
-    .dlmeta{ font-size:12px; color:var(--muted) }
-    .pbar{ width:180px; height:8px; background:var(--line); border-radius:999px; overflow:hidden; box-shadow:inset 0 1px 0 rgba(255,255,255,0.6) }
+    .dlstat{ font-size:12px; color:var(--color-muted); min-width:90px }
+    .dlmeta{ font-size:12px; color:var(--color-muted) }
+    .pbar{ width:180px; height:8px; background:var(--color-line); border-radius:999px; overflow:hidden; box-shadow:inset 0 1px 0 rgba(255,255,255,0.6) }
     .pfill{ height:100%; background:linear-gradient(90deg, var(--color-accent-teal), #22c55e); width:0% }
     .ghost{ padding:6px 10px; border:1px dashed #cfd6de; background:#fff; border-radius:6px; cursor:pointer }
     a.help{display:inline-block;margin-left:8px;width:18px;height:18px;border-radius:50%;border:1px solid #d1d5db;color:var(--color-muted);text-align:center;line-height:16px;text-decoration:none;font-weight:600;font-size:12px}
     a.help:hover{background:#f3f4f6;color:#374151}
-    .tip{position:fixed;z-index:50;max-width:360px;background:#ffffff;border:1px solid var(--line);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,0.14);padding:10px 12px}
+    .tip{position:fixed;z-index:50;max-width:360px;background:#ffffff;border:1px solid var(--color-line);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,0.14);padding:10px 12px}
     .tip .t-title{font-weight:600;margin-bottom:4px}
     .tip .t-more{color:var(--color-accent-teal);text-decoration:none}
     .t-hidden{display:none}
     .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:#fef3c7;border:1px solid #f59e0b;color:#92400e;padding:8px 12px;border-radius:10px;display:none;max-width:70vw;box-shadow:0 16px 40px rgba(0,0,0,0.14)}
-    #insights{position:fixed;right:16px;bottom:16px;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 48px rgba(0,0,0,0.12);padding:10px 12px;display:none;min-width:260px;max-width:50vw}
+    #insights{position:fixed;right:16px;bottom:16px;background:#fff;border:1px solid var(--color-line);border-radius:12px;box-shadow:0 18px 48px rgba(0,0,0,0.12);padding:10px 12px;display:none;min-width:260px;max-width:50vw}
     #insights .kv{display:flex;justify-content:space-between;color:#374151}
     #insights h4{margin:4px 0 6px 0;font-size:14px}
     .palette{position:fixed;inset:0;background:rgba(0,0,0,0.2);display:none;align-items:flex-start;justify-content:center;padding-top:10vh}
-    .pal-box{background:#fff;color:#111;width:min(680px,90vw);border:1px solid var(--line);border-radius:10px;box-shadow:0 20px 50px rgba(0,0,0,0.15);overflow:hidden}
+    .pal-box{background:#fff;color:#111;width:min(680px,90vw);border:1px solid var(--color-line);border-radius:10px;box-shadow:0 20px 50px rgba(0,0,0,0.15);overflow:hidden}
     .pal-box input{width:100%;padding:10px 12px;border:none;outline:none;font:inherit}
     .pal-list{max-height:50vh;overflow:auto}
     .pal-item{padding:8px 12px;border-top:1px solid #f1f5f9;cursor:pointer;display:flex;justify-content:space-between}
@@ -207,7 +207,7 @@
       <div id="rwPending" style="display:flex;flex-direction:column;gap:8px;max-height:32vh;overflow:auto"></div>
       <details style="margin-top:8px">
         <summary class="key">Recent decisions</summary>
-        <div id="rwRecent" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
+        <div id="rwRecent" style="font-size:12px;color:var(--color-muted);margin-top:6px"></div>
       </details>
     </div>
     <div class="card">
@@ -297,7 +297,7 @@
       <div class="row">
         <button class="iconbtn" id="egClear">Clear</button>
       </div>
-      <div id="egOut" style="max-height:28vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
+      <div id="egOut" style="max-height:28vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;background:#fff;padding:8px"></div>
     </div>
     <div class="card" data-collapsed="1">
       <h3>Training Telemetry <a href="#" class="help" data-doc="training_park" data-tip="Live metrics feeding the Training Park." title="Training telemetry">?</a></h3>
@@ -320,7 +320,7 @@
         <button class="iconbtn" onclick="refreshHW()">Refresh HW</button>
         <button class="iconbtn" id="gpuToggle">GPU adapters</button>
       </div>
-      <div id="gpuList" style="display:none; padding:8px; border:1px dashed var(--line); border-radius:8px; background:#fff"></div>
+      <div id="gpuList" style="display:none; padding:8px; border:1px dashed var(--color-line); border-radius:8px; background:#fff"></div>
       <pre id="sysOut">{}</pre>
     </div>
     <div class="card" data-collapsed="1">
@@ -348,8 +348,8 @@
         <button class="iconbtn" onclick="expExportCSV()">Export CSV</button>
         <button class="iconbtn" onclick="expCopyJSON()">Copy JSON</button>
       </div>
-      <div id="expDefs" style="max-height:20vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
-      <div id="expBoard" style="max-height:28vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px;margin-top:8px"></div>
+      <div id="expDefs" style="max-height:20vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;background:#fff;padding:8px"></div>
+      <div id="expBoard" style="max-height:28vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;background:#fff;padding:8px;margin-top:8px"></div>
     </div>
     <div class="card" data-collapsed="1">
       <h3>Models Metrics <a href="#" class="help" data-doc="events" data-tip="Live counters and EWMA for model downloads." title="Models metrics">?</a></h3>
@@ -424,7 +424,7 @@
         <label><input type="checkbox" id="epErrOnly"> errors only</label>
         <input id="epFilter" placeholder="filter id/kind/substr" style="flex:1;min-width:200px">
       </div>
-      <div id="epList" style="max-height:36vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
+      <div id="epList" style="max-height:36vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;background:#fff;padding:8px"></div>
     </div>
     <div class="card" data-collapsed="1">
       <h3>State Snapshots</h3>
@@ -455,7 +455,7 @@
         <button class="ghost" onclick="worldMapRefresh()">Refresh</button>
         <label><input type="checkbox" id="wmLive"> live</label>
       </div>
-      <div id="worldMap" style="max-height:28vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
+      <div id="worldMap" style="max-height:28vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;background:#fff;padding:8px"></div>
     </div>
     <div class="card" data-collapsed="1">
       <h3>Routes <a href="#" class="help" data-doc="events" data-tip="Live HTTP route stats (p95/ewma/hits/errors)." title="Routes stats">?</a></h3>
@@ -470,7 +470,7 @@
         </select>
         <input id="routesTopN" type="number" min="1" value="10" style="width:80px" title="Top N">
       </div>
-      <div id="routesTable" style="max-height:36vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:#fff;padding:8px"></div>
+      <div id="routesTable" style="max-height:36vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;background:#fff;padding:8px"></div>
     </div>
   <div class="card" data-collapsed="1">
       <h3>Self‑Learning <a href="#" class="help" data-doc="orchestrator" data-tip="Signals → suggestions. Gently embedded feedback." title="Self‑Learning docs">?</a></h3>
@@ -1770,9 +1770,9 @@ function rwRender(data){
         const summary = it.summary || (it.payload ? JSON.stringify(it.payload).slice(0, 280) : '');
         const url = it.url ? `<a href="${it.url}" target="_blank">open</a>` : '';
         const project = it.project || 'library';
-        return `<div style="border:1px solid var(--line);border-radius:8px;padding:8px;background:#fff;">
+        return `<div style="border:1px solid var(--color-line);border-radius:8px;padding:8px;background:#fff;">
           <div style="font-weight:600;margin-bottom:4px">${title}</div>
-          <div style="font-size:12px;color:var(--muted);margin-bottom:6px">${source} · ${project}</div>
+          <div style="font-size:12px;color:var(--color-muted);margin-bottom:6px">${source} · ${project}</div>
           <div style="font-size:13px;margin-bottom:8px">${summary || '(no summary)'}${url ? ' · ' + url : ''}</div>
           <div class="row" style="margin:0">
             <button class="iconbtn" onclick="rwAct('${it.id}','approve')">Approve</button>
@@ -2153,7 +2153,7 @@ function episodesRender(j){ try{
     const errs = ep.errors||0;
     const badge = errs>0 ? `<span class="badge bad" style="margin-left:6px"><span class="dot"></span> ${errs} err</span>` : `<span class="badge ok" style="margin-left:6px"><span class="dot"></span> OK</span>`;
     const eid = `epd-${(ep.id||String(idx)).replace(/[^a-zA-Z0-9_-]/g,'_')}`;
-    const head = `<div style="font-weight:600;display:flex;justify-content:space-between;align-items:center"><span>${ep.id} <span style="color:var(--muted);font-weight:400"> · ${count} events${dur} · ${last}</span>${badge}</span><button class="iconbtn" onclick="const d=document.getElementById('${eid}'); d.style.display = (d.style.display==='none'||!d.style.display)?'block':'none';">Details</button></div>`;
+    const head = `<div style="font-weight:600;display:flex;justify-content:space-between;align-items:center"><span>${ep.id} <span style="color:var(--color-muted);font-weight:400"> · ${count} events${dur} · ${last}</span>${badge}</span><button class="iconbtn" onclick="const d=document.getElementById('${eid}'); d.style.display = (d.style.display==='none'||!d.style.display)?'block':'none';">Details</button></div>`;
     const bodyAll = (ep.items||[]).map(ev=>{
       const k = ev.kind || '';
       const t = ev.time || '';

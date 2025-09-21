@@ -35,14 +35,14 @@ function hexToRgbTuple(hex){
   return [r,g,b];
 }
 
-// Derived variables: brand-copper-rgb and legacy aliases
+// Derived variables: brand-copper-rgb helper
 StyleDictionary.registerFormat({
   name: 'css/derived',
   formatter: ({ dictionary }) => {
     const t = dictionary.allTokens;
     const brand = t.find(x => x.name === 'color-brand-copper');
     const [r,g,b] = brand ? hexToRgbTuple(brand.value) : [184,115,51];
-    return `:root{\n  --brand-copper-rgb: ${r},${g},${b};\n  --ink: var(--color-ink);\n  --muted: var(--color-muted);\n  --line: var(--color-line);\n}`;
+    return `:root{\n  --brand-copper-rgb: ${r},${g},${b};\n}`;
   }
 });
 
