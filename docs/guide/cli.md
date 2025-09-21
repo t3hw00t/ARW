@@ -28,7 +28,7 @@ Basics
  
 Specs
 - `arw-cli spec health --base http://127.0.0.1:8091 [--pretty]` — fetch `/spec/health` and print JSON (pretty‑print with `--pretty`)
-- OpenAPI: `curl http://127.0.0.1:8091/spec/openapi.yaml` — served by `apps/arw-server/src/api_spec.rs`, returns the HTTP API contract (YAML)
+- OpenAPI: `curl http://127.0.0.1:8091/spec/openapi.yaml` — served by `apps/arw-server/src/api/spec.rs`, returns the HTTP API contract (YAML)
 - AsyncAPI: `curl http://127.0.0.1:8091/spec/asyncapi.yaml` — event stream schema aligned with the SSE bus
 - Index: `curl http://127.0.0.1:8091/spec/index.json | jq` — lists available spec artifacts and JSON schemas
 

@@ -194,6 +194,7 @@ nav:
       - Admin Handoff: developer/admin_handoff.md
       - Handoff Checklist: developer/handoff_checklist.md
       - Tasks: developer/tasks.md
+      - Orchestrator Validation: developer/orchestrator_validation.md
       - Stability Freeze: developer/stability.md
       - CI: developer/ci.md
       - Tauri API: developer/tauri_api.md

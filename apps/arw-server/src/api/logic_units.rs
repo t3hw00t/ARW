@@ -7,7 +7,7 @@ use axum::{
 use jsonschema::{Draft, JSONSchema};
 use serde_json::{json, Value};
 
-use crate::api_config::{
+use crate::api::config::{
     dot_to_pointer, ensure_path, get_by_dot, infer_schema_for_target, merge_values,
     validate_patch_value,
 };

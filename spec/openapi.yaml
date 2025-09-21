@@ -180,7 +180,8 @@ paths:
           description: Experiments
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/ExperimentsListResponse'
         '401':
           description: Unauthorized
       description: 'Experiments: GET /admin/experiments/list.'
@@ -215,7 +216,8 @@ paths:
           description: Scoreboard
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/ExperimentsScoreboardResponse'
         '401':
           description: Unauthorized
       description: 'Experiments: GET /admin/experiments/scoreboard.'
@@ -269,7 +271,8 @@ paths:
           description: Winners
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/ExperimentsWinnersResponse'
         '401':
           description: Unauthorized
       description: 'Experiments: GET /admin/experiments/winners.'
@@ -370,7 +373,6 @@ paths:
       parameters:
       - name: to
         in: query
-        description: Restore to version (or latest backup when omitted)
         required: false
         schema:
           type: integer
@@ -445,7 +447,6 @@ paths:
       parameters:
       - name: since
         in: query
-        description: Return suggestions if newer than this version
         required: false
         schema:
           type: integer
@@ -506,7 +507,6 @@ paths:
       parameters:
       - name: proj
         in: query
-        description: Project name
         required: false
         schema:
           type: string
@@ -515,7 +515,8 @@ paths:
           description: Project goldens
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/GoldensListResponse'
         '401':
           description: Unauthorized
       description: 'Experiments: GET /admin/goldens/list.'
@@ -535,7 +536,8 @@ paths:
           description: Evaluation summary
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/EvalSummary'
         '401':
           description: Unauthorized
       description: 'Experiments: POST /admin/goldens/run.'
@@ -2356,25 +2358,6 @@ components:
           minimum: 0
         ok:
           type: boolean
-    ClusterNode:
-      type: object
-      required:
-      - id
-      - role
-      properties:
-        capabilities: {}
-        health:
-          type:
-          - string
-          - 'null'
-        id:
-          type: string
-        name:
-          type:
-          - string
-          - 'null'
-        role:
-          type: string
     ConcurrencyUpdate:
       type: object
       properties:
@@ -2487,73 +2470,6 @@ components:
           type:
           - string
           - 'null'
-    EvalOptions:
-      type: object
-      properties:
-        compression_aggr:
-          type:
-          - number
-          - 'null'
-          format: double
-        context_budget_tokens:
-          type:
-          - integer
-          - 'null'
-          minimum: 0
-        context_footer:
-          type:
-          - string
-          - 'null'
-        context_format:
-          type:
-          - string
-          - 'null'
-        context_header:
-          type:
-          - string
-          - 'null'
-        context_item_budget_tokens:
-          type:
-          - integer
-          - 'null'
-          minimum: 0
-        context_item_template:
-          type:
-          - string
-          - 'null'
-        include_provenance:
-          type:
-          - boolean
-          - 'null'
-        joiner:
-          type:
-          - string
-          - 'null'
-        limit:
-          type:
-          - integer
-          - 'null'
-          minimum: 0
-        mmr_lambda:
-          type:
-          - number
-          - 'null'
-          format: double
-        retrieval_k:
-          type:
-          - integer
-          - 'null'
-          minimum: 0
-        temperature:
-          type:
-          - number
-          - 'null'
-          format: double
-        vote_k:
-          type:
-          - integer
-          - 'null'
-          minimum: 0
     EvalResultItem:
       type: object
       required:
@@ -2705,6 +2621,33 @@ components:
       properties:
         id:
           type: string
+    ExperimentsListResponse:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Experiment'
+    ExperimentsScoreboardResponse:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScoreRow'
+    ExperimentsWinnersResponse:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/WinnerInfo'
     FeedbackApplyRequest:
       type: object
       required:
@@ -2719,15 +2662,6 @@ components:
       properties:
         enabled:
           type: boolean
-    FeedbackRollbackQuery:
-      type: object
-      properties:
-        to:
-          type:
-          - integer
-          - 'null'
-          format: int64
-          minimum: 0
     FeedbackSignal:
       type: object
       required:
@@ -2793,15 +2727,6 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Suggestion'
-    FeedbackUpdatesQuery:
-      type: object
-      properties:
-        since:
-          type:
-          - integer
-          - 'null'
-          format: int64
-          minimum: 0
     GoldenItem:
       type: object
       required:
@@ -2830,13 +2755,18 @@ components:
           type: string
         proj:
           type: string
-    GoldensListQuery:
+    GoldensListResponse:
       type: object
+      required:
+      - project
+      - items
       properties:
-        proj:
-          type:
-          - string
-          - 'null'
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/GoldenItem'
+        project:
+          type: string
     GoldensRunRequest:
       type: object
       required:
@@ -3333,27 +3263,6 @@ components:
           minimum: 0
         variant:
           type: string
-    RunPlan:
-      type: object
-      required:
-      - proj
-      - exp_id
-      - variants
-      properties:
-        budget_total_ms:
-          type:
-          - integer
-          - 'null'
-          format: int64
-          minimum: 0
-        exp_id:
-          type: string
-        proj:
-          type: string
-        variants:
-          type: array
-          items:
-            type: string
     ScoreEntry:
       type: object
       required:

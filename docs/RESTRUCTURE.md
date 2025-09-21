@@ -47,19 +47,19 @@ Server modules (in progress)
 - Router split for maintainability and clarity:
   - Extracted: `api_policy`, `api_events`, `api_context`, `api_actions`, `api_memory`, `api_connectors`, `api_state`, `api_config`, `api_logic_units`, `api_leases`, `api_orchestrator`.
   - Files:
-    - Meta: `apps/arw-server/src/api_meta.rs`
-    - Policy: `apps/arw-server/src/api_policy.rs`
-    - Events: `apps/arw-server/src/api_events.rs`
-    - Context: `apps/arw-server/src/api_context.rs`
+    - Meta: `apps/arw-server/src/api/meta.rs`
+    - Policy: `apps/arw-server/src/api/policy.rs`
+    - Events: `apps/arw-server/src/api/events.rs`
+    - Context: `apps/arw-server/src/api/context.rs`
     - Context Loop Driver: `apps/arw-server/src/context_loop.rs`
-    - Actions: `apps/arw-server/src/api_actions.rs`
-    - Memory: `apps/arw-server/src/api_memory.rs`
-    - Connectors: `apps/arw-server/src/api_connectors.rs`
-    - State Views: `apps/arw-server/src/api_state.rs`
-    - Config Plane: `apps/arw-server/src/api_config.rs`
-    - Logic Units: `apps/arw-server/src/api_logic_units.rs`
-    - Leases: `apps/arw-server/src/api_leases.rs`
-    - Orchestrator: `apps/arw-server/src/api_orchestrator.rs`
+    - Actions: `apps/arw-server/src/api/actions.rs`
+    - Memory: `apps/arw-server/src/api/memory.rs`
+    - Connectors: `apps/arw-server/src/api/connectors.rs`
+    - State Views: `apps/arw-server/src/api/state.rs`
+    - Config Plane: `apps/arw-server/src/api/config.rs`
+    - Logic Units: `apps/arw-server/src/api/logic_units.rs`
+    - Leases: `apps/arw-server/src/api/leases.rs`
+    - Orchestrator: `apps/arw-server/src/api/orchestrator.rs`
 - Background loops:
     - Local Worker: `apps/arw-server/src/worker.rs` (lease gating + centralized egress ledger/event helper).
     - Read-model Publishers: `apps/arw-server/src/read_models.rs` (shared hashed patch scheduler across logic units, orchestrator jobs, memory, route stats).
@@ -250,10 +250,11 @@ Notes
 ## What’s Implemented (Quick Index)
 - Kernel + CAS: `crates/arw-kernel/src/lib.rs`
 - New server (triad slice): `apps/arw-server/src/main.rs`
-- SSE replay bridge: `apps/arw-server/src/api_events.rs`
-- Actions API: `apps/arw-server/src/api_actions.rs`
+- SSE replay bridge: `apps/arw-server/src/api/events.rs`
+- Actions API: `apps/arw-server/src/api/actions.rs`
 - Contribution ledger view: `GET /state/contributions` (new server)
  - Local worker (demo): dequeues queued → running → completed; appends `task.complete` to contributions.
+- Orchestrator core: `crates/arw-core/src/orchestrator/` (types, queue traits, local/NATS backends)
 
 ## API Snapshot (new server)
 - `POST /actions` → `{ id }` (202 Accepted)

@@ -1,7 +1,7 @@
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use axum::{extract::State, Json};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use utoipa::ToSchema;
 
@@ -13,6 +13,21 @@ fn unauthorized() -> axum::response::Response {
         Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
     )
         .into_response()
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ExperimentsListResponse {
+    pub items: Vec<experiments::Experiment>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ExperimentsScoreboardResponse {
+    pub items: Vec<experiments::ScoreRow>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ExperimentsWinnersResponse {
+    pub items: Vec<experiments::WinnerInfo>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -129,7 +144,7 @@ pub async fn experiments_activate(
     path = "/admin/experiments/list",
     tag = "Admin/Experiments",
     responses(
-        (status = 200, description = "Experiments", body = serde_json::Value),
+        (status = 200, description = "Experiments", body = ExperimentsListResponse),
         (status = 401, description = "Unauthorized"),
     )
 )]
@@ -141,7 +156,7 @@ pub async fn experiments_list(
         return unauthorized();
     }
     let items = state.experiments().list().await;
-    Json(json!({"items": items})).into_response()
+    Json(ExperimentsListResponse { items }).into_response()
 }
 
 #[utoipa::path(
@@ -149,7 +164,7 @@ pub async fn experiments_list(
     path = "/admin/experiments/scoreboard",
     tag = "Admin/Experiments",
     responses(
-        (status = 200, description = "Scoreboard", body = serde_json::Value),
+        (status = 200, description = "Scoreboard", body = ExperimentsScoreboardResponse),
         (status = 401, description = "Unauthorized"),
     )
 )]
@@ -161,7 +176,7 @@ pub async fn experiments_scoreboard(
         return unauthorized();
     }
     let items = state.experiments().list_scoreboard().await;
-    Json(json!({"items": items})).into_response()
+    Json(ExperimentsScoreboardResponse { items }).into_response()
 }
 
 #[utoipa::path(
@@ -169,7 +184,7 @@ pub async fn experiments_scoreboard(
     path = "/admin/experiments/winners",
     tag = "Admin/Experiments",
     responses(
-        (status = 200, description = "Winners", body = serde_json::Value),
+        (status = 200, description = "Winners", body = ExperimentsWinnersResponse),
         (status = 401, description = "Unauthorized"),
     )
 )]
@@ -181,7 +196,7 @@ pub async fn experiments_winners(
         return unauthorized();
     }
     let items = state.experiments().list_winners().await;
-    Json(json!({"items": items})).into_response()
+    Json(ExperimentsWinnersResponse { items }).into_response()
 }
 
 #[derive(Deserialize, ToSchema)]

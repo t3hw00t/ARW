@@ -27,7 +27,7 @@ Envelope
   }
   ```
 
-- CloudEvents structured mode (opt-in): set `ARW_EVENTS_SSE_MODE=ce-structured` to emit CloudEvents 1.0 structured JSON in `data:` with `data` holding the event payload. Example (implementation in [apps/arw-server/src/api_events.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_events.rs)):
+- CloudEvents structured mode (opt-in): set `ARW_EVENTS_SSE_MODE=ce-structured` to emit CloudEvents 1.0 structured JSON in `data:` with `data` holding the event payload. Example (implementation in [apps/arw-server/src/api/events.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/events.rs)):
   ```json
   {
     "specversion": "1.0",

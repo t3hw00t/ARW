@@ -22,7 +22,7 @@
           "path": "apps/arw-server/src/models.rs"
         },
         {
-          "path": "apps/arw-server/src/api_models.rs"
+          "path": "apps/arw-server/src/api/models.rs"
         },
         {
           "path": "apps/arw-server/src/util.rs"
@@ -117,7 +117,7 @@
           "path": "apps/arw-server/src/main.rs"
         },
         {
-          "path": "apps/arw-server/src/api_events.rs"
+          "path": "apps/arw-server/src/api/events.rs"
         },
         {
           "path": "apps/arw-server/src/read_models.rs"
@@ -168,7 +168,7 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-server/src/api_metrics.rs"
+          "path": "apps/arw-server/src/api/metrics.rs"
         },
         {
           "path": "apps/arw-server/src/metrics.rs"
@@ -228,7 +228,7 @@
           "path": "apps/arw-server/src/tools.rs"
         },
         {
-          "path": "apps/arw-server/src/api_tools.rs"
+          "path": "apps/arw-server/src/api/tools.rs"
         }
       ],
       "http": [
@@ -336,7 +336,7 @@
           "path": "apps/arw-server/src/context_loop.rs"
         },
         {
-          "path": "apps/arw-server/src/api_context.rs"
+          "path": "apps/arw-server/src/api/context.rs"
         }
       ],
       "http": [
@@ -387,7 +387,7 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-server/src/api_memory.rs"
+          "path": "apps/arw-server/src/api/memory.rs"
         }
       ],
       "http": [
@@ -425,7 +425,7 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-server/src/api_projects.rs"
+          "path": "apps/arw-server/src/api/projects.rs"
         },
         {
           "path": "apps/arw-server/src/util.rs"
@@ -499,7 +499,7 @@
           "path": "apps/arw-server/src/feedback.rs"
         },
         {
-          "path": "apps/arw-server/src/api_feedback.rs"
+          "path": "apps/arw-server/src/api/feedback.rs"
         }
       ],
       "http": [
@@ -597,7 +597,7 @@
           "path": "apps/arw-server/src/cluster.rs"
         },
         {
-          "path": "apps/arw-server/src/api_state.rs"
+          "path": "apps/arw-server/src/api/state.rs"
         }
       ],
       "http": [
@@ -644,7 +644,7 @@
           "path": "apps/arw-server/src/experiments.rs"
         },
         {
-          "path": "apps/arw-server/src/api_experiments.rs"
+          "path": "apps/arw-server/src/api/experiments.rs"
         }
       ],
       "http": [
@@ -697,13 +697,13 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-server/src/api_state.rs"
+          "path": "apps/arw-server/src/api/state.rs"
         },
         {
           "path": "apps/arw-server/src/self_model.rs"
         },
         {
-          "path": "apps/arw-server/src/api_self_model.rs"
+          "path": "apps/arw-server/src/api/self_model.rs"
         }
       ],
       "http": [
@@ -753,7 +753,7 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-server/src/api_state.rs"
+          "path": "apps/arw-server/src/api/state.rs"
         },
         {
           "path": "apps/arw-server/src/state_observer.rs"
@@ -907,7 +907,7 @@
           "path": "apps/arw-connector/src/main.rs"
         },
         {
-          "path": "apps/arw-server/src/api_orchestrator.rs"
+          "path": "apps/arw-server/src/api/orchestrator.rs"
         }
       ],
       "http": [
@@ -959,7 +959,7 @@
           "path": "apps/arw-server/src/main.rs"
         },
         {
-          "path": "apps/arw-server/src/api_spec.rs"
+          "path": "apps/arw-server/src/api/spec.rs"
         }
       ],
       "http": [
@@ -1000,13 +1000,13 @@
           "path": "apps/arw-server/src/main.rs"
         },
         {
-          "path": "apps/arw-server/src/api_actions.rs"
+          "path": "apps/arw-server/src/api/actions.rs"
         },
         {
-          "path": "apps/arw-server/src/api_events.rs"
+          "path": "apps/arw-server/src/api/events.rs"
         },
         {
-          "path": "apps/arw-server/src/api_state.rs"
+          "path": "apps/arw-server/src/api/state.rs"
         },
         {
           "path": "crates/arw-kernel/src/lib.rs"
@@ -1087,10 +1087,10 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-server/src/api_policy.rs"
+          "path": "apps/arw-server/src/api/policy.rs"
         },
         {
-          "path": "apps/arw-server/src/api_leases.rs"
+          "path": "apps/arw-server/src/api/leases.rs"
         },
         {
           "path": "crates/arw-policy/src/lib.rs"
@@ -1156,10 +1156,10 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-server/src/api_egress.rs"
+          "path": "apps/arw-server/src/api/egress.rs"
         },
         {
-          "path": "apps/arw-server/src/api_egress_settings.rs"
+          "path": "apps/arw-server/src/api/egress_settings.rs"
         },
         {
           "path": "apps/arw-server/src/egress_proxy.rs"
@@ -1224,7 +1224,7 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-server/src/api_context.rs"
+          "path": "apps/arw-server/src/api/context.rs"
         },
         {
           "path": "apps/arw-server/src/working_set.rs"
@@ -1294,7 +1294,7 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-server/src/api_actions.rs"
+          "path": "apps/arw-server/src/api/actions.rs"
         },
         {
           "path": "apps/arw-server/src/read_models.rs"
@@ -1303,7 +1303,7 @@
           "path": "apps/arw-server/src/working_set.rs"
         },
         {
-          "path": "apps/arw-server/src/api_memory.rs"
+          "path": "apps/arw-server/src/api/memory.rs"
         }
       ],
       "http": [
@@ -1366,7 +1366,7 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-server/src/api_config.rs"
+          "path": "apps/arw-server/src/api/config.rs"
         }
       ],
       "http": [
@@ -1441,10 +1441,10 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-server/src/api_logic_units.rs"
+          "path": "apps/arw-server/src/api/logic_units.rs"
         },
         {
-          "path": "apps/arw-server/src/api_config.rs"
+          "path": "apps/arw-server/src/api/config.rs"
         },
         {
           "path": "spec/schemas/logic_unit_manifest.json"
@@ -1501,7 +1501,7 @@
       },
       "ssot": [
         {
-          "path": "apps/arw-server/src/api_connectors.rs"
+          "path": "apps/arw-server/src/api/connectors.rs"
         }
       ],
       "http": [

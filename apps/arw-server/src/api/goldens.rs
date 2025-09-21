@@ -3,23 +3,30 @@ use arw_topics as topics;
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use axum::{extract::State, Json};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Debug, Deserialize, IntoParams, ToSchema)]
+#[into_params(parameter_in = Query)]
 pub struct GoldensListQuery {
     #[serde(default)]
     pub proj: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct GoldensListResponse {
+    pub project: String,
+    pub items: Vec<goldens::GoldenItem>,
 }
 
 #[utoipa::path(
     get,
     path = "/admin/goldens/list",
     tag = "Admin/Experiments",
-    params(("proj" = Option<String>, Query, description = "Project name")),
+    params(GoldensListQuery),
     responses(
-        (status = 200, description = "Project goldens", body = serde_json::Value),
+        (status = 200, description = "Project goldens", body = GoldensListResponse),
         (status = 401, description = "Unauthorized"),
     )
 )]
@@ -33,7 +40,11 @@ pub async fn goldens_list(
     }
     let proj = q.proj.unwrap_or_else(|| "default".into());
     let set = goldens::load(&proj).await;
-    Json(json!({"project": proj, "items": set.items})).into_response()
+    let response = GoldensListResponse {
+        project: proj,
+        items: set.items,
+    };
+    Json(response).into_response()
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -110,7 +121,7 @@ pub struct GoldensRunRequest {
     tag = "Admin/Experiments",
     request_body = GoldensRunRequest,
     responses(
-        (status = 200, description = "Evaluation summary", body = serde_json::Value),
+        (status = 200, description = "Evaluation summary", body = goldens::EvalSummary),
         (status = 401, description = "Unauthorized"),
     )
 )]

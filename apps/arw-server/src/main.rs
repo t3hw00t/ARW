@@ -197,39 +197,7 @@ macro_rules! route_patch_tag {
 }
 
 mod access_log;
-mod api_actions;
-mod api_chat;
-mod api_config;
-mod api_connectors;
-mod api_context;
-mod api_distill;
-mod api_egress;
-mod api_egress_settings;
-mod api_events;
-mod api_experiments;
-mod api_feedback;
-mod api_goldens;
-mod api_governor;
-mod api_hierarchy;
-mod api_leases;
-mod api_logic_units;
-mod api_memory;
-mod api_meta;
-mod api_metrics;
-mod api_models;
-mod api_orchestrator;
-mod api_policy;
-mod api_probe;
-mod api_projects;
-mod api_research_watcher;
-mod api_review;
-mod api_rpu;
-mod api_self_model;
-mod api_spec;
-mod api_staging;
-mod api_state;
-mod api_tools;
-mod api_ui;
+mod api;
 mod capsule_guard;
 mod chat;
 mod cluster;
@@ -486,7 +454,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::HEALTHZ,
-        api_meta::healthz,
+        api::meta::healthz,
         "stable"
     );
     app = route_get_tag!(
@@ -494,7 +462,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ABOUT,
-        api_meta::about,
+        api::meta::about,
         "stable"
     );
     app = route_get_tag!(
@@ -502,7 +470,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         "/shutdown",
-        api_meta::shutdown,
+        api::meta::shutdown,
         "experimental"
     );
     app = route_post_tag!(
@@ -510,7 +478,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ACTIONS,
-        api_actions::actions_submit,
+        api::actions::actions_submit,
         "beta"
     );
     app = route_get_tag!(
@@ -518,7 +486,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ACTIONS_ID,
-        api_actions::actions_get,
+        api::actions::actions_get,
         "beta"
     );
     app = route_post_tag!(
@@ -526,7 +494,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ACTIONS_ID_STATE,
-        api_actions::actions_state_set,
+        api::actions::actions_state_set,
         "beta"
     );
     app = route_get_tag!(
@@ -534,7 +502,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::EVENTS,
-        api_events::events_sse,
+        api::events::events_sse,
         "stable"
     );
     app = route_get_tag!(
@@ -542,7 +510,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::METRICS,
-        api_metrics::metrics_prometheus,
+        api::metrics::metrics_prometheus,
         "stable"
     );
     app = route_get_tag!(
@@ -550,17 +518,17 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_DEBUG,
-        api_ui::debug_ui,
+        api::ui::debug_ui,
         "beta"
     );
     // Local developer alias for backward compatibility (not included in OpenAPI)
-    app = route_get_rec!(app, endpoints_acc, paths::DEBUG_ALIAS, api_ui::debug_ui);
+    app = route_get_rec!(app, endpoints_acc, paths::DEBUG_ALIAS, api::ui::debug_ui);
     app = route_get_tag!(
         app,
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_UI_MODELS,
-        api_ui::models_ui,
+        api::ui::models_ui,
         "beta"
     );
     app = route_get_tag!(
@@ -568,7 +536,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_UI_AGENTS,
-        api_ui::agents_ui,
+        api::ui::agents_ui,
         "beta"
     );
     app = route_get_tag!(
@@ -576,7 +544,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_UI_PROJECTS,
-        api_ui::projects_ui,
+        api::ui::projects_ui,
         "beta"
     );
     app = route_get_tag!(
@@ -584,7 +552,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_UI_FLOWS,
-        api_ui::flows_ui,
+        api::ui::flows_ui,
         "beta"
     );
     app = route_get_tag!(
@@ -592,7 +560,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_UI_TOKENS,
-        api_ui::ui_tokens_css,
+        api::ui::ui_tokens_css,
         "beta"
     );
     app = route_get_tag!(
@@ -600,7 +568,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_UI_KIT,
-        api_ui::ui_kit_css,
+        api::ui::ui_kit_css,
         "beta"
     );
     app = route_get_tag!(
@@ -608,7 +576,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MODELS_SUMMARY,
-        api_models::models_summary,
+        api::models::models_summary,
         "beta"
     );
     app = route_get_tag!(
@@ -616,7 +584,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MODELS,
-        api_models::models_list,
+        api::models::models_list,
         "beta"
     );
     app = route_post_tag!(
@@ -624,7 +592,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MODELS_REFRESH,
-        api_models::models_refresh,
+        api::models::models_refresh,
         "beta"
     );
     app = route_post_tag!(
@@ -632,7 +600,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MODELS_SAVE,
-        api_models::models_save,
+        api::models::models_save,
         "beta"
     );
     app = route_post_tag!(
@@ -640,7 +608,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MODELS_LOAD,
-        api_models::models_load,
+        api::models::models_load,
         "beta"
     );
     app = route_post_tag!(
@@ -648,7 +616,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MODELS_ADD,
-        api_models::models_add,
+        api::models::models_add,
         "beta"
     );
     app = route_post_tag!(
@@ -656,7 +624,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MODELS_REMOVE,
-        api_models::models_remove,
+        api::models::models_remove,
         "beta"
     );
     app = route_get_tag!(
@@ -664,7 +632,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MODELS_DEFAULT,
-        api_models::models_default_get,
+        api::models::models_default_get,
         "beta"
     );
     app = route_post_tag!(
@@ -672,7 +640,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MODELS_DEFAULT,
-        api_models::models_default_set,
+        api::models::models_default_set,
         "beta"
     );
     app = route_get_tag!(
@@ -680,7 +648,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MODELS_CONCURRENCY,
-        api_models::models_concurrency_get,
+        api::models::models_concurrency_get,
         "beta"
     );
     app = route_post_tag!(
@@ -688,7 +656,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MODELS_CONCURRENCY,
-        api_models::models_concurrency_set,
+        api::models::models_concurrency_set,
         "beta"
     );
     app = route_get_tag!(
@@ -696,7 +664,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MODELS_JOBS,
-        api_models::models_jobs,
+        api::models::models_jobs,
         "beta"
     );
     app = route_get_tag!(
@@ -704,7 +672,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_MODELS_HASHES,
-        api_models::state_models_hashes,
+        api::models::state_models_hashes,
         "beta"
     );
     app = route_get_tag!(
@@ -712,7 +680,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_TOOLS,
-        api_tools::tools_list,
+        api::tools::tools_list,
         "beta"
     );
     app = route_post_tag!(
@@ -720,7 +688,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_TOOLS_RUN,
-        api_tools::tools_run,
+        api::tools::tools_run,
         "beta"
     );
     app = route_get_tag!(
@@ -728,7 +696,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_TOOLS_CACHE_STATS,
-        api_tools::tools_cache_stats,
+        api::tools::tools_cache_stats,
         "beta"
     );
     app = route_get_tag!(
@@ -736,7 +704,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MEMORY_QUARANTINE,
-        api_review::memory_quarantine_get,
+        api::review::memory_quarantine_get,
         "experimental"
     );
     app = route_post_tag!(
@@ -744,7 +712,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MEMORY_QUARANTINE,
-        api_review::memory_quarantine_queue,
+        api::review::memory_quarantine_queue,
         "experimental"
     );
     app = route_post_tag!(
@@ -752,7 +720,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MEMORY_QUARANTINE_ADMIT,
-        api_review::memory_quarantine_admit,
+        api::review::memory_quarantine_admit,
         "experimental"
     );
     app = route_get_tag!(
@@ -760,7 +728,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_WORLD_DIFFS,
-        api_review::world_diffs_get,
+        api::review::world_diffs_get,
         "experimental"
     );
     app = route_post_tag!(
@@ -768,7 +736,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_WORLD_DIFFS_QUEUE,
-        api_review::world_diffs_queue,
+        api::review::world_diffs_queue,
         "experimental"
     );
     app = route_post_tag!(
@@ -776,7 +744,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_WORLD_DIFFS_DECISION,
-        api_review::world_diffs_decision,
+        api::review::world_diffs_decision,
         "experimental"
     );
     app = route_get_tag!(
@@ -784,7 +752,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_GOVERNOR_PROFILE,
-        api_governor::governor_profile_get,
+        api::governor::governor_profile_get,
         "experimental"
     );
     app = route_post_tag!(
@@ -792,7 +760,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_GOVERNOR_PROFILE,
-        api_governor::governor_profile_set,
+        api::governor::governor_profile_set,
         "experimental"
     );
     app = route_get_tag!(
@@ -800,7 +768,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_GOVERNOR_HINTS,
-        api_governor::governor_hints_get,
+        api::governor::governor_hints_get,
         "experimental"
     );
     app = route_post_tag!(
@@ -808,7 +776,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_GOVERNOR_HINTS,
-        api_governor::governor_hints_set,
+        api::governor::governor_hints_set,
         "experimental"
     );
     app = route_get_tag!(
@@ -816,7 +784,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_FEEDBACK_STATE,
-        api_feedback::feedback_state,
+        api::feedback::feedback_state,
         "experimental"
     );
     app = route_post_tag!(
@@ -824,7 +792,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_FEEDBACK_SIGNAL,
-        api_feedback::feedback_signal,
+        api::feedback::feedback_signal,
         "experimental"
     );
     app = route_post_tag!(
@@ -832,7 +800,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_FEEDBACK_ANALYZE,
-        api_feedback::feedback_analyze,
+        api::feedback::feedback_analyze,
         "experimental"
     );
     app = route_post_tag!(
@@ -840,7 +808,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_FEEDBACK_APPLY,
-        api_feedback::feedback_apply,
+        api::feedback::feedback_apply,
         "experimental"
     );
     app = route_post_tag!(
@@ -848,7 +816,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_FEEDBACK_AUTO,
-        api_feedback::feedback_auto,
+        api::feedback::feedback_auto,
         "experimental"
     );
     app = route_post_tag!(
@@ -856,7 +824,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_FEEDBACK_RESET,
-        api_feedback::feedback_reset,
+        api::feedback::feedback_reset,
         "experimental"
     );
     app = route_post_tag!(
@@ -864,7 +832,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_DISTILL,
-        api_distill::distill_run,
+        api::distill::distill_run,
         "experimental"
     );
     app = route_get_tag!(
@@ -872,7 +840,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_FEEDBACK_SUGGESTIONS,
-        api_feedback::feedback_suggestions,
+        api::feedback::feedback_suggestions,
         "experimental"
     );
     app = route_get_tag!(
@@ -880,7 +848,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_FEEDBACK_UPDATES,
-        api_feedback::feedback_updates,
+        api::feedback::feedback_updates,
         "experimental"
     );
     app = route_get_tag!(
@@ -888,7 +856,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_FEEDBACK_POLICY,
-        api_feedback::feedback_policy,
+        api::feedback::feedback_policy,
         "experimental"
     );
     app = route_get_tag!(
@@ -896,7 +864,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_FEEDBACK_VERSIONS,
-        api_feedback::feedback_versions,
+        api::feedback::feedback_versions,
         "experimental"
     );
     app = route_post_tag!(
@@ -904,7 +872,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_FEEDBACK_ROLLBACK,
-        api_feedback::feedback_rollback,
+        api::feedback::feedback_rollback,
         "experimental"
     );
     app = route_post_tag!(
@@ -912,7 +880,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_EXPERIMENTS_DEFINE,
-        api_experiments::experiments_define,
+        api::experiments::experiments_define,
         "experimental"
     );
     app = route_post_tag!(
@@ -920,7 +888,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_EXPERIMENTS_RUN,
-        api_experiments::experiments_run,
+        api::experiments::experiments_run,
         "experimental"
     );
     app = route_post_tag!(
@@ -928,7 +896,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_EXPERIMENTS_ACTIVATE,
-        api_experiments::experiments_activate,
+        api::experiments::experiments_activate,
         "experimental"
     );
     app = route_get_tag!(
@@ -936,7 +904,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_EXPERIMENTS_LIST,
-        api_experiments::experiments_list,
+        api::experiments::experiments_list,
         "experimental"
     );
     app = route_get_tag!(
@@ -944,7 +912,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_EXPERIMENTS_SCOREBOARD,
-        api_experiments::experiments_scoreboard,
+        api::experiments::experiments_scoreboard,
         "experimental"
     );
     app = route_get_tag!(
@@ -952,7 +920,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_EXPERIMENTS_WINNERS,
-        api_experiments::experiments_winners,
+        api::experiments::experiments_winners,
         "experimental"
     );
     app = route_post_tag!(
@@ -960,7 +928,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_EXPERIMENTS_START,
-        api_experiments::experiments_start,
+        api::experiments::experiments_start,
         "experimental"
     );
     app = route_post_tag!(
@@ -968,7 +936,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_EXPERIMENTS_STOP,
-        api_experiments::experiments_stop,
+        api::experiments::experiments_stop,
         "experimental"
     );
     app = route_post_tag!(
@@ -976,7 +944,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_EXPERIMENTS_ASSIGN,
-        api_experiments::experiments_assign,
+        api::experiments::experiments_assign,
         "experimental"
     );
     app = route_get_tag!(
@@ -984,7 +952,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_GOLDENS_LIST,
-        api_goldens::goldens_list,
+        api::goldens::goldens_list,
         "experimental"
     );
     app = route_post_tag!(
@@ -992,7 +960,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_GOLDENS_ADD,
-        api_goldens::goldens_add,
+        api::goldens::goldens_add,
         "experimental"
     );
     app = route_post_tag!(
@@ -1000,7 +968,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_GOLDENS_RUN,
-        api_goldens::goldens_run,
+        api::goldens::goldens_run,
         "experimental"
     );
     app = route_get_tag!(
@@ -1008,7 +976,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_HIERARCHY_STATE,
-        api_hierarchy::hierarchy_state,
+        api::hierarchy::hierarchy_state,
         "experimental"
     );
     app = route_post_tag!(
@@ -1016,7 +984,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_HIERARCHY_ROLE,
-        api_hierarchy::hierarchy_role_set,
+        api::hierarchy::hierarchy_role_set,
         "experimental"
     );
     app = route_post_tag!(
@@ -1024,7 +992,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_HIERARCHY_HELLO,
-        api_hierarchy::hierarchy_hello,
+        api::hierarchy::hierarchy_hello,
         "experimental"
     );
     app = route_post_tag!(
@@ -1032,7 +1000,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_HIERARCHY_OFFER,
-        api_hierarchy::hierarchy_offer,
+        api::hierarchy::hierarchy_offer,
         "experimental"
     );
     app = route_post_tag!(
@@ -1040,7 +1008,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_HIERARCHY_ACCEPT,
-        api_hierarchy::hierarchy_accept,
+        api::hierarchy::hierarchy_accept,
         "experimental"
     );
     app = route_get_tag!(
@@ -1048,7 +1016,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_PROBE,
-        api_probe::probe_effective_paths,
+        api::probe::probe_effective_paths,
         "experimental"
     );
     app = route_get_tag!(
@@ -1056,7 +1024,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_PROBE_HW,
-        api_probe::probe_hw,
+        api::probe::probe_hw,
         "experimental"
     );
     app = route_get_tag!(
@@ -1064,7 +1032,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_PROBE_METRICS,
-        api_probe::probe_metrics,
+        api::probe::probe_metrics,
         "experimental"
     );
     app = route_get_tag!(
@@ -1072,7 +1040,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_INTROSPECT_STATS,
-        api_metrics::metrics_overview,
+        api::metrics::metrics_overview,
         "deprecated"
     );
     app = route_post_tag!(
@@ -1080,7 +1048,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MODELS_DOWNLOAD,
-        api_models::models_download,
+        api::models::models_download,
         "experimental"
     );
     app = route_post_tag!(
@@ -1088,7 +1056,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MODELS_DOWNLOAD_CANCEL,
-        api_models::models_download_cancel,
+        api::models::models_download_cancel,
         "experimental"
     );
     app = route_post_tag!(
@@ -1096,7 +1064,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MODELS_CAS_GC,
-        api_models::models_cas_gc,
+        api::models::models_cas_gc,
         "experimental"
     );
     app = route_get_tag!(
@@ -1104,7 +1072,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_EPISODES,
-        api_state::state_episodes,
+        api::state::state_episodes,
         "beta"
     );
     app = route_get_tag!(
@@ -1112,7 +1080,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_PROJECTS,
-        api_projects::state_projects_list,
+        api::projects::state_projects_list,
         "beta"
     );
     app = route_post_tag!(
@@ -1120,7 +1088,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::PROJECTS,
-        api_projects::projects_create_unified,
+        api::projects::projects_create_unified,
         "beta"
     );
     app = route_get_tag!(
@@ -1128,7 +1096,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_PROJECTS_TREE,
-        api_projects::state_projects_tree,
+        api::projects::state_projects_tree,
         "beta"
     );
     app = route_get_tag!(
@@ -1136,7 +1104,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_PROJECTS_NOTES,
-        api_projects::state_projects_notes,
+        api::projects::state_projects_notes,
         "beta"
     );
     app = route_get_tag!(
@@ -1144,7 +1112,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_PROJECTS_FILE,
-        api_projects::state_projects_file_get,
+        api::projects::state_projects_file_get,
         "beta"
     );
     app = route_put_tag!(
@@ -1152,7 +1120,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::PROJECTS_NOTES,
-        api_projects::projects_notes_put,
+        api::projects::projects_notes_put,
         "beta"
     );
     app = route_put_tag!(
@@ -1160,7 +1128,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::PROJECTS_FILE,
-        api_projects::projects_file_put,
+        api::projects::projects_file_put,
         "beta"
     );
     app = route_patch_tag!(
@@ -1168,7 +1136,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::PROJECTS_FILE,
-        api_projects::projects_file_patch_unified,
+        api::projects::projects_file_patch_unified,
         "beta"
     );
     app = route_post_tag!(
@@ -1176,7 +1144,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::PROJECTS_IMPORT,
-        api_projects::projects_import_unified,
+        api::projects::projects_import_unified,
         "beta"
     );
     app = route_get_tag!(
@@ -1184,7 +1152,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_ROUTE_STATS,
-        api_state::state_route_stats,
+        api::state::state_route_stats,
         "beta"
     );
     app = route_get_tag!(
@@ -1192,7 +1160,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_OBSERVATIONS,
-        api_state::state_observations,
+        api::state::state_observations,
         "beta"
     );
     app = route_get_tag!(
@@ -1200,7 +1168,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_BELIEFS,
-        api_state::state_beliefs,
+        api::state::state_beliefs,
         "beta"
     );
     app = route_get_tag!(
@@ -1208,7 +1176,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_INTENTS,
-        api_state::state_intents,
+        api::state::state_intents,
         "beta"
     );
     app = route_get_tag!(
@@ -1216,7 +1184,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_GUARDRAILS_METRICS,
-        api_state::state_guardrails_metrics,
+        api::state::state_guardrails_metrics,
         "beta"
     );
     app = route_get_tag!(
@@ -1224,7 +1192,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_ACTIONS,
-        api_state::state_actions,
+        api::state::state_actions,
         "beta"
     );
     app = route_get_tag!(
@@ -1232,7 +1200,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_CLUSTER,
-        api_state::state_cluster,
+        api::state::state_cluster,
         "beta"
     );
     app = route_get_tag!(
@@ -1240,7 +1208,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_WORLD,
-        api_state::state_world,
+        api::state::state_world,
         "beta"
     );
     app = route_get_tag!(
@@ -1248,7 +1216,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_WORLD_SELECT,
-        api_state::state_world_select,
+        api::state::state_world_select,
         "beta"
     );
     app = route_get_tag!(
@@ -1256,7 +1224,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_MODELS_METRICS,
-        api_models::state_models_metrics,
+        api::models::state_models_metrics,
         "beta"
     );
     app = route_get_tag!(
@@ -1264,7 +1232,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_CONTRIBS,
-        api_state::state_contributions,
+        api::state::state_contributions,
         "beta"
     );
     app = route_get_tag!(
@@ -1272,7 +1240,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_RESEARCH_WATCHER,
-        api_state::state_research_watcher,
+        api::state::state_research_watcher,
         "experimental"
     );
     app = route_get_tag!(
@@ -1280,7 +1248,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_STAGING_ACTIONS,
-        api_state::state_staging_actions,
+        api::state::state_staging_actions,
         "experimental"
     );
     app = route_get_tag!(
@@ -1288,7 +1256,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_TRAINING_TELEMETRY,
-        api_state::state_training_telemetry,
+        api::state::state_training_telemetry,
         "experimental"
     );
     app = route_post_tag!(
@@ -1296,7 +1264,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::LEASES,
-        api_leases::leases_create,
+        api::leases::leases_create,
         "experimental"
     );
     app = route_get_tag!(
@@ -1304,7 +1272,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_LEASES,
-        api_leases::state_leases,
+        api::leases::state_leases,
         "experimental"
     );
     app = route_get_tag!(
@@ -1312,7 +1280,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_EGRESS,
-        api_state::state_egress,
+        api::state::state_egress,
         "beta"
     );
     app = route_get_tag!(
@@ -1320,7 +1288,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_EGRESS_SETTINGS,
-        api_egress_settings::state_egress_settings,
+        api::egress_settings::state_egress_settings,
         "beta"
     );
     app = route_post_tag!(
@@ -1328,7 +1296,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::EGRESS_SETTINGS,
-        api_egress_settings::egress_settings_update,
+        api::egress_settings::egress_settings_update,
         "beta"
     );
     app = route_post_tag!(
@@ -1336,7 +1304,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::EGRESS_PREVIEW,
-        api_egress::egress_preview,
+        api::egress::egress_preview,
         "beta"
     );
     app = route_get_tag!(
@@ -1344,7 +1312,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_POLICY,
-        api_policy::state_policy,
+        api::policy::state_policy,
         "experimental"
     );
     app = route_get_tag!(
@@ -1352,7 +1320,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_POLICY_CAPSULES,
-        api_state::state_policy_capsules,
+        api::state::state_policy_capsules,
         "experimental"
     );
     app = route_post_tag!(
@@ -1360,7 +1328,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::POLICY_RELOAD,
-        api_policy::policy_reload,
+        api::policy::policy_reload,
         "experimental"
     );
     app = route_post_tag!(
@@ -1368,7 +1336,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::POLICY_SIMULATE,
-        api_policy::policy_simulate,
+        api::policy::policy_simulate,
         "experimental"
     );
     app = route_get_tag!(
@@ -1376,7 +1344,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_MODELS,
-        api_state::state_models,
+        api::state::state_models,
         "beta"
     );
     // Specs
@@ -1385,7 +1353,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::SPEC_OPENAPI,
-        api_spec::spec_openapi,
+        api::spec::spec_openapi,
         "stable"
     );
     app = route_get_tag!(
@@ -1393,7 +1361,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::SPEC_ASYNCAPI,
-        api_spec::spec_asyncapi,
+        api::spec::spec_asyncapi,
         "stable"
     );
     app = route_get_tag!(
@@ -1401,7 +1369,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::SPEC_MCP,
-        api_spec::spec_mcp,
+        api::spec::spec_mcp,
         "stable"
     );
     app = route_get_tag!(
@@ -1409,7 +1377,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::SPEC_SCHEMA,
-        api_spec::spec_schema,
+        api::spec::spec_schema,
         "stable"
     );
     app = route_get_tag!(
@@ -1417,7 +1385,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::SPEC_INDEX,
-        api_spec::spec_index,
+        api::spec::spec_index,
         "stable"
     );
     app = route_get_tag!(
@@ -1425,7 +1393,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::SPEC_HEALTH,
-        api_spec::spec_health,
+        api::spec::spec_health,
         "stable"
     );
     // Generated OpenAPI (experimental)
@@ -1434,7 +1402,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         "/spec/openapi.gen.yaml",
-        api_spec::spec_openapi_gen,
+        api::spec::spec_openapi_gen,
         "experimental"
     );
     app = route_get_tag!(
@@ -1442,7 +1410,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::CATALOG_INDEX,
-        api_spec::catalog_index,
+        api::spec::catalog_index,
         "stable"
     );
     app = route_get_tag!(
@@ -1450,7 +1418,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::CATALOG_HEALTH,
-        api_spec::catalog_health,
+        api::spec::catalog_health,
         "stable"
     );
     // Admin: RPU trust endpoints (admin token required)
@@ -1459,7 +1427,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_RPU_TRUST,
-        api_rpu::rpu_trust_get,
+        api::rpu::rpu_trust_get,
         "experimental"
     );
     app = route_post_tag!(
@@ -1467,7 +1435,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_RPU_RELOAD,
-        api_rpu::rpu_reload_post,
+        api::rpu::rpu_reload_post,
         "experimental"
     );
     // Record internal routes as well (no stability tagging for these yet)
@@ -1475,81 +1443,81 @@ async fn main() {
         app,
         endpoints_acc,
         "/logic-units",
-        api_logic_units::logic_units_list
+        api::logic_units::logic_units_list
     );
     app = route_get_rec!(
         app,
         endpoints_acc,
         "/state/logic_units",
-        api_logic_units::state_logic_units
+        api::logic_units::state_logic_units
     );
     app = route_post_rec!(
         app,
         endpoints_acc,
         "/logic-units/install",
-        api_logic_units::logic_units_install
+        api::logic_units::logic_units_install
     );
     app = route_post_rec!(
         app,
         endpoints_acc,
         "/logic-units/apply",
-        api_logic_units::logic_units_apply
+        api::logic_units::logic_units_apply
     );
     app = route_post_rec!(
         app,
         endpoints_acc,
         "/logic-units/revert",
-        api_logic_units::logic_units_revert
+        api::logic_units::logic_units_revert
     );
     app = route_get_rec!(
         app,
         endpoints_acc,
         "/state/config",
-        api_config::state_config
+        api::config::state_config
     );
-    app = route_post_rec!(app, endpoints_acc, "/patch/apply", api_config::patch_apply);
+    app = route_post_rec!(app, endpoints_acc, "/patch/apply", api::config::patch_apply);
     app = route_post_rec!(
         app,
         endpoints_acc,
         "/patch/revert",
-        api_config::patch_revert
+        api::config::patch_revert
     );
     app = route_get_rec!(
         app,
         endpoints_acc,
         "/state/config/snapshots",
-        api_config::state_config_snapshots
+        api::config::state_config_snapshots
     );
     app = route_get_rec!(
         app,
         endpoints_acc,
         "/state/config/snapshots/:id",
-        api_config::state_config_snapshot_get
+        api::config::state_config_snapshot_get
     );
     app = route_post_rec!(
         app,
         endpoints_acc,
         "/patch/validate",
-        api_config::patch_validate
+        api::config::patch_validate
     );
     app = route_get_rec!(
         app,
         endpoints_acc,
         "/state/schema_map",
-        api_config::state_schema_map
+        api::config::state_schema_map
     );
     app = route_post_rec!(
         app,
         endpoints_acc,
         "/patch/infer_schema",
-        api_config::patch_infer_schema
+        api::config::patch_infer_schema
     );
     app = route_get_tag!(
         app,
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_RUNTIME_MATRIX,
-        api_state::state_runtime_matrix,
+        api::state::state_runtime_matrix,
         "beta"
     );
     app = route_get_tag!(
@@ -1557,7 +1525,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_EXPERIMENTS,
-        api_state::state_experiments,
+        api::state::state_experiments,
         "beta"
     );
     app = route_get_tag!(
@@ -1565,7 +1533,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_SELF,
-        api_state::state_self_list,
+        api::state::state_self_list,
         "beta"
     );
     app = route_get_tag!(
@@ -1573,7 +1541,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STATE_SELF_AGENT,
-        api_state::state_self_get,
+        api::state::state_self_get,
         "beta"
     );
     app = route_post_tag!(
@@ -1581,7 +1549,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_SELF_MODEL_PROPOSE,
-        api_self_model::self_model_propose,
+        api::self_model::self_model_propose,
         "beta"
     );
     app = route_post_tag!(
@@ -1589,51 +1557,51 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_SELF_MODEL_APPLY,
-        api_self_model::self_model_apply,
+        api::self_model::self_model_apply,
         "beta"
     );
     app = route_post_rec!(
         app,
         endpoints_acc,
         "/context/assemble",
-        api_context::context_assemble
+        api::context::context_assemble
     );
     app = route_post_rec!(
         app,
         endpoints_acc,
         "/context/rehydrate",
-        api_context::context_rehydrate
+        api::context::context_rehydrate
     );
     app = route_get_rec!(
         app,
         endpoints_acc,
         "/state/connectors",
-        api_connectors::state_connectors
+        api::connectors::state_connectors
     );
     app = route_post_rec!(
         app,
         endpoints_acc,
         "/connectors/register",
-        api_connectors::connector_register
+        api::connectors::connector_register
     );
     app = route_post_rec!(
         app,
         endpoints_acc,
         "/connectors/token",
-        api_connectors::connector_token_set
+        api::connectors::connector_token_set
     );
     app = route_get_rec!(
         app,
         endpoints_acc,
         "/state/memory/recent",
-        api_memory::state_memory_recent
+        api::memory::state_memory_recent
     );
     app = route_get_tag!(
         app,
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MEMORY,
-        api_memory::admin_memory_list,
+        api::memory::admin_memory_list,
         "beta"
     );
     app = route_post_tag!(
@@ -1641,33 +1609,33 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_MEMORY_APPLY,
-        api_memory::admin_memory_apply,
+        api::memory::admin_memory_apply,
         "beta"
     );
     app = route_get_rec!(
         app,
         endpoints_acc,
         "/orchestrator/mini_agents",
-        api_orchestrator::orchestrator_mini_agents
+        api::orchestrator::orchestrator_mini_agents
     );
     app = route_post_rec!(
         app,
         endpoints_acc,
         "/orchestrator/mini_agents/start_training",
-        api_orchestrator::orchestrator_start_training
+        api::orchestrator::orchestrator_start_training
     );
     app = route_get_rec!(
         app,
         endpoints_acc,
         "/state/orchestrator/jobs",
-        api_orchestrator::state_orchestrator_jobs
+        api::orchestrator::state_orchestrator_jobs
     );
     app = route_post_tag!(
         app,
         endpoints_acc,
         endpoints_meta_acc,
         paths::RESEARCH_WATCHER_APPROVE,
-        api_research_watcher::research_watcher_approve,
+        api::research_watcher::research_watcher_approve,
         "experimental"
     );
     app = route_post_tag!(
@@ -1675,7 +1643,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::RESEARCH_WATCHER_ARCHIVE,
-        api_research_watcher::research_watcher_archive,
+        api::research_watcher::research_watcher_archive,
         "experimental"
     );
     app = route_post_tag!(
@@ -1683,7 +1651,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STAGING_ACTION_APPROVE,
-        api_staging::staging_action_approve,
+        api::staging::staging_action_approve,
         "experimental"
     );
     app = route_post_tag!(
@@ -1691,7 +1659,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::STAGING_ACTION_DENY,
-        api_staging::staging_action_deny,
+        api::staging::staging_action_deny,
         "experimental"
     );
     app = route_get_tag!(
@@ -1699,7 +1667,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_CHAT,
-        api_chat::chat_history,
+        api::chat::chat_history,
         "beta"
     );
     app = route_post_tag!(
@@ -1707,7 +1675,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_CHAT_SEND,
-        api_chat::chat_send,
+        api::chat::chat_send,
         "beta"
     );
     app = route_post_tag!(
@@ -1715,7 +1683,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_CHAT_CLEAR,
-        api_chat::chat_clear,
+        api::chat::chat_clear,
         "beta"
     );
     app = route_get_tag!(
@@ -1723,7 +1691,7 @@ async fn main() {
         endpoints_acc,
         endpoints_meta_acc,
         paths::ADMIN_CHAT_STATUS,
-        api_chat::chat_status,
+        api::chat::chat_status,
         "beta"
     );
     let cluster_state = cluster::ClusterRegistry::new(bus.clone());
@@ -1934,8 +1902,8 @@ mod http_tests {
 
     fn router_with_actions(state: AppState) -> Router {
         Router::new()
-            .route(paths::ACTIONS, post(api_actions::actions_submit))
-            .route(paths::ACTIONS_ID, get(api_actions::actions_get))
+            .route(paths::ACTIONS, post(api::actions::actions_submit))
+            .route(paths::ACTIONS_ID, get(api::actions::actions_get))
             .with_state(state)
     }
 

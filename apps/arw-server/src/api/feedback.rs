@@ -6,7 +6,7 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::json;
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
 
 use crate::{admin_ok, feedback, AppState};
 
@@ -227,7 +227,8 @@ pub async fn feedback_suggestions(
     Json(json!({"version": version, "suggestions": list})).into_response()
 }
 
-#[derive(Deserialize, ToSchema, Default)]
+#[derive(Debug, Default, Deserialize, ToSchema, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct FeedbackUpdatesQuery {
     #[serde(default)]
     pub since: Option<u64>,
@@ -237,7 +238,7 @@ pub struct FeedbackUpdatesQuery {
     get,
     path = "/admin/feedback/updates",
     tag = "Admin/Feedback",
-    params(("since" = Option<u64>, Query, description = "Return suggestions if newer than this version")),
+    params(FeedbackUpdatesQuery),
     responses(
         (status = 200, description = "Suggestions updated", body = serde_json::Value),
         (status = 204, description = "No changes since provided version"),
@@ -300,7 +301,8 @@ pub async fn feedback_versions(
     Json(json!({"versions": versions})).into_response()
 }
 
-#[derive(Deserialize, ToSchema, Default)]
+#[derive(Debug, Default, Deserialize, ToSchema, IntoParams)]
+#[into_params(parameter_in = Query)]
 pub struct FeedbackRollbackQuery {
     #[serde(default)]
     pub to: Option<u64>,
@@ -310,7 +312,7 @@ pub struct FeedbackRollbackQuery {
     post,
     path = "/admin/feedback/rollback",
     tag = "Admin/Feedback",
-    params(("to" = Option<u64>, Query, description = "Restore to version (or latest backup when omitted)")),
+    params(FeedbackRollbackQuery),
     responses(
         (status = 200, description = "Snapshot restored", body = serde_json::Value),
         (status = 401, description = "Unauthorized"),

@@ -10,7 +10,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tonic::{transport::Server, Request, Response, Status};
 use tracing::{info, warn};
 
-use crate::api_actions::{self, ActionReq, SubmitActionError};
+use crate::api::actions::{self, ActionReq, SubmitActionError};
 use crate::staging;
 use crate::AppState;
 
@@ -95,7 +95,7 @@ impl ArwService for ArwGrpcService {
             input: input_json,
             idem_key,
         };
-        match api_actions::submit_action(&self.state, action_req).await {
+        match api::actions::submit_action(&self.state, action_req).await {
             Ok(outcome) => Ok(Response::new(SubmitActionResponse {
                 id: outcome.id,
                 staged: outcome.staged,

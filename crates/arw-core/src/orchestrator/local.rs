@@ -1,76 +1,13 @@
-use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+
 use tokio::sync::{Mutex, Notify};
 use uuid::Uuid;
 
-/// A unit of work submitted to the orchestrator.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Task {
-    pub id: String,
-    /// Sticky routing key; connectors can shard by this.
-    pub shard_key: Option<String>,
-    /// Tool or operation identifier.
-    pub kind: String,
-    /// JSON payload for the operation.
-    pub payload: serde_json::Value,
-    /// Client-supplied idempotency key for exactly-once semantics (best-effort).
-    pub idem_key: Option<String>,
-    /// Priority lane: higher first; implementation may map to subjects/streams.
-    pub priority: i32,
-    /// Attempt count; incremented on re-delivery.
-    pub attempt: u32,
-}
-
-pub(crate) const DEFAULT_LEASE_TTL_MS: u64 = 30_000;
-pub(crate) const MIN_LEASE_TTL_MS: u64 = 100;
-
-impl Task {
-    pub fn new(kind: impl Into<String>, payload: serde_json::Value) -> Self {
-        Self {
-            id: Uuid::new_v4().to_string(),
-            shard_key: None,
-            kind: kind.into(),
-            payload,
-            idem_key: None,
-            priority: 0,
-            attempt: 0,
-        }
-    }
-}
-
-/// Lease token for in-flight work.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct LeaseToken {
-    pub task_id: String,
-    pub lease_id: String,
-    /// Epoch millis when lease expires.
-    pub expires_at_ms: u64,
-}
-
-/// Result envelope returned by connectors.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct TaskResult {
-    pub task_id: String,
-    pub ok: bool,
-    pub output: serde_json::Value,
-    pub error: Option<String>,
-    pub latency_ms: Option<u64>,
-}
-
-/// Queue abstraction for distributing Tasks.
-#[async_trait::async_trait]
-pub trait Queue: Send + Sync {
-    /// Enqueue a task; returns effective task id.
-    async fn enqueue(&self, t: Task) -> anyhow::Result<String>;
-    /// Dequeue next task for this consumer group; returns task and lease token.
-    async fn dequeue(&self, group: &str) -> anyhow::Result<(Task, LeaseToken)>;
-    /// Acknowledge and remove a task using its lease token.
-    async fn ack(&self, lease: LeaseToken) -> anyhow::Result<()>;
-    /// Negative-acknowledge; optionally schedule retry after millis.
-    async fn nack(&self, lease: LeaseToken, retry_after_ms: Option<u64>) -> anyhow::Result<()>;
-}
+use super::queue::Queue;
+use super::types::{LeaseToken, Task, DEFAULT_LEASE_TTL_MS, MIN_LEASE_TTL_MS};
+use super::util::now_millis;
 
 /// In-memory queue for single-process testing and defaults.
 #[derive(Clone)]
@@ -106,30 +43,30 @@ impl LocalQueue {
             inner: inner.clone(),
         };
         // Start lease sweeper to re-enqueue expired leases
-        let inner = inner.clone();
+        let inner_clone = inner.clone();
         tokio::spawn(async move {
-            let shutdown = inner.sweeper_shutdown.clone();
+            let shutdown = inner_clone.sweeper_shutdown.clone();
             loop {
-                if inner.stop_flag.load(Ordering::SeqCst) {
+                if inner_clone.stop_flag.load(Ordering::SeqCst) {
                     break;
                 }
                 tokio::select! {
                     _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {}
                     _ = shutdown.notified() => {
-                        if inner.stop_flag.load(Ordering::SeqCst) {
+                        if inner_clone.stop_flag.load(Ordering::SeqCst) {
                             break;
                         }
                         continue;
                     }
                 }
-                if inner.stop_flag.load(Ordering::SeqCst) {
+                if inner_clone.stop_flag.load(Ordering::SeqCst) {
                     break;
                 }
-                let now = crate::orchestrator::now_millis();
+                let now = now_millis();
                 // collect expired leases
                 let mut expired: Vec<Task> = Vec::new();
                 {
-                    let mut pend = inner.pending.lock().await;
+                    let mut pend = inner_clone.pending.lock().await;
                     let lids: Vec<String> = pend
                         .iter()
                         .filter_map(
@@ -144,14 +81,14 @@ impl LocalQueue {
                 }
                 if !expired.is_empty() {
                     {
-                        let mut map = inner.queues.lock().await;
+                        let mut map = inner_clone.queues.lock().await;
                         for mut t in expired {
                             t.attempt = t.attempt.saturating_add(1);
                             let q = map.entry(t.priority).or_insert_with(VecDeque::new);
                             q.push_back(t);
                         }
                     }
-                    inner.notify.notify_waiters();
+                    inner_clone.notify.notify_waiters();
                 }
             }
         });
@@ -262,33 +199,11 @@ impl Drop for LocalQueue {
     }
 }
 
-#[inline]
-pub(crate) fn now_millis() -> u64 {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_millis() as u64
-}
-
-/// Minimal orchestrator façade keeping placement logic separate from queue impls.
-#[derive(Clone)]
-pub struct Orchestrator<Q: Queue> {
-    queue: Arc<Q>,
-}
-
-impl<Q: Queue> Orchestrator<Q> {
-    pub fn new(queue: Arc<Q>) -> Self {
-        Self { queue }
-    }
-    pub async fn admit(&self, task: Task) -> anyhow::Result<String> {
-        self.queue.enqueue(task).await
-    }
-}
-
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use super::super::types::Task;
+    use super::LocalQueue;
+    use crate::orchestrator::Queue;
     use serde_json::json;
     use tokio::time::{sleep, timeout, Duration};
 
