@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
 
-use crate::{util, AppState};
+use crate::{tasks::TaskHandle, util, AppState};
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, Eq, Hash)]
 #[serde(rename_all = "snake_case")]
@@ -171,14 +171,17 @@ pub(crate) async fn load_persisted() {
     }
 }
 
-pub(crate) fn start(state: AppState) {
+pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
     let bus = state.bus();
-    tokio::spawn(async move {
-        let mut rx = bus.subscribe();
-        while let Ok(env) = rx.recv().await {
-            process_event(&bus, &env).await;
-        }
-    });
+    vec![TaskHandle::new(
+        "world.bus_listener",
+        tokio::spawn(async move {
+            let mut rx = bus.subscribe();
+            while let Ok(env) = rx.recv().await {
+                process_event(&bus, &env).await;
+            }
+        }),
+    )]
 }
 
 async fn process_event(bus: &arw_events::Bus, env: &Envelope) {

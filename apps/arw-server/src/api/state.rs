@@ -85,8 +85,21 @@ pub async fn state_route_stats(State(state): State<AppState>) -> impl IntoRespon
             "no_receivers": bus.no_receivers
         },
         "events": metrics.events,
-        "routes": metrics.routes
+        "routes": metrics.routes,
+        "tasks": metrics.tasks
     }))
+}
+
+/// Background tasks status snapshot.
+#[utoipa::path(
+    get,
+    path = "/state/tasks",
+    tag = "State",
+    responses((status = 200, description = "Background tasks", body = serde_json::Value))
+)]
+pub async fn state_tasks(State(state): State<AppState>) -> impl IntoResponse {
+    let tasks = state.metrics().tasks_snapshot();
+    Json(json!({ "tasks": tasks }))
 }
 
 /// Recent observations from the event bus.

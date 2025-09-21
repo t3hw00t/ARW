@@ -139,6 +139,7 @@ pub(crate) mod paths {
     pub const STATE_STAGING_ACTIONS: &str = "/state/staging/actions";
     pub const STATE_TRAINING_TELEMETRY: &str = "/state/training/telemetry";
     pub const STATE_RUNTIME_MATRIX: &str = "/state/runtime_matrix";
+    pub const STATE_TASKS: &str = "/state/tasks";
     pub const STATE_SELF: &str = "/state/self";
     pub const STATE_SELF_AGENT: &str = "/state/self/:agent";
     pub const STATE_EXPERIMENTS: &str = "/state/experiments";
@@ -687,6 +688,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
     builder.route_get(
         paths::STATE_ROUTE_STATS,
         api::state::state_route_stats,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::STATE_TASKS,
+        api::state::state_tasks,
         Some(Stability::Beta),
     );
     builder.route_get(

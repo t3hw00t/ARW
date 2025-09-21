@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use std::sync::RwLock;
 use tokio::time::{interval, Duration};
 
-use crate::{read_models, AppState};
+use crate::{read_models, tasks::TaskHandle, AppState};
 
 fn store() -> &'static RwLock<HashMap<String, Value>> {
     static MATRIX: OnceCell<RwLock<HashMap<String, Value>>> = OnceCell::new();
@@ -23,43 +23,52 @@ pub(crate) fn snapshot() -> HashMap<String, Value> {
     store().read().unwrap().clone()
 }
 
-pub(crate) fn start(state: AppState) {
+pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
     let subscriber_state = state.clone();
     let bus_for_patch = state.bus();
-    tokio::spawn(async move {
-        let mut rx = subscriber_state.bus().subscribe();
-        while let Ok(env) = rx.recv().await {
-            if env.kind.as_str() == "runtime.health" {
-                let key = env
-                    .payload
-                    .get("target")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("runtime")
-                    .to_string();
-                let snapshot = {
-                    let mut guard = store().write().unwrap();
-                    guard.insert(key, env.payload.clone());
-                    guard.clone()
-                };
-                read_models::publish_read_model_patch(
-                    &bus_for_patch,
-                    "runtime_matrix",
-                    &json!({"items": snapshot}),
-                );
+    let mut handles = Vec::new();
+    handles.push(TaskHandle::new(
+        "runtime_matrix.health_subscriber",
+        tokio::spawn(async move {
+            let mut rx = subscriber_state.bus().subscribe();
+            while let Ok(env) = rx.recv().await {
+                if env.kind.as_str() == "runtime.health" {
+                    let key = env
+                        .payload
+                        .get("target")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or("runtime")
+                        .to_string();
+                    let snapshot = {
+                        let mut guard = store().write().unwrap();
+                        guard.insert(key, env.payload.clone());
+                        guard.clone()
+                    };
+                    read_models::publish_read_model_patch(
+                        &bus_for_patch,
+                        "runtime_matrix",
+                        &json!({"items": snapshot}),
+                    );
+                }
             }
-        }
-    });
+        }),
+    ));
 
     let publisher_state = state.clone();
-    tokio::spawn(async move {
-        let mut tick = interval(Duration::from_secs(5));
-        loop {
-            tick.tick().await;
-            if let Some(payload) = build_local_health_payload(&publisher_state).await {
-                publisher_state.bus().publish("runtime.health", &payload);
+    handles.push(TaskHandle::new(
+        "runtime_matrix.local_publisher",
+        tokio::spawn(async move {
+            let mut tick = interval(Duration::from_secs(5));
+            loop {
+                tick.tick().await;
+                if let Some(payload) = build_local_health_payload(&publisher_state).await {
+                    publisher_state.bus().publish("runtime.health", &payload);
+                }
             }
-        }
-    });
+        }),
+    ));
+
+    handles
 }
 
 async fn build_local_health_payload(state: &AppState) -> Option<Value> {

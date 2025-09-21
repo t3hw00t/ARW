@@ -97,6 +97,23 @@ fn render_prometheus(summary: &MetricsSummary, bus: &arw_events::BusStats) -> St
         write_metric_line(&mut out, "arw_route_p95_ms", &labels, stat.p95_ms);
         write_metric_line(&mut out, "arw_route_max_ms", &labels, stat.max_ms);
     }
+
+    out.push_str("# HELP arw_task_inflight Current background task inflight count\n# TYPE arw_task_inflight gauge\n");
+    out.push_str("# HELP arw_task_started_total Background task start events\n# TYPE arw_task_started_total counter\n");
+    out.push_str("# HELP arw_task_completed_total Background task completions\n# TYPE arw_task_completed_total counter\n");
+    out.push_str("# HELP arw_task_aborted_total Background task aborts\n# TYPE arw_task_aborted_total counter\n");
+    for (task, status) in summary.tasks.iter() {
+        let labels = [("task", task.clone())];
+        write_metric_line(&mut out, "arw_task_inflight", &labels, status.inflight);
+        write_metric_line(&mut out, "arw_task_started_total", &labels, status.started);
+        write_metric_line(
+            &mut out,
+            "arw_task_completed_total",
+            &labels,
+            status.completed,
+        );
+        write_metric_line(&mut out, "arw_task_aborted_total", &labels, status.aborted);
+    }
     out
 }
 
@@ -136,6 +153,7 @@ pub async fn metrics_overview(headers: HeaderMap, State(state): State<AppState>)
     Json(json!({
         "events": summary.events,
         "routes": summary.routes,
+        "tasks": summary.tasks,
         "bus": {
             "published": bus.published,
             "delivered": bus.delivered,

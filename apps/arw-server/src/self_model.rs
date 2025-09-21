@@ -5,7 +5,7 @@ use tokio::fs as afs;
 use tokio::time::{interval, Duration};
 use uuid::Uuid;
 
-use crate::AppState;
+use crate::{tasks::TaskHandle, AppState};
 use arw_topics as topics;
 
 fn base_dir() -> PathBuf {
@@ -235,90 +235,98 @@ pub async fn apply_proposal(id: &str) -> Result<Value, SelfModelError> {
     Ok(json!({"id": id, "agent": agent, "applied": true}))
 }
 
-pub fn start_aggregators(state: AppState) {
-    spawn_tool_competence(state.clone());
-    spawn_resource_forecaster(state);
+pub fn start_aggregators(state: AppState) -> Vec<TaskHandle> {
+    vec![
+        spawn_tool_competence(state.clone()),
+        spawn_resource_forecaster(state),
+    ]
 }
 
-fn spawn_tool_competence(state: AppState) {
-    let mut rx = state.bus().subscribe();
-    tokio::spawn(async move {
-        while let Ok(env) = rx.recv().await {
-            if env.kind.as_str() == topics::TOPIC_TOOL_RAN {
-                if let Some(tool_id) = env.payload.get("id").and_then(|v| v.as_str()) {
-                    let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-                    let agent = agent_id();
-                    if let Err(err) = update_merge(&agent, |model| {
-                        if !model.is_object() {
-                            *model = json!({});
+fn spawn_tool_competence(state: AppState) -> TaskHandle {
+    TaskHandle::new(
+        "self_model.tool_competence",
+        tokio::spawn(async move {
+            let mut rx = state.bus().subscribe();
+            while let Ok(env) = rx.recv().await {
+                if env.kind.as_str() == topics::TOPIC_TOOL_RAN {
+                    if let Some(tool_id) = env.payload.get("id").and_then(|v| v.as_str()) {
+                        let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+                        let agent = agent_id();
+                        if let Err(err) = update_merge(&agent, |model| {
+                            if !model.is_object() {
+                                *model = json!({});
+                            }
+                            let obj = model.as_object_mut().unwrap();
+                            let lane = obj.entry("competence_map").or_insert_with(|| json!({}));
+                            let entry = lane
+                                .as_object_mut()
+                                .unwrap()
+                                .entry(tool_id.to_string())
+                                .or_insert_with(|| json!({"count": 0}));
+                            if let Some(map) = entry.as_object_mut() {
+                                let cur = map.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
+                                map.insert("count".into(), json!(cur.saturating_add(1)));
+                                map.insert("last".into(), json!(now.clone()));
+                            }
+                        })
+                        .await
+                        {
+                            tracing::debug!("self_model competence merge failed: {}", err);
                         }
-                        let obj = model.as_object_mut().unwrap();
-                        let lane = obj.entry("competence_map").or_insert_with(|| json!({}));
-                        let entry = lane
-                            .as_object_mut()
-                            .unwrap()
-                            .entry(tool_id.to_string())
-                            .or_insert_with(|| json!({"count": 0}));
-                        if let Some(map) = entry.as_object_mut() {
-                            let cur = map.get("count").and_then(|v| v.as_u64()).unwrap_or(0);
-                            map.insert("count".into(), json!(cur.saturating_add(1)));
-                            map.insert("last".into(), json!(now.clone()));
-                        }
-                    })
-                    .await
-                    {
-                        tracing::debug!("self_model competence merge failed: {}", err);
                     }
                 }
             }
-        }
-    });
+        }),
+    )
 }
 
-fn spawn_resource_forecaster(state: AppState) {
-    tokio::spawn(async move {
-        let mut ticker = interval(Duration::from_secs(aggregator_interval_secs()));
-        loop {
-            ticker.tick().await;
-            let snapshot = state.metrics().snapshot();
-            let routes = snapshot.routes.by_path;
-            let chat = routes.get("/admin/chat/send").cloned();
-            let tools = routes.get("/admin/tools/run").cloned();
-            if chat.is_none() && tools.is_none() {
-                continue;
-            }
-            let mut patch = json!({"resource_curve": {"recipes": {}}});
-            if let Some(route) = chat {
-                if route.ewma_ms.is_finite() && route.ewma_ms > 0.0 {
-                    if let Some(num) = serde_json::Number::from_f64(route.ewma_ms) {
-                        patch["resource_curve"]["recipes"]["chat"]["latency_ms_mean"] =
-                            Value::Number(num);
+fn spawn_resource_forecaster(state: AppState) -> TaskHandle {
+    TaskHandle::new(
+        "self_model.resource_forecaster",
+        tokio::spawn(async move {
+            let mut ticker = interval(Duration::from_secs(aggregator_interval_secs()));
+            loop {
+                ticker.tick().await;
+                let snapshot = state.metrics().snapshot();
+                let routes = snapshot.routes.by_path;
+                let chat = routes.get("/admin/chat/send").cloned();
+                let tools = routes.get("/admin/tools/run").cloned();
+                if chat.is_none() && tools.is_none() {
+                    continue;
+                }
+                let mut patch = json!({"resource_curve": {"recipes": {}}});
+                if let Some(route) = chat {
+                    if route.ewma_ms.is_finite() && route.ewma_ms > 0.0 {
+                        if let Some(num) = serde_json::Number::from_f64(route.ewma_ms) {
+                            patch["resource_curve"]["recipes"]["chat"]["latency_ms_mean"] =
+                                Value::Number(num);
+                        }
                     }
                 }
-            }
-            if let Some(route) = tools {
-                if route.ewma_ms.is_finite() && route.ewma_ms > 0.0 {
-                    if let Some(num) = serde_json::Number::from_f64(route.ewma_ms) {
-                        patch["resource_curve"]["recipes"]["tools"]["latency_ms_mean"] =
-                            Value::Number(num);
+                if let Some(route) = tools {
+                    if route.ewma_ms.is_finite() && route.ewma_ms > 0.0 {
+                        if let Some(num) = serde_json::Number::from_f64(route.ewma_ms) {
+                            patch["resource_curve"]["recipes"]["tools"]["latency_ms_mean"] =
+                                Value::Number(num);
+                        }
                     }
                 }
+                let recipes_empty = patch["resource_curve"]["recipes"]
+                    .as_object()
+                    .map(|o| o.is_empty())
+                    .unwrap_or(true);
+                if recipes_empty {
+                    continue;
+                }
+                let agent = agent_id();
+                if let Err(err) = update_merge(&agent, |model| {
+                    merge_json(model, &patch);
+                })
+                .await
+                {
+                    tracing::debug!("self_model resource merge failed: {}", err);
+                }
             }
-            let recipes_empty = patch["resource_curve"]["recipes"]
-                .as_object()
-                .map(|o| o.is_empty())
-                .unwrap_or(true);
-            if recipes_empty {
-                continue;
-            }
-            let agent = agent_id();
-            if let Err(err) = update_merge(&agent, |model| {
-                merge_json(model, &patch);
-            })
-            .await
-            {
-                tracing::debug!("self_model resource merge failed: {}", err);
-            }
-        }
-    });
+        }),
+    )
 }

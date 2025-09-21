@@ -7,11 +7,12 @@ use std::sync::Mutex;
 use std::time::Duration;
 use tokio::time;
 
-use crate::{training, AppState};
+use crate::{tasks::TaskHandle, training, AppState};
 use arw_topics as topics;
 
-pub(crate) fn start_read_models(state: AppState) {
-    spawn_read_model(
+pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
+    let mut handles = Vec::new();
+    handles.push(spawn_read_model(
         &state,
         "logic_units",
         Duration::from_millis(1500),
@@ -25,9 +26,9 @@ pub(crate) fn start_read_models(state: AppState) {
                 .ok()
                 .map(|items| json!({ "items": items }))
         },
-    );
+    ));
 
-    spawn_read_model(
+    handles.push(spawn_read_model(
         &state,
         "orchestrator_jobs",
         Duration::from_millis(2000),
@@ -41,9 +42,9 @@ pub(crate) fn start_read_models(state: AppState) {
                 .ok()
                 .map(|items| json!({ "items": items }))
         },
-    );
+    ));
 
-    spawn_read_model(
+    handles.push(spawn_read_model(
         &state,
         "memory_recent",
         Duration::from_millis(2500),
@@ -57,9 +58,9 @@ pub(crate) fn start_read_models(state: AppState) {
                 .ok()
                 .map(|items| json!({ "items": items }))
         },
-    );
+    ));
 
-    spawn_read_model(
+    handles.push(spawn_read_model(
         &state,
         "route_stats",
         Duration::from_millis(2000),
@@ -76,11 +77,22 @@ pub(crate) fn start_read_models(state: AppState) {
                 },
                 "events": metrics.events,
                 "routes": metrics.routes,
+                "tasks": metrics.tasks,
             }))
         },
-    );
+    ));
 
-    spawn_read_model(
+    handles.push(spawn_read_model(
+        &state,
+        "background_tasks",
+        Duration::from_millis(3000),
+        |st| async move {
+            let tasks = st.metrics().tasks_snapshot();
+            Some(json!({ "tasks": tasks }))
+        },
+    ));
+
+    handles.push(spawn_read_model(
         &state,
         "cluster_nodes",
         Duration::from_millis(5000),
@@ -88,9 +100,9 @@ pub(crate) fn start_read_models(state: AppState) {
             let nodes = st.cluster().snapshot().await;
             Some(json!({ "nodes": nodes }))
         },
-    );
+    ));
 
-    spawn_read_model(
+    handles.push(spawn_read_model(
         &state,
         "research_watcher",
         Duration::from_millis(5000),
@@ -121,9 +133,9 @@ pub(crate) fn start_read_models(state: AppState) {
                 "archived_recent": archived
             }))
         },
-    );
+    ));
 
-    spawn_read_model(
+    handles.push(spawn_read_model(
         &state,
         "staging_actions",
         Duration::from_millis(4000),
@@ -148,16 +160,16 @@ pub(crate) fn start_read_models(state: AppState) {
                 "recent": decided,
             }))
         },
-    );
+    ));
 
-    spawn_read_model(
+    handles.push(spawn_read_model(
         &state,
         "training_metrics",
         Duration::from_millis(4000),
         |st| async move { Some(training::telemetry_snapshot(&st)) },
-    );
+    ));
 
-    spawn_read_model(
+    handles.push(spawn_read_model(
         &state,
         "policy_leases",
         Duration::from_millis(4000),
@@ -167,26 +179,36 @@ pub(crate) fn start_read_models(state: AppState) {
             }
             Some(leases_snapshot(&st).await)
         },
-    );
+    ));
+
+    handles
 }
 
-fn spawn_read_model<F, Fut>(state: &AppState, id: &'static str, period: Duration, builder: F)
+fn spawn_read_model<F, Fut>(
+    state: &AppState,
+    id: &'static str,
+    period: Duration,
+    builder: F,
+) -> TaskHandle
 where
     F: Fn(AppState) -> Fut + Send + 'static,
     Fut: Future<Output = Option<Value>> + Send + 'static,
 {
     let bus = state.bus();
     let state = state.clone();
-    tokio::spawn(async move {
-        let mut tick = time::interval(period);
-        loop {
-            tick.tick().await;
-            let state_clone = state.clone();
-            if let Some(value) = builder(state_clone).await {
-                publish_read_model_patch(&bus, id, &value);
+    TaskHandle::new(
+        format!("read_model::{id}"),
+        tokio::spawn(async move {
+            let mut tick = time::interval(period);
+            loop {
+                tick.tick().await;
+                let state_clone = state.clone();
+                if let Some(value) = builder(state_clone).await {
+                    publish_read_model_patch(&bus, id, &value);
+                }
             }
-        }
-    });
+        }),
+    )
 }
 
 pub(crate) fn publish_read_model_patch(bus: &arw_events::Bus, id: &str, value: &Value) {

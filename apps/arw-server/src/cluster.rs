@@ -9,7 +9,7 @@ use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 use utoipa::ToSchema;
 
-use crate::{responses, AppState};
+use crate::{responses, tasks::TaskHandle, AppState};
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct ClusterNode {
@@ -106,44 +106,56 @@ impl ClusterRegistry {
     }
 }
 
-pub fn start(state: AppState) {
+pub fn start(state: AppState) -> Vec<TaskHandle> {
     let registry = state.cluster();
     let initial_registry = registry.clone();
     let initial_state = state.clone();
-    tokio::spawn(async move {
-        initial_registry.advertise_local(&initial_state).await;
-    });
+    let mut handles = Vec::new();
+    handles.push(TaskHandle::new(
+        "cluster.advertise_initial",
+        tokio::spawn(async move {
+            initial_registry.advertise_local(&initial_state).await;
+        }),
+    ));
 
     let periodic_registry = registry.clone();
     let periodic_state = state.clone();
-    tokio::spawn(async move {
-        let mut tick = interval(Duration::from_secs(300));
-        loop {
-            tick.tick().await;
-            periodic_registry.advertise_local(&periodic_state).await;
-        }
-    });
+    handles.push(TaskHandle::new(
+        "cluster.advertise_periodic",
+        tokio::spawn(async move {
+            let mut tick = interval(Duration::from_secs(300));
+            loop {
+                tick.tick().await;
+                periodic_registry.advertise_local(&periodic_state).await;
+            }
+        }),
+    ));
 
     let event_registry = registry.clone();
     let event_state = state.clone();
     let bus = state.bus();
-    tokio::spawn(async move {
-        let mut rx = bus.subscribe();
-        while let Ok(env) = rx.recv().await {
-            match env.kind.as_str() {
-                topics::TOPIC_MODELS_CHANGED | topics::TOPIC_MODELS_REFRESHED => {
-                    event_registry.advertise_local(&event_state).await;
+    handles.push(TaskHandle::new(
+        "cluster.advertise_on_events",
+        tokio::spawn(async move {
+            let mut rx = bus.subscribe();
+            while let Ok(env) = rx.recv().await {
+                match env.kind.as_str() {
+                    topics::TOPIC_MODELS_CHANGED | topics::TOPIC_MODELS_REFRESHED => {
+                        event_registry.advertise_local(&event_state).await;
+                    }
+                    topics::TOPIC_GOVERNOR_CHANGED => {
+                        event_registry.advertise_local(&event_state).await;
+                    }
+                    topics::TOPIC_CLUSTER_NODE_ADVERTISE | topics::TOPIC_CLUSTER_NODE_CHANGED => {
+                        event_registry.apply_remote_advert(&env.payload).await;
+                    }
+                    _ => {}
                 }
-                topics::TOPIC_GOVERNOR_CHANGED => {
-                    event_registry.advertise_local(&event_state).await;
-                }
-                topics::TOPIC_CLUSTER_NODE_ADVERTISE | topics::TOPIC_CLUSTER_NODE_CHANGED => {
-                    event_registry.apply_remote_advert(&env.payload).await;
-                }
-                _ => {}
             }
-        }
-    });
+        }),
+    ));
+
+    handles
 }
 
 fn summarize_models(models: Vec<Value>) -> Value {

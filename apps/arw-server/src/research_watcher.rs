@@ -5,7 +5,7 @@ use serde_json::Value;
 use tokio::time::{sleep, Duration};
 use tracing::{debug, warn};
 
-use crate::{http_timeout, AppState};
+use crate::{http_timeout, tasks::TaskHandle, AppState};
 use arw_topics as topics;
 
 const MIN_INTERVAL_SECS: u64 = 300;
@@ -27,23 +27,26 @@ struct SeedItem {
     payload: Option<Value>,
 }
 
-pub fn start(state: AppState) {
+pub fn start(state: AppState) -> Vec<TaskHandle> {
     if !state.kernel_enabled() {
-        return;
+        return Vec::new();
     }
     let client = reqwest::Client::builder()
         .timeout(http_timeout::get_duration())
         .build()
         .ok();
-    tokio::spawn(async move {
-        loop {
-            if let Err(err) = sync_once(&state, client.as_ref()).await {
-                warn!(target: "research_watcher", "sync error: {err:?}");
+    vec![TaskHandle::new(
+        "research_watcher.poller",
+        tokio::spawn(async move {
+            loop {
+                if let Err(err) = sync_once(&state, client.as_ref()).await {
+                    warn!(target: "research_watcher", "sync error: {err:?}");
+                }
+                let interval = interval_secs();
+                sleep(Duration::from_secs(interval)).await;
             }
-            let interval = interval_secs();
-            sleep(Duration::from_secs(interval)).await;
-        }
-    });
+        }),
+    )]
 }
 
 fn interval_secs() -> u64 {

@@ -71,6 +71,7 @@ pub struct RoutesSummary {
 pub struct MetricsSummary {
     pub events: EventsSummary,
     pub routes: RoutesSummary,
+    pub tasks: BTreeMap<String, TaskStatus>,
 }
 
 #[derive(Default)]
@@ -141,10 +142,70 @@ struct RouteStats {
     by_path: BTreeMap<String, RouteStat>,
 }
 
+#[derive(Clone, Serialize, Default)]
+pub struct TaskStatus {
+    pub started: u64,
+    pub completed: u64,
+    pub aborted: u64,
+    pub inflight: u64,
+    pub last_start: Option<String>,
+    pub last_stop: Option<String>,
+}
+
+#[derive(Default, Clone)]
+struct TaskStat {
+    started: u64,
+    completed: u64,
+    aborted: u64,
+    inflight: u64,
+    last_start: Option<String>,
+    last_stop: Option<String>,
+}
+
+impl TaskStat {
+    fn on_start(&mut self) {
+        self.started = self.started.saturating_add(1);
+        self.inflight = self.inflight.saturating_add(1);
+        self.last_start = Some(now_rfc3339());
+    }
+
+    fn on_finish(&mut self, outcome: TaskOutcome) {
+        if self.inflight > 0 {
+            self.inflight -= 1;
+        }
+        match outcome {
+            TaskOutcome::Completed => {
+                self.completed = self.completed.saturating_add(1);
+            }
+            TaskOutcome::Aborted => {
+                self.aborted = self.aborted.saturating_add(1);
+            }
+        }
+        self.last_stop = Some(now_rfc3339());
+    }
+
+    fn summary(&self) -> TaskStatus {
+        TaskStatus {
+            started: self.started,
+            completed: self.completed,
+            aborted: self.aborted,
+            inflight: self.inflight,
+            last_start: self.last_start.clone(),
+            last_stop: self.last_stop.clone(),
+        }
+    }
+}
+
+enum TaskOutcome {
+    Completed,
+    Aborted,
+}
+
 pub struct Metrics {
     events: Mutex<EventStats>,
     routes: Mutex<RouteStats>,
     hist_buckets: Vec<u64>,
+    tasks: Mutex<BTreeMap<String, TaskStat>>,
 }
 
 impl Default for Metrics {
@@ -175,6 +236,7 @@ impl Metrics {
             events: Mutex::new(EventStats::new()),
             routes: Mutex::new(RouteStats::default()),
             hist_buckets,
+            tasks: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -221,7 +283,43 @@ impl Metrics {
                 RoutesSummary { by_path: out }
             })
             .unwrap_or_default();
-        MetricsSummary { events, routes }
+        let tasks = self.tasks_snapshot();
+        MetricsSummary {
+            events,
+            routes,
+            tasks,
+        }
+    }
+
+    pub fn task_started(&self, name: &str) {
+        if let Ok(mut map) = self.tasks.lock() {
+            map.entry(name.to_string()).or_default().on_start();
+        }
+    }
+
+    pub fn task_completed(&self, name: &str) {
+        self.record_task_outcome(name, TaskOutcome::Completed);
+    }
+
+    pub fn task_aborted(&self, name: &str) {
+        self.record_task_outcome(name, TaskOutcome::Aborted);
+    }
+
+    fn record_task_outcome(&self, name: &str, outcome: TaskOutcome) {
+        if let Ok(mut map) = self.tasks.lock() {
+            map.entry(name.to_string()).or_default().on_finish(outcome);
+        }
+    }
+
+    pub fn tasks_snapshot(&self) -> BTreeMap<String, TaskStatus> {
+        self.tasks
+            .lock()
+            .map(|map| {
+                map.iter()
+                    .map(|(name, stat)| (name.clone(), stat.summary()))
+                    .collect()
+            })
+            .unwrap_or_default()
     }
 
     pub fn routes_for_analysis(&self) -> HashMap<String, (f64, u64, u64)> {

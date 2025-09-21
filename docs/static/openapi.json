@@ -3357,6 +3357,26 @@
         "description": "Staging queue snapshot."
       }
     },
+    "/state/tasks": {
+      "get": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Background tasks status snapshot.",
+        "operationId": "state_tasks_doc",
+        "responses": {
+          "200": {
+            "description": "Background tasks",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "description": "Background tasks status snapshot."
+      }
+    },
     "/state/training/telemetry": {
       "get": {
         "tags": [

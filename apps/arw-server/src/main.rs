@@ -1,19 +1,12 @@
-use arw_policy::PolicyEngine;
-use arw_wasi::ToolHost;
 use axum::http::HeaderMap;
-use chrono::Utc;
-use serde_json::json;
-use std::net::SocketAddr;
-use tower::limit::ConcurrencyLimitLayer;
-use tower_http::{compression::CompressionLayer, trace::TraceLayer};
-// jsonschema moved to modules
 use sha2::Digest as _;
-use tokio::sync::Mutex;
-use utoipa::OpenApi;
+use std::{net::SocketAddr, time::Duration};
+use tracing::{error, info};
 
 mod access_log;
 mod api;
 mod app_state;
+mod bootstrap;
 mod capsule_guard;
 mod chat;
 mod cluster;
@@ -44,6 +37,7 @@ mod self_model;
 mod sse_cache;
 mod staging;
 mod state_observer;
+mod tasks;
 mod tool_cache;
 mod tools;
 mod training;
@@ -55,58 +49,16 @@ mod world;
 mod router;
 
 pub(crate) use app_state::AppState;
-pub(crate) use router::build_router;
 
 #[tokio::main]
 async fn main() {
-    // OpenAPI/spec export mode for CI/docs sync (no server startup).
-    if let Ok(path) = std::env::var("OPENAPI_OUT") {
-        if let Some(parent) = std::path::Path::new(&path).parent() {
-            let _ = std::fs::create_dir_all(parent);
-        }
-        let yaml = crate::openapi::ApiDoc::openapi()
-            .to_yaml()
-            .unwrap_or_else(|_| "openapi: 3.0.3".into());
-        if let Err(e) = std::fs::write(&path, yaml) {
-            eprintln!(
-                "error: failed to write generated OPENAPI_OUT ({}): {}",
-                path, e
-            );
+    match bootstrap::ensure_openapi_export() {
+        Ok(Some(_)) => return,
+        Ok(None) => {}
+        Err(err) => {
+            eprintln!("error: failed to write generated OPENAPI_OUT: {err}");
             std::process::exit(2);
         }
-        // Emit selected schemas used in docs (gating contract & capsule)
-        {
-            use schemars::schema_for;
-            let dir = std::path::Path::new("spec/schemas");
-            let _ = std::fs::create_dir_all(dir);
-            let contract_schema = schema_for!(arw_core::gating::ContractCfg);
-            let capsule_schema = schema_for!(arw_protocol::GatingCapsule);
-            let _ = std::fs::write(
-                dir.join("gating_contract.json"),
-                serde_json::to_string_pretty(&contract_schema).unwrap(),
-            );
-            let _ = std::fs::write(
-                dir.join("gating_capsule.json"),
-                serde_json::to_string_pretty(&capsule_schema).unwrap(),
-            );
-        }
-        // Gating keys index for docs convenience
-        {
-            let keys_path = std::path::Path::new("docs/GATING_KEYS.md");
-            let generated_at = Utc::now().format("%Y-%m-%d %H:%M UTC").to_string();
-            let mut out = format!(
-                "---\ntitle: Gating Keys\n---\n\n# Gating Keys\nGenerated: {}\nType: Reference\n\nGenerated from code.\n\n",
-                generated_at
-            );
-            for k in arw_core::gating_keys::list() {
-                out.push_str(&format!("- `{}`\n", k));
-            }
-            if !out.ends_with('\n') {
-                out.push('\n');
-            }
-            let _ = std::fs::write(keys_path, out);
-        }
-        return;
     }
 
     arw_otel::init();
@@ -114,177 +66,65 @@ async fn main() {
     // Explicit env vars still take precedence over these seeded values.
     let _tier = arw_core::perf::apply_performance_preset();
     http_timeout::init_from_env();
-    let bus = arw_events::Bus::new_with_replay(256, 256);
-    let kernel = arw_kernel::Kernel::open(&crate::util::state_dir()).expect("init kernel");
-    let kernel_enabled = config::kernel_enabled_from_env();
-    // dual-write bus events to kernel and track DB ids for SSE when enabled
-    let sse_id_map = std::sync::Arc::new(Mutex::new(sse_cache::SseIdCache::with_capacity(2048)));
-    let metrics = std::sync::Arc::new(metrics::Metrics::default());
-    if kernel_enabled {
-        let mut rx = bus.subscribe();
-        let k2 = kernel.clone();
-        let sse_ids = sse_id_map.clone();
-        let metrics_clone = metrics.clone();
-        tokio::spawn(async move {
-            while let Ok(env) = rx.recv().await {
-                metrics_clone.record_event(&env.kind);
-                if let Ok(row_id) = k2.append_event_async(&env).await {
-                    let mut hasher = sha2::Sha256::new();
-                    hasher.update(env.time.as_bytes());
-                    hasher.update(env.kind.as_bytes());
-                    if let Ok(pbytes) = serde_json::to_vec(&env.payload) {
-                        hasher.update(&pbytes);
-                    }
-                    let digest = hasher.finalize();
-                    let key = u64::from_le_bytes([
-                        digest[0], digest[1], digest[2], digest[3], digest[4], digest[5],
-                        digest[6], digest[7],
-                    ]);
-                    let mut cache = sse_ids.lock().await;
-                    cache.insert(key, row_id);
-                }
-            }
-        });
-    } else {
-        let mut rx = bus.subscribe();
-        let metrics_clone = metrics.clone();
-        tokio::spawn(async move {
-            while let Ok(env) = rx.recv().await {
-                metrics_clone.record_event(&env.kind);
-            }
-        });
-    }
-    let policy = PolicyEngine::load_from_env();
-    let policy_arc = std::sync::Arc::new(Mutex::new(policy));
-    // Initialize simple WASI host with http.fetch support
-    let host: std::sync::Arc<dyn ToolHost> = {
-        match arw_wasi::LocalHost::new() {
-            Ok(h) => std::sync::Arc::new(h),
-            Err(_) => std::sync::Arc::new(arw_wasi::NoopHost),
+    let bootstrap::BootstrapOutput {
+        router,
+        state,
+        metrics,
+        background_tasks,
+    } = bootstrap::build().await;
+
+    let http_cfg = match bootstrap::http_config_from_env() {
+        Ok(cfg) => cfg,
+        Err(err) => {
+            eprintln!("error: {err}");
+            std::process::exit(2);
         }
     };
-    // Curated endpoints list recorded as routes are added (avoid drift)
-    let (app, endpoints_acc, endpoints_meta_acc) = build_router();
-    let state = AppState::builder(bus, kernel, policy_arc.clone(), host, kernel_enabled)
-        .with_config_state(std::sync::Arc::new(Mutex::new(json!({}))))
-        .with_config_history(std::sync::Arc::new(Mutex::new(Vec::new())))
-        .with_metrics(metrics.clone())
-        .with_sse_cache(sse_id_map)
-        .with_endpoints(std::sync::Arc::new(endpoints_acc))
-        .with_endpoints_meta(std::sync::Arc::new(endpoints_meta_acc))
-        .build()
-        .await;
-    read_models::publish_read_model_patch(
-        &state.bus(),
-        "policy_capsules",
-        &json!({"items": [], "count": 0}),
-    );
-    world::load_persisted().await;
-    // Start a simple local action worker (demo)
-    if state.kernel_enabled() {
-        worker::start_local_worker(state.clone());
-    }
-    // Start read-model publishers (logic units, orchestrator jobs)
-    read_models::start_read_models(state.clone());
-    cluster::start(state.clone());
-    runtime_matrix::start(state.clone());
-    state_observer::start(state.clone());
-    world::start(state.clone());
-    distill::start(state.clone());
-    self_model::start_aggregators(state.clone());
-    research_watcher::start(state.clone());
-    // Start/stop egress proxy based on current settings
-    egress_proxy::apply_current(state.clone()).await;
-    // Watch trust store file and publish rpu.trust.changed on reloads
-    {
-        let bus = state.bus();
-        tokio::spawn(async move {
-            use std::time::Duration;
-            let path = std::env::var("ARW_TRUST_CAPSULES")
-                .ok()
-                .unwrap_or_else(|| "configs/trust_capsules.json".to_string());
-            let mut last_mtime: Option<std::time::SystemTime> = None;
-            loop {
-                let mut changed = false;
-                if let Ok(md) = std::fs::metadata(&path) {
-                    if let Ok(mt) = md.modified() {
-                        if last_mtime.map(|t| t < mt).unwrap_or(true) {
-                            last_mtime = Some(mt);
-                            changed = true;
-                        }
-                    }
-                }
-                if changed {
-                    arw_core::rpu::reload_trust();
-                    let count = arw_core::rpu::trust_snapshot().len();
-                    let payload = serde_json::json!({
-                        "count": count,
-                        "path": path,
-                        "ts_ms": arw_core::rpu::trust_last_reload_ms()
-                    });
-                    bus.publish(arw_topics::TOPIC_RPU_TRUST_CHANGED, &payload);
-                }
-                tokio::time::sleep(Duration::from_secs(5)).await;
-            }
-        });
-    }
-    #[cfg(feature = "grpc")]
-    let _grpc_task = crate::grpc::spawn(state.clone());
-    let capsule_mw_state = state.clone();
-    let app = app.with_state(state);
-    let app = app.layer(axum::middleware::from_fn(move |req, next| {
-        let st = capsule_mw_state.clone();
-        async move { capsule_guard::capsule_mw(st, req, next).await }
-    }));
-    let metrics_layer = metrics.clone();
-    let app = app.layer(axum::middleware::from_fn(move |req, next| {
-        let metrics = metrics_layer.clone();
-        async move { metrics::track_http(metrics, req, next).await }
-    }));
-    // HTTP layers: compression, tracing, and concurrency limit
-    let conc: usize = std::env::var("ARW_HTTP_MAX_CONC")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(1024);
-    let app = app
-        .layer(CompressionLayer::new())
-        .layer(TraceLayer::new_for_http())
-        .layer(ConcurrencyLimitLayer::new(conc));
-    // Bind address/port (env overrides)
-    let bind = std::env::var("ARW_BIND").unwrap_or_else(|_| "127.0.0.1".into());
-    let port: u16 = std::env::var("ARW_PORT")
-        .ok()
-        .and_then(|s| s.parse().ok())
-        .unwrap_or(8091);
-    // Security: refuse public bind without an admin token
-    let token_set = std::env::var("ARW_ADMIN_TOKEN")
-        .ok()
-        .is_some_and(|v| !v.is_empty())
-        || std::env::var("ARW_ADMIN_TOKEN_SHA256")
-            .ok()
-            .is_some_and(|v| !v.is_empty());
-    let is_loopback = {
-        let b = bind.trim().to_ascii_lowercase();
-        b == "127.0.0.1" || b == "::1" || b == "[::1]" || b == "localhost"
-    };
-    if !is_loopback && !token_set {
-        eprintln!(
-            "error: ARW_BIND={} is public and ARW_ADMIN_TOKEN/ARW_ADMIN_TOKEN_SHA256 not set; refusing to start",
-            bind
-        );
-        std::process::exit(2);
-    }
-    let addr: SocketAddr = format!("{}:{}", bind, port).parse().unwrap();
-    // Global middleware: security headers, optional access log, then app
-    let app = app
-        .layer(axum::middleware::from_fn(security::headers_mw))
-        .layer(axum::middleware::from_fn(access_log::access_log_mw));
-    axum::serve(
-        tokio::net::TcpListener::bind(addr).await.unwrap(),
+
+    let app = bootstrap::attach_global_layers(bootstrap::attach_http_layers(
+        bootstrap::attach_stateful_layers(router, state, metrics),
+        http_cfg.concurrency_limit,
+    ));
+
+    let listener = tokio::net::TcpListener::bind(http_cfg.addr)
+        .await
+        .expect("bind server socket");
+
+    let server = axum::serve(
+        listener,
         app.into_make_service_with_connect_info::<SocketAddr>(),
     )
-    .await
-    .unwrap();
+    .with_graceful_shutdown(shutdown_signal());
+
+    if let Err(err) = server.await {
+        error!("http server exited with error: {err}");
+    }
+
+    info!("shutting down background tasks");
+    background_tasks
+        .shutdown_with_grace(Duration::from_secs(5))
+        .await;
+}
+
+async fn shutdown_signal() {
+    info!("shutdown signal listener active");
+    #[cfg(unix)]
+    {
+        use tokio::signal::unix::{signal, SignalKind};
+
+        let mut term = signal(SignalKind::terminate()).expect("install SIGTERM handler");
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {},
+            _ = term.recv() => {},
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        let _ = tokio::signal::ctrl_c().await;
+    }
+
+    info!("shutdown signal received");
 }
 
 #[cfg(test)]
@@ -293,8 +133,10 @@ mod http_tests {
     use super::*;
     use crate::router::paths;
     use arw_core::rpu;
+    use arw_policy::PolicyEngine;
     use arw_protocol::GatingCapsule;
     use arw_topics::{self as topics, TOPIC_POLICY_CAPSULE_APPLIED, TOPIC_READMODEL_PATCH};
+    use arw_wasi::ToolHost;
     use axum::{
         body::Body,
         http::{Request, StatusCode},
@@ -308,7 +150,7 @@ mod http_tests {
     use serde_json::{json, Value};
     use std::{collections::HashMap, fs, path::Path, sync::Arc, time::Duration};
     use tempfile::tempdir;
-    use tokio::time::timeout;
+    use tokio::{sync::Mutex, time::timeout};
     use tower::util::ServiceExt;
 
     async fn build_state(dir: &Path) -> AppState {
@@ -389,7 +231,7 @@ mod http_tests {
         let state_dir = temp.path().to_path_buf();
 
         let state = build_state(&state_dir).await;
-        worker::start_local_worker(state.clone());
+        let _worker = worker::start_local_worker(state.clone());
         let app = router_with_actions(state);
 
         let submit_body = json!({

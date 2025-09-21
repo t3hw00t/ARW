@@ -5,7 +5,7 @@ title: Metrics & Insights
 # Metrics & Insights
 { .topic-trio style="--exp:.6; --complex:.7; --complicated:.6" data-exp=".6" data-complex=".7" data-complicated=".6" }
 
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: How‑to
 
 ## Overview
@@ -15,7 +15,8 @@ Type: How‑to
 - Metacognition: calibration (Brier/ECE), risk–coverage (selective prediction), competence by domain/tool, resource forecast accuracy (tokens/latency/$ MAE), safety outcomes, and self‑model stability.
 
 ## Endpoints
-- GET `/introspect/stats` → `{ events, routes }` where `routes.by_path["/path"]` has `hits`, `errors`, `ewma_ms`, `p95_ms`, `last_ms`, `max_ms`, `last_status`.
+- GET `/introspect/stats` → `{ events, routes, tasks }` where `routes.by_path["/path"]` has `hits`, `errors`, `ewma_ms`, `p95_ms`, `last_ms`, `max_ms`, `last_status` and `tasks[task]` mirrors the background task counters described below.
+- GET `/state/tasks` → `{ tasks }` read-model refreshed every few seconds for dashboards (no admin auth needed).
 
 ## UI
 - Open `/debug` and toggle “Insights”.
@@ -33,6 +34,7 @@ Type: How‑to
   - `arw_http_route_*` — per-route hits/errors and latency histogram (p95 available via UI)
   - `arw_models_download_*` — models download lifecycle counters and EWMA throughput
   - `arw_tools_cache_*` — action cache hits/miss/coalesced and capacity/TTL
+  - `arw_task_*` — background task starts/completions/aborts (`*_total`) and inflight gauges
   - `arw_build_info{service,version,sha}` — build metadata
 - Trust (RPU):
     - `arw_rpu_trust_last_reload_ms` — epoch ms of last trust store reload

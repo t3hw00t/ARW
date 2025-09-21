@@ -38,6 +38,7 @@ jsonschema = { workspace = true }
 inventory = { workspace = true }
 schemars = { workspace = true }
 utoipa = { workspace = true }
+thiserror = { workspace = true }
 tower = { version = "0.4", features = ["limit","util"] }
 hyper = { version = "1", features = ["server","http1","http2"] }
 http-body-util = "0.1"

@@ -415,7 +415,7 @@ mod tests {
     async fn health_and_action_roundtrip() {
         let temp = tempdir().expect("tempdir");
         let state = build_state(temp.path()).await;
-        worker::start_local_worker(state.clone());
+        let _worker = worker::start_local_worker(state.clone());
         let service = ArwGrpcService {
             state: state.clone(),
         };

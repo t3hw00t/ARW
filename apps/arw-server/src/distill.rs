@@ -3,7 +3,7 @@ use std::path::Path;
 use tokio::fs as afs;
 use tracing::warn;
 
-use crate::{responses, state_observer, util, AppState};
+use crate::{responses, state_observer, tasks::TaskHandle, util, AppState};
 use arw_topics as topics;
 
 /// Run a single distillation pass: stitch recent intents/actions into compact playbooks,
@@ -86,27 +86,30 @@ pub(crate) async fn run_once(state: &AppState) -> Value {
 
 /// Spawn the periodic distillation loop. Defaults to 24h cadence and can be tuned via
 /// `ARW_DISTILL_EVERY_HOURS`.
-pub(crate) fn start(state: AppState) {
-    tokio::spawn(async move {
-        let hours: u64 = std::env::var("ARW_DISTILL_EVERY_HOURS")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(24);
-        if hours == 0 {
-            return;
-        }
-        let period = std::time::Duration::from_secs(hours.saturating_mul(3600));
-        let mut ticker = tokio::time::interval(period);
-        ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
-        // Run once immediately so operators have fresh artifacts without waiting a full interval
-        log_if_unexpected(run_once(&state).await);
-        // Consume the initial instant tick so the next awaits the full period
-        ticker.tick().await;
-        loop {
-            ticker.tick().await;
+pub(crate) fn start(state: AppState) -> TaskHandle {
+    TaskHandle::new(
+        "distill.loop",
+        tokio::spawn(async move {
+            let hours: u64 = std::env::var("ARW_DISTILL_EVERY_HOURS")
+                .ok()
+                .and_then(|s| s.parse().ok())
+                .unwrap_or(24);
+            if hours == 0 {
+                return;
+            }
+            let period = std::time::Duration::from_secs(hours.saturating_mul(3600));
+            let mut ticker = tokio::time::interval(period);
+            ticker.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
+            // Run once immediately so operators have fresh artifacts without waiting a full interval
             log_if_unexpected(run_once(&state).await);
-        }
-    });
+            // Consume the initial instant tick so the next awaits the full period
+            ticker.tick().await;
+            loop {
+                ticker.tick().await;
+                log_if_unexpected(run_once(&state).await);
+            }
+        }),
+    )
 }
 
 fn log_if_unexpected(result: Value) {

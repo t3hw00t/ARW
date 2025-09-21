@@ -5,7 +5,7 @@ use std::collections::VecDeque;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::RwLock;
 
-use crate::AppState;
+use crate::{tasks::TaskHandle, AppState};
 
 const OBS_CAP: usize = 256;
 const INTENTS_CAP: usize = 256;
@@ -41,13 +41,14 @@ fn actions_store() -> &'static RwLock<VecDeque<Value>> {
     ACTIONS.get_or_init(|| RwLock::new(VecDeque::with_capacity(ACTIONS_CAP)))
 }
 
-pub(crate) fn start(state: AppState) {
-    tokio::spawn(async move {
+pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
+    let handle = tokio::spawn(async move {
         let mut rx = state.bus().subscribe();
         while let Ok(env) = rx.recv().await {
             on_event(&env);
         }
     });
+    vec![TaskHandle::new("state_observer.bus_listener", handle)]
 }
 
 fn on_event(env: &Envelope) {

@@ -58,6 +58,7 @@ pub struct AboutResponse {
         crate::api::state::state_models,
         crate::api::state::state_runtime_matrix,
         crate::api::state::state_route_stats,
+        crate::api::state::state_tasks,
         crate::api::state::state_observations,
         crate::api::state::state_beliefs,
         crate::api::state::state_intents,
