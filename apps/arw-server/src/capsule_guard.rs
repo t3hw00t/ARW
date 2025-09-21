@@ -426,14 +426,9 @@ mod tests {
     use arw_policy::PolicyEngine;
     use arw_topics::{TOPIC_POLICY_CAPSULE_FAILED, TOPIC_POLICY_DECISION};
     use axum::http::{HeaderMap, HeaderValue};
-    use serde_json::json;
     use std::{path::Path, sync::Arc};
     use tempfile::tempdir;
     use tokio::time::{timeout, Duration};
-
-    use crate::{
-        chat, cluster, experiments, feedback, governor, metrics, models, sse_cache, tool_cache,
-    };
 
     #[test]
     fn parse_json_header() {
@@ -523,39 +518,12 @@ mod tests {
         let policy = PolicyEngine::load_from_env();
         let policy_arc = Arc::new(Mutex::new(policy));
         let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
-        let models_store = Arc::new(models::ModelStore::new(bus.clone(), Some(kernel.clone())));
-        models_store.bootstrap().await;
-        let tool_cache = Arc::new(tool_cache::ToolCache::new());
-        let governor_state = governor::GovernorState::new().await;
-        let metrics = Arc::new(metrics::Metrics::default());
-        let cluster_state = cluster::ClusterRegistry::new(bus.clone());
-        let feedback_hub =
-            feedback::FeedbackHub::new(bus.clone(), metrics.clone(), governor_state.clone()).await;
-        let experiments_state =
-            experiments::Experiments::new(bus.clone(), governor_state.clone()).await;
-        let capsules_store = Arc::new(CapsuleStore::new());
-        let chat_state = Arc::new(chat::ChatState::new());
-        AppState::new(
-            bus,
-            kernel,
-            policy_arc,
-            host,
-            Arc::new(Mutex::new(json!({}))),
-            Arc::new(Mutex::new(Vec::new())),
-            Arc::new(Mutex::new(sse_cache::SseIdCache::with_capacity(64))),
-            Arc::new(Vec::new()),
-            Arc::new(Vec::new()),
-            metrics,
-            true,
-            models_store,
-            tool_cache,
-            governor_state,
-            feedback_hub,
-            cluster_state,
-            experiments_state,
-            capsules_store,
-            chat_state,
-        )
+        AppState::builder(bus, kernel, policy_arc, host, true)
+            .with_config_state(Arc::new(Mutex::new(serde_json::json!({"mode": "test"}))))
+            .with_config_history(Arc::new(Mutex::new(Vec::new())))
+            .with_sse_capacity(64)
+            .build()
+            .await
     }
 
     fn sample_capsule(id: &str) -> GatingCapsule {

@@ -4,6 +4,7 @@ use arw_events::Bus;
 use arw_kernel::Kernel;
 use arw_policy::PolicyEngine;
 use arw_wasi::ToolHost;
+use serde_json::json;
 use tokio::sync::Mutex;
 
 use crate::{
@@ -11,6 +12,9 @@ use crate::{
 };
 
 pub(crate) type Policy = PolicyEngine;
+
+type SharedConfigState = Arc<Mutex<serde_json::Value>>;
+type SharedConfigHistory = Arc<Mutex<Vec<(String, serde_json::Value)>>>;
 
 #[derive(Clone)]
 pub(crate) struct AppState {
@@ -168,5 +172,235 @@ impl AppState {
 
     pub fn endpoints_meta(&self) -> Arc<Vec<serde_json::Value>> {
         self.endpoints_meta.clone()
+    }
+}
+
+pub(crate) struct AppStateBuilder {
+    bus: Bus,
+    kernel: Kernel,
+    policy: Arc<Mutex<Policy>>,
+    host: Arc<dyn ToolHost>,
+    kernel_enabled: bool,
+    config_state: Option<SharedConfigState>,
+    config_history: Option<SharedConfigHistory>,
+    sse_id_map: Option<Arc<Mutex<crate::sse_cache::SseIdCache>>>,
+    sse_capacity: usize,
+    endpoints: Option<Arc<Vec<String>>>,
+    endpoints_meta: Option<Arc<Vec<serde_json::Value>>>,
+    metrics: Option<Arc<metrics::Metrics>>,
+    models: Option<Arc<models::ModelStore>>,
+    tool_cache: Option<Arc<tool_cache::ToolCache>>,
+    governor: Option<Arc<governor::GovernorState>>,
+    feedback: Option<Arc<feedback::FeedbackHub>>,
+    cluster: Option<Arc<cluster::ClusterRegistry>>,
+    experiments: Option<Arc<experiments::Experiments>>,
+    capsules: Option<Arc<capsule_guard::CapsuleStore>>,
+    chat: Option<Arc<chat::ChatState>>,
+}
+
+impl AppState {
+    pub(crate) fn builder(
+        bus: Bus,
+        kernel: Kernel,
+        policy: Arc<Mutex<Policy>>,
+        host: Arc<dyn ToolHost>,
+        kernel_enabled: bool,
+    ) -> AppStateBuilder {
+        AppStateBuilder {
+            bus,
+            kernel,
+            policy,
+            host,
+            kernel_enabled,
+            config_state: None,
+            config_history: None,
+            sse_id_map: None,
+            sse_capacity: 2048,
+            endpoints: None,
+            endpoints_meta: None,
+            metrics: None,
+            models: None,
+            tool_cache: None,
+            governor: None,
+            feedback: None,
+            cluster: None,
+            experiments: None,
+            capsules: None,
+            chat: None,
+        }
+    }
+}
+
+#[allow(dead_code)]
+impl AppStateBuilder {
+    pub(crate) fn with_config_state(mut self, config_state: SharedConfigState) -> Self {
+        self.config_state = Some(config_state);
+        self
+    }
+
+    pub(crate) fn with_config_history(mut self, config_history: SharedConfigHistory) -> Self {
+        self.config_history = Some(config_history);
+        self
+    }
+
+    pub(crate) fn with_sse_cache(
+        mut self,
+        cache: Arc<Mutex<crate::sse_cache::SseIdCache>>,
+    ) -> Self {
+        self.sse_id_map = Some(cache);
+        self
+    }
+
+    pub(crate) fn with_sse_capacity(mut self, capacity: usize) -> Self {
+        self.sse_capacity = capacity;
+        self
+    }
+
+    pub(crate) fn with_endpoints(mut self, endpoints: Arc<Vec<String>>) -> Self {
+        self.endpoints = Some(endpoints);
+        self
+    }
+
+    pub(crate) fn with_endpoints_meta(
+        mut self,
+        endpoints_meta: Arc<Vec<serde_json::Value>>,
+    ) -> Self {
+        self.endpoints_meta = Some(endpoints_meta);
+        self
+    }
+
+    pub(crate) fn with_metrics(mut self, metrics: Arc<metrics::Metrics>) -> Self {
+        self.metrics = Some(metrics);
+        self
+    }
+
+    pub(crate) fn with_models(mut self, models: Arc<models::ModelStore>) -> Self {
+        self.models = Some(models);
+        self
+    }
+
+    pub(crate) fn with_tool_cache(mut self, cache: Arc<tool_cache::ToolCache>) -> Self {
+        self.tool_cache = Some(cache);
+        self
+    }
+
+    pub(crate) fn with_governor(mut self, governor: Arc<governor::GovernorState>) -> Self {
+        self.governor = Some(governor);
+        self
+    }
+
+    pub(crate) fn with_feedback(mut self, feedback: Arc<feedback::FeedbackHub>) -> Self {
+        self.feedback = Some(feedback);
+        self
+    }
+
+    pub(crate) fn with_cluster(mut self, cluster: Arc<cluster::ClusterRegistry>) -> Self {
+        self.cluster = Some(cluster);
+        self
+    }
+
+    pub(crate) fn with_experiments(mut self, experiments: Arc<experiments::Experiments>) -> Self {
+        self.experiments = Some(experiments);
+        self
+    }
+
+    pub(crate) fn with_capsules(mut self, capsules: Arc<capsule_guard::CapsuleStore>) -> Self {
+        self.capsules = Some(capsules);
+        self
+    }
+
+    pub(crate) fn with_chat(mut self, chat: Arc<chat::ChatState>) -> Self {
+        self.chat = Some(chat);
+        self
+    }
+
+    pub(crate) async fn build(self) -> AppState {
+        let config_state = self
+            .config_state
+            .unwrap_or_else(|| Arc::new(Mutex::new(json!({}))));
+        let config_history = self
+            .config_history
+            .unwrap_or_else(|| Arc::new(Mutex::new(Vec::new())));
+        let sse_id_map = self.sse_id_map.unwrap_or_else(|| {
+            Arc::new(Mutex::new(crate::sse_cache::SseIdCache::with_capacity(
+                self.sse_capacity,
+            )))
+        });
+        let endpoints = self
+            .endpoints
+            .unwrap_or_else(|| Arc::new(Vec::<String>::new()));
+        let endpoints_meta = self
+            .endpoints_meta
+            .unwrap_or_else(|| Arc::new(Vec::<serde_json::Value>::new()));
+        let metrics = self
+            .metrics
+            .unwrap_or_else(|| Arc::new(metrics::Metrics::default()));
+
+        let kernel_for_models = if self.kernel_enabled {
+            Some(self.kernel.clone())
+        } else {
+            None
+        };
+        let models_store = match self.models {
+            Some(models) => models,
+            None => {
+                let store = Arc::new(models::ModelStore::new(self.bus.clone(), kernel_for_models));
+                store.bootstrap().await;
+                store
+            }
+        };
+        let tool_cache = self
+            .tool_cache
+            .unwrap_or_else(|| Arc::new(tool_cache::ToolCache::new()));
+        let governor_state = match self.governor {
+            Some(state) => state,
+            None => governor::GovernorState::new().await,
+        };
+        let feedback_hub = match self.feedback {
+            Some(hub) => hub,
+            None => {
+                feedback::FeedbackHub::new(
+                    self.bus.clone(),
+                    metrics.clone(),
+                    governor_state.clone(),
+                )
+                .await
+            }
+        };
+        let cluster_state = self
+            .cluster
+            .unwrap_or_else(|| cluster::ClusterRegistry::new(self.bus.clone()));
+        let experiments_state = match self.experiments {
+            Some(state) => state,
+            None => experiments::Experiments::new(self.bus.clone(), governor_state.clone()).await,
+        };
+        let capsules_store = self
+            .capsules
+            .unwrap_or_else(|| Arc::new(capsule_guard::CapsuleStore::new()));
+        let chat_state = self
+            .chat
+            .unwrap_or_else(|| Arc::new(chat::ChatState::new()));
+
+        AppState::new(
+            self.bus,
+            self.kernel,
+            self.policy,
+            self.host,
+            config_state,
+            config_history,
+            sse_id_map,
+            endpoints,
+            endpoints_meta,
+            metrics,
+            self.kernel_enabled,
+            models_store,
+            tool_cache,
+            governor_state,
+            feedback_hub,
+            cluster_state,
+            experiments_state,
+            capsules_store,
+            chat_state,
+        )
     }
 }

@@ -21,6 +21,9 @@ Security & policy
 - OCR gated under `io:ocr` with its own TTL lease
 
 Tool interface
+> Build-time: enable the `tool_screenshots` feature when compiling `arw-server`
+> to expose the capture/annotate tools. Without it the API returns
+> `Unsupported` errors.
 `ui.screenshot.capture(scope?, format?, downscale?) → { path, width, height, preview_b64 }`
 - `scope`: `screen` (default) | `display:n` | `window:<id>` | `region:x,y,w,h`
 - `format`: `png` (default) or `jpg`

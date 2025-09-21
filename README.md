@@ -136,6 +136,13 @@ bash scripts/setup.sh
 bash scripts/start.sh --wait-health
 ```
 
+Screenshots and annotation tooling are optional and compiled when you enable the
+`tool_screenshots` feature flag (requires OS screenshot backends):
+
+```bash
+cargo run -p arw-server --features tool_screenshots
+```
+
 The unified server is API-first. Point your client or integration to:
 
 ```bash

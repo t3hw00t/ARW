@@ -163,47 +163,17 @@ async fn main() {
             Err(_) => std::sync::Arc::new(arw_wasi::NoopHost),
         }
     };
-    let models_store = std::sync::Arc::new(models::ModelStore::new(
-        bus.clone(),
-        if kernel_enabled {
-            Some(kernel.clone())
-        } else {
-            None
-        },
-    ));
-    let governor_state = governor::GovernorState::new().await;
-    models_store.bootstrap().await;
-    let tool_cache = std::sync::Arc::new(tool_cache::ToolCache::new());
     // Curated endpoints list recorded as routes are added (avoid drift)
     let (app, endpoints_acc, endpoints_meta_acc) = build_router();
-    let cluster_state = cluster::ClusterRegistry::new(bus.clone());
-    let feedback_hub =
-        feedback::FeedbackHub::new(bus.clone(), metrics.clone(), governor_state.clone()).await;
-    let experiments_state =
-        experiments::Experiments::new(bus.clone(), governor_state.clone()).await;
-    let capsules_store = std::sync::Arc::new(capsule_guard::CapsuleStore::new());
-    let chat_state = std::sync::Arc::new(chat::ChatState::new());
-    let state = AppState::new(
-        bus,
-        kernel,
-        policy_arc.clone(),
-        host,
-        std::sync::Arc::new(Mutex::new(json!({}))),
-        std::sync::Arc::new(Mutex::new(Vec::new())),
-        sse_id_map,
-        std::sync::Arc::new(endpoints_acc),
-        std::sync::Arc::new(endpoints_meta_acc),
-        metrics.clone(),
-        kernel_enabled,
-        models_store.clone(),
-        tool_cache.clone(),
-        governor_state.clone(),
-        feedback_hub.clone(),
-        cluster_state.clone(),
-        experiments_state.clone(),
-        capsules_store.clone(),
-        chat_state.clone(),
-    );
+    let state = AppState::builder(bus, kernel, policy_arc.clone(), host, kernel_enabled)
+        .with_config_state(std::sync::Arc::new(Mutex::new(json!({}))))
+        .with_config_history(std::sync::Arc::new(Mutex::new(Vec::new())))
+        .with_metrics(metrics.clone())
+        .with_sse_cache(sse_id_map)
+        .with_endpoints(std::sync::Arc::new(endpoints_acc))
+        .with_endpoints_meta(std::sync::Arc::new(endpoints_meta_acc))
+        .build()
+        .await;
     read_models::publish_read_model_patch(
         &state.bus(),
         "policy_capsules",
@@ -348,39 +318,12 @@ mod http_tests {
         let policy = PolicyEngine::load_from_env();
         let policy_arc = Arc::new(Mutex::new(policy));
         let host: Arc<dyn ToolHost> = Arc::new(arw_wasi::NoopHost);
-        let models_store = Arc::new(models::ModelStore::new(bus.clone(), Some(kernel.clone())));
-        models_store.bootstrap().await;
-        let tool_cache = Arc::new(tool_cache::ToolCache::new());
-        let governor_state = governor::GovernorState::new().await;
-        let metrics = Arc::new(metrics::Metrics::default());
-        let cluster_state = cluster::ClusterRegistry::new(bus.clone());
-        let feedback_hub =
-            feedback::FeedbackHub::new(bus.clone(), metrics.clone(), governor_state.clone()).await;
-        let experiments_state =
-            experiments::Experiments::new(bus.clone(), governor_state.clone()).await;
-        let capsules_store = Arc::new(capsule_guard::CapsuleStore::new());
-        let chat_state = Arc::new(chat::ChatState::new());
-        AppState::new(
-            bus,
-            kernel,
-            policy_arc,
-            host,
-            Arc::new(Mutex::new(json!({}))),
-            Arc::new(Mutex::new(Vec::new())),
-            Arc::new(Mutex::new(sse_cache::SseIdCache::with_capacity(64))),
-            Arc::new(Vec::new()),
-            Arc::new(Vec::new()),
-            metrics,
-            true,
-            models_store,
-            tool_cache,
-            governor_state,
-            feedback_hub,
-            cluster_state,
-            experiments_state,
-            capsules_store,
-            chat_state,
-        )
+        AppState::builder(bus, kernel, policy_arc, host, true)
+            .with_config_state(Arc::new(Mutex::new(json!({"mode": "test"}))))
+            .with_config_history(Arc::new(Mutex::new(Vec::new())))
+            .with_sse_capacity(64)
+            .build()
+            .await
     }
 
     fn router_with_actions(state: AppState) -> Router {
