@@ -89,12 +89,11 @@ mod paths {
     pub const ADMIN_TOOLS_CACHE_STATS: &str = "/admin/tools/cache_stats";
     pub const ADMIN_GOVERNOR_PROFILE: &str = "/admin/governor/profile";
     pub const ADMIN_GOVERNOR_HINTS: &str = "/admin/governor/hints";
-    pub const ADMIN_STATE_MEMORY_QUARANTINE: &str = "/admin/state/memory/quarantine";
     pub const ADMIN_MEMORY_QUARANTINE: &str = "/admin/memory/quarantine";
     pub const ADMIN_MEMORY_QUARANTINE_ADMIT: &str = "/admin/memory/quarantine/admit";
     pub const ADMIN_MEMORY: &str = "/admin/memory";
     pub const ADMIN_MEMORY_APPLY: &str = "/admin/memory/apply";
-    pub const ADMIN_STATE_WORLD_DIFFS: &str = "/admin/state/world_diffs";
+    pub const ADMIN_WORLD_DIFFS: &str = "/admin/world_diffs";
     pub const ADMIN_WORLD_DIFFS_QUEUE: &str = "/admin/world_diffs/queue";
     pub const ADMIN_WORLD_DIFFS_DECISION: &str = "/admin/world_diffs/decision";
     pub const ADMIN_PROBE: &str = "/admin/probe";
@@ -756,7 +755,7 @@ async fn main() {
         app,
         endpoints_acc,
         endpoints_meta_acc,
-        paths::ADMIN_STATE_MEMORY_QUARANTINE,
+        paths::ADMIN_MEMORY_QUARANTINE,
         api_review::memory_quarantine_get,
         "experimental"
     );
@@ -780,7 +779,7 @@ async fn main() {
         app,
         endpoints_acc,
         endpoints_meta_acc,
-        paths::ADMIN_STATE_WORLD_DIFFS,
+        paths::ADMIN_WORLD_DIFFS,
         api_review::world_diffs_get,
         "experimental"
     );

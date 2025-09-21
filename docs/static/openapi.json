@@ -1225,6 +1225,26 @@
       }
     },
     "/admin/memory/quarantine": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "memory_quarantine_get_doc",
+        "responses": {
+          "200": {
+            "description": "Memory quarantine entries",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "description": "Review: GET /admin/memory/quarantine."
+      },
       "post": {
         "tags": [
           "Review"
@@ -2249,28 +2269,6 @@
         "description": "SelfModel: POST /admin/self_model/propose."
       }
     },
-    "/admin/state/memory/quarantine": {
-      "get": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "memory_quarantine_get_doc",
-        "responses": {
-          "200": {
-            "description": "Memory quarantine entries",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        },
-        "description": "Review: GET /admin/state/memory/quarantine."
-      }
-    },
     "/state/models_hashes": {
       "get": {
         "tags": [
@@ -2344,28 +2342,6 @@
           }
         },
         "description": "Models: GET /state/models_hashes."
-      }
-    },
-    "/admin/state/world_diffs": {
-      "get": {
-        "tags": [
-          "Review"
-        ],
-        "operationId": "world_diffs_get_doc",
-        "responses": {
-          "200": {
-            "description": "Queued world diffs",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        },
-        "description": "Review: GET /admin/state/world_diffs."
       }
     },
     "/admin/tools": {
@@ -2454,6 +2430,28 @@
           }
         },
         "description": "Tools: POST /admin/tools/run."
+      }
+    },
+    "/admin/world_diffs": {
+      "get": {
+        "tags": [
+          "Review"
+        ],
+        "operationId": "world_diffs_get_doc",
+        "responses": {
+          "200": {
+            "description": "Queued world diffs",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "description": "Review: GET /admin/world_diffs."
       }
     },
     "/admin/world_diffs/decision": {

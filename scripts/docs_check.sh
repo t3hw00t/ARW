@@ -93,6 +93,54 @@ if [[ "${legacy_hits:-0}" -gt 0 ]]; then
   errors=$((errors+legacy_hits))
 fi
 
+# Guard against reintroducing removed legacy admin routes outside docs/spec
+info "Scanning code for legacy admin route references"
+python3 - <<'PY' "$root_dir"
+import sys, pathlib
+
+root = pathlib.Path(sys.argv[1])
+blocked = ['/' + 'admin' + '/state/', '/' + 'admin' + '/projects/']
+skip_dirs = {".git", ".arw", "docs", "spec", "target", "site", "vendor", "sandbox"}
+allowed_suffixes = {
+    ".rs", ".js", ".ts", ".tsx", ".jsx", ".mjs", ".cjs", ".json",
+    ".toml", ".yaml", ".yml", ".py", ".sh", ".bash", ".zsh", ".fish",
+    ".go", ".rb", ".kt", ".swift", ".java", ".cs", ".html", ".css",
+    ".scss", ".sass", ".less", ".mdx", ".txt"
+}
+
+def should_skip(path: pathlib.Path) -> bool:
+    parts = set(p.name for p in path.parents)
+    return bool(skip_dirs & parts)
+
+hits = []
+for file in root.rglob('*'):
+    if not file.is_file():
+        continue
+    if should_skip(file):
+        continue
+    if file.suffix and file.suffix.lower() not in allowed_suffixes:
+        continue
+    try:
+        text = file.read_text(encoding='utf-8')
+    except Exception:
+        continue
+    for idx, line in enumerate(text.splitlines(), 1):
+        for pattern in blocked:
+            if pattern in line:
+                hits.append((file, idx, line.strip()))
+
+if hits:
+    print('[error] Legacy admin route references detected:')
+    for path, line_no, line in hits[:50]:
+        rel = path.relative_to(root)
+        print(f"  {rel}:{line_no}: {line}")
+    print(f"__DOCS_CHECK_LEGACY_ROUTES__={len(hits)}")
+PY
+legacy_routes=$(grep -oE '__DOCS_CHECK_LEGACY_ROUTES__=[0-9]+' - | cut -d= -f2 || echo 0)
+if [[ "${legacy_routes:-0}" -gt 0 ]]; then
+  errors=$((errors+legacy_routes))
+fi
+
 # Link check for relative .md references
 info "Checking relative links to .md files"
 python3 - << 'PY' "$docs_dir"

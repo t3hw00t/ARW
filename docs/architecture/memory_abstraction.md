@@ -3,7 +3,7 @@ title: Memory Abstraction Layer
 ---
 
 # Memory Abstraction Layer
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: Explanation
 
 Microsummary: The Memory Abstraction Layer (MAL) is the canonical schema and lifecycle for all memories (ephemeral, episodic, semantic, profile) in ARW. The new Memory Overlay Service builds on MAL to provide hybrid retrieval, explainable packing, and model-agnostic context delivery.
@@ -54,7 +54,7 @@ Durability drives TTLs (minutes, hours, or months) and recency boosts during ret
 ### Admin helpers
 - `POST /admin/memory/apply` — convenience helper that inserts/updates memory items via the overlay.
 - `GET /admin/memory` — quick snapshot of recent records (lane/limit filters); ideal for debugging.
-- Quarantine endpoints: `GET /admin/state/memory/quarantine`, `POST /admin/memory/quarantine`, `POST /admin/memory/quarantine/admit`.
+- Quarantine endpoints: `GET /admin/memory/quarantine`, `POST /admin/memory/quarantine`, `POST /admin/memory/quarantine/admit`.
 
 Legacy `/memory/*` routes have been removed; rely on the action-based flow below for all production-facing behavior.
 

@@ -44,7 +44,7 @@ fn not_found(detail: impl Into<String>) -> axum::response::Response {
 
 #[utoipa::path(
     get,
-    path = "/admin/state/memory/quarantine",
+    path = "/admin/memory/quarantine",
     tag = "Review",
     responses(
         (status = 200, description = "Memory quarantine entries", body = serde_json::Value),
@@ -111,7 +111,7 @@ pub async fn memory_quarantine_admit(
 
 #[utoipa::path(
     get,
-    path = "/admin/state/world_diffs",
+    path = "/admin/world_diffs",
     tag = "Review",
     responses(
         (status = 200, description = "Queued world diffs", body = serde_json::Value),

@@ -34,7 +34,7 @@ def default_summary(method, path):
 
 
 def default_opid(method, path):
-    # e.g., GET /admin/state/world -> state_world_get_doc
+    # e.g., GET /admin/world_diffs -> world_diffs_get_doc
     parts = [p for p in path.strip('/').split('/') if p and not p.startswith('{')]
     stem = '_'.join([p.replace('-', '_') for p in parts]) or 'root'
     return f"{stem}_{method.lower()}_doc"
@@ -106,4 +106,3 @@ def main():
 
 if __name__ == '__main__':
     sys.exit(main())
-

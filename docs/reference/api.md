@@ -66,8 +66,8 @@ Memory
 - `GET /admin/memory` — list recent memory items (admin helper; supports `lane`/`limit`)
 - `GET /state/memory/recent` — most recent memories (per lane)
 - Action-first interface: `POST /actions (memory.upsert|memory.search|memory.pack)` handles durable updates, retrieval, and packing with event telemetry.
-- Review queue (admin): `GET /admin/state/memory/quarantine`, `POST /admin/memory/quarantine`, `POST /admin/memory/quarantine/admit` — track quarantined extracts before admitting to world/memory lanes.
-- World diff decisions (admin): `GET /admin/state/world_diffs`, `POST /admin/world_diffs/queue`, `POST /admin/world_diffs/decision` — queue diffs, record human decisions, and emit `world.diff.*` events.
+- Review queue (admin): `GET /admin/memory/quarantine`, `POST /admin/memory/quarantine`, `POST /admin/memory/quarantine/admit` — track quarantined extracts before admitting to world/memory lanes.
+- World diff decisions (admin): `GET /admin/world_diffs`, `POST /admin/world_diffs/queue`, `POST /admin/world_diffs/decision` — queue diffs, record human decisions, and emit `world.diff.*` events.
 
 Connectors
 - `GET /state/connectors` — list registered connector manifests (secrets elided)

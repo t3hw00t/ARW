@@ -209,7 +209,7 @@ Notes
 - Scripts: `scripts/start.{sh,ps1}` launch the unified server (launcher included). Use `ARW_NO_LAUNCHER=1` / `--service-only` for headless mode.
 - Debug helpers `scripts/debug.{sh,ps1}` default to the unified stack and can open `/admin/debug` (a `/debug` alias remains) when `ARW_DEBUG=1`.
   - Containers target `arw-server`; the legacy image is no longer published.
-- Deprecation signals: `/admin/state/*` read-model bridges have been removed in favour of the canonical `/state/*` endpoints (review queues still live under `/admin/state/memory/*` and `/admin/state/world_diffs`). `/admin/projects/*` helpers have been removed in favour of `/state/projects*` and `/projects*`; monitor automation for any lingering calls.
+- Deprecation signals: `/admin/state/*` read-model bridges have been removed in favour of the canonical `/state/*` endpoints (review queues now live under `/admin/memory/*` and `/admin/world_diffs`). `/admin/projects/*` helpers have been removed in favour of `/state/projects*` and `/projects*`; monitor automation for any lingering calls.
 
 ### Regression priority (Unified server)
 
@@ -363,7 +363,7 @@ State Views
 - WASI runtime host + first plugins (http.fetch, fs.patch, process.exec, guardrails.check)
 - Egress proxy + DNS guard skeleton + ledger hooks
 - Unified legacy capabilities on `arw-server` (Model Steward, Tool Forge, Snappy Governor, Event Spine patches, Feedback Loop, Experiment Deck, Memory Lanes, Project Hub/Map, Chat Workbench, Self Card, Screenshot Pipeline, Guardrail Gateway, Asimov Capsule Guard)
-- Memory quarantine + world diff review queues now ship directly on `arw-server` (`/admin/state/memory/quarantine`, `/admin/state/world_diffs`).
+- Memory quarantine + world diff review queues now ship directly on `arw-server` (`/admin/memory/quarantine`, `/admin/world_diffs`).
 
 ## Logic Units (Continuous Updates)
 - Strategy packs: Logic Units provide a safe way to adopt the latest research as config‑first bundles, with opt‑in code when necessary.

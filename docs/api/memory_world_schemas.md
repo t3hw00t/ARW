@@ -4,7 +4,7 @@ title: Memory & World Schemas
 
 # Memory & World Schemas
 
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: Reference
 
 Status: Beta
@@ -17,8 +17,8 @@ Schemas
 - DNS Anomaly Event — [spec/schemas/dns_anomaly_event.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/dns_anomaly_event.json)
 
 Notes
-- Quarantine now lives on the unified server: `GET /admin/state/memory/quarantine`, `POST /admin/memory/quarantine`, and `POST /admin/memory/quarantine/admit` (admin token required) with SSE events `memory.quarantined` and `memory.admitted`.
-- World diff review integrates in the collaboration flow via `GET /admin/state/world_diffs`, `POST /admin/world_diffs/queue`, and `POST /admin/world_diffs/decision`; queued/applied/rejected decisions emit `world.diff.*` events.
+- Quarantine now lives on the unified server: `GET /admin/memory/quarantine`, `POST /admin/memory/quarantine`, and `POST /admin/memory/quarantine/admit` (admin token required) with SSE events `memory.quarantined` and `memory.admitted`.
+- World diff review integrates in the collaboration flow via `GET /admin/world_diffs`, `POST /admin/world_diffs/queue`, and `POST /admin/world_diffs/decision`; queued/applied/rejected decisions emit `world.diff.*` events.
 - Redaction rules are applied to logs, snapshots, and egress previews; keep matchers simple and audited.
 - Archive policy is enforced by safe unpackers (path canonicalization + limits), with events `archive.unpacked` and `archive.blocked`.
 - DNS anomaly events are best‑effort alerts from the DNS guard; use to surface brief UI banners and suggest posture tightening.

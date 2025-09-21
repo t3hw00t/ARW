@@ -658,6 +658,33 @@ mod cmds {
             .map_err(|e| e.to_string())
     }
 
+    async fn admin_put_json(
+        path: &str,
+        body: Value,
+        port: Option<u16>,
+    ) -> Result<reqwest::Response, String> {
+        static HTTP: OnceCell<reqwest::Client> = OnceCell::new();
+        let mut headers = HeaderMap::new();
+        if let Some(tok) = admin_token() {
+            if let Ok(h) = HeaderValue::from_str(&tok) {
+                headers.insert("X-ARW-Admin", h);
+            }
+        }
+        let client = HTTP.get_or_init(|| {
+            reqwest::Client::builder()
+                .timeout(Duration::from_secs(15))
+                .build()
+                .unwrap()
+        });
+        client
+            .put(service_url(path, port))
+            .headers(headers)
+            .json(&body)
+            .send()
+            .await
+            .map_err(|e| e.to_string())
+    }
+
     // ---- Generic admin fetchers with explicit base+token (for remote connections) ----
     #[tauri::command]
     pub async fn admin_get_json_base(
@@ -747,12 +774,12 @@ mod cmds {
         path: String,
         port: Option<u16>,
     ) -> Result<Value, String> {
-        let qs = format!(
-            "admin/projects/file?proj={}&path={}",
+        let url = format!(
+            "state/projects/{}/file?path={}",
             urlencoding::encode(&proj),
             urlencoding::encode(&path)
         );
-        let resp = admin_get(&qs, port).await?;
+        let resp = admin_get(&url, port).await?;
         let v = resp.json::<Value>().await.map_err(|e| e.to_string())?;
         Ok(v)
     }
@@ -765,13 +792,13 @@ mod cmds {
         prev_sha256: Option<String>,
         port: Option<u16>,
     ) -> Result<(), String> {
-        let qs = format!(
-            "admin/projects/file?proj={}&path={}",
+        let url = format!(
+            "projects/{}/file?path={}",
             urlencoding::encode(&proj),
             urlencoding::encode(&path)
         );
         let body = serde_json::json!({ "content": content, "prev_sha256": prev_sha256 });
-        let _ = admin_post_json(&qs, body, port).await?;
+        let _ = admin_put_json(&url, body, port).await?;
         Ok(())
     }
 
@@ -783,9 +810,9 @@ mod cmds {
         mode: Option<String>,
         port: Option<u16>,
     ) -> Result<Value, String> {
-        let body =
-            serde_json::json!({ "proj": proj, "dest": dest, "src_path": src_path, "mode": mode });
-        let resp = admin_post_json("admin/projects/import", body, port).await?;
+        let body = serde_json::json!({ "dest": dest, "src_path": src_path, "mode": mode });
+        let path = format!("projects/{}/import", urlencoding::encode(&proj));
+        let resp = admin_post_json(&path, body, port).await?;
         let v = resp.json::<Value>().await.map_err(|e| e.to_string())?;
         Ok(v)
     }
