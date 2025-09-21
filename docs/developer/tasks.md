@@ -13,6 +13,8 @@ Type: Reference
     - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; keeps legacy fallback.
 - [t-250917235820-3900] Decommission legacy artifacts — todo (updated: 2025-09-17 21:58:20 UTC)
     - 2025-09-21 04:15:00 UTC: `/admin/state/*` and `/admin/projects/*` routes marked deprecated in OpenAPI/JSON; plan decommission once replacement UIs and APIs are confirmed.
+    - 2025-09-21 05:30:00 UTC: Removed `/admin/projects/*` endpoints from the server/spec; all docs now reference `/state/projects*` and `/projects*`.
+    - 2025-09-21 05:45:00 UTC: Removed `/admin/state/*` read-model aliases in favour of `/state/*`; guardrails metrics now live at `/state/guardrails_metrics`.
 - [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — todo (updated: 2025-09-17 21:58:18 UTC)
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-11 21:02:19 UTC)
 

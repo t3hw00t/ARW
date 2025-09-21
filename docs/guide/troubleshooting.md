@@ -96,7 +96,7 @@ Free space via CAS GC
   Listen for `models.cas.gc` summary events.
 
 Metrics
-- State endpoint: `GET /state/models_metrics` → `{ ewma_mbps, …counters }` (admin alias: `/admin/state/models_metrics`).
+- State endpoint: `GET /state/models_metrics` → `{ ewma_mbps, …counters }`.
 - SSE: subscribe to `models.download.progress` for status/progress.
 
 ## Launcher Build on Linux Fails

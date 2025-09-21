@@ -4,7 +4,7 @@ title: Models Typed Shapes
 
 # Models Typed Shapes
 
-Updated: 2025-09-16
+Updated: 2025-09-21
 Type: Reference
 
 Microsummary: Stable, typed response shapes for models endpoints used by UIs and clients. These align with the OpenAPI schemas exposed by the service.
@@ -52,7 +52,7 @@ Microsummary: Stable, typed response shapes for models endpoints used by UIs and
   - model_id: string
   - job_id: string
 
-- ModelsHashes (paginated): returned by `GET /state/models_hashes` (and admin variant)
+- ModelsHashes (paginated): returned by `GET /state/models_hashes`
   - total: number
   - count: number
   - limit: number

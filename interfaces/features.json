@@ -66,6 +66,10 @@
         },
         {
           "method": "GET",
+          "path": "/state/models_hashes"
+        },
+        {
+          "method": "GET",
           "path": "/state/models"
         }
       ],
@@ -430,35 +434,39 @@
       "http": [
         {
           "method": "GET",
-          "path": "/admin/projects/list"
+          "path": "/state/projects"
         },
         {
           "method": "POST",
-          "path": "/admin/projects/create"
+          "path": "/projects"
         },
         {
           "method": "GET",
-          "path": "/admin/projects/tree"
+          "path": "/state/projects/{proj}/tree"
         },
         {
           "method": "GET",
-          "path": "/admin/projects/notes"
+          "path": "/state/projects/{proj}/notes"
         },
         {
-          "method": "POST",
-          "path": "/admin/projects/notes"
+          "method": "PUT",
+          "path": "/projects/{proj}/notes"
         },
         {
           "method": "GET",
-          "path": "/admin/projects/file"
+          "path": "/state/projects/{proj}/file"
+        },
+        {
+          "method": "PUT",
+          "path": "/projects/{proj}/file"
+        },
+        {
+          "method": "PATCH",
+          "path": "/projects/{proj}/file"
         },
         {
           "method": "POST",
-          "path": "/admin/projects/file"
-        },
-        {
-          "method": "POST",
-          "path": "/admin/projects/patch"
+          "path": "/projects/{proj}/import"
         }
       ],
       "read_models": [],

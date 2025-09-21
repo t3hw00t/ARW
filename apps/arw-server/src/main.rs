@@ -2,7 +2,7 @@ use arw_policy::PolicyEngine;
 use arw_wasi::ToolHost;
 use axum::http::HeaderMap;
 use axum::{
-    routing::{get, post},
+    routing::{get, patch, post, put},
     Router,
 };
 use chrono::Utc;
@@ -50,9 +50,19 @@ mod paths {
     pub const STATE_OBSERVATIONS: &str = "/state/observations";
     pub const STATE_BELIEFS: &str = "/state/beliefs";
     pub const STATE_INTENTS: &str = "/state/intents";
+    pub const STATE_GUARDRAILS_METRICS: &str = "/state/guardrails_metrics";
     pub const STATE_CLUSTER: &str = "/state/cluster";
     pub const STATE_WORLD: &str = "/state/world";
     pub const STATE_WORLD_SELECT: &str = "/state/world/select";
+    pub const STATE_PROJECTS: &str = "/state/projects";
+    pub const STATE_PROJECTS_TREE: &str = "/state/projects/:proj/tree";
+    pub const STATE_PROJECTS_NOTES: &str = "/state/projects/:proj/notes";
+    pub const STATE_PROJECTS_FILE: &str = "/state/projects/:proj/file";
+    pub const STATE_MODELS_HASHES: &str = "/state/models_hashes";
+    pub const PROJECTS: &str = "/projects";
+    pub const PROJECTS_NOTES: &str = "/projects/:proj/notes";
+    pub const PROJECTS_FILE: &str = "/projects/:proj/file";
+    pub const PROJECTS_IMPORT: &str = "/projects/:proj/import";
     pub const SPEC_OPENAPI: &str = "/spec/openapi.yaml";
     pub const SPEC_ASYNCAPI: &str = "/spec/asyncapi.yaml";
     pub const SPEC_MCP: &str = "/spec/mcp-tools.json";
@@ -61,7 +71,6 @@ mod paths {
     pub const SPEC_HEALTH: &str = "/spec/health";
     pub const ADMIN_DEBUG: &str = "/admin/debug";
     pub const DEBUG_ALIAS: &str = "/debug";
-    pub const ADMIN_STATE_ROUTE_STATS: &str = "/admin/state/route_stats";
     pub const ADMIN_MODELS: &str = "/admin/models";
     pub const ADMIN_MODELS_SUMMARY: &str = "/admin/models/summary";
     pub const ADMIN_MODELS_REFRESH: &str = "/admin/models/refresh";
@@ -75,9 +84,6 @@ mod paths {
     pub const ADMIN_MODELS_DOWNLOAD_CANCEL: &str = "/admin/models/download/cancel";
     pub const ADMIN_MODELS_CAS_GC: &str = "/admin/models/cas_gc";
     pub const ADMIN_MODELS_JOBS: &str = "/admin/models/jobs";
-    pub const ADMIN_STATE_MODELS_METRICS: &str = "/admin/state/models_metrics";
-    pub const ADMIN_STATE_MODELS_HASHES: &str = "/admin/state/models_hashes";
-    pub const ADMIN_STATE_GUARDRAILS_METRICS: &str = "/admin/state/guardrails_metrics";
     pub const ADMIN_TOOLS: &str = "/admin/tools";
     pub const ADMIN_TOOLS_RUN: &str = "/admin/tools/run";
     pub const ADMIN_TOOLS_CACHE_STATS: &str = "/admin/tools/cache_stats";
@@ -102,20 +108,6 @@ mod paths {
     pub const ADMIN_HIERARCHY_ACCEPT: &str = "/admin/hierarchy/accept";
     pub const ADMIN_SELF_MODEL_PROPOSE: &str = "/admin/self_model/propose";
     pub const ADMIN_SELF_MODEL_APPLY: &str = "/admin/self_model/apply";
-    pub const ADMIN_STATE_OBSERVATIONS: &str = "/admin/state/observations";
-    pub const ADMIN_STATE_BELIEFS: &str = "/admin/state/beliefs";
-    pub const ADMIN_STATE_INTENTS: &str = "/admin/state/intents";
-    pub const ADMIN_STATE_ACTIONS: &str = "/admin/state/actions";
-    pub const ADMIN_STATE_CLUSTER: &str = "/admin/state/cluster";
-    pub const ADMIN_STATE_WORLD: &str = "/admin/state/world";
-    pub const ADMIN_STATE_WORLD_SELECT: &str = "/admin/state/world/select";
-    pub const ADMIN_PROJECTS_LIST: &str = "/admin/projects/list";
-    pub const ADMIN_PROJECTS_CREATE: &str = "/admin/projects/create";
-    pub const ADMIN_PROJECTS_TREE: &str = "/admin/projects/tree";
-    pub const ADMIN_PROJECTS_NOTES: &str = "/admin/projects/notes";
-    pub const ADMIN_PROJECTS_FILE: &str = "/admin/projects/file";
-    pub const ADMIN_PROJECTS_PATCH: &str = "/admin/projects/patch";
-    pub const ADMIN_PROJECTS_IMPORT: &str = "/admin/projects/import";
     pub const ADMIN_UI_MODELS: &str = "/admin/ui/models";
     pub const ADMIN_UI_AGENTS: &str = "/admin/ui/agents";
     pub const ADMIN_UI_PROJECTS: &str = "/admin/ui/projects";
@@ -186,6 +178,22 @@ macro_rules! route_post_tag {
         $endpoints.push(format!("POST {}", $path));
         $meta.push(serde_json::json!({"method":"POST","path":$path,"stability":$stability}));
         $router.route($path, post($handler))
+    }};
+}
+
+macro_rules! route_put_tag {
+    ($router:expr, $endpoints:expr, $meta:expr, $path:expr, $handler:path, $stability:expr) => {{
+        $endpoints.push(format!("PUT {}", $path));
+        $meta.push(serde_json::json!({"method":"PUT","path":$path,"stability":$stability}));
+        $router.route($path, put($handler))
+    }};
+}
+
+macro_rules! route_patch_tag {
+    ($router:expr, $endpoints:expr, $meta:expr, $path:expr, $handler:path, $stability:expr) => {{
+        $endpoints.push(format!("PATCH {}", $path));
+        $meta.push(serde_json::json!({"method":"PATCH","path":$path,"stability":$stability}));
+        $router.route($path, patch($handler))
     }};
 }
 
@@ -716,16 +724,8 @@ async fn main() {
         app,
         endpoints_acc,
         endpoints_meta_acc,
-        paths::ADMIN_STATE_MODELS_METRICS,
-        api_models::models_metrics,
-        "beta"
-    );
-    app = route_get_tag!(
-        app,
-        endpoints_acc,
-        endpoints_meta_acc,
-        paths::ADMIN_STATE_MODELS_HASHES,
-        api_models::models_hashes,
+        paths::STATE_MODELS_HASHES,
+        api_models::state_models_hashes,
         "beta"
     );
     app = route_get_tag!(
@@ -1132,145 +1132,73 @@ async fn main() {
         app,
         endpoints_acc,
         endpoints_meta_acc,
-        paths::ADMIN_STATE_ROUTE_STATS,
-        api_state::state_route_stats_admin,
-        "legacy"
+        paths::STATE_PROJECTS,
+        api_projects::state_projects_list,
+        "beta"
     );
-    app = route_get_tag!(
+    app = route_post_tag!(
         app,
         endpoints_acc,
         endpoints_meta_acc,
-        paths::ADMIN_STATE_OBSERVATIONS,
-        api_state::admin_state_observations,
-        "legacy"
-    );
-    app = route_get_tag!(
-        app,
-        endpoints_acc,
-        endpoints_meta_acc,
-        paths::ADMIN_STATE_BELIEFS,
-        api_state::admin_state_beliefs,
-        "legacy"
-    );
-    app = route_get_tag!(
-        app,
-        endpoints_acc,
-        endpoints_meta_acc,
-        paths::ADMIN_STATE_INTENTS,
-        api_state::admin_state_intents,
-        "legacy"
-    );
-    app = route_get_tag!(
-        app,
-        endpoints_acc,
-        endpoints_meta_acc,
-        paths::ADMIN_STATE_ACTIONS,
-        api_state::admin_state_actions,
-        "legacy"
-    );
-    app = route_get_tag!(
-        app,
-        endpoints_acc,
-        endpoints_meta_acc,
-        paths::ADMIN_STATE_GUARDRAILS_METRICS,
-        api_state::admin_state_guardrails_metrics,
+        paths::PROJECTS,
+        api_projects::projects_create_unified,
         "beta"
     );
     app = route_get_tag!(
         app,
         endpoints_acc,
         endpoints_meta_acc,
-        paths::ADMIN_STATE_CLUSTER,
-        api_state::admin_state_cluster,
-        "legacy"
+        paths::STATE_PROJECTS_TREE,
+        api_projects::state_projects_tree,
+        "beta"
     );
     app = route_get_tag!(
         app,
         endpoints_acc,
         endpoints_meta_acc,
-        paths::ADMIN_STATE_WORLD,
-        api_state::admin_state_world,
-        "legacy"
+        paths::STATE_PROJECTS_NOTES,
+        api_projects::state_projects_notes,
+        "beta"
     );
     app = route_get_tag!(
         app,
         endpoints_acc,
         endpoints_meta_acc,
-        paths::ADMIN_STATE_WORLD_SELECT,
-        api_state::admin_state_world_select,
-        "legacy"
+        paths::STATE_PROJECTS_FILE,
+        api_projects::state_projects_file_get,
+        "beta"
     );
-    app = route_get_tag!(
+    app = route_put_tag!(
         app,
         endpoints_acc,
         endpoints_meta_acc,
-        paths::ADMIN_PROJECTS_LIST,
-        api_projects::projects_list,
-        "legacy"
+        paths::PROJECTS_NOTES,
+        api_projects::projects_notes_put,
+        "beta"
+    );
+    app = route_put_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::PROJECTS_FILE,
+        api_projects::projects_file_put,
+        "beta"
+    );
+    app = route_patch_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::PROJECTS_FILE,
+        api_projects::projects_file_patch_unified,
+        "beta"
     );
     app = route_post_tag!(
         app,
         endpoints_acc,
         endpoints_meta_acc,
-        paths::ADMIN_PROJECTS_CREATE,
-        api_projects::projects_create,
-        "legacy"
-    );
-    app = route_get_tag!(
-        app,
-        endpoints_acc,
-        endpoints_meta_acc,
-        paths::ADMIN_PROJECTS_TREE,
-        api_projects::projects_tree,
-        "legacy"
-    );
-    app = route_get_tag!(
-        app,
-        endpoints_acc,
-        endpoints_meta_acc,
-        paths::ADMIN_PROJECTS_NOTES,
-        api_projects::projects_notes_get,
-        "legacy"
-    );
-    app = route_post_tag!(
-        app,
-        endpoints_acc,
-        endpoints_meta_acc,
-        paths::ADMIN_PROJECTS_NOTES,
-        api_projects::projects_notes_set,
-        "legacy"
-    );
-    app = route_get_tag!(
-        app,
-        endpoints_acc,
-        endpoints_meta_acc,
-        paths::ADMIN_PROJECTS_FILE,
-        api_projects::projects_file_get,
-        "legacy"
-    );
-    app = route_post_tag!(
-        app,
-        endpoints_acc,
-        endpoints_meta_acc,
-        paths::ADMIN_PROJECTS_FILE,
-        api_projects::projects_file_set,
-        "legacy"
-    );
-    app = route_post_tag!(
-        app,
-        endpoints_acc,
-        endpoints_meta_acc,
-        paths::ADMIN_PROJECTS_PATCH,
-        api_projects::projects_file_patch,
-        "legacy"
-    );
-    app = route_post_tag!(
-        app,
-        endpoints_acc,
-        endpoints_meta_acc,
-        paths::ADMIN_PROJECTS_IMPORT,
-        api_projects::projects_import,
-        "legacy"
+        paths::PROJECTS_IMPORT,
+        api_projects::projects_import_unified,
+        "beta"
     );
     app = route_get_tag!(
         app,
@@ -1302,6 +1230,14 @@ async fn main() {
         endpoints_meta_acc,
         paths::STATE_INTENTS,
         api_state::state_intents,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::STATE_GUARDRAILS_METRICS,
+        api_state::state_guardrails_metrics,
         "beta"
     );
     app = route_get_tag!(

@@ -1,7 +1,7 @@
 use axum::extract::State;
 use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
-use axum::{extract::Query, Json};
+use axum::{extract::Path, extract::Query, Json};
 use base64::Engine as _;
 use serde::Deserialize;
 use serde_json::{json, Value};
@@ -27,14 +27,6 @@ fn problem(status: axum::http::StatusCode, title: &str, detail: Option<&str>) ->
     (status, Json(body)).into_response()
 }
 
-#[utoipa::path(
-    get,
-    path = "/admin/projects/list",
-    tag = "Admin/Projects",    responses(
-        (status = 200, description = "Projects list", body = serde_json::Value),
-        (status = 401, description = "Unauthorized"),
-    )
-)]
 pub async fn projects_list(headers: HeaderMap) -> impl IntoResponse {
     if !admin_ok(&headers) {
         return unauthorized();
@@ -61,17 +53,6 @@ pub struct ProjectCreateRequest {
     pub name: String,
 }
 
-#[utoipa::path(
-    post,
-    path = "/admin/projects/create",
-    tag = "Admin/Projects",    request_body = ProjectCreateRequest,
-    responses(
-        (status = 200, description = "Project created", body = serde_json::Value),
-        (status = 400, description = "Invalid request"),
-        (status = 401, description = "Unauthorized"),
-        (status = 500, description = "Error")
-    )
-)]
 pub async fn projects_create(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -118,20 +99,12 @@ pub struct ProjectsTreeQuery {
     pub path: Option<String>,
 }
 
-#[utoipa::path(
-    get,
-    path = "/admin/projects/tree",
-    tag = "Admin/Projects",    params(
-        ("proj" = Option<String>, Query, description = "Project name"),
-        ("path" = Option<String>, Query, description = "Relative path")
-    ),
-    responses(
-        (status = 200, description = "Project tree", body = serde_json::Value),
-        (status = 400, description = "Invalid request"),
-        (status = 401, description = "Unauthorized"),
-        (status = 404, description = "Not found")
-    )
-)]
+#[derive(Deserialize)]
+pub(crate) struct StateProjectTreeQuery {
+    #[serde(default)]
+    pub path: Option<String>,
+}
+
 pub async fn projects_tree(
     headers: HeaderMap,
     Query(q): Query<ProjectsTreeQuery>,
@@ -203,16 +176,11 @@ pub struct ProjectNotesQuery {
     pub proj: String,
 }
 
-#[utoipa::path(
-    get,
-    path = "/admin/projects/notes",
-    tag = "Admin/Projects",    params(("proj" = String, Query)),
-    responses(
-        (status = 200, description = "Project notes", body = String),
-        (status = 400, description = "Invalid request"),
-        (status = 401, description = "Unauthorized")
-    )
-)]
+#[derive(Deserialize)]
+pub(crate) struct ProjectPathQuery {
+    pub path: String,
+}
+
 pub async fn projects_notes_get(
     headers: HeaderMap,
     Query(q): Query<ProjectNotesQuery>,
@@ -230,17 +198,6 @@ pub async fn projects_notes_get(
     String::new().into_response()
 }
 
-#[utoipa::path(
-    post,
-    path = "/admin/projects/notes",
-    tag = "Admin/Projects",    params(("proj" = String, Query)),
-    responses(
-        (status = 200, description = "Notes saved", body = serde_json::Value),
-        (status = 400, description = "Invalid request"),
-        (status = 401, description = "Unauthorized"),
-        (status = 500, description = "Error")
-    )
-)]
 pub async fn projects_notes_set(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -298,20 +255,6 @@ pub struct ProjectFileWrite {
     prev_sha256: Option<String>,
 }
 
-#[utoipa::path(
-    get,
-    path = "/admin/projects/file",
-    tag = "Admin/Projects",    params(
-        ("proj" = String, Query, description = "Project name"),
-        ("path" = String, Query, description = "Relative path")
-    ),
-    responses(
-        (status = 200, description = "Project file", body = serde_json::Value),
-        (status = 400, description = "Invalid request"),
-        (status = 401, description = "Unauthorized"),
-        (status = 404, description = "Not found")
-    )
-)]
 pub async fn projects_file_get(
     headers: HeaderMap,
     Query(q): Query<ProjectFileQuery>,
@@ -371,22 +314,6 @@ pub async fn projects_file_get(
     .into_response()
 }
 
-#[utoipa::path(
-    post,
-    path = "/admin/projects/file",
-    tag = "Admin/Projects",    params(
-        ("proj" = String, Query),
-        ("path" = String, Query)
-    ),
-    request_body = ProjectFileWrite,
-    responses(
-        (status = 200, description = "File written", body = serde_json::Value),
-        (status = 400, description = "Invalid request"),
-        (status = 401, description = "Unauthorized"),
-        (status = 409, description = "Conflict"),
-        (status = 500, description = "Error")
-    )
-)]
 pub async fn projects_file_set(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -485,22 +412,6 @@ pub struct ProjectPatchRequest {
     pub prev_sha256: Option<String>,
 }
 
-#[utoipa::path(
-    post,
-    path = "/admin/projects/patch",
-    tag = "Admin/Projects",    params(
-        ("proj" = String, Query),
-        ("path" = String, Query)
-    ),
-    request_body = ProjectPatchRequest,
-    responses(
-        (status = 200, description = "Patched", body = serde_json::Value),
-        (status = 400, description = "Invalid request"),
-        (status = 401, description = "Unauthorized"),
-        (status = 409, description = "Conflict"),
-        (status = 500, description = "Error")
-    )
-)]
 pub async fn projects_file_patch(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -533,18 +444,6 @@ pub struct ProjectImportRequest {
     pub mode: Option<String>,
 }
 
-#[utoipa::path(
-    post,
-    path = "/admin/projects/import",
-    tag = "Admin/Projects",    request_body = ProjectImportRequest,
-    responses(
-        (status = 200, description = "Imported", body = serde_json::Value),
-        (status = 400, description = "Invalid request"),
-        (status = 401, description = "Unauthorized"),
-        (status = 403, description = "Forbidden"),
-        (status = 500, description = "Error")
-    )
-)]
 pub async fn projects_import(
     headers: HeaderMap,
     State(state): State<AppState>,
@@ -608,6 +507,218 @@ pub async fn projects_import(
         .publish(topics::TOPIC_PROJECTS_FILE_WRITTEN, &evt);
     publish_audit("projects.file.import", &evt).await;
     Json(json!({"ok": true})).into_response()
+}
+
+#[utoipa::path(
+    get,
+    path = "/state/projects",
+    tag = "State/Projects",
+    responses((status = 200, description = "Projects list", body = serde_json::Value))
+)]
+pub async fn state_projects_list(headers: HeaderMap) -> impl IntoResponse {
+    projects_list(headers).await
+}
+
+#[utoipa::path(
+    post,
+    path = "/projects",
+    tag = "Projects",
+    request_body = ProjectCreateRequest,
+    responses(
+        (status = 200, description = "Project created", body = serde_json::Value),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Error")
+    )
+)]
+pub async fn projects_create_unified(
+    headers: HeaderMap,
+    state: State<AppState>,
+    Json(req): Json<ProjectCreateRequest>,
+) -> impl IntoResponse {
+    projects_create(headers, state, Json(req)).await
+}
+
+#[utoipa::path(
+    get,
+    path = "/state/projects/{proj}/tree",
+    tag = "State/Projects",
+    params(
+        ("proj" = String, Path, description = "Project name"),
+        ("path" = Option<String>, Query, description = "Relative path")
+    ),
+    responses(
+        (status = 200, description = "Project tree", body = serde_json::Value),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Not found")
+    )
+)]
+pub async fn state_projects_tree(
+    headers: HeaderMap,
+    Path(proj): Path<String>,
+    Query(q): Query<StateProjectTreeQuery>,
+) -> impl IntoResponse {
+    projects_tree(
+        headers,
+        Query(ProjectsTreeQuery {
+            proj: Some(proj),
+            path: q.path,
+        }),
+    )
+    .await
+}
+
+#[utoipa::path(
+    get,
+    path = "/state/projects/{proj}/notes",
+    tag = "State/Projects",
+    params(("proj" = String, Path, description = "Project name")),
+    responses(
+        (status = 200, description = "Project notes", body = String),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+pub async fn state_projects_notes(
+    headers: HeaderMap,
+    Path(proj): Path<String>,
+) -> impl IntoResponse {
+    projects_notes_get(headers, Query(ProjectNotesQuery { proj })).await
+}
+
+#[utoipa::path(
+    put,
+    path = "/projects/{proj}/notes",
+    tag = "Projects",
+    params(("proj" = String, Path, description = "Project name")),
+    request_body = String,
+    responses(
+        (status = 200, description = "Notes saved", body = serde_json::Value),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 500, description = "Error")
+    )
+)]
+pub async fn projects_notes_put(
+    headers: HeaderMap,
+    state: State<AppState>,
+    Path(proj): Path<String>,
+    body: String,
+) -> impl IntoResponse {
+    projects_notes_set(headers, state, Query(ProjectNotesQuery { proj }), body).await
+}
+
+#[utoipa::path(
+    get,
+    path = "/state/projects/{proj}/file",
+    tag = "State/Projects",
+    params(
+        ("proj" = String, Path, description = "Project name"),
+        ("path" = String, Query, description = "Relative path")
+    ),
+    responses(
+        (status = 200, description = "Project file", body = serde_json::Value),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Not found")
+    )
+)]
+pub async fn state_projects_file_get(
+    headers: HeaderMap,
+    Path(proj): Path<String>,
+    Query(q): Query<ProjectPathQuery>,
+) -> impl IntoResponse {
+    projects_file_get(headers, Query(ProjectFileQuery { proj, path: q.path })).await
+}
+
+#[utoipa::path(
+    put,
+    path = "/projects/{proj}/file",
+    tag = "Projects",
+    params(
+        ("proj" = String, Path, description = "Project name"),
+        ("path" = String, Query, description = "Relative path")
+    ),
+    request_body = ProjectFileWrite,
+    responses(
+        (status = 200, description = "File written", body = serde_json::Value),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 409, description = "Conflict"),
+        (status = 500, description = "Error")
+    )
+)]
+pub async fn projects_file_put(
+    headers: HeaderMap,
+    state: State<AppState>,
+    Path(proj): Path<String>,
+    Query(q): Query<ProjectPathQuery>,
+    Json(body): Json<ProjectFileWrite>,
+) -> impl IntoResponse {
+    projects_file_set(
+        headers,
+        state,
+        Query(ProjectFileQuery { proj, path: q.path }),
+        Json(body),
+    )
+    .await
+}
+
+#[utoipa::path(
+    patch,
+    path = "/projects/{proj}/file",
+    tag = "Projects",
+    params(
+        ("proj" = String, Path, description = "Project name"),
+        ("path" = String, Query, description = "Relative path")
+    ),
+    request_body = ProjectPatchRequest,
+    responses(
+        (status = 200, description = "File patched", body = serde_json::Value),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 409, description = "Conflict"),
+        (status = 500, description = "Error")
+    )
+)]
+pub async fn projects_file_patch_unified(
+    headers: HeaderMap,
+    state: State<AppState>,
+    Path(proj): Path<String>,
+    Query(q): Query<ProjectPathQuery>,
+    Json(req): Json<ProjectPatchRequest>,
+) -> impl IntoResponse {
+    projects_file_patch(
+        headers,
+        state,
+        Query(ProjectFileQuery { proj, path: q.path }),
+        Json(req),
+    )
+    .await
+}
+
+#[utoipa::path(
+    post,
+    path = "/projects/{proj}/import",
+    tag = "Projects",
+    params(("proj" = String, Path, description = "Project name")),
+    request_body = ProjectImportRequest,
+    responses(
+        (status = 200, description = "Imported", body = serde_json::Value),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 403, description = "Forbidden"),
+        (status = 500, description = "Error")
+    )
+)]
+pub async fn projects_import_unified(
+    headers: HeaderMap,
+    state: State<AppState>,
+    Path(proj): Path<String>,
+    Json(req): Json<ProjectImportRequest>,
+) -> impl IntoResponse {
+    projects_import(headers, state, Json(ProjectImportRequest { proj, ..req })).await
 }
 
 fn projects_dir() -> std::path::PathBuf {

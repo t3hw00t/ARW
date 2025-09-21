@@ -1,6 +1,9 @@
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
-use axum::{extract::State, Json};
+use axum::{
+    extract::{Query, State},
+    Json,
+};
 use serde::Deserialize;
 use serde_json::{json, Value};
 
@@ -309,20 +312,6 @@ pub async fn state_models_metrics(
     Json(state.models().metrics_value().await).into_response()
 }
 
-#[utoipa::path(
-    get,
-    path = "/admin/state/models_metrics",
-    tag = "Models",    responses((status = 200, description = "Metrics", body = serde_json::Value))
-)]
-pub async fn models_metrics(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    state_models_metrics(headers, State(state))
-        .await
-        .into_response()
-}
-
 #[derive(Deserialize, ToSchema)]
 pub struct HashesQuery {
     #[serde(default = "HashesQuery::default_limit")]
@@ -345,8 +334,8 @@ impl HashesQuery {
 
 #[utoipa::path(
     get,
-    path = "/admin/state/models_hashes",
-    tag = "Models",
+    path = "/state/models_hashes",
+    tag = "State",
     params(
         ("limit" = Option<usize>, Query, description = "Page size (default 100)"),
         ("offset" = Option<usize>, Query, description = "Start offset"),
@@ -356,10 +345,10 @@ impl HashesQuery {
     ),
     responses((status = 200, description = "Installed hashes", body = serde_json::Value))
 )]
-pub async fn models_hashes(
+pub async fn state_models_hashes(
     headers: HeaderMap,
     State(state): State<AppState>,
-    axum::extract::Query(q): axum::extract::Query<HashesQuery>,
+    Query(q): Query<HashesQuery>,
 ) -> impl IntoResponse {
     if !crate::admin_ok(&headers) {
         return unauthorized();

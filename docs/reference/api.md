@@ -107,7 +107,7 @@ Tool Forge & Guardrails (admin token required)
 - `GET /admin/tools` — enumerate registered tools with metadata from `arw_core::introspect_tools()`.
 - `POST /admin/tools/run` — invoke a tool (e.g., `ui.screenshot.capture`, `guardrails.check`); honors ingress/egress gates.
 - `GET /admin/tools/cache_stats` — action cache counters (hit/miss/coalesced/errors/bypass plus capacity/ttl/entries).
-- `GET /admin/state/guardrails_metrics` — guardrails circuit-breaker and retry counters for observability.
+- `GET /state/guardrails_metrics` — guardrails circuit-breaker and retry counters for observability.
 
 Semantics
 - status vs code: RFC 7807 ProblemDetails for errors; otherwise endpoint-specific JSON.

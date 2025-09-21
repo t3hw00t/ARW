@@ -2022,11 +2022,12 @@ const __statePathOverrides = {
   beliefs: '/state/beliefs',
   intents: '/state/intents',
   route_stats: '/state/route_stats',
-  world: '/state/world'
+  world: '/state/world',
+  guardrails_metrics: '/state/guardrails_metrics'
 };
 async function pullState(kind){
   try{
-    const path = __statePathOverrides[kind] || `/admin/state/${kind}`;
+    const path = __statePathOverrides[kind] || `/state/${kind}`;
     const r = await fetch(base + path, { headers: { 'X-ARW-Admin': __adminHeader || '' } });
     const j = await r.json();
     document.getElementById('stateOut').textContent = JSON.stringify(j,null,2);

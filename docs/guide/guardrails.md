@@ -6,7 +6,7 @@ title: Guardrails Checks
 
 The `guardrails.check` tool performs lightweight content checks locally and can delegate to an HTTP Guardrails service when available (e.g., a NeMo Guardrails server behind a simple `/check` endpoint).
 
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: How‑to
 
 ## Run a Check
@@ -36,7 +36,7 @@ When `ARW_GUARDRAILS_URL` is set, the tool first POSTs `{ text, policy?, rules? 
 
 ## Metrics & Introspection
 
-- JSON state: `GET /admin/state/guardrails_metrics` — exposes counters for retries, HTTP errors, and circuit breaker (open flag and until timestamp).
+- JSON state: `GET /state/guardrails_metrics` — exposes counters for retries, HTTP errors, and circuit breaker (open flag and until timestamp).
 - Prometheus: exported under the core metrics endpoint with `arw_guardrails_*` series.
 
 ## Example

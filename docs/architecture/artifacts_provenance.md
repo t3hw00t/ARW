@@ -45,7 +45,7 @@ Signals and helpers
 - Partial downloads keep `<name>.part` plus `<name>.part.meta` (resume validators: `etag`, `last_modified`) for `If-Range` safety.
 - Optional preflight (`ARW_DL_PREFLIGHT=1`) performs HEAD to capture `Content-Length` and validators and to enforce size/quota early.
 - A hash-based single-flight guard coalesces concurrent download requests for the same artifact and fans out progress/events to all waiting models.
-- Throughput EWMA is persisted in `{state_dir}/downloads.metrics.json` and used to admit downloads under hard budgets. Admins can read it (along with live counters) via `GET /state/models_metrics` (admin alias: `/admin/state/models_metrics`).
+- Throughput EWMA is persisted in `{state_dir}/downloads.metrics.json` and used to admit downloads under hard budgets. Admins can read it (along with live counters) via `GET /state/models_metrics`.
  - Schema: the per‑ID model manifest is defined at `spec/schemas/model_manifest.json`.
 
 GC & quotas

@@ -89,30 +89,6 @@ pub async fn state_route_stats(State(state): State<AppState>) -> impl IntoRespon
     }))
 }
 
-/// Legacy admin alias for route stats (`/admin/state/route_stats`).
-#[utoipa::path(
-    get,
-    path = "/admin/state/route_stats",
-    tag = "Admin/State",
-    summary = "Legacy admin alias for route stats.",    responses(
-        (status = 200, description = "Route stats", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn state_route_stats_admin(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
-    }
-    state_route_stats(State(state)).await.into_response()
-}
-
 /// Recent observations from the event bus.
 #[utoipa::path(
     get,
@@ -184,55 +160,17 @@ pub async fn state_intents(headers: HeaderMap) -> impl IntoResponse {
     Json(json!({"items": state_observer::intents_snapshot()})).into_response()
 }
 
-/// Recent actions stream (rolling window).
+/// Guardrails circuit-breaker metrics snapshot.
 #[utoipa::path(
     get,
-    path = "/admin/state/observations",
-    tag = "Admin/State",    responses(
-        (status = 200, description = "Recent observations", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn admin_state_observations(headers: HeaderMap) -> impl IntoResponse {
-    state_observations(headers).await.into_response()
-}
-
-/// Current beliefs snapshot derived from events.
-#[utoipa::path(
-    get,
-    path = "/admin/state/beliefs",
-    tag = "Admin/State",    responses(
-        (status = 200, description = "Beliefs snapshot", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn admin_state_beliefs(headers: HeaderMap) -> impl IntoResponse {
-    state_beliefs(headers).await.into_response()
-}
-
-/// Recent intents stream (rolling window).
-#[utoipa::path(
-    get,
-    path = "/admin/state/intents",
-    tag = "Admin/State",    responses(
-        (status = 200, description = "Recent intents", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn admin_state_intents(headers: HeaderMap) -> impl IntoResponse {
-    state_intents(headers).await.into_response()
-}
-
-#[utoipa::path(
-    get,
-    path = "/admin/state/guardrails_metrics",
-    tag = "Admin/State",
+    path = "/state/guardrails_metrics",
+    tag = "State",
     responses(
         (status = 200, description = "Guardrails metrics", body = serde_json::Value),
         (status = 401, description = "Unauthorized", body = serde_json::Value)
     )
 )]
-pub async fn admin_state_guardrails_metrics(headers: HeaderMap) -> impl IntoResponse {
+pub async fn state_guardrails_metrics(headers: HeaderMap) -> impl IntoResponse {
     if !crate::admin_ok(&headers) {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
@@ -278,22 +216,6 @@ pub async fn state_cluster(headers: HeaderMap, State(state): State<AppState>) ->
     Json(json!({"nodes": nodes})).into_response()
 }
 
-/// Cluster nodes snapshot (admin-only).
-#[utoipa::path(
-    get,
-    path = "/admin/state/cluster",
-    tag = "Admin/State",    responses(
-        (status = 200, description = "Cluster nodes", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn admin_state_cluster(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-) -> impl IntoResponse {
-    state_cluster(headers, State(state)).await.into_response()
-}
-
 #[derive(Deserialize, utoipa::ToSchema)]
 pub struct WorldQuery {
     #[serde(default)]
@@ -323,23 +245,6 @@ pub async fn state_world(headers: HeaderMap, Query(q): Query<WorldQuery>) -> imp
     }
     let map = world::snapshot_project_map(q.proj.as_deref());
     Json(serde_json::to_value(map).unwrap_or_else(|_| json!({}))).into_response()
-}
-
-/// Project world model snapshot (admin alias).
-#[utoipa::path(
-    get,
-    path = "/admin/state/world",
-    tag = "Admin/State",    params(("proj" = Option<String>, Query, description = "Project id")),
-    responses(
-        (status = 200, description = "World model", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn admin_state_world(
-    headers: HeaderMap,
-    Query(q): Query<WorldQuery>,
-) -> impl IntoResponse {
-    state_world(headers, Query(q)).await.into_response()
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -388,28 +293,6 @@ pub async fn state_world_select(
     let lambda = q.lambda.unwrap_or(0.5);
     let items = world::select_top_claims_diverse(q.proj.as_deref(), &query, k, lambda);
     Json(json!({"items": items})).into_response()
-}
-
-/// Select top-k claims for a query (admin alias).
-#[utoipa::path(
-    get,
-    path = "/admin/state/world/select",
-    tag = "Admin/State",    params(
-        ("proj" = Option<String>, Query, description = "Project id"),
-        ("q" = Option<String>, Query, description = "Query string"),
-        ("k" = Option<usize>, Query, description = "Top K"),
-        ("lambda" = Option<f64>, Query, description = "Diversity weight (0-1)")
-    ),
-    responses(
-        (status = 200, description = "Selected claims", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn admin_state_world_select(
-    headers: HeaderMap,
-    Query(q): Query<WorldSelectQuery>,
-) -> impl IntoResponse {
-    state_world_select(headers, Query(q)).await.into_response()
 }
 
 /// Kernel contributions snapshot.
@@ -496,25 +379,6 @@ pub async fn state_actions(
         .await
         .unwrap_or_default();
     Json(json!({"items": items})).into_response()
-}
-
-/// Recent actions stream (rolling window).
-#[utoipa::path(
-    get,
-    path = "/admin/state/actions",
-    tag = "Admin/State",    responses(
-        (status = 200, description = "Recent actions", body = serde_json::Value),
-        (status = 401, description = "Unauthorized", body = serde_json::Value)
-    )
-)]
-pub async fn admin_state_actions(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    Query(q): Query<std::collections::HashMap<String, String>>,
-) -> impl IntoResponse {
-    state_actions(headers, State(state), Query(q))
-        .await
-        .into_response()
 }
 
 /// Recent egress ledger list.

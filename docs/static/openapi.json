@@ -1747,12 +1747,34 @@
         "description": "Metrics snapshot probe (`/admin/probe/metrics`)."
       }
     },
-    "/admin/projects/create": {
+    "/state/projects": {
+      "get": {
+        "tags": [
+          "State/Projects"
+        ],
+        "operationId": "state_projects_list_doc",
+        "responses": {
+          "200": {
+            "description": "Projects list",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "description": "Projects: GET /state/projects."
+      }
+    },
+    "/projects": {
       "post": {
         "tags": [
-          "Admin/Projects"
+          "Projects"
         ],
-        "operationId": "projects_create_doc",
+        "operationId": "projects_create_unified_doc",
         "requestBody": {
           "content": {
             "application/json": {
@@ -1782,21 +1804,19 @@
             "description": "Error"
           }
         },
-        "description": "Projects: POST /admin/projects/create.",
-        "deprecated": true
+        "description": "Projects: POST /projects."
       }
     },
-    "/admin/projects/file": {
+    "/state/projects/{proj}/tree": {
       "get": {
         "tags": [
-          "Admin/Projects"
+          "State/Projects"
         ],
-        "operationId": "projects_file_get_doc",
+        "operationId": "state_projects_tree_doc",
         "parameters": [
           {
             "name": "proj",
-            "in": "query",
-            "description": "Project name",
+            "in": "path",
             "required": true,
             "schema": {
               "type": "string"
@@ -1805,7 +1825,137 @@
           {
             "name": "path",
             "in": "query",
-            "description": "Relative path",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project tree",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Not found"
+          }
+        },
+        "description": "Projects: GET /state/projects/{proj}/tree."
+      }
+    },
+    "/state/projects/{proj}/notes": {
+      "get": {
+        "tags": [
+          "State/Projects"
+        ],
+        "operationId": "state_projects_notes_doc",
+        "parameters": [
+          {
+            "name": "proj",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Project notes",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        },
+        "description": "Projects: GET /state/projects/{proj}/notes."
+      }
+    },
+    "/projects/{proj}/notes": {
+      "put": {
+        "tags": [
+          "Projects"
+        ],
+        "operationId": "projects_notes_put_doc",
+        "parameters": [
+          {
+            "name": "proj",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "text/plain": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Notes saved",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "500": {
+            "description": "Error"
+          }
+        },
+        "description": "Projects: PUT /projects/{proj}/notes."
+      }
+    },
+    "/state/projects/{proj}/file": {
+      "get": {
+        "tags": [
+          "State/Projects"
+        ],
+        "operationId": "state_projects_file_get_doc",
+        "parameters": [
+          {
+            "name": "proj",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "string"
@@ -1831,18 +1981,19 @@
             "description": "Not found"
           }
         },
-        "description": "Projects: GET /admin/projects/file.",
-        "deprecated": true
-      },
-      "post": {
+        "description": "Projects: GET /state/projects/{proj}/file."
+      }
+    },
+    "/projects/{proj}/file": {
+      "put": {
         "tags": [
-          "Admin/Projects"
+          "Projects"
         ],
-        "operationId": "projects_file_set_doc",
+        "operationId": "projects_file_put_doc",
         "parameters": [
           {
             "name": "proj",
-            "in": "query",
+            "in": "path",
             "required": true,
             "schema": {
               "type": "string"
@@ -1889,16 +2040,82 @@
             "description": "Error"
           }
         },
-        "description": "Projects: POST /admin/projects/file.",
-        "deprecated": true
+        "description": "Projects: PUT /projects/{proj}/file."
+      },
+      "patch": {
+        "tags": [
+          "Projects"
+        ],
+        "operationId": "projects_file_patch_unified_doc",
+        "parameters": [
+          {
+            "name": "proj",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProjectPatchRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "File patched",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid request"
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "500": {
+            "description": "Error"
+          }
+        },
+        "description": "Projects: PATCH /projects/{proj}/file."
       }
     },
-    "/admin/projects/import": {
+    "/projects/{proj}/import": {
       "post": {
         "tags": [
-          "Admin/Projects"
+          "Projects"
         ],
-        "operationId": "projects_import_doc",
+        "operationId": "projects_import_unified_doc",
+        "parameters": [
+          {
+            "name": "proj",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -1931,215 +2148,7 @@
             "description": "Error"
           }
         },
-        "description": "Projects: POST /admin/projects/import.",
-        "deprecated": true
-      }
-    },
-    "/admin/projects/list": {
-      "get": {
-        "tags": [
-          "Admin/Projects"
-        ],
-        "operationId": "projects_list_doc",
-        "responses": {
-          "200": {
-            "description": "Projects list",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        },
-        "description": "Projects: GET /admin/projects/list.",
-        "deprecated": true
-      }
-    },
-    "/admin/projects/notes": {
-      "get": {
-        "tags": [
-          "Admin/Projects"
-        ],
-        "operationId": "projects_notes_get_doc",
-        "parameters": [
-          {
-            "name": "proj",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Project notes",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        },
-        "description": "Projects: GET /admin/projects/notes.",
-        "deprecated": true
-      },
-      "post": {
-        "tags": [
-          "Admin/Projects"
-        ],
-        "operationId": "projects_notes_set_doc",
-        "parameters": [
-          {
-            "name": "proj",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Notes saved",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "500": {
-            "description": "Error"
-          }
-        },
-        "description": "Projects: POST /admin/projects/notes.",
-        "deprecated": true
-      }
-    },
-    "/admin/projects/patch": {
-      "post": {
-        "tags": [
-          "Admin/Projects"
-        ],
-        "operationId": "projects_file_patch_doc",
-        "parameters": [
-          {
-            "name": "proj",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "path",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ProjectPatchRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Patched",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "409": {
-            "description": "Conflict"
-          },
-          "500": {
-            "description": "Error"
-          }
-        },
-        "description": "Projects: POST /admin/projects/patch.",
-        "deprecated": true
-      }
-    },
-    "/admin/projects/tree": {
-      "get": {
-        "tags": [
-          "Admin/Projects"
-        ],
-        "operationId": "projects_tree_doc",
-        "parameters": [
-          {
-            "name": "proj",
-            "in": "query",
-            "description": "Project name",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "path",
-            "in": "query",
-            "description": "Relative path",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Project tree",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid request"
-          },
-          "401": {
-            "description": "Unauthorized"
-          },
-          "404": {
-            "description": "Not found"
-          }
-        },
-        "description": "Projects: GET /admin/projects/tree.",
-        "deprecated": true
+        "description": "Projects: POST /projects/{proj}/import."
       }
     },
     "/admin/self_model/apply": {
@@ -2240,178 +2249,6 @@
         "description": "SelfModel: POST /admin/self_model/propose."
       }
     },
-    "/admin/state/actions": {
-      "get": {
-        "tags": [
-          "Admin/State"
-        ],
-        "summary": "Recent actions stream (rolling window).",
-        "operationId": "admin_state_actions_doc",
-        "responses": {
-          "200": {
-            "description": "Recent actions",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "description": "Recent actions stream (rolling window).",
-        "deprecated": true
-      }
-    },
-    "/admin/state/beliefs": {
-      "get": {
-        "tags": [
-          "Admin/State"
-        ],
-        "summary": "Current beliefs snapshot derived from events.",
-        "operationId": "admin_state_beliefs_doc",
-        "responses": {
-          "200": {
-            "description": "Beliefs snapshot",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "description": "Current beliefs snapshot derived from events.",
-        "deprecated": true
-      }
-    },
-    "/admin/state/cluster": {
-      "get": {
-        "tags": [
-          "Admin/State"
-        ],
-        "summary": "Cluster nodes snapshot (admin-only).",
-        "operationId": "admin_state_cluster_doc",
-        "responses": {
-          "200": {
-            "description": "Cluster nodes",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "description": "Cluster nodes snapshot (admin-only).",
-        "deprecated": true
-      }
-    },
-    "/admin/state/guardrails_metrics": {
-      "get": {
-        "tags": [
-          "Admin/State"
-        ],
-        "operationId": "admin_state_guardrails_metrics_doc",
-        "responses": {
-          "200": {
-            "description": "Guardrails metrics",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "description": "State: GET /admin/state/guardrails_metrics."
-      }
-    },
-    "/admin/state/intents": {
-      "get": {
-        "tags": [
-          "Admin/State"
-        ],
-        "summary": "Recent intents stream (rolling window).",
-        "operationId": "admin_state_intents_doc",
-        "responses": {
-          "200": {
-            "description": "Recent intents",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "description": "Recent intents stream (rolling window).",
-        "deprecated": true
-      }
-    },
-    "/admin/state/route_stats": {
-      "get": {
-        "tags": [
-          "Admin/State"
-        ],
-        "summary": "Legacy admin alias for route stats.",
-        "operationId": "state_route_stats_admin_doc",
-        "responses": {
-          "200": {
-            "description": "Route stats",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "description": "Legacy alias for /state/route_stats.",
-        "deprecated": true
-      }
-    },
     "/admin/state/memory/quarantine": {
       "get": {
         "tags": [
@@ -2434,12 +2271,13 @@
         "description": "Review: GET /admin/state/memory/quarantine."
       }
     },
-    "/admin/state/models_hashes": {
+    "/state/models_hashes": {
       "get": {
         "tags": [
-          "Models"
+          "State"
         ],
-        "operationId": "models_hashes_doc",
+        "summary": "Installed model hashes and sizes.",
+        "operationId": "state_models_hashes_doc",
         "parameters": [
           {
             "name": "limit",
@@ -2447,8 +2285,7 @@
             "description": "Page size (default 100)",
             "required": false,
             "schema": {
-              "type": "integer",
-              "minimum": 0
+              "type": "integer"
             }
           },
           {
@@ -2457,8 +2294,7 @@
             "description": "Start offset",
             "required": false,
             "schema": {
-              "type": "integer",
-              "minimum": 0
+              "type": "integer"
             }
           },
           {
@@ -2497,45 +2333,6 @@
                 "schema": {}
               }
             }
-          }
-        },
-        "description": "Models: GET /admin/state/models_hashes."
-      }
-    },
-    "/admin/state/models_metrics": {
-      "get": {
-        "tags": [
-          "Models"
-        ],
-        "operationId": "models_metrics_doc",
-        "responses": {
-          "200": {
-            "description": "Metrics",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "description": "Models: GET /admin/state/models_metrics."
-      }
-    },
-    "/admin/state/observations": {
-      "get": {
-        "tags": [
-          "Admin/State"
-        ],
-        "summary": "Recent observations from the event bus.",
-        "operationId": "admin_state_observations_doc",
-        "responses": {
-          "200": {
-            "description": "Recent observations",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
           },
           "401": {
             "description": "Unauthorized",
@@ -2546,117 +2343,7 @@
             }
           }
         },
-        "description": "Recent observations from the event bus.",
-        "deprecated": true
-      }
-    },
-    "/admin/state/world": {
-      "get": {
-        "tags": [
-          "Admin/State"
-        ],
-        "summary": "Project world model snapshot (belief graph view).",
-        "operationId": "admin_state_world_doc",
-        "parameters": [
-          {
-            "name": "proj",
-            "in": "query",
-            "description": "Project id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "World model",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "description": "Project world model snapshot (belief graph view).",
-        "deprecated": true
-      }
-    },
-    "/admin/state/world/select": {
-      "get": {
-        "tags": [
-          "Admin/State"
-        ],
-        "summary": "Select top-k claims for a query.",
-        "operationId": "admin_state_world_select_doc",
-        "parameters": [
-          {
-            "name": "proj",
-            "in": "query",
-            "description": "Project id",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "q",
-            "in": "query",
-            "description": "Query string",
-            "required": false,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "k",
-            "in": "query",
-            "description": "Top K",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0
-            }
-          },
-          {
-            "name": "lambda",
-            "in": "query",
-            "description": "Diversity weight (0-1)",
-            "required": false,
-            "schema": {
-              "type": "number",
-              "format": "double"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Selected claims",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        },
-        "description": "Select top-k claims for a query.",
-        "deprecated": true
+        "description": "Models: GET /state/models_hashes."
       }
     },
     "/admin/state/world_diffs": {
@@ -3402,6 +3089,34 @@
         "responses": {
           "200": {
             "description": "Recent intents",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/state/guardrails_metrics": {
+      "get": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Guardrails circuit-breaker metrics.",
+        "description": "Guardrails circuit-breaker metrics (admin-only).",
+        "operationId": "state_guardrails_metrics_doc",
+        "responses": {
+          "200": {
+            "description": "Guardrails metrics",
             "content": {
               "application/json": {
                 "schema": {}
@@ -5860,6 +5575,14 @@
     {
       "name": "Specs",
       "description": "Specs endpoints"
+    },
+    {
+      "name": "Projects",
+      "description": "Projects endpoints"
+    },
+    {
+      "name": "State/Projects",
+      "description": "State/Projects endpoints"
     }
   ]
 }

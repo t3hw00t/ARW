@@ -20,7 +20,7 @@ Canonical topics used by the service are defined once under [crates/arw-topics/s
 - GET  `/state/models` — Public, read‑only models list (no admin token required).
 - GET  `/admin/models/summary` — Aggregated summary for UIs: `{ items, default, concurrency, metrics }`.
 - POST `/admin/models/cas_gc` — Run a one‑off CAS GC sweep; deletes unreferenced blobs older than `ttl_hours` (default `24`).
-- GET  `/admin/state/models_hashes` — Admin summary of installed model hashes and sizes.
+- GET  `/state/models_hashes` — Summary of installed model hashes and sizes.
 - GET  `/admin/models/by-hash/:sha256` — Serve a CAS blob by hash (egress‑gated; `io:egress:models.peer`).
   - Emits strong validators and immutable caching for digest‑addressed blobs:
     - `ETag: "<sha256>"`, `Last-Modified`, `Cache-Control: public, max-age=31536000, immutable`.
@@ -130,7 +130,7 @@ Note: formal `egress.decision` remains planned; previews and ledger appends are 
 
 The downloader maintains a lightweight throughput EWMA used for admission checks.
 - File: `{state_dir}/downloads.metrics.json` → `{ ewma_mbps }`
-- State endpoint: `GET /state/models_metrics` → `{ ewma_mbps, …counters }` (admin alias: `GET /admin/state/models_metrics`)
+- State endpoint: `GET /state/models_metrics` → `{ ewma_mbps, …counters }`
 - Read‑model: `GET /state/models_metrics` (mirrors counters + EWMA) and SSE patches with id `models_metrics`.
  - SSE patches: `state.read.model.patch` with id=`models_metrics` publishes RFC‑6902 JSON Patches. Publishing is coalesced (`ARW_MODELS_METRICS_COALESCE_MS`, default 250ms) with an idle refresh (`ARW_MODELS_METRICS_PUBLISH_MS`, default 2000ms).
 
@@ -159,7 +159,7 @@ curl -sS -X POST "$BASE/admin/models/download/cancel" \
 - On failure, the model list is updated to `status: "error"` with `error_code` to avoid stuck "downloading" states.
 - State directory is shown in `GET /admin/probe`.
 - Concurrency: set `ARW_MODELS_MAX_CONC` (default 2) or `ARW_MODELS_MAX_CONC_HARD` to limit simultaneous downloads. When all permits are taken the caller waits for a free slot.
-- Metrics: counters (`started`, `queued`, `admitted`, `canceled`, `completed`, `completed_cached`, `errors`, `bytes_total`) and throughput EWMA are exposed at `/state/models_metrics` (alias `/admin/state/models_metrics`) and streamed via read‑model patches (`id: models_metrics`).
+- Metrics: counters (`started`, `queued`, `admitted`, `canceled`, `completed`, `completed_cached`, `errors`, `bytes_total`) and throughput EWMA are exposed at `/state/models_metrics` and streamed via read‑model patches (`id: models_metrics`).
 - Checksum: `sha256` is mandatory and must be a 64‑char hex string; invalid values are rejected up front.
 - Budgets and disk-reserve enforcement now run in the unified server so long downloads surface `models.download.progress` events with optional `budget`/`disk` payloads (enable via `ARW_DL_PROGRESS_INCLUDE_*`).
 - When elapsed time crosses `ARW_BUDGET_SOFT_DEGRADE_PCT` of the soft budget the server emits a one-time `status:"degraded"` progress event (`code:"soft-budget"`) before the soft limit is breached.
