@@ -1891,16 +1891,23 @@ async fn main() {
 #[allow(clippy::items_after_test_module)]
 mod http_tests {
     use super::*;
+    use arw_core::rpu;
+    use arw_protocol::GatingCapsule;
+    use arw_topics::{TOPIC_POLICY_CAPSULE_APPLIED, TOPIC_READMODEL_PATCH};
     use axum::{
         body::Body,
         http::{Request, StatusCode},
+        middleware,
         routing::{get, post},
         Router,
     };
+    use base64::{engine::general_purpose::STANDARD as BASE64_STD, Engine};
+    use ed25519_dalek::{Signer, SigningKey};
     use http_body_util::BodyExt;
     use serde_json::{json, Value};
-    use std::{path::Path, sync::Arc, time::Duration};
+    use std::{collections::HashMap, fs, path::Path, sync::Arc, time::Duration};
     use tempfile::tempdir;
+    use tokio::time::timeout;
     use tower::util::ServiceExt;
 
     async fn build_state(dir: &Path) -> AppState {
@@ -1950,6 +1957,56 @@ mod http_tests {
             .route(paths::ACTIONS, post(api_actions::actions_submit))
             .route(paths::ACTIONS_ID, get(api_actions::actions_get))
             .with_state(state)
+    }
+
+    fn router_with_capsule(state: AppState) -> Router {
+        let capsule_state = state.clone();
+        Router::new()
+            .route("/admin/ping", get(|| async { StatusCode::OK }))
+            .layer(middleware::from_fn(move |req, next| {
+                let st = capsule_state.clone();
+                async move { capsule_guard::capsule_mw(st, req, next).await }
+            }))
+            .with_state(state)
+    }
+
+    fn write_trust_store(path: &Path, issuer: &str, signing: &SigningKey) {
+        let trust = json!({
+            "issuers": [
+                {
+                    "id": issuer,
+                    "alg": "ed25519",
+                    "key_b64": BASE64_STD.encode(signing.verifying_key().to_bytes()),
+                }
+            ]
+        });
+        fs::write(path, trust.to_string()).expect("write trust store");
+    }
+
+    fn signed_capsule(signing: &SigningKey, issuer: &str, id: &str) -> GatingCapsule {
+        let issued_at_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+        let mut capsule = GatingCapsule {
+            id: id.to_string(),
+            version: "1".into(),
+            issued_at_ms,
+            issuer: Some(issuer.to_string()),
+            hop_ttl: Some(3),
+            propagate: Some("none".into()),
+            denies: vec![],
+            contracts: vec![],
+            lease_duration_ms: Some(10_000),
+            renew_within_ms: Some(5_000),
+            signature: None,
+        };
+        let mut unsigned = capsule.clone();
+        unsigned.signature = None;
+        let bytes = serde_json::to_vec(&unsigned).expect("serialize capsule");
+        let sig = signing.sign(&bytes);
+        capsule.signature = Some(BASE64_STD.encode(sig.to_bytes()));
+        capsule
     }
 
     #[tokio::test]
@@ -2012,6 +2069,75 @@ mod http_tests {
         let payload = completed.expect("action completed");
         assert_eq!(payload["state"], "completed");
         assert_eq!(payload["output"]["echo"]["msg"], json!("hello-roundtrip"));
+    }
+
+    #[tokio::test]
+    async fn capsule_middleware_applies_and_publishes_read_model() {
+        let temp = tempdir().expect("tempdir");
+        let trust_path = temp.path().join("trust_capsules.json");
+        let signing = SigningKey::from_bytes(&[7u8; 32]);
+        let issuer = "test-issuer";
+        write_trust_store(&trust_path, issuer, &signing);
+        std::env::set_var("ARW_TRUST_CAPSULES", trust_path.display().to_string());
+        rpu::reload_trust();
+
+        let state_dir = temp.path().to_path_buf();
+        let state = build_state(&state_dir).await;
+        let bus = state.bus();
+        let mut rx = bus.subscribe_filtered(
+            vec![
+                TOPIC_POLICY_CAPSULE_APPLIED.to_string(),
+                TOPIC_READMODEL_PATCH.to_string(),
+            ],
+            Some(16),
+        );
+
+        let router = router_with_capsule(state.clone());
+        let capsule = signed_capsule(&signing, issuer, "capsule-http");
+        let capsule_json = serde_json::to_string(&capsule).expect("capsule json");
+
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/admin/ping")
+                    .header("X-ARW-Capsule", capsule_json)
+                    .body(Body::empty())
+                    .expect("capsule request"),
+            )
+            .await
+            .expect("capsule response");
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let mut events: HashMap<String, serde_json::Value> = HashMap::new();
+        while events.len() < 2 {
+            let env = timeout(Duration::from_secs(1), rx.recv())
+                .await
+                .expect("bus event")
+                .expect("bus not closed");
+            events.insert(env.kind.clone(), env.payload);
+        }
+
+        let applied = events
+            .remove(TOPIC_POLICY_CAPSULE_APPLIED)
+            .expect("applied event");
+        assert_eq!(applied["id"].as_str(), Some("capsule-http"));
+        assert_eq!(applied["issuer"].as_str(), Some(issuer));
+
+        let patch = events
+            .remove(TOPIC_READMODEL_PATCH)
+            .expect("read model patch");
+        assert_eq!(patch["id"].as_str(), Some("policy_capsules"));
+        let patch_items = patch["patch"].as_array().expect("patch array");
+        assert!(!patch_items.is_empty(), "patch should include diff");
+
+        let snapshot = state.capsules().snapshot().await;
+        let items = snapshot["items"].as_array().expect("capsule items");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["id"].as_str(), Some("capsule-http"));
+
+        std::env::remove_var("ARW_TRUST_CAPSULES");
     }
 }
 

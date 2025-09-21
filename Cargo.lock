@@ -382,6 +382,8 @@ dependencies = [
  "base64 0.22.1",
  "bytes",
  "chrono",
+ "criterion",
+ "ed25519-dalek",
  "fs2",
  "futures-util",
  "hex",
@@ -1676,6 +1678,7 @@ dependencies = [
  "serde",
  "serde_json",
  "tinytemplate",
+ "tokio",
  "walkdir",
 ]
 

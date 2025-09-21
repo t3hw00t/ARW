@@ -30,7 +30,9 @@ Capsules & Trust (RPU)
 - Generate keys (ed25519) and sign capsules:
   - `arw-cli capsule gen-ed25519` → save keys securely; put pubkey in `trust_capsules.json`.
   - `arw-cli capsule sign-ed25519 <sk_b64> capsule.json` → add `signature` to the capsule.
-- Adoption: pass a verified capsule via `X-ARW-Gate: <json>` header on admin‑authenticated requests.
+- Adoption: pass a verified capsule via `X-ARW-Capsule: <json>` header on admin‑authenticated requests.
+- Legacy `X-ARW-Gate` headers are rejected (410); update any automation that still uses the retired name.
+- Failure telemetry: legacy requests emit `policy.capsule.failed` and `policy.decision` events so monitoring catches rejected capsules.
 - Roadmap: see Architecture → Asimov Capsule Guard for the always-on capsule refresh plan.
 - Env override: `ARW_TRUST_CAPSULES=/path/to/trust_capsules.json`.
 

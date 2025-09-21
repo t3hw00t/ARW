@@ -12,7 +12,8 @@ Type: Explanation
 The Asimov Capsule Guard turns the "mind virus" idea into an enforceable feature: a lightweight policy capsule that refreshes itself at every critical runtime boundary, keeping safety rules and leases in effect without piling up irreversible denies.
 
 ## Current Behavior & Gaps
-- ✅ Capsule adoption runs in the unified server middleware: any request carrying `X-ARW-Capsule` (or the legacy `X-ARW-Gate`) is verified via the RPU, cached, and published to `/state/policy/capsules`. Lease metadata (`lease_duration_ms`, `renew_within_ms`) now travels with the capsule and surfaces in the read model.
+- ✅ Capsule adoption runs in the unified server middleware: any request carrying `X-ARW-Capsule` is verified via the RPU, cached, and published to `/state/policy/capsules`. Legacy `X-ARW-Gate` headers now error (410). Lease metadata (`lease_duration_ms`, `renew_within_ms`) travels with the capsule and surfaces in the read model.
+- ✅ Legacy failures emit `policy.capsule.failed` and `policy.decision` events so operators can observe rejected attempts.
 - ✅ `gating::adopt_capsule` keeps capsule denies and contracts in a runtime lease layer instead of the immutable hierarchy list, so guardrails expire or renew without a restart.【F:crates/arw-core/src/gating.rs†L248-L353】
 - ✅ The Regulatory Provenance Unit returns a lease outcome and the middleware emits `policy.capsule.applied` and `policy.capsule.expired`; the capsules read model patches whenever adoption or expiry occurs.【F:crates/arw-core/src/rpu.rs†L205-L220】【F:apps/arw-server/src/api_actions.rs†L19-L42】
 - ⚠️ Capsule propagation still needs tighter integration with downstream executors (connectors, logic units) so every tool hop refreshes leases automatically.

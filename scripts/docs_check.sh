@@ -141,6 +141,51 @@ if [[ "${legacy_routes:-0}" -gt 0 ]]; then
   errors=$((errors+legacy_routes))
 fi
 
+info "Ensuring legacy capsule header is not reintroduced"
+python3 - <<'PY' "$root_dir"
+import sys, pathlib
+
+root = pathlib.Path(sys.argv[1])
+blocked = "X-ARW-Gate"
+allowed_dirs = {root / "docs"}
+allowed_files = {
+    root / "apps" / "arw-server" / "src" / "capsule_guard.rs",
+    root / "scripts" / "docs_check.sh",
+    root / "CHANGELOG.md",
+}
+skip_names = {".git", ".arw", "target", "site", "vendor", "sandbox", "node_modules"}
+
+def should_skip(path: pathlib.Path) -> bool:
+    return any(part.name in skip_names for part in path.parents)
+
+hits = []
+for file in root.rglob('*'):
+    if not file.is_file():
+        continue
+    if file in allowed_files:
+        continue
+    if should_skip(file):
+        continue
+    if any(parent in allowed_dirs for parent in file.parents):
+        continue
+    try:
+        text = file.read_text(encoding='utf-8')
+    except Exception:
+        continue
+    if blocked in text:
+        hits.append(file.relative_to(root))
+
+if hits:
+    print('[error] Legacy capsule header detected:')
+    for path in hits[:50]:
+        print(f"  {path}")
+    print(f"__DOCS_CHECK_CAPSULE_HEADER__={len(hits)}")
+PY
+legacy_capsule=$(grep -oE '__DOCS_CHECK_CAPSULE_HEADER__=[0-9]+' - | cut -d= -f2 || echo 0)
+if [[ "${legacy_capsule:-0}" -gt 0 ]]; then
+  errors=$((errors+legacy_capsule))
+fi
+
 # Link check for relative .md references
 info "Checking relative links to .md files"
 python3 - << 'PY' "$docs_dir"

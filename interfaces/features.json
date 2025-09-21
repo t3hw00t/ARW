@@ -866,7 +866,7 @@
       "http": [
         {
           "method": "ANY",
-          "path": "/admin/* (X-ARW-Gate)"
+          "path": "/admin/* (X-ARW-Capsule)"
         }
       ],
       "read_models": [],

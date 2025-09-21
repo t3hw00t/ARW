@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::body::Body;
-use axum::http::{HeaderMap, Request, StatusCode};
+use axum::http::{HeaderMap, HeaderName, Request, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -14,6 +14,7 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use tokio::sync::Mutex;
 
+use arw_core::gating::CapsuleLeaseState;
 use arw_protocol::GatingCapsule;
 
 use crate::{read_models, AppState};
@@ -22,7 +23,17 @@ use arw_topics::{
 };
 
 const EVENT_THROTTLE_MS: u64 = 2_000;
-const HEADER_NAMES: [&str; 2] = ["X-ARW-Capsule", "X-ARW-Gate"];
+const LEGACY_HEADER_DETAIL: &str =
+    "Legacy X-ARW-Gate header is no longer supported; send X-ARW-Capsule instead";
+static CURRENT_HEADER_NAME: HeaderName = HeaderName::from_static("x-arw-capsule");
+static LEGACY_HEADER_NAME: HeaderName = HeaderName::from_static("x-arw-gate");
+
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
+enum CapsuleHeader<'a> {
+    None,
+    Current(&'a str),
+    Legacy(&'a str),
+}
 
 #[derive(Clone, Serialize)]
 pub struct CapsuleSnapshot {
@@ -42,10 +53,50 @@ struct CapsuleEntry {
     snapshot: CapsuleSnapshot,
     fingerprint: String,
     last_event_ms: u64,
-    capsule: arw_protocol::GatingCapsule,
+    capsule: GatingCapsule,
     remaining_hops: Option<u32>,
     lease_until_ms: Option<u64>,
     renew_within_ms: Option<u64>,
+}
+
+impl CapsuleSnapshot {
+    fn from_capsule(
+        capsule: &GatingCapsule,
+        now_ms: u64,
+        lease: &CapsuleLeaseState,
+        remaining_hops: Option<u32>,
+    ) -> Self {
+        Self {
+            id: capsule.id.clone(),
+            version: capsule.version.clone(),
+            issuer: capsule.issuer.clone(),
+            applied_ms: now_ms,
+            hop_ttl: capsule.hop_ttl,
+            denies: capsule.denies.len(),
+            contracts: capsule.contracts.len(),
+            remaining_hops,
+            lease_until_ms: lease.lease_until_ms,
+            renew_within_ms: lease.renew_within_ms,
+        }
+    }
+
+    fn refresh_from_capsule(
+        &mut self,
+        capsule: &GatingCapsule,
+        now_ms: u64,
+        lease: &CapsuleLeaseState,
+        remaining_hops: Option<u32>,
+    ) {
+        self.version.clone_from(&capsule.version);
+        self.issuer.clone_from(&capsule.issuer);
+        self.hop_ttl = capsule.hop_ttl;
+        self.denies = capsule.denies.len();
+        self.contracts = capsule.contracts.len();
+        self.applied_ms = now_ms;
+        self.remaining_hops = remaining_hops;
+        self.lease_until_ms = lease.lease_until_ms;
+        self.renew_within_ms = lease.renew_within_ms;
+    }
 }
 
 #[derive(Clone)]
@@ -73,9 +124,10 @@ impl CapsuleStore {
         &self,
         capsule: &GatingCapsule,
         now_ms: u64,
-        lease: arw_core::gating::CapsuleLeaseState,
+        lease: CapsuleLeaseState,
     ) -> AdoptOutcome {
         let fingerprint = fingerprint_capsule(capsule);
+        let remaining_hops = remaining_hops_after_adopt(capsule);
         let mut guard = self.inner.lock().await;
         match guard.entry(capsule.id.clone()) {
             Entry::Occupied(mut occ) => {
@@ -83,18 +135,12 @@ impl CapsuleStore {
                 let changed = entry.fingerprint != fingerprint
                     || entry.snapshot.version != capsule.version
                     || entry.snapshot.issuer != capsule.issuer;
-                entry.snapshot.version = capsule.version.clone();
-                entry.snapshot.issuer = capsule.issuer.clone();
-                entry.snapshot.hop_ttl = capsule.hop_ttl;
-                entry.snapshot.denies = capsule.denies.len();
-                entry.snapshot.contracts = capsule.contracts.len();
-                entry.snapshot.applied_ms = now_ms;
-                entry.snapshot.remaining_hops = capsule.hop_ttl.and_then(|ttl| ttl.checked_sub(1));
-                entry.snapshot.lease_until_ms = lease.lease_until_ms;
-                entry.snapshot.renew_within_ms = lease.renew_within_ms;
+                entry
+                    .snapshot
+                    .refresh_from_capsule(capsule, now_ms, &lease, remaining_hops);
                 entry.fingerprint = fingerprint;
-                entry.capsule = capsule.clone();
-                entry.remaining_hops = capsule.hop_ttl.and_then(|ttl| ttl.checked_sub(1));
+                entry.capsule.clone_from(capsule);
+                entry.remaining_hops = remaining_hops;
                 entry.lease_until_ms = lease.lease_until_ms;
                 entry.renew_within_ms = lease.renew_within_ms;
                 let should_notify =
@@ -108,24 +154,14 @@ impl CapsuleStore {
                 }
             }
             Entry::Vacant(vac) => {
-                let snapshot = CapsuleSnapshot {
-                    id: capsule.id.clone(),
-                    version: capsule.version.clone(),
-                    issuer: capsule.issuer.clone(),
-                    applied_ms: now_ms,
-                    hop_ttl: capsule.hop_ttl,
-                    denies: capsule.denies.len(),
-                    contracts: capsule.contracts.len(),
-                    remaining_hops: capsule.hop_ttl.and_then(|ttl| ttl.checked_sub(1)),
-                    lease_until_ms: lease.lease_until_ms,
-                    renew_within_ms: lease.renew_within_ms,
-                };
+                let snapshot =
+                    CapsuleSnapshot::from_capsule(capsule, now_ms, &lease, remaining_hops);
                 vac.insert(CapsuleEntry {
                     snapshot: snapshot.clone(),
                     fingerprint,
                     last_event_ms: now_ms,
                     capsule: capsule.clone(),
-                    remaining_hops: capsule.hop_ttl.and_then(|ttl| ttl.checked_sub(1)),
+                    remaining_hops,
                     lease_until_ms: lease.lease_until_ms,
                     renew_within_ms: lease.renew_within_ms,
                 });
@@ -150,7 +186,7 @@ impl CapsuleStore {
     pub async fn replay_all(&self) -> ReplayOutcome {
         let now = now_ms();
         let mut guard = self.inner.lock().await;
-        let mut apply: Vec<(String, arw_protocol::GatingCapsule)> = Vec::new();
+        let mut apply: Vec<(String, GatingCapsule)> = Vec::new();
         let mut to_remove: Vec<String> = Vec::new();
         let mut expired: Vec<CapsuleSnapshot> = Vec::new();
         for (id, entry) in guard.iter_mut() {
@@ -193,7 +229,7 @@ impl CapsuleStore {
             return ReplayOutcome { expired };
         }
 
-        let mut leases: HashMap<String, arw_core::gating::CapsuleLeaseState> = HashMap::new();
+        let mut leases: HashMap<String, CapsuleLeaseState> = HashMap::new();
         for (id, capsule) in &apply {
             let lease = arw_core::gating::adopt_capsule(capsule);
             leases.insert(id.clone(), lease);
@@ -225,10 +261,19 @@ pub async fn capsule_mw(state: AppState, req: Request<Body>, next: Next) -> Resp
 
 async fn apply_capsule(state: &AppState, headers: &HeaderMap) -> Result<(), Response> {
     let raw = match extract_header(headers) {
-        Some(v) => v,
-        None => return Ok(()),
+        CapsuleHeader::None => return Ok(()),
+        CapsuleHeader::Current(v) => v,
+        CapsuleHeader::Legacy(raw) => {
+            let capsule_id = parse_capsule(raw).ok().map(|cap| cap.id);
+            publish_failure(state, capsule_id.as_deref(), LEGACY_HEADER_DETAIL).await;
+            return Err(error_response(
+                StatusCode::GONE,
+                "capsule_header_legacy",
+                LEGACY_HEADER_DETAIL,
+            ));
+        }
     };
-    let capsule = match parse_capsule(&raw) {
+    let capsule = match parse_capsule(raw) {
         Ok(cap) => cap,
         Err(kind) => {
             let resp = error_response(
@@ -274,14 +319,26 @@ async fn apply_capsule(state: &AppState, headers: &HeaderMap) -> Result<(), Resp
     Ok(())
 }
 
-fn extract_header(headers: &HeaderMap) -> Option<String> {
-    HEADER_NAMES.iter().find_map(|name| {
-        headers
-            .get(*name)
-            .and_then(|v| v.to_str().ok())
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
-    })
+fn extract_header(headers: &HeaderMap) -> CapsuleHeader<'_> {
+    if let Some(value) = header_as_str(headers, &CURRENT_HEADER_NAME) {
+        return CapsuleHeader::Current(value);
+    }
+    if let Some(value) = header_as_str(headers, &LEGACY_HEADER_NAME) {
+        return CapsuleHeader::Legacy(value);
+    }
+    CapsuleHeader::None
+}
+
+fn header_as_str<'a>(headers: &'a HeaderMap, name: &'static HeaderName) -> Option<&'a str> {
+    headers
+        .get(name)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+}
+
+fn remaining_hops_after_adopt(capsule: &GatingCapsule) -> Option<u32> {
+    capsule.hop_ttl.and_then(|ttl| ttl.checked_sub(1))
 }
 
 fn parse_capsule(raw: &str) -> Result<GatingCapsule, CapsuleParseError> {
@@ -366,6 +423,17 @@ fn fingerprint_capsule(cap: &GatingCapsule) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use arw_policy::PolicyEngine;
+    use arw_topics::{TOPIC_POLICY_CAPSULE_FAILED, TOPIC_POLICY_DECISION};
+    use axum::http::{HeaderMap, HeaderValue};
+    use serde_json::json;
+    use std::{path::Path, sync::Arc};
+    use tempfile::tempdir;
+    use tokio::time::{timeout, Duration};
+
+    use crate::{
+        chat, cluster, experiments, feedback, governor, metrics, models, sse_cache, tool_cache,
+    };
 
     #[test]
     fn parse_json_header() {
@@ -406,5 +474,148 @@ mod tests {
         let encoded = BASE64_STD.encode(raw);
         let parsed = parse_capsule(&encoded).unwrap();
         assert_eq!(parsed.id, "test");
+    }
+
+    #[test]
+    fn extract_current_header_trims_value() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            CURRENT_HEADER_NAME.clone(),
+            HeaderValue::from_static("  {\"id\":\"abc\"}  "),
+        );
+        match extract_header(&headers) {
+            CapsuleHeader::Current(raw) => assert_eq!(raw, "{\"id\":\"abc\"}"),
+            other => panic!("unexpected match: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn extract_legacy_header_detects() {
+        let mut headers = HeaderMap::new();
+        headers.insert(LEGACY_HEADER_NAME.clone(), HeaderValue::from_static("{}"));
+        match extract_header(&headers) {
+            CapsuleHeader::Legacy(raw) => assert_eq!(raw, "{}"),
+            other => panic!("unexpected match: {:?}", other),
+        }
+    }
+
+    #[test]
+    fn extract_prefers_current_over_legacy() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            CURRENT_HEADER_NAME.clone(),
+            HeaderValue::from_static("current"),
+        );
+        headers.insert(
+            LEGACY_HEADER_NAME.clone(),
+            HeaderValue::from_static("legacy"),
+        );
+        match extract_header(&headers) {
+            CapsuleHeader::Current(raw) => assert_eq!(raw, "current"),
+            other => panic!("unexpected match: {:?}", other),
+        }
+    }
+
+    async fn build_state(dir: &Path) -> AppState {
+        std::env::set_var("ARW_STATE_DIR", dir.display().to_string());
+        let bus = arw_events::Bus::new_with_replay(64, 64);
+        let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
+        let policy = PolicyEngine::load_from_env();
+        let policy_arc = Arc::new(Mutex::new(policy));
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
+        let models_store = Arc::new(models::ModelStore::new(bus.clone(), Some(kernel.clone())));
+        models_store.bootstrap().await;
+        let tool_cache = Arc::new(tool_cache::ToolCache::new());
+        let governor_state = governor::GovernorState::new().await;
+        let metrics = Arc::new(metrics::Metrics::default());
+        let cluster_state = cluster::ClusterRegistry::new(bus.clone());
+        let feedback_hub =
+            feedback::FeedbackHub::new(bus.clone(), metrics.clone(), governor_state.clone()).await;
+        let experiments_state =
+            experiments::Experiments::new(bus.clone(), governor_state.clone()).await;
+        let capsules_store = Arc::new(CapsuleStore::new());
+        let chat_state = Arc::new(chat::ChatState::new());
+        AppState {
+            bus,
+            kernel,
+            policy: policy_arc,
+            host,
+            config_state: Arc::new(Mutex::new(json!({}))),
+            config_history: Arc::new(Mutex::new(Vec::new())),
+            sse_id_map: Arc::new(Mutex::new(sse_cache::SseIdCache::with_capacity(64))),
+            endpoints: Arc::new(Vec::new()),
+            endpoints_meta: Arc::new(Vec::new()),
+            metrics,
+            kernel_enabled: true,
+            models: models_store,
+            tool_cache,
+            governor: governor_state,
+            feedback: feedback_hub,
+            cluster: cluster_state,
+            experiments: experiments_state,
+            capsules: capsules_store,
+            chat: chat_state,
+        }
+    }
+
+    fn sample_capsule(id: &str) -> GatingCapsule {
+        GatingCapsule {
+            id: id.to_string(),
+            version: "1".into(),
+            issued_at_ms: 0,
+            issuer: Some("issuer".into()),
+            hop_ttl: Some(1),
+            propagate: None,
+            denies: vec![],
+            contracts: vec![],
+            lease_duration_ms: None,
+            renew_within_ms: None,
+            signature: Some("sig".into()),
+        }
+    }
+
+    #[tokio::test]
+    async fn legacy_header_returns_gone_and_emits_failure_events() {
+        let temp = tempdir().expect("tempdir");
+        let state = build_state(temp.path()).await;
+        let bus = state.bus();
+        let mut rx = bus.subscribe_filtered(
+            vec![
+                TOPIC_POLICY_CAPSULE_FAILED.to_string(),
+                TOPIC_POLICY_DECISION.to_string(),
+            ],
+            Some(8),
+        );
+
+        let mut headers = HeaderMap::new();
+        let cap = sample_capsule("legacy-test");
+        let raw = serde_json::to_string(&cap).unwrap();
+        headers.insert(
+            LEGACY_HEADER_NAME.clone(),
+            HeaderValue::from_str(&raw).unwrap(),
+        );
+
+        let result = apply_capsule(&state, &headers).await;
+        let response = result.expect_err("legacy header should be rejected");
+        assert_eq!(response.status(), StatusCode::GONE);
+
+        let first = timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("event available")
+            .expect("bus not closed");
+        assert_eq!(first.kind, TOPIC_POLICY_CAPSULE_FAILED);
+        assert_eq!(first.payload["detail"].as_str(), Some(LEGACY_HEADER_DETAIL));
+        assert_eq!(first.payload["id"].as_str(), Some("legacy-test"));
+
+        let second = timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("second event available")
+            .expect("bus not closed");
+        assert_eq!(second.kind, TOPIC_POLICY_DECISION);
+        assert_eq!(second.payload["allow"].as_bool(), Some(false));
+        assert_eq!(
+            second.payload["explain"]["detail"].as_str(),
+            Some(LEGACY_HEADER_DETAIL)
+        );
     }
 }

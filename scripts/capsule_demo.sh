@@ -34,8 +34,8 @@ echo "Signing capsule..."
 SIG=$(cargo run -q -p arw-cli -- capsule sign-ed25519 "$PRV" "$CAP_JSON")
 echo "Signature: $SIG"
 
-echo "Sending capsule in header to /healthz (admin-gated routes recommended)..."
+echo "Sending capsule via X-ARW-Capsule header to /healthz (admin-gated routes recommended)..."
 HDR=$(jq -c --arg sig "$SIG" '.signature=$sig' "$CAP_JSON")
-curl -s -H "X-ARW-Gate: $HDR" "http://127.0.0.1:${PORT}/healthz" || true
+curl -s -H "X-ARW-Capsule: $HDR" "http://127.0.0.1:${PORT}/healthz" || true
 echo
 echo "Done. Capsule adopted ephemerally until restart."

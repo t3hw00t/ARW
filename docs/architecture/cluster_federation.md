@@ -35,7 +35,7 @@ Status:
 - AsyncAPI topics `hierarchy.role.changed` and `hierarchy.state` continue to stream updates from both servers; cluster matrix views still land in the upcoming read-model work.
 
 ## Policy Capsules & Gating
-Every interaction can carry a `GatingCapsule` (HTTP `X-ARW-Gate` header). Capsules propagate immutable denies, role/node/tags/time-window restrictions, and auto-renew leases. Ingress and egress guards enforce policy at the beginning and end of action/memory stacks (for example, `io:ingress:task.kind`, `io:egress:task.kind`). Regulatory Provenance Units (RPUs) add signatures, ABAC policy (Cedar), hop TTL, and adoption ledgers as part of the Complexity Collapse program.
+Every interaction can carry a `GatingCapsule` via the `X-ARW-Capsule` header. Capsules propagate immutable denies, role/node/tags/time-window restrictions, and auto-renew leases. Ingress and egress guards enforce policy at the beginning and end of action/memory stacks (for example, `io:ingress:task.kind`, `io:egress:task.kind`). Regulatory Provenance Units (RPUs) add signatures, ABAC policy (Cedar), hop TTL, and adoption ledgers as part of the Complexity Collapse program. Legacy `X-ARW-Gate` headers are rejected to avoid silent fallbacks during federation rollout and emit failure telemetry for incident review.
 
 ## Configuration (Today)
 `configs/default.toml` retains the transitional toggles while we finish porting:

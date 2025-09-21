@@ -8,6 +8,7 @@ This project follows Keep a Changelog and Semantic Versioning. All notable chang
 - Restored unified server chat endpoints (`/admin/chat*`) with debug UI panels for staging approvals, research watcher, and training telemetry.
 - Retired legacy `/memory/*` REST shims and the `/admin/events` alias; new admin helpers live at `/admin/memory/*` and SSE streams at `/events`.
 - Regenerated OpenAPI/JSON artifacts to reflect the updated surface and removed legacy routes.
+- Removed the legacy `X-ARW-Gate` capsule header; requests must send capsules with `X-ARW-Capsule` (legacy usage now returns HTTP 410 and emits failure telemetry).
 
 ## [0.1.4] - 2025-09-15
 
