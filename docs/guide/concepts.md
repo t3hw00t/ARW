@@ -7,7 +7,7 @@ title: Core Concepts
 
 This page orients you to ARW’s moving parts so the rest of the guide makes sense.
 
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: Explanation
 
 ## Service
@@ -38,7 +38,7 @@ Unified model
 - State, cache, and logs live under the `state/` directory. Read-model snapshots publish under `/state/*`. Set `ARW_PORTABLE=1` to keep everything beside the install when you need a self-contained folder.
 
 ## Desktop Launcher (Optional)
-- A Tauri app layers tray controls and inspectors on top of `arw-server`. While it finishes the port, it can still start the legacy stack for the classic debug panes.
+- A Tauri app layers tray controls and inspectors on top of `arw-server`. Set `ARW_DEBUG=1` to serve the classic debug panes from the unified service—no separate legacy stack required.
 
 ## Learn More
 - Quickstart: guide/quickstart.md

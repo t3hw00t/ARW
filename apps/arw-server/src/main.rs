@@ -1094,7 +1094,7 @@ async fn main() {
         endpoints_meta_acc,
         paths::ADMIN_INTROSPECT_STATS,
         api_metrics::metrics_overview,
-        "legacy"
+        "deprecated"
     );
     app = route_post_tag!(
         app,

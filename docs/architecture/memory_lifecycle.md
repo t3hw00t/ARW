@@ -4,7 +4,7 @@ title: Memory Lifecycle
 
 # Memory Lifecycle
 
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: Explanation
 
 Memory is a first-class surface in the unified server: the kernel (via `arw-memory-core`) stores layered memories, the `memory.*` actions manage them, and `/state/memory` patches plus events keep UIs and tools in sync. This page folds in the legacy `Memory & Training` content so we do not lose important details as the overlay service replaces the older `/memory/*` REST endpoints.
@@ -29,9 +29,9 @@ Policies propagate from inputs to memories and artifacts (`private`, `project`, 
 Quality metrics (recall, diversity, coverage) feed dashboards in Training Park and populate `state/memory_metrics` as those read-models ship.
 
 ## Live Memory Feedback
-- **Surfaces**: CLI (`--probe`), the legacy Debug UI (`/debug` with `ARW_DEBUG=1`), launcher overlays, and future unified UIs subscribe to `memory.*` events.
+- **Surfaces**: CLI (`--probe`), the debug UI served by `arw-server` (`/admin/debug` with `ARW_DEBUG=1`), launcher overlays, and upcoming unified SPAs subscribe to `memory.*` events.
 - **Signals**: `memory.applied`, `memory.delta`, `memory.dataset.version`, and working-set events explain which items landed and why.
-- **Status**: The unified server already emits the same events; the UI portion is still provided by the legacy service until the new sidecar lands.
+- **Status**: The unified server emits the events and serves the debug panes today; the new sidecar experience will layer on the same stream when it ships.
 
 ## Conditional Training
 Flow: `TrainingRequest` -> policy/consent review -> `TrainingPlan` -> commit -> `DatasetVersion` -> `MemoryDelta`.
@@ -65,7 +65,7 @@ Run `python3 scripts/gen_feature_catalog.py` after schema updates to keep the in
 ## Interplay with Hardware & Governor
 The governor publishes `GovernorChanged` events that memory planners listen to (for example, reducing expansion depth on low-power profiles). Hardware probes inform offload choices for embedding search and vector workloads.
 
-## Legacy Coverage
-`memory.probe`, `feedback.evaluate`, and `feedback.apply` tooling now run on the unified server (tool IDs match previous bridge behaviour). The new sidecar will surface these flows without the legacy UI.
+## Coverage Notes
+`memory.probe`, `feedback.evaluate`, and `feedback.apply` tooling run on the unified server (tool IDs match previous bridge behaviour). The new sidecar will surface these flows alongside the current debug panes.
 
 See also: Context Working Set, Data Governance, Context Recipes, Training Park.

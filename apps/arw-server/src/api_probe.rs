@@ -73,7 +73,7 @@ fn unauthorized() -> Response {
         .into_response()
 }
 
-/// Effective path probe (mirrors legacy `/admin/probe`).
+/// Effective path probe (successor to `/admin/probe`).
 #[utoipa::path(
     get,
     path = "/admin/probe",

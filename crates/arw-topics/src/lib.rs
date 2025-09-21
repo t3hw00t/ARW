@@ -1,7 +1,7 @@
 //! Canonical event topic constants shared across services.
 //!
 //! This crate centralizes the string constants used when publishing events
-//! so that both the legacy service and the unified server stay in sync.
+//! so that the unified server and its clients stay in sync.
 //! Keep this list alphabetized within sections and favor dot.case names.
 
 // Models / downloads

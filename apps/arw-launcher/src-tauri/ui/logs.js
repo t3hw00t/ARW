@@ -43,14 +43,31 @@ async function loadStats() {
   document.getElementById('stat').textContent = 'Loading…';
   try {
     let j = null;
-    if (window.__ARW_BASE_OVERRIDE) {
-      const tok = await ARW.connections.tokenFor(base);
-      j = await ARW.invoke('admin_get_json_base', { base, path: 'admin/introspect/stats', token: tok });
-    } else {
-      const url = base + '/admin/introspect/stats';
-      const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      j = await resp.json();
+    const statsPaths = ['state/route_stats', 'admin/introspect/stats'];
+    let lastErr = null;
+    for (const path of statsPaths) {
+      try {
+        if (window.__ARW_BASE_OVERRIDE) {
+          const tok = await ARW.connections.tokenFor(base);
+          j = await ARW.invoke('admin_get_json_base', { base, path, token: tok });
+        } else {
+          const url = base + '/' + path;
+          const resp = await fetch(url, { headers: { 'Accept': 'application/json' } });
+          if (!resp.ok) throw new Error('HTTP ' + resp.status);
+          j = await resp.json();
+        }
+        if (path === 'admin/introspect/stats') {
+          console.warn('[logs] /admin/introspect/stats is deprecated; prefer /state/route_stats');
+        }
+        lastErr = null;
+        break;
+      } catch (err) {
+        lastErr = err;
+        j = null;
+      }
+    }
+    if (!j) {
+      throw lastErr || new Error('Failed to load route stats');
     }
     lastJson = j; render(j);
     document.getElementById('stat').textContent = 'OK';

@@ -3,7 +3,7 @@ title: Events & Logs Windows
 ---
 
 # Events & Logs Windows
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: How‑to
 
 ## Events
@@ -21,4 +21,4 @@ Type: How‑to
 
 Endpoints
 - Events stream: `GET /events?prefix=...&replay=50`
-- Introspection: `GET /admin/introspect/stats`
+- Introspection (deprecated; use `/state/route_stats` in new flows): `GET /admin/introspect/stats`

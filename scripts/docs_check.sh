@@ -63,6 +63,36 @@ for f in "${files[@]}"; do
   done < <(grep -E '^(##|###) ' "$f" || true)
 done
 
+# Banned legacy flags or terminology creeping back in
+info "Checking for banned legacy flags"
+python3 - <<'PY' "$docs_dir" "$root_dir/README.md"
+import sys, pathlib
+root_docs = pathlib.Path(sys.argv[1])
+readme = pathlib.Path(sys.argv[2])
+targets = list(root_docs.rglob('*.md')) + [readme]
+hits = []
+for path in targets:
+    try:
+        text = path.read_text(encoding='utf-8')
+    except Exception as exc:
+        print(f"[error] {path}: cannot read ({exc})")
+        continue
+    for idx, line in enumerate(text.splitlines(), 1):
+        if '--Legacy' in line or ' -Legacy' in line:
+            hits.append((path, idx, line.strip()))
+if hits:
+    print('[error] Deprecated legacy flags detected:')
+    for path, line_no, line in hits:
+        rel = path.relative_to(pathlib.Path.cwd())
+        print(f"  {rel}:{line_no}: {line}")
+    # communicate error count via sentinel
+    print(f"__DOCS_CHECK_LEGACY_HITS__={len(hits)}")
+PY
+legacy_hits=$(grep -oE '__DOCS_CHECK_LEGACY_HITS__=[0-9]+' - | cut -d= -f2 || echo 0)
+if [[ "${legacy_hits:-0}" -gt 0 ]]; then
+  errors=$((errors+legacy_hits))
+fi
+
 # Link check for relative .md references
 info "Checking relative links to .md files"
 python3 - << 'PY' "$docs_dir"

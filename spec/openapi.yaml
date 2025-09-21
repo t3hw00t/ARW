@@ -1064,7 +1064,7 @@ paths:
     get:
       tags:
       - Admin/Introspect
-      summary: Effective path probe (mirrors legacy `/admin/probe`).
+      summary: Effective path probe (successor to `/admin/probe`).
       operationId: probe_effective_paths_doc
       responses:
         '200':
@@ -1074,7 +1074,7 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: Effective path probe (mirrors legacy `/admin/probe`).
+      description: Effective path probe (successor to `/admin/probe`).
   /admin/probe/hw:
     get:
       tags:

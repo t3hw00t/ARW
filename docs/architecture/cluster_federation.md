@@ -4,10 +4,10 @@ title: Federated Clustering
 
 # Federated Clustering
 
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: Explanation
 
-Clustering, live sharing, pooled compute, and optional revenue sharing let ARW grow beyond a single machine without losing the solo fast path. This page now merges the legacy “Clustering” and “Hierarchy” drafts so the active plan is tracked in one place.
+Clustering, live sharing, pooled compute, and optional revenue sharing let ARW grow beyond a single machine without losing the solo fast path. This page merges the earlier “Clustering” and “Hierarchy” drafts so the active plan is tracked in one place.
 
 ## High-Level Shape
 - **Home Node (Control Plane)**: owns projects, policies, budgets, provenance; there is always a single authoritative Home per workspace.
@@ -38,7 +38,7 @@ Status:
 Every interaction can carry a `GatingCapsule` (HTTP `X-ARW-Gate` header). Capsules propagate immutable denies, role/node/tags/time-window restrictions, and auto-renew leases. Ingress and egress guards enforce policy at the beginning and end of action/memory stacks (for example, `io:ingress:task.kind`, `io:egress:task.kind`). Regulatory Provenance Units (RPUs) add signatures, ABAC policy (Cedar), hop TTL, and adoption ledgers as part of the Complexity Collapse program.
 
 ## Configuration (Today)
-`configs/default.toml` retains the legacy toggles while we finish porting:
+`configs/default.toml` retains the transitional toggles while we finish porting:
 
 ```toml
 [cluster]
@@ -79,7 +79,7 @@ Contribution meters track accepted work per node (token usage, GPU-seconds, tool
 | --- | --- |
 | `/hierarchy/role`, `/hierarchy/state` | yes (HTTP, experimental) |
 | `/hierarchy/hello\|offer\|accept` | yes (HTTP, experimental) |
-| `/actions` queue (`/triad`) | yes; replaces legacy debug queue |
+| `/actions` queue (`/triad`) | yes; replaces the retired debug queue |
 | Local bus ↔ NATS aggregator | yes (`arw-core/nats` feature) |
 | gRPC control plane | planned (track in Roadmap) |
 | Worker ledger & contribution meter | planned; ledger schema lives in kernel |

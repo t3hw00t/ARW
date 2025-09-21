@@ -170,8 +170,8 @@ bash scripts/audit.sh --interactive
 ```
 
 ```powershell
-# Windows — quick debug run (legacy UI)
-scripts/debug.ps1 -Interactive -Legacy
+# Windows — quick debug run (debug UI served by arw-server)
+scripts/debug.ps1 -Interactive
 
 # Windows — supply-chain audit
 scripts/audit.ps1 -Interactive
@@ -183,7 +183,7 @@ scripts/audit.ps1 -Interactive
 - Windows (ARM64): https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-arm64.msi
 - All assets and notes: https://github.com/t3hw00t/ARW/releases
 
-_Note_: MSI bundles may still target legacy internals while the launcher migrates. Prefer running the unified server (`scripts/start.ps1` without `-Legacy`, or `scripts/start.sh --service-only`).
+_Note_: MSI bundles ship the launcher together with `arw-server`. Run the unified server directly (`scripts/start.ps1` or `scripts/start.sh --service-only`) for headless installs; the debug panels are served by `arw-server` when `ARW_DEBUG=1`.
 
 ## Architecture at a Glance
 

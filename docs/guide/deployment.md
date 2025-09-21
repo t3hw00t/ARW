@@ -4,7 +4,7 @@ title: Deployment & Isolation
 
 # Deployment & Isolation
 
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: How‑to
 
 Run the unified `arw-server` in the environment that fits your workflow while keeping state portable and scoped. These recipes focus on the `/actions` → `/events` → `/state/*` stack.
@@ -65,10 +65,10 @@ Overrides:
 - Virtualized environments can hide GPUs or NPUs. Keep an eye on `/admin/probe/hw` to confirm what the runtime sees.
 - Some vendor stacks need host drivers (Intel/NVIDIA/AMD). The runtime degrades gracefully to CPU when capabilities are absent.
 
-## Tauri Launcher (Legacy bridge)
-- Launcher bundles continue to target the legacy debug UI until the new surfaces land.
+## Tauri Launcher (Unified)
+- Launcher bundles layer tray controls and inspectors on top of `arw-server`; enable `ARW_DEBUG=1` to serve the debug panels from the same process.
 - Linux builds need `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `libjavascriptcoregtk-4.1-dev`, and `libsoup-3.0-dev` (or the Nix shell via `nix develop`).
-- Use `just tauri-launcher-run -- --open` to launch the UI with `/debug` enabled during development.
+- Use `just tauri-launcher-run -- --open` to launch the UI with `/admin/debug` available during development.
 
 ## Containers
 
@@ -143,4 +143,4 @@ Add `ARW_ACCESS_UA=1 ARW_ACCESS_UA_HASH=1 ARW_ACCESS_REF=1` when you need user-a
 - `GET /state/runtime_matrix` — confirms discovery of local or remote workers as they land
 - `GET /admin/probe` — effective state paths (requires admin token)
 
-Keep the unified server as the default; fall back to the legacy service only for the debug UI while porting completes.
+Keep the unified server as the default; the legacy bridge has been removed, so all surfaces run on `arw-server`.

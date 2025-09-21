@@ -10,7 +10,7 @@ Type: Reference
 
 ## To Do
 - [t-250917235817-3181] Retarget launcher to unified server — todo (updated: 2025-09-17 22:44:29 UTC)
-    - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; keeps legacy fallback.
+    - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; legacy fallback removed.
 - [t-250917235820-3900] Decommission legacy artifacts — todo (updated: 2025-09-17 21:58:20 UTC)
     - 2025-09-21 04:15:00 UTC: `/admin/state/*` and `/admin/projects/*` routes marked deprecated in OpenAPI/JSON; plan decommission once replacement UIs and APIs are confirmed.
     - 2025-09-21 05:30:00 UTC: Removed `/admin/projects/*` endpoints from the server/spec; all docs now reference `/state/projects*` and `/projects*`.

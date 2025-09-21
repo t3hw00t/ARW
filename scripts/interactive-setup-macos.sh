@@ -80,7 +80,7 @@ dependencies_menu() {
   2) Install cargo-nextest (tests)
   3) Install jq (brew or local)
   4) Install pkg-config (optional)
-  5) Install GTK (legacy; optional)
+  5) Install GTK (launcher UI; optional)
   6) Create local MkDocs venv (.venv)
   7) Toggle use of Nix devshell for builds [current: ${ARW_USE_NIX}]
   8) Toggle system package managers (brew/apt) [current: ${ARW_ALLOW_SYSTEM_PKGS:-0}]
