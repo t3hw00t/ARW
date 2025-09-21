@@ -114,6 +114,22 @@ fn render_prometheus(summary: &MetricsSummary, bus: &arw_events::BusStats) -> St
         );
         write_metric_line(&mut out, "arw_task_aborted_total", &labels, status.aborted);
     }
+    out.push_str("# HELP arw_legacy_capsule_headers_total Legacy capsule headers rejected\n# TYPE arw_legacy_capsule_headers_total counter\n");
+    write_metric_line(
+        &mut out,
+        "arw_legacy_capsule_headers_total",
+        &[],
+        summary.compatibility.legacy_capsule_headers,
+    );
+    out.push_str("# HELP arw_legacy_route_hits_total Hits on legacy/compatibility HTTP shims\n# TYPE arw_legacy_route_hits_total counter\n");
+    for (path, count) in summary.compatibility.legacy_routes.iter() {
+        write_metric_line(
+            &mut out,
+            "arw_legacy_route_hits_total",
+            &[("path", path.clone())],
+            count,
+        );
+    }
     out
 }
 
@@ -154,6 +170,7 @@ pub async fn metrics_overview(headers: HeaderMap, State(state): State<AppState>)
         "events": summary.events,
         "routes": summary.routes,
         "tasks": summary.tasks,
+        "compatibility": summary.compatibility,
         "bus": {
             "published": bus.published,
             "delivered": bus.delivered,

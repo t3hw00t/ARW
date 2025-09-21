@@ -158,7 +158,27 @@ pub fn arw_gate(attr: TokenStream, item: TokenStream) -> TokenStream {
     let key = key_lit.value();
     let gate_stmt = quote! {
         if !arw_core::gating::allowed(#key) {
-            return (axum::http::StatusCode::FORBIDDEN, "gated").into_response();
+            let detail = if let Some(meta) = arw_core::gating_keys::find(#key) {
+                format!(
+                    "gated [{}] {} ({}) - {}",
+                    #key,
+                    meta.title,
+                    meta.stability,
+                    meta.summary
+                )
+            } else {
+                format!("gated [{}]", #key)
+            };
+            return (
+                axum::http::StatusCode::FORBIDDEN,
+                axum::Json(serde_json::json!({
+                    "type": "about:blank",
+                    "title": "Forbidden",
+                    "status": 403,
+                    "detail": detail,
+                })),
+            )
+                .into_response();
         }
     };
     // Prepend gate check to the function body
@@ -218,27 +238,106 @@ pub fn arw_admin(attr: TokenStream, item: TokenStream) -> TokenStream {
     let path_s = path.unwrap_or_else(|| "/admin".to_string());
     let summary_s: String = summary.unwrap_or_default();
 
-    // Minimal compile-time validations
-    let mut preamble = proc_macro2::TokenStream::new();
-    let valid_methods = ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"];
-    if !valid_methods.iter().any(|m| *m == method_s) {
-        preamble.extend(
-            quote! { compile_error!("arw_admin: method must be an HTTP verb like GET/POST"); },
-        );
-    }
-    if !path_s.starts_with("/admin") {
-        preamble.extend(quote! { compile_error!("arw_admin: path must start with '/admin'"); });
-    }
-
     let method_lit = LitStr::new(&method_s, Span::call_site());
     let path_lit = LitStr::new(&path_s, Span::call_site());
     let summary_lit = LitStr::new(&summary_s, Span::call_site());
 
     let gen = quote! {
-        #preamble
         #input_fn
         inventory::submit! {
-            arw_core::AdminEndpoint { method: #method_lit, path: #path_lit, summary: #summary_lit }
+            arw_core::AdminEndpoint {
+                method: #method_lit,
+                path: #path_lit,
+                summary: #summary_lit,
+            }
+        }
+    };
+    gen.into()
+}
+
+/// Declare a connector manifest and register it for discovery.
+/// Usage:
+/// #[arw_connector(
+///   id="connector.example",
+///   version="1.0.0",
+///   summary="Example connector",
+///   vendor="Example Corp",
+///   license="MIT"
+/// )]
+/// pub struct ExampleConnector;
+#[proc_macro_attribute]
+pub fn arw_connector(attr: TokenStream, item: TokenStream) -> TokenStream {
+    let metas = Punctuated::<Meta, Token![,]>::parse_terminated
+        .parse(attr)
+        .unwrap_or_default();
+    let input = parse_macro_input!(item as syn::ItemStruct);
+
+    let mut id: Option<String> = None;
+    let mut version: Option<String> = None;
+    let mut summary: Option<String> = None;
+    let mut vendor: Option<String> = None;
+    let mut license: Option<String> = None;
+
+    for m in metas {
+        if let Meta::NameValue(nv) = m {
+            let key = nv.path.get_ident().map(|i| i.to_string());
+            if let Some(k) = key {
+                match (k.as_str(), &nv.value) {
+                    (
+                        "id",
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Str(s), ..
+                        }),
+                    ) => id = Some(s.value()),
+                    (
+                        "version",
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Str(s), ..
+                        }),
+                    ) => version = Some(s.value()),
+                    (
+                        "summary",
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Str(s), ..
+                        }),
+                    ) => summary = Some(s.value()),
+                    (
+                        "vendor",
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Str(s), ..
+                        }),
+                    ) => vendor = Some(s.value()),
+                    (
+                        "license",
+                        Expr::Lit(ExprLit {
+                            lit: Lit::Str(s), ..
+                        }),
+                    ) => license = Some(s.value()),
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    let id_lit = LitStr::new(
+        id.as_deref().unwrap_or("connector.unknown"),
+        Span::call_site(),
+    );
+    let version_lit = LitStr::new(version.as_deref().unwrap_or("0.0.0"), Span::call_site());
+    let summary_lit = LitStr::new(summary.as_deref().unwrap_or(""), Span::call_site());
+    let vendor_lit = LitStr::new(vendor.as_deref().unwrap_or(""), Span::call_site());
+    let license_lit = LitStr::new(license.as_deref().unwrap_or(""), Span::call_site());
+
+    let gen = quote! {
+        #input
+        inventory::submit! {
+            arw_core::ConnectorManifest {
+                id: #id_lit,
+                version: #version_lit,
+                summary: #summary_lit,
+                vendor: #vendor_lit,
+                license: #license_lit,
+            }
         }
     };
     gen.into()

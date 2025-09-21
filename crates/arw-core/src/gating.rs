@@ -5,6 +5,8 @@ use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::RwLock;
 
+use tracing::Level;
+
 #[derive(Default, Clone, Serialize)]
 pub struct GateState {
     // Immutable denies set by user policy (config/env). Once set, cannot be removed at runtime.
@@ -125,6 +127,28 @@ fn wildcard_match(pattern: &str, key: &str) -> bool {
     }
 }
 
+#[inline]
+fn gate_denied(key: &str, source: &str, pattern: Option<&str>) -> bool {
+    if tracing::enabled!(Level::INFO) {
+        let pattern = pattern.unwrap_or("");
+        if let Some(meta) = crate::gating_keys::find(key) {
+            tracing::info!(
+                target: "arw::gating",
+                key,
+                source,
+                pattern,
+                title = meta.title,
+                stability = meta.stability,
+                summary = meta.summary,
+                "gating denied"
+            );
+        } else {
+            tracing::info!(target: "arw::gating", key, source, pattern, "gating denied");
+        }
+    }
+    false
+}
+
 /// Initialize immutable user policy denies from a TOML file and env var.
 pub fn init_from_config(path: &str) {
     let mut denies: HashSet<String> = HashSet::new();
@@ -196,12 +220,12 @@ pub fn allowed(key: &str) -> bool {
         let st = cell().read().unwrap();
         for p in &st.deny_user {
             if wildcard_match(p, key) {
-                return false;
+                return gate_denied(key, "user_policy", Some(p.as_str()));
             }
         }
         for p in &st.deny_hier {
             if wildcard_match(p, key) {
-                return false;
+                return gate_denied(key, "hierarchy_policy", Some(p.as_str()));
             }
         }
     }
@@ -211,7 +235,7 @@ pub fn allowed(key: &str) -> bool {
     for cap in runtime.capsules.values() {
         for p in &cap.denies {
             if wildcard_match(p, key) {
-                return false;
+                return gate_denied(key, "runtime_capsule", Some(p.as_str()));
             }
         }
     }
@@ -265,20 +289,20 @@ pub fn allowed(key: &str) -> bool {
                     ent.1 = 0;
                 }
                 if ent.1 >= limit {
-                    return false;
+                    return gate_denied(key, "quota_budget", Some(c.id.as_str()));
                 }
                 // allow this occurrence and increment counter
                 ent.1 += 1;
                 continue;
             }
-            return false; // plain deny while active
+            return gate_denied(key, "contract_active", Some(c.id.as_str()));
         }
         // Not active (expired) — auto renew?
         if !active {
             if let Some(renew) = c.auto_renew_secs {
                 let new_to = now.saturating_add(renew * 1000);
                 runtime.expires.insert(c.id.clone(), new_to);
-                return false; // becomes active immediately on first check
+                return gate_denied(key, "contract_auto_renew", Some(c.id.as_str()));
             }
         }
     }

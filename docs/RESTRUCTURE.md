@@ -225,6 +225,14 @@ Notes
 | Medium | Training Park metrics | Launcher pane is a stub with no dedicated telemetry `docs/guide/training_park.md`. | Publish training read-model, expose adjustments via actions, and bind UI charts. |
 | Medium | Interactive snappy bench | ✅ `snappy-bench` CLI hits `/actions` + `/events`, enforces budgets, and publishes quick-start docs. | ✅ CI runs `scripts/ci_snappy_bench.sh` (queue budget 500 ms); capture long-term baselines per performance preset. |
 
+### Legacy Retirement Checklist
+- Instrumentation is in place: legacy capsule headers increment `arw_legacy_capsule_headers_total`, and compatibility shims like `/debug` emit `arw_legacy_route_hits_total` so dashboards can highlight straggler clients.
+- Capsule leases refresh before every action submission, egress policy resolution, and tool invocation; passive renewals emit `policy.capsule.expired` without requiring HTTP traffic through the middleware.
+- Guardrail defaults now assume DNS guard + loopback proxy unless explicitly disabled (`ARW_DNS_GUARD_ENABLE=0`, `ARW_EGRESS_PROXY_ENABLE=0`), keeping new nodes locked down by default.
+- Start scripts (`scripts/start.{sh,ps1}`) and interactive helpers inherit those hardened defaults; verify staging starts without overriding them and document any environments that must opt out.
+- Gating key docs are enforced in CI: `render_markdown`/`render_json` fixtures must match `docs/GATING_KEYS.{md,json}`, preventing drift between code and references.
+- Publish this checklist with release notes when announcing final legacy shutdown so automation owners can verify metrics trends (legacy counters → zero) before the cutover window.
+
 ## Migration Plan (High‑level)
 1) Kernel + Triad API complete in `arw-server` (now)
    - Actions lifecycle (done: submit/get/state)

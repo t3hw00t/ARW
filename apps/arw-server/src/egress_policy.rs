@@ -1,8 +1,6 @@
 use serde_json::{json, Value};
 
-use crate::{read_models, AppState};
-use arw_topics as topics;
-use chrono::Utc;
+use crate::{capsule_guard, AppState};
 
 fn domain_suffix(host: &str) -> Option<String> {
     host.find('.').and_then(|idx| {
@@ -110,11 +108,23 @@ impl AllowRule {
     }
 }
 
+fn env_flag(key: &str, default: bool) -> bool {
+    match std::env::var(key) {
+        Ok(value) => matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "on"
+        ),
+        Err(_) => default,
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct ResolvedPolicy {
     pub posture: Posture,
     pub allow_rules: Vec<AllowRule>,
     pub block_ip_literals: bool,
+    pub dns_guard_enabled: bool,
+    pub proxy_enabled: bool,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -215,34 +225,15 @@ fn merge_allowlists(base: Vec<String>, extra: Vec<String>) -> Vec<AllowRule> {
 }
 
 pub async fn resolve_policy(state: &AppState) -> ResolvedPolicy {
-    let replay = state.capsules().replay_all().await;
-    if !replay.expired.is_empty() {
-        let expired_ms = Utc::now().timestamp_millis().max(0) as u64;
-        for snapshot in &replay.expired {
-            state.bus().publish(
-                topics::TOPIC_POLICY_CAPSULE_EXPIRED,
-                &serde_json::json!({
-                    "id": snapshot.id,
-                    "version": snapshot.version,
-                    "issuer": snapshot.issuer,
-                    "expired_ms": expired_ms,
-                    "applied_ms": snapshot.applied_ms,
-                    "lease_until_ms": snapshot.lease_until_ms,
-                }),
-            );
-        }
-        let snapshot = state.capsules().snapshot().await;
-        read_models::publish_read_model_patch(&state.bus(), "policy_capsules", &snapshot);
-    }
+    capsule_guard::refresh_capsules(state).await;
     let cfg = state.config_state().lock().await.clone();
     let posture_str = env_posture()
         .or_else(|| config_posture(&cfg))
         .unwrap_or_else(|| "standard".into());
     let posture = Posture::from_str(&posture_str).effective();
-    let block_ip_literals = std::env::var("ARW_EGRESS_BLOCK_IP_LITERALS")
-        .ok()
-        .as_deref()
-        == Some("1");
+    let block_ip_literals = env_flag("ARW_EGRESS_BLOCK_IP_LITERALS", false);
+    let dns_guard_enabled = env_flag("ARW_DNS_GUARD_ENABLE", true);
+    let proxy_enabled = env_flag("ARW_EGRESS_PROXY_ENABLE", true);
 
     let env_list = env_allowlist();
     let cfg_list = config_allowlist(&cfg);
@@ -268,6 +259,8 @@ pub async fn resolve_policy(state: &AppState) -> ResolvedPolicy {
         posture,
         allow_rules,
         block_ip_literals,
+        dns_guard_enabled,
+        proxy_enabled,
     }
 }
 
@@ -407,6 +400,8 @@ mod tests {
             posture: Posture::Allowlist,
             allow_rules: merge_allowlists(vec!["*.example.com".into()], Vec::new()),
             block_ip_literals: false,
+            dns_guard_enabled: true,
+            proxy_enabled: true,
         };
         assert!(matches!(
             evaluate(&policy, Some("api.example.com"), Some(443), "https"),

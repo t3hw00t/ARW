@@ -28,8 +28,18 @@ fn bytes_body(b: Bytes) -> ProxyBody {
     Full::new(b).boxed()
 }
 
+fn env_flag(key: &str, default: bool) -> bool {
+    match std::env::var(key) {
+        Ok(value) => matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "on"
+        ),
+        Err(_) => default,
+    }
+}
+
 fn dns_guard() -> bool {
-    std::env::var("ARW_DNS_GUARD_ENABLE").ok().as_deref() == Some("1")
+    env_flag("ARW_DNS_GUARD_ENABLE", true)
 }
 fn is_doh_host(h: &str) -> bool {
     let h = h.to_ascii_lowercase();
@@ -61,7 +71,7 @@ struct ProxyRuntime {
 static PROXY: Lazy<Mutex<Option<ProxyRuntime>>> = Lazy::new(|| Mutex::new(None));
 
 pub async fn apply_current(state: AppState) {
-    let enable = std::env::var("ARW_EGRESS_PROXY_ENABLE").ok().as_deref() == Some("1");
+    let enable = env_flag("ARW_EGRESS_PROXY_ENABLE", true);
     let port: u16 = std::env::var("ARW_EGRESS_PROXY_PORT")
         .ok()
         .and_then(|s| s.parse().ok())
@@ -185,6 +195,8 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
     base_meta.insert("capabilities".into(), json!(caps));
     base_meta.insert("policy_posture".into(), json!(policy.posture.as_str()));
     base_meta.insert("policy_allow".into(), json!(posture_decision.allow));
+    base_meta.insert("policy_dns_guard".into(), json!(policy.dns_guard_enabled));
+    base_meta.insert("policy_proxy_enabled".into(), json!(policy.proxy_enabled));
     if let Some(reason) = posture_decision.reason {
         base_meta.insert("policy_reason".into(), json!(reason_code(reason)));
     }

@@ -5,7 +5,7 @@ use arw_wasi::ToolHost;
 use serde_json::{json, Value};
 
 use crate::tool_cache::StoreOutcome;
-use crate::AppState;
+use crate::{capsule_guard, AppState};
 
 mod guardrails;
 pub(crate) use guardrails::metrics as guardrails_metrics_value;
@@ -13,6 +13,7 @@ mod error;
 pub use error::ToolError;
 
 pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value, ToolError> {
+    capsule_guard::refresh_capsules(state).await;
     let start = Instant::now();
     let bus = state.bus();
     let cache = state.tool_cache();

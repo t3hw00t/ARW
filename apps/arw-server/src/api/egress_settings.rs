@@ -39,8 +39,14 @@ pub(crate) struct EgressSettingsPatch {
     pub ledger_enable: Option<bool>,
 }
 
-fn get_env_flag(key: &str) -> bool {
-    std::env::var(key).ok().as_deref() == Some("1")
+fn env_flag(key: &str, default: bool) -> bool {
+    match std::env::var(key) {
+        Ok(value) => matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "on"
+        ),
+        Err(_) => default,
+    }
 }
 
 pub(crate) fn current_settings() -> EgressSettings {
@@ -59,14 +65,14 @@ pub(crate) fn current_settings() -> EgressSettings {
     EgressSettings {
         posture,
         allowlist,
-        block_ip_literals: get_env_flag("ARW_EGRESS_BLOCK_IP_LITERALS"),
-        dns_guard_enable: get_env_flag("ARW_DNS_GUARD_ENABLE"),
-        proxy_enable: get_env_flag("ARW_EGRESS_PROXY_ENABLE"),
+        block_ip_literals: env_flag("ARW_EGRESS_BLOCK_IP_LITERALS", false),
+        dns_guard_enable: env_flag("ARW_DNS_GUARD_ENABLE", true),
+        proxy_enable: env_flag("ARW_EGRESS_PROXY_ENABLE", true),
         proxy_port: std::env::var("ARW_EGRESS_PROXY_PORT")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(9080),
-        ledger_enable: get_env_flag("ARW_EGRESS_LEDGER_ENABLE"),
+        ledger_enable: env_flag("ARW_EGRESS_LEDGER_ENABLE", false),
     }
 }
 
@@ -226,17 +232,14 @@ pub async fn egress_settings_update(
     let out = EgressSettings {
         posture,
         allowlist,
-        block_ip_literals: std::env::var("ARW_EGRESS_BLOCK_IP_LITERALS")
-            .ok()
-            .as_deref()
-            == Some("1"),
-        dns_guard_enable: std::env::var("ARW_DNS_GUARD_ENABLE").ok().as_deref() == Some("1"),
-        proxy_enable: std::env::var("ARW_EGRESS_PROXY_ENABLE").ok().as_deref() == Some("1"),
+        block_ip_literals: env_flag("ARW_EGRESS_BLOCK_IP_LITERALS", false),
+        dns_guard_enable: env_flag("ARW_DNS_GUARD_ENABLE", true),
+        proxy_enable: env_flag("ARW_EGRESS_PROXY_ENABLE", true),
         proxy_port: std::env::var("ARW_EGRESS_PROXY_PORT")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(9080),
-        ledger_enable: std::env::var("ARW_EGRESS_LEDGER_ENABLE").ok().as_deref() == Some("1"),
+        ledger_enable: env_flag("ARW_EGRESS_LEDGER_ENABLE", false),
     };
     (
         axum::http::StatusCode::OK,

@@ -19,7 +19,8 @@ use arw_protocol::GatingCapsule;
 
 use crate::{read_models, AppState};
 use arw_topics::{
-    TOPIC_POLICY_CAPSULE_APPLIED, TOPIC_POLICY_CAPSULE_FAILED, TOPIC_POLICY_DECISION,
+    TOPIC_POLICY_CAPSULE_APPLIED, TOPIC_POLICY_CAPSULE_EXPIRED, TOPIC_POLICY_CAPSULE_FAILED,
+    TOPIC_POLICY_DECISION,
 };
 
 const EVENT_THROTTLE_MS: u64 = 2_000;
@@ -252,6 +253,29 @@ impl CapsuleStore {
     }
 }
 
+pub async fn refresh_capsules(state: &AppState) -> ReplayOutcome {
+    let replay = state.capsules().replay_all().await;
+    if !replay.expired.is_empty() {
+        let expired_ms = now_ms();
+        for snapshot in &replay.expired {
+            state.bus().publish(
+                TOPIC_POLICY_CAPSULE_EXPIRED,
+                &json!({
+                    "id": snapshot.id,
+                    "version": snapshot.version,
+                    "issuer": snapshot.issuer,
+                    "expired_ms": expired_ms,
+                    "applied_ms": snapshot.applied_ms,
+                    "lease_until_ms": snapshot.lease_until_ms,
+                }),
+            );
+        }
+        let snapshot = state.capsules().snapshot().await;
+        read_models::publish_read_model_patch(&state.bus(), "policy_capsules", &snapshot);
+    }
+    replay
+}
+
 pub async fn capsule_mw(state: AppState, req: Request<Body>, next: Next) -> Response {
     match apply_capsule(&state, req.headers()).await {
         Ok(_) => next.run(req).await,
@@ -264,7 +288,13 @@ async fn apply_capsule(state: &AppState, headers: &HeaderMap) -> Result<(), Resp
         CapsuleHeader::None => return Ok(()),
         CapsuleHeader::Current(v) => v,
         CapsuleHeader::Legacy(raw) => {
+            state.metrics().record_legacy_capsule_header();
             let capsule_id = parse_capsule(raw).ok().map(|cap| cap.id);
+            if let Some(id) = capsule_id.as_deref() {
+                tracing::warn!(target: "arw::policy", capsule_id = id, "legacy capsule header rejected");
+            } else {
+                tracing::warn!(target: "arw::policy", "legacy capsule header rejected (unparseable id)");
+            }
             publish_failure(state, capsule_id.as_deref(), LEGACY_HEADER_DETAIL).await;
             return Err(error_response(
                 StatusCode::GONE,

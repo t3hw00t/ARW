@@ -100,6 +100,9 @@ export ARW_HTTP_TIMEOUT_SECS="$timeout_secs"
 [[ $debug -eq 1 ]] && export ARW_DEBUG=1 || true
 [[ -n "$docs_url" ]] && export ARW_DOCS_URL="$docs_url" || true
 [[ -n "$admin_token" ]] && export ARW_ADMIN_TOKEN="$admin_token" || true
+# Hardened defaults unless caller overrides
+export ARW_EGRESS_PROXY_ENABLE="${ARW_EGRESS_PROXY_ENABLE:-1}"
+export ARW_DNS_GUARD_ENABLE="${ARW_DNS_GUARD_ENABLE:-1}"
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$DIR/.." && pwd)"

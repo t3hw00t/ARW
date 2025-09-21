@@ -13,7 +13,7 @@ Scope
 Runbook
 - Build: `cargo build --workspace` (or `just dev-server` for the unified server)
 - Start unified server: `ARW_PORT=8091 cargo run -p arw-server`
-- Enable proxy + guard: `ARW_EGRESS_PROXY_ENABLE=1 ARW_DNS_GUARD_ENABLE=1 ARW_EGRESS_LEDGER_ENABLE=1`
+- Proxy/DNS guard now default on (`ARW_EGRESS_PROXY_ENABLE=1`, `ARW_DNS_GUARD_ENABLE=1`); set them to `0` only if you intentionally disable enforcement. Ledger remains opt-in via `ARW_EGRESS_LEDGER_ENABLE=1`.
 - Inspect settings: `GET /state/egress/settings`
 - Update settings: `POST /egress/settings` (admin header required)
 - Preview egress: `POST /egress/preview` with `{ url, method? }`

@@ -24,6 +24,17 @@ fn problem(status: StatusCode, title: &str, detail: Option<&str>) -> Response {
     (status, Json(body)).into_response()
 }
 
+fn gating_detail(key: &str, fallback: &str) -> String {
+    if let Some(meta) = arw_core::gating_keys::find(key) {
+        format!(
+            "{} [{}] {} ({}) - {}",
+            fallback, key, meta.title, meta.stability, meta.summary
+        )
+    } else {
+        format!("{} [{}]", fallback, key)
+    }
+}
+
 #[utoipa::path(
     get,
     path = "/admin/tools",
@@ -82,14 +93,17 @@ pub async fn tools_run(
 
     let ingress_key = format!("io:ingress:tools.{}", req.id);
     if !arw_core::gating::allowed(&ingress_key) {
-        return problem(StatusCode::FORBIDDEN, "Forbidden", Some("gated:ingress"));
+        let detail = gating_detail(&ingress_key, "gated:ingress");
+        return problem(StatusCode::FORBIDDEN, "Forbidden", Some(detail.as_str()));
     }
 
     if req.id == "ui.screenshot.capture" && !arw_core::gating::allowed("io:screenshot") {
-        return problem(StatusCode::FORBIDDEN, "Forbidden", Some("gated:screenshot"));
+        let detail = gating_detail("io:screenshot", "gated:screenshot");
+        return problem(StatusCode::FORBIDDEN, "Forbidden", Some(detail.as_str()));
     }
     if req.id == "ui.screenshot.ocr" && !arw_core::gating::allowed("io:ocr") {
-        return problem(StatusCode::FORBIDDEN, "Forbidden", Some("gated:ocr"));
+        let detail = gating_detail("io:ocr", "gated:ocr");
+        return problem(StatusCode::FORBIDDEN, "Forbidden", Some(detail.as_str()));
     }
 
     let tool_id = req.id.clone();
@@ -136,7 +150,8 @@ pub async fn tools_run(
 
     let egress_key = format!("io:egress:tools.{}", tool_id);
     if !arw_core::gating::allowed(&egress_key) {
-        return problem(StatusCode::FORBIDDEN, "Forbidden", Some("gated:egress"));
+        let detail = gating_detail(&egress_key, "gated:egress");
+        return problem(StatusCode::FORBIDDEN, "Forbidden", Some(detail.as_str()));
     }
 
     Json(output).into_response()

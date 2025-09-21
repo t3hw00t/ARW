@@ -32,8 +32,8 @@ The effective posture is resolved from `PATCH /egress/settings` or the correspon
 
 ## Configuration
 - `ARW_NET_POSTURE`: `off|public|allowlist|custom`
-- `ARW_EGRESS_PROXY_ENABLE`: `1` (per node; preview forward proxy)
-- `ARW_DNS_GUARD_ENABLE`: `1` (per node)
+- `ARW_EGRESS_PROXY_ENABLE`: `1` (per node; preview forward proxy, defaults to enabled)
+- `ARW_DNS_GUARD_ENABLE`: `1` (per node, defaults to enabled)
 - `ARW_EGRESS_BLOCK_IP_LITERALS`: `1` (block IP-literal hosts for built‑in `http.fetch`)
 - `ARW_EGRESS_LEDGER_ENABLE`: `1` (log decisions)
 

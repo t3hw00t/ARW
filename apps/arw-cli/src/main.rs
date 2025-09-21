@@ -42,7 +42,7 @@ enum Commands {
 #[derive(Subcommand)]
 enum GateCmd {
     /// List known gating keys
-    Keys,
+    Keys(GateKeysArgs),
 }
 
 #[derive(Subcommand)]
@@ -68,6 +68,19 @@ struct PathsArgs {
 struct ToolsArgs {
     /// Pretty-print JSON
     #[arg(long)]
+    pretty: bool,
+}
+
+#[derive(Args)]
+struct GateKeysArgs {
+    /// Show grouped metadata and stability details
+    #[arg(long, conflicts_with = "json")]
+    details: bool,
+    /// Emit JSON instead of text
+    #[arg(long, conflicts_with = "details")]
+    json: bool,
+    /// Pretty-print JSON output
+    #[arg(long, requires = "json")]
     pretty: bool,
 }
 
@@ -186,9 +199,39 @@ fn main() {
             }
         }
         Some(Commands::Gate { cmd }) => match cmd {
-            GateCmd::Keys => {
-                for k in gating_keys::list() {
-                    println!("{}", k);
+            GateCmd::Keys(args) => {
+                if args.json {
+                    let payload = gating_keys::render_json(None);
+                    if args.pretty {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&payload).unwrap_or_else(|_| "{}".into())
+                        );
+                    } else {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&payload).unwrap_or_else(|_| "{}".into())
+                        );
+                    }
+                } else if args.details {
+                    let groups = gating_keys::groups();
+                    let total_keys: usize = groups.iter().map(|g| g.keys.len()).sum();
+                    println!(
+                        "Total groups: {} | Total keys: {}\n",
+                        groups.len(),
+                        total_keys
+                    );
+                    for group in groups {
+                        println!("{} — {}", group.name, group.summary);
+                        for key in group.keys {
+                            println!("  {:<24} {:<8} {}", key.id, key.stability, key.summary);
+                        }
+                        println!();
+                    }
+                } else {
+                    for key in gating_keys::list() {
+                        println!("{}", key);
+                    }
                 }
             }
         },

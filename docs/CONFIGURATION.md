@@ -205,10 +205,10 @@ SSE contract: see `architecture/sse_patch_contract.md` for `Last-Event-ID` and J
 ### Network Posture & Egress (Planned)
 These options control the policy‑backed egress gateway; some are implemented as noted.
 - `ARW_NET_POSTURE`: network posture per project: `off|public|allowlist|custom`.
-- `ARW_EGRESS_PROXY_ENABLE`: `1` to enable a host‑local egress proxy per node. (preview forward proxy)
+- `ARW_EGRESS_PROXY_ENABLE`: `1` to enable a host‑local egress proxy per node (default: `1`). (preview forward proxy)
 - `ARW_EGRESS_PROXY_PORT`: listen port for the local proxy (default `9080`).
 - `ARW_EGRESS_BLOCK_IP_LITERALS`: `1` to disallow IP‑literal hosts (require named hosts) for built‑in effectors. (implemented for `http.fetch`)
- - `ARW_DNS_GUARD_ENABLE`: `1` to guard DNS egress: proxy blocks DoH/DoT (`dns.google`, `cloudflare-dns.com`, port `853`), `/dns-query` paths, and `application/dns-message` payloads. Headless tools route via the proxy when enabled.
+- `ARW_DNS_GUARD_ENABLE`: `1` to guard DNS egress (default: `1`): proxy blocks DoH/DoT (`dns.google`, `cloudflare-dns.com`, port `853`), `/dns-query` paths, and `application/dns-message` payloads. Headless tools route via the proxy when enabled.
 - `ARW_DISABLE_HTTP3`: `1` to disable HTTP/3 for headless scrapers, ensuring proxy enforcement.
 - `ARW_EGRESS_LEDGER`: path to append‑only egress ledger (default `state://egress.jsonl`).
 - `ARW_EGRESS_LEDGER_ENABLE`: `1` to append entries to the egress ledger (opt‑in). (implemented)

@@ -227,17 +227,15 @@ fn export_gating_keys() -> Result<(), std::io::Error> {
             .unwrap_or_else(|| std::path::Path::new(".")),
     )?;
     let generated_at = Utc::now().format("%Y-%m-%d %H:%M UTC").to_string();
-    let mut out = format!(
-        "---\ntitle: Gating Keys\n---\n\n# Gating Keys\nGenerated: {}\nType: Reference\n\nGenerated from code.\n\n",
-        generated_at
-    );
-    for key in arw_core::gating_keys::list() {
-        out.push_str(&format!("- `{}`\n", key));
-    }
-    if !out.ends_with('\n') {
-        out.push('\n');
-    }
-    std::fs::write(keys_path, out)
+    let markdown = arw_core::gating_keys::render_markdown(&generated_at);
+    std::fs::write(keys_path, markdown)?;
+
+    let json_path = keys_path.with_extension("json");
+    let json_payload = arw_core::gating_keys::render_json(Some(&generated_at));
+    std::fs::write(
+        json_path,
+        serde_json::to_string_pretty(&json_payload).unwrap_or_else(|_| "{}".into()),
+    )
 }
 
 fn spawn_bus_forwarders(

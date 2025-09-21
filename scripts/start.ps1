@@ -39,6 +39,13 @@ if ($DocsUrl) { if (-not $DryRun) { $env:ARW_DOCS_URL = $DocsUrl } else { Dry "W
 if ($AdminToken) { if (-not $DryRun) { $env:ARW_ADMIN_TOKEN = $AdminToken } else { Dry 'Would set ARW_ADMIN_TOKEN=<redacted>' } }
 if ($TimeoutSecs) { if (-not $DryRun) { $env:ARW_HTTP_TIMEOUT_SECS = "$TimeoutSecs" } else { Dry "Would set ARW_HTTP_TIMEOUT_SECS=$TimeoutSecs" } }
 if ($Port) { if (-not $DryRun) { $env:ARW_PORT = "$Port" } else { Dry "Would set ARW_PORT=$Port" } }
+if (-not $DryRun) {
+  if (-not $env:ARW_EGRESS_PROXY_ENABLE) { $env:ARW_EGRESS_PROXY_ENABLE = '1' }
+  if (-not $env:ARW_DNS_GUARD_ENABLE) { $env:ARW_DNS_GUARD_ENABLE = '1' }
+} else {
+  Dry 'Would set ARW_EGRESS_PROXY_ENABLE=1 (default)'
+  Dry 'Would set ARW_DNS_GUARD_ENABLE=1 (default)'
+}
 
 $windowStyle = [System.Diagnostics.ProcessWindowStyle]::Minimized
 if ($HideWindow) {

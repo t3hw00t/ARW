@@ -3,6 +3,16 @@ use async_trait::async_trait;
 use base64::Engine; // for base64 encode
 use serde_json::Value;
 
+fn env_flag(key: &str, default: bool) -> bool {
+    match std::env::var(key) {
+        Ok(value) => matches!(
+            value.trim().to_ascii_lowercase().as_str(),
+            "1" | "true" | "on"
+        ),
+        Err(_) => default,
+    }
+}
+
 #[derive(thiserror::Error, Debug)]
 pub enum WasiError {
     #[error("unsupported tool: {0}")]
@@ -105,7 +115,7 @@ impl ToolHost for LocalHost {
                 let port = url.port().map(|p| p as i64);
                 let scheme = url.scheme().to_string();
                 // DNS guard: block DoH/DoT and dns-message payloads; then optional IP-literal guard
-                if std::env::var("ARW_DNS_GUARD_ENABLE").ok().as_deref() == Some("1") {
+                if env_flag("ARW_DNS_GUARD_ENABLE", true) {
                     let doh_host = host.as_deref().map(is_doh_host).unwrap_or(false);
                     let dot_port = port == Some(853);
                     let is_doh_path = url.path().contains("/dns-query");
@@ -126,11 +136,7 @@ impl ToolHost for LocalHost {
                     }
                 }
                 // Optional: block IP-literal destinations
-                if std::env::var("ARW_EGRESS_BLOCK_IP_LITERALS")
-                    .ok()
-                    .as_deref()
-                    == Some("1")
-                {
+                if env_flag("ARW_EGRESS_BLOCK_IP_LITERALS", false) {
                     if let Some(h) = &host {
                         if h.parse::<std::net::IpAddr>().is_ok() {
                             return Err(WasiError::Denied {
