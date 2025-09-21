@@ -122,6 +122,7 @@ nav:
       - Configuration: CONFIGURATION.md
       - CLI Reference: reference/cli.md
       - Specs Index: reference/specs.md
+      - Interface Release Notes: reference/interface-release-notes.md
       - Gating Keys: GATING_KEYS.md
       - Tools:
           - UI Screenshot Tools: reference/tools/ui_screenshot.md
@@ -139,6 +140,7 @@ nav:
       - Unified Object Graph: architecture/object_graph.md
       - Events Vocabulary: architecture/events_vocabulary.md
       - Restructure Handbook: RESTRUCTURE.md
+      - Screenshot Capture Pipeline: architecture/screenshot_capture_pipeline.md
       - UI Architecture Options (ASCII): architecture/ui_architecture_options.md
       - Kernel (Journal + CAS): architecture/kernel.md
       - Self‑Model (Metacognition): architecture/self_model.md
@@ -187,8 +189,10 @@ nav:
           - Index: adr/index.md
           - 0001: adr/0001-design-tokens-ssot.md
           - 0002: adr/0002-events-naming.md
+          - Template: adr/_template.md
       - Status: developer/status.md
       - Admin Handoff: developer/admin_handoff.md
+      - Handoff Checklist: developer/handoff_checklist.md
       - Tasks: developer/tasks.md
       - Stability Freeze: developer/stability.md
       - CI: developer/ci.md
@@ -197,6 +201,7 @@ nav:
       - Security: developer/SECURITY.md
       - Windows Compatibility Gate: developer/windows-compat-gate.md
       - Windows Start Validation: developer/windows-start-validation.md
+      - Winget Packaging: developer/winget.md
       - Plugin ABI & Trust: developer/plugin_abi_trust.md
       - Contract Tests: developer/contract_tests.md
   - Operations:

@@ -4,8 +4,9 @@ title: Screenshot Capture Pipeline
 
 # Screenshot Capture Pipeline
 
-Updated: 2025-09-20
-Type: Plan
+Updated: 2025-09-21
+Status: Planned
+Type: Explanation
 
 ## Goals
 - Give agents a safe, auditable way to present their on-screen context back to the user on demand.

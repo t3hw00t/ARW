@@ -5,6 +5,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
+use chrono::Utc;
 use serde_json::json;
 use std::net::SocketAddr;
 use tower::limit::ConcurrencyLimitLayer;
@@ -401,9 +402,16 @@ async fn main() {
         // Gating keys index for docs convenience
         {
             let keys_path = std::path::Path::new("docs/GATING_KEYS.md");
-            let mut out = String::from("# Gating Keys\n\nGenerated from code.\n\n");
+            let generated_at = Utc::now().format("%Y-%m-%d %H:%M UTC").to_string();
+            let mut out = format!(
+                "---\ntitle: Gating Keys\n---\n\n# Gating Keys\nGenerated: {}\nType: Reference\n\nGenerated from code.\n\n",
+                generated_at
+            );
             for k in arw_core::gating_keys::list() {
                 out.push_str(&format!("- `{}`\n", k));
+            }
+            if !out.ends_with('\n') {
+                out.push('\n');
             }
             let _ = std::fs::write(keys_path, out);
         }

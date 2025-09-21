@@ -3,8 +3,9 @@ title: Memory Overlay Service
 ---
 
 # Memory Overlay Service
-Updated: 2025-09-20
-Type: Plan
+Updated: 2025-09-21
+Status: Planned
+Type: Explanation
 
 Microsummary: Layered, LLM-agnostic memory service that sits on the unified object graph, exposes `memory.*` actions, and feeds the context working set with budget-aware packs built from hybrid retrieval over SQLite+vec0.
 
