@@ -34,7 +34,7 @@ Manage local models with safe HTTP download, resume, checksum verification, CAS 
   - `GET /admin/models/concurrency`
   - `POST /admin/models/concurrency`
   - `GET /admin/models/jobs`
-  - `GET /admin/state/models_metrics`
+  - `GET /state/models_metrics`
   - `GET /state/models`
 - Read‑models:
   - `models`
@@ -96,7 +96,7 @@ Latency budgets and route observability; publishes budgets vs. measured p95 and 
   - [apps/arw-server/src/metrics.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/metrics.rs)
 - HTTP:
   - `GET /metrics`
-  - `GET /admin/state/route_stats`
+  - `GET /state/route_stats`
 - Read‑models:
   - `route_stats`
   - `snappy`
@@ -288,7 +288,7 @@ Shared node registry and adverts for optional multi-node deployments.
   - [apps/arw-server/src/cluster.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/cluster.rs)
   - [apps/arw-server/src/api_state.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_state.rs)
 - HTTP:
-  - `GET /admin/state/cluster`
+  - `GET /state/cluster`
 - Read‑models:
   - `cluster_nodes`
 - Events:
@@ -355,11 +355,11 @@ Observations folded into beliefs/intents/actions and stitched episodes for a sco
   - [apps/arw-server/src/state_observer.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/state_observer.rs)
   - [apps/arw-server/src/world.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/world.rs)
 - HTTP:
-  - `GET /admin/state/observations`
-  - `GET /admin/state/beliefs`
-  - `GET /admin/state/intents`
-  - `GET /admin/state/actions`
-  - `GET /admin/state/episodes`
+  - `GET /state/observations`
+  - `GET /state/beliefs`
+  - `GET /state/intents`
+  - `GET /state/actions`
+  - `GET /state/episodes`
 - Events:
   - `world.updated`
 - References:

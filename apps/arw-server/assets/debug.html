@@ -1328,7 +1328,7 @@ function modelsMetricsRender(){ try{
 }catch{}}
 async function modelsMetricsRefresh(){
   try{
-    const r = await fetch(base + '/admin/state/models_metrics', { headers: { 'X-ARW-Admin': __adminHeader || '' } });
+    const r = await fetch(base + '/state/models_metrics', { headers: { 'X-ARW-Admin': __adminHeader || '' } });
     const j = await r.json();
     modelsMetrics = j?.data || j || {};
     modelsMetricsRender();
@@ -2015,19 +2015,35 @@ async function copyStatsNow(){ try{ const r=await fetch(base + '/introspect/stat
 <div id="toast" class="toast"></div>
 <script>
 function showToast(msg){ const t=document.getElementById('toast'); if(!t) return; t.textContent=msg; t.style.display='block'; clearTimeout(window.__toastTimer); window.__toastTimer = setTimeout(()=>{ t.style.display='none'; }, 2500); }
-async function pullState(kind){ try{ const r=await fetch(base + '/admin/state/' + kind, { headers: { 'X-ARW-Admin': __adminHeader || '' } }); const j=await r.json(); document.getElementById('stateOut').textContent = JSON.stringify(j,null,2); }catch(e){ showToast('state fetch failed'); } }
+const __statePathOverrides = {
+  actions: '/state/actions',
+  episodes: '/state/episodes',
+  observations: '/state/observations',
+  beliefs: '/state/beliefs',
+  intents: '/state/intents',
+  route_stats: '/state/route_stats',
+  world: '/state/world'
+};
+async function pullState(kind){
+  try{
+    const path = __statePathOverrides[kind] || `/admin/state/${kind}`;
+    const r = await fetch(base + path, { headers: { 'X-ARW-Admin': __adminHeader || '' } });
+    const j = await r.json();
+    document.getElementById('stateOut').textContent = JSON.stringify(j,null,2);
+  }catch(e){ showToast('state fetch failed'); }
+}
 async function worldSelect(){
   try {
     const q = encodeURIComponent(document.getElementById('worldQ').value||'');
     const k = encodeURIComponent(document.getElementById('worldK').value||'8');
-    const r = await fetch(base + '/admin/state/world/select?q=' + q + '&k=' + k, { headers: { 'X-ARW-Admin': __adminHeader || '' } });
+    const r = await fetch(base + '/state/world/select?q=' + q + '&k=' + k, { headers: { 'X-ARW-Admin': __adminHeader || '' } });
     const j = await r.json();
     document.getElementById('stateOut').textContent = JSON.stringify(j,null,2);
   } catch(e){ showToast('world select failed'); }
 }
 async function worldMapRefresh(){
   try {
-    const r = await fetch(base + '/admin/state/world', { headers: { 'X-ARW-Admin': __adminHeader || '' } });
+    const r = await fetch(base + '/state/world', { headers: { 'X-ARW-Admin': __adminHeader || '' } });
     const j = await r.json();
     const data = j?.data || j;
     const el = document.getElementById('worldMap'); if(!el) return;

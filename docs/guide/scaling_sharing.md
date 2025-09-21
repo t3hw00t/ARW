@@ -4,7 +4,7 @@ title: Scaling & Sharing (Opt‑In)
 
 # Scaling & Sharing (Opt‑In)
 
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: How‑to
 
 Agent Hub (ARW) is local‑first and privacy‑first by default. When a project needs more muscle or collaboration, you can opt‑in to scale and share — with clear boundaries and your approval at every step.
@@ -40,7 +40,7 @@ Related
 - Enables transparent revenue splits for shared projects later.
 
 Status
-- Some components are in active development or planned. See the roadmap and clustering/egress design docs for current status and interfaces. For a live snapshot of known nodes and their advertised capabilities, call `GET /admin/state/cluster` (or watch the `cluster_nodes` read-model).
+- Some components are in active development or planned. See the roadmap and clustering/egress design docs for current status and interfaces. For a live snapshot of known nodes and their advertised capabilities, call `GET /state/cluster` (admin alias: `/admin/state/cluster`) or watch the `cluster_nodes` read-model.
 
 See also
 - Features — `FEATURES.md`

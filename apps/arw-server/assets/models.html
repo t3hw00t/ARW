@@ -49,6 +49,6 @@ async function addM(){ const id=document.getElementById('mId').value.trim(); if(
 async function delM(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await call('POST','/admin/models/remove',{id}); await listM(); }
 async function defGet(){ const j=await call('GET','/admin/models/default'); document.getElementById('out').textContent=JSON.stringify(j,null,2); }
 async function defSet(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await call('POST','/admin/models/default',{id}); await listM(); }
-async function metricsM(){ try{ const j=await call('GET','/admin/state/models_metrics'); document.getElementById('out').textContent=JSON.stringify(j,null,2); }catch(err){ document.getElementById('out').textContent = `error: ${err.message}`; } }
+async function metricsM(){ try{ const j=await call('GET','/state/models_metrics'); document.getElementById('out').textContent=JSON.stringify(j,null,2); }catch(err){ document.getElementById('out').textContent = `error: ${err.message}`; } }
 document.addEventListener('DOMContentLoaded', ()=>{ loadAdminToken(); listM(); });
 </script>

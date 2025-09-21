@@ -205,13 +205,13 @@ impl SseReader {
                 self.reset_current();
                 return Some(msg);
             }
-            if line.starts_with(&[b':']) {
+            if line.starts_with(b":") {
                 continue;
             }
             let mut parts = line.splitn(2, |&b| b == b':');
             let field = parts.next().unwrap();
             let value_bytes = parts.next().unwrap_or(&[]);
-            let value = if value_bytes.starts_with(&[b' ']) {
+            let value = if value_bytes.starts_with(b" ") {
                 &value_bytes[1..]
             } else {
                 value_bytes
@@ -375,6 +375,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn dispatch_requests(
     total: u32,
     concurrency: usize,

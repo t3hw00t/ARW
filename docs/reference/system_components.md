@@ -35,13 +35,13 @@ This page is generated from [interfaces/system_components.json](https://github.c
 | Memory Abstraction Layer & Memory Atlas | [Memory Atlas](feature_matrix.md#memory-atlas)<br /><small>Core kernel</small> | Runtime | Core kernel / runtime / developers / data plane / plan | platform | POST /actions (memory.upsert)<br />POST /actions (memory.search)<br />POST /actions (memory.pack)<br />…<br />memory.item.upserted<br />memory.item.expired<br />… | [architecture/memory_abstraction.md](../architecture/memory_abstraction.md)<br />[architecture/memory_lifecycle.md](../architecture/memory_lifecycle.md)<br />[architecture/memory_overlay_service.md](../architecture/memory_overlay_service.md) |
 | Policy & Gating Core | [Policy & Lease Facade](feature_matrix.md#policy-lease-facade)<br /><small>Core kernel</small> | Security & Policy | Core kernel / runtime / operators / guardrails / beta | platform | GET /state/policy<br />POST /policy/reload<br />POST /policy/simulate<br />…<br />policy.decision<br />policy.reloaded | [GATING_KEYS.md](../GATING_KEYS.md)<br />[guide/policy_permissions.md](../guide/policy_permissions.md)<br />[crates/arw-core/src/gating.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/src/gating.rs) |
 | Replay & Observability Stack | — | Runtime | runtime / operators / assurance / plan | platform | — | [architecture/replay_time_travel.md](../architecture/replay_time_travel.md)<br />[architecture/observability_otel.md](../architecture/observability_otel.md) |
-| Runtime Layout & Control Plane Priority | [Snappy Governor](feature_matrix.md#snappy-governor)<br /><small>Core kernel</small> | Runtime | Core kernel / runtime / developers / infrastructure / beta | platform | GET /metrics<br />GET /admin/state/route_stats<br />snappy.notice<br />snappy.detail<br />… | [architecture/runtime_layout.md](../architecture/runtime_layout.md)<br />[architecture/performance.md](../architecture/performance.md) |
+| Runtime Layout & Control Plane Priority | [Snappy Governor](feature_matrix.md#snappy-governor)<br /><small>Core kernel</small> | Runtime | Core kernel / runtime / developers / infrastructure / beta | platform | GET /metrics<br />GET /state/route_stats<br />snappy.notice<br />snappy.detail<br />… | [architecture/runtime_layout.md](../architecture/runtime_layout.md)<br />[architecture/performance.md](../architecture/performance.md) |
 | SSE + JSON Patch Streaming Contract | [Event Spine](feature_matrix.md#event-spine)<br /><small>Core kernel</small> | Runtime | Core kernel / runtime / developers / data plane / beta | platform | GET /events<br />state.read.model.patch | [architecture/sse_patch_contract.md](../architecture/sse_patch_contract.md) |
 | Scheduler & Governor | — | Runtime | runtime / operators / infrastructure / plan | platform | — | [architecture/scheduler_governor.md](../architecture/scheduler_governor.md)<br />[architecture/scheduling_backpressure.md](../architecture/scheduling_backpressure.md) |
 | Self-Model (Metacognition) | [Self Card + Forecasts](feature_matrix.md#self-card-forecasts)<br /><small>Core kernel</small> | Runtime | Core kernel / runtime / operators / orchestration / plan | platform | GET /state/self<br />GET /state/self/:agent<br />POST /admin/self_model/propose<br />…<br />self.model.proposed<br />self.model.updated | [architecture/self_model.md](../architecture/self_model.md) |
 | Supply-Chain Trust | — | Security & Policy | build / operators / assurance / plan | platform | — | [architecture/supply_chain_trust.md](../architecture/supply_chain_trust.md)<br />[developer/ci.md](../developer/ci.md) |
 | UI Screenshot Tools | [Screenshot Capture Pipeline](feature_matrix.md#screenshot-capture-pipeline)<br /><small>Opt-in pack</small> | UX | Opt-in pack / runtime / operators / experience / beta | platform | POST /admin/tools/run<br />screenshots.captured<br />ui.screenshot.capture<br />ui.screenshot.annotate_burn<br />… | [architecture/screenshot_capture_pipeline.md](../architecture/screenshot_capture_pipeline.md)<br />[guide/screenshots.md](../guide/screenshots.md) |
-| Unified Object Graph & Event Stream | [Project Map (World Model)](feature_matrix.md#project-map-world-model)<br /><small>Core kernel</small> | Runtime | Core kernel / ui / operators / data plane / beta | platform | GET /admin/state/observations<br />GET /admin/state/beliefs<br />GET /admin/state/intents<br />…<br />world.updated | [architecture/object_graph.md](../architecture/object_graph.md) |
+| Unified Object Graph & Event Stream | [Project Map (World Model)](feature_matrix.md#project-map-world-model)<br /><small>Core kernel</small> | Runtime | Core kernel / ui / operators / data plane / beta | platform | GET /state/observations<br />GET /state/beliefs<br />GET /state/intents<br />…<br />world.updated | [architecture/object_graph.md](../architecture/object_graph.md) |
 | Versioning & Migration Backbone | — | Runtime | runtime / operators / configuration / beta | platform | — | [architecture/versioning_migration.md](../architecture/versioning_migration.md) |
 
 ## Component Details
@@ -126,7 +126,7 @@ Tracks artifacts as typed nodes with provenance edges tying inputs, policies, an
   - `GET /admin/models/concurrency`
   - `POST /admin/models/concurrency`
   - `GET /admin/models/jobs`
-  - `GET /admin/state/models_metrics`
+  - `GET /state/models_metrics`
   - `GET /state/models`
 - Environment:
   - `ARW_MODELS_MAX_MB`
@@ -609,7 +609,7 @@ Separates interactive control plane work from background tasks, prioritizing low
   - `state.read.model.patch`
 - HTTP:
   - `GET /metrics`
-  - `GET /admin/state/route_stats`
+  - `GET /state/route_stats`
 - Environment:
   - `ARW_SNAPPY_I2F_P95_MS`
   - `ARW_SNAPPY_FIRST_PARTIAL_P95_MS`
@@ -777,11 +777,11 @@ Shared object graph and SSE event stream keep Project Hub, Chat, Training Park, 
   - `policy.*`
   - `models.*`
 - HTTP:
-  - `GET /admin/state/observations`
-  - `GET /admin/state/beliefs`
-  - `GET /admin/state/intents`
-  - `GET /admin/state/actions`
-  - `GET /admin/state/episodes`
+  - `GET /state/observations`
+  - `GET /state/beliefs`
+  - `GET /state/intents`
+  - `GET /state/actions`
+  - `GET /state/episodes`
 - Topics:
   - `world.updated`
 - References:

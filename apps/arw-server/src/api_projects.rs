@@ -30,8 +30,7 @@ fn problem(status: axum::http::StatusCode, title: &str, detail: Option<&str>) ->
 #[utoipa::path(
     get,
     path = "/admin/projects/list",
-    tag = "Admin/Projects",
-    responses(
+    tag = "Admin/Projects",    responses(
         (status = 200, description = "Projects list", body = serde_json::Value),
         (status = 401, description = "Unauthorized"),
     )
@@ -65,8 +64,7 @@ pub struct ProjectCreateRequest {
 #[utoipa::path(
     post,
     path = "/admin/projects/create",
-    tag = "Admin/Projects",
-    request_body = ProjectCreateRequest,
+    tag = "Admin/Projects",    request_body = ProjectCreateRequest,
     responses(
         (status = 200, description = "Project created", body = serde_json::Value),
         (status = 400, description = "Invalid request"),
@@ -123,8 +121,7 @@ pub struct ProjectsTreeQuery {
 #[utoipa::path(
     get,
     path = "/admin/projects/tree",
-    tag = "Admin/Projects",
-    params(
+    tag = "Admin/Projects",    params(
         ("proj" = Option<String>, Query, description = "Project name"),
         ("path" = Option<String>, Query, description = "Relative path")
     ),
@@ -209,8 +206,7 @@ pub struct ProjectNotesQuery {
 #[utoipa::path(
     get,
     path = "/admin/projects/notes",
-    tag = "Admin/Projects",
-    params(("proj" = String, Query)),
+    tag = "Admin/Projects",    params(("proj" = String, Query)),
     responses(
         (status = 200, description = "Project notes", body = String),
         (status = 400, description = "Invalid request"),
@@ -237,8 +233,7 @@ pub async fn projects_notes_get(
 #[utoipa::path(
     post,
     path = "/admin/projects/notes",
-    tag = "Admin/Projects",
-    params(("proj" = String, Query)),
+    tag = "Admin/Projects",    params(("proj" = String, Query)),
     responses(
         (status = 200, description = "Notes saved", body = serde_json::Value),
         (status = 400, description = "Invalid request"),
@@ -306,8 +301,7 @@ pub struct ProjectFileWrite {
 #[utoipa::path(
     get,
     path = "/admin/projects/file",
-    tag = "Admin/Projects",
-    params(
+    tag = "Admin/Projects",    params(
         ("proj" = String, Query, description = "Project name"),
         ("path" = String, Query, description = "Relative path")
     ),
@@ -380,8 +374,7 @@ pub async fn projects_file_get(
 #[utoipa::path(
     post,
     path = "/admin/projects/file",
-    tag = "Admin/Projects",
-    params(
+    tag = "Admin/Projects",    params(
         ("proj" = String, Query),
         ("path" = String, Query)
     ),
@@ -495,8 +488,7 @@ pub struct ProjectPatchRequest {
 #[utoipa::path(
     post,
     path = "/admin/projects/patch",
-    tag = "Admin/Projects",
-    params(
+    tag = "Admin/Projects",    params(
         ("proj" = String, Query),
         ("path" = String, Query)
     ),
@@ -544,8 +536,7 @@ pub struct ProjectImportRequest {
 #[utoipa::path(
     post,
     path = "/admin/projects/import",
-    tag = "Admin/Projects",
-    request_body = ProjectImportRequest,
+    tag = "Admin/Projects",    request_body = ProjectImportRequest,
     responses(
         (status = 200, description = "Imported", body = serde_json::Value),
         (status = 400, description = "Invalid request"),

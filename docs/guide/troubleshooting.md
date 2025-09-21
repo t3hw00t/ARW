@@ -6,7 +6,7 @@ title: Troubleshooting
 
 This page lists quick fixes for common issues when starting ARW locally.
 
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: How‑to
 
 !!! note "Unified defaults"
@@ -96,7 +96,7 @@ Free space via CAS GC
   Listen for `models.cas.gc` summary events.
 
 Metrics
-- Admin endpoint: `GET /admin/state/models_metrics` → `{ ewma_mbps, …counters }`.
+- State endpoint: `GET /state/models_metrics` → `{ ewma_mbps, …counters }` (admin alias: `/admin/state/models_metrics`).
 - SSE: subscribe to `models.download.progress` for status/progress.
 
 ## Launcher Build on Linux Fails

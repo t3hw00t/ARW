@@ -12,6 +12,7 @@ Type: Reference
 - [t-250917235817-3181] Retarget launcher to unified server — todo (updated: 2025-09-17 22:44:29 UTC)
     - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; keeps legacy fallback.
 - [t-250917235820-3900] Decommission legacy artifacts — todo (updated: 2025-09-17 21:58:20 UTC)
+    - 2025-09-21 04:15:00 UTC: `/admin/state/*` and `/admin/projects/*` routes marked deprecated in OpenAPI/JSON; plan decommission once replacement UIs and APIs are confirmed.
 - [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — todo (updated: 2025-09-17 21:58:18 UTC)
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-11 21:02:19 UTC)
 
@@ -105,7 +106,7 @@ Type: Reference
 - [t-250912001100-3438] Phase 2: Beliefs/Intents/Actions stores + endpoints — done (updated: 2025-09-14 17:02:36 UTC)
     - 2025-09-14 17:02:36 UTC: Beliefs/Intents/Actions rolling stores implemented; endpoints: /state/{beliefs,intents,actions} and admin variants; wired via on_event with corr_id episodes stitching.
 - [t-250912001055-0044] Phase 2: Observations read-model + /state/observations — done (updated: 2025-09-14 17:02:35 UTC)
-    - 2025-09-14 17:02:35 UTC: Public /state/observations exists; admin wrapper at /admin/state/observations; rolling store wired via ext::state_api::obs_on_event and bus subscriber.
+    - 2025-09-14 17:02:35 UTC: Public /state/observations exists (admin alias remains); rolling store wired via ext::state_api::obs_on_event and bus subscriber. Beliefs/intents/world/cluster now share the same `/state/*` surfaces.
 - [t-250914050908-ev14] Feature Matrix: dot.case topics — done (updated: 2025-09-14 16:59:13 UTC)
     - 2025-09-14 16:59:12 UTC: Feature Matrix events verified/updated: experiments list now includes experiment.activated; all entries dot.case.
 - [t-250914050900-ev10] Events: topics.rs dot.case only — done (updated: 2025-09-14 16:59:12 UTC)

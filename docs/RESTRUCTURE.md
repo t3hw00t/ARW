@@ -185,7 +185,7 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
   - ⏭ Surface idle-timeout/retry tuneables (`ARW_DL_IDLE_TIMEOUT_SECS`, backoff policy) and expose resumable error hints in `/admin/ui/models`.
 - **Events & telemetry**
   - ✅ `egress.preview`/`egress.ledger.appended` emit from unified downloads with `corr_id` and posture metadata.
-  - ⏭ Expand `/admin/state/models_metrics` with resume counters, in-flight hash stats, and EWMA visibility for dashboards.
+  - ⏭ Expand `/state/models_metrics` (admin alias: `/admin/state/models_metrics`) with resume counters, in-flight hash stats, and EWMA visibility for dashboards.
 - **Docs & rollout**
   - ✅ Guide updates cover resume semantics and correlation IDs.
   - ✅ README and release notes highlight the `arw-svc` retirement and unified entry points; subsequent releases reference the unified server exclusively.
@@ -209,6 +209,7 @@ Notes
 - Scripts: `scripts/start.{sh,ps1}` launch the unified server (launcher included). Use `ARW_NO_LAUNCHER=1` / `--service-only` for headless mode.
 - Debug helpers `scripts/debug.{sh,ps1}` default to the unified stack and can open `/admin/debug` (a `/debug` alias remains) when `ARW_DEBUG=1`.
   - Containers target `arw-server`; the legacy image is no longer published.
+- Deprecation signals: `/admin/state/*` read-model bridges and `/admin/projects/*` file helpers are now marked `deprecated` in the OpenAPI/JSON surfaces. Migrate automation to the unified `/state/*` views or upcoming project APIs before they are removed.
 
 ### Regression priority (Unified server)
 
@@ -217,7 +218,7 @@ Notes
 | High | Admin debug surfaces (Models/Agents/Projects) | ✅ Static pages now target `/admin/*` and include admin-token handling; keep an eye out for remaining legacy calls in automation. | Monitor for CLI/scripts still pointing at legacy paths; add regression tests if gaps appear. |
 | High | gRPC surface | ✅ Feature-gated gRPC listener (health/actions/events) now ships with `arw-server` (see `docs/guide/grpc.md`). | Track follow-up RPC coverage (leases, tools, rich event replay) once consumers signal demand. |
 | High | Guardrail Gateway & capsules | Proxy preview exists; DNS guard and capsule adoption landed, but policy leases and capsule renewals remain unimplemented `docs/architecture/egress_firewall.md`. | Finish network scope enforcement + lease refresh, propagate capsules to tools/orchestrator, and surface posture presets in UI/CLI. |
-| High | Model Steward resilience | ✅ HEAD preflight + single-flight hash guard restored; `/admin/state/models_metrics` now surfaces inflight hashes and concurrency snapshots. | Track admin UI updates to render new metrics and expose preflight status; monitor ledger previews for multi-tenant downloads. |
+| High | Model Steward resilience | ✅ HEAD preflight + single-flight hash guard restored; `/state/models_metrics` (alias `/admin/state/models_metrics`) now surfaces inflight hashes and concurrency snapshots. | Track admin UI updates to render new metrics and expose preflight status; monitor ledger previews for multi-tenant downloads. |
 | Medium | Chat Workbench | Debug UI shows chat badge but `/admin/chat*` endpoints were not ported; planner loop runs but API surface is missing `docs/reference/feature_matrix.md`. | Recreate REST handlers (status/send/clear), bind to context loop, add auth, and refresh debug assets + OpenAPI. |
 | Medium | Human-in-the-loop staging | Backend staging queue exists, yet UI, per-project modes, and evidence review remain planned `docs/guide/human_in_loop.md`. | Build `/state/staging/actions` panel, approvals UI, lease policy toggles, and sidecar notifications. |
 | Medium | Research Watcher | Legacy ingestion feeds still stubbed; launcher Suggested tab is static `docs/guide/research_watcher.md`. | Implement polling worker, CAS-backed storage, read-model patches, and approve/archive endpoints. |

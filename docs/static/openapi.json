@@ -1129,7 +1129,8 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Introspect: GET /admin/introspect/stats."
+        "description": "Introspect: GET /admin/introspect/stats.",
+        "deprecated": true
       }
     },
     "/admin/memory": {
@@ -1781,7 +1782,8 @@
             "description": "Error"
           }
         },
-        "description": "Projects: POST /admin/projects/create."
+        "description": "Projects: POST /admin/projects/create.",
+        "deprecated": true
       }
     },
     "/admin/projects/file": {
@@ -1829,7 +1831,8 @@
             "description": "Not found"
           }
         },
-        "description": "Projects: GET /admin/projects/file."
+        "description": "Projects: GET /admin/projects/file.",
+        "deprecated": true
       },
       "post": {
         "tags": [
@@ -1886,7 +1889,8 @@
             "description": "Error"
           }
         },
-        "description": "Projects: POST /admin/projects/file."
+        "description": "Projects: POST /admin/projects/file.",
+        "deprecated": true
       }
     },
     "/admin/projects/import": {
@@ -1927,7 +1931,8 @@
             "description": "Error"
           }
         },
-        "description": "Projects: POST /admin/projects/import."
+        "description": "Projects: POST /admin/projects/import.",
+        "deprecated": true
       }
     },
     "/admin/projects/list": {
@@ -1949,7 +1954,8 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Projects: GET /admin/projects/list."
+        "description": "Projects: GET /admin/projects/list.",
+        "deprecated": true
       }
     },
     "/admin/projects/notes": {
@@ -1986,7 +1992,8 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Projects: GET /admin/projects/notes."
+        "description": "Projects: GET /admin/projects/notes.",
+        "deprecated": true
       },
       "post": {
         "tags": [
@@ -2022,7 +2029,8 @@
             "description": "Error"
           }
         },
-        "description": "Projects: POST /admin/projects/notes."
+        "description": "Projects: POST /admin/projects/notes.",
+        "deprecated": true
       }
     },
     "/admin/projects/patch": {
@@ -2081,7 +2089,8 @@
             "description": "Error"
           }
         },
-        "description": "Projects: POST /admin/projects/patch."
+        "description": "Projects: POST /admin/projects/patch.",
+        "deprecated": true
       }
     },
     "/admin/projects/tree": {
@@ -2129,7 +2138,8 @@
             "description": "Not found"
           }
         },
-        "description": "Projects: GET /admin/projects/tree."
+        "description": "Projects: GET /admin/projects/tree.",
+        "deprecated": true
       }
     },
     "/admin/self_model/apply": {
@@ -2255,7 +2265,8 @@
             }
           }
         },
-        "description": "Recent actions stream (rolling window)."
+        "description": "Recent actions stream (rolling window).",
+        "deprecated": true
       }
     },
     "/admin/state/beliefs": {
@@ -2283,7 +2294,8 @@
             }
           }
         },
-        "description": "Current beliefs snapshot derived from events."
+        "description": "Current beliefs snapshot derived from events.",
+        "deprecated": true
       }
     },
     "/admin/state/cluster": {
@@ -2311,7 +2323,8 @@
             }
           }
         },
-        "description": "Cluster nodes snapshot (admin-only)."
+        "description": "Cluster nodes snapshot (admin-only).",
+        "deprecated": true
       }
     },
     "/admin/state/guardrails_metrics": {
@@ -2366,7 +2379,37 @@
             }
           }
         },
-        "description": "Recent intents stream (rolling window)."
+        "description": "Recent intents stream (rolling window).",
+        "deprecated": true
+      }
+    },
+    "/admin/state/route_stats": {
+      "get": {
+        "tags": [
+          "Admin/State"
+        ],
+        "summary": "Legacy admin alias for route stats.",
+        "operationId": "state_route_stats_admin_doc",
+        "responses": {
+          "200": {
+            "description": "Route stats",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "description": "Legacy alias for /state/route_stats.",
+        "deprecated": true
       }
     },
     "/admin/state/memory/quarantine": {
@@ -2503,7 +2546,8 @@
             }
           }
         },
-        "description": "Recent observations from the event bus."
+        "description": "Recent observations from the event bus.",
+        "deprecated": true
       }
     },
     "/admin/state/world": {
@@ -2542,7 +2586,8 @@
             }
           }
         },
-        "description": "Project world model snapshot (belief graph view)."
+        "description": "Project world model snapshot (belief graph view).",
+        "deprecated": true
       }
     },
     "/admin/state/world/select": {
@@ -2610,7 +2655,8 @@
             }
           }
         },
-        "description": "Select top-k claims for a query."
+        "description": "Select top-k claims for a query.",
+        "deprecated": true
       }
     },
     "/admin/state/world_diffs": {
@@ -3261,6 +3307,166 @@
         }
       }
     },
+    "/state/models_metrics": {
+      "get": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Models metrics snapshot.",
+        "description": "Models metrics snapshot.",
+        "operationId": "state_models_metrics_doc",
+        "responses": {
+          "200": {
+            "description": "Metrics",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/state/observations": {
+      "get": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Recent observations from the event bus.",
+        "description": "Recent observations from the event bus.",
+        "operationId": "state_observations_doc",
+        "responses": {
+          "200": {
+            "description": "Recent observations",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/state/beliefs": {
+      "get": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Current beliefs snapshot derived from events.",
+        "description": "Current beliefs snapshot derived from events.",
+        "operationId": "state_beliefs_doc",
+        "responses": {
+          "200": {
+            "description": "Beliefs snapshot",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/state/intents": {
+      "get": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Recent intents stream (rolling window).",
+        "description": "Recent intents stream (rolling window).",
+        "operationId": "state_intents_doc",
+        "responses": {
+          "200": {
+            "description": "Recent intents",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/state/cluster": {
+      "get": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Cluster nodes snapshot.",
+        "description": "Cluster nodes snapshot (admin-only).",
+        "operationId": "state_cluster_doc",
+        "responses": {
+          "200": {
+            "description": "Cluster nodes",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/state/route_stats": {
+      "get": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Bus and per-route counters snapshot.",
+        "description": "Bus and per-route counters snapshot.",
+        "operationId": "state_route_stats_doc",
+        "responses": {
+          "200": {
+            "description": "Route stats",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
     "/state/orchestrator/jobs": {
       "get": {
         "tags": [
@@ -3453,6 +3659,113 @@
           }
         },
         "description": "Training telemetry snapshot."
+      }
+    },
+    "/state/world": {
+      "get": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Project world model snapshot (belief graph view).",
+        "description": "Project world model snapshot (belief graph view).",
+        "operationId": "state_world_doc",
+        "parameters": [
+          {
+            "name": "proj",
+            "in": "query",
+            "description": "Project id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "World model",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/state/world/select": {
+      "get": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Select top-k claims for a query.",
+        "description": "Select top-k claims for a query.",
+        "operationId": "state_world_select_doc",
+        "parameters": [
+          {
+            "name": "proj",
+            "in": "query",
+            "description": "Project id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "description": "Query string",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "k",
+            "in": "query",
+            "description": "Top K",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "lambda",
+            "in": "query",
+            "description": "Diversity weight (0-1)",
+            "required": false,
+            "schema": {
+              "type": "number",
+              "format": "double"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Selected claims",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
       }
     }
   },

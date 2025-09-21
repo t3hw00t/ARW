@@ -62,7 +62,7 @@
         },
         {
           "method": "GET",
-          "path": "/admin/state/models_metrics"
+          "path": "/state/models_metrics"
         },
         {
           "method": "GET",
@@ -177,7 +177,7 @@
         },
         {
           "method": "GET",
-          "path": "/admin/state/route_stats"
+          "path": "/state/route_stats"
         }
       ],
       "read_models": [
@@ -595,7 +595,7 @@
       "http": [
         {
           "method": "GET",
-          "path": "/admin/state/cluster"
+          "path": "/state/cluster"
         }
       ],
       "read_models": [
@@ -757,23 +757,23 @@
       "http": [
         {
           "method": "GET",
-          "path": "/admin/state/observations"
+          "path": "/state/observations"
         },
         {
           "method": "GET",
-          "path": "/admin/state/beliefs"
+          "path": "/state/beliefs"
         },
         {
           "method": "GET",
-          "path": "/admin/state/intents"
+          "path": "/state/intents"
         },
         {
           "method": "GET",
-          "path": "/admin/state/actions"
+          "path": "/state/actions"
         },
         {
           "method": "GET",
-          "path": "/admin/state/episodes"
+          "path": "/state/episodes"
         }
       ],
       "read_models": [],

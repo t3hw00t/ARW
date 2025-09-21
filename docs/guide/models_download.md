@@ -6,7 +6,7 @@ title: Models Download (HTTP)
 
 ARW provides HTTP endpoints (admin‑gated) to manage local models with streaming downloads, live progress via SSE, safe cancel, and mandatory SHA‑256 verification. HTTP Range resume will return in an upcoming update.
 
-Updated: 2025-09-20
+Updated: 2025-09-21
 Type: How‑to
 
 See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*).
@@ -130,8 +130,8 @@ Note: formal `egress.decision` remains planned; previews and ledger appends are 
 
 The downloader maintains a lightweight throughput EWMA used for admission checks.
 - File: `{state_dir}/downloads.metrics.json` → `{ ewma_mbps }`
-- Admin endpoint: `GET /admin/state/models_metrics` → `{ ewma_mbps, …counters }`
- - Read‑model: `GET /admin/state/models_metrics` and public `GET /state/models_metrics` (mirrors counters + EWMA).
+- State endpoint: `GET /state/models_metrics` → `{ ewma_mbps, …counters }` (admin alias: `GET /admin/state/models_metrics`)
+- Read‑model: `GET /state/models_metrics` (mirrors counters + EWMA) and SSE patches with id `models_metrics`.
  - SSE patches: `state.read.model.patch` with id=`models_metrics` publishes RFC‑6902 JSON Patches. Publishing is coalesced (`ARW_MODELS_METRICS_COALESCE_MS`, default 250ms) with an idle refresh (`ARW_MODELS_METRICS_PUBLISH_MS`, default 2000ms).
 
 ## Examples
@@ -159,7 +159,7 @@ curl -sS -X POST "$BASE/admin/models/download/cancel" \
 - On failure, the model list is updated to `status: "error"` with `error_code` to avoid stuck "downloading" states.
 - State directory is shown in `GET /admin/probe`.
 - Concurrency: set `ARW_MODELS_MAX_CONC` (default 2) or `ARW_MODELS_MAX_CONC_HARD` to limit simultaneous downloads. When all permits are taken the caller waits for a free slot.
-- Metrics: counters (`started`, `queued`, `admitted`, `canceled`, `completed`, `completed_cached`, `errors`, `bytes_total`) and throughput EWMA are exposed at `/admin/state/models_metrics` and streamed via read‑model patches (`id: models_metrics`).
+- Metrics: counters (`started`, `queued`, `admitted`, `canceled`, `completed`, `completed_cached`, `errors`, `bytes_total`) and throughput EWMA are exposed at `/state/models_metrics` (alias `/admin/state/models_metrics`) and streamed via read‑model patches (`id: models_metrics`).
 - Checksum: `sha256` is mandatory and must be a 64‑char hex string; invalid values are rejected up front.
 - Budgets and disk-reserve enforcement now run in the unified server so long downloads surface `models.download.progress` events with optional `budget`/`disk` payloads (enable via `ARW_DL_PROGRESS_INCLUDE_*`).
 - When elapsed time crosses `ARW_BUDGET_SOFT_DEGRADE_PCT` of the soft budget the server emits a one-time `status:"degraded"` progress event (`code:"soft-budget"`) before the soft limit is breached.

@@ -290,11 +290,16 @@ pub async fn models_jobs(headers: HeaderMap, State(state): State<AppState>) -> i
 
 #[utoipa::path(
     get,
-    path = "/admin/state/models_metrics",
-    tag = "Models",
-    responses((status = 200, description = "Metrics", body = serde_json::Value))
+    path = "/state/models_metrics",
+    tag = "State",
+    operation_id = "state_models_metrics_doc",
+    description = "Models metrics snapshot.",
+    responses(
+        (status = 200, description = "Metrics", body = serde_json::Value),
+        (status = 401, description = "Unauthorized", body = serde_json::Value)
+    )
 )]
-pub async fn models_metrics(
+pub async fn state_models_metrics(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
@@ -302,6 +307,20 @@ pub async fn models_metrics(
         return unauthorized();
     }
     Json(state.models().metrics_value().await).into_response()
+}
+
+#[utoipa::path(
+    get,
+    path = "/admin/state/models_metrics",
+    tag = "Models",    responses((status = 200, description = "Metrics", body = serde_json::Value))
+)]
+pub async fn models_metrics(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    state_models_metrics(headers, State(state))
+        .await
+        .into_response()
 }
 
 #[derive(Deserialize, ToSchema)]

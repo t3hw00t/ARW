@@ -137,7 +137,7 @@ Validate input → policy check → invoke → emit events → return.
 - `GET /state/route_stats`
 - `GET /state/actions`
 - `GET /state/contributions`
-- `GET /admin/state/cluster`
+- `GET /state/cluster`
 - `GET /admin/goldens/list`, `POST /admin/goldens/add`, `POST /admin/goldens/run`
 - `POST /admin/experiments/define`, `POST /admin/experiments/run`, `POST /admin/experiments/activate`, `GET /admin/experiments/list`, `GET /admin/experiments/scoreboard`, `GET /admin/experiments/winners`, `POST /admin/experiments/start`, `POST /admin/experiments/stop`, `POST /admin/experiments/assign`
 - `POST /leases`
@@ -190,7 +190,7 @@ See the Admin Endpoints guide for details and examples. Summary:
 - `POST /admin/models/cas_gc` — CAS GC once `{ttl_days}`; emits `models.cas.gc`.
 - `GET  /admin/models/by-hash/:sha256` — serve a CAS blob by sha256 (egress-gated).
 - `GET  /admin/state/models_hashes` — list installed model hashes and sizes.
-- `GET  /admin/state/models_metrics` — Lightweight metrics `{ ewma_mbps, started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total }`.
+- `GET  /state/models_metrics` — Lightweight metrics `{ ewma_mbps, started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total }` (admin alias: `/admin/state/models_metrics`).
 
 Admin events (AsyncAPI)
 - `models.download.progress`: standardized progress/errors with optional `budget` and `disk`.

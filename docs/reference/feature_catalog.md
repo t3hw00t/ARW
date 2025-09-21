@@ -46,7 +46,7 @@ _Keep loops under budget with shared event vocabulary and debugging surfaces._
 
 - **Snappy Governor** · backend / dev / core / complete
   Latency budgets and route observability; publishes budgets vs. measured p95 and breach notices.
-  _Routes_: `GET /metrics`, `GET /admin/state/route_stats`
+  _Routes_: `GET /metrics`, `GET /state/route_stats`
   _Signals_: `snappy.notice`, `snappy.detail`, `state.read.model.patch`
   _Env_: `ARW_SNAPPY_I2F_P95_MS`, `ARW_SNAPPY_FIRST_PARTIAL_P95_MS`, `ARW_SNAPPY_FULL_RESULT_P95_MS`, `ARW_SNAPPY_PUBLISH_MS`
   _Source_: [apps/arw-server/src/api_metrics.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_metrics.rs), [apps/arw-server/src/metrics.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/metrics.rs)
@@ -89,7 +89,7 @@ _Surface the beliefs, files, and links that back each decision._
 
 - **Project Map (World Model)** · backend / admin / connectivity / complete
   Observations folded into beliefs/intents/actions and stitched episodes for a scoped project world model.
-  _Routes_: `GET /admin/state/observations`, `GET /admin/state/beliefs`, `GET /admin/state/intents`, `GET /admin/state/actions`, `GET /admin/state/episodes`
+  _Routes_: `GET /state/observations`, `GET /state/beliefs`, `GET /state/intents`, `GET /state/actions`, `GET /state/episodes`
   _Signals_: `world.updated`
   _Source_: [apps/arw-server/src/api_state.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_state.rs), [apps/arw-server/src/state_observer.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/state_observer.rs), [apps/arw-server/src/world.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/world.rs)
   _References_: [architecture/object_graph.md](../architecture/object_graph.md)
@@ -172,7 +172,7 @@ _Ship safe defaults, audit runtime tweaks, and keep specs in sync._
 
 - **Model Steward** · backend / admin / core / complete
   Manage local models with safe HTTP download, resume, checksum verification, CAS storage, quotas, live progress, metrics, and concurrency controls.
-  _Routes_: `GET /admin/models/summary`, `POST /admin/models/download`, `POST /admin/models/download/cancel`, `POST /admin/models/cas_gc`, `GET /admin/models/concurrency`, `POST /admin/models/concurrency`, `GET /admin/models/jobs`, `GET /admin/state/models_metrics`, `GET /state/models`
+  _Routes_: `GET /admin/models/summary`, `POST /admin/models/download`, `POST /admin/models/download/cancel`, `POST /admin/models/cas_gc`, `GET /admin/models/concurrency`, `POST /admin/models/concurrency`, `GET /admin/models/jobs`, `GET /state/models_metrics`, `GET /state/models`
   _Signals_: `models.download.progress`, `models.changed`, `models.manifest.written`, `models.cas.gc`, `models.refreshed`, `state.read.model.patch`
   _Env_: `ARW_MODELS_MAX_MB`, `ARW_MODELS_DISK_RESERVE_MB`, `ARW_MODELS_MAX_CONC`, `ARW_MODELS_MAX_CONC_HARD`, `ARW_MODELS_QUOTA_MB`, `ARW_DL_EWMA_ALPHA`, `ARW_DL_MIN_MBPS`
   _Source_: [apps/arw-server/src/models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/models.rs), [apps/arw-server/src/api_models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_models.rs), [apps/arw-server/src/util.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/util.rs), …
@@ -199,7 +199,7 @@ _Queue, schedule, and observe heavier jobs as the team or workload grows._
 
 - **Federated Clustering** · runtime / operators / infrastructure / plan
   Shared node registry and adverts for optional multi-node deployments.
-  _Routes_: `GET /admin/state/cluster`
+  _Routes_: `GET /state/cluster`
   _Signals_: `cluster.node.advertise`, `cluster.node.changed`
   _Source_: [apps/arw-server/src/cluster.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/cluster.rs), [apps/arw-server/src/api_state.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api_state.rs)
   _References_: [architecture/cluster_federation.md](../architecture/cluster_federation.md)

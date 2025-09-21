@@ -46,6 +46,13 @@ mod paths {
     pub const POLICY_RELOAD: &str = "/policy/reload";
     pub const POLICY_SIMULATE: &str = "/policy/simulate";
     pub const STATE_MODELS: &str = "/state/models";
+    pub const STATE_MODELS_METRICS: &str = "/state/models_metrics";
+    pub const STATE_OBSERVATIONS: &str = "/state/observations";
+    pub const STATE_BELIEFS: &str = "/state/beliefs";
+    pub const STATE_INTENTS: &str = "/state/intents";
+    pub const STATE_CLUSTER: &str = "/state/cluster";
+    pub const STATE_WORLD: &str = "/state/world";
+    pub const STATE_WORLD_SELECT: &str = "/state/world/select";
     pub const SPEC_OPENAPI: &str = "/spec/openapi.yaml";
     pub const SPEC_ASYNCAPI: &str = "/spec/asyncapi.yaml";
     pub const SPEC_MCP: &str = "/spec/mcp-tools.json";
@@ -1277,8 +1284,64 @@ async fn main() {
         app,
         endpoints_acc,
         endpoints_meta_acc,
+        paths::STATE_OBSERVATIONS,
+        api_state::state_observations,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::STATE_BELIEFS,
+        api_state::state_beliefs,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::STATE_INTENTS,
+        api_state::state_intents,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
         paths::STATE_ACTIONS,
         api_state::state_actions,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::STATE_CLUSTER,
+        api_state::state_cluster,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::STATE_WORLD,
+        api_state::state_world,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::STATE_WORLD_SELECT,
+        api_state::state_world_select,
+        "beta"
+    );
+    app = route_get_tag!(
+        app,
+        endpoints_acc,
+        endpoints_meta_acc,
+        paths::STATE_MODELS_METRICS,
+        api_models::state_models_metrics,
         "beta"
     );
     app = route_get_tag!(
