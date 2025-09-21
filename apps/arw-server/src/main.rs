@@ -364,38 +364,18 @@ impl AppState {
 async fn main() {
     // OpenAPI/spec export mode for CI/docs sync (no server startup).
     if let Ok(path) = std::env::var("OPENAPI_OUT") {
-        // If OPENAPI_GEN=1, emit generated OpenAPI from annotations; otherwise copy curated spec.
-        let gen = std::env::var("OPENAPI_GEN").ok().as_deref() == Some("1");
         if let Some(parent) = std::path::Path::new(&path).parent() {
             let _ = std::fs::create_dir_all(parent);
         }
-        if gen {
-            let yaml = crate::openapi::ApiDoc::openapi()
-                .to_yaml()
-                .unwrap_or_else(|_| "openapi: 3.0.3".into());
-            if let Err(e) = std::fs::write(&path, yaml) {
-                eprintln!(
-                    "error: failed to write generated OPENAPI_OUT ({}): {}",
-                    path, e
-                );
-                std::process::exit(2);
-            }
-        } else {
-            // Write curated OpenAPI from spec/ to the requested path to keep
-            // CI's codegen-vs-curated comparison stable while we migrate.
-            let src = std::path::Path::new("spec").join("openapi.yaml");
-            match std::fs::read(&src) {
-                Ok(bytes) => {
-                    if let Err(e) = std::fs::write(&path, bytes) {
-                        eprintln!("error: failed to write OPENAPI_OUT ({}): {}", path, e);
-                        std::process::exit(2);
-                    }
-                }
-                Err(e) => {
-                    eprintln!("error: missing spec/openapi.yaml: {}", e);
-                    std::process::exit(2);
-                }
-            }
+        let yaml = crate::openapi::ApiDoc::openapi()
+            .to_yaml()
+            .unwrap_or_else(|_| "openapi: 3.0.3".into());
+        if let Err(e) = std::fs::write(&path, yaml) {
+            eprintln!(
+                "error: failed to write generated OPENAPI_OUT ({}): {}",
+                path, e
+            );
+            std::process::exit(2);
         }
         // Emit selected schemas used in docs (gating contract & capsule)
         {

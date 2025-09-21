@@ -202,6 +202,12 @@ interfaces-diff base="main":
   cp spec/openapi.yaml /tmp/ifc/rev.yaml
   docker run --rm -v /tmp/ifc:/tmp -w /tmp tufin/oasdiff:latest -format markdown -fail-on-breaking -base /tmp/base.yaml -revision /tmp/rev.yaml || true
 
+# Generate OpenAPI + schemas + JSON snapshot
+openapi-gen:
+  OPENAPI_OUT=spec/openapi.yaml cargo run --no-default-features -p arw-server
+  python3 scripts/ensure_openapi_descriptions.py
+  python3 scripts/generate_openapi_json.py
+
 check-enums:
   python3 scripts/check_models_progress_enums.py
 

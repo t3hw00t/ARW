@@ -1,4 +1,4 @@
-use crate::orchestrator::{LeaseToken, Queue, Task};
+use crate::orchestrator::{LeaseToken, Queue, Task, DEFAULT_LEASE_TTL_MS};
 use anyhow::Result;
 use async_nats::Client;
 // JetStream imports currently disabled until API is finalized
@@ -73,17 +73,12 @@ async fn connect_with_env(url: &str) -> Result<Client> {
 
 #[async_trait]
 impl Queue for NatsQueue {
-    async fn enqueue(&self, t: Task) -> Result<String> {
-        let id = if t.id.is_empty() {
-            Uuid::new_v4().to_string()
-        } else {
-            t.id.clone()
-        };
-        let mut t2 = t.clone();
-        if t2.id.is_empty() {
-            t2.id = id.clone();
+    async fn enqueue(&self, mut t: Task) -> Result<String> {
+        if t.id.is_empty() {
+            t.id = Uuid::new_v4().to_string();
         }
-        let bytes = serde_json::to_vec(&t2)?;
+        let id = t.id.clone();
+        let bytes = serde_json::to_vec(&t)?;
         self.client
             .publish(self.subject.clone(), bytes.into())
             .await?;
@@ -117,7 +112,7 @@ impl Queue for NatsQueue {
         let lease = LeaseToken {
             task_id: task.id.clone(),
             lease_id: Uuid::new_v4().to_string(),
-            expires_at_ms: crate::orchestrator::now_millis() + 30_000,
+            expires_at_ms: crate::orchestrator::now_millis() + DEFAULT_LEASE_TTL_MS,
         };
         Ok((task, lease))
     }

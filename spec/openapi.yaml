@@ -715,7 +715,6 @@ paths:
         '401':
           description: Unauthorized
       description: 'Introspect: GET /admin/introspect/stats.'
-      deprecated: true
   /admin/memory:
     get:
       tags:
@@ -1118,260 +1117,6 @@ paths:
         '401':
           description: Unauthorized
       description: Metrics snapshot probe (`/admin/probe/metrics`).
-  /state/projects:
-    get:
-      tags:
-      - State/Projects
-      operationId: state_projects_list_doc
-      responses:
-        '200':
-          description: Projects list
-          content:
-            application/json:
-              schema: {}
-        '401':
-          description: Unauthorized
-      description: 'Projects: GET /state/projects.'
-  /projects:
-    post:
-      tags:
-      - Projects
-      operationId: projects_create_unified_doc
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProjectCreateRequest'
-        required: true
-      responses:
-        '200':
-          description: Project created
-          content:
-            application/json:
-              schema: {}
-        '400':
-          description: Invalid request
-        '401':
-          description: Unauthorized
-        '500':
-          description: Error
-      description: 'Projects: POST /projects.'
-  /state/projects/{proj}/tree:
-    get:
-      tags:
-      - State/Projects
-      operationId: state_projects_tree_doc
-      parameters:
-      - name: proj
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: path
-        in: query
-        required: false
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Project tree
-          content:
-            application/json:
-              schema: {}
-        '400':
-          description: Invalid request
-        '401':
-          description: Unauthorized
-        '404':
-          description: Not found
-      description: 'Projects: GET /state/projects/{proj}/tree.'
-  /state/projects/{proj}/notes:
-    get:
-      tags:
-      - State/Projects
-      operationId: state_projects_notes_doc
-      parameters:
-      - name: proj
-        in: path
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Project notes
-          content:
-            text/plain:
-              schema:
-                type: string
-        '400':
-          description: Invalid request
-        '401':
-          description: Unauthorized
-      description: 'Projects: GET /state/projects/{proj}/notes.'
-  /projects/{proj}/notes:
-    put:
-      tags:
-      - Projects
-      operationId: projects_notes_put_doc
-      parameters:
-      - name: proj
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          text/plain:
-            schema:
-              type: string
-        required: true
-      responses:
-        '200':
-          description: Notes saved
-          content:
-            application/json:
-              schema: {}
-        '400':
-          description: Invalid request
-        '401':
-          description: Unauthorized
-        '500':
-          description: Error
-      description: 'Projects: PUT /projects/{proj}/notes.'
-  /state/projects/{proj}/file:
-    get:
-      tags:
-      - State/Projects
-      operationId: state_projects_file_get_doc
-      parameters:
-      - name: proj
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: path
-        in: query
-        required: true
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Project file
-          content:
-            application/json:
-              schema: {}
-        '400':
-          description: Invalid request
-        '401':
-          description: Unauthorized
-        '404':
-          description: Not found
-      description: 'Projects: GET /state/projects/{proj}/file.'
-  /projects/{proj}/file:
-    put:
-      tags:
-      - Projects
-      operationId: projects_file_put_doc
-      parameters:
-      - name: proj
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: path
-        in: query
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProjectFileWrite'
-        required: true
-      responses:
-        '200':
-          description: File written
-          content:
-            application/json:
-              schema: {}
-        '400':
-          description: Invalid request
-        '401':
-          description: Unauthorized
-        '409':
-          description: Conflict
-        '500':
-          description: Error
-      description: 'Projects: PUT /projects/{proj}/file.'
-    patch:
-      tags:
-      - Projects
-      operationId: projects_file_patch_unified_doc
-      parameters:
-      - name: proj
-        in: path
-        required: true
-        schema:
-          type: string
-      - name: path
-        in: query
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProjectPatchRequest'
-        required: true
-      responses:
-        '200':
-          description: File patched
-          content:
-            application/json:
-              schema: {}
-        '400':
-          description: Invalid request
-        '401':
-          description: Unauthorized
-        '409':
-          description: Conflict
-        '500':
-          description: Error
-      description: 'Projects: PATCH /projects/{proj}/file.'
-  /projects/{proj}/import:
-    post:
-      tags:
-      - Projects
-      operationId: projects_import_unified_doc
-      parameters:
-      - name: proj
-        in: path
-        required: true
-        schema:
-          type: string
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ProjectImportRequest'
-        required: true
-      responses:
-        '200':
-          description: Imported
-          content:
-            application/json:
-              schema: {}
-        '400':
-          description: Invalid request
-        '401':
-          description: Unauthorized
-        '403':
-          description: Forbidden
-        '500':
-          description: Error
-      description: 'Projects: POST /projects/{proj}/import.'
   /admin/self_model/apply:
     post:
       tags:
@@ -1433,55 +1178,6 @@ paths:
             application/json:
               schema: {}
       description: 'SelfModel: POST /admin/self_model/propose.'
-  /state/models_hashes:
-    get:
-      tags:
-      - State
-      summary: Installed model hashes and sizes.
-      operationId: state_models_hashes_doc
-      parameters:
-      - name: limit
-        in: query
-        description: Page size (default 100)
-        required: false
-        schema:
-          type: integer
-      - name: offset
-        in: query
-        description: Start offset
-        required: false
-        schema:
-          type: integer
-      - name: provider
-        in: query
-        description: Filter by provider
-        required: false
-        schema:
-          type: string
-      - name: sort
-        in: query
-        description: Sort key (bytes|sha256|path|providers_count)
-        required: false
-        schema:
-          type: string
-      - name: order
-        in: query
-        description: Order asc|desc
-        required: false
-        schema:
-          type: string
-      responses:
-        '200':
-          description: Installed hashes
-          content:
-            application/json:
-              schema: {}
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema: {}
-      description: 'Models: GET /state/models_hashes.'
   /admin/tools:
     get:
       tags:
@@ -1708,6 +1404,171 @@ paths:
             application/json:
               schema: {}
       description: Start a training job that results in a suggested Logic Unit (admin).
+  /projects:
+    post:
+      tags:
+      - Projects
+      operationId: projects_create_unified_doc
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectCreateRequest'
+        required: true
+      responses:
+        '200':
+          description: Project created
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '500':
+          description: Error
+      description: 'Projects: POST /projects.'
+  /projects/{proj}/file:
+    put:
+      tags:
+      - Projects
+      operationId: projects_file_put_doc
+      parameters:
+      - name: proj
+        in: path
+        description: Project name
+        required: true
+        schema:
+          type: string
+      - name: path
+        in: query
+        description: Relative path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectFileWrite'
+        required: true
+      responses:
+        '200':
+          description: File written
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '409':
+          description: Conflict
+        '500':
+          description: Error
+      description: 'Projects: PUT /projects/{proj}/file.'
+    patch:
+      tags:
+      - Projects
+      operationId: projects_file_patch_unified_doc
+      parameters:
+      - name: proj
+        in: path
+        description: Project name
+        required: true
+        schema:
+          type: string
+      - name: path
+        in: query
+        description: Relative path
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectPatchRequest'
+        required: true
+      responses:
+        '200':
+          description: File patched
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '409':
+          description: Conflict
+        '500':
+          description: Error
+      description: 'Projects: PATCH /projects/{proj}/file.'
+  /projects/{proj}/import:
+    post:
+      tags:
+      - Projects
+      operationId: projects_import_unified_doc
+      parameters:
+      - name: proj
+        in: path
+        description: Project name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProjectImportRequest'
+        required: true
+      responses:
+        '200':
+          description: Imported
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '403':
+          description: Forbidden
+        '500':
+          description: Error
+      description: 'Projects: POST /projects/{proj}/import.'
+  /projects/{proj}/notes:
+    put:
+      tags:
+      - Projects
+      operationId: projects_notes_put_doc
+      parameters:
+      - name: proj
+        in: path
+        description: Project name
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          text/plain:
+            schema:
+              type: string
+        required: true
+      responses:
+        '200':
+          description: Notes saved
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '500':
+          description: Error
+      description: 'Projects: PUT /projects/{proj}/notes.'
   /research_watcher/{id}/approve:
     post:
       tags:
@@ -1871,6 +1732,42 @@ paths:
           content:
             application/json:
               schema: {}
+  /state/beliefs:
+    get:
+      tags:
+      - State
+      summary: Current beliefs snapshot derived from events.
+      description: Current beliefs snapshot derived from events.
+      operationId: state_beliefs_doc
+      responses:
+        '200':
+          description: Beliefs snapshot
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: {}
+  /state/cluster:
+    get:
+      tags:
+      - State
+      summary: Cluster nodes snapshot.
+      description: Cluster nodes snapshot (admin-only).
+      operationId: state_cluster_doc
+      responses:
+        '200':
+          description: Cluster nodes
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: {}
   /state/experiments:
     get:
       tags:
@@ -1884,6 +1781,42 @@ paths:
             application/json:
               schema: {}
       description: Experiment events snapshot (public read-model).
+  /state/guardrails_metrics:
+    get:
+      tags:
+      - State
+      summary: Guardrails circuit-breaker metrics snapshot.
+      operationId: state_guardrails_metrics_doc
+      responses:
+        '200':
+          description: Guardrails metrics
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: {}
+      description: Guardrails circuit-breaker metrics snapshot.
+  /state/intents:
+    get:
+      tags:
+      - State
+      summary: Recent intents stream (rolling window).
+      description: Recent intents stream (rolling window).
+      operationId: state_intents_doc
+      responses:
+        '200':
+          description: Recent intents
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: {}
   /state/models:
     get:
       tags:
@@ -1897,11 +1830,55 @@ paths:
           content:
             application/json:
               schema: {}
+  /state/models_hashes:
+    get:
+      tags:
+      - State
+      operationId: state_models_hashes_doc
+      parameters:
+      - name: limit
+        in: query
+        description: Page size (default 100)
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+      - name: offset
+        in: query
+        description: Start offset
+        required: false
+        schema:
+          type: integer
+          minimum: 0
+      - name: provider
+        in: query
+        description: Filter by provider
+        required: false
+        schema:
+          type: string
+      - name: sort
+        in: query
+        description: Sort key (bytes|sha256|path|providers_count)
+        required: false
+        schema:
+          type: string
+      - name: order
+        in: query
+        description: Order asc|desc
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Installed hashes
+          content:
+            application/json:
+              schema: {}
+      description: 'State: GET /state/models_hashes.'
   /state/models_metrics:
     get:
       tags:
       - State
-      summary: Models metrics snapshot.
       description: Models metrics snapshot.
       operationId: state_models_metrics_doc
       responses:
@@ -1933,91 +1910,6 @@ paths:
           content:
             application/json:
               schema: {}
-  /state/beliefs:
-    get:
-      tags:
-      - State
-      summary: Current beliefs snapshot derived from events.
-      description: Current beliefs snapshot derived from events.
-      operationId: state_beliefs_doc
-      responses:
-        '200':
-          description: Beliefs snapshot
-          content:
-            application/json:
-              schema: {}
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema: {}
-  /state/intents:
-    get:
-      tags:
-      - State
-      summary: Recent intents stream (rolling window).
-      description: Recent intents stream (rolling window).
-      operationId: state_intents_doc
-      responses:
-        '200':
-          description: Recent intents
-          content:
-            application/json:
-              schema: {}
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema: {}
-  /state/guardrails_metrics:
-    get:
-      tags:
-      - State
-      summary: Guardrails circuit-breaker metrics.
-      description: Guardrails circuit-breaker metrics (admin-only).
-      operationId: state_guardrails_metrics_doc
-      responses:
-        '200':
-          description: Guardrails metrics
-          content:
-            application/json:
-              schema: {}
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema: {}
-  /state/cluster:
-    get:
-      tags:
-      - State
-      summary: Cluster nodes snapshot.
-      description: Cluster nodes snapshot (admin-only).
-      operationId: state_cluster_doc
-      responses:
-        '200':
-          description: Cluster nodes
-          content:
-            application/json:
-              schema: {}
-        '401':
-          description: Unauthorized
-          content:
-            application/json:
-              schema: {}
-  /state/route_stats:
-    get:
-      tags:
-      - State
-      summary: Bus and per-route counters snapshot.
-      description: Bus and per-route counters snapshot.
-      operationId: state_route_stats_doc
-      responses:
-        '200':
-          description: Route stats
-          content:
-            application/json:
-              schema: {}
   /state/orchestrator/jobs:
     get:
       tags:
@@ -2043,6 +1935,104 @@ paths:
             application/json:
               schema: {}
       description: Orchestrator jobs snapshot.
+  /state/projects:
+    get:
+      tags:
+      - State/Projects
+      operationId: state_projects_list_doc
+      responses:
+        '200':
+          description: Projects list
+          content:
+            application/json:
+              schema: {}
+      description: 'Projects: GET /state/projects.'
+  /state/projects/{proj}/file:
+    get:
+      tags:
+      - State/Projects
+      operationId: state_projects_file_get_doc
+      parameters:
+      - name: proj
+        in: path
+        description: Project name
+        required: true
+        schema:
+          type: string
+      - name: path
+        in: query
+        description: Relative path
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Project file
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+      description: 'Projects: GET /state/projects/{proj}/file.'
+  /state/projects/{proj}/notes:
+    get:
+      tags:
+      - State/Projects
+      operationId: state_projects_notes_doc
+      parameters:
+      - name: proj
+        in: path
+        description: Project name
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Project notes
+          content:
+            text/plain:
+              schema:
+                type: string
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+      description: 'Projects: GET /state/projects/{proj}/notes.'
+  /state/projects/{proj}/tree:
+    get:
+      tags:
+      - State/Projects
+      operationId: state_projects_tree_doc
+      parameters:
+      - name: proj
+        in: path
+        description: Project name
+        required: true
+        schema:
+          type: string
+      - name: path
+        in: query
+        description: Relative path
+        required: false
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Project tree
+          content:
+            application/json:
+              schema: {}
+        '400':
+          description: Invalid request
+        '401':
+          description: Unauthorized
+        '404':
+          description: Not found
+      description: 'Projects: GET /state/projects/{proj}/tree.'
   /state/research_watcher:
     get:
       tags:
@@ -2077,6 +2067,19 @@ paths:
             application/json:
               schema: {}
       description: Research watcher queue snapshot.
+  /state/route_stats:
+    get:
+      tags:
+      - State
+      summary: Bus and per-route counters snapshot.
+      operationId: state_route_stats_doc
+      responses:
+        '200':
+          description: Route stats
+          content:
+            application/json:
+              schema: {}
+      description: Bus and per-route counters snapshot.
   /state/runtime_matrix:
     get:
       tags:
@@ -3607,47 +3610,43 @@ tags:
   description: Service metadata and health
 - name: State
   description: "Read\u2011models (actions, models, egress, episodes)"
+- name: State/Projects
+  description: Project tree and notes read-models
 - name: Events
   description: "Server\u2011Sent Events stream"
 - name: Models
   description: Model steward admin endpoints
+- name: Projects
+  description: Project workspace management
+- name: Review
+  description: World diff and memory review utilities
+- name: Specs
+  description: Specification document endpoints
+- name: Distill
+  description: Distillation endpoints
+- name: Orchestrator
+  description: Orchestrator endpoints
+- name: Public
+  description: Public endpoints
 - name: Admin/Introspect
   description: Administrative probes and telemetry
 - name: Admin/Hierarchy
   description: Hierarchy coordination endpoints
 - name: Admin/SelfModel
   description: Self-model lifecycle endpoints
-- name: Admin/Projects
-  description: Project workspace management
 - name: Admin/Review
   description: Memory quarantine and world diff review queue
-- name: Admin/State
-  description: Administrative state read-models
 - name: Admin/Feedback
   description: Feedback engine signals and suggestions
 - name: Admin/Tools
   description: Tool Forge and action cache
+- name: Admin/Chat
+  description: Administrative chat endpoints
+- name: Admin/Experiments
+  description: Administrative experiments endpoints
+- name: Admin/Memory
+  description: Administrative memory endpoints
 - name: Research
   description: Research watcher workflow
 - name: Staging
   description: Human-in-the-loop approvals queue
-- name: Admin/Chat
-  description: Admin/Chat endpoints
-- name: Admin/Experiments
-  description: Admin/Experiments endpoints
-- name: Admin/Memory
-  description: Admin/Memory endpoints
-- name: Distill
-  description: Distill endpoints
-- name: Orchestrator
-  description: Orchestrator endpoints
-- name: Public
-  description: Public endpoints
-- name: Review
-  description: Review endpoints
-- name: Specs
-  description: Specs endpoints
-- name: Projects
-  description: Projects endpoints
-- name: State/Projects
-  description: State/Projects endpoints

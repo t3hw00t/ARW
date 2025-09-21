@@ -14,7 +14,7 @@ Type: Reference
 ### Interfaces workflow (APIs, events, tools)
 - Lint: Spectral on `spec/openapi.yaml` and `spec/asyncapi.yaml` using `quality/openapi-spectral.yaml`.
 - Diff: OpenAPI via `tufin/oasdiff` (breaking changes fail), AsyncAPI via `@asyncapi/diff` (markdown artifact).
-- Sync: Generate OpenAPI from code (`OPENAPI_OUT`) and normalize‑diff against `spec/openapi.yaml`.
+- Sync: Generate OpenAPI from code (`OPENAPI_OUT=spec/openapi.yaml cargo run --no-default-features -p arw-server`) and normalize‑diff against `spec/openapi.yaml`.
 - Mock: Boot Prism on OpenAPI and smoke a request.
 - Hygiene: fail if any descriptor has `review_after` or `sunset` past due.
 - Docs: generate “Interface Deprecations” and attach “Interface Release Notes” as artifacts.

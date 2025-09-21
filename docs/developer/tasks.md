@@ -11,11 +11,14 @@ Type: Reference
 ## To Do
 - [t-250917235817-3181] Retarget launcher to unified server — todo (updated: 2025-09-17 22:44:29 UTC)
     - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; legacy fallback removed.
+    - 2025-09-21 06:32:00 UTC: Hub episodes view consumes `/state/episodes` from arw-server, computes summaries client-side, and falls back to cached data when the legacy snapshot route is absent.
 - [t-250917235820-3900] Decommission legacy artifacts — todo (updated: 2025-09-17 21:58:20 UTC)
     - 2025-09-21 04:15:00 UTC: `/admin/state/*` and `/admin/projects/*` routes marked deprecated in OpenAPI/JSON; plan decommission once replacement UIs and APIs are confirmed.
     - 2025-09-21 05:30:00 UTC: Removed `/admin/projects/*` endpoints from the server/spec; all docs now reference `/state/projects*` and `/projects*`.
     - 2025-09-21 05:45:00 UTC: Removed `/admin/state/*` read-model aliases in favour of `/state/*`; guardrails metrics now live at `/state/guardrails_metrics`.
+    - 2025-09-21 06:45:00 UTC: Purged `Admin/Projects` and `Admin/State` tags from OpenAPI tooling (script + spec/json) to match the unified server taxonomy.
 - [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — todo (updated: 2025-09-17 21:58:18 UTC)
+    - 2025-09-21 06:55:00 UTC: Removed curated-spec fallback; `OPENAPI_OUT` now always emits ApiDoc-generated OpenAPI, and docs/scripts use the crate command (`cargo run --no-default-features -p arw-server -- OPENAPI_OUT=...`).
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-11 21:02:19 UTC)
 
 ## In Progress

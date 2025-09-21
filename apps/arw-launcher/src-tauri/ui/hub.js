@@ -16,8 +16,54 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elRunSnap = document.getElementById('runSnap');
   const elRunSnapMeta = document.getElementById('runSnapMeta');
   const elArtifactsTbl = document.getElementById('artifactsTbl');
-  function setRunsStat(txt){ if (elRunsStat){ elRunsStat.textContent = txt||''; if (txt) setTimeout(()=>{ if (elRunsStat.textContent===txt) elRunsStat.textContent=''; }, 1200); } }
-  function ms(n){ return Number.isFinite(n) ? n : 0 }
+  function setRunsStat(txt, sticky=false){
+    if (!elRunsStat) return;
+    elRunsStat.textContent = txt || '';
+    if (!txt || sticky) return;
+    setTimeout(()=>{ if (elRunsStat.textContent===txt) elRunsStat.textContent=''; }, 1200);
+  }
+  function normArr(v){ return Array.isArray(v) ? v : []; }
+  function parseMillis(ts){ try{ const ms = Date.parse(ts); return Number.isFinite(ms) ? ms : null; }catch{return null;} }
+  function isErrorEvent(ev){
+    try {
+      const kind = String(ev?.kind || '').toLowerCase();
+      if (kind.includes('error') || kind.includes('failed') || kind.includes('denied')) return true;
+      const payload = ev?.payload;
+      if (payload && typeof payload === 'object') {
+        if (payload.error != null || payload.err != null) return true;
+        if (payload.ok === false) return true;
+        const status = String(payload.status || '').toLowerCase();
+        if (status === 'error' || status === 'failed' || status === 'denied') return true;
+      }
+    } catch {}
+    return false;
+  }
+  function hydrateEpisode(ep){
+    const events = normArr(ep?.events);
+    const startTs = ep?.start || events[0]?.time || null;
+    const endTs = ep?.end || events[events.length - 1]?.time || null;
+    const startMs = parseMillis(startTs);
+    const endMs = parseMillis(endTs);
+    const duration = startMs != null && endMs != null && endMs >= startMs ? Math.round(endMs - startMs) : null;
+    const errors = events.reduce((acc, ev) => acc + (isErrorEvent(ev) ? 1 : 0), 0);
+    return {
+      ...(ep && typeof ep === 'object' ? ep : {}),
+      id: ep?.id || '',
+      start: startTs,
+      end: endTs,
+      duration_ms: duration,
+      last: endTs || '',
+      count: events.length,
+      errors,
+      items: events,
+      events,
+    };
+  }
+  function formatDuration(n){
+    if (!Number.isFinite(n) || n < 0) return '–';
+    if (n >= 1000) return `${(n/1000).toFixed(1)} s`;
+    return `${n} ms`;
+  }
   function renderRuns(){
     if (!elRunsTbl) return;
     const q = (elRunFilter?.value||'').toLowerCase();
@@ -32,8 +78,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       const tr = document.createElement('tr');
       const id = document.createElement('td'); id.className='mono'; id.textContent = r.id||'';
       const count = document.createElement('td'); count.textContent = r.count||0;
-      const dur = document.createElement('td'); dur.textContent = ms(r.duration_ms||0);
-      const err = document.createElement('td'); err.textContent = r.errors||0; if ((r.errors|0)>0) err.className='bad';
+      const dur = document.createElement('td'); dur.textContent = formatDuration(r.duration_ms);
+      const err = document.createElement('td'); const errVal = r.errors|0; err.textContent = errVal; if (errVal>0) err.className='bad';
       const act = document.createElement('td');
       const view = document.createElement('button'); view.className='ghost'; view.textContent='View'; view.title='View snapshot'; view.addEventListener('click', ()=> viewRun(r.id));
       act.appendChild(view);
@@ -48,7 +94,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       runsAbort = new AbortController();
       const r = await fetch(base + '/state/episodes', { signal: runsAbort.signal });
       const j = await r.json();
-      runsCache = Array.isArray(j?.items) ? j.items : (Array.isArray(j) ? j : []);
+      const raw = Array.isArray(j?.items) ? j.items : (Array.isArray(j) ? j : []);
+      runsCache = raw.map(hydrateEpisode);
+      setRunsStat(`Episodes: ${runsCache.length}`, true);
       renderRuns();
     }catch(e){ console.error(e); }
   }
@@ -57,13 +105,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     try{
       if (snapAbort) { try{ snapAbort.abort(); }catch{} }
       snapAbort = new AbortController();
-      const r = await fetch(base + '/state/episode/' + encodeURIComponent(id) + '/snapshot', { signal: snapAbort.signal });
-      const j = await r.json();
-      runSnapshot = j;
-      if (elRunSnap) elRunSnap.textContent = JSON.stringify(j, null, 2);
-      if (elRunSnapMeta) elRunSnapMeta.textContent = 'episode: ' + id;
+      let snap = null;
+      try {
+        const resp = await fetch(base + '/state/episode/' + encodeURIComponent(id) + '/snapshot', { signal: snapAbort.signal });
+        if (resp.ok) {
+          snap = await resp.json();
+        }
+      } catch (err) {
+        if (!(err && err.name === 'AbortError')) console.warn('snapshot fetch failed', err);
+      }
+      if (!snap) {
+        const fromCache = runsCache.find(r => r.id === id);
+        if (fromCache) {
+          snap = {
+            id: fromCache.id,
+            start: fromCache.start,
+            end: fromCache.end,
+            duration_ms: fromCache.duration_ms,
+            items: normArr(fromCache.items),
+          };
+        }
+      }
+      runSnapshot = snap;
+      if (elRunSnap) elRunSnap.textContent = snap ? JSON.stringify(snap, null, 2) : '';
+      if (elRunSnapMeta) elRunSnapMeta.textContent = snap ? 'episode: ' + id : '';
       renderArtifacts();
-    }catch(e){ console.error(e); runSnapshot=null; if (elRunSnap) elRunSnap.textContent=''; }
+    }catch(e){ console.error(e); runSnapshot=null; if (elRunSnap) elRunSnap.textContent=''; if (elRunSnapMeta) elRunSnapMeta.textContent=''; renderArtifacts(); }
   }
   document.getElementById('btnRunsRefresh')?.addEventListener('click', loadRuns);
   // Do not persist filters; just render on change

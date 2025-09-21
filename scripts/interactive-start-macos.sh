@@ -475,7 +475,7 @@ spec_export() {
   local svc; svc=$(ic_detect_bin arw-server)
   if [[ ! -x "$svc" ]]; then ic_warn "arw-server not built"; return; fi
   mkdir -p "$ROOT/spec"
-  OPENAPI_GEN=1 OPENAPI_OUT="$ROOT/spec/openapi.yaml" "$svc" || true
+  OPENAPI_OUT="$ROOT/spec/openapi.yaml" "$svc" || true
   ic_info "Wrote $ROOT/spec/openapi.yaml and schemas under spec/schemas if supported"
   ic_open_url "file://$ROOT/spec/openapi.yaml"
 }

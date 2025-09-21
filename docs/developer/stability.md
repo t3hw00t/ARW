@@ -33,7 +33,7 @@ Notes for Tauri 2
 - App permissions: `apps/arw-launcher/src-tauri/permissions/arw.json` (contains allowlist of ARW commands).
 - To add new app commands, update the allow list and rebuild. With `build.removeUnusedCommands: true`, commands not allowed are stripped.
 - Security: `cargo audit`; `cargo deny check advisories bans sources licenses`
-- Spec: `OPENAPI_GEN=1 OPENAPI_OUT=spec/openapi.yaml cargo run -p arw-server`
+- Spec: `OPENAPI_OUT=spec/openapi.yaml cargo run --no-default-features -p arw-server`
 - Docs: `bash scripts/docgen.sh && mkdocs build --strict`
 
 ## Versioning

@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, VecDeque};
+use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tokio::sync::{Mutex, Notify};
 use uuid::Uuid;
@@ -21,6 +22,9 @@ pub struct Task {
     /// Attempt count; incremented on re-delivery.
     pub attempt: u32,
 }
+
+pub(crate) const DEFAULT_LEASE_TTL_MS: u64 = 30_000;
+pub(crate) const MIN_LEASE_TTL_MS: u64 = 100;
 
 impl Task {
     pub fn new(kind: impl Into<String>, payload: serde_json::Value) -> Self {
@@ -76,23 +80,27 @@ pub struct LocalQueue {
 
 struct LocalInner {
     // simple FIFO per priority; lowest key is highest priority (i.e. -10 runs before 0)
-    queues: Mutex<HashMap<i32, VecDeque<Task>>>,
+    queues: Mutex<BTreeMap<i32, VecDeque<Task>>>,
     pending: Mutex<HashMap<String, (Task, u64)>>, // lease_id -> (task, expires_at_ms)
     notify: Notify,
     lease_ttl_ms: u64,
+    sweeper_shutdown: Arc<Notify>,
+    stop_flag: AtomicBool,
 }
 
 impl LocalQueue {
     pub fn new() -> Self {
-        Self::with_lease_ttl(30_000)
+        Self::with_lease_ttl(DEFAULT_LEASE_TTL_MS)
     }
 
     pub fn with_lease_ttl(ttl_ms: u64) -> Self {
         let inner = Arc::new(LocalInner {
-            queues: Mutex::new(HashMap::new()),
+            queues: Mutex::new(BTreeMap::new()),
             pending: Mutex::new(HashMap::new()),
             notify: Notify::new(),
-            lease_ttl_ms: ttl_ms.max(1_000), // clamp to >=1s
+            lease_ttl_ms: ttl_ms.max(MIN_LEASE_TTL_MS),
+            sweeper_shutdown: Arc::new(Notify::new()),
+            stop_flag: AtomicBool::new(false),
         });
         let this = Self {
             inner: inner.clone(),
@@ -100,8 +108,23 @@ impl LocalQueue {
         // Start lease sweeper to re-enqueue expired leases
         let inner = inner.clone();
         tokio::spawn(async move {
+            let shutdown = inner.sweeper_shutdown.clone();
             loop {
-                tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                if inner.stop_flag.load(Ordering::SeqCst) {
+                    break;
+                }
+                tokio::select! {
+                    _ = tokio::time::sleep(std::time::Duration::from_millis(500)) => {}
+                    _ = shutdown.notified() => {
+                        if inner.stop_flag.load(Ordering::SeqCst) {
+                            break;
+                        }
+                        continue;
+                    }
+                }
+                if inner.stop_flag.load(Ordering::SeqCst) {
+                    break;
+                }
                 let now = crate::orchestrator::now_millis();
                 // collect expired leases
                 let mut expired: Vec<Task> = Vec::new();
@@ -120,12 +143,15 @@ impl LocalQueue {
                     }
                 }
                 if !expired.is_empty() {
-                    let mut map = inner.queues.lock().await;
-                    for mut t in expired {
-                        t.attempt = t.attempt.saturating_add(1);
-                        let q = map.entry(t.priority).or_insert_with(VecDeque::new);
-                        q.push_back(t);
+                    {
+                        let mut map = inner.queues.lock().await;
+                        for mut t in expired {
+                            t.attempt = t.attempt.saturating_add(1);
+                            let q = map.entry(t.priority).or_insert_with(VecDeque::new);
+                            q.push_back(t);
+                        }
                     }
+                    inner.notify.notify_waiters();
                 }
             }
         });
@@ -158,26 +184,25 @@ impl Queue for LocalQueue {
     async fn dequeue(&self, _group: &str) -> anyhow::Result<(Task, LeaseToken)> {
         loop {
             // pop highest-priority non-empty queue
-            let mut sel: Option<(i32, Task)> = None;
-            {
+            let sel = {
                 let mut map = self.inner.queues.lock().await;
-                if map.is_empty() {
-                    // park until notify
-                } else {
-                    // iterate priorities sorted ascending
-                    let mut keys: Vec<i32> = map.keys().cloned().collect();
-                    keys.sort();
-                    for k in keys {
-                        if let Some(q) = map.get_mut(&k) {
-                            if let Some(t) = q.pop_front() {
-                                sel = Some((k, t));
-                                break;
-                            }
+                let mut selected: Option<Task> = None;
+                let mut empty_key: Option<i32> = None;
+                for (priority, queue) in map.iter_mut() {
+                    if let Some(task) = queue.pop_front() {
+                        if queue.is_empty() {
+                            empty_key = Some(*priority);
                         }
+                        selected = Some(task);
+                        break;
                     }
                 }
-            }
-            if let Some((_k, task)) = sel {
+                if let Some(key) = empty_key {
+                    map.remove(&key);
+                }
+                selected
+            };
+            if let Some(task) = sel {
                 let lease_id = Uuid::new_v4().to_string();
                 let now_ms = now_millis();
                 let ttl_ms = self.inner.lease_ttl_ms; // configurable lease ttl
@@ -186,10 +211,11 @@ impl Queue for LocalQueue {
                     let mut pend = self.inner.pending.lock().await;
                     pend.insert(lease_id.clone(), (task.clone(), exp));
                 }
+                let task_id = task.id.clone();
                 return Ok((
-                    task.clone(),
+                    task,
                     LeaseToken {
-                        task_id: task.id.clone(),
+                        task_id,
                         lease_id,
                         expires_at_ms: exp,
                     },
@@ -225,6 +251,17 @@ impl Queue for LocalQueue {
     }
 }
 
+impl Drop for LocalQueue {
+    fn drop(&mut self) {
+        // only signal shutdown when this is the final handle
+        if Arc::strong_count(&self.inner) == 1 {
+            self.inner.stop_flag.store(true, Ordering::SeqCst);
+            self.inner.sweeper_shutdown.notify_waiters();
+            self.inner.notify.notify_waiters();
+        }
+    }
+}
+
 #[inline]
 pub(crate) fn now_millis() -> u64 {
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -246,5 +283,37 @@ impl<Q: Queue> Orchestrator<Q> {
     }
     pub async fn admit(&self, task: Task) -> anyhow::Result<String> {
         self.queue.enqueue(task).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+    use tokio::time::{sleep, timeout, Duration};
+
+    #[tokio::test]
+    async fn local_queue_requeues_expired_tasks() {
+        let queue = LocalQueue::with_lease_ttl(100);
+        let mut task = Task::new("op.test", json!({"k": "v"}));
+        task.priority = 1;
+        let id = queue.enqueue(task).await.unwrap();
+
+        let (first_task, _lease) = queue.dequeue("g1").await.unwrap();
+        assert_eq!(first_task.id, id);
+        assert_eq!(first_task.attempt, 0);
+
+        sleep(Duration::from_millis(200)).await;
+
+        let (second_task, second_lease) = timeout(Duration::from_secs(2), queue.dequeue("g1"))
+            .await
+            .expect("dequeue timed out")
+            .unwrap();
+
+        assert_eq!(second_task.id, id);
+        assert_eq!(second_task.priority, 1);
+        assert_eq!(second_task.attempt, 1);
+
+        queue.ack(second_lease).await.unwrap();
     }
 }
