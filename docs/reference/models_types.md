@@ -29,28 +29,36 @@ Microsummary: Stable, typed response shapes for models endpoints used by UIs and
   - available_permits: number
   - held_permits: number
   - hard_cap?: number
-  - pending_shrink?: number
+  - pending_shrink?: number (when a non-blocking shrink has remaining in-flight jobs)
 
-- ModelsMetrics: counters + throughput estimate
-  - started: number
-  - queued: number
-  - admitted: number
-  - resumed: number
-  - canceled: number
-  - completed: number
-  - completed_cached: number
+- ModelsMetrics: counters + throughput estimate and nested detail
+  - started, queued, admitted, resumed, canceled: number
+  - completed: number (fresh downloads)
+  - completed_cached: number (coalesced followers)
   - errors: number
   - bytes_total: number
-  - ewma_mbps?: number
+  - ewma_mbps?: number (moving average download rate)
+  - preflight_ok / preflight_denied / preflight_skipped: number
+  - coalesced: number (followers served from cache)
+  - inflight: ModelsInflightEntry[]
+  - concurrency: ModelsConcurrency
+  - jobs: ModelsJobSnapshot[]
+
+- ModelsInflightEntry: active hash groups awaiting completion
+  - sha256: string
+  - primary: string (model id currently downloading)
+  - followers: string[] (coalesced waiters)
+  - count: number (total participants)
 
 - ModelsJobs: active jobs snapshot (admin)
   - active: ActiveJob[]
-  - inflight_hashes: string[]
-  - concurrency: ModelsConcurrency (includes pending_shrink when non‑blocking shrink left remainder)
+  - inflight: ModelsInflightEntry[]
+  - concurrency: ModelsConcurrency
 
 - ActiveJob
   - model_id: string
   - job_id: string
+  - corr_id?: string (download correlation id)
 
 - ModelsHashes (paginated): returned by `GET /state/models_hashes`
   - total: number

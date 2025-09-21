@@ -146,11 +146,15 @@
         </div>
         <table aria-label="Active jobs">
           <thead>
-            <tr><th>Model Id</th><th>Job Id</th><th>ETA</th></tr>
+            <tr><th>Model Id</th><th>Job Id</th><th>Corr Id</th><th>ETA</th></tr>
           </thead>
           <tbody id="jobs-active"></tbody>
         </table>
         <div class="row"><strong>Inflight Hashes:</strong> <span id="jobs-inflight" class="mono dim"></span></div>
+        <div class="row" role="region" aria-label="Ledger preview">
+          <strong>Ledger Preview:</strong>
+          <div id="ledger-preview" class="mono dim" aria-live="polite">Select a job to preview recent egress entries.</div>
+        </div>
       </div>
     </div>
     <script src="models.js" defer></script>

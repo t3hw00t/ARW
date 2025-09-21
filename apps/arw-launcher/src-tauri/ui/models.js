@@ -113,6 +113,92 @@ function iconsFor(status, code){
   }
 }
 
+function escapeHtml(value){
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function statusLabel(status){
+  const map = {
+    available: 'Available',
+    queued: 'Queued',
+    downloading: 'Downloading',
+    resumed: 'Resumed',
+    'cancel-requested': 'Cancel requested',
+    canceled: 'Canceled',
+    coalesced: 'Coalesced',
+    degraded: 'Degraded',
+    error: 'Error',
+    complete: 'Completed',
+  };
+  return map[status] || (status ? status.replace(/_/g, ' ') : '');
+}
+
+function statusTone(status){
+  switch(status){
+    case 'available':
+    case 'complete':
+      return 'ok';
+    case 'resumed':
+    case 'downloading':
+    case 'coalesced':
+      return 'accent';
+    case 'degraded':
+    case 'cancel-requested':
+    case 'queued':
+      return 'warn';
+    case 'error':
+      return 'bad';
+    default:
+      return 'neutral';
+  }
+}
+
+function renderStatusBadge(model){
+  const status = model && model.status ? String(model.status) : '';
+  if (!status){
+    return '<span class="dim">—</span>';
+  }
+  const label = statusLabel(status);
+  const tone = statusTone(status);
+  const badgeClass = tone && tone !== 'neutral' ? `status-badge ${tone}` : 'status-badge';
+  const icon = iconsFor(status, model && model.error_code);
+  const titleParts = [label];
+  if (model && model.error_code) titleParts.push(`Code: ${model.error_code}`);
+  if (model && model.url && status === 'downloading') titleParts.push(`Source: ${model.url}`);
+  const title = escapeHtml(titleParts.join(' — '));
+  const iconHtml = icon ? `${icon}` : '<span class="status-dot" aria-hidden="true"></span>';
+  return `<span class="${badgeClass}" role="status" aria-label="${title}" title="${title}">${iconHtml}<span>${escapeHtml(label)}</span></span>`;
+}
+
+async function fetchAdminJson(path){
+  const clean = String(path || '').replace(/^\/+/, '');
+  try{
+    if (window.__ARW_BASE_OVERRIDE){
+      const token = await ARW.connections.tokenFor(window.__ARW_BASE_OVERRIDE);
+      return await ARW.invoke('admin_get_json_base', { base: window.__ARW_BASE_OVERRIDE, path: clean, token });
+    }
+  }catch(e){ console.error(e); }
+  const headers = {};
+  try{
+    const tok = document.getElementById('admintok')?.value?.trim();
+    if (tok) headers['X-ARW-Admin'] = tok;
+  }catch{}
+  const resp = await fetch(`${ARW.base(port())}/${clean}`, { headers });
+  if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+  return await resp.json();
+}
+
+function shortSha(value){
+  const s = String(value||'');
+  if (s.length <= 12) return s || '—';
+  return `${s.slice(0,6)}…${s.slice(-4)}`;
+}
+
 async function loadPrefs() {
   await ARW.applyPortFromPrefs('port');
   const v = await ARW.getPrefs('launcher');
@@ -145,6 +231,7 @@ async function refresh() {
   // Concurrency + metrics line
   try{
     const c = sum.concurrency || {};
+    window.__lastConcurrency = c;
     const mm = sum.metrics || {};
     const rate = (typeof mm.ewma_mbps === 'number') ? `${mm.ewma_mbps.toFixed(1)} MB/s` : 'n/a';
     const counters = `S:${mm.started||0} Q:${mm.queued||0} A:${mm.admitted||0} R:${mm.resumed||0} C:${mm.completed||0}+${mm.completed_cached||0} E:${mm.errors||0}`;
@@ -182,26 +269,57 @@ async function refresh() {
     const tr = document.createElement('tr');
     const id = m.id || '';
     tr.setAttribute('data-model-id', id);
-    const pbtn = (!__BASE && m.path? `<button data-open="${m.path}" title="Open path">Open</button>` : '');
-    tr.innerHTML = `<td class="mono">${id}</td><td>${m.provider||''}</td><td>${m.status||''}</td><td class="mono">${m.path||''} ${pbtn}</td><td>${(id===def)?'★':''}</td><td><button data-id="${id}" title="Set as default">Make Default</button></td>`;
-    const defbtn = tr.querySelector('button[data-id]');
-    if (defbtn) defbtn.addEventListener('click', async (e)=>{
-      await ivk('models_default_set', { id: e.target.getAttribute('data-id'), port: port() });
+    tr.innerHTML = `
+      <td class="mono">${escapeHtml(id)}</td>
+      <td>${escapeHtml(m.provider || '')}</td>
+      <td>${renderStatusBadge(m)}</td>
+      <td class="mono">${escapeHtml(m.path || '')}</td>
+      <td>${(id===def)?'★':''}</td>
+      <td></td>
+    `;
+
+    const pathCell = tr.children[3];
+    if (!__BASE && m.path){
+      const openBtn = document.createElement('button');
+      openBtn.textContent = 'Open';
+      openBtn.title = 'Open path locally';
+      openBtn.setAttribute('data-open', m.path);
+      pathCell.appendChild(document.createTextNode(' '));
+      pathCell.appendChild(openBtn);
+      openBtn.addEventListener('click', async (e)=>{
+        e.preventDefault();
+        try{ await ivk('open_path', { path: m.path }); }catch(err){ console.error(err); ARW.toast('Unable to open path'); }
+      });
+    }
+
+    const actionsCell = tr.lastElementChild;
+    const actionWrap = document.createElement('div');
+    actionWrap.className = 'pill-buttons';
+    const defButton = document.createElement('button');
+    defButton.textContent = 'Make Default';
+    defButton.title = 'Set as default model';
+    defButton.addEventListener('click', async ()=>{
+      await ivk('models_default_set', { id, port: port() });
       refresh();
     });
-    try {
-      if ((String(m.status||'').toLowerCase()) === 'downloading'){
-        const tds = tr.querySelectorAll('td');
-        const actions = tds[tds.length-1];
-        const btn = document.createElement('button');
-        btn.textContent = 'Cancel'; btn.title='Cancel download';
-        btn.addEventListener('click', async ()=>{ await ivk('models_download_cancel', { id, port: port() }); });
-        actions.appendChild(document.createTextNode(' '));
-        actions.appendChild(btn);
-      }
-    } catch {}
-    const op = tr.querySelector('[data-open]');
-    if (op) op.addEventListener('click', async (e)=>{ if (!__BASE) await ivk('open_path', { path: e.target.getAttribute('data-open') }); });
+    actionWrap.appendChild(defButton);
+
+    const statusLower = String(m.status||'').toLowerCase();
+    if (statusLower === 'downloading' || statusLower === 'resumed' || statusLower === 'cancel-requested'){
+      const cancelBtn = document.createElement('button');
+      cancelBtn.textContent = 'Cancel';
+      cancelBtn.title = 'Cancel download';
+      cancelBtn.addEventListener('click', async ()=>{
+        try{
+          await ivk('models_download_cancel', { id, port: port() });
+          ARW.toast('Cancel requested');
+          refresh();
+        }catch(err){ console.error(err); ARW.toast('Cancel failed'); }
+      });
+      actionWrap.appendChild(cancelBtn);
+    }
+
+    actionsCell.appendChild(actionWrap);
     fragModels.appendChild(tr);
   });
   tb.appendChild(fragModels);
@@ -398,21 +516,23 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-copy-sha').addEventListener('click', async ()=>{ try{ await navigator.clipboard.writeText(document.getElementById('dsha').value||''); }catch(e){} });
   document.getElementById('btn-paste-sha').addEventListener('click', async ()=>{ try{ const t=await navigator.clipboard.readText(); if(t) document.getElementById('dsha').value = t.trim(); }catch(e){} });
   document.getElementById('btn-conc-apply').addEventListener('click', async ()=>{
-    try{
+  try{
       const max = parseInt(document.getElementById('concmax').value||'2', 10);
       const block = !!document.getElementById('concblock').checked;
       const res = await ivk('models_concurrency_set', { max, block, port: port() });
-      const changed = (res && (res.changed===true));
-      const newv = (res && res.new!=null) ? res.new : max;
-      const heldRel = res && res.held_released || 0;
-      const heldAcq = res && res.held_acquired || 0;
-      const pend = res && res.pending_shrink || 0;
-      const avail = res && res.available_permits;
-      const note = `→ ${newv} (${changed?'changed':'noop'}) · released ${heldRel}, acquired ${heldAcq}, pending ${pend}, avail ${avail}`;
-      ARW.toast(`Concurrency ${note}`);
-      // Update status line with new snapshot
+      const prev = window.__lastConcurrency || {};
+      const snapshot = res || {};
+      const target = (typeof snapshot.configured_max === 'number') ? snapshot.configured_max : max;
+      const held = (typeof snapshot.held_permits === 'number') ? snapshot.held_permits : 0;
+      const avail = (typeof snapshot.available_permits === 'number') ? snapshot.available_permits : null;
+      const pending = (typeof snapshot.pending_shrink === 'number') ? snapshot.pending_shrink : 0;
+      const changed = (typeof prev.configured_max === 'number') ? prev.configured_max !== target : true;
+      const parts = [`→ ${target}`, changed ? '(updated)' : '(unchanged)', `held ${held}`];
+      if (avail != null) parts.push(`avail ${avail}`);
+      if (pending > 0) parts.push(`pending ${pending}`);
+      ARW.toast(`Concurrency ${parts.join(' · ')}`);
+      window.__lastConcurrency = snapshot;
       await refresh();
-      // Persist concBlock preference
       try{ const p = await ARW.getPrefs('launcher') || {}; p.concBlock = block; await ARW.setPrefs('launcher', p); }catch{}
     }catch(e){ console.error(e); ARW.toast('Failed to set concurrency'); }
   });
@@ -422,8 +542,12 @@ document.addEventListener('DOMContentLoaded', () => {
     try{
       const max = parseInt(document.getElementById('concmax').value||'2', 10);
       const res = await ivk('models_concurrency_set', { max, block: true, port: port() });
-      const note = `→ ${res.new||max} (blocking); released ${res.held_released||0}, acquired ${res.held_acquired||0}`;
-      ARW.toast(`Concurrency ${note}`);
+      const snapshot = res || {};
+      const target = (typeof snapshot.configured_max === 'number') ? snapshot.configured_max : max;
+      const held = (typeof snapshot.held_permits === 'number') ? snapshot.held_permits : 0;
+      const pending = (typeof snapshot.pending_shrink === 'number') ? snapshot.pending_shrink : 0;
+      ARW.toast(`Concurrency → ${target} (held ${held}, pending ${pending})`);
+      window.__lastConcurrency = snapshot;
       await refresh();
     }catch(e){ console.error(e); ARW.toast('Failed to shrink'); }
   });
@@ -552,19 +676,55 @@ async function jobsRefresh(){
     rows.forEach(it => {
       const tr = document.createElement('tr');
       const eta = (window.__etaMap && window.__etaMap[it.model_id]) ? window.__etaMap[it.model_id] : '';
-      const etaHtml = eta ? `<span class=\"dim\">${eta}</span>` : '';
-      tr.innerHTML = `<td class=\"mono\"><a href=\"#\" data-focus=\"${it.model_id||''}\">${it.model_id||''}</a></td><td class=\"mono\">${it.job_id||''}</td><td>${etaHtml}</td>`;
+      const etaHtml = eta ? `<span class=\"dim\">${escapeHtml(eta)}</span>` : '';
+      const corr = it.corr_id || '';
+      const corrHtml = corr
+        ? `<div class=\"pill-buttons\"><button data-copy-corr=\"${escapeHtml(corr)}\">Copy</button><button data-ledger=\"${escapeHtml(corr)}\">Ledger</button></div>`
+        : '<span class="dim">—</span>';
+      tr.innerHTML = `
+        <td class=\"mono\"><a href=\"#\" data-focus=\"${escapeHtml(it.model_id||'')}\">${escapeHtml(it.model_id||'')}</a></td>
+        <td class=\"mono\">${escapeHtml(it.job_id||'')}</td>
+        <td>${corrHtml}</td>
+        <td>${etaHtml}</td>
+      `;
       const link = tr.querySelector('[data-focus]');
       if (link) link.addEventListener('click', (e)=>{ e.preventDefault(); focusModel(link.getAttribute('data-focus')); });
+      if (corr){
+        const copyBtn = tr.querySelector(`[data-copy-corr]`);
+        if (copyBtn) copyBtn.addEventListener('click', async ()=>{ await ARW.copy(corr); });
+        const ledgerBtn = tr.querySelector(`[data-ledger]`);
+        if (ledgerBtn) ledgerBtn.addEventListener('click', async ()=>{ await previewLedger(corr); });
+      }
       tb.appendChild(tr);
     });
-    const infl = (v.inflight_hashes||[]).join(', ');
-    document.getElementById('jobs-inflight').textContent = infl || '—';
+    if (!rows.length){
+      window.__lastLedgerCorr = '';
+      clearLedgerPreview();
+    }
+    const inflight = Array.isArray(v.inflight) ? v.inflight : [];
+    const inflText = inflight.length
+      ? inflight.map(it => {
+          const parts = [shortSha(it.sha256)];
+          if (it.primary && it.primary !== it.sha256) parts.push(`primary ${it.primary}`);
+          if (Array.isArray(it.followers) && it.followers.length) parts.push(`+${it.followers.length}`);
+          else if (typeof it.count === 'number' && it.count > 1) parts.push(`+${Math.max(0, it.count - 1)}`);
+          return parts.join(' ');
+        }).join(', ')
+      : '—';
+    document.getElementById('jobs-inflight').textContent = inflText;
     // reflect concurrency snapshot (kept in jobs payload for alignment)
     if (v.concurrency){
       const c = v.concurrency;
       const stat = document.getElementById('jobs-stat');
-      if (stat){ stat.textContent = `Conc ${c.available_permits||0}/${c.configured_max||0} (held ${c.held_permits||0})`; }
+      if (stat){
+        const pending = (typeof c.pending_shrink === 'number' && c.pending_shrink > 0) ? ` · pending ${c.pending_shrink}` : '';
+        stat.textContent = `Conc ${c.available_permits||0}/${c.configured_max||0} (held ${c.held_permits||0})${pending}`;
+      }
+    }
+    if (window.__lastLedgerCorr){
+      await previewLedger(window.__lastLedgerCorr, { silent: true });
+    } else {
+      clearLedgerPreview();
     }
   }catch(e){ console.error(e); }
 }
@@ -578,6 +738,62 @@ function focusModel(id){
       setTimeout(()=> row.classList.remove('hl'), 1200);
     }
   }catch{}
+}
+
+function clearLedgerPreview(){
+  const pre = document.getElementById('ledger-preview');
+  if (!pre) return;
+  if (pre.dataset && pre.dataset.locked === 'true') return;
+  if (pre.dataset) pre.dataset.locked = 'false';
+  pre.textContent = 'Select a job to preview recent egress entries.';
+  delete pre.dataset.count;
+  delete pre.dataset.corrId;
+}
+
+function describeLedgerEntry(entry){
+  if (!entry || typeof entry !== 'object') return '';
+  const ts = entry.timestamp || entry.created_at || entry.time || '';
+  const decision = entry.decision || entry.allow || entry.result || 'unknown';
+  const host = entry.host || entry.url || entry.target || '';
+  const code = entry.reason || entry.code || entry.status || '';
+  const bytes = typeof entry.bytes === 'number' ? entry.bytes : (typeof entry.total_bytes === 'number' ? entry.total_bytes : null);
+  const parts = [];
+  parts.push(ts ? `[${ts}]` : '[—]');
+  parts.push(String(decision));
+  if (code) parts.push(`(${code})`);
+  if (host) parts.push(host);
+  if (bytes != null) parts.push(`${bytesHuman(bytes)}`);
+  return parts.join(' ');
+}
+
+async function previewLedger(corrId, opts = {}){
+  const pre = document.getElementById('ledger-preview');
+  if (!pre) return;
+  const corr = corrId || window.__lastLedgerCorr || '';
+  window.__lastLedgerCorr = corr || '';
+  try{
+    pre.dataset.locked = 'true';
+    if (!opts.silent) pre.textContent = corr ? `Loading ledger entries for ${corr}…` : 'Loading recent ledger entries…';
+    const data = await fetchAdminJson('state/egress?limit=200');
+    const items = Array.isArray(data.items) ? data.items : [];
+    const filtered = corr ? items.filter(it => String(it.corr_id||'') === corr) : items;
+    if (!filtered.length){
+      pre.textContent = corr ? `No ledger entries for corr_id ${corr}.` : 'No ledger entries available yet.';
+      pre.dataset.count = '0';
+      pre.dataset.corrId = corr;
+      pre.dataset.locked = 'false';
+      return;
+    }
+    const lines = filtered.slice(0, 6).map(describeLedgerEntry).filter(Boolean);
+    pre.textContent = lines.join('\n') + (filtered.length > lines.length ? '\n…' : '');
+    pre.dataset.count = String(filtered.length);
+    pre.dataset.corrId = corr;
+  }catch(e){
+    console.error(e);
+    pre.textContent = 'Ledger preview unavailable.';
+  } finally {
+    pre.dataset.locked = 'false';
+  }
 }
 
 // Initialize toggles

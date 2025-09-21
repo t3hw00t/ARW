@@ -58,6 +58,113 @@ impl ConcurrencyState {
     }
 }
 
+#[derive(Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct ModelsMetricsCounters {
+    pub started: u64,
+    pub queued: u64,
+    pub admitted: u64,
+    pub resumed: u64,
+    pub canceled: u64,
+    pub completed: u64,
+    pub completed_cached: u64,
+    pub errors: u64,
+    pub bytes_total: u64,
+    pub ewma_mbps: Option<f64>,
+    pub preflight_ok: u64,
+    pub preflight_denied: u64,
+    pub preflight_skipped: u64,
+    pub coalesced: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct ModelsInflightEntry {
+    pub sha256: String,
+    pub primary: String,
+    #[serde(default)]
+    pub followers: Vec<String>,
+    pub count: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct ModelsJobDestination {
+    pub host: String,
+    pub port: u16,
+    pub protocol: String,
+}
+
+#[derive(Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct ModelsJobSnapshot {
+    pub model_id: String,
+    pub job_id: String,
+    pub url: String,
+    pub corr_id: String,
+    pub dest: ModelsJobDestination,
+    pub started_at: u64,
+}
+
+#[derive(Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct ModelsConcurrencySnapshot {
+    pub configured_max: u64,
+    pub available_permits: u64,
+    pub held_permits: u64,
+    #[serde(default)]
+    pub hard_cap: Option<u64>,
+    #[serde(default)]
+    pub pending_shrink: Option<u64>,
+}
+
+#[derive(Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct ModelsMetricsResponse {
+    pub started: u64,
+    pub queued: u64,
+    pub admitted: u64,
+    pub resumed: u64,
+    pub canceled: u64,
+    pub completed: u64,
+    pub completed_cached: u64,
+    pub errors: u64,
+    pub bytes_total: u64,
+    pub ewma_mbps: Option<f64>,
+    pub preflight_ok: u64,
+    pub preflight_denied: u64,
+    pub preflight_skipped: u64,
+    pub coalesced: u64,
+    #[serde(default)]
+    pub inflight: Vec<ModelsInflightEntry>,
+    pub concurrency: ModelsConcurrencySnapshot,
+    #[serde(default)]
+    pub jobs: Vec<ModelsJobSnapshot>,
+}
+
+impl ModelsMetricsResponse {
+    fn from_parts(
+        counters: ModelsMetricsCounters,
+        inflight: Vec<ModelsInflightEntry>,
+        concurrency: ModelsConcurrencySnapshot,
+        jobs: Vec<ModelsJobSnapshot>,
+    ) -> Self {
+        Self {
+            started: counters.started,
+            queued: counters.queued,
+            admitted: counters.admitted,
+            resumed: counters.resumed,
+            canceled: counters.canceled,
+            completed: counters.completed,
+            completed_cached: counters.completed_cached,
+            errors: counters.errors,
+            bytes_total: counters.bytes_total,
+            ewma_mbps: counters.ewma_mbps,
+            preflight_ok: counters.preflight_ok,
+            preflight_denied: counters.preflight_denied,
+            preflight_skipped: counters.preflight_skipped,
+            coalesced: counters.coalesced,
+            inflight,
+            concurrency,
+            jobs,
+        }
+    }
+}
+
 #[derive(Clone, Default)]
 struct MetricsState {
     started: u64,
@@ -77,23 +184,23 @@ struct MetricsState {
 }
 
 impl MetricsState {
-    fn snapshot(&self) -> Value {
-        json!({
-            "started": self.started,
-            "queued": self.queued,
-            "admitted": self.admitted,
-            "resumed": self.resumed,
-            "canceled": self.canceled,
-            "completed": self.completed,
-            "completed_cached": self.completed_cached,
-            "errors": self.errors,
-            "bytes_total": self.bytes_total,
-            "ewma_mbps": self.ewma_mbps,
-            "preflight_ok": self.preflight_ok,
-            "preflight_denied": self.preflight_denied,
-            "preflight_skipped": self.preflight_skipped,
-            "coalesced": self.coalesced,
-        })
+    fn snapshot(&self) -> ModelsMetricsCounters {
+        ModelsMetricsCounters {
+            started: self.started,
+            queued: self.queued,
+            admitted: self.admitted,
+            resumed: self.resumed,
+            canceled: self.canceled,
+            completed: self.completed,
+            completed_cached: self.completed_cached,
+            errors: self.errors,
+            bytes_total: self.bytes_total,
+            ewma_mbps: self.ewma_mbps,
+            preflight_ok: self.preflight_ok,
+            preflight_denied: self.preflight_denied,
+            preflight_skipped: self.preflight_skipped,
+            coalesced: self.coalesced,
+        }
     }
 
     fn record_started(&mut self) {
@@ -245,23 +352,23 @@ impl DownloadsState {
         }
     }
 
-    async fn job_snapshot(&self) -> Vec<Value> {
+    async fn job_snapshot(&self) -> Vec<ModelsJobSnapshot> {
         let jobs = self.jobs.lock().await;
         jobs.iter()
             .map(|(model_id, handle)| {
                 let dest = &handle.dest;
-                json!({
-                    "model_id": model_id,
-                    "job_id": handle.job_id,
-                    "url": handle.url_display,
-                    "corr_id": handle.corr_id,
-                    "dest": {
-                        "host": &dest.host,
-                        "port": dest.port,
-                        "protocol": &dest.protocol,
+                ModelsJobSnapshot {
+                    model_id: model_id.clone(),
+                    job_id: handle.job_id.clone(),
+                    url: handle.url_display.clone(),
+                    corr_id: handle.corr_id.clone(),
+                    dest: ModelsJobDestination {
+                        host: dest.host.clone(),
+                        port: dest.port,
+                        protocol: dest.protocol.clone(),
                     },
-                    "started_at": handle.started_at.elapsed().as_secs(),
-                })
+                    started_at: handle.started_at.elapsed().as_secs(),
+                }
             })
             .collect()
     }
@@ -366,17 +473,14 @@ impl HashGuardState {
         targets
     }
 
-    fn inflight_snapshot(&self) -> Vec<Value> {
+    fn inflight_snapshot(&self) -> Vec<ModelsInflightEntry> {
         self.by_sha
             .iter()
-            .map(|(sha, entry)| {
-                let followers: Vec<String> = entry.followers.iter().cloned().collect();
-                json!({
-                    "sha256": sha,
-                    "primary": entry.primary,
-                    "followers": followers,
-                    "count": 1 + entry.followers.len(),
-                })
+            .map(|(sha, entry)| ModelsInflightEntry {
+                sha256: sha.clone(),
+                primary: entry.primary.clone(),
+                followers: entry.followers.iter().cloned().collect(),
+                count: 1 + entry.followers.len() as u64,
             })
             .collect()
     }
@@ -434,12 +538,14 @@ impl ModelStore {
         let items = self.items.read().await.clone();
         let default = self.default_id.read().await.clone();
         let metrics = self.metrics.read().await.clone().snapshot();
-        let concurrency = self.concurrency_snapshot().await;
+        let metrics_value = serde_json::to_value(metrics).unwrap_or(Value::Null);
+        let concurrency =
+            serde_json::to_value(self.concurrency_snapshot().await).unwrap_or(Value::Null);
         json!({
             "items": items,
             "default": default,
             "concurrency": concurrency,
-            "metrics": metrics,
+            "metrics": metrics_value,
         })
     }
 
@@ -550,7 +656,7 @@ impl ModelStore {
         Ok(())
     }
 
-    pub async fn concurrency_get(&self) -> Value {
+    pub async fn concurrency_get(&self) -> ModelsConcurrencySnapshot {
         self.concurrency_snapshot().await
     }
 
@@ -558,7 +664,7 @@ impl ModelStore {
         &self,
         configured_max: Option<u64>,
         hard_cap: Option<u64>,
-    ) -> Value {
+    ) -> ModelsConcurrencySnapshot {
         {
             let mut state = self.concurrency.write().await;
             if let Some(max) = configured_max {
@@ -570,17 +676,12 @@ impl ModelStore {
         self.concurrency_snapshot().await
     }
 
-    pub async fn metrics_value(&self) -> Value {
-        let mut snapshot = self.metrics.read().await.clone().snapshot();
+    pub async fn metrics_value(&self) -> ModelsMetricsResponse {
+        let counters = self.metrics.read().await.clone().snapshot();
         let inflight = self.inflight_snapshot();
         let concurrency = self.concurrency_snapshot().await;
         let jobs = self.downloads.job_snapshot().await;
-        if let Value::Object(ref mut map) = snapshot {
-            map.insert("inflight".into(), Value::Array(inflight));
-            map.insert("concurrency".into(), concurrency);
-            map.insert("jobs".into(), Value::Array(jobs));
-        }
-        snapshot
+        ModelsMetricsResponse::from_parts(counters, inflight, concurrency, jobs)
     }
 
     pub async fn jobs_snapshot(&self) -> Value {
@@ -1955,7 +2056,10 @@ impl ModelStore {
 
     async fn emit_metrics_patch(&self) {
         let snapshot = self.metrics.read().await.clone().snapshot();
-        read_models::publish_read_model_patch(&self.bus, "models_metrics", &snapshot);
+        match serde_json::to_value(&snapshot) {
+            Ok(value) => read_models::publish_read_model_patch(&self.bus, "models_metrics", &value),
+            Err(err) => warn!("serialize models metrics snapshot failed: {err}"),
+        }
     }
 
     fn progress_extra_with_hints(
@@ -2106,7 +2210,10 @@ impl ModelStore {
         f(&mut metrics);
         let snapshot = metrics.snapshot();
         drop(metrics);
-        read_models::publish_read_model_patch(&self.bus, "models_metrics", &snapshot);
+        match serde_json::to_value(&snapshot) {
+            Ok(value) => read_models::publish_read_model_patch(&self.bus, "models_metrics", &value),
+            Err(err) => warn!("serialize models metrics snapshot failed: {err}"),
+        }
     }
 
     fn register_hash_role(&self, model_id: &str, sha: &str) -> HashGuardRole {
@@ -2129,7 +2236,7 @@ impl ModelStore {
         guard.progress_targets(model_id)
     }
 
-    fn inflight_snapshot(&self) -> Vec<Value> {
+    fn inflight_snapshot(&self) -> Vec<ModelsInflightEntry> {
         let guard = self.hash_guard.lock().expect("hash guard poisoned");
         guard.inflight_snapshot()
     }
@@ -2555,18 +2662,19 @@ impl ModelStore {
         }
     }
 
-    async fn concurrency_snapshot(&self) -> Value {
+    async fn concurrency_snapshot(&self) -> ModelsConcurrencySnapshot {
         let state = self.concurrency.read().await.clone();
         let configured = state.configured();
         let active = self.downloads.active_count().await as u64;
         let available = configured.saturating_sub(active);
-        json!({
-            "configured_max": configured,
-            "available_permits": available,
-            "held_permits": active.min(configured),
-            "hard_cap": state.hard_cap,
-            "pending_shrink": null,
-        })
+        let pending = active.saturating_sub(configured);
+        ModelsConcurrencySnapshot {
+            configured_max: configured,
+            available_permits: available,
+            held_permits: active.min(configured),
+            hard_cap: state.hard_cap,
+            pending_shrink: (pending > 0).then_some(pending),
+        }
     }
 
     async fn replace_items(&self, items: Vec<Value>) {
@@ -2873,16 +2981,56 @@ mod tests {
         assert_eq!(followers, vec!["model-b".to_string()]);
 
         let metrics = store.metrics_value().await;
-        let inflight = metrics
-            .get("inflight")
-            .and_then(|v| v.as_array())
-            .expect("metrics inflight array");
-        assert_eq!(inflight.len(), 1);
+        assert_eq!(metrics.inflight.len(), 1);
+        let entry = &metrics.inflight[0];
+        assert_eq!(entry.sha256, "hash-one");
+        assert_eq!(entry.primary, "model-a");
+        assert!(entry.followers.contains(&"model-b".to_string()));
 
         let released = store.release_primary_hash("model-a");
         assert_eq!(released, vec!["model-b".to_string()]);
         let targets_after = store.progress_targets("model-a");
         assert_eq!(targets_after, vec!["model-a".to_string()]);
+    }
+
+    #[tokio::test]
+    async fn metrics_snapshot_stable_shape() {
+        std::env::remove_var("ARW_MODELS_MAX_CONC");
+        std::env::remove_var("ARW_MODELS_MAX_CONC_HARD");
+
+        let bus = arw_events::Bus::new_with_replay(16, 16);
+        let store = Arc::new(ModelStore::new(bus, None));
+
+        let metrics = store.metrics_value().await;
+        let value = serde_json::to_value(&metrics).expect("serialize metrics");
+
+        let expected = json!({
+            "started": 0,
+            "queued": 0,
+            "admitted": 0,
+            "resumed": 0,
+            "canceled": 0,
+            "completed": 0,
+            "completed_cached": 0,
+            "errors": 0,
+            "bytes_total": 0,
+            "ewma_mbps": null,
+            "preflight_ok": 0,
+            "preflight_denied": 0,
+            "preflight_skipped": 0,
+            "coalesced": 0,
+            "inflight": [],
+            "concurrency": {
+                "configured_max": 2,
+                "available_permits": 2,
+                "held_permits": 0,
+                "hard_cap": null,
+                "pending_shrink": null,
+            },
+            "jobs": [],
+        });
+
+        assert_eq!(value, expected);
     }
 }
 

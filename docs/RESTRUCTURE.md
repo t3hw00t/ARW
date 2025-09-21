@@ -11,6 +11,29 @@ Type: Explanation
 Owner: Core maintainers
 Scope: Architecture, APIs, modules, migration plan, status, hand‑off tips
 
+## How to Use This Handbook
+- Start with the snapshot below to understand current momentum, then drill into the detailed tracks that follow.
+- Status callouts pair an emoji with plain language so screen readers and reports capture the same signal.
+- Cross-links point to source files or guides; keep those updated when you land a change to avoid drift.
+
+## Status Legend
+- ✅ Completed — work is merged and available in `main`.
+- 🔄 In progress — actively being delivered; expect updates soon.
+- ⏭ Next up — queued immediately after the active work wraps.
+- ⏳ Planned — scoped but waiting on prerequisites or staffing.
+
+## Alignment Pillars
+- **Stability:** Prefer incremental migrations that keep `/actions`, `/events`, and `/state/*` reliable at every commit; expand regression coverage before removing shims.
+- **Accessibility:** Mirror status text alongside icons, keep docs in plain language, and retain links to UI entry points so screen readers and handoffs stay frictionless.
+- **Harmony:** Keep terminology synchronized between code, docs, and telemetry; when you rename a surface, update the style guide and topics tables together.
+- **Optimization:** Fold in performance or ergonomics wins when touching a module—capture learnings in the Snappy UX contracts and retire redundant paths.
+
+## Current Work in Progress
+- **Unified server (`apps/arw-server`)** — keep the router module map below current, document new background loops, and land the remaining state/memory integrations without reintroducing legacy routes.
+- **Policy & posture** — finish the Cedar ABAC embed, wire explainers into `/actions`, and extend posture presets so capsules, leases, and the egress ledger stay aligned.
+- **Operator experience (Phase D)** — port Chat Workbench APIs, thread the screenshot pipeline through the SPA/right-sidecar shift, and retire the last `/admin/*` debug windows.
+- **Safety (Phase E)** — complete Guardrail Gateway enforcement, expand Asimov Capsule Guard coverage, and remove every compatibility fallback once gauges confirm zero legacy traffic.
+
 ## Vision (Harmonized)
 - Free, local‑first, privacy‑first agents that anyone can run on a laptop (CPU‑friendly), producing research‑grade output (provenance, coverage, verification, replayability).
 - Agents learn and grow: adaptive memory + skills; safe autonomy via plans, simulation, and leases; explicit policies and mandatory egress firewall.
@@ -160,11 +183,13 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
   - `GET /state/contributions`: contribution ledger snapshot.
   - File: `apps/arw-server/src/main.rs`
 
-- Policy (facade + posture) — In progress
-  - ABAC Facade: `arw-policy` crate provides a JSON‑backed policy engine with `allow_all` and `lease_rules` (kind_prefix → capability). `/actions` and context rehydrate are enforced via leases when required. See Guide → Policy (ABAC Facade).
-  - Security Posture: `ARW_SECURITY_POSTURE=relaxed|standard|strict` selects a default policy when no `ARW_POLICY_FILE` is set. Default is `standard` (lease‑gates network, fs, rehydrate, app, browser, models download, shell).
-  - Next: embed Cedar ABAC with an entity model (agents/projects/leases/capabilities) and explainers.
-  - Egress: preview forward proxy and `/egress/preview` implemented; DNS guard (DoH/DoT) and IP‑literal guard enforced; `/state/egress/settings` for runtime toggles with schema `spec/schemas/egress_settings.json`.
+### Policy (facade + posture)
+Status: In progress.
+
+- [x] ABAC facade (`arw-policy` crate) ships with JSON-backed rules, `allow_all`, and `lease_rules`; `/actions` and context rehydrate honor leases. See Guide → Policy (ABAC Facade).
+- [x] Security posture defaults (`ARW_SECURITY_POSTURE=relaxed|standard|strict`) select guard presets when `ARW_POLICY_FILE` is absent; `standard` lease-gates network, fs, rehydrate, apps, browser, models download, and shell access.
+- [ ] Embed Cedar ABAC with entity modeling (agents/projects/leases/capabilities) and human-readable explainers.
+- [ ] Extend egress integration so posture presets, capsule leases, and ledger toggles move together (forward proxy, `/egress/preview`, DNS/IP guards already live; expose remaining controls via `/state/egress/settings`).
 
 - `crates/arw-wasi` (WASI runtime scaffold) — Implemented (skeleton)
   - Provides a `ToolHost` trait and a `NoopHost` implementation as a placeholder.
@@ -181,27 +206,32 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
 ### Immediate Reintegration Backlog
 - **Models & egress**
   - ✅ Resume support (Range/If-Range, `.part` reuse) now ships in `arw-server`.
-  - ⏭ Re-introduce the optional HEAD quota preflight and single-flight hash guard so duplicate downloads coalesce before the GET.
-  - ⏭ Surface idle-timeout/retry tuneables (`ARW_DL_IDLE_TIMEOUT_SECS`, backoff policy) and expose resumable error hints in `/admin/ui/models`.
+  - Next up (⏭) Re-introduce the optional HEAD quota preflight and single-flight hash guard so duplicate downloads coalesce before the GET.
+  - Next up (⏭) Surface idle-timeout/retry tuneables (`ARW_DL_IDLE_TIMEOUT_SECS`, backoff policy) and expose resumable error hints in `/admin/ui/models`.
 - **Events & telemetry**
   - ✅ `egress.preview`/`egress.ledger.appended` emit from unified downloads with `corr_id` and posture metadata.
-- ⏭ Expand `/state/models_metrics` with resume counters, in-flight hash stats, and EWMA visibility for dashboards.
+- ✅ Expanded `/state/models_metrics` with resume counters, hash-group inflight listings, and EWMA telemetry (typed schema + tests).
 - **Docs & rollout**
   - ✅ Guide updates cover resume semantics and correlation IDs.
   - ✅ README and release notes highlight the `arw-svc` retirement and unified entry points; subsequent releases reference the unified server exclusively.
 - **UI follow-ups**
-  - ⏭ Wire the admin models UI to the new statuses (`resumed`, `degraded`, `cancel-requested`) and link ledger previews for operators.
+  - ✅ Launcher/admin models UI shows status badges for `resumed`/`degraded`/`cancel-requested`, and adds inline ledger previews with copy helpers for correlation IDs.
   - ✅ Debug Models/Agents/Projects pages (and launcher mirrors) now call `/admin/*` endpoints with admin headers. Legacy `/models/*` shims are no longer required.
 
 ### Legacy Feature Migration Track (runs parallel to phases 2–8)
 
+#### Snapshot
+- **Phase D — Operator experience:** In progress, with chat workbench routes, screenshot pipeline wiring, and the SPA/right-sidecar migration queued to close out the legacy debug UI.
+- **Phase E — Safety:** Planned; finish Guardrail Gateway enforcement, complete Asimov Capsule Guard coverage, and delete the lingering `/admin/*` fallbacks once capsules drive every decision path.
+- **Legacy shutdown instrumentation:** Completed, but keep dashboards on `arw_legacy_*` counters until traffic stays at zero for a sustained window.
+
 | Phase | Focus | Features/Deliverables | Dependencies | Status |
 | --- | --- | --- | --- | --- |
-| A | Core services | Model Steward (models download/CAS GC ✅), Tool Forge (tool runs/cache metrics ✅), Snappy Governor (route stats view), Event Spine patch streaming | Triad kernel, metrics plumbing | ✅ Backend landed in unified server |
-| B | Memory + projects | Memory Lanes (lane CRUD/save/load), Project Hub primitives (notes/files/patch), Project Map read models (observations/beliefs/intents) | Phase A storage, policy leases | ✅ APIs live; debug UI now targets the unified routes (monitor automation for straggling `/admin/*` calls) |
-| C | Feedback & experiments | Feedback Loop surfaces, Experiment Deck APIs, Self Card snapshots | Phase B data wiring | ✅ Services emitting; UI polish tracked with Phase D |
-| D | Operator experience | Chat Workbench, Screenshot Pipeline, launcher shift to SPA/right-sidecar, retire `/admin/*` debug windows | Phase A endpoints, UI unification groundwork | 🔄 Debug surfaces now ship from `arw-server`; SPA/right-sidecar migration tracked as follow-up |
-| E | Safety | Guardrail Gateway on `arw-server`, Asimov Capsule Guard enforcement, final removal of legacy `/admin/*` shims | Policy & egress firewall phase | ⏳ Partial proxy shipped; firewall + capsules outstanding |
+| A | Core services | Model Steward (models download/CAS GC ✅), Tool Forge (tool runs/cache metrics ✅), Snappy Governor (route stats view), Event Spine patch streaming | Triad kernel, metrics plumbing | Completed — backend landed in unified server (✅) |
+| B | Memory + projects | Memory Lanes (lane CRUD/save/load), Project Hub primitives (notes/files/patch), Project Map read models (observations/beliefs/intents) | Phase A storage, policy leases | Completed — APIs live; debug UI now targets the unified routes (✅) |
+| C | Feedback & experiments | Feedback Loop surfaces, Experiment Deck APIs, Self Card snapshots | Phase B data wiring | Completed — services emitting; UI polish tracked with Phase D (✅) |
+| D | Operator experience | Chat Workbench, Screenshot Pipeline, launcher shift to SPA/right-sidecar, retire `/admin/*` debug windows | Phase A endpoints, UI unification groundwork | In progress — debug surfaces now ship from `arw-server`; SPA/right-sidecar migration tracked as follow-up (🔄) |
+| E | Safety | Guardrail Gateway on `arw-server`, Asimov Capsule Guard enforcement, final removal of legacy `/admin/*` shims | Policy & egress firewall phase | Planned — partial proxy shipped; firewall + capsules outstanding (⏳) |
 
 Notes
 - Phases can overlap if dependencies are satisfied; track owners and dates in the backlog so the matrix stays current.

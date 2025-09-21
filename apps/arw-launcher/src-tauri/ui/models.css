@@ -11,12 +11,53 @@ th, td { border-bottom: 1px solid #eee; padding: 6px 8px; text-align: left; }
 .dim { color: var(--color-muted); }
 .ok { color: var(--status-ok); }
 .bad { color: var(--status-bad); }
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--color-line);
+  background: var(--surface-muted, #f4f4f5);
+  font-size: 0.75rem;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+.status-badge.ok { border-color: var(--status-ok); color: var(--status-ok); }
+.status-badge.warn { border-color: var(--status-warn); color: var(--status-warn); }
+.status-badge.accent { border-color: var(--color-accent-teal); color: var(--color-accent-teal); }
+.status-badge.bad { border-color: var(--status-bad); color: var(--status-bad); }
+.status-dot {
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: currentColor;
+  display: inline-block;
+}
 input[type=text], input[type=url], input[type=number] { padding: 6px 8px; border: 1px solid #ccc; border-radius: 8px; }
 button { padding: 8px 12px; border: 1px solid #aaa; border-radius: 8px; background: #fafafa; cursor: pointer; }
 button:hover { background: #f0f0f0; }
 .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; }
 .bar{ height:8px; border:1px solid var(--color-line); border-radius:8px; overflow:hidden; margin:4px 0 }
 .bar>i{ display:block; height:8px; width:0%; background: var(--color-accent-teal) }
+.pill-buttons {
+  display: inline-flex;
+  gap: 4px;
+}
+.pill-buttons button {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+}
+#ledger-preview {
+  margin-top: 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-line);
+  background: var(--surface-muted, #f4f4f5);
+  max-height: 200px;
+  overflow: auto;
+  font-size: 0.8rem;
+}
 
 /* Fixed widths moved from inline */
 #port{ width: 90px }

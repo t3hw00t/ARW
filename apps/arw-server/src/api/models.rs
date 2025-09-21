@@ -8,6 +8,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{models, AppState};
+use models::{ModelsConcurrencySnapshot, ModelsMetricsResponse};
 use utoipa::ToSchema;
 
 fn unauthorized() -> axum::response::Response {
@@ -247,7 +248,7 @@ pub struct ConcurrencyUpdate {
     get,
     path = "/admin/models/concurrency",
     tag = "Models",
-    responses((status = 200, description = "Concurrency", body = serde_json::Value))
+    responses((status = 200, description = "Concurrency", body = ModelsConcurrencySnapshot))
 )]
 pub async fn models_concurrency_get(
     headers: HeaderMap,
@@ -264,7 +265,7 @@ pub async fn models_concurrency_get(
     path = "/admin/models/concurrency",
     tag = "Models",
     request_body = ConcurrencyUpdate,
-    responses((status = 200, description = "Updated", body = serde_json::Value))
+    responses((status = 200, description = "Updated", body = ModelsConcurrencySnapshot))
 )]
 pub async fn models_concurrency_set(
     headers: HeaderMap,
@@ -298,7 +299,7 @@ pub async fn models_jobs(headers: HeaderMap, State(state): State<AppState>) -> i
     operation_id = "state_models_metrics_doc",
     description = "Models metrics snapshot.",
     responses(
-        (status = 200, description = "Metrics", body = serde_json::Value),
+        (status = 200, description = "Metrics", body = ModelsMetricsResponse),
         (status = 401, description = "Unauthorized", body = serde_json::Value)
     )
 )]

@@ -2,7 +2,9 @@ use anyhow::Result;
 use directories::ProjectDirs;
 use once_cell::sync::OnceCell;
 use reqwest::header::{HeaderMap, HeaderValue};
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::BTreeMap;
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -828,14 +830,21 @@ mod cmds {
     pub async fn models_summary(port: Option<u16>) -> Result<Value, String> {
         let resp = admin_get("admin/models/summary", port).await?;
         let env = resp.json::<Value>().await.map_err(|e| e.to_string())?;
-        // API returns { ok, data }; return data for convenience if present
-        Ok(env.get("data").cloned().unwrap_or(env))
+        let summary_raw = env.get("data").cloned().unwrap_or(env);
+        let summary: ModelsSummary =
+            serde_json::from_value(summary_raw).map_err(|e| e.to_string())?;
+        serde_json::to_value(summary).map_err(|e| e.to_string())
     }
 
     #[tauri::command]
-    pub async fn models_concurrency_get(port: Option<u16>) -> Result<Value, String> {
+    pub async fn models_concurrency_get(
+        port: Option<u16>,
+    ) -> Result<ModelsConcurrencySnapshot, String> {
         let resp = admin_get("admin/models/concurrency", port).await?;
-        let v = resp.json::<Value>().await.map_err(|e| e.to_string())?;
+        let v = resp
+            .json::<ModelsConcurrencySnapshot>()
+            .await
+            .map_err(|e| e.to_string())?;
         Ok(v)
     }
 
@@ -844,11 +853,14 @@ mod cmds {
         max: usize,
         block: Option<bool>,
         port: Option<u16>,
-    ) -> Result<Value, String> {
+    ) -> Result<ModelsConcurrencySnapshot, String> {
         let body = serde_json::json!({"max": max, "block": block});
         let resp = admin_post_json("admin/models/concurrency", body, port).await?;
-        let env = resp.json::<Value>().await.map_err(|e| e.to_string())?;
-        Ok(env.get("data").cloned().unwrap_or(env))
+        let v = resp
+            .json::<ModelsConcurrencySnapshot>()
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(v)
     }
 
     #[tauri::command]
@@ -1041,3 +1053,77 @@ mod cmds {
 
 // Re-export commands at crate root for existing callers
 pub use cmds::*;
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelsConcurrencySnapshot {
+    pub configured_max: u64,
+    pub available_permits: u64,
+    pub held_permits: u64,
+    #[serde(default)]
+    pub hard_cap: Option<u64>,
+    #[serde(default)]
+    pub pending_shrink: Option<u64>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelsJobDestination {
+    pub host: String,
+    pub port: u16,
+    pub protocol: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelsJobSnapshot {
+    pub model_id: String,
+    pub job_id: String,
+    pub url: String,
+    pub corr_id: String,
+    pub dest: ModelsJobDestination,
+    pub started_at: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelsInflightEntry {
+    pub sha256: String,
+    pub primary: String,
+    #[serde(default)]
+    pub followers: Vec<String>,
+    pub count: u64,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelsMetricsResponse {
+    pub started: u64,
+    pub queued: u64,
+    pub admitted: u64,
+    pub resumed: u64,
+    pub canceled: u64,
+    pub completed: u64,
+    pub completed_cached: u64,
+    pub errors: u64,
+    pub bytes_total: u64,
+    #[serde(default)]
+    pub ewma_mbps: Option<f64>,
+    pub preflight_ok: u64,
+    pub preflight_denied: u64,
+    pub preflight_skipped: u64,
+    pub coalesced: u64,
+    #[serde(default)]
+    pub inflight: Vec<ModelsInflightEntry>,
+    pub concurrency: ModelsConcurrencySnapshot,
+    #[serde(default)]
+    pub jobs: Vec<ModelsJobSnapshot>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct ModelsSummary {
+    #[serde(default)]
+    pub items: Vec<Value>,
+    #[serde(default)]
+    pub default: String,
+    #[serde(default)]
+    pub concurrency: ModelsConcurrencySnapshot,
+    #[serde(default)]
+    pub metrics: ModelsMetricsResponse,
+    #[serde(flatten, default)]
+    pub extra: BTreeMap<String, Value>,
+}
