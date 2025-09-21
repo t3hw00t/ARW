@@ -80,7 +80,7 @@ async fn sync_once(state: &AppState, client: Option<&reqwest::Client>) -> Result
         ingested += 1;
     }
     let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-    state.bus.publish(
+    state.bus().publish(
         topics::TOPIC_RESEARCH_WATCHER_UPDATED,
         &serde_json::json!({
             "ingested": ingested,
@@ -159,7 +159,7 @@ pub async fn update_status(
         .await?;
     if let Some(ref it) = item {
         let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-        state.bus.publish(
+        state.bus().publish(
             topics::TOPIC_RESEARCH_WATCHER_UPDATED,
             &serde_json::json!({
                 "id": it.id,

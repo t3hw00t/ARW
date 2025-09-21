@@ -43,14 +43,7 @@ fn get_env_flag(key: &str) -> bool {
     std::env::var(key).ok().as_deref() == Some("1")
 }
 
-/// Effective egress settings snapshot.
-#[utoipa::path(
-    get,
-    path = "/state/egress/settings",
-    tag = "Egress",
-    responses((status = 200, description = "Egress settings", body = serde_json::Value))
-)]
-pub async fn state_egress_settings() -> impl IntoResponse {
+pub(crate) fn current_settings() -> EgressSettings {
     let posture = std::env::var("ARW_NET_POSTURE")
         .ok()
         .or(std::env::var("ARW_SECURITY_POSTURE").ok());
@@ -63,7 +56,7 @@ pub async fn state_egress_settings() -> impl IntoResponse {
                 .collect()
         })
         .unwrap_or_default();
-    let out = EgressSettings {
+    EgressSettings {
         posture,
         allowlist,
         block_ip_literals: get_env_flag("ARW_EGRESS_BLOCK_IP_LITERALS"),
@@ -74,8 +67,18 @@ pub async fn state_egress_settings() -> impl IntoResponse {
             .and_then(|s| s.parse().ok())
             .unwrap_or(9080),
         ledger_enable: get_env_flag("ARW_EGRESS_LEDGER_ENABLE"),
-    };
-    Json(json!({"egress": out}))
+    }
+}
+
+/// Effective egress settings snapshot.
+#[utoipa::path(
+    get,
+    path = "/state/egress/settings",
+    tag = "Egress",
+    responses((status = 200, description = "Egress settings", body = serde_json::Value))
+)]
+pub async fn state_egress_settings() -> impl IntoResponse {
+    Json(json!({"egress": current_settings()}))
 }
 
 /// Update egress settings (admin token required).
@@ -141,7 +144,7 @@ pub async fn egress_settings_update(
         Err(e) => return (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Json(json!({"type":"about:blank","title":"Error","status":500, "detail": format!("invalid schema: {}", e)}))).into_response(),
     };
     // Merge patch into config_state.egress
-    let mut cfg = state.config_state.lock().await.clone();
+    let mut cfg = state.config_state().lock().await.clone();
     if !cfg.is_object() {
         cfg = json!({});
     }
@@ -195,16 +198,18 @@ pub async fn egress_settings_update(
         "kernel-disabled".to_string()
     };
     {
-        let mut cur = state.config_state.lock().await;
+        let cfg_state = state.config_state();
+        let mut cur = cfg_state.lock().await;
         *cur = cfg.clone();
     }
     {
-        let mut hist = state.config_history.lock().await;
+        let history = state.config_history();
+        let mut hist = history.lock().await;
         hist.push((snapshot_id.clone(), cfg.clone()));
     }
 
     // publish event, apply proxy toggle, and return effective settings with snapshot id
-    state.bus.publish(topics::TOPIC_EGRESS_SETTINGS_UPDATED, &json!({"ts": chrono::Utc::now().to_rfc3339(), "who": "admin", "snapshot_id": snapshot_id }));
+    state.bus().publish(topics::TOPIC_EGRESS_SETTINGS_UPDATED, &json!({"ts": chrono::Utc::now().to_rfc3339(), "who": "admin", "snapshot_id": snapshot_id }));
     egress_proxy::apply_current(state.clone()).await;
     let posture = std::env::var("ARW_NET_POSTURE")
         .ok()

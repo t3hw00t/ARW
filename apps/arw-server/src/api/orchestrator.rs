@@ -80,7 +80,7 @@ pub async fn orchestrator_start_training(
         )
             .into_response(),
     };
-    state.bus.publish(
+    state.bus().publish(
         topics::TOPIC_ORCHESTRATOR_JOB_CREATED,
         &json!({"id": id, "goal": goal}),
     );
@@ -99,7 +99,7 @@ pub async fn orchestrator_start_training(
                     Some(p),
                 )
                 .await;
-            state2.bus.publish(
+            state2.bus().publish(
                 topics::TOPIC_ORCHESTRATOR_JOB_PROGRESS,
                 &json!({"id": id_clone, "progress": p}),
             );
@@ -107,7 +107,7 @@ pub async fn orchestrator_start_training(
                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
             }
         }
-        state2.bus.publish(
+        state2.bus().publish(
             topics::TOPIC_ORCHESTRATOR_JOB_COMPLETED,
             &json!({"id": id_clone, "ok": true}),
         );
@@ -124,7 +124,7 @@ pub async fn orchestrator_start_training(
             .kernel()
             .insert_logic_unit_async(lu_id.clone(), manifest.clone(), "suggested".to_string())
             .await;
-        state2.bus.publish(
+        state2.bus().publish(
             topics::TOPIC_LOGICUNIT_SUGGESTED,
             &json!({"id": lu_id, "job_id": id_clone}),
         );

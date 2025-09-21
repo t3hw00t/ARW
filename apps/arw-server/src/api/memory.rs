@@ -135,7 +135,7 @@ pub async fn admin_memory_apply(
         .await
     {
         Ok(id) => {
-            state.bus.publish(
+            state.bus().publish(
                 topics::TOPIC_MEMORY_RECORD_PUT,
                 &json!({
                     "id": id,

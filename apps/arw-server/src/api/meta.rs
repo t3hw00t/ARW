@@ -46,17 +46,19 @@ pub async fn about(State(state): State<crate::AppState>) -> impl IntoResponse {
         .ok()
         .and_then(|s| s.parse().ok());
     let posture = std::env::var("ARW_SECURITY_POSTURE").ok();
-    let endpoints = state.endpoints.as_ref().clone();
-    let endpoints_meta = state.endpoints_meta.as_ref().clone();
+    let endpoints = state.endpoints();
+    let endpoints_meta = state.endpoints_meta();
+    let endpoints_vec = endpoints.as_ref().clone();
+    let endpoints_meta_vec = endpoints_meta.as_ref().clone();
     Json(json!({
         "service": name,
         "version": version,
         "http": {"bind": bind, "port": port},
         "docs_url": docs,
         "security_posture": posture,
-        "counts": {"public": endpoints.len(), "admin": 0, "total": endpoints.len()},
-        "endpoints": endpoints,
-        "endpoints_meta": endpoints_meta,
+        "counts": {"public": endpoints_vec.len(), "admin": 0, "total": endpoints_vec.len()},
+        "endpoints": endpoints_vec,
+        "endpoints_meta": endpoints_meta_vec,
         "perf_preset": {
             "tier": tier,
             "http_max_conc": http_max_conc,

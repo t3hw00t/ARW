@@ -15,7 +15,7 @@ use arw_topics as topics;
 /// Effective config JSON.
 #[utoipa::path(get, path = "/state/config", tag = "Config", responses((status = 200, body = serde_json::Value)))]
 pub async fn state_config(State(state): State<AppState>) -> impl IntoResponse {
-    let snap = state.config_state.lock().await.clone();
+    let snap = state.config_state().lock().await.clone();
     Json(json!({"config": snap}))
 }
 
@@ -206,7 +206,7 @@ pub async fn patch_apply(
         );
     }
     let dry = req.dry_run.unwrap_or(false);
-    let current_cfg = state.config_state.lock().await.clone();
+    let current_cfg = state.config_state().lock().await.clone();
     let patch_values: Vec<Value> = req
         .patches
         .iter()
@@ -323,11 +323,13 @@ pub async fn patch_apply(
             "kernel-disabled".to_string()
         };
         {
-            let mut hist = state.config_history.lock().await;
+            let history = state.config_history();
+            let mut hist = history.lock().await;
             hist.push((snapshot_id.clone(), cfg.clone()));
         }
         {
-            let mut cur = state.config_state.lock().await;
+            let cfg_state = state.config_state();
+            let mut cur = cfg_state.lock().await;
             *cur = cfg.clone();
         }
         let mut event_payload = json!({"ops": req.patches.len(), "snapshot_id": snapshot_id});
@@ -335,7 +337,7 @@ pub async fn patch_apply(
             event_payload["safety_issues"] = Value::Array(safety_issues.clone());
         }
         state
-            .bus
+            .bus()
             .publish(topics::TOPIC_CONFIG_PATCH_APPLIED, &event_payload);
         let json_patch: Vec<Value> = diffs
             .iter()
@@ -386,7 +388,8 @@ pub async fn patch_revert(
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
         );
     }
-    let mut hist = state.config_history.lock().await;
+    let history = state.config_history();
+    let mut hist = history.lock().await;
     if let Some((_, snap)) = hist
         .iter()
         .rev()
@@ -395,11 +398,12 @@ pub async fn patch_revert(
     {
         let new_id = uuid::Uuid::new_v4().to_string();
         {
-            let mut cur = state.config_state.lock().await;
+            let cfg_state = state.config_state();
+            let mut cur = cfg_state.lock().await;
             *cur = snap.clone();
         }
         hist.push((new_id.clone(), snap.clone()));
-        state.bus.publish(
+        state.bus().publish(
             topics::TOPIC_LOGICUNIT_REVERTED,
             &json!({"snapshot_id": req.snapshot_id, "new_snapshot_id": new_id}),
         );

@@ -253,7 +253,7 @@ async fn envelope_to_proto(
 ) -> Result<EventEnvelope, Status> {
     let payload = Some(json_to_prost(&env.payload)?);
     let policy_json = env
-        .policy
+        .policy()
         .as_ref()
         .map(|p| serde_json::to_value(p).map_err(|e| Status::internal(e.to_string())));
     let policy = match policy_json {

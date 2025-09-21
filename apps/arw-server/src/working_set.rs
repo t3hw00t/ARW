@@ -317,7 +317,7 @@ impl<'a> WorkingSetBuilder<'a> {
         let retrieve_start = Instant::now();
         for lane in lanes.iter() {
             let fetch_k = ((spec.limit * 3) + spec.expand_per_seed).max(10) as i64;
-            let mut items = self.state.kernel.select_memory_hybrid(
+            let mut items = self.state.kernel().select_memory_hybrid(
                 spec.query.as_deref(),
                 spec.embed.as_deref(),
                 lane.as_deref(),
@@ -378,7 +378,7 @@ impl<'a> WorkingSetBuilder<'a> {
             for seed in seed_infos.clone() {
                 let links = self
                     .state
-                    .kernel
+                    .kernel()
                     .list_memory_links(&seed.id, spec.expand_per_seed as i64)
                     .unwrap_or_default();
                 for link in links {
@@ -389,7 +389,7 @@ impl<'a> WorkingSetBuilder<'a> {
                         if candidates.contains_key(dst_id) {
                             continue;
                         }
-                        if let Ok(Some(record)) = self.state.kernel.get_memory(dst_id) {
+                        if let Ok(Some(record)) = self.state.kernel().get_memory(dst_id) {
                             if let Some(candidate) = build_expansion_candidate(
                                 record,
                                 &seed,
@@ -539,7 +539,7 @@ impl<'a> WorkingSetBuilder<'a> {
         let mut added = 0usize;
         let fetch_k = ((spec.limit * 2) + spec.expand_per_seed).max(12) as i64;
         for lane in lanes.iter() {
-            let mut items = self.state.kernel.select_memory_hybrid(
+            let mut items = self.state.kernel().select_memory_hybrid(
                 spec.query.as_deref(),
                 Some(avg.as_slice()),
                 lane.as_deref(),

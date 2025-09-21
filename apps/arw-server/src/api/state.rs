@@ -74,7 +74,7 @@ pub async fn state_episodes(
     responses((status = 200, description = "Route stats", body = serde_json::Value))
 )]
 pub async fn state_route_stats(State(state): State<AppState>) -> impl IntoResponse {
-    let bus = state.bus.stats();
+    let bus = state.bus().stats();
     let metrics = state.metrics().snapshot();
     Json(json!({
         "bus": {
@@ -416,7 +416,14 @@ pub async fn state_egress(
         .list_egress_async(limit.clamp(1, 2000))
         .await
         .unwrap_or_default();
-    Json(json!({"items": items})).into_response()
+    let count = items.len();
+    let settings = crate::api::egress_settings::current_settings();
+    Json(json!({
+        "count": count,
+        "items": items,
+        "settings": settings,
+    }))
+    .into_response()
 }
 
 /// Research watcher queue snapshot.

@@ -535,27 +535,27 @@ mod tests {
             experiments::Experiments::new(bus.clone(), governor_state.clone()).await;
         let capsules_store = Arc::new(CapsuleStore::new());
         let chat_state = Arc::new(chat::ChatState::new());
-        AppState {
+        AppState::new(
             bus,
             kernel,
-            policy: policy_arc,
+            policy_arc,
             host,
-            config_state: Arc::new(Mutex::new(json!({}))),
-            config_history: Arc::new(Mutex::new(Vec::new())),
-            sse_id_map: Arc::new(Mutex::new(sse_cache::SseIdCache::with_capacity(64))),
-            endpoints: Arc::new(Vec::new()),
-            endpoints_meta: Arc::new(Vec::new()),
+            Arc::new(Mutex::new(json!({}))),
+            Arc::new(Mutex::new(Vec::new())),
+            Arc::new(Mutex::new(sse_cache::SseIdCache::with_capacity(64))),
+            Arc::new(Vec::new()),
+            Arc::new(Vec::new()),
             metrics,
-            kernel_enabled: true,
-            models: models_store,
+            true,
+            models_store,
             tool_cache,
-            governor: governor_state,
-            feedback: feedback_hub,
-            cluster: cluster_state,
-            experiments: experiments_state,
-            capsules: capsules_store,
-            chat: chat_state,
-        }
+            governor_state,
+            feedback_hub,
+            cluster_state,
+            experiments_state,
+            capsules_store,
+            chat_state,
+        )
     }
 
     fn sample_capsule(id: &str) -> GatingCapsule {

@@ -7,10 +7,10 @@ use crate::{tool_cache::StoreOutcome, util, AppState};
 use arw_topics as topics;
 
 pub(crate) fn start_local_worker(state: AppState) {
-    let bus = state.bus.clone();
-    let kernel = state.kernel.clone();
-    let policy = state.policy.clone();
-    let host = state.host.clone();
+    let bus = state.bus();
+    let kernel = state.kernel().clone();
+    let policy = state.policy();
+    let host = state.host();
     let tool_cache = state.tool_cache();
     tokio::spawn(async move {
         loop {
@@ -394,6 +394,7 @@ async fn append_egress_entry_async(
                 record.corr_id.map(|s| s.to_string()),
                 None,
                 posture.map(|s| s.to_string()),
+                None,
             )
             .await
             .ok()

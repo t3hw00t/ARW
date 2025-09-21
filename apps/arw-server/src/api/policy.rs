@@ -17,7 +17,7 @@ use arw_topics as topics;
     responses((status = 200, description = "Policy snapshot", body = serde_json::Value))
 )]
 pub async fn state_policy(State(state): State<AppState>) -> impl axum::response::IntoResponse {
-    Json(state.policy.lock().await.snapshot())
+    Json(state.policy().lock().await.snapshot())
 }
 
 /// Reload policy from env/config (admin token required).
@@ -43,11 +43,12 @@ pub async fn policy_reload(
     }
     let newp = PolicyEngine::load_from_env();
     {
-        let mut pol = state.policy.lock().await;
+        let policy = state.policy();
+        let mut pol = policy.lock().await;
         *pol = newp.clone();
     }
     state
-        .bus
+        .bus()
         .publish(topics::TOPIC_POLICY_RELOADED, &json!(newp.snapshot()));
     (
         axum::http::StatusCode::OK,
@@ -107,7 +108,7 @@ pub async fn policy_simulate(
             .to_string(),
         attrs: v.get("attrs").cloned().unwrap_or(serde_json::json!({})),
     });
-    let d = state.policy.lock().await.evaluate_abac(&AbacRequest {
+    let d = state.policy().lock().await.evaluate_abac(&AbacRequest {
         action,
         subject: subj,
         resource: res,

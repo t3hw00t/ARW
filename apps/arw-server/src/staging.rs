@@ -95,7 +95,7 @@ pub async fn maybe_stage_action(
         )
         .await?;
     let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-    state.bus.publish(
+    state.bus().publish(
         topics::TOPIC_STAGING_PENDING,
         &json!({
             "id": id,
@@ -159,7 +159,7 @@ pub async fn approve_action(
             None,
         )
         .await?;
-    state.bus.publish(
+    state.bus().publish(
         topics::TOPIC_STAGING_DECIDED,
         &json!({
             "id": staging_id,
@@ -185,7 +185,7 @@ pub async fn approve_action(
         ce: None,
     };
     state
-        .bus
+        .bus()
         .publish(&submitted_env.kind, &submitted_env.payload);
     Ok(action_id)
 }
@@ -218,7 +218,7 @@ pub async fn deny_action(
             None,
         )
         .await?;
-    state.bus.publish(
+    state.bus().publish(
         topics::TOPIC_STAGING_DECIDED,
         &json!({
             "id": staging_id,

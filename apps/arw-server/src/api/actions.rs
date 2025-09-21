@@ -52,7 +52,7 @@ pub(crate) async fn submit_action(
     if !replay.expired.is_empty() {
         let expired_ms = chrono::Utc::now().timestamp_millis().max(0) as u64;
         for snapshot in &replay.expired {
-            state.bus.publish(
+            state.bus().publish(
                 topics::TOPIC_POLICY_CAPSULE_EXPIRED,
                 &json!({
                     "id": snapshot.id,
@@ -71,7 +71,7 @@ pub(crate) async fn submit_action(
         return Err(SubmitActionError::KernelDisabled);
     }
 
-    let decision = state.policy.lock().await.evaluate_action(&req.kind);
+    let decision = state.policy().lock().await.evaluate_action(&req.kind);
     if !decision.allow {
         if let Some(cap) = decision.require_capability.as_deref() {
             let lease = state
@@ -80,7 +80,7 @@ pub(crate) async fn submit_action(
                 .await
                 .map_err(SubmitActionError::Internal)?;
             if lease.is_none() {
-                state.bus.publish(
+                state.bus().publish(
                     topics::TOPIC_POLICY_DECISION,
                     &json!({
                         "action": req.kind,
@@ -181,7 +181,7 @@ pub(crate) async fn submit_action(
         policy: None,
         ce: None,
     };
-    state.bus.publish(&env.kind, &env.payload);
+    state.bus().publish(&env.kind, &env.payload);
     if let Err(err) = state
         .kernel()
         .append_contribution_async("local", "task.submit", 1.0, "task", None, None, None)
@@ -371,7 +371,7 @@ pub async fn actions_state_set(
                 policy: None,
                 ce: None,
             };
-            state.bus.publish(&env.kind, &env.payload);
+            state.bus().publish(&env.kind, &env.payload);
             (axum::http::StatusCode::OK, Json(json!({"ok": true}))).into_response()
         }
         Ok(false) => (

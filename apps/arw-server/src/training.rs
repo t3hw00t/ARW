@@ -5,7 +5,7 @@ use crate::AppState;
 
 pub fn telemetry_snapshot(state: &AppState) -> serde_json::Value {
     let metrics = state.metrics().snapshot();
-    let bus = state.bus.stats();
+    let bus = state.bus().stats();
     let generated = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
 
     let routes: Vec<serde_json::Value> = metrics

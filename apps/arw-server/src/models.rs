@@ -2365,6 +2365,7 @@ impl ModelStore {
                     corr,
                     project_id.clone(),
                     Some(posture.clone()),
+                    Some(json!({"source": "model_steward"})),
                 )
                 .await
             {
@@ -2408,6 +2409,7 @@ impl ModelStore {
             payload.insert("project_id".into(), json!(proj));
         }
         payload.insert("tool_id".into(), json!("models.download"));
+        payload.insert("meta".into(), json!({"source": "model_steward"}));
         self.bus.publish(
             topics::TOPIC_EGRESS_LEDGER_APPENDED,
             &Value::Object(payload),

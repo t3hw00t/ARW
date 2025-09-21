@@ -4,7 +4,9 @@ use serde::Deserialize;
 use serde_json::json;
 use utoipa::ToSchema;
 
-use crate::AppState;
+use crate::{read_models, AppState};
+use arw_topics as topics;
+use chrono::{Duration as ChronoDuration, SecondsFormat, Utc};
 
 #[derive(Deserialize, ToSchema)]
 pub(crate) struct LeaseReq {
@@ -35,19 +37,38 @@ pub async fn leases_create(
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
-    let ttl = req.ttl_secs.unwrap_or(3600);
-    let until = chrono::Utc::now() + chrono::Duration::seconds(ttl as i64);
-    let ttl_until = until.to_rfc3339();
+    let ttl_raw = req.ttl_secs.unwrap_or(3600);
+    let ttl = ttl_raw.clamp(1, 86_400);
+    let issued_at = Utc::now();
+    let ttl_until_dt = issued_at + ChronoDuration::seconds(ttl as i64);
+    let ttl_until = ttl_until_dt.to_rfc3339_opts(SecondsFormat::Millis, true);
+    let created_at = issued_at.to_rfc3339_opts(SecondsFormat::Millis, true);
     let id = uuid::Uuid::new_v4().to_string();
+    let subject = "local".to_string();
+    let capability = req.capability.trim().to_string();
+    if capability.is_empty() {
+        return (
+            axum::http::StatusCode::BAD_REQUEST,
+            Json(json!({
+                "type": "about:blank",
+                "title": "Bad Request",
+                "status": 400,
+                "detail": "capability must not be empty"
+            })),
+        )
+            .into_response();
+    }
+    let scope = req.scope.clone();
+    let budget = req.budget;
     if let Err(e) = state
         .kernel()
         .insert_lease_async(
             id.clone(),
-            "local".to_string(),
-            req.capability.clone(),
-            req.scope.clone(),
+            subject.clone(),
+            capability.clone(),
+            scope.clone(),
             ttl_until.clone(),
-            req.budget,
+            budget,
             None,
         )
         .await
@@ -60,9 +81,39 @@ pub async fn leases_create(
         )
             .into_response();
     }
+    let mut payload = serde_json::Map::new();
+    payload.insert("id".into(), json!(id));
+    payload.insert("subject".into(), json!(subject));
+    payload.insert("capability".into(), json!(capability));
+    payload.insert("ttl_until".into(), json!(ttl_until));
+    payload.insert("created".into(), json!(created_at));
+    if let Some(scope) = scope.clone() {
+        payload.insert("scope".into(), json!(scope));
+    }
+    if let Some(budget) = budget {
+        payload.insert("budget".into(), json!(budget));
+    }
+    state
+        .bus()
+        .publish(topics::TOPIC_LEASES_CREATED, &json!(payload));
+
+    let snapshot = read_models::leases_snapshot(&state).await;
+    read_models::publish_read_model_patch(&state.bus(), "policy_leases", &snapshot);
+
+    let mut response = serde_json::Map::new();
+    response.insert("id".into(), payload["id"].clone());
+    response.insert("ttl_until".into(), payload["ttl_until"].clone());
+    response.insert("created".into(), payload["created"].clone());
+    if let Some(scope_val) = payload.get("scope").cloned() {
+        response.insert("scope".into(), scope_val);
+    }
+    if let Some(budget_val) = payload.get("budget").cloned() {
+        response.insert("budget".into(), budget_val);
+    }
+
     (
         axum::http::StatusCode::CREATED,
-        Json(json!({"id": id, "ttl_until": ttl_until})),
+        Json(serde_json::Value::Object(response)),
     )
         .into_response()
 }
@@ -81,14 +132,6 @@ pub async fn state_leases(State(state): State<AppState>) -> impl IntoResponse {
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
-    match state.kernel().list_leases_async(200).await {
-        Ok(items) => Json(json!({"items": items})).into_response(),
-        Err(e) => (
-            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-            Json(
-                json!({"type":"about:blank","title":"Error","status":500, "detail": e.to_string()}),
-            ),
-        )
-            .into_response(),
-    }
+    let snapshot = read_models::leases_snapshot(&state).await;
+    Json(snapshot).into_response()
 }

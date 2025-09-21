@@ -19,7 +19,7 @@ pub(crate) fn start_read_models(state: AppState) {
             if !st.kernel_enabled() {
                 return None;
             }
-            st.kernel
+            st.kernel()
                 .list_logic_units_async(200)
                 .await
                 .ok()
@@ -35,7 +35,7 @@ pub(crate) fn start_read_models(state: AppState) {
             if !st.kernel_enabled() {
                 return None;
             }
-            st.kernel
+            st.kernel()
                 .list_orchestrator_jobs_async(200)
                 .await
                 .ok()
@@ -51,7 +51,7 @@ pub(crate) fn start_read_models(state: AppState) {
             if !st.kernel_enabled() {
                 return None;
             }
-            st.kernel
+            st.kernel()
                 .list_recent_memory_async(None, 200)
                 .await
                 .ok()
@@ -64,8 +64,8 @@ pub(crate) fn start_read_models(state: AppState) {
         "route_stats",
         Duration::from_millis(2000),
         |st| async move {
-            let bus = st.bus.stats();
-            let metrics = st.metrics.snapshot();
+            let bus = st.bus().stats();
+            let metrics = st.metrics().snapshot();
             Some(json!({
                 "bus": {
                     "published": bus.published,
@@ -156,6 +156,18 @@ pub(crate) fn start_read_models(state: AppState) {
         Duration::from_millis(4000),
         |st| async move { Some(training::telemetry_snapshot(&st)) },
     );
+
+    spawn_read_model(
+        &state,
+        "policy_leases",
+        Duration::from_millis(4000),
+        |st| async move {
+            if !st.kernel_enabled() {
+                return None;
+            }
+            Some(leases_snapshot(&st).await)
+        },
+    );
 }
 
 fn spawn_read_model<F, Fut>(state: &AppState, id: &'static str, period: Duration, builder: F)
@@ -163,7 +175,7 @@ where
     F: Fn(AppState) -> Fut + Send + 'static,
     Fut: Future<Output = Option<Value>> + Send + 'static,
 {
-    let bus = state.bus.clone();
+    let bus = state.bus();
     let state = state.clone();
     tokio::spawn(async move {
         let mut tick = time::interval(period);
@@ -195,4 +207,18 @@ pub(crate) fn publish_read_model_patch(bus: &arw_events::Bus, id: &str, value: &
         }),
     );
     guard.insert(id.to_string(), value.clone());
+}
+
+pub(crate) async fn leases_snapshot(state: &AppState) -> Value {
+    let items = state
+        .kernel()
+        .list_leases_async(200)
+        .await
+        .unwrap_or_default();
+    let generated = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    json!({
+        "generated": generated,
+        "count": items.len(),
+        "items": items,
+    })
 }

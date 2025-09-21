@@ -161,8 +161,8 @@ pub async fn events_sse(
             });
         }
     }
-    let mut bus_rx = state.bus.subscribe();
-    let sse_ids = state.sse_id_map.clone();
+    let mut bus_rx = state.bus().subscribe();
+    let sse_ids = state.sse_ids();
     tokio::spawn(async move {
         while let Ok(env) = bus_rx.recv().await {
             if prefixes.is_empty() || prefixes.iter().any(|p| env.kind.starts_with(p)) {

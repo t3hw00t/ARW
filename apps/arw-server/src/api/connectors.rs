@@ -99,7 +99,7 @@ pub async fn connector_register(
         );
     }
     // Emit event (no secrets)
-    state.bus.publish(
+    state.bus().publish(
         topics::TOPIC_CONNECTORS_REGISTERED,
         &json!({"id": obj["id"].clone(), "provider": obj["provider"].clone()}),
     );
@@ -165,7 +165,7 @@ pub async fn connector_token_set(
             ),
         );
     }
-    state.bus.publish(
+    state.bus().publish(
         topics::TOPIC_CONNECTORS_TOKEN_UPDATED,
         &json!({"id": req.id}),
     );

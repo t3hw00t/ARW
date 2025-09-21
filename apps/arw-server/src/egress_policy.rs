@@ -1,4 +1,4 @@
-use serde_json::Value;
+use serde_json::{json, Value};
 
 use crate::{read_models, AppState};
 use arw_topics as topics;
@@ -45,6 +45,18 @@ impl Posture {
             Posture::Standard => Posture::Public,
             Posture::Strict => Posture::Allowlist,
             other => other,
+        }
+    }
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Posture::Off => "off",
+            Posture::Relaxed => "relaxed",
+            Posture::Public => "public",
+            Posture::Standard => "standard",
+            Posture::Allowlist => "allowlist",
+            Posture::Custom => "custom",
+            Posture::Strict => "strict",
         }
     }
 }
@@ -207,7 +219,7 @@ pub async fn resolve_policy(state: &AppState) -> ResolvedPolicy {
     if !replay.expired.is_empty() {
         let expired_ms = Utc::now().timestamp_millis().max(0) as u64;
         for snapshot in &replay.expired {
-            state.bus.publish(
+            state.bus().publish(
                 topics::TOPIC_POLICY_CAPSULE_EXPIRED,
                 &serde_json::json!({
                     "id": snapshot.id,
@@ -222,7 +234,7 @@ pub async fn resolve_policy(state: &AppState) -> ResolvedPolicy {
         let snapshot = state.capsules().snapshot().await;
         read_models::publish_read_model_patch(&state.bus(), "policy_capsules", &snapshot);
     }
-    let cfg = state.config_state.lock().await.clone();
+    let cfg = state.config_state().lock().await.clone();
     let posture_str = env_posture()
         .or_else(|| config_posture(&cfg))
         .unwrap_or_else(|| "standard".into());
@@ -368,19 +380,21 @@ pub fn capability_candidates(host: Option<&str>, port: Option<u16>, scheme: &str
     caps
 }
 
-pub async fn lease_allows(state: &AppState, caps: &[String]) -> bool {
+pub async fn lease_grant(state: &AppState, caps: &[String]) -> Option<Value> {
     if !state.kernel_enabled() {
-        return false;
+        return None;
     }
-    let Some(kernel) = state.kernel_if_enabled() else {
-        return false;
-    };
+    let kernel = state.kernel_if_enabled()?;
     for cap in caps {
-        if let Ok(Some(_)) = kernel.find_valid_lease_async("local", cap).await {
-            return true;
+        if let Ok(Some(mut lease)) = kernel.find_valid_lease_async("local", cap).await {
+            if let Some(obj) = lease.as_object_mut() {
+                obj.entry("matched_capability")
+                    .or_insert_with(|| json!(cap));
+            }
+            return Some(lease);
         }
     }
-    false
+    None
 }
 
 #[cfg(test)]

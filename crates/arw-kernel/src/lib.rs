@@ -593,7 +593,8 @@ impl Kernel {
               bytes_out INTEGER,
               corr_id TEXT,
               proj TEXT,
-              posture TEXT
+              posture TEXT,
+              meta TEXT                     -- JSON blob with extended metadata
             );
             CREATE INDEX IF NOT EXISTS idx_egress_time ON egress_ledger(time);
 
@@ -626,6 +627,8 @@ impl Kernel {
             );
             "#,
         )?;
+        // Backfill optional columns for older installations (ignore errors if already present)
+        let _ = conn.execute("ALTER TABLE egress_ledger ADD COLUMN meta TEXT", []);
         MemoryStore::migrate(conn)?;
         Ok(())
     }
@@ -1389,11 +1392,13 @@ impl Kernel {
         corr_id: Option<&str>,
         proj: Option<&str>,
         posture: Option<&str>,
+        meta: Option<&serde_json::Value>,
     ) -> Result<i64> {
         let conn = self.conn()?;
         let now = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        let meta_s = meta.and_then(|v| serde_json::to_string(v).ok());
         conn.execute(
-            "INSERT INTO egress_ledger(time,decision,reason,dest_host,dest_port,protocol,bytes_in,bytes_out,corr_id,proj,posture) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO egress_ledger(time,decision,reason,dest_host,dest_port,protocol,bytes_in,bytes_out,corr_id,proj,posture,meta) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
             params![
                 now,
                 decision,
@@ -1405,7 +1410,8 @@ impl Kernel {
                 bytes_out,
                 corr_id,
                 proj,
-                posture
+                posture,
+                meta_s
             ],
         )?;
         Ok(conn.last_insert_rowid())
@@ -1414,11 +1420,12 @@ impl Kernel {
     pub fn list_egress(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id,time,decision,reason,dest_host,dest_port,protocol,bytes_in,bytes_out,corr_id,proj,posture FROM egress_ledger ORDER BY id DESC LIMIT ?",
+            "SELECT id,time,decision,reason,dest_host,dest_port,protocol,bytes_in,bytes_out,corr_id,proj,posture,meta FROM egress_ledger ORDER BY id DESC LIMIT ?",
         )?;
         let mut rows = stmt.query([limit])?;
         let mut out = Vec::new();
         while let Some(r) = rows.next()? {
+            let meta: Option<String> = r.get(12)?;
             out.push(serde_json::json!({
                 "id": r.get::<_, i64>(0)?,
                 "time": r.get::<_, String>(1)?,
@@ -1432,6 +1439,7 @@ impl Kernel {
                 "corr_id": r.get::<_, Option<String>>(9)?,
                 "proj": r.get::<_, Option<String>>(10)?,
                 "posture": r.get::<_, Option<String>>(11)?,
+                "meta": meta.and_then(|s| serde_json::from_str::<serde_json::Value>(&s).ok()),
             }));
         }
         Ok(out)
@@ -1951,8 +1959,10 @@ impl Kernel {
         corr_id: Option<String>,
         proj: Option<String>,
         posture: Option<String>,
+        meta: Option<serde_json::Value>,
     ) -> Result<i64> {
         let k = self.clone();
+        let meta = meta.map(std::sync::Arc::new);
         tokio::task::spawn_blocking(move || {
             k.append_egress(
                 &decision,
@@ -1965,6 +1975,7 @@ impl Kernel {
                 corr_id.as_deref(),
                 proj.as_deref(),
                 posture.as_deref(),
+                meta.as_deref(),
             )
         })
         .await

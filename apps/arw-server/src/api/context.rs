@@ -359,7 +359,7 @@ pub async fn context_rehydrate(
     match kind {
         "file" => {
             let allow_action = state
-                .policy
+                .policy()
                 .lock()
                 .await
                 .evaluate_action("context.rehydrate")
@@ -384,7 +384,7 @@ pub async fn context_rehydrate(
                         .is_some()
                 };
                 if !has_file_lease && !has_fs_lease {
-                    state.bus.publish(
+                    state.bus().publish(
                         topics::TOPIC_POLICY_DECISION,
                         &json!({
                             "action": "context.rehydrate",
@@ -470,7 +470,7 @@ pub async fn context_rehydrate(
                 }
             };
             let decision = state
-                .policy
+                .policy()
                 .lock()
                 .await
                 .evaluate_action("context.rehydrate.memory");
@@ -501,7 +501,7 @@ pub async fn context_rehydrate(
                 if !has_lease {
                     let require_str = required_caps.join("|");
                     let require_human = required_caps.join(" or ");
-                    state.bus.publish(
+                    state.bus().publish(
                         topics::TOPIC_POLICY_DECISION,
                         &json!({
                             "action": "context.rehydrate.memory",

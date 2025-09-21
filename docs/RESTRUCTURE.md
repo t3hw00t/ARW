@@ -217,7 +217,7 @@ Notes
 | --- | --- | --- | --- |
 | High | Admin debug surfaces (Models/Agents/Projects) | ✅ Static pages now target `/admin/*` and include admin-token handling; keep an eye out for remaining legacy calls in automation. | Monitor for CLI/scripts still pointing at legacy paths; add regression tests if gaps appear. |
 | High | gRPC surface | ✅ Feature-gated gRPC listener (health/actions/events) now ships with `arw-server` (see `docs/guide/grpc.md`). | Track follow-up RPC coverage (leases, tools, rich event replay) once consumers signal demand. |
-| High | Guardrail Gateway & capsules | Proxy preview exists; DNS guard and capsule adoption landed, but policy leases and capsule renewals remain unimplemented `docs/architecture/egress_firewall.md`. | Finish network scope enforcement + lease refresh, propagate capsules to tools/orchestrator, and surface posture presets in UI/CLI. |
+| High | Guardrail Gateway & capsules | Proxy preview exists; DNS guard and capsule adoption landed, plus live lease snapshots & events. Capsule renewals remain unimplemented `docs/architecture/egress_firewall.md`. | Finish network scope enforcement + lease refresh, propagate capsules to tools/orchestrator, and surface posture presets in UI/CLI. |
 | High | Model Steward resilience | ✅ HEAD preflight + single-flight hash guard restored; `/state/models_metrics` now surfaces inflight hashes and concurrency snapshots. | Track admin UI updates to render new metrics and expose preflight status; monitor ledger previews for multi-tenant downloads. |
 | Medium | Chat Workbench | Debug UI shows chat badge but `/admin/chat*` endpoints were not ported; planner loop runs but API surface is missing `docs/reference/feature_matrix.md`. | Recreate REST handlers (status/send/clear), bind to context loop, add auth, and refresh debug assets + OpenAPI. |
 | Medium | Human-in-the-loop staging | Backend staging queue exists, yet UI, per-project modes, and evidence review remain planned `docs/guide/human_in_loop.md`. | Build `/state/staging/actions` panel, approvals UI, lease policy toggles, and sidecar notifications. |
@@ -265,7 +265,7 @@ Notes
 - `GET /state/route_stats` → `{ bus: {…}, events: { start, total, kinds }, routes: { by_path: { "/path": { hits, errors, ewma_ms, p95_ms, max_ms } } } }`
 - `GET /state/actions` → `{ items: [{ id, kind, state, created, updated }] }`
 - `GET /state/contributions` → `{ items: [...] }`
-- `GET /state/egress` → `{ items: [...] }`
+- `GET /state/egress` → `{ count, items, settings }`
 - `GET /state/egress/settings` → effective egress posture and toggles
 - `POST /egress/settings` → admin‑gated runtime update of egress toggles
 - `POST /egress/preview` → `{ allow, reason?, host, port, protocol }` (applies allowlist, IP‑literal guard, and policy/lease rules; logs when ledger enabled)
@@ -273,14 +273,16 @@ Notes
 - `GET /state/self` → `{ agents: [ ... ] }` (lists `state/self/*.json`)
 - `GET /state/self/:agent` → the JSON content of `state/self/:agent.json`
  - `GET /about` → service metadata and discovery index; includes `endpoints[]` and `endpoints_meta[]` with `{ method, path, stability }` derived from in‑code path constants and route builders (avoids drift)
-- `POST /leases` → `{ id, ttl_until }` (create lease; subject=`local`)
-- `GET /state/leases` → `{ items: [...] }`
+- `POST /leases` → `{ id, ttl_until, created, scope?, budget? }` (creates lease, emits `leases.created`, refreshes `policy_leases` read model)
+- `GET /state/leases` → `{ generated, count, items: [...] }`
 - `GET /state/policy` → `{ allow_all, lease_rules[] }`
 - `POST /context/assemble` → assemble working set (hybrid memory retrieval; returns beliefs, seeds, and diagnostics; accepts optional `corr_id` to stitch events and publishes `working_set.*` on the main bus)
 - `POST /context/rehydrate` → return full content head for a pointer (`file` head bytes or full `memory` record), gated by leases when policy requires
 
 Events
 - Egress ledger appends publish `egress.ledger.appended` with `{ id?, decision, reason?, dest_host?, dest_port?, protocol?, bytes_in?, bytes_out?, corr_id?, proj?, posture }`.
+- Egress ledger appends publish `egress.ledger.appended` with `{ id?, decision, reason?, dest_host?, dest_port?, protocol?, bytes_in?, bytes_out?, corr_id?, proj?, posture, meta }`. Meta captures policy posture, candidate capabilities, lease hits, and dns_guard flags for downstream tooling.
+- Lease lifecycle publishes `leases.created` and updates the `policy_leases` read model/SSE patches.
 - Policy decisions emit `policy.decision` when an action is denied or lease‑gated (payload includes `action`, `allow`, `require_capability?`, and `explain`).
 - SSE filters and resume: `/events?prefix=...` filters server‑side; `/events?replay=N` replays last N; `/events?after=<row_id>` replays after a journal id; honor `Last-Event-ID` as `after` when present.
 

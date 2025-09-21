@@ -65,7 +65,7 @@ pub async fn rpu_reload_post(
         "ts_ms": arw_core::rpu::trust_last_reload_ms(),
     });
     state
-        .bus
+        .bus()
         .publish(arw_topics::TOPIC_RPU_TRUST_CHANGED, &payload);
     (
         axum::http::StatusCode::OK,

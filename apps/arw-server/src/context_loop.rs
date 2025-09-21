@@ -211,7 +211,7 @@ async fn run_context_iteration(
     corr_id: Option<String>,
     stream_sender: Option<mpsc::Sender<working_set::WorkingSetStreamEvent>>,
 ) -> IterationOutcome {
-    let bus = state.bus.clone();
+    let bus = state.bus();
     let iteration_start = Instant::now();
     let corr_for_payload = corr_id.clone();
     let spec_for_payload = spec.clone();

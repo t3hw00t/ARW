@@ -1,4 +1,4 @@
-use crate::egress_policy::{capability_candidates, lease_allows, reason_code, DenyReason};
+use crate::egress_policy::{capability_candidates, lease_grant, reason_code, DenyReason};
 use crate::{egress_policy, http_timeout, util::effective_posture, AppState};
 use bytes::Bytes;
 use http_body_util::combinators::BoxBody;
@@ -9,8 +9,9 @@ use hyper::{Method, Request, Response, StatusCode};
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder as AutoBuilder;
 use once_cell::sync::Lazy;
+use serde_json::{json, Value};
 use std::convert::Infallible;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
@@ -170,37 +171,63 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
     let mut parts = authority.split(':');
     let host = parts.next().unwrap_or("").to_string();
     let port: u16 = parts.next().and_then(|p| p.parse().ok()).unwrap_or(443);
+
     let policy = egress_policy::resolve_policy(&state).await;
     let posture_decision = egress_policy::evaluate(&policy, Some(&host), Some(port), "https");
-    if !posture_decision.allow {
+    let caps = capability_candidates(Some(&host), Some(port), "https");
+    let mut lease = lease_grant(&state, &caps).await;
+
+    let mut base_meta = serde_json::Map::new();
+    base_meta.insert(
+        "proxy".into(),
+        json!({"mode": "forward", "kind": "connect"}),
+    );
+    base_meta.insert("capabilities".into(), json!(caps));
+    base_meta.insert("policy_posture".into(), json!(policy.posture.as_str()));
+    base_meta.insert("policy_allow".into(), json!(posture_decision.allow));
+    if let Some(reason) = posture_decision.reason {
+        base_meta.insert("policy_reason".into(), json!(reason_code(reason)));
+    }
+    if let Some(ref lease_val) = lease {
+        base_meta.insert("lease".into(), lease_val.clone());
+        base_meta.insert("allowed_via".into(), json!("lease"));
+    }
+
+    if !posture_decision.allow && lease.is_none() {
         let reason = posture_decision
             .reason
             .unwrap_or(DenyReason::HostNotAllowed);
-        let caps = capability_candidates(Some(&host), Some(port), "https");
-        if !lease_allows(&state, &caps).await {
-            let code = reason_code(reason);
-            log_egress_event(
-                &state,
-                "deny",
-                Some(code),
-                Some(&host),
-                Some(port),
-                Some("tcp"),
-                None,
-                None,
-                corr_id_hdr.as_deref(),
-                proj_hdr.as_deref(),
-            )
-            .await;
-            return Response::builder()
-                .status(StatusCode::FORBIDDEN)
-                .body(Full::new(Bytes::from_static(b"Egress blocked")).boxed())
-                .unwrap();
-        }
+        let mut meta = base_meta.clone();
+        meta.insert("deny_stage".into(), json!("posture"));
+        meta.insert("deny_reason".into(), json!(reason_code(reason)));
+        let meta_val = Value::Object(meta);
+        log_egress_event(
+            &state,
+            "deny",
+            Some(reason_code(reason)),
+            Some(&host),
+            Some(port),
+            Some("tcp"),
+            None,
+            None,
+            corr_id_hdr.as_deref(),
+            proj_hdr.as_deref(),
+            Some(meta_val),
+        )
+        .await;
+        return Response::builder()
+            .status(StatusCode::FORBIDDEN)
+            .body(Full::new(Bytes::from_static(b"Egress blocked")).boxed())
+            .unwrap();
     }
+
     if dns_guard() && (port == 853 || is_doh_host(&host)) {
-        let caps = capability_candidates(Some(&host), Some(port), "https");
-        if !lease_allows(&state, &caps).await {
+        if lease.is_none() {
+            let mut meta = base_meta.clone();
+            meta.insert("dns_guard".into(), json!(true));
+            meta.insert("deny_stage".into(), json!("dns_guard"));
+            meta.insert("deny_reason".into(), json!("dns_guard"));
+            let meta_val = Value::Object(meta);
             log_egress_event(
                 &state,
                 "deny",
@@ -212,29 +239,38 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
                 None,
                 corr_id_hdr.as_deref(),
                 proj_hdr.as_deref(),
+                Some(meta_val),
             )
             .await;
             return Response::builder()
                 .status(StatusCode::FORBIDDEN)
                 .body(Full::new(Bytes::from_static(b"DNS guard")).boxed())
                 .unwrap();
+        } else {
+            base_meta.insert("dns_guard".into(), json!(true));
+            base_meta.insert("allowed_via".into(), json!("lease"));
         }
     }
-    // Policy
-    let dec = state.policy.lock().await.evaluate_action("net.tcp.connect");
-    if !dec.allow {
-        if let Some(cap) = dec.require_capability.as_deref() {
-            let lease_ok = if let Some(kernel) = state.kernel_if_enabled() {
-                kernel
-                    .find_valid_lease_async("local", cap)
-                    .await
-                    .ok()
-                    .flatten()
-                    .is_some()
+
+    let policy_decision = state
+        .policy()
+        .lock()
+        .await
+        .evaluate_action("net.tcp.connect");
+    if !policy_decision.allow {
+        if let Some(cap) = policy_decision.require_capability.as_deref() {
+            let lease_vec = vec![cap.to_string()];
+            if let Some(lease_val) = lease_grant(&state, &lease_vec).await {
+                lease = Some(lease_val.clone());
+                base_meta.insert("lease".into(), lease_val);
+                base_meta.insert("allowed_via".into(), json!("lease"));
+                base_meta.insert("policy_required_capability".into(), json!(cap));
             } else {
-                false
-            };
-            if !lease_ok {
+                let mut meta = base_meta.clone();
+                meta.insert("deny_stage".into(), json!("policy"));
+                meta.insert("deny_reason".into(), json!("lease_required"));
+                meta.insert("policy_required_capability".into(), json!(cap));
+                let meta_val = Value::Object(meta);
                 log_egress_event(
                     &state,
                     "deny",
@@ -246,6 +282,7 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
                     None,
                     corr_id_hdr.as_deref(),
                     proj_hdr.as_deref(),
+                    Some(meta_val),
                 )
                 .await;
                 return Response::builder()
@@ -253,14 +290,51 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
                     .body(Full::new(Bytes::from_static(b"Lease required")).boxed())
                     .unwrap();
             }
+        } else {
+            let mut meta = base_meta.clone();
+            meta.insert("deny_stage".into(), json!("policy"));
+            meta.insert("deny_reason".into(), json!("policy"));
+            let meta_val = Value::Object(meta);
+            log_egress_event(
+                &state,
+                "deny",
+                Some("policy"),
+                Some(&host),
+                Some(port),
+                Some("tcp"),
+                None,
+                None,
+                corr_id_hdr.as_deref(),
+                proj_hdr.as_deref(),
+                Some(meta_val),
+            )
+            .await;
+            return Response::builder()
+                .status(StatusCode::FORBIDDEN)
+                .body(Full::new(Bytes::from_static(b"Policy denied")).boxed())
+                .unwrap();
         }
     }
+
+    if !base_meta.contains_key("allowed_via") {
+        base_meta.insert("allowed_via".into(), json!("policy"));
+    }
+    if let Some(ref lease_val) = lease {
+        base_meta.insert("lease".into(), lease_val.clone());
+    }
+
+    let base_meta_value = Value::Object(base_meta.clone());
+    let meta_arc = Arc::new(base_meta_value);
+
     // Establish TCP to target
     let target = format!("{}:{}", host, port);
     let mut server_stream = match tokio::net::TcpStream::connect(target).await {
         Ok(s) => s,
         Err(e) => {
             warn!("connect failed: {}", e);
+            let mut meta = base_meta.clone();
+            meta.insert("error".into(), json!("connect"));
+            let meta_val = Value::Object(meta);
             log_egress_event(
                 &state,
                 "error",
@@ -272,6 +346,7 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
                 None,
                 corr_id_hdr.as_deref(),
                 proj_hdr.as_deref(),
+                Some(meta_val),
             )
             .await;
             return Response::builder()
@@ -284,6 +359,10 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
     let mut resp = Response::new(Empty::<Bytes>::new().boxed());
     *resp.status_mut() = StatusCode::OK;
     let st = state.clone();
+    let host_spawn = host.clone();
+    let corr_spawn = corr_id_hdr.clone();
+    let proj_spawn = proj_hdr.clone();
+    let meta_spawn = meta_arc.clone();
     tokio::spawn(async move {
         match hyper::upgrade::on(req).await {
             Ok(upgraded) => {
@@ -328,13 +407,14 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
                     &st,
                     "allow",
                     Some("connect"),
-                    Some(&host),
+                    Some(host_spawn.as_str()),
                     Some(port),
                     Some("tcp"),
                     Some(s2c_bytes as i64),
                     Some(c2s_bytes as i64),
-                    corr_id_hdr.as_deref(),
-                    proj_hdr.as_deref(),
+                    corr_spawn.as_deref(),
+                    proj_spawn.as_deref(),
+                    Some((*meta_spawn).clone()),
                 )
                 .await;
             }
@@ -383,7 +463,7 @@ async fn handle_http_forward(
             .reason
             .unwrap_or(DenyReason::HostNotAllowed);
         let caps = capability_candidates(host.as_deref(), Some(port), &scheme);
-        if !lease_allows(&state, &caps).await {
+        if lease_grant(&state, &caps).await.is_none() {
             let code = reason_code(reason);
             log_egress_event(
                 &state,
@@ -400,6 +480,7 @@ async fn handle_http_forward(
                 req.headers()
                     .get("x-arw-project")
                     .and_then(|h| h.to_str().ok()),
+                None,
             )
             .await;
             return Response::builder()
@@ -426,7 +507,7 @@ async fn handle_http_forward(
                 .unwrap_or(false);
         if doh_like || wants_dns_message {
             let caps = capability_candidates(host.as_deref(), Some(port), &scheme);
-            if !lease_allows(&state, &caps).await {
+            if lease_grant(&state, &caps).await.is_none() {
                 log_egress_event(
                     &state,
                     "deny",
@@ -442,6 +523,7 @@ async fn handle_http_forward(
                     req.headers()
                         .get("x-arw-project")
                         .and_then(|h| h.to_str().ok()),
+                    None,
                 )
                 .await;
                 return Response::builder()
@@ -452,7 +534,11 @@ async fn handle_http_forward(
         }
     }
     // Policy
-    let dec = state.policy.lock().await.evaluate_action("net.http.proxy");
+    let dec = state
+        .policy()
+        .lock()
+        .await
+        .evaluate_action("net.http.proxy");
     if !dec.allow {
         if let Some(cap) = dec.require_capability.as_deref() {
             let lease_ok = if let Some(kernel) = state.kernel_if_enabled() {
@@ -481,6 +567,7 @@ async fn handle_http_forward(
                     req.headers()
                         .get("x-arw-project")
                         .and_then(|h| h.to_str().ok()),
+                    None,
                 )
                 .await;
                 return Response::builder()
@@ -536,6 +623,7 @@ async fn handle_http_forward(
                 Some(body_len),
                 corr_id_hdr.as_deref(),
                 proj_hdr.as_deref(),
+                None,
             )
             .await;
             return Response::builder()
@@ -562,6 +650,7 @@ async fn handle_http_forward(
         Some(body_len),
         corr_id_hdr.as_deref(),
         proj_hdr.as_deref(),
+        None,
     )
     .await;
     let mut builder = Response::builder().status(status);
@@ -589,6 +678,7 @@ async fn maybe_log_egress(
     bytes_out: Option<i64>,
     corr_id: Option<&str>,
     proj: Option<&str>,
+    meta: Option<&serde_json::Value>,
 ) -> anyhow::Result<i64> {
     let mut row_id: i64 = 0;
     if std::env::var("ARW_EGRESS_LEDGER_ENABLE").ok().as_deref() == Some("1")
@@ -607,13 +697,14 @@ async fn maybe_log_egress(
                     corr_id.map(|s| s.to_string()),
                     proj.map(|s| s.to_string()),
                     Some(effective_posture()),
+                    meta.cloned(),
                 )
                 .await?;
         }
     }
     // Publish SSE event (CloudEvents metadata applied by bus)
     let posture = effective_posture();
-    state.bus.publish(
+    state.bus().publish(
         topics::TOPIC_EGRESS_LEDGER_APPENDED,
         &serde_json::json!({
             "id": if row_id > 0 { serde_json::Value::from(row_id) } else { serde_json::Value::Null },
@@ -626,7 +717,8 @@ async fn maybe_log_egress(
             "bytes_out": bytes_out,
             "corr_id": corr_id,
             "proj": proj,
-            "posture": posture
+            "posture": posture,
+            "meta": meta.cloned().unwrap_or(serde_json::Value::Null)
         }),
     );
     Ok(row_id)
@@ -644,9 +736,20 @@ async fn log_egress_event(
     bytes_out: Option<i64>,
     corr_id: Option<&str>,
     proj: Option<&str>,
+    meta: Option<serde_json::Value>,
 ) {
     if let Err(err) = maybe_log_egress(
-        state, decision, reason, host, port, proto, bytes_in, bytes_out, corr_id, proj,
+        state,
+        decision,
+        reason,
+        host,
+        port,
+        proto,
+        bytes_in,
+        bytes_out,
+        corr_id,
+        proj,
+        meta.as_ref(),
     )
     .await
     {

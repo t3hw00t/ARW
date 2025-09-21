@@ -118,7 +118,7 @@ pub async fn logic_units_install(
         .insert_logic_unit_async(id.clone(), manifest.clone(), "installed".to_string())
         .await;
     state
-        .bus
+        .bus()
         .publish(topics::TOPIC_LOGICUNIT_INSTALLED, &json!({"id": id}));
     (
         axum::http::StatusCode::CREATED,
@@ -194,7 +194,7 @@ pub async fn logic_units_apply(
         )
             .into_response();
     }
-    let current_cfg = state.config_state.lock().await.clone();
+    let current_cfg = state.config_state().lock().await.clone();
     let mut cfg = current_cfg.clone();
     let mut diffs: Vec<Value> = Vec::new();
     for p in patches.iter() {
@@ -286,7 +286,8 @@ pub async fn logic_units_apply(
     }
     if !dry {
         {
-            let mut cur = state.config_state.lock().await;
+            let cfg_state = state.config_state();
+            let mut cur = cfg_state.lock().await;
             *cur = cfg.clone();
         }
         if !id.is_empty() {
@@ -304,7 +305,7 @@ pub async fn logic_units_apply(
                 applied_payload["safety_issues"] = Value::Array(safety_issues.clone());
             }
             state
-                .bus
+                .bus()
                 .publish(topics::TOPIC_LOGICUNIT_APPLIED, &applied_payload);
         }
         let mut cfg_event = json!({"ops": patches.len()});
@@ -312,7 +313,7 @@ pub async fn logic_units_apply(
             cfg_event["safety_issues"] = Value::Array(safety_issues.clone());
         }
         state
-            .bus
+            .bus()
             .publish(topics::TOPIC_CONFIG_PATCH_APPLIED, &cfg_event);
         let json_patch: Vec<Value> = diffs
             .iter()
@@ -388,15 +389,17 @@ pub async fn logic_units_revert(
         )
             .into_response();
     }
-    let mut hist = state.config_history.lock().await;
+    let history = state.config_history();
+    let mut hist = history.lock().await;
     if let Some((_, cfg)) = hist.iter().rev().find(|(id, _)| id == snap).cloned() {
         let new_id = uuid::Uuid::new_v4().to_string();
         {
-            let mut cur = state.config_state.lock().await;
+            let cfg_state = state.config_state();
+            let mut cur = cfg_state.lock().await;
             *cur = cfg.clone();
         }
         hist.push((new_id.clone(), cfg.clone()));
-        state.bus.publish(
+        state.bus().publish(
             topics::TOPIC_LOGICUNIT_REVERTED,
             &json!({"snapshot_id": snap, "new_snapshot_id": new_id}),
         );
