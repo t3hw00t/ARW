@@ -4,7 +4,7 @@ title: Configuration
 
 # Configuration
 { .topic-trio style="--exp:.7; --complex:.5; --complicated:.3" data-exp=".7" data-complex=".5" data-complicated=".3" }
-Updated: 2025-09-20
+Updated: 2025-09-22
 Type: Reference
 
 See also: [Glossary](GLOSSARY.md), [Admin Endpoints](guide/admin_endpoints.md), [Quickstart](guide/quickstart.md)
@@ -89,7 +89,7 @@ Notes
 
 ## Docs & Debug UI
 - `ARW_DOCS_URL`: URL to your hosted docs for UI links. Appears in `GET /about` as `docs_url` so clients can discover your manual.
-- Debug UI is accessible at `/admin/debug` when enabled. In local debug builds (`ARW_DEBUG=1`) a friendly alias is also served at `/debug`.
+- Debug UI is accessible at `/admin/debug` when enabled (`ARW_DEBUG=1`).
 - `ARW_EVENTS_SSE_MODE`: format for SSE `data` payloads. `envelope` (default) emits the ARW envelope `{ time, kind, payload, ce }`. `ce-structured` emits CloudEvents 1.0 structured JSON with `data` holding the payload.
  - `ARW_EVENTS_JOURNAL`: optional path to a JSONL events journal for local replay/inspection.
 - `ARW_EVENTS_JOURNAL_MAX_MB`: rotate/journal size cap in MiB (default `20`).
@@ -165,7 +165,7 @@ These knobs prioritize perceived latency and streaming cadence.
 - `ARW_SNAPPY_CADENCE_MS`: steady stream cadence budget (default `250`)
 - `ARW_SNAPPY_COLD_START_MS`: cold start budget for control plane (default `500`)
 - `ARW_SNAPPY_FULL_RESULT_P95_MS`: p95 full result target (default `2000`)
-- `ARW_SNAPPY_PROTECTED_ENDPOINTS`: CSV prefixes for interactive surface (default `/debug,/state/,/chat/,/events`)
+- `ARW_SNAPPY_PROTECTED_ENDPOINTS`: CSV prefixes for interactive surface (default `/admin/debug,/state/,/chat/,/events`)
 - `ARW_ROUTE_HIST_MS`: CSV millisecond buckets for route latency histograms (default `5,10,25,50,100,200,500,1000,2000,5000,10000`)
 - `ARW_NATS_URL`: NATS URL, e.g. `nats://127.0.0.1:4222`
 - `ARW_NODE_ID`: node identifier for NATS subjects (defaults to hostname)
@@ -257,7 +257,7 @@ See also: [CLI Guide](guide/cli.md)
 - `ARW_REHYDRATE_FILE_HEAD_KB`: head bytes returned for file rehydrate (default `64`).
 
 ## Notes
-- Sensitive routes include `/admin/*`, `/debug`, `/probe`, `/admin/memory*`, `/state/memory*`, `/models*`, `/governor*`, `/introspect*`, `/chat*`, `/feedback*`.
+- Sensitive routes include `/admin/*`, `/admin/debug`, `/probe`, `/admin/memory*`, `/state/memory*`, `/models*`, `/governor*`, `/introspect*`, `/chat*`, `/feedback*`.
 - Prefer keeping the service bound to `127.0.0.1` or behind a TLS‑terminating reverse proxy.
 ## Egress Settings (Config Block)
 - Persisted settings can live under the top‑level `egress` block and are validated against [spec/schemas/egress_settings.json](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/egress_settings.json) via the Patch Engine.

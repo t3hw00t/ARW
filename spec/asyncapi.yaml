@@ -403,6 +403,15 @@ channels:
         payload:
           type: object
           additionalProperties: true
+  'leases.created':
+    subscribe:
+      operationId: leases_created_event
+      summary: "leases.created event"
+      message:
+        name: 'leases.created'
+        payload:
+          type: object
+          additionalProperties: true
   'logic.unit.applied':
     subscribe:
       operationId: logic_unit_applied_event

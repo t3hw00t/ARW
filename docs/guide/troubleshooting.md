@@ -11,7 +11,7 @@ Type: How‑to
 
 !!! note "Unified defaults"
     The unified `arw-server` listens on port 8091 and exposes `/actions`, `/events`, and `/state/*`.
-    Set `ARW_DEBUG=1` (or use `scripts/debug.{sh,ps1} --open`) when you need the browser-based debug panels under `/admin/ui/*` or `/debug`.
+    Set `ARW_DEBUG=1` (or use `scripts/debug.{sh,ps1} --open`) when you need the browser-based debug panels under `/admin/ui/*` or `/admin/debug`.
 
 ## Port Already in Use
 
@@ -37,9 +37,9 @@ Port already in use
   ```
 
 ## Debug UI Missing
-- Symptom: `/debug` returns 404 or a minimal page.
+- Symptom: `/admin/debug` returns 404 or a minimal page.
 - Fix: ensure `ARW_DEBUG=1` for local dev, or run via the Desktop Launcher.
-- Tip: use `scripts/debug.{sh,ps1} --open` to start the service, wait for `/healthz`, and open `/debug` automatically.
+- Tip: use `scripts/debug.{sh,ps1} --open` to start the service, wait for `/healthz`, and open `/admin/debug` automatically.
 - Tip: `GET /about` should still work without debug. It returns name/version and the `docs_url` link; if `/about` fails, check service logs and port.
 
 ## SSE Doesn’t Stream
@@ -120,5 +120,5 @@ Metrics
 
 ## Still Stuck?
 - Check logs in the terminal and in `.arw/logs`.
-- Use the Orchestration panel in `/debug` to probe.
+- Use the Orchestration panel in `/admin/debug` to probe.
 - File an issue with your OS, steps, and logs.

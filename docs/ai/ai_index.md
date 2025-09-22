@@ -5,7 +5,7 @@ Type: Reference
 Microsummary: Map of repo for AI/code models: purpose, key files, how to run, limits. Stable entrypoint for tooling.
 
 - Purpose: unified local-first agents service (`arw-server` in `apps/arw-server/`) plus tooling surfaces.
-- Quick run: follow `docs/guide/quickstart.md` for the unified flow; use `scripts/debug.{sh,ps1} --open` with `ARW_DEBUG=1` to open `/debug`.
+- Quick run: follow `docs/guide/quickstart.md` for the unified flow; use `scripts/debug.{sh,ps1} --open` with `ARW_DEBUG=1` to open `/admin/debug`.
 - Key files:
   - Primary service: `apps/arw-server/` (Rust unified server).
   - CLI: `apps/arw-cli/`; desktop launcher: `apps/arw-launcher/` (drives the unified server by default).

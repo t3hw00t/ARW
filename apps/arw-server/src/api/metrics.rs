@@ -121,15 +121,6 @@ fn render_prometheus(summary: &MetricsSummary, bus: &arw_events::BusStats) -> St
         &[],
         summary.compatibility.legacy_capsule_headers,
     );
-    out.push_str("# HELP arw_legacy_route_hits_total Hits on legacy/compatibility HTTP shims\n# TYPE arw_legacy_route_hits_total counter\n");
-    for (path, count) in summary.compatibility.legacy_routes.iter() {
-        write_metric_line(
-            &mut out,
-            "arw_legacy_route_hits_total",
-            &[("path", path.clone())],
-            count,
-        );
-    }
     out
 }
 

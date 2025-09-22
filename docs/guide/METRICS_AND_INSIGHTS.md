@@ -5,7 +5,7 @@ title: Metrics & Insights
 # Metrics & Insights
 { .topic-trio style="--exp:.6; --complex:.7; --complicated:.6" data-exp=".6" data-complex=".7" data-complicated=".6" }
 
-Updated: 2025-09-21
+Updated: 2025-09-22
 Type: How‑to
 
 ## Overview
@@ -19,7 +19,7 @@ Type: How‑to
 - GET `/state/tasks` → `{ tasks }` read-model refreshed every few seconds for dashboards (no admin auth needed).
 
 ## UI
-- Open `/debug` and toggle “Insights”.
+- Open `/admin/debug` and toggle “Insights”.
 - See Event totals and the top 3 routes by p95 latency (also shows EWMA and error counts).
 - Copy the JSON snapshot via “Copy stats”.
 
@@ -36,7 +36,6 @@ Type: How‑to
   - `arw_tools_cache_*` — action cache hits/miss/coalesced and capacity/TTL
   - `arw_task_*` — background task starts/completions/aborts (`*_total`) and inflight gauges
   - `arw_legacy_capsule_headers_total` — legacy `X-ARW-Gate` headers rejected (should trend to zero before retiring compatibility shims)
-  - `arw_legacy_route_hits_total{path="/debug"}` — HTTP hits against compatibility route aliases (e.g., `/debug`)
   - `arw_build_info{service,version,sha}` — build metadata
 - Trust (RPU):
     - `arw_rpu_trust_last_reload_ms` — epoch ms of last trust store reload
@@ -85,18 +84,15 @@ See also:
 - Snippets → Prometheus Recording Rules — ARW
 - Snippets → Grafana — Quick Panels (CPU/Mem/GPU)
 - Snippets → Prometheus Alerting Rules — ARW
-- [Restructure Handbook](../RESTRUCTURE.md) → Legacy Retirement Checklist (captures the expected zeroing-out of `arw_legacy_*` series prior to shutdown)
+- [Restructure Handbook](../RESTRUCTURE.md) → Legacy Retirement Checklist (captures the expected zeroing-out of `arw_legacy_capsule_headers_total` prior to shutdown)
 
 ### Legacy compatibility tracking
 
-Add quick panels/alerts to watch the new counters:
+Add quick panels/alerts to watch the legacy capsule header counter:
 
 ```
 # Grafana stat / alert: legacy capsule headers
 arw_legacy_capsule_headers_total
-
-# Alert when legacy HTTP shims still receive traffic
-increase(arw_legacy_route_hits_total{path="/debug"}[5m]) > 0
 ```
 
 Pair the metrics with a deprecation banner. For Prometheus alertmanager, you can extend the snippet at `docs/snippets/prometheus_alerting_rules.md` with:
@@ -115,6 +111,7 @@ Pair the metrics with a deprecation banner. For Prometheus alertmanager, you can
 ```
 
 Publishing a Grafana stat panel (e.g., single value, threshold to zero) in the “Legacy migration” row helps visualize progress while auditing automation/scripts.
+Pair the metric with log-based checks (e.g., access logs or 404 monitors) to spot stale `/debug` requests while automation is updated.
 
 Example scrape minimal config (Prometheus):
 ```

@@ -4,7 +4,7 @@ title: Deployment & Isolation
 
 # Deployment & Isolation
 
-Updated: 2025-09-21
+Updated: 2025-09-22
 Type: How‑to
 
 Run the unified `arw-server` in the environment that fits your workflow while keeping state portable and scoped. These recipes focus on the `/actions` → `/events` → `/state/*` stack.
@@ -143,6 +143,6 @@ Add `ARW_ACCESS_UA=1 ARW_ACCESS_UA_HASH=1 ARW_ACCESS_REF=1` when you need user-a
 - `GET /state/runtime_matrix` — confirms discovery of local or remote workers as they land
 - `GET /admin/probe` — effective state paths (requires admin token)
 - `GET /state/egress/settings` — confirm DNS guard (`dns_guard_enable=true`) and proxy (`proxy_enable=true`) defaults remain enabled unless the deployment explicitly opted out
-- `GET /metrics` — ensure `arw_legacy_capsule_headers_total`/`arw_legacy_route_hits_total` stay at zero before cutting over from legacy traffic
+- `GET /metrics` — ensure `arw_legacy_capsule_headers_total` stays at zero before cutting over from legacy traffic
 
 Keep the unified server as the default; the legacy bridge has been removed, so all surfaces run on `arw-server`.

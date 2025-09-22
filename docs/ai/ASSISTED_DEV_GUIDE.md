@@ -26,7 +26,7 @@ Docs & discoverability
 - When adding/altering schemas or endpoints, link them from Reference and include examples.
 
 Interfaces (for context)
-- Debug UI: `/debug`; state read‑models under `/state/*`; events via SSE.
+- Debug UI: `/admin/debug`; state read‑models under `/state/*`; events via SSE.
 - Schemas live under `spec/schemas` (e.g., `recipe_manifest.json`).
 
 Commit & PR hygiene
@@ -43,4 +43,3 @@ Acceptance checklist (paste in PR)
 - [ ] Docs updated (incl. microsummary)
 - [ ] Scope respected; no incidental refactors
 - [ ] Breaking changes documented (N/A if none)
-

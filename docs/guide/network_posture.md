@@ -4,7 +4,7 @@ title: Network Posture
 
 # Network Posture
 
-Updated: 2025-09-20
+Updated: 2025-09-22
 
 Status: Partial (gateway + posture enforcement implemented)
 Type: How‑to

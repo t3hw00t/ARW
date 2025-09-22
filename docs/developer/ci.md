@@ -42,7 +42,7 @@ scripts/test.ps1
 # Package bundle (release)
 scripts/package.ps1
 
-# Quick debug run (service with /debug)
+# Quick debug run (service with /admin/debug)
 scripts/debug.ps1
 
 # Supply-chain audit (cargo-audit + cargo-deny)

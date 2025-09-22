@@ -29,7 +29,7 @@ Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show bo
 - [Pack: Collaboration] Contextual launcher tray actions with recent commands
 - [Pack: Collaboration] Inline doc hints and contextual tooltips
 - [Pack: Collaboration] Command palette/quick-action menu in the launcher
- - [Pack: Collaboration] Canonical admin routes: `/admin/debug`, `/admin/ui/*` (keep clear dev aliases)
+ - [Pack: Collaboration] Canonical admin routes: `/admin/debug`, `/admin/ui/*` (legacy `/debug` alias removed)
  - [Pack: Collaboration] SSE robustness: status badges + auto-reconnect with backoff and Last-Event-ID resume
  - [Pack: Collaboration] Connections: per-connection admin token and open app windows for that base
  - [Pack: Collaboration] Schema-generated forms from OpenAPI for consistent parameter UIs

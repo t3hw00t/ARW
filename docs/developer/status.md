@@ -6,7 +6,7 @@ title: Workspace Status
 Updated: 2025-09-21
 Type: Reference
 
-Generated: 2025-09-21 02:34 UTC
+Generated: 2025-09-22 10:58 UTC
 
 
 ## Libraries
@@ -26,4 +26,5 @@ Generated: 2025-09-21 02:34 UTC
 - **arw-cli**: 0.1.4 — [apps/arw-cli/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/arw-cli/Cargo.toml)
 - **arw-server**: 0.1.4 — [apps/arw-server/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/Cargo.toml)
 - **arw-connector**: 0.1.4 — [apps/arw-connector/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/arw-connector/Cargo.toml)
+- **snappy-bench**: 0.1.4 — [apps/snappy-bench/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/snappy-bench/Cargo.toml)
 - **arw-launcher**: 0.1.4 — [apps/arw-launcher/src-tauri/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri/Cargo.toml)

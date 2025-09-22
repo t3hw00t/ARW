@@ -14,5 +14,24 @@ No changes
 
 ## AsyncAPI (Events)
 
-No changes
+```diff
+--- asyncapi.base.yaml
++++ asyncapi.head.yaml
+@@ -403,6 +403,15 @@
+         payload:
+           type: object
+           additionalProperties: true
++  'leases.created':
++    subscribe:
++      operationId: leases_created_event
++      summary: "leases.created event"
++      message:
++        name: 'leases.created'
++        payload:
++          type: object
++          additionalProperties: true
+   'logic.unit.applied':
+     subscribe:
+       operationId: logic_unit_applied_event
+```
 

@@ -914,7 +914,7 @@ function Wsl-Set-Default {
 
 function Security-Tips {
   Banner 'Security Tips' 'Protect admin endpoints'
-  Write-Host '  • Sensitive endpoints: /admin/debug (and the /debug alias), /probe, /admin/memory*, /state/memory*, /models/*, /governor/*, /introspect/*, /chat/*, /feedback/*'
+  Write-Host '  • Sensitive endpoints: /admin/debug, /probe, /admin/memory*, /state/memory*, /models/*, /governor/*, /introspect/*, /chat/*, /feedback/*'
   Write-Host '  • In development, ARW_DEBUG=1 is convenient; disable it otherwise.'
   Write-Host '  • Set ARW_ADMIN_TOKEN and send header: X-ARW-Admin: <token>'
   Write-Host '  • Adjust admin rate limiting via ARW_ADMIN_RL (default 60/60).'

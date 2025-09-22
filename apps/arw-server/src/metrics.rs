@@ -7,7 +7,6 @@ use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
-use tracing::warn;
 
 const SAMPLE_WINDOW: usize = 50;
 const EWMA_ALPHA: f64 = 0.2;
@@ -80,7 +79,6 @@ pub struct MetricsSummary {
 #[derive(Clone, Serialize, Default)]
 pub struct CompatibilitySummary {
     pub legacy_capsule_headers: u64,
-    pub legacy_routes: BTreeMap<String, u64>,
 }
 
 #[derive(Default)]
@@ -216,7 +214,6 @@ pub struct Metrics {
     hist_buckets: Vec<u64>,
     tasks: Mutex<BTreeMap<String, TaskStat>>,
     legacy_capsule_headers: AtomicU64,
-    legacy_routes: Mutex<BTreeMap<String, u64>>,
 }
 
 impl Default for Metrics {
@@ -249,7 +246,6 @@ impl Metrics {
             hist_buckets,
             tasks: Mutex::new(BTreeMap::new()),
             legacy_capsule_headers: AtomicU64::new(0),
-            legacy_routes: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -299,11 +295,6 @@ impl Metrics {
         let tasks = self.tasks_snapshot();
         let compatibility = CompatibilitySummary {
             legacy_capsule_headers: self.legacy_capsule_headers.load(Ordering::Relaxed),
-            legacy_routes: self
-                .legacy_routes
-                .lock()
-                .map(|map| map.clone())
-                .unwrap_or_default(),
         };
         MetricsSummary {
             events,
@@ -361,12 +352,6 @@ impl Metrics {
         self.legacy_capsule_headers.fetch_add(1, Ordering::Relaxed);
     }
 
-    pub fn record_legacy_route(&self, path: &str) {
-        if let Ok(mut map) = self.legacy_routes.lock() {
-            *map.entry(path.to_string()).or_default() += 1;
-        }
-    }
-
     pub fn event_kind_count(&self, kind: &str) -> u64 {
         self.events
             .lock()
@@ -390,10 +375,6 @@ pub async fn track_http(
     let elapsed_ms = started.elapsed().as_millis() as u64;
     let status = res.status().as_u16();
     metrics.record_route(&path, status, elapsed_ms);
-    if path == "/debug" {
-        metrics.record_legacy_route(&path);
-        warn!(target: "arw::compat", "legacy /debug alias used; prefer /admin/debug");
-    }
     let name = HeaderName::from_static("server-timing");
     if !res.headers().contains_key(&name) {
         if let Ok(value) = HeaderValue::from_str(&format!("total;dur={}", elapsed_ms)) {

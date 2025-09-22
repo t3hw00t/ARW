@@ -83,7 +83,7 @@ If `ARW_LITELLM_*` vars are set, they take precedence over the `ARW_OPENAI_*` on
 
 ## UI
 
-Open `/debug`, select a model (echo/reverse/time), set Temperature if desired, and Send. When a backend is configured, the response content comes from the backend; otherwise the synthetic reply is used.
+Open `/admin/debug`, select a model (echo/reverse/time), set Temperature if desired, and Send. When a backend is configured, the response content comes from the backend; otherwise the synthetic reply is used.
 ## Modes, Self‑Consistency, and Verifier (gated)
 
 - Mode controls planner hints and optional execution:

@@ -158,7 +158,7 @@ Sample response (defaults)
     - `GET  /admin/models/jobs` — inspect active jobs and inflight hashes.
     - `POST /admin/models/cas_gc` — trigger garbage collection for stored CAS blobs (returns a summary).
     - `GET  /events` — subscribe for progress/errors (filter with `?prefix=models.` for model activity).
-    - `GET  /admin/debug` — debug UI when `ARW_DEBUG=1` (a `/debug` alias remains for local builds).
+    - `GET  /admin/debug` — debug UI when `ARW_DEBUG=1`.
 
     Example download flow:
 

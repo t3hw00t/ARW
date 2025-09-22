@@ -4,7 +4,7 @@ title: Prometheus Alerting Rules — ARW
 
 # Prometheus Alerting Rules — ARW
 
-Updated: 2025-09-16
+Updated: 2025-09-22
 Type: How‑to
 
 Example alerting rules for common resource conditions. Tune thresholds and durations to your environment.
@@ -49,7 +49,7 @@ groups:
           description: |
             GPU memory usage is {{ $value | printf "%.1f" }}%% for 5 minutes.
 
-      # Legacy compatibility signals (should trend to zero before cutover)
+      # Legacy compatibility signal (should trend to zero before cutover)
       - alert: ARWLegacyCapsuleHeadersSeen
         expr: increase(arw_legacy_capsule_headers_total[15m]) > 0
         for: 15m
@@ -59,21 +59,7 @@ groups:
           summary: "Legacy capsule headers observed"
           description: |
             Legacy X-ARW-Gate headers were rejected {{ $value | printf "%.0f" }} times in the
-            last 15m. Identify lingering clients before disabling the compatibility shim.
-
-      - alert: ARWLegacyRouteHits
-        expr: sum(increase(arw_legacy_route_hits_total[15m])) > 0
-        for: 30m
-        labels:
-          severity: info
-        annotations:
-          summary: "Legacy HTTP route alias still in use"
-          description: |
-            Legacy compatibility paths (e.g., /debug) received traffic within the past 30m.
-            Paths:
-            {{ range $path, $value := increase(arw_legacy_route_hits_total[15m]) }}
-              - {{$path}}: {{ $value | printf "%.0f" }} hits
-            {{ end }}
+            last 15m. Identify lingering clients before final legacy cleanup.
 ```
 
 Tip: Pair alerts with routing labels/receivers (PagerDuty/Slack) in Alertmanager.

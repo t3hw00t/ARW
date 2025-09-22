@@ -6,7 +6,7 @@ title: Restructure Handbook (Source of Truth)
 
 This document is the single source of truth for the ongoing ARW restructure. It is written so a new contributor (or a chat without prior context) can pick up work immediately.
 
-Updated: 2025-09-21
+Updated: 2025-09-22
 Type: Explanation
 Owner: Core maintainers
 Scope: Architecture, APIs, modules, migration plan, status, hand‑off tips
@@ -223,7 +223,7 @@ Status: In progress.
 #### Snapshot
 - **Phase D — Operator experience:** In progress, with chat workbench routes, screenshot pipeline wiring, and the SPA/right-sidecar migration queued to close out the legacy debug UI.
 - **Phase E — Safety:** Planned; finish Guardrail Gateway enforcement, complete Asimov Capsule Guard coverage, and delete the lingering `/admin/*` fallbacks once capsules drive every decision path.
-- **Legacy shutdown instrumentation:** Completed, but keep dashboards on `arw_legacy_*` counters until traffic stays at zero for a sustained window.
+- **Legacy shutdown instrumentation:** Completed — dashboards now track `arw_legacy_capsule_headers_total`; keep it pinned until the counter stays at zero for a sustained window.
 
 | Phase | Focus | Features/Deliverables | Dependencies | Status |
 | --- | --- | --- | --- | --- |
@@ -237,7 +237,7 @@ Notes
 - Phases can overlap if dependencies are satisfied; track owners and dates in the backlog so the matrix stays current.
 - Update this section with status markers as phases complete (e.g., `A ✅`).
 - Scripts: `scripts/start.{sh,ps1}` launch the unified server (launcher included). Use `ARW_NO_LAUNCHER=1` / `--service-only` for headless mode.
-- Debug helpers `scripts/debug.{sh,ps1}` default to the unified stack and can open `/admin/debug` (a `/debug` alias remains) when `ARW_DEBUG=1`.
+- Debug helpers `scripts/debug.{sh,ps1}` default to the unified stack and open `/admin/debug` when `ARW_DEBUG=1`.
   - Containers target `arw-server`; the legacy image is no longer published.
 - Deprecation signals: `/admin/state/*` read-model bridges have been removed in favour of the canonical `/state/*` endpoints (review queues now live under `/admin/memory/*` and `/admin/world_diffs`). `/admin/projects/*` helpers have been removed in favour of `/state/projects*` and `/projects*`; monitor automation for any lingering calls.
 
@@ -256,12 +256,12 @@ Notes
 | Medium | Interactive snappy bench | ✅ `snappy-bench` CLI hits `/actions` + `/events`, enforces budgets, and publishes quick-start docs. | ✅ CI runs `scripts/ci_snappy_bench.sh` (queue budget 500 ms); capture long-term baselines per performance preset. |
 
 ### Legacy Retirement Checklist
-- Instrumentation is in place: legacy capsule headers increment `arw_legacy_capsule_headers_total`, and compatibility shims like `/debug` emit `arw_legacy_route_hits_total` so dashboards can highlight straggler clients.
+- Instrumentation is in place: legacy capsule headers increment `arw_legacy_capsule_headers_total`; the `/debug` alias is removed, so watch access logs or 404 gauges for any lingering requests.
 - Capsule leases refresh before every action submission, egress policy resolution, and tool invocation; passive renewals emit `policy.capsule.expired` without requiring HTTP traffic through the middleware.
 - Guardrail defaults now assume DNS guard + loopback proxy unless explicitly disabled (`ARW_DNS_GUARD_ENABLE=0`, `ARW_EGRESS_PROXY_ENABLE=0`), keeping new nodes locked down by default.
 - Start scripts (`scripts/start.{sh,ps1}`) and interactive helpers inherit those hardened defaults; verify staging starts without overriding them and document any environments that must opt out.
 - Gating key docs are enforced in CI: `render_markdown`/`render_json` fixtures must match `docs/GATING_KEYS.{md,json}`, preventing drift between code and references.
-- Publish this checklist with release notes when announcing final legacy shutdown so automation owners can verify metrics trends (legacy counters → zero) before the cutover window.
+- Publish this checklist with release notes when announcing final legacy shutdown so automation owners can verify metrics trends (`arw_legacy_capsule_headers_total → 0`) before the cutover window.
 
 ## Migration Plan (High‑level)
 1) Kernel + Triad API complete in `arw-server` (now)

@@ -232,7 +232,7 @@ _Note_: MSI bundles ship the launcher together with `arw-server`. Run the unifie
 └───────────────────────┴──────────────────────────┴────────────────┘
 ```
 
-<i>Screenshot:</i> debug UI at `/admin/debug` (a `/debug` alias is still provided when `ARW_DEBUG=1`).
+<i>Screenshot:</i> debug UI at `/admin/debug`.
 
 Screenshots → https://t3hw00t.github.io/ARW/guide/screenshots/
 

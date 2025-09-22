@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-21 02:34 UTC",
+  "updated": "2025-09-22 10:58 UTC",
   "tasks": [
     {
       "id": "t-250914050900-ev10",
@@ -37,7 +37,7 @@
     {
       "id": "t-250914050904-ev12",
       "title": "Debug UI: dot.case listeners",
-      "desc": "Switch /debug event listeners to dot.case kinds only",
+      "desc": "Switch /admin/debug event listeners to dot.case kinds only",
       "status": "done",
       "notes": [
         {
@@ -420,7 +420,7 @@
     },
     {
       "id": "t-250909224103-0211",
-      "title": "UI: near-live feedback in /debug",
+      "title": "UI: near-live feedback in /admin/debug",
       "desc": "Consume Feedback.Suggested via SSE; show deltas with rationale/confidence",
       "status": "done",
       "notes": [
@@ -1108,6 +1108,30 @@
         }
       ],
       "updated": "2025-09-21 01:05:00 UTC"
+    },
+    {
+      "id": "t-250922105500-ops01",
+      "title": "Grafana: re-import quick panels",
+      "desc": "Apply docs/snippets/grafana_quick_panels.md so dashboards drop the legacy route-hit panel and keep the capsule header stat only.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-22 10:55:00 UTC"
+    },
+    {
+      "id": "t-250922105510-ops02",
+      "title": "Prometheus: refresh legacy alert rules",
+      "desc": "Merge docs/snippets/prometheus_alerting_rules.md to remove the route-hit alert and retain ARWLegacyCapsuleHeadersSeen.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-22 10:55:10 UTC"
+    },
+    {
+      "id": "t-250922105520-ops03",
+      "title": "Staging smoke: verify /debug removal",
+      "desc": "Run staging checks to confirm /debug returns 404 and arw_legacy_capsule_headers_total stays at zero before prod cutover.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-22 10:55:20 UTC"
     }
   ]
 }

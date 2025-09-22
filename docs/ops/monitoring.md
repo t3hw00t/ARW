@@ -7,7 +7,7 @@ title: Monitoring & Alerts
 Updated: 2025-09-22
 Type: How‑to
 
-This note captures the minimal wiring needed to surface ARW metrics in Prometheus/Grafana and keep an eye on the new legacy shut-down counters.
+This note captures the minimal wiring needed to surface ARW metrics in Prometheus/Grafana and keep an eye on the legacy shut-down counter.
 
 ## Prometheus
 
@@ -26,10 +26,7 @@ This note captures the minimal wiring needed to surface ARW metrics in Prometheu
    awk '/```yaml/{flag=1;next}/```/{flag=0}flag' docs/snippets/prometheus_alerting_rules.md > /etc/prometheus/rules/arw-alerting-rules.yaml
    ```
 
-   The alert rules include
-   - `ARWLegacyCapsuleHeadersSeen`
-   - `ARWLegacyRouteHits`
-   so you will get early warning if any clients still hit compatibility paths while you plan the legacy turn-down.
+   The alert rules include `ARWLegacyCapsuleHeadersSeen` so you will get early warning if any clients still hit compatibility headers while you plan the legacy turn-down.
 
 3. Reload Prometheus:
    ```bash
@@ -67,14 +64,15 @@ Import the “Quick Panels” snippet into a dashboard so the legacy counters ar
 
 1. Grafana → Dashboards → Import → paste the JSON from `docs/snippets/grafana_quick_panels.md`.
 2. Select your Prometheus datasource when prompted (`DS_PROMETHEUS`).
-3. Pin the stat panels (“Legacy Capsule Headers (15m)”, “Legacy Route Hits (15m)”) to the migration dashboard.
+3. Pin the stat panel (“Legacy Capsule Headers (15m)”) to the migration dashboard.
 
 ## Staging checklist
 
 Before cutting any legacy traffic, verify in staging:
 
 - **Start scripts**: run `scripts/start.sh` (or `scripts/start.ps1`) and confirm `/state/egress/settings` reports `proxy_enable=true` and `dns_guard_enable=true`. If automation requires these disabled, document the override before pushing to production.
-- **Metrics**: confirm `arw_legacy_capsule_headers_total` and `arw_legacy_route_hits_total{path="/debug"}` stay at zero for at least 24 hours.
+- **Metrics**: confirm `arw_legacy_capsule_headers_total` stays at zero for at least 24 hours.
 - **Alerts**: ensure the new Prometheus rules fire in staging by temporarily issuing a legacy request (`curl -H 'X-ARW-Gate: {}' ...`), then acknowledge and clean up.
+- **Smoke**: hitting `/debug` should return 404; update client configs or bookmarks if it does not.
 
 These checks keep the legacy-retirement tasks measurable and ensure the defaults you rely on in production match what operators see locally.

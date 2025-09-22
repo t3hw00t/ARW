@@ -52,7 +52,7 @@ This document outlines a multi‑layer caching strategy for ARW, blending resear
 - In ARW:
   - Tool Action Cache: `/admin/tools/cache_stats`, `tool.cache` events, and `/metrics` `arw_tools_cache_*`.
   - Models metrics: `/state/models_metrics` and `/metrics` `arw_models_download_*`.
-  - Route stats: `/state/route_stats` and overlays in `/debug` (p95/ewma/hits/errors).
+  - Route stats: `/state/route_stats` and overlays in `/admin/debug` (p95/ewma/hits/errors).
 
 ## Configuration knobs
 

@@ -35,7 +35,7 @@ Type: How‑to
    Managers (single source of truth)
      - Agents    - Models    - Hardware    - Permissions    - Containers    - Plugins
 
-Debug UI: /debug (enable `ARW_DEBUG=1`)
+Debug UI: /admin/debug (enable `ARW_DEBUG=1`)
 ```
 
 Notes

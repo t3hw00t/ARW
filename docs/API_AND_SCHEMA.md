@@ -81,7 +81,7 @@ RFC 7807 Problem Details errors.
 W3C Trace Context + OpenTelemetry.
 
 ## UI Cross‑Reference
-- In the Debug UI (`/debug`, set `ARW_DEBUG=1`), the Tools panel exercises example tools and shows emitted `tool.ran` events.
+- In the Debug UI (`/admin/debug`, set `ARW_DEBUG=1`), the Tools panel exercises example tools and shows emitted `tool.ran` events.
 - Click the small “?” next to Tools for a tip and a link back to this page.
 
 ## Directories

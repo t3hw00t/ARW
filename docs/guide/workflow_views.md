@@ -43,5 +43,5 @@ Acceptance checks
 - Compare panel renders a diff for two pasted texts/JSON.
 
 - Events window: prefix presets (state/models/tools/egress/feedback/rpu), include/exclude body filters, Pretty/Wrap/Pause, Replay 50.
-- Debug UI remains available at `/debug` (set `ARW_DEBUG=1`). The launcher provides both browser and window shortcuts.
+- Debug UI is available at `/admin/debug` (set `ARW_DEBUG=1`). The launcher provides both browser and window shortcuts.
 - For dot‑case event kinds (e.g., `models.download.progress`) older CamelCase listeners will not work.

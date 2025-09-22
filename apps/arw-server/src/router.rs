@@ -178,7 +178,6 @@ pub(crate) mod paths {
     pub const SPEC_INDEX: &str = "/spec/index.json";
     pub const SPEC_HEALTH: &str = "/spec/health";
     pub const ADMIN_DEBUG: &str = "/admin/debug";
-    pub const DEBUG_ALIAS: &str = "/debug";
     pub const ADMIN_MODELS: &str = "/admin/models";
     pub const ADMIN_MODELS_SUMMARY: &str = "/admin/models/summary";
     pub const ADMIN_MODELS_REFRESH: &str = "/admin/models/refresh";
@@ -294,7 +293,6 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         Some(Stability::Stable),
     );
     builder.route_get(paths::ADMIN_DEBUG, api::ui::debug_ui, Some(Stability::Beta));
-    builder.route_get(paths::DEBUG_ALIAS, api::ui::debug_ui, None);
     builder.route_get(
         paths::ADMIN_UI_MODELS,
         api::ui::models_ui,

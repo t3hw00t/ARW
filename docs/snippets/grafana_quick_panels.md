@@ -4,7 +4,7 @@ title: Grafana — Quick Panels (CPU/Mem/GPU)
 
 # Grafana — Quick Panels (CPU/Mem/GPU)
 
-Updated: 2025-09-15
+Updated: 2025-09-22
 Type: How‑to
 
 A minimal Grafana dashboard with quick panels: CPU avg %, Mem usage %, GPU mem usage %, and CPU per-core time series.
@@ -63,36 +63,9 @@ A minimal Grafana dashboard with quick panels: CPU avg %, Mem usage %, GPU mem u
       "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 }
     },
     {
-      "type": "stat",
-      "title": "Legacy Route Hits (15m)",
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "targets": [
-        { "expr": "sum(increase(arw_legacy_route_hits_total[15m]))", "legendFormat": "legacy_routes" }
-      ],
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "auto"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "unit": "none",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 1 },
-              { "color": "red", "value": 5 }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 }
-    },
-    {
       "type": "gauge",
       "title": "CPU avg % (5m)",
-      "gridPos": {"x": 0, "y": 0, "w": 8, "h": 6},
+      "gridPos": {"x": 0, "y": 4, "w": 8, "h": 6},
       "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}},
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
       "targets": [ {"expr": "arw:cpu_percent_avg:5m OR arw_cpu_percent_avg", "legendFormat": "cpu %"} ]
@@ -100,7 +73,7 @@ A minimal Grafana dashboard with quick panels: CPU avg %, Mem usage %, GPU mem u
     {
       "type": "gauge",
       "title": "Mem usage %",
-      "gridPos": {"x": 8, "y": 0, "w": 8, "h": 6},
+      "gridPos": {"x": 8, "y": 4, "w": 8, "h": 6},
       "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}},
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
       "targets": [ {"expr": "arw:mem_usage_percent OR (100 * arw_mem_bytes_used / arw_mem_bytes_total)", "legendFormat": "mem %"} ]
@@ -108,7 +81,7 @@ A minimal Grafana dashboard with quick panels: CPU avg %, Mem usage %, GPU mem u
     {
       "type": "gauge",
       "title": "GPU mem usage %",
-      "gridPos": {"x": 16, "y": 0, "w": 8, "h": 6},
+      "gridPos": {"x": 16, "y": 4, "w": 8, "h": 6},
       "fieldConfig": {"defaults": {"unit": "percent", "min": 0, "max": 100}},
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
       "targets": [ {"expr": "arw:gpu_mem_usage_percent OR (100 * sum(arw_gpu_adapter_memory_bytes{kind=\"used\"}) / sum(arw_gpu_adapter_memory_bytes{kind=\"total\"}))", "legendFormat": "gpu %"} ]
@@ -116,7 +89,7 @@ A minimal Grafana dashboard with quick panels: CPU avg %, Mem usage %, GPU mem u
     {
       "type": "timeseries",
       "title": "CPU % per core",
-      "gridPos": {"x": 0, "y": 6, "w": 24, "h": 6},
+      "gridPos": {"x": 0, "y": 10, "w": 24, "h": 6},
       "fieldConfig": {"defaults": {"unit": "percent"}},
       "options": {"legend": {"displayMode": "table"}},
       "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},

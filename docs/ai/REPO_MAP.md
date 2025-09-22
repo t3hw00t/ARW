@@ -15,8 +15,7 @@ Top‑level
 - `sandbox/` — Scratch area for experiments.
 
 Key concepts from README
-- Local‑first service with Debug UI at `/debug`, state at `/state/*`, SSE events.
+- Local‑first service with Debug UI at `/admin/debug`, state at `/state/*`, SSE events.
 - “Commons Kit” recipes and tool schemas; recipe manifest schema in `spec/schemas`.
 
 (Use this map as the first chunk for retrieval; keep headings stable.)
-

@@ -73,7 +73,7 @@ UI Coherence
 - [Pack: Collaboration] Project Hub (Files): expand‑on‑search (auto‑expand ancestors of matches) and match highlighting — done
 - [Pack: Collaboration] Project Hub (Runs): Pin‑to‑compare available; filters are non‑persistent (view‑only) — done
 - [Pack: Collaboration] Accessibility: tree roles/aria‑level/expanded; regions labeled; command palette and gallery as dialogs; focus ring on rows; Compare tabs with role=tablist and roving tabindex — done
-- [Pack: Collaboration] Routes: canonicalize admin UI paths (`/admin/debug`, `/admin/ui/*`); keep local dev alias `/debug`; update launcher open path — doing
+- [Pack: Collaboration] Routes: canonicalize admin UI paths (`/admin/debug`, `/admin/ui/*`); remove the legacy `/debug` alias; update launcher open path — done
 - [Pack: Collaboration] SSE store: add connection status + resilient auto-reconnect with modest backoff; reuse filters and replay across reconnect — doing
 - [Pack: Collaboration] Connections window: allow per-connection admin token; open Events/Logs/Models windows pointed at that base — todo
 - [Pack: Collaboration] Per‑project templates: save/apply lanes/grid/focus in Hub — done
@@ -264,7 +264,7 @@ OpenAPI/Examples
 
 Feedback Engine (Near‑Live)
 - [Pack: Collaboration] Engine crate and integration: actor with O(1) stats, deltas via bus, snapshot+persistence [t-250909224102-8952]
-- [Pack: Collaboration] UI: near‑live feedback in /debug showing deltas with rationale/confidence [t-250909224103-0211]
+- [Pack: Collaboration] UI: near-live feedback in /admin/debug showing deltas with rationale/confidence [t-250909224103-0211]
 - [Pack: Collaboration] Policy hook: shadow → policy‑gated auto‑apply with bounds/rate‑limits [t-250909224103-5251]
 
 Testing

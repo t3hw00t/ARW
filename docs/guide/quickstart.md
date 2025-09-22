@@ -110,7 +110,7 @@ These flows emit structured `policy.*`, `working_set.*`, and `leases.*` events. 
 
 ## Debug UI
 
-Enable `ARW_DEBUG=1` to expose the debug panels at `/admin/debug` (a local `/debug` alias remains for convenience in dev builds).
+Enable `ARW_DEBUG=1` to expose the debug panels at `/admin/debug`.
 
 === "Windows"
 ```powershell

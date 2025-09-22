@@ -456,7 +456,7 @@ ic_clipboard_copy() { # $1=text
 ic_security_tips() {
   ic_banner "Security Tips" "Protect admin endpoints"
   cat <<TIPS
-  • Sensitive endpoints: /admin/debug (and the /debug alias), /probe, /admin/memory*, /state/memory*, /models/*, /governor/*, /introspect/*, /chat/*, /feedback/*
+  • Sensitive endpoints: /admin/debug, /probe, /admin/memory*, /state/memory*, /models/*, /governor/*, /introspect/*, /chat/*, /feedback/*
   • In development, set ARW_DEBUG=1 to simplify. In production, disable it.
   • Set ARW_ADMIN_TOKEN and send header: X-ARW-Admin: <token>
   • Rate limiting for admin endpoints can be adjusted via ARW_ADMIN_RL (default 60/60).

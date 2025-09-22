@@ -89,7 +89,7 @@ Trade‑offs: UX parity can drift; keep “UX invariants” shared.
 ```
 Terminal UI (ncurses) ──HTTP/SSE──▶ arw‑server
       ▲                                   │
-      │                                   └──▶ Minimal /debug for inspectors
+      │                                   └──▶ Minimal /admin/debug for inspectors
       └── Local scripts/automation
 ```
 
@@ -142,4 +142,3 @@ See also
 - How‑to → Workflow Views & Sidecar — guide/workflow_views.md
 - How‑to → UI Flows (ASCII) — guide/ui_flows.md
 - Explanations → UX Invariants — architecture/ux_invariants.md
-

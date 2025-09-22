@@ -27,7 +27,7 @@ Wire/protocol
 - Budget stream cadence: first event ≤150 ms; steady cadence ≤250 ms.
 
 Implementation layout (current)
-- Legacy bridge code has been removed; the unified server now owns `/admin/*`, `/debug`, and static assets directly.
+- Legacy bridge code has been removed; the unified server now owns `/admin/*` and serves static assets directly (debug UI at `/admin/debug`).
 - `bootstrap::run()` wires the bus, resources, read-model fan-out, and HTTP server before spawning background loops.
 - Background workers (models GC, snappy, metrics) are launched from a dedicated helper so control-plane tasks stay short-lived.
 - The event bus remains the nucleus: HTTP handlers, orchestrator queues, and the kernel journal all publish through the same path, keeping the object graph authoritative.

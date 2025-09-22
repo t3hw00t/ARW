@@ -9,16 +9,15 @@ Type: Reference
 
 
 ## To Do
+- [t-250922105520-ops03] Staging smoke: verify /debug removal — todo (updated: 2025-09-22 10:55:20 UTC)
+- [t-250922105510-ops02] Prometheus: refresh legacy alert rules — todo (updated: 2025-09-22 10:55:10 UTC)
+- [t-250922105500-ops01] Grafana: re-import quick panels — todo (updated: 2025-09-22 10:55:00 UTC)
+- [t-250921010500-bench] Implement unified snappy bench — todo (updated: 2025-09-21 01:05:00 UTC)
+    - 2025-09-21 01:05:00 UTC: Legacy snappy_bench in arw-svc depended on retired /admin bridges. Need a new CLI that hits /actions and /events directly, reports p95 targets, and can run in CI.
 - [t-250917235817-3181] Retarget launcher to unified server — todo (updated: 2025-09-17 22:44:29 UTC)
-    - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; legacy fallback removed.
-    - 2025-09-21 06:32:00 UTC: Hub episodes view consumes `/state/episodes` from arw-server, computes summaries client-side, and falls back to cached data when the legacy snapshot route is absent.
+    - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; keeps legacy fallback.
 - [t-250917235820-3900] Decommission legacy artifacts — todo (updated: 2025-09-17 21:58:20 UTC)
-    - 2025-09-21 04:15:00 UTC: `/admin/state/*` and `/admin/projects/*` routes marked deprecated in OpenAPI/JSON; plan decommission once replacement UIs and APIs are confirmed.
-    - 2025-09-21 05:30:00 UTC: Removed `/admin/projects/*` endpoints from the server/spec; all docs now reference `/state/projects*` and `/projects*`.
-    - 2025-09-21 05:45:00 UTC: Removed `/admin/state/*` read-model aliases in favour of `/state/*`; guardrails metrics now live at `/state/guardrails_metrics`.
-    - 2025-09-21 06:45:00 UTC: Purged `Admin/Projects` and `Admin/State` tags from OpenAPI tooling (script + spec/json) to match the unified server taxonomy.
 - [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — todo (updated: 2025-09-17 21:58:18 UTC)
-    - 2025-09-21 06:55:00 UTC: Removed curated-spec fallback; `OPENAPI_OUT` now always emits ApiDoc-generated OpenAPI, and docs/scripts use the crate command (`cargo run --no-default-features -p arw-server -- OPENAPI_OUT=...`).
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-11 21:02:19 UTC)
 
 ## In Progress
@@ -29,8 +28,6 @@ Type: Reference
 ## Paused
 
 ## Done
-- [t-250921010500-bench] Implement unified snappy bench — done (updated: 2025-09-21 03:05:00 UTC)
-    - 2025-09-21 03:05:00 UTC: Added `snappy-bench` CLI (apps/snappy-bench); exercises `/actions` while tailing `/events`, enforces snappy budgets, and integrates via `just bench-snappy`.
 - [t-250917235814-0001] Add Helm chart for arw-server — done (updated: 2025-09-17 21:58:16 UTC)
 - [t-250917235812-8254] Switch CI OpenAPI codegen to arw-server — done (updated: 2025-09-17 21:58:13 UTC)
 - [t-250917235747-3348] Annotate server handlers with utoipa — done (updated: 2025-09-17 21:58:04 UTC)
@@ -104,14 +101,14 @@ Type: Reference
     - 2025-09-14 17:12:10 UTC: Episodes filters (errors-only + substring) and details toggle exist; confirmed and kept live refresh.
 - [t-250909224103-5251] Policy: hook feedback auto-apply — done (updated: 2025-09-14 17:12:10 UTC)
     - 2025-09-14 17:12:10 UTC: Auto-apply wired: toggle /feedback/auto drives automatic apply of policy-approved suggestions; emits intents/actions events and persists state.
-- [t-250909224103-0211] UI: near-live feedback in /debug — done (updated: 2025-09-14 17:12:09 UTC)
+- [t-250909224103-0211] UI: near-live feedback in /admin/debug — done (updated: 2025-09-14 17:12:09 UTC)
     - 2025-09-14 17:12:08 UTC: Debug UI already renders live feedback.suggested; added auto-apply hook: when enabled, safe suggestions are auto-applied on feedback.suggested events (policy-gated).
 - [t-250912001105-7850] Phase 3: Episodes + Debug UI reactive views — done (updated: 2025-09-14 17:02:37 UTC)
     - 2025-09-14 17:02:36 UTC: Episodes view: /state/episodes endpoint + Debug UI panel with live refresh and episode snapshots; stitch by corr_id in ext/state_api.rs.
 - [t-250912001100-3438] Phase 2: Beliefs/Intents/Actions stores + endpoints — done (updated: 2025-09-14 17:02:36 UTC)
     - 2025-09-14 17:02:36 UTC: Beliefs/Intents/Actions rolling stores implemented; endpoints: /state/{beliefs,intents,actions} and admin variants; wired via on_event with corr_id episodes stitching.
 - [t-250912001055-0044] Phase 2: Observations read-model + /state/observations — done (updated: 2025-09-14 17:02:35 UTC)
-    - 2025-09-14 17:02:35 UTC: Public /state/observations exists (admin alias remains); rolling store wired via ext::state_api::obs_on_event and bus subscriber. Beliefs/intents/world/cluster now share the same `/state/*` surfaces.
+    - 2025-09-14 17:02:35 UTC: Public /state/observations exists; admin wrapper at /admin/state/observations; rolling store wired via ext::state_api::obs_on_event and bus subscriber.
 - [t-250914050908-ev14] Feature Matrix: dot.case topics — done (updated: 2025-09-14 16:59:13 UTC)
     - 2025-09-14 16:59:12 UTC: Feature Matrix events verified/updated: experiments list now includes experiment.activated; all entries dot.case.
 - [t-250914050900-ev10] Events: topics.rs dot.case only — done (updated: 2025-09-14 16:59:12 UTC)
@@ -176,3 +173,4 @@ Type: Reference
 - [t-250909170247-6008] Start service and verify /about — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
+
