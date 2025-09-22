@@ -19,7 +19,14 @@ This note captures the minimal wiring needed to surface ARW metrics in Prometheu
      - /etc/prometheus/rules/arw-alerting-rules.yaml
    ```
 
-2. Copy the YAML code blocks from the snippets into your rule files (the fenced ` ```yaml ... ``` ` sections in each snippet). A quick helper:
+2. Copy the YAML code blocks from the snippets into your rule files (the fenced ` ```yaml ... ``` ` sections in each snippet). You can let `scripts/export_ops_assets.sh` collect the latest assets into a staging directory:
+   ```bash
+   just ops-export /etc/prometheus/rules
+   # or run the script directly
+   ./scripts/export_ops_assets.sh --out /etc/prometheus/rules
+   # or set ARW_EXPORT_OUTDIR for alternative locations
+   ```
+   If you prefer a manual extraction, the following helper works too:
    ```bash
    install -d /etc/prometheus/rules
    awk '/```yaml/{flag=1;next}/```/{flag=0}flag' docs/snippets/prometheus_recording_rules.md > /etc/prometheus/rules/arw-recording-rules.yaml
@@ -60,7 +67,7 @@ Then reload Alertmanager (`/-/reload`).
 
 ## Grafana panels
 
-Import the “Quick Panels” snippet into a dashboard so the legacy counters are visible at a glance:
+Import the “Quick Panels” snippet into a dashboard so the legacy counters are visible at a glance (the export script above drops `grafana_quick_panels.json` alongside the Prometheus rules):
 
 1. Grafana → Dashboards → Import → paste the JSON from `docs/snippets/grafana_quick_panels.md`.
 2. Select your Prometheus datasource when prompted (`DS_PROMETHEUS`).
@@ -73,6 +80,6 @@ Before cutting any legacy traffic, verify in staging:
 - **Start scripts**: run `scripts/start.sh` (or `scripts/start.ps1`) and confirm `/state/egress/settings` reports `proxy_enable=true` and `dns_guard_enable=true`. If automation requires these disabled, document the override before pushing to production.
 - **Metrics**: confirm `arw_legacy_capsule_headers_total` stays at zero for at least 24 hours.
 - **Alerts**: ensure the new Prometheus rules fire in staging by temporarily issuing a legacy request (`curl -H 'X-ARW-Gate: {}' ...`), then acknowledge and clean up.
-- **Smoke**: hitting `/debug` should return 404; update client configs or bookmarks if it does not.
+- **Smoke**: run `scripts/check_legacy_surface.sh` (or hit `/debug` manually) to confirm the legacy alias returns 404, `/admin/debug` still serves, and capsule headers continue to raise 410 + metrics.
 
 These checks keep the legacy-retirement tasks measurable and ensure the defaults you rely on in production match what operators see locally.

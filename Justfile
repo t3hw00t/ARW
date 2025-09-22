@@ -104,6 +104,12 @@ docs-build: docgen
 docs-check:
   bash scripts/docs_check.sh
 
+legacy-check:
+  bash scripts/check_legacy_surface.sh
+
+ops-export out='ops/out':
+  bash scripts/export_ops_assets.sh --out '{{out}}'
+
 # Service
 start port='8091' debug='1':
   ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 bash -ceu '

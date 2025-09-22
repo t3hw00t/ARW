@@ -3,8 +3,7 @@ title: Gating Keys
 ---
 
 # Gating Keys
-Updated: 2025-09-22
-Generated: 2025-09-22 11:52 UTC
+Generated: 2025-09-22 11:56 UTC
 Type: Reference
 
 Generated from code.
@@ -144,3 +143,4 @@ Project workspace file management.
 | `projects:file:get` | Project File Get | stable | Read the contents of a tracked project file. |
 | `projects:file:set` | Project File Set | stable | Write or replace the contents of a project file. |
 | `projects:file:patch` | Project File Patch | beta | Apply a patch to a project file. |
+
