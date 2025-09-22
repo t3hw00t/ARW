@@ -2,7 +2,7 @@
 
 Adds durable request correlation, safer default headers, CSP controls, and richer ops: structured access logs with optional rolling files, SSE request-id correlation, and Docker/Helm polish. No breaking HTTP or SSE changes.
 
-> **Legacy notice:** As of the current `main` branch the legacy `arw-svc` bridge and its container images are retired. The notes below remain for historical context of the v0.1.4 cut.
+> **Legacy notice:** As of the current `main` branch the legacy bridge has been retired; these notes remain for historical context of the v0.1.4 cut.
 
 ## Highlights
 - Request IDs: end-to-end `x-request-id` propagation across responses and traces.
@@ -41,9 +41,8 @@ Adds durable request correlation, safer default headers, CSP controls, and riche
 - SSE decoration: `ARW_EVENTS_SSE_DECORATE`
 
 ## Install
-- Docker (unified): `ghcr.io/<owner>/arw-server:v0.1.4`
-- Docker (legacy UI bridge, retired): `ghcr.io/<owner>/arw-svc:v0.1.4`
-- Helm (legacy chart, retired): set `image.repository=ghcr.io/<owner>/arw-svc` and `image.tag=v0.1.4` (unified server chart forthcoming)
+- Docker: `ghcr.io/<owner>/arw-server:v0.1.4`
+- Helm: use the unified server chart (forthcoming) or mirror the Docker image directly until published.
 - Binaries: build from source with `cargo build --workspace --release`
 
 ## Verification

@@ -128,8 +128,41 @@ root_dir="$(cd "$(dirname "$0")/.." && pwd)"
 spec_dir="$root_dir/spec"
 mkdir -p "$spec_dir"
 
-# MCP tools via arw-cli
-if cargo build -p arw-cli --release >/dev/null 2>&1; then
+# Build release binaries once so downstream steps can reuse them
+build_ok=0
+if cargo build --release -p arw-server -p arw-cli >/dev/null 2>&1; then
+  build_ok=1
+else
+  warn "cargo build --release (arw-server/arw-cli) failed"
+fi
+
+# OpenAPI output directly from annotated ApiDoc
+if [ "$build_ok" -eq 1 ]; then
+  info "Generating OpenAPI from annotations"
+  if OPENAPI_OUT="$spec_dir/openapi.yaml" "$root_dir/target/release/arw-server"; then
+    info "Wrote $spec_dir/openapi.yaml"
+    if command -v python3 >/dev/null 2>&1; then
+      set +e
+      python3 "$root_dir/scripts/ensure_openapi_descriptions.py"
+      normalize_status=$?
+      set -e
+      if [ "$normalize_status" -eq 0 ]; then
+        :
+      elif [ "$normalize_status" -eq 1 ]; then
+        info "Normalized OpenAPI descriptions"
+      else
+        warn "failed to normalize openapi descriptions"
+      fi
+    fi
+  else
+    warn "failed to generate openapi.yaml"
+  fi
+else
+  warn "skipping OpenAPI generation (arw-server build failed)"
+fi
+
+# MCP tools via arw-cli (requires successful build)
+if [ "$build_ok" -eq 1 ]; then
   if "$root_dir/target/release/arw-cli" tools > "$spec_dir/mcp-tools.json" 2>/dev/null; then
     info "Wrote $spec_dir/mcp-tools.json"
   else

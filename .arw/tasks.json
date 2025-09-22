@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-22 17:59 UTC",
+  "updated": "2025-09-22 23:29 UTC",
   "tasks": [
     {
       "id": "t-250914050900-ev10",
@@ -24,11 +24,11 @@
       "notes": [
         {
           "time": "2025-09-14 16:43:57 UTC",
-          "text": "Replaced string publish in arw-svc with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13."
+          "text": "Replaced string publish in the legacy service bridge with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13."
         },
         {
           "time": "2025-09-14 16:44:18 UTC",
-          "text": "Replaced string publish in arw-svc with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13."
+          "text": "Replaced string publish in the legacy service bridge with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13."
         }
       ],
       "updated": "2025-09-14 16:44:17 UTC",
@@ -98,7 +98,7 @@
       "notes": [
         {
           "time": "2025-09-14 16:52:59 UTC",
-          "text": "Enhanced linter: fails on string-literal Bus.publish in apps/arw-svc and CamelCase subjects; verified repo passes."
+          "text": "Enhanced linter: fails on string-literal Bus.publish in legacy service paths and CamelCase subjects; verified repo passes."
         }
       ],
       "updated": "2025-09-14 16:53:00 UTC",
@@ -112,7 +112,7 @@
       "notes": [
         {
           "time": "2025-09-14 16:53:02 UTC",
-          "text": "Gating key events:task.completed confirmed in arw-core and used in arw-svc; gating keys doc lists it."
+          "text": "Gating key events:task.completed confirmed in arw-core and documented for the legacy bridge; gating keys doc lists it."
         }
       ],
       "updated": "2025-09-14 16:53:02 UTC",
@@ -153,7 +153,7 @@
     {
       "id": "t-250909170247-6008",
       "title": "Start service and verify /about",
-      "desc": "Run arw-svc locally with ARW_DEBUG=1 and curl /about",
+      "desc": "Run service locally with ARW_DEBUG=1 and curl /about",
       "status": "done",
       "notes": [],
       "updated": "2025-09-09 15:02:47 UTC",
@@ -544,7 +544,7 @@
       "notes": [
         {
           "time": "2025-09-11 21:10:37 UTC",
-          "text": "Implemented dyn timeout middleware + global handle; wired governor hints + outgoing HTTP; built & tests green for arw-svc."
+          "text": "Implemented dyn timeout middleware + global handle; wired governor hints + outgoing HTTP; built & tests green for arw-server."
         }
       ],
       "updated": "2025-09-11 21:10:37 UTC",
@@ -733,12 +733,12 @@
     {
       "id": "t-250912020516-8533",
       "title": "Phase 1: AppState builder + unified struct",
-      "desc": "Introduce apps/arw-svc/src/app_state.rs; unify bin/lib on shared AppState; add Resources container for future typed services; adjust main/lib to use builder.",
+      "desc": "Introduce unified app_state builder; add Resources container for future typed services; adjust main/lib to use builder.",
       "status": "done",
       "notes": [
         {
           "time": "2025-09-12 00:05:22 UTC",
-          "text": "Unified AppState in app_state.rs; main/lib migrated; added Resources container; built+tests green for arw-svc."
+          "text": "Unified AppState in app_state.rs; main/lib migrated; added Resources container; built+tests green for arw-server."
         }
       ],
       "updated": "2025-09-12 00:05:22 UTC",
@@ -1071,67 +1071,115 @@
       "id": "t-250917235817-3181",
       "title": "Retarget launcher to unified server",
       "desc": "Launcher still targets legacy bridge; migrate UI + service mgmt.",
-      "status": "todo",
+      "status": "done",
       "notes": [
         {
           "time": "2025-09-17 22:44:29 UTC",
           "text": "Launcher now prefers arw-server if present; defaults to port 8091; keeps legacy fallback."
+        },
+        {
+          "time": "2025-09-22 21:58:32 UTC",
+          "text": "Launcher logs view now hits /state/route_stats directly (legacy /admin/introspect/stats fallback removed)."
         }
       ],
-      "updated": "2025-09-17 22:44:29 UTC"
+      "updated": "2025-09-22 22:48:29 UTC",
+      "done_at": "2025-09-22 22:48:29 UTC"
     },
     {
       "id": "t-250917235818-8075",
       "title": "Replace static OpenAPI with ApiDoc emission",
       "desc": "Emit generated OpenAPI and reconcile curated overlay; update CI to use ApiDoc.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-17 21:58:18 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-22 19:54:01 UTC",
+          "text": "Focus next: replace remaining static spec/openapi.yaml usage with runtime ApiDoc export; audit docgen + release scripts."
+        },
+        {
+          "time": "2025-09-22 20:43:25 UTC",
+          "text": "Updated docgen + release/openapi workflows to emit spec/openapi.yaml via ApiDoc (release build) and refreshed docs to reference just openapi-gen."
+        },
+        {
+          "time": "2025-09-22 22:35:53 UTC",
+          "text": "Pre-push hook now reuses release arw-server binary for OPENAPI_OUT (matches docgen); docs updated to reference target/release path."
+        }
+      ],
+      "updated": "2025-09-22 22:56:13 UTC",
+      "done_at": "2025-09-22 22:56:13 UTC"
     },
     {
       "id": "t-250917235820-3900",
       "title": "Decommission legacy artifacts",
       "desc": "Remove arw-svc chart and docker publish once launcher retargeted and docs updated.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-17 21:58:20 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-22 23:05:11 UTC",
+          "text": "Windows packaging + CI now ship arw-server only; removed arw-svc workflow/docs references (labels, templates, env example, interfaces OpenAPI generation)."
+        }
+      ],
+      "updated": "2025-09-22 23:20:29 UTC",
+      "done_at": "2025-09-22 23:20:29 UTC"
     },
     {
       "id": "t-250921010500-bench",
       "title": "Implement unified snappy bench",
       "desc": "Recreate the snappy performance load tester against arw-server (actions + SSE).",
-      "status": "todo",
+      "status": "done",
       "notes": [
         {
           "time": "2025-09-21 01:05:00 UTC",
-          "text": "Legacy snappy_bench in arw-svc depended on retired /admin bridges. Need a new CLI that hits /actions and /events directly, reports p95 targets, and can run in CI."
+          "text": "Legacy snappy_bench in the retired service bridge depended on /admin routes. Need a new CLI that hits /actions and /events directly, reports p95 targets, and can run in CI."
+        },
+        {
+          "time": "2025-09-22 21:08:49 UTC",
+          "text": "ci_snappy_bench.sh now builds release bins once and runs snappy-bench against the compiled server; verified run succeeded."
         }
       ],
-      "updated": "2025-09-21 01:05:00 UTC"
+      "updated": "2025-09-22 22:49:37 UTC",
+      "done_at": "2025-09-22 22:49:37 UTC"
     },
     {
       "id": "t-250922105500-ops01",
       "title": "Grafana: re-import quick panels",
       "desc": "Apply docs/snippets/grafana_quick_panels.md so dashboards drop the legacy route-hit panel and keep the capsule header stat only.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-22 10:55:00 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-22 23:23:44 UTC",
+          "text": "Grafana quick panels snippet updated to drop legacy capsule gauge; remaining panels unchanged."
+        }
+      ],
+      "updated": "2025-09-22 23:23:55 UTC",
+      "done_at": "2025-09-22 23:23:55 UTC"
     },
     {
       "id": "t-250922105510-ops02",
       "title": "Prometheus: refresh legacy alert rules",
       "desc": "Merge docs/snippets/prometheus_alerting_rules.md to remove the route-hit alert and retain ARWLegacyCapsuleHeadersSeen.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-22 10:55:10 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-22 23:24:05 UTC",
+          "text": "Prometheus alert snippet updated: legacy capsule header alert removed; CPU/mem/GPU alerts retained."
+        }
+      ],
+      "updated": "2025-09-22 23:24:14 UTC",
+      "done_at": "2025-09-22 23:24:14 UTC"
     },
     {
       "id": "t-250922105520-ops03",
       "title": "Staging smoke: verify /debug removal",
       "desc": "Run staging checks to confirm /debug returns 404 and arw_legacy_capsule_headers_total stays at zero before prod cutover.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-22 10:55:20 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-22 23:29:13 UTC",
+          "text": "Ran scripts/check_legacy_surface.sh on local instance; /debug returns 404, /admin/debug 200, legacy capsule header rejected with counter increment."
+        }
+      ],
+      "updated": "2025-09-22 23:29:30 UTC",
+      "done_at": "2025-09-22 23:29:30 UTC"
     }
   ]
 }

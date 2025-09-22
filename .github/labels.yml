@@ -24,7 +24,7 @@
   description: CLI
 - name: area/service
   color: 1d76db
-  description: Service (arw-svc)
+  description: Service (arw-server)
 - name: area/docs
   color: 0e8a16
   description: Docs and site

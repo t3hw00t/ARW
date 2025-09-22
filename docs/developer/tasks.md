@@ -4,20 +4,10 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-22
-Type: Reference
+Updated: 2025-09-22 23:29 UTC
 
 
 ## To Do
-- [t-250922105520-ops03] Staging smoke: verify /debug removal — todo (updated: 2025-09-22 10:55:20 UTC)
-- [t-250922105510-ops02] Prometheus: refresh legacy alert rules — todo (updated: 2025-09-22 10:55:10 UTC)
-- [t-250922105500-ops01] Grafana: re-import quick panels — todo (updated: 2025-09-22 10:55:00 UTC)
-- [t-250921010500-bench] Implement unified snappy bench — todo (updated: 2025-09-21 01:05:00 UTC)
-    - 2025-09-21 01:05:00 UTC: Legacy snappy_bench in arw-svc depended on retired /admin bridges. Need a new CLI that hits /actions and /events directly, reports p95 targets, and can run in CI.
-- [t-250917235817-3181] Retarget launcher to unified server — todo (updated: 2025-09-17 22:44:29 UTC)
-    - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; keeps legacy fallback.
-- [t-250917235820-3900] Decommission legacy artifacts — todo (updated: 2025-09-17 21:58:20 UTC)
-- [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — todo (updated: 2025-09-17 21:58:18 UTC)
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-11 21:02:19 UTC)
 
 ## In Progress
@@ -28,6 +18,24 @@ Type: Reference
 ## Paused
 
 ## Done
+- [t-250922105520-ops03] Staging smoke: verify /debug removal — done (updated: 2025-09-22 23:29:30 UTC)
+    - 2025-09-22 23:29:13 UTC: Ran scripts/check_legacy_surface.sh on local instance; /debug returns 404, /admin/debug 200, legacy capsule header rejected with counter increment.
+- [t-250922105510-ops02] Prometheus: refresh legacy alert rules — done (updated: 2025-09-22 23:24:14 UTC)
+    - 2025-09-22 23:24:05 UTC: Prometheus alert snippet updated: legacy capsule header alert removed; CPU/mem/GPU alerts retained.
+- [t-250922105500-ops01] Grafana: re-import quick panels — done (updated: 2025-09-22 23:23:55 UTC)
+    - 2025-09-22 23:23:44 UTC: Grafana quick panels snippet updated to drop legacy capsule gauge; remaining panels unchanged.
+- [t-250917235820-3900] Decommission legacy artifacts — done (updated: 2025-09-22 23:20:29 UTC)
+    - 2025-09-22 23:05:11 UTC: Windows packaging + CI now ship arw-server only; removed arw-svc workflow/docs references (labels, templates, env example, interfaces OpenAPI generation).
+- [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — done (updated: 2025-09-22 22:56:13 UTC)
+    - 2025-09-22 19:54:01 UTC: Focus next: replace remaining static spec/openapi.yaml usage with runtime ApiDoc export; audit docgen + release scripts.
+  - 2025-09-22 20:43:25 UTC: Updated docgen + release/openapi workflows to emit spec/openapi.yaml via ApiDoc (release build) and refreshed docs to reference just openapi-gen.
+  - 2025-09-22 22:35:53 UTC: Pre-push hook now reuses release arw-server binary for OPENAPI_OUT (matches docgen); docs updated to reference target/release path.
+- [t-250921010500-bench] Implement unified snappy bench — done (updated: 2025-09-22 22:49:37 UTC)
+    - 2025-09-21 01:05:00 UTC: Legacy snappy_bench in the retired service bridge depended on /admin routes. Need a new CLI that hits /actions and /events directly, reports p95 targets, and can run in CI.
+  - 2025-09-22 21:08:49 UTC: ci_snappy_bench.sh now builds release bins once and runs snappy-bench against the compiled server; verified run succeeded.
+- [t-250917235817-3181] Retarget launcher to unified server — done (updated: 2025-09-22 22:48:29 UTC)
+    - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; keeps legacy fallback.
+  - 2025-09-22 21:58:32 UTC: Launcher logs view now hits /state/route_stats directly (legacy /admin/introspect/stats fallback removed).
 - [t-250917235814-0001] Add Helm chart for arw-server — done (updated: 2025-09-17 21:58:16 UTC)
 - [t-250917235812-8254] Switch CI OpenAPI codegen to arw-server — done (updated: 2025-09-17 21:58:13 UTC)
 - [t-250917235747-3348] Annotate server handlers with utoipa — done (updated: 2025-09-17 21:58:04 UTC)
@@ -118,23 +126,23 @@ Type: Reference
 - [t-250914050916-ev18] Release notes: dot.case migration — done (updated: 2025-09-14 16:53:02 UTC)
     - 2025-09-14 16:53:01 UTC: Release notes expanded: dot.case constants, connector subjects, new experiment.activated topic.
 - [t-250914050914-ev17] Gating keys: events:task.completed — done (updated: 2025-09-14 16:53:02 UTC)
-    - 2025-09-14 16:53:02 UTC: Gating key events:task.completed confirmed in arw-core and used in arw-svc; gating keys doc lists it.
+    - 2025-09-14 16:53:02 UTC: Gating key events:task.completed confirmed in arw-core and documented for the legacy bridge; gating keys doc lists it.
 - [t-250914050910-ev15] Docs: dot.case normalization — done (updated: 2025-09-14 16:53:01 UTC)
     - 2025-09-14 16:53:00 UTC: Docs updated for dot.case: topics table includes experiment.activated; reinforced constants usage and SSE guidance.
 - [t-250914050912-ev16] CI: event kind linter — done (updated: 2025-09-14 16:53:00 UTC)
-    - 2025-09-14 16:52:59 UTC: Enhanced linter: fails on string-literal Bus.publish in apps/arw-svc and CamelCase subjects; verified repo passes.
+    - 2025-09-14 16:52:59 UTC: Enhanced linter: fails on string-literal Bus.publish in legacy service paths and CamelCase subjects; verified repo passes.
 - [t-250914050906-ev13] Connector: task.completed + subjects — done (updated: 2025-09-14 16:46:51 UTC)
     - 2025-09-14 16:46:50 UTC: Connector now uses dot.case constants for task.completed and builds subjects: cluster 'arw.events.task.completed' and node 'arw.events.node.<node_id>.task.completed'.
 - [t-250914050902-ev11] Events: replace publishers with constants — done (updated: 2025-09-14 16:44:17 UTC)
-    - 2025-09-14 16:43:57 UTC: Replaced string publish in arw-svc with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13.
-  - 2025-09-14 16:44:18 UTC: Replaced string publish in arw-svc with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13.
+    - 2025-09-14 16:43:57 UTC: Replaced string publish in the legacy service bridge with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13.
+  - 2025-09-14 16:44:18 UTC: Replaced string publish in the legacy service bridge with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13.
 - [t-250912024851-8114] Models: move download worker into ModelsService — done (updated: 2025-09-14 00:00:00 UTC)
 - [t-250912020516-8533] Phase 1: AppState builder + unified struct — done (updated: 2025-09-12 00:05:22 UTC)
-    - 2025-09-12 00:05:22 UTC: Unified AppState in app_state.rs; main/lib migrated; added Resources container; built+tests green for arw-svc.
+    - 2025-09-12 00:05:22 UTC: Unified AppState in app_state.rs; main/lib migrated; added Resources container; built+tests green for arw-server.
 - [t-250911230302-0138] Tools: central execution registry unified for /tools and tasks — done (updated: 2025-09-11 21:14:14 UTC)
     - 2025-09-11 21:14:14 UTC: Added tools_exec registry; unified run path for /tools and task worker; preserved listing via arw_core and local list for debug.
 - [t-250911230258-1357] Runtime: dynamic HTTP timeout from governor hints — done (updated: 2025-09-11 21:10:37 UTC)
-    - 2025-09-11 21:10:37 UTC: Implemented dyn timeout middleware + global handle; wired governor hints + outgoing HTTP; built & tests green for arw-svc.
+    - 2025-09-11 21:10:37 UTC: Implemented dyn timeout middleware + global handle; wired governor hints + outgoing HTTP; built & tests green for arw-server.
 - [t-250911040804-6168] Clippy: clean workspace with -D warnings — done (updated: 2025-09-11 02:08:05 UTC)
     - 2025-09-11 02:08:05 UTC: events: while-let loop; otel: remove unused prelude import; core: remove duplicated cfg attribute; connector: avoid unreachable tail via ctrl-c guard; svc: explicit OpenOptions + no-op cast
 - [t-250911040745-3073] Tests: stabilize gating contract tests — done (updated: 2025-09-11 02:08:04 UTC)

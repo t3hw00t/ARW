@@ -36,7 +36,7 @@ This project follows Keep a Changelog and Semantic Versioning. All notable chang
 - Safer defaults for response headers and CSP; proxy header trust is opt‑in.
 
 ### Testing
-- `arw-svc` tests pass (53/53). Local builds verified for Docker/Helm paths.
+- `arw-server` tests pass (53/53). Local builds verified for Docker/Helm paths.
 
 ## [0.1.3] - 2025-09-15
 
@@ -57,7 +57,7 @@ This project follows Keep a Changelog and Semantic Versioning. All notable chang
 
 ### Developer
 - Bumped `arw-tauri` to `0.1.3`; launcher depends on the new plugin.
-- Bumped `arw-svc` to `0.1.3`.
+- Bumped `arw-server` to `0.1.3`.
 
 ## [0.1.2] - 2025-09-13
 
@@ -74,10 +74,10 @@ This project follows Keep a Changelog and Semantic Versioning. All notable chang
 Stability baseline. Consolidated features, CI hardening, docs, and ops.
 
 ### Added
-- Feature-flagged gRPC server for `arw-svc` (opt-in via `--features grpc` and `ARW_GRPC=1`).
+- Feature-flagged gRPC server (opt-in via `--features grpc` and `ARW_GRPC=1`).
 - Windows script improvements + Pester tests; CI job to run them.
 - CI: cargo-audit, cargo-deny, Nix build/test job, docs link-check (lychee), CodeQL.
-- Helm chart for `arw-svc` with readiness/liveness probes.
+- Helm chart with readiness/liveness probes.
 - Docker: multi-stage image, non-root runtime; Compose file and Justfile helpers.
 - Devcontainer (Nix) for consistent dev environment.
 - Docs: Training research, Wiki structure, gRPC guide; stability freeze checklist.
@@ -86,7 +86,7 @@ Stability baseline. Consolidated features, CI hardening, docs, and ops.
 - Consolidated merged branches; pruned stale `codex/*` remotes.
 - Introduced Tauri-based launcher (`arw-launcher`) and aligned scripts to a launcher‑first flow.
 - `arw-cli` updated to rand 0.9.
-- `arw-svc` refactors: AppState/Resources split; extended APIs and Debug UI.
+- Service refactors: AppState/Resources split; extended APIs and Debug UI.
 - CI installs Tauri/WebKitGTK deps on Linux for launcher builds.
 
 ### Fixed

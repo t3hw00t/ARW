@@ -39,13 +39,13 @@ jobs:
 
       - name: Build service + cli (release)
         run: |
-          cargo build --release --locked --target ${{ matrix.target }} -p arw-svc -p arw-cli
+          cargo build --release --locked --target ${{ matrix.target }} -p arw-server -p arw-cli
 
       - name: Stage external binaries for bundler
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Force apps/arw-launcher/src-tauri/bin | Out-Null
-          Copy-Item target/${{ matrix.target }}/release/arw-svc.exe apps/arw-launcher/src-tauri/bin/arw-svc.exe -Force
+          Copy-Item target/${{ matrix.target }}/release/arw-server.exe apps/arw-launcher/src-tauri/bin/arw-server.exe -Force
           Copy-Item target/${{ matrix.target }}/release/arw-cli.exe apps/arw-launcher/src-tauri/bin/arw-cli.exe -Force
 
       - name: Install Tauri CLI
@@ -65,7 +65,7 @@ jobs:
           $paths = @(
             'apps/arw-launcher/src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi',
             'apps/arw-launcher/src-tauri/target/${{ matrix.target }}/release/*.exe',
-            'target/${{ matrix.target }}/release/arw-svc.exe',
+            'target/${{ matrix.target }}/release/arw-server.exe',
             'target/${{ matrix.target }}/release/arw-cli.exe'
           )
           foreach ($p in $paths) { Get-ChildItem -Path $p -ErrorAction SilentlyContinue | Copy-Item -Destination dist-out-${{ matrix.arch }} -Force }
@@ -135,11 +135,11 @@ jobs:
           if (-not $installedPath) { throw 'Could not resolve install directory' }
           $exe = Join-Path $installedPath 'arw-launcher.exe'
           if (-not (Test-Path $exe)) { throw "Launcher exe not found at $exe" }
-          $svc = Join-Path $installedPath 'arw-svc.exe'
+          $svc = Join-Path $installedPath 'arw-server.exe'
           if (-not (Test-Path $svc)) { throw "Service exe not found at $svc" }
           Write-Host "[smoke] Launching $exe (hidden) with ARW_AUTOSTART=1"
           $env:ARW_AUTOSTART = '1'
-          $env:ARW_PORT = '8090'
+          $env:ARW_PORT = '8091'
           $p2 = Start-Process -FilePath $exe -WindowStyle Hidden -PassThru
           # Poll health
           $deadline = (Get-Date).AddSeconds(15)

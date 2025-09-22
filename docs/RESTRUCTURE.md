@@ -221,7 +221,7 @@ Status: In progress.
 ### Legacy Feature Migration Track (runs parallel to phases 2–8)
 
 #### Snapshot
-- **Phase D — Operator experience:** In progress, with chat workbench routes, screenshot pipeline wiring, and the SPA/right-sidecar migration queued to close out the legacy debug UI.
+- **Phase D — Operator experience:** In progress, with chat workbench routes, screenshot pipeline wiring, and the SPA/right-sidecar migration queued to close out the legacy debug UI. Launcher surfaces now read from `/state/*` endpoints (route stats, etc.) without `/admin/*` fallbacks.
 - **Phase E — Safety:** Planned; finish Guardrail Gateway enforcement, complete Asimov Capsule Guard coverage, and delete the lingering `/admin/*` fallbacks once capsules drive every decision path.
 - **Legacy shutdown instrumentation:** Completed — dashboards now track `arw_legacy_capsule_headers_total`; keep it pinned until the counter stays at zero for a sustained window.
 

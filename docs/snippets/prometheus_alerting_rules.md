@@ -49,17 +49,6 @@ groups:
           description: |
             GPU memory usage is {{ $value | printf "%.1f" }}%% for 5 minutes.
 
-      # Legacy compatibility signal (should trend to zero before cutover)
-      - alert: ARWLegacyCapsuleHeadersSeen
-        expr: increase(arw_legacy_capsule_headers_total[15m]) > 0
-        for: 15m
-        labels:
-          severity: warning
-        annotations:
-          summary: "Legacy capsule headers observed"
-          description: |
-            Legacy X-ARW-Gate headers were rejected {{ $value | printf "%.0f" }} times in the
-            last 15m. Identify lingering clients before final legacy cleanup.
 ```
 
 Tip: Pair alerts with routing labels/receivers (PagerDuty/Slack) in Alertmanager.

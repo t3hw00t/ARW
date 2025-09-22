@@ -3,11 +3,11 @@ title: Interactive Performance Bench
 ---
 
 # Interactive Performance Bench
-Updated: 2025-09-21
+Updated: 2025-09-22
 Type: How‑to
 
 Status: **Ready.** The unified bench lives at `apps/snappy-bench` and ships as a
-workspace binary (`cargo run -p snappy-bench`). It drives `/actions` while
+workspace binary (dev: `cargo run -p snappy-bench`). It drives `/actions` while
 listening to `/events` so queue wait, execution time, and end-to-end latency are
 measured from a single client.
 
@@ -19,7 +19,7 @@ Run the bench against a local server with defaults (100 actions, concurrency 8):
 just bench-snappy -- --admin-token ${ARW_ADMIN_TOKEN:-dev-admin}
 ```
 
-Or invoke it directly:
+Or invoke it directly (debug build):
 
 ```bash
 cargo run -p snappy-bench -- \
@@ -27,6 +27,17 @@ cargo run -p snappy-bench -- \
   --admin-token ${ARW_ADMIN_TOKEN:-dev-admin} \
   --requests 200 \
   --concurrency 16
+```
+
+For production-like numbers, build release binaries once and invoke the compiled tool:
+
+```bash
+cargo build --release -p arw-server -p snappy-bench
+ARW_ADMIN_TOKEN=${ARW_ADMIN_TOKEN:-dev-admin} \
+  target/release/snappy-bench \
+    --base http://127.0.0.1:8091 \
+    --requests 200 \
+    --concurrency 16
 ```
 
 The CLI exits non-zero when any action fails or when observed p95 totals exceed
@@ -78,7 +89,8 @@ budgets intentionally alongside documentation updates.
 ## CI integration
 
 A lightweight sanity run executes as part of the default GitHub Actions CI
-(`scripts/ci_snappy_bench.sh`). It starts `arw-server`, issues 60 echo actions
+(`scripts/ci_snappy_bench.sh`). It builds release binaries if needed, starts
+`arw-server`, issues 60 echo actions
 with concurrency 6, and fails if p95 totals exceed the configured budgets (queue
 budget defaults to 500 ms for CI) or if any request fails. Tune via `ARW_BENCH_*`
 env vars when invoking the script

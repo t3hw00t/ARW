@@ -96,7 +96,16 @@ trap 'rm -rf "$tmp"' EXIT
   # Ensure codegen runs from the repo root so Cargo and relative paths resolve
   ROOT=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
   cd "$ROOT"
-  OPENAPI_OUT="$tmp/codegen.yaml" cargo run --no-default-features -p arw-server --quiet || true
+  SERVER_BIN="$ROOT/target/release/arw-server"
+  if [[ ! -x "$SERVER_BIN" ]]; then
+    echo "[pre-push] building arw-server (release)" >&2
+    if ! cargo build --release -p arw-server >/tmp/arw-prepush-build.log 2>&1; then
+      sed 's/^/[build] /' /tmp/arw-prepush-build.log >&2 || true
+      exit 1
+    fi
+    rm -f /tmp/arw-prepush-build.log || true
+  fi
+  OPENAPI_OUT="$tmp/codegen.yaml" "$SERVER_BIN"
 )
 if [[ ! -s "$tmp/codegen.yaml" ]]; then
   echo "::error::Failed to generate OpenAPI via arw-server (OPENAPI_OUT)" >&2

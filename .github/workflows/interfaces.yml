@@ -100,29 +100,19 @@ jobs:
         with:
           workspaces: |
             . -> target
-      - name: Generate OpenAPI from code (server/service)
+      - name: Generate OpenAPI from code (ApiDoc)
         run: |
           set -euo pipefail
           mkdir -p /tmp/ifc-gen
-          if [ -f "$GITHUB_WORKSPACE/apps/arw-svc/Cargo.toml" ]; then
-            # Run the new service crate when available
-            (cd "$GITHUB_WORKSPACE" && OPENAPI_OUT=/tmp/ifc-gen/openapi.yaml cargo run -p arw-svc --bin arw-svc --quiet || true)
-          else
-            # Fallback to legacy arw-server annotations
-            (cd "$GITHUB_WORKSPACE" && OPENAPI_GEN=1 OPENAPI_OUT=/tmp/ifc-gen/openapi.yaml cargo run -p arw-server --quiet || true)
-          fi
-          test -s /tmp/ifc-gen/openapi.yaml || { echo '::error::Failed to generate OpenAPI document from service crate'; exit 1; }
-      - name: Generate OpenAPI from annotations (server)
+          cargo build --release -p arw-server
+          OPENAPI_OUT=/tmp/ifc-gen/openapi.yaml target/release/arw-server
+          test -s /tmp/ifc-gen/openapi.yaml || { echo '::error::Failed to generate OpenAPI document from arw-server'; exit 1; }
+      - name: Generate OpenAPI (annotated diff)
         run: |
           set -euo pipefail
           mkdir -p /tmp/ifc-gen
-          if [ -f "$GITHUB_WORKSPACE/apps/arw-svc/Cargo.toml" ]; then
-            : > /tmp/ifc-gen/openapi.annot.yaml
-            echo '::notice::Skipping annotated OpenAPI generation; arw-svc does not expose OPENAPI_GEN.'
-          else
-            (cd "$GITHUB_WORKSPACE" && OPENAPI_GEN=1 OPENAPI_OUT=/tmp/ifc-gen/openapi.annot.yaml cargo run -p arw-server --quiet || true)
-            test -s /tmp/ifc-gen/openapi.annot.yaml || { echo '::warning::Failed to produce annotated OpenAPI'; }
-          fi
+          [ -x target/release/arw-server ] || cargo build --release -p arw-server
+          OPENAPI_GEN=1 OPENAPI_OUT=/tmp/ifc-gen/openapi.annot.yaml target/release/arw-server || true
       - name: Compare with spec/openapi.yaml
         run: |
           set -euo pipefail
@@ -354,7 +344,7 @@ PY
       - name: Start service
         if: steps.find.outputs.hits != '[]'
         run: |
-          ARW_DEBUG=1 ARW_PORT=8099 nohup cargo run -p arw-svc >/tmp/svc.log 2>&1 &
+          ARW_DEBUG=1 ARW_PORT=8099 nohup cargo run -p arw-server >/tmp/svc.log 2>&1 &
           for i in $(seq 1 60); do curl -fsS http://127.0.0.1:8099/healthz && break || sleep 1; done
       - name: Verify headers for one deprecated op
         if: steps.find.outputs.hits != '[]'

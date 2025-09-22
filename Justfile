@@ -210,7 +210,8 @@ interfaces-diff base="main":
 
 # Generate OpenAPI + schemas + JSON snapshot
 openapi-gen:
-  OPENAPI_OUT=spec/openapi.yaml cargo run --no-default-features -p arw-server
+  cargo build --release --no-default-features -p arw-server
+  OPENAPI_OUT=spec/openapi.yaml target/release/arw-server
   python3 scripts/ensure_openapi_descriptions.py
   python3 scripts/generate_openapi_json.py
 

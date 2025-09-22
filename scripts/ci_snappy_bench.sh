@@ -32,11 +32,20 @@ export ARW_PORT="${PORT}"
 export ARW_DEBUG="0"
 export ARW_STATE_DIR="${STATE_DIR}"
 
-# Start the unified server in the background (dev profile is sufficient here).
-(
-  cd "${ROOT}"
-  cargo run -p arw-server -- --port "${PORT}" >/tmp/snappy-bench-server.log 2>&1
-) &
+# Ensure release binaries are available (keeps CI latency predictable).
+SERVER_BIN="${ROOT}/target/release/arw-server"
+BENCH_BIN="${ROOT}/target/release/snappy-bench"
+if [[ ! -x "${SERVER_BIN}" || ! -x "${BENCH_BIN}" ]]; then
+  echo "[snappy-bench] building release binaries"
+  (cd "${ROOT}" && cargo build --release -p arw-server -p snappy-bench >/tmp/snappy-bench-build.log 2>&1) || {
+    echo "[snappy-bench] build failed" >&2
+    sed 's/^/[build] /' /tmp/snappy-bench-build.log >&2 || true
+    exit 1
+  }
+fi
+
+# Start the unified server in the background.
+"${SERVER_BIN}" --port "${PORT}" >/tmp/snappy-bench-server.log 2>&1 &
 server_pid=$!
 
 echo "[snappy-bench] arw-server spawned (pid=${server_pid}), waiting for healthz..."
@@ -62,15 +71,12 @@ while true; do
 
 echo "[snappy-bench] server healthy, running bench (requests=${REQUESTS}, concurrency=${CONCURRENCY})"
 
-(
-  cd "${ROOT}"
-  cargo run -p snappy-bench -- \
-    --base "http://127.0.0.1:${PORT}" \
-    --admin-token "${TOKEN}" \
-    --requests "${REQUESTS}" \
-    --concurrency "${CONCURRENCY}" \
-    --budget-queue-ms "${QUEUE_BUDGET_MS}" \
-    --budget-full-ms "${FULL_BUDGET_MS}"
-)
+"${BENCH_BIN}" \
+  --base "http://127.0.0.1:${PORT}" \
+  --admin-token "${TOKEN}" \
+  --requests "${REQUESTS}" \
+  --concurrency "${CONCURRENCY}" \
+  --budget-queue-ms "${QUEUE_BUDGET_MS}" \
+  --budget-full-ms "${FULL_BUDGET_MS}"
 
 echo "[snappy-bench] bench run completed"

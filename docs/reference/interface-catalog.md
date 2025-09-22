@@ -23,7 +23,7 @@ Quality gates:
 
 Update workflow:
 
-1. Specs are generated from crate annotations. Regenerate with `OPENAPI_OUT=spec/openapi.yaml cargo run --no-default-features -p arw-server` (or `just openapi-gen`).
+1. Specs are generated from crate annotations. Regenerate with `just openapi-gen` (wraps `OPENAPI_OUT=spec/openapi.yaml target/release/arw-server`).
 2. Update relevant descriptors under `interfaces/` (owner, lifecycle, docs).
 3. Regenerate the catalog index: `python scripts/interfaces_generate_index.py`.
 4. Commit changes; CI will lint, diff, and check the index is up‑to‑date.
