@@ -9,10 +9,14 @@ Type: Reference
 
 
 ## To Do
-- [t-250922105520-ops03] Staging smoke: verify /debug removal — todo (updated: 2025-09-22 12:05:00 UTC)
-    - 2025-09-22 12:05:00 UTC: Added `scripts/check_legacy_surface.sh` to automate the `/debug` 404, admin debug, and legacy header checks prior to staging sign-off.
-    - 2025-09-22 14:45:00 UTC: CI now runs the legacy surface guard (see `.github/workflows/ci.yml`) so regressions are caught before staging; still need the staging run artifacts before closing the task.
-    - 2025-09-22 15:10:00 UTC: Use `ARW_LEGACY_CHECK_REPORT=/path/to/report.txt bash scripts/check_legacy_surface.sh` in staging so the evidence bundle includes the generated report.
+- [t-250922105520-ops03] Staging smoke: verify /debug removal — todo (updated: 2025-09-22 10:55:20 UTC)
+- [t-250922105510-ops02] Prometheus: refresh legacy alert rules — todo (updated: 2025-09-22 10:55:10 UTC)
+- [t-250922105500-ops01] Grafana: re-import quick panels — todo (updated: 2025-09-22 10:55:00 UTC)
+- [t-250921010500-bench] Implement unified snappy bench — todo (updated: 2025-09-21 01:05:00 UTC)
+    - 2025-09-21 01:05:00 UTC: Legacy snappy_bench in arw-svc depended on retired /admin bridges. Need a new CLI that hits /actions and /events directly, reports p95 targets, and can run in CI.
+- [t-250917235817-3181] Retarget launcher to unified server — todo (updated: 2025-09-17 22:44:29 UTC)
+    - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091; keeps legacy fallback.
+- [t-250917235820-3900] Decommission legacy artifacts — todo (updated: 2025-09-17 21:58:20 UTC)
 - [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — todo (updated: 2025-09-17 21:58:18 UTC)
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-11 21:02:19 UTC)
 
@@ -24,18 +28,6 @@ Type: Reference
 ## Paused
 
 ## Done
-- [t-250921010500-bench] Implement unified snappy bench — done (updated: 2025-09-22 11:58:00 UTC)
-    - 2025-09-21 01:05:00 UTC: Legacy snappy_bench in arw-svc depended on retired /admin bridges. Need a new CLI that hits /actions and /events directly, reports p95 targets, and can run in CI.
-    - 2025-09-22 11:58:00 UTC: Confirmed `apps/snappy-bench` targets `/actions` + `/events`, budgets queue/full latency, and runs via `scripts/ci_snappy_bench.sh`; docs updated under Guide → Interactive Bench.
-- [t-250917235820-3900] Decommission legacy artifacts — done (updated: 2025-09-22 12:55:00 UTC)
-    - 2025-09-22 12:55:00 UTC: Removed bundled `arw-svc` binaries from `apps/arw-launcher/src-tauri/bin` so launcher packages ship only the unified server.
-- [t-250917235817-3181] Retarget launcher to unified server — done (updated: 2025-09-22 12:45:00 UTC)
-    - 2025-09-17 22:44:29 UTC: Launcher now prefers arw-server if present; defaults to port 8091.
-    - 2025-09-22 12:45:00 UTC: Verified `arw-launcher` and `arw-tauri` only resolve `arw-server` binaries (`crates/arw-tauri/src/lib.rs`) and removed fallback note from docs/tasks.
-- [t-250922105510-ops02] Prometheus: refresh legacy alert rules — done (updated: 2025-09-22 12:20:00 UTC)
-    - 2025-09-22 12:20:00 UTC: Added `scripts/export_ops_assets.sh` (usable via `just ops-export /path`) to extract Prometheus YAML snippets into ready-to-apply files and documented the workflow under Ops → Monitoring.
-- [t-250922105500-ops01] Grafana: re-import quick panels — done (updated: 2025-09-22 12:20:00 UTC)
-    - 2025-09-22 12:20:00 UTC: Export script (`just ops-export /path`) now emits `grafana_quick_panels.json`; Ops doc points to the helper for quick re-import.
 - [t-250917235814-0001] Add Helm chart for arw-server — done (updated: 2025-09-17 21:58:16 UTC)
 - [t-250917235812-8254] Switch CI OpenAPI codegen to arw-server — done (updated: 2025-09-17 21:58:13 UTC)
 - [t-250917235747-3348] Annotate server handlers with utoipa — done (updated: 2025-09-17 21:58:04 UTC)
@@ -181,3 +173,4 @@ Type: Reference
 - [t-250909170247-6008] Start service and verify /about — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
+
