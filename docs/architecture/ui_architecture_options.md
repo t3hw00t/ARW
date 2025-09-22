@@ -6,7 +6,7 @@ title: UI Architecture Options (ASCII)
 
 Suggested UI/UX architecture patterns and combinations for ARW. Each option includes an ASCII diagram and when to consider it.
 
-Updated: 2025-09-16
+Updated: 2025-09-22
 Type: Explanation
 
 ## A) Desktop‑First (Tauri, Single SSE)

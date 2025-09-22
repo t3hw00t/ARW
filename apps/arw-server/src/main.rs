@@ -131,7 +131,7 @@ async fn shutdown_signal() {
 #[allow(clippy::items_after_test_module)]
 mod http_tests {
     use super::*;
-    use crate::router::paths;
+    use crate::router::{self, paths};
     use arw_core::rpu;
     use arw_policy::PolicyEngine;
     use arw_protocol::GatingCapsule;
@@ -285,6 +285,41 @@ mod http_tests {
         let payload = completed.expect("action completed");
         assert_eq!(payload["state"], "completed");
         assert_eq!(payload["output"]["echo"]["msg"], json!("hello-roundtrip"));
+    }
+
+    #[tokio::test]
+    async fn debug_alias_returns_not_found() {
+        let temp = tempdir().expect("tempdir");
+        let state_dir = temp.path().to_path_buf();
+        let state = build_state(&state_dir).await;
+
+        let (router, _, _) = router::build_router();
+        let app = router.with_state(state);
+
+        let legacy_resp = app
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/debug")
+                    .body(Body::empty())
+                    .expect("legacy request"),
+            )
+            .await
+            .expect("legacy response");
+        assert_eq!(legacy_resp.status(), StatusCode::NOT_FOUND);
+
+        let admin_resp = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(paths::ADMIN_DEBUG)
+                    .body(Body::empty())
+                    .expect("admin debug request"),
+            )
+            .await
+            .expect("admin debug response");
+        assert_eq!(admin_resp.status(), StatusCode::OK);
     }
 
     #[tokio::test]

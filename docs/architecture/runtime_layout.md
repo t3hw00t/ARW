@@ -1,5 +1,5 @@
 # Runtime Layout
-Updated: 2025-09-20
+Updated: 2025-09-22
 Type: Explanation
 
 Treat latency as a first‑class requirement. Bias the runtime for bursty, interactive work.

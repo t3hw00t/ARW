@@ -1,6 +1,6 @@
 # API Reference
 
-Updated: 2025-09-21
+Updated: 2025-09-22
 Type: Reference
 
 Microsummary: Public endpoints, admin surfaces, specs, and eventing. Stable/experimental flags are surfaced in specs; deprecations emit standard headers.

@@ -7,7 +7,7 @@ title: System Components
 _Last updated: 2025-09-21T13:07:06+02:00_
 
 # System Components
-Updated: 2025-09-21
+Updated: 2025-09-22
 Type: Reference
 
 This page is generated from [interfaces/system_components.json](https://github.com/t3hw00t/ARW/blob/main/interfaces/system_components.json) and reconciled with [interfaces/features.json](https://github.com/t3hw00t/ARW/blob/main/interfaces/features.json) plus topic constants in [`crates/arw-topics`](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs).

@@ -7,7 +7,7 @@ title: Feature Matrix
 _Last updated: 2025-09-21T13:07:06+02:00_
 
 # Feature Matrix
-Updated: 2025-09-21
+Updated: 2025-09-22
 Type: Reference
 
 This page is generated from [interfaces/features.json](https://github.com/t3hw00t/ARW/blob/main/interfaces/features.json) and validated against code (topics and file paths).

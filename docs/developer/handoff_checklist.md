@@ -50,6 +50,11 @@ Docs
 - How‑to: Egress Settings; Subscribe to Events (SSE); Correlation & Attribution
 - Architecture: Egress Firewall; Events Vocabulary
 - Guide: Admin Endpoints (adds egress endpoints section)
+- Dashboards & alerts: re-import `docs/snippets/grafana_quick_panels.md` and `docs/snippets/prometheus_alerting_rules.md` so the legacy `/debug` panels/alerts stay retired. Confirm staging Grafana shows only the capsule-header stat.
+
+Legacy Follow-ups
+- Staging smoke: hit `/debug` (expect 404) and watch `arw_legacy_capsule_headers_total` for 24h before cutting prod traffic.
+- Ops runbook: note `/admin/debug` as the only UI entry; remove leftover `/debug` bookmarks in internal docs or scripts.
 
 Next
 - Cedar ABAC integration; richer ledger CE; UI hooks for settings; DNS guard policy bindings.
