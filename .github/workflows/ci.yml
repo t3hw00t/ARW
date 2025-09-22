@@ -87,3 +87,8 @@ jobs:
 
       - name: Snappy bench (sanity)
         run: bash scripts/ci_snappy_bench.sh
+
+      - name: Legacy surface guard
+        env:
+          ARW_LEGACY_CHECK_WAIT_SECS: 120
+        run: bash scripts/check_legacy_surface.sh

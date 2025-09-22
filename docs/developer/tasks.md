@@ -11,6 +11,8 @@ Type: Reference
 ## To Do
 - [t-250922105520-ops03] Staging smoke: verify /debug removal — todo (updated: 2025-09-22 12:05:00 UTC)
     - 2025-09-22 12:05:00 UTC: Added `scripts/check_legacy_surface.sh` to automate the `/debug` 404, admin debug, and legacy header checks prior to staging sign-off.
+    - 2025-09-22 14:45:00 UTC: CI now runs the legacy surface guard (see `.github/workflows/ci.yml`) so regressions are caught before staging; still need the staging run artifacts before closing the task.
+    - 2025-09-22 15:10:00 UTC: Use `ARW_LEGACY_CHECK_REPORT=/path/to/report.txt bash scripts/check_legacy_surface.sh` in staging so the evidence bundle includes the generated report.
 - [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — todo (updated: 2025-09-17 21:58:18 UTC)
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-11 21:02:19 UTC)
 

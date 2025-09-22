@@ -81,5 +81,6 @@ Before cutting any legacy traffic, verify in staging:
 - **Metrics**: confirm `arw_legacy_capsule_headers_total` stays at zero for at least 24 hours.
 - **Alerts**: ensure the new Prometheus rules fire in staging by temporarily issuing a legacy request (`curl -H 'X-ARW-Gate: {}' ...`), then acknowledge and clean up.
 - **Smoke**: run `scripts/check_legacy_surface.sh` (or hit `/debug` manually) to confirm the legacy alias returns 404, `/admin/debug` still serves, and capsule headers continue to raise 410 + metrics.
+- **Evidence**: export `ARW_LEGACY_CHECK_REPORT=/var/log/arw/legacy-surface-$(date +%Y%m%dT%H%M%S).txt` so the smoke script writes a report you can attach to the change request or staging journal.
 
 These checks keep the legacy-retirement tasks measurable and ensure the defaults you rely on in production match what operators see locally.
