@@ -260,6 +260,7 @@ verify:
   cargo fmt --all -- --check
   cargo clippy --workspace --all-targets -- -D warnings
   cargo test --workspace --locked
+  node apps/arw-launcher/src-tauri/ui/read_store.test.js
   python3 scripts/lint_event_names.py
   bash scripts/docs_check.sh
 
