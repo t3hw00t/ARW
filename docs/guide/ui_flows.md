@@ -78,7 +78,7 @@ Enable admin → Start server → Open /admin/ui/projects
   |
   +--> Upload files    → drag & drop (size‑guarded)
 
-Endpoints (admin‑gated): /projects/list | /projects/create | /projects/notes | /projects/tree | /projects/file
+Endpoints (admin‑gated): /state/projects | /projects/create | /state/projects/{proj}/notes | /state/projects/{proj}/tree | /state/projects/{proj}/file
 ```
 
 See also

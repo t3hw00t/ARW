@@ -1947,10 +1947,38 @@ paths:
       operationId: state_projects_list_doc
       responses:
         '200':
-          description: Projects list
+          description: Projects read-model snapshot
           content:
             application/json:
-              schema: {}
+              schema:
+                type: object
+                properties:
+                  generated:
+                    type: string
+                    description: RFC3339 timestamp when the snapshot was generated.
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name:
+                          type: string
+                        notes:
+                          type: object
+                          additionalProperties: true
+                        tree:
+                          type: object
+                          properties:
+                            digest:
+                              type: string
+                            paths:
+                              type: object
+                              additionalProperties:
+                                type: array
+                                items:
+                                  type: object
+                        generated:
+                          type: string
       description: 'Projects: GET /state/projects.'
   /state/projects/{proj}/file:
     get:

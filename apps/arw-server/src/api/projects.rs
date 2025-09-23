@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use tokio::fs as afs;
 use tokio::io::AsyncWriteExt;
 
-use crate::{admin_ok, AppState};
+use crate::{admin_ok, read_models, AppState};
 use arw_topics as topics;
 
 fn unauthorized() -> Response {
@@ -25,27 +25,6 @@ fn problem(status: axum::http::StatusCode, title: &str, detail: Option<&str>) ->
         body["detail"] = json!(d);
     }
     (status, Json(body)).into_response()
-}
-
-pub async fn projects_list(headers: HeaderMap) -> impl IntoResponse {
-    if !admin_ok(&headers) {
-        return unauthorized();
-    }
-    let mut out: Vec<String> = Vec::new();
-    let root = projects_dir();
-    if let Ok(mut rd) = afs::read_dir(&root).await {
-        while let Ok(Some(ent)) = rd.next_entry().await {
-            if let Ok(ft) = ent.file_type().await {
-                if ft.is_dir() {
-                    if let Some(name) = ent.file_name().to_str() {
-                        out.push(name.to_string());
-                    }
-                }
-            }
-        }
-    }
-    out.sort();
-    Json(json!({"items": out})).into_response()
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -516,7 +495,11 @@ pub async fn projects_import(
     responses((status = 200, description = "Projects list", body = serde_json::Value))
 )]
 pub async fn state_projects_list(headers: HeaderMap) -> impl IntoResponse {
-    projects_list(headers).await
+    if !admin_ok(&headers) {
+        return unauthorized();
+    }
+    let snapshot = read_models::projects_snapshot().await;
+    Json(snapshot).into_response()
 }
 
 #[utoipa::path(
@@ -832,5 +815,89 @@ async fn publish_audit(action: &str, details: &Value) {
         .await
     {
         let _ = f.write_all(entry.as_bytes()).await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::{
+        body::to_bytes,
+        http::{HeaderMap, HeaderValue, StatusCode},
+    };
+    use once_cell::sync::Lazy;
+    use serde_json::Value;
+    use std::sync::{Mutex as StdMutex, MutexGuard as StdMutexGuard};
+    use tempfile::tempdir;
+
+    static ENV_MUTEX: Lazy<StdMutex<()>> = Lazy::new(|| StdMutex::new(()));
+
+    struct EnvContext {
+        _lock: StdMutexGuard<'static, ()>,
+        prev: Vec<(&'static str, Option<String>)>,
+    }
+
+    impl EnvContext {
+        fn new() -> Self {
+            Self {
+                _lock: ENV_MUTEX.lock().expect("env mutex"),
+                prev: Vec::new(),
+            }
+        }
+
+        fn set(&mut self, key: &'static str, value: &str) {
+            let prior = std::env::var(key).ok();
+            std::env::set_var(key, value);
+            self.prev.push((key, prior));
+        }
+    }
+
+    impl Drop for EnvContext {
+        fn drop(&mut self) {
+            for (key, value) in self.prev.drain(..) {
+                if let Some(prev) = value {
+                    std::env::set_var(key, prev);
+                } else {
+                    std::env::remove_var(key);
+                }
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn state_projects_snapshot_includes_notes_and_tree() {
+        let temp = tempdir().expect("tempdir");
+        let state_dir = temp.path().display().to_string();
+
+        let projects_root = temp.path().join("projects");
+        std::fs::create_dir_all(projects_root.join("alpha/docs")).expect("create project dir");
+        std::fs::write(projects_root.join("alpha/NOTES.md"), "Hello world").expect("write notes");
+        std::fs::write(projects_root.join("alpha/docs/info.txt"), "data").expect("write file");
+
+        let snapshot = crate::read_models::projects_snapshot_at(&projects_root).await;
+        let items = snapshot["items"].as_array().expect("items array");
+        let proj = items
+            .iter()
+            .find(|p| p["name"].as_str() == Some("alpha"))
+            .expect("project entry");
+        let notes = proj["notes"].as_object().expect("notes object");
+        assert!(notes["content"].as_str().unwrap_or("").contains("Hello"));
+        let tree = proj["tree"].as_object().expect("tree object");
+        let paths = tree["paths"].as_object().expect("paths object");
+        assert!(paths.contains_key(""));
+
+        let mut env = EnvContext::new();
+        env.set("ARW_STATE_DIR", &state_dir);
+        env.set("ARW_ADMIN_TOKEN", "secret");
+
+        let mut headers = HeaderMap::new();
+        headers.insert("X-ARW-Admin", HeaderValue::from_static("secret"));
+
+        let response = state_projects_list(headers).await.into_response();
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+        assert!(value["items"].as_array().is_some());
     }
 }

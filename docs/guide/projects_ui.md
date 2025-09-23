@@ -46,7 +46,7 @@ All `/projects/*` endpoints are treated as administrative and are protected by t
 
 ## API
 
-- `GET /projects/list` → `{ items: string[] }`
+- `GET /state/projects` → `{ generated, items: [{ name, notes, tree }] }`
 - `POST /projects/create` with `{ name }` → creates `<project>` and `NOTES.md`
 - `GET /projects/notes?proj=<name>` → returns note text
 - `POST /projects/notes?proj=<name>` with body as `text/plain` → saves notes

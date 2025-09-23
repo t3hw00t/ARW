@@ -73,6 +73,15 @@ Import the “Quick Panels” snippet into a dashboard so the legacy counters ar
 2. Select your Prometheus datasource when prompted (`DS_PROMETHEUS`).
 3. Pin the stat panel (“Legacy Capsule Headers (15m)”) to the migration dashboard.
 
+### Snappy Latency Budget Panel
+
+Snappy publishes a read-model (`id="snappy"`) that surfaces the worst protected routes, their p95 latency, and whether the full-result budget is breached. Mirror the same signal in Grafana with a table panel:
+
+- Query: `topk(5, max_over_time(arw_route_p95_ms{route=~"/admin/debug|/state/.*"}[5m]))`
+- Add calculated fields for the configured budget (see `ARW_SNAPPY_FULL_RESULT_P95_MS`) so the table highlights overruns.
+- Add a stat panel keyed to `arw_snappy_breach_total` (exposed via `/metrics`) for an at-a-glance breach indicator.
+- Cross-link the panel description to the Hub’s Metrics sidecar (“Snappy detail”) so operators can jump from dashboards to the live SSE feed when triaging spikes.
+
 ## Staging checklist
 
 Before cutting any legacy traffic, verify in staging:

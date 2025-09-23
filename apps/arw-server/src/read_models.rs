@@ -493,7 +493,7 @@ fn spawn_projects_read_model(state: &AppState) -> TaskHandle {
             let mut tick = time::interval(Duration::from_millis(4000));
             loop {
                 tick.tick().await;
-                let snapshot = build_projects_snapshot().await;
+                let snapshot = projects_snapshot().await;
                 publish_read_model_patch(&bus, "projects", &snapshot);
             }
         }),
@@ -610,11 +610,15 @@ async fn collect_tree(
     Ok(())
 }
 
-async fn build_projects_snapshot() -> Value {
-    let generated = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+pub(crate) async fn projects_snapshot() -> Value {
     let root_dir = projects_root_dir();
+    projects_snapshot_at(&root_dir).await
+}
+
+pub(crate) async fn projects_snapshot_at(root_dir: &Path) -> Value {
+    let generated = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     let mut items = Vec::new();
-    if let Ok(mut rd) = afs::read_dir(&root_dir).await {
+    if let Ok(mut rd) = afs::read_dir(root_dir).await {
         while let Ok(Some(ent)) = rd.next_entry().await {
             let file_type = match ent.file_type().await {
                 Ok(ft) => ft,

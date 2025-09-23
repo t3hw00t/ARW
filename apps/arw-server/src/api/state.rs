@@ -448,7 +448,8 @@ mod tests {
     use super::*;
     use arw_policy::PolicyEngine;
     use axum::{body::to_bytes, http::StatusCode};
-    use serde_json::Value;
+    use chrono::{DateTime, SecondsFormat, Utc};
+    use serde_json::{json, Value};
     use std::collections::HashMap;
     use std::sync::Arc;
     use tempfile::tempdir;
@@ -522,6 +523,65 @@ mod tests {
         assert!(item["output"].is_null());
         assert!(item.get("guard").is_none());
         assert!(item.get("posture").is_none());
+    }
+
+    #[tokio::test]
+    async fn state_episodes_returns_rollups() {
+        let temp = tempdir().expect("tempdir");
+        let state = build_state(temp.path()).await;
+
+        let corr = "run-123";
+        let t1: DateTime<Utc> = Utc::now();
+        let t2 = t1 + chrono::Duration::milliseconds(25);
+        let env1 = arw_events::Envelope {
+            time: t1.to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: "tasks.started".to_string(),
+            payload: json!({"corr_id": corr, "step": "start"}),
+            policy: None,
+            ce: None,
+        };
+        let env2 = arw_events::Envelope {
+            time: t2.to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: "tasks.completed".to_string(),
+            payload: json!({"corr_id": corr, "step": "end"}),
+            policy: None,
+            ce: None,
+        };
+
+        state
+            .kernel()
+            .append_event_async(&env1)
+            .await
+            .expect("append start event");
+        state
+            .kernel()
+            .append_event_async(&env2)
+            .await
+            .expect("append end event");
+
+        let response = state_episodes(HeaderMap::new(), State(state.clone()))
+            .await
+            .into_response();
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+        let items = value["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        let item = &items[0];
+        assert_eq!(item["id"].as_str(), Some(corr));
+        let events = item["events"].as_array().expect("events array");
+        assert_eq!(events.len(), 2);
+        let seq_set: std::collections::HashSet<_> = events
+            .iter()
+            .map(|ev| ev["payload"]["step"].as_str().unwrap_or(""))
+            .collect();
+        assert!(seq_set.contains("start"));
+        assert!(seq_set.contains("end"));
+        let start = item["start"].as_str().expect("start time");
+        let end = item["end"].as_str().expect("end time");
+        assert!(start == env1.time || start == env2.time);
+        assert!(end == env1.time || end == env2.time);
     }
 }
 

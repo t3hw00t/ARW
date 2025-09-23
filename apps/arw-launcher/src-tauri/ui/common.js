@@ -377,11 +377,60 @@ window.ARW = {
         }
         tbl.appendChild(tb);
         el.appendChild(tbl);
+
+        const snappy = ARW.read.get('snappy') || null;
+        const snappyBox = document.createElement('div');
+        snappyBox.style.marginTop = '12px';
+        snappyBox.className = 'snappy-detail';
+        if (snappy && snappy.observed) {
+          const breach = !!(snappy.breach && snappy.breach.full_result);
+          if (breach) {
+            snappyBox.style.borderLeft = '4px solid var(--color-warn, #d97706)';
+            snappyBox.style.paddingLeft = '8px';
+          }
+          const budget = snappy?.budgets?.full_result_p95_ms;
+          const header = document.createElement('div');
+          header.className = 'dim';
+          header.textContent = `Snappy budget ≤ ${budget ?? '–'} ms — observed max: ${snappy.observed.max_p95_ms ?? '–'} ms (${snappy.observed.max_path || 'n/a'})`;
+          snappyBox.appendChild(header);
+          const routes = Object.entries(snappy.observed.routes || {})
+            .map(([path, stats]) => ({
+              path,
+              p95: Number(stats?.p95_ms ?? 0),
+              hits: Number(stats?.hits ?? 0),
+            }))
+            .sort((a, b) => b.p95 - a.p95)
+            .slice(0, 4);
+          if (routes.length) {
+            const tblRoutes = document.createElement('table');
+            tblRoutes.innerHTML = '<thead><tr><th>path</th><th>p95</th><th>hits</th></tr></thead>';
+            const body = document.createElement('tbody');
+            routes.forEach((r) => {
+              const tr = document.createElement('tr');
+              tr.innerHTML = `<td class="mono">${r.path}</td><td>${r.p95}</td><td>${r.hits}</td>`;
+              body.appendChild(tr);
+            });
+            tblRoutes.appendChild(body);
+            snappyBox.appendChild(tblRoutes);
+          } else {
+            const empty = document.createElement('div');
+            empty.className = 'dim';
+            empty.textContent = 'Snappy: no protected routes observed yet';
+            snappyBox.appendChild(empty);
+          }
+        } else {
+          const wait = document.createElement('div');
+          wait.className = 'dim';
+          wait.textContent = 'Snappy detail: waiting for data';
+          snappyBox.appendChild(wait);
+        }
+        el.appendChild(snappyBox);
       };
       function safeJson(v){ try { return JSON.stringify(v); } catch { return String(v) } }
       const idAll = ARW.sse.subscribe('*', rTimeline);
       const idModels = ARW.sse.subscribe((k)=> k.startsWith('models.'), rModels);
       const idMetrics = ARW.read.subscribe('route_stats', rMetrics);
+      const idSnappy = ARW.read.subscribe('snappy', rMetrics);
       // Activity lane: listen for screenshots.captured and render thumbnails
       const rActivity = ({ env }) => {
         const el = sections.find(([n])=>n==='activity')?.[1]; if (!el) return;
@@ -408,7 +457,7 @@ window.ARW = {
       const idActivity = ARW.sse.subscribe((k)=> k.startsWith('screenshots.'), rActivity);
       // initial render for metrics if any
       rMetrics();
-      return { dispose(){ ARW.sse.unsubscribe(idAll); ARW.sse.unsubscribe(idModels); ARW.read.unsubscribe(idMetrics); ARW.sse.unsubscribe(idActivity); if(policyTimer) clearInterval(policyTimer); node.innerHTML=''; } }
+      return { dispose(){ ARW.sse.unsubscribe(idAll); ARW.sse.unsubscribe(idModels); ARW.read.unsubscribe(idMetrics); ARW.read.unsubscribe(idSnappy); ARW.sse.unsubscribe(idActivity); if(policyTimer) clearInterval(policyTimer); node.innerHTML=''; } }
     }
   }
 }
