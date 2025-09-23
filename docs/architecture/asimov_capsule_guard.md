@@ -5,7 +5,7 @@ title: Asimov Capsule Guard
 # Asimov Capsule Guard
 { .topic-trio style="--exp:.5; --complex:.7; --complicated:.6" data-exp=".5" data-complex=".7" data-complicated=".6" }
 
-Updated: 2025-09-21
+Updated: 2025-09-24
 Status: Planned
 Type: Explanation
 
@@ -13,9 +13,10 @@ The Asimov Capsule Guard turns the "mind virus" idea into an enforceable feature
 
 ## Current Behavior & Gaps
 - ✅ Capsule adoption runs in the unified server middleware: any request carrying `X-ARW-Capsule` is verified via the RPU, cached, and published to `/state/policy/capsules`. Legacy `X-ARW-Gate` headers now error (410). Lease metadata (`lease_duration_ms`, `renew_within_ms`) travels with the capsule and surfaces in the read model.
+- ✅ Capsule fingerprints ignore the signature blob, so re-signed payloads that keep identical policy data do not thrash adoption notifications or read-model patches.【F:apps/arw-server/src/capsule_guard.rs†L430-L438】
 - ✅ Legacy failures emit `policy.capsule.failed` and `policy.decision` events so operators can observe rejected attempts.
 - ✅ `gating::adopt_capsule` keeps capsule denies and contracts in a runtime lease layer instead of the immutable hierarchy list, so guardrails expire or renew without a restart.【F:crates/arw-core/src/gating.rs†L248-L353】
-- ✅ The Regulatory Provenance Unit returns a lease outcome and the middleware emits `policy.capsule.applied` and `policy.capsule.expired`; the capsules read model patches whenever adoption or expiry occurs.【F:crates/arw-core/src/rpu.rs†L205-L220】【F:apps/arw-server/src/api/actions.rs†L19-L42】
+- ✅ The Regulatory Provenance Unit returns a lease outcome and the middleware emits `policy.capsule.applied` and `policy.capsule.expired`; the capsules read model now patches only when the underlying state changes (new capsule, hop countdown, or expiry) to avoid noisy updates.【F:crates/arw-core/src/rpu.rs†L205-L220】【F:apps/arw-server/src/capsule_guard.rs†L257-L279】
 - ⚠️ Capsule propagation still needs tighter integration with downstream executors (connectors, logic units) so every tool hop refreshes leases automatically.
 
 The remaining gap is operational coverage: workers and higher-level runners still require passive refresh hooks so a capsule keeps renewing even when no HTTP request crosses the middleware.
@@ -28,7 +29,7 @@ The remaining gap is operational coverage: workers and higher-level runners stil
 ## Integration Plan
 ### Phase 0 — Observability & Data Contracts
 1. ✅ Extend `arw-protocol::GatingCapsule` with explicit lease semantics (renewal window, scoped denies) and document them in OpenAPI/MCP specs.
-2. ✅ Structured events (`policy.capsule.applied`/`policy.capsule.failed`/`policy.capsule.expired`) fire from the middleware, and `/state/policy/capsules` patches whenever adoption, renewal, or expiry occurs.
+2. ✅ Structured events (`policy.capsule.applied`/`policy.capsule.failed`/`policy.capsule.expired`) fire from the middleware, and `/state/policy/capsules` patches whenever adoption, renewal, hop countdown, or expiry materially changes the state.
 3. ⚠️ Instrument admin middleware and policy decisions with correlation IDs linking capsule adoption to downstream allows/denies.
 
 ### Phase 1 — Gating Runtime Rework

@@ -112,6 +112,7 @@ pub struct AdoptOutcome {
 
 pub struct ReplayOutcome {
     pub expired: Vec<CapsuleSnapshot>,
+    pub changed: bool,
 }
 
 impl CapsuleStore {
@@ -121,12 +122,8 @@ impl CapsuleStore {
         }
     }
 
-    pub async fn adopt(
-        &self,
-        capsule: &GatingCapsule,
-        now_ms: u64,
-        lease: CapsuleLeaseState,
-    ) -> AdoptOutcome {
+    pub async fn adopt(&self, capsule: &GatingCapsule, now_ms: u64) -> AdoptOutcome {
+        let lease = arw_core::gating::adopt_capsule(capsule);
         let fingerprint = fingerprint_capsule(capsule);
         let remaining_hops = remaining_hops_after_adopt(capsule);
         let mut guard = self.inner.lock().await;
@@ -190,11 +187,13 @@ impl CapsuleStore {
         let mut apply: Vec<(String, GatingCapsule)> = Vec::new();
         let mut to_remove: Vec<String> = Vec::new();
         let mut expired: Vec<CapsuleSnapshot> = Vec::new();
+        let mut changed = false;
         for (id, entry) in guard.iter_mut() {
             if let Some(expire) = entry.lease_until_ms {
                 if now >= expire {
                     to_remove.push(id.clone());
                     expired.push(entry.snapshot.clone());
+                    changed = true;
                     continue;
                 }
             }
@@ -206,6 +205,7 @@ impl CapsuleStore {
                     should_apply = true;
                     *hops = hops.saturating_sub(1);
                     entry.snapshot.remaining_hops = Some(*hops);
+                    changed = true;
                 }
                 None => {
                     if let Some(expire) = entry.lease_until_ms {
@@ -219,6 +219,7 @@ impl CapsuleStore {
             }
             if should_apply {
                 apply.push((id.clone(), entry.capsule.clone()));
+                changed = true;
             }
         }
         for id in to_remove {
@@ -227,7 +228,7 @@ impl CapsuleStore {
         drop(guard);
 
         if apply.is_empty() {
-            return ReplayOutcome { expired };
+            return ReplayOutcome { expired, changed };
         }
 
         let mut leases: HashMap<String, CapsuleLeaseState> = HashMap::new();
@@ -249,7 +250,7 @@ impl CapsuleStore {
                 }
             }
         }
-        ReplayOutcome { expired }
+        ReplayOutcome { expired, changed }
     }
 }
 
@@ -270,6 +271,8 @@ pub async fn refresh_capsules(state: &AppState) -> ReplayOutcome {
                 }),
             );
         }
+    }
+    if replay.changed {
         let snapshot = state.capsules().snapshot().await;
         read_models::publish_read_model_patch(&state.bus(), "policy_capsules", &snapshot);
     }
@@ -315,19 +318,16 @@ async fn apply_capsule(state: &AppState, headers: &HeaderMap) -> Result<(), Resp
             return Err(resp);
         }
     };
-    let lease = match arw_core::rpu::verify_and_adopt(&capsule) {
-        Some(lease) => lease,
-        None => {
-            publish_failure(state, Some(&capsule.id), "verification failed").await;
-            return Err(error_response(
-                StatusCode::FORBIDDEN,
-                "capsule_verification_failed",
-                "Capsule verification failed",
-            ));
-        }
-    };
+    if !arw_core::rpu::verify_capsule(&capsule) {
+        publish_failure(state, Some(&capsule.id), "verification failed").await;
+        return Err(error_response(
+            StatusCode::FORBIDDEN,
+            "capsule_verification_failed",
+            "Capsule verification failed",
+        ));
+    }
     let now = now_ms();
-    let outcome = state.capsules().adopt(&capsule, now, lease).await;
+    let outcome = state.capsules().adopt(&capsule, now).await;
     if outcome.notify {
         state.bus().publish(
             TOPIC_POLICY_CAPSULE_APPLIED,
@@ -444,7 +444,11 @@ fn now_ms() -> u64 {
 }
 
 fn fingerprint_capsule(cap: &GatingCapsule) -> String {
-    let bytes = serde_json::to_vec(cap).unwrap_or_default();
+    // Ignore signature bytes when fingerprinting so re-signed capsules with
+    // identical policy payloads do not trigger redundant updates.
+    let mut clean = cap.clone();
+    clean.signature = None;
+    let bytes = serde_json::to_vec(&clean).unwrap_or_default();
     let mut hasher = Sha256::new();
     hasher.update(bytes);
     hex::encode(hasher.finalize())
@@ -454,7 +458,7 @@ fn fingerprint_capsule(cap: &GatingCapsule) -> String {
 mod tests {
     use super::*;
     use arw_policy::PolicyEngine;
-    use arw_topics::{TOPIC_POLICY_CAPSULE_FAILED, TOPIC_POLICY_DECISION};
+    use arw_topics::{TOPIC_POLICY_CAPSULE_FAILED, TOPIC_POLICY_DECISION, TOPIC_READMODEL_PATCH};
     use axum::http::{HeaderMap, HeaderValue};
     use std::{path::Path, sync::Arc};
     use tempfile::tempdir;
@@ -570,6 +574,57 @@ mod tests {
             renew_within_ms: None,
             signature: Some("sig".into()),
         }
+    }
+
+    fn capsule_with_hops(id: &str, ttl: u32) -> GatingCapsule {
+        GatingCapsule {
+            hop_ttl: Some(ttl),
+            lease_duration_ms: Some(60_000),
+            renew_within_ms: Some(10_000),
+            signature: None,
+            ..sample_capsule(id)
+        }
+    }
+
+    #[tokio::test]
+    async fn replay_all_marks_changed_on_hop_decrement() {
+        let store = CapsuleStore::new();
+        let now = now_ms();
+        let capsule = capsule_with_hops("hop-test", 3);
+
+        store.adopt(&capsule, now).await;
+
+        let replay = store.replay_all().await;
+        assert!(replay.changed);
+        assert!(replay.expired.is_empty());
+
+        let snapshot = store.snapshot().await;
+        let items = snapshot["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["remaining_hops"].as_u64(), Some(1));
+    }
+
+    #[tokio::test]
+    async fn refresh_capsules_publishes_patch_on_state_change() {
+        let temp = tempdir().expect("tempdir");
+        let state = build_state(temp.path()).await;
+
+        let bus = state.bus();
+        let mut rx = bus.subscribe_filtered(vec![TOPIC_READMODEL_PATCH.to_string()], Some(8));
+
+        let capsule = capsule_with_hops("refresh-test", 3);
+        state.capsules().adopt(&capsule, now_ms()).await;
+
+        let replay = refresh_capsules(&state).await;
+        assert!(replay.changed);
+        assert!(replay.expired.is_empty());
+
+        let event = timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("patch event available")
+            .expect("bus open");
+        assert_eq!(event.kind, TOPIC_READMODEL_PATCH);
+        assert_eq!(event.payload["id"].as_str(), Some("policy_capsules"));
     }
 
     #[tokio::test]

@@ -115,6 +115,10 @@ impl<'c> MemoryStore<'c> {
                 now,
             ],
         )?;
+        // Keep the FTS index consistent with the primary table when upserts occur.
+        let _ = self
+            .conn
+            .execute("DELETE FROM memory_fts WHERE id=?", params![id.as_str()]);
         let _ = self.conn.execute(
             "INSERT INTO memory_fts(id,lane,key,value,tags) VALUES(?,?,?,?,?)",
             params![
@@ -543,6 +547,7 @@ fn cosine_sim(a: &[f32], b: &[f32]) -> f32 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rusqlite::params;
     use serde_json::json;
 
     fn setup_conn() -> Connection {
@@ -595,5 +600,61 @@ mod tests {
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0]["id"], id);
         assert!(hits[0]["sim"].as_f64().unwrap() > 0.99);
+    }
+
+    #[test]
+    fn test_fts_index_stays_in_sync_on_upsert() {
+        let conn = setup_conn();
+        let store = MemoryStore::new(&conn);
+
+        let id = store
+            .insert_memory(
+                Some("rec-1"),
+                "semantic",
+                Some("note"),
+                Some("key"),
+                &json!("first note"),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(id, "rec-1");
+
+        let hits = store.fts_search_memory("first", None, 10).unwrap();
+        assert_eq!(hits.len(), 1);
+        assert_eq!(hits[0]["id"], "rec-1");
+
+        let id_again = store
+            .insert_memory(
+                Some("rec-1"),
+                "semantic",
+                Some("note"),
+                Some("key"),
+                &json!("second memo"),
+                None,
+                None,
+                None,
+                None,
+            )
+            .unwrap();
+        assert_eq!(id_again, "rec-1");
+
+        let old_hits = store.fts_search_memory("first", None, 10).unwrap();
+        assert!(old_hits.is_empty());
+
+        let new_hits = store.fts_search_memory("second", None, 10).unwrap();
+        assert_eq!(new_hits.len(), 1);
+        assert_eq!(new_hits[0]["id"], "rec-1");
+
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM memory_fts WHERE id = ?",
+                params!["rec-1"],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 1);
     }
 }

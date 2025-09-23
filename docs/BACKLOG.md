@@ -4,7 +4,7 @@ title: Backlog
 
 # Backlog
 
-Updated: 2025-09-22
+Updated: 2025-09-24
 Type: Reference
 
 This backlog captures concrete work items and near-term priorities. The Roadmap focuses on higher‑level themes and time horizons; see About → Roadmap for strategic context.
@@ -149,13 +149,6 @@ Security & Admin
  - [Kernel] [t-250916130002-asg02] Layered gating denies/contracts with lease sweeper + emergency teardown hook — plan
  - [Kernel] [t-250916130003-asg03] Auto-replay verified capsules before actions/tools/egress/policy evaluation — plan
  - [Kernel] [t-250916130004-asg04] Admin UX + CLI for capsule presets, rotation, and audit trails — plan
-
-- Asimov Capsule Guard (plan)
- - [t-250916130001-asg01] RPU telemetry + `/state/policy/capsules` read-model surfacing adoption and TTL — todo
- - [t-250916130002-asg02] Layered gating denies/contracts with lease sweeper + emergency teardown hook — plan
- - [t-250916130003-asg03] Auto-replay verified capsules before actions/tools/egress/policy evaluation — plan
- - [t-250916130004-asg04] Admin UX + CLI for capsule presets, rotation, and audit trails — plan
-
 Caching & Performance (High Priority)
 - [Kernel] [t-250913001000-1001] Llama.cpp prompt cache: set `cache_prompt: true` in requests; doc server `--prompt-cache` for persistence — in progress
 - [Kernel] [t-250913001003-1002] CAS HTTP caching: add `ETag`, `Last-Modified`, long‑lived `Cache-Control`, and 304 handling to `/admin/models/by-hash/{sha256}` — done

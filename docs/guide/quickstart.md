@@ -4,7 +4,7 @@ title: Quickstart
 
 # Quickstart
 
-Updated: 2025-09-22
+Updated: 2025-09-24
 Type: Tutorial
 
 Run the unified ARW server locally in minutes. The architecture centres on the `/actions` → `/events` → `/state/*` triad; enable `ARW_DEBUG=1` to serve the browser debug panels.
