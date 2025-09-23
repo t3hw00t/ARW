@@ -357,31 +357,17 @@ pub async fn actions_get(
     }
     match state.kernel().get_action_async(&id).await {
         Ok(Some(a)) => {
-            let mut body = serde_json::Map::new();
-            body.insert("id".into(), json!(a.id));
-            body.insert("kind".into(), json!(a.kind));
-            body.insert("state".into(), json!(a.state));
-            body.insert("input".into(), a.input);
-            let sanitized_output = a
-                .output
-                .as_ref()
-                .map(sanitize_output_value)
-                .unwrap_or(Value::Null);
-            body.insert("output".into(), sanitized_output.clone());
-            if let Some(err) = a.error {
-                body.insert("error".into(), json!(err));
-            }
-            if let Value::Object(ref map) = sanitized_output {
-                if let Some(posture) = map.get("posture") {
-                    body.entry("posture".to_string()).or_insert(posture.clone());
-                }
-                if let Some(guard) = map.get("guard") {
-                    body.entry("guard".to_string()).or_insert(guard.clone());
-                }
-            }
-            body.insert("created".into(), json!(a.created));
-            body.insert("updated".into(), json!(a.updated));
-            (axum::http::StatusCode::OK, Json(Value::Object(body))).into_response()
+            let item = sanitize_action_record(json!({
+                "id": a.id,
+                "kind": a.kind,
+                "state": a.state,
+                "input": a.input,
+                "output": a.output,
+                "error": a.error,
+                "created": a.created,
+                "updated": a.updated,
+            }));
+            (axum::http::StatusCode::OK, Json(item)).into_response()
         }
         Ok(None) => (
             axum::http::StatusCode::NOT_FOUND,
@@ -398,7 +384,29 @@ pub async fn actions_get(
     }
 }
 
-fn sanitize_output_value(value: &Value) -> Value {
+pub(crate) fn sanitize_action_record(value: Value) -> Value {
+    match value {
+        Value::Object(mut map) => {
+            if let Some(output) = map.get("output") {
+                map.insert("output".into(), sanitize_output_value(output));
+            } else {
+                map.insert("output".into(), Value::Null);
+            }
+            if let Some(Value::Object(output)) = map.get("output").cloned() {
+                if let Some(posture) = output.get("posture") {
+                    map.entry("posture".to_string()).or_insert(posture.clone());
+                }
+                if let Some(guard) = output.get("guard") {
+                    map.entry("guard".to_string()).or_insert(guard.clone());
+                }
+            }
+            Value::Object(map)
+        }
+        other => other,
+    }
+}
+
+pub(crate) fn sanitize_output_value(value: &Value) -> Value {
     match value {
         Value::Object(map) => {
             let mut sanitized = map.clone();
@@ -411,7 +419,7 @@ fn sanitize_output_value(value: &Value) -> Value {
     }
 }
 
-fn sanitize_guard_value(value: &Value) -> Value {
+pub(crate) fn sanitize_guard_value(value: &Value) -> Value {
     if let Value::Object(map) = value {
         let mut sanitized = serde_json::Map::new();
         if let Some(v) = map.get("allowed") {
@@ -495,17 +503,36 @@ pub async fn actions_state_set(
                 "failed" => topics::TOPIC_ACTIONS_FAILED,
                 _ => topics::TOPIC_ACTIONS_UPDATED,
             };
-            let payload = json!({"id": id, "state": req.state, "error": req.error});
+            let mut payload = serde_json::Map::new();
+            payload.insert("id".into(), json!(id));
+            payload.insert("state".into(), json!(req.state));
+            if let Some(err) = req.error {
+                payload.insert("error".into(), json!(err));
+            }
+            if let Ok(Some(action)) = state.kernel().get_action_async(&id).await {
+                if let Some(output) = action.output.as_ref() {
+                    let sanitized = sanitize_output_value(output);
+                    payload.insert("output".into(), sanitized.clone());
+                    if let Some(posture) = sanitized.get("posture") {
+                        payload
+                            .entry("posture".to_string())
+                            .or_insert(posture.clone());
+                    }
+                    if let Some(guard) = sanitized.get("guard") {
+                        payload.entry("guard".to_string()).or_insert(guard.clone());
+                    }
+                }
+            }
             let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
             let env = arw_events::Envelope {
                 time: now,
                 kind: kind.into(),
-                payload: payload.clone(),
+                payload: Value::Object(payload.clone()),
                 policy: None,
                 ce: None,
             };
             state.bus().publish(&env.kind, &env.payload);
-            (axum::http::StatusCode::OK, Json(json!({"ok": true}))).into_response()
+            (axum::http::StatusCode::OK, Json(Value::Object(payload))).into_response()
         }
         Ok(false) => (
             axum::http::StatusCode::NOT_FOUND,

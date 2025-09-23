@@ -391,6 +391,10 @@ pub async fn state_actions(
         .list_actions_async(limit.clamp(1, 2000))
         .await
         .unwrap_or_default();
+    let items: Vec<Value> = items
+        .into_iter()
+        .map(crate::api::actions::sanitize_action_record)
+        .collect();
     Json(json!({"items": items})).into_response()
 }
 
@@ -437,6 +441,88 @@ pub async fn state_egress(
         "settings": settings,
     }))
     .into_response()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arw_policy::PolicyEngine;
+    use axum::{body::to_bytes, http::StatusCode};
+    use serde_json::Value;
+    use std::collections::HashMap;
+    use std::sync::Arc;
+    use tempfile::tempdir;
+    use tokio::sync::Mutex;
+
+    async fn build_state(path: &std::path::Path) -> AppState {
+        std::env::set_var("ARW_STATE_DIR", path.display().to_string());
+        let bus = arw_events::Bus::new_with_replay(16, 16);
+        let kernel = arw_kernel::Kernel::open(path).expect("init kernel");
+        let policy = PolicyEngine::load_from_env();
+        let policy_arc = Arc::new(Mutex::new(policy));
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
+        AppState::builder(bus, kernel, policy_arc, host, true)
+            .with_sse_capacity(16)
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    async fn state_actions_sanitizes_guard_metadata() {
+        let temp = tempdir().expect("tempdir");
+        let state = build_state(temp.path()).await;
+
+        let action_id = uuid::Uuid::new_v4().to_string();
+        state
+            .kernel()
+            .insert_action_async(
+                &action_id,
+                "net.http.get",
+                &json!({"url": "https://example.com"}),
+                None,
+                None,
+                "completed",
+            )
+            .await
+            .expect("insert action");
+
+        let stored_output = json!({
+            "value": {"status": "ok"},
+            "posture": "secure",
+            "guard": {
+                "allowed": true,
+                "policy_allow": false,
+                "required_capabilities": ["net:http", "io:egress"],
+                "lease": {
+                    "id": "lease-1",
+                    "subject": Some("local"),
+                    "capability": "net:http",
+                    "scope": Some("repo"),
+                    "ttl_until": "2099-01-01T00:00:00Z"
+                }
+            }
+        });
+
+        state
+            .kernel()
+            .update_action_result_async(action_id.clone(), Some(stored_output), None)
+            .await
+            .expect("store output");
+
+        let params: HashMap<String, String> = HashMap::new();
+        let response = state_actions(HeaderMap::new(), State(state.clone()), Query(params)).await;
+        let (parts, body) = response.into_response().into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+        let items = value["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        let item = &items[0];
+        assert_eq!(item["id"].as_str(), Some(action_id.as_str()));
+        assert!(item["output"].is_null());
+        assert!(item.get("guard").is_none());
+        assert!(item.get("posture").is_none());
+    }
 }
 
 /// Research watcher queue snapshot.
