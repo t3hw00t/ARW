@@ -5,9 +5,49 @@ use axum::{
     Json,
 };
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 
-use crate::{runtime_matrix, self_model, state_observer, training, world, AppState};
+use crate::{metrics, runtime_matrix, self_model, state_observer, training, world, AppState};
 use serde::Deserialize;
+
+pub(crate) async fn build_episode_rollups(state: &AppState, limit: usize) -> Vec<Value> {
+    let rows = state
+        .kernel()
+        .recent_events_async(limit as i64, None)
+        .await
+        .unwrap_or_default();
+    let mut by_corr: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+    for r in rows {
+        let corr_id = r.corr_id.unwrap_or_default();
+        if corr_id.is_empty() {
+            continue;
+        }
+        by_corr.entry(corr_id).or_default().push(json!({
+            "id": r.id,
+            "time": r.time,
+            "kind": r.kind,
+            "payload": r.payload,
+        }));
+    }
+    let mut items: Vec<Value> = Vec::new();
+    for (cid, evs) in by_corr.into_iter() {
+        let start = evs
+            .first()
+            .and_then(|e| e.get("time").cloned())
+            .unwrap_or(Value::Null);
+        let end = evs
+            .last()
+            .and_then(|e| e.get("time").cloned())
+            .unwrap_or(Value::Null);
+        items.push(json!({
+            "id": cid,
+            "events": evs,
+            "start": start,
+            "end": end,
+        }));
+    }
+    items
+}
 
 /// Episode rollups grouped by correlation id.
 #[utoipa::path(
@@ -33,36 +73,7 @@ pub async fn state_episodes(
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
-    // Simple episode rollup: group last 1000 events by corr_id
-    let rows = state
-        .kernel()
-        .recent_events_async(1000, None)
-        .await
-        .unwrap_or_default();
-    use std::collections::BTreeMap;
-    let mut by_corr: BTreeMap<String, Vec<Value>> = BTreeMap::new();
-    for r in rows {
-        let cid = r.corr_id.unwrap_or_else(|| "".to_string());
-        if cid.is_empty() {
-            continue;
-        }
-        by_corr
-            .entry(cid)
-            .or_default()
-            .push(json!({"id": r.id, "time": r.time, "kind": r.kind, "payload": r.payload}));
-    }
-    let mut items: Vec<Value> = Vec::new();
-    for (cid, evs) in by_corr.into_iter() {
-        let start = evs
-            .first()
-            .and_then(|e| e.get("time").cloned())
-            .unwrap_or(json!(null));
-        let end = evs
-            .last()
-            .and_then(|e| e.get("time").cloned())
-            .unwrap_or(json!(null));
-        items.push(json!({"id": cid, "events": evs, "start": start, "end": end}));
-    }
+    let items = build_episode_rollups(&state, 1000).await;
     Json(json!({"items": items})).into_response()
 }
 
@@ -74,20 +85,9 @@ pub async fn state_episodes(
     responses((status = 200, description = "Route stats", body = serde_json::Value))
 )]
 pub async fn state_route_stats(State(state): State<AppState>) -> impl IntoResponse {
+    let summary = state.metrics().snapshot();
     let bus = state.bus().stats();
-    let metrics = state.metrics().snapshot();
-    Json(json!({
-        "bus": {
-            "published": bus.published,
-            "delivered": bus.delivered,
-            "receivers": bus.receivers,
-            "lagged": bus.lagged,
-            "no_receivers": bus.no_receivers
-        },
-        "events": metrics.events,
-        "routes": metrics.routes,
-        "tasks": metrics.tasks
-    }))
+    Json(metrics::route_stats_snapshot(&summary, &bus))
 }
 
 /// Background tasks status snapshot.

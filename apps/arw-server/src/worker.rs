@@ -47,7 +47,14 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                         }
                     }
                     Ok(None) => time::sleep(Duration::from_millis(200)).await,
-                    Err(_) => time::sleep(Duration::from_millis(500)).await,
+                    Err(err) => {
+                        tracing::warn!(
+                            target: "arw::worker",
+                            error = ?err,
+                            "kernel dequeue failed; retrying",
+                        );
+                        time::sleep(Duration::from_millis(500)).await;
+                    }
                 }
             }
         }),

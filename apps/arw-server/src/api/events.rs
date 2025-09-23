@@ -244,3 +244,180 @@ pub async fn events_sse(
         .insert("x-request-id", request_id.parse().unwrap());
     response
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::{read_models, AppState};
+    use arw_topics::TOPIC_READMODEL_PATCH;
+    use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+    use http_body_util::BodyExt;
+    use serde_json::json;
+    use sha2::Digest;
+    use std::{collections::HashMap, sync::Arc, time::Duration};
+    use tempfile::tempdir;
+    use tokio::{sync::Mutex, time::timeout};
+
+    async fn build_state(path: &std::path::Path) -> AppState {
+        std::env::set_var("ARW_STATE_DIR", path.display().to_string());
+        let bus = arw_events::Bus::new_with_replay(64, 64);
+        let kernel = arw_kernel::Kernel::open(path).expect("init kernel for tests");
+        let policy = arw_policy::PolicyEngine::load_from_env();
+        let policy_arc = Arc::new(Mutex::new(policy));
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
+        AppState::builder(bus, kernel, policy_arc, host, true)
+            .with_sse_capacity(64)
+            .build()
+            .await
+    }
+
+    fn parse_sse_events(buffer: &mut String) -> Vec<SseRecord> {
+        let mut out = Vec::new();
+        loop {
+            if let Some(idx) = buffer.find("\n\n") {
+                let event_chunk = buffer[..idx].to_string();
+                *buffer = buffer[idx + 2..].to_string();
+                if !event_chunk.trim().is_empty() {
+                    out.push(SseRecord::from_chunk(&event_chunk));
+                }
+            } else {
+                break;
+            }
+        }
+        out
+    }
+
+    #[derive(Debug, Default, Clone)]
+    struct SseRecord {
+        event: Option<String>,
+        id: Option<String>,
+        data: Option<String>,
+    }
+
+    impl SseRecord {
+        fn from_chunk(chunk: &str) -> Self {
+            let mut record = Self::default();
+            for line in chunk.lines() {
+                if let Some(rest) = line.strip_prefix("event: ") {
+                    record.event = Some(rest.trim().to_string());
+                } else if let Some(rest) = line.strip_prefix("id: ") {
+                    record.id = Some(rest.trim().to_string());
+                } else if let Some(rest) = line.strip_prefix("data: ") {
+                    record.data = Some(rest.trim().to_string());
+                }
+            }
+            record
+        }
+    }
+
+    #[tokio::test]
+    async fn events_sse_replays_read_model_patches() {
+        let temp = tempdir().expect("tempdir");
+        let state = build_state(temp.path()).await;
+
+        let bus = state.bus();
+        let mut rx = bus.subscribe();
+        read_models::publish_read_model_patch(
+            &bus,
+            "tests.sse_fixture",
+            &json!({"items": [{"id": "fixture"}]}),
+        );
+
+        let env = timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("patch event on bus")
+            .expect("bus closed unexpectedly");
+        state.metrics().record_event(&env.kind);
+        let row_id = state
+            .kernel()
+            .append_event_async(&env)
+            .await
+            .expect("append event to kernel");
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(env.time.as_bytes());
+        hasher.update(env.kind.as_bytes());
+        if let Ok(payload_bytes) = serde_json::to_vec(&env.payload) {
+            hasher.update(&payload_bytes);
+        }
+        let digest = hasher.finalize();
+        let key = u64::from_le_bytes([
+            digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6], digest[7],
+        ]);
+        {
+            let sse_ids = state.sse_ids();
+            let mut cache = sse_ids.lock().await;
+            cache.insert(key, row_id);
+        }
+        let row_id_str = row_id.to_string();
+
+        // Initial SSE request with replay
+        let mut params = HashMap::new();
+        params.insert("prefix".to_string(), TOPIC_READMODEL_PATCH.to_string());
+        params.insert("replay".to_string(), "5".to_string());
+        let response = events_sse(State(state.clone()), Query(params), HeaderMap::new())
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let mut body = response.into_body();
+        let mut buffer = String::new();
+        let mut patch_event: Option<SseRecord> = None;
+        while patch_event.is_none() {
+            let frame = body
+                .frame()
+                .await
+                .expect("frame available")
+                .expect("frame data");
+            let bytes = frame.into_data().expect("data frame");
+            buffer.push_str(&String::from_utf8_lossy(&bytes));
+            for ev in parse_sse_events(&mut buffer) {
+                if ev.event.as_deref() == Some(TOPIC_READMODEL_PATCH) {
+                    patch_event = Some(ev);
+                    break;
+                }
+            }
+        }
+        let patch_event = patch_event.expect("patch event parsed");
+        assert_eq!(patch_event.event.as_deref(), Some(TOPIC_READMODEL_PATCH));
+        assert_eq!(patch_event.id.as_deref(), Some(row_id_str.as_str()));
+        let data_json = patch_event
+            .data
+            .as_ref()
+            .and_then(|d| serde_json::from_str::<serde_json::Value>(d).ok())
+            .expect("patch data json");
+        assert_eq!(data_json["id"].as_str(), Some("tests.sse_fixture"));
+        let patch_ops = data_json["patch"].as_array().expect("patch ops");
+        assert!(!patch_ops.is_empty(), "expected diff payload");
+
+        // Resume using Last-Event-ID; expect handshake but no replayed patch
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("last-event-id"),
+            HeaderValue::from_str(&row_id_str).expect("header value"),
+        );
+        let mut params = HashMap::new();
+        params.insert("prefix".to_string(), TOPIC_READMODEL_PATCH.to_string());
+        let resume_response = events_sse(State(state.clone()), Query(params), headers)
+            .await
+            .into_response();
+        assert_eq!(resume_response.status(), StatusCode::OK);
+
+        let mut resume_body = resume_response.into_body();
+        // Handshake event should arrive immediately
+        let frame = resume_body
+            .frame()
+            .await
+            .expect("resume frame")
+            .expect("resume data");
+        let handshake_bytes = frame.into_data().expect("handshake bytes");
+        let mut buffer = String::from_utf8_lossy(&handshake_bytes).to_string();
+        let handshake_events = parse_sse_events(&mut buffer);
+        assert!(handshake_events
+            .iter()
+            .any(|ev| ev.event.as_deref() == Some("service.connected")));
+
+        // No replayed patch should arrive within a short timeout
+        let no_event = timeout(Duration::from_millis(100), resume_body.frame()).await;
+        assert!(no_event.is_err(), "unexpected replay events after resume");
+    }
+}

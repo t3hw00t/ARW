@@ -41,6 +41,9 @@ Complexity Collapse (Cross-cutting)
   - C · Feedback & experiments (Soon): Feedback Loop, Experiment Deck, Self Card snapshots.
   - D · Operator experience (UI): Chat Workbench, Screenshot Pipeline, launcher SPA/right-sidecar swap.
   - E · Policy & guardrails: Guardrail Gateway on `arw-server`, Asimov Capsule Guard, retire remaining `/admin/*` fallbacks.
+- [Kernel] Snappy Governor verification sweep: confirm `/metrics`, `/state/route_stats`, and `snappy.*` events match the journal paths; add regression tests — done (snappy read-model + notice test)
+- [Kernel] Event Spine patch streaming rollout: wire patch tail to `/events` SSE, validate resume via JSON Patch fixtures, document cleanup of legacy paths — done (SSE replay test + docs)
+- [Kernel] Phase handoff coordination: assign owners/dates for remaining Phase A bullets and publish them to `.arw/tasks.json` — todo
 
 Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143001-0001] Context Working Set doc + mkdocs nav — done (this change)
@@ -54,6 +57,7 @@ Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143033-0009] Training Park: dials for diversity/recency/compression; recall‑risk and coverage meters — todo
 - [Pack: Research] [t-250918120201-tp01] Training telemetry read-models in `arw-server` (context/memory/tool success stats) powering Training Park — plan
 - [Pack: Research] [t-250918120205-tp02] Launcher Training Park window: replace stub UI with live metrics + control bindings — plan
+- [Pack: Research] Context telemetry guardrails: add CI assertions for `context.recall_risk`/`context.coverage`, capture budgets in docs, and publish a verification checklist — todo
 
 UI Coherence
 - [Pack: Collaboration] Universal right‑sidecar across Hub/Chat/Training; subscribe once to `/events` — done (initial lanes)
@@ -83,6 +87,8 @@ UI Coherence
  - [Pack: Collaboration] Next: keyboard shortcuts (global) cheatsheet and discoverability; ARIA polish for Agents/Runs actions; skip‑links across pages; unit tests for /projects/file content_b64 path; virtualize large trees.
 - [Pack: Collaboration] [t-250918120301-hitl01] Human-in-the-loop staging queue in `arw-server` with `/state/staging/actions` read-model and leases — plan
 - [Pack: Collaboration] [t-250918120305-hitl02] Sidecar approvals UI: replace placeholder copy with live staging actions + evidence preview — plan
+- [Pack: Collaboration] Feedback loop readiness: validate Heuristic Feedback Engine shadow runs, log deltas, and document sidecar approvals before enabling auto-apply — todo
+- [Pack: Collaboration] Project Hub SSE bridge: consume `state.read.model.patch` (Event Spine) for notes/files/live context in the SPA swap — doing (metadata feed wired)
 
 Kernel & Triad (NOW)
 - [Kernel] [t-250915090001-kern01] Add `arw-kernel` crate with SQLite/WAL schema (events, artifacts, actions) and CAS helpers — done
@@ -201,6 +207,7 @@ Observability & Eventing
 - [Kernel] Metrics registry with histograms; wire to /metrics [t-250911230320-8615]
 - [Kernel] Docs: surface route metrics/events in docs and status page — done
 - [Pack: Collaboration] RPU trust: watcher + endpoints + `rpu.trust.changed` event + Prometheus gauges — done
+- [Kernel] Event reader QA: test `Last-Event-ID` resume, ensure Spectral/OpenAPI coverage, and capture doc updates in developer guide — todo
 
 Compatibility & Hardware
 - [Kernel] GPU probe fallback via wgpu: enumerate adapters across backends — done

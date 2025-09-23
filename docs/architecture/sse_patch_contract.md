@@ -8,6 +8,7 @@ Purpose: stream deltas, not snapshots, to keep interaction latency low and bytes
 - Event kinds: domain events (`models.download.progress`, `chat.message`), read‑model patches (`state.*.patch`), notices, and a startup ack. Canonical constants live in [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs).
 - Patch format: RFC 6902 (`application/json-patch+json`) with compact paths.
 - Resume: client may send `Last-Event-ID`. Server acks with `service.connected` including `request_id`, `resume_from`, and replay metadata so clients can correlate logs. The query `?replay=N` replays from the in-process buffer (best-effort).
+- IDs: when the kernel is enabled every event is persisted and receives a monotonic row id; the SSE stream reuses that id so clients can reconnect with `Last-Event-ID` and fetch missed JSON Patch deltas directly from `/events`.
 
 Example handshake:
 

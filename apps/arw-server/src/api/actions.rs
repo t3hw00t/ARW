@@ -259,9 +259,9 @@ mod tests {
     use axum::{body::to_bytes, http::StatusCode};
     use serde_json::Value;
     use std::sync::Arc;
-    use tokio::time::{timeout, Duration};
     use tempfile::tempdir;
     use tokio::sync::Mutex;
+    use tokio::time::{timeout, Duration};
 
     async fn build_state(path: &std::path::Path) -> AppState {
         std::env::set_var("ARW_STATE_DIR", path.display().to_string());
@@ -346,10 +346,8 @@ mod tests {
         let state = build_state(temp.path()).await;
 
         let bus = state.bus();
-        let mut rx = bus.subscribe_filtered(
-            vec![topics::TOPIC_ACTIONS_COMPLETED.to_string()],
-            Some(8),
-        );
+        let mut rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_ACTIONS_COMPLETED.to_string()], Some(8));
 
         let action_id = uuid::Uuid::new_v4().to_string();
         state

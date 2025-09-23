@@ -3,10 +3,13 @@ use axum::http::{HeaderName, HeaderValue, Request};
 use axum::middleware::Next;
 use axum::response::Response;
 use serde::Serialize;
+use serde_json::{json, Value};
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
+
+use arw_events::BusStats;
 
 const SAMPLE_WINDOW: usize = 50;
 const EWMA_ALPHA: f64 = 0.2;
@@ -358,6 +361,21 @@ impl Metrics {
             .map(|stats| stats.kinds.get(kind).copied().unwrap_or(0))
             .unwrap_or(0)
     }
+}
+
+pub fn route_stats_snapshot(summary: &MetricsSummary, bus: &BusStats) -> Value {
+    json!({
+        "bus": {
+            "published": bus.published,
+            "delivered": bus.delivered,
+            "receivers": bus.receivers,
+            "lagged": bus.lagged,
+            "no_receivers": bus.no_receivers,
+        },
+        "events": summary.events,
+        "routes": summary.routes,
+        "tasks": summary.tasks,
+    })
 }
 
 pub async fn track_http(

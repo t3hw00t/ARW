@@ -22,6 +22,30 @@ The roadmap and its planning mirrors use badges to flag which slice of the stack
 
 Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show both the optional pack and that the work sits beyond the active delivery window.
 
+## Execution Streams (Alignment)
+
+To keep the larger intent visible while we iterate, we track four active execution streams. Each stream carries a short list of near-term moves, explicit checks, and documentation hooks so we stay synchronized as work lands.
+
+### Collapse the Kernel
+- Immediate moves: Snappy Governor verification and Event Spine patch replay (JSON Patch SSE test) are in place; next unblock Phase B by assigning owners to the remaining migration bullets in `docs/BACKLOG.md` and wiring Event Spine deltas into the live UI swaps.
+- Checks & optimizations: verify latency budgets through `/metrics` and `route_stats`; confirm CAS + SQLite dual-write paths capture the Snappy events without regressions.
+- Documentation: update the legacy migration timeline once Snappy/Event Spine publish windows are live; mirror owner assignments into Backlog → Complexity Collapse.
+
+### Never-Out-Of-Context
+- Immediate moves: land slot budgets and stable IDs in the Context API, ship the MMR selector pass, and draft the compression cascade executor so the Training Park metrics have a feed.
+- Checks & optimizations: add telemetry assertions for `context.recall_risk` and `context.coverage`; enforce hygiene caps/TTL janitor runs in integration tests.
+- Documentation: expand guide coverage for the new API surfaces and annotate Backlog entries as instrumentation ships.
+
+### Collaboration & Human-in-Loop Surfaces
+- Immediate moves: finalize the recipes runner/gallery, wire the Heuristic Feedback Engine shadow lane, surface the pending action queue in the sidecar, and plug Hub/Project surfaces into the Event Spine patch stream.
+- Checks & optimizations: ensure SSE reconnection/backoff is captured in the universal right-sidecar and validate feedback deltas via snapshot tests.
+- Documentation: update showcase/install paths and add the approval queue walkthrough once the sidecar panel is interactive.
+
+### Security Hardening & Observability
+- Immediate moves: stage the egress firewall scope manifest, wire capsule telemetry, and expose the event journal reader and metrics registry endpoints.
+- Checks & optimizations: exercise DNS guard and proxy posture in CI; audit new endpoints with Spectral rules and Prometheus scrapes.
+- Documentation: fold the guardrail posture presets into the security hardening guide and keep Backlog observability rows in sync as we ship readers.
+
 ## Near-Term (Weeks)
 
 #### [Kernel] Collapse the Kernel

@@ -8,7 +8,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   ARW.sse.connect(base, { replay: 25 });
   // ---------- Runs: episodes list + snapshot ----------
   let runsCache = [];
+  let episodesFromSSE = false;
   let runSnapshot = null;
+  let projectsModel = null;
+  const projectsIndex = new Map();
+  let projPrefs = {};
   const elRunsTbl = document.getElementById('runsTbl');
   const elRunsStat = document.getElementById('runsStat');
   const elRunFilter = document.getElementById('runFilter');
@@ -140,9 +144,25 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btnRunPinA')?.addEventListener('click', ()=>{ if (runSnapshot){ const ta=document.getElementById('cmpA'); if (ta){ ta.value = JSON.stringify(runSnapshot, null, 2); updateCompareLink('text'); } } });
   document.getElementById('btnRunPinB')?.addEventListener('click', ()=>{ if (runSnapshot){ const tb=document.getElementById('cmpB'); if (tb){ tb.value = JSON.stringify(runSnapshot, null, 2); updateCompareLink('text'); } } });
   await loadRuns();
+
+  const idEpisodesRead = ARW.read.subscribe('episodes', (model) => {
+    if (!model) return;
+    episodesFromSSE = true;
+    const items = Array.isArray(model.items) ? model.items : [];
+    runsCache = items.map(hydrateEpisode);
+    setRunsStat(`Episodes: ${runsCache.length}`, true);
+    renderRuns();
+  });
   // Throttle SSE-driven refresh on episode-related activity
   let _lastRunsAt = 0;
-  const runsTick = ()=>{ const now=Date.now(); if (now - _lastRunsAt > 1200){ _lastRunsAt = now; loadRuns(); } };
+  const runsTick = ()=>{
+    if (episodesFromSSE) return;
+    const now = Date.now();
+    if (now - _lastRunsAt > 1200) {
+      _lastRunsAt = now;
+      loadRuns();
+    }
+  };
   ARW.sse.subscribe((k, e) => {
     try{
       const p = e?.env?.payload || {};
@@ -170,6 +190,50 @@ document.addEventListener('DOMContentLoaded', async () => {
   let currentPath = '';
   const pathStack = [];
   function setStat(txt){ if (elProjStat) { elProjStat.textContent = txt||''; if (txt) setTimeout(()=>{ if (elProjStat.textContent===txt) elProjStat.textContent=''; }, 1500); } }
+  async function applyProjectsModel(model){
+    projectsModel = model || {};
+    projectsIndex.clear();
+    const items = Array.isArray(projectsModel.items) ? projectsModel.items : [];
+    for (const raw of items) {
+      if (!raw || typeof raw.name !== 'string') continue;
+      projectsIndex.set(raw.name, raw);
+    }
+    const names = Array.from(projectsIndex.keys()).sort();
+    if (elProjSel) {
+      const currentOptions = Array.from(elProjSel.options || []).map((o) => o.value);
+      const changed =
+        currentOptions.length !== names.length ||
+        currentOptions.some((v, idx) => v !== names[idx]);
+      if (changed) {
+        elProjSel.innerHTML = '';
+        for (const name of names) {
+          const opt = document.createElement('option');
+          opt.value = name;
+          opt.textContent = name;
+          elProjSel.appendChild(opt);
+        }
+      }
+    }
+    let targetProj = curProj;
+    if (!targetProj || !projectsIndex.has(targetProj)) {
+      targetProj = names[0] || null;
+    }
+    if (targetProj && targetProj !== curProj) {
+      try {
+        await setProj(targetProj);
+      } catch (err) {
+        console.error(err);
+      }
+    }
+    if (elProjSel) {
+      elProjSel.value = targetProj || '';
+    }
+    if (!targetProj || !projectsIndex.has(targetProj)) {
+      return;
+    }
+    await loadNotes(true);
+    await loadTree(currentPath);
+  }
   async function setProj(name){
     curProj = name||null;
     if (elCurProj) elCurProj.textContent = curProj||'–';
@@ -180,6 +244,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (elNotesAutosave) elNotesAutosave.checked = as;
     const hasEditor = !!(projPrefs && projPrefs.editorCmd);
     if (elProjPrefsBadge) elProjPrefsBadge.style.display = hasEditor? 'inline-flex':'none';
+    treeCache.clear();
     // restore last folder if present
     if (curProj){
       loadNotes();
@@ -191,14 +256,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try{
       const r = await fetch(base + '/projects/list');
       const j = await r.json().catch(()=>({items:[]}));
-      if (elProjSel){
-        elProjSel.innerHTML='';
-        (j.items||[]).forEach(n=>{ const o=document.createElement('option'); o.value=n; o.textContent=n; elProjSel.appendChild(o); });
-        if (!curProj){
-          try{ const hub=await ARW.getPrefs('ui:hub')||{}; const lp=hub.lastProject; if (lp && (j.items||[]).includes(lp)){ await setProj(lp); elProjSel.value = lp; } else if (j.items && j.items[0]) { await setProj(j.items[0]); elProjSel.value = j.items[0]; } }
-          catch{ if (j.items && j.items[0]) { await setProj(j.items[0]); elProjSel.value = j.items[0]; } }
-        }
-      }
+      await applyProjectsModel({ items: (j.items || []).map((name) => ({ name })) });
     }catch(e){ console.error(e); }
   }
   async function createProj(){
@@ -209,7 +267,22 @@ document.addEventListener('DOMContentLoaded', async () => {
       await listProjs(); setProj(n); ARW.toast('Project created');
     }catch(e){ console.error(e); ARW.toast('Create failed'); }
   }
-  async function loadNotes(){ if (!curProj||!elNotes) return; try{ const r = await fetch(base + '/projects/notes?proj='+encodeURIComponent(curProj)); const t = await r.text(); elNotes.value = t; }catch(e){ console.error(e); elNotes.value=''; } }
+  async function loadNotes(skipFetch=false){
+    if (!curProj || !elNotes) return;
+    const info = projectsIndex.get(curProj);
+    const content = info?.notes?.content;
+    if (typeof content === 'string') {
+      elNotes.value = content;
+      return;
+    }
+    const shouldSkip = skipFetch === true;
+    if (shouldSkip) return;
+    try{
+      const r = await fetch(base + '/projects/notes?proj='+encodeURIComponent(curProj));
+      const t = await r.text();
+      elNotes.value = t;
+    }catch(e){ console.error(e); elNotes.value=''; }
+  }
   async function saveNotes(quiet=false){ if (!curProj||!elNotes) return; try{ const t = elNotes.value||''; await fetch(base + '/projects/notes?proj='+encodeURIComponent(curProj), { method:'POST', headers:{'Content-Type':'text/plain'}, body: t + '\n' }); const ns=document.getElementById('notesStat'); if (ns){ ns.textContent='Saved'; setTimeout(()=>{ if (ns.textContent==='Saved') ns.textContent=''; }, 1200); } if (!quiet) { /* optional toast removed for quieter UX */ } }catch(e){ console.error(e); const ns=document.getElementById('notesStat'); if (ns){ ns.textContent='Error'; setTimeout(()=>{ if (ns.textContent==='Error') ns.textContent=''; }, 1500); } }
   async function loadTree(rel){
     if (!curProj||!elProjTree) return;
@@ -218,20 +291,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     currentPath = next;
     try{ const ns='ui:proj:'+curProj; const p=await ARW.getPrefs(ns)||{}; p.lastPath = currentPath; await ARW.setPrefs(ns, p); }catch{}
     renderCrumbs(currentPath);
-    try{
-      const r = await fetch(base + '/projects/tree?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(currentPath));
-      const j = await r.json().catch(()=>({items:[]}));
-      window.__curItems = (j.items||[]);
-      treeCache.set(String(currentPath||''), window.__curItems);
-      await expandOnSearch((elFileFilter?.value||'').trim());
-      renderTree(treeCache.get(String(currentPath||''))||[]);
-    }catch(e){ console.error(e); elProjTree.textContent = 'Error'; }
+    const key = String(currentPath||'');
+    let fromModel = false;
+    const info = projectsIndex.get(curProj);
+    const treePaths = info?.tree?.paths;
+    if (treePaths && Object.prototype.hasOwnProperty.call(treePaths, key)) {
+      const entries = Array.isArray(treePaths[key]) ? treePaths[key] : [];
+      treeCache.set(key, entries);
+      fromModel = true;
+    }
+    if (!fromModel) {
+      try{
+        const r = await fetch(base + '/projects/tree?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(currentPath));
+        const j = await r.json().catch(()=>({items:[]}));
+        treeCache.set(String(currentPath||''), j.items||[]);
+      }catch(e){ console.error(e); elProjTree.textContent = 'Error'; return; }
+    }
+    await expandOnSearch((elFileFilter?.value||'').trim());
+    renderTree(treeCache.get(String(currentPath||''))||[]);
   }
   async function ensureChildren(path){
     const key = String(path||'');
     if (!treeCache.has(key)){
-      try{ const r=await fetch(base + '/projects/tree?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(key)); const j=await r.json().catch(()=>({items:[]})); treeCache.set(key, (j.items||[])); }
-      catch{ treeCache.set(key, []); }
+      const info = projectsIndex.get(curProj);
+      const treePaths = info?.tree?.paths;
+      if (treePaths && Object.prototype.hasOwnProperty.call(treePaths, key)) {
+        const entries = Array.isArray(treePaths[key]) ? treePaths[key] : [];
+        treeCache.set(key, entries);
+      } else {
+        try{ const r=await fetch(base + '/projects/tree?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(key)); const j=await r.json().catch(()=>({items:[]})); treeCache.set(key, (j.items||[])); }
+        catch{ treeCache.set(key, []); }
+      }
     }
     return treeCache.get(key)||[];
   }
@@ -578,6 +668,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     catch(e){ console.error(e); ARW.toast('Save failed'); }
   });
   await listProjs();
+  const idProjectsRead = ARW.read.subscribe('projects', (model) => {
+    applyProjectsModel(model).catch((err) => console.error(err));
+  });
   // Quick state probe (models count)
   try {
     const r = await fetch(base + '/state/models');
@@ -896,6 +989,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('cmpA')?.addEventListener('input', ()=> updateCompareLink('text'));
   document.getElementById('cmpB')?.addEventListener('input', ()=> updateCompareLink('text'));
   applyCompareFromLink();
+
+  window.addEventListener('beforeunload', () => {
+    try { ARW.read.unsubscribe(idEpisodesRead); } catch {}
+    try { ARW.read.unsubscribe(idProjectsRead); } catch {}
+  });
 
   // ---------- Artifacts rendering from run snapshot ----------
   function summarizeValue(v){

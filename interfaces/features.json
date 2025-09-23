@@ -135,6 +135,8 @@
       "read_models": [
         "models",
         "models_metrics",
+        "episodes",
+        "projects",
         "route_stats",
         "snappy"
       ],
