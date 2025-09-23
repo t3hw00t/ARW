@@ -1,4 +1,4 @@
-.PHONY: build dev-build fmt lint test package docgen docs-build start
+.PHONY: build dev-build fmt lint test package docgen docs-build start clean clean-venv
 
 build:
 	cargo build --workspace --release --locked
@@ -26,3 +26,9 @@ docs-build: docgen
 
 start:
 	ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 bash scripts/start.sh --debug --port 8091
+
+clean:
+	bash scripts/clean_workspace.sh
+
+clean-venv:
+	bash scripts/clean_workspace.sh --venv

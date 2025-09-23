@@ -329,6 +329,7 @@ If you use an AI pair‑programmer, start here:
 - Enter Nix dev shell: `nix develop`
 - Fast loop: `just dev` (runs `arw-server` with `ARW_DEBUG=1`)
 - Docs locally: `just docs-serve` → http://127.0.0.1:8000
+- Workspace cleanup: `just clean` (append `--venv` to drop the local virtualenv)
 - More: https://t3hw00t.github.io/ARW/developer/
 
 90‑day plan (high‑level)

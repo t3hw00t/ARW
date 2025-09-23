@@ -1,5 +1,9 @@
 set shell := ["bash", "-cu"]
 
+# Cleanup
+clean *args:
+  bash scripts/clean_workspace.sh {{args}}
+
 # Build
 build:
   cargo build --workspace --release --locked
