@@ -790,4 +790,24 @@ mod tests {
         handle.abort();
         let _ = handle.await;
     }
+
+    #[test]
+    fn snappy_detail_emission_respects_interval() {
+        let _env_guard = EnvGuard::set(&[]);
+        let mut config = SnappyConfig::from_env();
+        config.detail_every = Some(Duration::from_millis(50));
+        let mut governor = SnappyGovernorState::new(config);
+
+        assert!(governor.should_emit_detail(), "first emit should pass");
+        assert!(
+            !governor.should_emit_detail(),
+            "subsequent emit inside interval should be throttled"
+        );
+
+        governor.last_detail = Some(Instant::now() - Duration::from_millis(75));
+        assert!(
+            governor.should_emit_detail(),
+            "emission should resume after interval elapses"
+        );
+    }
 }

@@ -29,3 +29,14 @@ Read‑model patch topics:
 - `state.read.model.patch` — generic topic. Payload: `{ id: "<id>", patch: <json-patch-array> }`. See `TOPIC_READMODEL_PATCH` in [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs).
 
 Clients can apply patches to a local object and render without re-fetching full snapshots.
+
+## Hub Projects Walkthrough
+
+The desktop Hub uses the contract above to keep the Projects panel in sync:
+
+1. **Prime from REST** — on launch it fetches the cached read-model snapshot from `/state/projects` so the tree renders even before the SSE channel opens.
+2. **Subscribe** — it connects to `/events?prefix=state.read.model.patch&replay=25` and records the `id` for every `state.read.model.patch` event.
+3. **Apply patches** — when the payload contains `{ "id": "projects" }` the Hub merges the JSON Patch into its local store, updating notes metadata and directory listings without additional HTTP calls.
+4. **Resume** — if the SSE socket reconnects, the Hub sends `Last-Event-ID` (the kernel row id). The server replies with `service.connected` and replays any missed patches, ensuring the UI’s caches match the persisted journal.
+
+This pattern is reused for other read-model consumers (e.g., Snappy telemetry) so clients only pay the cost of one initial snapshot and then stream compact diffs.

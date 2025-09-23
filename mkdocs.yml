@@ -93,6 +93,7 @@ nav:
       - Cost & Quotas: guide/cost_quota.md
       - Context Recipes: guide/context_recipes.md
       - Metrics & Insights: guide/METRICS_AND_INSIGHTS.md
+      - Monitoring & Alerts: ops/monitoring.md
       - Chat Backends: guide/chat_backends.md
       - Guardrails Checks: guide/guardrails.md
       - Correlation & Attribution: guide/correlation.md

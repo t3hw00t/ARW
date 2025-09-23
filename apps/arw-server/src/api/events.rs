@@ -252,6 +252,7 @@ mod tests {
     use arw_topics::TOPIC_READMODEL_PATCH;
     use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
     use http_body_util::BodyExt;
+    use json_patch::Patch;
     use serde_json::json;
     use sha2::Digest;
     use std::{collections::HashMap, sync::Arc, time::Duration};
@@ -424,6 +425,131 @@ mod tests {
             .any(|ev| ev.event.as_deref() == Some("service.connected")));
 
         // No replayed patch should arrive within a short timeout
+        let no_event = timeout(Duration::from_millis(100), resume_body.frame()).await;
+        assert!(no_event.is_err(), "unexpected replay events after resume");
+    }
+
+    #[tokio::test]
+    async fn events_sse_replays_projects_patch() {
+        let temp = tempdir().expect("tempdir");
+        let state = build_state(temp.path()).await;
+
+        let bus = state.bus();
+        let mut rx = bus.subscribe();
+        read_models::publish_read_model_patch(
+            &bus,
+            "projects",
+            &json!({
+                "items": [{
+                    "name": "alpha",
+                    "notes": {"content": "welcome", "bytes": 7, "modified": "2025-09-23T00:00:00Z"},
+                    "tree": {"paths": {"": []}, "digest": "deadbeef"}
+                }]
+            }),
+        );
+
+        let env = timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("patch event on bus")
+            .expect("bus closed unexpectedly");
+        state.metrics().record_event(&env.kind);
+        let row_id = state
+            .kernel()
+            .append_event_async(&env)
+            .await
+            .expect("append event to kernel");
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(env.time.as_bytes());
+        hasher.update(env.kind.as_bytes());
+        if let Ok(payload_bytes) = serde_json::to_vec(&env.payload) {
+            hasher.update(&payload_bytes);
+        }
+        let digest = hasher.finalize();
+        let key = u64::from_le_bytes([
+            digest[0], digest[1], digest[2], digest[3], digest[4], digest[5], digest[6], digest[7],
+        ]);
+        {
+            let sse_ids = state.sse_ids();
+            let mut cache = sse_ids.lock().await;
+            cache.insert(key, row_id);
+        }
+        let row_id_str = row_id.to_string();
+
+        let mut params = HashMap::new();
+        params.insert("prefix".to_string(), TOPIC_READMODEL_PATCH.to_string());
+        params.insert("replay".to_string(), "5".to_string());
+        let response = events_sse(State(state.clone()), Query(params), HeaderMap::new())
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let mut body = response.into_body();
+        let mut buffer = String::new();
+        let mut patch_event: Option<SseRecord> = None;
+        while patch_event.is_none() {
+            let frame = body
+                .frame()
+                .await
+                .expect("frame available")
+                .expect("frame data");
+            let bytes = frame.into_data().expect("data frame");
+            buffer.push_str(&String::from_utf8_lossy(&bytes));
+            for ev in parse_sse_events(&mut buffer) {
+                if ev.event.as_deref() == Some(TOPIC_READMODEL_PATCH) {
+                    patch_event = Some(ev);
+                    break;
+                }
+            }
+        }
+        let patch_event = patch_event.expect("patch event parsed");
+        assert_eq!(patch_event.event.as_deref(), Some(TOPIC_READMODEL_PATCH));
+        assert_eq!(patch_event.id.as_deref(), Some(row_id_str.as_str()));
+        let data_json = patch_event
+            .data
+            .as_ref()
+            .and_then(|d| serde_json::from_str::<serde_json::Value>(d).ok())
+            .expect("patch data json");
+        assert_eq!(data_json["kind"].as_str(), Some(TOPIC_READMODEL_PATCH));
+        let payload = data_json
+            .get("payload")
+            .and_then(|v| v.as_object())
+            .expect("patch payload");
+        assert_eq!(payload.get("id").and_then(|v| v.as_str()), Some("projects"));
+        let patch_value = payload.get("patch").cloned().expect("patch value");
+        let patch: Patch = serde_json::from_value(patch_value).expect("patch decode");
+        let mut doc = json!({});
+        json_patch::patch(&mut doc, &patch).expect("apply patch");
+        let items = doc["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        let item = &items[0];
+        assert_eq!(item["name"].as_str(), Some("alpha"));
+        assert_eq!(item["notes"]["content"].as_str(), Some("welcome"));
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            HeaderName::from_static("last-event-id"),
+            HeaderValue::from_str(&row_id_str).expect("header value"),
+        );
+        let mut params = HashMap::new();
+        params.insert("prefix".to_string(), TOPIC_READMODEL_PATCH.to_string());
+        let resume_response = events_sse(State(state.clone()), Query(params), headers)
+            .await
+            .into_response();
+        assert_eq!(resume_response.status(), StatusCode::OK);
+
+        let mut resume_body = resume_response.into_body();
+        let frame = resume_body
+            .frame()
+            .await
+            .expect("resume frame")
+            .expect("resume data");
+        let handshake_bytes = frame.into_data().expect("handshake bytes");
+        let mut buffer = String::from_utf8_lossy(&handshake_bytes).to_string();
+        let handshake_events = parse_sse_events(&mut buffer);
+        assert!(handshake_events
+            .iter()
+            .any(|ev| ev.event.as_deref() == Some("service.connected")));
+
         let no_event = timeout(Duration::from_millis(100), resume_body.frame()).await;
         assert!(no_event.is_err(), "unexpected replay events after resume");
     }

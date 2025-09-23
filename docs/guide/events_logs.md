@@ -22,6 +22,11 @@ Type: How‑to
 - Wrap toggle and Copy JSON available
 
 - The canonical resume flow is `GET /events?prefix=state.read.model.patch&replay=50` followed by reconnects with the last `id` you observed.
+- Desktop Hub walkthrough:
+  1. Fetch `/state/projects` (and other `/state/*` read-model snapshots) before opening SSE so the UI has an immediate baseline.
+  2. Connect to `/events?prefix=state.read.model.patch&replay=25` and cache the `id` from each event.
+  3. Apply each patch where `payload.id` matches the model you care about (`projects`, `snappy`, `episodes`, etc.).
+  4. On reconnect, send `Last-Event-ID` to receive any missed patches, keeping the UI fully consistent with the journal.
 
 Endpoints
 - Events stream: `GET /events?prefix=...&replay=50`

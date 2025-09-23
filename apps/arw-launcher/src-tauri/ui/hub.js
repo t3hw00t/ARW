@@ -8,7 +8,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   ARW.sse.connect(base, { replay: 25 });
   // ---------- Runs: episodes list + snapshot ----------
   let runsCache = [];
-  let episodesFromSSE = false;
+  let episodesPrimed = false;
   let runSnapshot = null;
   let projectsModel = null;
   const projectsIndex = new Map();
@@ -63,6 +63,23 @@ document.addEventListener('DOMContentLoaded', async () => {
       events,
     };
   }
+
+  async function fetchReadModel(id, path, options = {}) {
+    const { signal, transform } = options;
+    const fetchOpts = {};
+    if (signal) fetchOpts.signal = signal;
+    const resp = await fetch(base + path, fetchOpts);
+    if (!resp.ok) {
+      const err = new Error(`failed to fetch read model: ${id}`);
+      err.status = resp.status;
+      throw err;
+    }
+    const raw = await resp.json();
+    const model = transform ? transform(raw) : raw;
+    ARW.read._store.set(id, model);
+    ARW.read._emit(id);
+    return model;
+  }
   function formatDuration(n){
     if (!Number.isFinite(n) || n < 0) return '–';
     if (n >= 1000) return `${(n/1000).toFixed(1)} s`;
@@ -92,17 +109,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
   let runsAbort = null;
-  async function loadRuns(){
+  async function refreshEpisodesSnapshot(){
     try{
       if (runsAbort) { try{ runsAbort.abort(); }catch{} }
       runsAbort = new AbortController();
-      const r = await fetch(base + '/state/episodes', { signal: runsAbort.signal });
-      const j = await r.json();
-      const raw = Array.isArray(j?.items) ? j.items : (Array.isArray(j) ? j : []);
-      runsCache = raw.map(hydrateEpisode);
-      setRunsStat(`Episodes: ${runsCache.length}`, true);
-      renderRuns();
-    }catch(e){ console.error(e); }
+      await fetchReadModel('episodes', '/state/episodes', {
+        signal: runsAbort.signal,
+        transform(raw){
+          const isObj = raw && typeof raw === 'object' && !Array.isArray(raw);
+          const out = isObj ? { ...raw } : {};
+          const items = isObj && Array.isArray(raw.items)
+            ? raw.items
+            : Array.isArray(raw)
+              ? raw
+              : [];
+          out.items = items;
+          return out;
+        }
+      });
+    }catch(e){
+      if (!(e && e.name === 'AbortError')) console.error(e);
+    }
   }
   let snapAbort = null;
   async function viewRun(id){
@@ -136,31 +163,31 @@ document.addEventListener('DOMContentLoaded', async () => {
       renderArtifacts();
     }catch(e){ console.error(e); runSnapshot=null; if (elRunSnap) elRunSnap.textContent=''; if (elRunSnapMeta) elRunSnapMeta.textContent=''; renderArtifacts(); }
   }
-  document.getElementById('btnRunsRefresh')?.addEventListener('click', loadRuns);
+  document.getElementById('btnRunsRefresh')?.addEventListener('click', ()=>{ refreshEpisodesSnapshot(); });
   // Do not persist filters; just render on change
   elRunFilter?.addEventListener('input', ()=>{ renderRuns(); });
   elRunErrOnly?.addEventListener('change', ()=>{ renderRuns(); });
   document.getElementById('btnRunCopy')?.addEventListener('click', ()=>{ if (runSnapshot) ARW.copy(JSON.stringify(runSnapshot, null, 2)); });
   document.getElementById('btnRunPinA')?.addEventListener('click', ()=>{ if (runSnapshot){ const ta=document.getElementById('cmpA'); if (ta){ ta.value = JSON.stringify(runSnapshot, null, 2); updateCompareLink('text'); } } });
   document.getElementById('btnRunPinB')?.addEventListener('click', ()=>{ if (runSnapshot){ const tb=document.getElementById('cmpB'); if (tb){ tb.value = JSON.stringify(runSnapshot, null, 2); updateCompareLink('text'); } } });
-  await loadRuns();
-
-  const idEpisodesRead = ARW.read.subscribe('episodes', (model) => {
+  const applyEpisodesModel = (model) => {
     if (!model) return;
-    episodesFromSSE = true;
+    episodesPrimed = true;
     const items = Array.isArray(model.items) ? model.items : [];
     runsCache = items.map(hydrateEpisode);
     setRunsStat(`Episodes: ${runsCache.length}`, true);
     renderRuns();
-  });
+  };
+  const idEpisodesRead = ARW.read.subscribe('episodes', applyEpisodesModel);
+  await refreshEpisodesSnapshot();
   // Throttle SSE-driven refresh on episode-related activity
   let _lastRunsAt = 0;
   const runsTick = ()=>{
-    if (episodesFromSSE) return;
+    if (episodesPrimed) return;
     const now = Date.now();
     if (now - _lastRunsAt > 1200) {
       _lastRunsAt = now;
-      loadRuns();
+      refreshEpisodesSnapshot();
     }
   };
   ARW.sse.subscribe((k, e) => {
@@ -252,11 +279,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       catch{ loadTree(''); }
     }
   }
-  async function listProjs(){
+  async function refreshProjectsSnapshot(){
     try{
-      const r = await fetch(base + '/projects/list');
-      const j = await r.json().catch(()=>({items:[]}));
-      await applyProjectsModel({ items: (j.items || []).map((name) => ({ name })) });
+      await fetchReadModel('projects', '/state/projects');
     }catch(e){ console.error(e); }
   }
   async function createProj(){
@@ -264,7 +289,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try{
       const resp = await fetch(base + '/projects/create', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:n }) });
       if (!resp.ok) throw new Error('HTTP '+resp.status);
-      await listProjs(); setProj(n); ARW.toast('Project created');
+      await refreshProjectsSnapshot(); setProj(n); ARW.toast('Project created');
     }catch(e){ console.error(e); ARW.toast('Create failed'); }
   }
   async function loadNotes(skipFetch=false){
@@ -652,7 +677,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Wire events
   if (elProjSel) elProjSel.addEventListener('change', ()=> setProj(elProjSel.value||''));
   const btnCreate = document.getElementById('btnCreateProj'); if (btnCreate) btnCreate.addEventListener('click', createProj);
-  const btnRefresh = document.getElementById('btnRefreshProj'); if (btnRefresh) btnRefresh.addEventListener('click', ()=>{ listProjs(); if (curProj) loadTree(''); });
+  const btnRefresh = document.getElementById('btnRefreshProj'); if (btnRefresh) btnRefresh.addEventListener('click', ()=>{ refreshProjectsSnapshot(); if (curProj) loadTree(''); });
   const btnSaveNotes = document.getElementById('btnSaveNotes'); if (btnSaveNotes) btnSaveNotes.addEventListener('click', saveNotes);
   const btnReloadNotes = document.getElementById('btnReloadNotes'); if (btnReloadNotes) btnReloadNotes.addEventListener('click', loadNotes);
   if (elFileFilter){ elFileFilter.addEventListener('input', async ()=>{ try{ await expandOnSearch((elFileFilter.value||'').trim()); }catch{} renderTree(treeCache.get(String(currentPath||''))||[]); }); }
@@ -667,10 +692,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     try{ const ns='ui:proj:'+curProj; const cur=await ARW.getPrefs(ns)||{}; const prev=cur.editorCmd||''; const next = prompt('Project editor command (use {path} placeholder)', prev||''); if (next != null){ cur.editorCmd = String(next).trim(); await ARW.setPrefs(ns, cur); projPrefs = cur; if (elProjPrefsBadge) elProjPrefsBadge.style.display = (cur.editorCmd? 'inline-flex':'none'); ARW.toast('Project prefs saved'); } }
     catch(e){ console.error(e); ARW.toast('Save failed'); }
   });
-  await listProjs();
   const idProjectsRead = ARW.read.subscribe('projects', (model) => {
     applyProjectsModel(model).catch((err) => console.error(err));
   });
+  await refreshProjectsSnapshot();
   // Quick state probe (models count)
   try {
     const r = await fetch(base + '/state/models');
