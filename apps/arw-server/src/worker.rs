@@ -1,9 +1,12 @@
 use chrono::SecondsFormat;
 use serde_json::{json, Value};
+use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
 
 use crate::{
+    app_state::Policy,
+    egress_log::{self, EgressRecord},
     tasks::TaskHandle,
     tools::{self, ToolError},
     util, AppState,
@@ -11,263 +14,70 @@ use crate::{
 use arw_topics as topics;
 
 pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
-    let bus = state.bus();
-    let kernel = state.kernel().clone();
-    let policy = state.policy();
-    let host = state.host();
+    let ctx = WorkerContext::new(&state);
     let worker_state = state;
     TaskHandle::new(
         "worker.local",
         tokio::spawn(async move {
             let state = worker_state;
+            let ctx = ctx;
             loop {
-                match kernel.dequeue_one_queued_async().await {
+                match ctx.kernel.dequeue_one_queued_async().await {
                     Ok(Some((id, kind, input))) => {
                         let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-                        let env = arw_events::Envelope {
+                        let running_env = arw_events::Envelope {
                             time: now,
                             kind: topics::TOPIC_ACTIONS_RUNNING.into(),
-                            payload: json!({"id": id}),
+                            payload: json!({"id": id.clone()}),
                             policy: None,
                             ce: None,
                         };
-                        bus.publish(&env.kind, &env.payload);
-                        let action_result: Result<Value, ToolError> = if kind == "net.http.get" {
-                            let mut input2 = input.clone();
-                            if let Some(obj) = input2.as_object_mut() {
-                                let hdrs = obj.entry("headers").or_insert_with(|| json!({}));
-                                if let Some(hmap) = hdrs.as_object_mut() {
-                                    hmap.insert("X-ARW-Corr".to_string(), json!(id.clone()));
-                                    if let Ok(p) = std::env::var("ARW_PROJECT_ID") {
-                                        hmap.insert("X-ARW-Project".to_string(), json!(p));
-                                    }
-                                }
-                            }
-                            let policy_allows =
-                                policy.lock().await.evaluate_action("net.http.").allow;
-                            let allowed = if policy_allows {
-                                true
-                            } else {
-                                let has_http = kernel
-                                    .find_valid_lease_async("local", "net:http")
-                                    .await
-                                    .ok()
-                                    .flatten()
-                                    .is_some();
-                                if has_http {
-                                    true
-                                } else {
-                                    kernel
-                                        .find_valid_lease_async("local", "io:egress")
-                                        .await
-                                        .ok()
-                                        .flatten()
-                                        .is_some()
-                                }
-                            };
-                            if !allowed {
-                                append_egress_entry_async(
-                                    &kernel,
-                                    None,
-                                    &EgressRecord {
-                                        decision: "deny",
-                                        reason: Some("no_lease"),
-                                        dest_host: None,
-                                        dest_port: None,
-                                        protocol: Some("http"),
-                                        bytes_in: None,
-                                        bytes_out: None,
-                                        corr_id: None,
-                                    },
-                                    true,
-                                )
-                                .await;
-                                Ok(json!({"error":"lease required: net:http or io:egress"}))
-                            } else {
-                                match host.run_tool("http.fetch", &input2).await {
-                                    Ok(v) => {
-                                        let host_name = v.get("dest_host").and_then(|x| x.as_str());
-                                        let port = v.get("dest_port").and_then(|x| x.as_i64());
-                                        let proto = v.get("protocol").and_then(|x| x.as_str());
-                                        let bin = v.get("bytes_in").and_then(|x| x.as_i64());
-                                        let posture = util::effective_posture();
-                                        let record = EgressRecord {
-                                            decision: "allow",
-                                            reason: Some("ok"),
-                                            dest_host: host_name,
-                                            dest_port: port,
-                                            protocol: proto,
-                                            bytes_in: bin,
-                                            bytes_out: Some(0),
-                                            corr_id: Some(id.as_str()),
-                                        };
-                                        let entry = append_egress_entry_async(
-                                            &kernel,
-                                            Some(posture.as_str()),
-                                            &record,
-                                            false,
-                                        )
-                                        .await;
-                                        publish_egress_event(&bus, &posture, entry, &record);
-                                        Ok(v)
-                                    }
-                                    Err(arw_wasi::WasiError::Denied {
-                                        reason,
-                                        dest_host,
-                                        dest_port,
-                                        protocol,
-                                        ..
-                                    }) => {
-                                        let posture = util::effective_posture();
-                                        let record = EgressRecord {
-                                            decision: "deny",
-                                            reason: Some(reason.as_str()),
-                                            dest_host: dest_host.as_deref(),
-                                            dest_port,
-                                            protocol: protocol.as_deref(),
-                                            bytes_in: None,
-                                            bytes_out: None,
-                                            corr_id: Some(id.as_str()),
-                                        };
-                                        let entry = append_egress_entry_async(
-                                            &kernel,
-                                            Some(posture.as_str()),
-                                            &record,
-                                            false,
-                                        )
-                                        .await;
-                                        publish_egress_event(&bus, &posture, entry, &record);
-                                        Ok(json!({"error":"denied","reason": reason}))
-                                    }
-                                    Err(e) => {
-                                        Ok(json!({"error":"runtime","detail": e.to_string()}))
-                                    }
-                                }
-                            }
-                        } else if kind == "fs.patch" {
-                            let allowed = if !policy.lock().await.evaluate_action("fs.patch").allow
-                            {
-                                let has_fs = kernel
-                                    .find_valid_lease_async("local", "fs")
-                                    .await
-                                    .ok()
-                                    .flatten()
-                                    .is_some();
-                                if has_fs {
-                                    true
-                                } else {
-                                    kernel
-                                        .find_valid_lease_async("local", "fs:patch")
-                                        .await
-                                        .ok()
-                                        .flatten()
-                                        .is_some()
-                                }
-                            } else {
-                                true
-                            };
-                            if !allowed {
-                                bus.publish(
-                                    topics::TOPIC_POLICY_DECISION,
-                                    &json!({
-                                        "action": "fs.patch",
-                                        "allow": false,
-                                        "require_capability": "fs|fs:patch",
-                                        "explain": {"reason":"lease_required"}
-                                    }),
-                                );
-                                Ok(json!({"error":"lease required: fs or fs:patch"}))
-                            } else {
-                                match host.run_tool("fs.patch", &input).await {
-                                    Ok(v) => {
-                                        let path_s =
-                                            v.get("path").and_then(|x| x.as_str()).unwrap_or("");
-                                        bus.publish(
-                                            topics::TOPIC_PROJECTS_FILE_WRITTEN,
-                                            &json!({"path": path_s, "sha256": v.get("sha256") }),
-                                        );
-                                        Ok(v)
-                                    }
-                                    Err(e) => {
-                                        Ok(json!({"error":"runtime","detail": e.to_string()}))
-                                    }
-                                }
-                            }
-                        } else if kind == "app.vscode.open" {
-                            let allowed =
-                                if !policy.lock().await.evaluate_action("app.vscode.open").allow {
-                                    let has_vscode = kernel
-                                        .find_valid_lease_async("local", "io:app:vscode")
-                                        .await
-                                        .ok()
-                                        .flatten()
-                                        .is_some();
-                                    if has_vscode {
-                                        true
-                                    } else {
-                                        kernel
-                                            .find_valid_lease_async("local", "io:app")
-                                            .await
-                                            .ok()
-                                            .flatten()
-                                            .is_some()
-                                    }
-                                } else {
-                                    true
-                                };
-                            if !allowed {
-                                bus.publish(
-                                    topics::TOPIC_POLICY_DECISION,
-                                    &json!({
-                                        "action": "app.vscode.open",
-                                        "allow": false,
-                                        "require_capability": "io:app:vscode|io:app",
-                                        "explain": {"reason":"lease_required"}
-                                    }),
-                                );
-                                Ok(json!({"error":"lease required: io:app:vscode or io:app"}))
-                            } else {
-                                match host.run_tool("app.vscode.open", &input).await {
-                                    Ok(v) => {
-                                        let path_s = input
-                                            .get("path")
-                                            .and_then(|x| x.as_str())
-                                            .unwrap_or("");
-                                        bus.publish(
-                                            topics::TOPIC_APPS_VSCODE_OPENED,
-                                            &json!({"path": path_s }),
-                                        );
-                                        Ok(v)
-                                    }
-                                    Err(e) => {
-                                        Ok(json!({"error":"runtime","detail": e.to_string()}))
-                                    }
-                                }
-                            }
-                        } else {
-                            execute_dynamic_action(&state, &kind, &input).await
-                        };
-                        let out = match action_result {
-                            Ok(value) => value,
+                        ctx.bus.publish(&running_env.kind, &running_env.payload);
+
+                        let action_result = ctx.handle_action(&state, &id, &kind, &input).await;
+                        let ActionOutcome {
+                            output,
+                            posture,
+                            guard,
+                        } = match action_result {
+                            Ok(outcome) => outcome,
                             Err(err) => {
-                                handle_action_failure(&kernel, &bus, &id, &kind, err).await;
+                                handle_action_failure(&ctx.kernel, &ctx.bus, &id, &kind, err).await;
                                 continue;
                             }
                         };
-                        let _ = kernel
-                            .update_action_result_async(id.clone(), Some(out.clone()), None)
+
+                        let output_for_kernel = output.clone();
+                        let _ = ctx
+                            .kernel
+                            .update_action_result_async(id.clone(), Some(output_for_kernel), None)
                             .await;
-                        let _ = kernel.set_action_state_async(&id, "completed").await;
-                        let now2 = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-                        let env2 = arw_events::Envelope {
-                            time: now2,
+                        let _ = ctx.kernel.set_action_state_async(&id, "completed").await;
+
+                        let posture_value = posture.unwrap_or_else(util::effective_posture);
+                        let mut completed_payload = json!({
+                            "id": id.clone(),
+                            "output": output,
+                            "posture": posture_value,
+                        });
+                        if let Some(guard_meta) = guard {
+                            if let Value::Object(ref mut obj) = completed_payload {
+                                obj.insert("guard".into(), guard_meta.into_value());
+                            }
+                        }
+                        let completed_at =
+                            chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+                        let completed_env = arw_events::Envelope {
+                            time: completed_at,
                             kind: topics::TOPIC_ACTIONS_COMPLETED.into(),
-                            payload: json!({"id": env.payload["id"], "output": out}),
+                            payload: completed_payload,
                             policy: None,
                             ce: None,
                         };
-                        bus.publish(&env2.kind, &env2.payload);
-                        let _ = kernel
+                        ctx.bus.publish(&completed_env.kind, &completed_env.payload);
+
+                        let _ = ctx
+                            .kernel
                             .append_contribution_async(
                                 "local",
                                 "task.complete",
@@ -287,74 +97,369 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
     )
 }
 
-struct EgressRecord<'a> {
-    decision: &'static str,
-    reason: Option<&'a str>,
-    dest_host: Option<&'a str>,
-    dest_port: Option<i64>,
-    protocol: Option<&'a str>,
-    bytes_in: Option<i64>,
-    bytes_out: Option<i64>,
-    corr_id: Option<&'a str>,
+#[derive(Clone)]
+struct WorkerContext {
+    bus: arw_events::Bus,
+    kernel: arw_kernel::Kernel,
+    policy: Arc<tokio::sync::Mutex<Policy>>,
+    host: Arc<dyn arw_wasi::ToolHost>,
 }
 
-fn ledger_enabled() -> bool {
-    matches!(
-        std::env::var("ARW_EGRESS_LEDGER_ENABLE").ok().as_deref(),
-        Some("1")
-    )
-}
+impl WorkerContext {
+    fn new(state: &AppState) -> Self {
+        Self {
+            bus: state.bus(),
+            kernel: state.kernel().clone(),
+            policy: state.policy(),
+            host: state.host(),
+        }
+    }
 
-async fn append_egress_entry_async(
-    kernel: &arw_kernel::Kernel,
-    posture: Option<&str>,
-    record: &EgressRecord<'_>,
-    force: bool,
-) -> Option<i64> {
-    if force || ledger_enabled() {
-        kernel
-            .append_egress_async(
-                record.decision.to_string(),
-                record.reason.map(|s| s.to_string()),
-                record.dest_host.map(|s| s.to_string()),
-                record.dest_port,
-                record.protocol.map(|s| s.to_string()),
-                record.bytes_in,
-                record.bytes_out,
-                record.corr_id.map(|s| s.to_string()),
-                None,
-                posture.map(|s| s.to_string()),
-                None,
+    async fn handle_action(
+        &self,
+        state: &AppState,
+        id: &str,
+        kind: &str,
+        input: &Value,
+    ) -> Result<ActionOutcome, ToolError> {
+        match kind {
+            k if k.starts_with("net.http.") => self.handle_http_action(id, k, input).await,
+            "fs.patch" => self.handle_fs_patch(input).await,
+            "app.vscode.open" => self.handle_app_vscode_open(input).await,
+            _ => execute_dynamic_action(state, kind, input)
+                .await
+                .map(ActionOutcome::new),
+        }
+    }
+
+    async fn handle_http_action(
+        &self,
+        id: &str,
+        kind: &str,
+        input: &Value,
+    ) -> Result<ActionOutcome, ToolError> {
+        let mut input_with_headers = input.clone();
+        let project = std::env::var("ARW_PROJECT_ID").ok();
+        if let Some(obj) = input_with_headers.as_object_mut() {
+            let headers = obj.entry("headers").or_insert_with(|| json!({}));
+            if let Some(map) = headers.as_object_mut() {
+                map.insert("X-ARW-Corr".to_string(), json!(id));
+                if let Some(ref project_id) = project {
+                    map.insert("X-ARW-Project".to_string(), json!(project_id));
+                }
+                if !map.contains_key("X-ARW-Method") {
+                    if let Some(method) = kind.rsplit('.').next() {
+                        map.insert("X-ARW-Method".to_string(), json!(method.to_uppercase()));
+                    }
+                }
+            }
+        }
+
+        let guard = self
+            .guard_action("net.http.", &["net:http", "io:egress"])
+            .await;
+        if !guard.allowed {
+            let posture = util::effective_posture();
+            let record = EgressRecord {
+                decision: "deny",
+                reason: Some("no_lease"),
+                dest_host: None,
+                dest_port: None,
+                protocol: Some("http"),
+                bytes_in: None,
+                bytes_out: None,
+                corr_id: Some(id),
+                project: project.as_deref(),
+                meta: None,
+            };
+            self.record_egress(Some(posture.as_str()), &record, true, true)
+                .await;
+            return Ok(ActionOutcome::new(
+                json!({"error":"lease required: net:http or io:egress"}),
             )
-            .await
-            .ok()
-    } else {
+            .with_posture(posture)
+            .with_guard(guard));
+        }
+
+        match self.host.run_tool("http.fetch", &input_with_headers).await {
+            Ok(value) => {
+                let host_name = value.get("dest_host").and_then(|x| x.as_str());
+                let port = value.get("dest_port").and_then(|x| x.as_i64());
+                let proto = value.get("protocol").and_then(|x| x.as_str());
+                let bytes_in = value.get("bytes_in").and_then(|x| x.as_i64());
+                let bytes_out = value.get("bytes_out").and_then(|x| x.as_i64());
+                let posture = util::effective_posture();
+                let record = EgressRecord {
+                    decision: "allow",
+                    reason: Some("ok"),
+                    dest_host: host_name,
+                    dest_port: port,
+                    protocol: proto,
+                    bytes_in,
+                    bytes_out,
+                    corr_id: Some(id),
+                    project: project.as_deref(),
+                    meta: None,
+                };
+                self.record_egress(Some(posture.as_str()), &record, false, true)
+                    .await;
+                Ok(ActionOutcome::new(value)
+                    .with_posture(posture)
+                    .with_guard(guard))
+            }
+            Err(arw_wasi::WasiError::Denied {
+                reason,
+                dest_host,
+                dest_port,
+                protocol,
+                ..
+            }) => {
+                let posture = util::effective_posture();
+                let record = EgressRecord {
+                    decision: "deny",
+                    reason: Some(reason.as_str()),
+                    dest_host: dest_host.as_deref(),
+                    dest_port,
+                    protocol: protocol.as_deref(),
+                    bytes_in: None,
+                    bytes_out: None,
+                    corr_id: Some(id),
+                    project: project.as_deref(),
+                    meta: None,
+                };
+                self.record_egress(Some(posture.as_str()), &record, false, true)
+                    .await;
+                Ok(
+                    ActionOutcome::new(json!({"error":"denied","reason": reason}))
+                        .with_posture(posture)
+                        .with_guard(guard),
+                )
+            }
+            Err(err) => Ok(ActionOutcome::new(
+                json!({"error":"runtime","detail": err.to_string()}),
+            )
+            .with_guard(guard)),
+        }
+    }
+
+    async fn handle_fs_patch(&self, input: &Value) -> Result<ActionOutcome, ToolError> {
+        let guard = self.guard_action("fs.patch", &["fs", "fs:patch"]).await;
+        if !guard.allowed {
+            self.bus.publish(
+                topics::TOPIC_POLICY_DECISION,
+                &json!({
+                    "action": "fs.patch",
+                    "allow": false,
+                    "require_capability": "fs|fs:patch",
+                    "explain": {"reason":"lease_required"}
+                }),
+            );
+            return Ok(
+                ActionOutcome::new(json!({"error":"lease required: fs or fs:patch"}))
+                    .with_guard(guard),
+            );
+        }
+
+        match self.host.run_tool("fs.patch", input).await {
+            Ok(value) => {
+                let path_s = value.get("path").and_then(|x| x.as_str()).unwrap_or("");
+                self.bus.publish(
+                    topics::TOPIC_PROJECTS_FILE_WRITTEN,
+                    &json!({"path": path_s, "sha256": value.get("sha256") }),
+                );
+                Ok(ActionOutcome::new(value)
+                    .with_posture(util::effective_posture())
+                    .with_guard(guard))
+            }
+            Err(err) => Ok(ActionOutcome::new(
+                json!({"error":"runtime","detail": err.to_string()}),
+            )
+            .with_guard(guard)),
+        }
+    }
+
+    async fn handle_app_vscode_open(&self, input: &Value) -> Result<ActionOutcome, ToolError> {
+        let guard = self
+            .guard_action("app.vscode.open", &["io:app:vscode", "io:app"])
+            .await;
+        if !guard.allowed {
+            self.bus.publish(
+                topics::TOPIC_POLICY_DECISION,
+                &json!({
+                    "action": "app.vscode.open",
+                    "allow": false,
+                    "require_capability": "io:app:vscode|io:app",
+                    "explain": {"reason":"lease_required"}
+                }),
+            );
+            return Ok(ActionOutcome::new(
+                json!({"error":"lease required: io:app:vscode or io:app"}),
+            )
+            .with_guard(guard));
+        }
+
+        match self.host.run_tool("app.vscode.open", input).await {
+            Ok(value) => {
+                let path_s = input.get("path").and_then(|x| x.as_str()).unwrap_or("");
+                self.bus
+                    .publish(topics::TOPIC_APPS_VSCODE_OPENED, &json!({"path": path_s }));
+                Ok(ActionOutcome::new(value)
+                    .with_posture(util::effective_posture())
+                    .with_guard(guard))
+            }
+            Err(err) => Ok(ActionOutcome::new(
+                json!({"error":"runtime","detail": err.to_string()}),
+            )
+            .with_guard(guard)),
+        }
+    }
+
+    async fn guard_action(&self, action: &str, capabilities: &[&str]) -> ActionGuard {
+        let decision = self.policy.lock().await.evaluate_action(action);
+        if decision.allow {
+            return ActionGuard {
+                allowed: true,
+                policy_allow: true,
+                required_capabilities: Vec::new(),
+                lease: None,
+            };
+        }
+
+        let required = capabilities.iter().map(|c| c.to_string()).collect();
+        match self.has_any_capability(capabilities).await {
+            Some(lease) => ActionGuard {
+                allowed: true,
+                policy_allow: false,
+                required_capabilities: required,
+                lease: Some(lease),
+            },
+            None => ActionGuard {
+                allowed: false,
+                policy_allow: false,
+                required_capabilities: required,
+                lease: None,
+            },
+        }
+    }
+
+    async fn has_any_capability(&self, capabilities: &[&str]) -> Option<LeaseSummary> {
+        for capability in capabilities {
+            if let Ok(Some(lease_json)) = self
+                .kernel
+                .find_valid_lease_async("local", capability)
+                .await
+            {
+                if let Some(summary) = LeaseSummary::from_value(&lease_json) {
+                    return Some(summary);
+                }
+            }
+        }
         None
     }
+
+    async fn record_egress(
+        &self,
+        posture: Option<&str>,
+        record: &EgressRecord<'_>,
+        force: bool,
+        emit_event: bool,
+    ) -> Option<i64> {
+        egress_log::record(
+            Some(&self.kernel),
+            &self.bus,
+            posture,
+            record,
+            force,
+            emit_event,
+        )
+        .await
+    }
 }
 
-fn publish_egress_event(
-    bus: &arw_events::Bus,
-    posture: &str,
-    ledger_id: Option<i64>,
-    record: &EgressRecord<'_>,
-) {
-    let mut payload = serde_json::Map::new();
-    payload.insert("id".into(), json!(ledger_id));
-    payload.insert("decision".into(), json!(record.decision));
-    if let Some(reason) = record.reason {
-        payload.insert("reason".into(), json!(reason));
+struct ActionOutcome {
+    output: Value,
+    posture: Option<String>,
+    guard: Option<ActionGuard>,
+}
+
+impl ActionOutcome {
+    fn new(output: Value) -> Self {
+        Self {
+            output,
+            posture: None,
+            guard: None,
+        }
     }
-    payload.insert("dest_host".into(), json!(record.dest_host));
-    payload.insert("dest_port".into(), json!(record.dest_port));
-    payload.insert("protocol".into(), json!(record.protocol));
-    payload.insert("bytes_in".into(), json!(record.bytes_in));
-    payload.insert("corr_id".into(), json!(record.corr_id));
-    payload.insert("posture".into(), json!(posture));
-    bus.publish(
-        topics::TOPIC_EGRESS_LEDGER_APPENDED,
-        &Value::Object(payload),
-    );
+
+    fn with_posture(mut self, posture: String) -> Self {
+        self.posture = Some(posture);
+        self
+    }
+
+    fn with_guard(mut self, guard: ActionGuard) -> Self {
+        self.guard = Some(guard);
+        self
+    }
+}
+
+#[derive(Clone)]
+struct ActionGuard {
+    allowed: bool,
+    policy_allow: bool,
+    required_capabilities: Vec<String>,
+    lease: Option<LeaseSummary>,
+}
+
+impl ActionGuard {
+    fn into_value(self) -> Value {
+        let lease_value = self
+            .lease
+            .map(|lease| lease.into_value())
+            .unwrap_or(Value::Null);
+        json!({
+            "allowed": self.allowed,
+            "policy_allow": self.policy_allow,
+            "required_capabilities": self.required_capabilities,
+            "lease": lease_value,
+        })
+    }
+}
+
+#[derive(Clone)]
+struct LeaseSummary {
+    id: String,
+    subject: Option<String>,
+    capability: String,
+    scope: Option<String>,
+    ttl_until: String,
+}
+
+impl LeaseSummary {
+    fn from_value(value: &Value) -> Option<Self> {
+        Some(Self {
+            id: value.get("id")?.as_str()?.to_string(),
+            subject: value
+                .get("subject")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            capability: value.get("capability")?.as_str()?.to_string(),
+            scope: value
+                .get("scope")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string()),
+            ttl_until: value.get("ttl_until")?.as_str()?.to_string(),
+        })
+    }
+
+    fn into_value(self) -> Value {
+        json!({
+            "id": self.id,
+            "subject": self.subject,
+            "capability": self.capability,
+            "scope": self.scope,
+            "ttl_until": self.ttl_until,
+        })
+    }
 }
 
 struct DeniedInfo {
@@ -468,9 +573,18 @@ async fn handle_action_failure(
             bytes_in: None,
             bytes_out: None,
             corr_id: Some(id),
+            project: None,
+            meta: None,
         };
-        let entry = append_egress_entry_async(kernel, Some(posture.as_str()), &record, false).await;
-        publish_egress_event(bus, &posture, entry, &record);
+        let _ = egress_log::record(
+            Some(kernel),
+            bus,
+            Some(posture.as_str()),
+            &record,
+            false,
+            true,
+        )
+        .await;
     }
 }
 
@@ -504,22 +618,79 @@ mod tests {
     use crate::AppState;
     use arw_policy::PolicyEngine;
     use arw_topics as topics;
+    use async_trait::async_trait;
+    use chrono::{Duration as ChronoDuration, Utc};
+    use once_cell::sync::Lazy;
     use serde_json::json;
-    use std::sync::Arc;
+    use std::sync::{Arc, Mutex as StdMutex, MutexGuard as StdMutexGuard};
     use tokio::sync::Mutex;
     use tokio::time::{timeout, Duration};
+    use uuid::Uuid;
 
     async fn build_state(path: &std::path::Path) -> AppState {
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
+        build_state_with_host(path, host).await
+    }
+
+    async fn build_state_with_host(
+        path: &std::path::Path,
+        host: Arc<dyn arw_wasi::ToolHost>,
+    ) -> AppState {
         std::env::set_var("ARW_STATE_DIR", path.display().to_string());
         let bus = arw_events::Bus::new_with_replay(32, 32);
         let kernel = arw_kernel::Kernel::open(path).expect("init kernel");
         let policy = PolicyEngine::load_from_env();
         let policy_arc = Arc::new(Mutex::new(policy));
-        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
         AppState::builder(bus, kernel, policy_arc, host, true)
             .with_sse_capacity(16)
             .build()
             .await
+    }
+
+    static ENV_MUTEX: Lazy<StdMutex<()>> = Lazy::new(|| StdMutex::new(()));
+
+    struct EnvVarGuard {
+        key: &'static str,
+        _lock: StdMutexGuard<'static, ()>,
+    }
+
+    impl EnvVarGuard {
+        fn set(key: &'static str, value: &str) -> Self {
+            let lock = ENV_MUTEX.lock().expect("env mutex poisoned");
+            std::env::set_var(key, value);
+            Self { key, _lock: lock }
+        }
+    }
+
+    impl Drop for EnvVarGuard {
+        fn drop(&mut self) {
+            std::env::remove_var(self.key);
+        }
+    }
+
+    #[derive(Clone, Default)]
+    struct AllowingHost;
+
+    #[async_trait]
+    impl arw_wasi::ToolHost for AllowingHost {
+        async fn run_tool(
+            &self,
+            id: &str,
+            _input: &serde_json::Value,
+        ) -> Result<serde_json::Value, arw_wasi::WasiError> {
+            match id {
+                "http.fetch" => Ok(json!({
+                    "dest_host": "example.com",
+                    "dest_port": 443,
+                    "protocol": "https",
+                    "bytes_in": 2048,
+                    "bytes_out": 512,
+                })),
+                "fs.patch" => Ok(json!({"path": "/tmp/file.txt", "sha256": "abc123"})),
+                "app.vscode.open" => Ok(json!({"opened": true})),
+                _ => Err(arw_wasi::WasiError::Unsupported(id.to_string())),
+            }
+        }
     }
 
     #[tokio::test]
@@ -557,5 +728,207 @@ mod tests {
         assert_eq!(stored.state, "failed");
         let error_text = stored.error.unwrap_or_default();
         assert!(error_text.contains("unsupported"));
+    }
+
+    #[tokio::test]
+    async fn guard_action_respects_leases() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = build_state(temp.path()).await;
+        let ctx = WorkerContext::new(&state);
+
+        assert!(
+            !ctx.guard_action("fs.patch", &["fs", "fs:patch"])
+                .await
+                .allowed
+        );
+
+        let ttl = (Utc::now() + ChronoDuration::minutes(5)).to_rfc3339();
+        state
+            .kernel()
+            .insert_lease_async(
+                Uuid::new_v4().to_string(),
+                "local".into(),
+                "fs".into(),
+                None,
+                ttl,
+                None,
+                None,
+            )
+            .await
+            .expect("insert lease");
+
+        assert!(
+            ctx.guard_action("fs.patch", &["fs", "fs:patch"])
+                .await
+                .allowed
+        );
+    }
+
+    #[tokio::test]
+    async fn http_get_records_egress_on_success() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let _ledger_guard = EnvVarGuard::set("ARW_EGRESS_LEDGER_ENABLE", "1");
+        let state = build_state_with_host(temp.path(), Arc::new(AllowingHost::default())).await;
+        let ctx = WorkerContext::new(&state);
+
+        let bus = state.bus();
+        let mut rx = bus.subscribe_filtered(
+            vec![topics::TOPIC_EGRESS_LEDGER_APPENDED.to_string()],
+            Some(8),
+        );
+
+        let ttl = (Utc::now() + ChronoDuration::minutes(5)).to_rfc3339();
+        state
+            .kernel()
+            .insert_lease_async(
+                Uuid::new_v4().to_string(),
+                "local".into(),
+                "net:http".into(),
+                None,
+                ttl,
+                None,
+                None,
+            )
+            .await
+            .expect("insert lease");
+
+        let outcome = ctx
+            .handle_http_action(
+                "action-allow",
+                "net.http.get",
+                &json!({"url": "https://example.com", "headers": {}}),
+            )
+            .await
+            .expect("http fetch");
+        assert!(outcome.output.get("error").is_none());
+        assert_eq!(outcome.guard.as_ref().map(|g| g.allowed), Some(true));
+
+        let env = timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("event recv")
+            .expect("event value");
+        assert_eq!(env.kind, topics::TOPIC_EGRESS_LEDGER_APPENDED);
+        assert_eq!(env.payload["decision"].as_str(), Some("allow"));
+        assert_eq!(env.payload["corr_id"].as_str(), Some("action-allow"));
+
+        let ledger = state
+            .kernel()
+            .list_egress_async(1)
+            .await
+            .expect("ledger list");
+        let entry = ledger.first().expect("entry");
+        assert_eq!(entry["decision"].as_str(), Some("allow"));
+        assert_eq!(entry["corr_id"].as_str(), Some("action-allow"));
+        assert_eq!(entry["bytes_in"].as_i64(), Some(2048));
+        assert_eq!(entry["bytes_out"].as_i64(), Some(512));
+    }
+
+    #[tokio::test]
+    async fn http_get_denied_without_lease_records_event() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let _ledger_guard = EnvVarGuard::set("ARW_EGRESS_LEDGER_ENABLE", "0");
+        let state = build_state_with_host(temp.path(), Arc::new(AllowingHost::default())).await;
+        let ctx = WorkerContext::new(&state);
+
+        let bus = state.bus();
+        let mut rx = bus.subscribe_filtered(
+            vec![topics::TOPIC_EGRESS_LEDGER_APPENDED.to_string()],
+            Some(8),
+        );
+
+        let outcome = ctx
+            .handle_http_action(
+                "action-deny",
+                "net.http.get",
+                &json!({"url": "https://example.com", "headers": {}}),
+            )
+            .await
+            .expect("http fetch");
+        assert_eq!(
+            outcome.output.get("error").and_then(|v| v.as_str()),
+            Some("lease required: net:http or io:egress"),
+        );
+        assert_eq!(outcome.guard.as_ref().map(|g| g.allowed), Some(false));
+
+        let env = timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("event recv")
+            .expect("event value");
+        assert_eq!(env.kind, topics::TOPIC_EGRESS_LEDGER_APPENDED);
+        assert_eq!(env.payload["decision"].as_str(), Some("deny"));
+        assert_eq!(env.payload["reason"].as_str(), Some("no_lease"));
+        assert_eq!(env.payload["corr_id"].as_str(), Some("action-deny"));
+
+        let ledger = state
+            .kernel()
+            .list_egress_async(1)
+            .await
+            .expect("ledger list");
+        let entry = ledger.first().expect("entry");
+        assert_eq!(entry["decision"].as_str(), Some("deny"));
+        assert_eq!(entry["reason"].as_str(), Some("no_lease"));
+        assert_eq!(entry["corr_id"].as_str(), Some("action-deny"));
+    }
+
+    #[tokio::test]
+    async fn completed_event_includes_guard_metadata() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let _ledger_guard = EnvVarGuard::set("ARW_EGRESS_LEDGER_ENABLE", "0");
+        let state = build_state_with_host(temp.path(), Arc::new(AllowingHost::default())).await;
+
+        let mut rx = state
+            .bus()
+            .subscribe_filtered(vec![topics::TOPIC_ACTIONS_COMPLETED.to_string()], Some(8));
+
+        let ttl = (Utc::now() + ChronoDuration::minutes(5)).to_rfc3339();
+        state
+            .kernel()
+            .insert_lease_async(
+                Uuid::new_v4().to_string(),
+                "local".into(),
+                "net:http".into(),
+                None,
+                ttl,
+                None,
+                None,
+            )
+            .await
+            .expect("insert lease");
+
+        let worker = start_local_worker(state.clone());
+
+        let action_id = Uuid::new_v4().to_string();
+        state
+            .kernel()
+            .insert_action_async(
+                &action_id,
+                "net.http.get",
+                &json!({"url": "https://example.com", "headers": {}}),
+                None,
+                None,
+                "queued",
+            )
+            .await
+            .expect("enqueue action");
+
+        let env = timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("completed event recv")
+            .expect("event value");
+        let (_, _, handle) = worker.into_inner();
+        handle.abort();
+
+        assert_eq!(env.kind, topics::TOPIC_ACTIONS_COMPLETED);
+        assert_eq!(env.payload["id"].as_str(), Some(action_id.as_str()));
+        assert!(env.payload["posture"].as_str().is_some());
+        assert_eq!(env.payload["guard"]["allowed"].as_bool(), Some(true));
+        assert_eq!(
+            env.payload["guard"]["lease"]["capability"].as_str(),
+            Some("net:http"),
+        );
+        assert!(env.payload["guard"]["required_capabilities"]
+            .as_array()
+            .map(|v| !v.is_empty())
+            .unwrap_or(false));
     }
 }

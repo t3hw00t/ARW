@@ -14,6 +14,7 @@ pub mod config;
 mod context_loop;
 mod coverage;
 mod distill;
+mod egress_log;
 mod egress_policy;
 mod egress_proxy;
 mod experiments;

@@ -2,15 +2,15 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::http_timeout;
-use arw_topics as topics;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::Mutex;
 use url::Url;
 
 use crate::{
+    egress_log::{self, EgressRecord},
     tools::{self, ToolError},
-    util, AppState,
+    AppState,
 };
 
 const HISTORY_LIMIT: usize = 48;
@@ -561,46 +561,33 @@ async fn record_egress(
         Ok(u) => u,
         Err(_) => return,
     };
-    let host = parsed.host_str().map(|s| s.to_string());
+    let host_owned = parsed.host_str().map(|s| s.to_string());
     let port = parsed.port().map(|p| p as i64);
-    let protocol = Some(parsed.scheme().to_string());
-    let corr_id = uuid::Uuid::new_v4().to_string();
-    let posture = util::effective_posture();
+    let protocol_owned = parsed.scheme().to_string();
+    let corr_id_owned = uuid::Uuid::new_v4().to_string();
 
-    let ledger_id = state
-        .kernel()
-        .append_egress_async(
-            decision.to_string(),
-            reason.map(|r| r.to_string()),
-            host.clone(),
-            port,
-            protocol.clone(),
-            bytes_in,
-            None,
-            Some(corr_id.clone()),
-            None,
-            Some(posture.clone()),
-            None,
-        )
-        .await
-        .ok();
+    let record = EgressRecord {
+        decision,
+        reason,
+        dest_host: host_owned.as_deref(),
+        dest_port: port,
+        protocol: Some(protocol_owned.as_str()),
+        bytes_in,
+        bytes_out: None,
+        corr_id: Some(corr_id_owned.as_str()),
+        project: None,
+        meta: None,
+    };
 
-    let mut payload = serde_json::Map::new();
-    payload.insert("id".into(), json!(ledger_id));
-    payload.insert("decision".into(), json!(decision));
-    if let Some(r) = reason {
-        payload.insert("reason".into(), json!(r));
-    }
-    payload.insert("dest_host".into(), json!(host));
-    payload.insert("dest_port".into(), json!(port));
-    payload.insert("protocol".into(), json!(protocol));
-    payload.insert("bytes_in".into(), json!(bytes_in));
-    payload.insert("corr_id".into(), json!(corr_id));
-    payload.insert("posture".into(), json!(posture));
-    state.bus().publish(
-        topics::TOPIC_EGRESS_LEDGER_APPENDED,
-        &Value::Object(payload),
-    );
+    egress_log::record(
+        state.kernel_if_enabled(),
+        &state.bus(),
+        None,
+        &record,
+        false,
+        true,
+    )
+    .await;
 }
 
 #[cfg(test)]

@@ -1,3 +1,4 @@
+use crate::egress_log::{self, EgressRecord};
 use crate::egress_policy::{capability_candidates, lease_grant, reason_code, DenyReason};
 use crate::{egress_policy, http_timeout, util::effective_posture, AppState};
 use bytes::Bytes;
@@ -16,7 +17,6 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-use arw_topics as topics;
 type ProxyBody = BoxBody<Bytes, Infallible>;
 
 #[allow(dead_code)]
@@ -679,64 +679,6 @@ async fn handle_http_forward(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn maybe_log_egress(
-    state: &AppState,
-    decision: &str,
-    reason: Option<&str>,
-    host: Option<&str>,
-    port: Option<u16>,
-    proto: Option<&str>,
-    bytes_in: Option<i64>,
-    bytes_out: Option<i64>,
-    corr_id: Option<&str>,
-    proj: Option<&str>,
-    meta: Option<&serde_json::Value>,
-) -> anyhow::Result<i64> {
-    let mut row_id: i64 = 0;
-    if std::env::var("ARW_EGRESS_LEDGER_ENABLE").ok().as_deref() == Some("1")
-        && state.kernel_enabled()
-    {
-        if let Some(kernel) = state.kernel_if_enabled() {
-            row_id = kernel
-                .append_egress_async(
-                    decision.to_string(),
-                    reason.map(|s| s.to_string()),
-                    host.map(|s| s.to_string()),
-                    port.map(|p| p as i64),
-                    proto.map(|s| s.to_string()),
-                    bytes_in,
-                    bytes_out,
-                    corr_id.map(|s| s.to_string()),
-                    proj.map(|s| s.to_string()),
-                    Some(effective_posture()),
-                    meta.cloned(),
-                )
-                .await?;
-        }
-    }
-    // Publish SSE event (CloudEvents metadata applied by bus)
-    let posture = effective_posture();
-    state.bus().publish(
-        topics::TOPIC_EGRESS_LEDGER_APPENDED,
-        &serde_json::json!({
-            "id": if row_id > 0 { serde_json::Value::from(row_id) } else { serde_json::Value::Null },
-            "decision": decision,
-            "reason": reason,
-            "dest_host": host,
-            "dest_port": port,
-            "protocol": proto,
-            "bytes_in": bytes_in,
-            "bytes_out": bytes_out,
-            "corr_id": corr_id,
-            "proj": proj,
-            "posture": posture,
-            "meta": meta.cloned().unwrap_or(serde_json::Value::Null)
-        }),
-    );
-    Ok(row_id)
-}
-
-#[allow(clippy::too_many_arguments)]
 async fn log_egress_event(
     state: &AppState,
     decision: &str,
@@ -750,21 +692,26 @@ async fn log_egress_event(
     proj: Option<&str>,
     meta: Option<serde_json::Value>,
 ) {
-    if let Err(err) = maybe_log_egress(
-        state,
+    let posture = effective_posture();
+    let record = EgressRecord {
         decision,
         reason,
-        host,
-        port,
-        proto,
+        dest_host: host,
+        dest_port: port.map(|p| p as i64),
+        protocol: proto,
         bytes_in,
         bytes_out,
         corr_id,
-        proj,
-        meta.as_ref(),
+        project: proj,
+        meta: meta.as_ref(),
+    };
+    egress_log::record(
+        state.kernel_if_enabled(),
+        &state.bus(),
+        Some(posture.as_str()),
+        &record,
+        false,
+        true,
     )
-    .await
-    {
-        warn!(?err, "failed to append egress ledger entry");
-    }
+    .await;
 }
