@@ -20,6 +20,7 @@ Type: How‑to
 
 ## UI
 - Open `/admin/debug` and toggle “Insights”.
+- See Snappy latency detail in the Hub metrics sidecar (top protected routes + budget breach indicator) streaming from the `snappy` read-model.
 - See Event totals and the top 3 routes by p95 latency (also shows EWMA and error counts).
 - Copy the JSON snapshot via “Copy stats”.
 

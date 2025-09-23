@@ -900,4 +900,55 @@ mod tests {
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         assert!(value["items"].as_array().is_some());
     }
+
+    #[tokio::test]
+    async fn state_projects_tree_returns_entries() {
+        let temp = tempdir().expect("tempdir");
+        let state_dir = temp.path().display().to_string();
+
+        let projects_root = temp.path().join("projects");
+        std::fs::create_dir_all(projects_root.join("alpha/docs")).expect("create project dir");
+        std::fs::write(projects_root.join("alpha/docs/info.txt"), "data").expect("write file");
+
+        let mut env = EnvContext::new();
+        env.set("ARW_STATE_DIR", &state_dir);
+        env.set("ARW_ADMIN_TOKEN", "secret");
+
+        let mut headers = HeaderMap::new();
+        headers.insert("X-ARW-Admin", HeaderValue::from_static("secret"));
+
+        // Root listing
+        let response = state_projects_tree(
+            headers.clone(),
+            Path("alpha".to_string()),
+            Query(StateProjectTreeQuery { path: None }),
+        )
+        .await
+        .into_response();
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+        let items = value["items"].as_array().expect("items array");
+        assert!(items.iter().any(|it| it["name"].as_str() == Some("docs")));
+
+        // Nested path listing
+        let response = state_projects_tree(
+            headers,
+            Path("alpha".to_string()),
+            Query(StateProjectTreeQuery {
+                path: Some("docs".to_string()),
+            }),
+        )
+        .await
+        .into_response();
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes nested");
+        let value: Value = serde_json::from_slice(&bytes).expect("json nested");
+        let items = value["items"].as_array().expect("items array nested");
+        assert!(items
+            .iter()
+            .any(|it| it["name"].as_str() == Some("info.txt")));
+    }
 }
