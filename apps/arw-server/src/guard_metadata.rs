@@ -33,23 +33,21 @@ pub(crate) fn sanitize_guard_value(value: &Value) -> Value {
         if let Some(v) = map.get("required_capabilities") {
             sanitized.insert("required_capabilities".into(), v.clone());
         }
-        if let Some(lease) = map.get("lease") {
-            if let Value::Object(lease_map) = lease {
-                let mut redacted = Map::new();
-                if let Some(cap) = lease_map.get("capability") {
-                    redacted.insert("capability".into(), cap.clone());
+        if let Some(Value::Object(lease_map)) = map.get("lease") {
+            let mut redacted = Map::new();
+            if let Some(cap) = lease_map.get("capability") {
+                redacted.insert("capability".into(), cap.clone());
+            }
+            if let Some(ttl) = lease_map.get("ttl_until") {
+                redacted.insert("ttl_until".into(), ttl.clone());
+            }
+            if let Some(scope) = lease_map.get("scope") {
+                if !scope.is_null() {
+                    redacted.insert("scope".into(), scope.clone());
                 }
-                if let Some(ttl) = lease_map.get("ttl_until") {
-                    redacted.insert("ttl_until".into(), ttl.clone());
-                }
-                if let Some(scope) = lease_map.get("scope") {
-                    if !scope.is_null() {
-                        redacted.insert("scope".into(), scope.clone());
-                    }
-                }
-                if !redacted.is_empty() {
-                    sanitized.insert("lease".into(), Value::Object(redacted));
-                }
+            }
+            if !redacted.is_empty() {
+                sanitized.insert("lease".into(), Value::Object(redacted));
             }
         }
         Value::Object(sanitized)

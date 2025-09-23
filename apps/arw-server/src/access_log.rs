@@ -90,7 +90,7 @@ pub async fn access_log_mw(req: Request<axum::body::Body>, next: Next) -> Respon
     let dur_ms = started.elapsed().as_millis() as u64;
     let status = res.status().as_u16();
     let n = COUNTER.fetch_add(1, Ordering::Relaxed) + 1;
-    if CFG.sample_n > 1 && n % CFG.sample_n != 0 {
+    if CFG.sample_n > 1 && !n.is_multiple_of(CFG.sample_n) {
         return res;
     }
     let mut obj = serde_json::json!({

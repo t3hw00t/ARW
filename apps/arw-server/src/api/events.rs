@@ -273,15 +273,11 @@ mod tests {
 
     fn parse_sse_events(buffer: &mut String) -> Vec<SseRecord> {
         let mut out = Vec::new();
-        loop {
-            if let Some(idx) = buffer.find("\n\n") {
-                let event_chunk = buffer[..idx].to_string();
-                *buffer = buffer[idx + 2..].to_string();
-                if !event_chunk.trim().is_empty() {
-                    out.push(SseRecord::from_chunk(&event_chunk));
-                }
-            } else {
-                break;
+        while let Some(idx) = buffer.find("\n\n") {
+            let event_chunk = buffer[..idx].to_string();
+            *buffer = buffer[idx + 2..].to_string();
+            if !event_chunk.trim().is_empty() {
+                out.push(SseRecord::from_chunk(&event_chunk));
             }
         }
         out
@@ -385,8 +381,19 @@ mod tests {
             .as_ref()
             .and_then(|d| serde_json::from_str::<serde_json::Value>(d).ok())
             .expect("patch data json");
-        assert_eq!(data_json["id"].as_str(), Some("tests.sse_fixture"));
-        let patch_ops = data_json["patch"].as_array().expect("patch ops");
+        assert_eq!(data_json["kind"].as_str(), Some(TOPIC_READMODEL_PATCH));
+        let payload = data_json
+            .get("payload")
+            .and_then(|v| v.as_object())
+            .expect("patch payload");
+        assert_eq!(
+            payload.get("id").and_then(|v| v.as_str()),
+            Some("tests.sse_fixture")
+        );
+        let patch_ops = payload
+            .get("patch")
+            .and_then(|v| v.as_array())
+            .expect("patch ops");
         assert!(!patch_ops.is_empty(), "expected diff payload");
 
         // Resume using Last-Event-ID; expect handshake but no replayed patch

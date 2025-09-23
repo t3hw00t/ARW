@@ -504,7 +504,7 @@ async fn openai_chat(
                             .and_then(|v| {
                                 v.get("choices")
                                     .and_then(|c| c.as_array())
-                                    .and_then(|arr| arr.get(0))
+                                    .and_then(|arr| arr.first())
                                     .and_then(|choice| {
                                         choice
                                             .get("message")
@@ -597,7 +597,6 @@ mod tests {
     use arw_policy::PolicyEngine;
     use serde_json::json;
     use std::sync::Arc;
-    use tempfile;
     use tokio::sync::Mutex;
 
     async fn build_state(path: &std::path::Path) -> AppState {

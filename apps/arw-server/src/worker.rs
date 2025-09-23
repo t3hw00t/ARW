@@ -915,7 +915,7 @@ mod tests {
     async fn http_get_records_egress_on_success() {
         let temp = tempfile::tempdir().expect("tempdir");
         let _ledger_guard = EnvVarGuard::set("ARW_EGRESS_LEDGER_ENABLE", "1");
-        let state = build_state_with_host(temp.path(), Arc::new(AllowingHost::default())).await;
+        let state = build_state_with_host(temp.path(), Arc::new(AllowingHost)).await;
         let ctx = WorkerContext::new(&state);
 
         let bus = state.bus();
@@ -974,7 +974,7 @@ mod tests {
     async fn http_get_denied_without_lease_records_event() {
         let temp = tempfile::tempdir().expect("tempdir");
         let _ledger_guard = EnvVarGuard::set("ARW_EGRESS_LEDGER_ENABLE", "0");
-        let state = build_state_with_host(temp.path(), Arc::new(AllowingHost::default())).await;
+        let state = build_state_with_host(temp.path(), Arc::new(AllowingHost)).await;
         let ctx = WorkerContext::new(&state);
 
         let bus = state.bus();
@@ -1021,7 +1021,7 @@ mod tests {
     async fn completed_event_includes_guard_metadata() {
         let temp = tempfile::tempdir().expect("tempdir");
         let _ledger_guard = EnvVarGuard::set("ARW_EGRESS_LEDGER_ENABLE", "0");
-        let state = build_state_with_host(temp.path(), Arc::new(AllowingHost::default())).await;
+        let state = build_state_with_host(temp.path(), Arc::new(AllowingHost)).await;
 
         let mut rx = state
             .bus()

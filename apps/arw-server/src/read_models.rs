@@ -4,7 +4,7 @@ use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::{fs as afs, time};
@@ -508,7 +508,7 @@ fn system_time_to_rfc3339(time: SystemTime) -> Option<String> {
     Some(DateTime::<Utc>::from(time).to_rfc3339_opts(SecondsFormat::Millis, true))
 }
 
-async fn notes_details(project_root: &PathBuf) -> (Option<String>, Option<u64>, Option<String>) {
+async fn notes_details(project_root: &Path) -> (Option<String>, Option<u64>, Option<String>) {
     let notes = project_root.join("NOTES.md");
     match afs::metadata(&notes).await {
         Ok(meta) => {
@@ -531,7 +531,7 @@ async fn notes_details(project_root: &PathBuf) -> (Option<String>, Option<u64>, 
 }
 
 async fn collect_tree(
-    project_root: &PathBuf,
+    project_root: &Path,
     paths: &mut BTreeMap<String, Vec<Value>>,
     digest: &mut Sha256,
 ) -> std::io::Result<()> {
@@ -541,7 +541,7 @@ async fn collect_tree(
             continue;
         }
         let abs = if rel.is_empty() {
-            project_root.clone()
+            project_root.to_path_buf()
         } else {
             project_root.join(&rel)
         };

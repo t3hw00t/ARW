@@ -68,9 +68,7 @@ async fn append(
     if !(force || ledger_enabled()) {
         return None;
     }
-    let Some(kernel) = kernel else {
-        return None;
-    };
+    let kernel = kernel?;
     match kernel
         .append_egress_async(
             record.decision.to_string(),
@@ -116,10 +114,7 @@ fn publish(
     payload.insert("proj".into(), serde_json::json!(record.project));
     payload.insert(
         "meta".into(),
-        record
-            .meta
-            .map(|v| v.clone())
-            .unwrap_or(serde_json::Value::Null),
+        record.meta.cloned().unwrap_or(serde_json::Value::Null),
     );
     payload.insert("posture".into(), serde_json::json!(posture));
     bus.publish(
