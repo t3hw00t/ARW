@@ -181,12 +181,11 @@
     <div class="card">
       <h3>Chat <a href="#" class="help" data-doc="orchestrator" data-tip="Super simple debug chat; models are stubbed (echo/reverse/time)." title="Chat docs">?</a></h3>
       <div class="row" role="toolbar" aria-label="Chat settings">
-        <select id="chatModel">
-          <option value="echo">echo</option>
-          <option value="reverse">reverse</option>
-          <option value="time">time</option>
-        </select>
-        <input id="chatTemp" type="number" step="0.1" min="0" max="2" value="0.7" style="width: 80px;">
+        <label class="key" for="chatTemp">temperature</label>
+        <input id="chatTemp" type="number" step="0.1" min="-5" max="5" value="0.2" style="width: 80px;">
+        <label class="key" for="chatVoteK">vote-k</label>
+        <input id="chatVoteK" type="number" min="1" max="5" value="1" style="width: 70px;">
+        <span class="key" id="chatBackendLabel" title="Last backend"></span>
       </div>
       <textarea id="chatInput" placeholder="Say hello"></textarea>
       <div class="row" role="toolbar" aria-label="Chat actions"><button onclick="chatSend()">Send</button> <button onclick="chatClear()">Clear</button></div>
@@ -1700,7 +1699,12 @@ document.addEventListener('DOMContentLoaded', ()=>{
 });
 function setAdmin(on){ __adminOk = !!on; const b=document.getElementById('adminBadge'); if(!b) return; b.className = 'badge ' + (on ? 'ok' : 'warn'); b.innerHTML = '<span class="dot"></span> Admin: ' + (on ? 'on' : 'off'); }
 function setSSE(on){ const b=document.getElementById('sseBadge'); if(!b) return; b.className = 'badge ' + (on ? 'ok' : 'bad'); b.innerHTML = '<span class="dot"></span> SSE: ' + (on ? 'live' : 'off'); }
-function setChat(name, ok){ const b=document.getElementById('chatBadge'); if(!b) return; const cls = ok ? (name==='synthetic'?'warn':'ok') : 'bad'; b.className = 'badge ' + cls; b.innerHTML = '<span class="dot"></span> Chat: ' + name; }
+function setChat(name, ok){
+  const b=document.getElementById('chatBadge');
+  const label=document.getElementById('chatBackendLabel');
+  if(b){ const cls = ok ? (name==='synthetic'?'warn':'ok') : 'bad'; b.className = 'badge ' + cls; b.innerHTML = '<span class="dot"></span> Chat: ' + name; }
+  if(label){ label.textContent = name || ''; }
+}
 async function chatProbe(){ try{ const r=await fetch(base + '/chat/status?probe=1'); const j=await r.json(); setChat(j.backend||'synthetic', !!j.ok); showToast('Chat ' + (j.backend||'synthetic') + ': ' + (j.ok?'ok':'fail') + (j.latency_ms?(' · '+j.latency_ms+' ms') : '')); }catch{ setChat('synthetic', false); showToast('Chat probe failed'); } }
 async function chatInit(){ try{ const r=await fetch(base + '/chat/status'); const j=await r.json(); setChat(j.backend||'synthetic', !!j.ok); }catch{ setChat('synthetic', false); } }
 function adminHeaders(json){ const h = {}; if(__adminHeader){ h['X-ARW-Admin'] = __adminHeader; } if(json){ h['Content-Type'] = 'application/json'; } return h; }
@@ -1708,10 +1712,21 @@ function chatRender(history){ try{ const out = document.getElementById('chatOut'
 async function chatFetch(){ try{ const r = await fetch(base + '/admin/chat', { headers: adminHeaders(false) }); if(!r.ok) return; const j = await r.json(); chatRender(j?.items || j?.data || []); }catch(e){ console.warn('chat fetch failed', e); } }
 async function chatSend(){ try{
   const input = document.getElementById('chatInput'); if(!input) return; const prompt = input.value.trim();
+  const tempEl = document.getElementById('chatTemp');
+  const voteEl = document.getElementById('chatVoteK');
   const body = { prompt };
+  if(tempEl){
+    let t = parseFloat(tempEl.value);
+    if(Number.isFinite(t)){ t = Math.max(-5, Math.min(5, t)); body.temperature = t; tempEl.value = t.toFixed(1); }
+  }
+  if(voteEl){
+    let vk = parseInt(voteEl.value, 10);
+    if(Number.isFinite(vk)){ vk = Math.max(1, Math.min(5, vk)); body.vote_k = vk; voteEl.value = vk; }
+  }
   const r = await fetch(base + '/admin/chat/send', { method:'POST', headers: adminHeaders(true), body: JSON.stringify(body) });
   if(!r.ok){ showToast('chat send failed ('+r.status+')'); return; }
   const j = await r.json();
+  if(j && j.backend){ setChat(j.backend, true); }
   chatRender(j?.history || j?.data || []);
   input.value = '';
 }catch(e){ console.error(e); showToast('chat send failed'); }}

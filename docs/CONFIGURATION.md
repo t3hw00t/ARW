@@ -125,6 +125,7 @@ Config discovery (CWD‑independent)
 - `ARW_OPENAI_API_KEY`: OpenAI‑compatible API key.
 - `ARW_OPENAI_BASE_URL`: custom base URL for OpenAI‑compatible servers.
 - `ARW_OPENAI_MODEL`: default model name when using OpenAI‑compatible backend.
+- `ARW_CHAT_SYSTEM_PROMPT`: optional system prompt prepended to chat requests (default `"You are a helpful assistant."`).
 - `ARW_HTTP_TIMEOUT_SECS`: shared HTTP timeout in seconds (default `20`). The unified server seeds this value on startup and governor hints update it live.
 - `ARW_HTTP_BODY_HEAD_KB`: number of KB of response body retained in memory for previews (default `64`).
 - `ARW_NET_ALLOWLIST`: comma‑separated hostnames allowed for HTTP effectors (optional).

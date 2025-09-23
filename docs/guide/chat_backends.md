@@ -47,6 +47,7 @@ Environment variables:
 - `ARW_OPENAI_API_KEY` (required)
 - `ARW_OPENAI_BASE_URL` (optional, default `https://api.openai.com`)
 - `ARW_OPENAI_MODEL` (optional, default `gpt-4o-mini`)
+- `ARW_CHAT_SYSTEM_PROMPT` (optional, default `You are a helpful assistant.`)
 
 Example:
 
@@ -65,6 +66,11 @@ Requests are sent to `POST {ARW_OPENAI_BASE_URL}/v1/chat/completions` with a bod
 }
 ```
 
+Optional fields that ARW forwards:
+
+- `temperature` — overrides the sampling temperature (default `0.2`).
+- `vote_k` — enables server-side self-consistency by sampling multiple candidates; ARW clamps this to `1..=5`.
+
 ### LiteLLM (OpenAI-compatible proxy)
 
 ARW also supports LiteLLM by pointing the OpenAI-compatible base URL to your LiteLLM server.
@@ -75,11 +81,11 @@ Environment (either form works):
 - `ARW_LITELLM_API_KEY` (optional, if your proxy requires it)
 - `ARW_LITELLM_MODEL` (optional; otherwise `ARW_OPENAI_MODEL` is used)
 
-If `ARW_LITELLM_*` vars are set, they take precedence over the `ARW_OPENAI_*` ones.
+If `ARW_LITELLM_*` vars are set, they take precedence over the `ARW_OPENAI_*` ones; when they are absent ARW automatically falls back to the OpenAI configuration.
 
-## Temperature
+## Request Options
 
-`/chat/send` accepts an optional `temperature` value. The service includes it in the assistant message and passes it through to backends when set.
+`/admin/chat/send` (and the upcoming UI knob) accepts an optional `temperature` and `vote_k`. Both are forwarded to the configured backend when supported; otherwise ARW gracefully falls back to a single synthetic reply.
 
 ## UI
 

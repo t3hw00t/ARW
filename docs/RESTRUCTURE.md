@@ -222,6 +222,8 @@ Status: In progress.
 
 #### Snapshot
 - **Phase D — Operator experience:** In progress, with chat workbench routes, screenshot pipeline wiring, and the SPA/right-sidecar migration queued to close out the legacy debug UI. Launcher surfaces now read from `/state/*` endpoints (route stats, etc.) without `/admin/*` fallbacks.
+- Recent: the admin chat endpoints now run through the shared `chat.respond` tool, so llama/OpenAI/LiteLLM backends are exercised via the unified action pipeline while preserving synthetic fallback for air-gapped installs.
+- Debug UI exposes the new temperature and vote-k controls (wiring straight into `chat.respond`), keeping observability inline with Phase D expectations.
 - **Phase E — Safety:** Planned; finish Guardrail Gateway enforcement, complete Asimov Capsule Guard coverage, and delete the lingering `/admin/*` fallbacks once capsules drive every decision path.
 - **Legacy shutdown instrumentation:** Completed — dashboards now track `arw_legacy_capsule_headers_total`; keep it pinned until the counter stays at zero for a sustained window.
 

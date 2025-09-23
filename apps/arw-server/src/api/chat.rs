@@ -36,6 +36,10 @@ pub struct ChatHistory {
 #[derive(Deserialize, ToSchema)]
 pub struct ChatSendReq {
     pub prompt: String,
+    #[serde(default)]
+    pub temperature: Option<f64>,
+    #[serde(default)]
+    pub vote_k: Option<u64>,
 }
 
 #[utoipa::path(
@@ -60,7 +64,11 @@ pub async fn chat_send(
         )
             .into_response();
     }
-    let outcome = state.chat().send(&req.prompt).await;
+    let options = chat::ChatSendOptions {
+        temperature: req.temperature,
+        vote_k: req.vote_k.map(|v| v as usize),
+    };
+    let outcome = state.chat().send(&state, &req.prompt, options).await;
     Json(ChatSendResp {
         ok: true,
         backend: outcome.backend,

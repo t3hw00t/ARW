@@ -1,9 +1,13 @@
 use chrono::SecondsFormat;
 use serde_json::{json, Value};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 use tokio::time;
 
-use crate::{tasks::TaskHandle, tool_cache::StoreOutcome, util, AppState};
+use crate::{
+    tasks::TaskHandle,
+    tools::{self, ToolError},
+    util, AppState,
+};
 use arw_topics as topics;
 
 pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
@@ -11,10 +15,11 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
     let kernel = state.kernel().clone();
     let policy = state.policy();
     let host = state.host();
-    let tool_cache = state.tool_cache();
+    let worker_state = state;
     TaskHandle::new(
         "worker.local",
         tokio::spawn(async move {
+            let state = worker_state;
             loop {
                 match kernel.dequeue_one_queued_async().await {
                     Ok(Some((id, kind, input))) => {
@@ -27,7 +32,7 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                             ce: None,
                         };
                         bus.publish(&env.kind, &env.payload);
-                        let out = if kind == "net.http.get" {
+                        let action_result: Result<Value, ToolError> = if kind == "net.http.get" {
                             let mut input2 = input.clone();
                             if let Some(obj) = input2.as_object_mut() {
                                 let hdrs = obj.entry("headers").or_insert_with(|| json!({}));
@@ -77,7 +82,7 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                                     true,
                                 )
                                 .await;
-                                json!({"error":"lease required: net:http or io:egress"})
+                                Ok(json!({"error":"lease required: net:http or io:egress"}))
                             } else {
                                 match host.run_tool("http.fetch", &input2).await {
                                     Ok(v) => {
@@ -104,7 +109,7 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                                         )
                                         .await;
                                         publish_egress_event(&bus, &posture, entry, &record);
-                                        v
+                                        Ok(v)
                                     }
                                     Err(arw_wasi::WasiError::Denied {
                                         reason,
@@ -132,9 +137,11 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                                         )
                                         .await;
                                         publish_egress_event(&bus, &posture, entry, &record);
-                                        json!({"error":"denied","reason": reason})
+                                        Ok(json!({"error":"denied","reason": reason}))
                                     }
-                                    Err(e) => json!({"error":"runtime","detail": e.to_string()}),
+                                    Err(e) => {
+                                        Ok(json!({"error":"runtime","detail": e.to_string()}))
+                                    }
                                 }
                             }
                         } else if kind == "fs.patch" {
@@ -169,7 +176,7 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                                         "explain": {"reason":"lease_required"}
                                     }),
                                 );
-                                json!({"error":"lease required: fs or fs:patch"})
+                                Ok(json!({"error":"lease required: fs or fs:patch"}))
                             } else {
                                 match host.run_tool("fs.patch", &input).await {
                                     Ok(v) => {
@@ -179,9 +186,11 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                                             topics::TOPIC_PROJECTS_FILE_WRITTEN,
                                             &json!({"path": path_s, "sha256": v.get("sha256") }),
                                         );
-                                        v
+                                        Ok(v)
                                     }
-                                    Err(e) => json!({"error":"runtime","detail": e.to_string()}),
+                                    Err(e) => {
+                                        Ok(json!({"error":"runtime","detail": e.to_string()}))
+                                    }
                                 }
                             }
                         } else if kind == "app.vscode.open" {
@@ -216,7 +225,7 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                                         "explain": {"reason":"lease_required"}
                                     }),
                                 );
-                                json!({"error":"lease required: io:app:vscode or io:app"})
+                                Ok(json!({"error":"lease required: io:app:vscode or io:app"}))
                             } else {
                                 match host.run_tool("app.vscode.open", &input).await {
                                     Ok(v) => {
@@ -228,109 +237,22 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                                             topics::TOPIC_APPS_VSCODE_OPENED,
                                             &json!({"path": path_s }),
                                         );
-                                        v
+                                        Ok(v)
                                     }
-                                    Err(e) => json!({"error":"runtime","detail": e.to_string()}),
+                                    Err(e) => {
+                                        Ok(json!({"error":"runtime","detail": e.to_string()}))
+                                    }
                                 }
                             }
                         } else {
-                            let mut cache_event: Option<Value> = None;
-                            let output_value: Value;
-                            if tool_cache.enabled() && tool_cache.is_cacheable(&kind) {
-                                let cache_key = tool_cache.action_key(&kind, &input);
-                                let lookup_start = Instant::now();
-                                if let Some(hit) = tool_cache.lookup(&cache_key).await {
-                                    let elapsed_ms = lookup_start.elapsed().as_millis() as u64;
-                                    metrics::counter!("arw_tools_cache_hits", 1);
-                                    cache_event = Some(json!({
-                                        "action_id": id.clone(),
-                                        "tool": kind.clone(),
-                                        "outcome": "hit",
-                                        "elapsed_ms": elapsed_ms,
-                                        "key": cache_key,
-                                        "digest": hit.digest,
-                                        "cached": true,
-                                        "age_secs": hit.age_secs,
-                                    }));
-                                    output_value = hit.value;
-                                } else {
-                                    let run_start = Instant::now();
-                                    let simulated = simulate_action(&kind, &input)
-                                        .unwrap_or_else(|_| json!({"ok": true}));
-                                    let elapsed_ms = run_start.elapsed().as_millis() as u64;
-                                    let store_outcome =
-                                        tool_cache.store(&cache_key, &simulated).await;
-                                    let (outcome_label, digest_opt, cached_flag, reason_opt) =
-                                        match store_outcome {
-                                            Some(StoreOutcome {
-                                                digest,
-                                                cached: true,
-                                            }) => {
-                                                metrics::counter!("arw_tools_cache_miss", 1);
-                                                ("miss", Some(digest), true, None)
-                                            }
-                                            Some(StoreOutcome {
-                                                digest,
-                                                cached: false,
-                                            }) => {
-                                                metrics::counter!("arw_tools_cache_error", 1);
-                                                (
-                                                    "error",
-                                                    Some(digest),
-                                                    false,
-                                                    Some("store_failed".to_string()),
-                                                )
-                                            }
-                                            None => {
-                                                metrics::counter!("arw_tools_cache_error", 1);
-                                                (
-                                                    "error",
-                                                    None,
-                                                    false,
-                                                    Some("serialize_failed".to_string()),
-                                                )
-                                            }
-                                        };
-                                    let mut payload = json!({
-                                        "action_id": id.clone(),
-                                        "tool": kind.clone(),
-                                        "outcome": outcome_label,
-                                        "elapsed_ms": elapsed_ms,
-                                        "key": cache_key,
-                                        "digest": digest_opt,
-                                        "cached": cached_flag,
-                                        "age_secs": Value::Null,
-                                    });
-                                    if let Some(reason) = reason_opt {
-                                        payload["reason"] = Value::String(reason);
-                                    }
-                                    cache_event = Some(payload);
-                                    output_value = simulated;
-                                }
-                            } else {
-                                let run_start = Instant::now();
-                                let simulated = simulate_action(&kind, &input)
-                                    .unwrap_or_else(|_| json!({"ok": true}));
-                                let elapsed_ms = run_start.elapsed().as_millis() as u64;
-                                if tool_cache.enabled() {
-                                    let cache_key = tool_cache.action_key(&kind, &input);
-                                    metrics::counter!("arw_tools_cache_bypass", 1);
-                                    cache_event = Some(json!({
-                                        "action_id": id.clone(),
-                                        "tool": kind.clone(),
-                                        "outcome": "not_cacheable",
-                                        "elapsed_ms": elapsed_ms,
-                                        "key": cache_key,
-                                        "cached": false,
-                                        "reason": "not_cacheable",
-                                    }));
-                                }
-                                output_value = simulated;
+                            execute_dynamic_action(&state, &kind, &input).await
+                        };
+                        let out = match action_result {
+                            Ok(value) => value,
+                            Err(err) => {
+                                handle_action_failure(&kernel, &bus, &id, &kind, err).await;
+                                continue;
                             }
-                            if let Some(evt) = cache_event {
-                                bus.publish(topics::TOPIC_TOOL_CACHE, &evt);
-                            }
-                            output_value
                         };
                         let _ = kernel
                             .update_action_result_async(id.clone(), Some(out.clone()), None)
@@ -435,9 +357,205 @@ fn publish_egress_event(
     );
 }
 
+struct DeniedInfo {
+    reason: String,
+    dest_host: Option<String>,
+    dest_port: Option<i64>,
+    protocol: Option<String>,
+}
+
+fn tool_error_details(
+    id: &str,
+    kind: &str,
+    err: &ToolError,
+) -> (String, Value, Option<DeniedInfo>) {
+    match err {
+        ToolError::Unsupported(tool_id) => {
+            let tool_name = tool_id.clone();
+            let error_msg = format!("unsupported tool: {}", tool_name);
+            let payload = json!({
+                "id": id,
+                "kind": kind,
+                "error": {
+                    "type": "unsupported",
+                    "tool": tool_name,
+                    "detail": "tool is not available",
+                }
+            });
+            (error_msg, payload, None)
+        }
+        ToolError::Invalid(detail) => {
+            let detail_cloned = detail.clone();
+            let error_msg = format!("invalid request: {}", detail_cloned);
+            let payload = json!({
+                "id": id,
+                "kind": kind,
+                "error": {
+                    "type": "invalid",
+                    "detail": detail_cloned,
+                }
+            });
+            (error_msg, payload, None)
+        }
+        ToolError::Runtime(detail) => {
+            let detail_cloned = detail.clone();
+            let error_msg = format!("runtime error: {}", detail_cloned);
+            let payload = json!({
+                "id": id,
+                "kind": kind,
+                "error": {
+                    "type": "runtime",
+                    "detail": detail_cloned,
+                }
+            });
+            (error_msg, payload, None)
+        }
+        ToolError::Denied {
+            reason,
+            dest_host,
+            dest_port,
+            protocol,
+        } => {
+            let denied = DeniedInfo {
+                reason: reason.clone(),
+                dest_host: dest_host.clone(),
+                dest_port: *dest_port,
+                protocol: protocol.clone(),
+            };
+            let error_msg = format!("denied: {}", reason);
+            let payload = json!({
+                "id": id,
+                "kind": kind,
+                "error": {
+                    "type": "denied",
+                    "reason": reason,
+                    "dest_host": dest_host,
+                    "dest_port": dest_port,
+                    "protocol": protocol,
+                }
+            });
+            (error_msg, payload, Some(denied))
+        }
+    }
+}
+
+async fn handle_action_failure(
+    kernel: &arw_kernel::Kernel,
+    bus: &arw_events::Bus,
+    id: &str,
+    kind: &str,
+    err: ToolError,
+) {
+    let (error_msg, mut event_payload, denied) = tool_error_details(id, kind, &err);
+    tracing::warn!(target: "arw::worker", %id, %kind, "action failed: {}", error_msg);
+
+    let _ = kernel
+        .update_action_result_async(id.to_string(), None, Some(error_msg.clone()))
+        .await;
+    let _ = kernel.set_action_state_async(id, "failed").await;
+
+    tools::ensure_corr(&mut event_payload);
+    bus.publish(topics::TOPIC_ACTIONS_FAILED, &event_payload);
+
+    if let Some(denied) = denied {
+        let posture = util::effective_posture();
+        let record = EgressRecord {
+            decision: "deny",
+            reason: Some(denied.reason.as_str()),
+            dest_host: denied.dest_host.as_deref(),
+            dest_port: denied.dest_port,
+            protocol: denied.protocol.as_deref(),
+            bytes_in: None,
+            bytes_out: None,
+            corr_id: Some(id),
+        };
+        let entry = append_egress_entry_async(kernel, Some(posture.as_str()), &record, false).await;
+        publish_egress_event(bus, &posture, entry, &record);
+    }
+}
+
+async fn execute_dynamic_action(
+    state: &AppState,
+    kind: &str,
+    input: &Value,
+) -> Result<Value, ToolError> {
+    match tools::run_tool(state, kind, input.clone()).await {
+        Ok(value) => Ok(value),
+        Err(err) => {
+            if kind.starts_with("demo.") {
+                simulate_action(kind, input).map_err(ToolError::Runtime)
+            } else {
+                Err(err)
+            }
+        }
+    }
+}
+
 fn simulate_action(kind: &str, input: &Value) -> Result<Value, String> {
     match kind {
         "demo.echo" => Ok(json!({"echo": input})),
         _ => Ok(json!({"ok": true})),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::AppState;
+    use arw_policy::PolicyEngine;
+    use arw_topics as topics;
+    use serde_json::json;
+    use std::sync::Arc;
+    use tokio::sync::Mutex;
+    use tokio::time::{timeout, Duration};
+
+    async fn build_state(path: &std::path::Path) -> AppState {
+        std::env::set_var("ARW_STATE_DIR", path.display().to_string());
+        let bus = arw_events::Bus::new_with_replay(32, 32);
+        let kernel = arw_kernel::Kernel::open(path).expect("init kernel");
+        let policy = PolicyEngine::load_from_env();
+        let policy_arc = Arc::new(Mutex::new(policy));
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
+        AppState::builder(bus, kernel, policy_arc, host, true)
+            .with_sse_capacity(16)
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    async fn unsupported_tool_marks_action_failed() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = build_state(temp.path()).await;
+        let _worker = start_local_worker(state.clone());
+
+        let bus = state.bus();
+        let mut rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_ACTIONS_FAILED.to_string()], Some(8));
+
+        let action_id = uuid::Uuid::new_v4().to_string();
+        state
+            .kernel()
+            .insert_action_async(&action_id, "tool.missing", &json!({}), None, None, "queued")
+            .await
+            .expect("enqueue action");
+
+        let env = timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("bus event")
+            .expect("event value");
+        assert_eq!(env.kind, topics::TOPIC_ACTIONS_FAILED);
+        assert_eq!(env.payload["id"].as_str(), Some(action_id.as_str()));
+        assert_eq!(env.payload["kind"].as_str(), Some("tool.missing"));
+        assert_eq!(env.payload["error"]["type"].as_str(), Some("unsupported"));
+
+        let stored = state
+            .kernel()
+            .get_action_async(&action_id)
+            .await
+            .expect("get action")
+            .expect("action row");
+        assert_eq!(stored.state, "failed");
+        let error_text = stored.error.unwrap_or_default();
+        assert!(error_text.contains("unsupported"));
     }
 }
