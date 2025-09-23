@@ -10,7 +10,11 @@ use serde_json::{json, Value};
 use tracing::warn;
 use utoipa::ToSchema;
 
-use crate::{capsule_guard, staging, AppState};
+use crate::{
+    capsule_guard,
+    guard_metadata::{apply_posture_and_guard, sanitize_guard_value},
+    staging, AppState,
+};
 use arw_topics as topics;
 
 #[derive(Deserialize, ToSchema)]
@@ -255,6 +259,7 @@ mod tests {
     use axum::{body::to_bytes, http::StatusCode};
     use serde_json::Value;
     use std::sync::Arc;
+    use tokio::time::{timeout, Duration};
     use tempfile::tempdir;
     use tokio::sync::Mutex;
 
@@ -334,6 +339,96 @@ mod tests {
         assert_eq!(value["guard"], expected_guard);
         assert_eq!(value["posture"].as_str(), Some("secure"));
     }
+
+    #[tokio::test]
+    async fn actions_state_set_sanitizes_metadata() {
+        let temp = tempdir().expect("tempdir");
+        let state = build_state(temp.path()).await;
+
+        let bus = state.bus();
+        let mut rx = bus.subscribe_filtered(
+            vec![topics::TOPIC_ACTIONS_COMPLETED.to_string()],
+            Some(8),
+        );
+
+        let action_id = uuid::Uuid::new_v4().to_string();
+        state
+            .kernel()
+            .insert_action_async(
+                &action_id,
+                "net.http.get",
+                &json!({"url": "https://example.com"}),
+                None,
+                None,
+                "queued",
+            )
+            .await
+            .expect("insert action");
+
+        let stored_output = json!({
+            "value": {"status": "ok"},
+            "posture": "secure",
+            "guard": {
+                "allowed": true,
+                "policy_allow": false,
+                "required_capabilities": ["net:http", "io:egress"],
+                "lease": {
+                    "id": "lease-1",
+                    "subject": "local",
+                    "capability": "net:http",
+                    "scope": "repo",
+                    "ttl_until": "2099-01-01T00:00:00Z"
+                }
+            }
+        });
+
+        state
+            .kernel()
+            .update_action_result_async(action_id.clone(), Some(stored_output), None)
+            .await
+            .expect("store output");
+
+        let response = actions_state_set(
+            State(state.clone()),
+            Path(action_id.clone()),
+            Json(ActionStateReq {
+                state: "completed".into(),
+                error: None,
+            }),
+        )
+        .await;
+
+        let (parts, body) = response.into_response().into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+
+        let expected_guard = json!({
+            "allowed": true,
+            "policy_allow": false,
+            "required_capabilities": ["net:http", "io:egress"],
+            "lease": {
+                "capability": "net:http",
+                "ttl_until": "2099-01-01T00:00:00Z",
+                "scope": "repo"
+            }
+        });
+
+        assert_eq!(value["posture"].as_str(), Some("secure"));
+        assert_eq!(value["guard"], expected_guard);
+        assert_eq!(value["output"]["guard"], expected_guard);
+
+        let env = timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("event recv")
+            .expect("event value");
+        assert_eq!(env.kind, topics::TOPIC_ACTIONS_COMPLETED);
+        assert_eq!(env.payload["id"].as_str(), Some(action_id.as_str()));
+        assert_eq!(env.payload["posture"].as_str(), Some("secure"));
+        assert_eq!(env.payload["guard"], expected_guard);
+        assert_eq!(env.payload["output"]["guard"], expected_guard);
+        assert!(env.payload["output"]["guard"]["lease"].get("id").is_none());
+    }
 }
 
 /// Get action details by id.
@@ -393,12 +488,12 @@ pub(crate) fn sanitize_action_record(value: Value) -> Value {
                 map.insert("output".into(), Value::Null);
             }
             if let Some(Value::Object(output)) = map.get("output").cloned() {
-                if let Some(posture) = output.get("posture") {
-                    map.entry("posture".to_string()).or_insert(posture.clone());
-                }
-                if let Some(guard) = output.get("guard") {
-                    map.entry("guard".to_string()).or_insert(guard.clone());
-                }
+                apply_posture_and_guard(
+                    &mut map,
+                    output.get("posture").and_then(Value::as_str),
+                    output.get("guard").cloned(),
+                    false,
+                );
             }
             Value::Object(map)
         }
@@ -416,43 +511,6 @@ pub(crate) fn sanitize_output_value(value: &Value) -> Value {
             Value::Object(sanitized)
         }
         other => other.clone(),
-    }
-}
-
-pub(crate) fn sanitize_guard_value(value: &Value) -> Value {
-    if let Value::Object(map) = value {
-        let mut sanitized = serde_json::Map::new();
-        if let Some(v) = map.get("allowed") {
-            sanitized.insert("allowed".into(), v.clone());
-        }
-        if let Some(v) = map.get("policy_allow") {
-            sanitized.insert("policy_allow".into(), v.clone());
-        }
-        if let Some(v) = map.get("required_capabilities") {
-            sanitized.insert("required_capabilities".into(), v.clone());
-        }
-        if let Some(lease) = map.get("lease") {
-            if let Value::Object(lease_map) = lease {
-                let mut redacted = serde_json::Map::new();
-                if let Some(cap) = lease_map.get("capability") {
-                    redacted.insert("capability".into(), cap.clone());
-                }
-                if let Some(ttl) = lease_map.get("ttl_until") {
-                    redacted.insert("ttl_until".into(), ttl.clone());
-                }
-                if let Some(scope) = lease_map.get("scope") {
-                    if !scope.is_null() {
-                        redacted.insert("scope".into(), scope.clone());
-                    }
-                }
-                if !redacted.is_empty() {
-                    sanitized.insert("lease".into(), Value::Object(redacted));
-                }
-            }
-        }
-        Value::Object(sanitized)
-    } else {
-        value.clone()
     }
 }
 
@@ -512,15 +570,13 @@ pub async fn actions_state_set(
             if let Ok(Some(action)) = state.kernel().get_action_async(&id).await {
                 if let Some(output) = action.output.as_ref() {
                     let sanitized = sanitize_output_value(output);
-                    payload.insert("output".into(), sanitized.clone());
-                    if let Some(posture) = sanitized.get("posture") {
-                        payload
-                            .entry("posture".to_string())
-                            .or_insert(posture.clone());
-                    }
-                    if let Some(guard) = sanitized.get("guard") {
-                        payload.entry("guard".to_string()).or_insert(guard.clone());
-                    }
+                    apply_posture_and_guard(
+                        &mut payload,
+                        sanitized.get("posture").and_then(Value::as_str),
+                        sanitized.get("guard").cloned(),
+                        false,
+                    );
+                    payload.insert("output".into(), sanitized);
                 }
             }
             let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);

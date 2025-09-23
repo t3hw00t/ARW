@@ -23,6 +23,7 @@ mod goldens;
 mod governor;
 #[cfg(feature = "grpc")]
 mod grpc;
+mod guard_metadata;
 mod http_timeout;
 mod metrics;
 mod models;

@@ -7,6 +7,7 @@ use tokio::time;
 use crate::{
     app_state::Policy,
     egress_log::{self, EgressRecord},
+    guard_metadata::apply_posture_and_guard,
     tasks::TaskHandle,
     tools::{self, ToolError},
     util, AppState,
@@ -35,61 +36,15 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                         ctx.bus.publish(&running_env.kind, &running_env.payload);
 
                         let action_result = ctx.handle_action(&state, &id, &kind, &input).await;
-                        let ActionOutcome {
-                            output,
-                            posture,
-                            guard,
-                        } = match action_result {
-                            Ok(outcome) => outcome,
+                        match action_result {
+                            Ok(outcome) => {
+                                ctx.complete_action(&id, outcome).await;
+                            }
                             Err(failure) => {
-                                handle_action_failure(&ctx.kernel, &ctx.bus, &id, &kind, failure)
-                                    .await;
+                                ctx.fail_action(&id, &kind, failure).await;
                                 continue;
                             }
-                        };
-
-                        let posture_value = posture.unwrap_or_else(util::effective_posture);
-                        let stored_output =
-                            enrich_output(output.clone(), guard.clone(), &posture_value);
-                        let _ = ctx
-                            .kernel
-                            .update_action_result_async(id.clone(), Some(stored_output), None)
-                            .await;
-                        let _ = ctx.kernel.set_action_state_async(&id, "completed").await;
-
-                        let mut completed_payload = json!({
-                            "id": id.clone(),
-                            "output": output,
-                            "posture": posture_value,
-                        });
-                        if let Some(ref guard_meta) = guard {
-                            if let Value::Object(ref mut obj) = completed_payload {
-                                obj.insert("guard".into(), guard_meta.to_external_value());
-                            }
                         }
-                        let completed_at =
-                            chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-                        let completed_env = arw_events::Envelope {
-                            time: completed_at,
-                            kind: topics::TOPIC_ACTIONS_COMPLETED.into(),
-                            payload: completed_payload,
-                            policy: None,
-                            ce: None,
-                        };
-                        ctx.bus.publish(&completed_env.kind, &completed_env.payload);
-
-                        let _ = ctx
-                            .kernel
-                            .append_contribution_async(
-                                "local",
-                                "task.complete",
-                                1.0,
-                                "task",
-                                None,
-                                None,
-                                None,
-                            )
-                            .await;
                     }
                     Ok(None) => time::sleep(Duration::from_millis(200)).await,
                     Err(_) => time::sleep(Duration::from_millis(500)).await,
@@ -132,6 +87,141 @@ impl WorkerContext {
                 Ok(value) => Ok(ActionOutcome::new(value)),
                 Err(err) => Err(ActionFailure::new(err)),
             },
+        }
+    }
+
+    async fn complete_action(&self, id: &str, outcome: ActionOutcome) {
+        let ActionOutcome {
+            output,
+            posture,
+            guard,
+        } = outcome;
+
+        let posture_value = posture.unwrap_or_else(util::effective_posture);
+        let stored_output = enrich_output(output.clone(), guard.clone(), &posture_value);
+        let _ = self
+            .kernel
+            .update_action_result_async(id.to_string(), Some(stored_output), None)
+            .await;
+        let _ = self.kernel.set_action_state_async(id, "completed").await;
+
+        let mut completed_payload = serde_json::Map::new();
+        completed_payload.insert("id".into(), Value::String(id.to_string()));
+        completed_payload.insert("output".into(), output);
+        apply_posture_and_guard(
+            &mut completed_payload,
+            Some(posture_value.as_str()),
+            guard.as_ref().map(|g| g.to_external_value()),
+            true,
+        );
+        let completed_payload = Value::Object(completed_payload);
+        let completed_at = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+        let completed_env = arw_events::Envelope {
+            time: completed_at,
+            kind: topics::TOPIC_ACTIONS_COMPLETED.into(),
+            payload: completed_payload,
+            policy: None,
+            ce: None,
+        };
+        self.bus
+            .publish(&completed_env.kind, &completed_env.payload);
+
+        let _ = self
+            .kernel
+            .append_contribution_async("local", "task.complete", 1.0, "task", None, None, None)
+            .await;
+    }
+
+    async fn fail_action(&self, id: &str, kind: &str, failure: ActionFailure) {
+        let ActionFailure {
+            error,
+            guard,
+            posture,
+        } = failure;
+        let posture_value = posture.unwrap_or_else(util::effective_posture);
+
+        let (error_msg, mut event_payload, denied) = tool_error_details(id, kind, &error);
+        if let Value::Object(ref mut obj) = event_payload {
+            apply_posture_and_guard(
+                obj,
+                Some(posture_value.as_str()),
+                guard.as_ref().map(|g| g.to_external_value()),
+                true,
+            );
+        }
+        if let Some(ref guard_meta) = guard {
+            tracing::debug!(
+                target: "arw::worker",
+                %id,
+                %kind,
+                allowed = guard_meta.allowed,
+                policy_allow = guard_meta.policy_allow,
+                posture = %posture_value,
+                required_caps = ?guard_meta.required_capabilities,
+                lease_capability = guard_meta.lease.as_ref().map(|l| l.capability.as_str()),
+                "action guard metadata on failure",
+            );
+        } else {
+            tracing::debug!(
+                target: "arw::worker",
+                %id,
+                %kind,
+                posture = %posture_value,
+                "action failure without guard metadata",
+            );
+        }
+        tracing::warn!(target: "arw::worker", %id, %kind, "action failed: {}", error_msg);
+
+        let mut failure_body = serde_json::Map::new();
+        if let Some(err_value) = event_payload.get("error") {
+            failure_body.insert("error".into(), err_value.clone());
+        } else {
+            failure_body.insert("error".into(), Value::String(error_msg.clone()));
+        }
+        apply_posture_and_guard(
+            &mut failure_body,
+            Some(posture_value.as_str()),
+            guard.as_ref().map(|g| g.to_internal_value()),
+            true,
+        );
+        let failure_output = Value::Object(failure_body);
+
+        let _ = self
+            .kernel
+            .update_action_result_async(
+                id.to_string(),
+                Some(failure_output),
+                Some(error_msg.clone()),
+            )
+            .await;
+        let _ = self.kernel.set_action_state_async(id, "failed").await;
+
+        tools::ensure_corr(&mut event_payload);
+        self.bus
+            .publish(topics::TOPIC_ACTIONS_FAILED, &event_payload);
+
+        if let Some(denied) = denied {
+            let record = EgressRecord {
+                decision: "deny",
+                reason: Some(denied.reason.as_str()),
+                dest_host: denied.dest_host.as_deref(),
+                dest_port: denied.dest_port,
+                protocol: denied.protocol.as_deref(),
+                bytes_in: None,
+                bytes_out: None,
+                corr_id: Some(id),
+                project: None,
+                meta: None,
+            };
+            let _ = egress_log::record(
+                Some(&self.kernel),
+                &self.bus,
+                Some(posture_value.as_str()),
+                &record,
+                false,
+                true,
+            )
+            .await;
         }
     }
 
@@ -481,21 +571,23 @@ impl ActionGuard {
 fn enrich_output(value: Value, guard: Option<ActionGuard>, posture: &str) -> Value {
     match value {
         Value::Object(mut map) => {
-            map.entry("posture".to_string())
-                .or_insert_with(|| Value::String(posture.to_string()));
-            if let Some(ref guard_meta) = guard {
-                map.entry("guard".to_string())
-                    .or_insert_with(|| guard_meta.to_internal_value());
-            }
+            apply_posture_and_guard(
+                &mut map,
+                Some(posture),
+                guard.as_ref().map(|g| g.to_internal_value()),
+                false,
+            );
             Value::Object(map)
         }
         other => {
             let mut map = serde_json::Map::new();
             map.insert("value".into(), other);
-            map.insert("posture".into(), Value::String(posture.to_string()));
-            if let Some(ref guard_meta) = guard {
-                map.insert("guard".into(), guard_meta.to_internal_value());
-            }
+            apply_posture_and_guard(
+                &mut map,
+                Some(posture),
+                guard.as_ref().map(|g| g.to_internal_value()),
+                true,
+            );
             Value::Object(map)
         }
     }
@@ -627,99 +719,6 @@ fn tool_error_details(
             });
             (error_msg, payload, Some(denied))
         }
-    }
-}
-
-async fn handle_action_failure(
-    kernel: &arw_kernel::Kernel,
-    bus: &arw_events::Bus,
-    id: &str,
-    kind: &str,
-    failure: ActionFailure,
-) {
-    let ActionFailure {
-        error,
-        guard,
-        posture,
-    } = failure;
-    let posture_value = posture.unwrap_or_else(util::effective_posture);
-
-    let (error_msg, mut event_payload, denied) = tool_error_details(id, kind, &error);
-    if let Value::Object(ref mut obj) = event_payload {
-        obj.insert("posture".into(), Value::String(posture_value.clone()));
-        if let Some(ref guard_meta) = guard {
-            obj.insert("guard".into(), guard_meta.to_external_value());
-        }
-    }
-    if let Some(ref guard_meta) = guard {
-        tracing::debug!(
-            target: "arw::worker",
-            %id,
-            %kind,
-            allowed = guard_meta.allowed,
-            policy_allow = guard_meta.policy_allow,
-            posture = %posture_value,
-            required_caps = ?guard_meta.required_capabilities,
-            lease_capability = guard_meta.lease.as_ref().map(|l| l.capability.as_str()),
-            "action guard metadata on failure",
-        );
-    } else {
-        tracing::debug!(
-            target: "arw::worker",
-            %id,
-            %kind,
-            posture = %posture_value,
-            "action failure without guard metadata",
-        );
-    }
-    tracing::warn!(target: "arw::worker", %id, %kind, "action failed: {}", error_msg);
-
-    let mut failure_body = serde_json::Map::new();
-    if let Some(err_value) = event_payload.get("error") {
-        failure_body.insert("error".into(), err_value.clone());
-    } else {
-        failure_body.insert("error".into(), Value::String(error_msg.clone()));
-    }
-    failure_body.insert("posture".into(), Value::String(posture_value.clone()));
-    if let Some(ref guard_meta) = guard {
-        failure_body.insert("guard".into(), guard_meta.to_internal_value());
-    }
-    let failure_output = Value::Object(failure_body);
-
-    let _ = kernel
-        .update_action_result_async(
-            id.to_string(),
-            Some(failure_output),
-            Some(error_msg.clone()),
-        )
-        .await;
-    let _ = kernel.set_action_state_async(id, "failed").await;
-
-    tools::ensure_corr(&mut event_payload);
-    bus.publish(topics::TOPIC_ACTIONS_FAILED, &event_payload);
-
-    if let Some(denied) = denied {
-        let record = EgressRecord {
-            decision: "deny",
-            reason: Some(denied.reason.as_str()),
-            dest_host: denied.dest_host.as_deref(),
-            dest_port: denied.dest_port,
-            protocol: denied.protocol.as_deref(),
-            bytes_in: None,
-            bytes_out: None,
-            corr_id: Some(id),
-            project: None,
-            meta: None,
-        };
-        let _ = egress_log::record(
-            Some(kernel),
-            bus,
-            Some(posture_value.as_str()),
-            &record,
-            false,
-            true,
-        )
-        .await;
     }
 }
 
@@ -1088,5 +1087,138 @@ mod tests {
             stored_output["posture"].as_str(),
             env.payload["posture"].as_str(),
         );
+    }
+
+    #[tokio::test]
+    async fn complete_action_updates_kernel_and_emits_event() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = build_state(temp.path()).await;
+        let ctx = WorkerContext::new(&state);
+
+        let bus = state.bus();
+        let mut rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_ACTIONS_COMPLETED.to_string()], Some(8));
+
+        let action_id = Uuid::new_v4().to_string();
+        state
+            .kernel()
+            .insert_action_async(&action_id, "demo.echo", &json!({}), None, None, "queued")
+            .await
+            .expect("insert action");
+
+        let expected_capability = "net:http".to_string();
+        let guard = ActionGuard {
+            allowed: true,
+            policy_allow: false,
+            required_capabilities: vec![expected_capability.clone()],
+            lease: Some(LeaseSummary {
+                id: "lease-1".into(),
+                subject: Some("subject".into()),
+                capability: expected_capability.clone(),
+                scope: Some("scope".into()),
+                ttl_until: "2099-01-01T00:00:00Z".into(),
+            }),
+        };
+
+        let outcome = ActionOutcome::new(json!({"result": "ok"}))
+            .with_posture("steady".to_string())
+            .with_guard(guard);
+
+        ctx.complete_action(&action_id, outcome).await;
+
+        let env = timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("completed event recv")
+            .expect("event value");
+
+        assert_eq!(env.kind, topics::TOPIC_ACTIONS_COMPLETED);
+        assert_eq!(env.payload["id"].as_str(), Some(action_id.as_str()));
+        assert_eq!(env.payload["posture"].as_str(), Some("steady"));
+        assert_eq!(
+            env.payload["guard"]["lease"]["capability"].as_str(),
+            Some(expected_capability.as_str()),
+        );
+        assert_eq!(env.payload["output"], json!({"result": "ok"}));
+
+        let stored = state
+            .kernel()
+            .get_action_async(&action_id)
+            .await
+            .expect("get action")
+            .expect("action row");
+        assert_eq!(stored.state, "completed");
+        let stored_output = stored.output.expect("stored output");
+        assert_eq!(stored_output["posture"].as_str(), Some("steady"));
+        assert_eq!(
+            stored_output["guard"]["lease"]["capability"].as_str(),
+            Some(expected_capability.as_str()),
+        );
+        assert_eq!(stored_output["guard"]["allowed"].as_bool(), Some(true));
+    }
+
+    #[tokio::test]
+    async fn fail_action_updates_kernel_and_emits_event() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = build_state(temp.path()).await;
+        let ctx = WorkerContext::new(&state);
+
+        let bus = state.bus();
+        let mut rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_ACTIONS_FAILED.to_string()], Some(8));
+
+        let action_id = Uuid::new_v4().to_string();
+        state
+            .kernel()
+            .insert_action_async(&action_id, "demo.echo", &json!({}), None, None, "queued")
+            .await
+            .expect("insert action");
+
+        let required_caps = vec!["io:egress".to_string()];
+        let failure = ActionFailure::new(ToolError::Invalid("bad input".into()))
+            .with_guard(ActionGuard {
+                allowed: false,
+                policy_allow: false,
+                required_capabilities: required_caps.clone(),
+                lease: None,
+            })
+            .with_posture("alert");
+
+        ctx.fail_action(&action_id, "demo.echo", failure).await;
+
+        let env = timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("failed event recv")
+            .expect("event value");
+
+        assert_eq!(env.kind, topics::TOPIC_ACTIONS_FAILED);
+        assert_eq!(env.payload["id"].as_str(), Some(action_id.as_str()));
+        assert_eq!(env.payload["posture"].as_str(), Some("alert"));
+        let event_caps: Vec<String> = env.payload["guard"]["required_capabilities"]
+            .as_array()
+            .expect("required caps")
+            .iter()
+            .map(|v| v.as_str().unwrap_or_default().to_string())
+            .collect();
+        assert_eq!(event_caps, required_caps);
+        assert_eq!(env.payload["error"]["type"].as_str(), Some("invalid"),);
+
+        let stored = state
+            .kernel()
+            .get_action_async(&action_id)
+            .await
+            .expect("get action")
+            .expect("action row");
+        assert_eq!(stored.state, "failed");
+        let stored_output = stored.output.expect("stored output");
+        assert_eq!(stored_output["posture"].as_str(), Some("alert"));
+        let stored_caps: Vec<String> = stored_output["guard"]["required_capabilities"]
+            .as_array()
+            .expect("stored guard caps")
+            .iter()
+            .map(|v| v.as_str().unwrap_or_default().to_string())
+            .collect();
+        assert_eq!(stored_caps, required_caps);
+        assert_eq!(stored_output["guard"]["allowed"].as_bool(), Some(false));
+        assert_eq!(stored.error.as_deref(), Some("invalid request: bad input"));
     }
 }
