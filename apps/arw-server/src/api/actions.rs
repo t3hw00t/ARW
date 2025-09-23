@@ -319,8 +319,19 @@ mod tests {
         let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
         let value: Value = serde_json::from_slice(&bytes).expect("json");
         assert_eq!(value["id"].as_str(), Some(action_id.as_str()));
-        assert_eq!(value["output"], stored_output);
-        assert_eq!(value["guard"]["allowed"].as_bool(), Some(true));
+        assert_eq!(value["output"].get("value"), stored_output.get("value"),);
+        assert_eq!(value["output"]["posture"].as_str(), Some("secure"));
+        let expected_guard = json!({
+            "allowed": true,
+            "policy_allow": false,
+            "required_capabilities": ["net:http", "io:egress"],
+            "lease": {
+                "capability": "net:http",
+                "ttl_until": "2099-01-01T00:00:00Z"
+            }
+        });
+        assert_eq!(value["output"]["guard"], expected_guard);
+        assert_eq!(value["guard"], expected_guard);
         assert_eq!(value["posture"].as_str(), Some("secure"));
     }
 }
@@ -351,15 +362,20 @@ pub async fn actions_get(
             body.insert("kind".into(), json!(a.kind));
             body.insert("state".into(), json!(a.state));
             body.insert("input".into(), a.input);
-            body.insert("output".into(), a.output.clone().unwrap_or(Value::Null));
+            let sanitized_output = a
+                .output
+                .as_ref()
+                .map(sanitize_output_value)
+                .unwrap_or(Value::Null);
+            body.insert("output".into(), sanitized_output.clone());
             if let Some(err) = a.error {
                 body.insert("error".into(), json!(err));
             }
-            if let Some(ref output) = a.output {
-                if let Some(posture) = output.get("posture") {
+            if let Value::Object(ref map) = sanitized_output {
+                if let Some(posture) = map.get("posture") {
                     body.entry("posture".to_string()).or_insert(posture.clone());
                 }
-                if let Some(guard) = output.get("guard") {
+                if let Some(guard) = map.get("guard") {
                     body.entry("guard".to_string()).or_insert(guard.clone());
                 }
             }
@@ -379,6 +395,56 @@ pub async fn actions_get(
             ),
         )
             .into_response(),
+    }
+}
+
+fn sanitize_output_value(value: &Value) -> Value {
+    match value {
+        Value::Object(map) => {
+            let mut sanitized = map.clone();
+            if let Some(guard) = map.get("guard") {
+                sanitized.insert("guard".into(), sanitize_guard_value(guard));
+            }
+            Value::Object(sanitized)
+        }
+        other => other.clone(),
+    }
+}
+
+fn sanitize_guard_value(value: &Value) -> Value {
+    if let Value::Object(map) = value {
+        let mut sanitized = serde_json::Map::new();
+        if let Some(v) = map.get("allowed") {
+            sanitized.insert("allowed".into(), v.clone());
+        }
+        if let Some(v) = map.get("policy_allow") {
+            sanitized.insert("policy_allow".into(), v.clone());
+        }
+        if let Some(v) = map.get("required_capabilities") {
+            sanitized.insert("required_capabilities".into(), v.clone());
+        }
+        if let Some(lease) = map.get("lease") {
+            if let Value::Object(lease_map) = lease {
+                let mut redacted = serde_json::Map::new();
+                if let Some(cap) = lease_map.get("capability") {
+                    redacted.insert("capability".into(), cap.clone());
+                }
+                if let Some(ttl) = lease_map.get("ttl_until") {
+                    redacted.insert("ttl_until".into(), ttl.clone());
+                }
+                if let Some(scope) = lease_map.get("scope") {
+                    if !scope.is_null() {
+                        redacted.insert("scope".into(), scope.clone());
+                    }
+                }
+                if !redacted.is_empty() {
+                    sanitized.insert("lease".into(), Value::Object(redacted));
+                }
+            }
+        }
+        Value::Object(sanitized)
+    } else {
+        value.clone()
     }
 }
 

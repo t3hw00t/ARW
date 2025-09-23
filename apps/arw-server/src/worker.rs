@@ -64,7 +64,7 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                         });
                         if let Some(ref guard_meta) = guard {
                             if let Value::Object(ref mut obj) = completed_payload {
-                                obj.insert("guard".into(), guard_meta.clone().into_value());
+                                obj.insert("guard".into(), guard_meta.to_external_value());
                             }
                         }
                         let completed_at =
@@ -449,10 +449,25 @@ struct ActionGuard {
 }
 
 impl ActionGuard {
-    fn into_value(self) -> Value {
+    fn to_internal_value(&self) -> Value {
         let lease_value = self
             .lease
-            .map(|lease| lease.into_value())
+            .as_ref()
+            .map(|lease| lease.to_internal_value())
+            .unwrap_or(Value::Null);
+        json!({
+            "allowed": self.allowed,
+            "policy_allow": self.policy_allow,
+            "required_capabilities": self.required_capabilities,
+            "lease": lease_value,
+        })
+    }
+
+    fn to_external_value(&self) -> Value {
+        let lease_value = self
+            .lease
+            .as_ref()
+            .map(|lease| lease.to_external_value())
             .unwrap_or(Value::Null);
         json!({
             "allowed": self.allowed,
@@ -464,15 +479,13 @@ impl ActionGuard {
 }
 
 fn enrich_output(value: Value, guard: Option<ActionGuard>, posture: &str) -> Value {
-    let guard_value = guard.map(|g| g.into_value());
     match value {
         Value::Object(mut map) => {
             map.entry("posture".to_string())
                 .or_insert_with(|| Value::String(posture.to_string()));
-            if let Some(guard_value) = guard_value {
-                if !map.contains_key("guard") {
-                    map.insert("guard".into(), guard_value);
-                }
+            if let Some(ref guard_meta) = guard {
+                map.entry("guard".to_string())
+                    .or_insert_with(|| guard_meta.to_internal_value());
             }
             Value::Object(map)
         }
@@ -480,8 +493,8 @@ fn enrich_output(value: Value, guard: Option<ActionGuard>, posture: &str) -> Val
             let mut map = serde_json::Map::new();
             map.insert("value".into(), other);
             map.insert("posture".into(), Value::String(posture.to_string()));
-            if let Some(guard_value) = guard_value {
-                map.insert("guard".into(), guard_value);
+            if let Some(ref guard_meta) = guard {
+                map.insert("guard".into(), guard_meta.to_internal_value());
             }
             Value::Object(map)
         }
@@ -514,7 +527,7 @@ impl LeaseSummary {
         })
     }
 
-    fn into_value(self) -> Value {
+    fn to_internal_value(&self) -> Value {
         json!({
             "id": self.id,
             "subject": self.subject,
@@ -522,6 +535,16 @@ impl LeaseSummary {
             "scope": self.scope,
             "ttl_until": self.ttl_until,
         })
+    }
+
+    fn to_external_value(&self) -> Value {
+        let mut obj = serde_json::Map::new();
+        obj.insert("capability".into(), Value::String(self.capability.clone()));
+        obj.insert("ttl_until".into(), Value::String(self.ttl_until.clone()));
+        if let Some(scope) = &self.scope {
+            obj.insert("scope".into(), Value::String(scope.clone()));
+        }
+        Value::Object(obj)
     }
 }
 
@@ -625,7 +648,7 @@ async fn handle_action_failure(
     if let Value::Object(ref mut obj) = event_payload {
         obj.insert("posture".into(), Value::String(posture_value.clone()));
         if let Some(ref guard_meta) = guard {
-            obj.insert("guard".into(), guard_meta.clone().into_value());
+            obj.insert("guard".into(), guard_meta.to_external_value());
         }
     }
     if let Some(ref guard_meta) = guard {
@@ -659,7 +682,7 @@ async fn handle_action_failure(
     }
     failure_body.insert("posture".into(), Value::String(posture_value.clone()));
     if let Some(ref guard_meta) = guard {
-        failure_body.insert("guard".into(), guard_meta.clone().into_value());
+        failure_body.insert("guard".into(), guard_meta.to_internal_value());
     }
     let failure_output = Value::Object(failure_body);
 
