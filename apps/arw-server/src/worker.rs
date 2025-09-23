@@ -468,9 +468,11 @@ fn enrich_output(value: Value, guard: Option<ActionGuard>, posture: &str) -> Val
     match value {
         Value::Object(mut map) => {
             map.entry("posture".to_string())
-                .or_insert(Value::String(posture.to_string()));
+                .or_insert_with(|| Value::String(posture.to_string()));
             if let Some(guard_value) = guard_value {
-                map.insert("guard".into(), guard_value);
+                if !map.contains_key("guard") {
+                    map.insert("guard".into(), guard_value);
+                }
             }
             Value::Object(map)
         }
@@ -626,10 +628,47 @@ async fn handle_action_failure(
             obj.insert("guard".into(), guard_meta.clone().into_value());
         }
     }
+    if let Some(ref guard_meta) = guard {
+        tracing::debug!(
+            target: "arw::worker",
+            %id,
+            %kind,
+            allowed = guard_meta.allowed,
+            policy_allow = guard_meta.policy_allow,
+            posture = %posture_value,
+            required_caps = ?guard_meta.required_capabilities,
+            lease_capability = guard_meta.lease.as_ref().map(|l| l.capability.as_str()),
+            "action guard metadata on failure",
+        );
+    } else {
+        tracing::debug!(
+            target: "arw::worker",
+            %id,
+            %kind,
+            posture = %posture_value,
+            "action failure without guard metadata",
+        );
+    }
     tracing::warn!(target: "arw::worker", %id, %kind, "action failed: {}", error_msg);
 
+    let mut failure_body = serde_json::Map::new();
+    if let Some(err_value) = event_payload.get("error") {
+        failure_body.insert("error".into(), err_value.clone());
+    } else {
+        failure_body.insert("error".into(), Value::String(error_msg.clone()));
+    }
+    failure_body.insert("posture".into(), Value::String(posture_value.clone()));
+    if let Some(ref guard_meta) = guard {
+        failure_body.insert("guard".into(), guard_meta.clone().into_value());
+    }
+    let failure_output = Value::Object(failure_body);
+
     let _ = kernel
-        .update_action_result_async(id.to_string(), None, Some(error_msg.clone()))
+        .update_action_result_async(
+            id.to_string(),
+            Some(failure_output),
+            Some(error_msg.clone()),
+        )
         .await;
     let _ = kernel.set_action_state_async(id, "failed").await;
 
@@ -803,6 +842,10 @@ mod tests {
         assert_eq!(stored.state, "failed");
         let error_text = stored.error.unwrap_or_default();
         assert!(error_text.contains("unsupported"));
+        let stored_output = stored.output.expect("stored output");
+        assert_eq!(stored_output["error"]["type"].as_str(), Some("unsupported"));
+        assert!(stored_output["posture"].as_str().is_some());
+        assert!(stored_output.get("guard").is_none());
     }
 
     #[tokio::test]

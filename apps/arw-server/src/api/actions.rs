@@ -248,6 +248,83 @@ pub async fn actions_submit(
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arw_policy::PolicyEngine;
+    use axum::{body::to_bytes, http::StatusCode};
+    use serde_json::Value;
+    use std::sync::Arc;
+    use tempfile::tempdir;
+    use tokio::sync::Mutex;
+
+    async fn build_state(path: &std::path::Path) -> AppState {
+        std::env::set_var("ARW_STATE_DIR", path.display().to_string());
+        let bus = arw_events::Bus::new_with_replay(16, 16);
+        let kernel = arw_kernel::Kernel::open(path).expect("init kernel");
+        let policy = PolicyEngine::load_from_env();
+        let policy_arc = Arc::new(Mutex::new(policy));
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
+        AppState::builder(bus, kernel, policy_arc, host, true)
+            .with_sse_capacity(16)
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    async fn actions_get_exposes_guard_and_posture() {
+        let temp = tempdir().expect("tempdir");
+        let state = build_state(temp.path()).await;
+
+        let action_id = uuid::Uuid::new_v4().to_string();
+        state
+            .kernel()
+            .insert_action_async(
+                &action_id,
+                "net.http.get",
+                &json!({"url": "https://example.com"}),
+                None,
+                None,
+                "completed",
+            )
+            .await
+            .expect("insert action");
+
+        let stored_output = json!({
+            "value": {"status": "ok"},
+            "posture": "secure",
+            "guard": {
+                "allowed": true,
+                "policy_allow": false,
+                "required_capabilities": ["net:http", "io:egress"],
+                "lease": {
+                    "id": "lease-1",
+                    "subject": Some("local"),
+                    "capability": "net:http",
+                    "scope": None::<String>,
+                    "ttl_until": "2099-01-01T00:00:00Z"
+                }
+            }
+        });
+
+        state
+            .kernel()
+            .update_action_result_async(action_id.clone(), Some(stored_output.clone()), None)
+            .await
+            .expect("store output");
+
+        let response = actions_get(State(state.clone()), Path(action_id.clone())).await;
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(value["id"].as_str(), Some(action_id.as_str()));
+        assert_eq!(value["output"], stored_output);
+        assert_eq!(value["guard"]["allowed"].as_bool(), Some(true));
+        assert_eq!(value["posture"].as_str(), Some("secure"));
+    }
+}
+
 /// Get action details by id.
 #[utoipa::path(
     get,
@@ -268,20 +345,28 @@ pub async fn actions_get(
         return crate::responses::kernel_disabled();
     }
     match state.kernel().get_action_async(&id).await {
-        Ok(Some(a)) => (
-            axum::http::StatusCode::OK,
-            Json(json!({
-                "id": a.id,
-                "kind": a.kind,
-                "state": a.state,
-                "input": a.input,
-                "output": a.output,
-                "error": a.error,
-                "created": a.created,
-                "updated": a.updated
-            })),
-        )
-            .into_response(),
+        Ok(Some(a)) => {
+            let mut body = serde_json::Map::new();
+            body.insert("id".into(), json!(a.id));
+            body.insert("kind".into(), json!(a.kind));
+            body.insert("state".into(), json!(a.state));
+            body.insert("input".into(), a.input);
+            body.insert("output".into(), a.output.clone().unwrap_or(Value::Null));
+            if let Some(err) = a.error {
+                body.insert("error".into(), json!(err));
+            }
+            if let Some(ref output) = a.output {
+                if let Some(posture) = output.get("posture") {
+                    body.entry("posture".to_string()).or_insert(posture.clone());
+                }
+                if let Some(guard) = output.get("guard") {
+                    body.entry("guard".to_string()).or_insert(guard.clone());
+                }
+            }
+            body.insert("created".into(), json!(a.created));
+            body.insert("updated".into(), json!(a.updated));
+            (axum::http::StatusCode::OK, Json(Value::Object(body))).into_response()
+        }
         Ok(None) => (
             axum::http::StatusCode::NOT_FOUND,
             Json(json!({"type":"about:blank","title":"Not Found","status":404})),
