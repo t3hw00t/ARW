@@ -41,28 +41,30 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                             guard,
                         } = match action_result {
                             Ok(outcome) => outcome,
-                            Err(err) => {
-                                handle_action_failure(&ctx.kernel, &ctx.bus, &id, &kind, err).await;
+                            Err(failure) => {
+                                handle_action_failure(&ctx.kernel, &ctx.bus, &id, &kind, failure)
+                                    .await;
                                 continue;
                             }
                         };
 
-                        let output_for_kernel = output.clone();
+                        let posture_value = posture.unwrap_or_else(util::effective_posture);
+                        let stored_output =
+                            enrich_output(output.clone(), guard.clone(), &posture_value);
                         let _ = ctx
                             .kernel
-                            .update_action_result_async(id.clone(), Some(output_for_kernel), None)
+                            .update_action_result_async(id.clone(), Some(stored_output), None)
                             .await;
                         let _ = ctx.kernel.set_action_state_async(&id, "completed").await;
 
-                        let posture_value = posture.unwrap_or_else(util::effective_posture);
                         let mut completed_payload = json!({
                             "id": id.clone(),
                             "output": output,
                             "posture": posture_value,
                         });
-                        if let Some(guard_meta) = guard {
+                        if let Some(ref guard_meta) = guard {
                             if let Value::Object(ref mut obj) = completed_payload {
-                                obj.insert("guard".into(), guard_meta.into_value());
+                                obj.insert("guard".into(), guard_meta.clone().into_value());
                             }
                         }
                         let completed_at =
@@ -121,14 +123,15 @@ impl WorkerContext {
         id: &str,
         kind: &str,
         input: &Value,
-    ) -> Result<ActionOutcome, ToolError> {
+    ) -> Result<ActionOutcome, ActionFailure> {
         match kind {
             k if k.starts_with("net.http.") => self.handle_http_action(id, k, input).await,
             "fs.patch" => self.handle_fs_patch(input).await,
             "app.vscode.open" => self.handle_app_vscode_open(input).await,
-            _ => execute_dynamic_action(state, kind, input)
-                .await
-                .map(ActionOutcome::new),
+            _ => match execute_dynamic_action(state, kind, input).await {
+                Ok(value) => Ok(ActionOutcome::new(value)),
+                Err(err) => Err(ActionFailure::new(err)),
+            },
         }
     }
 
@@ -137,7 +140,7 @@ impl WorkerContext {
         id: &str,
         kind: &str,
         input: &Value,
-    ) -> Result<ActionOutcome, ToolError> {
+    ) -> Result<ActionOutcome, ActionFailure> {
         let mut input_with_headers = input.clone();
         let project = std::env::var("ARW_PROJECT_ID").ok();
         if let Some(obj) = input_with_headers.as_object_mut() {
@@ -242,7 +245,7 @@ impl WorkerContext {
         }
     }
 
-    async fn handle_fs_patch(&self, input: &Value) -> Result<ActionOutcome, ToolError> {
+    async fn handle_fs_patch(&self, input: &Value) -> Result<ActionOutcome, ActionFailure> {
         let guard = self.guard_action("fs.patch", &["fs", "fs:patch"]).await;
         if !guard.allowed {
             self.bus.publish(
@@ -278,7 +281,7 @@ impl WorkerContext {
         }
     }
 
-    async fn handle_app_vscode_open(&self, input: &Value) -> Result<ActionOutcome, ToolError> {
+    async fn handle_app_vscode_open(&self, input: &Value) -> Result<ActionOutcome, ActionFailure> {
         let guard = self
             .guard_action("app.vscode.open", &["io:app:vscode", "io:app"])
             .await;
@@ -402,7 +405,42 @@ impl ActionOutcome {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug)]
+struct ActionFailure {
+    error: ToolError,
+    guard: Option<ActionGuard>,
+    posture: Option<String>,
+}
+
+impl ActionFailure {
+    fn new(error: ToolError) -> Self {
+        Self {
+            error,
+            guard: None,
+            posture: None,
+        }
+    }
+
+    #[allow(dead_code)]
+    fn with_guard(mut self, guard: ActionGuard) -> Self {
+        self.guard = Some(guard);
+        self
+    }
+
+    #[allow(dead_code)]
+    fn with_posture<S: Into<String>>(mut self, posture: S) -> Self {
+        self.posture = Some(posture.into());
+        self
+    }
+
+    #[allow(dead_code)]
+    fn with_optional_guard(mut self, guard: Option<ActionGuard>) -> Self {
+        self.guard = guard;
+        self
+    }
+}
+
+#[derive(Clone, Debug)]
 struct ActionGuard {
     allowed: bool,
     policy_allow: bool,
@@ -425,7 +463,30 @@ impl ActionGuard {
     }
 }
 
-#[derive(Clone)]
+fn enrich_output(value: Value, guard: Option<ActionGuard>, posture: &str) -> Value {
+    let guard_value = guard.map(|g| g.into_value());
+    match value {
+        Value::Object(mut map) => {
+            map.entry("posture".to_string())
+                .or_insert(Value::String(posture.to_string()));
+            if let Some(guard_value) = guard_value {
+                map.insert("guard".into(), guard_value);
+            }
+            Value::Object(map)
+        }
+        other => {
+            let mut map = serde_json::Map::new();
+            map.insert("value".into(), other);
+            map.insert("posture".into(), Value::String(posture.to_string()));
+            if let Some(guard_value) = guard_value {
+                map.insert("guard".into(), guard_value);
+            }
+            Value::Object(map)
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 struct LeaseSummary {
     id: String,
     subject: Option<String>,
@@ -549,9 +610,22 @@ async fn handle_action_failure(
     bus: &arw_events::Bus,
     id: &str,
     kind: &str,
-    err: ToolError,
+    failure: ActionFailure,
 ) {
-    let (error_msg, mut event_payload, denied) = tool_error_details(id, kind, &err);
+    let ActionFailure {
+        error,
+        guard,
+        posture,
+    } = failure;
+    let posture_value = posture.unwrap_or_else(util::effective_posture);
+
+    let (error_msg, mut event_payload, denied) = tool_error_details(id, kind, &error);
+    if let Value::Object(ref mut obj) = event_payload {
+        obj.insert("posture".into(), Value::String(posture_value.clone()));
+        if let Some(ref guard_meta) = guard {
+            obj.insert("guard".into(), guard_meta.clone().into_value());
+        }
+    }
     tracing::warn!(target: "arw::worker", %id, %kind, "action failed: {}", error_msg);
 
     let _ = kernel
@@ -563,7 +637,6 @@ async fn handle_action_failure(
     bus.publish(topics::TOPIC_ACTIONS_FAILED, &event_payload);
 
     if let Some(denied) = denied {
-        let posture = util::effective_posture();
         let record = EgressRecord {
             decision: "deny",
             reason: Some(denied.reason.as_str()),
@@ -579,7 +652,7 @@ async fn handle_action_failure(
         let _ = egress_log::record(
             Some(kernel),
             bus,
-            Some(posture.as_str()),
+            Some(posture_value.as_str()),
             &record,
             false,
             true,
@@ -718,6 +791,8 @@ mod tests {
         assert_eq!(env.payload["id"].as_str(), Some(action_id.as_str()));
         assert_eq!(env.payload["kind"].as_str(), Some("tool.missing"));
         assert_eq!(env.payload["error"]["type"].as_str(), Some("unsupported"));
+        assert!(env.payload["posture"].as_str().is_some());
+        assert!(env.payload.get("guard").is_none());
 
         let stored = state
             .kernel()
@@ -930,5 +1005,22 @@ mod tests {
             .as_array()
             .map(|v| !v.is_empty())
             .unwrap_or(false));
+
+        let stored = state
+            .kernel()
+            .get_action_async(&action_id)
+            .await
+            .expect("get action")
+            .expect("action row");
+        let stored_output = stored.output.expect("stored output");
+        assert_eq!(stored_output["guard"]["allowed"].as_bool(), Some(true));
+        assert_eq!(
+            stored_output["guard"]["lease"]["capability"].as_str(),
+            Some("net:http"),
+        );
+        assert_eq!(
+            stored_output["posture"].as_str(),
+            env.payload["posture"].as_str(),
+        );
     }
 }
