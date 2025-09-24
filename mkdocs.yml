@@ -97,6 +97,7 @@ nav:
       - Trial Planning: ops/trial_readiness.md
       - Trial Runbook: ops/trial_runbook.md
       - Participant Quickstart: ops/trial_quickstart.md
+      - Facilitator Checklist: ops/trial_facilitator_checklist.md
       - Chat Backends: guide/chat_backends.md
       - Guardrails Checks: guide/guardrails.md
       - Correlation & Attribution: guide/correlation.md

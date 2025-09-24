@@ -7,7 +7,7 @@ title: Trial Runbook
 Updated: 2025-09-26
 Type: Checklist (quick reference)
 
-This runbook keeps the daily trial routine lightweight. Use it side-by-side with the Trial Readiness Plan and the participant quickstart sheet.
+This runbook keeps the daily trial routine lightweight. Use it side-by-side with the Trial Readiness Plan, the facilitator checklist, and the participant quickstart sheet.
 
 ## Before the day starts
 

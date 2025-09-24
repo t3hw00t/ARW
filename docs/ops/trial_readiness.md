@@ -7,7 +7,7 @@ title: Trial Readiness Plan
 Updated: 2025-09-26
 Type: Playbook (quick guide)
 
-Use this short guide to decide when Agent Hub feels good enough to invite real teammates into a trial. It sticks to plain language so product owners, operators, and partners can follow along without digging into the code.
+Use this short guide to decide when Agent Hub feels good enough to invite real teammates into a trial. Facilitators should also review the checklist (`docs/ops/trial_facilitator_checklist.md`) and onboarding email template (`docs/ops/trials/onboarding_email_template.md`). It sticks to plain language so product owners, operators, and partners can follow along without digging into the code.
 
 ## Four easy checkpoints
 
