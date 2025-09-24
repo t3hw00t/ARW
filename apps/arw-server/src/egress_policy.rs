@@ -95,10 +95,7 @@ impl AllowRule {
     }
 
     fn matches(&self, host: &str, port: Option<u16>) -> bool {
-        let host_norm = host
-            .trim()
-            .trim_end_matches('.')
-            .to_ascii_lowercase();
+        let host_norm = host.trim().trim_end_matches('.').to_ascii_lowercase();
         if let Some(rule_port) = self.port {
             if port != Some(rule_port) {
                 return false;

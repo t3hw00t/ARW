@@ -1,4 +1,6 @@
 # Trial Dashboard Snapshots
+Updated: 2025-09-26
+Type: Asset folder note
 
 Store exported Trial Control Center (or equivalent dashboard) images here during a trial.
 
