@@ -1,9 +1,12 @@
 # Trial Daily Log — {{DATE}}
 
+Updated: 2025-09-26
+
 ## Snapshot
 - Pilot: 
 - Observer: 
 - Day/time: 
+- Dashboard snapshot filename (`docs/ops/trials/screenshots/`): 
 
 ## Dashboard tiles (copy values)
 - Systems: 

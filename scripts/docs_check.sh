@@ -152,6 +152,7 @@ allowed_files = {
     root / "apps" / "arw-server" / "src" / "capsule_guard.rs",
     root / "scripts" / "docs_check.sh",
     root / "CHANGELOG.md",
+    root / "scripts" / "check_legacy_surface.sh",
 }
 skip_names = {".git", ".arw", "target", "site", "vendor", "sandbox", "node_modules"}
 

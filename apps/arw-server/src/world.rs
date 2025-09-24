@@ -353,8 +353,13 @@ pub struct ProjectMap {
 
 pub(crate) fn snapshot_project_map(project: Option<&str>) -> ProjectMap {
     let ws = store().read().unwrap();
-    let (graph, last_ver) = if let Some(p) = project {
-        (ws.proj_graphs.get(p), ws.default_graph.version)
+    let global_version = ver().load(Ordering::Relaxed);
+    let (graph, graph_version) = if let Some(p) = project {
+        let g = ws.proj_graphs.get(p);
+        let version = g
+            .map(|graph| graph.version)
+            .unwrap_or(ws.default_graph.version);
+        (g, version)
     } else {
         (Some(&ws.default_graph), ws.default_graph.version)
     };
@@ -420,7 +425,7 @@ pub(crate) fn snapshot_project_map(project: Option<&str>) -> ProjectMap {
             }
         }
         ProjectMap {
-            version: ver().load(Ordering::Relaxed).max(last_ver),
+            version: global_version.max(graph_version),
             project: project.map(|s| s.to_string()),
             entities,
             claims,
@@ -434,7 +439,7 @@ pub(crate) fn snapshot_project_map(project: Option<&str>) -> ProjectMap {
         }
     } else {
         ProjectMap {
-            version: ver().load(Ordering::Relaxed),
+            version: global_version,
             project: project.map(|s| s.to_string()),
             entities: Vec::new(),
             claims: Vec::new(),

@@ -1,5 +1,7 @@
 # Dashboard Snapshot Tips
 
+Updated: 2025-09-26
+
 When you save a screenshot or export from the Trial Control Center, double-check these cues:
 
 - Tile colours match the status in the daily log (green = on target, amber = watch, red = action needed).

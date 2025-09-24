@@ -1,9 +1,9 @@
 use crate::image_utils::bgra_to_rgba_image;
 use anyhow::{anyhow, Result};
 use display_info::DisplayInfo;
-use fxhash::hash32;
 use image::RgbaImage;
-use std::{mem, ops::Deref, ptr};
+use rustc_hash::FxHasher;
+use std::{hash::Hasher, mem, ops::Deref, ptr};
 use widestring::U16CString;
 use windows::{
     core::PCWSTR,
@@ -73,11 +73,17 @@ fn get_monitor_info_exw_from_id(id: u32) -> Result<MONITORINFOEXW> {
             let sz_device_ptr = monitor_info_exw.szDevice.as_ptr();
             let sz_device_string =
                 unsafe { U16CString::from_ptr_str(sz_device_ptr).to_string_lossy() };
-            hash32(sz_device_string.as_bytes()) == id
+            fxhash32(sz_device_string.as_bytes()) == id
         })
         .ok_or_else(|| anyhow!("Can't find a display by id {id}"))?;
 
     Ok(*monitor_info_exw)
+}
+
+fn fxhash32(bytes: &[u8]) -> u32 {
+    let mut hasher = FxHasher::default();
+    hasher.write(bytes);
+    hasher.finish() as u32
 }
 
 extern "system" fn monitor_enum_proc(

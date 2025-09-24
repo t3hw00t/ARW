@@ -95,15 +95,27 @@ impl AllowRule {
     }
 
     fn matches(&self, host: &str, port: Option<u16>) -> bool {
+        let host_norm = host
+            .trim()
+            .trim_end_matches('.')
+            .to_ascii_lowercase();
         if let Some(rule_port) = self.port {
             if port != Some(rule_port) {
                 return false;
             }
         }
         if self.wildcard {
-            host.ends_with(&self.suffix)
+            let suffix = &self.suffix;
+            if host_norm.len() <= suffix.len() {
+                return false;
+            }
+            if !host_norm.ends_with(suffix) {
+                return false;
+            }
+            let boundary_idx = host_norm.len() - suffix.len() - 1;
+            matches!(host_norm.as_bytes().get(boundary_idx), Some(b'.'))
         } else {
-            host == self.suffix
+            host_norm == self.suffix
         }
     }
 }
@@ -435,6 +447,24 @@ pub async fn lease_grant(state: &AppState, caps: &[String]) -> Option<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn allow_rule_wildcard_requires_label_boundary() {
+        let rule = AllowRule::new("*.example.com").expect("rule");
+        assert!(rule.matches("api.example.com", None));
+        assert!(rule.matches("deep.branch.example.com", None));
+        assert!(!rule.matches("example.com", None));
+        assert!(!rule.matches("badexample.com", None));
+    }
+
+    #[test]
+    fn allow_rule_exact_and_port_matching_are_case_insensitive() {
+        let rule = AllowRule::new("Foo.Example.com:8443").expect("rule");
+        assert!(rule.matches("foo.example.com", Some(8443)));
+        assert!(rule.matches("FOO.EXAMPLE.COM", Some(8443)));
+        assert!(!rule.matches("foo.example.com", Some(443)));
+        assert!(!rule.matches("foo.example.com", None));
+    }
 
     #[test]
     fn wildcard_matching() {

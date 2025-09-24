@@ -22,7 +22,7 @@ Use this sheet to launch and run our two-person trial. Tick items as you go; if 
 - [ ] Send the onboarding note (or DM) with the quickstart link.
 - [ ] Drop tokens in our shared vault and copy expiry dates into the access matrix.
 - [ ] Schedule a quick daily sync (video or chat).
-- [ ] Verify Trial Control Center tiles are green and screenshot the baseline.
+- [ ] Verify Trial Control Center (or `/admin/debug`) tiles are green and screenshot the baseline.
 
 ## Daily loop
 - [ ] Run preflight each morning (`just trials-preflight`).

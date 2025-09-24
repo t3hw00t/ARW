@@ -11,8 +11,8 @@ This runbook keeps our two-person trial routine lightweight. Use it with the Tri
 
 ## Before the day starts
 
-- Open the Trial Control Center; confirm all four tiles (Systems, Memory, Approvals, Safety) are green.  Record the numbers in a fresh copy of `docs/ops/trials/daily_log_template.md`.
-- Run `just trials-preflight` or press the Home screen preflight button.
+- Open the Trial Control Center (or `/admin/debug` dashboards) and confirm Systems, Memory, Approvals, and Safety are green. Record the numbers in a fresh copy of `docs/ops/trials/daily_log_template.md`.
+- Run `just trials-preflight` (or press the Home screen preflight button when it ships).
 - Check the approvals lane is empty; if not, ping the other person before starting.
 - Glance at the access matrix (ops/access_matrix.yaml) to verify tokens expiring today.
 
@@ -42,7 +42,7 @@ This runbook keeps our two-person trial routine lightweight. Use it with the Tri
 ## End-of-day wrap
 
 - Clear or hand off approvals.
-- Snapshot the dashboard tiles and drop them into `docs/ops/trials/` (see `dashboard_snapshot.md`).
+- Snapshot the dashboard tiles, save them in `docs/ops/trials/screenshots/` (add a short caption in the daily log), and log the filename in the daily log (see `docs/ops/trials/dashboard_snapshot.md`).
 - Update the incident log and highlight the day’s wins.
 - Check the access matrix for tokens or leases expiring overnight.
 

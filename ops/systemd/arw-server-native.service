@@ -5,13 +5,22 @@ Wants=network-online.target
 
 [Service]
 EnvironmentFile=-/etc/default/arw-server
+EnvironmentFile=-%h/.config/arw-server.env
+Environment=ARW_PORT=8091
+Environment=ARW_BIND=127.0.0.1
+Environment=ARW_HTTP_TIMEOUT_SECS=20
+Environment=ARW_STATE_DIR=/var/lib/arw-server-%i/state
+WorkingDirectory=/var/lib/arw-server-%i
+StateDirectory=arw-server-%i
+RuntimeDirectory=arw-server-%i
 User=%i
 ExecStart=/usr/local/bin/arw-server
+ExecStartPre=/usr/bin/mkdir -p /var/lib/arw-server-%i/state
 Restart=always
 RestartSec=2
 NoNewPrivileges=true
-ProtectSystem=full
-ProtectHome=true
+ProtectSystem=strict
+ProtectHome=read-only
 PrivateTmp=true
 ProtectControlGroups=true
 ProtectClock=true
@@ -23,7 +32,7 @@ MemoryDenyWriteExecute=true
 CapabilityBoundingSet=
 AmbientCapabilities=
 SystemCallFilter=@system-service
+ReadWritePaths=/var/lib/arw-server-%i
 
 [Install]
 WantedBy=default.target
-

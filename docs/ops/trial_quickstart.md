@@ -9,6 +9,11 @@ Type: Participant guide
 
 It’s just the two of us in this trial, but keep this one-page guide handy so either person can get started in five minutes.
 
+!!! note "Launcher vs. Project Hub"
+    The steps below assume the Project Hub launcher UI. If you are running the
+    headless server only, mirror the same flows via `/admin/debug` and the
+    Project Hub Activity panel, and record approvals manually in the daily log.
+
 ## 1. Install & Sign In
 
 1. Download the latest release from our shared link (see the prep note).

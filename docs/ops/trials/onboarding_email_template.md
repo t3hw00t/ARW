@@ -1,5 +1,7 @@
 # Trial Onboarding Note (two-person)
 
+Updated: 2025-09-26
+
 Subject: Trial run reminder — getting set up
 
 Hi {{Name}},

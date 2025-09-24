@@ -1,0 +1,32 @@
+[package]
+name = "iso8601"
+version = "0.6.3"
+authors = [
+    "Jan-Erik Rediger <janerik@fnordig.de>",
+    "Hendrik Sollich <hendrik@hoodie.de>",
+]
+
+description = "Parsing ISO8601 dates using nom"
+keywords = ["iso8601", "date-time", "parser", "nom"]
+categories = ["parser-implementations", "date-and-time"]
+
+repository = "https://github.com/badboy/iso8601"
+documentation = "https://docs.rs/iso8601/"
+license = "MIT"
+readme = "README.md"
+
+edition = "2021"
+
+[dependencies]
+nom = { version = "8", default-features = false }
+chrono = { version = "0.4", default-features = false, optional = true }
+num-traits = { version = "0.2", optional = true }
+serde = { version = "1.0", optional = true }
+
+[dev-dependencies]
+serde_json = "1.0"
+
+[features]
+default = ["std"]
+std = ["nom/std"]
+chrono = ["dep:chrono", "dep:num-traits"]

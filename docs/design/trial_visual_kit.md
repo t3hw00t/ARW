@@ -45,6 +45,6 @@ This brief keeps UI, docs, and training materials aligned while we polish the tr
 
 1. Figma page with the home screen, approvals drawer, and control center.
 2. Exported PNGs for docs and training decks.
-3. SVG icon set (home/compass/shield/status) checked into `assets/icons/trial/`.
+3. SVG icon set (home/compass/shield/status) checked into `assets/icons/trial/` (`home.svg`, `compass.svg`, `shield.svg`, `status.svg`).
 
 Keep the visuals approachable—friendly shapes, minimal chrome, and language that sounds like a teammate, not a terminal.

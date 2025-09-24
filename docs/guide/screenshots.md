@@ -4,12 +4,12 @@ title: Screenshots
 
 # Screenshots
 Updated: 2025-09-21
-Status: Enabled (capture + annotate), Optional OCR (build‑time)
+Status: Capture + annotate shipping behind optional features; OCR optional (build‑time)
 Type: How‑to
 
 Purpose: allow AI agents and the user to capture the screen or a window region, attach it to a conversation, and optionally run OCR for instruction generation.
 
-The capability is live end‑to‑end:
+The capability is live end‑to‑end when the screenshot toolchain features are enabled:
 - Service exposes `ui.screenshot.capture`, `ui.screenshot.annotate_burn`, and (optional) `ui.screenshot.ocr`.
 - The launcher and chat clients surface palette shortcuts, chat buttons, and the Screenshots Gallery.
 - `screenshots.captured` SSE events fan out previews immediately so the UI can react in real time.
@@ -21,9 +21,9 @@ Security & policy
 - OCR gated under `io:ocr` with its own TTL lease
 
 Tool interface
-> Build-time: enable the `tool_screenshots` feature when compiling `arw-server`
-> to expose the capture/annotate tools. Without it the API returns
-> `Unsupported` errors.
+> Build-time: compile `arw-server` with `--features "tool_screenshots"` (and
+> optionally `ocr_tesseract`) to expose the capture/annotate tools. Without
+> those features the API returns `Unsupported` errors.
 `ui.screenshot.capture(scope?, format?, downscale?) → { path, width, height, preview_b64 }`
 - `scope`: `screen` (default) | `display:n` | `window:<id>` | `region:x,y,w,h`
 - `format`: `png` (default) or `jpg`
@@ -37,10 +37,15 @@ Events
 OCR (optional)
 - `ui.screenshot.ocr(path) → { text, blocks[] }`
 - Local OCR engine only; no network egress by default
-- Build‑time feature: `ocr_tesseract` enables Tesseract via `leptess`. This repo enables it by default; install system deps (e.g., `tesseract-ocr` + `libtesseract-dev` on Linux) to build. Without the libs, disable with `--no-default-features` or build without `ocr_tesseract`.
+- Build‑time feature: `ocr_tesseract` enables Tesseract via `leptess`. Enable it
+  with `--features "tool_screenshots ocr_tesseract"` and install system deps
+  (e.g., `tesseract-ocr` + `libtesseract-dev` on Linux). If the libs are not
+  present, omit the `ocr_tesseract` feature.
 
 Storage
-- Default save directory: `.arw/screenshots/YYYY/MM/DD/<ts>_<scope>.png`
+- Default save directory: `<ARW_STATE_DIR>/screenshots/YYYY/MM/DD/<ts>_<scope>.png`
+  (defaults to `state/screenshots/...`). Set `ARW_STATE_DIR` to relocate the
+  output (for example, `$HOME/.arw`).
 
 UI integration
 - Sidecar Activity lane shows recent screenshots as thumbnails; click to open (launcher `open_path`).

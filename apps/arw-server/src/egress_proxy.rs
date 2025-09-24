@@ -20,6 +20,7 @@ use std::sync::{
     Arc, Mutex,
 };
 use std::task::{Context, Poll};
+use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
@@ -71,6 +72,7 @@ fn is_doh_host(h: &str) -> bool {
 
 struct ProxyRuntime {
     port: u16,
+    timeout_secs: u64,
     cancel: CancellationToken,
     handle: tokio::task::JoinHandle<()>,
 }
@@ -87,27 +89,31 @@ pub async fn apply_current(state: AppState) {
 }
 
 pub async fn apply(enable: bool, port: u16, state: AppState) {
+    let desired_timeout = http_timeout::get_secs();
     let mut guard = PROXY.lock().unwrap();
-    match (&*guard, enable) {
-        (Some(rt), true) if rt.port == port => {
-            // already running with same port
+    if let Some(current) = guard.as_ref() {
+        if !enable {
+            if let Some(current) = guard.take() {
+                current.cancel.cancel();
+                current.handle.abort();
+            }
             return;
         }
-        (Some(rt), false) | (Some(rt), true) if rt.port != port => {
-            rt.cancel.cancel();
-            rt.handle.abort();
-            *guard = None;
-            if !enable {
-                return;
-            }
+        if current.port == port && current.timeout_secs == desired_timeout {
+            return;
         }
-        (None, false) => return,
-        _ => {}
+        if let Some(current) = guard.take() {
+            current.cancel.cancel();
+            current.handle.abort();
+        }
+    } else if !enable {
+        return;
     }
     let bind = format!("127.0.0.1:{}", port);
     info!("egress proxy listening on {} (preview)", bind);
+    let client_timeout = Duration::from_secs(desired_timeout.max(1));
     let client = reqwest::Client::builder()
-        .timeout(http_timeout::get_duration())
+        .timeout(client_timeout)
         .build()
         .expect("reqwest client");
     let cancel = CancellationToken::new();
@@ -148,6 +154,7 @@ pub async fn apply(enable: bool, port: u16, state: AppState) {
     });
     *guard = Some(ProxyRuntime {
         port,
+        timeout_secs: desired_timeout,
         cancel,
         handle,
     });
@@ -597,6 +604,8 @@ async fn handle_http_forward(
         url,
     );
 
+    rb = rb.timeout(http_timeout::get_duration());
+
     for (name, value) in headers.iter() {
         if let Ok(reqwest_name) = reqwest::header::HeaderName::from_bytes(name.as_str().as_bytes())
         {
@@ -625,7 +634,7 @@ async fn handle_http_forward(
     if has_request_body {
         let body_stream = body
             .into_data_stream()
-            .map(|res| res.map_err(|err| io::Error::new(io::ErrorKind::Other, err)));
+            .map(|res| res.map_err(io::Error::other));
         rb = rb.body(reqwest::Body::wrap_stream(body_stream));
     } else {
         drop(body);
@@ -661,13 +670,15 @@ async fn handle_http_forward(
     let stream = CountingStream::new(
         out.bytes_stream(),
         state.clone(),
-        host.clone(),
-        Some(port),
-        scheme.clone(),
-        body_len,
-        corr_id_hdr.clone(),
-        proj_hdr.clone(),
-        resp_len,
+        CountingStreamContext {
+            host: host.clone(),
+            port: Some(port),
+            scheme: scheme.clone(),
+            body_len,
+            corr_id: corr_id_hdr.clone(),
+            proj: proj_hdr.clone(),
+            advertised_len: resp_len,
+        },
     );
 
     let mut builder = Response::builder().status(status);
@@ -690,12 +701,8 @@ async fn handle_http_forward(
     }
 }
 
-struct CountingStream<S>
-where
-    S: Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + 'static,
-{
-    inner: S,
-    state: AppState,
+#[derive(Clone)]
+struct CountingStreamContext {
     host: Option<String>,
     port: Option<u16>,
     scheme: String,
@@ -703,6 +710,15 @@ where
     corr_id: Option<String>,
     proj: Option<String>,
     advertised_len: Option<i64>,
+}
+
+struct CountingStream<S>
+where
+    S: Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + 'static,
+{
+    inner: S,
+    state: AppState,
+    ctx: CountingStreamContext,
     bytes_in: Arc<AtomicI64>,
     logged: bool,
 }
@@ -711,27 +727,11 @@ impl<S> CountingStream<S>
 where
     S: Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + 'static,
 {
-    fn new(
-        inner: S,
-        state: AppState,
-        host: Option<String>,
-        port: Option<u16>,
-        scheme: String,
-        body_len: Option<i64>,
-        corr_id: Option<String>,
-        proj: Option<String>,
-        advertised_len: Option<i64>,
-    ) -> Self {
+    fn new(inner: S, state: AppState, ctx: CountingStreamContext) -> Self {
         Self {
             inner,
             state,
-            host,
-            port,
-            scheme,
-            body_len,
-            corr_id,
-            proj,
-            advertised_len,
+            ctx,
             bytes_in: Arc::new(AtomicI64::new(0)),
             logged: false,
         }
@@ -743,33 +743,27 @@ where
         }
         self.logged = true;
         let state = self.state.clone();
-        let host = self.host.clone();
-        let port = self.port;
-        let scheme = self.scheme.clone();
-        let body_len = self.body_len;
-        let corr_id = self.corr_id.clone();
-        let proj = self.proj.clone();
+        let ctx = self.ctx.clone();
         let bytes = self.bytes_in.clone();
-        let advertised = self.advertised_len;
         tokio::spawn(async move {
             let measured = bytes.load(Ordering::Relaxed);
             let final_bytes = if measured > 0 {
                 Some(measured)
             } else {
-                advertised
+                ctx.advertised_len
             };
             let decision = if success { "allow" } else { "error" };
             log_egress_event(
                 &state,
                 decision,
                 Some(reason),
-                host.as_deref(),
-                port,
-                Some(&scheme),
+                ctx.host.as_deref(),
+                ctx.port,
+                Some(&ctx.scheme),
                 final_bytes,
-                body_len,
-                corr_id.as_deref(),
-                proj.as_deref(),
+                ctx.body_len,
+                ctx.corr_id.as_deref(),
+                ctx.proj.as_deref(),
                 None,
             )
             .await;

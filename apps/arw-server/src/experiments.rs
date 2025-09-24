@@ -83,6 +83,12 @@ pub struct ScoreEntry {
     pub time: String,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+struct VariantScore {
+    proj: String,
+    score: ScoreEntry,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, Default, ToSchema)]
 pub struct ScoreRow {
     pub exp_id: String,
@@ -115,6 +121,10 @@ pub struct RunOutcomeVariant {
     pub passed: usize,
     pub failed: usize,
     pub avg_latency_ms: u64,
+    #[serde(default)]
+    pub avg_ctx_tokens: u64,
+    #[serde(default)]
+    pub avg_ctx_items: u64,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
@@ -128,7 +138,7 @@ pub struct RunOutcome {
 pub struct Experiments {
     experiments: RwLock<HashMap<String, Experiment>>,
     winners: RwLock<HashMap<String, WinnerInfo>>,
-    scoreboard: RwLock<HashMap<String, HashMap<String, ScoreEntry>>>,
+    scoreboard: RwLock<HashMap<String, HashMap<String, VariantScore>>>,
     events: RwLock<VecDeque<Value>>,
     bus: Bus,
     governor: Arc<GovernorState>,
@@ -195,8 +205,10 @@ impl Experiments {
                 passed: summary.passed,
                 failed: summary.failed,
                 avg_latency_ms: summary.avg_latency_ms,
+                avg_ctx_tokens: summary.avg_ctx_tokens,
+                avg_ctx_items: summary.avg_ctx_items,
             });
-            self.update_scoreboard(&plan.exp_id, variant, &summary)
+            self.update_scoreboard(&plan.exp_id, &plan.proj, variant, &summary)
                 .await;
             let mut payload = json!({
                 "exp_id": plan.exp_id,
@@ -247,8 +259,8 @@ impl Experiments {
                     total: row.total,
                     failed: row.failed,
                     avg_latency_ms: row.avg_latency_ms,
-                    avg_ctx_tokens: 0,
-                    avg_ctx_items: 0,
+                    avg_ctx_tokens: row.avg_ctx_tokens,
+                    avg_ctx_items: row.avg_ctx_items,
                 };
                 self.set_winner(info).await;
             }
@@ -320,12 +332,12 @@ impl Experiments {
         let map = self.scoreboard.read().await;
         let mut out = Vec::new();
         for (exp_id, variants) in map.iter() {
-            for (variant, score) in variants.iter() {
+            for (variant, entry) in variants.iter() {
                 out.push(ScoreRow {
                     exp_id: exp_id.clone(),
-                    proj: String::new(),
+                    proj: entry.proj.clone(),
                     variant: variant.clone(),
-                    score: score.clone(),
+                    score: entry.score.clone(),
                 });
             }
         }
@@ -381,19 +393,28 @@ impl Experiments {
         guard.push_back(json!({"time": now_iso(), "event": payload}));
     }
 
-    async fn update_scoreboard(&self, exp_id: &str, variant: &str, summary: &goldens::EvalSummary) {
+    async fn update_scoreboard(
+        &self,
+        exp_id: &str,
+        proj: &str,
+        variant: &str,
+        summary: &goldens::EvalSummary,
+    ) {
         let mut map = self.scoreboard.write().await;
         let entry = map.entry(exp_id.to_string()).or_insert_with(HashMap::new);
         entry.insert(
             variant.to_string(),
-            ScoreEntry {
-                passed: summary.passed,
-                total: summary.total,
-                failed: summary.failed,
-                avg_latency_ms: summary.avg_latency_ms,
-                avg_ctx_tokens: summary.avg_ctx_tokens,
-                avg_ctx_items: summary.avg_ctx_items,
-                time: now_iso(),
+            VariantScore {
+                proj: proj.to_string(),
+                score: ScoreEntry {
+                    passed: summary.passed,
+                    total: summary.total,
+                    failed: summary.failed,
+                    avg_latency_ms: summary.avg_latency_ms,
+                    avg_ctx_tokens: summary.avg_ctx_tokens,
+                    avg_ctx_items: summary.avg_ctx_items,
+                    time: now_iso(),
+                },
             },
         );
         self.persist().await;
@@ -420,7 +441,13 @@ impl Experiments {
                     score.clear();
                     for row in state.scoreboard.iter() {
                         let entry = score.entry(row.exp_id.clone()).or_default();
-                        entry.insert(row.variant.clone(), row.score.clone());
+                        entry.insert(
+                            row.variant.clone(),
+                            VariantScore {
+                                proj: row.proj.clone(),
+                                score: row.score.clone(),
+                            },
+                        );
                     }
                 }
             }
@@ -433,12 +460,12 @@ impl Experiments {
         {
             let map = self.scoreboard.read().await;
             for (exp_id, variants) in map.iter() {
-                for (variant, score) in variants.iter() {
+                for (variant, entry) in variants.iter() {
                     scoreboard.push(ScoreRow {
                         exp_id: exp_id.clone(),
-                        proj: String::new(),
+                        proj: entry.proj.clone(),
                         variant: variant.clone(),
-                        score: score.clone(),
+                        score: entry.score.clone(),
                     });
                 }
             }

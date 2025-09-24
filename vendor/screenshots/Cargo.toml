@@ -41,8 +41,8 @@ version = "2.3"
 [target."cfg(target_os = \"macos\")".dependencies.core-graphics]
 version = "0.22"
 
-[target."cfg(target_os = \"windows\")".dependencies.fxhash]
-version = "0.2"
+[target."cfg(target_os = \"windows\")".dependencies.rustc-hash]
+version = "1.1"
 
 [target."cfg(target_os = \"windows\")".dependencies.widestring]
 version = "1.0"

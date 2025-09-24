@@ -1,0 +1,7 @@
+/build.rs
+/rust-toolchain
+target
+
+result
+
+.direnv/*
