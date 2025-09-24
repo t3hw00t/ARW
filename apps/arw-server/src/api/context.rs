@@ -3,6 +3,7 @@ use axum::response::IntoResponse;
 use axum::{extract::State, Json};
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::collections::BTreeMap;
 use std::convert::Infallible;
 use std::future::ready;
 use tokio::sync::mpsc;
@@ -54,6 +55,8 @@ pub(crate) struct AssembleReq {
     pub max_iterations: Option<usize>,
     #[serde(default)]
     pub corr_id: Option<String>,
+    #[serde(default)]
+    pub slot_budgets: Option<BTreeMap<String, usize>>,
 }
 
 /// Assemble context working set; optionally stream iterations via SSE.
@@ -325,7 +328,9 @@ fn build_spec(req: &AssembleReq) -> working_set::WorkingSetSpec {
         expand_query_top_k: req
             .expand_query_top_k
             .unwrap_or_else(working_set::default_expand_query_top_k),
+        slot_budgets: BTreeMap::new(),
     };
+    spec.slot_budgets = req.slot_budgets.clone().unwrap_or_default();
     spec.normalize();
     spec
 }

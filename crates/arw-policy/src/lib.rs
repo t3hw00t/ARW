@@ -168,9 +168,7 @@ impl PolicyEngine {
             }
         }
 
-        if self.cfg.allow_all {
-            allow = true;
-        } else if !needs_capability {
+        if self.cfg.allow_all || !needs_capability {
             allow = true;
         }
 
@@ -243,7 +241,7 @@ impl CedarEngine {
                     .and_then(|p| fs::read_to_string(p).ok())
                     .or_else(|| c.policy.clone())
             })
-            .unwrap_or_else(|| default_policy_source());
+            .unwrap_or(default_policy_source());
         let policies: PolicySet = policy_src.parse().ok()?;
 
         let schema = cedar_cfg.and_then(|c| {

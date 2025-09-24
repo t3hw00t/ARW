@@ -42,7 +42,7 @@ Complexity Collapse (Cross-cutting)
 
 Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143001-0001] Context Working Set doc + mkdocs nav — done (this change)
-- [Pack: Research] [t-250912143005-0002] Context API: allow slot budgets and return stable pointers (IDs) for all included items — todo
+- [Pack: Research] [t-250912143005-0002] Context API: allow slot budgets and return stable pointers (IDs) for all included items — done (slot budgets + slot coverage landed in this change)
 - [Pack: Research] [t-250912143009-0003] Retrieval: add MMR‑style selector across vector/graph mounts and world beliefs — todo
 - [Pack: Research] [t-250912143013-0004] Compression cascade: summarize episodes (extract→abstract→outline) into mounts with provenance — todo
 - [Pack: Research] [t-250912143017-0005] Failure detectors: emit `context.recall_risk` and `context.coverage` with meters in UI — todo

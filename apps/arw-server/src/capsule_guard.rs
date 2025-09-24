@@ -510,7 +510,10 @@ mod tests {
     use arw_topics::{TOPIC_POLICY_CAPSULE_FAILED, TOPIC_POLICY_DECISION, TOPIC_READMODEL_PATCH};
     use axum::http::{HeaderMap, HeaderValue};
     use once_cell::sync::Lazy;
-    use std::{path::Path, sync::{Arc, Mutex as StdMutex}};
+    use std::{
+        path::Path,
+        sync::{Arc, Mutex as StdMutex},
+    };
     use tempfile::tempdir;
     use tokio::time::{timeout, Duration};
 

@@ -144,7 +144,7 @@ The triad groups operations by intent:
   - `POST /logic-units/apply` — activate a logic unit version across the runtime.
   - `POST /logic-units/revert` — roll back to a previous logic unit snapshot.
 - **Context assembly**
-  - `POST /context/assemble` — drive the working-set loop once or stream each iteration (set `stream=true`) to build retrieval context, including diagnostics and coverage metadata.
+  - `POST /context/assemble` — drive the working-set loop once or stream each iteration (set `stream=true`) to build retrieval context, including diagnostics and coverage metadata. The request body accepts `slot_budgets` (map of slot → max items) so you can reserve space for instructions, plan, safety, etc.; the response surfaces `slots.counts` and `slots.budgets` to highlight gaps such as `slot_underfilled:instructions` in coverage.
   - `POST /context/rehydrate` — rehydrate context pointers (currently file heads) with lease-aware guardrails and policy enforcement.
 - **Memory writes & advanced retrieval**
   - `POST /actions (memory.upsert)` — insert or merge a memory item; emits `memory.item.upserted` and updates `/state/memory`.

@@ -31,6 +31,7 @@ pub struct WorkingSetSpec {
     pub scorer: Option<String>,
     pub expand_query: bool,
     pub expand_query_top_k: usize,
+    pub slot_budgets: BTreeMap<String, usize>,
 }
 
 impl WorkingSetSpec {
@@ -74,6 +75,7 @@ impl WorkingSetSpec {
             self.expand_query_top_k = default_expand_query_top_k();
         }
         self.expand_query_top_k = self.expand_query_top_k.clamp(1, 32);
+        self.normalize_slot_budgets();
     }
 
     pub fn scorer_label(&self) -> String {
@@ -81,19 +83,57 @@ impl WorkingSetSpec {
     }
 
     pub fn snapshot(&self) -> Value {
-        json!({
-            "query_provided": self.query.is_some(),
-            "lanes": self.lanes,
-            "limit": self.limit,
-            "expand_per_seed": self.expand_per_seed,
-            "diversity_lambda": self.diversity_lambda,
-            "min_score": self.min_score,
-            "project": self.project,
-            "lane_bonus": self.lane_bonus,
-            "scorer": self.scorer,
-            "expand_query": self.expand_query,
-            "expand_query_top_k": self.expand_query_top_k,
-        })
+        let mut snapshot = serde_json::Map::new();
+        snapshot.insert("query_provided".into(), json!(self.query.is_some()));
+        snapshot.insert("lanes".into(), json!(self.lanes));
+        snapshot.insert("limit".into(), json!(self.limit));
+        snapshot.insert("expand_per_seed".into(), json!(self.expand_per_seed));
+        snapshot.insert("diversity_lambda".into(), json!(self.diversity_lambda));
+        snapshot.insert("min_score".into(), json!(self.min_score));
+        snapshot.insert("project".into(), json!(self.project));
+        snapshot.insert("lane_bonus".into(), json!(self.lane_bonus));
+        snapshot.insert("scorer".into(), json!(self.scorer));
+        snapshot.insert("expand_query".into(), json!(self.expand_query));
+        snapshot.insert("expand_query_top_k".into(), json!(self.expand_query_top_k));
+        if !self.slot_budgets.is_empty() {
+            let mut slots = serde_json::Map::new();
+            for (slot, limit) in self.slot_budgets.iter() {
+                slots.insert(slot.clone(), json!(limit));
+            }
+            snapshot.insert("slot_budgets".into(), Value::Object(slots));
+        }
+        Value::Object(snapshot)
+    }
+
+    fn normalize_slot_budgets(&mut self) {
+        if self.slot_budgets.is_empty() {
+            return;
+        }
+        let mut normalized = BTreeMap::new();
+        let limit_cap = self.limit.max(1);
+        for (slot, value) in std::mem::take(&mut self.slot_budgets) {
+            let slot = slot.trim().to_ascii_lowercase();
+            if slot.is_empty() {
+                continue;
+            }
+            let capped = value.min(limit_cap);
+            if capped == 0 {
+                continue;
+            }
+            normalized.insert(slot, capped);
+        }
+        self.slot_budgets = normalized;
+    }
+
+    pub fn slot_limit(&self, slot: &str) -> Option<usize> {
+        if self.slot_budgets.is_empty() {
+            return None;
+        }
+        let key = slot.trim().to_ascii_lowercase();
+        self.slot_budgets
+            .get(&key)
+            .copied()
+            .or_else(|| self.slot_budgets.get("*").copied())
     }
 }
 
@@ -117,29 +157,49 @@ pub struct WorkingSetSummary {
     pub threshold_hits: usize,
     pub total_candidates: usize,
     pub lane_counts: BTreeMap<String, usize>,
+    pub slot_counts: BTreeMap<String, usize>,
+    pub slot_budgets: BTreeMap<String, usize>,
     pub min_score: f32,
     pub scorer: String,
 }
 
 impl WorkingSetSummary {
     pub fn to_json(&self) -> Value {
+        let mut obj = serde_json::Map::new();
+        obj.insert("target_limit".into(), json!(self.target_limit));
+        obj.insert("lanes_requested".into(), json!(self.lanes_requested));
+        obj.insert("selected".into(), json!(self.selected));
+        obj.insert("avg_cscore".into(), json!(self.avg_cscore));
+        obj.insert("max_cscore".into(), json!(self.max_cscore));
+        obj.insert("min_cscore".into(), json!(self.min_cscore));
+        obj.insert("threshold_hits".into(), json!(self.threshold_hits));
+        obj.insert("total_candidates".into(), json!(self.total_candidates));
         let mut lanes = serde_json::Map::new();
         for (lane, count) in self.lane_counts.iter() {
             lanes.insert(lane.clone(), json!(count));
         }
-        json!({
-            "target_limit": self.target_limit,
-            "lanes_requested": self.lanes_requested,
-            "selected": self.selected,
-            "avg_cscore": self.avg_cscore,
-            "max_cscore": self.max_cscore,
-            "min_cscore": self.min_cscore,
-            "threshold_hits": self.threshold_hits,
-            "total_candidates": self.total_candidates,
-            "lane_counts": Value::Object(lanes),
-            "min_score": self.min_score,
-            "scorer": self.scorer,
-        })
+        obj.insert("lane_counts".into(), Value::Object(lanes));
+        if !self.slot_counts.is_empty() || !self.slot_budgets.is_empty() {
+            let mut slots = serde_json::Map::new();
+            if !self.slot_counts.is_empty() {
+                let mut counts = serde_json::Map::new();
+                for (slot, count) in self.slot_counts.iter() {
+                    counts.insert(slot.clone(), json!(count));
+                }
+                slots.insert("counts".into(), Value::Object(counts));
+            }
+            if !self.slot_budgets.is_empty() {
+                let mut budgets = serde_json::Map::new();
+                for (slot, limit) in self.slot_budgets.iter() {
+                    budgets.insert(slot.clone(), json!(limit));
+                }
+                slots.insert("budgets".into(), Value::Object(budgets));
+            }
+            obj.insert("slots".into(), Value::Object(slots));
+        }
+        obj.insert("min_score".into(), json!(self.min_score));
+        obj.insert("scorer".into(), json!(self.scorer));
+        Value::Object(obj)
     }
 }
 
@@ -428,7 +488,7 @@ impl<'a> WorkingSetBuilder<'a> {
         let candidate_total = all_candidates.len();
 
         let select_start = Instant::now();
-        let (selected, lane_counts) =
+        let (selected, lane_counts, slot_counts) =
             select_candidates(all_candidates, &spec, has_above, scorer.as_ref(), observer);
         let select_elapsed = select_start.elapsed();
         histogram!(
@@ -442,6 +502,7 @@ impl<'a> WorkingSetBuilder<'a> {
             &spec,
             &selected,
             &lane_counts,
+            &slot_counts,
             has_above,
             candidate_total,
             scorer.name(),
@@ -459,6 +520,7 @@ impl<'a> WorkingSetBuilder<'a> {
             &seed_infos,
             &expanded_raw,
             &lane_counts,
+            &slot_counts,
             items.len(),
             has_above,
             &summary,
@@ -594,6 +656,7 @@ struct Candidate {
     embed: Option<Vec<f32>>,
     cscore: f32,
     value: Value,
+    slot: Option<String>,
 }
 
 #[derive(Clone)]
@@ -674,13 +737,26 @@ fn select_candidates<O: WorkingSetObserver>(
     has_above: bool,
     scorer: &dyn CandidateScorer,
     observer: &mut O,
-) -> (Vec<Candidate>, BTreeMap<String, usize>) {
+) -> (
+    Vec<Candidate>,
+    BTreeMap<String, usize>,
+    BTreeMap<String, usize>,
+) {
     let mut selected: Vec<Candidate> = Vec::new();
     let mut lane_counts: BTreeMap<String, usize> = BTreeMap::new();
+    let mut slot_counts: BTreeMap<String, usize> = BTreeMap::new();
     while !candidates.is_empty() && selected.len() < spec.limit {
         let mut best_idx: Option<usize> = None;
         let mut best_score = f32::MIN;
         for (idx, cand) in candidates.iter().enumerate() {
+            if let Some(slot_key) = cand.slot_key() {
+                if let Some(limit) = spec.slot_limit(&slot_key) {
+                    let current = slot_counts.get(&slot_key).copied().unwrap_or(0);
+                    if current >= limit {
+                        continue;
+                    }
+                }
+            }
             let ctx = SelectionContext {
                 spec,
                 selected: &selected,
@@ -698,6 +774,16 @@ fn select_candidates<O: WorkingSetObserver>(
             None => break,
         };
         let cand = candidates.swap_remove(idx);
+        if let Some(slot_key) = cand.slot_key() {
+            if let Some(limit) = spec.slot_limit(&slot_key) {
+                let current = slot_counts.get(&slot_key).copied().unwrap_or(0);
+                if current >= limit {
+                    // Slot is at capacity; skip this candidate and continue.
+                    continue;
+                }
+            }
+            *slot_counts.entry(slot_key).or_insert(0) += 1;
+        }
         let lane_key = cand.lane.clone().unwrap_or_else(|| "unknown".to_string());
         *lane_counts.entry(lane_key.clone()).or_insert(0) += 1;
         counter!("arw_context_selected_total", 1, "lane" => lane_key);
@@ -712,7 +798,7 @@ fn select_candidates<O: WorkingSetObserver>(
         );
         selected.push(cand);
     }
-    (selected, lane_counts)
+    (selected, lane_counts, slot_counts)
 }
 
 fn lane_bonus(counts: &BTreeMap<String, usize>, lane: &str, bonus: f32) -> f32 {
@@ -941,6 +1027,7 @@ fn build_diagnostics(
     seeds: &[SeedInfo],
     expanded: &[Value],
     lane_counts: &BTreeMap<String, usize>,
+    slot_counts: &BTreeMap<String, usize>,
     selected: usize,
     has_above: bool,
     summary: &WorkingSetSummary,
@@ -961,22 +1048,46 @@ fn build_diagnostics(
     for (lane, count) in lane_counts.iter() {
         lanes.insert(lane.clone(), json!(count));
     }
-    json!({
-        "params": spec.snapshot(),
-        "counts": counts,
-        "lanes": Value::Object(lanes),
-        "had_candidates_above_threshold": has_above,
-        "summary": summary.to_json(),
-        "timings_ms": {
+    let mut root = serde_json::Map::new();
+    root.insert("params".into(), spec.snapshot());
+    root.insert("counts".into(), counts);
+    root.insert("lanes".into(), Value::Object(lanes));
+    if !slot_counts.is_empty() || !spec.slot_budgets.is_empty() {
+        let mut slots = serde_json::Map::new();
+        if !slot_counts.is_empty() {
+            let mut counts = serde_json::Map::new();
+            for (slot, count) in slot_counts.iter() {
+                counts.insert(slot.clone(), json!(count));
+            }
+            slots.insert("counts".into(), Value::Object(counts));
+        }
+        if !spec.slot_budgets.is_empty() {
+            let mut budgets = serde_json::Map::new();
+            for (slot, limit) in spec.slot_budgets.iter() {
+                budgets.insert(slot.clone(), json!(limit));
+            }
+            slots.insert("budgets".into(), Value::Object(budgets));
+        }
+        root.insert("slots".into(), Value::Object(slots));
+    }
+    root.insert("had_candidates_above_threshold".into(), json!(has_above));
+    root.insert("summary".into(), summary.to_json());
+    root.insert(
+        "timings_ms".into(),
+        json!({
             "retrieve": retrieve_elapsed.as_secs_f64() * 1000.0,
             "query_expand": expand_query_elapsed.as_secs_f64() * 1000.0,
             "link_expand": expand_elapsed.as_secs_f64() * 1000.0,
             "select": select_elapsed.as_secs_f64() * 1000.0,
             "total": total_elapsed.as_secs_f64() * 1000.0,
-        },
-        "scorer": scorer_name,
-        "generated_at": chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
-    })
+        }),
+    );
+    root.insert("scorer".into(), json!(scorer_name));
+    root.insert(
+        "generated_at".into(),
+        json!(chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)),
+    );
+    Value::Object(root)
 }
 
 impl Candidate {
@@ -998,6 +1109,10 @@ impl Candidate {
             })
             .unwrap_or_default();
         let embed = parse_embed(&value);
+        let slot = extract_slot(&value);
+        if let (Some(slot_name), Some(obj)) = (slot.as_ref(), value.as_object_mut()) {
+            obj.insert("slot".into(), json!(slot_name));
+        }
         util::attach_memory_ptr(&mut value);
         Candidate {
             id,
@@ -1007,8 +1122,43 @@ impl Candidate {
             embed,
             cscore,
             value,
+            slot,
         }
     }
+
+    fn slot_key(&self) -> Option<String> {
+        let normalized = self
+            .slot
+            .as_ref()
+            .map(|s| s.trim().to_ascii_lowercase())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "unslotted".to_string());
+        Some(normalized)
+    }
+}
+
+fn extract_slot(value: &Value) -> Option<String> {
+    let slot = value
+        .get("slot")
+        .and_then(|v| v.as_str())
+        .or_else(|| value.get("kind").and_then(|v| v.as_str()))
+        .or_else(|| {
+            value
+                .get("value")
+                .and_then(|v| v.get("slot"))
+                .and_then(|v| v.as_str())
+        })
+        .or_else(|| {
+            value
+                .get("value")
+                .and_then(|v| v.get("kind"))
+                .and_then(|v| v.as_str())
+        })?;
+    let slot = slot.trim();
+    if slot.is_empty() {
+        return None;
+    }
+    Some(slot.to_ascii_lowercase())
 }
 
 fn parse_embed(value: &Value) -> Option<Vec<f32>> {
@@ -1165,6 +1315,7 @@ impl WorkingSetSummary {
         spec: &WorkingSetSpec,
         selected: &[Candidate],
         lane_counts: &BTreeMap<String, usize>,
+        slot_counts: &BTreeMap<String, usize>,
         has_above: bool,
         total_candidates: usize,
         scorer: &str,
@@ -1200,6 +1351,8 @@ impl WorkingSetSummary {
             threshold_hits: if has_above { hits } else { 0 },
             total_candidates,
             lane_counts: lane_counts.clone(),
+            slot_counts: slot_counts.clone(),
+            slot_budgets: spec.slot_budgets.clone(),
             min_score: spec.min_score,
             scorer: scorer.to_string(),
         }
@@ -1376,7 +1529,19 @@ mod tests {
             scorer: None,
             expand_query: default_expand_query(),
             expand_query_top_k: 0,
+            slot_budgets: BTreeMap::new(),
         }
+    }
+
+    fn make_candidate(id: &str, slot: &str, score: f32) -> Candidate {
+        let value = json!({
+            "id": id,
+            "lane": "semantic",
+            "kind": slot,
+            "value": {"text": format!("{slot} memo")},
+            "cscore": score,
+        });
+        Candidate::from_value(id.to_string(), Some("semantic".into()), value, score)
     }
 
     #[test]
@@ -1395,6 +1560,7 @@ mod tests {
         assert_eq!(spec.lane_bonus, default_lane_bonus());
         assert_eq!(spec.scorer_label(), default_scorer());
         assert_eq!(spec.expand_query_top_k, default_expand_query_top_k());
+        assert!(spec.slot_budgets.is_empty());
     }
 
     #[test]
@@ -1418,6 +1584,10 @@ mod tests {
             scorer: Some("  CONFIDENCE  ".into()),
             expand_query: false,
             expand_query_top_k: 100,
+            slot_budgets: BTreeMap::from([
+                (" Evidence ".to_string(), 999usize),
+                ("".to_string(), 5usize),
+            ]),
             ..base_spec()
         };
         spec.normalize();
@@ -1427,6 +1597,8 @@ mod tests {
         assert_eq!(spec.expand_per_seed, 8);
         assert_eq!(spec.scorer_label(), "confidence");
         assert_eq!(spec.expand_query_top_k, 32);
+        assert_eq!(spec.slot_budgets.get("evidence"), Some(&256));
+        assert!(!spec.slot_budgets.contains_key(""));
     }
 
     #[test]
@@ -1485,5 +1657,43 @@ mod tests {
         std::env::set_var("ARW_CONTEXT_STREAM_DEFAULT", "1");
 
         assert!(default_streaming_enabled());
+    }
+
+    #[test]
+    fn slot_budgets_cap_selection_counts() {
+        let mut spec = base_spec();
+        spec.lanes = vec!["semantic".into()];
+        spec.limit = 4;
+        spec.expand_per_seed = 0;
+        spec.diversity_lambda = 0.5;
+        spec.min_score = 0.1;
+        spec.lane_bonus = 0.0;
+        spec.scorer = Some("confidence".into());
+        spec.slot_budgets =
+            BTreeMap::from([("instructions".into(), 1usize), ("evidence".into(), 2usize)]);
+        spec.normalize();
+
+        let candidates = vec![
+            make_candidate("inst-1", "instructions", 0.9),
+            make_candidate("inst-2", "instructions", 0.8),
+            make_candidate("ev-1", "evidence", 0.85),
+            make_candidate("ev-2", "evidence", 0.7),
+            make_candidate("ev-3", "evidence", 0.65),
+            make_candidate("plan-1", "plan", 0.6),
+        ];
+
+        let scorer = resolve_scorer(spec.scorer.as_deref());
+        let mut observer = ();
+        let (selected, _lanes, slot_counts) =
+            select_candidates(candidates, &spec, true, scorer.as_ref(), &mut observer);
+
+        assert_eq!(slot_counts.get("instructions"), Some(&1));
+        assert_eq!(slot_counts.get("evidence"), Some(&2));
+        let selected_instructions = selected
+            .iter()
+            .filter(|c| c.slot.as_deref() == Some("instructions"))
+            .count();
+        assert_eq!(selected_instructions, 1);
+        assert!(selected.len() <= spec.limit);
     }
 }

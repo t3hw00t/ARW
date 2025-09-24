@@ -388,6 +388,7 @@ mod tests {
             scorer: Some("mmrd".into()),
             expand_query: false,
             expand_query_top_k: 6,
+            slot_budgets: BTreeMap::new(),
         }
     }
 
@@ -415,6 +416,8 @@ mod tests {
             threshold_hits: 0,
             total_candidates: 11,
             lane_counts,
+            slot_counts: BTreeMap::new(),
+            slot_budgets: BTreeMap::new(),
             min_score: 0.6,
             scorer: "mmrd".into(),
         };

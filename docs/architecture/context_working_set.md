@@ -26,7 +26,8 @@ Memory layers (each with its own budget + eviction)
 Context assembly (every turn)
 - Plan first: start with a subgoal‑specific plan; choose the next small step.
 - Targeted retrieval: build a small set from semantic + world memories using relevance, recency, and diversity (MMR‑style) to avoid duplicates.
-- Token budgeter: fixed slots for instructions, plan, safety/policy, and evidence; leftover tokens go to nice‑to‑have context.
+- Token budgeter: fixed slots for instructions, plan, safety/policy, and evidence; leftover tokens go to nice-to-have context.
+- Slot-aware assembly: `/context/assemble` accepts `slot_budgets` (map of slot → max items). Selected items expose a normalized `slot` field and the response summarizes how many items landed in each slot so telemetry and UI can highlight gaps.
 - Always include pointers: emit stable IDs alongside excerpts so the agent/UI can rehydrate more by ID when needed.
 - Coverage-guided refinement: when `coverage.reasons` flag gaps (e.g., low lane diversity, weak scores, below target limit) the next iteration automatically widens lanes, increases expansion, or lowers thresholds before running. Dashboards see the proposed adjustments via the `next_spec` snapshot on each `working_set.iteration.summary` event.
 
@@ -74,6 +75,7 @@ Why this works
 Implementation notes (ARW)
 - Memory layers: existing lanes (`ephemeral`/`episodic`/`semantic`/`procedural`) in `MemoryService` will enforce per‑lane caps/TTL and emit `Memory.*` hygiene events.
 - Context API: extend `/admin/context/assemble` to accept slot budgets, diversity knobs, and to return pointers (stable IDs) for all included items.
+- API snapshot now includes `slot_budgets` and per-slot counts/budgets inside `working_set.summary.slots`, enabling coverage checks (e.g., flagging `slot_underfilled:instructions`).
 - Retrieval: add MMR‑style selector over vector/graph mounts and the world belief graph.
 - Compression: background job to summarize episodes and roll up entities; write summaries to mounts with provenance.
 - Failure detectors: emit `context.recall_risk` and `context.coverage` events; surface in UI and adjust next‑turn retrieval.

@@ -887,7 +887,10 @@ mod tests {
         assert!(paths.contains_key(""));
 
         let mut env = EnvContext::new();
+        let projects_dir = projects_root.display().to_string();
+
         env.set("ARW_STATE_DIR", &state_dir);
+        env.set("ARW_PROJECTS_DIR", &projects_dir);
         env.set("ARW_ADMIN_TOKEN", "secret");
 
         let mut headers = HeaderMap::new();
@@ -911,7 +914,10 @@ mod tests {
         std::fs::write(projects_root.join("alpha/docs/info.txt"), "data").expect("write file");
 
         let mut env = EnvContext::new();
+        let projects_dir = projects_root.display().to_string();
+
         env.set("ARW_STATE_DIR", &state_dir);
+        env.set("ARW_PROJECTS_DIR", &projects_dir);
         env.set("ARW_ADMIN_TOKEN", "secret");
 
         let mut headers = HeaderMap::new();

@@ -39,6 +39,15 @@ pub fn assess(ws: &WorkingSet) -> CoverageVerdict {
     if summary.threshold_hits == 0 && summary.max_cscore < summary.min_score {
         reasons.push("no_items_above_threshold".to_string());
     }
+    for (slot, required) in summary.slot_budgets.iter() {
+        if *required == 0 {
+            continue;
+        }
+        let have = summary.slot_counts.get(slot).copied().unwrap_or(0);
+        if have < (*required).min(summary.selected.max(1)) {
+            reasons.push(format!("slot_underfilled:{slot}"));
+        }
+    }
     CoverageVerdict {
         needs_more: !reasons.is_empty(),
         reasons,
@@ -77,6 +86,8 @@ mod tests {
             threshold_hits: 3,
             total_candidates: 7,
             lane_counts: lanes,
+            slot_counts: BTreeMap::new(),
+            slot_budgets: BTreeMap::new(),
             min_score: 0.6,
             scorer: "mmrd".into(),
         };
@@ -99,6 +110,8 @@ mod tests {
             threshold_hits: 0,
             total_candidates: 12,
             lane_counts: lanes,
+            slot_counts: BTreeMap::new(),
+            slot_budgets: BTreeMap::new(),
             min_score: 0.6,
             scorer: "mmrd".into(),
         };
@@ -110,5 +123,32 @@ mod tests {
         assert!(reasons.contains("low_lane_diversity"));
         assert!(reasons.contains("weak_average_score"));
         assert!(reasons.contains("no_items_above_threshold"));
+    }
+
+    #[test]
+    fn slot_budget_gap_surfaces_reason() {
+        let mut budgets = BTreeMap::new();
+        budgets.insert("instructions".to_string(), 1usize);
+        let summary = WorkingSetSummary {
+            target_limit: 4,
+            lanes_requested: 2,
+            selected: 2,
+            avg_cscore: 0.6,
+            max_cscore: 0.7,
+            min_cscore: 0.5,
+            threshold_hits: 2,
+            total_candidates: 5,
+            lane_counts: BTreeMap::new(),
+            slot_counts: BTreeMap::new(),
+            slot_budgets: budgets,
+            min_score: 0.4,
+            scorer: "mmrd".into(),
+        };
+        let verdict = assess(&empty_ws(summary));
+        assert!(verdict.needs_more);
+        assert!(verdict
+            .reasons
+            .iter()
+            .any(|r| r == "slot_underfilled:instructions"));
     }
 }
