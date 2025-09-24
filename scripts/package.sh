@@ -16,6 +16,8 @@ done
 
 command -v cargo >/dev/null || { echo 'cargo not found'; exit 1; }
 
+"$(dirname "$0")/check_release_blockers.sh"
+
 if [[ $nobuild -eq 0 ]]; then
   echo '[package] Building (release)'
   if [[ -n "$target_triple" ]]; then

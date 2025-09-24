@@ -1,5 +1,5 @@
 use crate::image_utils::png_to_rgba_image;
-use anyhow::{anyhow, Result};
+use anyhow::{anyhow, Context, Result};
 use dbus::{
     arg::{AppendAll, Iter, IterAppend, PropMap, ReadAll, RefArg, TypeMismatchError, Variant},
     blocking::Connection,
@@ -10,7 +10,7 @@ use libwayshot::{CaptureRegion, WayshotConnection};
 use percent_encoding::percent_decode;
 use std::{
     collections::HashMap,
-    env::temp_dir,
+    env,
     fs::{self},
     sync::{Arc, Mutex},
     time::{Duration, SystemTime, UNIX_EPOCH},
@@ -43,6 +43,26 @@ impl SignalArgs for OrgFreedesktopPortalRequestResponse {
     const INTERFACE: &'static str = "org.freedesktop.portal.Request";
 }
 
+fn load_rgba_and_cleanup(
+    path: &String,
+    crop_x: i32,
+    crop_y: i32,
+    width: i32,
+    height: i32,
+) -> Result<RgbaImage> {
+    match png_to_rgba_image(path, crop_x, crop_y, width, height) {
+        Ok(image) => {
+            fs::remove_file(path)
+                .with_context(|| format!("failed to remove temporary screenshot {path}"))?;
+            Ok(image)
+        }
+        Err(err) => {
+            let _ = fs::remove_file(path);
+            Err(err)
+        }
+    }
+}
+
 fn org_gnome_shell_screenshot(
     conn: &Connection,
     x: i32,
@@ -58,9 +78,14 @@ fn org_gnome_shell_screenshot(
 
     let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?;
 
-    let dirname = temp_dir().join("screenshot");
+    let dirname = env::temp_dir().join("screenshot");
 
-    fs::create_dir_all(&dirname)?;
+    fs::create_dir_all(&dirname).with_context(|| {
+        format!(
+            "failed to ensure temporary screenshot dir {}",
+            dirname.display()
+        )
+    })?;
 
     let mut path = dirname.join(timestamp.as_micros().to_string());
     path.set_extension("png");
@@ -73,11 +98,7 @@ fn org_gnome_shell_screenshot(
         (x, y, width, height, false, &filename),
     )?;
 
-    let rgba_image = png_to_rgba_image(&filename, 0, 0, width, height)?;
-
-    fs::remove_file(&filename)?;
-
-    Ok(rgba_image)
+    load_rgba_and_cleanup(&filename, 0, 0, width, height)
 }
 
 fn org_freedesktop_portal_screenshot(
@@ -153,17 +174,119 @@ fn org_freedesktop_portal_screenshot(
 
     if status.ne(&Some(0)) || path.is_empty() {
         if !path.is_empty() {
-            fs::remove_file(path)?;
+            let _ = fs::remove_file(path);
         }
         return Err(anyhow!("Screenshot failed or canceled",));
     }
 
     let filename = percent_decode(path.as_bytes()).decode_utf8()?.to_string();
-    let rgba_image = png_to_rgba_image(&filename, x, y, width, height)?;
+    load_rgba_and_cleanup(&filename, x, y, width, height)
+}
 
-    fs::remove_file(&filename)?;
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum CompositorHint {
+    GnomeLike,
+    PlasmaLike,
+    WlrootsLike,
+    Unknown,
+}
 
-    Ok(rgba_image)
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+enum ScreenshotStrategyKind {
+    Gnome,
+    Portal,
+    WlRoots,
+}
+
+impl ScreenshotStrategyKind {
+    fn label(&self) -> &'static str {
+        match self {
+            ScreenshotStrategyKind::Gnome => "gnome-shell",
+            ScreenshotStrategyKind::Portal => "xdg-desktop-portal",
+            ScreenshotStrategyKind::WlRoots => "wlroots",
+        }
+    }
+}
+
+const ORDER_WLROOTS: &[ScreenshotStrategyKind; 3] = &[
+    ScreenshotStrategyKind::WlRoots,
+    ScreenshotStrategyKind::Portal,
+    ScreenshotStrategyKind::Gnome,
+];
+const ORDER_GNOME: &[ScreenshotStrategyKind; 3] = &[
+    ScreenshotStrategyKind::Gnome,
+    ScreenshotStrategyKind::Portal,
+    ScreenshotStrategyKind::WlRoots,
+];
+const ORDER_PLASMA: &[ScreenshotStrategyKind; 3] = &[
+    ScreenshotStrategyKind::Portal,
+    ScreenshotStrategyKind::Gnome,
+    ScreenshotStrategyKind::WlRoots,
+];
+const ORDER_UNKNOWN: &[ScreenshotStrategyKind; 3] = &[
+    ScreenshotStrategyKind::Portal,
+    ScreenshotStrategyKind::Gnome,
+    ScreenshotStrategyKind::WlRoots,
+];
+
+fn backend_order_for_hint(hint: CompositorHint) -> &'static [ScreenshotStrategyKind] {
+    match hint {
+        CompositorHint::WlrootsLike => ORDER_WLROOTS,
+        CompositorHint::GnomeLike => ORDER_GNOME,
+        CompositorHint::PlasmaLike => ORDER_PLASMA,
+        CompositorHint::Unknown => ORDER_UNKNOWN,
+    }
+}
+
+fn compositor_env_tokens() -> Vec<String> {
+    const CANDIDATE_VARS: [&str; 3] = [
+        "XDG_CURRENT_DESKTOP",
+        "XDG_SESSION_DESKTOP",
+        "DESKTOP_SESSION",
+    ];
+    CANDIDATE_VARS
+        .iter()
+        .filter_map(|key| env::var(key).ok())
+        .flat_map(|value| {
+            value
+                .split([':', ';', ','])
+                .flat_map(|part| part.split_whitespace())
+                .map(|token| token.trim().to_lowercase())
+                .collect::<Vec<String>>()
+        })
+        .filter(|token| !token.is_empty())
+        .collect()
+}
+
+fn compositor_hint() -> CompositorHint {
+    let tokens = compositor_env_tokens();
+
+    if tokens.iter().any(|token| token.contains("gnome")) {
+        return CompositorHint::GnomeLike;
+    }
+
+    const WLROOTS_HINTS: [&str; 7] = [
+        "sway", "river", "hyprland", "wayfire", "labwc", "niri", "cage",
+    ]; // best-effort markers
+    if tokens
+        .iter()
+        .any(|token| WLROOTS_HINTS.iter().any(|hint| token.contains(hint)))
+        || env::var_os("SWAYSOCK").is_some()
+        || env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some()
+        || env::var_os("WAYFIRE_SOCKET").is_some()
+        || env::var_os("LABWC_SOCKET").is_some()
+    {
+        return CompositorHint::WlrootsLike;
+    }
+
+    if tokens
+        .iter()
+        .any(|token| token.contains("plasma") || token.contains("kde"))
+    {
+        return CompositorHint::PlasmaLike;
+    }
+
+    CompositorHint::Unknown
 }
 
 fn wlr_screenshot(
@@ -184,12 +307,193 @@ fn wlr_screenshot(
     Ok(rgba_image)
 }
 
-// TODO: 失败后尝试删除文件
+enum ScreenshotBackend<'a> {
+    Gnome(&'a Connection),
+    Portal(&'a Connection),
+    WlRoots,
+}
+
+fn instantiate_backends<'a>(
+    conn: &'a Connection,
+    hint: CompositorHint,
+) -> Vec<ScreenshotBackend<'a>> {
+    backend_order_for_hint(hint)
+        .iter()
+        .map(|kind| match kind {
+            ScreenshotStrategyKind::Gnome => ScreenshotBackend::Gnome(conn),
+            ScreenshotStrategyKind::Portal => ScreenshotBackend::Portal(conn),
+            ScreenshotStrategyKind::WlRoots => ScreenshotBackend::WlRoots,
+        })
+        .collect()
+}
+
+impl<'a> ScreenshotBackend<'a> {
+    fn label(&self) -> &'static str {
+        self.kind().label()
+    }
+
+    fn kind(&self) -> ScreenshotStrategyKind {
+        match self {
+            ScreenshotBackend::Gnome(_) => ScreenshotStrategyKind::Gnome,
+            ScreenshotBackend::Portal(_) => ScreenshotStrategyKind::Portal,
+            ScreenshotBackend::WlRoots => ScreenshotStrategyKind::WlRoots,
+        }
+    }
+
+    fn capture(&self, x: i32, y: i32, width: i32, height: i32) -> Result<RgbaImage> {
+        match self {
+            ScreenshotBackend::Gnome(conn) => org_gnome_shell_screenshot(conn, x, y, width, height)
+                .with_context(|| format!("{backend} backend failed", backend = self.label())),
+            ScreenshotBackend::Portal(conn) => {
+                org_freedesktop_portal_screenshot(conn, x, y, width, height)
+                    .with_context(|| format!("{backend} backend failed", backend = self.label()))
+            }
+            ScreenshotBackend::WlRoots => wlr_screenshot(x, y, width, height)
+                .with_context(|| format!("{backend} backend failed", backend = self.label())),
+        }
+    }
+}
+
 pub fn wayland_screenshot(x: i32, y: i32, width: i32, height: i32) -> Result<RgbaImage> {
     let conn = Connection::new_session()?;
+    let compositor = compositor_hint();
 
-    // TODO: work out if compositor is wlroots before attempting anything else
-    org_gnome_shell_screenshot(&conn, x, y, width, height)
-        .or_else(|_| org_freedesktop_portal_screenshot(&conn, x, y, width, height))
-        .or_else(|_| wlr_screenshot(x, y, width, height))
+    let backends: Vec<ScreenshotBackend> = instantiate_backends(&conn, compositor);
+
+    let mut errors = Vec::with_capacity(backends.len());
+    for backend in &backends {
+        match backend.capture(x, y, width, height) {
+            Ok(image) => return Ok(image),
+            Err(err) => errors.push((backend.label(), err)),
+        }
+    }
+
+    let summary = errors
+        .iter()
+        .map(|(label, err)| format!("{label}: {err}"))
+        .collect::<Vec<_>>()
+        .join(" | ");
+
+    Err(anyhow!(
+        "All Wayland screenshot strategies failed. Attempts: {summary}",
+    ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{
+        env,
+        sync::{Mutex, OnceLock},
+    };
+
+    const ENV_RESET_KEYS: [&str; 7] = [
+        "XDG_CURRENT_DESKTOP",
+        "XDG_SESSION_DESKTOP",
+        "DESKTOP_SESSION",
+        "SWAYSOCK",
+        "HYPRLAND_INSTANCE_SIGNATURE",
+        "WAYFIRE_SOCKET",
+        "LABWC_SOCKET",
+    ];
+
+    fn with_sanitized_env(vars: &[(&str, Option<&str>)], f: impl FnOnce()) {
+        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+        let _guard = LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+
+        let mut keys = ENV_RESET_KEYS.to_vec();
+        for (key, _) in vars {
+            if !keys.contains(key) {
+                keys.push(key);
+            }
+        }
+
+        let snapshot: Vec<(String, Option<String>)> = keys
+            .iter()
+            .map(|key| ((*key).to_string(), env::var(key).ok()))
+            .collect();
+
+        for key in &keys {
+            env::remove_var(key);
+        }
+
+        for (key, value) in vars {
+            match value {
+                Some(val) => env::set_var(key, val),
+                None => env::remove_var(key),
+            }
+        }
+
+        f();
+
+        for (key, value) in snapshot {
+            match value {
+                Some(val) => env::set_var(&key, val),
+                None => env::remove_var(&key),
+            }
+        }
+    }
+
+    #[test]
+    fn compositor_hint_detects_gnome() {
+        with_sanitized_env(&[("XDG_CURRENT_DESKTOP", Some("GNOME:Classic"))], || {
+            assert_eq!(compositor_hint(), CompositorHint::GnomeLike);
+        });
+    }
+
+    #[test]
+    fn compositor_hint_detects_wlroots_tokens() {
+        with_sanitized_env(&[("XDG_SESSION_DESKTOP", Some("sway"))], || {
+            assert_eq!(compositor_hint(), CompositorHint::WlrootsLike);
+        });
+    }
+
+    #[test]
+    fn compositor_hint_detects_wlroots_env_markers() {
+        with_sanitized_env(&[("HYPRLAND_INSTANCE_SIGNATURE", Some("abc"))], || {
+            assert_eq!(compositor_hint(), CompositorHint::WlrootsLike);
+        });
+    }
+
+    #[test]
+    fn compositor_hint_detects_plasma() {
+        with_sanitized_env(&[("DESKTOP_SESSION", Some("KDE:PLASMA"))], || {
+            assert_eq!(compositor_hint(), CompositorHint::PlasmaLike);
+        });
+    }
+
+    #[test]
+    fn compositor_hint_defaults_to_unknown() {
+        with_sanitized_env(&[], || {
+            assert_eq!(compositor_hint(), CompositorHint::Unknown);
+        });
+    }
+
+    #[test]
+    fn backend_order_prefers_wlroots_when_hint_is_wlroots() {
+        assert_eq!(
+            backend_order_for_hint(CompositorHint::WlrootsLike),
+            ORDER_WLROOTS
+        );
+    }
+
+    #[test]
+    fn backend_order_prefers_gnome_when_hint_is_gnome_like() {
+        assert_eq!(
+            backend_order_for_hint(CompositorHint::GnomeLike),
+            ORDER_GNOME
+        );
+    }
+
+    #[test]
+    fn backend_order_prefers_portal_when_hint_is_plasma_or_unknown() {
+        assert_eq!(
+            backend_order_for_hint(CompositorHint::PlasmaLike),
+            ORDER_PLASMA
+        );
+        assert_eq!(
+            backend_order_for_hint(CompositorHint::Unknown),
+            ORDER_UNKNOWN
+        );
+    }
 }

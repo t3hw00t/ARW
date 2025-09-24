@@ -11,6 +11,8 @@ function Die($msg){ Write-Error $msg; exit 1 }
 
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { Die 'Rust `cargo` not found in PATH. Install Rust: https://rustup.rs' }
 
+& (Join-Path $PSScriptRoot 'check_release_blockers.ps1')
+
 if (-not $NoBuild) {
   if ($Target) {
     Info "Building (release) for target $Target"

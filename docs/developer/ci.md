@@ -49,6 +49,8 @@ scripts/debug.ps1
 scripts/audit.ps1
 ```
 
+Release packaging scripts call `scripts/check_release_blockers.sh` / `.ps1` before bundling to enforce the `release-blocker:restructure` gate. Set `ARW_SKIP_RELEASE_BLOCKER_CHECK=1` only when you explicitly need to bypass the guard (e.g., local smoke builds), and export `GH_TOKEN`/`GITHUB_TOKEN` to raise GitHub rate limits when querying blockers.
+
 ## Local CI Mirror
 Run the same checks as CI locally:
 

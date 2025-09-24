@@ -9,8 +9,36 @@ permissions:
   contents: write
 
 jobs:
+  release_gate:
+    name: release blockers cleared
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+    steps:
+      - name: Check restructure release blockers
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const label = 'release-blocker:restructure';
+            const issues = await github.paginate(github.rest.issues.listForRepo, {
+              owner,
+              repo,
+              state: 'open',
+              labels: label,
+              per_page: 100,
+            });
+            if (issues.length > 0) {
+              const refs = issues.map(issue => `#${issue.number} (${issue.title})`).join(', ');
+              core.setFailed(`Open restructure release blockers: ${refs}`);
+            } else {
+              core.info('No open restructure release blockers.');
+            }
+
   linux:
     name: package (linux)
+    needs: release_gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -52,6 +80,7 @@ jobs:
 
   windows:
     name: package (windows)
+    needs: release_gate
     runs-on: windows-latest
     steps:
       - name: Checkout
@@ -87,6 +116,7 @@ jobs:
 
   macos:
     name: package (macos)
+    needs: release_gate
     runs-on: macos-latest
     steps:
       - name: Checkout

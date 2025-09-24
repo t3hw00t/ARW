@@ -29,10 +29,15 @@ Scope: Architecture, APIs, modules, migration plan, status, hand‑off tips
 - **Optimization:** Fold in performance or ergonomics wins when touching a module—capture learnings in the Snappy UX contracts and retire redundant paths.
 
 ## Current Work in Progress
-- **Unified server (`apps/arw-server`)** — keep the router module map below current, document new background loops, and land the remaining state/memory integrations without reintroducing legacy routes.
-- **Policy & posture** — finish the Cedar ABAC embed, wire explainers into `/actions`, and extend posture presets so capsules, leases, and the egress ledger stay aligned.
-- **Operator experience (Phase D)** — port Chat Workbench APIs, thread the screenshot pipeline through the SPA/right-sidecar shift, and retire the last `/admin/*` debug windows.
-- **Safety (Phase E)** — complete Guardrail Gateway enforcement, expand Asimov Capsule Guard coverage, and remove every compatibility fallback once gauges confirm zero legacy traffic.
+
+| Track | Tracking Label(s) | Status | Check-in Cadence | Exit Criteria |
+| --- | --- | --- | --- | --- |
+| Unified server (`apps/arw-server`) | `proj:restructure/core`, `track:unified-server` | 🔄 Active | Weekly architecture sync (Wed) | Router module map current, background loops documented, remaining state/memory integrations land with zero legacy route regressions |
+| Policy & posture | `proj:restructure/core`, `track:policy-posture` | 🔄 Active | Bi-weekly policy review | Cedar ABAC embed merged, `/actions` explainers live, posture presets keep capsules/leases/egress ledger in lock-step |
+| Operator experience (Phase D) | `proj:restructure/phase-d`, `area:operator-experience` | 🔄 Active | Launcher debug stand-up (Fri) | Chat Workbench REST handlers shipped, screenshot pipeline threaded through SPA/right-sidecar, `/admin/*` debug fallbacks removed |
+| Safety (Phase E) | `proj:restructure/phase-e`, `area:safety` | ⏳ Planned | Monthly safety council | Guardrail Gateway enforcement complete, Asimov Capsule Guard parity achieved, compatibility fallbacks retired after legacy traffic reaches zero |
+
+> Tracking notes: each row corresponds to an item in the “ARW Restructure” GitHub Project. Apply the listed labels to issues/PRs so automation keeps this table in sync with board status and dashboards.
 
 ## Vision (Harmonized)
 - Free, local‑first, privacy‑first agents that anyone can run on a laptop (CPU‑friendly), producing research‑grade output (provenance, coverage, verification, replayability).
@@ -203,11 +208,15 @@ Status: In progress.
   - UI/experience: migrate Chat Workbench, Screenshot Pipeline, Self Card + forecasts to the new SPA/right-sidecar flow once endpoints land.
   - Policy & safety: unify Guardrail Gateway and Asimov Capsule Guard enforcement on `arw-server` (rely on upcoming policy/egress work) and remove launcher fallbacks to `/admin/*` once replacements ship.
 
-### Immediate Reintegration Backlog
+### Immediate Reintegration Backlog (Release Gate)
+
+> Release gate: every open issue with `release-blocker:restructure` is linked to the “Immediate Reintegration” view in the ARW Restructure project. Packaging and tag automation must fail if any remain open.
+> Automation: `.github/workflows/release-packages.yml` runs a preflight job that aborts releases when these blockers are present; keep labels in sync with the board.
+
 - **Models & egress**
   - ✅ Resume support (Range/If-Range, `.part` reuse) now ships in `arw-server`.
-  - Next up (⏭) Re-introduce the optional HEAD quota preflight and single-flight hash guard so duplicate downloads coalesce before the GET.
-  - Next up (⏭) Surface idle-timeout/retry tuneables (`ARW_DL_IDLE_TIMEOUT_SECS`, backoff policy) and expose resumable error hints in `/admin/ui/models`.
+  - [ ] Re-introduce the optional HEAD quota preflight and single-flight hash guard so duplicate downloads coalesce before the GET (`release-blocker:models-egress`).
+  - [ ] Surface idle-timeout/retry tuneables (`ARW_DL_IDLE_TIMEOUT_SECS`, backoff policy) and expose resumable error hints in `/admin/ui/models` (`release-blocker:models-egress`).
 - **Events & telemetry**
   - ✅ `egress.preview`/`egress.ledger.appended` emit from unified downloads with `corr_id` and posture metadata.
 - ✅ Expanded `/state/models_metrics` with resume counters, hash-group inflight listings, and EWMA telemetry (typed schema + tests).

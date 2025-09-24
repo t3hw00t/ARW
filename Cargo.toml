@@ -16,7 +16,8 @@ members = [
   "apps/arw-connector",
   "apps/snappy-bench",
   "crates/arw-tauri",
-  "apps/arw-launcher/src-tauri"
+  "apps/arw-launcher/src-tauri",
+  "vendor/screenshots"
 ]
 resolver = "2"
 
