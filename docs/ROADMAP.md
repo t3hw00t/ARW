@@ -176,6 +176,13 @@ The stack scales by refusing to recompute or resend the same work twice and by b
 #### Long-Term (3–6 Months)
 - [Pack: Collaboration][Future] Ledger-driven settlement tooling: contribution meter and revenue ledger mature into auditable exports for collaborators, and opt-in policy templates help teams review disputes locally without a separate governance simulator.
 
+### Pack: Autonomous Operations
+
+#### Planning
+- [Pack: Collaboration][Future] Autonomy Lane Charter: document sandbox rules, budgets, and operator controls for autonomous helpers (see docs/spec/autonomy_lane.md).
+- [Pack: Collaboration][Future] Autonomy governor: scheduler kill switch, pause/rollback UI, and telemetry tile ahead of Gate G4 trials.
+- [Pack: Collaboration][Future] Autonomy rehearsal: synthetic workload drills, two-person sign-off, and Trial Control Center overlays before inviting real workloads.
+
 ### Pack: Research
 
 #### Recently Shipped

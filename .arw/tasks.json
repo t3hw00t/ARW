@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-24 15:51 UTC",
+  "updated": "2025-09-26 12:30 UTC",
   "tasks": [
     {
       "id": "t-phase-a-01",
@@ -1226,6 +1226,70 @@
       ],
       "updated": "2025-09-22 23:29:30 UTC",
       "done_at": "2025-09-22 23:29:30 UTC"
+    },
+    {
+      "id": "trial-g0",
+      "title": "Gate G0: Stable core ready",
+      "desc": "Verify triad endpoints, status tray strings, and preflight button ahead of internal rehearsal.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-26 12:30 UTC"
+    },
+    {
+      "id": "trial-g1",
+      "title": "Gate G1: Reliable memory",
+      "desc": "Ship focus card, freshness stamps, and context telemetry scores before Cohort A onboarding.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-26 12:30 UTC"
+    },
+    {
+      "id": "trial-g2",
+      "title": "Gate G2: Calm approvals",
+      "desc": "Deliver approvals lane, connections drawer, and illustrated operator guide.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-26 12:30 UTC"
+    },
+    {
+      "id": "trial-g3",
+      "title": "Gate G3: Trial operations",
+      "desc": "Bundle trial dashboard, guardrails presets, stop/rollback drills, and daily stand-up template.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-26 12:30 UTC"
+    },
+    {
+      "id": "trial-autonomy-governor",
+      "title": "Autonomy governor & kill switch",
+      "desc": "Wire scheduler preemption, approvals override, and emergency stop flow for autonomy lane.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-26 12:30 UTC"
+    },
+    {
+      "id": "autonomy-lane-spec",
+      "title": "Author Autonomy Lane ADR",
+      "desc": "Document budgets, guardrails, and operator controls for autonomous helpers (docs/spec/autonomy_lane.md).",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-26 12:30 UTC"
+    },
+    {
+      "id": "autonomy-rollback-playbook",
+      "title": "Autonomy rollback drills",
+      "desc": "Document and rehearse 2-minute rollback recipe; surface in trial runbook.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-26 12:30 UTC"
+    },
+    {
+      "id": "trial-visual-kit",
+      "title": "Design trial visual kit",
+      "desc": "Produce mockups for home tabs, approvals lane, and trial dashboard to align UI and docs.",
+      "status": "todo",
+      "notes": [],
+      "updated": "2025-09-26 12:30 UTC"
     }
   ]
 }
