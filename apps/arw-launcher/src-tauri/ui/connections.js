@@ -1,4 +1,24 @@
 const invoke = (cmd, args) => ARW.invoke(cmd, args);
+let sseIndicatorHandle = null;
+
+function ensureSseIndicator() {
+  const wrap = document.getElementById('statusBadges');
+  if (!wrap) return;
+  if (sseIndicatorHandle) return;
+  let badge = document.getElementById('connectionsSseBadge');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.id = 'connectionsSseBadge';
+    badge.className = 'badge';
+    wrap.appendChild(badge);
+  }
+  sseIndicatorHandle = ARW.sse.indicator(badge, { prefix: 'SSE' });
+}
+
+function connectSse({ replay = 5, resume = false } = {}) {
+  ensureSseIndicator();
+  ARW.sse.connect(ARW.base(8091), { replay, prefix: 'probe.metrics' }, resume);
+}
 function load(){ return ARW.getPrefs('launcher').then(v => (v&&v.connections)||[]) }
 async function save(conns){ const v = await ARW.getPrefs('launcher')||{}; v.connections = conns; await ARW.setPrefs('launcher', v) }
 async function refresh(){
@@ -50,5 +70,5 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-save').addEventListener('click', async ()=>{
     const conns = await load(); await save(conns); document.getElementById('stat').textContent = 'Saved'; ARW.toast('Connections saved');
   });
-  (async ()=>{ await refresh(); setInterval(refresh, 10000) })();
+  (async ()=>{ connectSse({ replay: 5, resume: false }); await refresh(); setInterval(refresh, 10000) })();
 });

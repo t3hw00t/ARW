@@ -1,5 +1,27 @@
 const invoke = (cmd, args) => ARW.invoke(cmd, args);
 const getPort = () => ARW.getPortFromInput('port');
+const effectivePort = () => getPort() || 8091;
+
+let miniDownloadsSub = null;
+
+function connectSse({ replay = 0, resume = true } = {}) {
+  const opts = { prefix: 'models.' };
+  if (replay > 0) opts.replay = replay;
+  ARW.sse.connect(ARW.base(effectivePort()), opts, resume);
+}
+
+function initStatusBadges() {
+  const wrap = document.getElementById('statusBadges');
+  if (!wrap) return;
+  let badge = document.getElementById('sseBadge');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.id = 'sseBadge';
+    badge.className = 'badge';
+    wrap.appendChild(badge);
+  }
+  ARW.sse.indicator(badge, { prefix: 'SSE' });
+}
 
 async function loadPrefs() {
   try {
@@ -14,6 +36,8 @@ async function loadPrefs() {
     const enabled = await invoke('launcher_autostart_status');
     document.getElementById('loginstart').checked = !!enabled
   } catch {}
+  connectSse({ replay: 5, resume: false });
+  miniDownloads();
   health();
 }
 
@@ -23,47 +47,106 @@ async function savePrefs() {
   v.autostart = !!document.getElementById('autostart').checked;
   v.notifyOnStatus = !!document.getElementById('notif').checked;
   await ARW.setPrefs('launcher', v);
+  connectSse({ replay: 5, resume: false });
+  miniDownloads();
 }
 
 async function health() {
-  try{
-    const ok = await invoke('check_service_health', { port: getPort() });
-    document.getElementById('svc-dot').className = 'dot ' + (ok ? 'ok' : 'bad');
-    document.getElementById('svc-text').innerText = ok ? 'online' : 'offline';
-  }catch{}
+  const dot = document.getElementById('svc-dot');
+  const txt = document.getElementById('svc-text');
+  const startBtn = document.getElementById('btn-start');
+  const stopBtn = document.getElementById('btn-stop');
+  try {
+    const ok = await invoke('check_service_health', { port: effectivePort() });
+    if (dot) dot.className = 'dot ' + (ok ? 'ok' : 'bad');
+    if (txt) txt.innerText = ok ? 'online' : 'offline';
+    if (startBtn) startBtn.disabled = ok;
+    if (stopBtn) stopBtn.disabled = !ok;
+  } catch {
+    if (dot) dot.className = 'dot';
+    if (txt) txt.innerText = 'unknown';
+    if (startBtn) startBtn.disabled = false;
+    if (stopBtn) stopBtn.disabled = true;
+  }
 }
 
 // Mini downloads widget (models.*)
 function miniDownloads() {
-  const root=document.getElementById('dlmini');
-  if(!root) return;
-  const last={};
-  const getPort = ()=> ARW.getPortFromInput('port') || 8091;
-  (async ()=>{
-    try{
-      const es = new EventSource(ARW.base(getPort()) + '/events?prefix=models.');
-      es.addEventListener('models.download.progress', (ev)=>{
-        try{
-          const j = JSON.parse(ev.data||'{}');
-          const id = j.id; const pct=(j.progress||0)+'%';
-          let el = root.querySelector(`[data-dlid="${id}"]`);
-          if(!el){ el=document.createElement('span'); el.setAttribute('data-dlid', id); el.className='badge'; el.innerHTML='<span class="dot"></span> '+id+' '+pct; root.appendChild(el); }
-          if(j.status==='complete'){ el.className='badge'; el.innerHTML = '<span class="dot"></span> '+id+' complete'; setTimeout(()=>{ if(el&&el.parentNode) el.parentNode.removeChild(el); }, 1500); return; }
-          if(j.error || j.code){ el.className='badge'; el.innerHTML = '<span class="dot bad"></span> '+id+' '+(j.code||'error'); return; }
-          // rate
-          const now = Date.now(); let tail=''; const prev=last[id]; last[id] = { t: now, b: (j.downloaded||0) };
-          if (prev && j.downloaded>=prev.b){ const dt=(now-prev.t)/1000; const db=j.downloaded-prev.b; const mbps = db/(1024*1024)/Math.max(0.001,dt); if(mbps>0.05) tail = ' · '+mbps.toFixed(2)+' MiB/s'; }
-          el.className='badge'; el.innerHTML = '<span class="dot"></span> '+id+' '+pct+tail;
-        }catch{}
-      });
-    }catch{}
-  })();
+  const root = document.getElementById('dlmini');
+  if (!root) return;
+  root.innerHTML = '';
+  if (miniDownloadsSub) {
+    ARW.sse.unsubscribe(miniDownloadsSub);
+    miniDownloadsSub = null;
+  }
+  const badges = new Map();
+  const last = new Map();
+  const ensure = (id) => {
+    if (badges.has(id)) return badges.get(id);
+    const el = document.createElement('span');
+    el.className = 'badge';
+    root.appendChild(el);
+    badges.set(id, el);
+    return el;
+  };
+  const remove = (id) => {
+    const el = badges.get(id);
+    if (!el) return;
+    if (el.parentNode) el.parentNode.removeChild(el);
+    badges.delete(id);
+    last.delete(id);
+  };
+  const render = (el, dotClass, label) => {
+    el.innerHTML = '';
+    const dot = document.createElement('span');
+    dot.className = `dot ${dotClass || ''}`.trim();
+    el.appendChild(dot);
+    const text = document.createElement('span');
+    text.textContent = ` ${label}`;
+    el.appendChild(text);
+  };
+  miniDownloadsSub = ARW.sse.subscribe((kind) => kind.startsWith('models.'), ({ kind, env }) => {
+    if (kind !== 'models.download.progress') return;
+    const payload = env?.payload || {};
+    const id = String(payload.id || '').trim();
+    if (!id) return;
+    const el = ensure(id);
+    if (payload.status === 'complete') {
+      render(el, '', `${id} complete`);
+      setTimeout(() => remove(id), 1500);
+      return;
+    }
+    if (payload.error || payload.code) {
+      const code = payload.code || 'error';
+      render(el, 'bad', `${id} ${code}`);
+      return;
+    }
+    const progress = payload.progress != null ? `${payload.progress}%` : (payload.status || '…');
+    let tail = '';
+    const now = Date.now();
+    const downloaded = Number(payload.downloaded || 0);
+    const prev = last.get(id);
+    last.set(id, { t: now, bytes: downloaded });
+    if (prev && downloaded >= prev.bytes) {
+      const dt = Math.max(0.001, (now - prev.t) / 1000);
+      const rate = (downloaded - prev.bytes) / dt / (1024 * 1024);
+      if (rate > 0.05) {
+        tail = ` · ${rate.toFixed(2)} MiB/s`;
+      }
+    }
+    const dotClass = payload.status === 'canceled' ? 'bad' : '';
+    render(el, dotClass, `${id} ${progress}${tail}`);
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  initStatusBadges();
   // Buttons
+  document.getElementById('btn-open').addEventListener('click', async () => {
+    try { await invoke('open_debug_ui', { port: effectivePort() }); } catch (e) { console.error(e); }
+  });
   document.getElementById('btn-open-window').addEventListener('click', async () => {
-    try { await invoke('open_debug_window', { port: getPort() }); } catch (e) { console.error(e); }
+    try { await invoke('open_debug_window', { port: effectivePort() }); } catch (e) { console.error(e); }
   });
   document.getElementById('btn-events').addEventListener('click', async () => {
     try { await invoke('open_events_window'); } catch (e) { console.error(e); }
@@ -87,10 +170,10 @@ document.addEventListener('DOMContentLoaded', () => {
     try { await invoke('open_training_window'); } catch (e) { console.error(e); }
   });
   document.getElementById('btn-start').addEventListener('click', async () => {
-    try { await invoke('start_service', { port: getPort() }); ARW.toast('Service starting'); } catch (e) { console.error(e); }
+    try { await invoke('start_service', { port: effectivePort() }); ARW.toast('Service starting'); } catch (e) { console.error(e); }
   });
   document.getElementById('btn-stop').addEventListener('click', async () => {
-    try { await invoke('stop_service', { port: getPort() }); ARW.toast('Service stop requested'); } catch (e) { console.error(e); }
+    try { await invoke('stop_service', { port: effectivePort() }); ARW.toast('Service stop requested'); } catch (e) { console.error(e); }
   });
   document.getElementById('btn-save').addEventListener('click', async () => {
     try {
@@ -104,9 +187,25 @@ document.addEventListener('DOMContentLoaded', () => {
       await invoke('open_url', { url: 'https://github.com/t3hw00t/ARW/releases' });
     } catch (e) { console.error(e); }
   });
+  const healthBtn = document.getElementById('btn-health');
+  if (healthBtn) healthBtn.addEventListener('click', async () => {
+    const el = document.getElementById('health');
+    if (el) { el.textContent = '…'; el.className = ''; }
+    try {
+      const ok = await invoke('check_service_health', { port: effectivePort() });
+      if (el) { el.textContent = ok ? 'Service UP' : 'Service DOWN'; el.className = ok ? 'ok' : 'bad'; }
+    } catch (e) {
+      if (el) { el.textContent = 'Error'; el.className = 'bad'; }
+      console.error(e);
+    }
+  });
+  const portInput = document.getElementById('port');
+  if (portInput) portInput.addEventListener('change', () => {
+    connectSse({ replay: 5, resume: false });
+    miniDownloads();
+  });
   // Service health polling
   health(); setInterval(health, 4000);
   // Prefs and mini SSE downloads
   loadPrefs();
-  miniDownloads();
 });

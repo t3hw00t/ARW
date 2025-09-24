@@ -78,7 +78,7 @@ UI Coherence
 - [Pack: Collaboration] Project Hub (Runs): Pin‑to‑compare available; filters are non‑persistent (view‑only) — done
 - [Pack: Collaboration] Accessibility: tree roles/aria‑level/expanded; regions labeled; command palette and gallery as dialogs; focus ring on rows; Compare tabs with role=tablist and roving tabindex — done
 - [Pack: Collaboration] Routes: canonicalize admin UI paths (`/admin/debug`, `/admin/ui/*`); remove the legacy `/debug` alias; update launcher open path — done
-- [Pack: Collaboration] SSE store: add connection status + resilient auto-reconnect with modest backoff; reuse filters and replay across reconnect — doing
+- [Pack: Collaboration] SSE store: add connection status + resilient auto-reconnect with modest backoff; reuse filters and replay across reconnect — done
 - [Pack: Collaboration] Connections window: allow per-connection admin token; open Events/Logs/Models windows pointed at that base — todo
 - [Pack: Collaboration] Per‑project templates: save/apply lanes/grid/focus in Hub — done
 - [Pack: Collaboration] Route SLO selector UI: adjustable p95 threshold in Logs/Events — done

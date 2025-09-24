@@ -207,14 +207,25 @@ window.ARW = {
     _nextId: 1,
     _lastId: null,
     _connected: false,
+    _status: 'idle',
+    _last: null,
+    _lastRaw: null,
+    _lastKind: null,
     _base: null,
     _opts: null,
     _retryMs: 500,
     _retryTimer: null,
     _closing: false,
-    _url(baseUrl, opts){
+    _updateStatus(status, extra){
+      this._status = status;
+      try{ if (document && document.body) document.body.setAttribute('data-sse-status', status); }catch{}
+      const payload = { status, ...(extra||{}) };
+      this._emit('*status*', payload);
+    },
+    _url(baseUrl, opts, afterId){
       const params = new URLSearchParams();
-      if (opts?.replay) params.set('replay', String(opts.replay));
+      if (afterId) params.set('after', String(afterId));
+      if (!afterId && opts?.replay) params.set('replay', String(opts.replay));
       if (opts?.prefix && Array.isArray(opts.prefix)) {
         for (const p of opts.prefix) params.append('prefix', p);
       } else if (typeof opts?.prefix === 'string' && opts.prefix) {
@@ -223,22 +234,36 @@ window.ARW = {
       return baseUrl.replace(/\/$/, '') + '/events' + (params.toString() ? ('?' + params.toString()) : '');
     },
     _clearTimer(){ if (this._retryTimer){ clearTimeout(this._retryTimer); this._retryTimer=null; } },
-    connect(baseUrl, opts = {}) {
+    connect(baseUrl, opts = {}, resumeLast = false) {
+      const prevBase = this._base;
+      const baseChanged = typeof prevBase === 'string' && prevBase !== baseUrl;
       this._base = baseUrl;
-      this._opts = opts || {};
+      this._opts = { ...(opts || {}) };
+      if (baseChanged) {
+        this._lastId = null;
+      }
       this._clearTimer();
       if (this._es) { try { this._closing = true; this._es.close(); } catch {} this._es = null; this._closing = false; }
-      const url = this._url(baseUrl, opts);
+      const useAfter = resumeLast && !baseChanged && this._lastId;
+      const url = this._url(baseUrl, this._opts, useAfter ? this._lastId : null);
+      this._updateStatus('connecting');
       const es = new EventSource(url, { withCredentials: false });
-      es.onopen = () => { this._connected = true; this._retryMs = 500; this._emit('*open*', {}); };
+      es.onopen = () => {
+        this._connected = true;
+        this._retryMs = 500;
+        this._emit('*open*', {});
+        this._updateStatus('open');
+      };
       es.onerror = () => {
         this._connected = false;
+        const ms = Math.min(this._retryMs, 5000);
+        const closing = this._closing;
         this._emit('*error*', {});
+        this._updateStatus(closing ? 'closed' : 'error', closing ? {} : { retryIn: ms });
         // EventSource auto-reconnects, but in some environments it can stall.
         // Kick a fresh connection with modest backoff unless we intentionally closed.
-        if (!this._closing) {
+        if (!closing) {
           this._clearTimer();
-          const ms = Math.min(this._retryMs, 5000);
           this._retryTimer = setTimeout(() => { try { this.reconnect(); } catch {} }, ms);
           this._retryMs = Math.min(ms * 2, 5000);
         }
@@ -248,6 +273,9 @@ window.ARW = {
         let data = null;
         try { data = JSON.parse(ev.data); } catch { data = { raw: ev.data }; }
         const kind = data?.kind || 'unknown';
+        this._last = data;
+        this._lastRaw = ev.data;
+        this._lastKind = kind;
         this._emit(kind, data);
       };
       this._es = es;
@@ -258,8 +286,38 @@ window.ARW = {
       this._onlineOnce = () => { try { this.reconnect(); } catch {} };
       try { window.addEventListener('online', this._onlineOnce, { once: true }); } catch {}
     },
-    reconnect(){ if (this._base) this.connect(this._base, this._opts || {}); },
-    close(){ this._clearTimer(); if (this._es){ try { this._closing = true; this._es.close(); } catch {} this._es=null; this._closing=false; } },
+    reconnect(){ if (this._base) this.connect(this._base, this._opts || {}, true); },
+    close(){
+      this._clearTimer();
+      if (this._es){ try { this._closing = true; this._es.close(); } catch {} this._es=null; }
+      this._closing=false;
+      this._connected = false;
+      this._updateStatus('closed');
+    },
+    indicator(target, opts = {}){
+      const node = typeof target === 'string' ? document.getElementById(target) : target;
+      if (!node) return { dispose(){} };
+      const self = this;
+      try{ if (!node.dataset.indicator) node.dataset.indicator = 'sse'; }catch{}
+      const labels = Object.assign({ open:'on', connecting:'connecting', idle:'off', error:'retrying', closed:'off' }, opts.labels || {});
+      const prefix = opts.prefix === undefined ? (node.dataset.ssePrefix ?? 'SSE') : opts.prefix;
+      const renderOpt = typeof opts.render === 'function' ? opts.render : null;
+      const render = (status, info) => {
+        try{ node.dataset.state = status; }catch{}
+        if (renderOpt) { renderOpt(node, status, info, { labels, prefix }); return; }
+        const label = labels[status] ?? labels.default ?? status;
+        if (prefix) node.textContent = `${prefix}: ${label}`;
+        else node.textContent = label;
+      };
+      const subId = this.subscribe('*status*', ({ env }) => render(env?.status || 'idle', env));
+      render(this.status(), { status: this.status() });
+      return { dispose(){ self.unsubscribe(subId); } };
+    },
+    status(){
+      try{ if (document && document.body) document.body.setAttribute('data-sse-status', this._status); }catch{}
+      return this._status;
+    },
+    last(){ return { kind: this._lastKind, data: this._last, raw: this._lastRaw }; },
     subscribe(filter, cb) {
       const id = this._nextId++;
       this._subs.set(id, { filter, cb });

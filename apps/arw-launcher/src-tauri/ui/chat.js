@@ -8,8 +8,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('autoOcr').addEventListener('change', async (e)=>{
     try{ const prefs = await ARW.getPrefs('launcher') || {}; prefs.autoOcr = !!e.target.checked; await ARW.setPrefs('launcher', prefs); }catch{}
   });
-  ARW.sse.subscribe('*open*', ()=> document.getElementById('sseStat').textContent = 'SSE: on');
-  ARW.sse.subscribe('*error*', ()=> document.getElementById('sseStat').textContent = 'SSE: off');
+  ARW.sse.indicator('sseStat', { prefix: 'SSE' });
   ARW.sse.connect(base, { replay: 10 });
 
   // Compare helpers

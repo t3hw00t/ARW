@@ -11,6 +11,8 @@ Type: How‑to
 - Include/Exclude body filters (substring match)
 - Controls: Replay 50, Pretty JSON, Wrap, Pause, Clear, Copy last
 - One SSE stream; capped buffer (300 entries)
+- Connection chip shows `connecting → on → retrying`; launcher reuses the last `id` to resume after transient drops.
+- `Auto` pauses rendering only—SSE keeps the route stats model current so manual refresh renders the latest snapshot immediately.
 - Read-model deltas stream over the same `/events` feed; use `prefix=state.read.model.patch` and supply `Last-Event-ID` to resume without losing JSON Patch diffs.
 - Project metadata (`id="projects"`) now streams via patches so UIs can refresh notes and trees without polling.
 - Watch capture activity by filtering `screenshots.`; the Activity lane/gallery subscribe to the same events.

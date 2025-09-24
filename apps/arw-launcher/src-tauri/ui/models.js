@@ -1,6 +1,34 @@
 const port = () => ARW.getPortFromInput('port');
 const __BASE = (()=>{ try{ return window.__ARW_BASE_OVERRIDE ? String(window.__ARW_BASE_OVERRIDE).replace(/\/$/,'') : null; }catch{ return null } })();
 
+let modelsSseSub = null;
+let modelsSseIndicator = null;
+
+function modelsBase() {
+  return __BASE || ARW.base(port() || 8091);
+}
+
+function ensureSseIndicator() {
+  const wrap = document.getElementById('statusBadges');
+  if (!wrap) return;
+  if (modelsSseIndicator) return;
+  let badge = document.getElementById('modelsSseBadge');
+  if (!badge) {
+    badge = document.createElement('span');
+    badge.id = 'modelsSseBadge';
+    badge.className = 'badge';
+    wrap.appendChild(badge);
+  }
+  modelsSseIndicator = ARW.sse.indicator(badge, { prefix: 'SSE' });
+}
+
+function connectModelsSse({ replay = 0, resume = true } = {}) {
+  ensureSseIndicator();
+  const opts = { prefix: 'models.' };
+  if (replay > 0) opts.replay = replay;
+  ARW.sse.connect(modelsBase(), opts, resume);
+}
+
 async function ivk(cmd, args){
   if (!__BASE) return ARW.invoke(cmd, args);
   const tok = await ARW.connections.tokenFor(__BASE);
@@ -221,6 +249,8 @@ async function savePrefs() {
   v.adminToken = document.getElementById('admintok').value || '';
   await ARW.setPrefs('launcher', v);
   document.getElementById('stat').textContent = 'Saved prefs';
+  connectModelsSse({ replay: 10, resume: false });
+  startModelsSse();
 }
 
 async function refresh() {
@@ -379,100 +409,104 @@ function setJobsAuto(on){
   if (on) { jobsAutoTimer = setInterval(()=>{ jobsRefresh(); }, 3000); }
 }
 
-function sse() {
-  const p = port() || 8091;
-  const es = new EventSource(ARW.base(p) + '/events?prefix=models.');
-  const last = {}; // id -> { t: ms, bytes: number }
+function startModelsSse() {
+  if (modelsSseSub) {
+    ARW.sse.unsubscribe(modelsSseSub);
+    modelsSseSub = null;
+  }
+  const last = {};
   let lastJobsAt = 0;
   if (!window.__etaMap) window.__etaMap = {};
-  es.onmessage = (ev) => {
+  modelsSseSub = ARW.sse.subscribe((kind) => kind.startsWith('models.'), ({ kind, env }) => {
     try {
-      const j = JSON.parse(ev.data);
-      if (j.kind && j.kind.startsWith('models.')) {
-        if (j.kind === 'models.download.progress') {
-          const pl = j.payload || {};
-          document.getElementById('dlprog').textContent = JSON.stringify(pl, null, 2);
-          const id = pl.id || '';
-          if (id){
-            const row=ensureBar(id);
-            const bar=row.querySelector('[data-bar]');
-            const txt=row.querySelector('[data-text]');
-            const pct=pl.progress||0;
-            if(bar) bar.style.width=(pct||0)+'%';
-            const dled=pl.downloaded||0;
-            const dledTxt=bytesHuman(dled);
-            const tot=pl.total? bytesHuman(pl.total) : null;
-            const now = Date.now();
-            let tail = '';
-            try{
-              const prev = last[id];
-              last[id] = { t: now, bytes: dled };
-              if (prev && dled >= prev.bytes){
-                const dt = Math.max(1, now - prev.t) / 1000;
-                const db = dled - prev.bytes;
-                const rate = db / dt;
-                const mpers = rate / (1024*1024);
-                if (mpers > 0.01){
-                  tail += ` · speed: ${mpers.toFixed(2)} MiB/s`;
-                  if (pl.total && dled < pl.total){
-                    const rem = pl.total - dled;
-                    const etaSec = Math.max(0, Math.floor(rem / Math.max(1, rate)));
-                    const mm = Math.floor(etaSec/60).toString().padStart(2,'0');
-                    const ss = (etaSec%60).toString().padStart(2,'0');
-                    tail += ` · ETA: ${mm}:${ss}`;
-                    window.__etaMap[id] = `${mm}:${ss}`;
-                  }
+      const pl = env?.payload || {};
+      if (kind === 'models.download.progress') {
+        document.getElementById('dlprog').textContent = JSON.stringify(pl, null, 2);
+        const id = pl.id || '';
+        if (id) {
+          const row = ensureBar(id);
+          const bar = row.querySelector('[data-bar]');
+          const txt = row.querySelector('[data-text]');
+          const pct = pl.progress || 0;
+          if (bar) bar.style.width = (pct || 0) + '%';
+          const dled = pl.downloaded || 0;
+          const dledTxt = bytesHuman(dled);
+          const tot = pl.total ? bytesHuman(pl.total) : null;
+          const now = Date.now();
+          let tail = '';
+          try {
+            const prev = last[id];
+            last[id] = { t: now, bytes: dled };
+            if (prev && dled >= prev.bytes) {
+              const dt = Math.max(1, now - prev.t) / 1000;
+              const db = dled - prev.bytes;
+              const rate = db / dt;
+              const mpers = rate / (1024 * 1024);
+              if (mpers > 0.01) {
+                tail += ` · speed: ${mpers.toFixed(2)} MiB/s`;
+                if (pl.total && dled < pl.total) {
+                  const rem = pl.total - dled;
+                  const etaSec = Math.max(0, Math.floor(rem / Math.max(1, rate)));
+                  const mm = Math.floor(etaSec / 60).toString().padStart(2, '0');
+                  const ss = (etaSec % 60).toString().padStart(2, '0');
+                  tail += ` · ETA: ${mm}:${ss}`;
+                  window.__etaMap[id] = `${mm}:${ss}`;
                 }
               }
-            }catch{}
-            if (pl.budget && (pl.budget.spent_ms!=null || pl.budget.remaining_hard_ms!=null)){
-              const spent = pl.budget.spent_ms||0;
-              const rem = pl.budget.remaining_hard_ms;
-              const spentS = (spent/1000).toFixed(1);
-              const remS = (typeof rem==='number') ? (rem/1000).toFixed(1) : '∞';
-              tail += ` · budget: ${spentS}s/${remS}s`;
             }
-            const baseTxt = pl.total? `${dledTxt}/${tot} (${pct}%)` : (pl.status||'');
-            const disk = pl.disk? ` · Disk: ${bytesHuman(pl.disk.available)} free / ${bytesHuman(pl.disk.total)} total` : '';
-            const iconHtml = iconsFor(pl.status, pl.code);
-            if(txt) txt.innerHTML = (iconHtml ? `<span class="icons">${iconHtml}</span>` : '') + baseTxt + tail + disk;
-            if(pl.disk){
-              const el=document.getElementById('disk');
-              if(el) el.textContent = `Disk: ${bytesHuman(pl.disk.available)} free / ${bytesHuman(pl.disk.total)} total`;
-            }
-            if(pl.status==='complete'){
-              setTimeout(async()=>{
-                await refresh();
-                const list=await ivk('models_list',{port:port()});
-                const found=(list||[]).find(mm=>mm.id===id);
-                if(!__BASE && found&&found.path){ try{ await ivk('open_path',{path:found.path}); }catch(e){} }
-                removeBar(id);
-                try{ delete window.__etaMap[id]; }catch{}
-              }, 250);
-            }
+          } catch {}
+          if (pl.budget && (pl.budget.spent_ms != null || pl.budget.remaining_hard_ms != null)) {
+            const spent = pl.budget.spent_ms || 0;
+            const rem = pl.budget.remaining_hard_ms;
+            const spentS = (spent / 1000).toFixed(1);
+            const remS = typeof rem === 'number' ? (rem / 1000).toFixed(1) : '∞';
+            tail += ` · budget: ${spentS}s/${remS}s`;
           }
-          // Lightly refresh jobs snapshot at most once a second during progress
-          const nowMs = Date.now();
-          if (nowMs - lastJobsAt > 1000) { lastJobsAt = nowMs; jobsRefresh(); }
-          try{
-            const pl = j.payload || {};
-            if (pl.status === 'complete' && pl.id) {
-              (async ()=>{
-                await refresh();
-                const list2 = await ivk('models_list', { port: port() });
-                const found = (list2||[]).find(mm => mm.id === pl.id);
-                if (found && found.path) { try { await ivk('open_path', { path: found.path }); } catch(e){} }
-              })();
-            }
-          }catch{}
+          const baseTxt = pl.total ? `${dledTxt}/${tot} (${pct}%)` : (pl.status || '');
+          const disk = pl.disk ? ` · Disk: ${bytesHuman(pl.disk.available)} free / ${bytesHuman(pl.disk.total)} total` : '';
+          const iconHtml = iconsFor(pl.status, pl.code);
+          if (txt) txt.innerHTML = (iconHtml ? `<span class="icons">${iconHtml}</span>` : '') + baseTxt + tail + disk;
+          if (pl.disk) {
+            const el = document.getElementById('disk');
+            if (el) el.textContent = `Disk: ${bytesHuman(pl.disk.available)} free / ${bytesHuman(pl.disk.total)} total`;
+          }
+          if (pl.status === 'complete') {
+            setTimeout(async () => {
+              await refresh();
+              const list = await ivk('models_list', { port: port() });
+              const found = (list || []).find((mm) => mm.id === id);
+              if (!__BASE && found && found.path) {
+                try { await ivk('open_path', { path: found.path }); } catch (e) { console.error(e); }
+              }
+              removeBar(id);
+              try { delete window.__etaMap[id]; } catch {}
+            }, 250);
+          }
         }
-        if (j.kind === 'models.changed' || j.kind === 'models.refreshed') {
-          refresh();
+        const nowMs = Date.now();
+        if (nowMs - lastJobsAt > 1000) {
+          lastJobsAt = nowMs;
           jobsRefresh();
         }
+        if (pl.status === 'complete' && pl.id) {
+          (async () => {
+            await refresh();
+            const list2 = await ivk('models_list', { port: port() });
+            const found = (list2 || []).find((mm) => mm.id === pl.id);
+            if (found && found.path) {
+              try { await ivk('open_path', { path: found.path }); } catch (e) { console.error(e); }
+            }
+          })();
+        }
       }
-    } catch {}
-  };
+      if (kind === 'models.changed' || kind === 'models.refreshed') {
+        refresh();
+        jobsRefresh();
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -585,12 +619,24 @@ document.addEventListener('DOMContentLoaded', () => {
     setJobsAuto(!!e.target.checked);
     try{ const p = await ARW.getPrefs('launcher') || {}; p.jobsAuto = !!e.target.checked; await ARW.setPrefs('launcher', p); }catch{}
   });
+  const portInput = document.getElementById('port');
+  if (portInput) portInput.addEventListener('change', () => {
+    connectModelsSse({ replay: 10, resume: false });
+    startModelsSse();
+  });
   const hp = document.getElementById('hash-prov'); if (hp) hp.addEventListener('change', async (e)=>{ try{ const p = await ARW.getPrefs('launcher')||{}; p.hashProvider = e.target.value||''; await ARW.setPrefs('launcher', p);}catch{}; hashesRefresh(); });
   const hs = document.getElementById('hash-sort'); if (hs) hs.addEventListener('change', async (e)=>{ try{ const p = await ARW.getPrefs('launcher')||{}; p.hashSort = e.target.value||'bytes'; await ARW.setPrefs('launcher', p);}catch{}; hashesRefresh(); });
   const ho = document.getElementById('hash-order'); if (ho) ho.addEventListener('change', async (e)=>{ try{ const p = await ARW.getPrefs('launcher')||{}; p.hashOrder = e.target.value||'desc'; await ARW.setPrefs('launcher', p);}catch{}; hashesRefresh(); });
   const hl = document.getElementById('hash-limit'); if (hl) hl.addEventListener('change', async (e)=>{ const n = parseInt(e.target.value||'50',10)||50; e.target.value=n; try{ const p = await ARW.getPrefs('launcher')||{}; p.hashLimit=n; await ARW.setPrefs('launcher', p);}catch{}; hashesRefresh(); });
   const cb = document.getElementById('concblock'); if (cb) cb.addEventListener('change', async (e)=>{ try{ const p = await ARW.getPrefs('launcher')||{}; p.concBlock = !!e.target.checked; await ARW.setPrefs('launcher', p);}catch{}; });
-  (async ()=>{ await loadPrefs(); await refresh(); await hashesRefresh(); await jobsRefresh(); sse(); })();
+  (async () => {
+    await loadPrefs();
+    await refresh();
+    await hashesRefresh();
+    await jobsRefresh();
+    connectModelsSse({ replay: 10, resume: false });
+    startModelsSse();
+  })();
 });
 
 // Keyboard shortcuts (ignore when typing)

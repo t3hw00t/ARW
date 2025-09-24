@@ -3,8 +3,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const port = ARW.getPortFromInput('port') || 8091;
   const base = ARW.base(port);
   const sc = ARW.sidecar.mount('sidecar', ['timeline','context','policy','metrics','models','activity'], { base });
-  ARW.sse.subscribe('*open*', ()=> document.getElementById('sseStat').textContent = 'SSE: on');
-  ARW.sse.subscribe('*error*', ()=> document.getElementById('sseStat').textContent = 'SSE: off');
+  ARW.sse.indicator('sseStat', { prefix: 'SSE' });
   ARW.sse.connect(base, { replay: 25 });
   // ---------- Runs: episodes list + snapshot ----------
   let runsCache = [];
