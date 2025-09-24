@@ -11,7 +11,7 @@ This runbook keeps the daily trial routine lightweight. Use it side-by-side with
 
 ## Before the day starts
 
-- Open the Trial Control Center; confirm all four tiles (Systems, Memory, Approvals, Safety) are green.
+- Open the Trial Control Center; confirm all four tiles (Systems, Memory, Approvals, Safety) are green.  Record the numbers in a fresh copy of `docs/ops/trials/daily_log_template.md`.
 - Run `just trials-preflight` or press the Home screen preflight button.
 - Check the approvals lane is empty; if not, page the on-call approver.
 - Glance at the access matrix (ops/access_matrix.yaml) to verify tokens expiring today.
@@ -42,7 +42,7 @@ This runbook keeps the daily trial routine lightweight. Use it side-by-side with
 ## End-of-day wrap
 
 - Clear or hand off approvals.
-- Snapshot the dashboard tiles (screenshots or export) and store them in the trial dossier.
+- Snapshot the dashboard tiles (screenshots or export) and drop them into `docs/ops/trials/` (see `dashboard_snapshot.md`).
 - Update the incident log and highlight the day’s wins.
 - Check the access matrix for tokens or leases expiring overnight.
 

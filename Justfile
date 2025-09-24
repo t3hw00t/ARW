@@ -114,6 +114,9 @@ legacy-check:
 ops-export out='ops/out':
   bash scripts/export_ops_assets.sh --out '{{out}}'
 
+trials-preflight:
+  bash scripts/trials_preflight.sh
+
 # Service
 start port='8091' debug='1':
   ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 bash -ceu '

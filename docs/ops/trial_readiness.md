@@ -57,7 +57,7 @@ Until those are done we keep trials in guided mode.
 - Memory fidelity: selector, compression, hygiene, context telemetry, Training Park dials.
 - Approvals + sharing: staging queue, approvals lane, connections drawer, feedback readiness.
 - Safety bundle: GTK/GLib upgrade, egress firewall presets, capsule guard, Prometheus tiles, red-team rehearsal.
-- Automation helpers: `just triad-smoke`, `just context-ci`, `just trials-preflight`, `scripts/trials_preflight.sh`, `docs/ops/trial_runbook.md`, `ops/access_matrix.yaml`.
+- Automation helpers: `just triad-smoke`, `just context-ci`, `just trials-preflight`, `scripts/trials_preflight.sh`, `docs/ops/trial_runbook.md`, `ops/access_matrix.yaml`, `docs/ops/trials/`.
 - Visual kit: home tabs, approvals lane, and dashboard mocks (task `trial-visual-kit`).
 - Autonomy prep: tasks added (`trial-g0`–`trial-g3`, `trial-autonomy-governor`, `autonomy-lane-spec`, `autonomy-rollback-playbook`).
 
