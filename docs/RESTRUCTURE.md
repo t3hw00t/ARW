@@ -193,8 +193,9 @@ Status: In progress.
 
 - [x] ABAC facade (`arw-policy` crate) ships with JSON-backed rules, `allow_all`, and `lease_rules`; `/actions` and context rehydrate honor leases. See Guide → Policy (ABAC Facade).
 - [x] Security posture defaults (`ARW_SECURITY_POSTURE=relaxed|standard|strict`) select guard presets when `ARW_POLICY_FILE` is absent; `standard` lease-gates network, fs, rehydrate, apps, browser, models download, and shell access.
-- [ ] Embed Cedar ABAC with entity modeling (agents/projects/leases/capabilities) and human-readable explainers.
-- [ ] Extend egress integration so posture presets, capsule leases, and ledger toggles move together (forward proxy, `/egress/preview`, DNS/IP guards already live; expose remaining controls via `/state/egress/settings`).
+- [x] Embed Cedar ABAC with entity modeling (agents/projects/leases/capabilities) and human-readable explainers.
+- [x] Extend egress integration so posture presets, capsule leases, and ledger toggles move together (forward proxy, `/egress/preview`, DNS/IP guards already live; expose remaining controls via `/state/egress/settings`).
+  - `/state/egress/settings` now reports `recommended` posture defaults alongside capsule and lease snapshots; admin updates inherit ledger/proxy defaults when posture changes.
 
 - `crates/arw-wasi` (WASI runtime scaffold) — Implemented (skeleton)
   - Provides a `ToolHost` trait and a `NoopHost` implementation as a placeholder.
@@ -215,8 +216,9 @@ Status: In progress.
 
 - **Models & egress**
   - ✅ Resume support (Range/If-Range, `.part` reuse) now ships in `arw-server`.
-  - [ ] Re-introduce the optional HEAD quota preflight and single-flight hash guard so duplicate downloads coalesce before the GET (`release-blocker:models-egress`).
-  - [ ] Surface idle-timeout/retry tuneables (`ARW_DL_IDLE_TIMEOUT_SECS`, backoff policy) and expose resumable error hints in `/admin/ui/models` (`release-blocker:models-egress`).
+  - [x] Re-introduce the optional HEAD quota preflight and single-flight hash guard so duplicate downloads coalesce before the GET (`release-blocker:models-egress`).
+  - [x] Surface idle-timeout/retry tuneables (`ARW_DL_IDLE_TIMEOUT_SECS`, backoff policy) and expose resumable error hints in `/admin/ui/models` (`release-blocker:models-egress`).
+    - Runtime metrics now publish `runtime { idle_timeout_secs, send_retries, stream_retries, retry_backoff_ms, preflight_enabled }`, and the admin UI surfaces guidance when downloads stall or resume fails.
 - **Events & telemetry**
   - ✅ `egress.preview`/`egress.ledger.appended` emit from unified downloads with `corr_id` and posture metadata.
 - ✅ Expanded `/state/models_metrics` with resume counters, hash-group inflight listings, and EWMA telemetry (typed schema + tests).

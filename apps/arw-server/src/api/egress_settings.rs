@@ -5,8 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use utoipa::ToSchema;
 
-use crate::egress_proxy;
-use crate::AppState;
+use crate::{egress_policy, egress_proxy, AppState};
 use arw_topics as topics;
 use jsonschema::{Draft, JSONSchema};
 
@@ -39,41 +38,85 @@ pub(crate) struct EgressSettingsPatch {
     pub ledger_enable: Option<bool>,
 }
 
-fn env_flag(key: &str, default: bool) -> bool {
-    match std::env::var(key) {
-        Ok(value) => matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "1" | "true" | "on"
-        ),
-        Err(_) => default,
+fn bool_flag(value: bool) -> &'static str {
+    if value {
+        "1"
+    } else {
+        "0"
     }
 }
 
-pub(crate) fn current_settings() -> EgressSettings {
-    let posture = std::env::var("ARW_NET_POSTURE")
-        .ok()
-        .or(std::env::var("ARW_SECURITY_POSTURE").ok());
-    let allowlist: Vec<String> = std::env::var("ARW_NET_ALLOWLIST")
-        .ok()
-        .map(|s| {
-            s.split(',')
-                .map(|x| x.trim().to_string())
-                .filter(|x| !x.is_empty())
-                .collect()
-        })
-        .unwrap_or_default();
+pub(crate) async fn current_settings(state: &AppState) -> EgressSettings {
+    let policy = egress_policy::resolve_policy(state).await;
+    let posture = Some(policy.posture.as_str().to_string());
+    let cfg = state.config_state().lock().await.clone();
+    let mut allowlist = egress_policy::config_allowlist(&cfg);
+    allowlist.extend(egress_policy::env_allowlist());
+    allowlist.sort();
+    allowlist.dedup();
     EgressSettings {
         posture,
         allowlist,
-        block_ip_literals: env_flag("ARW_EGRESS_BLOCK_IP_LITERALS", false),
-        dns_guard_enable: env_flag("ARW_DNS_GUARD_ENABLE", true),
-        proxy_enable: env_flag("ARW_EGRESS_PROXY_ENABLE", true),
+        block_ip_literals: policy.block_ip_literals,
+        dns_guard_enable: policy.dns_guard_enabled,
+        proxy_enable: policy.proxy_enabled,
         proxy_port: std::env::var("ARW_EGRESS_PROXY_PORT")
             .ok()
             .and_then(|s| s.parse().ok())
             .unwrap_or(9080),
-        ledger_enable: env_flag("ARW_EGRESS_LEDGER_ENABLE", false),
+        ledger_enable: policy.ledger_enabled,
     }
+}
+
+async fn compose_egress_payload(state: &AppState) -> serde_json::Value {
+    let egress = current_settings(state).await;
+    let posture_value = egress.posture.clone().unwrap_or_else(|| "standard".into());
+    let posture_enum = egress_policy::Posture::from_str(&posture_value);
+    let effective_posture = posture_enum.effective();
+    let defaults = egress_policy::posture_defaults(effective_posture);
+    let recommended = json!({
+        "block_ip_literals": defaults.block_ip_literals,
+        "dns_guard_enable": defaults.dns_guard_enabled,
+        "proxy_enable": defaults.proxy_enabled,
+        "ledger_enable": defaults.ledger_enabled,
+    });
+    let capsules_snapshot = state.capsules().snapshot().await;
+    let capsule_count = capsules_snapshot
+        .get("count")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let leases_summary = if state.kernel_enabled() {
+        match state.kernel().list_leases_async(200).await {
+            Ok(items) => {
+                let total = items.len();
+                let net = items
+                    .iter()
+                    .filter(|lease| {
+                        lease
+                            .as_object()
+                            .and_then(|obj| obj.get("capability"))
+                            .and_then(|v| v.as_str())
+                            .map(|cap| cap.starts_with("net"))
+                            .unwrap_or(false)
+                    })
+                    .count();
+                json!({"total": total, "net": net, "items": items})
+            }
+            Err(err) => json!({"error": err.to_string()}),
+        }
+    } else {
+        json!({"enabled": false})
+    };
+
+    json!({
+        "egress": egress,
+        "recommended": recommended,
+        "capsules": {
+            "active": capsule_count,
+            "snapshot": capsules_snapshot,
+        },
+        "leases": leases_summary,
+    })
 }
 
 /// Effective egress settings snapshot.
@@ -83,8 +126,8 @@ pub(crate) fn current_settings() -> EgressSettings {
     tag = "Egress",
     responses((status = 200, description = "Egress settings", body = serde_json::Value))
 )]
-pub async fn state_egress_settings() -> impl IntoResponse {
-    Json(json!({"egress": current_settings()}))
+pub async fn state_egress_settings(State(state): State<AppState>) -> impl IntoResponse {
+    Json(compose_egress_payload(&state).await)
 }
 
 /// Update egress settings (admin token required).
@@ -111,34 +154,6 @@ pub async fn egress_settings_update(
         )
             .into_response();
     }
-    if let Some(posture) = patch.posture.as_deref() {
-        std::env::set_var("ARW_NET_POSTURE", posture);
-    }
-    if let Some(list) = patch.allowlist.as_ref() {
-        let s = list
-            .iter()
-            .map(|x| x.trim())
-            .filter(|x| !x.is_empty())
-            .collect::<Vec<_>>()
-            .join(",");
-        std::env::set_var("ARW_NET_ALLOWLIST", s);
-    }
-    if let Some(b) = patch.block_ip_literals {
-        std::env::set_var("ARW_EGRESS_BLOCK_IP_LITERALS", if b { "1" } else { "0" });
-    }
-    if let Some(b) = patch.dns_guard_enable {
-        std::env::set_var("ARW_DNS_GUARD_ENABLE", if b { "1" } else { "0" });
-    }
-    if let Some(b) = patch.proxy_enable {
-        std::env::set_var("ARW_EGRESS_PROXY_ENABLE", if b { "1" } else { "0" });
-    }
-    if let Some(p) = patch.proxy_port {
-        std::env::set_var("ARW_EGRESS_PROXY_PORT", format!("{}", p));
-    }
-    if let Some(b) = patch.ledger_enable {
-        std::env::set_var("ARW_EGRESS_LEDGER_ENABLE", if b { "1" } else { "0" });
-    }
-
     // persist to config_state under "egress" with schema validation
     let schema_path = "spec/schemas/egress_settings.json";
     let schema_json = match std::fs::read(schema_path).ok().and_then(|b| serde_json::from_slice::<serde_json::Value>(&b).ok()) {
@@ -158,26 +173,76 @@ pub async fn egress_settings_update(
     if !egress.is_object() {
         egress = json!({});
     }
-    if let Some(v) = patch.posture {
-        egress["posture"] = json!(v);
+    let mut posture_value = if let Some(posture) = patch.posture.clone() {
+        std::env::set_var("ARW_NET_POSTURE", &posture);
+        posture
+    } else {
+        std::env::var("ARW_NET_POSTURE")
+            .ok()
+            .or_else(|| std::env::var("ARW_SECURITY_POSTURE").ok())
+            .unwrap_or_else(|| "standard".into())
+    };
+
+    let posture_changed = patch.posture.is_some();
+    if let Some(posture) = patch.posture.as_ref() {
+        egress["posture"] = json!(posture);
+        posture_value = posture.clone();
     }
-    if let Some(v) = patch.allowlist {
-        egress["allowlist"] = json!(v);
+
+    if let Some(list) = patch.allowlist.as_ref() {
+        let entries: Vec<String> = list
+            .iter()
+            .map(|x| x.trim())
+            .filter(|x| !x.is_empty())
+            .map(|s| s.to_string())
+            .collect();
+        std::env::set_var("ARW_NET_ALLOWLIST", entries.join(","));
+        egress["allowlist"] = json!(entries);
     }
-    if let Some(v) = patch.block_ip_literals {
-        egress["block_ip_literals"] = json!(v);
+
+    if let Some(port) = patch.proxy_port {
+        std::env::set_var("ARW_EGRESS_PROXY_PORT", format!("{}", port));
+        egress["proxy_port"] = json!(port);
     }
-    if let Some(v) = patch.dns_guard_enable {
-        egress["dns_guard_enable"] = json!(v);
+
+    let posture_enum = egress_policy::Posture::from_str(&posture_value);
+    let effective_posture = posture_enum.effective();
+    let defaults = egress_policy::posture_defaults(effective_posture);
+
+    let mut block_final = patch.block_ip_literals;
+    if block_final.is_none() && posture_changed {
+        block_final = Some(defaults.block_ip_literals);
     }
-    if let Some(v) = patch.proxy_enable {
-        egress["proxy_enable"] = json!(v);
+    if let Some(value) = block_final {
+        std::env::set_var("ARW_EGRESS_BLOCK_IP_LITERALS", bool_flag(value));
+        egress["block_ip_literals"] = json!(value);
     }
-    if let Some(v) = patch.proxy_port {
-        egress["proxy_port"] = json!(v);
+
+    let mut dns_final = patch.dns_guard_enable;
+    if dns_final.is_none() && posture_changed {
+        dns_final = Some(defaults.dns_guard_enabled);
     }
-    if let Some(v) = patch.ledger_enable {
-        egress["ledger_enable"] = json!(v);
+    if let Some(value) = dns_final {
+        std::env::set_var("ARW_DNS_GUARD_ENABLE", bool_flag(value));
+        egress["dns_guard_enable"] = json!(value);
+    }
+
+    let mut proxy_final = patch.proxy_enable;
+    if proxy_final.is_none() && posture_changed {
+        proxy_final = Some(defaults.proxy_enabled);
+    }
+    if let Some(value) = proxy_final {
+        std::env::set_var("ARW_EGRESS_PROXY_ENABLE", bool_flag(value));
+        egress["proxy_enable"] = json!(value);
+    }
+
+    let mut ledger_final = patch.ledger_enable;
+    if ledger_final.is_none() && posture_changed {
+        ledger_final = Some(defaults.ledger_enabled);
+    }
+    if let Some(value) = ledger_final {
+        std::env::set_var("ARW_EGRESS_LEDGER_ENABLE", bool_flag(value));
+        egress["ledger_enable"] = json!(value);
     }
 
     // Validate the sub-tree against the schema
@@ -217,33 +282,10 @@ pub async fn egress_settings_update(
     // publish event, apply proxy toggle, and return effective settings with snapshot id
     state.bus().publish(topics::TOPIC_EGRESS_SETTINGS_UPDATED, &json!({"ts": chrono::Utc::now().to_rfc3339(), "who": "admin", "snapshot_id": snapshot_id }));
     egress_proxy::apply_current(state.clone()).await;
-    let posture = std::env::var("ARW_NET_POSTURE")
-        .ok()
-        .or(std::env::var("ARW_SECURITY_POSTURE").ok());
-    let allowlist: Vec<String> = std::env::var("ARW_NET_ALLOWLIST")
-        .ok()
-        .map(|s| {
-            s.split(',')
-                .map(|x| x.trim().to_string())
-                .filter(|x| !x.is_empty())
-                .collect()
-        })
-        .unwrap_or_default();
-    let out = EgressSettings {
-        posture,
-        allowlist,
-        block_ip_literals: env_flag("ARW_EGRESS_BLOCK_IP_LITERALS", false),
-        dns_guard_enable: env_flag("ARW_DNS_GUARD_ENABLE", true),
-        proxy_enable: env_flag("ARW_EGRESS_PROXY_ENABLE", true),
-        proxy_port: std::env::var("ARW_EGRESS_PROXY_PORT")
-            .ok()
-            .and_then(|s| s.parse().ok())
-            .unwrap_or(9080),
-        ledger_enable: env_flag("ARW_EGRESS_LEDGER_ENABLE", false),
-    };
-    (
-        axum::http::StatusCode::OK,
-        Json(json!({"egress": out, "snapshot_id": snapshot_id})),
-    )
-        .into_response()
+
+    let mut body = compose_egress_payload(&state).await;
+    if let Some(map) = body.as_object_mut() {
+        map.insert("snapshot_id".into(), json!(snapshot_id));
+    }
+    (axum::http::StatusCode::OK, Json(body)).into_response()
 }

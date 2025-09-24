@@ -145,8 +145,9 @@ Config discovery (CWD‑independent)
 - `ARW_DL_SEND_RETRIES`: HTTP request retries for initial send before failing (default `2`).
 - `ARW_DL_STREAM_RETRIES`: stream read retries (resume with Range) before failing (default `2`).
 - `ARW_DL_IDLE_TIMEOUT_SECS`: idle fallback timeout when no hard budget is set (default `300`; set `0` to disable).
+- `ARW_DL_RETRY_BACKOFF_MS`: base backoff (in milliseconds) between retry attempts (default `500`; applied linearly per attempt).
 - `ARW_DL_EWMA_ALPHA`: smoothing factor for throughput EWMA used in admission decisions (default `0.3`).
-- `ARW_DL_PREFLIGHT`: when `1`, perform a HEAD preflight to capture `Content-Length` and resume validators (ETag/Last-Modified). Enables early enforcement of `ARW_MODELS_MAX_MB` and `ARW_MODELS_QUOTA_MB` before starting the transfer.
+- `ARW_DL_PREFLIGHT`: when `1`, perform a HEAD preflight to capture `Content-Length` and resume validators (ETag/Last-Modified). Enables early enforcement of `ARW_MODELS_MAX_MB` and `ARW_MODELS_QUOTA_MB` before starting the transfer. Default `1` (set to `0` to disable).
 - `ARW_DL_PROGRESS_INCLUDE_BUDGET`: when `1`, include a `budget` snapshot (soft/hard ms, elapsed, remaining, state) in unified `models.download.progress` events.
 - `ARW_DL_PROGRESS_INCLUDE_DISK`: when `1`, include a `disk` snapshot `{reserve,available,need}` (bytes) in unified `models.download.progress` events.
 - `ARW_DL_PROGRESS_VALIDATE`: when `1`, validate progress `status`/`code` against the known vocabulary and log warnings for unknown values (helps catch drift).

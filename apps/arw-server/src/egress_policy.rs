@@ -125,6 +125,45 @@ pub struct ResolvedPolicy {
     pub block_ip_literals: bool,
     pub dns_guard_enabled: bool,
     pub proxy_enabled: bool,
+    pub ledger_enabled: bool,
+}
+
+#[derive(Debug, Clone, Copy)]
+pub struct PostureDefaults {
+    pub block_ip_literals: bool,
+    pub dns_guard_enabled: bool,
+    pub proxy_enabled: bool,
+    pub ledger_enabled: bool,
+}
+
+pub fn posture_defaults(posture: Posture) -> PostureDefaults {
+    match posture {
+        Posture::Off => PostureDefaults {
+            block_ip_literals: false,
+            dns_guard_enabled: false,
+            proxy_enabled: false,
+            ledger_enabled: false,
+        },
+        Posture::Relaxed => PostureDefaults {
+            block_ip_literals: false,
+            dns_guard_enabled: false,
+            proxy_enabled: false,
+            ledger_enabled: false,
+        },
+        Posture::Public => PostureDefaults {
+            block_ip_literals: true,
+            dns_guard_enabled: true,
+            proxy_enabled: true,
+            ledger_enabled: true,
+        },
+        Posture::Allowlist | Posture::Custom | Posture::Strict => PostureDefaults {
+            block_ip_literals: true,
+            dns_guard_enabled: true,
+            proxy_enabled: true,
+            ledger_enabled: true,
+        },
+        Posture::Standard => posture_defaults(Posture::Public),
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -157,7 +196,7 @@ impl PolicyDecision {
     }
 }
 
-fn env_allowlist() -> Vec<String> {
+pub(crate) fn env_allowlist() -> Vec<String> {
     std::env::var("ARW_NET_ALLOWLIST")
         .ok()
         .map(|s| {
@@ -169,7 +208,7 @@ fn env_allowlist() -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn config_allowlist(cfg: &Value) -> Vec<String> {
+pub(crate) fn config_allowlist(cfg: &Value) -> Vec<String> {
     cfg.get("egress")
         .and_then(|v| v.get("allowlist"))
         .and_then(|v| serde_json::from_value::<Vec<String>>(v.clone()).ok())
@@ -231,9 +270,11 @@ pub async fn resolve_policy(state: &AppState) -> ResolvedPolicy {
         .or_else(|| config_posture(&cfg))
         .unwrap_or_else(|| "standard".into());
     let posture = Posture::from_str(&posture_str).effective();
-    let block_ip_literals = env_flag("ARW_EGRESS_BLOCK_IP_LITERALS", false);
-    let dns_guard_enabled = env_flag("ARW_DNS_GUARD_ENABLE", true);
-    let proxy_enabled = env_flag("ARW_EGRESS_PROXY_ENABLE", true);
+    let defaults = posture_defaults(posture);
+    let block_ip_literals = env_flag("ARW_EGRESS_BLOCK_IP_LITERALS", defaults.block_ip_literals);
+    let dns_guard_enabled = env_flag("ARW_DNS_GUARD_ENABLE", defaults.dns_guard_enabled);
+    let proxy_enabled = env_flag("ARW_EGRESS_PROXY_ENABLE", defaults.proxy_enabled);
+    let ledger_enabled = env_flag("ARW_EGRESS_LEDGER_ENABLE", defaults.ledger_enabled);
 
     let env_list = env_allowlist();
     let cfg_list = config_allowlist(&cfg);
@@ -261,6 +302,7 @@ pub async fn resolve_policy(state: &AppState) -> ResolvedPolicy {
         block_ip_literals,
         dns_guard_enabled,
         proxy_enabled,
+        ledger_enabled,
     }
 }
 
@@ -402,6 +444,7 @@ mod tests {
             block_ip_literals: false,
             dns_guard_enabled: true,
             proxy_enabled: true,
+            ledger_enabled: true,
         };
         assert!(matches!(
             evaluate(&policy, Some("api.example.com"), Some(443), "https"),

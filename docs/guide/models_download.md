@@ -4,9 +4,9 @@ title: Models Download (HTTP)
 
 # Models Download (HTTP)
 
-ARW provides HTTP endpoints (admin‑gated) to manage local models with streaming downloads, live progress via SSE, safe cancel, and mandatory SHA‑256 verification. HTTP Range resume will return in an upcoming update.
+ARW provides HTTP endpoints (admin‑gated) to manage local models with streaming downloads, live progress via SSE, safe cancel, and mandatory SHA‑256 verification. HTTP Range resume is supported when the upstream advertises validators (`ETag` or `Last-Modified`).
 
-Updated: 2025-09-21
+Updated: 2025-09-23
 Type: How‑to
 
 See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*).
@@ -86,7 +86,7 @@ Subscribe to `GET /events` and filter `models.download.progress` events. Example
 Schema notes:
 - Always includes `id`.
 - `status` is one of `started`, `queued`, `admitted`, `downloading`, `resumed`, `degraded`, `complete`, `canceled`, `cancel-requested`, `no-active-job`, or `error`.
-- `code` provides a machine hint on progress/failure (e.g., `resumed`, `soft-budget`, `sha256_mismatch`, `http`, `io`, `size_limit`, `quota_exceeded`, `disk_insufficient`).
+- `code` provides a machine hint on progress/failure (e.g., `resumed`, `soft-budget`, `idle-timeout`, `sha256_mismatch`, `http`, `io`, `size_limit`, `quota_exceeded`, `disk_insufficient`).
 - `bytes`/`downloaded` report cumulative bytes fetched; `total` and `percent` are present when the server provided `Content-Length`.
 - Completion events include `sha256`, `bytes`, `downloaded`, `cached`, and `total`.
 - Every payload includes `corr_id`; use it to join egress ledger entries and `/events` flows.
@@ -130,7 +130,8 @@ Note: formal `egress.decision` remains planned; previews and ledger appends are 
 
 The downloader maintains a lightweight throughput EWMA used for admission checks.
 - File: `{state_dir}/downloads.metrics.json` → `{ ewma_mbps }`
-- State endpoint: `GET /state/models_metrics` → `{ ewma_mbps, …counters }`
+- State endpoint: `GET /state/models_metrics` → `{ ewma_mbps, …counters, runtime }`
+- `runtime` reports idle timeout and retry tuning: `{ idle_timeout_secs, send_retries, stream_retries, retry_backoff_ms, preflight_enabled }`.
 - Read‑model: `GET /state/models_metrics` (mirrors counters + EWMA) and SSE patches with id `models_metrics`.
  - SSE patches: `state.read.model.patch` with id=`models_metrics` publishes RFC‑6902 JSON Patches. Publishing is coalesced (`ARW_MODELS_METRICS_COALESCE_MS`, default 250ms) with an idle refresh (`ARW_MODELS_METRICS_PUBLISH_MS`, default 2000ms).
 
@@ -160,11 +161,13 @@ curl -sS -X POST "$BASE/admin/models/download/cancel" \
 - State directory is shown in `GET /admin/probe`.
 - Concurrency: set `ARW_MODELS_MAX_CONC` (default 2) or `ARW_MODELS_MAX_CONC_HARD` to limit simultaneous downloads. When all permits are taken the caller waits for a free slot.
 - Metrics: counters (`started`, `queued`, `admitted`, `canceled`, `completed`, `completed_cached`, `errors`, `bytes_total`) and throughput EWMA are exposed at `/state/models_metrics` and streamed via read‑model patches (`id: models_metrics`).
+- Idle timeout defaults to `300` seconds (`ARW_DL_IDLE_TIMEOUT_SECS`). Set it to `0` to disable for very slow links or increase for high-latency mirrors.
+- Admin UI (`/admin/ui/models`) surfaces runtime tuning (idle timeout, retry budgets, HEAD preflight state) and highlights common remediation steps when errors accumulate.
 - Checksum: `sha256` is mandatory and must be a 64‑char hex string; invalid values are rejected up front.
 - Budgets and disk-reserve enforcement now run in the unified server so long downloads surface `models.download.progress` events with optional `budget`/`disk` payloads (enable via `ARW_DL_PROGRESS_INCLUDE_*`).
 - When elapsed time crosses `ARW_BUDGET_SOFT_DEGRADE_PCT` of the soft budget the server emits a one-time `status:"degraded"` progress event (`code:"soft-budget"`) before the soft limit is breached.
 - When elapsed time reaches `ARW_BUDGET_DOWNLOAD_HARD_MS` the server cancels the transfer and emits an error progress event with `code:"hard-budget"`.
-- Range resume is supported: ensure upstream responses provide `ETag` or `Last-Modified` so retries can be validated. The server retries automatically when the peer honours `If-Range`.
+- Range resume is supported: ensure upstream responses provide `ETag` or `Last-Modified` so retries can be validated. The server retries automatically when the peer honours `If-Range` and within the configured retry budgets.
 
 ### Manifest
 

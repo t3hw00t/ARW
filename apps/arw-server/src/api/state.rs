@@ -434,7 +434,7 @@ pub async fn state_egress(
         .await
         .unwrap_or_default();
     let count = items.len();
-    let settings = crate::api::egress_settings::current_settings();
+    let settings = crate::api::egress_settings::current_settings(&state).await;
     Json(json!({
         "count": count,
         "items": items,

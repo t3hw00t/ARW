@@ -27,6 +27,56 @@ const DOWNLOAD_EVENT_KIND: &str = "models.download.progress";
 const PROGRESS_EMIT_BYTES: u64 = 5 * 1024 * 1024; // 5 MiB
 const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(750);
 
+#[derive(Clone, Copy, Debug)]
+struct DownloadTuning {
+    idle_timeout: Option<Duration>,
+    send_retries: u32,
+    stream_retries: u32,
+    retry_backoff_ms: u64,
+}
+
+impl DownloadTuning {
+    fn from_env() -> Self {
+        let idle_timeout = std::env::var("ARW_DL_IDLE_TIMEOUT_SECS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok());
+        let idle_timeout = match idle_timeout {
+            Some(0) => None,
+            Some(secs) => Some(Duration::from_secs(secs)),
+            None => Some(Duration::from_secs(300)),
+        };
+        let send_retries = std::env::var("ARW_DL_SEND_RETRIES")
+            .ok()
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(2);
+        let stream_retries = std::env::var("ARW_DL_STREAM_RETRIES")
+            .ok()
+            .and_then(|s| s.parse::<u32>().ok())
+            .unwrap_or(2);
+        let retry_backoff_ms = std::env::var("ARW_DL_RETRY_BACKOFF_MS")
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(500)
+            .clamp(50, 60_000);
+        Self {
+            idle_timeout,
+            send_retries,
+            stream_retries,
+            retry_backoff_ms,
+        }
+    }
+
+    fn idle_timeout_secs(&self) -> Option<u64> {
+        self.idle_timeout.map(|d| d.as_secs())
+    }
+
+    fn backoff_delay(&self, attempt: u32) -> Duration {
+        let step = attempt.max(1);
+        let base = Duration::from_millis(self.retry_backoff_ms);
+        base.checked_mul(step).unwrap_or(base)
+    }
+}
+
 #[derive(Clone, Default)]
 struct ConcurrencyState {
     configured_max: u64,
@@ -114,6 +164,16 @@ pub struct ModelsConcurrencySnapshot {
 }
 
 #[derive(Clone, Serialize, Deserialize, ToSchema, Default)]
+pub struct ModelsRuntimeConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub idle_timeout_secs: Option<u64>,
+    pub send_retries: u32,
+    pub stream_retries: u32,
+    pub retry_backoff_ms: u64,
+    pub preflight_enabled: bool,
+}
+
+#[derive(Clone, Serialize, Deserialize, ToSchema, Default)]
 pub struct ModelsMetricsResponse {
     pub started: u64,
     pub queued: u64,
@@ -134,6 +194,8 @@ pub struct ModelsMetricsResponse {
     pub concurrency: ModelsConcurrencySnapshot,
     #[serde(default)]
     pub jobs: Vec<ModelsJobSnapshot>,
+    #[serde(default)]
+    pub runtime: ModelsRuntimeConfig,
 }
 
 impl ModelsMetricsResponse {
@@ -142,6 +204,7 @@ impl ModelsMetricsResponse {
         inflight: Vec<ModelsInflightEntry>,
         concurrency: ModelsConcurrencySnapshot,
         jobs: Vec<ModelsJobSnapshot>,
+        runtime: ModelsRuntimeConfig,
     ) -> Self {
         Self {
             started: counters.started,
@@ -161,6 +224,19 @@ impl ModelsMetricsResponse {
             inflight,
             concurrency,
             jobs,
+            runtime,
+        }
+    }
+}
+
+impl ModelsRuntimeConfig {
+    fn from_tuning(tuning: &DownloadTuning, preflight_enabled: bool) -> Self {
+        Self {
+            idle_timeout_secs: tuning.idle_timeout_secs(),
+            send_retries: tuning.send_retries,
+            stream_retries: tuning.stream_retries,
+            retry_backoff_ms: tuning.retry_backoff_ms,
+            preflight_enabled,
         }
     }
 }
@@ -681,7 +757,9 @@ impl ModelStore {
         let inflight = self.inflight_snapshot();
         let concurrency = self.concurrency_snapshot().await;
         let jobs = self.downloads.job_snapshot().await;
-        ModelsMetricsResponse::from_parts(counters, inflight, concurrency, jobs)
+        let runtime =
+            ModelsRuntimeConfig::from_tuning(Self::download_tuning(), Self::preflight_enabled());
+        ModelsMetricsResponse::from_parts(counters, inflight, concurrency, jobs, runtime)
     }
 
     pub async fn jobs_snapshot(&self) -> Value {
@@ -1123,23 +1201,60 @@ impl ModelStore {
             }
         }
 
-        let mut request = self
-            .http_client
-            .get(&url)
-            .timeout(http_timeout::get_duration());
+        let tuning = Self::download_tuning();
+        let if_range_header = if resume_from > 0 {
+            Self::load_resume_ifrange(&meta_path).await
+        } else {
+            None
+        };
 
-        if resume_from > 0 {
-            request = request.header(reqwest::header::RANGE, format!("bytes={}-", resume_from));
-            if let Some(if_range) = Self::load_resume_ifrange(&meta_path).await {
-                request = request.header(reqwest::header::IF_RANGE, if_range);
+        let mut attempt = 0u32;
+        let response = loop {
+            let mut request = self
+                .http_client
+                .get(&url)
+                .timeout(http_timeout::get_duration());
+
+            if resume_from > 0 {
+                request = request.header(reqwest::header::RANGE, format!("bytes={}-", resume_from));
+                if let Some(ref if_range) = if_range_header {
+                    request = request.header(reqwest::header::IF_RANGE, if_range.clone());
+                }
             }
-        }
 
-        let response = match request.send().await {
-            Ok(resp) => match resp.error_for_status() {
-                Ok(ok) => ok,
+            match request.send().await {
+                Ok(resp) => match resp.error_for_status() {
+                    Ok(ok) => break ok,
+                    Err(err) => {
+                        error!("model download http error: {err}");
+                        let code = if err.is_timeout() {
+                            "request-timeout"
+                        } else {
+                            "http"
+                        };
+                        let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
+                        return DownloadOutcome::Failed {
+                            code: code.into(),
+                            message: err.to_string(),
+                            elapsed: started_at.elapsed(),
+                            dest,
+                            corr_id,
+                            bytes_in: downloaded,
+                        };
+                    }
+                },
                 Err(err) => {
-                    error!("model download http error: {err}");
+                    if attempt < tuning.send_retries {
+                        let delay = tuning.backoff_delay(attempt + 1);
+                        warn!(
+                            "model download send error (attempt {attempt}): {err}; retrying in {:?}",
+                            delay
+                        );
+                        tokio::time::sleep(delay).await;
+                        attempt += 1;
+                        continue;
+                    }
+                    error!("model download request error: {err}");
                     let code = if err.is_timeout() {
                         "request-timeout"
                     } else {
@@ -1155,23 +1270,6 @@ impl ModelStore {
                         bytes_in: downloaded,
                     };
                 }
-            },
-            Err(err) => {
-                error!("model download request error: {err}");
-                let code = if err.is_timeout() {
-                    "request-timeout"
-                } else {
-                    "http"
-                };
-                let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
-                return DownloadOutcome::Failed {
-                    code: code.into(),
-                    message: err.to_string(),
-                    elapsed: started_at.elapsed(),
-                    dest,
-                    corr_id,
-                    bytes_in: downloaded,
-                };
             }
         };
 
@@ -1349,17 +1447,47 @@ impl ModelStore {
         let limits = DownloadBudgetLimits::global();
         let mut budget_notifier = BudgetNotifier::new(limits);
         let start = started_at;
+        let idle_timeout = tuning.idle_timeout;
 
         loop {
-            let next = tokio::select! {
-                chunk = stream.next() => chunk,
-                _ = cancel.cancelled() => {
-                    let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
-                    return DownloadOutcome::Canceled {
-                        elapsed: start.elapsed(),
-                        dest,
-                        corr_id,
-                    };
+            let next = if let Some(idle) = idle_timeout {
+                tokio::select! {
+                    chunk = stream.next() => chunk,
+                    _ = cancel.cancelled() => {
+                        let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
+                        return DownloadOutcome::Canceled {
+                            elapsed: start.elapsed(),
+                            dest,
+                            corr_id,
+                        };
+                    }
+                    _ = tokio::time::sleep(idle) => {
+                        warn!("model download idle-timeout after {:?}", idle);
+                        let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
+                        return DownloadOutcome::Failed {
+                            code: "idle-timeout".into(),
+                            message: format!(
+                                "no data received for {} seconds (ARW_DL_IDLE_TIMEOUT_SECS)",
+                                idle.as_secs()
+                            ),
+                            elapsed: start.elapsed(),
+                            dest,
+                            corr_id,
+                            bytes_in: downloaded,
+                        };
+                    }
+                }
+            } else {
+                tokio::select! {
+                    chunk = stream.next() => chunk,
+                    _ = cancel.cancelled() => {
+                        let _ = Self::remove_resume_artifacts(&tmp_path, &meta_path).await;
+                        return DownloadOutcome::Canceled {
+                            elapsed: start.elapsed(),
+                            dest,
+                            corr_id,
+                        };
+                    }
                 }
             };
             let Some(next) = next else {
@@ -2162,6 +2290,11 @@ impl ModelStore {
         })
     }
 
+    fn download_tuning() -> &'static DownloadTuning {
+        static TUNING: OnceCell<DownloadTuning> = OnceCell::new();
+        TUNING.get_or_init(DownloadTuning::from_env)
+    }
+
     fn available_space(path: PathBuf) -> Result<u64, String> {
         available_space(path).map_err(|e| e.to_string())
     }
@@ -2247,7 +2380,13 @@ impl ModelStore {
     }
 
     fn preflight_enabled() -> bool {
-        env_flag("ARW_DL_PREFLIGHT")
+        match std::env::var("ARW_DL_PREFLIGHT") {
+            Ok(value) => matches!(
+                value.trim().to_ascii_lowercase().as_str(),
+                "1" | "true" | "on"
+            ),
+            Err(_) => true,
+        }
     }
 
     async fn run_preflight(
@@ -3028,6 +3167,13 @@ mod tests {
                 "pending_shrink": null,
             },
             "jobs": [],
+            "runtime": {
+                "idle_timeout_secs": 300,
+                "send_retries": 2,
+                "stream_retries": 2,
+                "retry_backoff_ms": 500,
+                "preflight_enabled": true
+            },
         });
 
         assert_eq!(value, expected);
