@@ -114,6 +114,12 @@ legacy-check:
 ops-export out='ops/out':
   bash scripts/export_ops_assets.sh --out '{{out}}'
 
+triad-smoke:
+  bash scripts/triad_smoke.sh
+
+context-ci:
+  bash scripts/context_ci.sh
+
 trials-preflight:
   bash scripts/trials_preflight.sh
 

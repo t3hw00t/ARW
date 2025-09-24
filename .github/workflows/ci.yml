@@ -88,6 +88,12 @@ jobs:
       - name: Snappy bench (sanity)
         run: bash scripts/ci_snappy_bench.sh
 
+      - name: Trial triad smoke
+        run: bash scripts/triad_smoke.sh
+
+      - name: Trial context telemetry check
+        run: bash scripts/context_ci.sh
+
       - name: Legacy surface guard
         env:
           ARW_LEGACY_CHECK_WAIT_SECS: 120

@@ -1,7 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Agent Hub (ARW) Launcher",
-  "version": "0.1.0",
   "identifier": "org.arw.launcher",
   "build": {
     "frontendDist": "ui",
@@ -21,8 +20,7 @@
         "form-action": "'none'"
       }
     }
-  }
-  ,
+  },
   "bundle": {
     "icon": [
       "icons/icon.ico"

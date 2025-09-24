@@ -1,9 +1,10 @@
 use crate::egress_log::{self, EgressRecord};
 use crate::egress_policy::{capability_candidates, lease_grant, reason_code, DenyReason};
 use crate::{egress_policy, http_timeout, util::effective_posture, AppState};
+use axum::body::Body;
 use bytes::Bytes;
-use http_body_util::combinators::BoxBody;
-use http_body_util::{BodyExt as _, Empty, Full};
+use futures_util::{Stream, StreamExt};
+use http_body_util::BodyExt;
 use hyper::body::Incoming as IncomingBody;
 use hyper::service::service_fn;
 use hyper::{Method, Request, Response, StatusCode};
@@ -12,20 +13,26 @@ use hyper_util::server::conn::auto::Builder as AutoBuilder;
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
 use std::convert::Infallible;
-use std::sync::{Arc, Mutex};
+use std::io;
+use std::pin::Pin;
+use std::sync::{
+    atomic::{AtomicI64, Ordering},
+    Arc, Mutex,
+};
+use std::task::{Context, Poll};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio_util::sync::CancellationToken;
 use tracing::{info, warn};
 
-type ProxyBody = BoxBody<Bytes, Infallible>;
+type ProxyBody = Body;
 
 #[allow(dead_code)]
 fn empty_body() -> ProxyBody {
-    Empty::<Bytes>::new().boxed()
+    Body::empty()
 }
 #[allow(dead_code)]
 fn bytes_body(b: Bytes) -> ProxyBody {
-    Full::new(b).boxed()
+    Body::from(b)
 }
 
 fn env_flag(key: &str, default: bool) -> bool {
@@ -174,7 +181,7 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
         None => {
             return Response::builder()
                 .status(StatusCode::BAD_REQUEST)
-                .body(Full::new(Bytes::from_static(b"Bad CONNECT")).boxed())
+                .body(Body::from("Bad CONNECT"))
                 .unwrap();
         }
     };
@@ -229,7 +236,7 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
         .await;
         return Response::builder()
             .status(StatusCode::FORBIDDEN)
-            .body(Full::new(Bytes::from_static(b"Egress blocked")).boxed())
+            .body(Body::from("Egress blocked"))
             .unwrap();
     }
 
@@ -256,7 +263,7 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
             .await;
             return Response::builder()
                 .status(StatusCode::FORBIDDEN)
-                .body(Full::new(Bytes::from_static(b"DNS guard")).boxed())
+                .body(Body::from("DNS guard"))
                 .unwrap();
         } else {
             base_meta.insert("dns_guard".into(), json!(true));
@@ -299,7 +306,7 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
                 .await;
                 return Response::builder()
                     .status(StatusCode::FORBIDDEN)
-                    .body(Full::new(Bytes::from_static(b"Lease required")).boxed())
+                    .body(Body::from("Lease required"))
                     .unwrap();
             }
         } else {
@@ -323,7 +330,7 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
             .await;
             return Response::builder()
                 .status(StatusCode::FORBIDDEN)
-                .body(Full::new(Bytes::from_static(b"Policy denied")).boxed())
+                .body(Body::from("Policy denied"))
                 .unwrap();
         }
     }
@@ -363,12 +370,12 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
             .await;
             return Response::builder()
                 .status(StatusCode::BAD_GATEWAY)
-                .body(Full::new(Bytes::from_static(b"Connect failed")).boxed())
+                .body(Body::from("Connect failed"))
                 .unwrap();
         }
     };
     // Prepare response and upgrade
-    let mut resp = Response::new(Empty::<Bytes>::new().boxed());
+    let mut resp = Response::new(Body::empty());
     *resp.status_mut() = StatusCode::OK;
     let st = state.clone();
     let host_spawn = host.clone();
@@ -443,24 +450,27 @@ async fn handle_http_forward(
     client: reqwest::Client,
     req: Request<IncomingBody>,
 ) -> Response<ProxyBody> {
-    // Expect absolute-form URI
-    let corr_id_hdr = req
-        .headers()
+    let (parts, body) = req.into_parts();
+    let headers = parts.headers;
+    let method = parts.method;
+    let uri = parts.uri;
+
+    let corr_id_hdr = headers
         .get("x-arw-corr")
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
-    let proj_hdr = req
-        .headers()
+    let proj_hdr = headers
         .get("x-arw-project")
         .and_then(|h| h.to_str().ok())
         .map(|s| s.to_string());
-    let uri = req.uri().to_string();
-    let url = match reqwest::Url::parse(&uri) {
+
+    let uri_string = uri.to_string();
+    let url = match reqwest::Url::parse(&uri_string) {
         Ok(u) => u,
         Err(_) => {
             return Response::builder()
                 .status(StatusCode::BAD_REQUEST)
-                .body(Full::new(Bytes::from_static(b"Expected absolute-form URI")).boxed())
+                .body(Body::from("Expected absolute-form URI"))
                 .unwrap();
         }
     };
@@ -486,33 +496,28 @@ async fn handle_http_forward(
                 Some(&scheme),
                 None,
                 None,
-                req.headers()
-                    .get("x-arw-corr")
-                    .and_then(|h| h.to_str().ok()),
-                req.headers()
-                    .get("x-arw-project")
-                    .and_then(|h| h.to_str().ok()),
+                corr_id_hdr.as_deref(),
+                proj_hdr.as_deref(),
                 None,
             )
             .await;
             return Response::builder()
                 .status(StatusCode::FORBIDDEN)
-                .body(Full::new(Bytes::from_static(b"Egress blocked")).boxed())
+                .body(Body::from("Egress blocked"))
                 .unwrap();
         }
     }
+
     if dns_guard() {
         let path = url.path().to_string();
         let doh_like =
             host.as_deref().map(is_doh_host).unwrap_or(false) || path.contains("/dns-query");
-        let wants_dns_message = req
-            .headers()
+        let wants_dns_message = headers
             .get("accept")
             .and_then(|v| v.to_str().ok())
             .map(|s| s.contains("application/dns-message"))
             .unwrap_or(false)
-            || req
-                .headers()
+            || headers
                 .get("content-type")
                 .and_then(|v| v.to_str().ok())
                 .map(|s| s.contains("application/dns-message"))
@@ -529,23 +534,19 @@ async fn handle_http_forward(
                     Some(&scheme),
                     None,
                     None,
-                    req.headers()
-                        .get("x-arw-corr")
-                        .and_then(|h| h.to_str().ok()),
-                    req.headers()
-                        .get("x-arw-project")
-                        .and_then(|h| h.to_str().ok()),
+                    corr_id_hdr.as_deref(),
+                    proj_hdr.as_deref(),
                     None,
                 )
                 .await;
                 return Response::builder()
                     .status(StatusCode::FORBIDDEN)
-                    .body(Full::new(Bytes::from_static(b"DNS guard")).boxed())
+                    .body(Body::from("DNS guard"))
                     .unwrap();
             }
         }
     }
-    // Policy
+
     let dec = state
         .policy()
         .lock()
@@ -573,54 +574,63 @@ async fn handle_http_forward(
                     Some(&scheme),
                     None,
                     None,
-                    req.headers()
-                        .get("x-arw-corr")
-                        .and_then(|h| h.to_str().ok()),
-                    req.headers()
-                        .get("x-arw-project")
-                        .and_then(|h| h.to_str().ok()),
+                    corr_id_hdr.as_deref(),
+                    proj_hdr.as_deref(),
                     None,
                 )
                 .await;
                 return Response::builder()
                     .status(StatusCode::FORBIDDEN)
-                    .body(Full::new(Bytes::from_static(b"Lease required")).boxed())
+                    .body(Body::from("Lease required"))
                     .unwrap();
             }
         }
     }
-    // Build outbound request
-    let method = req.method().clone();
+
+    let body_len = headers
+        .get(hyper::header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<i64>().ok());
+
     let mut rb = client.request(
         reqwest::Method::from_bytes(method.as_str().as_bytes()).unwrap_or(reqwest::Method::GET),
         url,
     );
-    // headers
-    for (k, v) in req.headers().iter() {
-        if let Ok(name) = reqwest::header::HeaderName::from_bytes(k.as_str().as_bytes()) {
-            if let Ok(val) = reqwest::header::HeaderValue::from_bytes(v.as_bytes()) {
-                // Skip hop-by-hop headers
-                if name == reqwest::header::CONNECTION
-                    || name == reqwest::header::PROXY_AUTHORIZATION
-                    || name == reqwest::header::TE
-                    || name == reqwest::header::UPGRADE
-                {
-                    continue;
-                }
-                rb = rb.header(name, val);
+
+    for (name, value) in headers.iter() {
+        if let Ok(reqwest_name) = reqwest::header::HeaderName::from_bytes(name.as_str().as_bytes())
+        {
+            if reqwest_name == reqwest::header::HOST
+                || reqwest_name == reqwest::header::CONTENT_LENGTH
+                || reqwest_name == reqwest::header::CONNECTION
+                || reqwest_name == reqwest::header::PROXY_AUTHORIZATION
+                || reqwest_name == reqwest::header::TE
+                || reqwest_name == reqwest::header::UPGRADE
+            {
+                continue;
+            }
+            if let Ok(reqwest_value) = reqwest::header::HeaderValue::from_bytes(value.as_bytes()) {
+                rb = rb.header(reqwest_name, reqwest_value);
             }
         }
     }
-    // body
-    let body_bytes = match req.into_body().collect().await {
-        Ok(b) => b.to_bytes(),
-        Err(_) => Bytes::new(),
-    };
-    let body_len = body_bytes.len() as i64;
-    if body_len > 0 {
-        rb = rb.body(body_bytes.clone());
+
+    let chunked = headers
+        .get(hyper::header::TRANSFER_ENCODING)
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.eq_ignore_ascii_case("chunked"))
+        .unwrap_or(false);
+    let has_request_body =
+        !matches!(method, Method::GET | Method::HEAD) || body_len.is_some() || chunked;
+    if has_request_body {
+        let body_stream = body
+            .into_data_stream()
+            .map(|res| res.map_err(|err| io::Error::new(io::ErrorKind::Other, err)));
+        rb = rb.body(reqwest::Body::wrap_stream(body_stream));
+    } else {
+        drop(body);
     }
-    // Send
+
     let out = match rb.send().await {
         Ok(r) => r,
         Err(e) => {
@@ -632,7 +642,7 @@ async fn handle_http_forward(
                 Some(port),
                 Some(&scheme),
                 None,
-                Some(body_len),
+                body_len,
                 corr_id_hdr.as_deref(),
                 proj_hdr.as_deref(),
                 None,
@@ -640,42 +650,169 @@ async fn handle_http_forward(
             .await;
             return Response::builder()
                 .status(StatusCode::BAD_GATEWAY)
-                .body(Full::new(Bytes::from(format!("Forward error: {}", e))).boxed())
+                .body(Body::from(format!("Forward error: {}", e)))
                 .unwrap();
         }
     };
+
     let status = out.status();
+    let resp_len = out.content_length().map(|v| v as i64);
     let out_headers = out.headers().clone();
-    let resp_bytes = match out.bytes().await {
-        Ok(b) => b,
-        Err(_) => Bytes::new(),
-    };
-    let bytes_in = resp_bytes.len() as i64;
-    log_egress_event(
-        &state,
-        "allow",
-        Some("http"),
-        host.as_deref(),
+    let stream = CountingStream::new(
+        out.bytes_stream(),
+        state.clone(),
+        host.clone(),
         Some(port),
-        Some(&scheme),
-        Some(bytes_in),
-        Some(body_len),
-        corr_id_hdr.as_deref(),
-        proj_hdr.as_deref(),
-        None,
-    )
-    .await;
+        scheme.clone(),
+        body_len,
+        corr_id_hdr.clone(),
+        proj_hdr.clone(),
+        resp_len,
+    );
+
     let mut builder = Response::builder().status(status);
-    // Copy a few safe headers
     if let Some(ct) = out_headers.get(reqwest::header::CONTENT_TYPE) {
         builder = builder.header("content-type", ct);
     }
     if let Some(cl) = out_headers.get(reqwest::header::CONTENT_LENGTH) {
         builder = builder.header("content-length", cl);
-    } else {
-        builder = builder.header("content-length", resp_bytes.len());
     }
-    builder.body(Full::new(resp_bytes).boxed()).unwrap()
+
+    match builder.body(Body::from_stream(stream)) {
+        Ok(resp) => resp,
+        Err(err) => {
+            warn!("proxy response build failed: {}", err);
+            Response::builder()
+                .status(StatusCode::BAD_GATEWAY)
+                .body(Body::from("proxy stream error"))
+                .unwrap()
+        }
+    }
+}
+
+struct CountingStream<S>
+where
+    S: Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + 'static,
+{
+    inner: S,
+    state: AppState,
+    host: Option<String>,
+    port: Option<u16>,
+    scheme: String,
+    body_len: Option<i64>,
+    corr_id: Option<String>,
+    proj: Option<String>,
+    advertised_len: Option<i64>,
+    bytes_in: Arc<AtomicI64>,
+    logged: bool,
+}
+
+impl<S> CountingStream<S>
+where
+    S: Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + 'static,
+{
+    fn new(
+        inner: S,
+        state: AppState,
+        host: Option<String>,
+        port: Option<u16>,
+        scheme: String,
+        body_len: Option<i64>,
+        corr_id: Option<String>,
+        proj: Option<String>,
+        advertised_len: Option<i64>,
+    ) -> Self {
+        Self {
+            inner,
+            state,
+            host,
+            port,
+            scheme,
+            body_len,
+            corr_id,
+            proj,
+            advertised_len,
+            bytes_in: Arc::new(AtomicI64::new(0)),
+            logged: false,
+        }
+    }
+
+    fn log_once(&mut self, success: bool, reason: &'static str) {
+        if self.logged {
+            return;
+        }
+        self.logged = true;
+        let state = self.state.clone();
+        let host = self.host.clone();
+        let port = self.port;
+        let scheme = self.scheme.clone();
+        let body_len = self.body_len;
+        let corr_id = self.corr_id.clone();
+        let proj = self.proj.clone();
+        let bytes = self.bytes_in.clone();
+        let advertised = self.advertised_len;
+        tokio::spawn(async move {
+            let measured = bytes.load(Ordering::Relaxed);
+            let final_bytes = if measured > 0 {
+                Some(measured)
+            } else {
+                advertised
+            };
+            let decision = if success { "allow" } else { "error" };
+            log_egress_event(
+                &state,
+                decision,
+                Some(reason),
+                host.as_deref(),
+                port,
+                Some(&scheme),
+                final_bytes,
+                body_len,
+                corr_id.as_deref(),
+                proj.as_deref(),
+                None,
+            )
+            .await;
+        });
+    }
+}
+
+impl<S> Stream for CountingStream<S>
+where
+    S: Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + 'static,
+{
+    type Item = Result<Bytes, reqwest::Error>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        match Pin::new(&mut this.inner).poll_next(cx) {
+            Poll::Ready(Some(Ok(chunk))) => {
+                this.bytes_in
+                    .fetch_add(chunk.len() as i64, Ordering::Relaxed);
+                Poll::Ready(Some(Ok(chunk)))
+            }
+            Poll::Ready(Some(Err(err))) => {
+                this.log_once(false, "forward_stream");
+                Poll::Ready(Some(Err(err)))
+            }
+            Poll::Ready(None) => {
+                this.log_once(true, "http");
+                Poll::Ready(None)
+            }
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+impl<S> Drop for CountingStream<S>
+where
+    S: Stream<Item = Result<Bytes, reqwest::Error>> + Unpin + Send + 'static,
+{
+    fn drop(&mut self) {
+        if !self.logged {
+            self.log_once(true, "http");
+        }
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
