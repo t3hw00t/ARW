@@ -306,6 +306,7 @@ async fn initialise_state(state: &AppState, kernel_enabled: bool) -> TaskManager
     tasks.push(crate::distill::start(state.clone()));
     tasks.extend(crate::self_model::start_aggregators(state.clone()));
     tasks.extend(crate::research_watcher::start(state.clone()));
+    tasks.push(crate::capsule_guard::start_refresh_task(state.clone()));
 
     egress_proxy::apply_current(state.clone()).await;
     tasks.push(spawn_trust_store_watcher(state.clone()));

@@ -12,12 +12,15 @@ use base64::Engine as _;
 use serde::Serialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use tokio::sync::Mutex;
+use tokio::{
+    sync::Mutex,
+    time::{interval, Duration, MissedTickBehavior},
+};
 
 use arw_core::gating::CapsuleLeaseState;
 use arw_protocol::GatingCapsule;
 
-use crate::{read_models, AppState};
+use crate::{read_models, tasks::TaskHandle, AppState};
 use arw_topics::{
     TOPIC_POLICY_CAPSULE_APPLIED, TOPIC_POLICY_CAPSULE_EXPIRED, TOPIC_POLICY_CAPSULE_FAILED,
     TOPIC_POLICY_DECISION,
@@ -28,6 +31,8 @@ const LEGACY_HEADER_DETAIL: &str =
     "Legacy X-ARW-Gate header is no longer supported; send X-ARW-Capsule instead";
 static CURRENT_HEADER_NAME: HeaderName = HeaderName::from_static("x-arw-capsule");
 static LEGACY_HEADER_NAME: HeaderName = HeaderName::from_static("x-arw-gate");
+const DEFAULT_REFRESH_SECS: u64 = 5;
+const MIN_REFRESH_SECS: u64 = 1;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 enum CapsuleHeader<'a> {
@@ -279,6 +284,50 @@ pub async fn refresh_capsules(state: &AppState) -> ReplayOutcome {
     replay
 }
 
+fn refresh_interval_secs() -> u64 {
+    std::env::var("ARW_CAPSULE_REFRESH_SECS")
+        .ok()
+        .and_then(|raw| raw.parse::<u64>().ok())
+        .map(|secs| secs.max(MIN_REFRESH_SECS))
+        .unwrap_or(DEFAULT_REFRESH_SECS)
+}
+
+fn refresh_interval() -> Duration {
+    Duration::from_secs(refresh_interval_secs())
+}
+
+pub fn start_refresh_task(state: AppState) -> TaskHandle {
+    let mut ticker = interval(refresh_interval());
+    ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    TaskHandle::new(
+        "capsules.refresh",
+        tokio::spawn(async move {
+            let initial = refresh_capsules(&state).await;
+            if initial.changed || !initial.expired.is_empty() {
+                tracing::debug!(
+                    target: "arw::policy",
+                    expired = initial.expired.len(),
+                    changed = initial.changed,
+                    "capsule refresh sweep applied",
+                );
+            }
+
+            loop {
+                ticker.tick().await;
+                let outcome = refresh_capsules(&state).await;
+                if outcome.changed || !outcome.expired.is_empty() {
+                    tracing::debug!(
+                        target: "arw::policy",
+                        expired = outcome.expired.len(),
+                        changed = outcome.changed,
+                        "capsule refresh sweep applied",
+                    );
+                }
+            }
+        }),
+    )
+}
+
 pub async fn capsule_mw(state: AppState, req: Request<Body>, next: Next) -> Response {
     match apply_capsule(&state, req.headers()).await {
         Ok(_) => next.run(req).await,
@@ -460,9 +509,12 @@ mod tests {
     use arw_policy::PolicyEngine;
     use arw_topics::{TOPIC_POLICY_CAPSULE_FAILED, TOPIC_POLICY_DECISION, TOPIC_READMODEL_PATCH};
     use axum::http::{HeaderMap, HeaderValue};
-    use std::{path::Path, sync::Arc};
+    use once_cell::sync::Lazy;
+    use std::{path::Path, sync::{Arc, Mutex as StdMutex}};
     use tempfile::tempdir;
     use tokio::time::{timeout, Duration};
+
+    static ENV_LOCK: Lazy<StdMutex<()>> = Lazy::new(|| StdMutex::new(()));
 
     #[test]
     fn parse_json_header() {
@@ -625,6 +677,25 @@ mod tests {
             .expect("bus open");
         assert_eq!(event.kind, TOPIC_READMODEL_PATCH);
         assert_eq!(event.payload["id"].as_str(), Some("policy_capsules"));
+    }
+
+    #[test]
+    fn refresh_interval_respects_env_and_floor() {
+        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+
+        std::env::remove_var("ARW_CAPSULE_REFRESH_SECS");
+        assert_eq!(refresh_interval_secs(), DEFAULT_REFRESH_SECS);
+
+        std::env::set_var("ARW_CAPSULE_REFRESH_SECS", "0");
+        assert_eq!(refresh_interval_secs(), MIN_REFRESH_SECS);
+
+        std::env::set_var("ARW_CAPSULE_REFRESH_SECS", "7");
+        assert_eq!(refresh_interval_secs(), 7);
+
+        std::env::set_var("ARW_CAPSULE_REFRESH_SECS", "not-a-number");
+        assert_eq!(refresh_interval_secs(), DEFAULT_REFRESH_SECS);
+
+        std::env::remove_var("ARW_CAPSULE_REFRESH_SECS");
     }
 
     #[tokio::test]

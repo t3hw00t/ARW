@@ -89,8 +89,9 @@ See also: Guide → Network Posture, Policy, Security Hardening, Clustering.
 ## What’s Implemented (Initial)
 - Egress Preview API: `POST /egress/preview` → `{ allow, reason?, host, port, protocol }`. Applies allowlist, IP‑literal guard, and policy/lease rules. When `ARW_EGRESS_LEDGER_ENABLE=1`, logs preview decisions.
 - Egress Proxy (preview): `ARW_EGRESS_PROXY_ENABLE=1` starts a loopback forward proxy at `127.0.0.1:${ARW_EGRESS_PROXY_PORT:-9080}` supporting HTTP requests and HTTPS `CONNECT` tunnels. Enforces posture-aware allowlists, DNS guard rules, and policy/lease checks; logs to the egress ledger when enabled.
-- Built‑in HTTP effector: `http.fetch` enforces allowlist and optional IP‑literal blocking; logs egress decisions when ledger is enabled.
+- Built-in HTTP effector: `http.fetch` enforces allowlist and optional IP-literal blocking; logs egress decisions when ledger is enabled.
  - DNS Guard (preview): When `ARW_DNS_GUARD_ENABLE=1`, the proxy and `http.fetch` block DoH/DoT endpoints (e.g., `dns.google`, `cloudflare-dns.com`, port `853`), `/dns-query` paths, and `application/dns-message` payloads.
+- Capsule renewals: the `capsules.refresh` task (see `apps/arw-server/src/capsule_guard.rs`) replays active capsules periodically, reapplying leases before expiry and emitting `policy.capsule.expired` when lifetimes lapse.
 
 Control plane
 - GET `/state/egress/settings` — returns effective posture and egress toggles (allowlist, proxy, ledger, DNS guard, block IP literals).
