@@ -94,6 +94,8 @@ nav:
       - Context Recipes: guide/context_recipes.md
       - Metrics & Insights: guide/METRICS_AND_INSIGHTS.md
       - Monitoring & Alerts: ops/monitoring.md
+      - Trial Planning: ops/trial_readiness.md
+      - Trial Runbook: ops/trial_runbook.md
       - Chat Backends: guide/chat_backends.md
       - Guardrails Checks: guide/guardrails.md
       - Correlation & Attribution: guide/correlation.md
@@ -184,6 +186,7 @@ nav:
       - Build Efficiency: developer/build_efficiency.md
       - Docs Style (Diátaxis): developer/docs_style.md
       - Design Theme: developer/design_theme.md
+      - Trial Visual Kit: design/trial_visual_kit.md
       - Standards: developer/standards.md
       - UI Kit (Launcher): developer/ui_kit.md
       - ADRs:
