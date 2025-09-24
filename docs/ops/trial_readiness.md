@@ -7,11 +7,11 @@ title: Trial Readiness Plan
 Updated: 2025-09-26
 Type: Playbook (quick guide)
 
-Use this short guide to decide when Agent Hub feels good enough to invite real teammates into a trial. Facilitators should also review the checklist (`docs/ops/trial_facilitator_checklist.md`) and onboarding email template (`docs/ops/trials/onboarding_email_template.md`). It sticks to plain language so product owners, operators, and partners can follow along without digging into the code.
+Use this short guide to decide when Agent Hub feels good enough for **the two of us** to run a focused trial. We still reference the checklist (`docs/ops/trial_facilitator_checklist.md`) and onboarding note (`docs/ops/trials/onboarding_email_template.md`), but the scope stays intentionally small so we can iterate quickly before inviting anyone else.
 
 ## Four easy checkpoints
 
-| Gate | Focus | What users should notice | Quick prep for the crew |
+| Gate | Focus | What we should see | Quick prep for us |
 | ---- | ----- | ------------------------ | ------------------------ |
 | **G0 · Core feels steady** | Launch & status lights | Home opens quickly, status tray says “All good,” the self-check button passes. | Single activity history, refreshed sign-in tokens, preflight button wired. |
 | **G1 · Memory makes sense** | Briefs & context | “What’s in focus” card shows key facts with timestamps and sources. | Summaries stay fresh, gentle “needs background” nudges appear, metrics hit the dashboard. |
@@ -20,13 +20,14 @@ Use this short guide to decide when Agent Hub feels good enough to invite real t
 
 When G0–G3 each take only a few minutes to verify, it is time to move from rehearsal to a real trial cohort.
 
-## Trial flow at a glance
+## Trial flow for two
 
-1. **Warm-up rehearsal** – Hit the preflight button, walk through a sample project like “Aurora Bikes Market Scan,” jot any confusing wording.
-2. **Green-light chat** – Builder crew meets for 15 minutes, reads the gate checklist aloud, tags the release candidate, sets the trial date.
-3. **Cohort A (internal)** – Send a welcome mail + first steps PDF, hold a five-minute daily stand-up to review dashboard tiles and approvals queue, collect notes in one shared doc.
-4. **Cohort B (trusted partners)** – Share a lightweight kit (installer link, 10-minute video, emergency contact). Keep helpers in Guided mode until one full workflow finishes. Watch approvals wait times (<4 hours target).
-5. **Wrap-up** – Celebrate wins, log friction, update the runbook and starter kit, tag the stable release, archive screenshots of the dashboard.
+1. **Warm-up rehearsal (10 min)** – Run the preflight button, walk through a sample task, and capture rough notes in the daily log.
+2. **Go/No-Go sync (5 min)** – Quick call or chat: confirm the gate checklist, tag the release build, and pick the trial window.
+3. **Hands-on window (30–60 min)** – One of us pilots the workflow while the other watches the dashboard, clears approvals, and jots highlights. Swap roles the next day to keep perspective fresh.
+4. **Wrap-up (10 min)** – Screenshot the dashboard, summarize wins/friction in the log, and update the runbook/quickstart if anything felt clunky.
+
+When this loop feels smooth we can think about inviting more teammates.
 
 ## Keeping the interface friendly
 
@@ -51,7 +52,7 @@ Until those are done we keep trials in guided mode.
 
 ## Builder checklist
 
-(Internal note for the crew. Map each line to the backlog or task list.)
+(Internal note for the two of us. We own every line for now, so keep it prioritized but lightweight by default.)
 
 - Kernel triad work: `/actions`, `/state`, SQLite journal, hashed tokens.
 - Memory fidelity: selector, compression, hygiene, context telemetry, Training Park dials.
@@ -63,8 +64,8 @@ Until those are done we keep trials in guided mode.
 
 ## Ready means…
 
-- Anyone can tell in one glance if helpers are safe to keep running.
-- Approvals feel like a short conversation, not a wall of logs.
+- Either of us can tell in one glance if helpers are safe to keep running.
+- Approvals feel like a short chat, not a wall of logs.
 - Dashboards say “Waiting approvals,” “Context freshness,” etc., and stay within targets.
 - Pausing or rolling back feels as simple as locking a phone.
 - Confidence is high enough that planning for autonomous pilots feels natural, not risky.

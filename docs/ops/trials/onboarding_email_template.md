@@ -1,32 +1,32 @@
-# Trial Onboarding Email Template
+# Trial Onboarding Note (two-person)
 
-Subject: Welcome to the Agent Hub trial — getting started
+Subject: Trial run reminder — getting set up
 
 Hi {{Name}},
 
-Thanks for joining our Agent Hub trial. Here’s everything you need for your first session.
+Quick reminder for our trial run. Here’s the info you need before we start.
 
 **When & where**
 - Trial window: {{dates}}
-- Daily stand-up: {{time}} ({{link}})
+- Daily sync: {{time}} ({{link}} or “async note”)
 
 **Install & sign in (5 minutes)**
 1. Download the latest build: {{download_link}}
 2. Run the installer and launch Agent Hub.
 3. Paste your access token (expires {{expiry_date}}). If it lapses, reply here for a refresh.
-4. Stay in **Guided mode** unless an operator switches you.
+4. Stay in **Guided mode** unless we both agree to flip to Autonomy Lane.
 
 **Helpful links**
 - Participant quickstart: {{quickstart_link}}
 - Feedback doc: {{feedback_link}}
-- Emergency contact: {{ops_contact}}
+- Ping me on {{preferred_chat}} if anything feels off
 
 **What to expect**
 - The helper may ask for approvals in the right-hand queue. Click **Approve** or **Hold** and add a quick note.
-- We only log the documents you share with the helper. Close the app when you finish each session.
+- We only log what we share. Close the app when you finish the session so logs stay tidy.
 
-If anything feels off, pause helpers from the Safeguards tab and ping us right away.
+If anything feels off, pause helpers from the Safeguards tab and DM me immediately.
 
 Happy testing!
 
-— {{Facilitator Name}}
+— {{Your name}}

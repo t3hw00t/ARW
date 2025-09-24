@@ -7,14 +7,14 @@ title: Trial Quickstart
 Updated: 2025-09-26
 Type: Participant guide
 
-Welcome to the Agent Hub trial. This one-page guide helps you get started in five minutes.
+It’s just the two of us in this trial, but keep this one-page guide handy so either person can get started in five minutes.
 
 ## 1. Install & Sign In
 
-1. Download the latest release from the link your coordinator shared.
+1. Download the latest release from our shared link (see the prep note).
 2. Run the installer and launch Agent Hub.
-3. Enter the access token provided to you (expires on the date noted in the welcome email).
-4. Stay in **Guided mode** unless a facilitator asks you to switch.
+3. Enter the access token we generated for this run (see the prep note for the expiry date).
+4. Stay in **Guided mode** unless we explicitly agree to test Autonomy Lane.
 
 ## 2. Your Home Screen
 
@@ -30,18 +30,17 @@ Welcome to the Agent Hub trial. This one-page guide helps you get started in fiv
 
 ## 4. Sharing Findings
 
-- Use the **Feedback** button (bottom-right corner) or add bullets to the shared doc link in the welcome email.
-- If you spot confusing language or behaviour, note the time so the ops team can review logs.
+- Use the **Feedback** button (bottom-right corner) or add bullets to our shared notes doc.
+- If you spot confusing language or behaviour, note the time so we can review logs later.
 
 ## 5. Emergencies
 
-- If something feels wrong, open the Safeguards tab and click **Pause helpers**.
-- Ping the on-call teammate listed in the welcome email or runbook contact list.
+- If something feels wrong, open the Safeguards tab and click **Pause helpers**, then DM the other person right away.
 
 ## Quick Reminders
 
-- Trials last only during the scheduled window; close the app when you’re done.
+- Trials last only during the scheduled window we picked; close the app when you’re done.
 - We only log the files and links you explicitly share with the helper.
-- Your token may expire early if unused—ask for a refresh if needed.
+- Tokens may expire early if unused—regenerate one in the shared vault if that happens.
 
 Enjoy the trial—and thank you for the feedback!

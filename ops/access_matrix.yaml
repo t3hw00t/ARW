@@ -1,10 +1,10 @@
 # Access Matrix for Trial Runs
 # Updated: 2025-09-26
-# Fill in one row per participant or machine. Keep this file lightweight; rotate tokens frequently.
+# Fill in one row per participant or machine. It is just the two of us for now, but keep the structure so we can add more later.
 
 participants:
   - name: ""
-    role: ""          # e.g., product owner, designer, partner
+    role: ""          # optional; use "pilot" / "observer" if it helps
     cohort: ""        # Cohort A or B
     machine_id: ""    # Hostname or device label
     token_alias: ""   # Friendly name for API/admin token
@@ -14,8 +14,8 @@ participants:
     notes: ""
 
 on_call:
-  ops_lead: ""
-  approvals_buddy: ""
-  builder_contact: ""
+  ops_lead: ""    # one of us
+  approvals_buddy: ""  # usually the other person
+  builder_contact: ""  # same as ops unless noted
 
 # Reminder: store actual secrets in a secure vault; this file tracks who has access and when to rotate.

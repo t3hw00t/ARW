@@ -1,9 +1,9 @@
 # Trial Daily Log — {{DATE}}
 
 ## Snapshot
-- Cohort: 
-- Day of trial: 
-- Facilitator: 
+- Pilot: 
+- Observer: 
+- Day/time: 
 
 ## Dashboard tiles (copy values)
 - Systems: 
@@ -14,7 +14,7 @@
 ## Highlights
 - 
 
-## Approvals summary
+## Approvals summary (note if either of us held something)
 - Total reviewed: 
 - Oldest item age: 
 - Notes:
@@ -26,7 +26,7 @@
 - Resolution:
 - Follow-up:
 
-## Feedback quotes
+## Notes & feedback
 - 
 
 ## Next actions
