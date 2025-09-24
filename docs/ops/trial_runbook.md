@@ -7,7 +7,7 @@ title: Trial Runbook
 Updated: 2025-09-26
 Type: Checklist (quick reference)
 
-This runbook keeps the daily trial routine lightweight. Use it side-by-side with the Trial Readiness Plan.
+This runbook keeps the daily trial routine lightweight. Use it side-by-side with the Trial Readiness Plan and the participant quickstart sheet.
 
 ## Before the day starts
 
@@ -23,7 +23,7 @@ This runbook keeps the daily trial routine lightweight. Use it side-by-side with
 - If an alert appears (“Needs a teammate’s OK”), capture a quick note in the incident log.
 - Encourage trial participants to drop observations into the shared feedback doc or use the in-app survey.
 
-## Daily stand-up template
+## Daily stand-up template (see `docs/ops/trials/standup_template.md` for slide layout)
 
 1. **Health** – Are all dashboard tiles green? Any slow starts?
 2. **Approvals** – How many waiting items? Oldest age?

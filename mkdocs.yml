@@ -96,6 +96,7 @@ nav:
       - Monitoring & Alerts: ops/monitoring.md
       - Trial Planning: ops/trial_readiness.md
       - Trial Runbook: ops/trial_runbook.md
+      - Participant Quickstart: ops/trial_quickstart.md
       - Chat Backends: guide/chat_backends.md
       - Guardrails Checks: guide/guardrails.md
       - Correlation & Attribution: guide/correlation.md
