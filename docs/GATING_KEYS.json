@@ -1,362 +1,362 @@
 {
-  "generated": "2025-09-22 23:29 UTC",
+  "type": "reference",
+  "total_groups": 12,
+  "total_keys": 47,
   "groups": [
     {
+      "name": "Orchestration",
+      "summary": "Task queueing and lifecycle events.",
       "keys": [
         {
           "id": "queue:enqueue",
-          "stability": "stable",
+          "title": "Queue Enqueue",
           "summary": "Schedule work onto the orchestrator queue.",
-          "title": "Queue Enqueue"
+          "stability": "stable"
         },
         {
           "id": "events:task.completed",
-          "stability": "stable",
+          "title": "Task Completed Event",
           "summary": "Emit task lifecycle completion events to subscribers.",
-          "title": "Task Completed Event"
+          "stability": "stable"
         }
-      ],
-      "name": "Orchestration",
-      "summary": "Task queueing and lifecycle events."
+      ]
     },
     {
+      "name": "Memory",
+      "summary": "Retrieval-augmented memory operations and quota management.",
       "keys": [
         {
           "id": "memory:get",
-          "stability": "stable",
+          "title": "Memory Fetch",
           "summary": "Read stored memory capsules for retrieval augmented operations.",
-          "title": "Memory Fetch"
+          "stability": "stable"
         },
         {
           "id": "memory:save",
-          "stability": "stable",
+          "title": "Memory Save",
           "summary": "Persist a new memory capsule to the shared store.",
-          "title": "Memory Save"
+          "stability": "stable"
         },
         {
           "id": "memory:load",
-          "stability": "stable",
+          "title": "Memory Load",
           "summary": "Load memory collections into the active runtime context.",
-          "title": "Memory Load"
+          "stability": "stable"
         },
         {
           "id": "memory:apply",
-          "stability": "stable",
+          "title": "Memory Apply",
           "summary": "Apply memory updates or patches to existing capsules.",
-          "title": "Memory Apply"
+          "stability": "stable"
         },
         {
           "id": "memory:limit:get",
-          "stability": "stable",
+          "title": "Memory Limit Inspect",
           "summary": "Inspect the configured memory quota for a scope.",
-          "title": "Memory Limit Inspect"
+          "stability": "stable"
         },
         {
           "id": "memory:limit:set",
-          "stability": "stable",
+          "title": "Memory Limit Update",
           "summary": "Adjust the allowed memory quota for a scope.",
-          "title": "Memory Limit Update"
+          "stability": "stable"
         }
-      ],
-      "name": "Memory",
-      "summary": "Retrieval-augmented memory operations and quota management."
+      ]
     },
     {
+      "name": "Models",
+      "summary": "Model registry, lifecycle, and distribution controls.",
       "keys": [
         {
           "id": "models:list",
-          "stability": "stable",
+          "title": "Models List",
           "summary": "Enumerate registered model adapters and aliases.",
-          "title": "Models List"
+          "stability": "stable"
         },
         {
           "id": "models:refresh",
-          "stability": "stable",
+          "title": "Models Refresh",
           "summary": "Refresh model registry metadata from upstream sources.",
-          "title": "Models Refresh"
+          "stability": "stable"
         },
         {
           "id": "models:save",
-          "stability": "stable",
+          "title": "Models Save",
           "summary": "Persist model artifacts or configuration snapshots.",
-          "title": "Models Save"
+          "stability": "stable"
         },
         {
           "id": "models:load",
-          "stability": "stable",
+          "title": "Models Load",
           "summary": "Load a stored model artifact for execution.",
-          "title": "Models Load"
+          "stability": "stable"
         },
         {
           "id": "models:add",
-          "stability": "stable",
+          "title": "Models Add",
           "summary": "Register a new model alias or adapter.",
-          "title": "Models Add"
+          "stability": "stable"
         },
         {
           "id": "models:delete",
-          "stability": "stable",
+          "title": "Models Delete",
           "summary": "Remove an existing model alias or adapter.",
-          "title": "Models Delete"
+          "stability": "stable"
         },
         {
           "id": "models:default:get",
-          "stability": "stable",
+          "title": "Default Model Get",
           "summary": "Read the global default model selection.",
-          "title": "Default Model Get"
+          "stability": "stable"
         },
         {
           "id": "models:default:set",
-          "stability": "stable",
+          "title": "Default Model Set",
           "summary": "Update the global default model selection.",
-          "title": "Default Model Set"
+          "stability": "stable"
         },
         {
           "id": "models:download",
-          "stability": "beta",
+          "title": "Models Download",
           "summary": "Download remote model artifacts for local use.",
-          "title": "Models Download"
+          "stability": "beta"
         }
-      ],
-      "name": "Models",
-      "summary": "Model registry, lifecycle, and distribution controls."
+      ]
     },
     {
+      "name": "Feedback",
+      "summary": "Feedback collection, automation, and application.",
       "keys": [
         {
           "id": "feedback:state",
-          "stability": "stable",
+          "title": "Feedback State",
           "summary": "Inspect the active feedback controller state.",
-          "title": "Feedback State"
+          "stability": "stable"
         },
         {
           "id": "feedback:signal",
-          "stability": "stable",
+          "title": "Feedback Signal",
           "summary": "Emit a feedback signal event.",
-          "title": "Feedback Signal"
+          "stability": "stable"
         },
         {
           "id": "feedback:analyze",
-          "stability": "beta",
+          "title": "Feedback Analyze",
           "summary": "Run feedback analyzers on collected signals.",
-          "title": "Feedback Analyze"
+          "stability": "beta"
         },
         {
           "id": "feedback:apply",
-          "stability": "stable",
+          "title": "Feedback Apply",
           "summary": "Apply feedback-driven adjustments to the system.",
-          "title": "Feedback Apply"
+          "stability": "stable"
         },
         {
           "id": "feedback:auto",
-          "stability": "experimental",
+          "title": "Feedback Auto",
           "summary": "Toggle automated feedback processing flows.",
-          "title": "Feedback Auto"
+          "stability": "experimental"
         },
         {
           "id": "feedback:reset",
-          "stability": "stable",
+          "title": "Feedback Reset",
           "summary": "Reset accumulated feedback state.",
-          "title": "Feedback Reset"
+          "stability": "stable"
         }
-      ],
-      "name": "Feedback",
-      "summary": "Feedback collection, automation, and application."
+      ]
     },
     {
+      "name": "Tools",
+      "summary": "Tool discovery and invocation.",
       "keys": [
         {
           "id": "tools:list",
-          "stability": "stable",
+          "title": "Tools List",
           "summary": "List available tool integrations.",
-          "title": "Tools List"
+          "stability": "stable"
         },
         {
           "id": "tools:run",
-          "stability": "beta",
+          "title": "Tools Run",
           "summary": "Invoke a tool on behalf of an agent.",
-          "title": "Tools Run"
+          "stability": "beta"
         }
-      ],
-      "name": "Tools",
-      "summary": "Tool discovery and invocation."
+      ]
     },
     {
+      "name": "Chat",
+      "summary": "Interactive chat lifecycle and assurance checks.",
       "keys": [
         {
           "id": "chat:send",
-          "stability": "stable",
+          "title": "Chat Send",
           "summary": "Send a message to an active chat session.",
-          "title": "Chat Send"
+          "stability": "stable"
         },
         {
           "id": "chat:clear",
-          "stability": "stable",
+          "title": "Chat Clear",
           "summary": "Clear a conversation transcript.",
-          "title": "Chat Clear"
+          "stability": "stable"
         },
         {
           "id": "chat:self_consistency",
-          "stability": "experimental",
+          "title": "Chat Self-Consistency",
           "summary": "Trigger self-consistency evaluation across chat responses.",
-          "title": "Chat Self-Consistency"
+          "stability": "experimental"
         },
         {
           "id": "chat:verify",
-          "stability": "beta",
+          "title": "Chat Verify",
           "summary": "Run verification routines on chat outputs.",
-          "title": "Chat Verify"
+          "stability": "beta"
         }
-      ],
-      "name": "Chat",
-      "summary": "Interactive chat lifecycle and assurance checks."
+      ]
     },
     {
+      "name": "Governor",
+      "summary": "Safety and steering policies applied by the governor.",
       "keys": [
         {
           "id": "governor:set",
-          "stability": "stable",
+          "title": "Governor Set",
           "summary": "Update governor policies for orchestration and safety.",
-          "title": "Governor Set"
+          "stability": "stable"
         },
         {
           "id": "governor:hints:set",
-          "stability": "beta",
+          "title": "Governor Hints Set",
           "summary": "Configure hint prompts for the governor.",
-          "title": "Governor Hints Set"
+          "stability": "beta"
         }
-      ],
-      "name": "Governor",
-      "summary": "Safety and steering policies applied by the governor."
+      ]
     },
     {
+      "name": "Hierarchy",
+      "summary": "Hierarchical coordination handshakes and state access.",
       "keys": [
         {
           "id": "hierarchy:hello",
-          "stability": "stable",
+          "title": "Hierarchy Hello",
           "summary": "Introduce an agent to the coordination hierarchy.",
-          "title": "Hierarchy Hello"
+          "stability": "stable"
         },
         {
           "id": "hierarchy:offer",
-          "stability": "beta",
+          "title": "Hierarchy Offer",
           "summary": "Offer capabilities to the hierarchy controller.",
-          "title": "Hierarchy Offer"
+          "stability": "beta"
         },
         {
           "id": "hierarchy:accept",
-          "stability": "beta",
+          "title": "Hierarchy Accept",
           "summary": "Accept assignments from the hierarchy controller.",
-          "title": "Hierarchy Accept"
+          "stability": "beta"
         },
         {
           "id": "hierarchy:state:get",
-          "stability": "stable",
+          "title": "Hierarchy State Get",
           "summary": "Inspect the current state of the hierarchy.",
-          "title": "Hierarchy State Get"
+          "stability": "stable"
         },
         {
           "id": "hierarchy:role:set",
-          "stability": "stable",
+          "title": "Hierarchy Role Set",
           "summary": "Assign or update roles within the hierarchy.",
-          "title": "Hierarchy Role Set"
+          "stability": "stable"
         }
-      ],
-      "name": "Hierarchy",
-      "summary": "Hierarchical coordination handshakes and state access."
+      ]
     },
     {
+      "name": "Introspection",
+      "summary": "Internal observability APIs for diagnostics.",
       "keys": [
         {
           "id": "introspect:tools",
-          "stability": "stable",
+          "title": "Introspect Tools",
           "summary": "Discover the available introspection tools.",
-          "title": "Introspect Tools"
+          "stability": "stable"
         },
         {
           "id": "introspect:schema",
-          "stability": "stable",
+          "title": "Introspect Schema",
           "summary": "Fetch the introspection schema definitions.",
-          "title": "Introspect Schema"
+          "stability": "stable"
         },
         {
           "id": "introspect:stats",
-          "stability": "stable",
+          "title": "Introspect Stats",
           "summary": "Read system health and runtime statistics.",
-          "title": "Introspect Stats"
+          "stability": "stable"
         },
         {
           "id": "introspect:probe",
-          "stability": "experimental",
+          "title": "Introspect Probe",
           "summary": "Execute deep health probes on internal subsystems.",
-          "title": "Introspect Probe"
+          "stability": "experimental"
         }
-      ],
-      "name": "Introspection",
-      "summary": "Internal observability APIs for diagnostics."
+      ]
     },
     {
+      "name": "Administration",
+      "summary": "Administrative controls and lifecycle hooks.",
       "keys": [
         {
           "id": "admin:shutdown",
-          "stability": "stable",
+          "title": "Admin Shutdown",
           "summary": "Trigger a controlled shutdown of the system.",
-          "title": "Admin Shutdown"
+          "stability": "stable"
         },
         {
           "id": "admin:emit",
-          "stability": "stable",
+          "title": "Admin Emit",
           "summary": "Emit administrative diagnostics or events.",
-          "title": "Admin Emit"
+          "stability": "stable"
         }
-      ],
-      "name": "Administration",
-      "summary": "Administrative controls and lifecycle hooks."
+      ]
     },
     {
+      "name": "Regulatory Provenance",
+      "summary": "Trust and provenance management via the RPU.",
       "keys": [
         {
           "id": "rpu:trust:get",
-          "stability": "stable",
+          "title": "RPU Trust Get",
           "summary": "Inspect the trust ledger maintained by the RPU.",
-          "title": "RPU Trust Get"
+          "stability": "stable"
         },
         {
           "id": "rpu:trust:reload",
-          "stability": "stable",
+          "title": "RPU Trust Reload",
           "summary": "Reload trust policies and provenance rules.",
-          "title": "RPU Trust Reload"
+          "stability": "stable"
         }
-      ],
-      "name": "Regulatory Provenance",
-      "summary": "Trust and provenance management via the RPU."
+      ]
     },
     {
+      "name": "Projects",
+      "summary": "Project workspace file management.",
       "keys": [
         {
           "id": "projects:file:get",
-          "stability": "stable",
+          "title": "Project File Get",
           "summary": "Read the contents of a tracked project file.",
-          "title": "Project File Get"
+          "stability": "stable"
         },
         {
           "id": "projects:file:set",
-          "stability": "stable",
+          "title": "Project File Set",
           "summary": "Write or replace the contents of a project file.",
-          "title": "Project File Set"
+          "stability": "stable"
         },
         {
           "id": "projects:file:patch",
-          "stability": "beta",
+          "title": "Project File Patch",
           "summary": "Apply a patch to a project file.",
-          "title": "Project File Patch"
+          "stability": "beta"
         }
-      ],
-      "name": "Projects",
-      "summary": "Project workspace file management."
+      ]
     }
   ],
-  "total_groups": 12,
-  "total_keys": 47,
-  "type": "reference"
+  "generated": "2025-09-24 16:10 UTC"
 }

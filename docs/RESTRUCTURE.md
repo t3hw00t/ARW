@@ -4,15 +4,15 @@ title: Restructure Handbook (Source of Truth)
 
 # Restructure Handbook (Source of Truth)
 
-This document is the single source of truth for the ongoing ARW restructure. It is written so a new contributor (or a chat without prior context) can pick up work immediately.
+This document is the single source of truth for the ARW restructure. It now serves as the hand-off reference for the completed migration and gives new contributors (or a chat without prior context) the context needed to work with the unified stack.
 
-Updated: 2025-09-22
+Updated: 2025-09-26
 Type: Explanation
 Owner: Core maintainers
 Scope: Architecture, APIs, modules, migration plan, status, hand‑off tips
 
 ## How to Use This Handbook
-- Start with the snapshot below to understand current momentum, then drill into the detailed tracks that follow.
+- Start with the track summary below to understand how the restructure landed, then drill into the detailed tracks that follow.
 - Status callouts pair an emoji with plain language so screen readers and reports capture the same signal.
 - Cross-links point to source files or guides; keep those updated when you land a change to avoid drift.
 
@@ -28,16 +28,18 @@ Scope: Architecture, APIs, modules, migration plan, status, hand‑off tips
 - **Harmony:** Keep terminology synchronized between code, docs, and telemetry; when you rename a surface, update the style guide and topics tables together.
 - **Optimization:** Fold in performance or ergonomics wins when touching a module—capture learnings in the Snappy UX contracts and retire redundant paths.
 
-## Current Work in Progress
+## Track Summary (Final)
 
 | Track | Tracking Label(s) | Status | Check-in Cadence | Exit Criteria |
 | --- | --- | --- | --- | --- |
-| Unified server (`apps/arw-server`) | `proj:restructure/core`, `track:unified-server` | 🔄 Active | Weekly architecture sync (Wed) | Router module map current, background loops documented, remaining state/memory integrations land with zero legacy route regressions |
-| Policy & posture | `proj:restructure/core`, `track:policy-posture` | 🔄 Active | Bi-weekly policy review | Cedar ABAC embed merged, `/actions` explainers live, posture presets keep capsules/leases/egress ledger in lock-step |
-| Operator experience (Phase D) | `proj:restructure/phase-d`, `area:operator-experience` | 🔄 Active | Launcher debug stand-up (Fri) | Chat Workbench REST handlers shipped, screenshot pipeline threaded through SPA/right-sidecar, `/admin/*` debug fallbacks removed |
-| Safety (Phase E) | `proj:restructure/phase-e`, `area:safety` | ⏳ Planned | Monthly safety council | Guardrail Gateway enforcement complete, Asimov Capsule Guard parity achieved, compatibility fallbacks retired after legacy traffic reaches zero |
+| Unified server (`apps/arw-server`) | `proj:restructure/core`, `track:unified-server` | ✅ Completed | Weekly architecture sync (Wed) | Router module map current, background loops documented, and state/memory integrations landed without legacy regressions (2025-09-24) |
+| Policy & posture | `proj:restructure/core`, `track:policy-posture` | ✅ Completed | Bi-weekly policy review | Cedar ABAC embed merged with explainers; posture presets keep capsules/leases/egress ledger aligned; hand-off run 2025-09-25 |
+| Operator experience (Phase D) | `proj:restructure/phase-d`, `area:operator-experience` | ✅ Completed | Launcher debug stand-up (Fri) | Chat Workbench REST handlers, screenshot pipeline, SPA/right-sidecar swap, and `/admin/*` fallback removal verified 2025-09-25 |
+| Safety (Phase E) | `proj:restructure/phase-e`, `area:safety` | ✅ Completed | Monthly safety council | Guardrail Gateway enforcement + Asimov Capsule Guard parity shipped; compatibility fallbacks retired after legacy traffic reached zero (2025-09-26) |
 
 > Tracking notes: each row corresponds to an item in the “ARW Restructure” GitHub Project. Apply the listed labels to issues/PRs so automation keeps this table in sync with board status and dashboards.
+
+All restructure workstreams are now closed. Maintain this table as a historical snapshot; future evolution for these areas lives in the standard backlog and roadmap streams.
 
 ## Vision (Harmonized)
 - Free, local‑first, privacy‑first agents that anyone can run on a laptop (CPU‑friendly), producing research‑grade output (provenance, coverage, verification, replayability).
@@ -169,7 +171,7 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
 - Responses: writes return `202 Accepted` with an id; progress over SSE; errors use RFC 7807 problem shape.
 - Lexicon: Lease (capability grant), Policy (ABAC with leases), Egress Ledger (normalized network record), Working Set (context), Logic Unit (strategy pack), WASI Host (plugins), Decision (allow/require_capability/explain).
 - Prose: US English, concise and friendly; headings in Title Case; keep consistent tone. See [Docs Style](developer/docs_style.md) and [CONTRIBUTING.md](https://github.com/t3hw00t/ARW/blob/main/CONTRIBUTING.md).
-- Code: keep event/topic names and HTTP routes consistent with docs; prefer small, composable modules; avoid unnecessary renames during the restructure.
+- Code: keep event/topic names and HTTP routes consistent with docs; prefer small, composable modules; avoid unnecessary renames when touching these historical restructure artifacts so diff history stays legible.
 - Feature catalog: curate `interfaces/feature_catalog.json` alongside `interfaces/features.json`; run `python3 scripts/check_feature_integrity.py` then `python3 scripts/gen_feature_catalog.py` when capabilities move.
 
 ## New Modules (current status)
@@ -204,10 +206,10 @@ Status: In progress.
 - Legacy bridge (status)
   - `apps/arw-svc` and its launch flags have been removed. Debug UI assets now live under `apps/arw-server/assets` and render when `ARW_DEBUG=1`.
 - `/events` is the canonical SSE endpoint; the legacy `/admin/events` alias has been removed.
-- Legacy feature migration (unified target — all todo unless noted)
-  - Core services: port Model Steward (models download/CAS GC ✅), Tool Forge (tool runs/cache ✅), Feedback Loop, Experiment Deck, Memory Lanes, Project Hub primitives, Project Map read models, Snappy Governor, Event Spine patch streaming.
-  - UI/experience: migrate Chat Workbench, Screenshot Pipeline, Self Card + forecasts to the new SPA/right-sidecar flow once endpoints land.
-  - Policy & safety: unify Guardrail Gateway and Asimov Capsule Guard enforcement on `arw-server` (rely on upcoming policy/egress work) and remove launcher fallbacks to `/admin/*` once replacements ship.
+- Legacy feature migration (unified target — completed)
+  - ✅ Core services: Model Steward, Tool Forge, Feedback Loop, Experiment Deck, Memory Lanes, Project Hub primitives, Project Map read models, Snappy Governor, and Event Spine patch streaming now run on the unified server.
+  - ✅ UI/experience: Chat Workbench, Screenshot Pipeline, Self Card, and forecasts operate through the SPA/right-sidecar flow with live SSE data.
+  - ✅ Policy & safety: Guardrail Gateway and Asimov Capsule Guard enforcement live on `arw-server`, and launcher/SPA surfaces no longer depend on `/admin/*` fallbacks.
 
 ### Immediate Reintegration Backlog (Release Gate)
 
@@ -227,15 +229,17 @@ Status: In progress.
   - ✅ README and release notes highlight the `arw-svc` retirement and unified entry points; subsequent releases reference the unified server exclusively.
 - **UI follow-ups**
   - ✅ Launcher/admin models UI shows status badges for `resumed`/`degraded`/`cancel-requested`, and adds inline ledger previews with copy helpers for correlation IDs.
-  - ✅ Debug Models/Agents/Projects pages (and launcher mirrors) now call `/admin/*` endpoints with admin headers. Legacy `/models/*` shims are no longer required.
+- ✅ Debug Models/Agents/Projects pages (and launcher mirrors) now call `/admin/*` endpoints with admin headers. Legacy `/models/*` shims are no longer required.
+
+All restructure-labelled blockers are currently closed; the gate remains in CI but should pass cleanly unless new blockers are tagged.
 
 ### Legacy Feature Migration Track (runs parallel to phases 2–8)
 
 #### Snapshot
-- **Phase D — Operator experience:** In progress, with chat workbench routes, screenshot pipeline wiring, and the SPA/right-sidecar migration queued to close out the legacy debug UI. Launcher surfaces now read from `/state/*` endpoints (route stats, etc.) without `/admin/*` fallbacks.
-- Recent: the admin chat endpoints now run through the shared `chat.respond` tool, so llama/OpenAI/LiteLLM backends are exercised via the unified action pipeline while preserving synthetic fallback for air-gapped installs.
-- Debug UI exposes the new temperature and vote-k controls (wiring straight into `chat.respond`), keeping observability inline with Phase D expectations.
-- **Phase E — Safety:** Planned; finish Guardrail Gateway enforcement, complete Asimov Capsule Guard coverage, and delete the lingering `/admin/*` fallbacks once capsules drive every decision path.
+- **Phase D — Operator experience:** Completed — chat workbench routes, screenshot pipeline wiring, and the SPA/right-sidecar migration shipped together; launcher surfaces now rely exclusively on `/state/*` endpoints.
+- Recent: the admin chat endpoints now run through the shared `chat.respond` tool, exercising llama/OpenAI/LiteLLM backends via the unified action pipeline while preserving synthetic fallback for air-gapped installs.
+- Debug UI exposes the new temperature and vote-k controls (wired straight into `chat.respond`), keeping observability inline with Phase D expectations.
+- **Phase E — Safety:** Completed — Guardrail Gateway enforcement and Asimov Capsule Guard coverage now run on `arw-server`, and `/admin/*` fallbacks have been deleted after capsule telemetry held steady.
 - **Legacy shutdown instrumentation:** Completed — dashboards now track `arw_legacy_capsule_headers_total`; keep it pinned until the counter stays at zero for a sustained window.
 
 | Phase | Focus | Features/Deliverables | Dependencies | Status |
@@ -332,7 +336,6 @@ Notes
 - `POST /context/rehydrate` → return full content head for a pointer (`file` head bytes or full `memory` record), gated by leases when policy requires
 
 Events
-- Egress ledger appends publish `egress.ledger.appended` with `{ id?, decision, reason?, dest_host?, dest_port?, protocol?, bytes_in?, bytes_out?, corr_id?, proj?, posture }`.
 - Egress ledger appends publish `egress.ledger.appended` with `{ id?, decision, reason?, dest_host?, dest_port?, protocol?, bytes_in?, bytes_out?, corr_id?, proj?, posture, meta }`. Meta captures policy posture, candidate capabilities, lease hits, and dns_guard flags for downstream tooling.
 - Lease lifecycle publishes `leases.created` and updates the `policy_leases` read model/SSE patches.
 - Policy decisions emit `policy.decision` when an action is denied or lease‑gated (payload includes `action`, `allow`, `require_capability?`, and `explain`).
@@ -413,12 +416,12 @@ State Views
   3. Document flags/envs in [Configuration](CONFIGURATION.md).
   4. If it touches federation/economics, append to Contribution & Splits section.
 
-## Next Milestones
-- Cedar ABAC scaffold (entities, allow-default, explainers on `/actions`)
-- WASI runtime host + first plugins (http.fetch, fs.patch, process.exec, guardrails.check)
-- Egress proxy + DNS guard skeleton + ledger hooks
-- Unified legacy capabilities on `arw-server` (Model Steward, Tool Forge, Snappy Governor, Event Spine patches, Feedback Loop, Experiment Deck, Memory Lanes, Project Hub/Map, Chat Workbench, Self Card, Screenshot Pipeline, Guardrail Gateway, Asimov Capsule Guard)
-- Memory quarantine + world diff review queues now ship directly on `arw-server` (`/admin/memory/quarantine`, `/admin/world_diffs`).
+## Post-Restructure Follow-ups
+- Cedar ABAC entity modeling now feeds explainers; future refinements (relationship graph, decision caching) live in Backlog → Security Hardening & Observability.
+- WASI runtime host is in place with the local tool runner; new plugins and guard hooks are tracked in Backlog (runtime/tooling stream).
+- Egress proxy, DNS guard, and ledger automation stay under Security Hardening; extend posture presets rather than reopening restructure tasks.
+- Memory hygiene (quarantine, world diff review) and expanded context workflows continue in Never-Out-Of-Context backlog items.
+- Any new legacy migrations should land as regular backlog issues; this handbook remains as reference for the completed restructure.
 
 ## Logic Units (Continuous Updates)
 - Strategy packs: Logic Units provide a safe way to adopt the latest research as config‑first bundles, with opt‑in code when necessary.

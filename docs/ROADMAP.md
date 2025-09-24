@@ -4,7 +4,7 @@ title: Roadmap
 
 # Roadmap
 
-Updated: 2025-09-20
+Updated: 2025-09-26
 Type: Reference
 
 See also: [Backlog](BACKLOG.md) and [Interface Roadmap](INTERFACE_ROADMAP.md).
@@ -27,9 +27,9 @@ Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show bo
 To keep the larger intent visible while we iterate, we track four active execution streams. Each stream carries a short list of near-term moves, explicit checks, and documentation hooks so we stay synchronized as work lands.
 
 ### Collapse the Kernel
-- Immediate moves: Snappy Governor verification and Event Spine patch replay (JSON Patch SSE test) are in place; next unblock Phase B by assigning owners to the remaining migration bullets in `docs/BACKLOG.md` and wiring Event Spine deltas into the live UI swaps.
-- Checks & optimizations: verify latency budgets through `/metrics` and `route_stats`; confirm CAS + SQLite dual-write paths capture the Snappy events without regressions.
-- Documentation: update the legacy migration timeline once Snappy/Event Spine publish windows are live; mirror owner assignments into Backlog → Complexity Collapse.
+- Immediate moves: Snappy Governor verification and Event Spine patch replay (JSON Patch SSE test) both landed; the restructure board is closed, so shift focus to backlog items that extend instrumentation and UI patch consumers.
+- Checks & optimizations: continue verifying latency budgets through `/metrics` and `route_stats`; confirm CAS + SQLite dual-write paths capture Snappy events without regressions.
+- Documentation: restructure timeline is final; keep backlog → Complexity Collapse entries in sync as new work spins up outside the restructure gate.
 
 ### Never-Out-Of-Context
 - Immediate moves: land slot budgets and stable IDs in the Context API, ship the MMR selector pass, and draft the compression cascade executor so the Training Park metrics have a feed.
@@ -49,24 +49,17 @@ To keep the larger intent visible while we iterate, we track four active executi
 ## Near-Term (Weeks)
 
 #### [Kernel] Collapse the Kernel
-- [Kernel] Kernel & Triad (in progress): unify to a single SQLite journal + CAS, and expose the triad API (`/actions`, `/events`, `/state`). Initial step: kernel journal with DB-backed replay on `/triad/events` and dual-write from the in-process bus.
+- [Kernel] Kernel & Triad (complete): unified SQLite journal + CAS with triad API (`/actions`, `/events`, `/state`) is live; remain in stabilization mode while iterating.
 - [Kernel] Stabilization window: limit to bug fixes, docs, tests, and internal cleanups; additive API changes only.
 - [Kernel] Observability & Eventing: event journal tail/readers and metrics/docgen polish — see Backlog → Now.
 - [Kernel] Security & Remote Access: hashed tokens, per-route gating, TLS profiles, proxy templates — see Backlog → Now.
 - [Kernel] Egress Firewall (plan): add policy network scopes + TTL leases; per-node loopback proxy + DNS guard; route containerized scrapers first; egress ledger and pre-offload preview; default posture “Public only.”
 - [Kernel] Lightweight mitigations (plan): memory quarantine; project isolation; belief-diff review queue; hardened headless browsing (disable SW/H3; same-origin); safe archive jail; DNS guard with anomaly alerts; secrets redaction; security posture presets.
-- [Kernel] Asimov Capsule Guard (plan): lease-based capsules with runtime refresh hooks and telemetry — see Architecture → Asimov Capsule Guard.
+- [Kernel] Asimov Capsule Guard: lease-based capsules with runtime refresh hooks and telemetry are live; future tuning flows through Security Hardening backlog items.
 - [Kernel] State & Episodes: observations/beliefs/intents/actions stores; episodes with reactive UI — see Backlog → Now.
 - [Kernel] Services & Orchestration: hierarchy/governor services; queue leases and nack behavior — see Backlog → Now.
 - [Kernel] Specs & Interop: AsyncAPI + MCP artifacts and /spec/* serving — see Backlog → Now.
-- [Kernel] Legacy feature migration (unified server): follow Phases A–E (see Restructure Handbook) with a bias toward vertical slices that unlock UI swaps quickly. Phase A (core services) is in-flight now; Phase B (memory + projects) begins once Tool Forge lands (Model Steward ✅).
-
-##### Legacy Feature Migration Phases (Kernel Owner)
-- **Phase A · Core services (Now)** — Model Steward ✅, Tool Forge, Snappy Governor, Event Spine patch streaming.
-- **Phase B · Memory + projects (Next)** — Memory Lanes, Project Hub primitives, Project Map read models.
-- **Phase C · Feedback & experiments (Soon)** — Feedback Loop, Experiment Deck, Self Card.
-- **Phase D · Operator experience (UI)** — Chat Workbench, Screenshot Pipeline, launcher → SPA/right-sidecar.
-- **Phase E · Policy & guardrails** — Guardrail Gateway, Asimov Capsule Guard, removal of `/admin/*` fallbacks.
+- [Kernel] Legacy feature migration (Phases A–E): completed; see `docs/RESTRUCTURE.md` for the final summary and hand-off guidance.
 
 #### [Pack: Collaboration] Calm collaboration surfaces
 - [Pack: Collaboration] UI coherence & routing: canonical admin debug/UI endpoints; launcher open path alignment; SSE reconnection/backoff and status; universal right-sidecar across Hub/Chat/Training; command palette.

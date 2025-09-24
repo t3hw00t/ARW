@@ -4,7 +4,7 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-22 23:29 UTC
+Updated: 2025-09-24 15:51 UTC
 
 
 ## To Do
@@ -18,6 +18,13 @@ Updated: 2025-09-22 23:29 UTC
 ## Paused
 
 ## Done
+- [t-phase-a-03] Phase B kickoff — done (updated: 2025-09-26 00:15:00 UTC)
+    - 2025-09-22 23:52:00 UTC: Assigned alice to Memory Lanes (ETA 2025-10-03), bob to Project Hub primitives (ETA 2025-10-10), carla to Project Map read models (ETA 2025-10-17).
+  - 2025-09-26 00:15:00 UTC: Confirmed hand-off with owners; restructure board closed with Phase B milestones tracked in backlog instead of the restructure gate.
+- [t-phase-a-02] Phase A: Event Spine patch streaming — done (updated: 2025-09-22 23:45:00 UTC)
+    - 2025-09-22 23:45:00 UTC: Added SSE replay test with Last-Event-ID resume; documentation updated.
+- [t-phase-a-01] Phase A: Snappy Governor verification — done (updated: 2025-09-22 23:44:00 UTC)
+    - 2025-09-22 23:44:00 UTC: Snappy read-model + notice regression test landed (events_sse + route stats snapshot).
 - [t-250922105520-ops03] Staging smoke: verify /debug removal — done (updated: 2025-09-22 23:29:30 UTC)
     - 2025-09-22 23:29:13 UTC: Ran scripts/check_legacy_surface.sh on local instance; /debug returns 404, /admin/debug 200, legacy capsule header rejected with counter increment.
 - [t-250922105510-ops02] Prometheus: refresh legacy alert rules — done (updated: 2025-09-22 23:24:14 UTC)

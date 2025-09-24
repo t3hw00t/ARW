@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-22 23:52 UTC",
+  "updated": "2025-09-24 15:51 UTC",
   "tasks": [
     {
       "id": "t-phase-a-01",
@@ -34,14 +34,19 @@
       "id": "t-phase-a-03",
       "title": "Phase B kickoff",
       "desc": "Assign owners/timeline for Memory Lanes, Project Hub primitives, Project Map read models",
-      "status": "in_progress",
+      "status": "done",
       "notes": [
         {
           "time": "2025-09-22 23:52:00 UTC",
           "text": "Assigned alice to Memory Lanes (ETA 2025-10-03), bob to Project Hub primitives (ETA 2025-10-10), carla to Project Map read models (ETA 2025-10-17)."
+        },
+        {
+          "time": "2025-09-26 00:15:00 UTC",
+          "text": "Confirmed hand-off with owners; restructure board closed with Phase B milestones tracked in backlog instead of the restructure gate."
         }
       ],
-      "updated": "2025-09-22 23:52:00 UTC"
+      "updated": "2025-09-26 00:15:00 UTC",
+      "done_at": "2025-09-26 00:15:00 UTC"
     },
     {
       "id": "t-250914050900-ev10",

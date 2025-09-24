@@ -87,7 +87,7 @@ curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
   http://127.0.0.1:8091/state/egress/settings | jq
 ```
 
-Additional views expose models, self descriptions, memory lanes, logic units, orchestrator jobs, and more as they land during the restructure.
+Additional views expose models, self descriptions, memory lanes, logic units, orchestrator jobs, and more—capabilities that landed with the restructure and continue to expand with regular releases.
 
 ## Policy, Leases, and Context
 

@@ -4,7 +4,7 @@ title: Backlog
 
 # Backlog
 
-Updated: 2025-09-24
+Updated: 2025-09-26
 Type: Reference
 
 This backlog captures concrete work items and near-term priorities. The Roadmap focuses on higher‑level themes and time horizons; see About → Roadmap for strategic context.
@@ -35,15 +35,10 @@ Complexity Collapse (Cross-cutting)
 - [Kernel] Unified retrieval pipeline and memory abstraction (vector/graph/kv/doc) with shared CRUD/stats and index hygiene
 - [Kernel] Capability/lease system with node-local egress proxy; remove per-tool allowlists
 - [Kernel] UI: shared right-sidecar, schema-generated forms, and global command palette
-- [Kernel] Legacy feature migration (Phases A–E)
-  - A · Core services (Now): Model Steward (`/state/models` + admin suite ✅), Tool Forge (tool runs/cache stats ✅), Snappy Governor, Event Spine patch streaming — owners + timelines to be linked from Tasks.
-  - B · Memory + projects (Next): Memory Lanes, Project Hub primitives, Project Map read models.
-  - C · Feedback & experiments (Soon): Feedback Loop, Experiment Deck, Self Card snapshots.
-  - D · Operator experience (UI): Chat Workbench, Screenshot Pipeline, launcher SPA/right-sidecar swap.
-  - E · Policy & guardrails: Guardrail Gateway on `arw-server`, Asimov Capsule Guard, retire remaining `/admin/*` fallbacks.
+- [Kernel] Legacy feature migration (Phases A–E) — done; see `docs/RESTRUCTURE.md` for the final summary and hand-off notes.
 - [Kernel] Snappy Governor verification sweep: confirm `/metrics`, `/state/route_stats`, and `snappy.*` events match the journal paths; add regression tests — done (snappy read-model + notice test)
 - [Kernel] Event Spine patch streaming rollout: wire patch tail to `/events` SSE, validate resume via JSON Patch fixtures, document cleanup of legacy paths — done (SSE replay test + docs)
-- [Kernel] Phase handoff coordination: assign owners/dates for remaining Phase A bullets and publish them to `.arw/tasks.json` — todo
+- [Kernel] Phase handoff coordination: assign owners/dates for remaining Phase A bullets and publish them to `.arw/tasks.json` — done (see items `t-phase-a-01..03`).
 
 Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143001-0001] Context Working Set doc + mkdocs nav — done (this change)

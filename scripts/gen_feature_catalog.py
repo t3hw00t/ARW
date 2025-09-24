@@ -109,7 +109,7 @@ def render_catalog(catalog: dict, features: dict) -> str:
     out.append("# Universal Feature Catalog\n")
     base = github_blob_base()
     out.append(
-        "This catalog maps every shipped capability to the experience pillars we use during the restructure. "
+        "This catalog maps every shipped capability to the experience pillars established during the restructure and now used for ongoing alignment. "
         "It extends the shared language in "
         "[developer/style.md](../developer/style.md) and draws from "
         f"[interfaces/features.json]({base}interfaces/features.json) and "

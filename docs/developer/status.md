@@ -4,7 +4,7 @@ title: Workspace Status
 
 # Workspace Status
 
-Generated: 2025-09-22 23:29 UTC
+Generated: 2025-09-24 15:51 UTC
 
 
 ## Libraries
@@ -19,6 +19,7 @@ Generated: 2025-09-22 23:29 UTC
 - **arw-heuristics**: 0.1.4 — [crates/arw-heuristics/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-heuristics/Cargo.toml)
 - **arw-otel**: 0.1.4 — [crates/arw-otel/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-otel/Cargo.toml)
 - **arw-tauri**: 0.1.4 — [crates/arw-tauri/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-tauri/Cargo.toml)
+- **screenshots**: 0.8.10 — [vendor/screenshots/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/vendor/screenshots/Cargo.toml)
 
 ## Binaries
 - **arw-cli**: 0.1.4 — [apps/arw-cli/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/arw-cli/Cargo.toml)
