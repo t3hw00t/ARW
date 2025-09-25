@@ -47,15 +47,16 @@ All `/projects/*` endpoints are treated as administrative and are protected by t
 ## API
 
 - `GET /state/projects` → `{ generated, items: [{ name, notes, tree }] }`
-- `POST /projects/create` with `{ name }` → creates `<project>` and `NOTES.md`
-- `GET /projects/notes?proj=<name>` → returns note text
-- `POST /projects/notes?proj=<name>` with body as `text/plain` → saves notes
-- `GET /projects/tree?proj=<name>&path=<relative>` → `{ items: { name, dir, rel }[] }`
-- `GET /projects/file?proj=<name>&path=<relative>` → `{ path, sha256, content, abs_path }`
-- `POST /projects/file?proj=<name>&path=<relative>` → write atomically
+- `POST /projects` with `{ "name": "..." }` → creates `<project>` and `NOTES.md`
+- `GET /state/projects/{proj}/notes` → returns note text
+- `PUT /projects/{proj}/notes` with `text/plain` body → saves notes
+- `GET /state/projects/{proj}/tree?path=<relative>` → `{ items: [{ name, dir, rel }] }`
+- `GET /state/projects/{proj}/file?path=<relative>` → `{ path, sha256, content, abs_path }`
+- `PUT /projects/{proj}/file?path=<relative>` → write atomically
   - Body (JSON):
-    - `content` (string, UTF‑8) or `content_b64` (string, Base64‑encoded bytes)
+    - `content` (string, UTF‑8) or `content_b64` (Base64-encoded bytes)
     - `prev_sha256` (optional) — if provided and mismatched, returns 409 Conflict
+- `PATCH /projects/{proj}/file?path=<relative>` with `{ "mode": "replace", "content": ... }` → convenience wrapper around the PUT form
 
 Notes
 

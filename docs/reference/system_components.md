@@ -234,7 +234,7 @@ Issues auditable, time-bound capability leases so the UI can explain why sensiti
 - References:
   - [architecture/capability_consent_ledger.md](../architecture/capability_consent_ledger.md)
 - Notes:
-  - Grants modeled as leases with TTLs feed a planned `/state/policy` read-model showing active permissions.
+  - Grants modeled as leases with TTLs feed the `/state/policy` read-model showing active permissions.
   - Denials and escalations record provenance alongside lease issuance.
 
 ### Compliance Mode

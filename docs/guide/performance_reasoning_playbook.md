@@ -18,7 +18,7 @@ Run Modes (one click, predictable outcomes)
 
 Where this maps in ARW
 - Scheduler & Runtime Matrix pick local vs offload respecting SLOs and policy. See Guide → Runtime Matrix and Architecture → Scheduler & Governor.
-- Deep/Verified appear as toggles in the sidecar and API (planned), with pre‑offload previews and egress metering.
+- Deep/Verified appear as toggles in the debug UI header (and via `/admin/governor/hints`) with pre-offload previews and egress metering.
 - Downloads, tools, and egress use budgets and admission checks today (Models, Egress Ledger). See Guide → Models Download, Reference → Egress Schemas.
 
 Scheduling and model/runtime choice (automatic, explainable)
@@ -104,8 +104,7 @@ What to explicitly avoid
 
 Implementation status in ARW
 - Shipping: budgets/admission on downloads; Egress Ledger format; Runtime Matrix skeleton; World Model scaffold; evaluation harness basics.
-- In progress: Deep/Verified toggles in UI; MMR retrieval recipe; self‑consistency gates; calibrated confidence training loop; per‑project cost/token meters.
+- In progress: richer Deep/Verified UX across all surfaces; MMR retrieval recipe; self-consistency gates; calibrated confidence training loop; per-project cost/token meters.
 - Planned: offload runner with policy‑backed egress and leases; staging area approvals; semantic cache with TTL.
 
 See also: Architecture → Budgets & Context, Scheduler & Governor, Context Working Set; Guide → Runtime Matrix, Evaluation Harness, METRICS & INSIGHTS, Cost & Quotas.
-

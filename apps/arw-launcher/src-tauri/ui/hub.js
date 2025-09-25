@@ -286,7 +286,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function createProj(){
     const n = (elProjName?.value||'').trim(); if (!n) return;
     try{
-      const resp = await fetch(base + '/projects/create', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:n }) });
+      const resp = await fetch(base + '/projects', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:n }) });
       if (!resp.ok) throw new Error('HTTP '+resp.status);
       await refreshProjectsSnapshot(); setProj(n); ARW.toast('Project created');
     }catch(e){ console.error(e); ARW.toast('Create failed'); }
@@ -302,12 +302,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     const shouldSkip = skipFetch === true;
     if (shouldSkip) return;
     try{
-      const r = await fetch(base + '/projects/notes?proj='+encodeURIComponent(curProj));
+      const r = await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/notes');
       const t = await r.text();
       elNotes.value = t;
     }catch(e){ console.error(e); elNotes.value=''; }
   }
-  async function saveNotes(quiet=false){ if (!curProj||!elNotes) return; try{ const t = elNotes.value||''; await fetch(base + '/projects/notes?proj='+encodeURIComponent(curProj), { method:'POST', headers:{'Content-Type':'text/plain'}, body: t + '\n' }); const ns=document.getElementById('notesStat'); if (ns){ ns.textContent='Saved'; setTimeout(()=>{ if (ns.textContent==='Saved') ns.textContent=''; }, 1200); } if (!quiet) { /* optional toast removed for quieter UX */ } }catch(e){ console.error(e); const ns=document.getElementById('notesStat'); if (ns){ ns.textContent='Error'; setTimeout(()=>{ if (ns.textContent==='Error') ns.textContent=''; }, 1500); } }
+  async function saveNotes(quiet=false){ if (!curProj||!elNotes) return; try{ const t = elNotes.value||''; await fetch(base + '/projects/'+encodeURIComponent(curProj)+'/notes', { method:'PUT', headers:{'Content-Type':'text/plain'}, body: t + '\n' }); const ns=document.getElementById('notesStat'); if (ns){ ns.textContent='Saved'; setTimeout(()=>{ if (ns.textContent==='Saved') ns.textContent=''; }, 1200); } if (!quiet) { /* optional toast removed for quieter UX */ } }catch(e){ console.error(e); const ns=document.getElementById('notesStat'); if (ns){ ns.textContent='Error'; setTimeout(()=>{ if (ns.textContent==='Error') ns.textContent=''; }, 1500); } }
   async function loadTree(rel){
     if (!curProj||!elProjTree) return;
     const next = String(rel||'');
@@ -326,7 +326,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     if (!fromModel) {
       try{
-        const r = await fetch(base + '/projects/tree?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(currentPath));
+        const r = await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/tree?path='+encodeURIComponent(currentPath));
         const j = await r.json().catch(()=>({items:[]}));
         treeCache.set(String(currentPath||''), j.items||[]);
       }catch(e){ console.error(e); elProjTree.textContent = 'Error'; return; }
@@ -343,7 +343,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const entries = Array.isArray(treePaths[key]) ? treePaths[key] : [];
         treeCache.set(key, entries);
       } else {
-        try{ const r=await fetch(base + '/projects/tree?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(key)); const j=await r.json().catch(()=>({items:[]})); treeCache.set(key, (j.items||[])); }
+        try{ const r=await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/tree?path='+encodeURIComponent(key)); const j=await r.json().catch(()=>({items:[]})); treeCache.set(key, (j.items||[])); }
         catch{ treeCache.set(key, []); }
       }
     }
@@ -388,7 +388,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try{
       let items = treeCache.get(parentRel);
       if (!Array.isArray(items)){
-        const r = await fetch(base + '/projects/tree?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(parentRel||''));
+        const r = await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/tree?path='+encodeURIComponent(parentRel||''));
         const j = await r.json().catch(()=>({items:[]}));
         items = (j.items||[]);
         treeCache.set(parentRel, items);
@@ -424,9 +424,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         name.addEventListener('click', ()=>{ if (it.dir) loadTree(it.rel||''); else filePreview(it.rel||''); }); nameWrap.appendChild(name);
         const actions=document.createElement('div'); actions.className='row';
         if (!it.dir){
-          const copyBtn=document.createElement('button'); copyBtn.className='ghost'; copyBtn.textContent='Copy'; copyBtn.title='Copy file contents to clipboard'; copyBtn.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const cached=fileCache.get(rel); const fresh=cached&&(Date.now()-cached.t<fileTTL); let j=fresh?cached.data:await (await fetch(base + '/projects/file?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(rel))).json(); if(!fresh) fileCache.set(rel,{data:j,t:Date.now()}); ARW.copy(String(j.content||'')); }catch(e){ console.error(e); ARW.toast('Copy failed'); } }); actions.appendChild(copyBtn);
-          const openBtn=document.createElement('button'); openBtn.className='ghost'; openBtn.textContent='Open'; openBtn.title='Open with system default'; openBtn.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const cached=fileCache.get(rel); const fresh=cached&&(Date.now()-cached.t<fileTTL); let j=fresh?cached.data:await (await fetch(base + '/projects/file?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(rel))).json(); if(!fresh) fileCache.set(rel,{data:j,t:Date.now()}); if(j&&j.abs_path){ await ARW.invoke('open_path',{path:j.abs_path}); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open failed'); } }); actions.appendChild(openBtn);
-          const editOpen=document.createElement('button'); editOpen.className='ghost'; editOpen.textContent='Open in Editor'; editOpen.title='Open in configured editor'; editOpen.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const cached=fileCache.get(rel); const fresh=cached&&(Date.now()-cached.t<fileTTL); let j=fresh?cached.data:await (await fetch(base + '/projects/file?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(rel))).json(); if(!fresh) fileCache.set(rel,{data:j,t:Date.now()}); if(j&&j.abs_path){ const eff=(projPrefs&&projPrefs.editorCmd)||((await ARW.getPrefs('launcher'))||{}).editorCmd||null; await ARW.invoke('open_in_editor',{path:j.abs_path, editor_cmd: eff}); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); } }); actions.appendChild(editOpen);
+          const copyBtn=document.createElement('button'); copyBtn.className='ghost'; copyBtn.textContent='Copy'; copyBtn.title='Copy file contents to clipboard'; copyBtn.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const cached=fileCache.get(rel); const fresh=cached&&(Date.now()-cached.t<fileTTL); let j=fresh?cached.data:await (await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel))).json(); if(!fresh) fileCache.set(rel,{data:j,t:Date.now()}); ARW.copy(String(j.content||'')); }catch(e){ console.error(e); ARW.toast('Copy failed'); } }); actions.appendChild(copyBtn);
+          const openBtn=document.createElement('button'); openBtn.className='ghost'; openBtn.textContent='Open'; openBtn.title='Open with system default'; openBtn.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const cached=fileCache.get(rel); const fresh=cached&&(Date.now()-cached.t<fileTTL); let j=fresh?cached.data:await (await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel))).json(); if(!fresh) fileCache.set(rel,{data:j,t:Date.now()}); if(j&&j.abs_path){ await ARW.invoke('open_path',{path:j.abs_path}); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open failed'); } }); actions.appendChild(openBtn);
+          const editOpen=document.createElement('button'); editOpen.className='ghost'; editOpen.textContent='Open in Editor'; editOpen.title='Open in configured editor'; editOpen.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const cached=fileCache.get(rel); const fresh=cached&&(Date.now()-cached.t<fileTTL); let j=fresh?cached.data:await (await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel))).json(); if(!fresh) fileCache.set(rel,{data:j,t:Date.now()}); if(j&&j.abs_path){ const eff=(projPrefs&&projPrefs.editorCmd)||((await ARW.getPrefs('launcher'))||{}).editorCmd||null; await ARW.invoke('open_in_editor',{path:j.abs_path, editor_cmd: eff}); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); } }); actions.appendChild(editOpen);
         }
         const left=document.createElement('div'); left.style.display='flex'; left.style.alignItems='center'; left.style.gap='6px'; left.appendChild(nameWrap); row.appendChild(left); row.appendChild(actions); host.appendChild(row);
         if (it.dir && (expanded.has(it.rel||'') || searchExpanded.has(String(it.rel||'')))){
@@ -494,7 +494,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const copyBtn=document.createElement('button'); copyBtn.className='ghost'; copyBtn.textContent='Copy'; copyBtn.addEventListener('click', async ()=>{
           try{
             const rel = it.rel||''; const cached = fileCache.get(rel); const fresh = cached && (Date.now()-cached.t < fileTTL);
-            let j = fresh ? cached.data : await (await fetch(base + '/projects/file?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(rel))).json();
+            let j = fresh ? cached.data : await (await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel))).json();
             if (!fresh) fileCache.set(rel, { data: j, t: Date.now() });
             ARW.copy(String(j.content||''));
           }catch(e){ console.error(e); ARW.toast('Copy failed'); }
@@ -502,7 +502,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const openBtn=document.createElement('button'); openBtn.className='ghost'; openBtn.textContent='Open'; openBtn.addEventListener('click', async ()=>{
           try{
             const rel = it.rel||''; const cached = fileCache.get(rel); const fresh = cached && (Date.now()-cached.t < fileTTL);
-            let j = fresh ? cached.data : await (await fetch(base + '/projects/file?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(rel))).json();
+            let j = fresh ? cached.data : await (await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel))).json();
             if (!fresh) fileCache.set(rel, { data: j, t: Date.now() });
             if (j && j.abs_path) { await ARW.invoke('open_path', { path: j.abs_path }); } else { ARW.toast('Path unavailable'); }
           }catch(e){ console.error(e); ARW.toast('Open failed'); }
@@ -510,7 +510,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const editOpen=document.createElement('button'); editOpen.className='ghost'; editOpen.textContent='Open in Editor'; editOpen.addEventListener('click', async ()=>{
           try{
             const rel = it.rel||''; const cached = fileCache.get(rel); const fresh = cached && (Date.now()-cached.t < fileTTL);
-            let j = fresh ? cached.data : await (await fetch(base + '/projects/file?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(rel))).json();
+            let j = fresh ? cached.data : await (await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel))).json();
             if (!fresh) fileCache.set(rel, { data: j, t: Date.now() });
             if (j && j.abs_path) { const eff = (projPrefs&&projPrefs.editorCmd) || ((await ARW.getPrefs('launcher'))||{}).editorCmd || null; await ARW.invoke('open_in_editor', { path: j.abs_path, editor_cmd: eff }); } else { ARW.toast('Path unavailable'); }
           }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); }
@@ -531,7 +531,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try{
           let dest = currentPath ? (currentPath.replace(/\/$/, '') + '/' + f.name) : f.name;
           let exists = false;
-          try{ const r = await fetch(base + '/projects/file?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(dest)); exists = r.ok; }catch{}
+          try{ const r = await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(dest)); exists = r.ok; }catch{}
           if (exists){ const ow = confirm('Overwrite '+dest+'?'); if (!ow){ const m=f.name.match(/^(.*?)(\.[^.]*)?$/); const baseN=m?m[1]:f.name; const ext=m?m[2]||'':''; dest = (currentPath? currentPath+'/' : '') + baseN + ' (copy)' + ext; } }
           if (f.size > 10*1024*1024){ alert('File too large (max 10 MiB)'); continue; }
           let body = {};
@@ -541,7 +541,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const b64 = (function(u8){ let bin=''; const CHUNK=0x8000; for(let i=0;i<u8.length;i+=CHUNK){ bin += String.fromCharCode.apply(null, u8.subarray(i,i+CHUNK)); } return btoa(bin); })(new Uint8Array(ab));
             body = { content_b64: b64, prev_sha256: null };
           }
-          const resp = await fetch(base + '/projects/file?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(dest), { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+          const resp = await fetch(base + '/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(dest), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
           if (!resp.ok){ console.warn('Upload failed', f.name, resp.status); continue; }
         }catch(err){ console.error('Upload error', err); }
       }
@@ -552,7 +552,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnBack = document.getElementById('btnTreeBack'); if (btnBack) btnBack.addEventListener('click', ()=>{ const prev = pathStack.pop(); loadTree(prev||''); });
   async function filePreview(rel){
     try{
-      const r=await fetch(base + '/projects/file?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(rel||''));
+      const r=await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel||''));
       const j=await r.json();
       try{ fileCache.set(rel||'', { data: j, t: Date.now() }); }catch{}
       const prev=document.getElementById('treePrev'); if (!prev) return;
@@ -575,17 +575,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       const pathRel = rel;
       function toggleEditing(on){ pre.style.display = on? 'none':'block'; ta.style.display = on? 'block':'none'; editBtn.style.display = on? 'none':'inline-block'; saveBtn.style.display = on? 'inline-block':'none'; revertBtn.style.display = on? 'inline-block':'none'; }
       editBtn.addEventListener('click', ()=> toggleEditing(true));
-      openEditor.addEventListener('click', async ()=>{ try{ const rel = pathRel||''; const cached = fileCache.get(rel); const fresh = cached && (Date.now()-cached.t < fileTTL); let jx = fresh ? cached.data : await (await fetch(base + '/projects/file?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(rel))).json(); if (!fresh) fileCache.set(rel, { data: jx, t: Date.now() }); if (jx && jx.abs_path) { const eff = (projPrefs&&projPrefs.editorCmd) || ((await ARW.getPrefs('launcher'))||{}).editorCmd || null; await ARW.invoke('open_in_editor', { path: jx.abs_path, editor_cmd: eff }); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); } });
+      openEditor.addEventListener('click', async ()=>{ try{ const rel = pathRel||''; const cached = fileCache.get(rel); const fresh = cached && (Date.now()-cached.t < fileTTL); let jx = fresh ? cached.data : await (await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel))).json(); if (!fresh) fileCache.set(rel, { data: jx, t: Date.now() }); if (jx && jx.abs_path) { const eff = (projPrefs&&projPrefs.editorCmd) || ((await ARW.getPrefs('launcher'))||{}).editorCmd || null; await ARW.invoke('open_in_editor', { path: jx.abs_path, editor_cmd: eff }); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); } });
       revertBtn.addEventListener('click', ()=>{ ta.value = String(j.content||''); toggleEditing(false); });
       saveBtn.addEventListener('click', async ()=>{
         try{
           const body = { content: ta.value||'', prev_sha256: sha };
-          const resp = await fetch(base + '/projects/file?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(pathRel||''), { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+          const resp = await fetch(base + '/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(pathRel||''), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
           if (!resp.ok){
             if (resp.status === 409){
               // Conflict: fetch latest and present a simple merge panel
               try{
-                const r3=await fetch(base + '/projects/file?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(pathRel||''));
+                const r3=await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(pathRel||''));
                 const j3=await r3.json();
                 const merge = document.createElement('div'); merge.className='card'; merge.style.marginTop='6px';
                 const h=document.createElement('div'); h.className='row'; h.innerHTML = '<strong>Merge needed</strong><span class="dim">Server changed since you loaded this file</span>';
@@ -609,9 +609,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 saveMine.addEventListener('click', async ()=>{
                   try{
                     const body2 = { content: lt.value||'', prev_sha256: j3.sha256||null };
-                    const resp2 = await fetch(base + '/projects/file?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(pathRel||''), { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body2) });
+                    const resp2 = await fetch(base + '/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(pathRel||''), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body2) });
                     if (!resp2.ok){ ARW.toast('Save failed'); return; }
-                    const r4=await fetch(base + '/projects/file?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(pathRel||''));
+                    const r4=await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(pathRel||''));
                     const j4=await r4.json(); sha=j4.sha256||null; j.content=j4.content||''; pre.textContent=String(j.content||''); ta.value=j4.content||''; toggleEditing(false); merge.remove(); ARW.toast('Saved');
                   }catch(e){ console.error(e); ARW.toast('Save failed'); }
                 });
@@ -666,7 +666,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             ARW.toast('Save failed'); return;
           }
           // reload to get new sha/content
-          const r2=await fetch(base + '/projects/file?proj='+encodeURIComponent(curProj)+'&path='+encodeURIComponent(pathRel||''));
+          const r2=await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(pathRel||''));
           const j2=await r2.json();
           sha = j2.sha256||null; j.content = j2.content||''; pre.textContent = String(j.content||''); toggleEditing(false); ARW.toast('Saved');
         }catch(e){ console.error(e); ARW.toast('Save failed'); }

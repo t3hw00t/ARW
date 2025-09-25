@@ -273,7 +273,7 @@ Notes
 | Medium | Interactive snappy bench | ✅ `snappy-bench` CLI hits `/actions` + `/events`, enforces budgets, and publishes quick-start docs. | ✅ CI runs `scripts/ci_snappy_bench.sh` (queue budget 500 ms); capture long-term baselines per performance preset. |
 
 ### Legacy Retirement Checklist
-- Instrumentation is in place: legacy capsule headers increment `arw_legacy_capsule_headers_total`; the `/debug` alias is removed, so watch access logs or 404 gauges (or run `scripts/check_legacy_surface.sh` / `just legacy-check`) for any lingering requests.
+- Instrumentation is in place: legacy capsule headers increment `arw_legacy_capsule_headers_total`; the `/debug` alias is removed, so watch access logs or 404 gauges (or run `scripts/check_legacy_surface.sh` / `just legacy-check` for a quick static + optional HTTP probe when a server is running) for any lingering requests.
 - Packaging no longer bundles the legacy `arw-svc` binaries; launcher distributions ship `arw-server` exclusively.
 - Capsule leases refresh before every action submission, egress policy resolution, and tool invocation; passive renewals emit `policy.capsule.expired` without requiring HTTP traffic through the middleware.
 - Guardrail defaults now assume DNS guard + loopback proxy unless explicitly disabled (`ARW_DNS_GUARD_ENABLE=0`, `ARW_EGRESS_PROXY_ENABLE=0`), keeping new nodes locked down by default.

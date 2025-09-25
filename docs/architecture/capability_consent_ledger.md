@@ -15,7 +15,7 @@ Model
 - Denials and escalations are first‑class events.
 
 Storage
-- Journaled locally; summarized for UI. Planned endpoint: `/state/policy` with active leases per principal.
+- Journaled locally; summarized for UI. `/state/policy` exposes active leases per principal for the admin UI and API clients.
 
 UI
 - Inline prompts in the sidecar; history visible per episode and per project.

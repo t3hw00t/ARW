@@ -36,7 +36,7 @@ Type: Explanation
 - Security & Policy: Central gating keys and deny contracts; ingress/egress guards; Policy Capsules; roadmap RPU for signatures/ABAC. See: [Security Hardening](guide/security_hardening.md), [Policy & Permissions](guide/policy_permissions.md).
 - Visual capture: Agents and UIs call `ui.screenshot.capture` for screen/window/region snapshots with Activity lane previews, gallery management, annotation tooling, and optional OCR. See: [Screenshots](guide/screenshots.md).
 - Self-improvement loop: goldens + rewards, A/B runner (with shadow), config patch engine, policy-aware tuner, calibrated self-model, nightly distillation (and on-demand via `POST /admin/distill`), and a persisted experiments scoreboard + winners. See: Experiments (guide/experiments_ab.md).
-- Egress control (planned): policy-backed, per-node egress gateway + DNS guard with project-level network posture and an egress ledger. See: Architecture → Egress Firewall; Guide → Network Posture.
+- Egress control: policy-backed, per-node egress gateway + DNS guard with project-level network posture and an egress ledger. See: Architecture → Egress Firewall; Guide → Network Posture.
 - Lightweight mitigations (planned): memory quarantine; project isolation; belief-diff review; cluster manifest pinning; hardened headless browsing; safe archive handling; DNS anomaly guard; accelerator zeroing; event sequencing; context rehydration check. See: Architecture → Lightweight Mitigations.
 - Models: enhanced downloader with resume, checksum, EWMA admission, disk reserve checks, content-disposition filenames, cross-platform finalize, and a simple concurrency limiter (`ARW_MODELS_MAX_CONC`).
 - Safety & Profiles: Sandboxed file/network allowlists; profiles (performance/balanced/power-saver/custom); secrets and hints.
@@ -49,8 +49,8 @@ Type: Explanation
 ## Companion Apps (Rust)
 - Launcher (Tauri): tray, notifications, Events/Logs windows, Debug UI opener; optional autostart. See: Desktop Launcher (guide/launcher.md).
 - Debug UI (Tauri): event stream, probe overlays, training console, logs/metrics.
-- Model Manager (planned): browse/manage/convert/quantize; profiles & compatibility checks.
-- Connection Manager (planned): discover, tune, and control connections/links with policy and health.
+- Model Manager: browse/manage/convert/quantize; profiles & compatibility checks (launcher window; see Guide → Models Download).
+- Connection Manager: discover, tune, and control connections/links with policy and health (launcher window; see Guide → Connectors).
 
 ## Projects / Workstreams
 - Core framework, Launcher, Debug UI, Model Manager, Connection Manager.
