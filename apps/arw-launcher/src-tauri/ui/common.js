@@ -14,6 +14,28 @@ window.ARW = {
       }catch{ return 'index' }
     }
   },
+  validateProjectName(name) {
+    const raw = String(name ?? '').trim();
+    if (!raw) return { ok: false, error: 'Project name cannot be empty' };
+    if (raw.length > 120) return { ok: false, error: 'Project name must be 120 characters or fewer' };
+    if (raw.startsWith('.')) return { ok: false, error: 'Project name cannot start with a dot' };
+    const valid = /^[A-Za-z0-9 _.-]+$/.test(raw);
+    if (!valid) return { ok: false, error: 'Project name may only contain letters, numbers, spaces, ., -, _' };
+    return { ok: true, value: raw };
+  },
+  validateProjectRelPath(rel) {
+    const raw = String(rel ?? '').trim();
+    if (!raw) return { ok: false, error: 'Destination path cannot be empty' };
+    if (/^[\\/]/.test(raw)) return { ok: false, error: 'Destination must be relative (no leading / or \\)' };
+    if (/^[A-Za-z]:/.test(raw)) return { ok: false, error: 'Destination must not include a drive prefix' };
+    if (/^\\\\/.test(raw)) return { ok: false, error: 'Destination must not include a UNC prefix' };
+    const parts = raw.split(/[\\/]+/).filter(Boolean);
+    if (!parts.length) return { ok: false, error: 'Destination path cannot be empty' };
+    if (parts.some(seg => seg === '.' || seg === '..')) {
+      return { ok: false, error: 'Destination must not contain . or .. segments' };
+    }
+    return { ok: true, value: parts.join('/') };
+  },
   invoke(cmd, args) {
     return window.__TAURI__.invoke(cmd, args)
   },
@@ -73,9 +95,18 @@ window.ARW = {
   },
   async saveToProjectPrompt(path){
     try{
-      const proj = prompt('Project name'); if (!proj) return null;
+      const projInput = prompt('Project name'); if (!projInput) return null;
+      const projCheck = this.validateProjectName(projInput);
+      if (!projCheck.ok){ this.toast(projCheck.error); return null; }
+      const proj = projCheck.value;
       const baseName = (path||'').split(/[\\/]/).pop() || 'capture.png';
-      const dest = prompt('Destination path inside project', 'images/'+baseName) || ('images/'+baseName);
+      let destInput = prompt('Destination path inside project', 'images/'+baseName);
+      if (destInput == null) return null;
+      destInput = String(destInput).trim();
+      if (!destInput) destInput = 'images/'+baseName;
+      const destCheck = this.validateProjectRelPath(destInput);
+      if (!destCheck.ok){ this.toast(destCheck.error); return null; }
+      const dest = destCheck.value;
       const out = await this.invoke('projects_import', { proj, dest, src_path: path, mode: 'copy', port: this.getPortFromInput('port') });
       this.toast('Saved to '+proj+': '+dest);
       return { proj, dest };

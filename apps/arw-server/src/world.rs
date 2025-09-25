@@ -374,26 +374,24 @@ pub(crate) fn snapshot_project_map(project: Option<&str>) -> ProjectMap {
             match n.kind {
                 NodeKind::Entity => {
                     ents_seen += 1;
-                    entities.push(json!({
-                        "id": n.id,
-                        "props": n.props.clone(),
-                        "confidence": n.confidence,
-                        "last": n.last_observed,
-                    }));
-                    if entities.len() >= 50 {
-                        break;
+                    if entities.len() < 50 {
+                        entities.push(json!({
+                            "id": n.id,
+                            "props": n.props.clone(),
+                            "confidence": n.confidence,
+                            "last": n.last_observed,
+                        }));
                     }
                 }
                 NodeKind::Claim => {
                     cl_seen += 1;
-                    claims.push(json!({
-                        "id": n.id,
-                        "props": n.props.clone(),
-                        "confidence": n.confidence,
-                        "last": n.last_observed,
-                    }));
-                    if claims.len() >= 50 {
-                        break;
+                    if claims.len() < 50 {
+                        claims.push(json!({
+                            "id": n.id,
+                            "props": n.props.clone(),
+                            "confidence": n.confidence,
+                            "last": n.last_observed,
+                        }));
                     }
                 }
                 _ => {}
@@ -497,6 +495,51 @@ fn flatten_value(v: &Value, cap: usize) -> String {
             out
         }
         Value::Null => String::new(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn snapshot_project_map_counts_all_nodes_whilst_sampling() {
+        {
+            let mut ws = store().write().expect("world store lock");
+            *ws = WorldStore::default();
+
+            let mut graph = BeliefGraph::default();
+            for idx in 0..120 {
+                let node = Node {
+                    id: format!("entity-{idx}"),
+                    kind: NodeKind::Entity,
+                    props: Map::default(),
+                    confidence: None,
+                    last_observed: None,
+                    provenance: Vec::new(),
+                };
+                graph.nodes.insert(node.id.clone(), node);
+            }
+            for idx in 0..80 {
+                let node = Node {
+                    id: format!("claim-{idx}"),
+                    kind: NodeKind::Claim,
+                    props: Map::default(),
+                    confidence: None,
+                    last_observed: None,
+                    provenance: Vec::new(),
+                };
+                graph.nodes.insert(node.id.clone(), node);
+            }
+            ws.default_graph = graph;
+        }
+        ver().store(0, Ordering::Relaxed);
+
+        let snapshot = snapshot_project_map(None);
+        assert_eq!(snapshot.entities.len(), 50);
+        assert_eq!(snapshot.claims.len(), 50);
+        assert_eq!(snapshot.coverage["entities"].as_u64(), Some(120));
+        assert_eq!(snapshot.coverage["claims"].as_u64(), Some(80));
     }
 }
 

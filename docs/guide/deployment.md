@@ -79,7 +79,7 @@ docker run --rm -p 8091:8091 \
   -e ARW_BIND=0.0.0.0 \
   -e ARW_PORT=8091 \
   -e ARW_ADMIN_TOKEN=dev-admin \
-  ghcr.io/<owner>/arw-server:latest
+  ghcr.io/t3hw00t/arw-server:latest
 ```
 
 Build locally if you prefer:
@@ -109,7 +109,7 @@ helm template arw deploy/charts/arw-server
 ```
 
 Key values:
-- `image.repository=ghcr.io/<owner>/arw-server`
+- `image.repository=ghcr.io/t3hw00t/arw-server` (override if you publish a fork)
 - `image.tag=vX.Y.Z`
 - `service.type=ClusterIP` (default) — front with your own ingress/TLS
 - `env.ARW_BIND=0.0.0.0` and `env.ARW_ADMIN_TOKEN` for any externally reachable deployment

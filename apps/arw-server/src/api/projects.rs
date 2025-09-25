@@ -749,6 +749,16 @@ fn validate_rel_path(rel: &str) -> Option<std::path::PathBuf> {
             c,
             std::path::Component::ParentDir | std::path::Component::RootDir
         )
+            || {
+                #[cfg(windows)]
+                {
+                    matches!(c, std::path::Component::Prefix(_))
+                }
+                #[cfg(not(windows))]
+                {
+                    false
+                }
+            }
     }) {
         return None;
     }
@@ -956,5 +966,18 @@ mod tests {
         assert!(items
             .iter()
             .any(|it| it["name"].as_str() == Some("info.txt")));
+    }
+
+    #[test]
+    fn validate_rel_path_blocks_traversal_and_prefixes() {
+        assert!(validate_rel_path("docs/readme.md").is_some());
+        assert!(validate_rel_path("../etc/passwd").is_none());
+
+        #[cfg(windows)]
+        {
+            assert!(validate_rel_path("..\\foo").is_none());
+            assert!(validate_rel_path("C:secret.txt").is_none());
+            assert!(validate_rel_path(r"\\server\share\data.txt").is_none());
+        }
     }
 }
