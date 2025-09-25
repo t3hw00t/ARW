@@ -67,12 +67,12 @@ To keep the larger intent visible while we iterate, we track four active executi
 - [Pack: Collaboration] Visual capture: screenshot tool (OS-level) with optional window crop; OCR (optional); SSE events + thumbnails; sidecar Activity integration.
 - [Pack: Collaboration] Recipes MVP: schema + gallery + runner (local-first, default-deny permissions).
 - [Pack: Collaboration] Heuristic Feedback Engine: lightweight, near-live suggestions with guardrails — see Backlog → Now → Feedback Engine for concrete work items.
-- [Pack: Collaboration] Human-in-the-loop staging: queue pending actions in `arw-server`, surface approvals in the sidecar, and ship per-project review modes.
+- [Pack: Collaboration] Human-in-the-loop staging: phase one shipped (queue + approvals). Next: evidence previews, posture-driven review modes, and SLA tooling.
 
 #### [Pack: Research] Research & memory packs
 - [Pack: Research] Logic Units (config-first): manifest/schema, Library UI with diff preview, apply/revert/promote, initial sample units.
-- [Pack: Research] Research Watcher (read-only): build `arw-server` ingestion + read-models so curated feeds land in Suggested units with human review.
-- [Pack: Research] Training Park telemetry: expose retrieval/context/tool metrics from `arw-server` and upgrade the launcher view from stub to live controls.
+- [Pack: Research] Research Watcher (read-only): ingestion + read-models live. Next: scoring heuristics, richer payload renderers, and cross-install subscriptions.
+- [Pack: Research] Training Park telemetry: baseline `/state/training/telemetry` is live; next deliver richer metrics and upgrade the launcher view from stub to live controls.
 
 ## Mid-Term (1–2 Months)
 

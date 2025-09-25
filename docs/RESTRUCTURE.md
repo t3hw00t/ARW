@@ -54,14 +54,14 @@ Fast feedback is a product value. We design for immediacy:
   - First partial response ≤ 150 ms
   - P95 route latency budgets per endpoint (see Guide → Interactive Performance)
 - Streaming by default: `/events` is always on; `/actions` returns 202 quickly and progress streams over SSE.
-- HTTP layers: compression, tracing, and a global concurrency governor (`ARW_HTTP_MAX_CONC`, default 1024) provide stable latency under load.
+- HTTP layers: compression, tracing, and a global concurrency governor (`ARW_HTTP_MAX_CONC`) provide stable latency under load; presets seed the limit (256 → 16384) so lightweight hosts stay snappy and workstations scale.
 - Non‑blocking request paths: enqueue and return; heavy work runs in workers; avoid synchronous compute in handlers.
 - Warm starts: pre‑warm caches (read‑models, prepared SQL, HTTP clients) at boot for low first‑hit latency.
 - Small writes, big reads: journal writes are small and fast; large artifacts go to CAS; clients fetch head or stream on demand.
 - Singleflight + caches: coalesce identical work; use short‑lived in‑mem caches and durable CAS for reuse.
 - Bounded IO: cap inline file reads (e.g., 64 KB head); paginate views; chunk long operations.
 - WAL + indexes: SQLite WAL mode, targeted indexes, prepared statements; avoid full‑table scans in hot paths.
-- Backpressure: queue with fairness; reject/slow when budgets are exceeded rather than stalling the UI. Knob: `ARW_ACTIONS_QUEUE_MAX` (default `1024`).
+- Backpressure: queue with fairness; reject/slow when budgets are exceeded rather than stalling the UI. Knob: `ARW_ACTIONS_QUEUE_MAX`, seeded by the preset tier alongside concurrency.
  - Presets: seed sane defaults via `ARW_PERF_PRESET` (`eco|balanced|performance|turbo`) or auto‑detect. See How‑to → Performance Presets. Explicit env vars still override.
 
 Implementation touchpoints in the new stack:
@@ -267,9 +267,9 @@ Notes
 | High | Guardrail Gateway & capsules | Proxy preview exists; DNS guard and capsule adoption landed, plus live lease snapshots & events. Background refresh loop now renews capsules without relying on request traffic (`apps/arw-server/src/capsule_guard.rs`). | Surface posture presets in UI/CLI and extend network-scope enforcement across connectors/orchestrator consumers. |
 | High | Model Steward resilience | ✅ HEAD preflight + single-flight hash guard restored; `/state/models_metrics` now surfaces inflight hashes and concurrency snapshots. | Track admin UI updates to render new metrics and expose preflight status; monitor ledger previews for multi-tenant downloads. |
 | Medium | Chat Workbench | ✅ `/admin/chat*` endpoints restored with planner, temperature, and vote-k controls; ensure docs/tests cover multi-backend flows. | Add launcher/docs walkthroughs, exercise synthetic + remote backends in CI, and keep OpenAPI examples fresh. |
-| Medium | Human-in-the-loop staging | Backend staging queue exists, yet UI, per-project modes, and evidence review remain planned `docs/guide/human_in_loop.md`. | Build `/state/staging/actions` panel, approvals UI, lease policy toggles, and sidecar notifications. |
-| Medium | Research Watcher | Legacy ingestion feeds still stubbed; launcher Suggested tab is static `docs/guide/research_watcher.md`. | Implement polling worker, CAS-backed storage, read-model patches, and approve/archive endpoints. |
-| Medium | Training Park metrics | Launcher pane is a stub with no dedicated telemetry `docs/guide/training_park.md`. | Publish training read-model, expose adjustments via actions, and bind UI charts. |
+| Medium | Human-in-the-loop staging | Kernel staging queue, approvals, and debug/launcher flows are live (`docs/guide/human_in_loop.md`); next focus is richer evidence previews and posture-driven policies. | Ship sidecar evidence panes, escalation rules, and SLA alerts. |
+| Medium | Research Watcher | Poller, read-model, and approve/archive APIs are live (`docs/guide/research_watcher.md`); feeds can now seed Suggested units. | Layer prioritisation heuristics, richer payload rendering, and cross-install sharing. |
+| Medium | Training Park metrics | Launcher pane remains a stub, but `/state/training/telemetry` + `training_metrics` read-model are live (`docs/guide/training_park.md`). | Extend telemetry coverage, add adjustment actions, and bind UI charts. |
 | Medium | Interactive snappy bench | ✅ `snappy-bench` CLI hits `/actions` + `/events`, enforces budgets, and publishes quick-start docs. | ✅ CI runs `scripts/ci_snappy_bench.sh` (queue budget 500 ms); capture long-term baselines per performance preset. |
 
 ### Legacy Retirement Checklist

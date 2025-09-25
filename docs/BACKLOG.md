@@ -50,7 +50,7 @@ Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143025-0007] Logic Unit: ship config‑only Never‑Out‑Of‑Context defaults (budgets, diversity, rehydrate rules) — todo
 - [Pack: Research] [t-250912143029-0008] UI: Project Hub panel “What’s in context now” with artifact pointers and rehydrate actions — todo
 - [Pack: Research] [t-250912143033-0009] Training Park: dials for diversity/recency/compression; recall‑risk and coverage meters — todo
-- [Pack: Research] [t-250918120201-tp01] Training telemetry read-models in `arw-server` (context/memory/tool success stats) powering Training Park — plan
+- [Pack: Research] [t-250918120201-tp01] Training telemetry read-models in `arw-server` (context/memory/tool success stats) powering Training Park — doing (baseline snapshot live; expanding coverage)
 - [Pack: Research] [t-250918120205-tp02] Launcher Training Park window: replace stub UI with live metrics + control bindings — plan
 - [Pack: Research] Context telemetry guardrails: add CI assertions for `context.recall_risk`/`context.coverage`, capture budgets in docs, and publish a verification checklist — todo
 
@@ -80,16 +80,16 @@ UI Coherence
 - [Pack: Collaboration] Export CSV: route/kind tables — done; table diff export — done (two‑row or wide)
 - [Pack: Collaboration] Next: labels/arrows in annotator; redaction presets (regex+OCR); append Markdown to NOTES.md; Pin‑to‑compare from Runs; retention/tagging for gallery; guided countdown for capture.
  - [Pack: Collaboration] Next: keyboard shortcuts (global) cheatsheet and discoverability; ARIA polish for Agents/Runs actions; skip‑links across pages; unit tests for /projects/file content_b64 path; virtualize large trees.
-- [Pack: Collaboration] [t-250918120301-hitl01] Human-in-the-loop staging queue in `arw-server` with `/state/staging/actions` read-model and leases — plan
-- [Pack: Collaboration] [t-250918120305-hitl02] Sidecar approvals UI: replace placeholder copy with live staging actions + evidence preview — plan
+- [Pack: Collaboration] [t-250918120301-hitl01] Human-in-the-loop staging queue in `arw-server` with `/state/staging/actions` read-model and leases — done (shipped kernel + API; follow-up UX tracked separately)
+- [Pack: Collaboration] [t-250918120305-hitl02] Sidecar approvals UI: replace placeholder copy with live staging actions + evidence preview — todo (evidence/diff pass)
 - [Pack: Collaboration] Feedback loop readiness: validate Heuristic Feedback Engine shadow runs, log deltas, and document sidecar approvals before enabling auto-apply — todo
 - [Pack: Collaboration] Project Hub SSE bridge: consume `state.read.model.patch` (Event Spine) for notes/files/live context in the SPA swap — doing (metadata feed wired)
 
 Kernel & Triad (NOW)
 - [Kernel] [t-250915090001-kern01] Add `arw-kernel` crate with SQLite/WAL schema (events, artifacts, actions) and CAS helpers — done
 - [Kernel] [t-250915090010-kern02] Dual-write bus events to kernel and expose `/triad/events?replay=N` — done
-- [Kernel] [t-250915090020-kern03] Add `/actions` endpoint backed by kernel with idempotency and policy stub — todo
-- [Kernel] [t-250915090030-kern04] Add `/state/*` views sourced from kernel (episodes, route_stats, models) — todo
+- [Kernel] [t-250915090020-kern03] Add `/actions` endpoint backed by kernel with idempotency and policy stub — done (triad queue unified)
+- [Kernel] [t-250915090030-kern04] Add `/state/*` views sourced from kernel (episodes, route_stats, models) — done (read-models shipped; continued polish tracked in metrics section)
 - [Kernel] [t-250915090040-kern05] Migrate JSONL events journal to SQLite (remove old env) — plan
 
 Design System & Tokens
@@ -120,9 +120,9 @@ Logic Units (High Priority)
 - [Pack: Research] Library UI: tabs (Installed/Experimental/Suggested/Archived), diff preview, apply/revert/promote
 - [Pack: Research] Agent Profile slots + compatibility checks (design + stubs)
 - [Pack: Research] A/B dry‑run pipeline wired to Evaluation Harness; per‑unit metrics panel
-- [Pack: Research] [t-250918120101-rw01] Research Watcher ingestion service in `arw-server` (RSS/OpenReview adapters queued to kernel-backed jobs) — plan
-- [Pack: Research] [t-250918120105-rw02] `/state/research_watcher` read-model + `state.read.model.patch` stream for Suggested tab — plan
-- [Pack: Research] [t-250918120109-rw03] Launcher Library integration: surface Suggested units with approve/archive actions wired to new endpoints — plan
+- [Pack: Research] [t-250918120101-rw01] Research Watcher ingestion service in `arw-server` (RSS/OpenReview adapters queued to kernel-backed jobs) — done (phase one JSON feeds)
+- [Pack: Research] [t-250918120105-rw02] `/state/research_watcher` read-model + `state.read.model.patch` stream for Suggested tab — done (launcher + debug consuming live patches)
+- [Pack: Research] [t-250918120109-rw03] Launcher Library integration: surface Suggested units with approve/archive actions wired to new endpoints — doing (polish bulk actions/tags)
 
 Last‑mile Structures
 - [Pack: Research] Config Patch Engine: dry‑run/apply/revert endpoints; schema validation; audited permission widening

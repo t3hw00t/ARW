@@ -6,43 +6,52 @@ title: Research Watcher
 Updated: 2025-09-20
 Type: How‑to
 
-Status: **Planned.** No ingestion service or read-models ship in `arw-server` yet; the Launcher Library still shows static lists.
+Status: **Online ingestion (phase one).** `arw-server` polls configured feeds, seeds candidate Logic Units into the kernel, and serves `/state/research_watcher` snapshots plus approvals/archives through the unified API. Launcher Suggested tabs and the Debug UI consume the same read-model.
 
-This page now tracks the rollout plan for the Research Watcher on the unified server.
+Use this guide to wire the watcher into your deployment and plan upcoming enhancements.
 
-## Objectives
+## Capabilities Today
 
-- Surface candidate Logic Units from curated feeds without executing unknown code.
-- Keep the queue auditable: sources, summaries, and approval history live in the kernel.
-- Feed the Logic Units Library Suggested tab via `state.read.model.patch` so clients stay real-time.
+- **Polling worker** — background task `research_watcher.poller` ingests JSON feeds or local seed files every `ARW_RESEARCH_WATCHER_INTERVAL_SECS` seconds (default 900, floor 300).
+- **Kernel-backed catalog** — each item records `source`, `source_id`, `title`, `summary`, `url`, `status`, and optional payload metadata in CAS.
+- **APIs & surfaces**
+  - `GET /state/research_watcher` for snapshots; add `?status=pending` or `limit=200` as needed.
+  - `state.read.model.patch` (id `research_watcher`) streams incremental updates to the launcher and sidecars.
+  - `POST /research_watcher/{id}/approve|archive` updates status and emits `research_watcher.updated` events.
+  - `/admin/debug` includes approve/archive controls; the launcher Suggested tab renders the same queue.
+- **Event telemetry** — each ingest produces `research_watcher.updated` events with counts; status changes publish item-level updates.
 
-## Implementation Plan (`arw-server`)
+## Configuration
 
-1. **Ingestion jobs** — add an async worker under `arw-server` that polls RSS/JSON feeds (arXiv, OpenReview, ACL, curated blogs) and records candidates as kernel jobs (`t-250918120101-rw01`). Use the existing job scheduler so retries, telemetry, and leases are consistent.
-2. **Normalization pipeline** — map fetched items to a shared schema (title, gist, expected effect, compute profile, source URL). Store payloads in CAS to avoid duplicating blobs.
-3. **Review queue read-model** — publish `/state/research_watcher` snapshots and `state.read.model.patch` deltas (`t-250918120105-rw02`). Reuse `read_models::publish_read_model_patch` for diffing and persistence.
-4. **Approval endpoints** — expose minimal POST endpoints to approve/archive candidates, wiring decisions through the policy/lease system so audit trails land in the kernel.
-5. **Launcher Library integration** — swap the Suggested tab to hit the new read-models and approval endpoints, keeping offline fallbacks (`t-250918120109-rw03`).
+- `ARW_RESEARCH_WATCHER_SEED`: optional local JSON file (`[ {...} ]` or `{ "items": [ ... ] }`) used at startup.
+- `ARW_RESEARCH_WATCHER_FEEDS`: comma-separated HTTP(S) endpoints returning watcher payloads.
+- `ARW_RESEARCH_WATCHER_INTERVAL_SECS`: polling cadence (minimum 300).
 
-## Configure & Observe
+Example seed item:
 
-- Seed suggestions locally with `ARW_RESEARCH_WATCHER_SEED` (path to JSON array) or point at remote feeds via `ARW_RESEARCH_WATCHER_FEEDS` (comma-separated HTTP(S) URLs returning `{ "items": [...] }`).
-- Control polling cadence with `ARW_RESEARCH_WATCHER_INTERVAL_SECS` (defaults to 900 seconds, minimum 300).
-- Inspect the live queue via `GET /state/research_watcher` or subscribe to `state.read.model.patch` with id `research_watcher`.
+```json
+{
+  "source": "arxiv",
+  "source_id": "2409.01234",
+  "title": "Agentic Retrieval Experiments",
+  "summary": "Evaluates cascaded agent pipelines for retrieval-heavy tasks.",
+  "url": "https://arxiv.org/abs/2409.01234"
+}
+```
 
-## Refactor & Optimization Notes
+## Operational Tips
 
-- Share the ingestion job harness with other future watchers (e.g., connector updates) to avoid bespoke schedulers.
-- Lean on the existing CAS helpers for storing paper metadata; dedupe by stable IDs to avoid double-processing.
-- Gate remote fetches behind the egress policy so feeds obey network posture settings.
-- Keep summaries small and pre-computed; the Launcher should not re-render large markdown blobs for every SSE tick.
+- Keep feeds behind the egress proxy and DNS guard; watcher requests inherit the global network posture.
+- Deduplicate via `source` + `source_id`; replays update in place without creating duplicates.
+- Pair approvals with logic-unit promotion flows so the Suggested tab stays synchronized with what you ship.
 
-## Current Stopgap
+## Roadmap
 
-Until the feed lands, populate Suggested units manually via the Library UI or commit sample manifests under `examples/logic-units/`.
+1. **Richer payloads** — convert RSS/HTML sources on ingest, add provenance previews, and store extended metadata for launcher cards (`t-250918120101-rw01`).
+2. **Scoring & prioritisation** — add heuristics (recency, signal, workspace fit) and expose sort toggles in UI (`t-250918120105-rw02`).
+3. **Library integration polish** — finalise Suggested tab UX with bulk actions, tags, and cross-install sharing (`t-250918120109-rw03`).
 
 ## Related Work
 
-- Backlog: `t-250918120101-rw01`, `t-250918120105-rw02`, `t-250918120109-rw03`
 - Architecture: [architecture/logic_units.md](../architecture/logic_units.md)
 - Reference: Logic Units Library (Suggested tab requirements)

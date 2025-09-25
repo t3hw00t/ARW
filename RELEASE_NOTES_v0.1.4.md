@@ -41,7 +41,7 @@ Adds durable request correlation, safer default headers, CSP controls, and riche
 - SSE decoration: `ARW_EVENTS_SSE_DECORATE`
 
 ## Install
-- Docker: `ghcr.io/<owner>/arw-server:v0.1.4`
+- Docker: `ghcr.io/t3hw00t/arw-server:v0.1.4`
 - Helm: use the unified server chart (forthcoming) or mirror the Docker image directly until published.
 - Binaries: build from source with `cargo build --workspace --release`
 

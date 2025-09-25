@@ -106,9 +106,11 @@ Example (truncated for brevity):
     { "method": "GET", "path": "/healthz", "stability": "stable" },
     { "method": "POST", "path": "/actions", "stability": "beta" }
   ],
-  "perf_preset": { "tier": null, "http_max_conc": 1024, "actions_queue_max": 1024 }
+  "perf_preset": { "tier": "balanced", "http_max_conc": 1024, "actions_queue_max": 1024 }
 }
 ```
+
+Preset values adapt to the host; the example above reflects the `balanced` tier (autodetected on mid-range laptops). Low-power hosts default closer to 256, while workstations can scale to 16384.
 
 ## Triad surface
 

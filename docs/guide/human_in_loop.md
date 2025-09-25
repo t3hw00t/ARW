@@ -7,22 +7,44 @@ title: Human‑in‑the‑Loop
 Updated: 2025-09-20
 Type: How‑to
 
-Status: **Planned.** The unified `arw-server` will reintroduce the staging queue; the legacy bridge has been removed. The launcher sidecar shows static copy until the new workflow lands.
+Status: **Available (phase one).** `arw-server` now stages actions when `ARW_ACTION_STAGING_MODE` demands review, backs approvals with the kernel, and exposes live views in `/state/staging/actions` and the Debug UI. Launcher sidecar cards render the same data; richer evidence previews remain on the roadmap.
 
-This page tracks the migration plan for Human-in-the-loop approvals on the new stack.
+This page explains the shipped experience and the remaining roadmap for Human-in-the-loop approvals on the unified stack.
 
-## Implementation Plan (`arw-server` + UI)
+## What’s Live Today
 
-1. **Staging queue** — persist pending actions in the kernel with explicit leases and expirations, and expose a `/state/staging/actions` read-model (`t-250918120301-hitl01`).
-2. **Escalations** — publish `policy.decision` events whenever an action requires review so subscribers (sidecar, CLI) can badge attention.
-3. **Sidecar approvals** — wire the existing sidecar panel to list staged actions with evidence previews and approve/deny calls (`t-250918120305-hitl02`).
-4. **Modes** — implement per-project modes (auto, ask-once, always-review) as policy hints so admins can tune risk appetite per workspace.
+- Kernel persistence: staged actions, approvals, and denials are recorded in SQLite with timestamps, reviewers, and linkage back to the action id.
+- Unified API surface:
+  - `POST /actions` responds with `{ staged: true }` when submissions enter the queue.
+  - `GET /state/staging/actions` enumerates pending and decided entries (`status`, `project`, `requested_by`, `created`).
+  - `POST /staging/actions/{id}/approve|deny` promotes or rejects staged items, emits `staging.decided`, and replays `actions.submitted` for downstream consumers.
+- Live surfaces: `/admin/debug` lists staged items with approve/deny controls; the launcher mirrors the feed and badges attention alongside notifications.
+- Event telemetry: `staging.pending` and `staging.decided` fire through `/events`; policy denials continue to emit `policy.decision` when leases are missing.
+
+## Next Enhancements
+
+1. **Evidence & context lanes** — inline previews, diffs, and artifact links in the sidecar (`t-250918120305-hitl02`).
+2. **Per-project policy hints** — richer `always/ask/auto` presets rooted in project posture, plus escalation rules.
+3. **Queue ergonomics** — dedupe on action cache hashes, paging for long queues, and SLA alerts to keep approvals timely.
+4. **Audit trails** — fold reviewer notes into the contribution ledger view with filters and retention controls.
 
 ## Configure & Observe
 
-- Set `ARW_ACTION_STAGING_MODE` to `auto` (default), `ask`, or `always`. Pair with `ARW_ACTION_STAGING_ALLOW` (CSV list of action kinds) to whitelist low-risk calls when running in ask mode.
-- Use `ARW_ACTION_STAGING_ACTOR` to label who is submitting staged requests; the label is stored with the queue entry.
-- Review the queue via `GET /state/staging/actions` or the `state.read.model.patch` stream (id `staging_actions`). Approve or deny entries with `POST /staging/actions/{id}/approve|deny`.
+- `ARW_ACTION_STAGING_MODE`: `auto` (default, queue only when policies demand), `ask` (queue everything except an allowlist), or `always`.
+- `ARW_ACTION_STAGING_ALLOW`: comma-delimited action kinds that bypass staging when you run in ask mode.
+- `ARW_ACTION_STAGING_ACTOR`: optional label recorded with each staged entry (helpful for multi-seat installs).
+- `GET /state/staging/actions`: returns pending or decided entries; add `?status=pending` and `?limit=500` for focused dashboards.
+- `state.read.model.patch` with id `staging_actions`: feeds sidecars and headless clients with incremental updates.
+- `POST /staging/actions/{id}/approve|deny`: send `{ "decided_by": "name" }` or `{ "reason": "why" }` (JSON body) to approve or deny a queued action.
+
+Example:
+
+```bash
+curl -s -X POST http://127.0.0.1:8091/staging/actions/$ID/approve \
+  -H 'content-type: application/json' \
+  -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+  -d '{"decided_by":"reviewer.cc"}' | jq
+```
 
 ## Evidence & Audit
 

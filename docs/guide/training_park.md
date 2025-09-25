@@ -6,21 +6,22 @@ title: Training Park
 Updated: 2025-09-20
 Type: How‑to
 
-Status: **Prototype (stub).** The launcher window renders controls, but it emits toast placeholders and the service does not publish dedicated Training Park metrics yet.
+Status: **Telemetry live, UI stub.** `arw-server` now exposes `/state/training/telemetry` and a `training_metrics` read-model; the launcher window still renders placeholder controls until we wire the new data through.
 
 The goal remains: a third primary perspective for tuning instincts, memory, and behavior without drowning in raw logs.
 
 ## What Ships Today
 
 - Shared right-sidecar lanes (Timeline, Context, Policy, Metrics, Models) via the general SSE connection.
-- Manual A/B button stub for future experiments.
-- No dedicated `Training.*` or `Policy.*` events yet.
+- `GET /state/training/telemetry` snapshot with route stats, tool success rate, and bus health, plus `state.read.model.patch` id `training_metrics` for live updates.
+- Manual A/B button stub for future experiments (launcher still toast-only until UI work lands).
+- Underlying metrics piggyback on the same collectors powering `/state/route_stats`, so telemetry remains consistent with other dashboards.
 
 ## Implementation Plan (`arw-server` + Launcher)
 
-1. **Emit telemetry** — extend `arw-server` read-model loops to publish training metrics (`t-250918120201-tp01`). Start with context assembly stats, memory coverage, and tool success/failure counts; reuse `publish_read_model_patch` for diffing.
+1. **Expand telemetry** — extend the current read-model with context assembly stats, memory coverage, and retriever diagnostics (`t-250918120201-tp01`).
 2. **Expose controls** — model tunable presets (`ARW_CONTEXT_*`, `ARW_PERF_PRESET`) as structured actions so adjustments flow through `/actions` with policy/lease checks.
-3. **Upgrade UI** — replace the launcher stub with live meters, sparklines, and controls bound to the new read-model + actions (`t-250918120205-tp02`).
+3. **Upgrade UI** — replace the launcher stub with live meters, sparklines, and controls bound to the telemetry + actions (`t-250918120205-tp02`).
 4. **Record sessions** — append adjustments to the kernel so Training runs can promote configs into Logic Units or project hints with provenance.
 
 ## Inspect Telemetry
@@ -37,7 +38,7 @@ The goal remains: a third primary perspective for tuning instincts, memory, and 
 
 ## Safety
 
-- Keep all adjustments lease-gated; risky changes still land in a staging queue once Human-in-the-loop approvals ship.
+- Keep all adjustments lease-gated; risky changes land in the Human-in-the-loop staging queue before execution.
 - Continue surfacing evidence previews when a change would offload work or rewrite policies.
 
 ## Related Work

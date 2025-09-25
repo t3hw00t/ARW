@@ -30,17 +30,17 @@ Centralized reference for ARW environment variables and common flags. Defaults f
 - `ARW_SQLITE_POOL_AUTOTUNE_WAIT_MS`: average wait threshold (in ms) that triggers pool growth (default `50`). Shrink decisions use one quarter of this threshold.
 - `ARW_SPEC_DIR`: base directory for spec artifacts served under `/spec/*` (default: `spec`).
  - `ARW_INTERFACES_DIR`: base directory for the interface catalog served at `/catalog/index` (default: `interfaces`).
-- `ARW_ACTIONS_QUEUE_MAX`: backpressure limit for queued actions (default `1024`). When exceeded, `/actions` returns 429.
+- `ARW_ACTIONS_QUEUE_MAX`: backpressure limit for queued actions. Defaults follow the active performance preset (256 → 16384); explicit exports override the preset.
 - `ARW_ACTION_STAGING_MODE`: staging policy for `/actions` submissions. Options: `auto` (default, queue immediately), `ask` (stage unless action kind appears in `ARW_ACTION_STAGING_ALLOW`), or `always` (stage every action for manual approval).
 - `ARW_ACTION_STAGING_ALLOW`: comma‑delimited list of action kinds that bypass staging when `ARW_ACTION_STAGING_MODE=ask`.
 - `ARW_ACTION_STAGING_ACTOR`: label recorded on staging entries for audit trails (defaults to `local`).
-- `ARW_HTTP_MAX_CONC`: global HTTP concurrency limit (default `1024`) applied via Tower layer. Prevents overload and enforces fairness across routes. SSE `/events` is not limited by timeouts but does count toward concurrency.
+- `ARW_HTTP_MAX_CONC`: global HTTP concurrency limit seeded by the performance preset (256 → 16384). Prevents overload and enforces fairness across routes. SSE `/events` is not limited by timeouts but counts toward concurrency.
 
 ## Performance Presets
 - `ARW_PERF_PRESET`: selects built‑in runtime tuning presets. Options: `eco|balanced|performance|turbo`. When unset, ARW auto‑detects a tier from CPU cores and RAM and seeds sane defaults.
 - `ARW_PERF_PRESET_TIER`: read‑only effective tier after auto‑detection or explicit selection (`eco|balanced|performance|turbo`).
 
-Presets seed defaults for hot‑path tunables if you haven’t set them explicitly:
+Presets seed defaults for hot-path tunables if you haven’t set them explicitly:
 - `ARW_HTTP_MAX_CONC`: HTTP concurrency limit.
 - `ARW_ACTIONS_QUEUE_MAX`: max queued actions before 429.
 - `ARW_CONTEXT_K`: target size of the working set returned by `/context/assemble`.
@@ -58,6 +58,17 @@ Presets seed defaults for hot‑path tunables if you haven’t set them explicit
 - `ARW_RESEARCH_WATCHER_INTERVAL_SECS`: poll interval for Research Watcher feeds (default `900`, minimum `300`).
 - `ARW_CONTEXT_COVERAGE_MAX_ITERS`: maximum iterations allowed for the coverage (CRAG) refinement loop.
 - `ARW_REHYDRATE_FILE_HEAD_KB`: preview bytes for `/context/rehydrate`.
+
+Preset heuristics today:
+
+| Preset | `ARW_HTTP_MAX_CONC` | `ARW_ACTIONS_QUEUE_MAX` |
+| --- | --- | --- |
+| `eco` | 256 | 256 |
+| `balanced` | 1024 | 1024 |
+| `performance` | 4096 | 4096 |
+| `turbo` | 16384 | 16384 |
+
+The tier is auto-detected at startup unless you set `ARW_PERF_PRESET`; values only seed defaults and can be overridden per environment.
 - `ARW_ROUTE_STATS_*`: coalesce/publish cadences for route stats.
 - `ARW_MODELS_METRICS_*`: coalesce/publish cadences for models metrics.
 
