@@ -73,7 +73,7 @@ Implementation touchpoints in the new stack:
   - Implementation: `/context/assemble` offloads hybrid retrieval to blocking workers (for both streaming and synchronous responses) so the async runtime stays responsive; `/context/rehydrate` caps head bytes via `ARW_REHYDRATE_FILE_HEAD_KB`.
 - Egress: proxy/ledger happen off the synchronous path; preview is an action with SSE.
 
-Server modules (in progress)
+Server modules (post-migration snapshot)
 - Router split for maintainability and clarity:
   - Extracted: `api_policy`, `api_events`, `api_context`, `api_actions`, `api_memory`, `api_connectors`, `api_state`, `api_config`, `api_logic_units`, `api_leases`, `api_orchestrator`.
   - Files:
@@ -180,18 +180,18 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
   - APIs: `append_event`, `recent_events`, `insert_action`, `get_action`, `set_action_state`, `find_action_by_idem`, `append_contribution`, `list_contributions`.
   - File: `crates/arw-kernel/src/lib.rs`
 
-- `apps/arw-server` (unified server) — In progress
+- `apps/arw-server` (unified server) — Completed (2025-09-24)
   - `POST /actions`: idempotent queue; emits `actions.submitted`; appends contribution `task.submit`.
   - `GET /actions/:id`: returns action state and metadata.
   - `POST /actions/:id/state`: transitions (queued|running|completed|failed) and emits events.
-  - `GET /events`: live SSE stream (bus); kernel dual‑writes events.
+  - `GET /events`: live SSE stream (bus); kernel dual-writes events.
   - `GET /state/episodes`: groups recent events by `corr_id`.
   - `GET /state/route_stats`: combined bus counters, event kind totals, and per-route latency/hit metrics.
   - `GET /state/contributions`: contribution ledger snapshot.
   - File: `apps/arw-server/src/main.rs`
 
 ### Policy (facade + posture)
-Status: In progress.
+Status: Completed (ongoing refinements flow through the security backlog).
 
 - [x] ABAC facade (`arw-policy` crate) ships with JSON-backed rules, `allow_all`, and `lease_rules`; `/actions` and context rehydrate honor leases. See Guide → Policy (ABAC Facade).
 - [x] Security posture defaults (`ARW_SECURITY_POSTURE=relaxed|standard|strict`) select guard presets when `ARW_POLICY_FILE` is absent; `standard` lease-gates network, fs, rehydrate, apps, browser, models download, and shell access.
@@ -209,7 +209,7 @@ Status: In progress.
 - Legacy feature migration (unified target — completed)
   - ✅ Core services: Model Steward, Tool Forge, Feedback Loop, Experiment Deck, Memory Lanes, Project Hub primitives, Project Map read models, Snappy Governor, and Event Spine patch streaming now run on the unified server.
   - ✅ UI/experience: Chat Workbench, Screenshot Pipeline, Self Card, and forecasts operate through the SPA/right-sidecar flow with live SSE data.
-  - ✅ Policy & safety: Guardrail Gateway and Asimov Capsule Guard enforcement live on `arw-server`, and launcher/SPA surfaces no longer depend on `/admin/*` fallbacks.
+  - ✅ Policy & safety: Guardrail Gateway and Asimov Capsule Guard (alpha) enforcement live on `arw-server`, and launcher/SPA surfaces no longer depend on `/admin/*` fallbacks.
 
 ### Immediate Reintegration Backlog (Release Gate)
 
@@ -239,7 +239,7 @@ All restructure-labelled blockers are currently closed; the gate remains in CI b
 - **Phase D — Operator experience:** Completed — chat workbench routes, screenshot pipeline wiring, and the SPA/right-sidecar migration shipped together; launcher surfaces now rely exclusively on `/state/*` endpoints.
 - Recent: the admin chat endpoints now run through the shared `chat.respond` tool, exercising llama/OpenAI/LiteLLM backends via the unified action pipeline while preserving synthetic fallback for air-gapped installs.
 - Debug UI exposes the new temperature and vote-k controls (wired straight into `chat.respond`), keeping observability inline with Phase D expectations.
-- **Phase E — Safety:** Completed — Guardrail Gateway enforcement and Asimov Capsule Guard coverage now run on `arw-server`, and `/admin/*` fallbacks have been deleted after capsule telemetry held steady.
+- **Phase E — Safety:** Completed — Guardrail Gateway enforcement and Asimov Capsule Guard (alpha) coverage now run on `arw-server`, and `/admin/*` fallbacks have been deleted after capsule telemetry held steady.
 - **Legacy shutdown instrumentation:** Completed — dashboards now track `arw_legacy_capsule_headers_total`; keep it pinned until the counter stays at zero for a sustained window.
 
 | Phase | Focus | Features/Deliverables | Dependencies | Status |
@@ -247,8 +247,8 @@ All restructure-labelled blockers are currently closed; the gate remains in CI b
 | A | Core services | Model Steward (models download/CAS GC ✅), Tool Forge (tool runs/cache metrics ✅), Snappy Governor (route stats view), Event Spine patch streaming | Triad kernel, metrics plumbing | Completed — backend landed in unified server (✅) |
 | B | Memory + projects | Memory Lanes (lane CRUD/save/load), Project Hub primitives (notes/files/patch), Project Map read models (observations/beliefs/intents) | Phase A storage, policy leases | Completed — APIs live; debug UI now targets the unified routes (✅) |
 | C | Feedback & experiments | Feedback Loop surfaces, Experiment Deck APIs, Self Card snapshots | Phase B data wiring | Completed — services emitting; UI polish tracked with Phase D (✅) |
-| D | Operator experience | Chat Workbench, Screenshot Pipeline, launcher shift to SPA/right-sidecar, retire `/admin/*` debug windows | Phase A endpoints, UI unification groundwork | In progress — debug surfaces now ship from `arw-server`; SPA/right-sidecar migration tracked as follow-up (🔄) |
-| E | Safety | Guardrail Gateway on `arw-server`, Asimov Capsule Guard enforcement, final removal of legacy `/admin/*` shims | Policy & egress firewall phase | Planned — partial proxy shipped; firewall + capsules outstanding (⏳) |
+| D | Operator experience | Chat Workbench, Screenshot Pipeline, launcher shift to SPA/right-sidecar, retire `/admin/*` debug windows | Phase A endpoints, UI unification groundwork | Completed — debug surfaces ship from `arw-server`; remaining SPA polish tracked via standard backlog (✅) |
+| E | Safety | Guardrail Gateway on `arw-server`, Asimov Capsule Guard enforcement, final removal of legacy `/admin/*` shims | Policy & egress firewall phase | Completed — guardrail gateway + capsule guard alpha landed; propagation hooks now live in the security backlog (✅) |
 
 Notes
 - Phases can overlap if dependencies are satisfied; track owners and dates in the backlog so the matrix stays current.
@@ -266,7 +266,7 @@ Notes
 | High | gRPC surface | ✅ Feature-gated gRPC listener (health/actions/events) now ships with `arw-server` (see `docs/guide/grpc.md`). | Track follow-up RPC coverage (leases, tools, rich event replay) once consumers signal demand. |
 | High | Guardrail Gateway & capsules | Proxy preview exists; DNS guard and capsule adoption landed, plus live lease snapshots & events. Background refresh loop now renews capsules without relying on request traffic (`apps/arw-server/src/capsule_guard.rs`). | Surface posture presets in UI/CLI and extend network-scope enforcement across connectors/orchestrator consumers. |
 | High | Model Steward resilience | ✅ HEAD preflight + single-flight hash guard restored; `/state/models_metrics` now surfaces inflight hashes and concurrency snapshots. | Track admin UI updates to render new metrics and expose preflight status; monitor ledger previews for multi-tenant downloads. |
-| Medium | Chat Workbench | Debug UI shows chat badge but `/admin/chat*` endpoints were not ported; planner loop runs but API surface is missing `docs/reference/feature_matrix.md`. | Recreate REST handlers (status/send/clear), bind to context loop, add auth, and refresh debug assets + OpenAPI. |
+| Medium | Chat Workbench | ✅ `/admin/chat*` endpoints restored with planner, temperature, and vote-k controls; ensure docs/tests cover multi-backend flows. | Add launcher/docs walkthroughs, exercise synthetic + remote backends in CI, and keep OpenAPI examples fresh. |
 | Medium | Human-in-the-loop staging | Backend staging queue exists, yet UI, per-project modes, and evidence review remain planned `docs/guide/human_in_loop.md`. | Build `/state/staging/actions` panel, approvals UI, lease policy toggles, and sidecar notifications. |
 | Medium | Research Watcher | Legacy ingestion feeds still stubbed; launcher Suggested tab is static `docs/guide/research_watcher.md`. | Implement polling worker, CAS-backed storage, read-model patches, and approve/archive endpoints. |
 | Medium | Training Park metrics | Launcher pane is a stub with no dedicated telemetry `docs/guide/training_park.md`. | Publish training read-model, expose adjustments via actions, and bind UI charts. |

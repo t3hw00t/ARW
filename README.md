@@ -54,7 +54,7 @@ These ship with `arw-server` out of the box and keep working even when you stay 
 - **[Core kernel]** Signed plugins and sandboxed tools by default.
 - **[Opt-in pack]** Install Logic Units with schema checks so you can stage, audit, and roll back higher-risk automation before it touches production projects.
 - **[Remote collaborator pack]** Preview and log every outbound request through the Guardrail Gateway before any data leaves your machine.
-- **[Future pack]** Asimov Capsule Guard will add always-on capsule propagation and lease refresh for remote peers.
+- **[Future pack]** Asimov Capsule Guard (alpha) keeps capsules refreshed across the unified runtime today; additional propagation hooks and remote presets land as they harden.
 
 ## What You Can Do
 

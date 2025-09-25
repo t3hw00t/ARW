@@ -7,7 +7,7 @@ title: Security Hardening
 
 This guide summarizes recommended steps to run ARW more securely beyond the local‑dev defaults.
 
-Updated: 2025-09-22
+Updated: 2025-09-26
 Type: How‑to
 
 Baseline
@@ -33,7 +33,7 @@ Capsules & Trust (RPU)
 - Adoption: pass a verified capsule via `X-ARW-Capsule: <json>` header on admin‑authenticated requests.
 - Legacy `X-ARW-Gate` headers are rejected (410); update any automation that still uses the retired name.
 - Failure telemetry: legacy requests emit `policy.capsule.failed` and `policy.decision` events so monitoring catches rejected capsules.
-- Roadmap: see Architecture → Asimov Capsule Guard for the always-on capsule refresh plan.
+- Alpha: see Architecture → Asimov Capsule Guard for current capsule refresh coverage and backlog roadmap.
 - Env override: `ARW_TRUST_CAPSULES=/path/to/trust_capsules.json`.
 
 Reverse Proxy

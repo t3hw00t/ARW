@@ -4,7 +4,7 @@ title: Debug UI Overview
 
 # Debug UI Overview
 
-Updated: 2025-09-20
+Updated: 2025-09-26
 Type: How‑to
 
 The Debug UI (served by the Tauri Launcher or via `/admin`) is a lightweight control panel for ARW. It exposes a live event stream, useful admin actions, and compact insight panels. This page highlights two high‑leverage areas you’ll likely use often: Context Assembly and Experiments.
@@ -66,22 +66,22 @@ The UI exposes two complementary areas:
 - Use the Assemble overrides to trial formatting/budget changes before baking them into hints or variants.
 - Watch the KPIs while iterating: the best solve rate with a much larger context may not be worth the cost unless justified.
 - The A/B runner executes in batch lanes; keep interactive work fast by scheduling heavy runs off‑peak.
-- Screenshot (placeholder):
+- Screenshot (example):
 
 ![Context Assemble Preview](../images/context_assemble.svg)
 
-- Screenshot (placeholder):
+- Screenshot (example):
 
 ![Experiments Panel](../images/experiments_panel.svg)
 
-- Screenshot (placeholder):
+- Screenshot (example):
 
 ![Experiments Scoreboard](../images/experiments_scoreboard.svg)
 
 
 ## How to Capture Screenshots
 
-You can replace the placeholder images with real screenshots of your environment:
+You can replace the example images with real screenshots of your environment:
 
 1) From the browser (served at `/admin`)
 - Resize the window to a reasonable width (e.g., 1280px) for readability.

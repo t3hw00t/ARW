@@ -108,12 +108,12 @@
       "name": "Asimov Capsule Guard",
       "owner": "platform",
       "category": "Security & Policy",
-      "description": "Planned capsule lifecycle that refreshes reversible denies at runtime boundaries and emits telemetry for active guardrails.",
+      "description": "Alpha capsule lifecycle that refreshes reversible denies at runtime boundaries and emits telemetry for active guardrails.",
       "scope": {
         "surface": "runtime",
         "audience": "operators",
         "layer": "guardrails",
-        "maturity": "plan"
+        "maturity": "alpha"
       },
       "depends": [
         "policy_gating_core",
@@ -127,11 +127,14 @@
         "topics": [
           "policy.capsule.*"
         ],
-        "http": []
+        "http": [
+          "ANY /admin/* (X-ARW-Capsule)"
+        ]
       },
       "notes": [
         "Extends gating capsules with leases so protections renew without restarts.",
-        "Instruments admin middleware, tool execution, and egress to refresh capsules proactively."
+        "Instruments admin middleware, tool execution, and egress to refresh capsules proactively.",
+        "Outstanding backlog: proxy refresh + UX/CLI tooling tracked under Security & Admin → Asimov Capsule Guard."
       ],
       "signals": [],
       "docs": [

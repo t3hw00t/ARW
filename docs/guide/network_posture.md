@@ -4,7 +4,7 @@ title: Network Posture
 
 # Network Posture
 
-Updated: 2025-09-22
+Updated: 2025-09-26
 
 Status: Partial (gateway + posture enforcement implemented)
 Type: How‑to
@@ -20,7 +20,7 @@ The effective posture is resolved from `PATCH /egress/settings` or the correspon
 
 ## Lease Overrides
 - When posture blocks a host or port, the gateway checks `net:*` leases before denying the egress. Granting a lease such as `net:host:internal.example.com` or `net:port:8443` temporarily widens scope.
-- Capsule leases (see Asimov Capsule Guard) can refresh these capabilities automatically once adopted.
+- Capsule leases (Asimov Capsule Guard · alpha) refresh these capabilities automatically once adopted.
 
 ## Leases & Prompts
 - Prompts request a lease (duration + scope) when a tool needs broader access.
