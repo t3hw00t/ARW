@@ -50,7 +50,7 @@ ARW specifics
 
 Quick commands
 - WebView2: `powershell -ExecutionPolicy Bypass -File scripts\webview2.ps1` → `WebView2-Menu`
-- Start (service only): `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -WaitHealth`
+- Start (service only): `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHealth`
 
 Automation
 - Script: `scripts/windows-advanced-gate.ps1` runs SignTool verify, attempts MSI ICE (if tools installed), and surfaces AppVerifier/WACK hints. Set `ARW_STRICT_SIGN_VERIFY=1` to fail unsigned artifacts.

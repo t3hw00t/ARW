@@ -99,6 +99,7 @@ function Start-ServiceOnly {
   if ($AdminToken) { $svcArgs += @('-AdminToken', $AdminToken) }
   if ($UseDist) { $svcArgs += '-UseDist' }
   if ($WaitHealth) { $svcArgs += @('-WaitHealth','-WaitHealthTimeoutSecs', $WaitHealthTimeoutSecs) }
+  $svcArgs += '-ServiceOnly'
   & (Join-Path $PSScriptRoot 'start.ps1') @svcArgs
 }
 

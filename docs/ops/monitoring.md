@@ -86,7 +86,7 @@ Snappy publishes a read-model (`id="snappy"`) that surfaces the worst protected 
 
 Before cutting any legacy traffic, verify in staging:
 
-- **Start scripts**: run `scripts/start.sh` (or `scripts/start.ps1`) and confirm `/state/egress/settings` reports `proxy_enable=true` and `dns_guard_enable=true`. If automation requires these disabled, document the override before pushing to production.
+- **Start scripts**: run `scripts/start.sh` (or `scripts/start.ps1 -ServiceOnly`) and confirm `/state/egress/settings` reports `proxy_enable=true` and `dns_guard_enable=true`. If automation requires these disabled, document the override before pushing to production.
 - **Metrics**: confirm `arw_legacy_capsule_headers_total` stays at zero for at least 24 hours.
 - **Alerts**: ensure the new Prometheus rules fire in staging by temporarily issuing a legacy request (`curl -H 'X-ARW-Gate: {}' ...`), then acknowledge and clean up.
 - **Smoke**: run `scripts/check_legacy_surface.sh` (or hit `/debug` manually) to confirm the legacy alias stays 404; when a server is online the helper also exercises `/admin/debug` and legacy capsule headers.

@@ -20,7 +20,7 @@ Run the unified `arw-server` in the environment that fits your workflow while ke
 ### 1) Native user-mode (recommended)
 - Best access to GPU/NPU backends (DirectML/CUDA/ROCm/CoreML/OpenVINO where available).
 - Install under your user directory (for example `%USERPROFILE%\\arw` or `~/arw`) and enable portable mode in config.
-- Launch with the helper scripts (`scripts/start.ps1` or `scripts/start.sh --service-only --wait-health`).
+- Launch with the helper scripts (`scripts/start.ps1 -ServiceOnly` or `scripts/start.sh --service-only --wait-health`).
 
 ### 2) Windows Sandbox (.wsb)
 - Ephemeral VM that resets on close; useful for evaluation or risky experiments.

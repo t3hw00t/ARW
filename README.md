@@ -125,7 +125,7 @@ The details that make ARW practical in real workflows.
 Windows (headless unified server)
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/setup.ps1
-powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
+powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHealth
 ```
 
 - Windows installer packages ship the launcher with `arw-server` + `arw-cli`. See Windows Install: https://t3hw00t.github.io/ARW/guide/windows_install/ for MSI links and tray behavior.
@@ -190,7 +190,7 @@ scripts/audit.ps1 -Interactive
 - Windows (ARM64): https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-arm64.msi
 - All assets and notes: https://github.com/t3hw00t/ARW/releases
 
-_Note_: MSI bundles ship the launcher together with `arw-server`. Run the unified server directly (`scripts/start.ps1` or `scripts/start.sh --service-only`) for headless installs; the debug panels are served by `arw-server` when `ARW_DEBUG=1`.
+_Note_: MSI bundles ship the launcher together with `arw-server`. Run the unified server directly (`scripts/start.ps1 -ServiceOnly` or `scripts/start.sh --service-only`) for headless installs; the debug panels are served by `arw-server` when `ARW_DEBUG=1`.
 
 ## Architecture at a Glance
 

@@ -40,7 +40,7 @@ The new `arw-server` binary is headless-first. It streams events and state over 
 === "Windows"
 ```powershell
 # Headless server (8091 by default)
-powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -WaitHealth
+powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHealth
 ```
 
 === "Linux / macOS"

@@ -42,7 +42,7 @@ Type: Reference
 
 ### 3. Start the unified server (headless)
 - Pick `3) Start service only`.
-- The menu sets `ARW_NO_LAUNCHER=1`, `ARW_PID_FILE=./.arw/run/arw-server.pid`, and `ARW_LOG_FILE=./.arw/logs/arw-server.out.log` before invoking `scripts/start.ps1`.
+- The menu sets `ARW_NO_LAUNCHER=1`, `ARW_PID_FILE=./.arw/run/arw-server.pid`, and `ARW_LOG_FILE=./.arw/logs/arw-server.out.log` before invoking `scripts/start.ps1 -ServiceOnly`.
 - Expected CLI output from `start.ps1`:
   - `[start] Launching ... arw-server.exe ... (headless env or unified server)`
   - `[start] Health OK after … → http://127.0.0.1:8091/healthz`
@@ -58,21 +58,21 @@ Type: Reference
 ### 5. HTTP smoke tests on port 8091
 - `Test-NetConnection -ComputerName 127.0.0.1 -Port 8091` should report `TcpTestSucceeded : True`.
 - Use `Invoke-RestMethod` for JSON endpoints (PowerShell 5 requires `-UseBasicParsing`):
-  - `Invoke-RestMethod http://127.0.0.1:8091/actions`
-  - `Invoke-RestMethod http://127.0.0.1:8091/state`
+  - `Invoke-RestMethod http://127.0.0.1:8091/about`
+  - `Invoke-RestMethod http://127.0.0.1:8091/state/actions`
 - Stream a short event sample (Ctrl+C after seeing output):
-  - `curl --max-time 5 http://127.0.0.1:8091/events?tail=1`
-- Expect HTTP 200 responses. `/actions` and `/state` return JSON payloads; `/events` should emit at least one NDJSON/SSE line.
+  - `curl --max-time 5 http://127.0.0.1:8091/events?replay=1`
+- Expect HTTP 200 responses. `/about` and `/state/actions` return JSON payloads; `/events` should emit at least one NDJSON/SSE line (ensure `ARW_DEBUG=1` or send the admin token when required).
 
 ### 6. Shutdown cleanup
 - From the menu choose `9) Stop service (/shutdown)`.
 - Confirm `Get-Process -Name arw-server` fails and `.\.arw\run\arw-server.pid` no longer matches a running process.
 
 ## CLI toggles and packaging checks
-- **Hidden window regression**: `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -HideWindow -WaitHealth`. Expect no console window flashes and `[start] Health OK … → http://127.0.0.1:8091/healthz`.
-- **Dist bundle**: package with `powershell -ExecutionPolicy Bypass -File scripts\package.ps1`, then run `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -UseDist -WaitHealth`. Confirm it launches `dist\arw-...\bin\arw-server.exe`.
-- **NoBuild guard**: temporarily rename `target\release\arw-server.exe`, run `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -NoBuild`, and expect `Service binary not found and -NoBuild specified`.
-- **WaitHealth timeout**: `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -WaitHealth -WaitHealthTimeoutSecs 20` should report success when the server is reachable, or warn if it times out.
+- **Hidden window regression**: `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -HideWindow -WaitHealth`. Expect no console window flashes and `[start] Health OK … → http://127.0.0.1:8091/healthz`.
+- **Dist bundle**: package with `powershell -ExecutionPolicy Bypass -File scripts\package.ps1`, then run `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -UseDist -WaitHealth`. Confirm it launches `dist\arw-...\bin\arw-server.exe`.
+- **NoBuild guard**: temporarily rename `target\release\arw-server.exe`, run `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -NoBuild`, and expect `Service binary not found and -NoBuild specified`.
+- **WaitHealth timeout**: `powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHealth -WaitHealthTimeoutSecs 20` should report success when the server is reachable, or warn if it times out.
 
 ## Preferences file
 - In the menu select `13) Save preferences`.

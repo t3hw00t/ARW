@@ -18,7 +18,7 @@ Requirements
 Quickstart (developer path)
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
-powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -WaitHealth
+powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHealth
 ```
 - The start script launches the service in the background and, if present, the desktop launcher.
 - If the launcher isn’t built yet, the script attempts a `cargo build -p arw-launcher`.
@@ -35,7 +35,7 @@ Select “Install Evergreen Runtime”. This is required for the launcher on Win
 Portable bundle (no Rust required)
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\package.ps1
-powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -UseDist -WaitHealth
+powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -UseDist -WaitHealth
 ```
 This creates `dist/arw-<version>-windows-<arch>.zip` with:
 - `bin/` — `arw-server.exe`, `arw-cli.exe`, optional `arw-launcher.exe`

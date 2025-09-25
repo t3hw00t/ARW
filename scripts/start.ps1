@@ -11,10 +11,17 @@ param(
   [switch]$WaitHealth,
   [int]$WaitHealthTimeoutSecs = 30,
   [switch]$DryRun,
-  [switch]$HideWindow
+  [switch]$HideWindow,
+  [switch]$ServiceOnly,
+  [switch]$LauncherOnly
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
+
+if ($ServiceOnly -and $LauncherOnly) {
+  Write-Error '-ServiceOnly and -LauncherOnly cannot be combined.'
+  exit 1
+}
 
 # Compatibility: PowerShell 5 vs 7 for Invoke-WebRequest
 $script:IwrArgs = @{}
@@ -65,7 +72,40 @@ $launcher = if ($UseDist) {
   if ($zipBase) { Join-Path $zipBase.FullName (Join-Path 'bin' $launcherExe) } else { $null }
 } else { Join-Path (Join-Path $root 'target\release') $launcherExe }
 
-if (-not $svc -or -not (Test-Path $svc)) {
+$startService = $true
+$startLauncher = $true
+if ($ServiceOnly) {
+  $startLauncher = $false
+  if (-not $DryRun) {
+    $env:ARW_NO_LAUNCHER = '1'
+    $env:ARW_NO_TRAY = '1'
+  } else {
+    Dry 'Would set ARW_NO_LAUNCHER=1 (service only)'
+    Dry 'Would set ARW_NO_TRAY=1 (service only)'
+  }
+} elseif ($LauncherOnly) {
+  $startService = $false
+  if (-not $DryRun) {
+    $env:ARW_NO_LAUNCHER = '0'
+    $env:ARW_NO_TRAY = '0'
+  } else {
+    Dry 'Would set ARW_NO_LAUNCHER=0 (launcher only)'
+    Dry 'Would set ARW_NO_TRAY=0 (launcher only)'
+  }
+} elseif (($env:ARW_NO_LAUNCHER -and $env:ARW_NO_LAUNCHER -eq '1') -or ($env:ARW_NO_TRAY -and $env:ARW_NO_TRAY -eq '1')) {
+  $startLauncher = $false
+}
+
+if (-not $startService -and -not $startLauncher) {
+  Info 'Nothing to launch (launcher disabled and service suppressed).'
+  exit 0
+}
+
+if (-not $startService -and $WaitHealth) {
+  Write-Warning '-WaitHealth requested but service launch disabled; skipping health probe.'
+}
+
+if ($startService -and (-not $svc -or -not (Test-Path $svc))) {
   if ($DryRun) {
     Write-Warning "Service binary not found ($svc). [dryrun] would build release (arw-server)."
     $svc = Join-Path (Join-Path $root 'target\release') $exe
@@ -89,7 +129,7 @@ if (-not $svc -or -not (Test-Path $svc)) {
   }
 }
 
-if (-not $launcher -or -not (Test-Path $launcher)) {
+if ($startLauncher -and (-not $launcher -or -not (Test-Path $launcher))) {
   if ($DryRun) {
     Write-Warning "Launcher binary not found ($launcher). [dryrun] would attempt build (arw-launcher)."
   } elseif (-not $NoBuild) {
@@ -110,10 +150,7 @@ if (-not $launcher -or -not (Test-Path $launcher)) {
   $launcher = Join-Path (Join-Path $root 'target\release') $launcherExe
 }
 
-# Respect ARW_NO_LAUNCHER/ARW_NO_TRAY=1 for CLI-only environments
-$skipLauncher = $false
-if (($env:ARW_NO_LAUNCHER -and $env:ARW_NO_LAUNCHER -eq '1') -or ($env:ARW_NO_TRAY -and $env:ARW_NO_TRAY -eq '1')) { $skipLauncher = $true }
-
+# Helper utilities
 function Ensure-ParentDir($path) {
   try {
     $dir = [System.IO.Path]::GetDirectoryName($path)
@@ -137,59 +174,73 @@ function Wait-For-Health($port, $timeoutSecs) {
   if ($ok) { Info ("Health OK after " + $attempts + " checks → $base/healthz") } else { Write-Warning ("Health not reachable within $timeoutSecs seconds → $base/healthz") }
 }
 
-if (-not $skipLauncher -and (Test-Path $launcher)) {
-  Info "Launching $svc on http://127.0.0.1:$Port"
+function Start-ServiceBinary([string]$message) {
+  Info $message
   if ($DryRun) {
     Dry ("Would start: $svc (cwd=$root, windowStyle=$($windowStyle.ToString()))")
     if ($env:ARW_LOG_FILE) { Dry ("Would redirect output to $env:ARW_LOG_FILE") }
     if ($env:ARW_PID_FILE) { Dry ("Would write PID file to $env:ARW_PID_FILE") }
     if ($WaitHealth) { Dry ("Would wait for health at /healthz (timeout ${WaitHealthTimeoutSecs}s)") }
+    return
+  }
+
+  $startArgs = @{ FilePath = $svc; WorkingDirectory = $root; PassThru = $true }
+  if ($env:ARW_LOG_FILE) {
+    Ensure-ParentDir $env:ARW_LOG_FILE
+    $startArgs.WindowStyle = $windowStyle
+    $startArgs.RedirectStandardOutput = $env:ARW_LOG_FILE
+    $startArgs.RedirectStandardError = $env:ARW_LOG_FILE
+  } elseif ($HideWindow) {
+    $startArgs.WindowStyle = $windowStyle
+  } else {
+    $startArgs.NoNewWindow = $true
+  }
+
+  $p = Start-Process @startArgs
+
+  if ($env:ARW_PID_FILE) {
+    Ensure-ParentDir $env:ARW_PID_FILE
+    try { $p.Id | Out-File -FilePath $env:ARW_PID_FILE -Encoding ascii -Force } catch {}
+  }
+
+  if ($WaitHealth) { Wait-For-Health -port $Port -timeoutSecs $WaitHealthTimeoutSecs }
+}
+
+function Start-LauncherBinary {
+  Info "Launching launcher $launcher"
+  if ($DryRun) {
     Dry ("Would launch launcher: $launcher")
-  } else {
-    if ($env:ARW_LOG_FILE) {
-      Ensure-ParentDir $env:ARW_LOG_FILE
-      $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle $windowStyle -RedirectStandardOutput $env:ARW_LOG_FILE -RedirectStandardError $env:ARW_LOG_FILE -PassThru
-    } else {
-      $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle $windowStyle -PassThru
-    }
-    if ($env:ARW_PID_FILE) {
-      Ensure-ParentDir $env:ARW_PID_FILE
-      try { $p.Id | Out-File -FilePath $env:ARW_PID_FILE -Encoding ascii -Force } catch {}
-    }
-    if ($WaitHealth) { Wait-For-Health -port $Port -timeoutSecs $WaitHealthTimeoutSecs }
-    if (-not $script:HasWebView2) {
-      Write-Warning "WebView2 Runtime not detected; the launcher may prompt to install it. You can install it now via: powershell -ExecutionPolicy Bypass -File scripts/webview2.ps1"
-    }
-    Info "Launching launcher $launcher"
-    # Hint the launcher to auto-start the service if not already running
+    return
+  }
+  if (-not $script:HasWebView2) {
+    Write-Warning "WebView2 Runtime not detected; the launcher may prompt to install it. You can install it now via: powershell -ExecutionPolicy Bypass -File scripts/webview2.ps1"
+  }
+  if (-not $LauncherOnly) {
     try { $env:ARW_AUTOSTART = '1' } catch {}
-    & $launcher
   }
-} else {
-  $msg = if ($skipLauncher) { '(headless env or unified server)' } else { '(launcher not found)' }
-  Info "Launching $svc on http://127.0.0.1:$Port $msg"
-  if ($DryRun) {
-    Dry ("Would start: $svc (cwd=$root, windowStyle=$($windowStyle.ToString()))")
-    if ($env:ARW_LOG_FILE) { Dry ("Would redirect output to $env:ARW_LOG_FILE") }
-    if ($env:ARW_PID_FILE) { Dry ("Would write PID file to $env:ARW_PID_FILE") }
-    if ($WaitHealth) { Dry ("Would wait for health at /healthz (timeout ${WaitHealthTimeoutSecs}s)") }
-  } else {
-    if ($env:ARW_PID_FILE) {
-      if ($env:ARW_LOG_FILE) {
-        Ensure-ParentDir $env:ARW_LOG_FILE
-        $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle $windowStyle -RedirectStandardOutput $env:ARW_LOG_FILE -RedirectStandardError $env:ARW_LOG_FILE -PassThru
-      } else {
-        $p = Start-Process -FilePath $svc -WorkingDirectory $root -WindowStyle $windowStyle -PassThru
-      }
-      Ensure-ParentDir $env:ARW_PID_FILE
-      try { $p.Id | Out-File -FilePath $env:ARW_PID_FILE -Encoding ascii -Force } catch {}
-      if ($WaitHealth) { Wait-For-Health -port $Port -timeoutSecs $WaitHealthTimeoutSecs }
-    } else {
-      if ($env:ARW_LOG_FILE) {
-        & $svc *> $env:ARW_LOG_FILE
-      } else {
-        & $svc
-      }
-    }
+  & $launcher
+}
+
+if ($startLauncher -and -not (Test-Path $launcher)) {
+  if ($LauncherOnly) {
+    Write-Error "Launcher binary not found ($launcher). Build it first or rerun without -LauncherOnly."
+    exit 1
   }
+  Write-Warning "Launcher binary not found ($launcher); falling back to service only."
+  $startLauncher = $false
+}
+
+if ($startService) {
+  if (-not (Test-Path $svc)) {
+    Write-Error "Service binary not found ($svc). Build it first or rerun without -ServiceOnly."
+    exit 1
+  }
+  $context = if ($startLauncher) { "Launching $svc on http://127.0.0.1:$Port" } else { "Launching $svc on http://127.0.0.1:$Port (service only)" }
+  Start-ServiceBinary $context
+}
+
+if ($startLauncher) {
+  Start-LauncherBinary
+} elseif (-not $startService) {
+  Info 'Launcher requested suppression of service; exiting.'
 }

@@ -20,7 +20,7 @@ Port already in use
 - Fix: pick another port.
   - Windows
     ```powershell
-    $env:ARW_PORT=8091; powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -WaitHealth
+    $env:ARW_PORT=8091; powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHealth
     ```
   - Linux / macOS
     ```bash
