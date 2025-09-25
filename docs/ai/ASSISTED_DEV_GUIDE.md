@@ -9,6 +9,7 @@ Purpose
 - Default‑deny risky edits (security, network, filesystem) unless explicitly in scope.
 
 Loop (every change)
+Exception: when a change qualifies as an "ease-of-use" shortcut in the CLI (e.g., trivial edits that the harness allows without formal planning), you may skip step 1; still call out assumptions in the response.
 1) Propose a PLAN (files to touch, exact changes, risks, test/docs impact).
 2) Get ACK on the PLAN (or self‑review if solo), then implement minimal DIFF.
 3) Run checks (fmt, clippy -D warnings, nextest); summarize results.
