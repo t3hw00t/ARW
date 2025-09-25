@@ -50,11 +50,16 @@ ic_emit_token() { # $1=token [$2=label]
   ic_log_dir_rel ".arw"
   if [[ -t 1 ]]; then
     ic_info "Generated ${label}: ${token}"
+    ic_warn "Store this ${label} securely; remove it from history if copied."
   else
-    local file="$root/.arw/last_${label// /_}.txt"
+    local safe_label
+    safe_label=$(printf '%s' "$label" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9._-]/_/g')
+    local file="$root/.arw/last_${safe_label}.txt"
+    rm -f "$file" 2>/dev/null || true
     umask 077
     printf '%s\n' "$token" >"$file"
     ic_info "Generated ${label} stored at $file"
+    ic_warn "Delete this file after recording the ${label}."
   fi
 }
 

@@ -205,7 +205,8 @@ security_preflight() {
     echo "   4) Cancel start"
     read -r -p "Select [1/2/3]: " s; s=${s:-1}
     case "$s" in
-      1) ADMIN_TOKEN=$(ic_rand_token); export ARW_ADMIN_TOKEN="$ADMIN_TOKEN"; ic_info "Token set for this session.";
+      1) ADMIN_TOKEN=$(ic_generate_token); export ARW_ADMIN_TOKEN="$ADMIN_TOKEN"; ic_emit_token "$ADMIN_TOKEN" "admin token";
+         ic_warn "Store this token securely.";
          read -r -p "Persist token to .arw/env.sh? (Y/n): " sv; [[ "${sv,,}" != n* ]] && ic_env_save; return 0;;
       2) DEBUG=0; unset ARW_DEBUG; return 0;;
       3) return 0;;

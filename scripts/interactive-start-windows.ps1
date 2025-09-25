@@ -43,11 +43,14 @@ function Show-GeneratedToken {
   New-Item -ItemType Directory -Force $dir | Out-Null
   if (-not [Console]::IsOutputRedirected) {
     Info ("Generated $Label: $Token")
+    Warn 'Store this value securely; remove it from scrollback if copied.'
   } else {
-    $fileLabel = ($Label -replace '\s+', '_')
+    $fileLabel = ($Label.ToLower() -replace '[^a-z0-9._-]', '_')
     $path = Join-Path $dir ("last_$fileLabel.txt")
+    if (Test-Path $path) { Remove-Item -Force $path }
     $Token | Set-Content -Path $path -Encoding utf8
     Info ("Generated $Label stored at $path")
+    Warn 'Delete this file after saving the value securely.'
   }
 }
 
@@ -466,7 +469,14 @@ function Security-Preflight {
     Write-Host '  3) Cancel start'
     $s = Read-Host 'Select [1/2/3]'; if (-not $s) { $s = '1' }
     switch ($s) {
-      '1' { $tok = [Guid]::NewGuid().ToString('N'); $env:ARW_ADMIN_TOKEN = $tok; $script:AdminToken = $tok; Info 'Token set for this session.'; return $true }
+      '1' {
+        $tok = New-AdminToken
+        $env:ARW_ADMIN_TOKEN = $tok
+        $script:AdminToken = $tok
+        Show-GeneratedToken -Token $tok -Label 'admin token'
+        Warn 'Store this token securely.'
+        return $true
+      }
       '2' { return $true }
       default { return $false }
     }

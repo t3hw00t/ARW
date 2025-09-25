@@ -118,6 +118,7 @@ pub struct AdoptOutcome {
 pub struct ReplayOutcome {
     pub expired: Vec<CapsuleSnapshot>,
     pub changed: bool,
+    pub reapplied: Vec<CapsuleSnapshot>,
 }
 
 impl CapsuleStore {
@@ -233,7 +234,11 @@ impl CapsuleStore {
         drop(guard);
 
         if apply.is_empty() {
-            return ReplayOutcome { expired, changed };
+            return ReplayOutcome {
+                expired,
+                changed,
+                reapplied: Vec::new(),
+            };
         }
 
         let mut leases: HashMap<String, CapsuleLeaseState> = HashMap::new();
@@ -243,6 +248,7 @@ impl CapsuleStore {
         }
 
         let mut guard = self.inner.lock().await;
+        let mut reapplied: Vec<CapsuleSnapshot> = Vec::with_capacity(apply.len());
         for (id, _) in apply.into_iter() {
             if let Some(entry) = guard.get_mut(&id) {
                 if let Some(lease) = leases.get(&id) {
@@ -252,10 +258,15 @@ impl CapsuleStore {
                     entry.lease_until_ms = lease.lease_until_ms;
                     entry.renew_within_ms = lease.renew_within_ms;
                     entry.last_event_ms = now;
+                    reapplied.push(entry.snapshot.clone());
                 }
             }
         }
-        ReplayOutcome { expired, changed }
+        ReplayOutcome {
+            expired,
+            changed,
+            reapplied,
+        }
     }
 }
 
@@ -280,6 +291,25 @@ pub async fn refresh_capsules(state: &AppState) -> ReplayOutcome {
     if replay.changed {
         let snapshot = state.capsules().snapshot().await;
         read_models::publish_read_model_patch(&state.bus(), "policy_capsules", &snapshot);
+    }
+    if !replay.reapplied.is_empty() {
+        for snapshot in &replay.reapplied {
+            state.bus().publish(
+                TOPIC_POLICY_CAPSULE_APPLIED,
+                &json!({
+                    "id": snapshot.id,
+                    "version": snapshot.version,
+                    "issuer": snapshot.issuer,
+                    "applied_ms": snapshot.applied_ms,
+                    "hop_ttl": snapshot.hop_ttl,
+                    "denies": snapshot.denies,
+                    "contracts": snapshot.contracts,
+                    "lease_until_ms": snapshot.lease_until_ms,
+                    "renew_within_ms": snapshot.renew_within_ms,
+                    "renewal": true,
+                }),
+            );
+        }
     }
     replay
 }
@@ -653,6 +683,7 @@ mod tests {
         let replay = store.replay_all().await;
         assert!(replay.changed);
         assert!(replay.expired.is_empty());
+        assert_eq!(replay.reapplied.len(), 1);
 
         let snapshot = store.snapshot().await;
         let items = snapshot["items"].as_array().expect("items array");
@@ -666,7 +697,13 @@ mod tests {
         let state = build_state(temp.path()).await;
 
         let bus = state.bus();
-        let mut rx = bus.subscribe_filtered(vec![TOPIC_READMODEL_PATCH.to_string()], Some(8));
+        let mut rx = bus.subscribe_filtered(
+            vec![
+                TOPIC_POLICY_CAPSULE_APPLIED.to_string(),
+                TOPIC_READMODEL_PATCH.to_string(),
+            ],
+            Some(8),
+        );
 
         let capsule = capsule_with_hops("refresh-test", 3);
         state.capsules().adopt(&capsule, now_ms()).await;
@@ -674,6 +711,15 @@ mod tests {
         let replay = refresh_capsules(&state).await;
         assert!(replay.changed);
         assert!(replay.expired.is_empty());
+        assert_eq!(replay.reapplied.len(), 1);
+
+        let applied = timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("applied event available")
+            .expect("bus open");
+        assert_eq!(applied.kind, TOPIC_POLICY_CAPSULE_APPLIED);
+        assert_eq!(applied.payload["id"].as_str(), Some("refresh-test"));
+        assert_eq!(applied.payload["renewal"].as_bool(), Some(true));
 
         let event = timeout(Duration::from_secs(1), rx.recv())
             .await

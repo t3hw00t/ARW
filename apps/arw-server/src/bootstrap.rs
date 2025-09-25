@@ -340,20 +340,47 @@ fn spawn_trust_store_watcher(state: AppState) -> TaskHandle {
     TaskHandle::new(
         "trust.watcher",
         tokio::spawn(async move {
-            use std::time::Duration;
+            use std::io::ErrorKind;
+            use std::time::{Duration, SystemTime};
 
             let path = std::env::var("ARW_TRUST_CAPSULES")
                 .ok()
                 .unwrap_or_else(|| "configs/trust_capsules.json".to_string());
-            let mut last_mtime: Option<std::time::SystemTime> = None;
+            let mut last_mtime: Option<SystemTime> = None;
+            let mut last_present: Option<bool> = None;
 
             loop {
                 let mut changed = false;
-                if let Ok(metadata) = std::fs::metadata(&path) {
-                    if let Ok(modified) = metadata.modified() {
-                        if last_mtime.map(|t| t < modified).unwrap_or(true) {
-                            last_mtime = Some(modified);
+                match tokio::fs::metadata(&path).await {
+                    Ok(metadata) => {
+                        let modified = metadata.modified().ok();
+                        let saw_file_before = matches!(last_present, Some(true));
+                        if !saw_file_before {
                             changed = true;
+                        } else if let (Some(prev), Some(current)) = (last_mtime, modified) {
+                            if current > prev {
+                                changed = true;
+                            }
+                        } else if modified.is_some() && last_mtime.is_none() {
+                            changed = true;
+                        }
+                        last_present = Some(true);
+                        last_mtime = modified;
+                    }
+                    Err(err) => {
+                        if err.kind() == ErrorKind::NotFound {
+                            if last_present != Some(false) {
+                                changed = true;
+                                last_present = Some(false);
+                                last_mtime = None;
+                            }
+                        } else {
+                            tracing::warn!(
+                                target: "arw::policy",
+                                path = %path,
+                                error = %err,
+                                "trust watcher metadata probe failed",
+                            );
                         }
                     }
                 }
@@ -365,6 +392,7 @@ fn spawn_trust_store_watcher(state: AppState) -> TaskHandle {
                         "count": count,
                         "path": path,
                         "ts_ms": arw_core::rpu::trust_last_reload_ms(),
+                        "exists": matches!(last_present, Some(true)),
                     });
                     bus.publish(arw_topics::TOPIC_RPU_TRUST_CHANGED, &payload);
                 }

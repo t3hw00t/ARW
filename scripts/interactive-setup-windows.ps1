@@ -43,11 +43,14 @@ function Show-GeneratedToken {
   New-Item -ItemType Directory -Force $dir | Out-Null
   if (-not [Console]::IsOutputRedirected) {
     Info ("Generated $Label: $Token")
+    Warn 'Store this value securely; remove it from scrollback if copied.'
   } else {
-    $fileLabel = ($Label -replace '\s+', '_')
+    $fileLabel = ($Label.ToLower() -replace '[^a-z0-9._-]', '_')
     $path = Join-Path $dir ("last_$fileLabel.txt")
+    if (Test-Path $path) { Remove-Item -Force $path }
     $Token | Set-Content -Path $path -Encoding utf8
     Info ("Generated $Label stored at $path")
+    Warn 'Delete this file after saving the value securely.'
   }
 }
 
