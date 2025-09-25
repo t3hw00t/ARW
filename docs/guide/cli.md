@@ -33,9 +33,8 @@ Specs
 - Index: `curl http://127.0.0.1:8091/spec/index.json | jq` — lists available spec artifacts and JSON schemas
 
 Events (SSE)
-- Tail live events from the service with optional replay and prefix filters:
-  - `arw-cli events tail --base http://127.0.0.1:8091 --replay 10 --prefix models. --prefix feedback.`
-  - Add `--json-only` to print only the JSON payloads.
+- Tail live events with `curl -N "http://127.0.0.1:8091/events?replay=10&prefix=models."`
+- When `ARW_ADMIN_TOKEN` is set, include `-H "Authorization: Bearer $ARW_ADMIN_TOKEN"`.
 
 Gating Keys
 - List all known keys used by `#[arw_gate]` and policy:

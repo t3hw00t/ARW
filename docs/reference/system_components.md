@@ -22,7 +22,7 @@ This page is generated from [interfaces/system_components.json](https://github.c
 | Capability & Consent Ledger | — | Governance | runtime / operators / governance / plan | platform | — | [architecture/capability_consent_ledger.md](../architecture/capability_consent_ledger.md) |
 | Compliance Mode | — | Governance | workspace / operators / governance / plan | platform | — | [architecture/compliance_mode.md](../architecture/compliance_mode.md) |
 | Config Plane & Patch Engine | [Config Plane](feature_matrix.md#config-plane)<br /><small>Core kernel</small> | Configuration | Core kernel / admin / operators / configuration / plan | platform | GET /state/config<br />GET /state/config/snapshots<br />GET /state/config/snapshots/:id<br />…<br />config.patch.applied<br />logic.unit.reverted | [architecture/config_patch_engine.md](../architecture/config_patch_engine.md)<br />[configs/schema_map.json](https://github.com/t3hw00t/ARW/blob/main/configs/schema_map.json) |
-| Context Working Set | [Working Set Builder](feature_matrix.md#working-set-builder)<br /><small>Core kernel</small> | Runtime | Core kernel / runtime / developers / context / plan | platform | GET /context/assemble<br />GET /admin/context/assemble<br />POST /context/rehydrate<br />…<br />working_set.started<br />working_set.seed<br />… | [architecture/context_working_set.md](../architecture/context_working_set.md) |
+| Context Working Set | [Working Set Builder](feature_matrix.md#working-set-builder)<br /><small>Core kernel</small> | Runtime | Core kernel / runtime / developers / context / plan | platform | POST /context/assemble<br />POST /context/rehydrate<br />…<br />working_set.started<br />working_set.seed<br />… | [architecture/context_working_set.md](../architecture/context_working_set.md) |
 | Data Governance & Privacy | — | Governance | workspace / operators / governance / plan | platform | — | [architecture/data_governance.md](../architecture/data_governance.md) |
 | Durability & Offline Resilience | — | Runtime | runtime / operators / infrastructure / plan | platform | — | [architecture/durability.md](../architecture/durability.md) |
 | Egress Firewall & Ledger | [Egress Sentinel](feature_matrix.md#egress-sentinel)<br /><small>Core kernel</small> | Security & Policy | Core kernel / runtime / operators / guardrails / plan | platform | POST /egress/preview<br />POST /egress/settings<br />GET /state/egress<br />…<br />egress.ledger.appended<br />egress.settings.updated | [architecture/egress_firewall.md](../architecture/egress_firewall.md)<br />[guide/network_posture.md](../guide/network_posture.md) |
@@ -310,10 +310,8 @@ Layered retrieval pipeline that assembles working, episodic, semantic, procedura
   - `working_set.iteration.summary`
   - `working_set.error`
 - HTTP:
-  - `GET /context/assemble`
-  - `GET /admin/context/assemble`
+  - `POST /context/assemble`
   - `POST /context/rehydrate`
-  - `/admin/context/assemble`
 - Environment:
   - `ARW_CONTEXT_LANES_DEFAULT`
   - `ARW_CONTEXT_K`

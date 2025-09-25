@@ -2081,24 +2081,37 @@ async function worldMapRefresh(){
 }
 async function contextAssemble(){
   try {
-    const q = encodeURIComponent(document.getElementById('worldQ').value||'');
-    const k = encodeURIComponent(document.getElementById('worldK').value||'8');
-    let url = base + '/admin/context/assemble?q=' + q + '&k=' + k;
-    // Apply per-call overrides when toggled (reuses hints inputs)
-    try{
-      const on = !!document.getElementById('asmOverride')?.checked;
-      if (on){
-        const fmt=document.getElementById('hintCtxFmt')?.value||''; if(fmt) url += '&context_format=' + encodeURIComponent(fmt);
-        const prov=document.getElementById('hintProv')?.checked; if(prov) url += '&include_provenance=true';
-        const cb=document.getElementById('hintCtxBudget')?.value||''; if(cb) url += '&context_budget_tokens=' + encodeURIComponent(cb);
-        const pi=document.getElementById('hintCtxPer')?.value||''; if(pi) url += '&context_item_budget_tokens=' + encodeURIComponent(pi);
-        const hdr=document.getElementById('hintCtxHeader')?.value||''; if(hdr) url += '&context_header=' + encodeURIComponent(hdr);
-        const ftr=document.getElementById('hintCtxFooter')?.value||''; if(ftr) url += '&context_footer=' + encodeURIComponent(ftr);
-        const tpl=document.getElementById('hintCtxTpl')?.value||''; if(tpl) url += '&context_item_template=' + encodeURIComponent(tpl);
-        const jn=document.getElementById('hintJoiner')?.value||''; if(jn) url += '&joiner=' + encodeURIComponent(jn);
+    const rawQ = (document.getElementById('worldQ')?.value || '').trim();
+    const rawLimit = document.getElementById('worldK')?.value || '8';
+    const payload = { debug: true };
+    if (rawQ) payload.q = rawQ;
+    const limitNum = parseInt(rawLimit, 10);
+    if (!Number.isNaN(limitNum) && limitNum > 0) {
+      payload.limit = limitNum;
+    }
+    if (document.getElementById('hintProv')?.checked) {
+      payload.include_sources = true;
+    }
+    if (document.getElementById('asmOverride')?.checked) {
+      payload.include_sources = true;
+    }
+    const headers = { 'Content-Type': 'application/json' };
+    if (__adminHeader) {
+      headers['X-ARW-Admin'] = __adminHeader;
+    }
+    const r = await fetch(base + '/context/assemble', {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) {
+      showToast(`context assemble failed (${r.status})`);
+      const errText = await r.text().catch(() => '');
+      if (errText) {
+        document.getElementById('stateOut').textContent = errText;
       }
-    }catch{}
-    const r = await fetch(url, { headers: { 'X-ARW-Admin': __adminHeader || '' } });
+      return;
+    }
     const j = await r.json();
     const data = j?.data || j;
     document.getElementById('stateOut').textContent = JSON.stringify(data,null,2);

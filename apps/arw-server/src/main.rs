@@ -156,6 +156,7 @@ mod http_tests {
     use tower::util::ServiceExt;
 
     async fn build_state(dir: &Path) -> AppState {
+        std::env::set_var("ARW_DEBUG", "1");
         std::env::set_var("ARW_STATE_DIR", dir.display().to_string());
         let bus = arw_events::Bus::new_with_replay(64, 64);
         let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
@@ -475,7 +476,25 @@ mod http_tests {
     }
 }
 
+fn env_truthy(key: &str) -> bool {
+    std::env::var(key)
+        .ok()
+        .map(|v| {
+            let trimmed = v.trim();
+            matches!(
+                trimmed.to_ascii_lowercase().as_str(),
+                "1" | "true" | "yes" | "on" | "debug"
+            )
+        })
+        .unwrap_or(false)
+}
+
 pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
+    // Debug mode opens admin surfaces for local development convenience.
+    if env_truthy("ARW_DEBUG") {
+        return true;
+    }
+
     // When ARW_ADMIN_TOKEN or ARW_ADMIN_TOKEN_SHA256 is set, require it in Authorization: Bearer or X-ARW-Admin
     let token_plain = std::env::var("ARW_ADMIN_TOKEN")
         .ok()
@@ -484,7 +503,7 @@ pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
         .ok()
         .filter(|t| !t.is_empty());
     if token_plain.is_none() && token_hash.is_none() {
-        return true;
+        return false;
     }
     // Extract presented token
     let mut presented: Option<String> = None;

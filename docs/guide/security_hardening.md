@@ -12,7 +12,7 @@ Type: How‑to
 
 Baseline
 - Bind: the service binds to `127.0.0.1` by default. Keep it private or put it behind a reverse proxy.
-- Admin endpoints: set an admin token and require it on sensitive routes.
+- Admin endpoints: set an admin token and require it on sensitive routes (the unified server now rejects admin requests unless `ARW_DEBUG=1` or a valid token is presented).
   - Env: `ARW_ADMIN_TOKEN=your-secret`
   - Header: `X-ARW-Admin: your-secret`
 - Events & State: when `ARW_ADMIN_TOKEN` is set, `/events` and sensitive `/state/*` endpoints require the token. Keep these behind auth and a reverse proxy if exposed.

@@ -313,10 +313,8 @@
       ],
       "interfaces": {
         "http": [
-          "GET /context/assemble",
-          "GET /admin/context/assemble",
-          "POST /context/rehydrate",
-          "/admin/context/assemble"
+          "POST /context/assemble",
+          "POST /context/rehydrate"
         ],
         "env": [
           "ARW_CONTEXT_K",

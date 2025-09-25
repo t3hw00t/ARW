@@ -1237,12 +1237,8 @@
       ],
       "http": [
         {
-          "method": "GET",
+          "method": "POST",
           "path": "/context/assemble"
-        },
-        {
-          "method": "GET",
-          "path": "/admin/context/assemble"
         },
         {
           "method": "POST",

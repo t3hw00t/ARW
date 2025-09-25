@@ -74,13 +74,11 @@ Additionally, the evaluator tracks average context footprint after packing:
 
 ## Apply Winners
 
-Activation copies the variant knobs into live hints so `/admin/context/assemble` and chat use them immediately. This covers retrieval K, MMR lambda, compression, vote‑k, strict budgets, and formatting.
+Activation copies the variant knobs into live hints so `POST /context/assemble` (and chat) use them immediately. This covers retrieval K, MMR lambda, compression, vote‑k, strict budgets, and formatting.
 
 ## Live Context Overrides & Preview
 
-`GET /admin/context/assemble` returns structured context and a `context_preview` string. You can provide per‑call overrides (non‑persistent) via query params:
-
-`context_format`, `include_provenance`, `context_item_template`, `context_header`, `context_footer`, `joiner`, `context_budget_tokens`, `context_item_budget_tokens`.
+`POST /context/assemble` returns structured context and a `context_preview` string. Supply overrides in the JSON body (`{"q":"demo","limit":12,"slot_budgets":{"evidence":8}}`), and set `debug:true` to capture iteration diagnostics.
 
 `aux.context` reports packing metrics: tokens/items before→after, budget, per‑item cap, and retrieval/λ.
 

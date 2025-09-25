@@ -370,6 +370,7 @@ mod tests {
     use tokio::time::{sleep, timeout};
 
     async fn build_state(dir: &Path) -> AppState {
+        std::env::set_var("ARW_DEBUG", "1");
         std::env::set_var("ARW_STATE_DIR", dir.display().to_string());
         let bus = Bus::new_with_replay(64, 64);
         let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");

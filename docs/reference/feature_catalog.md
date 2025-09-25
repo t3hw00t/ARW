@@ -26,7 +26,7 @@ _Spin up projects with live state, context-on-demand, and predictable response t
 
 - **Working Set Builder** · backend / builder / intelligence / beta
   Hybrid retrieval with coverage loops, streaming diagnostics, and on-demand rehydrate for just-in-time context (stable pointers include `memory` ids and `file` heads).
-  _Routes_: `GET /context/assemble`, `GET /admin/context/assemble`, `POST /context/rehydrate`
+  _Routes_: `POST /context/assemble`, `POST /context/rehydrate`
   _Signals_: `working_set.started`, `working_set.seed`, `working_set.expanded`, `working_set.expand_query`, `working_set.selected`, `working_set.completed`, `working_set.iteration.summary`, `working_set.error`
   _Env_: `ARW_CONTEXT_LANES_DEFAULT`, `ARW_CONTEXT_K`, `ARW_CONTEXT_EXPAND_PER_SEED`, `ARW_CONTEXT_DIVERSITY_LAMBDA`, `ARW_CONTEXT_MIN_SCORE`, `ARW_CONTEXT_LANE_BONUS`, `ARW_CONTEXT_EXPAND_QUERY`, `ARW_CONTEXT_EXPAND_QUERY_TOP_K`, …
   _Source_: [apps/arw-server/src/api/context.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/context.rs), [apps/arw-server/src/working_set.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/working_set.rs), [apps/arw-server/src/coverage.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/coverage.rs)

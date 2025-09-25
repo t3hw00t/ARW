@@ -19,22 +19,16 @@ The Debug UI (served by the Tauri Launcher or via `/admin`) is a lightweight con
 
 ## Context Assembly
 
-- Button: Assemble → calls `GET /admin/context/assemble?q=...&k=...`.
-- Returns a structured payload with `beliefs`, `recent` (intents/actions/files), and `policy/model`.
-- Preview: A rendered `context_preview` shows the formatted evidence block that downstream recipes will see.
-- KPIs: a small row displays the effective retrieval K and MMR λ (diversity), compression aggressiveness, and a tokens/items summary for the evidence.
+- Button: Assemble → issues `POST /context/assemble` with a JSON body (`{"q":"...","limit":8,"debug":true}` by default).
+- The response includes the assembled working-set (`working_set.items`), diagnostic summaries, `context_preview`, and the spec that produced the result.
+- Toggle **overrides** to request a richer payload (enables `include_sources`); provenance and slot diagnostics stay visible even when hints are unchanged.
+- KPIs: the panel summarises the effective retrieval K, λ, compression, token budgets, and drop counts so you can gauge coverage at a glance.
 
-### Overrides (non‑persistent)
+### Hints vs. quick tweaks
 
-Toggle “overrides” to apply per‑call settings without changing hints:
-
-- `context_format` (bullets|jsonl|inline|custom)
-- `include_provenance`
-- `context_item_template` (for format=custom)
-- `context_header`, `context_footer`, `joiner`
-- `context_budget_tokens`, `context_item_budget_tokens`
-
-These map to query parameters accepted by `/admin/context/assemble`. The returned `aux.context` includes packing metrics: tokens/items before→after, budget, and per‑item cap.
+- Use the **Governor Hints** form (right column) to persist retrieval/formatting knobs via `/admin/governor/hints`.
+- The Assemble overrides are now read-only helpers: they enrich the preview without mutating live hints, so you can inspect seeds and diagnostics safely.
+- For per-call experiments, combine `POST /context/assemble` with payload fields such as `lanes`, `slot_budgets`, or `max_iterations`. The sample palette links copy ready-to-edit `curl` commands with the current project/query.
 
 ## Experiments (A/B)
 

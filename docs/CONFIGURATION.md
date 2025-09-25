@@ -67,7 +67,7 @@ Notes
 - Build profiles already offer `release` vs `maxperf` for build‑time tuning; presets target runtime behavior.
 
 ## Admin & Security
-- `ARW_ADMIN_TOKEN`: required token for admin endpoints; when set, also required for `/events` and sensitive `/state/*` endpoints.
+- `ARW_ADMIN_TOKEN`: required token for admin endpoints; when set, also required for `/events` and sensitive `/state/*` endpoints. If no token is configured, set `ARW_DEBUG=1` for local access—otherwise admin routes return `401`.
 - `ARW_ADMIN_TOKEN_SHA256`: hex‑encoded SHA‑256 of the admin token. Prefer this in environments where passing plaintext envs is undesirable. When both are set, either value is accepted.
  - `ARW_TOOLS_CACHE_TTL_SECS`: Action Cache TTL (seconds; default 600).
  - `ARW_TOOLS_CACHE_CAP`: Action Cache max entries (default 2048).
@@ -76,7 +76,7 @@ Notes
  - `ARW_MODELS_METRICS_COALESCE_MS`: coalesce window for models metrics patches (default 250ms; min 10ms).
  - `ARW_MODELS_METRICS_PUBLISH_MS`: idle publish cadence for models metrics (default 2000ms; min 200ms).
 - `ARW_ADMIN_RL`: admin rate limit as `limit/window_secs` (default `60/60`).
-- `ARW_DEBUG`: `1` enables local debug mode; do not use in production.
+- `ARW_DEBUG`: `1` enables local debug mode; do not use in production. When unset, admin routes require a valid `ARW_ADMIN_TOKEN` header.
 - `ARW_REFERRER_POLICY`: referrer policy header value (default `no-referrer`).
 - `ARW_HSTS`: `1` to enable `Strict-Transport-Security` header (only when served behind HTTPS).
  - `ARW_SECURITY_POSTURE`: posture preset `relaxed|standard|strict`. If no `ARW_POLICY_FILE` is provided, ARW derives a default policy from this. Default is `standard`.

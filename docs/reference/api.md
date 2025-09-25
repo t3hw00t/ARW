@@ -11,7 +11,7 @@ Microsummary: Public endpoints, admin surfaces, specs, and eventing. Stable/expe
   - Alias: `GET /spec/openapi.gen.yaml` (same as `/spec/openapi.yaml`)
 - Catalog: `GET /catalog/index` (YAML) and `GET /catalog/health` (JSON)
 - `/state/*`: read-models for actions, contributions, episodes, leases, egress, policy, models, and self snapshots.
-- Auth: Local-only by default; for admin endpoints set `ARW_ADMIN_TOKEN` and send `Authorization: Bearer <token>` or `X-ARW-Admin`.
+- Auth: Local-only by default; for admin endpoints set `ARW_ADMIN_TOKEN` and send `Authorization: Bearer <token>` or `X-ARW-Admin`. Without a token, enable `ARW_DEBUG=1` (development only) or the server returns `401` for `/admin/*`, `/state/*`, and `/events` requests.
 
 ## Endpoint overview
 

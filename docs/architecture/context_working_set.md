@@ -74,7 +74,7 @@ Why this works
 
 Implementation notes (ARW)
 - Memory layers: existing lanes (`ephemeral`/`episodic`/`semantic`/`procedural`) in `MemoryService` will enforce per‑lane caps/TTL and emit `Memory.*` hygiene events.
-- Context API: extend `/admin/context/assemble` to accept slot budgets, diversity knobs, and to return pointers (stable IDs) for all included items.
+- Context API: extend `POST /context/assemble` to accept slot budgets, diversity knobs, and to return pointers (stable IDs) for all included items.
 - API snapshot now includes `slot_budgets` and per-slot counts/budgets inside `working_set.summary.slots`, enabling coverage checks (e.g., flagging `slot_underfilled:instructions`).
 - Retrieval: add MMR‑style selector over vector/graph mounts and the world belief graph.
 - Compression: background job to summarize episodes and roll up entities; write summaries to mounts with provenance.

@@ -565,8 +565,7 @@ Hybrid retrieval with coverage loops, streaming diagnostics, and on-demand rehyd
   - [apps/arw-server/src/working_set.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/working_set.rs)
   - [apps/arw-server/src/coverage.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/coverage.rs)
 - HTTP:
-  - `GET /context/assemble`
-  - `GET /admin/context/assemble`
+  - `POST /context/assemble`
   - `POST /context/rehydrate`
 - Events:
   - `working_set.started`

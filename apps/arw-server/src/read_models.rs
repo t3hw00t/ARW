@@ -725,6 +725,7 @@ mod tests {
     }
 
     async fn build_state(path: &std::path::Path) -> AppState {
+        std::env::set_var("ARW_DEBUG", "1");
         std::env::set_var("ARW_STATE_DIR", path.display().to_string());
         let bus = arw_events::Bus::new_with_replay(32, 32);
         let kernel = arw_kernel::Kernel::open(path).expect("init kernel");

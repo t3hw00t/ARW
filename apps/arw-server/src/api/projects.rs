@@ -748,17 +748,16 @@ fn validate_rel_path(rel: &str) -> Option<std::path::PathBuf> {
         matches!(
             c,
             std::path::Component::ParentDir | std::path::Component::RootDir
-        )
-            || {
-                #[cfg(windows)]
-                {
-                    matches!(c, std::path::Component::Prefix(_))
-                }
-                #[cfg(not(windows))]
-                {
-                    false
-                }
+        ) || {
+            #[cfg(windows)]
+            {
+                matches!(c, std::path::Component::Prefix(_))
             }
+            #[cfg(not(windows))]
+            {
+                false
+            }
+        }
     }) {
         return None;
     }
