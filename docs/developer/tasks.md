@@ -62,7 +62,7 @@ Updated: 2025-09-25 09:14 UTC
     - 2025-09-14 23:17:01 UTC: Added /admin/rpu/trust and /admin/rpu/reload endpoints; gating keys rpu:trust:get and rpu:trust:reload; will add file watch next.
   - 2025-09-17 20:44:00 UTC: Unified server now exposes /admin/rpu/trust and /admin/rpu/reload (admin token required) and watches ARW_TRUST_CAPSULES for changes, emitting rpu.trust.changed. Verification supports ed25519 and secp256k1 with ABAC check.
 - [t-250911230308-0779] Orchestrator: configurable lease, nack delay, and max in-flight — done (updated: 2025-09-17 20:29:00 UTC)
-    - 2025-09-17 20:29:00 UTC: LocalQueue supports configurable lease TTL (ARW_ORCH_LEASE_MS). Worker honors ARW_ORCH_NACK_DELAY_MS and ARW_ORCH_MAX_INFLIGHT for retry delay and concurrency.
+    - 2025-09-17 20:29:00 UTC: LocalQueue gained knobs for lease TTL, retry delay, and concurrency. The unified server now auto-tunes these values; the historic `ARW_ORCH_*` env hints are retired.
 - [t-250914223250-ui11] Route SLO selector — done (updated: 2025-09-17 20:19:01 UTC)
     - 2025-09-17 20:19:01 UTC: SLO input present in logs/events (launcher) and header badge in debug UI; SLO persisted in prefs (sloP95) and used for p95 highlighting.
 - [t-250914223240-ui10] Export CSV: logs/table diffs — done (updated: 2025-09-17 20:19:01 UTC)
@@ -196,4 +196,3 @@ Updated: 2025-09-25 09:14 UTC
 - [t-250909170247-6008] Start service and verify /about — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
-

@@ -141,22 +141,15 @@ Config discovery (CWD‑independent)
 - `ARW_BUDGET_DOWNLOAD_SOFT_MS`: soft budget window in ms (0 = unbounded).
 - `ARW_BUDGET_DOWNLOAD_HARD_MS`: hard budget window in ms (0 = unbounded). When elapsed time reaches this window the unified server aborts the download and emits `models.download.progress` with `status:"error"` and `code:"hard-budget"`.
 - `ARW_BUDGET_SOFT_DEGRADE_PCT`: percentage of soft budget used before a “degraded” status is emitted (default `80`).
-- `ARW_DL_MIN_MBPS`: minimum expected throughput used for admission checks when total size is known (default `2.0`).
 - `ARW_DL_SEND_RETRIES`: HTTP request retries for initial send before failing (default `2`).
 - `ARW_DL_STREAM_RETRIES`: stream read retries (resume with Range) before failing (default `2`).
 - `ARW_DL_IDLE_TIMEOUT_SECS`: idle fallback timeout when no hard budget is set (default `300`; set `0` to disable).
 - `ARW_DL_RETRY_BACKOFF_MS`: base backoff (in milliseconds) between retry attempts (default `500`; applied linearly per attempt).
-- `ARW_DL_EWMA_ALPHA`: smoothing factor for throughput EWMA used in admission decisions (default `0.3`).
 - `ARW_DL_PREFLIGHT`: when `1`, perform a HEAD preflight to capture `Content-Length` and resume validators (ETag/Last-Modified). Enables early enforcement of `ARW_MODELS_MAX_MB` and `ARW_MODELS_QUOTA_MB` before starting the transfer. Default `1` (set to `0` to disable).
 - `ARW_DL_PROGRESS_INCLUDE_BUDGET`: when `1`, include a `budget` snapshot (soft/hard ms, elapsed, remaining, state) in unified `models.download.progress` events.
 - `ARW_DL_PROGRESS_INCLUDE_DISK`: when `1`, include a `disk` snapshot `{reserve,available,need}` (bytes) in unified `models.download.progress` events.
-- `ARW_DL_PROGRESS_VALIDATE`: when `1`, validate progress `status`/`code` against the known vocabulary and log warnings for unknown values (helps catch drift).
- 
-HTTP client (downloads)
-- `ARW_DL_HTTP_KEEPALIVE_SECS`: TCP keepalive seconds for the download client pool (default `60`; `0` = unset/OS default).
-- `ARW_DL_HTTP_POOL_IDLE_SECS`: idle timeout seconds for pooled connections (default `90`; `0` = unset/disable explicit idle timeout).
-- `ARW_DL_HTTP_POOL_MAX_IDLE_PER_HOST`: max idle connections per host (default `8`, min `1`).
-The enhanced downloader path is always enabled; the legacy `ARW_DL_NEW` flag has been removed to reduce maintenance overhead.
+
+_Forward-looking knobs (not yet wired):_ `ARW_DL_MIN_MBPS`, `ARW_DL_EWMA_ALPHA`, `ARW_DL_PROGRESS_VALIDATE`, `ARW_DL_HTTP_KEEPALIVE_SECS`, `ARW_DL_HTTP_POOL_IDLE_SECS`, and `ARW_DL_HTTP_POOL_MAX_IDLE_PER_HOST` are reserved for upcoming downloader tuning. They are documented here to keep configuration names stable, but the current server ignores them.
 
 ### Interactive Performance Budgets & Streaming
 
@@ -189,14 +182,16 @@ SSE contract: see `architecture/sse_patch_contract.md` for `Last-Event-ID` and J
 ## Hardware Probes & Metrics
 - `ARW_ROCM_SMI`: `1` enables ROCm SMI enrichment for AMD GPU metrics on Linux (best‑effort).
 - `ARW_DXCORE_NPU`: `1` enables DXCore probe for NPUs on Windows when built with `npu_dxcore` feature.
-- `ARW_METRICS_INTERVAL_SECS`: background SSE `probe.metrics` interval seconds (default `10`, min `2`).
+
+_Planned:_ `ARW_METRICS_INTERVAL_SECS` will expose the `probe.metrics` interval once metrics streaming moves out of the debug surfaces.
 
 ## CORS, Headers & Networking
-- `ARW_CORS_ANY`: `1` to relax CORS during development only.
 - `ARW_CSP_AUTO`: `1` to auto‑inject a CSP for `text/html` responses (default `1`).
 - `ARW_CSP_PRESET`: CSP preset `relaxed|strict` (default `relaxed`).
 - `ARW_CSP`: explicit CSP policy string; set to `off`/`0` to disable.
 - `ARW_TRUST_FORWARD_HEADERS`: `1` to trust `X-Forwarded-For`/`Forwarded` (access log client IP) when behind a trusted proxy.
+
+_Planned:_ `ARW_CORS_ANY` returns once we finish the hardened CORS story for the debug UI and launcher windows. For now CORS remains strict.
 
 ### Access Logs (stdout)
 - `ARW_ACCESS_LOG`: `1` to enable JSON access logs to stdout.
@@ -212,8 +207,11 @@ These options control the policy‑backed egress gateway; some are implemented a
 - `ARW_EGRESS_BLOCK_IP_LITERALS`: `1` to disallow IP‑literal hosts (require named hosts) for built‑in effectors. (implemented for `http.fetch`)
 - `ARW_DNS_GUARD_ENABLE`: `1` to guard DNS egress (default: `1`): proxy blocks DoH/DoT (`dns.google`, `cloudflare-dns.com`, port `853`), `/dns-query` paths, and `application/dns-message` payloads. Headless tools route via the proxy when enabled.
 - `ARW_DISABLE_HTTP3`: `1` to disable HTTP/3 for headless scrapers, ensuring proxy enforcement.
-- `ARW_EGRESS_LEDGER`: path to append‑only egress ledger (default `state://egress.jsonl`).
 - `ARW_EGRESS_LEDGER_ENABLE`: `1` to append entries to the egress ledger (opt‑in). (implemented)
+
+_Deprecated:_ `ARW_EGRESS_LEDGER` previously pointed to an external JSONL path; ledger entries now live in the kernel and the variable is ignored.
+
+_Deprecated:_ `ARW_EGRESS_LEDGER` used to point at an external JSONL file. The unified server now stores the ledger in the kernel; leave the variable unset.
 
 ### Security Posture & Mitigations (Planned)
 - `ARW_SECURITY_POSTURE`: per‑project preset `relaxed|standard|strict`.
@@ -223,6 +221,8 @@ These options control the policy‑backed egress gateway; some are implemented a
 - `ARW_ARCHIVE_MAX_BYTES`: max total uncompressed bytes per extraction (default `512 MiB`).
 - `ARW_DNS_RATE_LIMIT`: max DNS QPS per tool/process (default tuned for local dev).
 - `ARW_GPU_ZERO_ON_RELEASE`: `1` to zero VRAM/workspace buffers between jobs when supported.
+
+These posture toggles remain in backlog until the sandboxing work solidifies; the current builds ignore them.
 
 ## Launcher & CLI
 - `ARW_NO_LAUNCHER`: `1` to skip launching the desktop launcher when starting the service.

@@ -51,8 +51,7 @@ Manage local models with safe HTTP download, resume, checksum verification, CAS 
   - `ARW_MODELS_MAX_CONC`
   - `ARW_MODELS_MAX_CONC_HARD`
   - `ARW_MODELS_QUOTA_MB`
-  - `ARW_DL_EWMA_ALPHA`
-  - `ARW_DL_MIN_MBPS`
+  - _Reserved_: `ARW_DL_MIN_MBPS`, `ARW_DL_EWMA_ALPHA`
 - References:
   - [architecture/artifacts_provenance.md](../architecture/artifacts_provenance.md)
 
@@ -78,9 +77,7 @@ Unified in-process bus + SSE stream; maintains compact read-models and publishes
   - `snappy`
 - Events:
   - `state.read.model.patch`
-- Env:
-  - `ARW_BUS_CAP`
-  - `ARW_BUS_REPLAY`
+- Env: auto-sized (no overrides)
 - References:
   - [architecture/sse_patch_contract.md](../architecture/sse_patch_contract.md)
 

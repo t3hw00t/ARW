@@ -54,7 +54,7 @@ _Keep loops under budget with shared event vocabulary and debugging surfaces._
   Unified in-process bus + SSE stream; maintains compact read-models and publishes JSON Patch deltas for low-latency UIs.
   _Routes_: `GET /events`
   _Signals_: `state.read.model.patch`
-  _Env_: `ARW_BUS_CAP`, `ARW_BUS_REPLAY`
+  _Env_: auto-tuned bus; capacity and replay depth scale internally (no env overrides).
   _Source_: [apps/arw-server/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/main.rs), [apps/arw-server/src/api/events.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/events.rs), [apps/arw-server/src/read_models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/read_models.rs), …
   _References_: [architecture/sse_patch_contract.md](../architecture/sse_patch_contract.md)
 
@@ -172,7 +172,8 @@ _Ship safe defaults, audit runtime tweaks, and keep specs in sync._
   Manage local models with safe HTTP download, resume, checksum verification, CAS storage, quotas, live progress, metrics, and concurrency controls.
   _Routes_: `GET /admin/models/summary`, `POST /admin/models/download`, `POST /admin/models/download/cancel`, `POST /admin/models/cas_gc`, `GET /admin/models/concurrency`, `POST /admin/models/concurrency`, `GET /admin/models/jobs`, `GET /state/models_metrics`, `GET /state/models_hashes`, `GET /state/models`
   _Signals_: `models.download.progress`, `models.changed`, `models.manifest.written`, `models.cas.gc`, `models.refreshed`, `state.read.model.patch`
-  _Env_: `ARW_MODELS_MAX_MB`, `ARW_MODELS_DISK_RESERVE_MB`, `ARW_MODELS_MAX_CONC`, `ARW_MODELS_MAX_CONC_HARD`, `ARW_MODELS_QUOTA_MB`, `ARW_DL_EWMA_ALPHA`, `ARW_DL_MIN_MBPS`
+  _Env_: `ARW_MODELS_MAX_MB`, `ARW_MODELS_DISK_RESERVE_MB`, `ARW_MODELS_MAX_CONC`, `ARW_MODELS_MAX_CONC_HARD`, `ARW_MODELS_QUOTA_MB`
+  _Forward-looking_: downloader knobs such as `ARW_DL_MIN_MBPS` and `ARW_DL_EWMA_ALPHA` are reserved for the next admission-control pass.
   _Source_: [apps/arw-server/src/models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/models.rs), [apps/arw-server/src/api/models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/models.rs), [apps/arw-server/src/util.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/util.rs), …
   _References_: [architecture/artifacts_provenance.md](../architecture/artifacts_provenance.md)
 

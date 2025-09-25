@@ -167,4 +167,4 @@ docker run --rm -p 8091:8091 \
 
 - Read the [Restructure Handbook](../RESTRUCTURE.md) for the canonical roadmap.
 - Explore [Context Recipes](context_recipes.md) and [Performance Presets](performance_presets.md) to tune retrieval speed and coverage.
-- Run `cargo run -p arw-server` during development for hot reloads and tracing; `ARW_OTEL_EXPORT=stdout` prints spans locally.
+- Run `cargo run -p arw-server` during development for hot reloads and tracing; set `ARW_OTEL=1` to exercise the upcoming OTLP pipeline (currently falls back to standard tracing with a warning).

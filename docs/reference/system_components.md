@@ -133,8 +133,7 @@ Tracks artifacts as typed nodes with provenance edges tying inputs, policies, an
   - `ARW_MODELS_MAX_CONC`
   - `ARW_MODELS_MAX_CONC_HARD`
   - `ARW_MODELS_QUOTA_MB`
-  - `ARW_DL_EWMA_ALPHA`
-  - `ARW_DL_MIN_MBPS`
+  - _Reserved_: `ARW_DL_MIN_MBPS`, `ARW_DL_EWMA_ALPHA`
 - Topics:
   - `models.download.progress`
   - `models.changed`
@@ -641,9 +640,7 @@ Defines the incremental streaming protocol that delivers RFC 6902 patches over
   - `state.read.model.patch`
 - HTTP:
   - `GET /events`
-- Environment:
-  - `ARW_BUS_CAP`
-  - `ARW_BUS_REPLAY`
+- Environment: auto-sized (no env overrides)
 - Query:
   - `?replay=`
   - `Last-Event-ID`

@@ -39,7 +39,7 @@ Capsules & Trust (RPU)
 Reverse Proxy
 - Terminate TLS and IP-restrict at your proxy (Nginx, Caddy, Traefik) and forward to `127.0.0.1:8091` (unified server). Enable `ARW_DEBUG=1` only when you explicitly need `/admin/debug`.
 - Set `ARW_DOCS_URL=https://your-domain/docs` so the debug UI can link to your public docs.
-- Keep CORS strict; only enable `ARW_CORS_ANY=1` in development.
+- Keep CORS strict; the future `ARW_CORS_ANY` override remains disabled until the hardened CORS profile lands.
 
 Nginx example
 ```

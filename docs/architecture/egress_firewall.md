@@ -80,7 +80,7 @@ These flags control posture and gateway behavior. Some are implemented (noted), 
 - `ARW_EGRESS_PROXY_PORT`: listen port (default 9080)
 - `ARW_EGRESS_BLOCK_IP_LITERALS`: `1` to require named hosts (implemented for built‑in http.fetch)
 - `ARW_DNS_GUARD_ENABLE`: `1` to enforce local resolver for tools
-- `ARW_EGRESS_LEDGER`: path or `state://egress.jsonl`
+- _Deprecated:_ `ARW_EGRESS_LEDGER` previously pointed at an external JSONL path. The unified server now stores ledger entries in the kernel; leave this unset.
 - `ARW_DISABLE_HTTP3`: `1` for headless scrapers to force H1/H2 via proxy
 - `ARW_EGRESS_LEDGER_ENABLE`: `1` to append entries to the egress ledger (implemented)
 

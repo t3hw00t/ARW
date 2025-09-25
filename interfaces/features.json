@@ -90,9 +90,7 @@
         "ARW_MODELS_DISK_RESERVE_MB",
         "ARW_MODELS_MAX_CONC",
         "ARW_MODELS_MAX_CONC_HARD",
-        "ARW_MODELS_QUOTA_MB",
-        "ARW_DL_EWMA_ALPHA",
-        "ARW_DL_MIN_MBPS"
+        "ARW_MODELS_QUOTA_MB"
       ],
       "docs": [
         {
@@ -143,10 +141,7 @@
       "topics": [
         "state.read.model.patch"
       ],
-      "env": [
-        "ARW_BUS_CAP",
-        "ARW_BUS_REPLAY"
-      ],
+      "env": [],
       "docs": [
         {
           "path": "docs/architecture/sse_patch_contract.md"

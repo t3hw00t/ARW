@@ -11,7 +11,7 @@ Type: Reference
 ## Surface
 - Bind: loopback only (127.0.0.1) by default.
 - Sensitive endpoints: gated by `ARW_DEBUG=1` or `X-ARW-Admin` header matching `ARW_ADMIN_TOKEN`.
-- CORS: permissive only if `ARW_DEBUG=1` or `ARW_CORS_ANY=1`; otherwise restrictive.
+- CORS: remains restrictive; `ARW_CORS_ANY` is reserved for a future dev override once the hardened policy ships.
 
 ## Sensitive Endpoints
 - `/admin/debug`, `/admin/probe*`, `/admin/memory*`, `/admin/models*`, `/admin/governor*`, `/admin/introspect*`, `/admin/chat*`, `/admin/feedback*`, `/events`, `/admin/shutdown`.
