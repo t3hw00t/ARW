@@ -98,6 +98,13 @@ nav:
       - Trial Runbook: ops/trial_runbook.md
       - Participant Quickstart: ops/trial_quickstart.md
       - Facilitator Checklist: ops/trial_facilitator_checklist.md
+      - Trial Dossier:
+          - Overview: ops/trials/README.md
+          - Daily Log Template: ops/trials/daily_log_template.md
+          - Stand-up Template: ops/trials/standup_template.md
+          - Dashboard Snapshot Guide: ops/trials/dashboard_snapshot.md
+          - Onboarding Email Template: ops/trials/onboarding_email_template.md
+          - Screenshot Checklist: ops/trials/screenshots/README.md
       - Chat Backends: guide/chat_backends.md
       - Guardrails Checks: guide/guardrails.md
       - Correlation & Attribution: guide/correlation.md
@@ -137,6 +144,7 @@ nav:
           - Cluster Schemas: api/cluster_schemas.md
           - Memory & World Schemas: api/memory_world_schemas.md
           - JSON Schemas: reference/schemas.md
+      - Autonomy Lane Charter: spec/autonomy_lane.md
       - Support Matrix: reference/support_matrix.md
       - Telemetry & Privacy: reference/telemetry_privacy.md
       - Trust Boundaries: reference/trust_boundaries.md

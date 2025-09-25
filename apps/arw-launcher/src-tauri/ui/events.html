@@ -4,14 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ARW Events</title>
-  </head>
-  <body>
-    <a href="#log" class="skip-link">Skip to events log</a>
     <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="ui-kit.css" />
     <link rel="stylesheet" href="common.css" />
     <link rel="stylesheet" href="events.css" />
     <script src="common.js" defer></script>
+    <script src="events.js" defer></script>
+  </head>
+  <body>
+    <a href="#log" class="skip-link">Skip to events log</a>
     <div class="toolbar" role="region" aria-label="Events controls">
       <label>Port: <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8091"></label>
       <label>Prefix: <input id="filter" aria-label="Event prefix filter" type="text" placeholder="e.g. models. or state."></label>
@@ -42,6 +43,5 @@
       <span class="dim">SSE: <b id="stat" role="status" aria-live="polite">off</b></span>
     </div>
     <div id="log" role="log" aria-live="polite" aria-relevant="additions text"></div>
-    <script src="events.js" defer></script>
   </body>
   </html>

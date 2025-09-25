@@ -4,14 +4,15 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Agent Hub (ARW) Logs</title>
-  </head>
-  <body>
-    <a href="#out" class="skip-link">Skip to logs</a>
     <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="ui-kit.css" />
     <link rel="stylesheet" href="common.css" />
     <link rel="stylesheet" href="logs.css" />
     <script src="common.js" defer></script>
+    <script src="logs.js" defer></script>
+  </head>
+  <body>
+    <a href="#out" class="skip-link">Skip to logs</a>
     <div class="toolbar" role="region" aria-label="Logs controls">
       <label>Port: <input id="port" aria-label="Port" type="number" min="1" max="65535" value="8091"></label>
       <button id="btn-refresh" class="primary">Refresh</button>
@@ -32,6 +33,5 @@
       <span class="dim">Status: <b id="stat" role="status" aria-live="polite">…</b></span>
     </div>
     <div id="out" role="region" aria-label="Log output"></div>
-    <script src="logs.js" defer></script>
   </body>
   </html>

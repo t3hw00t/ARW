@@ -27,3 +27,6 @@ Generated: 2025-09-25 09:14 UTC
 - **arw-connector**: 0.1.4 — [apps/arw-connector/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/arw-connector/Cargo.toml)
 - **snappy-bench**: 0.1.4 — [apps/snappy-bench/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/snappy-bench/Cargo.toml)
 - **arw-launcher**: 0.1.4 — [apps/arw-launcher/src-tauri/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri/Cargo.toml)
+
+## Advisory watchlist
+- **GTK 0.18.x (via tauri/tray-icon/wry)** — upstream `gtk-rs` GTK3 bindings are frozen (RUSTSEC-2024-0413/0416). Track Tauri’s GTK4 migration and update when `wry` releases Linux support without the legacy crate.

@@ -81,10 +81,6 @@ docker run --rm -p 8091:8091 \
   "$IMG"
 ```
 
-Legacy image:
-```bash
-```
-
 ## Security Notes
 
 - Keep `ARW_DEBUG=0` for production; set a strong `ARW_ADMIN_TOKEN`.
