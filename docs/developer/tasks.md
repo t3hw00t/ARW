@@ -4,10 +4,18 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-24 15:51 UTC
+Updated: 2025-09-25 09:14 UTC
 
 
 ## To Do
+- [trial-visual-kit] Design trial visual kit — todo (updated: 2025-09-26 12:30 UTC)
+- [autonomy-rollback-playbook] Autonomy rollback drills — todo (updated: 2025-09-26 12:30 UTC)
+- [autonomy-lane-spec] Author Autonomy Lane ADR — todo (updated: 2025-09-26 12:30 UTC)
+- [trial-autonomy-governor] Autonomy governor & kill switch — todo (updated: 2025-09-26 12:30 UTC)
+- [trial-g3] Gate G3: Trial operations — todo (updated: 2025-09-26 12:30 UTC)
+- [trial-g2] Gate G2: Calm approvals — todo (updated: 2025-09-26 12:30 UTC)
+- [trial-g1] Gate G1: Reliable memory — todo (updated: 2025-09-26 12:30 UTC)
+- [trial-g0] Gate G0: Stable core ready — todo (updated: 2025-09-26 12:30 UTC)
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-11 21:02:19 UTC)
 
 ## In Progress

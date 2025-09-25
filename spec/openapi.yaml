@@ -3479,6 +3479,14 @@ components:
       - failed
       - avg_latency_ms
       properties:
+        avg_ctx_items:
+          type: integer
+          format: int64
+          minimum: 0
+        avg_ctx_tokens:
+          type: integer
+          format: int64
+          minimum: 0
         avg_latency_ms:
           type: integer
           format: int64
