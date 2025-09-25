@@ -2,9 +2,9 @@ use anyhow::Result;
 use jsonschema::JSONSchema;
 use once_cell::sync::Lazy;
 use schemars::JsonSchema;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[derive(Debug, Default, Deserialize, Serialize, JsonSchema)]
 pub struct RuntimeConfig {
     #[serde(default)]
     pub portable: Option<bool>,
@@ -22,7 +22,7 @@ pub struct RuntimeConfig {
     pub external_base_url: Option<String>,
 }
 
-#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[derive(Debug, Default, Deserialize, Serialize, JsonSchema)]
 pub struct Config {
     #[serde(default)]
     pub runtime: RuntimeConfig,
@@ -58,7 +58,7 @@ pub fn load_config(path: &str) -> Result<Config> {
     Ok(cfg)
 }
 
-#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[derive(Debug, Default, Deserialize, Serialize, JsonSchema)]
 pub struct ClusterConfig {
     /// Enable multi-core/connector mode.
     #[serde(default)]

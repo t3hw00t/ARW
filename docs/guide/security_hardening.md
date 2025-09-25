@@ -20,7 +20,7 @@ Baseline
 - Rate limits: adjust admin limiter, e.g. `ARW_ADMIN_RL="60/60"` (limit/window_secs).
 
 Policy & Gating
-- Immutable denies: edit [`configs/gating.toml`](https://github.com/t3hw00t/ARW/blob/main/configs/gating.toml) to add keys like `"tools:*"` or `"models:*"`.
+    - Immutable denies: edit [`configs/gating.toml`](https://github.com/t3hw00t/ARW/blob/main/configs/gating.toml) (override with `ARW_GATING_FILE`) to add keys like `"tools:*"` or `"models:*"`.
 - Contracts: add time‑bound denies with optional auto‑renew and subject filters.
 - Ingress/Egress: use keys like `io:ingress:tools.<id>` and `io:egress:chat` to shape inputs/outputs.
  - Recommended production deny: block introspection endpoints: `deny_user = ["introspect:*"]`.

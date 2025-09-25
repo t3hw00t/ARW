@@ -156,7 +156,36 @@ pub fn list_admin_endpoints() -> Vec<AdminEndpoint> {
 }
 
 /// Compute effective paths and portability flags (env-based; cross‑platform).
-pub fn load_effective_paths() -> serde_json::Value {
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct EffectivePaths {
+    pub portable: bool,
+    pub state_dir: String,
+    pub cache_dir: String,
+    pub logs_dir: String,
+    pub memory: MemoryLayout,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq, Default)]
+pub struct MemoryLayout {
+    pub ephemeral: Vec<String>,
+    pub episodic: Vec<String>,
+    pub semantic: Vec<String>,
+    pub procedural: Vec<String>,
+}
+
+impl Default for EffectivePaths {
+    fn default() -> Self {
+        Self {
+            portable: false,
+            state_dir: "state".into(),
+            cache_dir: "state/arw/cache".into(),
+            logs_dir: "state/arw/logs".into(),
+            memory: MemoryLayout::default(),
+        }
+    }
+}
+
+pub fn effective_paths() -> EffectivePaths {
     // Load defaults from config file if present, then overlay env vars
     // Resolve config path independent of current working directory.
     let cfg_path_env = std::env::var("ARW_CONFIG").ok();
@@ -242,18 +271,17 @@ pub fn load_effective_paths() -> serde_json::Value {
         .or_else(|| cfg.as_ref().and_then(|c| c.runtime.logs_dir.clone()))
         .unwrap_or_else(|| default_logs.clone());
 
-    serde_json::json!({
-        "portable": portable,
-        "state_dir": expand(state_dir),
-        "cache_dir": expand(cache_dir),
-        "logs_dir": expand(logs_dir),
-        "memory": {
-            "ephemeral": [],
-            "episodic": [],
-            "semantic": [],
-            "procedural": []
-        }
-    })
+    EffectivePaths {
+        portable,
+        state_dir: expand(state_dir),
+        cache_dir: expand(cache_dir),
+        logs_dir: expand(logs_dir),
+        memory: MemoryLayout::default(),
+    }
+}
+
+pub fn load_effective_paths() -> serde_json::Value {
+    serde_json::to_value(effective_paths()).unwrap_or_else(|_| json!({}))
 }
 
 /// Simple sanity function for arw-cli.

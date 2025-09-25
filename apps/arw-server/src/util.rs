@@ -19,7 +19,11 @@ pub fn effective_posture() -> String {
 }
 
 pub fn state_dir() -> PathBuf {
-    PathBuf::from(std::env::var("ARW_STATE_DIR").unwrap_or_else(|_| "state".into()))
+    if let Some(paths) = crate::config::effective_paths() {
+        PathBuf::from(paths.state_dir)
+    } else {
+        PathBuf::from(arw_core::effective_paths().state_dir)
+    }
 }
 
 pub fn attach_memory_ptr(value: &mut Value) {

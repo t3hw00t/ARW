@@ -6,6 +6,7 @@ use arw_policy::PolicyEngine;
 use arw_wasi::ToolHost;
 use serde_json::json;
 use tokio::sync::Mutex;
+use tracing::info;
 use utoipa::OpenApi;
 
 use crate::{
@@ -30,6 +31,10 @@ pub(crate) struct BootstrapOutput {
 }
 
 pub(crate) async fn build() -> BootstrapOutput {
+    config::apply_effective_paths();
+    let initial_config = config::load_initial_config_state();
+    config::init_gating_from_configs();
+
     let bus = Bus::new_with_replay(256, 256);
     let kernel = Kernel::open(&crate::util::state_dir()).expect("init kernel");
     let kernel_enabled = config::kernel_enabled_from_env();
@@ -54,9 +59,20 @@ pub(crate) async fn build() -> BootstrapOutput {
 
     let (router, endpoints, endpoints_meta) = build_router();
 
+    let config::InitialConfigState {
+        value: initial_config_value,
+        history: initial_history,
+        source: initial_source,
+    } = initial_config;
+    if let Some(src) = initial_source {
+        info!(config_source = %src, "runtime config source detected");
+    }
+    let config_state = Arc::new(Mutex::new(initial_config_value));
+    let config_history = Arc::new(Mutex::new(initial_history));
+
     let state = AppState::builder(bus, kernel, policy_arc, host, kernel_enabled)
-        .with_config_state(Arc::new(Mutex::new(json!({}))))
-        .with_config_history(Arc::new(Mutex::new(Vec::new())))
+        .with_config_state(config_state)
+        .with_config_history(config_history)
         .with_metrics(metrics.clone())
         .with_sse_cache(sse_id_map)
         .with_endpoints(Arc::new(endpoints))

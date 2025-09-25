@@ -16,7 +16,8 @@ Centralized reference for ARW environment variables and common flags. Defaults f
 - `ARW_BIND`: HTTP bind address (default: `127.0.0.1`). Use `0.0.0.0` to listen on all interfaces in trusted environments or behind a TLS proxy. The server refuses to start if bound to a non‑loopback address without an admin token (see `ARW_ADMIN_TOKEN`), to avoid accidental public exposure.
 - `ARW_PORTABLE`: `1` keeps state/cache/logs near the app bundle.
  - `ARW_CONFIG`: absolute path to the primary config TOML (overrides discovery).
- - `ARW_CONFIG_DIR`: base directory to search for additional configs (e.g., `configs/gating.toml`, `configs/feedback.toml`). When unset, the service also probes beside the executable and the current directory.
+- `ARW_CONFIG_DIR`: base directory to search for additional configs (e.g., `configs/gating.toml`, `configs/feedback.toml`). When unset, the service also probes beside the executable and the current directory.
+- `ARW_GATING_FILE`: optional absolute or relative path to the immutable gating policy TOML. Defaults to the discovery chain described below.
 - `ARW_KERNEL_ENABLE`: enable the SQLite journal/CAS kernel (default `1`). When enabled, the service dual‑writes events to the kernel and exposes `/events?replay=N`. When disabled (`0`/`false`), journaling and replay endpoints fall back to in-memory delivery only and `/events?replay` returns `501 Not Implemented`.
 - `ARW_SQLITE_POOL_SIZE`: starting target for SQLite connections in the pool (default `8`). Requests beyond the current limit block until a handle is returned.
 - `ARW_SQLITE_POOL_MIN`: lower bound for the autotuner/shrinker (default `2`).
@@ -130,6 +131,7 @@ Defaults
 Config discovery (CWD‑independent)
 - Primary config: if `ARW_CONFIG` is not set, ARW looks for `configs/default.toml` in the following locations (first hit wins): `ARW_CONFIG_DIR`, beside the executable, parent of the executable (useful in dev trees), repository root (dev), then the current directory.
 - Optional configs (e.g., `configs/gating.toml`, `configs/feedback.toml`) follow the same search order via `ARW_CONFIG_DIR` and executable‑relative paths.
+- Gating policy: resolves `ARW_GATING_FILE` first. When unset, it follows the same discovery chain as above for `configs/gating.toml`.
 
 ## Chat & Models
 - `ARW_LLAMA_URL`: llama.cpp server endpoint (e.g., `http://127.0.0.1:8080`).
