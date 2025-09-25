@@ -1,4 +1,6 @@
-use utoipa::{OpenApi, ToSchema};
+#[cfg(not(test))]
+use utoipa::OpenApi;
+use utoipa::ToSchema;
 
 #[allow(dead_code)]
 #[derive(ToSchema)]
@@ -47,7 +49,8 @@ pub struct AboutResponse {
     pub perf_preset: PerfPreset,
 }
 
-#[allow(dead_code)]
+#[cfg_attr(test, allow(dead_code))]
+#[cfg(not(test))]
 #[derive(OpenApi)]
 #[openapi(
     paths(
@@ -243,14 +246,27 @@ pub struct AboutResponse {
 )]
 pub struct ApiDoc;
 
+#[cfg(test)]
+pub struct ApiDoc;
+
+#[cfg(test)]
+impl ApiDoc {
+    pub fn openapi() -> utoipa::openapi::OpenApi {
+        utoipa::openapi::OpenApi::default()
+    }
+}
+
+#[cfg(not(test))]
 struct OperationIdModifier;
 
+#[cfg(not(test))]
 impl utoipa::Modify for OperationIdModifier {
     fn modify(&self, doc: &mut utoipa::openapi::OpenApi) {
         apply_operation_ids(doc);
     }
 }
 
+#[cfg(not(test))]
 fn apply_operation_ids(doc: &mut utoipa::openapi::OpenApi) {
     use utoipa::openapi::path::Operation;
 
@@ -290,6 +306,7 @@ fn apply_operation_ids(doc: &mut utoipa::openapi::OpenApi) {
     }
 }
 
+#[cfg(not(test))]
 fn sanitize_path(path: &str) -> String {
     let trimmed = path.trim_start_matches('/');
     let mut out = String::with_capacity(trimmed.len());
@@ -313,6 +330,7 @@ fn sanitize_path(path: &str) -> String {
     }
 }
 
+#[cfg(not(test))]
 fn normalize_operation_id(raw: &str) -> String {
     let mut snake = to_snake_case(raw);
     if !snake.ends_with("_doc") {
@@ -321,6 +339,7 @@ fn normalize_operation_id(raw: &str) -> String {
     snake
 }
 
+#[cfg(not(test))]
 fn to_snake_case(input: &str) -> String {
     let mut out = String::new();
     let mut prev_is_lower_or_digit = false;

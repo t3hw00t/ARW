@@ -83,7 +83,10 @@ fn normalize_tags(tags: &[String]) -> Vec<String> {
         if trimmed.is_empty() {
             continue;
         }
-        if !out.iter().any(|existing| existing.eq_ignore_ascii_case(trimmed)) {
+        if !out
+            .iter()
+            .any(|existing| existing.eq_ignore_ascii_case(trimmed))
+        {
             out.push(trimmed.to_string());
         }
     }
@@ -146,10 +149,7 @@ fn build_memory_record_event(
 }
 
 fn build_memory_applied_event(record: &Value, source: &str) -> Value {
-    let mut obj = record
-        .as_object()
-        .cloned()
-        .unwrap_or_else(Map::new);
+    let mut obj = record.as_object().cloned().unwrap_or_else(Map::new);
     obj.insert("source".into(), json!(source));
     let value_clone = obj.get("value").cloned();
     if let Some(value) = value_clone {
@@ -173,14 +173,17 @@ fn build_memory_applied_event(record: &Value, source: &str) -> Value {
 }
 
 /// Most recent memories (per lane).
-#[utoipa::path(
-    get,
-    path = "/state/memory/recent",
-    tag = "Memory",
-    params(("lane" = Option<String>, Query), ("limit" = Option<i64>, Query)),
-    responses(
-        (status = 200, body = serde_json::Value),
-        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+#[cfg_attr(
+    not(test),
+    utoipa::path(
+        get,
+        path = "/state/memory/recent",
+        tag = "Memory",
+        params(("lane" = Option<String>, Query), ("limit" = Option<i64>, Query)),
+        responses(
+            (status = 200, body = serde_json::Value),
+            (status = 501, description = "Kernel disabled", body = serde_json::Value)
+        )
     )
 )]
 pub async fn state_memory_recent(
@@ -234,15 +237,18 @@ pub struct MemoryApplyReq {
 }
 
 /// Insert a memory item (admin helper).
-#[utoipa::path(
-    post,
-    path = "/admin/memory/apply",
-    tag = "Admin/Memory",
-    request_body = MemoryApplyReq,
-    responses(
-        (status = 201, description = "Created", body = serde_json::Value),
-        (status = 401, description = "Unauthorized"),
-        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+#[cfg_attr(
+    not(test),
+    utoipa::path(
+        post,
+        path = "/admin/memory/apply",
+        tag = "Admin/Memory",
+        request_body = MemoryApplyReq,
+        responses(
+            (status = 201, description = "Created", body = serde_json::Value),
+            (status = 401, description = "Unauthorized"),
+            (status = 501, description = "Kernel disabled", body = serde_json::Value)
+        )
     )
 )]
 pub async fn admin_memory_apply(
@@ -286,10 +292,11 @@ pub async fn admin_memory_apply(
         .await
     {
         Ok(id) => {
+            let default_updated = now_timestamp();
             let mut stored_value = value.clone();
             let mut stored_tags = tags.clone().unwrap_or_default();
-            let mut stored_hash = compute_memory_hash(&lane, &kind, &key, &stored_value);
-            let mut updated = now_timestamp();
+            let mut stored_hash: Option<String> = None;
+            let mut updated: Option<String> = None;
 
             match state.kernel().get_memory_async(id.clone()).await {
                 Ok(Some(record)) => {
@@ -301,10 +308,10 @@ pub async fn admin_memory_apply(
                             stored_tags = parse_tags_field(obj.get("tags"));
                         }
                         if let Some(h) = obj.get("hash").and_then(|v| v.as_str()) {
-                            stored_hash = h.to_string();
+                            stored_hash = Some(h.to_string());
                         }
                         if let Some(u) = obj.get("updated").and_then(|v| v.as_str()) {
-                            updated = u.to_string();
+                            updated = Some(u.to_string());
                         }
                     }
                 }
@@ -317,6 +324,9 @@ pub async fn admin_memory_apply(
             }
 
             let normalized_tags = normalize_tags(&stored_tags);
+            let stored_hash = stored_hash
+                .unwrap_or_else(|| compute_memory_hash(&lane, &kind, &key, &stored_value));
+            let updated = updated.unwrap_or(default_updated);
 
             let record_event = build_memory_record_event(
                 &id,
@@ -359,15 +369,18 @@ pub async fn admin_memory_apply(
 }
 
 /// List recent memory items (admin helper).
-#[utoipa::path(
-    get,
-    path = "/admin/memory",
-    tag = "Admin/Memory",
-    params(("lane" = Option<String>, Query), ("limit" = Option<i64>, Query)),
-    responses(
-        (status = 200, description = "Memory snapshot", body = serde_json::Value),
-        (status = 401, description = "Unauthorized"),
-        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+#[cfg_attr(
+    not(test),
+    utoipa::path(
+        get,
+        path = "/admin/memory",
+        tag = "Admin/Memory",
+        params(("lane" = Option<String>, Query), ("limit" = Option<i64>, Query)),
+        responses(
+            (status = 200, description = "Memory snapshot", body = serde_json::Value),
+            (status = 401, description = "Unauthorized"),
+            (status = 501, description = "Kernel disabled", body = serde_json::Value)
+        )
     )
 )]
 pub async fn admin_memory_list(
@@ -472,8 +485,27 @@ mod tests {
         assert_eq!(parts.status, StatusCode::CREATED);
         let body_bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
         let response_json: Value = serde_json::from_slice(&body_bytes).expect("json response");
-        assert_eq!(response_json["record"]["value"]["test_id"].as_str(), Some(target_id.as_str()));
-        assert_eq!(response_json["applied"]["value_preview"].as_str().is_some(), true);
+        assert_eq!(
+            response_json["record"]["value"]["test_id"].as_str(),
+            Some(target_id.as_str())
+        );
+        assert_eq!(
+            response_json["applied"]["value_preview"].as_str().is_some(),
+            true
+        );
+        let lane = response_json["record"]["lane"].as_str().expect("lane str");
+        let kind_opt = response_json["record"]["kind"]
+            .as_str()
+            .map(|s| s.to_string());
+        let key_opt = response_json["record"]["key"]
+            .as_str()
+            .map(|s| s.to_string());
+        let expected_hash =
+            compute_memory_hash(lane, &kind_opt, &key_opt, &response_json["record"]["value"]);
+        assert_eq!(
+            response_json["record"]["hash"].as_str(),
+            Some(expected_hash.as_str())
+        );
 
         let envelope = timeout(Duration::from_secs(1), rx.recv())
             .await
@@ -490,7 +522,10 @@ mod tests {
         assert!(payload["ptr"].is_object());
         let tags = payload["tags"].as_array().expect("tags array");
         assert_eq!(tags.len(), 2); // deduped (alpha, notes)
-        assert_eq!(payload["value"]["test_id"].as_str(), Some(target_id.as_str()));
+        assert_eq!(
+            payload["value"]["test_id"].as_str(),
+            Some(target_id.as_str())
+        );
 
         let envelope = timeout(Duration::from_secs(1), rx.recv())
             .await
@@ -499,11 +534,23 @@ mod tests {
         assert_eq!(envelope.kind, topics::TOPIC_MEMORY_APPLIED);
         let payload = envelope.payload;
         assert_eq!(payload["source"].as_str(), Some("admin.memory.apply"));
-        assert_eq!(payload["value"]["test_id"].as_str(), Some(target_id.as_str()));
+        assert_eq!(
+            payload["value"]["test_id"].as_str(),
+            Some(target_id.as_str())
+        );
         assert!(payload["value_preview"].as_str().is_some());
         assert!(payload["value_bytes"].as_u64().is_some());
         assert!(payload["applied_at"].as_str().is_some());
         let tags = payload["tags"].as_array().expect("tags array");
         assert_eq!(tags.len(), 2);
+        let payload_lane = payload["lane"].as_str().expect("lane");
+        let payload_kind = payload["kind"].as_str().map(|s| s.to_string());
+        let payload_key = payload["key"].as_str().map(|s| s.to_string());
+        let expected_payload_hash =
+            compute_memory_hash(payload_lane, &payload_kind, &payload_key, &payload["value"]);
+        assert_eq!(
+            payload["hash"].as_str(),
+            Some(expected_payload_hash.as_str())
+        );
     }
 }

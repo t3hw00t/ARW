@@ -7,6 +7,7 @@ use arw_wasi::ToolHost;
 use serde_json::json;
 use tokio::sync::Mutex;
 use tracing::info;
+#[cfg(not(test))]
 use utoipa::OpenApi;
 
 use crate::{

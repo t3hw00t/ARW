@@ -2,6 +2,7 @@ use axum::http::{header, StatusCode};
 use axum::Json;
 use axum::{extract::Path, response::IntoResponse};
 use serde_json::json;
+#[cfg(not(test))]
 use utoipa::OpenApi;
 
 fn spec_dir() -> std::path::PathBuf {
