@@ -24,6 +24,50 @@ function Section($t){ Write-Host "> $t" -ForegroundColor Magenta }
 function Info($t){ Write-Host "[info] $t" -ForegroundColor DarkCyan }
 function Warn($t){ Write-Host "[warn] $t" -ForegroundColor Yellow }
 
+function New-AdminToken {
+  try {
+    $bytes = New-Object byte[] 16
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    return ([System.BitConverter]::ToString($bytes) -replace '-').ToLower()
+  } catch {
+    return ([Guid]::NewGuid().ToString('N'))
+  }
+}
+
+function Show-GeneratedToken {
+  param(
+    [string]$Token,
+    [string]$Label = 'admin token'
+  )
+  $dir = Join-Path $root '.arw'
+  New-Item -ItemType Directory -Force $dir | Out-Null
+  if (-not [Console]::IsOutputRedirected) {
+    Info ("Generated $Label: $Token")
+  } else {
+    $fileLabel = ($Label -replace '\s+', '_')
+    $path = Join-Path $dir ("last_$fileLabel.txt")
+    $Token | Set-Content -Path $path -Encoding utf8
+    Info ("Generated $Label stored at $path")
+  }
+}
+
+function Show-GeneratedToken {
+  param(
+    [string]$Token,
+    [string]$Label = 'admin token'
+  )
+  $dir = Join-Path $root '.arw'
+  New-Item -ItemType Directory -Force $dir | Out-Null
+  if (-not [Console]::IsOutputRedirected) {
+    Info ("Generated $Label: $Token")
+  } else {
+    $fileLabel = ($Label -replace '\s+', '_')
+    $path = Join-Path $dir ("last_$fileLabel.txt")
+    $Token | Set-Content -Path $path -Encoding utf8
+    Info ("Generated $Label stored at $path")
+  }
+}
+
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $localBin = Join-Path $root '.arw\bin'
 New-Item -ItemType Directory -Force $localBin | Out-Null
@@ -113,7 +157,16 @@ function Configure-Settings {
   Section 'Configure Settings'
   $ans = Read-Host "HTTP port [$Port]"; if ($ans) { $Port = [int]$ans }
   $ans = Read-Host "Docs URL (optional) [$DocsUrl]"; if ($ans -ne '') { $DocsUrl = $ans }
-  $ans = Read-Host "Admin token (optional) [$AdminToken]"; if ($ans -ne '') { $AdminToken = $ans }
+  if (-not $AdminToken) {
+    $ans = Read-Host 'Generate admin token now? (Y/n)'
+    if ($ans -notmatch '^[nN]') {
+      $AdminToken = New-AdminToken
+      Show-GeneratedToken -Token $AdminToken -Label 'admin token'
+      Warn 'Store this token securely (password manager or encrypted secret).'
+    }
+  }
+  $displayToken = if ($AdminToken) { $AdminToken } else { 'auto' }
+  $ans = Read-Host "Admin token [$displayToken]"; if ($ans -ne '') { $AdminToken = $ans }
   $ans = Read-Host 'Run tests after build? (y/N)'; $RunTests = ($ans -match '^[yY]')
   $ans = Read-Host 'Build docs site with MkDocs? (Y/n)'; $BuildDocs = -not ($ans -match '^[nN]')
   $ans = Read-Host 'Create portable bundle in dist/? (y/N)'; $DoPackage = ($ans -match '^[yY]')
@@ -347,7 +400,13 @@ function First-Run-Wizard {
   Write-Host '  3) Cluster (NATS)'
   $prof = Read-Host 'Select [1/2/3]'; if (-not $prof) { $prof = '1' }
   $p = Read-Host ("HTTP port [" + $Port + "]"); if (-not $p) { $p = $Port }
-  $ans = Read-Host 'Generate admin token? (Y/n)'; if (-not ($ans -match '^[nN]')) { $tok = [Guid]::NewGuid().ToString('N'); $env:ARW_ADMIN_TOKEN = $tok; Info ("Generated token: " + $tok) }
+  $ans = Read-Host 'Generate admin token? (Y/n)'
+  if (-not ($ans -match '^[nN]')) {
+    $tok = New-AdminToken
+    $env:ARW_ADMIN_TOKEN = $tok
+    Show-GeneratedToken -Token $tok -Label 'admin token'
+    Warn 'Store this token securely.'
+  }
   $cfgDir = Join-Path $root 'configs'; New-Item -ItemType Directory -Force $cfgDir | Out-Null
   $cfgPath = Join-Path $cfgDir 'local.toml'
   if ($prof -eq '3') {

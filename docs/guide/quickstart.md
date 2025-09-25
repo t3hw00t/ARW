@@ -142,12 +142,15 @@ A lightweight container image is available for the unified server:
 docker build -f apps/arw-server/Dockerfile -t arw-server:dev .
 
 # Run headless (bind 8091)
+export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
 docker run --rm -p 8091:8091 \
   -e ARW_BIND=0.0.0.0 \
   -e ARW_PORT=8091 \
-  -e ARW_ADMIN_TOKEN=dev-admin \
+  -e ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" \
   arw-server:dev
 ```
+
+Generate the secret with any equivalent tool if `openssl` is unavailable.
 
 `docker compose up` uses the unified server by default.
 

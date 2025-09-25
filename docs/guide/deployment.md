@@ -75,18 +75,26 @@ Overrides:
 Run the unified server image (amd64/arm64):
 
 ```bash
+export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
 docker run --rm -p 8091:8091 \
   -e ARW_BIND=0.0.0.0 \
   -e ARW_PORT=8091 \
-  -e ARW_ADMIN_TOKEN=dev-admin \
+  -e ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" \
   ghcr.io/t3hw00t/arw-server:latest
 ```
+
+Use any equivalent tool to generate the secret if `openssl` is unavailable.
 
 Build locally if you prefer:
 
 ```bash
 docker build -f apps/arw-server/Dockerfile -t arw-server:dev .
-docker run --rm -p 8091:8091 arw-server:dev
+export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
+docker run --rm -p 8091:8091 \
+  -e ARW_BIND=0.0.0.0 \
+  -e ARW_PORT=8091 \
+  -e ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" \
+  arw-server:dev
 ```
 
 Unified images replace the legacy bridge; new deployments should target `arw-server`.
@@ -122,6 +130,7 @@ Legacy charts have been removed; use `deploy/charts/arw-server` for Kubernetes d
 Structured access logs are available in the unified server, including rolling file support:
 
 ```bash
+# Reuse the strong token exported earlier (or export a new one)
 docker run --rm -p 8091:8091 \
   -e ARW_BIND=0.0.0.0 \
   -e ARW_PORT=8091 \
@@ -131,11 +140,12 @@ docker run --rm -p 8091:8091 \
   -e ARW_ACCESS_LOG_DIR=/var/log/arw \
   -e ARW_ACCESS_LOG_PREFIX=http-access \
   -e ARW_ACCESS_LOG_ROTATION=daily \
+  -e ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" \
   -v $(pwd)/logs:/var/log/arw \
-  ghcr.io/<owner>/arw-server:latest
+  ghcr.io/t3hw00t/arw-server:latest
 ```
 
-Add `ARW_ACCESS_UA=1 ARW_ACCESS_UA_HASH=1 ARW_ACCESS_REF=1` when you need user-agent and referer fields (hashing keeps sensitive inputs obscured).
+Add `ARW_ACCESS_UA=1 ARW_ACCESS_UA_HASH=1 ARW_ACCESS_REF=1` when you need user-agent and referer fields (hashing keeps sensitive inputs obscured). Replace `t3hw00t` with your registry owner if you publish a forked image.
 
 ## Verification Checklist
 - `GET /healthz` — liveness

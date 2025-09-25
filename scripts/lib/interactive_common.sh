@@ -38,6 +38,26 @@ ic_err()     { printf "%s %s\n" "$(_ic_color red '[error]')" "$*"; }
 
 ic_press_enter() { read -r -p "Press Enter to continue…" _; }
 
+ic_generate_token() {
+  ic_rand_token
+}
+
+ic_emit_token() { # $1=token [$2=label]
+  local token="$1"
+  local label="${2:-admin token}"
+  local root; root=$(ic_root)
+  mkdir -p "$root/.arw"
+  ic_log_dir_rel ".arw"
+  if [[ -t 1 ]]; then
+    ic_info "Generated ${label}: ${token}"
+  else
+    local file="$root/.arw/last_${label// /_}.txt"
+    umask 077
+    printf '%s\n' "$token" >"$file"
+    ic_info "Generated ${label} stored at $file"
+  fi
+}
+
 ic_root() { (cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd); }
 ic_local_bin_dir() { echo "$(ic_root)/.arw/bin"; }
 ic_path_add_local_bin() {
@@ -96,7 +116,9 @@ ic_env_save() { # save known keys to .arw/env.sh
     echo "export ARW_ALLOW_SYSTEM_PKGS=${ARW_ALLOW_SYSTEM_PKGS:-0}"
     echo "export ARW_PORT=${ARW_PORT:-8091}"
     echo "export ARW_DOCS_URL=${ARW_DOCS_URL:-}"
-    echo "export ARW_ADMIN_TOKEN=${ARW_ADMIN_TOKEN:-}"
+    if [[ -n "${ARW_ADMIN_TOKEN:-}" ]]; then
+      echo "# export ARW_ADMIN_TOKEN=… (redacted)"
+    fi
     echo "export ARW_CONFIG=${ARW_CONFIG:-}"
     echo "export ARW_NATS_URL=${ARW_NATS_URL:-}"
     echo "export ARW_WAIT_HEALTH=${ARW_WAIT_HEALTH:-1}"

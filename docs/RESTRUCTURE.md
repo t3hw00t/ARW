@@ -348,7 +348,7 @@ Runtime
 
 ## Running Locally (new server)
 ```bash
-export ARW_ADMIN_TOKEN=dev-admin
+export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
 # Start the server with a matching token (omit --debug in hardened setups)
 cargo run -p arw-server
 # Health
@@ -367,6 +367,8 @@ curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/state/logic_u
 curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/state/orchestrator/jobs | jq
 curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" 'localhost:8091/state/memory/recent?limit=50' | jq
 ```
+
+Generate the token with an equivalent tool if `openssl` is unavailable.
 
 Notes
 - Admin endpoints require either `ARW_DEBUG=1` (development-only) or a matching `Authorization: Bearer` token.

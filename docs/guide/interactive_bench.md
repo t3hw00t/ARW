@@ -13,18 +13,20 @@ measured from a single client.
 
 ## Quick start
 
-Run the bench against a local server with defaults (100 actions, concurrency 8):
+Run the bench against a local server with defaults (100 actions, concurrency 8). Ensure `ARW_ADMIN_TOKEN` matches the server configuration (export one as shown in the Quickstart guides if you have not already):
 
 ```bash
-just bench-snappy -- --admin-token ${ARW_ADMIN_TOKEN:-dev-admin}
+just bench-snappy -- --admin-token "$ARW_ADMIN_TOKEN"
 ```
+
+> Tip: `export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"` matches the examples in the Docker guides. Use any equivalent generator if `openssl` is unavailable, and keep the value aligned with the running server.
 
 Or invoke it directly (debug build):
 
 ```bash
 cargo run -p snappy-bench -- \
   --base http://127.0.0.1:8091 \
-  --admin-token ${ARW_ADMIN_TOKEN:-dev-admin} \
+  --admin-token "$ARW_ADMIN_TOKEN" \
   --requests 200 \
   --concurrency 16
 ```
@@ -33,11 +35,11 @@ For production-like numbers, build release binaries once and invoke the compiled
 
 ```bash
 cargo build --release -p arw-server -p snappy-bench
-ARW_ADMIN_TOKEN=${ARW_ADMIN_TOKEN:-dev-admin} \
-  target/release/snappy-bench \
-    --base http://127.0.0.1:8091 \
-    --requests 200 \
-    --concurrency 16
+target/release/snappy-bench \
+  --base http://127.0.0.1:8091 \
+  --admin-token "$ARW_ADMIN_TOKEN" \
+  --requests 200 \
+  --concurrency 16
 ```
 
 The CLI exits non-zero when any action fails or when observed p95 totals exceed

@@ -40,9 +40,17 @@ problems.
 
 - Service in containers
   - Default deployment: use the unified `arw-server` image
-    (`ghcr.io/<owner>/arw-server`). It binds to port 8091; publish it with a
-    command such as `docker run -p 8091:8091 ghcr.io/<owner>/arw-server:latest`
-    (set `ARW_BIND=0.0.0.0` or `ARW_PORT=8091` as needed for your environment).
+    (`ghcr.io/t3hw00t/arw-server`; replace `t3hw00t` if you publish your own build).
+    Expose it with hardened defaults:
+    ```bash
+    export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
+    docker run --rm -p 8091:8091 \
+      -e ARW_BIND=0.0.0.0 \
+      -e ARW_PORT=8091 \
+      -e ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" \
+      ghcr.io/t3hw00t/arw-server:latest
+    ```
+    Substitute any equivalent secret generator if `openssl` is unavailable.
   - Desktop Launcher is not intended for headless containers; use a host
     desktop environment or run the Launcher outside the container.
   - GPU access in containers requires host support and appropriate device

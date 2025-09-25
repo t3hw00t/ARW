@@ -24,6 +24,50 @@ function Info($t){ Write-Host "[info] $t" -ForegroundColor DarkCyan }
 function Warn($t){ Write-Host "[warn] $t" -ForegroundColor Yellow }
 function Dry($t){ if ($script:GlobalDryRun) { Write-Host "[dryrun] $t" -ForegroundColor Yellow } }
 
+function New-AdminToken {
+  try {
+    $bytes = New-Object byte[] 16
+    [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+    return ([System.BitConverter]::ToString($bytes) -replace '-').ToLower()
+  } catch {
+    return ([Guid]::NewGuid().ToString('N'))
+  }
+}
+
+function Show-GeneratedToken {
+  param(
+    [string]$Token,
+    [string]$Label = 'admin token'
+  )
+  $dir = Join-Path $root '.arw'
+  New-Item -ItemType Directory -Force $dir | Out-Null
+  if (-not [Console]::IsOutputRedirected) {
+    Info ("Generated $Label: $Token")
+  } else {
+    $fileLabel = ($Label -replace '\s+', '_')
+    $path = Join-Path $dir ("last_$fileLabel.txt")
+    $Token | Set-Content -Path $path -Encoding utf8
+    Info ("Generated $Label stored at $path")
+  }
+}
+
+function Show-GeneratedToken {
+  param(
+    [string]$Token,
+    [string]$Label = 'admin token'
+  )
+  $dir = Join-Path $root '.arw'
+  New-Item -ItemType Directory -Force $dir | Out-Null
+  if (-not [Console]::IsOutputRedirected) {
+    Info ("Generated $Label: $Token")
+  } else {
+    $fileLabel = ($Label -replace '\s+', '_')
+    $path = Join-Path $dir ("last_$fileLabel.txt")
+    $Token | Set-Content -Path $path -Encoding utf8
+    Info ("Generated $Label stored at $path")
+  }
+}
+
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 # Add project-local Rust cargo bin to PATH if present (isolated, no admin)
 $localRustCargoBin = Join-Path $root '.arw\rust\cargo\bin'
@@ -65,7 +109,16 @@ function Configure-Runtime {
   } catch {}
   $ans = Read-Host 'Enable debug endpoints? (y/N)'; $Debug = ($ans -match '^[yY]')
   $ans = Read-Host "Docs URL (optional) [$DocsUrl]"; if ($ans -ne '') { $DocsUrl = $ans }
-  $ans = Read-Host "Admin token (optional) [$AdminToken]"; if ($ans -ne '') { $AdminToken = $ans }
+  if (-not $AdminToken) {
+    $ans = Read-Host 'Generate admin token now? (Y/n)'
+    if ($ans -notmatch '^[nN]') {
+      $AdminToken = New-AdminToken
+      Show-GeneratedToken -Token $AdminToken -Label 'admin token'
+      Warn 'Keep this token safe; exposure grants admin access.'
+    }
+  }
+  $displayToken = if ($AdminToken) { $AdminToken } else { 'auto' }
+  $ans = Read-Host "Admin token [$displayToken]"; if ($ans -ne '') { $AdminToken = $ans }
   $ans = Read-Host 'Use packaged dist/ bundle when present? (y/N)'; $UseDist = ($ans -match '^[yY]')
   $ans = Read-Host ("Wait for /healthz after start? (Y/n) [" + (if ($WaitHealth) { 'Y' } else { 'n' }) + "]"); if ($ans) { $WaitHealth = -not ($ans -match '^[nN]') }
   $ans = Read-Host ("Health wait timeout secs [$WaitHealthTimeoutSecs]"); if ($ans) { try { $WaitHealthTimeoutSecs = [int]$ans } catch { } }
@@ -161,14 +214,32 @@ function Open-ProbeMenu {
       '7' { try { Set-Clipboard -Value "$base/spec"; Info 'Copied Spec URL' } catch { } }
       '8' {
         $tok = $env:ARW_ADMIN_TOKEN
-        if (-not $tok) { $ans = Read-Host 'No token set. Generate one now? (Y/n)'; if (-not ($ans -match '^[nN]')) { $tok = [Guid]::NewGuid().ToString('N'); $env:ARW_ADMIN_TOKEN = $tok; $script:AdminToken = $tok; Info 'Generated token for this session.' } }
+        if (-not $tok) {
+          $ans = Read-Host 'No token set. Generate one now? (Y/n)'
+          if (-not ($ans -match '^[nN]')) {
+            $tok = New-AdminToken
+            $env:ARW_ADMIN_TOKEN = $tok
+            $script:AdminToken = $tok
+            Show-GeneratedToken -Token $tok -Label 'admin token (session)'
+            Warn 'Store this token securely.'
+          }
+        }
         if ($tok) { $cmd = "curl -sS -H `"X-ARW-Admin: $tok`" `"$base/admin/tools`" | jq ." } else { $cmd = "curl -sS -H `"X-ARW-Admin: YOUR_TOKEN`" `"$base/admin/tools`" | jq ." }
         try { Set-Clipboard -Value $cmd; Info 'Copied admin curl snippet' } catch { }
         Write-Host $cmd
       }
       '9' {
         $tok = $env:ARW_ADMIN_TOKEN
-        if (-not $tok) { $ans = Read-Host 'No token set. Generate one now? (Y/n)'; if (-not ($ans -match '^[nN]')) { $tok = [Guid]::NewGuid().ToString('N'); $env:ARW_ADMIN_TOKEN = $tok; $script:AdminToken = $tok; Info 'Generated token for this session.' } }
+        if (-not $tok) {
+          $ans = Read-Host 'No token set. Generate one now? (Y/n)'
+          if (-not ($ans -match '^[nN]')) {
+            $tok = New-AdminToken
+            $env:ARW_ADMIN_TOKEN = $tok
+            $script:AdminToken = $tok
+            Show-GeneratedToken -Token $tok -Label 'admin token (session)'
+            Warn 'Store this token securely.'
+          }
+        }
         if ($tok) { $cmd = "curl -sS -H `"X-ARW-Admin: $tok`" `"$base/shutdown`"" } else { $cmd = "curl -sS -H `"X-ARW-Admin: YOUR_TOKEN`" `"$base/shutdown`"" }
         try { Set-Clipboard -Value $cmd; Info 'Copied admin curl shutdown' } catch { }
         Write-Host $cmd

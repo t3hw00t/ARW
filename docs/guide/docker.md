@@ -11,7 +11,7 @@ Run the unified ARW server in a container. This guide covers local build/run, Do
 
 ## Images
 
-- Registry (unified server): `ghcr.io/<owner>/arw-server`
+- Registry (unified server): `ghcr.io/t3hw00t/arw-server` (replace `t3hw00t` with your fork owner if publishing your own build)
 - Tags: `main`, `vX.Y.Z`, `latest` (on release), and `sha-<shortsha>`
 
 ## Local Build & Run (Unified Server)
@@ -21,16 +21,19 @@ Run the unified ARW server in a container. This guide covers local build/run, Do
 docker build -f apps/arw-server/Dockerfile -t arw-server:dev .
 
 # Run (headless unified server on 8091)
+export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
 docker run --rm -p 8091:8091 \
   -e ARW_BIND=0.0.0.0 \
   -e ARW_PORT=8091 \
-  -e ARW_ADMIN_TOKEN=dev-admin \
+  -e ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" \
   arw-server:dev
 
 # Verify
 curl -sS http://127.0.0.1:8091/healthz
 curl -sS http://127.0.0.1:8091/about | jq
 ```
+
+If `openssl` is unavailable, generate a secret with an equivalent tool such as `python -c 'import secrets; print(secrets.token_hex(32))'`.
 
 ## Docker Compose
 
@@ -49,6 +52,7 @@ The compose file defaults to the unified server on port 8091 and binds to `127.0
 Write structured access logs to rotating files with the unified server container:
 
 ```bash
+# Reuse the strong token exported earlier (or export a new one)
 docker run --rm -p 8091:8091 \
   -e ARW_BIND=0.0.0.0 -e ARW_PORT=8091 \
   -e ARW_ACCESS_LOG=1 -e ARW_ACCESS_SAMPLE_N=1 \
@@ -56,6 +60,7 @@ docker run --rm -p 8091:8091 \
   -e ARW_ACCESS_LOG_DIR=/var/log/arw \
   -e ARW_ACCESS_LOG_PREFIX=http-access \
   -e ARW_ACCESS_LOG_ROTATION=daily \
+  -e ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" \
   -v $(pwd)/logs:/var/log/arw \
   arw-server:dev
 ```
@@ -71,13 +76,14 @@ Set in `.env` (see `.env.example`):
 ## Pull from GHCR
 
 ```bash
-# Replace <owner> with repo owner (e.g., t3hw00t)
-IMG=ghcr.io/<owner>/arw-server:latest
+IMG=ghcr.io/t3hw00t/arw-server:latest
+export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
 
 docker pull "$IMG"
 docker run --rm -p 8091:8091 \
-  -e ARW_BIND=0.0.0.0 -e ARW_PORT=8091 \
-  -e ARW_ADMIN_TOKEN=your-secret \
+  -e ARW_BIND=0.0.0.0 \
+  -e ARW_PORT=8091 \
+  -e ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" \
   "$IMG"
 ```
 

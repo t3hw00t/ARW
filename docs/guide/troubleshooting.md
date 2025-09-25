@@ -17,14 +17,14 @@ Type: How‑to
 
 Port already in use
 - Symptom: `bind` error or `curl` to `/healthz` times out.
-- Fix: pick another port.
+- Fix: pick another unused port (example below uses `8092`).
   - Windows
     ```powershell
-    $env:ARW_PORT=8091; powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHealth
+    $env:ARW_PORT=8092; powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHealth
     ```
   - Linux / macOS
     ```bash
-    ARW_PORT=8091 bash scripts/start.sh --wait-health
+    ARW_PORT=8092 bash scripts/start.sh --service-only --wait-health
     ```
 
 ## Unauthorized Admin Calls (401/403)

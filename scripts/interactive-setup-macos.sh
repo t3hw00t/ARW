@@ -110,7 +110,14 @@ configure_settings() {
   ic_section "Configure Settings"
   read -r -p "HTTP port [${PORT}]: " ans; PORT=${ans:-$PORT}
   read -r -p "Docs URL (optional) [${DOCS_URL}]: " ans; DOCS_URL=${ans:-$DOCS_URL}
-  read -r -p "Admin token (optional) [${ADMIN_TOKEN}]: " ans; ADMIN_TOKEN=${ans:-$ADMIN_TOKEN}
+  if [[ -z "${ADMIN_TOKEN}" ]]; then
+    read -r -p "Generate admin token now? (Y/n): " gen; if [[ "${gen,,}" != n* ]]; then
+      ADMIN_TOKEN=$(ic_generate_token)
+      ic_emit_token "$ADMIN_TOKEN" "admin token"
+      ic_warn "Store this token securely (password manager or encrypted .env)."
+    fi
+  fi
+  read -r -p "Admin token [${ADMIN_TOKEN:-auto}]: " ans; ADMIN_TOKEN=${ans:-$ADMIN_TOKEN}
   read -r -p "Run tests after build? (y/N): " ans; [[ "${ans,,}" == y* ]] && RUN_TESTS=1 || RUN_TESTS=0
   read -r -p "Build docs site with MkDocs? (Y/n): " ans; [[ "${ans,,}" == n* ]] && BUILD_DOCS=0 || BUILD_DOCS=1
   read -r -p "Create portable bundle in dist/? (y/N): " ans; [[ "${ans,,}" == y* ]] && DO_PACKAGE=1 || DO_PACKAGE=0
@@ -244,7 +251,7 @@ first_run_wizard() {
   if ic_port_in_use "$p"; then np=$(ic_next_free_port "$p"); ic_warn "Port busy; suggesting $np"; read -r -p "Use $np? (Y/n) " yn; [[ "${yn,,}" != n* ]] && p=$np; fi
 
   ic_section "Admin Token"
-  read -r -p "Generate admin token? (Y/n): " gen; if [[ "${gen,,}" != n* ]]; then tok=$(ic_rand_token); export ARW_ADMIN_TOKEN="$tok"; ic_info "Generated token: $tok"; fi
+  read -r -p "Generate admin token? (Y/n): " gen; if [[ "${gen,,}" != n* ]]; then tok=$(ic_generate_token); export ARW_ADMIN_TOKEN="$tok"; ic_emit_token "$tok" "admin token"; ic_warn "Store this token securely."; fi
 
   ic_section "Write config"
   mkdir -p "$ROOT/configs"

@@ -37,12 +37,12 @@ Type: Explanation
 - Signed plugins and sandboxed tools by default.
 
 ## Get Started
-- Quickstart: run ARW locally in minutes.
-- Features: see what’s included and what’s planned.
-- Architecture: understand the object graph and single event stream (SSE).
-- Verify: check `GET /healthz` and `GET /about` for a quick sanity check.
+- [Quickstart](guide/quickstart.md): run ARW locally in minutes.
+- [Feature Matrix](reference/feature_matrix.md): review what ships today and what’s planned.
+- [Architecture overview](architecture/object_graph.md): follow the unified object graph and SSE stream.
+- [Verify endpoints](guide/quickstart.md#verify-the-server): do a quick `/healthz` and `/about` check.
 
-Tip: ARW treats context as a just‑in‑time working set assembled from layered memories. See Architecture → Context Working Set for how we keep prompts small, relevant, and explainable.
+Tip: ARW treats context as a just‑in‑time working set assembled from layered memories. See [Architecture → Context Working Set](architecture/context_working_set.md) for how we keep prompts small, relevant, and explainable.
 
 ## Who It’s For
 - People who want real help on real work without giving away their data.
@@ -54,9 +54,9 @@ Tip: ARW treats context as a just‑in‑time working set assembled from layered
 - Not a monolithic “one‑true‑agent” — compose via recipes and tools.
 
 ## Choose Your Path
-- Run Locally: Quickstart
-- Operate & Secure: Security Hardening, Deployment, Admin Endpoints
-- Contribute: Developer/Overview
+- [Run Locally](guide/quickstart.md)
+- [Operate & Secure](guide/security_hardening.md) · [Deployment](guide/deployment.md) · [Admin Endpoints](guide/admin_endpoints.md)
+- [Contribute](developer/index.md)
 
 Related:
 - [Experiments (A/B) & Goldens](guide/experiments_ab.md)

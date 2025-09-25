@@ -69,16 +69,10 @@ These ship with `arw-server` out of the box and keep working even when you stay 
 
 - Watch sites or docs for changes and get short, actionable updates after you enable the connectors or watcher packs you trust.
 
+<a id="opt-in-collaboration-extensions"></a>
 ### Remote collaborator packs
 
-- Invite a teammate to co-drive a run or offload heavy steps once you’ve pooled compute with trusted peers.
-
-<a id="opt-in-collaboration-extensions"></a>
-## Remote collaboration packs
-
 These unlock when you choose to collaborate or federate resources.
-
-### Scaling & Sharing
 
 - **[Core kernel]** Start on one machine and keep every workflow local until you explicitly invite more help.
 - **[Opt-in pack]** Install automation packs (Logic Units, experiments, or debugger surfaces) to prep work before you bring collaborators into the loop.
@@ -133,7 +127,7 @@ powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHea
 Linux / macOS (headless unified server)
 ```bash
 bash scripts/setup.sh
-bash scripts/start.sh --wait-health
+bash scripts/start.sh --service-only --wait-health
 ```
 
 Screenshots and annotation tooling are optional and compiled when you enable the
@@ -155,14 +149,19 @@ curl -sS -X POST http://127.0.0.1:8091/actions \
 
 Docker (amd64/arm64) — unified server
 ```bash
-docker run --rm -p 8091:8091 ghcr.io/t3hw00t/arw-server:latest
+# Generate a strong admin token once and keep it secret
+export ARW_ADMIN_TOKEN="$(openssl rand -hex 32)"
+
+docker run --rm -p 8091:8091 \
+  -e ARW_BIND=0.0.0.0 \
+  -e ARW_PORT=8091 \
+  -e ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" \
+  ghcr.io/t3hw00t/arw-server:latest
 ```
 
-Verify endpoints
-```bash
-curl -sS http://127.0.0.1:8091/healthz
-curl -sS http://127.0.0.1:8091/about | jq
-```
+Use any equivalent secret generator if `openssl` is unavailable.
+
+Use the same `/healthz` and `/about` checks above to confirm the container is ready.
 
 ### Debug & Audit Helpers
 
@@ -242,10 +241,12 @@ Screenshots → https://t3hw00t.github.io/ARW/guide/screenshots/
 # Build locally
 docker build -f apps/arw-server/Dockerfile -t arw-server:dev .
 
-# Run (dev): binds on localhost unless ARW_BIND set
+# Run (dev): override bind address for LAN testing
+export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
 docker run --rm -p 8091:8091 \
-  -e ARW_PORT=8091 -e ARW_BIND=0.0.0.0 \
-  -e ARW_ADMIN_TOKEN=dev-admin \
+  -e ARW_BIND=0.0.0.0 \
+  -e ARW_PORT=8091 \
+  -e ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" \
   arw-server:dev
 
 # Verify
@@ -307,14 +308,14 @@ Universal sidecar (always on)
 - Architecture: https://t3hw00t.github.io/ARW/architecture/object_graph/ and https://t3hw00t.github.io/ARW/architecture/events_vocabulary/
 - Desktop Launcher: https://t3hw00t.github.io/ARW/guide/launcher/
 - Admin Endpoints: https://t3hw00t.github.io/ARW/guide/admin_endpoints/
- - Models Download: https://t3hw00t.github.io/ARW/guide/models_download/
+- Models Download: https://t3hw00t.github.io/ARW/guide/models_download/
 - Security Hardening: https://t3hw00t.github.io/ARW/guide/security_hardening/
- - Network Posture: https://t3hw00t.github.io/ARW/guide/network_posture/
+- Network Posture: https://t3hw00t.github.io/ARW/guide/network_posture/
 - Roadmap: https://t3hw00t.github.io/ARW/ROADMAP/
- - Clustering blueprint: https://t3hw00t.github.io/ARW/architecture/cluster_federation/
+- Clustering blueprint: https://t3hw00t.github.io/ARW/architecture/cluster_federation/
 
 Commons Kit (what we ship on top)
-- One‑click “agent recipes”: manifest bundles of prompts + tools + guardrails + minimal UI. Install by dropping a folder into `recipes/` and launching. See https://t3hw00t.github.io/ARW/guide/recipes/ and schema under https://github.com/t3hw00t/ARW/blob/main/spec/schemas/recipe_manifest.json
+- One‑click “agent recipes”: manifest bundles of prompts + tools + guardrails + minimal UI. Install by dropping a folder into `${ARW_STATE_DIR:-state}/recipes/` (created on first run) and launching. See https://t3hw00t.github.io/ARW/guide/recipes/ and schema under https://github.com/t3hw00t/ARW/blob/main/spec/schemas/recipe_manifest.json
 - Form‑first tools: ARW tool JSON Schemas render parameter forms automatically; validate before dispatch.
 - Sensible trust boundaries: default‑deny for file write, shell, and network; per‑recipe ask/allow/never with audit events visible in the sidecar.
 
@@ -341,7 +342,12 @@ If you use an AI pair‑programmer, start here:
 
 - Run latest image:
   ```bash
-  docker run --rm -p 8091:8091 ghcr.io/t3hw00t/arw-server:latest
+  export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
+  docker run --rm -p 8091:8091 \
+    -e ARW_BIND=0.0.0.0 \
+    -e ARW_PORT=8091 \
+    -e ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" \
+    ghcr.io/t3hw00t/arw-server:latest
   ```
 - Compose/Helm examples: see https://t3hw00t.github.io/ARW/guide/docker/
 

@@ -68,7 +68,14 @@ configure_runtime() {
   fi
   read -r -p "Enable debug endpoints? (y/N) " ans; [[ "${ans,,}" == y* ]] && DEBUG=1 || DEBUG=0
   read -r -p "Docs URL (optional) [${DOCS_URL}]: " ans; DOCS_URL=${ans:-$DOCS_URL}
-  read -r -p "Admin token (optional) [${ADMIN_TOKEN}]: " ans; ADMIN_TOKEN=${ans:-$ADMIN_TOKEN}
+  if [[ -z "${ADMIN_TOKEN}" ]]; then
+    read -r -p "Generate admin token now? (Y/n): " gen; if [[ "${gen,,}" != n* ]]; then
+      ADMIN_TOKEN=$(ic_generate_token)
+      ic_emit_token "$ADMIN_TOKEN" "admin token"
+      ic_warn "Store this token securely; sessions without it expose admin surfaces."
+    fi
+  fi
+  read -r -p "Admin token [${ADMIN_TOKEN:-auto}]: " ans; ADMIN_TOKEN=${ans:-$ADMIN_TOKEN}
   read -r -p "Use packaged dist/ bundle when present? (y/N) " ans; [[ "${ans,,}" == y* ]] && USE_DIST=1 || USE_DIST=0
   read -r -p "Wait for /healthz after start? (Y/n) [$( [[ ${WAIT_HEALTH:-1} -eq 1 ]] && echo Y || echo n)]: " ans; [[ "${ans,,}" == n* ]] && WAIT_HEALTH=0 || WAIT_HEALTH=1
   read -r -p "Health wait timeout secs [${WAIT_HEALTH_TIMEOUT_SECS}]: " ans; WAIT_HEALTH_TIMEOUT_SECS=${ans:-$WAIT_HEALTH_TIMEOUT_SECS}
@@ -149,7 +156,7 @@ EOF
       7) ic_clipboard_copy "$base/spec"; ic_info "Copied $base/spec"; ic_press_enter ;;
       8) {
            local tok="$ADMIN_TOKEN"; if [[ -z "$tok" ]]; then
-             read -r -p "No token set. Generate one now? (Y/n): " g; if [[ "${g,,}" != n* ]]; then tok=$(ic_rand_token); export ARW_ADMIN_TOKEN="$tok"; ic_info "Generated token for this session."; fi
+            read -r -p "No token set. Generate one now? (Y/n): " g; if [[ "${g,,}" != n* ]]; then tok=$(ic_generate_token); export ARW_ADMIN_TOKEN="$tok"; ic_emit_token "$tok" "admin token (session)"; ic_warn "Store this token securely."; fi
            fi
            local cmd
            if [[ -n "$tok" ]]; then
@@ -161,7 +168,7 @@ EOF
          } ;;
       9) {
            local tok="$ADMIN_TOKEN"; if [[ -z "$tok" ]]; then
-             read -r -p "No token set. Generate one now? (Y/n): " g; if [[ "${g,,}" != n* ]]; then tok=$(ic_rand_token); export ARW_ADMIN_TOKEN="$tok"; ic_info "Generated token for this session."; fi
+            read -r -p "No token set. Generate one now? (Y/n): " g; if [[ "${g,,}" != n* ]]; then tok=$(ic_generate_token); export ARW_ADMIN_TOKEN="$tok"; ic_emit_token "$tok" "admin token (session)"; ic_warn "Store this token securely."; fi
            fi
            local cmd
            if [[ -n "$tok" ]]; then

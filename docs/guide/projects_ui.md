@@ -30,7 +30,7 @@ See also: [Keyboard Shortcuts](shortcuts.md)
 ## Enable and Open
 
 - Set `ARW_DEBUG=1` (or provide `X-ARW-Admin` when running in locked mode).
-- Start the unified server as usual (e.g. `bash scripts/start.sh --wait-health`).
+- Start the unified server as usual (e.g. `bash scripts/start.sh --service-only --debug --wait-health`).
 - Open `http://127.0.0.1:8091/admin/ui/projects` in your browser.
 
 !!! note "Admin gating"

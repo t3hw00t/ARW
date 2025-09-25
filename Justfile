@@ -58,7 +58,12 @@ docker-build:
   docker build -f apps/arw-server/Dockerfile -t arw-server:dev .
 
 docker-run:
-  docker run --rm -p 8091:8091 -e ARW_PORT=8091 -e ARW_BIND=0.0.0.0 arw-server:dev
+  ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"; \
+  docker run --rm -p 8091:8091 \
+    -e ARW_BIND=0.0.0.0 \
+    -e ARW_PORT=8091 \
+    -e ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" \
+    arw-server:dev
 
 # Build and push multi-arch image to GHCR (requires docker login to GHCR)
 docker-push ghcr="ghcr.io/t3hw00t/arw-server" tag="dev":
@@ -67,7 +72,12 @@ docker-push ghcr="ghcr.io/t3hw00t/arw-server" tag="dev":
 
 # Run published image from GHCR
 docker-run-ghcr ghcr="ghcr.io/t3hw00t/arw-server" tag="latest":
-  docker run --rm -p 8091:8091 -e ARW_PORT=8091 -e ARW_BIND=0.0.0.0 {{ghcr}}:{{tag}}
+  ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"; \
+  docker run --rm -p 8091:8091 \
+    -e ARW_BIND=0.0.0.0 \
+    -e ARW_PORT=8091 \
+    -e ARW_ADMIN_TOKEN="$ARW_ADMIN_TOKEN" \
+    {{ghcr}}:{{tag}}
 
 # Tail latest rolling access log (http.access)
 access-tail:
