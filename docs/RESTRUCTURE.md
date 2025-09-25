@@ -347,6 +347,8 @@ Runtime
 
 ## Running Locally (new server)
 ```bash
+export ARW_ADMIN_TOKEN=dev-admin
+# Start the server with a matching token (omit --debug in hardened setups)
 cargo run -p arw-server
 # Health
 curl -s localhost:8091/healthz
@@ -357,15 +359,16 @@ curl -s -X POST localhost:8091/actions -H 'content-type: application/json' \
   -d '{"kind":"demo.echo","input":{"msg":"hi"},"idem_key":"demo-1"}'
 # Stream events
 curl -N localhost:8091/events
-# Views
-curl -s localhost:8091/state/episodes | jq
-curl -s localhost:8091/state/contributions | jq
-curl -s localhost:8091/state/logic_units | jq
-curl -s localhost:8091/state/orchestrator/jobs | jq
-curl -s 'localhost:8091/state/memory/recent?limit=50' | jq
+# Views (admin-gated)
+curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/state/episodes | jq
+curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/state/contributions | jq
+curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/state/logic_units | jq
+curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/state/orchestrator/jobs | jq
+curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" 'localhost:8091/state/memory/recent?limit=50' | jq
 ```
 
 Notes
+- Admin endpoints require either `ARW_DEBUG=1` (development-only) or a matching `Authorization: Bearer` token.
 - The demo server binds to `127.0.0.1:8091` by default. Override with `ARW_BIND` and `ARW_PORT`.
 
 ## How To Try (End-to-End)
@@ -381,8 +384,10 @@ Policy (ABAC facade)
 - Simulate: `curl -s -X POST localhost:8091/policy/simulate -H 'content-type: application/json' -d '{"kind":"net.http.get"}' | jq`
 
 Leases
-- Create: `curl -s -X POST localhost:8091/leases -H 'content-type: application/json' -d '{"capability":"net:http","ttl_secs":600}' | jq`
-- List: `curl -s localhost:8091/state/leases | jq`
+- Create HTTP lease: `curl -s -X POST localhost:8091/leases -H 'content-type: application/json' -d '{"capability":"net:http","ttl_secs":600}' | jq`
+- Create context leases: `curl -s -X POST localhost:8091/leases -H 'content-type: application/json' -d '{"capability":"context:rehydrate:file","ttl_secs":600}' | jq`
+- Also grant memory rehydrate: `curl -s -X POST localhost:8091/leases -H 'content-type: application/json' -d '{"capability":"context:rehydrate:memory","ttl_secs":600}' | jq`
+- List: `curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/state/leases | jq`
 
 Context
 - Assemble: `curl -s -X POST localhost:8091/context/assemble -H 'content-type: application/json' -d '{"q":"term","lanes":["semantic","procedural"],"limit":18,"include_sources":true,"corr_id":"demo-ctx-1"}' | jq`
@@ -406,8 +411,8 @@ Network allowlist demo
 - Denied: submit to `https://google.com` → denied with reason `allowlist`; ledger records a `deny` decision.
 
 State Views
-- Egress: `curl -s localhost:8091/state/egress | jq`
-- Actions: `curl -s localhost:8091/state/actions | jq`
+- Egress: `curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/state/egress | jq`
+- Actions: `curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/state/actions | jq`
 
 ## Contributor Checklist (Restructure)
 - When adding/changing triad endpoints, kernel schemas, or runtime/policy:
