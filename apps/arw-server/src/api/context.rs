@@ -15,11 +15,11 @@ use crate::{
     context_loop::{
         drive_context_loop, ContextLoopResult, StreamIterationEmitter, SyncIterationCollector,
     },
-    util, working_set, AppState,
+    coverage, util, working_set, AppState,
 };
 use arw_topics as topics;
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Clone, Deserialize, ToSchema)]
 pub(crate) struct AssembleReq {
     #[serde(default)]
     pub proj: Option<String>,
@@ -92,6 +92,7 @@ pub async fn context_assemble(
     if stream_requested {
         return stream_working_set(
             state,
+            req,
             base_spec.clone(),
             include_sources,
             debug,
@@ -154,69 +155,27 @@ pub async fn context_assemble(
 
     let iterations_meta = collector.into_inner();
 
-    let working_set::WorkingSet {
-        items,
-        seeds,
-        expanded,
-        diagnostics,
-        summary,
-    } = ws;
-    let mut working = json!({
-        "items": items,
-        "counts": {
-            "items": items.len(),
-            "seeds": seeds.len(),
-            "expanded": expanded.len()
-        },
-        "summary": summary.to_json(),
-        "iterations": Value::Array(iterations_meta.clone()),
-        "coverage": json!({
-            "needs_more": last_verdict.needs_more,
-            "reasons": last_verdict.reasons
-        })
-    });
-    working["final_spec"] = final_spec.snapshot();
-    if include_sources || debug {
-        working["seeds"] = json!(seeds);
-        working["expanded"] = json!(expanded);
-    }
-    if debug {
-        working["diagnostics"] = diagnostics;
-    }
-    let beliefs = working.get("items").cloned().unwrap_or_else(|| json!([]));
-    let mut body = json!({
-        "query": req.q,
-        "project": req.proj,
-        "lanes": final_spec.lanes.clone(),
-        "limit": final_spec.limit,
-        "expand_per_seed": final_spec.expand_per_seed,
-        "diversity_lambda": final_spec.diversity_lambda,
-        "min_score": final_spec.min_score,
-        "scorer": final_spec.scorer_label(),
-        "expand_query": final_spec.expand_query,
-        "expand_query_top_k": final_spec.expand_query_top_k,
-        "max_iterations": max_iterations,
-        "working_set": working,
-        "beliefs": beliefs
-    });
-    if let Some(obj) = body.as_object_mut() {
-        obj.insert("requested_spec".into(), base_spec.snapshot());
-    }
-    if let Some(embed) = req.embed.clone() {
-        if let Some(obj) = body.as_object_mut() {
-            obj.insert("embed".into(), json!(embed));
-        }
-    }
-    if let Some(obj) = body.as_object_mut() {
-        if let Some(cid) = corr_id {
-            obj.insert("corr_id".into(), json!(cid));
-        }
-    }
+    let body = build_context_response(
+        &req,
+        &base_spec,
+        &final_spec,
+        &last_verdict,
+        ws,
+        iterations_meta,
+        include_sources,
+        debug,
+        max_iterations,
+        corr_id.as_ref(),
+    );
+
+    state.bus().publish(topics::TOPIC_CONTEXT_ASSEMBLED, &body);
+
     (axum::http::StatusCode::OK, Json(body)).into_response()
 }
 
 async fn stream_working_set(
     state: AppState,
+    req: AssembleReq,
     base_spec: working_set::WorkingSetSpec,
     include_sources: bool,
     debug: bool,
@@ -230,19 +189,39 @@ async fn stream_working_set(
     let state_clone = state.clone();
     let spec_clone = base_spec.clone();
     let corr_for_task = corr_id.clone();
+    let req_for_task = req.clone();
+    let base_spec_for_task = base_spec.clone();
     tokio::spawn(async move {
         let stream_sender = tx.clone();
         let emitter = StreamIterationEmitter::new(stream_sender.clone());
-        let _ = drive_context_loop(
-            state_clone,
+        let loop_result = drive_context_loop(
+            state_clone.clone(),
             spec_clone,
-            corr_for_task,
+            corr_for_task.clone(),
             max_iterations,
             Some(stream_sender),
             false,
             move |event| emitter.handle(event),
         )
         .await;
+
+        if let Some(ws) = loop_result.final_working_set {
+            let body = build_context_response(
+                &req_for_task,
+                &base_spec_for_task,
+                &loop_result.final_spec,
+                &loop_result.last_verdict,
+                ws,
+                Vec::new(),
+                include_sources,
+                debug,
+                max_iterations,
+                corr_for_task.as_ref(),
+            );
+            state_clone
+                .bus()
+                .publish(topics::TOPIC_CONTEXT_ASSEMBLED, &body);
+        }
     });
 
     let stream = ReceiverStream::new(rx).filter_map(move |evt| {
@@ -290,6 +269,136 @@ async fn stream_working_set(
         Some(Ok::<_, Infallible>(event))
     });
     Sse::new(stream).into_response()
+}
+
+fn build_context_response(
+    req: &AssembleReq,
+    base_spec: &working_set::WorkingSetSpec,
+    final_spec: &working_set::WorkingSetSpec,
+    last_verdict: &coverage::CoverageVerdict,
+    ws: working_set::WorkingSet,
+    iterations_meta: Vec<Value>,
+    include_sources: bool,
+    debug: bool,
+    max_iterations: usize,
+    corr_id: Option<&String>,
+) -> Value {
+    let working_set::WorkingSet {
+        items,
+        seeds,
+        expanded,
+        diagnostics,
+        summary,
+    } = ws;
+
+    let preview = build_context_preview(&items);
+
+    let item_count = items.len();
+    let seed_count = seeds.len();
+    let expanded_count = expanded.len();
+
+    let mut working = json!({
+        "items": items,
+        "counts": {
+            "items": item_count,
+            "seeds": seed_count,
+            "expanded": expanded_count
+        },
+        "summary": summary.to_json(),
+        "coverage": json!({
+            "needs_more": last_verdict.needs_more,
+            "reasons": last_verdict.reasons
+        })
+    });
+    working["iterations"] = Value::Array(iterations_meta);
+    working["final_spec"] = final_spec.snapshot();
+    if include_sources || debug {
+        working["seeds"] = json!(seeds);
+        working["expanded"] = json!(expanded);
+    }
+    if debug {
+        working["diagnostics"] = diagnostics;
+    }
+
+    let beliefs = working.get("items").cloned().unwrap_or_else(|| json!([]));
+
+    let mut body = json!({
+        "query": req.q,
+        "project": req.proj,
+        "lanes": final_spec.lanes.clone(),
+        "limit": final_spec.limit,
+        "expand_per_seed": final_spec.expand_per_seed,
+        "diversity_lambda": final_spec.diversity_lambda,
+        "min_score": final_spec.min_score,
+        "scorer": final_spec.scorer_label(),
+        "expand_query": final_spec.expand_query,
+        "expand_query_top_k": final_spec.expand_query_top_k,
+        "max_iterations": max_iterations,
+        "working_set": working,
+        "beliefs": beliefs
+    });
+
+    if let Some(obj) = body.as_object_mut() {
+        obj.insert("requested_spec".into(), base_spec.snapshot());
+        if let Some(embed) = req.embed.clone() {
+            obj.insert("embed".into(), json!(embed));
+        }
+        if let Some(cid) = corr_id {
+            obj.insert("corr_id".into(), json!(cid));
+        }
+        if let Some(preview) = preview {
+            obj.insert("context_preview".into(), json!(preview));
+        }
+    }
+
+    body
+}
+
+fn build_context_preview(items: &[Value]) -> Option<String> {
+    const MAX_LINES: usize = 5;
+    const LINE_MAX: usize = 160;
+    const TOTAL_MAX: usize = 800;
+
+    let mut lines = Vec::new();
+    for item in items.iter().take(MAX_LINES) {
+        let candidate = if let Some(obj) = item.as_object() {
+            obj.get("text")
+                .and_then(|v| v.as_str())
+                .or_else(|| obj.get("summary").and_then(|v| v.as_str()))
+                .or_else(|| obj.get("content").and_then(|v| v.as_str()))
+                .or_else(|| obj.get("value").and_then(|v| v.as_str()))
+        } else if let Some(s) = item.as_str() {
+            Some(s)
+        } else {
+            None
+        };
+
+        let text = candidate
+            .map(|s| s.to_string())
+            .unwrap_or_else(|| serde_json::to_string(item).unwrap_or_default());
+        let normalized = text.split_whitespace().collect::<Vec<_>>().join(" ");
+        let trimmed = normalized.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        let mut line = trimmed.to_string();
+        if line.len() > LINE_MAX {
+            line.truncate(LINE_MAX);
+            line.push('…');
+        }
+        lines.push(format!("• {}", line));
+    }
+
+    if lines.is_empty() {
+        return None;
+    }
+
+    let mut preview = lines.join("\n");
+    if preview.len() > TOTAL_MAX {
+        preview.truncate(TOTAL_MAX);
+        preview.push('…');
+    }
+    Some(preview)
 }
 
 fn build_spec(req: &AssembleReq) -> working_set::WorkingSetSpec {

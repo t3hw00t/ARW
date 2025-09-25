@@ -171,7 +171,7 @@
   <div class="row">
     <button onclick="hit('/version')">/version</button>
     <button onclick="hit('/about')">/about</button>
-    <button onclick="hit('/admin/introspect/tools')">/admin/introspect/tools</button>
+    <button onclick="hit('/admin/tools')">/admin/tools</button>
     <button onclick="hit('/admin/probe')">/admin/probe</button>
     <button onclick="hit('/admin/models')">/admin/models</button>
     <button onclick="post('/admin/models/refresh')">POST /admin/models/refresh</button>
@@ -213,7 +213,6 @@
       <h3>Orchestration <a href="#" class="help" data-doc="orchestrator" data-tip="Common actions to manage the local agent service." title="Orchestration docs">?</a></h3>
       <div class="row" role="toolbar" aria-label="Orchestration actions">
         <button onclick="orProbe()">Probe now</button>
-        <button onclick="orEmitTest()">Emit test</button>
         <button onclick="orRefreshModels()">Refresh models</button>
         <button onclick="runSelfTests()">Self‑tests</button>
         <button onclick="orShutdown()">Shutdown</button>
@@ -647,7 +646,6 @@ async function runTool(){
 
 // Orchestration actions
 async function orProbe(){ await req('GET', '/probe', null, 'out', 'rt-orch'); }
-async function orEmitTest(){ await req('GET', '/emit/test', null, 'out', 'rt-orch'); }
 async function orRefreshModels(){ await req('POST', '/models/refresh', null, 'out', 'rt-orch'); }
 async function orShutdown(){ await req('GET', '/shutdown', null, 'out', 'rt-orch'); }
 async function orProfileApply(){ const name = document.getElementById('profileSel').value; await req('POST','/governor/profile',{name},'out','rt-orch'); }
@@ -1546,7 +1544,7 @@ async function runSelfTests(){
 
   try { const v = await jget('/version'); if(v.service && v.version){ pass('/version'); } else { fail('/version','missing keys'); } } catch(e){ fail('/version',e); }
   try { const a = await jget('/about'); if(Array.isArray(a.endpoints)){ pass('/about'); } else { fail('/about','missing endpoints'); } } catch(e){ fail('/about',e); }
-  try { const t = await jget('/introspect/tools'); if(Array.isArray(t) && t.length>=2){ pass('/introspect/tools'); } else { fail('/introspect/tools','unexpected'); } } catch(e){ fail('/introspect/tools',e); }
+  try { const t = await jget('/admin/tools'); if(Array.isArray(t?.items) ? t.items.length >= 2 : Array.isArray(t) && t.length>=2){ pass('/admin/tools'); } else { fail('/admin/tools','unexpected'); } } catch(e){ fail('/admin/tools',e); }
 
   try { await jpost('/admin/memory/apply',{lane:'ephemeral',value:{ from:'selftest', t: Date.now() }}); const m = await jget('/admin/memory?limit=5'); if(m && (m.items||m.data?.items)){ pass('POST /admin/memory/apply + GET /admin/memory'); } else { fail('memory','unexpected'); } } catch(e){ fail('memory',e); }
 
@@ -1827,7 +1825,7 @@ async function trainingFetch(){ try{
   const out = document.getElementById('trainingOut');
   if(out){ out.textContent = JSON.stringify(j?.data || j, null, 2); }
 }catch(e){ console.error(e); showToast('training fetch failed'); }}
-async function probeAdmin(){ try{ const r = await fetch(base + '/introspect/tools'); setAdmin(r.ok); }catch{ setAdmin(false); } }
+async function probeAdmin(){ try{ const r = await fetch(base + '/admin/tools'); setAdmin(r.ok); }catch{ setAdmin(false); } }
 document.addEventListener('DOMContentLoaded', probeAdmin);
 document.addEventListener('DOMContentLoaded', ()=>{ var b=document.getElementById('chatTestBtn'); if(b){ b.addEventListener('click', chatProbe); } chatInit(); chatFetch(); });
 document.addEventListener('DOMContentLoaded', stagingFetch);
@@ -1948,7 +1946,7 @@ const palette = {
   list:[
     {t:'Open /version', h:'GET', f:()=>hit('/version')},
     {t:'Open /about', h:'GET', f:()=>hit('/about')},
-    {t:'List tools', h:'GET', f:()=>hit('/introspect/tools')},
+    {t:'List tools', h:'GET', f:()=>hit('/admin/tools')},
     {t:'Probe now', h:'Action', f:()=>orProbe()},
     {t:'Refresh models', h:'Action', f:()=>orRefreshModels()},
     {t:'Run self-tests', h:'Action', f:()=>runSelfTests()},

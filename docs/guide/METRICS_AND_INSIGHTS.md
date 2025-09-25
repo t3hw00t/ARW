@@ -15,7 +15,7 @@ Type: How‑to
 - Metacognition: calibration (Brier/ECE), risk–coverage (selective prediction), competence by domain/tool, resource forecast accuracy (tokens/latency/$ MAE), safety outcomes, and self‑model stability.
 
 ## Endpoints
-- GET `/introspect/stats` → `{ events, routes, tasks }` where `routes.by_path["/path"]` has `hits`, `errors`, `ewma_ms`, `p95_ms`, `last_ms`, `max_ms`, `last_status` and `tasks[task]` mirrors the background task counters described below.
+- GET `/admin/introspect/stats` → `{ events, routes, tasks }` where `routes.by_path["/path"]` has `hits`, `errors`, `ewma_ms`, `p95_ms`, `last_ms`, `max_ms`, `last_status` and `tasks[task]` mirrors the background task counters described below.
 - GET `/state/tasks` → `{ tasks }` read-model refreshed every few seconds for dashboards (no admin auth needed).
 
 ## UI
@@ -25,7 +25,7 @@ Type: How‑to
 - Copy the JSON snapshot via “Copy stats”.
 
 ## Security
-- `/introspect/*` surfaces are gated by default; see Developer Security Notes.
+- `/admin/introspect/*` surfaces are gated by default; see Developer Security Notes.
 
 ## Prometheus Exposition
 

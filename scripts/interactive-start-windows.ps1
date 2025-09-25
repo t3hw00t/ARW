@@ -140,34 +140,32 @@ function Open-ProbeMenu {
     Write-Host @'
   1) Open Debug UI (/admin/debug)
   2) Open API Spec (/spec)
-  3) Open Tools JSON (/introspect/tools)
+  3) Open Tools JSON (/admin/tools)
   4) Invoke health (/healthz)
-  5) Trigger test event (/emit/test)
-  6) Check NATS connectivity
-  7) Copy Debug URL to clipboard
-  8) Copy Spec URL to clipboard
-  9) Copy admin curl (introspect/tools)
-  10) Copy admin curl (shutdown)
+  5) Check NATS connectivity
+  6) Copy Debug URL to clipboard
+  7) Copy Spec URL to clipboard
+  8) Copy admin curl (tools)
+  9) Copy admin curl (shutdown)
   0) Back
 '@
     $pick = Read-Host 'Select'
     switch ($pick) {
       '1' { Start-Process -FilePath "$base/admin/debug" | Out-Null }
       '2' { Start-Process -FilePath "$base/spec" | Out-Null }
-      '3' { Start-Process -FilePath "$base/introspect/tools" | Out-Null }
+      '3' { Start-Process -FilePath "$base/admin/tools" | Out-Null }
       '4' { try { (Invoke-WebRequest @IwrArgs "$base/healthz").Content | Write-Host } catch {} ; Read-Host 'Continue' | Out-Null }
-      '5' { try { (Invoke-WebRequest @IwrArgs "$base/emit/test").Content | Write-Host } catch {} ; Read-Host 'Continue' | Out-Null }
-      '6' { $u = Read-Host 'NATS URL [nats://127.0.0.1:4222]'; if (-not $u) { $u = 'nats://127.0.0.1:4222' }; $rest = $u -replace '^.*?://',''; $parts = $rest.Split(':'); $h=$parts[0]; $p=if ($parts.Length -gt 1) { [int]$parts[1] } else { 4222 }; try { $ok = (Test-NetConnection -ComputerName $h -Port $p -WarningAction SilentlyContinue).TcpTestSucceeded; if ($ok) { Info ("NATS reachable at $($h):$p") } else { Warn ("Cannot reach $($h):$p") } } catch { Warn 'Test failed' }; Read-Host 'Continue' | Out-Null }
-      '7' { try { Set-Clipboard -Value "$base/admin/debug"; Info 'Copied Debug URL' } catch { } }
-      '8' { try { Set-Clipboard -Value "$base/spec"; Info 'Copied Spec URL' } catch { } }
-      '9' {
+      '5' { $u = Read-Host 'NATS URL [nats://127.0.0.1:4222]'; if (-not $u) { $u = 'nats://127.0.0.1:4222' }; $rest = $u -replace '^.*?://',''; $parts = $rest.Split(':'); $h=$parts[0]; $p=if ($parts.Length -gt 1) { [int]$parts[1] } else { 4222 }; try { $ok = (Test-NetConnection -ComputerName $h -Port $p -WarningAction SilentlyContinue).TcpTestSucceeded; if ($ok) { Info ("NATS reachable at $($h):$p") } else { Warn ("Cannot reach $($h):$p") } } catch { Warn 'Test failed' }; Read-Host 'Continue' | Out-Null }
+      '6' { try { Set-Clipboard -Value "$base/admin/debug"; Info 'Copied Debug URL' } catch { } }
+      '7' { try { Set-Clipboard -Value "$base/spec"; Info 'Copied Spec URL' } catch { } }
+      '8' {
         $tok = $env:ARW_ADMIN_TOKEN
         if (-not $tok) { $ans = Read-Host 'No token set. Generate one now? (Y/n)'; if (-not ($ans -match '^[nN]')) { $tok = [Guid]::NewGuid().ToString('N'); $env:ARW_ADMIN_TOKEN = $tok; $script:AdminToken = $tok; Info 'Generated token for this session.' } }
-        if ($tok) { $cmd = "curl -sS -H `"X-ARW-Admin: $tok`" `"$base/introspect/tools`" | jq ." } else { $cmd = "curl -sS -H `"X-ARW-Admin: YOUR_TOKEN`" `"$base/introspect/tools`" | jq ." }
+        if ($tok) { $cmd = "curl -sS -H `"X-ARW-Admin: $tok`" `"$base/admin/tools`" | jq ." } else { $cmd = "curl -sS -H `"X-ARW-Admin: YOUR_TOKEN`" `"$base/admin/tools`" | jq ." }
         try { Set-Clipboard -Value $cmd; Info 'Copied admin curl snippet' } catch { }
         Write-Host $cmd
       }
-      '10' {
+      '9' {
         $tok = $env:ARW_ADMIN_TOKEN
         if (-not $tok) { $ans = Read-Host 'No token set. Generate one now? (Y/n)'; if (-not ($ans -match '^[nN]')) { $tok = [Guid]::NewGuid().ToString('N'); $env:ARW_ADMIN_TOKEN = $tok; $script:AdminToken = $tok; Info 'Generated token for this session.' } }
         if ($tok) { $cmd = "curl -sS -H `"X-ARW-Admin: $tok`" `"$base/shutdown`"" } else { $cmd = "curl -sS -H `"X-ARW-Admin: YOUR_TOKEN`" `"$base/shutdown`"" }

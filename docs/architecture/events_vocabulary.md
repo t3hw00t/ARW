@@ -16,7 +16,7 @@ Canonical categories (normalized)
 - Thought stages: `obs.*` (observations), `beliefs.*`, `intents.*`, `actions.*`
 - Token I/O: `tokens.in`, `tokens.out`
 - Tooling: `tool.invoked`, `tool.ran`, `tool.error`
-- Context: `working_set.started`, `working_set.seed`, `working_set.expanded`, `working_set.expand_query`, `working_set.selected`, `working_set.iteration.summary`, `working_set.completed`, `working_set.error` (payload includes `iteration`, `project`, `query`, and optional `corr_id`; summaries also include the iteration's spec snapshot, a `coverage{needs_more,reasons}` object, and—when another pass is queued—a `next_spec` snapshot. Errors echo the spec alongside the message)
+- Context: `working_set.started`, `working_set.seed`, `working_set.expanded`, `working_set.expand_query`, `working_set.selected`, `working_set.iteration.summary`, `working_set.completed`, `working_set.error`, plus the consolidated summaries `context.coverage` (per iteration coverage verdict + spec snapshot) and `context.assembled` (final working set, preview, and spec snapshot). Errors echo the spec alongside the message.
 - Policy: `policy.prompt`, `policy.allow`, `policy.deny`
 - Runtime: `runtime.health`, `runtime.profile.changed`
 - Models: `models.download.progress`, `models.changed`, `models.cas.gc`, `models.manifest.written`, `models.refreshed`

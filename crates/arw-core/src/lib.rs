@@ -97,7 +97,7 @@ pub fn tool_schema(id: &str) -> Value {
             "required": ["portable","state_dir","cache_dir","logs_dir","memory"]
         }),
 
-        // Schema describing the list that /introspect/tools returns
+        // Schema describing the list that /admin/tools returns
         "introspect.tools" => json!({
             "$schema": "https://json-schema.org/draft/2020-12/schema",
             "title": "ToolInfoList",

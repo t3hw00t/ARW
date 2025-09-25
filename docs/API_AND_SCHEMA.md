@@ -104,7 +104,7 @@ Each operation declares: Input, Output, Error types; capabilities; stability (st
 ## Declaration Style (Rust)
 
 New endpoints (introspection, feedback, distill)
-- `GET /introspect/stats`: returns event totals and per‑route metrics (hits, errors, EWMA, last/max ms).
+- `GET /admin/introspect/stats`: returns event totals and per‑route metrics (hits, errors, EWMA, last/max ms).
 - `POST /admin/feedback/signal`: record a signal `{ kind, target, confidence, severity, note }`.
 - `POST /admin/feedback/analyze`: produce suggestions from signals and stats.
 - `POST /admin/feedback/apply`: apply a suggestion `{ id }` (updates hints/profile/memory limit conservatively).
@@ -166,7 +166,7 @@ header when calling these endpoints.
 
 Admin probes
 ```bash
-H "$BASE/admin/introspect/tools" | jq '.[0:5]'
+H "$BASE/admin/tools" | jq '.items[0:5]'
 H "$BASE/admin/introspect/schemas/memory.probe@1.0.0" | jq
 ```
 
@@ -176,7 +176,7 @@ curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/events?replay=10"
 ```
 
 Key admin endpoints
-- `GET /admin/introspect/tools`
+- `GET /admin/tools`
 - `GET /admin/introspect/schemas/{tool_id}`
 - `GET /admin/probe?task_id=...&step=...`
 - `SSE /events`

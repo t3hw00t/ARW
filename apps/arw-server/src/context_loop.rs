@@ -293,6 +293,15 @@ async fn run_context_iteration(
                 topics::TOPIC_WORKING_SET_ITERATION_SUMMARY,
                 &summary_payload,
             );
+            let coverage_payload = build_context_coverage_payload(
+                iteration,
+                &spec_used,
+                &ws.summary,
+                &verdict,
+                corr_id.as_ref(),
+                duration_ms,
+            );
+            bus.publish(topics::TOPIC_CONTEXT_COVERAGE, &coverage_payload);
             IterationOutcome::Success(Box::new(IterationSuccess {
                 working_set: ws,
                 verdict,
@@ -478,6 +487,33 @@ fn build_iteration_summary_payload(
         payload.insert("next_spec".into(), next_spec.snapshot());
     }
     payload.insert("duration_ms".into(), json!(duration_ms));
+    Value::Object(payload)
+}
+
+fn build_context_coverage_payload(
+    iteration: usize,
+    spec: &working_set::WorkingSetSpec,
+    summary: &working_set::WorkingSetSummary,
+    verdict: &coverage::CoverageVerdict,
+    corr_id: Option<&String>,
+    duration_ms: f64,
+) -> Value {
+    let mut payload = Map::new();
+    payload.insert("iteration".into(), json!(iteration));
+    payload.insert("needs_more".into(), json!(verdict.needs_more));
+    payload.insert("reasons".into(), json!(verdict.reasons));
+    payload.insert("summary".into(), summary.to_json());
+    payload.insert("spec".into(), spec.snapshot());
+    payload.insert("duration_ms".into(), json!(duration_ms));
+    if let Some(cid) = corr_id {
+        payload.insert("corr_id".into(), json!(cid));
+    }
+    if let Some(project) = spec.project.as_ref() {
+        payload.insert("project".into(), json!(project));
+    }
+    if let Some(query) = spec.query.as_ref() {
+        payload.insert("query".into(), json!(query));
+    }
     Value::Object(payload)
 }
 

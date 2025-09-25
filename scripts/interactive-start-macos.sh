@@ -128,39 +128,37 @@ open_links_menu() {
     cat <<EOF
   1) Open Debug UI (/admin/debug)
   2) Open API Spec (/spec)
-  3) Open Tools JSON (/introspect/tools)
+  3) Open Tools JSON (/admin/tools)
   4) Curl health (/healthz)
-  5) Trigger test event (/emit/test)
-  6) Check NATS connectivity
-  7) Copy Debug URL to clipboard
-  8) Copy Spec URL to clipboard
-  9) Copy admin curl (introspect/tools)
-  10) Copy admin curl (shutdown)
+  5) Check NATS connectivity
+  6) Copy Debug URL to clipboard
+  7) Copy Spec URL to clipboard
+  8) Copy admin curl (tools)
+  9) Copy admin curl (shutdown)
   0) Back
 EOF
     read -r -p "Select: " pick || true
     case "$pick" in
       1) ic_open_url "$base/admin/debug" ;;
       2) ic_open_url "$base/spec" ;;
-      3) ic_open_url "$base/introspect/tools" ;;
+      3) ic_open_url "$base/admin/tools" ;;
       4) http_get "$base/healthz" || true; echo; ic_press_enter ;;
-      5) http_get "$base/emit/test" || true; echo; ic_press_enter ;;
-      6) read -r -p "NATS URL [nats://127.0.0.1:4222]: " u; u=${u:-nats://127.0.0.1:4222}; read -r h p < <(ic_parse_host_port "$u"); if ic_port_test "$h" "$p"; then ic_info "NATS reachable at $h:$p"; else ic_warn "Cannot reach $h:$p"; fi; ic_press_enter ;;
-      7) ic_clipboard_copy "$base/admin/debug"; ic_info "Copied $base/admin/debug"; ic_press_enter ;;
-      8) ic_clipboard_copy "$base/spec"; ic_info "Copied $base/spec"; ic_press_enter ;;
-      9) {
+      5) read -r -p "NATS URL [nats://127.0.0.1:4222]: " u; u=${u:-nats://127.0.0.1:4222}; read -r h p < <(ic_parse_host_port "$u"); if ic_port_test "$h" "$p"; then ic_info "NATS reachable at $h:$p"; else ic_warn "Cannot reach $h:$p"; fi; ic_press_enter ;;
+      6) ic_clipboard_copy "$base/admin/debug"; ic_info "Copied $base/admin/debug"; ic_press_enter ;;
+      7) ic_clipboard_copy "$base/spec"; ic_info "Copied $base/spec"; ic_press_enter ;;
+      8) {
            local tok="$ADMIN_TOKEN"; if [[ -z "$tok" ]]; then
              read -r -p "No token set. Generate one now? (Y/n): " g; if [[ "${g,,}" != n* ]]; then tok=$(ic_rand_token); export ARW_ADMIN_TOKEN="$tok"; ic_info "Generated token for this session."; fi
            fi
            local cmd
            if [[ -n "$tok" ]]; then
-             cmd="curl -sS -H 'X-ARW-Admin: $tok' '$base/introspect/tools' | jq ."
+             cmd="curl -sS -H 'X-ARW-Admin: $tok' '$base/admin/tools' | jq ."
            else
-             cmd="curl -sS -H 'X-ARW-Admin: YOUR_TOKEN' '$base/introspect/tools' | jq ."
+             cmd="curl -sS -H 'X-ARW-Admin: YOUR_TOKEN' '$base/admin/tools' | jq ."
            fi
            ic_clipboard_copy "$cmd"; ic_info "Copied admin curl snippet"; echo "$cmd"; ic_press_enter;
          } ;;
-      10) {
+      9) {
            local tok="$ADMIN_TOKEN"; if [[ -z "$tok" ]]; then
              read -r -p "No token set. Generate one now? (Y/n): " g; if [[ "${g,,}" != n* ]]; then tok=$(ic_rand_token); export ARW_ADMIN_TOKEN="$tok"; ic_info "Generated token for this session."; fi
            fi

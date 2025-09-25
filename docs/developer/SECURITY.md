@@ -14,7 +14,7 @@ Type: Reference
 - CORS: permissive only if `ARW_DEBUG=1` or `ARW_CORS_ANY=1`; otherwise restrictive.
 
 ## Sensitive Endpoints
-- `/admin/debug`, `/admin/probe*`, `/admin/memory*`, `/admin/models*`, `/admin/governor*`, `/admin/introspect*`, `/admin/chat*`, `/admin/feedback*`, `/events`, `/admin/emit*`, `/admin/shutdown`.
+- `/admin/debug`, `/admin/probe*`, `/admin/memory*`, `/admin/models*`, `/admin/governor*`, `/admin/introspect*`, `/admin/chat*`, `/admin/feedback*`, `/events`, `/admin/shutdown`.
 - Adjust the list conservatively; prefer to over‑protect and open case‑by‑case.
 
 ## Recommendations
