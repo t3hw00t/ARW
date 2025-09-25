@@ -1,7 +1,11 @@
+use std::collections::BTreeSet;
+
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use axum::{extract::State, Json};
 use serde_json::json;
+
+use arw_core::list_admin_endpoints;
 
 /// Health probe.
 #[utoipa::path(
@@ -48,15 +52,55 @@ pub async fn about(State(state): State<crate::AppState>) -> impl IntoResponse {
     let posture = std::env::var("ARW_SECURITY_POSTURE").ok();
     let endpoints = state.endpoints();
     let endpoints_meta = state.endpoints_meta();
-    let endpoints_vec = endpoints.as_ref().clone();
-    let endpoints_meta_vec = endpoints_meta.as_ref().clone();
+    let admin_endpoints = list_admin_endpoints();
+
+    let admin_paths: BTreeSet<String> = admin_endpoints
+        .iter()
+        .map(|ep| ep.path.to_string())
+        .collect();
+    let admin_entries: BTreeSet<String> = admin_endpoints
+        .iter()
+        .map(|ep| format!("{} {}", ep.method, ep.path))
+        .collect();
+
+    let mut public_set: BTreeSet<String> = endpoints.as_ref().clone().into_iter().collect();
+    for entry in &admin_entries {
+        public_set.remove(entry);
+    }
+
+    let public_count = public_set.len();
+    let admin_count = admin_endpoints.len();
+
+    let mut endpoints_meta_vec = endpoints_meta.as_ref().clone();
+    endpoints_meta_vec.retain(|entry| {
+        entry
+            .get("path")
+            .and_then(|v| v.as_str())
+            .map(|path| !admin_paths.contains(path))
+            .unwrap_or(true)
+    });
+
+    let mut endpoint_set = public_set.clone();
+    for admin in admin_endpoints {
+        let entry = format!("{} {}", admin.method, admin.path);
+        endpoint_set.insert(entry.clone());
+        endpoints_meta_vec.push(json!({
+            "method": admin.method,
+            "path": admin.path,
+            "summary": admin.summary,
+            "stability": "admin",
+        }));
+    }
+
+    let endpoints_vec: Vec<String> = endpoint_set.into_iter().collect();
+    let total_count = endpoints_vec.len();
     Json(json!({
         "service": name,
         "version": version,
         "http": {"bind": bind, "port": port},
         "docs_url": docs,
         "security_posture": posture,
-        "counts": {"public": endpoints_vec.len(), "admin": 0, "total": endpoints_vec.len()},
+        "counts": {"public": public_count, "admin": admin_count, "total": total_count},
         "endpoints": endpoints_vec,
         "endpoints_meta": endpoints_meta_vec,
         "perf_preset": {

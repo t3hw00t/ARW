@@ -28,23 +28,23 @@ Unless noted, examples assume the unified `arw-server` on `http://127.0.0.1:8091
   - `version`: semantic version string
   - `role`: current node role
   - `docs_url`: base docs URL if configured
-  - `counts`: endpoint counts — `{ public, admin, total }`.
+  - `counts`: endpoint counts — `{ public, admin, total }` (totals reflect unique endpoints).
   - `endpoints`: list of known endpoints as strings in the form `"METHOD /path"`.
     - Public endpoints are recorded at router build time (source-of-truth is the runtime recorder).
-    - Admin endpoints come from the compile-time registry via `#[arw_admin]` (prevents drift).
+    - Admin endpoints come from the compile-time registry via `#[arw_admin]` (prevents drift) and are merged with the runtime recorder at response time.
     - The list is deduped and sorted.
 
-Example
+Example (counts will vary as new endpoints land)
 ```json
 {
   "name": "Agent Hub (ARW)",
   "tagline": "Your private AI control room that can scale and share when you choose.",
   "description": "Agent Hub (ARW) lets you run your own team of AI helpers on your computer to research, plan, write, and build—while you stay in charge.",
   "service": "arw-server",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "role": "Home",
   "docs_url": "https://t3hw00t.github.io/ARW/",
-  "counts": { "public": 12, "admin": 48, "total": 60 },
+  "counts": { "public": 62, "admin": 48, "total": 110 },
   "endpoints": [
     "GET /healthz",
     "GET /spec/openapi.yaml",
@@ -59,12 +59,12 @@ Example
     - Set `ARW_ADMIN_TOKEN` and require it on all admin calls
     - Keep the service bound to `127.0.0.1` or place behind a TLS proxy
     - Tune rate limits with `ARW_ADMIN_RL` (e.g., `60/60`)
-    - Avoid `ARW_DEBUG=1` outside local development
+    - Avoid `ARW_DEBUG=1` outside local development (debug mode is the only time admin endpoints are open without a token)
 
 ## Authentication
 
 - Header: `Authorization: Bearer <token>` **or** `X-ARW-Admin: <token>`.
-- Server toggle: set `ARW_ADMIN_TOKEN` to the expected token; if it is unset or blank, the surface behaves as development/open.
+- Server toggle: set `ARW_ADMIN_TOKEN` (or `ARW_ADMIN_TOKEN_SHA256`) to the expected token; when neither variable is set the surface stays locked unless `ARW_DEBUG=1` is also present.
 - Mutating endpoints that require the token today include:
   - Configuration and schema helpers (`POST /patch/*`).
   - Connector lifecycle (`POST /connectors/register`, `POST /connectors/token`).
@@ -83,18 +83,18 @@ Example
 
 ### `/about` and endpoint discovery
 
-`/about` surfaces what the triad recorder knows about the running binary. Each router mount calls `route_get_tag!` / `route_post_tag!` (or their recording counterparts) to push an entry into the in-memory registry. The response exposes that registry alongside build metadata and counts so you can programmatically discover capabilities and stability levels.
+`/about` surfaces what the triad recorder knows about the running binary. Each router mount calls `route_get_tag!` / `route_post_tag!` (or their recording counterparts) to push an entry into the in-memory registry. At response time the service merges that runtime list with the compile-time admin registry so clients can distinguish public and privileged surfaces while the counts remain accurate.
 
 Example (truncated for brevity):
 
 ```json
 {
   "service": "arw-server",
-  "version": "0.1.0",
+  "version": "0.1.4",
   "http": { "bind": "127.0.0.1", "port": 8091 },
   "docs_url": "https://t3hw00t.github.io/ARW/",
   "security_posture": null,
-  "counts": { "public": 59, "admin": 0, "total": 59 },
+  "counts": { "public": 62, "admin": 48, "total": 110 },
   "endpoints": [
     "GET /healthz",
     "GET /about",
