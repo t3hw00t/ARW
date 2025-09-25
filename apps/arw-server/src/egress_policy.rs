@@ -3,14 +3,41 @@ use serde_json::{json, Value};
 use crate::{capsule_guard, AppState};
 
 fn domain_suffix(host: &str) -> Option<String> {
-    host.find('.').and_then(|idx| {
-        let s = &host[idx + 1..];
-        if s.is_empty() {
-            None
-        } else {
-            Some(s.to_string())
-        }
-    })
+    use std::net::IpAddr;
+
+    let trimmed = host.trim().trim_end_matches('.').to_ascii_lowercase();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.parse::<IpAddr>().is_ok() {
+        return None;
+    }
+
+    let parts: Vec<&str> = trimmed.split('.').collect();
+    if parts.len() < 2 {
+        return None;
+    }
+
+    // Minimal multi-label PSL coverage to avoid regressing popular ccTLDs without
+    // introducing a heavy dependency. This can be expanded if additional cases
+    // surface.
+    const MULTI_LABEL_SUFFIXES: &[&str] = &[
+        "co.uk", "org.uk", "gov.uk", "ac.uk", "sch.uk", "ltd.uk", "plc.uk", "me.uk", "co.jp",
+        "or.jp", "ne.jp", "ac.jp", "ad.jp", "ed.jp", "go.jp", "gr.jp", "lg.jp", "co.nz", "org.nz",
+        "govt.nz", "ac.nz", "geek.nz", "com.au", "net.au", "org.au", "edu.au", "gov.au",
+        "csiro.au", "com.br", "com.cn",
+    ];
+
+    let last = parts.last().unwrap();
+    let penultimate = parts[parts.len() - 2];
+    let candidate = format!("{penultimate}.{last}");
+
+    if MULTI_LABEL_SUFFIXES.contains(&candidate.as_str()) && parts.len() >= 3 {
+        let registrable = format!("{}.{}", parts[parts.len() - 3], candidate);
+        return Some(registrable);
+    }
+
+    Some(candidate)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -452,6 +479,44 @@ mod tests {
         assert!(rule.matches("deep.branch.example.com", None));
         assert!(!rule.matches("example.com", None));
         assert!(!rule.matches("badexample.com", None));
+    }
+
+    #[test]
+    fn domain_suffix_handles_apex_and_subdomains() {
+        assert_eq!(
+            domain_suffix("example.com"),
+            Some("example.com".to_string())
+        );
+        assert_eq!(
+            domain_suffix("www.example.com"),
+            Some("example.com".to_string())
+        );
+        assert_eq!(
+            domain_suffix("sub.service.example.com"),
+            Some("example.com".to_string())
+        );
+    }
+
+    #[test]
+    fn domain_suffix_handles_common_multi_label_suffixes() {
+        assert_eq!(
+            domain_suffix("foo.example.co.uk"),
+            Some("example.co.uk".to_string())
+        );
+        assert_eq!(
+            domain_suffix("example.co.uk"),
+            Some("example.co.uk".to_string())
+        );
+        assert_eq!(
+            domain_suffix("bar.example.com.au"),
+            Some("example.com.au".to_string())
+        );
+    }
+
+    #[test]
+    fn domain_suffix_ignores_ip_literals() {
+        assert_eq!(domain_suffix("127.0.0.1"), None);
+        assert_eq!(domain_suffix("::1"), None);
     }
 
     #[test]

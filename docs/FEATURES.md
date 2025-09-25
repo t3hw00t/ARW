@@ -21,10 +21,13 @@ Type: Explanation
 - Configurable strategies via Logic Units you can A/B, apply, and roll back without code changes.
 
 ## Scaling & Sharing (Opt‑In)
-- Pool compute to your own GPU box or a trusted collaborator’s machine; offload under your rules and budget.
-- Live co‑drive sessions; risky actions wait in a staging area for approval.
-- Clear boundaries: egress previews and a ledger of what left and why.
-- Fair splits across GPU time, tokens, and tasks.
+- Stay local-first by default; federation and co-drive remain disabled until you enable them.
+- **Preview** Pool compute to your own GPU box or a trusted collaborator’s machine; offload under your rules and budget.
+- **Preview** Live co‑drive sessions keep risky actions in a staging area that waits for approval.
+- **Preview** Clear boundaries arrive when you enable the Guardrail Gateway proxy + ledger to record what left and why.
+- **Future** Fair splits across GPU time, tokens, and tasks.
+
+> **Enable preview features** Set `[cluster] enabled = true` in your override config before inviting workers, then export `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_EGRESS_LEDGER_ENABLE=1` to capture previews.
 
 ## Under the Hood
 - Open, local‑first agent runtime with versioned tool schemas and portable packaging. Rust core; optional plugins; thin UIs.
@@ -36,7 +39,7 @@ Type: Explanation
 - Security & Policy: Central gating keys and deny contracts; ingress/egress guards; Policy Capsules; roadmap RPU for signatures/ABAC. See: [Security Hardening](guide/security_hardening.md), [Policy & Permissions](guide/policy_permissions.md).
 - Visual capture: Agents and UIs call `ui.screenshot.capture` for screen/window/region snapshots with Activity lane previews, gallery management, annotation tooling, and optional OCR. See: [Screenshots](guide/screenshots.md).
 - Self-improvement loop: goldens + rewards, A/B runner (with shadow), config patch engine, policy-aware tuner, calibrated self-model, nightly distillation (and on-demand via `POST /admin/distill`), and a persisted experiments scoreboard + winners. See: Experiments (guide/experiments_ab.md).
-- Egress control: policy-backed, per-node egress gateway + DNS guard with project-level network posture and an egress ledger. See: Architecture → Egress Firewall; Guide → Network Posture.
+- Egress control (preview): enable the Guardrail Gateway for a policy-backed loopback proxy, DNS guard, project-level network posture, and an egress ledger. See: Architecture → Egress Firewall; Guide → Network Posture.
 - Lightweight mitigations (planned): memory quarantine; project isolation; belief-diff review; cluster manifest pinning; hardened headless browsing; safe archive handling; DNS anomaly guard; accelerator zeroing; event sequencing; context rehydration check. See: Architecture → Lightweight Mitigations.
 - Models: enhanced downloader with resume, checksum, EWMA admission, disk reserve checks, content-disposition filenames, cross-platform finalize, and a simple concurrency limiter (`ARW_MODELS_MAX_CONC`).
 - Safety & Profiles: Sandboxed file/network allowlists; profiles (performance/balanced/power-saver/custom); secrets and hints.

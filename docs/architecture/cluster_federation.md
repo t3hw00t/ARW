@@ -9,6 +9,8 @@ Type: Explanation
 
 Clustering, live sharing, pooled compute, and optional revenue sharing let ARW grow beyond a single machine without losing the solo fast path. This page merges the earlier “Clustering” and “Hierarchy” drafts so the active plan is tracked in one place.
 
+> **Status:** opt-in preview. Interfaces may change between releases; expect sharp edges while the shared sidecar, cluster matrix, and contribution ledger land.
+
 ## High-Level Shape
 - **Home Node (Control Plane)**: owns projects, policies, budgets, provenance; there is always a single authoritative Home per workspace.
 - **Workers (Compute Plane)**: advertise capabilities (models, GPUs, tools), accept jobs, stream events back.
@@ -47,6 +49,8 @@ bus = "local"    # "nats" when feature "arw-core/nats" is enabled
 queue = "local"  # "nats" when feature "arw-core/nats" is enabled
 # nats_url = "nats://127.0.0.1:4222"
 ```
+
+Set `enabled = true` in your override config to join the preview. Export `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_EGRESS_LEDGER_ENABLE=1` so Guardrail Gateway previews and the ledger capture offloads during federation tests.
 
 The unified server already speaks NATS when compiled with the feature; JetStream durable queues land once the worker orchestration is active.
 

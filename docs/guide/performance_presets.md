@@ -54,7 +54,7 @@ The working-set pipeline exposes `metrics` counters and histograms so you can ve
 - `arw_context_seed_candidates_total`, `arw_context_link_expansion_total`, `arw_context_query_expansion_total`, `arw_context_selected_total` — per-lane cardinality of seeds, expansions, and final picks.
 - `arw_context_scorer_used_total{scorer=...}` — scorer usage per request.
 
-Scrape the unified `/state/metrics` endpoint (or whichever exporter you wire up) to watch how presets behave under load and to decide when to bump budgets.
+Scrape the unified `/metrics` endpoint (or whichever exporter you wire up) to watch how presets behave under load and to decide when to bump budgets.
 
 ## Inspect & Override
 Presets only provide defaults. To override, export the env var(s) you care about:
@@ -69,4 +69,3 @@ arw-server
 - Presets control runtime behavior. They can be combined: e.g., `cargo build --profile maxperf` and run with `ARW_PERF_PRESET=performance`.
 
 See also: Configuration (CONFIGURATION.md), Interactive Performance (guide/interactive_performance.md)
-

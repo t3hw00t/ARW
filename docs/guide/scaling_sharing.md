@@ -9,10 +9,12 @@ Type: How‑to
 
 Agent Hub (ARW) is local‑first and privacy‑first by default. When a project needs more muscle or collaboration, you can opt‑in to scale and share — with clear boundaries and your approval at every step.
 
+> **Status:** opt-in preview. Flip `[cluster] enabled = true` in your override config and enable the Guardrail Gateway (`ARW_EGRESS_PROXY_ENABLE=1`, `ARW_EGRESS_LEDGER_ENABLE=1`) before inviting remote workers.
+
 ## Pool Compute
-- Add your own GPU box or a trusted friend’s machine as a worker.
-- Heavy jobs offload under your rules, budget, and policies.
-- Preview what would be sent (inputs, sizes, estimated cost) before anything leaves your machine.
+- Add your own GPU box or a trusted friend’s machine as a worker (preview).
+- Heavy jobs offload under your rules, budget, and policies (preview).
+- Guardrail Gateway previews show inputs, sizes, and estimated cost before anything leaves your machine (enable proxy + ledger).
 
 Related
 - Architecture: Federated Clustering — `architecture/cluster_federation.md`
@@ -20,7 +22,7 @@ Related
 - Architecture: Egress Firewall (policy‑backed gateway) — `architecture/egress_firewall.md`
 
 ## Live Co‑Drive
-- Share an agent session so collaborators can watch, suggest, or take the wheel with your approval.
+- Share an agent session so collaborators can watch, suggest, or take the wheel with your approval (preview).
 - Risky actions land in a staging area and wait for an explicit go‑ahead.
 
 Related
@@ -28,8 +30,8 @@ Related
 - Guide: Permissions & Policies — `guide/policy_permissions.md`
 
 ## Clear Boundaries
-- You see what would be sent, to whom, and the estimated cost.
-- An egress ledger records offloads for review and auditing.
+- You see what would be sent, to whom, and the estimated cost (proxy preview).
+- An egress ledger records offloads for review and auditing once enabled.
 
 Related
 - Reference: Telemetry & Privacy — `reference/telemetry_privacy.md`

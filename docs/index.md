@@ -14,7 +14,7 @@ Type: Explanation
 ## Why It’s Different
 - You decide access: files, web, mic, and camera are off until you grant time‑limited permission.
 - You can see and replay everything: sources, steps, tools used, and cost; snapshot any run and compare later.
-- It grows with you: start on one laptop; invite other machines to help or co‑drive in real time.
+- It grows with you: start on one laptop; federation preview lets invited machines help or co-drive under your supervision.
 - Configurable, not brittle: “Logic Units” are safe strategy packs you can A/B test, apply, and roll back.
 
 ## What You Can Do
@@ -25,10 +25,13 @@ Type: Explanation
 - Chat to explore data and export both answers and evidence.
 
 ## Scaling & Sharing (Opt‑In)
-- Pool compute to your GPU box or a trusted collaborator’s machine; offload heavy jobs under your rules and budget.
-- Live co‑drive sessions: others can watch, suggest, or take the wheel with your approval; risky actions wait for your sign‑off.
-- Clear boundaries: preview what would leave your machine, to whom, and the estimated cost; an egress ledger records it.
-- Fair splits: meter GPU time, tokens, and tasks for transparent revenue sharing later.
+- Stay local-first by default; remote workers and co-drive remain off until you flip them on.
+- **Preview** Pool compute to your GPU box or a trusted collaborator’s machine; offload heavy jobs under your rules and budget.
+- **Preview** Live co‑drive sessions: others can watch, suggest, or take the wheel with your approval; risky actions wait for your sign-off.
+- **Preview** Clear boundaries: enable the Guardrail Gateway proxy + ledger to preview egress and capture an audit trail.
+- **Future** Fair splits: meter GPU time, tokens, and tasks for transparent revenue sharing later.
+
+> **Enable preview features** Set `[cluster] enabled = true` in your override config before inviting workers, and export `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_EGRESS_LEDGER_ENABLE=1` to record previews.
 
 ## Safety & Control
 - Permission leases with timers and scopes; no silent escalation.

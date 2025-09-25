@@ -43,7 +43,7 @@ These ship with `arw-server` out of the box and keep working even when you stay 
 
 - You decide access: files, web, mic, and camera are off until you grant time‑limited permission.
 - You can see and replay everything: each result shows sources, steps, tools used, and cost; any run can be snapshotted and compared later.
-- It grows with you: start on one laptop; when needed, invite other machines to help or co‑drive an agent in real time.
+- It grows with you: start on one laptop; when you opt in, federation preview lets invited machines help or co-drive under your policies.
 - It is configurable, not brittle: frontier techniques arrive as “Logic Units” (safe strategy packs) you can turn on, A/B test, and roll back in one click.
 
 ### Safety & Control
@@ -53,7 +53,7 @@ These ship with `arw-server` out of the box and keep working even when you stay 
 - **[Core kernel]** Budgets for time, tokens, and spend; the system stays within plan and shows the meter.
 - **[Core kernel]** Signed plugins and sandboxed tools by default.
 - **[Opt-in pack]** Install Logic Units with schema checks so you can stage, audit, and roll back higher-risk automation before it touches production projects.
-- **[Remote collaborator pack]** Preview and log every outbound request through the Guardrail Gateway before any data leaves your machine.
+- **[Remote collaborator pack · Preview]** Turn on the Guardrail Gateway to preview and log outbound requests before any data leaves your machine.
 - **[Future pack]** Asimov Capsule Guard (alpha) keeps capsules refreshed across the unified runtime today; additional propagation hooks and remote presets land as they harden.
 
 ## What You Can Do
@@ -72,14 +72,16 @@ These ship with `arw-server` out of the box and keep working even when you stay 
 <a id="opt-in-collaboration-extensions"></a>
 ### Remote collaborator packs
 
-These unlock when you choose to collaborate or federate resources.
+These unlock when you choose to collaborate or federate resources. Remote compute, co‑drive, and the Guardrail Gateway run as opt-in previews while we finish the shared sidecar and cluster matrix.
 
 - **[Core kernel]** Start on one machine and keep every workflow local until you explicitly invite more help.
 - **[Opt-in pack]** Install automation packs (Logic Units, experiments, or debugger surfaces) to prep work before you bring collaborators into the loop.
-- **[Remote collaborator pack]** Pool compute: add your own GPU box or a trusted friend’s machine as a worker. Heavy jobs offload there under your rules and budget.
-- **[Remote collaborator pack]** Live co‑drive: share an agent session so others can watch, suggest, or take the wheel with your approval. Risky actions still wait in a staging area for you to approve.
-- **[Remote collaborator pack]** Clear boundaries: before anything leaves your machine, you see what would be sent, to whom, and the estimated cost. An egress ledger records it all.
+- **[Remote collaborator pack · Preview]** Pool compute: add your own GPU box or a trusted friend’s machine as a worker. Heavy jobs offload there under your rules and budget.
+- **[Remote collaborator pack · Preview]** Live co‑drive: share an agent session so others can watch, suggest, or take the wheel with your approval. Risky actions still wait in a staging area for you to approve.
+- **[Remote collaborator pack · Preview]** Clear boundaries: before anything leaves your machine, you see what would be sent, to whom, and the estimated cost. Enable the Guardrail Gateway proxy + ledger to capture the audit trail.
 - **[Future pack]** Fair splits: contributions (GPU time, tokens, tasks) are metered per collaborator so shared project revenue can be split transparently later.
+
+> **Enable federation preview** Set `[cluster] enabled = true` in your override config (example: `${ARW_STATE_DIR}/config.toml`), optionally point `bus`/`queue` at "nats", export `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_EGRESS_LEDGER_ENABLE=1`, then restart `arw-server`.
 
 ## Future packs (Roadmap)
 
@@ -275,8 +277,8 @@ Pull from GHCR (on releases): `ghcr.io/t3hw00t/arw-server:latest`. See the Docke
 - Tools: macro‑driven registration with generated JSON Schemas
 - Observability: tracing/logging/metrics and event journal (optional)
 - Packaging: portable installs and per‑user state by default
- - Clustering (design): single Home Node with invited Workers under strict policy and egress control; live sharing and pooled compute remain opt‑in. See https://t3hw00t.github.io/ARW/architecture/cluster_federation/
- - Egress Firewall (plan): policy‑backed, per‑node loopback proxy + DNS guard with project‑level network posture (Off/Public/Allowlist/Custom), egress ledger, and pre‑offload previews. See https://t3hw00t.github.io/ARW/architecture/egress_firewall/
+- Clustering (preview): single Home Node with invited Workers under strict policy and egress control; live sharing and pooled compute remain opt-in. See https://t3hw00t.github.io/ARW/architecture/cluster_federation/
+- Egress Firewall (preview): policy-backed, per-node loopback proxy + DNS guard with project-level network posture (Off/Public/Allowlist/Custom), egress ledger, and pre-offload previews when enabled. See https://t3hw00t.github.io/ARW/architecture/egress_firewall/
 
 Three primary perspectives
 - Project Hub: the center of real‑world work (files/notes/agents/data/runs)

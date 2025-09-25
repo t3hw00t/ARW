@@ -195,16 +195,29 @@ impl CapsuleStore {
         let mut expired: Vec<CapsuleSnapshot> = Vec::new();
         let mut changed = false;
         for (id, entry) in guard.iter_mut() {
+            let mut should_apply = false;
+            let mut expired_now = false;
+
             if let Some(expire) = entry.lease_until_ms {
                 if now >= expire {
-                    to_remove.push(id.clone());
-                    expired.push(entry.snapshot.clone());
-                    changed = true;
-                    continue;
+                    let since_expiry = now.saturating_sub(expire);
+                    if entry
+                        .renew_within_ms
+                        .map(|window| since_expiry <= window)
+                        .unwrap_or(false)
+                    {
+                        should_apply = true;
+                    } else {
+                        expired_now = true;
+                    }
+                } else if let Some(window) = entry.renew_within_ms {
+                    let until_expiry = expire.saturating_sub(now);
+                    if until_expiry <= window {
+                        should_apply = true;
+                    }
                 }
             }
 
-            let mut should_apply = false;
             match entry.remaining_hops {
                 Some(0) => {}
                 Some(ref mut hops) => {
@@ -213,16 +226,16 @@ impl CapsuleStore {
                     entry.snapshot.remaining_hops = Some(*hops);
                     changed = true;
                 }
-                None => {
-                    if let Some(expire) = entry.lease_until_ms {
-                        if let Some(window) = entry.renew_within_ms {
-                            if expire.saturating_sub(now) <= window {
-                                should_apply = true;
-                            }
-                        }
-                    }
-                }
+                None => {}
             }
+
+            if expired_now {
+                to_remove.push(id.clone());
+                expired.push(entry.snapshot.clone());
+                changed = true;
+                continue;
+            }
+
             if should_apply {
                 apply.push((id.clone(), entry.capsule.clone()));
                 changed = true;
@@ -545,7 +558,7 @@ mod tests {
         sync::{Arc, Mutex as StdMutex},
     };
     use tempfile::tempdir;
-    use tokio::time::{timeout, Duration};
+    use tokio::time::{sleep, timeout, Duration};
 
     static ENV_LOCK: Lazy<StdMutex<()>> = Lazy::new(|| StdMutex::new(()));
 
@@ -670,6 +683,29 @@ mod tests {
             signature: None,
             ..sample_capsule(id)
         }
+    }
+
+    #[tokio::test]
+    async fn replay_all_renews_with_short_window_before_purging() {
+        let _guard = ENV_LOCK.lock().unwrap();
+
+        let store = CapsuleStore::new();
+        let mut capsule = sample_capsule("renewal-test");
+        capsule.hop_ttl = None;
+        capsule.signature = None;
+        capsule.lease_duration_ms = Some(300);
+        capsule.renew_within_ms = Some(1_500);
+
+        store.adopt(&capsule, now_ms()).await;
+
+        sleep(Duration::from_millis(350)).await;
+
+        let replay = store.replay_all().await;
+        assert!(replay.expired.is_empty());
+        assert_eq!(replay.reapplied.len(), 1);
+
+        let snapshot = store.snapshot().await;
+        assert_eq!(snapshot["count"].as_u64(), Some(1));
     }
 
     #[tokio::test]

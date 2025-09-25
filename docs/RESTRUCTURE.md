@@ -383,7 +383,7 @@ Policy (ABAC facade)
 - Create `policy.json`:
   - `{ "allow_all": false, "lease_rules": [ { "kind_prefix": "net.http.", "capability": "net:http" }, { "kind_prefix": "context.rehydrate.memory", "capability": "context:rehydrate:memory" }, { "kind_prefix": "context.rehydrate", "capability": "context:rehydrate:file" } ] }`
 - Export: `export ARW_POLICY_FILE=policy.json`
-- Check: `curl -s localhost:8091/state/policy | jq`
+- Check: `curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/state/policy | jq`
 - Simulate: `curl -s -X POST localhost:8091/policy/simulate -H 'content-type: application/json' -d '{"kind":"net.http.get"}' | jq`
 
 Leases

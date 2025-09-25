@@ -33,6 +33,31 @@ bash scripts/build.sh
 bash scripts/test.sh
 ```
 
+## Set an Admin Token
+
+Generate a secret and export it so the launcher scripts **and** your tooling reuse the same token.
+
+=== "Linux / macOS"
+```bash
+export ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-$(openssl rand -hex 32)}"
+```
+
+> Tip: If `openssl` is unavailable, run:
+> ```bash
+> python - <<'PY'
+> import secrets
+> print(secrets.token_hex(32))
+> PY
+> ```
+> Copy the printed value into `ARW_ADMIN_TOKEN`.
+
+=== "Windows"
+```powershell
+$env:ARW_ADMIN_TOKEN = [System.Guid]::NewGuid().ToString("N")
+```
+
+Keeping the variable in your shell ensures subsequent `curl` calls send `Authorization: Bearer $ARW_ADMIN_TOKEN` without extra copy/paste.
+
 ## Run the Unified Server (Headless)
 
 The new `arw-server` binary is headless-first. It streams events and state over HTTP/SSE while we finish porting the UI.
@@ -40,13 +65,13 @@ The new `arw-server` binary is headless-first. It streams events and state over 
 === "Windows"
 ```powershell
 # Headless server (8091 by default)
-powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHealth
+powershell -ExecutionPolicy Bypass -File scripts/start.ps1 -ServiceOnly -WaitHealth -AdminToken $env:ARW_ADMIN_TOKEN
 ```
 
 === "Linux / macOS"
 ```bash
 # Headless server (8091 by default)
-bash scripts/start.sh --service-only --wait-health
+bash scripts/start.sh --service-only --wait-health --admin-token "$ARW_ADMIN_TOKEN"
 ```
 
 ## Verify the Server
@@ -93,7 +118,8 @@ Additional views expose models, self descriptions, memory lanes, logic units, or
 
 ```bash
 # Inspect the effective policy
-curl -s http://127.0.0.1:8091/state/policy | jq
+curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+  http://127.0.0.1:8091/state/policy | jq
 
 # Create a lease that allows outbound HTTP for 10 minutes
 curl -s -X POST http://127.0.0.1:8091/leases \
