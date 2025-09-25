@@ -23,6 +23,7 @@ API (unified server)
 Security & policy
 - Secrets redaction: `/state/connectors` never returns `token`/`refresh_token`.
 - Egress: calls using connectors still obey allowlists and leases (e.g., `net:http:api.github.com`).
+- Scopes → leases: every scope declared on a connector expects a matching capability lease (e.g., grant `cloud:github:repo:rw` before invoking a GitHub connector).
 - Local apps: treat local app actions as tools with tight leases (e.g., `io:app:vscode`, `io:app:word`).
 - No auto‑install: adding tokens requires `ARW_ADMIN_TOKEN` by default.
 
@@ -41,13 +42,16 @@ curl -s localhost:8091/state/connectors | jq
 
 2) Use a connector with http.fetch
 ```bash
+curl -s -X POST localhost:8091/leases -H 'content-type: application/json' \
+  -d '{"capability":"cloud:github:repo:rw","ttl_secs":600}' | jq
+
 curl -s -X POST localhost:8091/actions -H 'content-type: application/json' \
   -d '{
         "kind":"net.http.get",
         "input":{ "url":"https://api.github.com/user", "connector_id":"gh-main" }
       }' | jq
 ```
-The runtime injects `Authorization: Bearer <token>` and still enforces egress allowlists. Optionally restrict hosts per connector by setting `meta.allowed_hosts` in the connector manifest (e.g., `["api.github.com"]`).
+The runtime injects `Authorization: Bearer <token>` and still enforces egress allowlists. If the lease is missing, the action returns `connector lease required` and emits a `policy.decision`. Optionally restrict hosts per connector by setting `meta.allowed_hosts` in the connector manifest (e.g., `["api.github.com"]`).
 ```
 
 3) Local apps (first tool; more planned)

@@ -33,7 +33,7 @@ Specs
 - Index: `curl http://127.0.0.1:8091/spec/index.json | jq` — lists available spec artifacts and JSON schemas
 
 Events (SSE)
-- Tail live events with `curl -N "http://127.0.0.1:8091/events?replay=10&prefix=models."`
+- Tail live events with `curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" "http://127.0.0.1:8091/events?replay=10&prefix=models."`
 - When `ARW_ADMIN_TOKEN` is set, include `-H "Authorization: Bearer $ARW_ADMIN_TOKEN"`.
 
 Gating Keys

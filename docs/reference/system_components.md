@@ -508,7 +508,7 @@ Memory overlay service on top of the MAL schema that exposes `memory.*` actions,
   - `POST /actions (memory.upsert)`
   - `POST /actions (memory.search)`
   - `POST /actions (memory.pack)`
-  - `GET /state/memory`
+  - `GET /state/memory` (SSE stream)
   - `GET /state/memory/recent`
 - Topics:
   - `memory.item.upserted`

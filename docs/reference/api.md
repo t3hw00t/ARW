@@ -73,6 +73,7 @@ Connectors
 - `GET /state/connectors` — list registered connector manifests (secrets elided)
 - `POST /connectors/register` — register a manifest (admin-gated)
 - `POST /connectors/token` — set/update token/refresh token (admin-gated)
+- `POST /leases` + `connectors` — grant connector scopes by issuing leases (e.g., `cloud:github:repo:rw`) before using the connector.
 
 Logic Units & Config
 - `GET /logic-units` — catalog installed logic units
@@ -230,4 +231,4 @@ SSE
     }
   }
   ```
-- Example client: `curl -N http://127.0.0.1:8091/events?prefix=egress.`
+- Example client: `curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" http://127.0.0.1:8091/events?prefix=egress.`

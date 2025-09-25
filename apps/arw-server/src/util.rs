@@ -1,5 +1,17 @@
+use anyhow::{anyhow, Result};
 use serde_json::{json, Value};
 use std::path::PathBuf;
+
+/// Load a connector manifest from disk.
+pub async fn load_connector_manifest(id: &str) -> Result<Value> {
+    let path = state_dir().join("connectors").join(format!("{}.json", id));
+    let bytes = tokio::fs::read(&path)
+        .await
+        .map_err(|err| anyhow!("read connector manifest: {err}"))?;
+    let value: Value =
+        serde_json::from_slice(&bytes).map_err(|err| anyhow!("parse connector manifest: {err}"))?;
+    Ok(value)
+}
 
 pub fn default_models() -> Vec<Value> {
     vec![

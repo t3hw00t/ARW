@@ -54,7 +54,7 @@ cat spec/schemas/dns_anomaly_event.json | jq '.title,.description'
 
 Events (SSE)
 ```bash
-curl -N "$BASE/events?replay=10"
+curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" "$BASE/events?replay=10"
 ```
 
 The stream opens with a `service.connected` envelope that carries `request_id`, `resume_from`, and replay metadata before historical events (when requested) and live traffic.

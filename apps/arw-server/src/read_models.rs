@@ -223,9 +223,10 @@ where
     )
 }
 
+static READ_MODEL_CACHE: OnceCell<Mutex<HashMap<String, Value>>> = OnceCell::new();
+
 pub(crate) fn publish_read_model_patch(bus: &arw_events::Bus, id: &str, value: &Value) {
-    static LAST: OnceCell<Mutex<HashMap<String, Value>>> = OnceCell::new();
-    let map = LAST.get_or_init(|| Mutex::new(HashMap::new()));
+    let map = READ_MODEL_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
     let mut guard = map.lock().unwrap();
     let prev = guard.get(id).cloned().unwrap_or_else(|| json!({}));
     let patch = json_patch::diff(&prev, value);
@@ -241,6 +242,12 @@ pub(crate) fn publish_read_model_patch(bus: &arw_events::Bus, id: &str, value: &
         }),
     );
     guard.insert(id.to_string(), value.clone());
+}
+
+pub(crate) fn cached_read_model(id: &str) -> Option<Value> {
+    READ_MODEL_CACHE
+        .get()
+        .and_then(|map| map.lock().ok().and_then(|guard| guard.get(id).cloned()))
 }
 
 fn spawn_snappy(state: &AppState) -> TaskHandle {

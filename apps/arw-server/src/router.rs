@@ -167,6 +167,7 @@ pub(crate) mod paths {
     pub const STATE_PROJECTS_NOTES: &str = "/state/projects/:proj/notes";
     pub const STATE_PROJECTS_FILE: &str = "/state/projects/:proj/file";
     pub const STATE_MODELS_HASHES: &str = "/state/models_hashes";
+    pub const STATE_MEMORY: &str = "/state/memory";
     pub const PROJECTS: &str = "/projects";
     pub const PROJECTS_NOTES: &str = "/projects/:proj/notes";
     pub const PROJECTS_FILE: &str = "/projects/:proj/file";
@@ -947,6 +948,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         "/connectors/token",
         api::connectors::connector_token_set,
         None,
+    );
+    builder.route_get(
+        paths::STATE_MEMORY,
+        api::memory::state_memory_stream,
+        Some(Stability::Beta),
     );
     builder.route_get(
         "/state/memory/recent",

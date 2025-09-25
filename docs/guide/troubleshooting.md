@@ -44,7 +44,7 @@ Port already in use
 
 ## SSE Doesn’t Stream
 - Symptom: `curl` returns headers but shows no lines.
-- Fix: use `curl -N`, disable proxy buffering, try `?replay=10`.
+- Fix: use `curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN"`, disable proxy buffering, try `?replay=10`.
   ```bash
   curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
     http://127.0.0.1:8091/events?replay=10

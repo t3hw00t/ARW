@@ -281,6 +281,15 @@ impl WorkerContext {
             .with_guard(guard));
         }
 
+        if let Some(connector_id) = input_with_headers
+            .get("connector_id")
+            .and_then(|v| v.as_str())
+        {
+            if let Err(outcome) = self.ensure_connector_scopes(&guard, connector_id).await {
+                return Ok(outcome);
+            }
+        }
+
         match self.host.run_tool("http.fetch", &input_with_headers).await {
             Ok(value) => {
                 let host_name = value.get("dest_host").and_then(|x| x.as_str());
@@ -340,6 +349,99 @@ impl WorkerContext {
             )
             .with_guard(guard)),
         }
+    }
+
+    async fn ensure_connector_scopes(
+        &self,
+        guard: &ActionGuard,
+        connector_id: &str,
+    ) -> Result<(), ActionOutcome> {
+        let manifest = match util::load_connector_manifest(connector_id).await {
+            Ok(value) => value,
+            Err(err) => {
+                tracing::warn!(
+                    target: "arw::worker",
+                    %connector_id,
+                    "failed to load connector manifest: {err}"
+                );
+                let outcome = ActionOutcome::new(json!({
+                    "error": "connector manifest unavailable",
+                    "connector_id": connector_id,
+                }))
+                .with_posture(util::effective_posture())
+                .with_guard(guard.clone());
+                return Err(outcome);
+            }
+        };
+
+        let scopes: Vec<String> = manifest
+            .get("scopes")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str().map(|s| s.trim().to_string()))
+                    .filter(|s| !s.is_empty())
+                    .collect::<Vec<String>>()
+            })
+            .unwrap_or_default();
+
+        if scopes.is_empty() {
+            return Ok(());
+        }
+
+        let mut missing: Vec<String> = Vec::new();
+        for capability in &scopes {
+            match self
+                .kernel
+                .find_valid_lease_async("local", capability)
+                .await
+            {
+                Ok(Some(_)) => {}
+                Ok(None) => missing.push(capability.clone()),
+                Err(err) => {
+                    tracing::warn!(
+                        target: "arw::worker",
+                        %connector_id,
+                        %capability,
+                        "connector scope lease check failed: {err}"
+                    );
+                    let outcome = ActionOutcome::new(json!({
+                        "error": "connector lease check failed",
+                        "connector_id": connector_id,
+                        "capability": capability,
+                        "detail": err.to_string(),
+                    }))
+                    .with_posture(util::effective_posture())
+                    .with_guard(guard.clone());
+                    return Err(outcome);
+                }
+            }
+        }
+
+        if missing.is_empty() {
+            return Ok(());
+        }
+
+        let missing_caps = missing.clone();
+        self.bus.publish(
+            topics::TOPIC_POLICY_DECISION,
+            &json!({
+                "action": format!("connector.{connector_id}"),
+                "allow": false,
+                "require_capability": missing_caps,
+                "explain": {"reason": "connector_scopes"},
+            }),
+        );
+
+        let posture = util::effective_posture();
+        let outcome = ActionOutcome::new(json!({
+            "error": "connector lease required",
+            "connector_id": connector_id,
+            "missing_scopes": missing,
+        }))
+        .with_posture(posture)
+        .with_guard(guard.clone());
+        Err(outcome)
     }
 
     async fn handle_fs_patch(&self, input: &Value) -> Result<ActionOutcome, ActionFailure> {
@@ -910,6 +1012,90 @@ mod tests {
             ctx.guard_action("fs.patch", &["fs", "fs:patch"])
                 .await
                 .allowed
+        );
+    }
+
+    #[tokio::test]
+    async fn connector_requires_scope_lease() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let state = build_state(temp.path()).await;
+
+        let connectors_dir = util::state_dir().join("connectors");
+        tokio::fs::create_dir_all(&connectors_dir)
+            .await
+            .expect("create connectors dir");
+        let manifest = json!({
+            "id": "gh-main",
+            "kind": "cloud",
+            "provider": "github",
+            "scopes": ["cloud:github:repo:rw"],
+            "meta": json!({})
+        });
+        tokio::fs::write(
+            connectors_dir.join("gh-main.json"),
+            serde_json::to_vec(&manifest).expect("manifest bytes"),
+        )
+        .await
+        .expect("write manifest");
+
+        let ttl = (Utc::now() + ChronoDuration::minutes(5)).to_rfc3339();
+        state
+            .kernel()
+            .insert_lease_async(
+                Uuid::new_v4().to_string(),
+                "local".into(),
+                "net:http".into(),
+                None,
+                ttl,
+                None,
+                None,
+            )
+            .await
+            .expect("insert lease");
+
+        let ctx = WorkerContext::new(&state);
+        let bus = state.bus();
+        let mut rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_POLICY_DECISION.to_string()], Some(8));
+
+        let outcome = ctx
+            .handle_http_action(
+                "conn-test",
+                "net.http.get",
+                &json!({
+                    "url": "https://api.github.com",
+                    "method": "GET",
+                    "connector_id": "gh-main"
+                }),
+            )
+            .await
+            .expect("http fetch");
+
+        assert_eq!(
+            outcome.output["error"].as_str(),
+            Some("connector lease required")
+        );
+        let missing = outcome.output["missing_scopes"]
+            .as_array()
+            .expect("missing scopes");
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].as_str(), Some("cloud:github:repo:rw"));
+
+        let decision = timeout(Duration::from_millis(200), rx.recv())
+            .await
+            .expect("policy event timeout")
+            .expect("policy event");
+        assert_eq!(decision.kind, topics::TOPIC_POLICY_DECISION);
+        assert_eq!(
+            decision.payload["action"].as_str(),
+            Some("connector.gh-main")
+        );
+        assert_eq!(
+            decision.payload["require_capability"]
+                .as_array()
+                .and_then(|arr| arr.first())
+                .and_then(|v| v.as_str()),
+            Some("cloud:github:repo:rw")
         );
     }
 

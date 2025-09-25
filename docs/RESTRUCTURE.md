@@ -147,7 +147,7 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
   - `POST /actions (memory.upsert)` → emits `memory.item.upserted`
   - `POST /actions (memory.search)`
   - `POST /actions (memory.pack)` → journals decisions via `memory.pack.journaled`
-  - `GET /state/memory` (JSON Patch stream of inserts/expirations/pack previews)
+- `GET /state/memory` — SSE stream of snapshots + JSON Patch events (inserts/expirations/pack previews)
 - Legacy REST (still wired through the new core while clients migrate):
 - ✅ Legacy `/memory/*` REST shims (put/search_embed/select/link/coherent) removed — rely on `/actions` (`memory.*`) and `GET /state/memory/recent`.
 - Purpose: stable centerpoint (self‑image and identity), dedupe via hashes, explainable hybrid retrieval (lexical + vector), and budget-aware context packs.
@@ -156,7 +156,7 @@ Effectively, the agent’s “context window” spans the entire indexed world, 
 ## Connectors (Cloud & Local Apps)
 - Purpose: let agents safely access cloud apps/storage (GitHub, Slack, Google/Microsoft 365, Notion, etc.) and local apps (VS Code, Word, Mail) through explicit, lease‑gated connectors.
 - Registry: register connectors via `POST /connectors/register` with `{ id?, kind: cloud|local, provider, scopes[], meta? }`. List via `GET /state/connectors`.
-- Tokens: update tokens via `POST /connectors/token` with `{ id, token?, refresh_token?, expires_at? }` (admin‑gated). Secrets are stored under `state/connectors/*.json`; `/state/connectors` redacts secrets.
+- Tokens: update tokens via `POST /connectors/token` with `{ id, token?, refresh_token?, expires_at? }` (admin‑gated). Secrets are stored under `state/connectors/*.json`; `/state/connectors` redacts secrets. Connector scopes now require matching leases (e.g., grant `cloud:github:repo:rw` before using a GitHub connector) — missing scopes return `connector lease required` and emit `policy.decision`.
 - Events: `connectors.registered`, `connectors.token.updated`.
 - Egress and policy: outbound calls still go through the egress policy (allowlists, leases). Connectors declare `scopes` and map to capability leases (e.g., `net:http:github.com`, `cloud:github:repo:rw`).
 - Usage: pass `connector_id` in `net.http.get` input and the runtime injects `Authorization: Bearer <token>`. You can restrict domains per connector via `meta.allowed_hosts`.
@@ -326,6 +326,7 @@ Notes
 - `POST /egress/settings` → admin‑gated runtime update of egress toggles
 - `POST /egress/preview` → `{ allow, reason?, host, port, protocol }` (applies allowlist, IP‑literal guard, and policy/lease rules; logs when ledger enabled)
 - `GET /state/models` → `{ items: [...] }` (reads `state/models.json` or returns defaults)
+- `GET /state/memory` → SSE stream of `memory.snapshot` + `memory.patch` events (JSON Patch payloads + live snapshot)
 - `GET /state/self` → `{ agents: [ ... ] }` (lists `state/self/*.json`)
 - `GET /state/self/:agent` → the JSON content of `state/self/:agent.json`
  - `GET /about` → service metadata and discovery index; includes `endpoints[]` and `endpoints_meta[]` with `{ method, path, stability }` derived from in‑code path constants and route builders (avoids drift)
@@ -358,7 +359,7 @@ curl -s localhost:8091/about | jq
 curl -s -X POST localhost:8091/actions -H 'content-type: application/json' \
   -d '{"kind":"demo.echo","input":{"msg":"hi"},"idem_key":"demo-1"}'
 # Stream events
-curl -N localhost:8091/events
+curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/events
 # Views (admin-gated)
 curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/state/episodes | jq
 curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/state/contributions | jq
@@ -396,7 +397,7 @@ Context
 
 Actions and Events
 - Submit: `curl -s -X POST localhost:8091/actions -H 'content-type: application/json' -d '{"kind":"net.http.get","input":{"url":"https://example.com"}}' | jq`
-- Watch: `curl -N localhost:8091/events?replay=20`
+- Watch: `curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/events?replay=20`
 
 Files (fs.patch)
 - Require lease when policy is strict (example rule: kind_prefix `fs.` → capability `fs`).
@@ -413,6 +414,7 @@ Network allowlist demo
 State Views
 - Egress: `curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/state/egress | jq`
 - Actions: `curl -s -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/state/actions | jq`
+- Memory (stream): `curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" localhost:8091/state/memory`
 
 ## Contributor Checklist (Restructure)
 - When adding/changing triad endpoints, kernel schemas, or runtime/policy:

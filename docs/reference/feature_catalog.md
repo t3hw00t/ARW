@@ -80,7 +80,7 @@ _Surface the beliefs, files, and links that back each decision._
 
 - **Memory Atlas** · backend / builder / intelligence / beta
   Memory overlay service backed by the canonical MAL store with hybrid retrieval, explainable packing, and stable pointers (`ptr.kind: "memory"`).
-  _Routes_: `POST /actions (memory.upsert)`, `POST /actions (memory.search)`, `POST /actions (memory.pack)`, `GET /state/memory`, `GET /state/memory/recent`
+  _Routes_: `POST /actions (memory.upsert)`, `POST /actions (memory.search)`, `POST /actions (memory.pack)`, `GET /state/memory` (SSE), `GET /state/memory/recent`
   _Signals_: `memory.item.upserted`, `memory.item.expired`, `memory.pack.journaled`
   _Source_: [apps/arw-server/src/api/actions.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/actions.rs), [apps/arw-server/src/read_models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/read_models.rs), [apps/arw-server/src/working_set.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/working_set.rs), …
   _References_: [architecture/memory_abstraction.md](../architecture/memory_abstraction.md), [architecture/memory_lifecycle.md](../architecture/memory_lifecycle.md), [architecture/memory_overlay_service.md](../architecture/memory_overlay_service.md)
@@ -209,6 +209,7 @@ _Queue, schedule, and observe heavier jobs as the team or workload grows._
   _Signals_: `connectors.registered`, `connectors.token.updated`
   _Env_: `ARW_STATE_DIR`
   _Source_: [apps/arw-server/src/api/connectors.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/connectors.rs)
+  Connector scopes map directly to capability leases (e.g., `cloud:github:repo:rw`); callers must mint matching leases before invoking connectors or the runtime returns `connector lease required`.
 
 - **Tool Forge** · backend / admin / core / complete
   Tool registry with schema introspection and an Action Cache (in-memory TTL + CAS) with singleflight.

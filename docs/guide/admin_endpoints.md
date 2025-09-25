@@ -157,7 +157,7 @@ The triad groups operations by intent:
   - Legacy `/memory/*` selectors have been removed; use the action-based flow and `GET /state/memory/recent` for inspection.
 - **Connectors**
   - `POST /connectors/register` — write a connector manifest to disk and emit `connectors.registered` (token required).
-  - `POST /connectors/token` — store or rotate connector tokens/secrets and emit `connectors.token.updated` (token required).
+  - `POST /connectors/token` — store or rotate connector tokens/secrets and emit `connectors.token.updated` (token required). Connector scopes require matching capability leases before use; missing scopes surface `connector lease required`.
 - **Orchestrator**
   - `POST /orchestrator/mini_agents/start_training` — kick off training for mini agents; the read model exposes progress via `/state/orchestrator/jobs`.
 
@@ -192,7 +192,7 @@ The triad groups operations by intent:
 - **Connectors**
   - `GET /state/connectors` — connector manifests with secrets scrubbed.
 - **Memory & context**
-  - `GET /state/memory` — JSON Patch stream of inserts, expirations, and packed context previews.
+  - `GET /state/memory` — SSE stream emitting `memory.snapshot` and `memory.patch` events (JSON Patches plus live snapshot).
   - `GET /state/memory/recent` — snapshot of recent records (lane/limit filters).
 - **Self introspection**
   - `GET /state/self` — list available self models on disk.
@@ -235,7 +235,7 @@ curl -sS "${BASE}/egress/preview" \
 Stream events (replay the last 5 first):
 
 ```bash
-curl -N "${BASE}/events?replay=5"
+curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" "${BASE}/events?replay=5"
 ```
 
 ### Event samples

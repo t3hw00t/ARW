@@ -1,4 +1,5 @@
 use axum::http::HeaderMap;
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::IntoResponse;
 use axum::{
     extract::{Query, State},
@@ -9,7 +10,11 @@ use hex::encode as hex_encode;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
-use tracing::warn;
+use std::convert::Infallible;
+use std::time::Duration;
+use tokio::sync::mpsc;
+use tokio_stream::wrappers::ReceiverStream;
+use tracing::{error, warn};
 use utoipa::ToSchema;
 
 use crate::{admin_ok, util, AppState};
@@ -170,6 +175,131 @@ fn build_memory_applied_event(record: &Value, source: &str) -> Value {
         }
     }
     Value::Object(obj)
+}
+
+const MEMORY_SNAPSHOT_EVENT: &str = "memory.snapshot";
+const MEMORY_PATCH_EVENT: &str = "memory.patch";
+
+/// Stream memory read-model patches and snapshots via SSE.
+#[utoipa::path(
+    get,
+    path = "/state/memory",
+    tag = "Memory",
+    responses(
+        (status = 200, description = "Memory stream", content_type = "text/event-stream"),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value),
+        (status = 500, description = "Kernel error", body = serde_json::Value)
+    )
+)]
+pub async fn state_memory_stream(State(state): State<AppState>) -> axum::response::Response {
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
+
+    let mut current_snapshot =
+        if let Some(value) = crate::read_models::cached_read_model("memory_recent") {
+            value
+        } else {
+            match state.kernel().list_recent_memory_async(None, 200).await {
+                Ok(items) => json!({
+                    "items": attach_memory_ptrs(items),
+                    "generated": now_timestamp(),
+                }),
+                Err(err) => {
+                    return (
+                        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                        Json(json!({
+                            "type": "about:blank",
+                            "title": "Error",
+                            "status": 500,
+                            "detail": err.to_string()
+                        })),
+                    )
+                        .into_response();
+                }
+            }
+        };
+
+    if let Some(items) = current_snapshot
+        .get_mut("items")
+        .and_then(|value| value.as_array_mut())
+    {
+        for item in items.iter_mut() {
+            util::attach_memory_ptr(item);
+        }
+    }
+
+    let (tx, rx) = mpsc::channel::<Result<Event, Infallible>>(64);
+    let state_clone = state.clone();
+    let sender = tx.clone();
+    tokio::spawn(async move {
+        if let Ok(event) = Event::default()
+            .event(MEMORY_SNAPSHOT_EVENT)
+            .json_data(&json!({"snapshot": current_snapshot.clone()}))
+        {
+            if sender.send(Ok(event)).await.is_err() {
+                return;
+            }
+        } else {
+            error!("failed to serialize initial memory snapshot event");
+            return;
+        }
+
+        let mut bus_rx = state_clone.bus().subscribe();
+        while let Ok(env) = bus_rx.recv().await {
+            if env.kind != topics::TOPIC_READMODEL_PATCH {
+                continue;
+            }
+            let id = env.payload.get("id").and_then(|v| v.as_str()).unwrap_or("");
+            if id != "memory_recent" {
+                continue;
+            }
+            let Some(patch_val) = env.payload.get("patch") else {
+                continue;
+            };
+            let patch_ops: Vec<json_patch::PatchOperation> =
+                match serde_json::from_value(patch_val.clone()) {
+                    Ok(ops) => ops,
+                    Err(err) => {
+                        warn!("deserialize memory patch failed: {}", err);
+                        continue;
+                    }
+                };
+            let mut next_snapshot = current_snapshot.clone();
+            if let Err(err) = json_patch::patch(&mut next_snapshot, &patch_ops) {
+                warn!("apply memory patch failed: {}", err);
+                continue;
+            }
+            current_snapshot = next_snapshot;
+            let payload = json!({
+                "patch": patch_val.clone(),
+                "snapshot": current_snapshot.clone(),
+            });
+            match Event::default()
+                .event(MEMORY_PATCH_EVENT)
+                .json_data(&payload)
+            {
+                Ok(event) => {
+                    if sender.send(Ok(event)).await.is_err() {
+                        break;
+                    }
+                }
+                Err(err) => {
+                    warn!("serialize memory patch event failed: {}", err);
+                }
+            }
+        }
+    });
+
+    drop(tx);
+
+    Sse::new(ReceiverStream::new(rx))
+        .keep_alive(
+            KeepAlive::new()
+                .interval(Duration::from_secs(15))
+                .text(":keep-alive"),
+        )
+        .into_response()
 }
 
 /// Most recent memories (per lane).
@@ -421,30 +551,214 @@ pub async fn admin_memory_list(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::read_models;
     use arw_policy::PolicyEngine;
     use arw_wasi::ToolHost;
     use axum::{
         body::to_bytes,
         http::{HeaderMap, HeaderValue, StatusCode},
+        routing::get,
+        Router,
     };
+    use http_body_util::BodyExt;
     use serde_json::{json, Value};
+    use std::collections::VecDeque;
     use std::sync::Arc;
     use tempfile::tempdir;
     use tokio::sync::Mutex;
     use tokio::time::{timeout, Duration};
+    use tower::ServiceExt;
 
     async fn build_state(dir: &std::path::Path) -> AppState {
         std::env::set_var("ARW_DEBUG", "1");
         std::env::set_var("ARW_STATE_DIR", dir.display().to_string());
-        let bus = arw_events::Bus::new_with_replay(32, 32);
+        let bus = arw_events::Bus::new_with_replay(64, 64);
         let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
         let policy = PolicyEngine::load_from_env();
         let policy_arc = Arc::new(Mutex::new(policy));
         let host: Arc<dyn ToolHost> = Arc::new(arw_wasi::NoopHost);
         AppState::builder(bus, kernel, policy_arc, host, true)
-            .with_sse_capacity(32)
+            .with_sse_capacity(64)
             .build()
             .await
+    }
+
+    #[derive(Debug, Default, Clone)]
+    struct SseRecord {
+        event: Option<String>,
+        data: Option<String>,
+    }
+
+    fn parse_sse(buffer: &mut String) -> Vec<SseRecord> {
+        let mut out = Vec::new();
+        while let Some(idx) = buffer.find("\n\n") {
+            let chunk = buffer[..idx].to_string();
+            *buffer = buffer[idx + 2..].to_string();
+            if chunk.trim().is_empty() {
+                continue;
+            }
+            let mut record = SseRecord::default();
+            for line in chunk.lines() {
+                if let Some(rest) = line.strip_prefix("event: ") {
+                    record.event = Some(rest.trim().to_string());
+                } else if let Some(rest) = line.strip_prefix("data: ") {
+                    record.data = Some(rest.trim().to_string());
+                }
+            }
+            out.push(record);
+        }
+        out
+    }
+
+    #[tokio::test]
+    async fn memory_stream_provides_snapshot_and_patch() {
+        let temp = tempdir().expect("tmp");
+        let state = build_state(temp.path()).await;
+
+        let initial_value = json!({"text": "hello"});
+        let _ = state
+            .kernel()
+            .insert_memory_async(
+                None,
+                "semantic".to_string(),
+                Some("note".to_string()),
+                Some("hello".to_string()),
+                initial_value,
+                None,
+                Some(vec!["demo".to_string()]),
+                Some(0.8),
+                None,
+            )
+            .await
+            .expect("insert memory");
+
+        let snapshot_now = state
+            .kernel()
+            .list_recent_memory_async(None, 200)
+            .await
+            .expect("list memory");
+        read_models::publish_read_model_patch(
+            &state.bus(),
+            "memory_recent",
+            &json!({"items": attach_memory_ptrs(snapshot_now.clone()), "generated": now_timestamp()}),
+        );
+
+        let app = Router::new()
+            .route("/state/memory", get(state_memory_stream))
+            .with_state(state.clone());
+
+        let response = app
+            .clone()
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/state/memory")
+                    .body(axum::body::Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+
+        let mut body = response.into_body();
+        let mut buffer = String::new();
+        let mut events = VecDeque::new();
+
+        while events
+            .iter()
+            .all(|ev: &SseRecord| ev.event.as_deref() != Some(MEMORY_SNAPSHOT_EVENT))
+        {
+            let frame = body.frame().await.expect("frame").expect("data frame");
+            let bytes = frame.into_data().expect("frame data");
+            buffer.push_str(&String::from_utf8_lossy(&bytes));
+            events.extend(parse_sse(&mut buffer));
+        }
+
+        let snapshot_event = events
+            .iter()
+            .find(|ev| ev.event.as_deref() == Some(MEMORY_SNAPSHOT_EVENT))
+            .expect("snapshot event");
+        let snapshot_json = snapshot_event
+            .data
+            .as_ref()
+            .and_then(|d| serde_json::from_str::<serde_json::Value>(d).ok())
+            .expect("snapshot json");
+        assert_eq!(
+            snapshot_json
+                .get("snapshot")
+                .and_then(|s| s.get("items"))
+                .and_then(|items| items.as_array())
+                .map(|arr| arr.len())
+                .unwrap_or_default(),
+            1,
+        );
+
+        let _ = state
+            .kernel()
+            .insert_memory_async(
+                None,
+                "semantic".to_string(),
+                Some("note".to_string()),
+                Some("second".to_string()),
+                json!({"text": "second"}),
+                None,
+                Some(vec!["demo".to_string()]),
+                Some(0.5),
+                None,
+            )
+            .await
+            .expect("insert second memory");
+
+        let updated_snapshot = state
+            .kernel()
+            .list_recent_memory_async(None, 200)
+            .await
+            .expect("list updated memory");
+        read_models::publish_read_model_patch(
+            &state.bus(),
+            "memory_recent",
+            &json!({
+                "items": attach_memory_ptrs(updated_snapshot),
+                "generated": now_timestamp()
+            }),
+        );
+
+        let patch_event = timeout(Duration::from_millis(500), async {
+            loop {
+                let frame = body
+                    .frame()
+                    .await
+                    .expect("patch frame")
+                    .expect("patch data");
+                let bytes = frame.into_data().expect("patch bytes");
+                buffer.push_str(&String::from_utf8_lossy(&bytes));
+                events.extend(parse_sse(&mut buffer));
+                if let Some(found) = events
+                    .iter()
+                    .find(|ev| ev.event.as_deref() == Some(MEMORY_PATCH_EVENT))
+                {
+                    break Some(found.clone());
+                }
+            }
+        })
+        .await
+        .expect("patch event present")
+        .expect("patch event");
+
+        let patch_json = patch_event
+            .data
+            .as_ref()
+            .and_then(|d| serde_json::from_str::<serde_json::Value>(d).ok())
+            .expect("patch json");
+        let items_len = patch_json
+            .get("snapshot")
+            .and_then(|v| v.get("items"))
+            .and_then(|v| v.as_array())
+            .map(|arr| arr.len())
+            .unwrap_or_default();
+        assert_eq!(
+            items_len, 2,
+            "snapshot after patch should include two items"
+        );
     }
 
     #[tokio::test]
