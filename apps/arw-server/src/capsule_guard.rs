@@ -301,10 +301,6 @@ pub async fn refresh_capsules(state: &AppState) -> ReplayOutcome {
             );
         }
     }
-    if replay.changed {
-        let snapshot = state.capsules().snapshot().await;
-        read_models::publish_read_model_patch(&state.bus(), "policy_capsules", &snapshot);
-    }
     if !replay.reapplied.is_empty() {
         for snapshot in &replay.reapplied {
             state.bus().publish(
@@ -323,6 +319,10 @@ pub async fn refresh_capsules(state: &AppState) -> ReplayOutcome {
                 }),
             );
         }
+    }
+    if replay.changed {
+        let snapshot = state.capsules().snapshot().await;
+        read_models::publish_read_model_patch(&state.bus(), "policy_capsules", &snapshot);
     }
     replay
 }
