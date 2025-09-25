@@ -24,7 +24,7 @@ Type: Reference
 - Windows and Linux bundles are uploaded as CI artifacts.
 
 ### Windows Launcher Bundles
-- Workflow: `.github/workflows/tauri-windows.yml` builds launcher MSIs via a two‑arch matrix (x64 primary; ARM64 best‑effort) and uploads them with svc/cli.
+- Workflow: `.github/workflows/tauri-windows.yml` builds launcher MSIs via a two‑arch matrix (x64 primary; ARM64 best‑effort) and packages them with `arw-server`/`arw-cli` for out-of-the-box service control.
 - MSI content: includes `arw-server.exe` and `arw-cli.exe` so service autostart works out‑of‑the‑box.
 - Optional code signing: enable by adding `WINDOWS_CERT_PFX` (base64 PFX) and `WINDOWS_CERT_PASSWORD` secrets; artifacts are signed with `signtool`.
 - Release: on tagged pushes (`v*.*.*`), x64 MSI always publishes; ARM64 MSI publishes when the toolchain supports cross‑bundling.
@@ -83,8 +83,10 @@ mkdocs build --strict
 just interfaces-index       # regenerate interfaces/index.yaml
 just interfaces-lint        # spectral lint OpenAPI/AsyncAPI
 just interfaces-diff        # OpenAPI diff vs origin/main (Docker)
-just docs-deprecations      # generate deprecations doc
-just docs-release-notes     # generate release notes (BASE_REF=... override)
+# generate deprecations doc
+just docs-deprecations
+# generate interface release notes (BASE_REF=... override)
+just docs-release-notes
 just check-enums            # verify ModelsDownloadProgress status/code enums match code
 
 # Design tokens (single source)

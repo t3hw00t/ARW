@@ -168,7 +168,7 @@ impl PolicyEngine {
             }
         }
 
-        if self.cfg.allow_all || !needs_capability {
+        if self.cfg.allow_all {
             allow = true;
         }
 
@@ -724,5 +724,31 @@ mod tests {
         assert_eq!(model["principal"]["id"], "tester");
         assert_eq!(model["resource"]["id"], "alpha");
         assert_eq!(model["action"]["id"], "context.rehydrate.file");
+    }
+
+    #[test]
+    fn cedar_deny_applies_without_lease_requirement() {
+        let policy = r#"
+        permit(principal, action, resource);
+        forbid(principal, action, resource) when { action.kind == "models.download" };
+        "#;
+        let engine = PolicyEngine::with_config(PolicyConfig {
+            allow_all: false,
+            lease_rules: vec![],
+            cedar: Some(CedarConfig {
+                policy: Some(policy.into()),
+                ..Default::default()
+            }),
+        });
+
+        let mut request = AbacRequest::default();
+        request.action = "models.download".into();
+
+        let decision = engine.evaluate_abac(&request);
+        assert!(
+            !decision.allow,
+            "cedar forbid verdict should deny action without lease requirement"
+        );
+        assert!(decision.require_capability.is_none());
     }
 }

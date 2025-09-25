@@ -39,10 +39,34 @@ def main() -> int:
     codes = sorted(codes)
 
     doc = yaml.safe_load(ASYNCAPI.read_text(encoding='utf-8'))
-    msg = doc['components']['messages']['ModelsDownloadProgress']
-    pen = msg['payload']['properties']
-    s_en = pen['status']['enum']
-    c_en = pen['code']['enum']
+    components = doc.get('components', {})
+    messages = components.get('messages', {})
+    msg = messages.get('ModelsDownloadProgress')
+    if msg is None:
+        print("error: spec/asyncapi.yaml is missing components.messages.ModelsDownloadProgress", file=sys.stderr)
+        return 2
+
+    payload = msg.get('payload')
+    if payload is None:
+        print("error: ModelsDownloadProgress message has no payload", file=sys.stderr)
+        return 2
+
+    pen = payload.get('properties')
+    if pen is None:
+        print("error: ModelsDownloadProgress payload lacks properties", file=sys.stderr)
+        return 2
+    status_prop = pen.get('status')
+    if status_prop is None or 'enum' not in status_prop:
+        print("error: ModelsDownloadProgress.status lacks an enum", file=sys.stderr)
+        return 2
+
+    code_prop = pen.get('code')
+    if code_prop is None or 'enum' not in code_prop:
+        print("error: ModelsDownloadProgress.code lacks an enum", file=sys.stderr)
+        return 2
+
+    s_en = status_prop['enum']
+    c_en = code_prop['enum']
 
     s_miss = sorted(set(status) ^ set(s_en))
     c_miss = sorted(set(codes) ^ set(c_en))
