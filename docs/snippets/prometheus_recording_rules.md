@@ -7,7 +7,7 @@ title: Prometheus Recording Rules — ARW
 Updated: 2025-09-15
 Type: How‑to
 
-Recording rules precompute common expressions so dashboards and alerts can use short, stable series names.
+Recording rules precompute common expressions so dashboards and alerts can use short, stable series names. GPU-related rules rely on the upcoming GPU telemetry pack; keep or remove them based on whether the `arw_gpu_*` metrics are present in your deployment.
 
 ## Example rules.yaml
 
@@ -46,4 +46,3 @@ groups:
 Usage:
 - Reference `arw:cpu_percent_avg:5m`, `arw:mem_usage_percent`, and `arw:gpu_mem_usage_percent` directly in panels and alerts.
 - Vendor breakdown via `arw:gpu_vram_total_gib:vendor`.
-

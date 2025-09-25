@@ -150,7 +150,7 @@ The triad groups operations by intent:
   - `POST /actions (memory.upsert)` — insert or merge a memory item; emits `memory.item.upserted` and updates `/state/memory`.
   - `POST /actions (memory.search)` — hybrid lexical/vector search with filters and RRF/MMR metadata.
   - `POST /actions (memory.pack)` — build a context pack respecting token/slot budgets; journals decisions via `memory.pack.journaled`.
-  - `POST /admin/memory/apply` — lightweight helper to upsert a record directly via the kernel (admin token required).
+  - `POST /admin/memory/apply` — lightweight helper to upsert a record directly via the kernel (admin token required). Returns `{ id, record, applied }` where `record` mirrors the canonical memory item (id/lane/kind/key/tags/hash/value/ptr) and `applied` includes the observability metadata broadcast on `memory.applied` (`source`, `value_preview`, `value_preview_truncated`, `value_bytes`, `applied_at`).
   - `GET /admin/memory` — quick snapshot of recent records (supports `lane` and `limit` filters).
   - Legacy `/memory/*` selectors have been removed; use the action-based flow and `GET /state/memory/recent` for inspection.
 - **Connectors**

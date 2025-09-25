@@ -460,12 +460,59 @@ channels:
   'memory.applied':
     subscribe:
       operationId: memory_applied_event
-      summary: "memory.applied event"
+      summary: "memory.applied event (id, lane, key, tags[], hash, value, ptr, value_preview, value_bytes, source)"
       message:
         name: 'memory.applied'
         payload:
           type: object
           additionalProperties: true
+          properties:
+            id:
+              type: string
+            lane:
+              type: string
+            kind:
+              type: string
+              nullable: true
+            key:
+              type: string
+              nullable: true
+            tags:
+              type: array
+              items:
+                type: string
+            hash:
+              type: string
+            score:
+              type: number
+              nullable: true
+            prob:
+              type: number
+              nullable: true
+            value:
+              description: Full memory payload (arbitrary JSON value)
+            value_preview:
+              type: string
+              description: Human-friendly snippet for dashboards
+            value_preview_truncated:
+              type: boolean
+            value_bytes:
+              type: integer
+              format: int64
+            ptr:
+              type: object
+              additionalProperties: true
+            source:
+              type: string
+            updated:
+              type: string
+              format: date-time
+            applied_at:
+              type: string
+              format: date-time
+          required:
+            - id
+            - lane
   'memory.item.expired':
     subscribe:
       operationId: memory_item_expired_event

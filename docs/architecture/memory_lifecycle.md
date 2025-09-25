@@ -30,7 +30,7 @@ Quality metrics (recall, diversity, coverage) feed dashboards in Training Park a
 
 ## Live Memory Feedback
 - **Surfaces**: CLI (`--probe`), the debug UI served by `arw-server` (`/admin/debug` with `ARW_DEBUG=1`), launcher overlays, and upcoming unified SPAs subscribe to `memory.*` events.
-- **Signals**: `memory.applied`, `memory.delta`, `memory.dataset.version`, and working-set events explain which items landed and why.
+- **Signals**: `memory.record.put` publishes the full record (lane, key, value, tags, hash, ptr) immediately after a write, and `memory.applied` adds observability metadata (`source`, `value_preview`, `value_preview_truncated`, `value_bytes`, `applied_at`) so dashboards can render the change without fetching the full artifact. Downstream hygiene jobs continue to emit `memory.delta` and `memory.dataset.version`, and working-set events explain how context assembly consumed the new record.
 - **Status**: The unified server emits the events and serves the debug panes today; the new sidecar experience will layer on the same stream when it ships.
 
 ## Conditional Training

@@ -85,13 +85,12 @@ fn unauthorized() -> Response {
 )]
 pub async fn probe_effective_paths(
     headers: HeaderMap,
-    State(state): State<AppState>,
+    State(_state): State<AppState>,
 ) -> impl IntoResponse {
     if !admin_ok(&headers) {
         return unauthorized();
     }
     let ep = arw_core::load_effective_paths();
-    state.bus().publish(topics::TOPIC_MEMORY_APPLIED, &ep);
     Json(ep).into_response()
 }
 

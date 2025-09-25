@@ -44,6 +44,8 @@ Type: How‑to
 
 ### GPU/NPU metrics examples (PromQL)
 
+These queries assume the forthcoming GPU telemetry collector (shipping with the Performance & Hardware pack). Until that pack is enabled, the `arw_gpu_*`/`arw_npu_*` series remain absent and dashboards should rely on host-level exporters.
+
 - Adapters count (GPU/NPU):
 ```
 arw_gpu_adapters

@@ -4,8 +4,12 @@ use axum::{
     extract::{Query, State},
     Json,
 };
+use chrono::{SecondsFormat, Utc};
+use hex::encode as hex_encode;
 use serde::Deserialize;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
+use sha2::{Digest, Sha256};
+use tracing::warn;
 use utoipa::ToSchema;
 
 use crate::{admin_ok, util, AppState};
@@ -19,6 +23,153 @@ fn attach_memory_ptrs(items: Vec<Value>) -> Vec<Value> {
             item
         })
         .collect()
+}
+
+const VALUE_PREVIEW_MAX_CHARS: usize = 240;
+
+fn now_timestamp() -> String {
+    Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
+}
+
+fn compute_memory_hash(
+    lane: &str,
+    kind: &Option<String>,
+    key: &Option<String>,
+    value: &Value,
+) -> String {
+    let mut hasher = Sha256::new();
+    hasher.update(lane.as_bytes());
+    if let Some(k) = kind {
+        hasher.update(k.as_bytes());
+    }
+    if let Some(k) = key {
+        hasher.update(k.as_bytes());
+    }
+    if let Ok(bytes) = serde_json::to_vec(value) {
+        hasher.update(bytes);
+    }
+    hex_encode(hasher.finalize())
+}
+
+fn truncate_chars(input: &str, limit: usize) -> (String, bool) {
+    let mut out = String::new();
+    let mut truncated = false;
+    for (idx, ch) in input.chars().enumerate() {
+        if idx >= limit {
+            truncated = true;
+            break;
+        }
+        out.push(ch);
+    }
+    if truncated {
+        out.push('…');
+    }
+    (out, truncated)
+}
+
+fn preview_from_value(value: &Value) -> Option<(String, bool)> {
+    match value {
+        Value::String(s) => Some(truncate_chars(s, VALUE_PREVIEW_MAX_CHARS)),
+        _ => serde_json::to_string(value)
+            .ok()
+            .map(|s| truncate_chars(&s, VALUE_PREVIEW_MAX_CHARS)),
+    }
+}
+
+fn normalize_tags(tags: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for tag in tags {
+        let trimmed = tag.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if !out.iter().any(|existing| existing.eq_ignore_ascii_case(trimmed)) {
+            out.push(trimmed.to_string());
+        }
+    }
+    out
+}
+
+fn parse_tags_field(value: Option<&Value>) -> Vec<String> {
+    match value {
+        Some(Value::String(s)) => s
+            .split(',')
+            .map(|part| part.trim())
+            .filter(|part| !part.is_empty())
+            .map(|part| part.to_string())
+            .collect(),
+        Some(Value::Array(values)) => values
+            .iter()
+            .filter_map(|v| v.as_str())
+            .map(|s| s.to_string())
+            .collect(),
+        _ => Vec::new(),
+    }
+}
+
+fn build_memory_record_event(
+    id: &str,
+    lane: &str,
+    kind: Option<&String>,
+    key: Option<&String>,
+    value: &Value,
+    tags: &[String],
+    score: Option<f64>,
+    prob: Option<f64>,
+    hash: &str,
+    updated: &str,
+) -> Value {
+    let mut map = Map::new();
+    map.insert("id".into(), json!(id));
+    map.insert("lane".into(), json!(lane));
+    if let Some(k) = kind {
+        map.insert("kind".into(), json!(k));
+    }
+    if let Some(k) = key {
+        map.insert("key".into(), json!(k));
+    }
+    map.insert("value".into(), value.clone());
+    map.insert("tags".into(), json!(tags));
+    if let Some(s) = score {
+        map.insert("score".into(), json!(s));
+    }
+    if let Some(p) = prob {
+        map.insert("prob".into(), json!(p));
+    }
+    if !hash.is_empty() {
+        map.insert("hash".into(), json!(hash));
+    }
+    map.insert("updated".into(), json!(updated));
+    let mut value = Value::Object(map);
+    util::attach_memory_ptr(&mut value);
+    value
+}
+
+fn build_memory_applied_event(record: &Value, source: &str) -> Value {
+    let mut obj = record
+        .as_object()
+        .cloned()
+        .unwrap_or_else(Map::new);
+    obj.insert("source".into(), json!(source));
+    let value_clone = obj.get("value").cloned();
+    if let Some(value) = value_clone {
+        if let Some((preview, truncated)) = preview_from_value(&value) {
+            obj.insert("value_preview".into(), json!(preview));
+            obj.insert("value_preview_truncated".into(), json!(truncated));
+        }
+        if let Ok(bytes) = serde_json::to_vec(&value) {
+            obj.insert("value_bytes".into(), json!(bytes.len()));
+        }
+        obj.insert("value".into(), value);
+    }
+    if !obj.contains_key("applied_at") {
+        if let Some(updated) = obj.get("updated").cloned() {
+            obj.insert("applied_at".into(), updated);
+        } else {
+            obj.insert("applied_at".into(), json!(now_timestamp()));
+        }
+    }
+    Value::Object(obj)
 }
 
 /// Most recent memories (per lane).
@@ -135,17 +286,67 @@ pub async fn admin_memory_apply(
         .await
     {
         Ok(id) => {
-            state.bus().publish(
-                topics::TOPIC_MEMORY_RECORD_PUT,
-                &json!({
-                    "id": id,
-                    "lane": lane,
-                    "kind": kind,
-                    "key": key,
-                    "tags": tags,
-                }),
+            let mut stored_value = value.clone();
+            let mut stored_tags = tags.clone().unwrap_or_default();
+            let mut stored_hash = compute_memory_hash(&lane, &kind, &key, &stored_value);
+            let mut updated = now_timestamp();
+
+            match state.kernel().get_memory_async(id.clone()).await {
+                Ok(Some(record)) => {
+                    if let Some(obj) = record.as_object() {
+                        if let Some(v) = obj.get("value") {
+                            stored_value = v.clone();
+                        }
+                        if stored_tags.is_empty() {
+                            stored_tags = parse_tags_field(obj.get("tags"));
+                        }
+                        if let Some(h) = obj.get("hash").and_then(|v| v.as_str()) {
+                            stored_hash = h.to_string();
+                        }
+                        if let Some(u) = obj.get("updated").and_then(|v| v.as_str()) {
+                            updated = u.to_string();
+                        }
+                    }
+                }
+                Ok(None) => {
+                    warn!("memory: inserted id {id} missing on reload");
+                }
+                Err(err) => {
+                    warn!(?err, "memory: failed to reload record {id}");
+                }
+            }
+
+            let normalized_tags = normalize_tags(&stored_tags);
+
+            let record_event = build_memory_record_event(
+                &id,
+                &lane,
+                kind.as_ref(),
+                key.as_ref(),
+                &stored_value,
+                &normalized_tags,
+                score,
+                prob,
+                &stored_hash,
+                &updated,
             );
-            (axum::http::StatusCode::CREATED, Json(json!({"id": id}))).into_response()
+
+            state
+                .bus()
+                .publish(topics::TOPIC_MEMORY_RECORD_PUT, &record_event);
+
+            let applied_event = build_memory_applied_event(&record_event, "admin.memory.apply");
+            state
+                .bus()
+                .publish(topics::TOPIC_MEMORY_APPLIED, &applied_event);
+
+            let body = json!({
+                "id": id,
+                "record": record_event,
+                "applied": applied_event
+            });
+
+            (axum::http::StatusCode::CREATED, Json(body)).into_response()
         }
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -201,5 +402,108 @@ pub async fn admin_memory_list(
             ),
         )
             .into_response(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arw_policy::PolicyEngine;
+    use arw_wasi::ToolHost;
+    use axum::{
+        body::to_bytes,
+        http::{HeaderMap, HeaderValue, StatusCode},
+    };
+    use serde_json::{json, Value};
+    use std::sync::Arc;
+    use tempfile::tempdir;
+    use tokio::sync::Mutex;
+    use tokio::time::{timeout, Duration};
+
+    async fn build_state(dir: &std::path::Path) -> AppState {
+        std::env::set_var("ARW_DEBUG", "1");
+        std::env::set_var("ARW_STATE_DIR", dir.display().to_string());
+        let bus = arw_events::Bus::new_with_replay(32, 32);
+        let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
+        let policy = PolicyEngine::load_from_env();
+        let policy_arc = Arc::new(Mutex::new(policy));
+        let host: Arc<dyn ToolHost> = Arc::new(arw_wasi::NoopHost);
+        AppState::builder(bus, kernel, policy_arc, host, true)
+            .with_sse_capacity(32)
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    async fn memory_apply_emits_record_and_applied_events() {
+        let temp = tempdir().expect("temp dir");
+        let state = build_state(temp.path()).await;
+        let bus = state.bus();
+        let mut rx = bus.subscribe_filtered(
+            vec![
+                topics::TOPIC_MEMORY_RECORD_PUT.to_string(),
+                topics::TOPIC_MEMORY_APPLIED.to_string(),
+            ],
+            Some(16),
+        );
+
+        let target_id = format!("ui_selftest_{}", Utc::now().timestamp_millis());
+        let request = MemoryApplyReq {
+            lane: "ephemeral".into(),
+            kind: Some("note".into()),
+            key: Some("summary".into()),
+            value: json!({
+                "test_id": target_id,
+                "content": "captured from debug self-test"
+            }),
+            tags: Some(vec!["alpha".into(), "Alpha".into(), "notes".into()]),
+            embed: None,
+            score: Some(0.42),
+            prob: Some(0.84),
+        };
+
+        let mut headers = HeaderMap::new();
+        headers.insert("X-ARW-Admin", HeaderValue::from_static("ok"));
+
+        let response = admin_memory_apply(headers, State(state.clone()), Json(request))
+            .await
+            .into_response();
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::CREATED);
+        let body_bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let response_json: Value = serde_json::from_slice(&body_bytes).expect("json response");
+        assert_eq!(response_json["record"]["value"]["test_id"].as_str(), Some(target_id.as_str()));
+        assert_eq!(response_json["applied"]["value_preview"].as_str().is_some(), true);
+
+        let envelope = timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("event timeout")
+            .expect("event present");
+        assert_eq!(envelope.kind, topics::TOPIC_MEMORY_RECORD_PUT);
+        let payload = envelope.payload;
+        assert_eq!(payload["lane"].as_str(), Some("ephemeral"));
+        assert_eq!(payload["kind"].as_str(), Some("note"));
+        assert_eq!(payload["key"].as_str(), Some("summary"));
+        assert_eq!(payload["score"].as_f64(), Some(0.42));
+        assert_eq!(payload["prob"].as_f64(), Some(0.84));
+        assert!(payload["hash"].as_str().is_some());
+        assert!(payload["ptr"].is_object());
+        let tags = payload["tags"].as_array().expect("tags array");
+        assert_eq!(tags.len(), 2); // deduped (alpha, notes)
+        assert_eq!(payload["value"]["test_id"].as_str(), Some(target_id.as_str()));
+
+        let envelope = timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("applied event timeout")
+            .expect("applied event present");
+        assert_eq!(envelope.kind, topics::TOPIC_MEMORY_APPLIED);
+        let payload = envelope.payload;
+        assert_eq!(payload["source"].as_str(), Some("admin.memory.apply"));
+        assert_eq!(payload["value"]["test_id"].as_str(), Some(target_id.as_str()));
+        assert!(payload["value_preview"].as_str().is_some());
+        assert!(payload["value_bytes"].as_u64().is_some());
+        assert!(payload["applied_at"].as_str().is_some());
+        let tags = payload["tags"].as_array().expect("tags array");
+        assert_eq!(tags.len(), 2);
     }
 }

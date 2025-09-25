@@ -7,7 +7,7 @@ title: Prometheus Alerting Rules — ARW
 Updated: 2025-09-22
 Type: How‑to
 
-Example alerting rules for common resource conditions. Tune thresholds and durations to your environment.
+Example alerting rules for common resource conditions. Tune thresholds and durations to your environment. GPU alerts depend on the GPU telemetry pack; if the `arw_gpu_*` metrics are absent, drop or postpone those rules.
 
 ## Alerts.yaml
 

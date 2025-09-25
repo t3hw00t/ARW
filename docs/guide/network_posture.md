@@ -16,7 +16,7 @@ Network posture is a per‑project setting that translates policy into enforceab
 - Public / Standard: allow a curated set of public registries (GitHub, crates.io, PyPI, npm, Hugging Face, container registries) plus any host explicitly listed in settings.
 - Allowlist / Custom / Strict: only hosts listed in settings are permitted; non-standard ports require explicit entries.
 
-The effective posture is resolved from `PATCH /egress/settings` or the corresponding `ARW_NET_POSTURE` env var. Hosts are matched case-insensitively with wildcard support (`*.example.com`).
+The effective posture is resolved from `POST /egress/settings` or the corresponding `ARW_NET_POSTURE` env var. Hosts are matched case-insensitively with wildcard support (`*.example.com`).
 
 ## Lease Overrides
 - When posture blocks a host or port, the gateway checks `net:*` leases before denying the egress. Granting a lease such as `net:host:internal.example.com` or `net:port:8443` temporarily widens scope.
