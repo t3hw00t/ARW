@@ -153,7 +153,7 @@ Caching & Performance (High Priority)
 - [Kernel] [t-250913001015-1006] Metrics: expose cache hit/miss/age, bytes/latency saved, stampede suppression rate at `/state/*` and `/metrics` — done (tool cache telemetry surfaces + Prometheus counters)
 - [Kernel] [t-250913001018-1007] Cache Policy manifest + loader: define YAML format, map to env knobs, and plan migration to config‑first overrides — docs done; loader todo
 - [Kernel] [t-250914210100-http01] HTTP helpers module (`ext::http`) for ETag/Last‑Modified/Range parsing; adopt in models blob GET/HEAD — done
-- [Kernel] [t-250914210104-http02] Adopt `ext::http` helpers across any future digest/static file endpoints (keep semantics consistent) — todo
+- [Kernel] [t-250914210104-http02] Adopt `ext::http` helpers across any future digest/static file endpoints (keep semantics consistent) — done (models blob CAS route)
 - [Kernel] [t-250914210107-http03] Docs: consolidate HTTP caching semantics into a short reusable snippet and cross‑link from API/Guide — done
 
 Egress Firewall & Posture (Plan)

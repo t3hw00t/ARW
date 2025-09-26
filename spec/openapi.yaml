@@ -35,7 +35,6 @@ paths:
                 $ref: '#/components/schemas/ChatHistory'
         '401':
           description: Unauthorized
-      description: 'Chat: GET /admin/chat.'
   /admin/chat/clear:
     post:
       tags:
@@ -49,7 +48,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Chat: POST /admin/chat/clear.'
   /admin/chat/send:
     post:
       tags:
@@ -70,7 +68,6 @@ paths:
                 $ref: '#/components/schemas/ChatSendResp'
         '401':
           description: Unauthorized
-      description: 'Chat: POST /admin/chat/send.'
   /admin/chat/status:
     get:
       tags:
@@ -92,7 +89,6 @@ paths:
                 $ref: '#/components/schemas/ChatStatusResp'
         '401':
           description: Unauthorized
-      description: 'Chat: GET /admin/chat/status.'
   /admin/distill:
     post:
       tags:
@@ -107,7 +103,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: Trigger a manual distillation pass.
   /admin/experiments/activate:
     post:
       tags:
@@ -129,7 +124,6 @@ paths:
           description: Unauthorized
         '404':
           description: Unknown experiment
-      description: 'Experiments: POST /admin/experiments/activate.'
   /admin/experiments/assign:
     post:
       tags:
@@ -149,7 +143,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Experiments: POST /admin/experiments/assign.'
   /admin/experiments/define:
     post:
       tags:
@@ -169,7 +162,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Experiments: POST /admin/experiments/define.'
   /admin/experiments/list:
     get:
       tags:
@@ -184,7 +176,6 @@ paths:
                 $ref: '#/components/schemas/ExperimentsListResponse'
         '401':
           description: Unauthorized
-      description: 'Experiments: GET /admin/experiments/list.'
   /admin/experiments/run:
     post:
       tags:
@@ -205,7 +196,6 @@ paths:
                 $ref: '#/components/schemas/RunOutcome'
         '401':
           description: Unauthorized
-      description: 'Experiments: POST /admin/experiments/run.'
   /admin/experiments/scoreboard:
     get:
       tags:
@@ -220,7 +210,6 @@ paths:
                 $ref: '#/components/schemas/ExperimentsScoreboardResponse'
         '401':
           description: Unauthorized
-      description: 'Experiments: GET /admin/experiments/scoreboard.'
   /admin/experiments/start:
     post:
       tags:
@@ -240,7 +229,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Experiments: POST /admin/experiments/start.'
   /admin/experiments/stop:
     post:
       tags:
@@ -260,7 +248,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Experiments: POST /admin/experiments/stop.'
   /admin/experiments/winners:
     get:
       tags:
@@ -275,7 +262,6 @@ paths:
                 $ref: '#/components/schemas/ExperimentsWinnersResponse'
         '401':
           description: Unauthorized
-      description: 'Experiments: GET /admin/experiments/winners.'
   /admin/feedback/analyze:
     post:
       tags:
@@ -290,7 +276,6 @@ paths:
                 $ref: '#/components/schemas/FeedbackState'
         '401':
           description: Unauthorized
-      description: 'Feedback: POST /admin/feedback/analyze.'
   /admin/feedback/apply:
     post:
       tags:
@@ -316,7 +301,6 @@ paths:
           description: Policy denied
         '404':
           description: Unknown suggestion
-      description: 'Feedback: POST /admin/feedback/apply.'
   /admin/feedback/auto:
     post:
       tags:
@@ -336,7 +320,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Feedback: POST /admin/feedback/auto.'
   /admin/feedback/policy:
     get:
       tags:
@@ -350,7 +333,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Feedback: GET /admin/feedback/policy.'
   /admin/feedback/reset:
     post:
       tags:
@@ -364,7 +346,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Feedback: POST /admin/feedback/reset.'
   /admin/feedback/rollback:
     post:
       tags:
@@ -388,7 +369,6 @@ paths:
           description: Unauthorized
         '404':
           description: Snapshot not found
-      description: 'Feedback: POST /admin/feedback/rollback.'
   /admin/feedback/signal:
     post:
       tags:
@@ -409,7 +389,6 @@ paths:
                 $ref: '#/components/schemas/FeedbackState'
         '401':
           description: Unauthorized
-      description: 'Feedback: POST /admin/feedback/signal.'
   /admin/feedback/state:
     get:
       tags:
@@ -424,7 +403,6 @@ paths:
                 $ref: '#/components/schemas/FeedbackState'
         '401':
           description: Unauthorized
-      description: 'Feedback: GET /admin/feedback/state.'
   /admin/feedback/suggestions:
     get:
       tags:
@@ -438,7 +416,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Feedback: GET /admin/feedback/suggestions.'
   /admin/feedback/updates:
     get:
       tags:
@@ -462,7 +439,6 @@ paths:
           description: No changes since provided version
         '401':
           description: Unauthorized
-      description: 'Feedback: GET /admin/feedback/updates.'
   /admin/feedback/versions:
     get:
       tags:
@@ -476,7 +452,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Feedback: GET /admin/feedback/versions.'
   /admin/goldens/add:
     post:
       tags:
@@ -498,7 +473,6 @@ paths:
           description: Persist failed
         '401':
           description: Unauthorized
-      description: 'Experiments: POST /admin/goldens/add.'
   /admin/goldens/list:
     get:
       tags:
@@ -519,7 +493,6 @@ paths:
                 $ref: '#/components/schemas/GoldensListResponse'
         '401':
           description: Unauthorized
-      description: 'Experiments: GET /admin/goldens/list.'
   /admin/goldens/run:
     post:
       tags:
@@ -540,7 +513,6 @@ paths:
                 $ref: '#/components/schemas/EvalSummary'
         '401':
           description: Unauthorized
-      description: 'Experiments: POST /admin/goldens/run.'
   /admin/governor/hints:
     get:
       tags:
@@ -555,7 +527,6 @@ paths:
                 $ref: '#/components/schemas/Hints'
         '401':
           description: Unauthorized
-      description: 'Introspect: GET /admin/governor/hints.'
     post:
       tags:
       - Admin/Introspect
@@ -574,7 +545,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Introspect: POST /admin/governor/hints.'
   /admin/governor/profile:
     get:
       tags:
@@ -589,7 +559,6 @@ paths:
                 $ref: '#/components/schemas/GovernorProfileResponse'
         '401':
           description: Unauthorized
-      description: 'Introspect: GET /admin/governor/profile.'
     post:
       tags:
       - Admin/Introspect
@@ -608,7 +577,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Introspect: POST /admin/governor/profile.'
   /admin/hierarchy/accept:
     post:
       tags:
@@ -628,7 +596,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Hierarchy: POST /admin/hierarchy/accept.'
   /admin/hierarchy/hello:
     post:
       tags:
@@ -648,7 +615,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Hierarchy: POST /admin/hierarchy/hello.'
   /admin/hierarchy/offer:
     post:
       tags:
@@ -668,7 +634,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Hierarchy: POST /admin/hierarchy/offer.'
   /admin/hierarchy/role:
     post:
       tags:
@@ -688,7 +653,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Hierarchy: POST /admin/hierarchy/role.'
   /admin/hierarchy/state:
     get:
       tags:
@@ -702,7 +666,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Hierarchy: GET /admin/hierarchy/state.'
   /admin/introspect/stats:
     get:
       tags:
@@ -716,7 +679,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Introspect: GET /admin/introspect/stats.'
   /admin/memory:
     get:
       tags:
@@ -748,7 +710,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: List recent memory items (admin helper).
   /admin/memory/apply:
     post:
       tags:
@@ -774,7 +735,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: Insert a memory item (admin helper).
   /admin/memory/quarantine:
     get:
       tags:
@@ -788,7 +748,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Review: GET /admin/memory/quarantine.'
     post:
       tags:
       - Review
@@ -809,7 +768,6 @@ paths:
           description: Unauthorized
         '500':
           description: Storage error
-      description: 'Review: POST /admin/memory/quarantine.'
   /admin/memory/quarantine/admit:
     post:
       tags:
@@ -831,7 +789,6 @@ paths:
           description: Unauthorized
         '500':
           description: Storage error
-      description: 'Review: POST /admin/memory/quarantine/admit.'
   /admin/models:
     get:
       tags:
@@ -847,7 +804,6 @@ paths:
                 items: {}
         '401':
           description: Unauthorized
-      description: 'Models: GET /admin/models.'
   /admin/models/add:
     post:
       tags:
@@ -867,7 +823,42 @@ paths:
               schema: {}
         '400':
           description: Invalid input
-      description: 'Models: POST /admin/models/add.'
+  /admin/models/by-hash/{sha256}:
+    get:
+      tags:
+      - Models
+      operationId: models_blob_by_hash_doc
+      parameters:
+      - name: sha256
+        in: path
+        description: Model blob SHA-256 (hex)
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          description: Model blob
+          content:
+            application/octet-stream: {}
+        '304':
+          description: Not modified
+        '400':
+          description: Invalid hash
+          content:
+            application/json:
+              schema: {}
+        '401':
+          description: Unauthorized
+        '404':
+          description: Blob not found
+          content:
+            application/json:
+              schema: {}
+        '500':
+          description: Read error
+          content:
+            application/json:
+              schema: {}
   /admin/models/cas_gc:
     post:
       tags:
@@ -887,7 +878,6 @@ paths:
               schema: {}
         '501':
           description: CAS GC unavailable
-      description: 'Models: POST /admin/models/cas_gc.'
   /admin/models/concurrency:
     get:
       tags:
@@ -900,7 +890,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ModelsConcurrencySnapshot'
-      description: 'Models: GET /admin/models/concurrency.'
     post:
       tags:
       - Models
@@ -918,7 +907,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ModelsConcurrencySnapshot'
-      description: 'Models: POST /admin/models/concurrency.'
   /admin/models/default:
     get:
       tags:
@@ -930,7 +918,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: 'Models: GET /admin/models/default.'
     post:
       tags:
       - Models
@@ -949,7 +936,6 @@ paths:
               schema: {}
         '400':
           description: Unknown model
-      description: 'Models: POST /admin/models/default.'
   /admin/models/download:
     post:
       tags:
@@ -969,7 +955,6 @@ paths:
               schema: {}
         '501':
           description: Download unavailable
-      description: 'Models: POST /admin/models/download.'
   /admin/models/download/cancel:
     post:
       tags:
@@ -989,7 +974,6 @@ paths:
               schema: {}
         '501':
           description: Cancel unavailable
-      description: 'Models: POST /admin/models/download/cancel.'
   /admin/models/jobs:
     get:
       tags:
@@ -1001,7 +985,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: 'Models: GET /admin/models/jobs.'
   /admin/models/load:
     post:
       tags:
@@ -1017,7 +1000,6 @@ paths:
                 items: {}
         '404':
           description: Missing models.json
-      description: 'Models: POST /admin/models/load.'
   /admin/models/refresh:
     post:
       tags:
@@ -1031,7 +1013,6 @@ paths:
               schema:
                 type: array
                 items: {}
-      description: 'Models: POST /admin/models/refresh.'
   /admin/models/remove:
     post:
       tags:
@@ -1049,7 +1030,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: 'Models: POST /admin/models/remove.'
   /admin/models/save:
     post:
       tags:
@@ -1061,7 +1041,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: 'Models: POST /admin/models/save.'
   /admin/models/summary:
     get:
       tags:
@@ -1075,7 +1054,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Models: GET /admin/models/summary.'
   /admin/probe:
     get:
       tags:
@@ -1090,7 +1068,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: Effective path probe (successor to `/admin/probe`).
   /admin/probe/hw:
     get:
       tags:
@@ -1105,7 +1082,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: Hardware/software probe (`/admin/probe/hw`).
   /admin/probe/metrics:
     get:
       tags:
@@ -1120,7 +1096,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: Metrics snapshot probe (`/admin/probe/metrics`).
   /admin/self_model/apply:
     post:
       tags:
@@ -1153,7 +1128,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: 'SelfModel: POST /admin/self_model/apply.'
   /admin/self_model/propose:
     post:
       tags:
@@ -1181,7 +1155,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: 'SelfModel: POST /admin/self_model/propose.'
   /admin/tools:
     get:
       tags:
@@ -1195,7 +1168,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Tools: GET /admin/tools.'
   /admin/tools/cache_stats:
     get:
       tags:
@@ -1209,7 +1181,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Tools: GET /admin/tools/cache_stats.'
   /admin/tools/run:
     post:
       tags:
@@ -1237,7 +1208,6 @@ paths:
           description: Unknown tool
         '500':
           description: Tool runtime error
-      description: 'Tools: POST /admin/tools/run.'
   /admin/world_diffs:
     get:
       tags:
@@ -1251,7 +1221,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: 'Review: GET /admin/world_diffs.'
   /admin/world_diffs/decision:
     post:
       tags:
@@ -1275,7 +1244,6 @@ paths:
           description: Diff not found
         '500':
           description: Storage error
-      description: 'Review: POST /admin/world_diffs/decision.'
   /admin/world_diffs/queue:
     post:
       tags:
@@ -1297,14 +1265,12 @@ paths:
           description: Unauthorized
         '500':
           description: Storage error
-      description: 'Review: POST /admin/world_diffs/queue.'
   /events:
     get:
       tags:
       - Events
-      summary: "Server\u2011Sent Events stream of envelopes."
-      description: "Server\u2011Sent Events stream of envelopes; supports replay and\
-        \ prefix filters."
+      summary: Server‑Sent Events stream of envelopes.
+      description: Server‑Sent Events stream of envelopes; supports replay and prefix filters.
       operationId: events_sse_doc
       parameters:
       - name: after
@@ -1363,7 +1329,6 @@ paths:
             text/plain:
               schema:
                 type: string
-      description: 'Public: GET /metrics.'
   /orchestrator/mini_agents:
     get:
       tags:
@@ -1381,7 +1346,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: List available mini-agents (placeholder).
   /orchestrator/mini_agents/start_training:
     post:
       tags:
@@ -1407,7 +1371,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: Start a training job that results in a suggested Logic Unit (admin).
   /projects:
     post:
       tags:
@@ -1431,7 +1394,6 @@ paths:
           description: Unauthorized
         '500':
           description: Error
-      description: 'Projects: POST /projects.'
   /projects/{proj}/file:
     put:
       tags:
@@ -1470,7 +1432,6 @@ paths:
           description: Conflict
         '500':
           description: Error
-      description: 'Projects: PUT /projects/{proj}/file.'
     patch:
       tags:
       - Projects
@@ -1508,7 +1469,6 @@ paths:
           description: Conflict
         '500':
           description: Error
-      description: 'Projects: PATCH /projects/{proj}/file.'
   /projects/{proj}/import:
     post:
       tags:
@@ -1541,7 +1501,6 @@ paths:
           description: Forbidden
         '500':
           description: Error
-      description: 'Projects: POST /projects/{proj}/import.'
   /projects/{proj}/notes:
     put:
       tags:
@@ -1573,7 +1532,6 @@ paths:
           description: Unauthorized
         '500':
           description: Error
-      description: 'Projects: PUT /projects/{proj}/notes.'
   /research_watcher/{id}/approve:
     post:
       tags:
@@ -1604,7 +1562,6 @@ paths:
           description: Not found
         '500':
           description: Error
-      description: 'Research: POST /research_watcher/{id}/approve.'
   /research_watcher/{id}/archive:
     post:
       tags:
@@ -1635,7 +1592,6 @@ paths:
           description: Not found
         '500':
           description: Error
-      description: 'Research: POST /research_watcher/{id}/archive.'
   /spec/health:
     get:
       tags:
@@ -1648,7 +1604,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: Health summary for spec artifacts (presence/size).
   /staging/actions/{id}/approve:
     post:
       tags:
@@ -1679,7 +1634,6 @@ paths:
           description: Not found
         '500':
           description: Error
-      description: 'Staging: POST /staging/actions/{id}/approve.'
   /staging/actions/{id}/deny:
     post:
       tags:
@@ -1710,7 +1664,6 @@ paths:
           description: Not found
         '500':
           description: Error
-      description: 'Staging: POST /staging/actions/{id}/deny.'
   /state/actions:
     get:
       tags:
@@ -1785,7 +1738,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: Experiment events snapshot (public read-model).
   /state/guardrails_metrics:
     get:
       tags:
@@ -1803,7 +1755,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: Guardrails circuit-breaker metrics snapshot.
   /state/intents:
     get:
       tags:
@@ -1881,7 +1832,6 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HashPage'
-      description: 'State: GET /state/models_hashes.'
   /state/models_metrics:
     get:
       tags:
@@ -1942,7 +1892,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: Orchestrator jobs snapshot.
   /state/projects:
     get:
       tags:
@@ -1954,7 +1903,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: 'Projects: GET /state/projects.'
   /state/projects/{proj}/file:
     get:
       tags:
@@ -1985,7 +1933,6 @@ paths:
           description: Unauthorized
         '404':
           description: Not found
-      description: 'Projects: GET /state/projects/{proj}/file.'
   /state/projects/{proj}/notes:
     get:
       tags:
@@ -2009,7 +1956,6 @@ paths:
           description: Invalid request
         '401':
           description: Unauthorized
-      description: 'Projects: GET /state/projects/{proj}/notes.'
   /state/projects/{proj}/tree:
     get:
       tags:
@@ -2040,7 +1986,6 @@ paths:
           description: Unauthorized
         '404':
           description: Not found
-      description: 'Projects: GET /state/projects/{proj}/tree.'
   /state/research_watcher:
     get:
       tags:
@@ -2074,7 +2019,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: Research watcher queue snapshot.
   /state/route_stats:
     get:
       tags:
@@ -2087,7 +2031,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: Bus and per-route counters snapshot.
   /state/runtime_matrix:
     get:
       tags:
@@ -2105,7 +2048,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: Runtime matrix snapshot.
   /state/staging/actions:
     get:
       tags:
@@ -2139,7 +2081,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: Staging queue snapshot.
   /state/tasks:
     get:
       tags:
@@ -2152,7 +2093,6 @@ paths:
           content:
             application/json:
               schema: {}
-      description: Background tasks status snapshot.
   /state/training/telemetry:
     get:
       tags:
@@ -2167,7 +2107,6 @@ paths:
               schema: {}
         '401':
           description: Unauthorized
-      description: Training telemetry snapshot.
   /state/world:
     get:
       tags:
@@ -3874,11 +3813,11 @@ tags:
 - name: Meta
   description: Service metadata and health
 - name: State
-  description: "Read\u2011models (actions, models, egress, episodes)"
+  description: Read‑models (actions, models, egress, episodes)
 - name: State/Projects
   description: Project tree and notes read-models
 - name: Events
-  description: "Server\u2011Sent Events stream"
+  description: Server‑Sent Events stream
 - name: Models
   description: Model steward admin endpoints
 - name: Projects

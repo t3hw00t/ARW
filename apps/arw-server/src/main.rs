@@ -18,6 +18,7 @@ mod egress_log;
 mod egress_policy;
 mod egress_proxy;
 mod experiments;
+mod ext;
 mod feedback;
 mod goldens;
 mod governor;

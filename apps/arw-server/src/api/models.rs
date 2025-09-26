@@ -1,13 +1,21 @@
-use axum::http::HeaderMap;
-use axum::response::IntoResponse;
+use axum::body::Body;
+use axum::http::{
+    header::{
+        CACHE_CONTROL, CONTENT_LENGTH, CONTENT_TYPE, ETAG, LAST_MODIFIED, X_CONTENT_TYPE_OPTIONS,
+    },
+    HeaderMap, Method, StatusCode,
+};
+use axum::response::{IntoResponse, Response};
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     Json,
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
+use tokio::fs;
+use tokio_util::io::ReaderStream;
 
-use crate::{models, AppState};
+use crate::{ext, models, AppState};
 use models::{HashPage, ModelsConcurrencySnapshot, ModelsMetricsResponse};
 use utoipa::ToSchema;
 
@@ -449,5 +457,324 @@ pub async fn models_cas_gc(
             ),
         )
             .into_response(),
+    }
+}
+
+#[utoipa::path(
+    get,
+    path = "/admin/models/by-hash/{sha256}",
+    tag = "Models",
+    params(("sha256" = String, Path, description = "Model blob SHA-256 (hex)")),
+    responses(
+        (status = 200, description = "Model blob", content_type = "application/octet-stream"),
+        (status = 304, description = "Not modified"),
+        (status = 400, description = "Invalid hash", body = serde_json::Value),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Blob not found", body = serde_json::Value),
+        (status = 500, description = "Read error", body = serde_json::Value)
+    )
+)]
+pub async fn models_blob_by_hash(
+    method: Method,
+    Path(sha256): Path<String>,
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Response {
+    if !crate::admin_ok(&headers) {
+        return unauthorized();
+    }
+
+    let hash = sha256.trim();
+    if hash.len() != 64 || !hash.chars().all(|c| c.is_ascii_hexdigit()) {
+        return (
+            StatusCode::BAD_REQUEST,
+            Json(json!({
+                "type": "about:blank",
+                "title": "Invalid hash",
+                "status": 400
+            })),
+        )
+            .into_response();
+    }
+    let hash = hash.to_ascii_lowercase();
+    let cas_path = state.models().cas_blob_path(&hash);
+
+    let metadata = match fs::metadata(&cas_path).await {
+        Ok(meta) => meta,
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {
+            return (
+                StatusCode::NOT_FOUND,
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "Blob not found",
+                    "status": 404
+                })),
+            )
+                .into_response();
+        }
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "Read error",
+                    "status": 500,
+                    "detail": err.to_string()
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    let len = metadata.len();
+    let modified = metadata.modified().ok();
+    let cache_control = "public, max-age=31536000, immutable";
+    let etag = ext::http::etag_value(&hash);
+    let last_modified_header = modified.and_then(ext::http::http_date_value);
+
+    if ext::http::if_none_match_matches(&headers, &hash) {
+        return ext::http::not_modified_response(
+            &etag,
+            last_modified_header.as_ref(),
+            cache_control,
+        );
+    }
+    if let Some(modified_time) = modified {
+        if ext::http::not_modified_since(&headers, modified_time) {
+            return ext::http::not_modified_response(
+                &etag,
+                last_modified_header.as_ref(),
+                cache_control,
+            );
+        }
+    }
+
+    let mut builder = Response::builder()
+        .status(StatusCode::OK)
+        .header(ETAG, etag.clone())
+        .header(CACHE_CONTROL, cache_control)
+        .header(X_CONTENT_TYPE_OPTIONS, "nosniff")
+        .header(CONTENT_TYPE, "application/octet-stream")
+        .header(CONTENT_LENGTH, len.to_string());
+    if let Some(ref last_modified) = last_modified_header {
+        builder = builder.header(LAST_MODIFIED, last_modified.clone());
+    }
+
+    if method == Method::HEAD {
+        return builder
+            .body(Body::empty())
+            .unwrap_or_else(|_| Response::new(Body::empty()));
+    }
+
+    let file = match fs::File::open(&cas_path).await {
+        Ok(file) => file,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "Read error",
+                    "status": 500,
+                    "detail": err.to_string()
+                })),
+            )
+                .into_response();
+        }
+    };
+    let stream = ReaderStream::new(file);
+    builder
+        .body(Body::from_stream(stream))
+        .unwrap_or_else(|_| Response::new(Body::empty()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::env;
+    use axum::http::{header::IF_NONE_MATCH, HeaderMap, HeaderValue};
+    use http_body_util::BodyExt;
+    use std::{path::Path, sync::Arc};
+    use tempfile::tempdir;
+    use tokio::sync::Mutex;
+
+    async fn build_state(path: &Path, env_guard: &mut env::EnvGuard) -> AppState {
+        env_guard.set("ARW_DEBUG", "1");
+        crate::util::reset_state_dir_for_tests();
+        env_guard.set("ARW_STATE_DIR", path.display().to_string());
+        let bus = arw_events::Bus::new_with_replay(32, 32);
+        let kernel = arw_kernel::Kernel::open(path).expect("init kernel for tests");
+        let policy = arw_policy::PolicyEngine::load_from_env();
+        let policy_arc = Arc::new(Mutex::new(policy));
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
+        AppState::builder(bus, kernel, policy_arc, host, true)
+            .with_sse_capacity(32)
+            .build()
+            .await
+    }
+
+    async fn write_blob(state: &AppState, hash: &str, body: &[u8]) {
+        let path = state.models().cas_blob_path(hash);
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).await.expect("create cas dir");
+        }
+        fs::write(&path, body).await.expect("write cas blob");
+    }
+
+    fn make_hash() -> String {
+        "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef".to_string()
+    }
+
+    #[tokio::test]
+    async fn models_blob_by_hash_serves_blob_with_headers() {
+        let mut env_guard = env::guard();
+        let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let state = build_state(temp.path(), &mut env_guard).await;
+
+        let hash = make_hash();
+        let payload = b"artifact-bytes";
+        write_blob(&state, &hash, payload).await;
+
+        let response = models_blob_by_hash(
+            Method::GET,
+            Path(hash.clone()),
+            State(state.clone()),
+            HeaderMap::new(),
+        )
+        .await;
+
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        assert_eq!(
+            parts.headers.get(ETAG).and_then(|v| v.to_str().ok()),
+            Some(format!("\"{}\"", hash).as_str())
+        );
+        assert_eq!(
+            parts
+                .headers
+                .get(CACHE_CONTROL)
+                .and_then(|v| v.to_str().ok()),
+            Some("public, max-age=31536000, immutable")
+        );
+        assert_eq!(
+            parts
+                .headers
+                .get(CONTENT_TYPE)
+                .and_then(|v| v.to_str().ok()),
+            Some("application/octet-stream")
+        );
+        assert_eq!(
+            parts
+                .headers
+                .get(X_CONTENT_TYPE_OPTIONS)
+                .and_then(|v| v.to_str().ok()),
+            Some("nosniff")
+        );
+        assert_eq!(
+            parts
+                .headers
+                .get(CONTENT_LENGTH)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse::<u64>().ok()),
+            Some(payload.len() as u64)
+        );
+        assert!(parts.headers.get(LAST_MODIFIED).is_some());
+
+        let collected = BodyExt::collect(body)
+            .await
+            .expect("collect body")
+            .to_bytes();
+        assert_eq!(&collected[..], payload);
+    }
+
+    #[tokio::test]
+    async fn models_blob_by_hash_head_omits_body() {
+        let mut env_guard = env::guard();
+        let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let state = build_state(temp.path(), &mut env_guard).await;
+
+        let hash = make_hash();
+        let payload = b"head-check";
+        write_blob(&state, &hash, payload).await;
+
+        let response = models_blob_by_hash(
+            Method::HEAD,
+            Path(hash.clone()),
+            State(state.clone()),
+            HeaderMap::new(),
+        )
+        .await;
+
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        let bytes = BodyExt::collect(body)
+            .await
+            .expect("collect head body")
+            .to_bytes();
+        assert!(bytes.is_empty(), "HEAD responses should omit body");
+        assert_eq!(
+            parts
+                .headers
+                .get(CONTENT_LENGTH)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse::<u64>().ok()),
+            Some(payload.len() as u64)
+        );
+    }
+
+    #[tokio::test]
+    async fn models_blob_by_hash_honors_if_none_match() {
+        let mut env_guard = env::guard();
+        let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let state = build_state(temp.path(), &mut env_guard).await;
+
+        let hash = make_hash();
+        write_blob(&state, &hash, b"etag").await;
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            IF_NONE_MATCH,
+            HeaderValue::from_str(&format!("\"{}\"", hash)).expect("header value"),
+        );
+
+        let response = models_blob_by_hash(
+            Method::GET,
+            Path(hash.clone()),
+            State(state.clone()),
+            headers,
+        )
+        .await;
+
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::NOT_MODIFIED);
+        let bytes = BodyExt::collect(body)
+            .await
+            .expect("collect body")
+            .to_bytes();
+        assert!(bytes.is_empty());
+        assert_eq!(
+            parts.headers.get(ETAG).and_then(|v| v.to_str().ok()),
+            Some(format!("\"{}\"", hash).as_str())
+        );
+    }
+
+    #[tokio::test]
+    async fn models_blob_by_hash_rejects_invalid_hash() {
+        let mut env_guard = env::guard();
+        let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let state = build_state(temp.path(), &mut env_guard).await;
+
+        let response = models_blob_by_hash(
+            Method::GET,
+            Path("not-a-hash".to_string()),
+            State(state.clone()),
+            HeaderMap::new(),
+        )
+        .await;
+
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }

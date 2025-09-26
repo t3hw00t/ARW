@@ -2874,6 +2874,10 @@ impl ModelStore {
         self.models_dir().join("by-hash")
     }
 
+    pub fn cas_blob_path(&self, hash: &str) -> PathBuf {
+        self.cas_dir().join(hash)
+    }
+
     fn manifest_path(&self, id: &str) -> PathBuf {
         self.models_dir().join(format!("{id}.json"))
     }

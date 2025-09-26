@@ -21,7 +21,7 @@ Canonical topics used by the service are defined once under [crates/arw-topics/s
 - GET  `/admin/models/summary` — Aggregated summary for UIs: `{ items, default, concurrency, metrics }`.
 - POST `/admin/models/cas_gc` — Run a one‑off CAS GC sweep; deletes unreferenced blobs older than `ttl_hours` (default `24`).
 - GET  `/state/models_hashes` — Summary of installed model hashes and sizes.
-- GET  `/admin/models/by-hash/:sha256` — Serve a CAS blob by hash (egress‑gated; `io:egress:models.peer`).
+- GET  `/admin/models/by-hash/:sha256` — Serve a CAS blob by hash (egress‑gated; `io:egress:models.peer`). Responses include strong validators (`ETag:"{sha256}"`, `Last-Modified`) and long-lived caching headers so repeat fetches can short-circuit with `304 Not Modified` when unchanged. HEAD requests mirror the metadata without streaming the blob.
   - Emits strong validators and immutable caching for digest‑addressed blobs:
     - `ETag: "<sha256>"`, `Last-Modified`, `Cache-Control: public, max-age=31536000, immutable`.
     - Honors `If-None-Match` (304 Not Modified) for repeat requests.

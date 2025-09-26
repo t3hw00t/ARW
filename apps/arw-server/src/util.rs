@@ -1,10 +1,10 @@
 use anyhow::{anyhow, Result};
 use once_cell::sync::{Lazy, OnceCell};
 use serde_json::{json, Value};
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::sync::Mutex;
 #[cfg(test)]
-use std::sync::MutexGuard;
+use std::{path::Path, sync::MutexGuard};
 
 static STATE_DIR: Lazy<Mutex<OnceCell<PathBuf>>> = Lazy::new(|| Mutex::new(OnceCell::new()));
 

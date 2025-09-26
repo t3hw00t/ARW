@@ -3,7 +3,7 @@ title: HTTP Caching Semantics (Digest Blobs)
 ---
 
 # HTTP Caching Semantics (Digest Blobs)
-Updated: 2025-09-20
+Updated: 2025-09-26
 Type: Reference
 
 For endpoints that serve immutable, digest‑addressed blobs (e.g., `/admin/models/by-hash/{sha256}`):
@@ -25,6 +25,8 @@ For endpoints that serve immutable, digest‑addressed blobs (e.g., `/admin/mode
 - HEAD behavior
   - Mirrors GET headers (validators, caching); no body
   - Honors `If-None-Match` / `If-Modified-Since`
+
+For generated reference artifacts (e.g., `/spec/openapi.yaml`, `/spec/asyncapi.yaml`, `/spec/mcp-tools.json`, `/spec/schemas/*.json`, `/catalog/index`), the server emits strong ETags derived from file contents plus optional `Last-Modified` timestamps. The cache policy defaults to `Cache-Control: public, max-age=300, must-revalidate`, balancing fresh docs with client revalidation support.
 
 Examples:
 

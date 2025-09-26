@@ -46,6 +46,7 @@ bytes = "1"
 hyper-util = { version = "0.1", features = ["server","tokio"] }
 once_cell = { workspace = true }
 json-patch = "2"
+httpdate = "1.0"
 moka = { version = "0.12", features = ["future"] }
 sysinfo = { workspace = true }
 os_info = { workspace = true }

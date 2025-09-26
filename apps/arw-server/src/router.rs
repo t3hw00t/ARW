@@ -191,6 +191,7 @@ pub(crate) mod paths {
     pub const ADMIN_MODELS_DOWNLOAD: &str = "/admin/models/download";
     pub const ADMIN_MODELS_DOWNLOAD_CANCEL: &str = "/admin/models/download/cancel";
     pub const ADMIN_MODELS_CAS_GC: &str = "/admin/models/cas_gc";
+    pub const ADMIN_MODELS_BY_HASH: &str = "/admin/models/by-hash/:sha256";
     pub const ADMIN_MODELS_JOBS: &str = "/admin/models/jobs";
     pub const ADMIN_TOOLS: &str = "/admin/tools";
     pub const ADMIN_TOOLS_RUN: &str = "/admin/tools/run";
@@ -632,6 +633,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
     builder.route_post(
         paths::ADMIN_MODELS_CAS_GC,
         api::models::models_cas_gc,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_MODELS_BY_HASH,
+        api::models::models_blob_by_hash,
         Some(Stability::Experimental),
     );
     builder.route_get(

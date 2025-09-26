@@ -92,6 +92,7 @@ pub struct AboutResponse {
         crate::api::models::models_download,
         crate::api::models::models_download_cancel,
         crate::api::models::models_cas_gc,
+        crate::api::models::models_blob_by_hash,
         crate::api::tools::tools_list,
         crate::api::tools::tools_run,
         crate::api::tools::tools_cache_stats,

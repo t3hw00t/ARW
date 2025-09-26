@@ -391,6 +391,7 @@ dependencies = [
  "futures-util",
  "hex",
  "http-body-util",
+ "httpdate",
  "hyper 1.7.0",
  "hyper-util",
  "image",
