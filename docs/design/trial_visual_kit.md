@@ -47,4 +47,10 @@ This brief keeps UI, docs, and training materials aligned while we polish the tr
 2. Exported PNGs for docs and training decks.
 3. SVG icon set (home/compass/shield/status) checked into `assets/icons/trial/` (`home.svg`, `compass.svg`, `shield.svg`, `status.svg`).
 
+### Icon references
+
+- Use the shared SVGs directly in docs or UI mockups: `assets/icons/trial/home.svg`, `assets/icons/trial/compass.svg`, `assets/icons/trial/shield.svg`, `assets/icons/trial/status.svg`.
+- Each icon uses `currentColor`, so they inherit the surrounding text colour and remain high contrast across themes.
+- When embedding in Markdown, include short alt text for accessibility, e.g. `![Home tab](../../assets/icons/trial/home.svg)`.
+
 Keep the visuals approachable—friendly shapes, minimal chrome, and language that sounds like a teammate, not a terminal.

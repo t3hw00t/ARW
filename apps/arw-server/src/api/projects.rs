@@ -3,8 +3,11 @@ use axum::http::HeaderMap;
 use axum::response::{IntoResponse, Response};
 use axum::{extract::Path, extract::Query, Json};
 use base64::Engine as _;
-use serde::Deserialize;
+use chrono::{DateTime, SecondsFormat, Utc};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
+use std::io::ErrorKind;
+use std::time::SystemTime;
 use tokio::fs as afs;
 use tokio::io::AsyncWriteExt;
 
@@ -58,7 +61,7 @@ pub async fn projects_create(
     }
     let notes = dir.join("NOTES.md");
     if afs::metadata(&notes).await.is_err() {
-        let ts = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
+        let ts = Utc::now().format("%Y-%m-%d %H:%M:%S UTC");
         let body = format!("# {}\n\nCreated: {}\n\n", safe, ts);
         let _ = save_bytes_atomic(&notes, body.as_bytes()).await;
     }
@@ -155,6 +158,37 @@ pub struct ProjectNotesQuery {
     pub proj: String,
 }
 
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ProjectNotesDocument {
+    pub proj: String,
+    pub content: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bytes: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modified: Option<String>,
+}
+
+#[derive(Deserialize, utoipa::ToSchema)]
+pub struct ProjectNotesWrite {
+    pub content: String,
+    #[serde(default)]
+    pub prev_sha256: Option<String>,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ProjectNotesSaveResponse {
+    pub ok: bool,
+    pub proj: String,
+    pub sha256: String,
+    pub bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub modified: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub corr_id: Option<String>,
+}
+
 #[derive(Deserialize)]
 pub(crate) struct ProjectPathQuery {
     pub path: String,
@@ -167,32 +201,115 @@ pub async fn projects_notes_get(
     if !admin_ok(&headers) {
         return unauthorized();
     }
-    if let Some(path) = project_notes_path(&q.proj) {
-        if let Ok(bytes) = afs::read(&path).await {
-            if let Ok(text) = String::from_utf8(bytes) {
-                return text.into_response();
-            }
-        }
-    }
-    String::new().into_response()
-}
-
-pub async fn projects_notes_set(
-    headers: HeaderMap,
-    State(state): State<AppState>,
-    Query(q): Query<ProjectNotesQuery>,
-    body: String,
-) -> impl IntoResponse {
-    if !admin_ok(&headers) {
-        return unauthorized();
-    }
-    let Some(path) = project_notes_path(&q.proj) else {
+    let proj = q.proj;
+    let Some(path) = project_notes_path(&proj) else {
         return problem(
             axum::http::StatusCode::BAD_REQUEST,
             "Bad Request",
             Some("invalid proj"),
         );
     };
+
+    let meta = match afs::metadata(&path).await {
+        Ok(m) => Some(m),
+        Err(err) if err.kind() == ErrorKind::NotFound => None,
+        Err(err) => {
+            return problem(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Error",
+                Some(&err.to_string()),
+            )
+        }
+    };
+
+    let mut doc = ProjectNotesDocument {
+        proj: proj.clone(),
+        content: String::new(),
+        sha256: None,
+        bytes: None,
+        modified: None,
+    };
+
+    if let Some(meta) = &meta {
+        doc.bytes = Some(meta.len());
+        doc.modified = meta.modified().ok().and_then(|t| system_time_to_rfc3339(t));
+    }
+
+    match afs::read(&path).await {
+        Ok(bytes) => {
+            doc.sha256 = Some(sha256_hex(&bytes));
+            match String::from_utf8(bytes) {
+                Ok(text) => {
+                    doc.content = text;
+                }
+                Err(_) => {
+                    return problem(
+                        axum::http::StatusCode::BAD_REQUEST,
+                        "Bad Request",
+                        Some("notes not valid utf-8"),
+                    )
+                }
+            }
+        }
+        Err(err) if err.kind() == ErrorKind::NotFound => {}
+        Err(err) => {
+            return problem(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Error",
+                Some(&err.to_string()),
+            )
+        }
+    }
+
+    Json(doc).into_response()
+}
+
+pub async fn projects_notes_set(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(q): Query<ProjectNotesQuery>,
+    Json(body): Json<ProjectNotesWrite>,
+) -> impl IntoResponse {
+    if !admin_ok(&headers) {
+        return unauthorized();
+    }
+    let proj = q.proj;
+    let Some(path) = project_notes_path(&proj) else {
+        return problem(
+            axum::http::StatusCode::BAD_REQUEST,
+            "Bad Request",
+            Some("invalid proj"),
+        );
+    };
+    if let Some(expected) = body.prev_sha256.as_deref() {
+        match afs::read(&path).await {
+            Ok(current) => {
+                let have = sha256_hex(&current);
+                if have != expected {
+                    return problem(
+                        axum::http::StatusCode::CONFLICT,
+                        "Conflict",
+                        Some("sha mismatch"),
+                    );
+                }
+            }
+            Err(err) if err.kind() == ErrorKind::NotFound => {
+                return problem(
+                    axum::http::StatusCode::CONFLICT,
+                    "Conflict",
+                    Some("notes missing"),
+                );
+            }
+            Err(err) => {
+                return problem(
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "Error",
+                    Some(&err.to_string()),
+                );
+            }
+        }
+    }
+
     if let Some(parent) = path.parent() {
         if let Err(e) = afs::create_dir_all(parent).await {
             return problem(
@@ -202,20 +319,62 @@ pub async fn projects_notes_set(
             );
         }
     }
-    if let Err(e) = save_bytes_atomic(&path, body.as_bytes()).await {
+
+    let bytes = body.content.into_bytes();
+    let sha = sha256_hex(&bytes);
+    if let Err(e) = save_bytes_atomic(&path, &bytes).await {
         return problem(
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             "Error",
             Some(&e.to_string()),
         );
     }
-    let mut evt = json!({"name": q.proj});
+
+    let meta = match afs::metadata(&path).await {
+        Ok(m) => Some(m),
+        Err(err) => {
+            return problem(
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Error",
+                Some(&err.to_string()),
+            )
+        }
+    };
+    let (bytes_len, modified) = if let Some(meta) = meta {
+        let bytes_len = meta.len();
+        let modified = meta.modified().ok().and_then(|t| system_time_to_rfc3339(t));
+        (bytes_len, modified)
+    } else {
+        (bytes.len() as u64, None)
+    };
+
+    let corr = uuid::Uuid::new_v4().to_string();
+    let mut evt = json!({
+        "name": proj.clone(),
+        "sha256": sha,
+        "bytes": bytes_len,
+        "modified": modified.clone(),
+        "corr_id": corr,
+    });
     ensure_corr(&mut evt);
     state
         .bus()
         .publish(topics::TOPIC_PROJECTS_NOTES_SAVED, &evt);
     publish_audit("projects.notes.saved", &evt).await;
-    Json(json!({"ok": true})).into_response()
+
+    let resp = ProjectNotesSaveResponse {
+        ok: true,
+        proj,
+        sha256: sha,
+        bytes: bytes_len,
+        modified,
+        corr_id: evt
+            .get("corr_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+    };
+
+    Json(resp).into_response()
 }
 
 #[derive(Deserialize)]
@@ -558,7 +717,7 @@ pub async fn state_projects_tree(
     tag = "State/Projects",
     params(("proj" = String, Path, description = "Project name")),
     responses(
-        (status = 200, description = "Project notes", body = String),
+        (status = 200, description = "Project notes", body = ProjectNotesDocument),
         (status = 400, description = "Invalid request"),
         (status = 401, description = "Unauthorized")
     )
@@ -575,9 +734,9 @@ pub async fn state_projects_notes(
     path = "/projects/{proj}/notes",
     tag = "Projects",
     params(("proj" = String, Path, description = "Project name")),
-    request_body = String,
+    request_body = ProjectNotesWrite,
     responses(
-        (status = 200, description = "Notes saved", body = serde_json::Value),
+        (status = 200, description = "Notes saved", body = ProjectNotesSaveResponse),
         (status = 400, description = "Invalid request"),
         (status = 401, description = "Unauthorized"),
         (status = 500, description = "Error")
@@ -587,9 +746,15 @@ pub async fn projects_notes_put(
     headers: HeaderMap,
     state: State<AppState>,
     Path(proj): Path<String>,
-    body: String,
+    Json(body): Json<ProjectNotesWrite>,
 ) -> impl IntoResponse {
-    projects_notes_set(headers, state, Query(ProjectNotesQuery { proj }), body).await
+    projects_notes_set(
+        headers,
+        state,
+        Query(ProjectNotesQuery { proj }),
+        Json(body),
+    )
+    .await
 }
 
 #[utoipa::path(
@@ -742,6 +907,10 @@ fn project_notes_path(name: &str) -> Option<std::path::PathBuf> {
     project_root(name).map(|p| p.join("NOTES.md"))
 }
 
+fn system_time_to_rfc3339(time: SystemTime) -> Option<String> {
+    Some(DateTime::<Utc>::from(time).to_rfc3339_opts(SecondsFormat::Millis, true))
+}
+
 fn validate_rel_path(rel: &str) -> Option<std::path::PathBuf> {
     let path = std::path::Path::new(rel);
     if path.components().any(|c| {
@@ -810,7 +979,7 @@ async fn save_bytes_atomic(path: &std::path::Path, bytes: &[u8]) -> std::io::Res
 }
 
 async fn publish_audit(action: &str, details: &Value) {
-    let ts = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    let ts = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
     let line = serde_json::json!({"time": ts, "action": action, "details": details});
     let entry = serde_json::to_string(&line).unwrap_or_else(|_| "{}".to_string()) + "\n";
     let path = crate::util::state_dir().join("audit.log");

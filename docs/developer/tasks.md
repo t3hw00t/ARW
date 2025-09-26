@@ -14,7 +14,8 @@ Updated: 2025-09-26 13:52 UTC
 - [trial-g2] Gate G2: Calm approvals — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g1] Gate G1: Reliable memory — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g0] Gate G0: Stable core ready — todo (updated: 2025-09-26 12:30 UTC)
-- [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-11 21:02:19 UTC)
+- [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-26 19:57:50 UTC)
+  - 2025-09-26 19:57:50 UTC: AppState already unified (see `apps/arw-server/src/app_state.rs`). Re-scope remaining work to carve domain adapters (policy/models/cluster) and remove legacy `ext` call sites before marking complete.
 
 ## In Progress
 - [t-250914223220-cap03] OCR for screenshots (optional) — in_progress (updated: 2025-09-17 20:19:01 UTC)

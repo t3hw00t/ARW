@@ -48,8 +48,8 @@ All `/projects/*` endpoints are treated as administrative and are protected by t
 
 - `GET /state/projects` → `{ generated, items: [{ name, notes, tree }] }`
 - `POST /projects` with `{ "name": "..." }` → creates `<project>` and `NOTES.md`
-- `GET /state/projects/{proj}/notes` → returns note text
-- `PUT /projects/{proj}/notes` with `text/plain` body → saves notes
+- `GET /state/projects/{proj}/notes` → `{ proj, content, sha256?, bytes?, modified? }`
+- `PUT /projects/{proj}/notes` with `{ "content": "…", "prev_sha256": "…"? }`
 - `GET /state/projects/{proj}/tree?path=<relative>` → `{ items: [{ name, dir, rel }] }`
 - `GET /state/projects/{proj}/file?path=<relative>` → `{ path, sha256, content, abs_path }`
 - `PUT /projects/{proj}/file?path=<relative>` → write atomically
@@ -63,6 +63,8 @@ Notes
 - Names are sanitized: letters, numbers, space, `-`, `_`, `.`; no leading dot.
 - Tree listing hides dotfiles and directories outside the project root.
 - Default per‑file payload limit is `ARW_PROJECT_MAX_FILE_MB` (MiB), defaults to 1 MiB.
+- Notes writes return `{ ok, proj, sha256, bytes, modified, corr_id }`; the same `sha256` appears in the next read-model update.
+- Provide `prev_sha256` to guard concurrent edits. Omit it (or set to `null`) when creating a new notes file.
 
 ## Editor Integration
 

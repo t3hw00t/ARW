@@ -1556,16 +1556,17 @@ paths:
           type: string
       requestBody:
         content:
-          text/plain:
+          application/json:
             schema:
-              type: string
+              $ref: '#/components/schemas/ProjectNotesWrite'
         required: true
       responses:
         '200':
           description: Notes saved
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/ProjectNotesSaveResponse'
         '400':
           description: Invalid request
         '401':
@@ -2001,9 +2002,9 @@ paths:
         '200':
           description: Project notes
           content:
-            text/plain:
+            application/json:
               schema:
-                type: string
+                $ref: '#/components/schemas/ProjectNotesDocument'
         '400':
           description: Invalid request
         '401':
@@ -3485,6 +3486,67 @@ components:
           type: string
         src_path:
           type: string
+    ProjectNotesDocument:
+      type: object
+      required:
+      - proj
+      - content
+      properties:
+        bytes:
+          type:
+          - integer
+          - 'null'
+          format: int64
+          minimum: 0
+        content:
+          type: string
+        modified:
+          type:
+          - string
+          - 'null'
+        proj:
+          type: string
+        sha256:
+          type:
+          - string
+          - 'null'
+    ProjectNotesSaveResponse:
+      type: object
+      required:
+      - ok
+      - proj
+      - sha256
+      - bytes
+      properties:
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        corr_id:
+          type:
+          - string
+          - 'null'
+        modified:
+          type:
+          - string
+          - 'null'
+        ok:
+          type: boolean
+        proj:
+          type: string
+        sha256:
+          type: string
+    ProjectNotesWrite:
+      type: object
+      required:
+      - content
+      properties:
+        content:
+          type: string
+        prev_sha256:
+          type:
+          - string
+          - 'null'
     ProjectPatchRequest:
       type: object
       required:

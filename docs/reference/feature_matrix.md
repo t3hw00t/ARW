@@ -220,7 +220,9 @@ Projects tree/creation/notes and safe file IO (atomic write, SHA precondition), 
   - `POST /projects`
   - `GET /state/projects/{proj}/tree`
   - `GET /state/projects/{proj}/notes`
+    - Response: `{ proj, content, sha256?, bytes?, modified? }`
   - `PUT /projects/{proj}/notes`
+    - Body: `{ "content": "…", "prev_sha256": "…"? }`
   - `GET /state/projects/{proj}/file`
   - `PUT /projects/{proj}/file`
   - `PATCH /projects/{proj}/file`

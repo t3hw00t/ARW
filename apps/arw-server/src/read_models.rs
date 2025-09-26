@@ -13,6 +13,15 @@ const MAX_NOTES_LEN: usize = 64 * 1024;
 const MAX_TREE_DEPTH: usize = 5;
 const MAX_ENTRIES_PER_DIR: usize = 512;
 
+#[derive(Default)]
+struct NotesSnapshot {
+    modified: Option<String>,
+    bytes: Option<u64>,
+    content: Option<String>,
+    sha256: Option<String>,
+    truncated: bool,
+}
+
 use crate::{metrics, tasks::TaskHandle, training, AppState};
 use arw_topics as topics;
 
@@ -516,31 +525,43 @@ fn system_time_to_rfc3339(time: SystemTime) -> Option<String> {
     Some(DateTime::<Utc>::from(time).to_rfc3339_opts(SecondsFormat::Millis, true))
 }
 
-async fn notes_details(project_root: &Path) -> (Option<String>, Option<u64>, Option<String>) {
+async fn notes_details(project_root: &Path) -> NotesSnapshot {
+    let mut snapshot = NotesSnapshot::default();
     let notes = project_root.join("NOTES.md");
+
     match afs::metadata(&notes).await {
         Ok(meta) => {
-            let modified = meta.modified().ok().and_then(system_time_to_rfc3339);
-            let size = Some(meta.len());
-            let content = match afs::read(&notes).await {
-                Ok(bytes) => {
-                    let mut text = String::from_utf8_lossy(&bytes).to_string();
-                    if text.len() > MAX_NOTES_LEN {
-                        text.truncate(MAX_NOTES_LEN);
-                    }
-                    Some(text)
-                }
-                Err(_) => None,
-            };
-            (modified, size, content)
+            snapshot.modified = meta.modified().ok().and_then(system_time_to_rfc3339);
+            snapshot.bytes = Some(meta.len());
         }
-        Err(_) => (None, None, None),
+        Err(_) => return snapshot,
     }
+
+    match afs::read(&notes).await {
+        Ok(bytes) => {
+            let mut hasher = Sha256::new();
+            hasher.update(&bytes);
+            snapshot.sha256 = Some(format!("{:x}", hasher.finalize()));
+
+            let mut text = String::from_utf8_lossy(&bytes).to_string();
+            if text.len() > MAX_NOTES_LEN {
+                snapshot.truncated = true;
+                text.truncate(MAX_NOTES_LEN);
+            }
+            snapshot.content = Some(text);
+        }
+        Err(_) => {
+            // Keep defaults when notes cannot be read; metadata already captured when available.
+        }
+    }
+
+    snapshot
 }
 
 async fn collect_tree(
     project_root: &Path,
     paths: &mut BTreeMap<String, Vec<Value>>,
+    truncated: &mut BTreeMap<String, usize>,
     digest: &mut Sha256,
 ) -> std::io::Result<()> {
     let mut stack: Vec<(String, usize)> = vec![(String::new(), 0)];
@@ -611,7 +632,9 @@ async fn collect_tree(
                 .cmp(b["name"].as_str().unwrap_or(""))
         });
         if entries.len() > MAX_ENTRIES_PER_DIR {
+            let overflow = entries.len() - MAX_ENTRIES_PER_DIR;
             entries.truncate(MAX_ENTRIES_PER_DIR);
+            truncated.insert(rel.clone(), overflow);
         }
         paths.insert(rel, entries);
     }
@@ -640,24 +663,44 @@ pub(crate) async fn projects_snapshot_at(root_dir: &Path) -> Value {
                 continue;
             }
             let project_root = ent.path();
-            let (notes_modified, notes_bytes, notes_content) = notes_details(&project_root).await;
+            let notes = notes_details(&project_root).await;
             let mut tree_paths = BTreeMap::new();
+            let mut truncated_dirs = BTreeMap::new();
             let mut digest = Sha256::new();
-            let _ = collect_tree(&project_root, &mut tree_paths, &mut digest).await;
+            let _ = collect_tree(
+                &project_root,
+                &mut tree_paths,
+                &mut truncated_dirs,
+                &mut digest,
+            )
+            .await;
             let tree_value = tree_paths
                 .into_iter()
                 .map(|(k, v)| (k, Value::Array(v)))
                 .collect::<serde_json::Map<String, Value>>();
+            let truncated_value = if truncated_dirs.is_empty() {
+                Value::Null
+            } else {
+                Value::Object(
+                    truncated_dirs
+                        .into_iter()
+                        .map(|(k, v)| (k, Value::from(v as u64)))
+                        .collect(),
+                )
+            };
             items.push(json!({
                 "name": name,
                 "notes": {
-                    "modified": notes_modified,
-                    "bytes": notes_bytes,
-                    "content": notes_content,
+                    "modified": notes.modified,
+                    "bytes": notes.bytes,
+                    "sha256": notes.sha256,
+                    "content": notes.content,
+                    "truncated": notes.truncated,
                 },
                 "tree": {
                     "digest": format!("{:x}", digest.finalize()),
                     "paths": Value::Object(tree_value),
+                    "truncated": truncated_value,
                 }
             }));
         }
@@ -701,6 +744,74 @@ mod tests {
     use tempfile::tempdir;
     use tokio::sync::Mutex;
     use tokio::time::timeout;
+
+    #[tokio::test]
+    async fn notes_snapshot_includes_sha_and_content() {
+        let dir = tempdir().unwrap();
+        let project = dir.path();
+        tokio::fs::create_dir_all(project).await.unwrap();
+        let notes_path = project.join("NOTES.md");
+        let body = "hello notes";
+        tokio::fs::write(&notes_path, body).await.unwrap();
+
+        let snapshot = notes_details(project).await;
+        assert_eq!(snapshot.content.as_deref(), Some(body));
+        assert_eq!(snapshot.bytes, Some(body.len() as u64));
+        assert!(!snapshot.truncated);
+
+        let mut hasher = Sha256::new();
+        hasher.update(body.as_bytes());
+        let expected = format!("{:x}", hasher.finalize());
+        assert_eq!(snapshot.sha256, Some(expected));
+    }
+
+    #[tokio::test]
+    async fn notes_snapshot_marks_truncation() {
+        let dir = tempdir().unwrap();
+        let project = dir.path();
+        tokio::fs::create_dir_all(project).await.unwrap();
+        let notes_path = project.join("NOTES.md");
+        let long_body = "x".repeat(MAX_NOTES_LEN + 10);
+        tokio::fs::write(&notes_path, &long_body).await.unwrap();
+
+        let snapshot = notes_details(project).await;
+        assert!(snapshot.truncated);
+        assert_eq!(
+            snapshot.content.as_ref().map(|s| s.len()),
+            Some(MAX_NOTES_LEN)
+        );
+
+        let mut hasher = Sha256::new();
+        hasher.update(long_body.as_bytes());
+        let expected = format!("{:x}", hasher.finalize());
+        assert_eq!(snapshot.sha256, Some(expected));
+    }
+
+    #[tokio::test]
+    async fn tree_snapshot_tracks_overflow_counts() {
+        let dir = tempdir().unwrap();
+        let project_root = dir.path().join("proj");
+        tokio::fs::create_dir_all(&project_root).await.unwrap();
+        for idx in 0..(MAX_ENTRIES_PER_DIR + 3) {
+            let file = project_root.join(format!("file_{idx:03}.txt"));
+            tokio::fs::write(file, b"ok").await.unwrap();
+        }
+
+        let snapshot = projects_snapshot_at(dir.path()).await;
+        let items = snapshot["items"].as_array().expect("items array");
+        let tree = &items[0]["tree"];
+        let truncated = tree["truncated"].as_object().expect("truncated object");
+        assert_eq!(truncated.get("").and_then(|v| v.as_u64()), Some(3));
+
+        let root_entries = tree["paths"]
+            .as_object()
+            .unwrap()
+            .get("")
+            .unwrap()
+            .as_array()
+            .unwrap();
+        assert_eq!(root_entries.len(), MAX_ENTRIES_PER_DIR);
+    }
 
     async fn build_state(path: &std::path::Path, env_guard: &mut env::EnvGuard) -> AppState {
         env_guard.set("ARW_DEBUG", "1");
