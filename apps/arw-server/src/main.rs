@@ -157,6 +157,7 @@ mod http_tests {
 
     async fn build_state(dir: &Path) -> AppState {
         std::env::set_var("ARW_DEBUG", "1");
+        crate::util::reset_state_dir_for_tests();
         std::env::set_var("ARW_STATE_DIR", dir.display().to_string());
         let bus = arw_events::Bus::new_with_replay(64, 64);
         let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
@@ -231,6 +232,7 @@ mod http_tests {
     #[tokio::test]
     async fn http_action_roundtrip_completes() {
         let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state_dir = temp.path().to_path_buf();
 
         let state = build_state(&state_dir).await;
@@ -293,6 +295,7 @@ mod http_tests {
     #[tokio::test]
     async fn debug_alias_returns_not_found() {
         let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state_dir = temp.path().to_path_buf();
         let state = build_state(&state_dir).await;
 
@@ -328,6 +331,7 @@ mod http_tests {
     #[tokio::test]
     async fn capsule_middleware_applies_and_publishes_read_model() {
         let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let trust_path = temp.path().join("trust_capsules.json");
         let signing = SigningKey::from_bytes(&[7u8; 32]);
         let issuer = "test-issuer";

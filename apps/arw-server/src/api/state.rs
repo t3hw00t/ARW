@@ -457,6 +457,7 @@ mod tests {
 
     async fn build_state(path: &std::path::Path) -> AppState {
         std::env::set_var("ARW_DEBUG", "1");
+        crate::util::reset_state_dir_for_tests();
         std::env::set_var("ARW_STATE_DIR", path.display().to_string());
         let bus = arw_events::Bus::new_with_replay(16, 16);
         let kernel = arw_kernel::Kernel::open(path).expect("init kernel");
@@ -472,6 +473,7 @@ mod tests {
     #[tokio::test]
     async fn state_actions_sanitizes_guard_metadata() {
         let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state = build_state(temp.path()).await;
 
         let action_id = uuid::Uuid::new_v4().to_string();

@@ -357,18 +357,20 @@ mod tests {
 
     static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
-    fn setup_env(dir: &std::path::Path) {
-        std::env::set_var("ARW_STATE_DIR", dir.display().to_string());
+    fn setup_env(dir: &std::path::Path) -> crate::util::StateDirTestGuard {
+        let guard = crate::util::scoped_state_dir_for_tests(dir);
         std::env::set_var("ARW_TOOLS_CACHE_CAP", "16");
         std::env::set_var("ARW_TOOLS_CACHE_TTL_SECS", "60");
+        guard
     }
 
     #[tokio::test]
     async fn cache_roundtrip() {
         let tmp = tempdir().unwrap();
+        let state_guard;
         {
             let _guard = ENV_LOCK.lock().unwrap();
-            setup_env(tmp.path());
+            state_guard = setup_env(tmp.path());
         }
         let cache = ToolCache::new();
         assert!(cache.enabled());
@@ -382,25 +384,26 @@ mod tests {
         assert_eq!(hit.value, payload);
         assert_eq!(hit.digest, outcome.digest);
         assert!(cache.cas_path(&hit.digest).exists());
-        std::env::remove_var("ARW_STATE_DIR");
         std::env::remove_var("ARW_TOOLS_CACHE_CAP");
         std::env::remove_var("ARW_TOOLS_CACHE_TTL_SECS");
+        drop(state_guard);
     }
 
     #[tokio::test]
     async fn allow_list_overrides_defaults() {
         let tmp = tempdir().unwrap();
+        let state_guard;
         {
             let _guard = ENV_LOCK.lock().unwrap();
-            setup_env(tmp.path());
+            state_guard = setup_env(tmp.path());
             std::env::set_var("ARW_TOOLS_CACHE_ALLOW", "demo.echo");
         }
         let cache = ToolCache::new();
         assert!(cache.is_cacheable("demo.echo"));
         assert!(!cache.is_cacheable("guardrails.check"));
         std::env::remove_var("ARW_TOOLS_CACHE_ALLOW");
-        std::env::remove_var("ARW_STATE_DIR");
         std::env::remove_var("ARW_TOOLS_CACHE_CAP");
         std::env::remove_var("ARW_TOOLS_CACHE_TTL_SECS");
+        drop(state_guard);
     }
 }

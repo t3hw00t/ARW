@@ -265,7 +265,7 @@ Feedback Engine (Near‑Live)
 Testing
 - [Kernel] End‑to‑end coverage for endpoints & gating; fixtures; CI integration [t-250911230325-2116]
 - [Kernel] [t-250914210200-test01] Scoped state dir for tests (`test_support::scoped_state_dir`) to isolate `ARW_STATE_DIR` — done
-- [Kernel] [t-250914210204-test02] Migrate env‑derived `state_dir` lookups to a process‑lifetime cache (OnceCell) with a test‑only reset hook to avoid flakiness — todo
+- [Kernel] [t-250914210204-test02] Migrate env‑derived `state_dir` lookups to a process‑lifetime cache (OnceCell) with a test‑only reset hook to avoid flakiness — done (scoped cache + guard landed)
 - [Kernel] [t-250914210208-test03] Concurrency controls: add tests for `block=false` shrink path and pending_shrink reporting — todo
 
 Stabilization & Contracts

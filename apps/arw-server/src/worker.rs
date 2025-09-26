@@ -872,6 +872,7 @@ mod tests {
 
     async fn build_state(path: &std::path::Path) -> AppState {
         std::env::set_var("ARW_DEBUG", "1");
+        crate::util::reset_state_dir_for_tests();
         let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
         build_state_with_host(path, host).await
     }
@@ -881,6 +882,7 @@ mod tests {
         host: Arc<dyn arw_wasi::ToolHost>,
     ) -> AppState {
         std::env::set_var("ARW_DEBUG", "1");
+        crate::util::reset_state_dir_for_tests();
         std::env::set_var("ARW_STATE_DIR", path.display().to_string());
         let bus = arw_events::Bus::new_with_replay(32, 32);
         let kernel = arw_kernel::Kernel::open(path).expect("init kernel");
@@ -941,6 +943,7 @@ mod tests {
     #[tokio::test]
     async fn unsupported_tool_marks_action_failed() {
         let temp = tempfile::tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state = build_state(temp.path()).await;
         let _worker = start_local_worker(state.clone());
 
@@ -984,6 +987,7 @@ mod tests {
     #[tokio::test]
     async fn guard_action_respects_leases() {
         let temp = tempfile::tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state = build_state(temp.path()).await;
         let ctx = WorkerContext::new(&state);
 
@@ -1018,6 +1022,7 @@ mod tests {
     #[tokio::test]
     async fn connector_requires_scope_lease() {
         let temp = tempfile::tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state = build_state(temp.path()).await;
 
         let connectors_dir = util::state_dir().join("connectors");
@@ -1102,6 +1107,7 @@ mod tests {
     #[tokio::test]
     async fn http_get_records_egress_on_success() {
         let temp = tempfile::tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let _ledger_guard = EnvVarGuard::set("ARW_EGRESS_LEDGER_ENABLE", "1");
         let state = build_state_with_host(temp.path(), Arc::new(AllowingHost)).await;
         let ctx = WorkerContext::new(&state);
@@ -1161,6 +1167,7 @@ mod tests {
     #[tokio::test]
     async fn http_get_denied_without_lease_records_event() {
         let temp = tempfile::tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let _ledger_guard = EnvVarGuard::set("ARW_EGRESS_LEDGER_ENABLE", "0");
         let state = build_state_with_host(temp.path(), Arc::new(AllowingHost)).await;
         let ctx = WorkerContext::new(&state);
@@ -1208,6 +1215,7 @@ mod tests {
     #[tokio::test]
     async fn completed_event_includes_guard_metadata() {
         let temp = tempfile::tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let _ledger_guard = EnvVarGuard::set("ARW_EGRESS_LEDGER_ENABLE", "0");
         let state = build_state_with_host(temp.path(), Arc::new(AllowingHost)).await;
 
@@ -1354,6 +1362,7 @@ mod tests {
     #[tokio::test]
     async fn fail_action_updates_kernel_and_emits_event() {
         let temp = tempfile::tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state = build_state(temp.path()).await;
         let ctx = WorkerContext::new(&state);
 

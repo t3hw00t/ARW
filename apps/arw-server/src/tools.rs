@@ -181,7 +181,7 @@ mod tests {
     #[tokio::test]
     async fn screenshot_tools_return_unsupported_without_feature() {
         let temp = tempfile::tempdir().expect("tempdir");
-        std::env::set_var("ARW_STATE_DIR", temp.path().display().to_string());
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
 
         let bus = arw_events::Bus::new_with_replay(8, 8);
         let kernel = arw_kernel::Kernel::open(temp.path()).expect("init kernel");

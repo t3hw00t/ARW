@@ -601,6 +601,7 @@ mod tests {
 
     async fn build_state(path: &std::path::Path) -> AppState {
         std::env::set_var("ARW_DEBUG", "1");
+        crate::util::reset_state_dir_for_tests();
         std::env::set_var("ARW_STATE_DIR", path.display().to_string());
         let bus = arw_events::Bus::new_with_replay(8, 8);
         let kernel = arw_kernel::Kernel::open(path).expect("init kernel");
@@ -616,6 +617,7 @@ mod tests {
     #[tokio::test]
     async fn tool_defaults_to_synthetic() {
         let temp = tempfile::tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state = build_state(temp.path()).await;
         let output = run_chat_tool(&state, json!({"prompt": "hi"}))
             .await
@@ -627,6 +629,7 @@ mod tests {
     #[tokio::test]
     async fn chat_state_tracks_history() {
         let temp = tempfile::tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state = build_state(temp.path()).await;
         let outcome = state
             .chat()

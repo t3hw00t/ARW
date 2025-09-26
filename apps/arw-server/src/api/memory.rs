@@ -571,6 +571,7 @@ mod tests {
 
     async fn build_state(dir: &std::path::Path) -> AppState {
         std::env::set_var("ARW_DEBUG", "1");
+        crate::util::reset_state_dir_for_tests();
         std::env::set_var("ARW_STATE_DIR", dir.display().to_string());
         let bus = arw_events::Bus::new_with_replay(64, 64);
         let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
@@ -613,6 +614,7 @@ mod tests {
     #[tokio::test]
     async fn memory_stream_provides_snapshot_and_patch() {
         let temp = tempdir().expect("tmp");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state = build_state(temp.path()).await;
 
         let initial_value = json!({"text": "hello"});
@@ -764,6 +766,7 @@ mod tests {
     #[tokio::test]
     async fn memory_apply_emits_record_and_applied_events() {
         let temp = tempdir().expect("temp dir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state = build_state(temp.path()).await;
         let bus = state.bus();
         let mut rx = bus.subscribe_filtered(

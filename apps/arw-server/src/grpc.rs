@@ -371,6 +371,7 @@ mod tests {
 
     async fn build_state(dir: &Path) -> AppState {
         std::env::set_var("ARW_DEBUG", "1");
+        crate::util::reset_state_dir_for_tests();
         std::env::set_var("ARW_STATE_DIR", dir.display().to_string());
         let bus = Bus::new_with_replay(64, 64);
         let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
@@ -415,6 +416,7 @@ mod tests {
     #[tokio::test]
     async fn health_and_action_roundtrip() {
         let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state = build_state(temp.path()).await;
         let _worker = worker::start_local_worker(state.clone());
         let service = ArwGrpcService {
@@ -467,6 +469,7 @@ mod tests {
     #[tokio::test]
     async fn stream_receives_submitted_event() {
         let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state = build_state(temp.path()).await;
         let service = ArwGrpcService {
             state: state.clone(),

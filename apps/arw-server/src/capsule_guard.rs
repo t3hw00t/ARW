@@ -645,6 +645,7 @@ mod tests {
 
     async fn build_state(dir: &Path) -> AppState {
         std::env::set_var("ARW_DEBUG", "1");
+        crate::util::reset_state_dir_for_tests();
         std::env::set_var("ARW_STATE_DIR", dir.display().to_string());
         let bus = arw_events::Bus::new_with_replay(64, 64);
         let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
@@ -730,6 +731,7 @@ mod tests {
     #[tokio::test]
     async fn refresh_capsules_publishes_patch_on_state_change() {
         let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state = build_state(temp.path()).await;
 
         let bus = state.bus();
@@ -787,6 +789,7 @@ mod tests {
     #[tokio::test]
     async fn legacy_header_returns_gone_and_emits_failure_events() {
         let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state = build_state(temp.path()).await;
         let bus = state.bus();
         let mut rx = bus.subscribe_filtered(
