@@ -3,6 +3,8 @@ use serde_json::{json, Value};
 use std::{path::PathBuf, sync::Mutex};
 use tracing::{info, warn};
 
+use arw_core::cache_policy::{AssignmentReason, CachePolicyOutcome};
+
 static EFFECTIVE_PATHS: Lazy<Mutex<Option<arw_core::EffectivePaths>>> =
     Lazy::new(|| Mutex::new(None));
 
@@ -118,6 +120,80 @@ fn discovered_gating_path() -> (Option<PathBuf>, &'static str) {
     )
 }
 
+pub fn init_cache_policy_from_manifest() {
+    let (path_opt, source) = discovered_cache_policy_path();
+    match path_opt {
+        Some(path) if path.exists() => {
+            let path_string = path.to_string_lossy().to_string();
+            match arw_core::cache_policy::apply_manifest(&path_string) {
+                Ok(outcome) => emit_cache_policy_logs(&path, source, outcome),
+                Err(err) => {
+                    warn!(path = %path.display(), source, "failed to load cache policy manifest: {err}")
+                }
+            }
+        }
+        Some(path) => {
+            warn!(path = %path.display(), source, "cache policy manifest path missing; env defaults only")
+        }
+        None => info!("no cache policy manifest discovered; relying on env defaults"),
+    }
+}
+
+fn discovered_cache_policy_path() -> (Option<PathBuf>, &'static str) {
+    if let Ok(explicit) = std::env::var("ARW_CACHE_POLICY_FILE") {
+        if !explicit.trim().is_empty() {
+            return (Some(PathBuf::from(explicit)), "env");
+        }
+    }
+
+    if let Some(path) = arw_core::resolve_config_path("configs/cache_policy.yaml") {
+        return (Some(path), "search");
+    }
+
+    (None, "search")
+}
+
+fn emit_cache_policy_logs(path: &PathBuf, source: &'static str, outcome: CachePolicyOutcome) {
+    let applied: Vec<String> = outcome
+        .assignments
+        .iter()
+        .filter(|a| a.applied)
+        .map(|a| format!("{}={}", a.key, a.value))
+        .collect();
+
+    if applied.is_empty() {
+        info!(path = %path.display(), source, "cache policy manifest loaded (no env changes)");
+    } else {
+        info!(path = %path.display(), source, applied = %applied.join(","), "cache policy manifest applied");
+    }
+
+    let overridden: Vec<&str> = outcome
+        .assignments
+        .iter()
+        .filter(|a| matches!(a.reason, Some(AssignmentReason::EnvOverride)))
+        .map(|a| a.key)
+        .collect();
+
+    if !overridden.is_empty() {
+        info!(path = %path.display(), source, overrides = ?overridden, "environment overrides take precedence over cache policy entries");
+    }
+
+    let reuse_matches = outcome
+        .assignments
+        .iter()
+        .filter(|a| matches!(a.reason, Some(AssignmentReason::AlreadySetSameValue)))
+        .map(|a| a.key)
+        .collect::<Vec<_>>();
+
+    if !reuse_matches.is_empty() {
+        info!(path = %path.display(), source, retained = ?reuse_matches, "cache policy entries already satisfied by existing env values");
+    }
+
+    for warning in outcome.warnings {
+        warn!(path = %path.display(), source, warning = %warning, "cache policy manifest warning");
+    }
+}
+
 pub fn kernel_enabled_from_env() -> bool {
     std::env::var("ARW_KERNEL_ENABLE")
         .map(|v| {
@@ -130,8 +206,8 @@ pub fn kernel_enabled_from_env() -> bool {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_effective_paths, kernel_enabled_from_env, load_initial_config_state,
-        reset_effective_paths_for_tests,
+        apply_effective_paths, init_cache_policy_from_manifest, kernel_enabled_from_env,
+        load_initial_config_state, reset_effective_paths_for_tests,
     };
     use once_cell::sync::Lazy;
     use std::{env, fs, sync::Mutex};
@@ -228,5 +304,45 @@ mod tests {
         assert_eq!(initial.history.len(), 1);
 
         env::remove_var("ARW_CONFIG");
+    }
+
+    #[test]
+    fn init_cache_policy_from_manifest_sets_env() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        env::remove_var("ARW_CACHE_POLICY_FILE");
+        env::remove_var("ARW_TOOLS_CACHE_TTL_SECS");
+        env::remove_var("ARW_ROUTE_STATS_COALESCE_MS");
+        env::remove_var("ARW_MODELS_METRICS_COALESCE_MS");
+
+        let tmp = tempdir().unwrap();
+        let manifest = tmp.path().join("cache_policy.yaml");
+        fs::write(
+            &manifest,
+            r#"
+cache:
+  action_cache:
+    ttl: 15m
+  read_models:
+    sse:
+      coalesce_ms: 300
+"#,
+        )
+        .unwrap();
+
+        env::set_var(
+            "ARW_CACHE_POLICY_FILE",
+            manifest.to_string_lossy().to_string(),
+        );
+
+        init_cache_policy_from_manifest();
+
+        assert_eq!(env::var("ARW_TOOLS_CACHE_TTL_SECS").unwrap(), "900");
+        assert_eq!(env::var("ARW_ROUTE_STATS_COALESCE_MS").unwrap(), "300");
+        assert_eq!(env::var("ARW_MODELS_METRICS_COALESCE_MS").unwrap(), "300");
+
+        env::remove_var("ARW_CACHE_POLICY_FILE");
+        env::remove_var("ARW_TOOLS_CACHE_TTL_SECS");
+        env::remove_var("ARW_ROUTE_STATS_COALESCE_MS");
+        env::remove_var("ARW_MODELS_METRICS_COALESCE_MS");
     }
 }

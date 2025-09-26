@@ -12,6 +12,7 @@ tracing = { workspace = true }
 arw-protocol = { path = "../arw-protocol", version = "0.1.4" }
 arw-events = { path = "../arw-events", version = "0.1.4" }
 toml = { workspace = true }
+serde_yaml = "0.9"
 async-trait = "0.1"
 tokio = { workspace = true }
 uuid = { workspace = true }
