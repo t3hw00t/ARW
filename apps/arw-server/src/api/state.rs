@@ -8,7 +8,14 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
 use crate::{metrics, runtime_matrix, self_model, state_observer, training, world, AppState};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+
+#[derive(Clone, Serialize, ToSchema)]
+pub struct ModelsCatalogResponse {
+    #[schema(value_type = Vec<serde_json::Value>)]
+    pub items: Vec<Value>,
+}
 
 pub(crate) async fn build_episode_rollups(state: &AppState, limit: usize) -> Vec<Value> {
     let rows = state
@@ -716,11 +723,11 @@ pub async fn state_training_telemetry(
     tag = "State",
     operation_id = "state_models_doc",
     description = "Model catalog read-model.",
-    responses((status = 200, description = "Model catalog", body = serde_json::Value))
+    responses((status = 200, description = "Model catalog", body = ModelsCatalogResponse))
 )]
 pub async fn state_models(State(state): State<AppState>) -> impl IntoResponse {
     let items = state.models().list().await;
-    Json(json!({"items": items}))
+    Json(ModelsCatalogResponse { items })
 }
 
 /// Runtime matrix snapshot.

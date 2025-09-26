@@ -780,7 +780,7 @@ impl ModelStore {
         provider: Option<String>,
         sort: Option<String>,
         order: Option<String>,
-    ) -> Value {
+    ) -> HashPage {
         let items = self.items.read().await.clone();
         let mut map: HashMap<String, (u64, String, HashSet<String>)> = HashMap::new();
         for entry in items.iter() {
@@ -851,13 +851,13 @@ impl ModelStore {
         let limit = limit.clamp(1, 10_000);
         let end = offset.saturating_add(limit).min(total);
         let slice = rows[offset..end].to_vec();
-        json!({
-            "items": slice,
-            "total": total,
-            "count": end.saturating_sub(offset),
-            "limit": limit,
-            "offset": offset,
-        })
+        HashPage {
+            items: slice,
+            total,
+            count: end.saturating_sub(offset),
+            limit,
+            offset,
+        }
     }
 
     pub async fn start_download(self: &Arc<Self>, req: DownloadRequest) -> Result<(), String> {
@@ -3178,6 +3178,58 @@ mod tests {
 
         assert_eq!(value, expected);
     }
+
+    #[tokio::test]
+    async fn hashes_page_groups_and_filters_providers() {
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let store = ModelStore::new(bus, None);
+        let items = vec![
+            json!({
+                "id": "m-primary",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "bytes": 10,
+                "provider": "alpha",
+                "path": "/models/alpha.bin"
+            }),
+            json!({
+                "id": "m-follower",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "provider": "beta"
+            }),
+            json!({
+                "id": "m-two",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "bytes": 7,
+                "provider": "alpha",
+                "path": "/models/alpha-two.bin"
+            }),
+        ];
+        store.replace_items(items).await;
+
+        let page = store.hashes_page(10, 0, None, None, None).await;
+        assert_eq!(page.total, 2);
+        assert_eq!(page.count, 2);
+        assert_eq!(page.limit, 10);
+        assert_eq!(page.offset, 0);
+
+        let first = &page.items[0];
+        assert_eq!(
+            first.sha256,
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        );
+        assert_eq!(first.bytes, 10);
+        assert_eq!(first.path, "/models/alpha.bin");
+        let mut providers = first.providers.clone();
+        providers.sort();
+        assert_eq!(providers, vec!["alpha", "beta"]);
+
+        let filtered = store
+            .hashes_page(10, 0, Some("beta".into()), None, None)
+            .await;
+        assert_eq!(filtered.total, 1);
+        assert_eq!(filtered.count, 1);
+        assert_eq!(filtered.items[0].sha256, first.sha256);
+    }
 }
 
 fn env_flag(name: &str) -> bool {
@@ -3254,4 +3306,13 @@ pub struct HashItem {
     pub bytes: u64,
     pub path: String,
     pub providers: Vec<String>,
+}
+
+#[derive(Clone, Serialize, ToSchema)]
+pub struct HashPage {
+    pub items: Vec<HashItem>,
+    pub total: usize,
+    pub count: usize,
+    pub limit: usize,
+    pub offset: usize,
 }

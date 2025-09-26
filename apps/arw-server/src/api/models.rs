@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::{models, AppState};
-use models::{ModelsConcurrencySnapshot, ModelsMetricsResponse};
+use models::{HashPage, ModelsConcurrencySnapshot, ModelsMetricsResponse};
 use utoipa::ToSchema;
 
 fn unauthorized() -> axum::response::Response {
@@ -344,7 +344,7 @@ impl HashesQuery {
         ("sort" = Option<String>, Query, description = "Sort key (bytes|sha256|path|providers_count)"),
         ("order" = Option<String>, Query, description = "Order asc|desc")
     ),
-    responses((status = 200, description = "Installed hashes", body = serde_json::Value))
+    responses((status = 200, description = "Installed hashes", body = HashPage))
 )]
 pub async fn state_models_hashes(
     headers: HeaderMap,

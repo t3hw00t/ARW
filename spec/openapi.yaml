@@ -1833,7 +1833,8 @@ paths:
           description: Model catalog
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/ModelsCatalogResponse'
   /state/models_hashes:
     get:
       tags:
@@ -1877,7 +1878,8 @@ paths:
           description: Installed hashes
           content:
             application/json:
-              schema: {}
+              schema:
+                $ref: '#/components/schemas/HashPage'
       description: 'State: GET /state/models_hashes.'
   /state/models_metrics:
     get:
@@ -2934,6 +2936,51 @@ components:
       properties:
         profile:
           type: string
+    HashItem:
+      type: object
+      required:
+      - sha256
+      - bytes
+      - path
+      - providers
+      properties:
+        bytes:
+          type: integer
+          format: int64
+          minimum: 0
+        path:
+          type: string
+        providers:
+          type: array
+          items:
+            type: string
+        sha256:
+          type: string
+    HashPage:
+      type: object
+      required:
+      - items
+      - total
+      - count
+      - limit
+      - offset
+      properties:
+        count:
+          type: integer
+          minimum: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/HashItem'
+        limit:
+          type: integer
+          minimum: 0
+        offset:
+          type: integer
+          minimum: 0
+        total:
+          type: integer
+          minimum: 0
     HealthOk:
       type: object
       required:
@@ -3157,6 +3204,14 @@ components:
       properties:
         id:
           type: string
+    ModelsCatalogResponse:
+      type: object
+      required:
+      - items
+      properties:
+        items:
+          type: array
+          items: {}
     ModelsConcurrencySnapshot:
       type: object
       required:
