@@ -1,5 +1,5 @@
 use anyhow::{anyhow, Result};
-use arw_memory_core::MemoryStore;
+use arw_memory_core::{MemoryInsertArgs, MemoryInsertOwned, MemoryStore};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
@@ -1445,22 +1445,10 @@ impl Kernel {
         Ok(out)
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn insert_memory(
-        &self,
-        id_opt: Option<&str>,
-        lane: &str,
-        kind: Option<&str>,
-        key: Option<&str>,
-        value: &serde_json::Value,
-        embed: Option<&[f32]>,
-        tags: Option<&[String]>,
-        score: Option<f64>,
-        prob: Option<f64>,
-    ) -> Result<String> {
+    pub fn insert_memory(&self, args: &MemoryInsertArgs<'_>) -> Result<String> {
         let conn = self.conn()?;
         let store = MemoryStore::new(&conn);
-        store.insert_memory(id_opt, lane, kind, key, value, embed, tags, score, prob)
+        store.insert_memory(args)
     }
 
     pub fn search_memory(
@@ -1530,6 +1518,12 @@ impl Kernel {
         let conn = self.conn()?;
         let store = MemoryStore::new(&conn);
         store.get_memory(id)
+    }
+
+    pub fn find_memory_by_hash(&self, hash: &str) -> Result<Option<serde_json::Value>> {
+        let conn = self.conn()?;
+        let store = MemoryStore::new(&conn);
+        store.find_memory_by_hash(hash)
     }
 
     pub fn list_recent_memory(
@@ -1692,34 +1686,11 @@ impl Kernel {
     // ---------------- Async wrappers (spawn_blocking) ----------------
     // These helpers offload rusqlite work from async executors.
 
-    #[allow(clippy::too_many_arguments)]
-    pub async fn insert_memory_async(
-        &self,
-        id_opt: Option<String>,
-        lane: String,
-        kind: Option<String>,
-        key: Option<String>,
-        value: serde_json::Value,
-        embed: Option<Vec<f32>>,
-        tags: Option<Vec<String>>,
-        score: Option<f64>,
-        prob: Option<f64>,
-    ) -> Result<String> {
+    pub async fn insert_memory_async(&self, owned: MemoryInsertOwned) -> Result<String> {
         let k = self.clone();
         tokio::task::spawn_blocking(move || {
-            let embed_ref = embed.as_deref();
-            let tags_ref = tags.as_deref();
-            k.insert_memory(
-                id_opt.as_deref(),
-                &lane,
-                kind.as_deref(),
-                key.as_deref(),
-                &value,
-                embed_ref,
-                tags_ref,
-                score,
-                prob,
-            )
+            let args = owned.to_args();
+            k.insert_memory(&args)
         })
         .await
         .map_err(|e| anyhow!("join error: {}", e))?
@@ -1785,6 +1756,16 @@ impl Kernel {
     ) -> Result<Vec<serde_json::Value>> {
         let k = self.clone();
         tokio::task::spawn_blocking(move || k.list_recent_memory(lane.as_deref(), limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn find_memory_by_hash_async(
+        &self,
+        hash: String,
+    ) -> Result<Option<serde_json::Value>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.find_memory_by_hash(&hash))
             .await
             .map_err(|e| anyhow!("join error: {}", e))?
     }

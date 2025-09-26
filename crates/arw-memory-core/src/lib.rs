@@ -4,15 +4,167 @@
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
-use serde_json::Value;
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::cmp::Ordering;
 use uuid::Uuid;
+
+const SELECT_COLUMN_LIST: &[&str] = &[
+    "id",
+    "lane",
+    "kind",
+    "key",
+    "value",
+    "tags",
+    "hash",
+    "embed",
+    "embed_hint",
+    "score",
+    "prob",
+    "created",
+    "updated",
+    "agent_id",
+    "project_id",
+    "text",
+    "durability",
+    "trust",
+    "privacy",
+    "ttl_s",
+    "keywords",
+    "entities",
+    "source",
+    "links",
+    "extra",
+];
+
+fn select_columns(prefix: Option<&str>) -> String {
+    match prefix {
+        Some(p) => SELECT_COLUMN_LIST
+            .iter()
+            .map(|col| format!("{p}.{col}"))
+            .collect::<Vec<_>>()
+            .join(","),
+        None => SELECT_COLUMN_LIST.join(","),
+    }
+}
 
 /// Lightweight wrapper around a `rusqlite::Connection` that exposes
 /// memory-specific helpers (schema setup + CRUD/search primitives).
 pub struct MemoryStore<'c> {
     conn: &'c Connection,
+}
+
+pub struct MemoryInsertArgs<'a> {
+    pub id: Option<&'a str>,
+    pub lane: &'a str,
+    pub kind: Option<&'a str>,
+    pub key: Option<&'a str>,
+    pub value: &'a Value,
+    pub embed: Option<&'a [f32]>,
+    pub embed_hint: Option<&'a str>,
+    pub tags: Option<&'a [String]>,
+    pub score: Option<f64>,
+    pub prob: Option<f64>,
+    pub agent_id: Option<&'a str>,
+    pub project_id: Option<&'a str>,
+    pub text: Option<&'a str>,
+    pub durability: Option<&'a str>,
+    pub trust: Option<f64>,
+    pub privacy: Option<&'a str>,
+    pub ttl_s: Option<i64>,
+    pub keywords: Option<&'a [String]>,
+    pub entities: Option<&'a Value>,
+    pub source: Option<&'a Value>,
+    pub links: Option<&'a Value>,
+    pub extra: Option<&'a Value>,
+    pub hash: Option<String>,
+}
+
+impl<'a> MemoryInsertArgs<'a> {
+    pub fn compute_hash(&self) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(self.lane.as_bytes());
+        if let Some(kind) = self.kind {
+            hasher.update(kind.as_bytes());
+        }
+        if let Some(key) = self.key {
+            hasher.update(key.as_bytes());
+        }
+        if let Some(agent) = self.agent_id {
+            hasher.update(agent.as_bytes());
+        }
+        if let Some(project) = self.project_id {
+            hasher.update(project.as_bytes());
+        }
+        if let Some(text) = self.text {
+            hasher.update(text.as_bytes());
+        }
+        if let Ok(bytes) = serde_json::to_vec(self.value) {
+            hasher.update(bytes);
+        }
+        format!("{:x}", hasher.finalize())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct MemoryInsertOwned {
+    pub id: Option<String>,
+    pub lane: String,
+    pub kind: Option<String>,
+    pub key: Option<String>,
+    pub value: Value,
+    pub embed: Option<Vec<f32>>,
+    pub embed_hint: Option<String>,
+    pub tags: Option<Vec<String>>,
+    pub score: Option<f64>,
+    pub prob: Option<f64>,
+    pub agent_id: Option<String>,
+    pub project_id: Option<String>,
+    pub text: Option<String>,
+    pub durability: Option<String>,
+    pub trust: Option<f64>,
+    pub privacy: Option<String>,
+    pub ttl_s: Option<i64>,
+    pub keywords: Option<Vec<String>>,
+    pub entities: Option<Value>,
+    pub source: Option<Value>,
+    pub links: Option<Value>,
+    pub extra: Option<Value>,
+    pub hash: Option<String>,
+}
+
+impl MemoryInsertOwned {
+    pub fn to_args(&self) -> MemoryInsertArgs<'_> {
+        MemoryInsertArgs {
+            id: self.id.as_deref(),
+            lane: &self.lane,
+            kind: self.kind.as_deref(),
+            key: self.key.as_deref(),
+            value: &self.value,
+            embed: self.embed.as_deref(),
+            embed_hint: self.embed_hint.as_deref(),
+            tags: self.tags.as_ref().map(|v| v.as_slice()),
+            score: self.score,
+            prob: self.prob,
+            agent_id: self.agent_id.as_deref(),
+            project_id: self.project_id.as_deref(),
+            text: self.text.as_deref(),
+            durability: self.durability.as_deref(),
+            trust: self.trust,
+            privacy: self.privacy.as_deref(),
+            ttl_s: self.ttl_s,
+            keywords: self.keywords.as_ref().map(|v| v.as_slice()),
+            entities: self.entities.as_ref(),
+            source: self.source.as_ref(),
+            links: self.links.as_ref(),
+            extra: self.extra.as_ref(),
+            hash: self.hash.clone(),
+        }
+    }
+
+    pub fn compute_hash(&self) -> String {
+        self.to_args().compute_hash()
+    }
 }
 
 impl<'c> MemoryStore<'c> {
@@ -32,14 +184,28 @@ impl<'c> MemoryStore<'c> {
               tags TEXT,
               hash TEXT,
               embed TEXT,
+              embed_hint TEXT,
               score REAL,
               prob REAL,
+              agent_id TEXT,
+              project_id TEXT,
+              text TEXT,
+              durability TEXT,
+              trust REAL,
+              privacy TEXT,
+              ttl_s INTEGER,
+              keywords TEXT,
+              entities TEXT,
+              source TEXT,
+              links TEXT,
+              extra TEXT,
               created TEXT NOT NULL,
               updated TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_mem_lane ON memory_records(lane);
             CREATE INDEX IF NOT EXISTS idx_mem_key ON memory_records(key);
             CREATE INDEX IF NOT EXISTS idx_mem_hash ON memory_records(hash);
+            CREATE INDEX IF NOT EXISTS idx_mem_agent_project ON memory_records(agent_id, project_id, updated DESC);
 
             CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(
               id UNINDEXED,
@@ -61,61 +227,73 @@ impl<'c> MemoryStore<'c> {
             CREATE INDEX IF NOT EXISTS idx_mem_links_src ON memory_links(src_id);
             "#,
         )?;
+        for ddl in [
+            "ALTER TABLE memory_records ADD COLUMN embed_hint TEXT",
+            "ALTER TABLE memory_records ADD COLUMN agent_id TEXT",
+            "ALTER TABLE memory_records ADD COLUMN project_id TEXT",
+            "ALTER TABLE memory_records ADD COLUMN text TEXT",
+            "ALTER TABLE memory_records ADD COLUMN durability TEXT",
+            "ALTER TABLE memory_records ADD COLUMN trust REAL",
+            "ALTER TABLE memory_records ADD COLUMN privacy TEXT",
+            "ALTER TABLE memory_records ADD COLUMN ttl_s INTEGER",
+            "ALTER TABLE memory_records ADD COLUMN keywords TEXT",
+            "ALTER TABLE memory_records ADD COLUMN entities TEXT",
+            "ALTER TABLE memory_records ADD COLUMN source TEXT",
+            "ALTER TABLE memory_records ADD COLUMN links TEXT",
+            "ALTER TABLE memory_records ADD COLUMN extra TEXT",
+        ] {
+            let _ = conn.execute(ddl, []);
+        }
         Ok(())
     }
 
-    #[allow(clippy::too_many_arguments)]
-    pub fn insert_memory(
-        &self,
-        id_opt: Option<&str>,
-        lane: &str,
-        kind: Option<&str>,
-        key: Option<&str>,
-        value: &Value,
-        embed: Option<&[f32]>,
-        tags: Option<&[String]>,
-        score: Option<f64>,
-        prob: Option<f64>,
-    ) -> Result<String> {
+    pub fn insert_memory(&self, args: &MemoryInsertArgs<'_>) -> Result<String> {
         let now = Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
-        let value_s = serde_json::to_string(value).unwrap_or_else(|_| "{}".to_string());
-        let embed_s = embed.map(|v| {
+        let value_s = serde_json::to_string(args.value).unwrap_or_else(|_| "{}".to_string());
+        let embed_s = args.embed.map(|v| {
             let arr: Vec<String> = v.iter().map(|f| f.to_string()).collect();
             format!("[{}]", arr.join(","))
         });
-        let mut hasher = Sha256::new();
-        hasher.update(lane.as_bytes());
-        if let Some(k) = kind {
-            hasher.update(k.as_bytes());
-        }
-        if let Some(k) = key {
-            hasher.update(k.as_bytes());
-        }
-        hasher.update(value_s.as_bytes());
-        let hash = format!("{:x}", hasher.finalize());
-        let id = id_opt
+        let hash = args.hash.clone().unwrap_or_else(|| args.compute_hash());
+        let id = args
+            .id
             .map(|s| s.to_string())
             .unwrap_or_else(|| Uuid::new_v4().to_string());
-        let tags_joined = tags.map(|ts| ts.join(","));
-        let tags_s = tags_joined.clone();
+        let tags_joined = args.tags.map(|ts| ts.join(","));
+        let keywords_joined = args.keywords.map(|kw| kw.join(","));
         self.conn.execute(
-            "INSERT OR REPLACE INTO memory_records(id,lane,kind,key,value,tags,hash,embed,score,prob,created,updated) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT OR REPLACE INTO memory_records(
+                id,lane,kind,key,value,tags,hash,embed,embed_hint,score,prob,
+                agent_id,project_id,text,durability,trust,privacy,ttl_s,keywords,entities,source,links,extra,created,updated
+            ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             params![
                 id,
-                lane,
-                kind,
-                key,
+                args.lane,
+                args.kind,
+                args.key,
                 value_s,
-                tags_s,
+                tags_joined.clone(),
                 hash,
                 embed_s,
-                score,
-                prob,
+                args.embed_hint,
+                args.score,
+                args.prob,
+                args.agent_id,
+                args.project_id,
+                args.text,
+                args.durability,
+                args.trust,
+                args.privacy,
+                args.ttl_s,
+                keywords_joined,
+                args.entities.and_then(|v| serde_json::to_string(v).ok()),
+                args.source.and_then(|v| serde_json::to_string(v).ok()),
+                args.links.and_then(|v| serde_json::to_string(v).ok()),
+                args.extra.and_then(|v| serde_json::to_string(v).ok()),
                 now,
                 now,
             ],
         )?;
-        // Keep the FTS index consistent with the primary table when upserts occur.
         let _ = self
             .conn
             .execute("DELETE FROM memory_fts WHERE id=?", params![id.as_str()]);
@@ -123,9 +301,9 @@ impl<'c> MemoryStore<'c> {
             "INSERT INTO memory_fts(id,lane,key,value,tags) VALUES(?,?,?,?,?)",
             params![
                 id,
-                lane,
-                key.unwrap_or(""),
-                value_s.clone(),
+                args.lane,
+                args.key.unwrap_or(""),
+                value_s,
                 tags_joined.unwrap_or_default(),
             ],
         );
@@ -136,21 +314,25 @@ impl<'c> MemoryStore<'c> {
         let mut out = Vec::new();
         let like_q = format!("%{}%", query);
         if let Some(l) = lane {
-            let mut stmt = self.conn.prepare(
-                "SELECT id,lane,kind,key,value,tags,hash,score,prob,updated FROM memory_records \
-                 WHERE lane=? AND (COALESCE(key,'') LIKE ? OR COALESCE(value,'') LIKE ? OR COALESCE(tags,'') LIKE ?) \
+            let sql = format!(
+                "SELECT {cols} FROM memory_records
+                 WHERE lane=? AND (COALESCE(key,'') LIKE ? OR COALESCE(value,'') LIKE ? OR COALESCE(tags,'') LIKE ?)
                  ORDER BY updated DESC LIMIT ?",
-            )?;
+                cols = select_columns(None)
+            );
+            let mut stmt = self.conn.prepare(&sql)?;
             let mut rows = stmt.query(params![l, like_q, like_q, like_q, limit])?;
             while let Some(r) = rows.next()? {
                 out.push(row_to_value(r)?);
             }
         } else {
-            let mut stmt = self.conn.prepare(
-                "SELECT id,lane,kind,key,value,tags,hash,score,prob,updated FROM memory_records \
-                 WHERE (COALESCE(key,'') LIKE ? OR COALESCE(value,'') LIKE ? OR COALESCE(tags,'') LIKE ?) \
+            let sql = format!(
+                "SELECT {cols} FROM memory_records
+                 WHERE (COALESCE(key,'') LIKE ? OR COALESCE(value,'') LIKE ? OR COALESCE(tags,'') LIKE ?)
                  ORDER BY updated DESC LIMIT ?",
-            )?;
+                cols = select_columns(None)
+            );
+            let mut stmt = self.conn.prepare(&sql)?;
             let mut rows = stmt.query(params![like_q, like_q, like_q, limit])?;
             while let Some(r) = rows.next()? {
                 out.push(row_to_value(r)?);
@@ -167,23 +349,27 @@ impl<'c> MemoryStore<'c> {
     ) -> Result<Vec<Value>> {
         let mut out = Vec::new();
         if let Some(l) = lane {
-            let mut stmt = self.conn.prepare(
-                "SELECT r.id,r.lane,r.kind,r.key,r.value,r.tags,r.hash,r.score,r.prob,r.updated
+            let sql = format!(
+                "SELECT {cols}
                  FROM memory_records r JOIN memory_fts f ON f.id=r.id
                  WHERE f.memory_fts MATCH ? AND f.lane=?
                  ORDER BY r.updated DESC LIMIT ?",
-            )?;
+                cols = select_columns(Some("r"))
+            );
+            let mut stmt = self.conn.prepare(&sql)?;
             let mut rows = stmt.query(params![query, l, limit])?;
             while let Some(r) = rows.next()? {
                 out.push(row_to_value(r)?);
             }
         } else {
-            let mut stmt = self.conn.prepare(
-                "SELECT r.id,r.lane,r.kind,r.key,r.value,r.tags,r.hash,r.score,r.prob,r.updated
+            let sql = format!(
+                "SELECT {cols}
                  FROM memory_records r JOIN memory_fts f ON f.id=r.id
                  WHERE f.memory_fts MATCH ?
                  ORDER BY r.updated DESC LIMIT ?",
-            )?;
+                cols = select_columns(Some("r"))
+            );
+            let mut stmt = self.conn.prepare(&sql)?;
             let mut rows = stmt.query(params![query, limit])?;
             while let Some(r) = rows.next()? {
                 out.push(row_to_value(r)?);
@@ -202,13 +388,17 @@ impl<'c> MemoryStore<'c> {
             return Ok(Vec::new());
         }
         let sql = if lane.is_some() {
-            "SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated \
-             FROM memory_records WHERE lane=? ORDER BY updated DESC LIMIT 1000"
+            format!(
+                "SELECT {cols} FROM memory_records WHERE lane=? ORDER BY updated DESC LIMIT 1000",
+                cols = select_columns(None)
+            )
         } else {
-            "SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated \
-             FROM memory_records ORDER BY updated DESC LIMIT 1000"
+            format!(
+                "SELECT {cols} FROM memory_records ORDER BY updated DESC LIMIT 1000",
+                cols = select_columns(None)
+            )
         };
-        let mut stmt = self.conn.prepare(sql)?;
+        let mut stmt = self.conn.prepare(sql.as_str())?;
         let mut rows = if let Some(l) = lane {
             stmt.query(params![l])?
         } else {
@@ -221,22 +411,10 @@ impl<'c> MemoryStore<'c> {
                 if let Ok(embed_vec) = parse_embedding(&embed_str) {
                     if embed_vec.len() == embed.len() && !embed_vec.is_empty() {
                         if let Ok(sim) = cosine_similarity(embed, &embed_vec) {
-                            let value_s: String = r.get(4)?;
-                            let value_v = serde_json::from_str::<Value>(&value_s)
-                                .unwrap_or_else(|_| Value::Object(Default::default()));
-                            let item = serde_json::json!({
-                                "id": r.get::<_, String>(0)?,
-                                "lane": r.get::<_, String>(1)?,
-                                "kind": r.get::<_, Option<String>>(2)?,
-                                "key": r.get::<_, Option<String>>(3)?,
-                                "value": value_v,
-                                "tags": r.get::<_, Option<String>>(5)?,
-                                "hash": r.get::<_, Option<String>>(6)?,
-                                "score": r.get::<_, Option<f64>>(8)?,
-                                "prob": r.get::<_, Option<f64>>(9)?,
-                                "updated": r.get::<_, String>(10)?,
-                                "sim": sim,
-                            });
+                            let mut item = row_to_value_full(r)?;
+                            if let Some(obj) = item.as_object_mut() {
+                                obj.insert("sim".into(), json!(sim));
+                            }
                             scored.push((sim, item));
                         }
                     }
@@ -261,98 +439,78 @@ impl<'c> MemoryStore<'c> {
         let mut candidates: Vec<Value> = Vec::new();
         if let Some(qs) = query {
             if !qs.is_empty() {
-                let mut stmt = if lane.is_some() {
-                    self.conn.prepare(
-                        "SELECT r.id,r.lane,r.kind,r.key,r.value,r.tags,r.hash,r.embed,r.score,r.prob,r.updated \
-                         FROM memory_records r JOIN memory_fts f ON f.id=r.id \
-                         WHERE f.memory_fts MATCH ? AND f.lane=? \
+                let sql = if lane.is_some() {
+                    format!(
+                        "SELECT {cols}
+                         FROM memory_records r JOIN memory_fts f ON f.id=r.id
+                         WHERE f.memory_fts MATCH ? AND f.lane=?
                          ORDER BY r.updated DESC LIMIT 400",
-                    )?
+                        cols = select_columns(Some("r"))
+                    )
                 } else {
-                    self.conn.prepare(
-                        "SELECT r.id,r.lane,r.kind,r.key,r.value,r.tags,r.hash,r.embed,r.score,r.prob,r.updated \
-                         FROM memory_records r JOIN memory_fts f ON f.id=r.id \
-                         WHERE f.memory_fts MATCH ? \
+                    format!(
+                        "SELECT {cols}
+                         FROM memory_records r JOIN memory_fts f ON f.id=r.id
+                         WHERE f.memory_fts MATCH ?
                          ORDER BY r.updated DESC LIMIT 400",
-                    )?
+                        cols = select_columns(Some("r"))
+                    )
                 };
+                let mut stmt = self.conn.prepare(&sql)?;
                 let mut rows = if let Some(l) = lane {
                     stmt.query(params![qs, l])?
                 } else {
                     stmt.query(params![qs])?
                 };
                 while let Some(r) = rows.next()? {
-                    let value_s: String = r.get(4)?;
-                    let value_v = serde_json::from_str::<Value>(&value_s)
-                        .unwrap_or_else(|_| Value::Object(Default::default()));
-                    candidates.push(serde_json::json!({
-                        "id": r.get::<_, String>(0)?,
-                        "lane": r.get::<_, String>(1)?,
-                        "kind": r.get::<_, Option<String>>(2)?,
-                        "key": r.get::<_, Option<String>>(3)?,
-                        "value": value_v,
-                        "tags": r.get::<_, Option<String>>(5)?,
-                        "hash": r.get::<_, Option<String>>(6)?,
-                        "embed": r.get::<_, Option<String>>(7)?,
-                        "score": r.get::<_, Option<f64>>(8)?,
-                        "prob": r.get::<_, Option<f64>>(9)?,
-                        "updated": r.get::<_, String>(10)?,
-                        "_fts_hit": true,
-                    }));
+                    let mut record = row_to_value_full(r)?;
+                    if let Some(obj) = record.as_object_mut() {
+                        obj.insert("_fts_hit".into(), Value::Bool(true));
+                    }
+                    candidates.push(record);
                 }
             }
         }
         if candidates.is_empty() {
-            let mut stmt = if lane.is_some() {
-                self.conn.prepare(
-                    "SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated FROM memory_records WHERE lane=? ORDER BY updated DESC LIMIT 400",
-                )?
+            let sql = if lane.is_some() {
+                format!(
+                    "SELECT {cols} FROM memory_records WHERE lane=? ORDER BY updated DESC LIMIT 400",
+                    cols = select_columns(None)
+                )
             } else {
-                self.conn.prepare(
-                    "SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated FROM memory_records ORDER BY updated DESC LIMIT 400",
-                )?
+                format!(
+                    "SELECT {cols} FROM memory_records ORDER BY updated DESC LIMIT 400",
+                    cols = select_columns(None)
+                )
             };
+            let mut stmt = self.conn.prepare(&sql)?;
             let mut rows = if let Some(l) = lane {
                 stmt.query(params![l])?
             } else {
                 stmt.query([])?
             };
             while let Some(r) = rows.next()? {
-                let value_s: String = r.get(4)?;
-                let value_v = serde_json::from_str::<Value>(&value_s)
-                    .unwrap_or_else(|_| Value::Object(Default::default()));
-                candidates.push(serde_json::json!({
-                    "id": r.get::<_, String>(0)?,
-                    "lane": r.get::<_, String>(1)?,
-                    "kind": r.get::<_, Option<String>>(2)?,
-                    "key": r.get::<_, Option<String>>(3)?,
-                    "value": value_v,
-                    "tags": r.get::<_, Option<String>>(5)?,
-                    "hash": r.get::<_, Option<String>>(6)?,
-                    "embed": r.get::<_, Option<String>>(7)?,
-                    "score": r.get::<_, Option<f64>>(8)?,
-                    "prob": r.get::<_, Option<f64>>(9)?,
-                    "updated": r.get::<_, String>(10)?,
-                    "_fts_hit": false,
-                }));
+                let mut record = row_to_value_full(r)?;
+                if let Some(obj) = record.as_object_mut() {
+                    obj.insert("_fts_hit".into(), Value::Bool(false));
+                }
+                candidates.push(record);
             }
         }
         let now = Utc::now();
         let mut scored: Vec<(f32, Value)> = Vec::new();
         for mut item in candidates {
             let mut sim = 0f32;
-            if let (Some(es), Some(e)) = (item.get("embed").and_then(|v| v.as_str()), embed) {
-                if let Ok(embed_vec) = serde_json::from_str::<Value>(es) {
-                    if let Some(arr) = embed_vec.as_array() {
-                        let mut v2: Vec<f32> = Vec::with_capacity(arr.len());
-                        for v in arr.iter() {
-                            if let Some(f) = v.as_f64() {
-                                v2.push(f as f32);
-                            }
+            if let (Some(embed_values), Some(e)) = (item.get("embed"), embed) {
+                if let Some(arr) = embed_values.as_array() {
+                    let mut v2: Vec<f32> = Vec::with_capacity(arr.len());
+                    for v in arr.iter() {
+                        if let Some(f) = v.as_f64() {
+                            v2.push(f as f32);
                         }
-                        if v2.len() == e.len() && !e.is_empty() {
-                            sim = cosine_sim(e, &v2);
-                        }
+                    }
+                    if v2.len() == e.len() && !e.is_empty() {
+                        sim = cosine_sim(e, &v2);
                     }
                 }
             }
@@ -432,9 +590,11 @@ impl<'c> MemoryStore<'c> {
     }
 
     pub fn get_memory(&self, id: &str) -> Result<Option<Value>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated FROM memory_records WHERE id=? LIMIT 1",
-        )?;
+        let sql = format!(
+            "SELECT {cols} FROM memory_records WHERE id=? LIMIT 1",
+            cols = select_columns(None)
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
         let mut rows = stmt.query(params![id])?;
         if let Some(r) = rows.next()? {
             Ok(Some(row_to_value_full(r)?))
@@ -446,17 +606,21 @@ impl<'c> MemoryStore<'c> {
     pub fn list_recent_memory(&self, lane: Option<&str>, limit: i64) -> Result<Vec<Value>> {
         let mut out = Vec::new();
         if let Some(l) = lane {
-            let mut stmt = self.conn.prepare(
-                "SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated FROM memory_records WHERE lane=? ORDER BY updated DESC LIMIT ?",
-            )?;
+            let sql = format!(
+                "SELECT {cols} FROM memory_records WHERE lane=? ORDER BY updated DESC LIMIT ?",
+                cols = select_columns(None)
+            );
+            let mut stmt = self.conn.prepare(&sql)?;
             let mut rows = stmt.query(params![l, limit])?;
             while let Some(r) = rows.next()? {
                 out.push(row_to_value_full(r)?);
             }
         } else {
-            let mut stmt = self.conn.prepare(
-                "SELECT id,lane,kind,key,value,tags,hash,embed,score,prob,updated FROM memory_records ORDER BY updated DESC LIMIT ?",
-            )?;
+            let sql = format!(
+                "SELECT {cols} FROM memory_records ORDER BY updated DESC LIMIT ?",
+                cols = select_columns(None)
+            );
+            let mut stmt = self.conn.prepare(&sql)?;
             let mut rows = stmt.query(params![limit])?;
             while let Some(r) = rows.next()? {
                 out.push(row_to_value_full(r)?);
@@ -464,43 +628,136 @@ impl<'c> MemoryStore<'c> {
         }
         Ok(out)
     }
+
+    pub fn find_memory_by_hash(&self, hash: &str) -> Result<Option<Value>> {
+        let sql = format!(
+            "SELECT {cols} FROM memory_records WHERE hash=? LIMIT 1",
+            cols = select_columns(None)
+        );
+        let mut stmt = self.conn.prepare(&sql)?;
+        let mut rows = stmt.query(params![hash])?;
+        if let Some(r) = rows.next()? {
+            Ok(Some(row_to_value_full(r)?))
+        } else {
+            Ok(None)
+        }
+    }
 }
 
 fn row_to_value(row: &rusqlite::Row<'_>) -> Result<Value> {
-    let value_s: String = row.get(4)?;
-    let value_v = serde_json::from_str::<Value>(&value_s)
-        .unwrap_or_else(|_| Value::Object(Default::default()));
-    Ok(serde_json::json!({
-        "id": row.get::<_, String>(0)?,
-        "lane": row.get::<_, String>(1)?,
-        "kind": row.get::<_, Option<String>>(2)?,
-        "key": row.get::<_, Option<String>>(3)?,
-        "value": value_v,
-        "tags": row.get::<_, Option<String>>(5)?,
-        "hash": row.get::<_, Option<String>>(6)?,
-        "score": row.get::<_, Option<f64>>(7)?,
-        "prob": row.get::<_, Option<f64>>(8)?,
-        "updated": row.get::<_, String>(9)?,
-    }))
+    row_to_value_common(row)
 }
 
 fn row_to_value_full(row: &rusqlite::Row<'_>) -> Result<Value> {
+    row_to_value_common(row)
+}
+
+fn row_to_value_common(row: &rusqlite::Row<'_>) -> Result<Value> {
+    let mut map = Map::new();
+    map.insert("id".into(), json!(row.get::<_, String>(0)?));
+    map.insert("lane".into(), json!(row.get::<_, String>(1)?));
+    if let Some(kind) = row.get::<_, Option<String>>(2)? {
+        map.insert("kind".into(), json!(kind));
+    }
+    if let Some(key) = row.get::<_, Option<String>>(3)? {
+        map.insert("key".into(), json!(key));
+    }
+
     let value_s: String = row.get(4)?;
-    let value_v = serde_json::from_str::<Value>(&value_s)
-        .unwrap_or_else(|_| Value::Object(Default::default()));
-    Ok(serde_json::json!({
-        "id": row.get::<_, String>(0)?,
-        "lane": row.get::<_, String>(1)?,
-        "kind": row.get::<_, Option<String>>(2)?,
-        "key": row.get::<_, Option<String>>(3)?,
-        "value": value_v,
-        "tags": row.get::<_, Option<String>>(5)?,
-        "hash": row.get::<_, Option<String>>(6)?,
-        "embed": row.get::<_, Option<String>>(7)?,
-        "score": row.get::<_, Option<f64>>(8)?,
-        "prob": row.get::<_, Option<f64>>(9)?,
-        "updated": row.get::<_, String>(10)?,
-    }))
+    let value_v =
+        serde_json::from_str::<Value>(&value_s).unwrap_or_else(|_| Value::Object(Map::new()));
+    map.insert("value".into(), value_v);
+
+    let tags_value = row
+        .get::<_, Option<String>>(5)?
+        .map(|s| split_list(&s))
+        .unwrap_or_else(|| Vec::new());
+    map.insert("tags".into(), Value::Array(tags_value));
+
+    if let Some(hash) = row.get::<_, Option<String>>(6)? {
+        map.insert("hash".into(), json!(hash));
+    }
+
+    if let Some(embed) = row.get::<_, Option<String>>(7)? {
+        if let Ok(vec) = parse_embedding(&embed) {
+            if !vec.is_empty() {
+                map.insert("embed".into(), json!(vec));
+            }
+        }
+    }
+    if let Some(hint) = row.get::<_, Option<String>>(8)? {
+        map.insert("embed_hint".into(), json!(hint));
+    }
+
+    if let Some(score) = row.get::<_, Option<f64>>(9)? {
+        map.insert("score".into(), json!(score));
+    }
+    if let Some(prob) = row.get::<_, Option<f64>>(10)? {
+        map.insert("prob".into(), json!(prob));
+    }
+
+    if let Some(created) = row.get::<_, Option<String>>(11)? {
+        map.insert("created".into(), json!(created));
+    }
+    map.insert("updated".into(), json!(row.get::<_, String>(12)?));
+
+    if let Some(agent) = row.get::<_, Option<String>>(13)? {
+        map.insert("agent_id".into(), json!(agent));
+    }
+    if let Some(project) = row.get::<_, Option<String>>(14)? {
+        map.insert("project_id".into(), json!(project));
+    }
+    if let Some(text) = row.get::<_, Option<String>>(15)? {
+        map.insert("text".into(), json!(text));
+    }
+    if let Some(durability) = row.get::<_, Option<String>>(16)? {
+        map.insert("durability".into(), json!(durability));
+    }
+    if let Some(trust) = row.get::<_, Option<f64>>(17)? {
+        map.insert("trust".into(), json!(trust));
+    }
+    if let Some(privacy) = row.get::<_, Option<String>>(18)? {
+        map.insert("privacy".into(), json!(privacy));
+    }
+    if let Some(ttl) = row.get::<_, Option<i64>>(19)? {
+        map.insert("ttl_s".into(), json!(ttl));
+    }
+
+    let keywords_value = row
+        .get::<_, Option<String>>(20)?
+        .map(|s| split_list(&s))
+        .unwrap_or_else(|| Vec::new());
+    if !keywords_value.is_empty() {
+        map.insert("keywords".into(), Value::Array(keywords_value));
+    }
+
+    if let Some(entities) = parse_json_string(row.get::<_, Option<String>>(21)?) {
+        map.insert("entities".into(), entities);
+    }
+    if let Some(source) = parse_json_string(row.get::<_, Option<String>>(22)?) {
+        map.insert("source".into(), source);
+    }
+    if let Some(links) = parse_json_string(row.get::<_, Option<String>>(23)?) {
+        map.insert("links".into(), links);
+    }
+    if let Some(extra) = parse_json_string(row.get::<_, Option<String>>(24)?) {
+        map.insert("extra".into(), extra);
+    }
+
+    Ok(Value::Object(map))
+}
+
+fn split_list(input: &str) -> Vec<Value> {
+    input
+        .split(',')
+        .map(|part| part.trim())
+        .filter(|part| !part.is_empty())
+        .map(|part| Value::String(part.to_string()))
+        .collect()
+}
+
+fn parse_json_string(input: Option<String>) -> Option<Value> {
+    input.and_then(|s| serde_json::from_str::<Value>(&s).ok())
 }
 
 fn parse_embedding(embed_s: &str) -> Result<Vec<f32>> {
@@ -560,19 +817,33 @@ mod tests {
     fn test_insert_and_get_memory() {
         let conn = setup_conn();
         let store = MemoryStore::new(&conn);
-        let id = store
-            .insert_memory(
-                None,
-                "episodic",
-                Some("summary"),
-                Some("key"),
-                &serde_json::json!({"text":"hello"}),
-                None,
-                Some(&["tag1".to_string()]),
-                Some(0.9),
-                Some(0.8),
-            )
-            .unwrap();
+        let insert_owned = MemoryInsertOwned {
+            id: None,
+            lane: "episodic".to_string(),
+            kind: Some("summary".to_string()),
+            key: Some("key".to_string()),
+            value: serde_json::json!({"text":"hello"}),
+            embed: None,
+            embed_hint: None,
+            tags: Some(vec!["tag1".to_string()]),
+            score: Some(0.9),
+            prob: Some(0.8),
+            agent_id: None,
+            project_id: None,
+            text: None,
+            durability: None,
+            trust: None,
+            privacy: None,
+            ttl_s: None,
+            keywords: None,
+            entities: None,
+            source: None,
+            links: None,
+            extra: None,
+            hash: None,
+        };
+        let args = insert_owned.to_args();
+        let id = store.insert_memory(&args).unwrap();
         let fetched = store.get_memory(&id).unwrap().unwrap();
         assert_eq!(fetched["lane"], "episodic");
     }
@@ -581,19 +852,33 @@ mod tests {
     fn test_search_memory_by_embedding_yields_sim() {
         let conn = setup_conn();
         let store = MemoryStore::new(&conn);
-        let id = store
-            .insert_memory(
-                None,
-                "semantic",
-                Some("fact"),
-                Some("key"),
-                &json!({ "text": "vector memo" }),
-                Some(&[1.0, 0.0]),
-                None,
-                None,
-                None,
-            )
-            .unwrap();
+        let insert_owned = MemoryInsertOwned {
+            id: None,
+            lane: "semantic".to_string(),
+            kind: Some("fact".to_string()),
+            key: Some("key".to_string()),
+            value: json!({ "text": "vector memo" }),
+            embed: Some(vec![1.0, 0.0]),
+            embed_hint: None,
+            tags: None,
+            score: None,
+            prob: None,
+            agent_id: None,
+            project_id: None,
+            text: None,
+            durability: None,
+            trust: None,
+            privacy: None,
+            ttl_s: None,
+            keywords: None,
+            entities: None,
+            source: None,
+            links: None,
+            extra: None,
+            hash: None,
+        };
+        let args = insert_owned.to_args();
+        let id = store.insert_memory(&args).unwrap();
         let hits = store
             .search_memory_by_embedding(&[1.0, 0.0], Some("semantic"), 1)
             .unwrap();
@@ -607,38 +892,66 @@ mod tests {
         let conn = setup_conn();
         let store = MemoryStore::new(&conn);
 
-        let id = store
-            .insert_memory(
-                Some("rec-1"),
-                "semantic",
-                Some("note"),
-                Some("key"),
-                &json!("first note"),
-                None,
-                None,
-                None,
-                None,
-            )
-            .unwrap();
+        let insert_owned = MemoryInsertOwned {
+            id: Some("rec-1".to_string()),
+            lane: "semantic".to_string(),
+            kind: Some("note".to_string()),
+            key: Some("key".to_string()),
+            value: json!("first note"),
+            embed: None,
+            embed_hint: None,
+            tags: None,
+            score: None,
+            prob: None,
+            agent_id: None,
+            project_id: None,
+            text: None,
+            durability: None,
+            trust: None,
+            privacy: None,
+            ttl_s: None,
+            keywords: None,
+            entities: None,
+            source: None,
+            links: None,
+            extra: None,
+            hash: None,
+        };
+        let args = insert_owned.to_args();
+        let id = store.insert_memory(&args).unwrap();
         assert_eq!(id, "rec-1");
 
         let hits = store.fts_search_memory("first", None, 10).unwrap();
         assert_eq!(hits.len(), 1);
         assert_eq!(hits[0]["id"], "rec-1");
 
-        let id_again = store
-            .insert_memory(
-                Some("rec-1"),
-                "semantic",
-                Some("note"),
-                Some("key"),
-                &json!("second memo"),
-                None,
-                None,
-                None,
-                None,
-            )
-            .unwrap();
+        let insert_owned = MemoryInsertOwned {
+            id: Some("rec-1".to_string()),
+            lane: "semantic".to_string(),
+            kind: Some("note".to_string()),
+            key: Some("key".to_string()),
+            value: json!("second memo"),
+            embed: None,
+            embed_hint: None,
+            tags: None,
+            score: None,
+            prob: None,
+            agent_id: None,
+            project_id: None,
+            text: None,
+            durability: None,
+            trust: None,
+            privacy: None,
+            ttl_s: None,
+            keywords: None,
+            entities: None,
+            source: None,
+            links: None,
+            extra: None,
+            hash: None,
+        };
+        let args_again = insert_owned.to_args();
+        let id_again = store.insert_memory(&args_again).unwrap();
         assert_eq!(id_again, "rec-1");
 
         let old_hits = store.fts_search_memory("first", None, 10).unwrap();

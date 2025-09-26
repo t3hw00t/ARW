@@ -6,10 +6,8 @@ use axum::{
     Json,
 };
 use chrono::{SecondsFormat, Utc};
-use hex::encode as hex_encode;
 use serde::Deserialize;
-use serde_json::{json, Map, Value};
-use sha2::{Digest, Sha256};
+use serde_json::{json, Value};
 use std::convert::Infallible;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -17,20 +15,8 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, warn};
 use utoipa::ToSchema;
 
-use crate::{admin_ok, util, AppState};
+use crate::{admin_ok, memory_service, AppState};
 use arw_topics as topics;
-
-fn attach_memory_ptrs(items: Vec<Value>) -> Vec<Value> {
-    items
-        .into_iter()
-        .map(|mut item| {
-            util::attach_memory_ptr(&mut item);
-            item
-        })
-        .collect()
-}
-
-const VALUE_PREVIEW_MAX_CHARS: usize = 240;
 
 fn now_timestamp() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
@@ -42,139 +28,15 @@ fn compute_memory_hash(
     key: &Option<String>,
     value: &Value,
 ) -> String {
-    let mut hasher = Sha256::new();
-    hasher.update(lane.as_bytes());
-    if let Some(k) = kind {
-        hasher.update(k.as_bytes());
+    memory_service::MemoryUpsertInput {
+        lane: lane.to_string(),
+        kind: kind.clone(),
+        key: key.clone(),
+        value: value.clone(),
+        ..Default::default()
     }
-    if let Some(k) = key {
-        hasher.update(k.as_bytes());
-    }
-    if let Ok(bytes) = serde_json::to_vec(value) {
-        hasher.update(bytes);
-    }
-    hex_encode(hasher.finalize())
-}
-
-fn truncate_chars(input: &str, limit: usize) -> (String, bool) {
-    let mut out = String::new();
-    let mut truncated = false;
-    for (idx, ch) in input.chars().enumerate() {
-        if idx >= limit {
-            truncated = true;
-            break;
-        }
-        out.push(ch);
-    }
-    if truncated {
-        out.push('…');
-    }
-    (out, truncated)
-}
-
-fn preview_from_value(value: &Value) -> Option<(String, bool)> {
-    match value {
-        Value::String(s) => Some(truncate_chars(s, VALUE_PREVIEW_MAX_CHARS)),
-        _ => serde_json::to_string(value)
-            .ok()
-            .map(|s| truncate_chars(&s, VALUE_PREVIEW_MAX_CHARS)),
-    }
-}
-
-fn normalize_tags(tags: &[String]) -> Vec<String> {
-    let mut out: Vec<String> = Vec::new();
-    for tag in tags {
-        let trimmed = tag.trim();
-        if trimmed.is_empty() {
-            continue;
-        }
-        if !out
-            .iter()
-            .any(|existing| existing.eq_ignore_ascii_case(trimmed))
-        {
-            out.push(trimmed.to_string());
-        }
-    }
-    out
-}
-
-fn parse_tags_field(value: Option<&Value>) -> Vec<String> {
-    match value {
-        Some(Value::String(s)) => s
-            .split(',')
-            .map(|part| part.trim())
-            .filter(|part| !part.is_empty())
-            .map(|part| part.to_string())
-            .collect(),
-        Some(Value::Array(values)) => values
-            .iter()
-            .filter_map(|v| v.as_str())
-            .map(|s| s.to_string())
-            .collect(),
-        _ => Vec::new(),
-    }
-}
-
-fn build_memory_record_event(
-    id: &str,
-    lane: &str,
-    kind: Option<&String>,
-    key: Option<&String>,
-    value: &Value,
-    tags: &[String],
-    score: Option<f64>,
-    prob: Option<f64>,
-    hash: &str,
-    updated: &str,
-) -> Value {
-    let mut map = Map::new();
-    map.insert("id".into(), json!(id));
-    map.insert("lane".into(), json!(lane));
-    if let Some(k) = kind {
-        map.insert("kind".into(), json!(k));
-    }
-    if let Some(k) = key {
-        map.insert("key".into(), json!(k));
-    }
-    map.insert("value".into(), value.clone());
-    map.insert("tags".into(), json!(tags));
-    if let Some(s) = score {
-        map.insert("score".into(), json!(s));
-    }
-    if let Some(p) = prob {
-        map.insert("prob".into(), json!(p));
-    }
-    if !hash.is_empty() {
-        map.insert("hash".into(), json!(hash));
-    }
-    map.insert("updated".into(), json!(updated));
-    let mut value = Value::Object(map);
-    util::attach_memory_ptr(&mut value);
-    value
-}
-
-fn build_memory_applied_event(record: &Value, source: &str) -> Value {
-    let mut obj = record.as_object().cloned().unwrap_or_else(Map::new);
-    obj.insert("source".into(), json!(source));
-    let value_clone = obj.get("value").cloned();
-    if let Some(value) = value_clone {
-        if let Some((preview, truncated)) = preview_from_value(&value) {
-            obj.insert("value_preview".into(), json!(preview));
-            obj.insert("value_preview_truncated".into(), json!(truncated));
-        }
-        if let Ok(bytes) = serde_json::to_vec(&value) {
-            obj.insert("value_bytes".into(), json!(bytes.len()));
-        }
-        obj.insert("value".into(), value);
-    }
-    if !obj.contains_key("applied_at") {
-        if let Some(updated) = obj.get("updated").cloned() {
-            obj.insert("applied_at".into(), updated);
-        } else {
-            obj.insert("applied_at".into(), json!(now_timestamp()));
-        }
-    }
-    Value::Object(obj)
+    .into_insert_owned()
+    .compute_hash()
 }
 
 const MEMORY_SNAPSHOT_EVENT: &str = "memory.snapshot";
@@ -201,10 +63,13 @@ pub async fn state_memory_stream(State(state): State<AppState>) -> axum::respons
             value
         } else {
             match state.kernel().list_recent_memory_async(None, 200).await {
-                Ok(items) => json!({
-                    "items": attach_memory_ptrs(items),
-                    "generated": now_timestamp(),
-                }),
+                Ok(mut items) => {
+                    memory_service::attach_memory_ptrs(&mut items);
+                    json!({
+                        "items": items,
+                        "generated": now_timestamp(),
+                    })
+                }
                 Err(err) => {
                     return (
                         axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -219,15 +84,6 @@ pub async fn state_memory_stream(State(state): State<AppState>) -> axum::respons
                 }
             }
         };
-
-    if let Some(items) = current_snapshot
-        .get_mut("items")
-        .and_then(|value| value.as_array_mut())
-    {
-        for item in items.iter_mut() {
-            util::attach_memory_ptr(item);
-        }
-    }
 
     let (tx, rx) = mpsc::channel::<Result<Event, Infallible>>(64);
     let state_clone = state.clone();
@@ -271,6 +127,12 @@ pub async fn state_memory_stream(State(state): State<AppState>) -> axum::respons
                 continue;
             }
             current_snapshot = next_snapshot;
+            if let Some(items) = current_snapshot
+                .get_mut("items")
+                .and_then(|value| value.as_array_mut())
+            {
+                memory_service::attach_memory_ptrs(items);
+            }
             let payload = json!({
                 "patch": patch_val.clone(),
                 "snapshot": current_snapshot.clone(),
@@ -334,8 +196,8 @@ pub async fn state_memory_recent(
         .list_recent_memory_async(lane_owned, limit)
         .await
     {
-        Ok(items) => {
-            let items = attach_memory_ptrs(items);
+        Ok(mut items) => {
+            memory_service::attach_memory_ptrs(&mut items);
             (axum::http::StatusCode::OK, Json(json!({"items": items}))).into_response()
         }
         Err(e) => (
@@ -348,7 +210,14 @@ pub async fn state_memory_recent(
     }
 }
 
-#[derive(Deserialize, ToSchema)]
+#[derive(Deserialize, ToSchema, Default)]
+pub struct MemoryEmbeddingReq {
+    pub vector: Vec<f32>,
+    #[serde(default)]
+    pub hint: Option<String>,
+}
+
+#[derive(Deserialize, ToSchema, Default)]
 pub struct MemoryApplyReq {
     pub lane: String,
     #[serde(default)]
@@ -357,13 +226,39 @@ pub struct MemoryApplyReq {
     pub key: Option<String>,
     pub value: Value,
     #[serde(default)]
-    pub tags: Option<Vec<String>>,
+    pub text: Option<String>,
     #[serde(default)]
-    pub embed: Option<Vec<f32>>,
+    pub agent_id: Option<String>,
+    #[serde(default)]
+    pub project_id: Option<String>,
+    #[serde(default)]
+    pub durability: Option<String>,
+    #[serde(default)]
+    pub trust: Option<f64>,
+    #[serde(default)]
+    pub privacy: Option<String>,
+    #[serde(default)]
+    pub ttl_s: Option<i64>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    #[serde(default)]
+    pub keywords: Vec<String>,
+    #[serde(default)]
+    pub embedding: Option<MemoryEmbeddingReq>,
     #[serde(default)]
     pub score: Option<f64>,
     #[serde(default)]
     pub prob: Option<f64>,
+    #[serde(default)]
+    pub entities: Value,
+    #[serde(default)]
+    pub source: Value,
+    #[serde(default)]
+    pub links: Value,
+    #[serde(default)]
+    pub extra: Value,
+    #[serde(default)]
+    pub dedupe: bool,
 }
 
 /// Insert a memory item (admin helper).
@@ -396,96 +291,46 @@ pub async fn admin_memory_apply(
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
-    let MemoryApplyReq {
-        lane,
-        kind,
-        key,
-        value,
-        tags,
-        embed,
-        score,
-        prob,
-    } = req;
-    match state
-        .kernel()
-        .insert_memory_async(
-            None,
-            lane.clone(),
-            kind.clone(),
-            key.clone(),
-            value.clone(),
-            embed,
-            tags.clone(),
-            score,
-            prob,
-        )
-        .await
-    {
-        Ok(id) => {
-            let default_updated = now_timestamp();
-            let mut stored_value = value.clone();
-            let mut stored_tags = tags.clone().unwrap_or_default();
-            let mut stored_hash: Option<String> = None;
-            let mut updated: Option<String> = None;
+    let mut body = memory_service::MemoryUpsertInput {
+        id: None,
+        lane: req.lane,
+        kind: req.kind,
+        key: req.key,
+        value: req.value,
+        text: req.text,
+        agent_id: req.agent_id,
+        project_id: req.project_id,
+        durability: req.durability,
+        trust: req.trust,
+        privacy: req.privacy,
+        ttl_s: req.ttl_s,
+        tags: req.tags,
+        keywords: req.keywords,
+        embedding: req
+            .embedding
+            .map(|emb| memory_service::MemoryEmbeddingInput {
+                vector: emb.vector,
+                hint: emb.hint,
+            }),
+        score: req.score,
+        prob: req.prob,
+        entities: req.entities,
+        source: req.source,
+        links: req.links,
+        extra: req.extra,
+        dedupe: req.dedupe,
+    };
+    if body.privacy.is_none() {
+        body.privacy = Some("private".to_string());
+    }
 
-            match state.kernel().get_memory_async(id.clone()).await {
-                Ok(Some(record)) => {
-                    if let Some(obj) = record.as_object() {
-                        if let Some(v) = obj.get("value") {
-                            stored_value = v.clone();
-                        }
-                        if stored_tags.is_empty() {
-                            stored_tags = parse_tags_field(obj.get("tags"));
-                        }
-                        if let Some(h) = obj.get("hash").and_then(|v| v.as_str()) {
-                            stored_hash = Some(h.to_string());
-                        }
-                        if let Some(u) = obj.get("updated").and_then(|v| v.as_str()) {
-                            updated = Some(u.to_string());
-                        }
-                    }
-                }
-                Ok(None) => {
-                    warn!("memory: inserted id {id} missing on reload");
-                }
-                Err(err) => {
-                    warn!(?err, "memory: failed to reload record {id}");
-                }
-            }
-
-            let normalized_tags = normalize_tags(&stored_tags);
-            let stored_hash = stored_hash
-                .unwrap_or_else(|| compute_memory_hash(&lane, &kind, &key, &stored_value));
-            let updated = updated.unwrap_or(default_updated);
-
-            let record_event = build_memory_record_event(
-                &id,
-                &lane,
-                kind.as_ref(),
-                key.as_ref(),
-                &stored_value,
-                &normalized_tags,
-                score,
-                prob,
-                &stored_hash,
-                &updated,
-            );
-
-            state
-                .bus()
-                .publish(topics::TOPIC_MEMORY_RECORD_PUT, &record_event);
-
-            let applied_event = build_memory_applied_event(&record_event, "admin.memory.apply");
-            state
-                .bus()
-                .publish(topics::TOPIC_MEMORY_APPLIED, &applied_event);
-
+    match memory_service::upsert_memory(&state, body, "admin.memory.apply").await {
+        Ok(result) => {
             let body = json!({
-                "id": id,
-                "record": record_event,
-                "applied": applied_event
+                "id": result.id,
+                "record": result.record,
+                "applied": result.applied
             });
-
             (axum::http::StatusCode::CREATED, Json(body)).into_response()
         }
         Err(e) => (
@@ -534,8 +379,8 @@ pub async fn admin_memory_list(
         .and_then(|s| s.parse::<i64>().ok())
         .unwrap_or(100);
     match state.kernel().list_recent_memory_async(lane, limit).await {
-        Ok(items) => {
-            let items = attach_memory_ptrs(items);
+        Ok(mut items) => {
+            memory_service::attach_memory_ptrs(&mut items);
             (axum::http::StatusCode::OK, Json(json!({"items": items}))).into_response()
         }
         Err(e) => (
@@ -551,7 +396,7 @@ pub async fn admin_memory_list(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::read_models;
+    use crate::{memory_service, read_models};
     use arw_policy::PolicyEngine;
     use arw_wasi::ToolHost;
     use axum::{
@@ -618,19 +463,19 @@ mod tests {
         let state = build_state(temp.path()).await;
 
         let initial_value = json!({"text": "hello"});
+        let insert_owned = memory_service::MemoryUpsertInput {
+            lane: "semantic".to_string(),
+            kind: Some("note".to_string()),
+            key: Some("hello".to_string()),
+            value: initial_value,
+            tags: vec!["demo".to_string()],
+            score: Some(0.8),
+            ..Default::default()
+        }
+        .into_insert_owned();
         let _ = state
             .kernel()
-            .insert_memory_async(
-                None,
-                "semantic".to_string(),
-                Some("note".to_string()),
-                Some("hello".to_string()),
-                initial_value,
-                None,
-                Some(vec!["demo".to_string()]),
-                Some(0.8),
-                None,
-            )
+            .insert_memory_async(insert_owned)
             .await
             .expect("insert memory");
 
@@ -639,10 +484,12 @@ mod tests {
             .list_recent_memory_async(None, 200)
             .await
             .expect("list memory");
+        let mut snapshot_items = snapshot_now.clone();
+        memory_service::attach_memory_ptrs(&mut snapshot_items);
         read_models::publish_read_model_patch(
             &state.bus(),
             "memory_recent",
-            &json!({"items": attach_memory_ptrs(snapshot_now.clone()), "generated": now_timestamp()}),
+            &json!({"items": snapshot_items, "generated": now_timestamp()}),
         );
 
         let app = Router::new()
@@ -694,32 +541,33 @@ mod tests {
             1,
         );
 
+        let insert_owned = memory_service::MemoryUpsertInput {
+            lane: "semantic".to_string(),
+            kind: Some("note".to_string()),
+            key: Some("second".to_string()),
+            value: json!({"text": "second"}),
+            tags: vec!["demo".to_string()],
+            score: Some(0.5),
+            ..Default::default()
+        }
+        .into_insert_owned();
         let _ = state
             .kernel()
-            .insert_memory_async(
-                None,
-                "semantic".to_string(),
-                Some("note".to_string()),
-                Some("second".to_string()),
-                json!({"text": "second"}),
-                None,
-                Some(vec!["demo".to_string()]),
-                Some(0.5),
-                None,
-            )
+            .insert_memory_async(insert_owned)
             .await
             .expect("insert second memory");
 
-        let updated_snapshot = state
+        let mut updated_snapshot = state
             .kernel()
             .list_recent_memory_async(None, 200)
             .await
             .expect("list updated memory");
+        memory_service::attach_memory_ptrs(&mut updated_snapshot);
         read_models::publish_read_model_patch(
             &state.bus(),
             "memory_recent",
             &json!({
-                "items": attach_memory_ptrs(updated_snapshot),
+                "items": updated_snapshot,
                 "generated": now_timestamp()
             }),
         );
@@ -786,10 +634,10 @@ mod tests {
                 "test_id": target_id,
                 "content": "captured from debug self-test"
             }),
-            tags: Some(vec!["alpha".into(), "Alpha".into(), "notes".into()]),
-            embed: None,
+            tags: vec!["alpha".into(), "Alpha".into(), "notes".into()],
             score: Some(0.42),
             prob: Some(0.84),
+            ..Default::default()
         };
 
         let mut headers = HeaderMap::new();

@@ -26,6 +26,7 @@ mod governor;
 mod grpc;
 mod guard_metadata;
 mod http_timeout;
+mod memory_service;
 mod metrics;
 mod models;
 mod openapi;

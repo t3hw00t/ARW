@@ -186,7 +186,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
         &state,
         "training_metrics",
         Duration::from_millis(4000),
-        |st| async move { Some(training::telemetry_snapshot(&st)) },
+        |st| async move { Some(training::telemetry_snapshot(&st).await) },
     ));
 
     handles.push(spawn_read_model(

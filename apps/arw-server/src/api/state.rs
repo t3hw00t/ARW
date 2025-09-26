@@ -713,7 +713,7 @@ pub async fn state_training_telemetry(
         )
             .into_response();
     }
-    Json(training::telemetry_snapshot(&state)).into_response()
+    Json(training::telemetry_snapshot(&state).await).into_response()
 }
 
 /// Model catalog read-model.

@@ -375,6 +375,7 @@ dependencies = [
  "arw-heuristics",
  "arw-kernel",
  "arw-macros",
+ "arw-memory-core",
  "arw-otel",
  "arw-policy",
  "arw-protocol",
