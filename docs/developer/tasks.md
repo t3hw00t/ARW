@@ -117,7 +117,7 @@ Updated: 2025-09-25 09:14 UTC
     - 2025-09-11 21:03:46 UTC: Duplicate of t-250911230252-9858; track only the latter.
   - 2025-09-14 17:16:47 UTC: Per-route gating via #[arw_gate] confirmed across endpoints; admin middleware slimmed and hardened (hashed token, per-key RL).
 - [t-250911230312-0863] Admin auth: hashed tokens + per-token/IP sliding rate-limit — done (updated: 2025-09-14 17:16:46 UTC)
-    - 2025-09-14 17:16:46 UTC: Admin auth: support ARW_ADMIN_TOKEN_SHA256 (constant-time compare) and per-token/IP sliding rate limit via token bucket (ARW_ADMIN_RL=limit/window).
+    - 2025-09-14 17:16:46 UTC: Admin auth: support ARW_ADMIN_TOKEN_SHA256 (constant-time compare). Token-bucket rate limiting (ARW_ADMIN_RL=limit/window) remains in flight.
 - [t-250912024843-7597] Resources: Hierarchy/Governor services — done (updated: 2025-09-14 17:12:12 UTC)
     - 2025-09-14 17:12:11 UTC: Hierarchy/Governor services implemented and registered in AppState; admin APIs mounted; events emitted on changes.
 - [t-250912024838-4137] UI: Episodes filters + details toggle — done (updated: 2025-09-14 17:12:11 UTC)

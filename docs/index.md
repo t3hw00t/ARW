@@ -31,7 +31,7 @@ Type: Explanation
 - **Preview** Clear boundaries: enable the Guardrail Gateway proxy + ledger to preview egress and capture an audit trail.
 - **Future** Fair splits: meter GPU time, tokens, and tasks for transparent revenue sharing later.
 
-> **Enable preview features** Set `[cluster] enabled = true` in your override config before inviting workers, and export `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_EGRESS_LEDGER_ENABLE=1` to record previews.
+> **Enable preview features** Add `[cluster]` with `enabled = true` to a config file the server already loads (for example `configs/default.toml`). If you store overrides elsewhere, export `ARW_CONFIG` or `ARW_CONFIG_DIR` so that file is discovered. Then set `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_EGRESS_LEDGER_ENABLE=1` to record previews.
 
 ## Safety & Control
 - Permission leases with timers and scopes; no silent escalation.

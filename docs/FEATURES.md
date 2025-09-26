@@ -27,7 +27,7 @@ Type: Explanation
 - **Preview** Clear boundaries arrive when you enable the Guardrail Gateway proxy + ledger to record what left and why.
 - **Future** Fair splits across GPU time, tokens, and tasks.
 
-> **Enable preview features** Set `[cluster] enabled = true` in your override config before inviting workers, then export `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_EGRESS_LEDGER_ENABLE=1` to capture previews.
+> **Enable preview features** Add `[cluster]` → `enabled = true` to a config file the server already loads (e.g., `configs/default.toml`). If you keep overrides elsewhere, point `ARW_CONFIG` or `ARW_CONFIG_DIR` at that path. Then export `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_EGRESS_LEDGER_ENABLE=1` to capture previews.
 
 ## Under the Hood
 - Open, local‑first agent runtime with versioned tool schemas and portable packaging. Rust core; optional plugins; thin UIs.

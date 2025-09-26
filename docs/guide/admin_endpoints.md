@@ -58,7 +58,7 @@ Example (counts will vary as new endpoints land)
 !!! warning "Minimum Secure Setup"
     - Set `ARW_ADMIN_TOKEN` and require it on all admin calls
     - Keep the service bound to `127.0.0.1` or place behind a TLS proxy
-    - Tune rate limits with `ARW_ADMIN_RL` (e.g., `60/60`)
+    - Planned: per-token/IP rate limiter (`ARW_ADMIN_RL=limit/window`) — rely on admin tokens and default concurrency caps until the limiter lands
     - Avoid `ARW_DEBUG=1` outside local development (debug mode is the only time admin endpoints are open without a token)
 
 ## Authentication

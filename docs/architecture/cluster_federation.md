@@ -50,7 +50,7 @@ queue = "local"  # "nats" when feature "arw-core/nats" is enabled
 # nats_url = "nats://127.0.0.1:4222"
 ```
 
-Set `enabled = true` in your override config to join the preview. Export `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_EGRESS_LEDGER_ENABLE=1` so Guardrail Gateway previews and the ledger capture offloads during federation tests.
+Set `[cluster]` → `enabled = true` in a config file the runtime already loads (e.g., `configs/default.toml`), or point `ARW_CONFIG`/`ARW_CONFIG_DIR` at your custom overrides. Export `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_EGRESS_LEDGER_ENABLE=1` so Guardrail Gateway previews and the ledger capture offloads during federation tests.
 
 The unified server already speaks NATS when compiled with the feature; JetStream durable queues land once the worker orchestration is active.
 

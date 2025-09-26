@@ -486,7 +486,7 @@ ic_security_tips() {
   • Sensitive endpoints: /admin/debug, /probe, /admin/memory*, /state/memory*, /models/*, /governor/*, /introspect/*, /chat/*, /feedback/*
   • In development, set ARW_DEBUG=1 to simplify. In production, disable it.
   • Set ARW_ADMIN_TOKEN and send header: X-ARW-Admin: <token>
-  • Rate limiting for admin endpoints can be adjusted via ARW_ADMIN_RL (default 60/60).
+  • Admin rate limiting (ARW_ADMIN_RL) is reserved for an upcoming release; until then rely on ARW_ADMIN_TOKEN and sane ARW_HTTP_MAX_CONC values.
   • Consider putting the service behind a reverse proxy with TLS in multi-user environments.
 TIPS
 }

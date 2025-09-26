@@ -9,7 +9,7 @@ Type: How‑to
 
 Agent Hub (ARW) is local‑first and privacy‑first by default. When a project needs more muscle or collaboration, you can opt‑in to scale and share — with clear boundaries and your approval at every step.
 
-> **Status:** opt-in preview. Flip `[cluster] enabled = true` in your override config and enable the Guardrail Gateway (`ARW_EGRESS_PROXY_ENABLE=1`, `ARW_EGRESS_LEDGER_ENABLE=1`) before inviting remote workers.
+> **Status:** opt-in preview. Add `[cluster]` → `enabled = true` to a config file the server already reads (for example `configs/default.toml`). If your overrides live elsewhere, export `ARW_CONFIG` or `ARW_CONFIG_DIR` to include them. Enable the Guardrail Gateway (`ARW_EGRESS_PROXY_ENABLE=1`, `ARW_EGRESS_LEDGER_ENABLE=1`) before inviting remote workers.
 
 ## Pool Compute
 - Add your own GPU box or a trusted friend’s machine as a worker (preview).

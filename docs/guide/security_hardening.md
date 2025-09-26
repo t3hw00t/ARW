@@ -17,7 +17,7 @@ Baseline
   - Header: `X-ARW-Admin: your-secret`
 - Events & State: when `ARW_ADMIN_TOKEN` is set, `/events` and sensitive `/state/*` endpoints require the token. Keep these behind auth and a reverse proxy if exposed.
 - Debug mode: unset `ARW_DEBUG` in production. With `ARW_DEBUG=1`, sensitive endpoints are open locally.
-- Rate limits: adjust admin limiter, e.g. `ARW_ADMIN_RL="60/60"` (limit/window_secs).
+- Future-proof rate limits: reserved admin limiter (`ARW_ADMIN_RL="limit/window"`) will arrive with the token-bucket rollout; today rely on tokens plus `ARW_HTTP_MAX_CONC`.
 
 Policy & Gating
     - Immutable denies: edit [`configs/gating.toml`](https://github.com/t3hw00t/ARW/blob/main/configs/gating.toml) (override with `ARW_GATING_FILE`) to add keys like `"tools:*"` or `"models:*"`.
@@ -116,7 +116,7 @@ Checklist
 - [ ] `ARW_DEBUG` unset
 - [ ] `ARW_ADMIN_TOKEN` set and required
 - [ ] Patch safety enforcement enabled (`ARW_PATCH_SAFETY`) where risky patches must be rejected outright
-- [ ] Admin rate‑limit tuned (`ARW_ADMIN_RL`)
+- [ ] Admin rate‑limit configured (`ARW_ADMIN_RL`, upcoming release)
 - [ ] Gating policy in [`configs/gating.toml`](https://github.com/t3hw00t/ARW/blob/main/configs/gating.toml)
 - [ ] Trust store configured; capsules signed and verified when used
 - [ ] Reverse proxy/TLS if remote

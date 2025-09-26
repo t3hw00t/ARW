@@ -81,7 +81,7 @@ These unlock when you choose to collaborate or federate resources. Remote comput
 - **[Remote collaborator pack · Preview]** Clear boundaries: before anything leaves your machine, you see what would be sent, to whom, and the estimated cost. Enable the Guardrail Gateway proxy + ledger to capture the audit trail.
 - **[Future pack]** Fair splits: contributions (GPU time, tokens, tasks) are metered per collaborator so shared project revenue can be split transparently later.
 
-> **Enable federation preview** Set `[cluster] enabled = true` in your override config (example: `${ARW_STATE_DIR}/config.toml`), optionally point `bus`/`queue` at "nats", export `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_EGRESS_LEDGER_ENABLE=1`, then restart `arw-server`.
+> **Enable federation preview** Add a `[cluster]` section with `enabled = true` to a config file the server loads by default (for example `configs/default.toml` beside the binaries). If you maintain overrides under `${ARW_STATE_DIR}`, export `ARW_CONFIG` or `ARW_CONFIG_DIR` so the server picks it up. Optionally set `bus`/`queue` to `"nats"`, export `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_EGRESS_LEDGER_ENABLE=1`, then restart `arw-server`.
 
 ## Future packs (Roadmap)
 
