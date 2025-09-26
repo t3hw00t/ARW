@@ -1,5 +1,5 @@
 use chrono::SecondsFormat;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::time;
@@ -8,6 +8,7 @@ use crate::{
     app_state::Policy,
     egress_log::{self, EgressRecord},
     guard_metadata::apply_posture_and_guard,
+    memory_service,
     tasks::TaskHandle,
     tools::{self, ToolError},
     util, AppState,
@@ -90,11 +91,89 @@ impl WorkerContext {
             k if k.starts_with("net.http.") => self.handle_http_action(id, k, input).await,
             "fs.patch" => self.handle_fs_patch(input).await,
             "app.vscode.open" => self.handle_app_vscode_open(input).await,
+            "memory.upsert" => self.handle_memory_upsert(state, input).await,
+            "memory.search" => self.handle_memory_search(state, input).await,
+            "memory.pack" => self.handle_memory_pack(state, input).await,
             _ => match execute_dynamic_action(state, kind, input).await {
                 Ok(value) => Ok(ActionOutcome::new(value)),
                 Err(err) => Err(ActionFailure::new(err)),
             },
         }
+    }
+
+    async fn handle_memory_upsert(
+        &self,
+        state: &AppState,
+        input: &Value,
+    ) -> Result<ActionOutcome, ActionFailure> {
+        let mut body: memory_service::MemoryUpsertInput = serde_json::from_value(input.clone())
+            .map_err(|err| {
+                ActionFailure::new(ToolError::Runtime(format!(
+                    "invalid memory.upsert input: {err}"
+                )))
+            })?;
+        if body.privacy.is_none() {
+            body.privacy = Some("private".to_string());
+        }
+        match memory_service::upsert_memory(state, body, "memory.upsert").await {
+            Ok(result) => Ok(ActionOutcome::new(json!({
+                "id": result.id,
+                "record": result.record,
+                "applied": result.applied
+            }))),
+            Err(err) => Err(ActionFailure::new(ToolError::Runtime(err.to_string()))),
+        }
+    }
+
+    async fn handle_memory_search(
+        &self,
+        state: &AppState,
+        input: &Value,
+    ) -> Result<ActionOutcome, ActionFailure> {
+        let params: memory_service::MemorySearchInput = serde_json::from_value(input.clone())
+            .map_err(|err| {
+                ActionFailure::new(ToolError::Runtime(format!(
+                    "invalid memory.search input: {err}"
+                )))
+            })?;
+        let items = memory_service::search_memory(state, params)
+            .await
+            .map_err(|err| ActionFailure::new(ToolError::Runtime(err.to_string())))?;
+        Ok(ActionOutcome::new(json!({
+            "items": items,
+        })))
+    }
+
+    async fn handle_memory_pack(
+        &self,
+        state: &AppState,
+        input: &Value,
+    ) -> Result<ActionOutcome, ActionFailure> {
+        let params: memory_service::MemoryPackInput = serde_json::from_value(input.clone())
+            .map_err(|err| {
+                ActionFailure::new(ToolError::Runtime(format!(
+                    "invalid memory.pack input: {err}"
+                )))
+            })?;
+        let result = memory_service::pack_memory(state, params)
+            .await
+            .map_err(|err| ActionFailure::new(ToolError::Runtime(err.to_string())))?;
+
+        let mut payload = Map::new();
+        payload.insert("items".into(), json!(result.items));
+        payload.insert("spec".into(), result.spec);
+        payload.insert("summary".into(), result.summary);
+        if !result.seeds.is_empty() {
+            payload.insert("seeds".into(), json!(result.seeds));
+        }
+        if !result.expanded.is_empty() {
+            payload.insert("expanded".into(), json!(result.expanded));
+        }
+        if let Some(diag) = result.diagnostics {
+            payload.insert("diagnostics".into(), diag);
+        }
+
+        Ok(ActionOutcome::new(Value::Object(payload)))
     }
 
     async fn complete_action(&self, id: &str, outcome: ActionOutcome) {
@@ -962,6 +1041,180 @@ mod tests {
         assert_eq!(stored_output["error"]["type"].as_str(), Some("unsupported"));
         assert!(stored_output["posture"].as_str().is_some());
         assert!(stored_output.get("guard").is_none());
+    }
+
+    #[tokio::test]
+    async fn memory_upsert_action_writes_record() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let mut env_guard = env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
+        let _worker = start_local_worker(state.clone());
+
+        let bus = state.bus();
+        let mut rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_ACTIONS_COMPLETED.to_string()], Some(8));
+
+        let action_id = Uuid::new_v4().to_string();
+        let payload = json!({
+            "lane": "episodic",
+            "value": {"text": "note"},
+            "tags": ["worker-test"],
+            "dedupe": true
+        });
+        state
+            .kernel()
+            .insert_action_async(&action_id, "memory.upsert", &payload, None, None, "queued")
+            .await
+            .expect("enqueue memory action");
+
+        let completed_env = timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("memory upsert event timeout")
+            .expect("memory upsert completion");
+        assert_eq!(completed_env.payload["id"], json!(action_id));
+
+        let action = state
+            .kernel()
+            .get_action_async(&action_id)
+            .await
+            .expect("load action")
+            .expect("action present");
+        let output = action.output.expect("action output");
+        assert_eq!(output["record"]["lane"], json!("episodic"));
+
+        let memories = state
+            .kernel()
+            .list_recent_memory_async(None, 10)
+            .await
+            .expect("list memories");
+        assert!(!memories.is_empty());
+        assert_eq!(memories[0]["lane"], json!("episodic"));
+    }
+
+    #[tokio::test]
+    async fn memory_search_action_returns_results() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let mut env_guard = env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
+        let _worker = start_local_worker(state.clone());
+
+        let insert_body = memory_service::MemoryUpsertInput {
+            lane: "episodic".into(),
+            value: json!({"text": "worker search note", "topic": "memory"}),
+            tags: vec!["worker-search".into()],
+            text: Some("worker search note".into()),
+            ..Default::default()
+        };
+        memory_service::upsert_memory(&state, insert_body, "test.memory.search")
+            .await
+            .expect("insert memory");
+
+        let bus = state.bus();
+        let mut rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_ACTIONS_COMPLETED.to_string()], Some(8));
+
+        let action_id = Uuid::new_v4().to_string();
+        let payload = json!({
+            "lane": "episodic",
+            "query": "worker search",
+            "limit": 5
+        });
+        state
+            .kernel()
+            .insert_action_async(&action_id, "memory.search", &payload, None, None, "queued")
+            .await
+            .expect("enqueue memory.search action");
+
+        let completed_env = timeout(Duration::from_secs(2), rx.recv())
+            .await
+            .expect("memory search event timeout")
+            .expect("memory search completion");
+        assert_eq!(completed_env.payload["id"], json!(action_id));
+
+        let action = state
+            .kernel()
+            .get_action_async(&action_id)
+            .await
+            .expect("load search action")
+            .expect("action present");
+        let output = action.output.expect("action output");
+        let items = output["items"].as_array().expect("items array");
+        assert!(!items.is_empty());
+        let first = items.first().expect("first item");
+        assert_eq!(first["value"]["text"], json!("worker search note"));
+        assert!(first["ptr"].is_object());
+    }
+
+    #[tokio::test]
+    async fn memory_pack_action_returns_working_set() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let mut env_guard = env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
+        let _worker = start_local_worker(state.clone());
+
+        for idx in 0..3 {
+            let insert_body = memory_service::MemoryUpsertInput {
+                lane: "episodic".into(),
+                value: json!({
+                    "text": format!("worker pack note {idx}"),
+                    "slot": if idx % 2 == 0 { "evidence" } else { "context" }
+                }),
+                tags: vec!["worker-pack".into()],
+                text: Some(format!("worker pack note {idx}")),
+                ..Default::default()
+            };
+            memory_service::upsert_memory(&state, insert_body, "test.memory.pack")
+                .await
+                .expect("insert pack memory");
+        }
+
+        let bus = state.bus();
+        let mut rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_ACTIONS_COMPLETED.to_string()], Some(8));
+
+        let action_id = Uuid::new_v4().to_string();
+        let payload = json!({
+            "query": "worker pack",
+            "lanes": ["episodic"],
+            "limit": 3,
+            "include_sources": true,
+            "debug": true
+        });
+        state
+            .kernel()
+            .insert_action_async(&action_id, "memory.pack", &payload, None, None, "queued")
+            .await
+            .expect("enqueue memory.pack action");
+
+        let completed_env = timeout(Duration::from_secs(3), rx.recv())
+            .await
+            .expect("memory pack event timeout")
+            .expect("memory pack completion");
+        assert_eq!(completed_env.payload["id"], json!(action_id));
+
+        let action = state
+            .kernel()
+            .get_action_async(&action_id)
+            .await
+            .expect("load pack action")
+            .expect("action present");
+        let output = action.output.expect("action output");
+        let items = output["items"].as_array().expect("items array");
+        assert!(!items.is_empty());
+        assert!(output["spec"].is_object());
+        assert!(output["summary"].is_object());
+        if let Some(seeds) = output.get("seeds") {
+            assert!(seeds.is_array());
+        }
+        if let Some(expanded) = output.get("expanded") {
+            assert!(expanded.is_array());
+        }
+        assert!(items
+            .iter()
+            .any(|item| { item["value"]["text"].as_str() == Some("worker pack note 0") }));
     }
 
     #[tokio::test]
