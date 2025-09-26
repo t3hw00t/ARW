@@ -561,11 +561,12 @@ impl<'a> WorkingSetBuilder<'a> {
         expanded_raw: &mut Vec<Value>,
         observer: &mut O,
     ) -> Result<usize> {
+        let seed_pool = seed_infos.len();
         let mut seeds_with_embed: Vec<(&SeedInfo, &Vec<f32>)> = seed_infos
             .iter()
             .filter_map(|seed| seed.embed.as_ref().map(|embed| (seed, embed)))
             .collect();
-        if seeds_with_embed.len() < 2 {
+        if seeds_with_embed.is_empty() {
             return Ok(0);
         }
         seeds_with_embed.sort_by(|a, b| {
@@ -581,6 +582,8 @@ impl<'a> WorkingSetBuilder<'a> {
         let mut avg = vec![0f32; dims];
         let mut weight_sum = 0f32;
         let mut seed_ids: Vec<String> = Vec::new();
+        let mut lane_sums: HashMap<String, (Vec<f32>, f32)> = HashMap::new();
+        let mut lane_seed_ids: HashMap<String, Vec<String>> = HashMap::new();
         for (seed, embed) in seeds_with_embed.iter().take(top_k) {
             if embed.len() != dims {
                 continue;
@@ -590,6 +593,19 @@ impl<'a> WorkingSetBuilder<'a> {
                 avg[i] += value * weight;
             }
             weight_sum += weight;
+            if let Some(lane_name) = seed.lane.as_ref() {
+                let entry = lane_sums
+                    .entry(lane_name.clone())
+                    .or_insert_with(|| (vec![0f32; dims], 0f32));
+                for (i, value) in embed.iter().enumerate() {
+                    entry.0[i] += value * weight;
+                }
+                entry.1 += weight;
+                lane_seed_ids
+                    .entry(lane_name.clone())
+                    .or_insert_with(Vec::new)
+                    .push(seed.id.clone());
+            }
             seed_ids.push(seed.id.clone());
         }
         if weight_sum == 0.0 {
@@ -598,12 +614,33 @@ impl<'a> WorkingSetBuilder<'a> {
         for value in avg.iter_mut() {
             *value /= weight_sum;
         }
+        let mut lane_vectors: HashMap<String, Vec<f32>> = HashMap::new();
+        for (lane, (mut sum, weight)) in lane_sums.into_iter() {
+            if weight > 0.0 {
+                for value in sum.iter_mut() {
+                    *value /= weight;
+                }
+                lane_vectors.insert(lane, sum);
+            }
+        }
+        let global_embed = avg.as_slice();
+        let seeds_fallback = seed_ids;
         let mut added = 0usize;
         let fetch_k = ((spec.limit * 2) + spec.expand_per_seed).max(12) as i64;
         for lane in lanes.iter() {
+            let embed_opt = lane
+                .as_ref()
+                .and_then(|lane_name| lane_vectors.get(lane_name).map(|vec| vec.as_slice()))
+                .or_else(|| {
+                    if global_embed.is_empty() {
+                        None
+                    } else {
+                        Some(global_embed)
+                    }
+                });
             let mut items = self.state.kernel().select_memory_hybrid(
                 spec.query.as_deref(),
-                Some(avg.as_slice()),
+                embed_opt,
                 lane.as_deref(),
                 fetch_k,
             )?;
@@ -613,11 +650,16 @@ impl<'a> WorkingSetBuilder<'a> {
                         .and_then(|v| v.as_str())
                         .map(|s| s.to_string())
                 });
+                let seeds_for_lane = lane
+                    .as_ref()
+                    .and_then(|lane_name| lane_seed_ids.get(lane_name))
+                    .unwrap_or_else(|| &seeds_fallback);
                 if let Some(candidate) = build_query_expansion_candidate(
                     item,
                     lane_override,
                     spec.project.as_deref(),
-                    &seed_ids,
+                    seeds_for_lane.as_slice(),
+                    seed_pool,
                 ) {
                     if candidates.contains_key(&candidate.id) {
                         continue;
@@ -629,7 +671,7 @@ impl<'a> WorkingSetBuilder<'a> {
                         json!({
                             "item": payload.clone(),
                             "lane": lane_for_event.clone(),
-                            "seeds_used": seed_ids.clone(),
+                            "seeds_used": seeds_for_lane,
                         }),
                     );
                     counter!(
@@ -968,6 +1010,7 @@ fn build_query_expansion_candidate(
     lane: Option<String>,
     project: Option<&str>,
     seeds_used: &[String],
+    seed_pool: usize,
 ) -> Option<Candidate> {
     let id = value.get("id").and_then(|v| v.as_str())?.to_string();
     let lane = lane.or_else(|| {
@@ -983,7 +1026,8 @@ fn build_query_expansion_candidate(
     }
     let base_score = value.get("cscore").and_then(|v| v.as_f64()).unwrap_or(0.0) as f32;
     let recency = recency_score(value.get("updated").and_then(|v| v.as_str()));
-    let support = (seeds_used.len() as f32) / (seeds_used.len().max(1) as f32);
+    let pool = seed_pool.max(1) as f32;
+    let support = (seeds_used.len() as f32 / pool).clamp(0.0, 1.0);
     let affinity = project.map(|p| project_affinity(&value, p)).unwrap_or(1.0);
     let raw_score = 0.5 * base_score + 0.3 * recency + 0.2 * support;
     let cscore = (raw_score * affinity).clamp(0.0, 1.0);
@@ -998,6 +1042,10 @@ fn build_query_expansion_candidate(
                     "recency": recency,
                     "support": support,
                     "project_affinity": affinity,
+                },
+                "support_detail": {
+                    "count": seeds_used.len(),
+                    "pool": seed_pool,
                 },
                 "seeds_used": seeds_used,
                 "cscore": cscore,
