@@ -194,7 +194,7 @@ Declarative cache manifest covering action cache keys, LLM reuse, semantic cachi
   - SSE + JSON Patch Streaming Contract
 - Signals & Telemetry:
   - `task.completed`
-  - `tool.cache`
+  - `tool.cache` (outcomes: `hit`, `miss`, `coalesced`, `not_cacheable`, `error`)
   - `models.changed`
 - HTTP:
   - `GET /admin/tools`
@@ -215,6 +215,7 @@ Declarative cache manifest covering action cache keys, LLM reuse, semantic cachi
   - [architecture/caching_layers.md](../architecture/caching_layers.md)
 - Notes:
   - CAS-backed action cache pairs with W-TinyLFU fronts and digest-addressed blobs.
+  - Singleflight guards collapse identical misses so followers wait and emit `tool.cache` `coalesced` events when replaying the leader’s result; Prometheus counters (`arw_tools_cache_hits`, `arw_tools_cache_miss`, `arw_tools_cache_coalesced`, `arw_tools_cache_coalesced_waiters`, `arw_tools_cache_error`, `arw_tools_cache_bypass`) mirror the admin stats payload.
   - Future RocksDB tiers and resumable SSE streams extend coverage.
 
 ### Capability & Consent Ledger

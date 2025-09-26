@@ -63,10 +63,11 @@ cache:
 - Action Cache (tools):
   - Key: `sha256(tool_id@version + canonical JSON input)`.
   - Store: CAS under `{state_dir}/tools/by-digest/`.
-  - In‑memory: Moka W‑TinyLFU front.
+  - In-memory: Moka W-TinyLFU front.
   - Env: `ARW_TOOLS_CACHE_TTL_SECS`, `ARW_TOOLS_CACHE_CAP`.
-  - Admin: `GET /admin/tools/cache_stats`.
-  - Events/metrics: `tool.cache` events, `/metrics` `arw_tools_cache_*`.
+  - Admin: `GET /admin/tools/cache_stats` (fields include hit, miss, coalesced waiters, bypass, capacity, TTL, entries).
+  - Events/metrics: `tool.cache` events (outcomes include `hit`, `miss`, `coalesced`, `not_cacheable`, `error`), `/metrics` counters such as `arw_tools_cache_hits`, `arw_tools_cache_miss`, `arw_tools_cache_coalesced`, `arw_tools_cache_coalesced_waiters`, `arw_tools_cache_error`, and `arw_tools_cache_bypass`.
+  - Stampede control: identical in-flight tool calls coalesce behind a singleflight guard; followers block until the leader stores or fails, then reuse the cached result.
 
 - LLM KV/prefix cache:
   - llama.cpp: client sends `cache_prompt: true`; server can run with `--prompt-cache <file>` for persistence.

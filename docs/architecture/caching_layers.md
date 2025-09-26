@@ -17,7 +17,8 @@ This document outlines a multi‑layer caching strategy for ARW, blending resear
 
 - Tool/action cache (Bazel‑style)
   - Treat each tool invocation as a deterministic action keyed by a content hash of: tool id/version, canonical input (RFC‑8785 JSON), and an environment signature.
-  - Store outputs in a content‑addressed store (CAS) and map `action_key → digest`. Replay on hit; execute on miss. Emit `tool.cache` events and publish lightweight counters.
+  - Store outputs in a content‑addressed store (CAS) and map `action_key → digest`. Replay on hit; execute on miss. Emit `tool.cache` events (`hit`, `miss`, `coalesced`, `not_cacheable`, `error`) and publish lightweight counters.
+  - Collapse identical in-flight misses with a singleflight guard so one runner computes the result while followers wait, record coalesced waiters, and reuse the cached output when the leader commits it.
 
 - Semantic response cache (planned)
   - Cache Q→A pairs per project/user keyed by embeddings with a verifier gate. Only reuse when a thresholded match passes a quick check; otherwise seed the model with the cached answer for speculative decoding.
@@ -42,7 +43,7 @@ This document outlines a multi‑layer caching strategy for ARW, blending resear
 ## What’s implemented in ARW today
 
 - llama.cpp client requests include `cache_prompt: true` enabling KV reuse.
-- Tool Action Cache with Moka front + disk CAS back; RFC‑8785‑like canonicalization, singleflight, counters, Prometheus metrics, and admin stats.
+- Tool Action Cache with Moka front + disk CAS back; RFC‑8785‑like canonicalization, singleflight coalescing, counters (`arw_tools_cache_hits`, `arw_tools_cache_miss`, `arw_tools_cache_coalesced`, `arw_tools_cache_coalesced_waiters`, `arw_tools_cache_error`, `arw_tools_cache_bypass`), Prometheus metrics, and admin stats.
 - CAS blob serving with validators and 304 handling.
 - Read‑models and deltas: models metrics and route stats publish RFC‑6902 patches with coalescing; UI panels consume them live.
 

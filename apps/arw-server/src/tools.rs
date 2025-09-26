@@ -4,13 +4,57 @@ use arw_topics as topics;
 use arw_wasi::ToolHost;
 use serde_json::{json, Value};
 
-use crate::tool_cache::StoreOutcome;
+use crate::tool_cache::{SingleflightGuard, StoreOutcome, ToolCacheHit};
 use crate::{capsule_guard, AppState};
 
 mod guardrails;
 pub(crate) use guardrails::metrics as guardrails_metrics_value;
 mod error;
 pub use error::ToolError;
+
+const METRIC_CACHE_HIT: &str = "arw_tools_cache_hits";
+const METRIC_CACHE_COALESCED: &str = "arw_tools_cache_coalesced";
+const METRIC_CACHE_COALESCED_WAITERS: &str = "arw_tools_cache_coalesced_waiters";
+const METRIC_CACHE_MISS: &str = "arw_tools_cache_miss";
+const METRIC_CACHE_ERROR: &str = "arw_tools_cache_error";
+const METRIC_CACHE_BYPASS: &str = "arw_tools_cache_bypass";
+
+fn publish_cache_hit(
+    bus: &arw_events::Bus,
+    id: &str,
+    key: &str,
+    hit: &ToolCacheHit,
+    outcome: &str,
+    elapsed_ms: u64,
+) -> Value {
+    metrics::counter!(METRIC_CACHE_HIT, 1);
+    if outcome == "coalesced" {
+        metrics::counter!(METRIC_CACHE_COALESCED, 1);
+    }
+
+    let mut cache_evt = json!({
+        "tool": id,
+        "outcome": outcome,
+        "elapsed_ms": elapsed_ms,
+        "key": key,
+        "digest": hit.digest,
+        "cached": true,
+        "age_secs": hit.age_secs,
+    });
+    ensure_corr(&mut cache_evt);
+    bus.publish(topics::TOPIC_TOOL_CACHE, &cache_evt);
+
+    let mut payload = json!({"id": id, "output": hit.value.clone()});
+    ensure_corr(&mut payload);
+    bus.publish(topics::TOPIC_TOOL_RAN, &payload);
+    if id == "ui.screenshot.capture" {
+        let mut shot = hit.value.clone();
+        ensure_corr(&mut shot);
+        bus.publish(topics::TOPIC_SCREENSHOTS_CAPTURED, &shot);
+    }
+
+    hit.value.clone()
+}
 
 pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value, ToolError> {
     capsule_guard::refresh_capsules(state).await;
@@ -20,35 +64,43 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
     let cacheable = cache.enabled() && cache.is_cacheable(id);
     let cache_key = cacheable.then(|| cache.action_key(id, &input));
 
+    let mut flight_guard: Option<SingleflightGuard<'_>> = None;
+
     if let Some(ref key) = cache_key {
         if let Some(hit) = cache.lookup(key).await {
-            metrics::counter!("arw_tools_cache_hits", 1);
             let elapsed_ms = start.elapsed().as_millis() as u64;
-            let mut cache_evt = json!({
-                "tool": id,
-                "outcome": "hit",
-                "elapsed_ms": elapsed_ms,
-                "key": key,
-                "digest": hit.digest,
-                "cached": true,
-                "age_secs": hit.age_secs,
-            });
-            ensure_corr(&mut cache_evt);
-            bus.publish(topics::TOPIC_TOOL_CACHE, &cache_evt);
+            let value = publish_cache_hit(&bus, id, key, &hit, "hit", elapsed_ms);
+            return Ok(value);
+        }
 
-            let mut payload = json!({"id": id, "output": hit.value.clone()});
-            ensure_corr(&mut payload);
-            bus.publish(topics::TOPIC_TOOL_RAN, &payload);
-            if id == "ui.screenshot.capture" {
-                let mut shot = hit.value.clone();
-                ensure_corr(&mut shot);
-                bus.publish(topics::TOPIC_SCREENSHOTS_CAPTURED, &shot);
+        loop {
+            let guard = cache.begin_singleflight(key);
+            if guard.is_leader() {
+                flight_guard = Some(guard);
+                break;
             }
-            return Ok(hit.value);
+
+            cache.record_coalesced_wait();
+            metrics::counter!(METRIC_CACHE_COALESCED_WAITERS, 1);
+            guard.wait().await;
+
+            if let Some(hit) = cache.lookup(key).await {
+                let elapsed_ms = start.elapsed().as_millis() as u64;
+                let value = publish_cache_hit(&bus, id, key, &hit, "coalesced", elapsed_ms);
+                return Ok(value);
+            }
         }
     }
 
-    let output = run_tool_inner(state, id, &input).await?;
+    let output = match run_tool_inner(state, id, &input).await {
+        Ok(value) => value,
+        Err(err) => {
+            if let Some(mut guard) = flight_guard.take() {
+                guard.notify_waiters();
+            }
+            return Err(err);
+        }
+    };
     let elapsed_ms = start.elapsed().as_millis() as u64;
 
     if let Some(ref key) = cache_key {
@@ -57,7 +109,7 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
                 digest,
                 cached: true,
             }) => {
-                metrics::counter!("arw_tools_cache_miss", 1);
+                metrics::counter!(METRIC_CACHE_MISS, 1);
                 let mut cache_evt = json!({
                     "tool": id,
                     "outcome": "miss",
@@ -74,7 +126,7 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
                 digest,
                 cached: false,
             }) => {
-                metrics::counter!("arw_tools_cache_error", 1);
+                metrics::counter!(METRIC_CACHE_ERROR, 1);
                 let mut cache_evt = json!({
                     "tool": id,
                     "outcome": "error",
@@ -88,7 +140,7 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
                 bus.publish(topics::TOPIC_TOOL_CACHE, &cache_evt);
             }
             None => {
-                metrics::counter!("arw_tools_cache_error", 1);
+                metrics::counter!(METRIC_CACHE_ERROR, 1);
                 let mut cache_evt = json!({
                     "tool": id,
                     "outcome": "error",
@@ -103,7 +155,7 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
         }
     } else if cache.enabled() {
         cache.record_bypass();
-        metrics::counter!("arw_tools_cache_bypass", 1);
+        metrics::counter!(METRIC_CACHE_BYPASS, 1);
         let mut cache_evt = json!({
             "tool": id,
             "outcome": "not_cacheable",
@@ -113,6 +165,10 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
         });
         ensure_corr(&mut cache_evt);
         bus.publish(topics::TOPIC_TOOL_CACHE, &cache_evt);
+    }
+
+    if let Some(mut guard) = flight_guard.take() {
+        guard.notify_waiters();
     }
 
     let mut payload = json!({"id": id, "output": output.clone()});
@@ -173,9 +229,90 @@ mod tests {
     use super::*;
     use crate::AppState;
     use arw_policy::PolicyEngine;
+    use async_trait::async_trait;
+    use once_cell::sync::Lazy;
     use serde_json::json;
-    use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    use std::sync::{Arc, Mutex as StdMutex};
     use tokio::sync::Mutex;
+    use tokio::time::{sleep, Duration};
+
+    static ENV_LOCK: Lazy<StdMutex<()>> = Lazy::new(|| StdMutex::new(()));
+
+    #[derive(Clone)]
+    struct SlowHost {
+        calls: Arc<AtomicUsize>,
+        delay: Duration,
+    }
+
+    impl SlowHost {
+        fn new(delay: Duration) -> Self {
+            Self {
+                calls: Arc::new(AtomicUsize::new(0)),
+                delay,
+            }
+        }
+
+        fn calls(&self) -> Arc<AtomicUsize> {
+            self.calls.clone()
+        }
+    }
+
+    #[async_trait]
+    impl ToolHost for SlowHost {
+        async fn run_tool(&self, id: &str, _input: &Value) -> Result<Value, arw_wasi::WasiError> {
+            assert_eq!(id, "custom.test");
+            self.calls.fetch_add(1, Ordering::Relaxed);
+            sleep(self.delay).await;
+            Ok(json!({"ok": true}))
+        }
+    }
+
+    #[tokio::test]
+    async fn singleflight_coalesces_identical_tool_runs() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let _env_guard = ENV_LOCK.lock().unwrap();
+        std::env::set_var("ARW_TOOLS_CACHE_CAP", "8");
+        std::env::set_var("ARW_TOOLS_CACHE_TTL_SECS", "60");
+        std::env::set_var("ARW_TOOLS_CACHE_ALLOW", "custom.test");
+
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let kernel = arw_kernel::Kernel::open(temp.path()).expect("init kernel");
+        let policy = PolicyEngine::load_from_env();
+        let policy_arc = Arc::new(Mutex::new(policy));
+        let slow_host = Arc::new(SlowHost::new(Duration::from_millis(50)));
+        let host: Arc<dyn ToolHost> = slow_host.clone();
+
+        let state = AppState::builder(bus, kernel, policy_arc, host, true)
+            .with_sse_capacity(16)
+            .build()
+            .await;
+
+        let state_a = state.clone();
+        let state_b = state.clone();
+        let input_a = json!({"value": 1});
+        let input_b = json!({"value": 1});
+
+        let fut1 = tokio::spawn(async move { run_tool(&state_a, "custom.test", input_a).await });
+        let fut2 = tokio::spawn(async move { run_tool(&state_b, "custom.test", input_b).await });
+
+        let (res1, res2) = tokio::join!(fut1, fut2);
+        let out1 = res1.expect("task1").expect("run1");
+        let out2 = res2.expect("task2").expect("run2");
+        assert_eq!(out1, out2);
+        let call_count = slow_host.calls();
+        assert_eq!(call_count.load(Ordering::Relaxed), 1);
+
+        let stats = state.tool_cache().stats();
+        assert_eq!(stats.miss, 1);
+        assert_eq!(stats.hit, 1);
+        assert_eq!(stats.coalesced, 1);
+
+        std::env::remove_var("ARW_TOOLS_CACHE_CAP");
+        std::env::remove_var("ARW_TOOLS_CACHE_TTL_SECS");
+        std::env::remove_var("ARW_TOOLS_CACHE_ALLOW");
+    }
 
     #[cfg(not(feature = "tool_screenshots"))]
     #[tokio::test]
