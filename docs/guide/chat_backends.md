@@ -7,6 +7,8 @@ title: Chat Backends
 
 The ARW debug Chat UI can use simple synthetic replies (echo/reverse/time) or call real model backends when configured.
 
+> **Managed runtimes**: The upcoming runtime manager can download and launch llama.cpp/ONNX/vLLM bundles automatically (CPU, CUDA, ROCm, Metal, DirectML, CoreML, Vulkan) and expose health via `/state/runtimes`. Until that ships, the env variables below continue to work for manual setup.
+
 Updated: 2025-09-22
 Type: How‑to
 

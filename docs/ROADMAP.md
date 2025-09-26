@@ -79,7 +79,7 @@ To keep the larger intent visible while we iterate, we track four active executi
 #### [Kernel] Collapse the Kernel
 - [Kernel] WASI plugin sandbox: capability-based tools with explicit permissions.
 - [Kernel] Policy engine integration: Cedar bindings; per-tool permission manifests.
-- [Kernel] Model orchestration: adapters (llama.cpp, ONNX Runtime) with pooling and profiles, plus a vLLM adapter with PagedAttention and prefix cache and GPU/CPU KV memory policy hints for long-context batching and prefix sharing.
+- [Kernel] Model orchestration: managed runtime supervisor (llama.cpp, ONNX Runtime, vLLM) with pooling, profiles, accelerator bundles (CUDA/ROCm/Metal/DirectML/CoreML/Vulkan), and GPU/CPU KV memory policy hints for long-context batching and prefix sharing.
 - [Kernel] Tests: feature-gated HTTP oneshot tests; policy and capability contract tests.
 - [Kernel] AsyncAPI + MCP artifacts: generate `/spec/asyncapi.yaml` and `/spec/mcp-tools.json` in CI; serve `/spec/*` endpoints.
 - [Kernel] Policy hooks for feedback auto-apply decisions (shadow mode → guarded auto).
@@ -88,10 +88,12 @@ To keep the larger intent visible while we iterate, we track four active executi
 
 #### [Pack: Collaboration] Calm collaboration surfaces at scale
 - [Pack: Collaboration] UI app to manage various project types.
+- [Pack: Collaboration] Voice & Vision Studio: consent-first audio/video capture, managed Whisper.cpp & llava.cpp adapters, live transcription/description panels.
 - [Pack: Collaboration] Regulatory Provenance Unit (RPU): trust store, signature verification, Cedar ABAC for capsule adoption, hop TTL/propagation, adoption ledger (ephemeral by default).
 
 #### [Pack: Research] Research & memory packs
 - [Pack: Research] Capsules: record inputs/outputs/events/hints; export/import; deterministic replay.
+- [Pack: Research] Runtime claims for multimodal autonomy: `runtime.claim.*` events, accelerator-aware fallbacks, budget-driven prompt cache warm-up.
 - [Pack: Research] Dataset & memory lab: local pipelines, tags, audits, and reproducible reports.
 - [Pack: Research] Commons Kit: ship 5 public-goods recipes with signed index and exportable memories.
 - [Pack: Research] Logic Units v2: scripted transforms (sandboxed) and plugin units (with contract tests); policy-gated installation; compatibility matrix.

@@ -9,7 +9,7 @@ ARW provides HTTP endpoints (admin‑gated) to manage local models with streamin
 Updated: 2025-09-23
 Type: How‑to
 
-See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*).
+See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*), and Architecture → Managed llama.cpp Runtime for how downloaded weights plug into the runtime supervisor.
 Canonical topics used by the service are defined once under [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs).
 
 ## Endpoints

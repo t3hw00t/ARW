@@ -6,7 +6,7 @@ title: Agent Hub (ARW)
 
 Your private AI control room that can scale and share when you choose.
 
-In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” on your computer to research, plan, write, and build—while you stay in charge. It is local‑first and privacy‑first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.
+In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” on your computer to research, plan, write, build—and now see and hear—while you stay in charge. It is local‑first and privacy‑first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.
 
 Updated: 2025-09-24
 Type: Explanation
@@ -23,12 +23,15 @@ Type: Explanation
 - Watch sites or docs for changes and get actionable updates.
 - Turn vague goals into concrete plans and next steps.
 - Chat to explore data and export both answers and evidence.
+- Spin up managed llama.cpp/ONNX/vLLM runtimes with automatic accelerator detection and fallback.
+- Capture voice, vision, and pointer input safely: consent-first mic/camera access, local transcription/description/narration, plus gated pointer/keyboard automation when explicitly approved.
 
 ## Scaling & Sharing (Opt‑In)
 - Stay local-first by default; remote workers and co-drive remain off until you flip them on.
 - **Preview** Pool compute to your GPU box or a trusted collaborator’s machine; offload heavy jobs under your rules and budget.
-- **Preview** Live co‑drive sessions: others can watch, suggest, or take the wheel with your approval; risky actions wait for your sign-off.
+- **Preview** Live co-drive sessions: others can watch, suggest, or take the wheel with your approval; risky actions wait for your sign-off.
 - **Preview** Clear boundaries: enable the Guardrail Gateway proxy + ledger to preview egress and capture an audit trail.
+- **Preview** Managed runtimes share accelerator capacity across collaborators with signed bundles and automatic fallbacks.
 - **Future** Fair splits: meter GPU time, tokens, and tasks for transparent revenue sharing later.
 
 > **Enable preview features** Add `[cluster]` with `enabled = true` to a config file the server already loads (for example `configs/default.toml`). If you store overrides elsewhere, export `ARW_CONFIG` or `ARW_CONFIG_DIR` so that file is discovered. Then set `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_EGRESS_LEDGER_ENABLE=1` to record previews.
@@ -38,6 +41,7 @@ Type: Explanation
 - A project world view tracks key facts, open questions, and constraints so agents act on evidence, not guesses.
 - Budgets for time, tokens, and spend; stay within plan with a visible meter.
 - Signed plugins and sandboxed tools by default.
+- Managed runtime supervisor respects guardrails: accelerator access is lease-gated, telemetry is recorded, and fallbacks never break privacy promises.
 
 ## Get Started
 - [Quickstart](guide/quickstart.md): run ARW locally in minutes.

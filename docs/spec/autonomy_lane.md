@@ -44,9 +44,10 @@ This lane is opt-in. Teams choose when to enter it and can fall back to Guided m
    - Metrics tile in the dashboard with heartbeat, spend, approvals bypassed, and overrides.
 
 5. **Audit hooks**
-   - Capsule guard leases auto-refresh and log any denial.
-   - All outbound requests and file writes tagged with the lane id.
-   - Run summary exported to the Trial Dossier archive.
+- Capsule guard leases auto-refresh and log any denial.
+- All outbound requests and file writes tagged with the lane id.
+- Run summary exported to the Trial Dossier archive.
+- Runtime supervisor hooks: accelerator/tier claims (`runtime.claim.*` events), voice/vision runtime enablement, and fallback rules are recorded alongside the lane audit trail.
 
 ## Rollout Plan
 

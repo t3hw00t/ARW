@@ -287,6 +287,14 @@ Platform & Policy
 
 Models & Orchestration
 - [Kernel] Model orchestration adapters (llama.cpp, ONNX Runtime) with pooling and profiles
+- [Kernel] Managed llama.cpp runtime supervisor: runtime registry, health probes, Launcher controls, `/state/runtimes`
+- [Kernel] Runtime adapter contract + docs (llama.cpp first, ONNX Runtime pilot)
+- [Pack: Collaboration] Launcher runtime panel: hardware probe, profile selector, per-project overrides
+- [Pack: Research] Orchestrator runtime claims + Autonomy Lane runtime gates (`runtime.claim.*` events, fallback policy)
+- [Kernel] Accelerator bundles: signed CUDA/ROCm/Metal/DirectML/CoreML/Vulkan builds + capability detection wizard
+- [Pack: Collaboration] Voice & Vision adapters (managed Whisper.cpp, llava.cpp) with Launcher consent flows
+- [Pack: Collaboration] Pointer & keyboard automation tools with high-trust leases, replay logging, and runtime supervisor integration
+- [Kernel] Multi-modal runtime schema updates (`/state/runtimes` modalities, policy gates); see docs/architecture/multimodal_runtime_plan.md
 - [Pack: Research] Capsules: record inputs/outputs/events/hints; export/import; deterministic replay
 
 Specs & Interop
