@@ -407,34 +407,30 @@ fn spawn_trust_store_watcher(state: AppState) -> TaskHandle {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use once_cell::sync::Lazy;
-    use std::{env, sync::Mutex};
-
-    static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+    use crate::test_support::env as test_env;
 
     #[test]
     fn enforce_admin_token_loopback_allowed_without_token() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        env::remove_var("ARW_ADMIN_TOKEN");
-        env::remove_var("ARW_ADMIN_TOKEN_SHA256");
+        let mut guard = test_env::guard();
+        guard.remove("ARW_ADMIN_TOKEN");
+        guard.remove("ARW_ADMIN_TOKEN_SHA256");
         assert!(enforce_admin_token_guard("127.0.0.1").is_ok());
         assert!(enforce_admin_token_guard("localhost").is_ok());
     }
 
     #[test]
     fn enforce_admin_token_requires_token_for_public_bind() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        env::remove_var("ARW_ADMIN_TOKEN");
-        env::remove_var("ARW_ADMIN_TOKEN_SHA256");
+        let mut guard = test_env::guard();
+        guard.remove("ARW_ADMIN_TOKEN");
+        guard.remove("ARW_ADMIN_TOKEN_SHA256");
         let err = enforce_admin_token_guard("0.0.0.0").unwrap_err();
         assert!(matches!(err, HttpConfigError::MissingAdminToken { .. }));
     }
 
     #[test]
     fn enforce_admin_token_allows_public_bind_with_token() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        env::set_var("ARW_ADMIN_TOKEN", "token");
+        let mut guard = test_env::guard();
+        guard.set("ARW_ADMIN_TOKEN", "token");
         assert!(enforce_admin_token_guard("0.0.0.0").is_ok());
-        env::remove_var("ARW_ADMIN_TOKEN");
     }
 }

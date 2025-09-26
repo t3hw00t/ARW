@@ -40,6 +40,8 @@ mod sse_cache;
 mod staging;
 mod state_observer;
 mod tasks;
+#[cfg(test)]
+mod test_support;
 mod tool_cache;
 mod tools;
 mod training;
@@ -133,7 +135,10 @@ async fn shutdown_signal() {
 #[allow(clippy::items_after_test_module)]
 mod http_tests {
     use super::*;
-    use crate::router::{self, paths};
+    use crate::{
+        router::{self, paths},
+        test_support::env,
+    };
     use arw_core::rpu;
     use arw_policy::PolicyEngine;
     use arw_protocol::GatingCapsule;
@@ -155,10 +160,10 @@ mod http_tests {
     use tokio::{sync::Mutex, time::timeout};
     use tower::util::ServiceExt;
 
-    async fn build_state(dir: &Path) -> AppState {
-        std::env::set_var("ARW_DEBUG", "1");
+    async fn build_state(dir: &Path, env_guard: &mut env::EnvGuard) -> AppState {
+        env_guard.set("ARW_DEBUG", "1");
         crate::util::reset_state_dir_for_tests();
-        std::env::set_var("ARW_STATE_DIR", dir.display().to_string());
+        env_guard.set("ARW_STATE_DIR", dir.display().to_string());
         let bus = arw_events::Bus::new_with_replay(64, 64);
         let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
         let policy = PolicyEngine::load_from_env();
@@ -234,8 +239,8 @@ mod http_tests {
         let temp = tempdir().expect("tempdir");
         let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state_dir = temp.path().to_path_buf();
-
-        let state = build_state(&state_dir).await;
+        let mut env_guard = env::guard();
+        let state = build_state(&state_dir, &mut env_guard).await;
         let _worker = worker::start_local_worker(state.clone());
         let app = router_with_actions(state);
 
@@ -297,7 +302,8 @@ mod http_tests {
         let temp = tempdir().expect("tempdir");
         let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
         let state_dir = temp.path().to_path_buf();
-        let state = build_state(&state_dir).await;
+        let mut env_guard = env::guard();
+        let state = build_state(&state_dir, &mut env_guard).await;
 
         let (router, _, _) = router::build_router();
         let app = router.with_state(state);
@@ -336,11 +342,12 @@ mod http_tests {
         let signing = SigningKey::from_bytes(&[7u8; 32]);
         let issuer = "test-issuer";
         write_trust_store(&trust_path, issuer, &signing);
-        std::env::set_var("ARW_TRUST_CAPSULES", trust_path.display().to_string());
+        let mut env_guard = env::guard();
+        env_guard.set("ARW_TRUST_CAPSULES", trust_path.display().to_string());
         rpu::reload_trust();
 
         let state_dir = temp.path().to_path_buf();
-        let state = build_state(&state_dir).await;
+        let state = build_state(&state_dir, &mut env_guard).await;
         let bus = state.bus();
         let mut rx = bus.subscribe_filtered(
             vec![
@@ -394,14 +401,14 @@ mod http_tests {
         let items = snapshot["items"].as_array().expect("capsule items");
         assert_eq!(items.len(), 1);
         assert_eq!(items[0]["id"].as_str(), Some("capsule-http"));
-
-        std::env::remove_var("ARW_TRUST_CAPSULES");
+        env_guard.remove("ARW_TRUST_CAPSULES");
     }
 
     #[tokio::test]
     async fn lease_creation_emits_event_and_updates_read_model() {
         let temp = tempdir().expect("tempdir");
-        let state = build_state(temp.path()).await;
+        let mut env_guard = env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
         let bus = state.bus();
         let mut rx = bus.subscribe_filtered(
             vec![

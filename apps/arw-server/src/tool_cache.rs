@@ -670,27 +670,24 @@ impl CacheCounters {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use once_cell::sync::Lazy;
-    use std::sync::Mutex;
+    use crate::test_support::env as test_env;
     use tempfile::tempdir;
 
-    static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
-
-    fn setup_env(dir: &std::path::Path) -> crate::util::StateDirTestGuard {
+    fn setup_env(
+        env_guard: &mut test_env::EnvGuard,
+        dir: &std::path::Path,
+    ) -> crate::util::StateDirTestGuard {
         let guard = crate::util::scoped_state_dir_for_tests(dir);
-        std::env::set_var("ARW_TOOLS_CACHE_CAP", "16");
-        std::env::set_var("ARW_TOOLS_CACHE_TTL_SECS", "60");
+        env_guard.set("ARW_TOOLS_CACHE_CAP", "16");
+        env_guard.set("ARW_TOOLS_CACHE_TTL_SECS", "60");
         guard
     }
 
     #[tokio::test]
     async fn cache_roundtrip() {
         let tmp = tempdir().unwrap();
-        let state_guard;
-        {
-            let _guard = ENV_LOCK.lock().unwrap();
-            state_guard = setup_env(tmp.path());
-        }
+        let mut env_guard = test_env::guard();
+        let state_guard = setup_env(&mut env_guard, tmp.path());
         let cache = ToolCache::new();
         assert!(cache.enabled());
         assert!(cache.is_cacheable("demo.echo"));
@@ -722,26 +719,18 @@ mod tests {
         assert_eq!(stats.latency_saved_ms_total, 32);
         assert_eq!(stats.latency_saved_samples, 1);
         assert!(stats.avg_hit_age_secs >= 0.0);
-        std::env::remove_var("ARW_TOOLS_CACHE_CAP");
-        std::env::remove_var("ARW_TOOLS_CACHE_TTL_SECS");
         drop(state_guard);
     }
 
     #[tokio::test]
     async fn allow_list_overrides_defaults() {
         let tmp = tempdir().unwrap();
-        let state_guard;
-        {
-            let _guard = ENV_LOCK.lock().unwrap();
-            state_guard = setup_env(tmp.path());
-            std::env::set_var("ARW_TOOLS_CACHE_ALLOW", "demo.echo");
-        }
+        let mut env_guard = test_env::guard();
+        let state_guard = setup_env(&mut env_guard, tmp.path());
+        env_guard.set("ARW_TOOLS_CACHE_ALLOW", "demo.echo");
         let cache = ToolCache::new();
         assert!(cache.is_cacheable("demo.echo"));
         assert!(!cache.is_cacheable("guardrails.check"));
-        std::env::remove_var("ARW_TOOLS_CACHE_ALLOW");
-        std::env::remove_var("ARW_TOOLS_CACHE_CAP");
-        std::env::remove_var("ARW_TOOLS_CACHE_TTL_SECS");
         drop(state_guard);
     }
 }

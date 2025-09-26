@@ -245,17 +245,14 @@ use screenshots_disabled as screenshots;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AppState;
+    use crate::{test_support::env as test_env, AppState};
     use arw_policy::PolicyEngine;
     use async_trait::async_trait;
-    use once_cell::sync::Lazy;
     use serde_json::json;
     use std::sync::atomic::{AtomicUsize, Ordering};
-    use std::sync::{Arc, Mutex as StdMutex};
+    use std::sync::Arc;
     use tokio::sync::Mutex;
     use tokio::time::{sleep, Duration};
-
-    static ENV_LOCK: Lazy<StdMutex<()>> = Lazy::new(|| StdMutex::new(()));
 
     #[derive(Clone)]
     struct SlowHost {
@@ -290,10 +287,10 @@ mod tests {
     async fn singleflight_coalesces_identical_tool_runs() {
         let temp = tempfile::tempdir().expect("tempdir");
         let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let _env_guard = ENV_LOCK.lock().unwrap();
-        std::env::set_var("ARW_TOOLS_CACHE_CAP", "8");
-        std::env::set_var("ARW_TOOLS_CACHE_TTL_SECS", "60");
-        std::env::set_var("ARW_TOOLS_CACHE_ALLOW", "custom.test");
+        let mut env_guard = test_env::guard();
+        env_guard.set("ARW_TOOLS_CACHE_CAP", "8");
+        env_guard.set("ARW_TOOLS_CACHE_TTL_SECS", "60");
+        env_guard.set("ARW_TOOLS_CACHE_ALLOW", "custom.test");
 
         let bus = arw_events::Bus::new_with_replay(8, 8);
         let kernel = arw_kernel::Kernel::open(temp.path()).expect("init kernel");
@@ -326,10 +323,6 @@ mod tests {
         assert_eq!(stats.miss, 1);
         assert_eq!(stats.hit, 1);
         assert_eq!(stats.coalesced, 1);
-
-        std::env::remove_var("ARW_TOOLS_CACHE_CAP");
-        std::env::remove_var("ARW_TOOLS_CACHE_TTL_SECS");
-        std::env::remove_var("ARW_TOOLS_CACHE_ALLOW");
     }
 
     #[cfg(not(feature = "tool_screenshots"))]

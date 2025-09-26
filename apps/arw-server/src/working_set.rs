@@ -1527,40 +1527,13 @@ pub fn default_streaming_enabled() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::env as test_env;
     use serde_json::json;
-    use std::sync::Mutex;
 
-    static ENV_LOCK: once_cell::sync::Lazy<Mutex<()>> =
-        once_cell::sync::Lazy::new(|| Mutex::new(()));
-
-    struct ContextEnvGuard {
-        saved: Vec<(&'static str, Option<String>)>,
-    }
-
-    impl ContextEnvGuard {
-        fn new() -> Self {
-            let saved = CONTEXT_ENV_KEYS
-                .iter()
-                .map(|&key| {
-                    let prev = std::env::var(key).ok();
-                    std::env::remove_var(key);
-                    (key, prev)
-                })
-                .collect();
-            Self { saved }
-        }
-    }
-
-    impl Drop for ContextEnvGuard {
-        fn drop(&mut self) {
-            for (key, value) in self.saved.iter() {
-                if let Some(value) = value {
-                    std::env::set_var(key, value);
-                } else {
-                    std::env::remove_var(key);
-                }
-            }
-        }
+    fn context_env_guard() -> test_env::EnvGuard {
+        let mut guard = test_env::guard();
+        guard.apply(CONTEXT_ENV_KEYS.iter().map(|&key| (key, None)));
+        guard
     }
 
     fn base_spec() -> WorkingSetSpec {
@@ -1594,8 +1567,7 @@ mod tests {
 
     #[test]
     fn normalize_applies_defaults_when_missing() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let _env = ContextEnvGuard::new();
+        let _env_guard = context_env_guard();
         let mut spec = base_spec();
         spec.expand_per_seed = 99;
         spec.normalize();
@@ -1613,8 +1585,7 @@ mod tests {
 
     #[test]
     fn normalize_trims_and_clamps_inputs() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let _env = ContextEnvGuard::new();
+        let _env_guard = context_env_guard();
         let mut spec = WorkingSetSpec {
             lanes: vec![
                 " procedural ".into(),
@@ -1651,8 +1622,7 @@ mod tests {
 
     #[test]
     fn snapshot_reflects_normalized_state() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let _env = ContextEnvGuard::new();
+        let _env_guard = context_env_guard();
         let mut spec = base_spec();
         spec.lanes = vec!["semantic".into()];
         spec.limit = 12;
@@ -1674,9 +1644,8 @@ mod tests {
 
     #[test]
     fn env_overrides_expand_query_default() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let _env = ContextEnvGuard::new();
-        std::env::set_var("ARW_CONTEXT_EXPAND_QUERY", "true");
+        let mut env_guard = context_env_guard();
+        env_guard.set("ARW_CONTEXT_EXPAND_QUERY", "true");
 
         assert!(default_expand_query());
 
@@ -1686,9 +1655,8 @@ mod tests {
 
     #[test]
     fn env_overrides_expand_query_top_k_default() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let _env = ContextEnvGuard::new();
-        std::env::set_var("ARW_CONTEXT_EXPAND_QUERY_TOP_K", "7");
+        let mut env_guard = context_env_guard();
+        env_guard.set("ARW_CONTEXT_EXPAND_QUERY_TOP_K", "7");
 
         assert_eq!(default_expand_query_top_k(), 7);
 
@@ -1700,9 +1668,8 @@ mod tests {
 
     #[test]
     fn env_overrides_streaming_default() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        let _env = ContextEnvGuard::new();
-        std::env::set_var("ARW_CONTEXT_STREAM_DEFAULT", "1");
+        let mut env_guard = context_env_guard();
+        env_guard.set("ARW_CONTEXT_STREAM_DEFAULT", "1");
 
         assert!(default_streaming_enabled());
     }

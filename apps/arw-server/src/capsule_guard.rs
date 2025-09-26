@@ -549,18 +549,13 @@ fn fingerprint_capsule(cap: &GatingCapsule) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::env as test_env;
     use arw_policy::PolicyEngine;
     use arw_topics::{TOPIC_POLICY_CAPSULE_FAILED, TOPIC_POLICY_DECISION, TOPIC_READMODEL_PATCH};
     use axum::http::{HeaderMap, HeaderValue};
-    use once_cell::sync::Lazy;
-    use std::{
-        path::Path,
-        sync::{Arc, Mutex as StdMutex},
-    };
+    use std::{path::Path, sync::Arc};
     use tempfile::tempdir;
     use tokio::time::{sleep, timeout, Duration};
-
-    static ENV_LOCK: Lazy<StdMutex<()>> = Lazy::new(|| StdMutex::new(()));
 
     #[test]
     fn parse_json_header() {
@@ -643,10 +638,10 @@ mod tests {
         }
     }
 
-    async fn build_state(dir: &Path) -> AppState {
-        std::env::set_var("ARW_DEBUG", "1");
+    async fn build_state(dir: &Path, env_guard: &mut test_env::EnvGuard) -> AppState {
+        env_guard.set("ARW_DEBUG", "1");
         crate::util::reset_state_dir_for_tests();
-        std::env::set_var("ARW_STATE_DIR", dir.display().to_string());
+        env_guard.set("ARW_STATE_DIR", dir.display().to_string());
         let bus = arw_events::Bus::new_with_replay(64, 64);
         let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
         let policy = PolicyEngine::load_from_env();
@@ -688,8 +683,6 @@ mod tests {
 
     #[tokio::test]
     async fn replay_all_renews_with_short_window_before_purging() {
-        let _guard = ENV_LOCK.lock().unwrap();
-
         let store = CapsuleStore::new();
         let mut capsule = sample_capsule("renewal-test");
         capsule.hop_ttl = None;
@@ -732,7 +725,8 @@ mod tests {
     async fn refresh_capsules_publishes_patch_on_state_change() {
         let temp = tempdir().expect("tempdir");
         let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path()).await;
+        let mut env_guard = test_env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
 
         let bus = state.bus();
         let mut rx = bus.subscribe_filtered(
@@ -769,28 +763,27 @@ mod tests {
 
     #[test]
     fn refresh_interval_respects_env_and_floor() {
-        let _guard = ENV_LOCK.lock().expect("env lock poisoned");
+        let mut env_guard = test_env::guard();
 
-        std::env::remove_var("ARW_CAPSULE_REFRESH_SECS");
+        env_guard.remove("ARW_CAPSULE_REFRESH_SECS");
         assert_eq!(refresh_interval_secs(), DEFAULT_REFRESH_SECS);
 
-        std::env::set_var("ARW_CAPSULE_REFRESH_SECS", "0");
+        env_guard.set("ARW_CAPSULE_REFRESH_SECS", "0");
         assert_eq!(refresh_interval_secs(), MIN_REFRESH_SECS);
 
-        std::env::set_var("ARW_CAPSULE_REFRESH_SECS", "7");
+        env_guard.set("ARW_CAPSULE_REFRESH_SECS", "7");
         assert_eq!(refresh_interval_secs(), 7);
 
-        std::env::set_var("ARW_CAPSULE_REFRESH_SECS", "not-a-number");
+        env_guard.set("ARW_CAPSULE_REFRESH_SECS", "not-a-number");
         assert_eq!(refresh_interval_secs(), DEFAULT_REFRESH_SECS);
-
-        std::env::remove_var("ARW_CAPSULE_REFRESH_SECS");
     }
 
     #[tokio::test]
     async fn legacy_header_returns_gone_and_emits_failure_events() {
         let temp = tempdir().expect("tempdir");
         let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path()).await;
+        let mut env_guard = test_env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
         let bus = state.bus();
         let mut rx = bus.subscribe_filtered(
             vec![

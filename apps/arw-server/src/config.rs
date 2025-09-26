@@ -209,47 +209,43 @@ mod tests {
         apply_effective_paths, init_cache_policy_from_manifest, kernel_enabled_from_env,
         load_initial_config_state, reset_effective_paths_for_tests,
     };
-    use once_cell::sync::Lazy;
-    use std::{env, fs, sync::Mutex};
+    use crate::test_support::env as test_env;
+    use std::{env, fs};
     use tempfile::tempdir;
-
-    static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
     #[test]
     fn default_true() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        env::remove_var("ARW_KERNEL_ENABLE");
+        let mut guard = test_env::guard();
+        guard.remove("ARW_KERNEL_ENABLE");
         assert!(kernel_enabled_from_env());
     }
 
     #[test]
     fn disabled_values() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let mut guard = test_env::guard();
         for value in ["0", "false", "False", "FALSE", " 0 ", " false "] {
-            env::set_var("ARW_KERNEL_ENABLE", value);
+            guard.set("ARW_KERNEL_ENABLE", value);
             assert!(!kernel_enabled_from_env(), "value {value:?}");
         }
-        env::remove_var("ARW_KERNEL_ENABLE");
     }
 
     #[test]
     fn enabled_values() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let mut guard = test_env::guard();
         for value in ["1", "true", "YES"] {
-            env::set_var("ARW_KERNEL_ENABLE", value);
+            guard.set("ARW_KERNEL_ENABLE", value);
             assert!(kernel_enabled_from_env(), "value {value:?}");
         }
-        env::remove_var("ARW_KERNEL_ENABLE");
     }
 
     #[test]
     fn apply_effective_paths_sets_env() {
-        let _guard = ENV_LOCK.lock().unwrap();
+        let mut guard = test_env::guard();
         reset_effective_paths_for_tests();
-        env::remove_var("ARW_CONFIG");
-        env::remove_var("ARW_STATE_DIR");
-        env::remove_var("ARW_CACHE_DIR");
-        env::remove_var("ARW_LOGS_DIR");
+        guard.remove("ARW_CONFIG");
+        guard.remove("ARW_STATE_DIR");
+        guard.remove("ARW_CACHE_DIR");
+        guard.remove("ARW_LOGS_DIR");
 
         let tmp = tempdir().unwrap();
         let cfg = tmp.path().join("bootstrap.toml");
@@ -263,7 +259,7 @@ mod tests {
             "#,
         )
         .unwrap();
-        env::set_var("ARW_CONFIG", cfg.to_string_lossy().to_string());
+        guard.set("ARW_CONFIG", cfg.to_string_lossy().to_string());
 
         let paths = apply_effective_paths();
         assert_eq!(paths.state_dir, "./tmp_state".replace('\\', "/"));
@@ -271,17 +267,13 @@ mod tests {
         assert_eq!(env::var("ARW_CACHE_DIR").unwrap(), paths.cache_dir);
         assert_eq!(env::var("ARW_LOGS_DIR").unwrap(), paths.logs_dir);
 
-        env::remove_var("ARW_CONFIG");
-        env::remove_var("ARW_STATE_DIR");
-        env::remove_var("ARW_CACHE_DIR");
-        env::remove_var("ARW_LOGS_DIR");
         reset_effective_paths_for_tests();
     }
 
     #[test]
     fn load_initial_config_state_reads_file() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        env::remove_var("ARW_CONFIG");
+        let mut guard = test_env::guard();
+        guard.remove("ARW_CONFIG");
 
         let tmp = tempdir().unwrap();
         let cfg = tmp.path().join("bootstrap.toml");
@@ -293,7 +285,7 @@ mod tests {
             "#,
         )
         .unwrap();
-        env::set_var("ARW_CONFIG", cfg.to_string_lossy().to_string());
+        guard.set("ARW_CONFIG", cfg.to_string_lossy().to_string());
 
         let initial = load_initial_config_state();
         assert_eq!(
@@ -302,17 +294,15 @@ mod tests {
         );
         assert!(initial.value.get("runtime").is_some());
         assert_eq!(initial.history.len(), 1);
-
-        env::remove_var("ARW_CONFIG");
     }
 
     #[test]
     fn init_cache_policy_from_manifest_sets_env() {
-        let _guard = ENV_LOCK.lock().unwrap();
-        env::remove_var("ARW_CACHE_POLICY_FILE");
-        env::remove_var("ARW_TOOLS_CACHE_TTL_SECS");
-        env::remove_var("ARW_ROUTE_STATS_COALESCE_MS");
-        env::remove_var("ARW_MODELS_METRICS_COALESCE_MS");
+        let mut guard = test_env::guard();
+        guard.remove("ARW_CACHE_POLICY_FILE");
+        guard.remove("ARW_TOOLS_CACHE_TTL_SECS");
+        guard.remove("ARW_ROUTE_STATS_COALESCE_MS");
+        guard.remove("ARW_MODELS_METRICS_COALESCE_MS");
 
         let tmp = tempdir().unwrap();
         let manifest = tmp.path().join("cache_policy.yaml");
@@ -329,7 +319,7 @@ cache:
         )
         .unwrap();
 
-        env::set_var(
+        guard.set(
             "ARW_CACHE_POLICY_FILE",
             manifest.to_string_lossy().to_string(),
         );
@@ -339,10 +329,5 @@ cache:
         assert_eq!(env::var("ARW_TOOLS_CACHE_TTL_SECS").unwrap(), "900");
         assert_eq!(env::var("ARW_ROUTE_STATS_COALESCE_MS").unwrap(), "300");
         assert_eq!(env::var("ARW_MODELS_METRICS_COALESCE_MS").unwrap(), "300");
-
-        env::remove_var("ARW_CACHE_POLICY_FILE");
-        env::remove_var("ARW_TOOLS_CACHE_TTL_SECS");
-        env::remove_var("ARW_ROUTE_STATS_COALESCE_MS");
-        env::remove_var("ARW_MODELS_METRICS_COALESCE_MS");
     }
 }

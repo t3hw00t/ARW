@@ -248,27 +248,36 @@ pub async fn events_sse(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{read_models, AppState};
+    use crate::{read_models, test_support::env, AppState};
     use arw_topics::TOPIC_READMODEL_PATCH;
     use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
+    use hex;
     use http_body_util::BodyExt;
     use json_patch::Patch;
-    use serde_json::json;
+    use serde_json::{json, Value};
     use sha2::Digest;
     use std::{collections::HashMap, sync::Arc, time::Duration};
     use tempfile::tempdir;
     use tokio::{sync::Mutex, time::timeout};
 
-    async fn build_state(path: &std::path::Path) -> AppState {
-        std::env::set_var("ARW_DEBUG", "1");
+    async fn build_state(path: &std::path::Path, env_guard: &mut env::EnvGuard) -> AppState {
+        build_state_with_kernel(path, env_guard, true).await
+    }
+
+    async fn build_state_with_kernel(
+        path: &std::path::Path,
+        env_guard: &mut env::EnvGuard,
+        kernel_enabled: bool,
+    ) -> AppState {
+        env_guard.set("ARW_DEBUG", "1");
         crate::util::reset_state_dir_for_tests();
-        std::env::set_var("ARW_STATE_DIR", path.display().to_string());
+        env_guard.set("ARW_STATE_DIR", path.display().to_string());
         let bus = arw_events::Bus::new_with_replay(64, 64);
         let kernel = arw_kernel::Kernel::open(path).expect("init kernel for tests");
         let policy = arw_policy::PolicyEngine::load_from_env();
         let policy_arc = Arc::new(Mutex::new(policy));
         let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
-        AppState::builder(bus, kernel, policy_arc, host, true)
+        AppState::builder(bus, kernel, policy_arc, host, kernel_enabled)
             .with_sse_capacity(64)
             .build()
             .await
@@ -311,9 +320,10 @@ mod tests {
 
     #[tokio::test]
     async fn events_sse_replays_read_model_patches() {
+        let mut env_guard = env::guard();
         let temp = tempdir().expect("tempdir");
         let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path()).await;
+        let state = build_state(temp.path(), &mut env_guard).await;
 
         let bus = state.bus();
         let mut rx = bus.subscribe();
@@ -434,9 +444,10 @@ mod tests {
 
     #[tokio::test]
     async fn events_sse_replays_projects_patch() {
+        let mut env_guard = env::guard();
         let temp = tempdir().expect("tempdir");
         let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path()).await;
+        let state = build_state(temp.path(), &mut env_guard).await;
 
         let bus = state.bus();
         let mut rx = bus.subscribe();
@@ -556,5 +567,79 @@ mod tests {
 
         let no_event = timeout(Duration::from_millis(100), resume_body.frame()).await;
         assert!(no_event.is_err(), "unexpected replay events after resume");
+    }
+
+    #[tokio::test]
+    async fn events_sse_requires_auth_without_token() {
+        let mut env_guard = env::guard();
+        let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let state = build_state(temp.path(), &mut env_guard).await;
+
+        env_guard.set("ARW_DEBUG", "0");
+        env_guard.set("ARW_ADMIN_TOKEN", "secret-token");
+
+        let response = events_sse(State(state), Query(HashMap::new()), HeaderMap::new())
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        env_guard.remove("ARW_ADMIN_TOKEN");
+        env_guard.remove("ARW_DEBUG");
+    }
+
+    #[tokio::test]
+    async fn events_sse_rejects_replay_when_kernel_disabled() {
+        let mut env_guard = env::guard();
+        let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let state = build_state_with_kernel(temp.path(), &mut env_guard, false).await;
+
+        env_guard.set("ARW_DEBUG", "1");
+
+        let mut params = HashMap::new();
+        params.insert("after".to_string(), "1".to_string());
+
+        let response = events_sse(State(state), Query(params), HeaderMap::new())
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::NOT_IMPLEMENTED);
+
+        let body_bytes = response
+            .into_body()
+            .collect()
+            .await
+            .expect("collect body")
+            .to_bytes();
+        let body_json: Value = serde_json::from_slice(&body_bytes).expect("json body");
+        assert_eq!(body_json["title"].as_str(), Some("Kernel Disabled"));
+        assert_eq!(body_json["status"].as_u64(), Some(501));
+
+        env_guard.remove("ARW_DEBUG");
+    }
+
+    #[tokio::test]
+    async fn events_sse_accepts_hashed_admin_token() {
+        let mut env_guard = env::guard();
+        let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let state = build_state(temp.path(), &mut env_guard).await;
+
+        env_guard.set("ARW_DEBUG", "0");
+        env_guard.remove("ARW_ADMIN_TOKEN");
+        let presented = "secret-token";
+        let digest = sha2::Sha256::digest(presented.as_bytes());
+        env_guard.set("ARW_ADMIN_TOKEN_SHA256", hex::encode(digest));
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            HeaderValue::from_str(&format!("Bearer {}", presented)).expect("header value"),
+        );
+
+        let response = events_sse(State(state), Query(HashMap::new()), headers)
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
     }
 }

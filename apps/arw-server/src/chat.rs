@@ -593,16 +593,16 @@ async fn record_egress(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::AppState;
+    use crate::{test_support::env, AppState};
     use arw_policy::PolicyEngine;
     use serde_json::json;
     use std::sync::Arc;
     use tokio::sync::Mutex;
 
-    async fn build_state(path: &std::path::Path) -> AppState {
-        std::env::set_var("ARW_DEBUG", "1");
+    async fn build_state(path: &std::path::Path, env_guard: &mut env::EnvGuard) -> AppState {
+        env_guard.set("ARW_DEBUG", "1");
         crate::util::reset_state_dir_for_tests();
-        std::env::set_var("ARW_STATE_DIR", path.display().to_string());
+        env_guard.set("ARW_STATE_DIR", path.display().to_string());
         let bus = arw_events::Bus::new_with_replay(8, 8);
         let kernel = arw_kernel::Kernel::open(path).expect("init kernel");
         let policy = PolicyEngine::load_from_env();
@@ -618,7 +618,8 @@ mod tests {
     async fn tool_defaults_to_synthetic() {
         let temp = tempfile::tempdir().expect("tempdir");
         let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path()).await;
+        let mut env_guard = env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
         let output = run_chat_tool(&state, json!({"prompt": "hi"}))
             .await
             .expect("tool output");
@@ -630,7 +631,8 @@ mod tests {
     async fn chat_state_tracks_history() {
         let temp = tempfile::tempdir().expect("tempdir");
         let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path()).await;
+        let mut env_guard = env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
         let outcome = state
             .chat()
             .send(&state, "hello", ChatSendOptions::default())

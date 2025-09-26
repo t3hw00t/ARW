@@ -357,8 +357,8 @@ fn null_value() -> Value {
 mod tests {
     use super::*;
     use crate::{
-        capsule_guard, cluster, experiments, feedback, governor, metrics, models, tool_cache,
-        worker,
+        capsule_guard, cluster, experiments, feedback, governor, metrics, models,
+        test_support::env, tool_cache, worker,
     };
     use arw_events::Bus;
     use arw_policy::PolicyEngine;
@@ -369,10 +369,10 @@ mod tests {
     use tempfile::tempdir;
     use tokio::time::{sleep, timeout};
 
-    async fn build_state(dir: &Path) -> AppState {
-        std::env::set_var("ARW_DEBUG", "1");
+    async fn build_state(dir: &Path, env_guard: &mut env::EnvGuard) -> AppState {
+        env_guard.set("ARW_DEBUG", "1");
         crate::util::reset_state_dir_for_tests();
-        std::env::set_var("ARW_STATE_DIR", dir.display().to_string());
+        env_guard.set("ARW_STATE_DIR", dir.display().to_string());
         let bus = Bus::new_with_replay(64, 64);
         let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
         let policy = PolicyEngine::load_from_env();
@@ -417,7 +417,8 @@ mod tests {
     async fn health_and_action_roundtrip() {
         let temp = tempdir().expect("tempdir");
         let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path()).await;
+        let mut env_guard = env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
         let _worker = worker::start_local_worker(state.clone());
         let service = ArwGrpcService {
             state: state.clone(),

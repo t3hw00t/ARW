@@ -691,51 +691,21 @@ pub(crate) async fn leases_snapshot(state: &AppState) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::env;
     use arw_events::Envelope;
     use arw_policy::PolicyEngine;
     use arw_topics as topics;
     use json_patch::Patch;
-    use once_cell::sync::Lazy;
     use serde_json::Value;
-    use std::sync::{Arc, Mutex as StdMutex, MutexGuard as StdMutexGuard};
+    use std::sync::Arc;
     use tempfile::tempdir;
     use tokio::sync::Mutex;
     use tokio::time::timeout;
 
-    static ENV_MUTEX: Lazy<StdMutex<()>> = Lazy::new(|| StdMutex::new(()));
-
-    struct EnvGuard {
-        _lock: StdMutexGuard<'static, ()>,
-        prev: Vec<(&'static str, Option<String>)>,
-    }
-
-    impl EnvGuard {
-        fn set(pairs: &[(&'static str, &str)]) -> Self {
-            let lock = ENV_MUTEX.lock().expect("env mutex");
-            let mut prev = Vec::new();
-            for (key, value) in pairs {
-                prev.push((*key, std::env::var(key).ok()));
-                std::env::set_var(key, value);
-            }
-            Self { _lock: lock, prev }
-        }
-    }
-
-    impl Drop for EnvGuard {
-        fn drop(&mut self) {
-            for (key, maybe_val) in &self.prev {
-                match maybe_val {
-                    Some(val) => std::env::set_var(key, val),
-                    None => std::env::remove_var(key),
-                }
-            }
-        }
-    }
-
-    async fn build_state(path: &std::path::Path) -> AppState {
-        std::env::set_var("ARW_DEBUG", "1");
+    async fn build_state(path: &std::path::Path, env_guard: &mut env::EnvGuard) -> AppState {
+        env_guard.set("ARW_DEBUG", "1");
         crate::util::reset_state_dir_for_tests();
-        std::env::set_var("ARW_STATE_DIR", path.display().to_string());
+        env_guard.set("ARW_STATE_DIR", path.display().to_string());
         let bus = arw_events::Bus::new_with_replay(32, 32);
         let kernel = arw_kernel::Kernel::open(path).expect("init kernel");
         let policy = PolicyEngine::load_from_env();
@@ -751,13 +721,14 @@ mod tests {
     async fn snappy_publishes_patch_and_notice() {
         let temp = tempdir().expect("tempdir");
         let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path()).await;
+        let mut env_guard = env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
 
-        let _env_guard = EnvGuard::set(&[
-            ("ARW_SNAPPY_PUBLISH_MS", "10"),
-            ("ARW_SNAPPY_FULL_RESULT_P95_MS", "15"),
-            ("ARW_SNAPPY_PROTECTED_ENDPOINTS", "/state/"),
-            ("ARW_SNAPPY_DETAIL_EVERY", "0"),
+        env_guard.apply([
+            ("ARW_SNAPPY_PUBLISH_MS", Some("10")),
+            ("ARW_SNAPPY_FULL_RESULT_P95_MS", Some("15")),
+            ("ARW_SNAPPY_PROTECTED_ENDPOINTS", Some("/state/")),
+            ("ARW_SNAPPY_DETAIL_EVERY", Some("0")),
         ]);
 
         state.metrics().record_route("/state/routes", 200, 30);
@@ -808,7 +779,7 @@ mod tests {
 
     #[test]
     fn snappy_detail_emission_respects_interval() {
-        let _env_guard = EnvGuard::set(&[]);
+        let _env_guard = env::guard();
         let mut config = SnappyConfig::from_env();
         config.detail_every = Some(Duration::from_millis(50));
         let mut governor = SnappyGovernorState::new(config);
