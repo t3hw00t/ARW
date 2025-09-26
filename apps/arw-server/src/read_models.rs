@@ -88,7 +88,8 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
         |st| async move {
             let summary = st.metrics().snapshot();
             let bus = st.bus().stats();
-            Some(metrics::route_stats_snapshot(&summary, &bus))
+            let cache = st.tool_cache().stats();
+            Some(metrics::route_stats_snapshot(&summary, &bus, &cache))
         },
     ));
 

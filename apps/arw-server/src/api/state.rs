@@ -87,7 +87,8 @@ pub async fn state_episodes(
 pub async fn state_route_stats(State(state): State<AppState>) -> impl IntoResponse {
     let summary = state.metrics().snapshot();
     let bus = state.bus().stats();
-    Json(metrics::route_stats_snapshot(&summary, &bus))
+    let cache = state.tool_cache().stats();
+    Json(metrics::route_stats_snapshot(&summary, &bus, &cache))
 }
 
 /// Background tasks status snapshot.

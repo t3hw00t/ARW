@@ -1,4 +1,9 @@
-use crate::{admin_ok, metrics::MetricsSummary, AppState};
+use crate::{
+    admin_ok,
+    metrics::{cache_stats_snapshot, MetricsSummary},
+    tool_cache::ToolCacheStats,
+    AppState,
+};
 use axum::http::{HeaderMap, HeaderValue};
 use axum::response::{IntoResponse, Response};
 use axum::{extract::State, Json};
@@ -42,7 +47,11 @@ fn write_metric_line(
     }
 }
 
-fn render_prometheus(summary: &MetricsSummary, bus: &arw_events::BusStats) -> String {
+fn render_prometheus(
+    summary: &MetricsSummary,
+    bus: &arw_events::BusStats,
+    cache: &ToolCacheStats,
+) -> String {
     let mut out = String::new();
     out.push_str(
         "# HELP arw_bus_published_total Events published\n# TYPE arw_bus_published_total counter\n",
@@ -121,6 +130,113 @@ fn render_prometheus(summary: &MetricsSummary, bus: &arw_events::BusStats) -> St
         &[],
         summary.compatibility.legacy_capsule_headers,
     );
+
+    out.push_str("# HELP arw_tool_cache_hits_total Tool cache hits\n# TYPE arw_tool_cache_hits_total counter\n");
+    write_metric_line(&mut out, "arw_tool_cache_hits_total", &[], cache.hit);
+    out.push_str("# HELP arw_tool_cache_miss_total Tool cache misses\n# TYPE arw_tool_cache_miss_total counter\n");
+    write_metric_line(&mut out, "arw_tool_cache_miss_total", &[], cache.miss);
+    out.push_str("# HELP arw_tool_cache_coalesced_total Tool cache coalesced waiters\n# TYPE arw_tool_cache_coalesced_total counter\n");
+    write_metric_line(
+        &mut out,
+        "arw_tool_cache_coalesced_total",
+        &[],
+        cache.coalesced,
+    );
+    out.push_str("# HELP arw_tool_cache_errors_total Tool cache errors\n# TYPE arw_tool_cache_errors_total counter\n");
+    write_metric_line(&mut out, "arw_tool_cache_errors_total", &[], cache.errors);
+    out.push_str("# HELP arw_tool_cache_bypass_total Tool cache bypasses\n# TYPE arw_tool_cache_bypass_total counter\n");
+    write_metric_line(&mut out, "arw_tool_cache_bypass_total", &[], cache.bypass);
+    out.push_str("# HELP arw_tool_cache_entries Tool cache entry count\n# TYPE arw_tool_cache_entries gauge\n");
+    write_metric_line(&mut out, "arw_tool_cache_entries", &[], cache.entries);
+    out.push_str("# HELP arw_tool_cache_latency_saved_ms_total Latency saved via cache (ms)\n# TYPE arw_tool_cache_latency_saved_ms_total counter\n");
+    write_metric_line(
+        &mut out,
+        "arw_tool_cache_latency_saved_ms_total",
+        &[],
+        cache.latency_saved_ms_total,
+    );
+    out.push_str("# HELP arw_tool_cache_latency_saved_samples_total Latency saved samples\n# TYPE arw_tool_cache_latency_saved_samples_total counter\n");
+    write_metric_line(
+        &mut out,
+        "arw_tool_cache_latency_saved_samples_total",
+        &[],
+        cache.latency_saved_samples,
+    );
+    out.push_str("# HELP arw_tool_cache_payload_bytes_saved_total Payload bytes saved via cache\n# TYPE arw_tool_cache_payload_bytes_saved_total counter\n");
+    write_metric_line(
+        &mut out,
+        "arw_tool_cache_payload_bytes_saved_total",
+        &[],
+        cache.payload_bytes_saved_total,
+    );
+    out.push_str("# HELP arw_tool_cache_payload_saved_samples_total Payload saved samples\n# TYPE arw_tool_cache_payload_saved_samples_total counter\n");
+    write_metric_line(
+        &mut out,
+        "arw_tool_cache_payload_saved_samples_total",
+        &[],
+        cache.payload_saved_samples,
+    );
+    out.push_str("# HELP arw_tool_cache_avg_latency_saved_ms Average latency saved per sample\n# TYPE arw_tool_cache_avg_latency_saved_ms gauge\n");
+    write_metric_line(
+        &mut out,
+        "arw_tool_cache_avg_latency_saved_ms",
+        &[],
+        cache.avg_latency_saved_ms,
+    );
+    out.push_str("# HELP arw_tool_cache_avg_payload_bytes_saved Average payload bytes saved per sample\n# TYPE arw_tool_cache_avg_payload_bytes_saved gauge\n");
+    write_metric_line(
+        &mut out,
+        "arw_tool_cache_avg_payload_bytes_saved",
+        &[],
+        cache.avg_payload_bytes_saved,
+    );
+    out.push_str("# HELP arw_tool_cache_avg_hit_age_secs Average age of cache hits\n# TYPE arw_tool_cache_avg_hit_age_secs gauge\n");
+    write_metric_line(
+        &mut out,
+        "arw_tool_cache_avg_hit_age_secs",
+        &[],
+        cache.avg_hit_age_secs,
+    );
+    out.push_str("# HELP arw_tool_cache_hit_age_samples_total Cache hit age samples\n# TYPE arw_tool_cache_hit_age_samples_total counter\n");
+    write_metric_line(
+        &mut out,
+        "arw_tool_cache_hit_age_samples_total",
+        &[],
+        cache.hit_age_samples,
+    );
+    out.push_str("# HELP arw_tool_cache_last_hit_age_secs Last observed cache hit age\n# TYPE arw_tool_cache_last_hit_age_secs gauge\n");
+    if let Some(last_age) = cache.last_hit_age_secs {
+        write_metric_line(&mut out, "arw_tool_cache_last_hit_age_secs", &[], last_age);
+    }
+    out.push_str("# HELP arw_tool_cache_max_hit_age_secs Max observed cache hit age\n# TYPE arw_tool_cache_max_hit_age_secs gauge\n");
+    if let Some(max_age) = cache.max_hit_age_secs {
+        write_metric_line(&mut out, "arw_tool_cache_max_hit_age_secs", &[], max_age);
+    }
+    out.push_str("# HELP arw_tool_cache_stampede_suppression_rate Stampede suppression rate\n# TYPE arw_tool_cache_stampede_suppression_rate gauge\n");
+    write_metric_line(
+        &mut out,
+        "arw_tool_cache_stampede_suppression_rate",
+        &[],
+        cache.stampede_suppression_rate,
+    );
+    out.push_str("# HELP arw_tool_cache_last_latency_saved_ms Last observed latency saved\n# TYPE arw_tool_cache_last_latency_saved_ms gauge\n");
+    if let Some(last_saved) = cache.last_latency_saved_ms {
+        write_metric_line(
+            &mut out,
+            "arw_tool_cache_last_latency_saved_ms",
+            &[],
+            last_saved,
+        );
+    }
+    out.push_str("# HELP arw_tool_cache_last_payload_bytes Last observed payload bytes\n# TYPE arw_tool_cache_last_payload_bytes gauge\n");
+    if let Some(last_payload) = cache.last_payload_bytes {
+        write_metric_line(
+            &mut out,
+            "arw_tool_cache_last_payload_bytes",
+            &[],
+            last_payload,
+        );
+    }
     out
 }
 
@@ -133,7 +249,8 @@ fn render_prometheus(summary: &MetricsSummary, bus: &arw_events::BusStats) -> St
 pub async fn metrics_prometheus(State(state): State<AppState>) -> Response {
     let summary = state.metrics().snapshot();
     let bus_stats = state.bus().stats();
-    let body = render_prometheus(&summary, &bus_stats);
+    let cache_stats = state.tool_cache().stats();
+    let body = render_prometheus(&summary, &bus_stats, &cache_stats);
     let mut response = Response::new(body.into());
     response.headers_mut().insert(
         axum::http::header::CONTENT_TYPE,
@@ -157,11 +274,13 @@ pub async fn metrics_overview(headers: HeaderMap, State(state): State<AppState>)
     }
     let summary = state.metrics().snapshot();
     let bus = state.bus().stats();
+    let cache_stats = state.tool_cache().stats();
     Json(json!({
         "events": summary.events,
         "routes": summary.routes,
         "tasks": summary.tasks,
         "compatibility": summary.compatibility,
+        "cache": cache_stats_snapshot(&cache_stats),
         "bus": {
             "published": bus.published,
             "delivered": bus.delivered,

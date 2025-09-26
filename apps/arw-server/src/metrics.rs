@@ -11,6 +11,8 @@ use std::time::Instant;
 
 use arw_events::BusStats;
 
+use crate::tool_cache::ToolCacheStats;
+
 const SAMPLE_WINDOW: usize = 50;
 const EWMA_ALPHA: f64 = 0.2;
 
@@ -363,7 +365,11 @@ impl Metrics {
     }
 }
 
-pub fn route_stats_snapshot(summary: &MetricsSummary, bus: &BusStats) -> Value {
+pub fn route_stats_snapshot(
+    summary: &MetricsSummary,
+    bus: &BusStats,
+    cache: &ToolCacheStats,
+) -> Value {
     json!({
         "bus": {
             "published": bus.published,
@@ -375,6 +381,33 @@ pub fn route_stats_snapshot(summary: &MetricsSummary, bus: &BusStats) -> Value {
         "events": summary.events,
         "routes": summary.routes,
         "tasks": summary.tasks,
+        "cache": cache_stats_snapshot(cache),
+    })
+}
+
+pub fn cache_stats_snapshot(cache: &ToolCacheStats) -> Value {
+    json!({
+        "hit": cache.hit,
+        "miss": cache.miss,
+        "coalesced": cache.coalesced,
+        "errors": cache.errors,
+        "bypass": cache.bypass,
+        "capacity": cache.capacity,
+        "ttl_secs": cache.ttl_secs,
+        "entries": cache.entries,
+        "latency_saved_ms_total": cache.latency_saved_ms_total,
+        "latency_saved_samples": cache.latency_saved_samples,
+        "avg_latency_saved_ms": cache.avg_latency_saved_ms,
+        "payload_bytes_saved_total": cache.payload_bytes_saved_total,
+        "payload_saved_samples": cache.payload_saved_samples,
+        "avg_payload_bytes_saved": cache.avg_payload_bytes_saved,
+        "avg_hit_age_secs": cache.avg_hit_age_secs,
+        "hit_age_samples": cache.hit_age_samples,
+        "last_hit_age_secs": cache.last_hit_age_secs,
+        "max_hit_age_secs": cache.max_hit_age_secs,
+        "stampede_suppression_rate": cache.stampede_suppression_rate,
+        "last_latency_saved_ms": cache.last_latency_saved_ms,
+        "last_payload_bytes": cache.last_payload_bytes,
     })
 }
 

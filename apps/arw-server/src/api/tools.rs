@@ -6,7 +6,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 use utoipa::ToSchema;
 
-use crate::{admin_ok, tools, AppState};
+use crate::{admin_ok, metrics::cache_stats_snapshot, tools, AppState};
 
 fn unauthorized() -> Response {
     (
@@ -174,15 +174,5 @@ pub async fn tools_cache_stats(
         return unauthorized();
     }
     let stats = state.tool_cache().stats();
-    Json(json!({
-        "hit": stats.hit,
-        "miss": stats.miss,
-        "coalesced": stats.coalesced,
-        "errors": stats.errors,
-        "bypass": stats.bypass,
-        "capacity": stats.capacity,
-        "ttl_secs": stats.ttl_secs,
-        "entries": stats.entries,
-    }))
-    .into_response()
+    Json(cache_stats_snapshot(&stats)).into_response()
 }

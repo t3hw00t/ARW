@@ -26,6 +26,7 @@ fn publish_cache_hit(
     hit: &ToolCacheHit,
     outcome: &str,
     elapsed_ms: u64,
+    latency_saved_ms: Option<u64>,
 ) -> Value {
     metrics::counter!(METRIC_CACHE_HIT, 1);
     if outcome == "coalesced" {
@@ -41,6 +42,12 @@ fn publish_cache_hit(
         "cached": true,
         "age_secs": hit.age_secs,
     });
+    if let Some(bytes) = hit.payload_bytes {
+        cache_evt["payload_bytes"] = json!(bytes);
+    }
+    if let Some(saved) = latency_saved_ms {
+        cache_evt["latency_saved_ms"] = json!(saved);
+    }
     ensure_corr(&mut cache_evt);
     bus.publish(topics::TOPIC_TOOL_CACHE, &cache_evt);
 
@@ -69,7 +76,8 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
     if let Some(ref key) = cache_key {
         if let Some(hit) = cache.lookup(key).await {
             let elapsed_ms = start.elapsed().as_millis() as u64;
-            let value = publish_cache_hit(&bus, id, key, &hit, "hit", elapsed_ms);
+            let saved_ms = cache.record_hit_metrics(key, &hit, elapsed_ms);
+            let value = publish_cache_hit(&bus, id, key, &hit, "hit", elapsed_ms, saved_ms);
             return Ok(value);
         }
 
@@ -86,7 +94,9 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
 
             if let Some(hit) = cache.lookup(key).await {
                 let elapsed_ms = start.elapsed().as_millis() as u64;
-                let value = publish_cache_hit(&bus, id, key, &hit, "coalesced", elapsed_ms);
+                let saved_ms = cache.record_hit_metrics(key, &hit, elapsed_ms);
+                let value =
+                    publish_cache_hit(&bus, id, key, &hit, "coalesced", elapsed_ms, saved_ms);
                 return Ok(value);
             }
         }
@@ -104,10 +114,12 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
     let elapsed_ms = start.elapsed().as_millis() as u64;
 
     if let Some(ref key) = cache_key {
-        match cache.store(key, &output).await {
+        match cache.store(key, &output, elapsed_ms).await {
             Some(StoreOutcome {
                 digest,
                 cached: true,
+                payload_bytes,
+                miss_elapsed_ms,
             }) => {
                 metrics::counter!(METRIC_CACHE_MISS, 1);
                 let mut cache_evt = json!({
@@ -118,6 +130,8 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
                     "digest": digest,
                     "cached": true,
                     "age_secs": Value::Null,
+                    "payload_bytes": payload_bytes,
+                    "miss_elapsed_ms": miss_elapsed_ms,
                 });
                 ensure_corr(&mut cache_evt);
                 bus.publish(topics::TOPIC_TOOL_CACHE, &cache_evt);
@@ -125,6 +139,8 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
             Some(StoreOutcome {
                 digest,
                 cached: false,
+                payload_bytes,
+                miss_elapsed_ms,
             }) => {
                 metrics::counter!(METRIC_CACHE_ERROR, 1);
                 let mut cache_evt = json!({
@@ -135,6 +151,8 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
                     "digest": digest,
                     "cached": false,
                     "reason": "store_failed",
+                    "payload_bytes": payload_bytes,
+                    "miss_elapsed_ms": miss_elapsed_ms,
                 });
                 ensure_corr(&mut cache_evt);
                 bus.publish(topics::TOPIC_TOOL_CACHE, &cache_evt);
