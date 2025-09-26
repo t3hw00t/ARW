@@ -4,13 +4,11 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-25 09:14 UTC
+Updated: 2025-09-26 13:52 UTC
 
 
 ## To Do
 - [trial-visual-kit] Design trial visual kit — todo (updated: 2025-09-26 12:30 UTC)
-- [autonomy-rollback-playbook] Autonomy rollback drills — todo (updated: 2025-09-26 12:30 UTC)
-- [autonomy-lane-spec] Author Autonomy Lane ADR — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-autonomy-governor] Autonomy governor & kill switch — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g3] Gate G3: Trial operations — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g2] Gate G2: Calm approvals — todo (updated: 2025-09-26 12:30 UTC)
@@ -26,6 +24,10 @@ Updated: 2025-09-25 09:14 UTC
 ## Paused
 
 ## Done
+- [autonomy-rollback-playbook] Autonomy rollback drills — done (updated: 2025-09-26 13:52:05 UTC)
+  - 2025-09-26 13:52:05 UTC: Authored autonomy rollback playbook, shipped automation helper (`scripts/autonomy_rollback.sh`), and documented usage.
+- [autonomy-lane-spec] Author Autonomy Lane ADR — done (updated: 2025-09-26 13:52:05 UTC)
+  - 2025-09-26 13:52:05 UTC: Autonomy Lane charter accepted; expanded contract, telemetry, and rollback alignment.
 - [t-phase-a-03] Phase B kickoff — done (updated: 2025-09-26 00:15:00 UTC)
     - 2025-09-22 23:52:00 UTC: Assigned alice to Memory Lanes (ETA 2025-10-03), bob to Project Hub primitives (ETA 2025-10-10), carla to Project Map read models (ETA 2025-10-17).
   - 2025-09-26 00:15:00 UTC: Confirmed hand-off with owners; restructure board closed with Phase B milestones tracked in backlog instead of the restructure gate.

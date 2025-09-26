@@ -47,6 +47,7 @@ Fully autonomous helpers stay behind an extra gate (G4). Before we schedule that
 
 - Publish the **Autonomy Lane Charter** ([spec/autonomy_lane.md](../spec/autonomy_lane.md)) so everyone knows the sandbox rules.
 - Finish the autonomy governor, kill switch, and rollback drills (tasks `trial-autonomy-governor`, `autonomy-rollback-playbook`).
+- Rehearse the automation helper: `ARW_ADMIN_TOKEN=<token> just autonomy-rollback lane=<lane_id> project=<project_id>`; log results in the trial dossier.
 - Add an autonomy tile to the Trial Control Center plus a quick “Stop now” button.
 - Rehearse synthetic workloads twice (for example, a fake e-commerce shop) before inviting real users.
 

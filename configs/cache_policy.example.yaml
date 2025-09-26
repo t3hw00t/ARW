@@ -1,38 +1,32 @@
 cache:
+  # Currently supported fields map directly to environment knobs.
   action_cache:
-    key: jcs(json(input, env, tool_version))
-    store: cas://local-ssd
-    ttl: 7d
-    revalidate_on: [tool_version_change, secret_version_change]
-  llm:
-    kv_prefix_cache: on
-    semantic_cache:
-      embedder: "bge-small-en"
-      sim_threshold: 0.92
-      verifier: "mini-qa-judge"
-      scope: per-user
-      negative_cache_ttl: 2h
+    ttl: 7d               # -> ARW_TOOLS_CACHE_TTL_SECS (seconds)
+    capacity: 4096        # -> ARW_TOOLS_CACHE_CAP (entries)
+    allow:                # -> ARW_TOOLS_CACHE_ALLOW (CSV)
+      - demo.echo
+      - http.fetch
+    deny:                 # -> ARW_TOOLS_CACHE_DENY (CSV)
+      - fs.patch
   read_models:
     sse:
-      format: json-patch
-      resume: last-event-id
-      coalesce_ms: 250
-      idle_publish_ms: 2000
-  in_memory:
-    policy: w-tinylfu
-    capacity_mb: 512
-  disk:
-    engine: rocksdb
-    block_cache_uncompressed_mb: 512
-    block_cache_compressed_mb: 512
-    partitioned_index_filters: true
-    secondary_cache: ssd
-  edge:
-    headers:
-      cache_control: "public, max-age=60, stale-while-revalidate=300, stale-if-error=86400"
-    request_coalescing: true
-  compression:
-    zstd_dictionary:
-      per_type: [json_tool_output, patches]
-      train_on: last_10k_samples
+      coalesce_ms: 250    # -> ARW_ROUTE_STATS_COALESCE_MS + ARW_MODELS_METRICS_COALESCE_MS
+      idle_publish_ms: 2000  # -> ARW_ROUTE_STATS_PUBLISH_MS + ARW_MODELS_METRICS_PUBLISH_MS
 
+  # Planned sections stay commented until implementation lands.
+  # llm:
+  #   kv_prefix_cache: on
+  #   semantic_cache:
+  #     embedder: "bge-small-en"
+  #     sim_threshold: 0.92
+  #     verifier: "mini-qa-judge"
+  #     scope: per-user
+  #     negative_cache_ttl: 2h
+  # edge:
+  #   headers:
+  #     cache_control: "public, max-age=60, stale-while-revalidate=300, stale-if-error=86400"
+  #   request_coalescing: true
+  # compression:
+  #   zstd_dictionary:
+  #     per_type: [json_tool_output, patches]
+  #     train_on: last_10k_samples

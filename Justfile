@@ -133,6 +133,9 @@ context-ci:
 trials-preflight:
   bash scripts/trials_preflight.sh
 
+autonomy-rollback *params:
+  bash scripts/autonomy_rollback.sh {{params}}
+
 # Service
 start port='8091' debug='1':
   ARW_NO_LAUNCHER=1 ARW_NO_TRAY=1 bash -ceu '

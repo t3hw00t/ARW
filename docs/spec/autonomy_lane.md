@@ -6,60 +6,71 @@ title: Autonomy Lane Charter
 
 Updated: 2025-09-26
 Type: Decision record
-Status: Draft
+Status: Accepted
 
-## Why
+## Intent
 
-We want to let trusted teams run fully autonomous helpers that share compute, memory, and workflows without breaking the safety promises that make Agent Hub feel calm. The Autonomy Lane defines the “sandbox” rules so product owners, operators, and external partners know exactly what happens when a helper is allowed to move without constant human approvals.
+Give trusted operators a predictable, high-signal way to let helpers run without manual approvals while preserving the calm, reversible guarantees of the core kernel. The Autonomy Lane defines the contract every autonomous run must satisfy: who can start it, how far it may reach, and how we stop or rewind it when something drifts.
 
-## What “Autonomy Lane” Means
+## Definitions
 
-An Autonomy Lane is a named environment inside Agent Hub where:
-- A helper can execute a pre-approved recipe end to end without pausing for every approve/deny prompt.
-- Every action, message, and outbound request is still logged in real time and can be interrupted instantly.
-- Budgets, schedules, and allowed destinations are locked before the run begins and cannot widen themselves.
+- **Lane** — A named policy envelope (e.g., `trial-g4-autonomy`) that carries budgets, scope, telemetry, and audit labels.
+- **Run** — A scheduled or ad-hoc autonomous session executing one or more recipes under the lane envelope.
+- **Operator** — The human on call for the lane. They approve entry, monitor telemetry, and hold the stop switch.
+- **Owner** — The product or project lead who signs off on lane scope and success criteria.
 
-This lane is opt-in. Teams choose when to enter it and can fall back to Guided mode anytime.
+## Entry Criteria
 
-## Guardrails Checklist
+1. **Scope approval** — Owner and operator record the allowed objectives, data sets, and autonomy window. We require dual sign-off before the scheduler can promote a run to `autonomous`.
+2. **Budgets locked** — Time, token, and spend caps are resolved into the lane manifest. Cool-down triggers at 90% for any budget and flips the run back to Guided mode automatically.
+3. **Guardrail presets** — Capsule guard leases, gating keys (`network:egress`, `runtime:manage`, `tools:high_privilege`), and egress posture (`public-only`, `partner`, or `custom`) must be staged and validated via the rehearsal checklist.
+4. **Snapshots available** — Project and runtime snapshots must exist so the rollback recipe can complete in under two minutes.
+5. **Telemetry sinks online** — `/state/episodes`, `/metrics`, and Trial Control Center overlays are reachable from the operator station; alerts go to the rotation channel.
 
-1. **Budget contract**
-   - Time, token, and spend caps declared up front.
-   - Automatic cool-down when 90% of any budget is used.
-   - Daily digest sent to the lane owner.
+## Lane Contract
 
-2. **Destination policy**
-   - Allowlist of domains, APIs, and local tools.
-   - Any new host triggers an interruptible “seeking permission” alert.
-   - File system scope limited to the active project.
+- **Budgets** — The kernel enforces wall-clock, token, and spend budgets per run. Breaches emit `autonomy.budget.close_to_limit` events; hard stops emit `autonomy.budget.exhausted` followed by `autonomy.run.paused`.
+- **Destinations & I/O** — Destinations come from a manifest (`configs/autonomy/destinations.yaml`) that the lane references. DNS guard and the egress proxy enforce host/port limits; filesystem scope is restricted to the project workspace and declared mount points.
+- **Runtime & tools** — Runs may claim runtimes tagged `autonomy_ready=true`. The orchestrator denies tools without `tool.contract.autonomy=true` metadata or missing safety notes. High-risk logic units must declare rollback hooks before they can execute autonomously.
+- **Observation surface** — Every run streams a live ticker (objective, latest action, next planned step) and writes deltas to the shared event spine (`autonomy.tick.*`). Helpers document why decisions were taken via `world.belief` annotations.
+- **Interruption guarantees** — Pause/stop commands preempt scheduler queues, revoke capability leases, and send an interrupt to active tools. Tool adapters must acknowledge within five seconds or get terminated by the supervisor.
 
-3. **Operator controls**
-   - Big **Pause helper** button in the Trial Control Center.
-   - “Rollback last run” action that reverts recent changes or restores snapshots.
-   - Phone/email rotation for on-call humans during the trial window.
+## Operator Controls
 
-4. **Transparency overlays**
-   - Live ticker showing current objective, latest action, and next planned step.
-   - Timeline replay available after the run with annotations for auto/assist/human steps.
-   - Metrics tile in the dashboard with heartbeat, spend, approvals bypassed, and overrides.
+- **Pause / Resume** — Trial Control Center exposes a single pause toggle wiring into `scheduler.pause_lane(lane_id)`. Resume requires operator authentication plus reason logging.
+- **Stop & Snapshot** — `Stop` flushes outstanding jobs, creates a snapshot (`/admin/projects/:id/snapshot`), and records a `autonomy.run.stopped` event with the operator ID.
+- **Rollback** — Control bar links directly to the Runbook (see [ops/trials/autonomy_rollback_playbook.md](../ops/trials/autonomy_rollback_playbook.md)). Operators can invoke the automated recipe or the manual checklist.
+- **Escalation** — Pager channel receives structured alerts (`autonomy.alert.*`). Playbook lists escalation tree (primary operator → owner → security liaison).
 
-5. **Audit hooks**
-- Capsule guard leases auto-refresh and log any denial.
-- All outbound requests and file writes tagged with the lane id.
-- Run summary exported to the Trial Dossier archive.
-- Runtime supervisor hooks: accelerator/tier claims (`runtime.claim.*` events), voice/vision runtime enablement, and fallback rules are recorded alongside the lane audit trail.
+## Telemetry & Audits
 
-## Rollout Plan
+- Emit structured events: `autonomy.run.started`, `.paused`, `.resumed`, `.stopped`, `.rollback.started/completed`, `.budget.*`, `.egress.blocked`, `.tool.denied`.
+- `/state/autonomy/lanes` read-model summarizes current runs, budget headroom, outstanding alerts, and last operator action.
+- Prometheus counters: `autonomy_runs_total{status}` and `autonomy_interrupts_total{reason}`. Gauges capture `autonomy_budget_remaining_seconds` and `autonomy_budget_remaining_tokens`.
+- Trial dossier receives a run summary snapshot (`ops/trials/README.md` guidance) after each autonomous session.
 
-- **Design**: create low-fidelity mockups for the Autonomy Lane status panel, pause/rollback controls, and budget editor.
-- **Implementation**: ship the scheduler kill switch, egress firewall presets, and lane-specific telemetry (tasks `trial-autonomy-governor`, `autonomy-rollback-playbook`).
-- **Testing**: stage synthetic workloads (e.g., sandbox e-commerce store) and rehearse interrupts twice before inviting real users.
-- **Launch**: announce Gate G4 with clear entry criteria, support rotation, and exit review template.
+## Rollback & Recovery
+
+The lane never runs without a fresh rollback rehearsal. The two-minute recipe lives in [Autonomy rollback playbook](../ops/trials/autonomy_rollback_playbook.md) and includes:
+- Identifying the last good snapshot (project, runtime, and guardrail presets).
+- Reverting CAS-stored configs via the patch engine.
+- Validating the helper is back in Guided mode before clearing the alert.
+
+## Implementation Checklist
+
+- [x] Charter published and accepted.
+- [ ] `trial-autonomy-governor`: wire scheduler kill switch, pause lane API, Trial Control Center controls.
+- [x] `autonomy-rollback-playbook`: keep runbook current; rehearsal tracked per cohort.
+- [ ] `autonomy-lane-spec`: keep this ADR aligned with implementation; revisit quarterly.
+- [ ] `trial-g3` / `trial-g4`: update gate criteria once kill switch and rollback rehearsals ship.
+
+## Change History
+
+- 2025-09-26 — Charter promoted from draft to accepted; added lane contract, telemetry, and rollback alignment.
+- 2025-09-18 — Initial draft capturing intent and guardrail checklist.
 
 ## Open Questions
 
-- Should lane entry require two-person sign-off (owner + operator)?
-- Do we surface a “confidence meter” to end users or keep it as an operator-only signal?
-- How do we visualize long-running autonomous work without causing alert fatigue?
-
-Please record decisions and updates in this document as the lane matures.
+1. Should we gate lane entry on two-person sign-off at runtime (launcher prompt) or settle for the pre-run checklist?
+2. Do we expose a confidence score or anomaly meter to end users, or keep it operator-only to avoid alert fatigue?
+3. What is the default exhaust behavior after multiple rollbacks (pause indefinitely vs. allow retries)?

@@ -15,5 +15,6 @@ Use this folder to store lightweight records during the trial. Keep files short 
 
 - `daily_log_template.md` — copy once per day for Cohort A/B.
 - `dashboard_snapshot.md` — jot the numbers you expect to see when saving a screenshot.
+- `autonomy_rollback_playbook.md` — step-by-step rollback instructions when the Autonomy Lane is active.
 
 Store sensitive data elsewhere; this dossier is for coordination only.

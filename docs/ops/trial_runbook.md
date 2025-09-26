@@ -34,10 +34,11 @@ This runbook keeps our two-person trial routine lightweight. Use it with the Tri
 ## If something breaks
 
 1. Pause helpers from the Trial Control Center (or kill switch) immediately.
-2. Capture the time and what people saw in the incident log.
-3. Run `just triad-smoke` to confirm the core service.
-4. DM each other with the incident note so we decide fast.
-5. Decide whether to resume, retry, or end the session.
+2. If the run was under Autonomy Lane, jump to the [Autonomy rollback playbook](trials/autonomy_rollback_playbook.md) after pausing.
+3. Capture the time and what people saw in the incident log.
+4. Run `just triad-smoke` to confirm the core service.
+5. DM each other with the incident note so we decide fast.
+6. Decide whether to resume, retry, or end the session.
 
 ## End-of-day wrap
 
