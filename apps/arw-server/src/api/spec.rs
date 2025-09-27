@@ -1,3 +1,4 @@
+use super::http_utils;
 use axum::body::Body;
 use axum::http::{
     header::{self, HeaderMap},
@@ -9,7 +10,6 @@ use serde_json::json;
 use sha2::{Digest, Sha256};
 use std::time::SystemTime;
 
-use crate::ext;
 #[cfg(not(test))]
 use utoipa::OpenApi;
 
@@ -225,19 +225,19 @@ fn respond_bytes(
     let mut hasher = Sha256::new();
     hasher.update(&bytes);
     let etag_hex = format!("{:x}", hasher.finalize());
-    let etag = ext::http::etag_value(&etag_hex);
-    let last_modified_header = last_modified.and_then(ext::http::http_date_value);
+    let etag = http_utils::etag_value(&etag_hex);
+    let last_modified_header = last_modified.and_then(http_utils::http_date_value);
 
-    if ext::http::if_none_match_matches(&headers, &etag_hex) {
-        return ext::http::not_modified_response(
+    if http_utils::if_none_match_matches(&headers, &etag_hex) {
+        return http_utils::not_modified_response(
             &etag,
             last_modified_header.as_ref(),
             cache_control,
         );
     }
     if let Some(modified) = last_modified {
-        if ext::http::not_modified_since(&headers, modified) {
-            return ext::http::not_modified_response(
+        if http_utils::not_modified_since(&headers, modified) {
+            return http_utils::not_modified_response(
                 &etag,
                 last_modified_header.as_ref(),
                 cache_control,

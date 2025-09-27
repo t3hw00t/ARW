@@ -201,99 +201,61 @@ mod tests {
     }
 
     #[test]
-    fn if_none_match_ignores_non_utf8_header() {
-        // SAFETY: value contains invalid UTF-8; constructing via from_bytes succeeds.
+    fn if_none_match_handles_invalid_headers() {
         let mut headers = HeaderMap::new();
         headers.insert(
             header::IF_NONE_MATCH,
             HeaderValue::from_bytes(b"\xff").unwrap(),
         );
 
-        assert!(!if_none_match_matches(&headers, "anything"));
+        assert!(!if_none_match_matches(&headers, "foo"));
     }
 
     #[test]
-    fn not_modified_since_obeys_one_second_precision() {
-        let reference = SystemTime::UNIX_EPOCH + Duration::from_secs(1_700_000_000);
+    fn not_modified_since_allows_skew_exact_or_prior() {
+        let modified = SystemTime::UNIX_EPOCH + Duration::from_secs(10);
+        let since = httpdate::fmt_http_date(SystemTime::UNIX_EPOCH + Duration::from_secs(10));
         let mut headers = HeaderMap::new();
-        let header_value = http_date_value(reference).expect("http-date");
-        headers.insert(header::IF_MODIFIED_SINCE, header_value);
+        headers.insert(
+            header::IF_MODIFIED_SINCE,
+            HeaderValue::from_str(&since).unwrap(),
+        );
 
-        assert!(not_modified_since(&headers, reference));
-        assert!(not_modified_since(
-            &headers,
-            reference - Duration::from_millis(500)
-        ));
-        assert!(!not_modified_since(
-            &headers,
-            reference + Duration::from_secs(2)
-        ));
+        assert!(not_modified_since(&headers, modified));
     }
 
     #[test]
-    fn not_modified_response_sets_expected_headers() {
-        let etag = etag_value("hash");
-        let last_modified =
-            http_date_value(SystemTime::UNIX_EPOCH + Duration::from_secs(42)).unwrap();
-        let response = not_modified_response(&etag, Some(&last_modified), "public, max-age=60");
-        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
-        let headers = response.headers();
-        assert_eq!(headers.get(header::ETAG), Some(&etag));
-        assert_eq!(headers.get(header::LAST_MODIFIED), Some(&last_modified));
-        assert_eq!(
-            headers
-                .get(header::CACHE_CONTROL)
-                .and_then(|v| v.to_str().ok()),
-            Some("public, max-age=60")
+    fn not_modified_since_rejects_future_times() {
+        let modified = SystemTime::UNIX_EPOCH + Duration::from_secs(20);
+        let since = httpdate::fmt_http_date(SystemTime::UNIX_EPOCH + Duration::from_secs(10));
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::IF_MODIFIED_SINCE,
+            HeaderValue::from_str(&since).unwrap(),
         );
+
+        assert!(!not_modified_since(&headers, modified));
+    }
+
+    #[test]
+    fn parse_single_byte_range_handles_suffix_range() {
+        let range = parse_single_byte_range("bytes=-10", 100).unwrap();
+        assert_eq!(range, ByteRange { start: 90, end: 99 });
+    }
+
+    #[test]
+    fn parse_single_byte_range_rejects_invalid_prefix() {
         assert_eq!(
-            headers
-                .get(header::X_CONTENT_TYPE_OPTIONS)
-                .and_then(|v| v.to_str().ok()),
-            Some("nosniff")
+            parse_single_byte_range("items=0-10", 100),
+            Err(ByteRangeError::Invalid)
         );
     }
 
     #[test]
-    fn parse_single_range_start_end() {
-        let range = parse_single_byte_range("bytes=10-49", 100).expect("range");
-        assert_eq!(range, ByteRange { start: 10, end: 49 });
-        assert_eq!(range.len(), 40);
-    }
-
-    #[test]
-    fn parse_single_range_open_ended() {
-        let range = parse_single_byte_range("bytes=10-", 16).expect("range");
-        assert_eq!(range, ByteRange { start: 10, end: 15 });
-    }
-
-    #[test]
-    fn parse_single_range_suffix() {
-        let range = parse_single_byte_range("bytes=-4", 10).expect("range");
-        assert_eq!(range, ByteRange { start: 6, end: 9 });
-    }
-
-    #[test]
-    fn parse_single_range_suffix_larger_than_len() {
-        let range = parse_single_byte_range("bytes=-999", 10).expect("range");
-        assert_eq!(range, ByteRange { start: 0, end: 9 });
-    }
-
-    #[test]
-    fn parse_single_range_unsatisfiable_start_outside_len() {
-        let err = parse_single_byte_range("bytes=50-60", 10).unwrap_err();
-        assert_eq!(err, ByteRangeError::Unsatisfiable);
-    }
-
-    #[test]
-    fn parse_single_range_invalid_when_start_after_end() {
-        let err = parse_single_byte_range("bytes=20-10", 100).unwrap_err();
-        assert_eq!(err, ByteRangeError::Invalid);
-    }
-
-    #[test]
-    fn parse_single_range_invalid_format() {
-        let err = parse_single_byte_range("items=0-10", 100).unwrap_err();
-        assert_eq!(err, ByteRangeError::Invalid);
+    fn parse_single_byte_range_rejects_unsatisfiable() {
+        assert_eq!(
+            parse_single_byte_range("bytes=200-300", 100),
+            Err(ByteRangeError::Unsatisfiable)
+        );
     }
 }

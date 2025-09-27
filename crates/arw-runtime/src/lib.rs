@@ -90,6 +90,9 @@ pub struct RuntimeHealth {
     pub latency_ms: Option<f64>,
     pub capacity: Option<u32>,
     pub inflight_jobs: Option<u32>,
+    pub error_count: Option<u64>,
+    pub request_count: Option<u64>,
+    pub error_rate: Option<f64>,
     pub prompt_cache_warm: Option<bool>,
 }
 
@@ -188,14 +191,31 @@ impl RuntimeStatus {
                 health.latency_ms = Some(avg);
             }
             if let Some(errors) = http_obj.get("errors").and_then(|v| v.as_u64()) {
-                health.inflight_jobs = Some(errors as u32);
+                health.error_count = Some(errors);
+            }
+            if let Some(hits) = http_obj.get("hits").and_then(|v| v.as_u64()) {
+                health.request_count = Some(hits);
+            }
+            if let Some(rate) = http_obj.get("error_rate").and_then(|v| v.as_f64()) {
+                health.error_rate = Some(rate);
+            } else if let (Some(errors), Some(hits)) = (health.error_count, health.request_count) {
+                if hits > 0 {
+                    health.error_rate = Some(errors as f64 / hits as f64);
+                }
             }
             if let Some(slow_routes) = http_obj.get("slow_routes").and_then(|v| v.as_array()) {
                 for entry in slow_routes.iter().filter_map(|v| v.as_str()) {
                     status.detail.push(format!("Slow route: {}", entry));
                 }
             }
-            if health.latency_ms.is_some() || health.inflight_jobs.is_some() {
+            if health.latency_ms.is_some()
+                || health.inflight_jobs.is_some()
+                || health.error_count.is_some()
+                || health.request_count.is_some()
+                || health.error_rate.is_some()
+                || health.capacity.is_some()
+                || health.prompt_cache_warm.is_some()
+            {
                 status.health = Some(health);
             }
         }
@@ -277,3 +297,53 @@ pub trait RuntimeAdapter: Send + Sync {
 }
 
 pub type BoxedAdapter = Box<dyn RuntimeAdapter>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{DateTime, Utc};
+    use serde_json::json;
+
+    #[test]
+    fn maps_http_error_counts_into_health() {
+        let payload = json!({
+            "status": {
+                "code": "ready",
+                "severity": "warn",
+                "label": "Ready with warnings",
+                "detail": ["Heads up"],
+                "aria_hint": "Some additional context",
+            },
+            "generated": "2024-05-20T12:00:00Z",
+            "http": {
+                "avg_ewma_ms": 125.0,
+                "errors": 7u64,
+                "hits": 32u64,
+                "slow_routes": ["/slow"],
+            }
+        });
+
+        let status =
+            RuntimeStatus::from_health_payload("runtime-1", &payload).expect("status should parse");
+
+        assert_eq!(status.id, "runtime-1");
+        assert_eq!(status.state, RuntimeState::Ready);
+        assert_eq!(status.severity, RuntimeSeverity::Warn);
+        assert!(status
+            .detail
+            .iter()
+            .any(|entry| entry.contains("Slow route")));
+        let expected = "2024-05-20T12:00:00Z"
+            .parse::<DateTime<Utc>>()
+            .expect("expected timestamp parses");
+        assert_eq!(status.updated_at, expected);
+
+        let health = status.health.expect("health payload should exist");
+        assert_eq!(health.latency_ms, Some(125.0));
+        assert_eq!(health.error_count, Some(7));
+        assert_eq!(health.request_count, Some(32));
+        let error_rate = health.error_rate.expect("error rate present");
+        assert!((error_rate - (7.0 / 32.0)).abs() < 1e-12);
+        assert_eq!(health.inflight_jobs, None);
+    }
+}

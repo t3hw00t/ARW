@@ -4,7 +4,7 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-26 13:52 UTC
+Updated: 2025-09-27 03:57 UTC
 
 
 ## To Do
@@ -14,8 +14,7 @@ Updated: 2025-09-26 13:52 UTC
 - [trial-g2] Gate G2: Calm approvals — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g1] Gate G1: Reliable memory — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g0] Gate G0: Stable core ready — todo (updated: 2025-09-26 12:30 UTC)
-- [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-26 19:57:50 UTC)
-  - 2025-09-26 19:57:50 UTC: AppState already unified (see `apps/arw-server/src/app_state.rs`). Re-scope remaining work to carve domain adapters (policy/models/cluster) and remove legacy `ext` call sites before marking complete.
+
 
 ## In Progress
 - [t-250914223220-cap03] OCR for screenshots (optional) — in_progress (updated: 2025-09-17 20:19:01 UTC)
@@ -29,6 +28,8 @@ Updated: 2025-09-26 13:52 UTC
   - 2025-09-26 13:52:05 UTC: Authored autonomy rollback playbook, shipped automation helper (`scripts/autonomy_rollback.sh`), and documented usage.
 - [autonomy-lane-spec] Author Autonomy Lane ADR — done (updated: 2025-09-26 13:52:05 UTC)
   - 2025-09-26 13:52:05 UTC: Autonomy Lane charter accepted; expanded contract, telemetry, and rollback alignment.
+- [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — done (updated: 2025-09-27 03:57:24 UTC)
+  - 2025-09-27 03:57:24 UTC: Migrated HTTP helpers into `apps/arw-server/src/api/http_utils.rs`, removed the legacy `ext` tree, refreshed backlog references, and confirmed server modules use the new adapters.
 - [t-phase-a-03] Phase B kickoff — done (updated: 2025-09-26 00:15:00 UTC)
     - 2025-09-22 23:52:00 UTC: Assigned alice to Memory Lanes (ETA 2025-10-03), bob to Project Hub primitives (ETA 2025-10-10), carla to Project Map read models (ETA 2025-10-17).
   - 2025-09-26 00:15:00 UTC: Confirmed hand-off with owners; restructure board closed with Phase B milestones tracked in backlog instead of the restructure gate.
@@ -130,11 +131,11 @@ Updated: 2025-09-26 13:52 UTC
 - [t-250909224103-0211] UI: near-live feedback in /admin/debug — done (updated: 2025-09-14 17:12:09 UTC)
     - 2025-09-14 17:12:08 UTC: Debug UI already renders live feedback.suggested; added auto-apply hook: when enabled, safe suggestions are auto-applied on feedback.suggested events (policy-gated).
 - [t-250912001105-7850] Phase 3: Episodes + Debug UI reactive views — done (updated: 2025-09-14 17:02:37 UTC)
-    - 2025-09-14 17:02:36 UTC: Episodes view: /state/episodes endpoint + Debug UI panel with live refresh and episode snapshots; stitch by corr_id in ext/state_api.rs.
+    - 2025-09-14 17:02:36 UTC: Episodes view: /state/episodes endpoint + Debug UI panel with live refresh and episode snapshots; stitch by corr_id in `apps/arw-server/src/api/state.rs`.
 - [t-250912001100-3438] Phase 2: Beliefs/Intents/Actions stores + endpoints — done (updated: 2025-09-14 17:02:36 UTC)
     - 2025-09-14 17:02:36 UTC: Beliefs/Intents/Actions rolling stores implemented; endpoints: /state/{beliefs,intents,actions} and admin variants; wired via on_event with corr_id episodes stitching.
 - [t-250912001055-0044] Phase 2: Observations read-model + /state/observations — done (updated: 2025-09-14 17:02:35 UTC)
-    - 2025-09-14 17:02:35 UTC: Public /state/observations exists; admin wrapper at /admin/state/observations; rolling store wired via ext::state_api::obs_on_event and bus subscriber.
+    - 2025-09-14 17:02:35 UTC: Public /state/observations exists; admin wrapper at /admin/state/observations; rolling store backed by `apps/arw-server/src/state_observer.rs` and surfaced via `api::state::state_observations`.
 - [t-250914050908-ev14] Feature Matrix: dot.case topics — done (updated: 2025-09-14 16:59:13 UTC)
     - 2025-09-14 16:59:12 UTC: Feature Matrix events verified/updated: experiments list now includes experiment.activated; all entries dot.case.
 - [t-250914050900-ev10] Events: topics.rs dot.case only — done (updated: 2025-09-14 16:59:12 UTC)

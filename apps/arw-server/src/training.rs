@@ -113,13 +113,39 @@ pub async fn telemetry_snapshot(state: &AppState) -> serde_json::Value {
 
 fn compact_options(value: Value) -> Value {
     match value {
-        Value::Object(mut map) => {
-            map.retain(|_, v| !matches!(v, Value::Null));
-            Value::Object(map)
+        Value::Object(map) => {
+            let mut cleaned = serde_json::Map::new();
+            for (key, value) in map.into_iter() {
+                let compacted = compact_options(value);
+                match &compacted {
+                    Value::Null => continue,
+                    Value::Object(obj) if obj.is_empty() => continue,
+                    Value::Array(items) if items.is_empty() => continue,
+                    _ => {
+                        cleaned.insert(key, compacted);
+                    }
+                }
+            }
+            Value::Object(cleaned)
+        }
+        Value::Array(items) => {
+            let mut cleaned = Vec::new();
+            for entry in items.into_iter() {
+                let compacted = compact_options(entry);
+                match &compacted {
+                    Value::Null => continue,
+                    Value::Object(obj) if obj.is_empty() => continue,
+                    Value::Array(values) if values.is_empty() => continue,
+                    _ => cleaned.push(compacted),
+                }
+            }
+            Value::Array(cleaned)
         }
         other => other,
     }
 }
+
+const CAPSULE_EXPIRING_SOON_WINDOW_MS: u64 = 60_000;
 
 fn summarize_capsules(snapshot: Value) -> Value {
     let count = snapshot.get("count").and_then(Value::as_u64).unwrap_or(0);
@@ -135,7 +161,10 @@ fn summarize_capsules(snapshot: Value) -> Value {
             if let Some(expiry) = item.get("lease_until_ms").and_then(Value::as_u64) {
                 if expiry <= now_ms {
                     expired += 1;
-                } else if expiry.saturating_sub(now_ms) <= 5 * 60 * 1000 {
+                } else if expiry
+                    .saturating_sub(now_ms)
+                    <= CAPSULE_EXPIRING_SOON_WINDOW_MS
+                {
                     expiring_soon += 1;
                 }
             }
@@ -152,12 +181,11 @@ fn summarize_capsules(snapshot: Value) -> Value {
 
 fn sanitize_capsule(raw: &Value) -> Value {
     let mut obj = serde_json::Map::new();
-    if let Some(id) = raw.get("id") {
-        obj.insert("id".into(), id.clone());
-    }
-    if let Some(version) = raw.get("version") {
-        obj.insert("version".into(), version.clone());
-    }
+    obj.insert("id".into(), raw.get("id").cloned().unwrap_or(Value::Null));
+    obj.insert(
+        "version".into(),
+        raw.get("version").cloned().unwrap_or(Value::Null),
+    );
     if let Some(issuer) = raw.get("issuer") {
         obj.insert("issuer".into(), issuer.clone());
     }

@@ -13,10 +13,32 @@ fn store() -> &'static RwLock<HashMap<String, Value>> {
 }
 
 fn node_id() -> String {
-    std::env::var("ARW_NODE_ID")
-        .ok()
-        .filter(|s| !s.trim().is_empty())
-        .unwrap_or_else(|| sysinfo::System::host_name().unwrap_or_else(|| "local".to_string()))
+    static NODE_ID: OnceCell<String> = OnceCell::new();
+    NODE_ID
+        .get_or_init(|| {
+            std::env::var("ARW_NODE_ID")
+                .ok()
+                .and_then(|value| {
+                    let trimmed = value.trim();
+                    if trimmed.is_empty() {
+                        None
+                    } else {
+                        Some(trimmed.to_string())
+                    }
+                })
+                .or_else(|| {
+                    sysinfo::System::host_name().and_then(|hostname| {
+                        let trimmed = hostname.trim();
+                        if trimmed.is_empty() {
+                            None
+                        } else {
+                            Some(trimmed.to_string())
+                        }
+                    })
+                })
+                .unwrap_or_else(|| "local".to_string())
+        })
+        .clone()
 }
 
 pub(crate) fn snapshot() -> HashMap<String, Value> {
@@ -99,7 +121,13 @@ async fn build_local_health_payload(state: &AppState) -> Option<Value> {
     let avg_ewma = if ewma_count == 0 {
         None
     } else {
-        Some((ewma_sum / ewma_count as f64).round())
+        Some(ewma_sum / ewma_count as f64)
+    };
+
+    let error_rate = if total_hits == 0 {
+        None
+    } else {
+        Some(total_errors as f64 / total_hits as f64)
     };
 
     // Determine human-friendly status signal
@@ -193,6 +221,7 @@ async fn build_local_health_payload(state: &AppState) -> Option<Value> {
             "hits": total_hits,
             "errors": total_errors,
             "avg_ewma_ms": avg_ewma,
+            "error_rate": error_rate,
             "slow_routes": if slow_routes.is_empty() { None } else { Some(slow_routes) },
         }
     });

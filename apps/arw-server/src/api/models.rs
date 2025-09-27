@@ -18,7 +18,8 @@ use tokio::fs;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
 
-use crate::{ext, models, AppState};
+use super::http_utils;
+use crate::{models, AppState};
 use models::{HashPage, ModelsConcurrencySnapshot, ModelsMetricsResponse};
 use utoipa::ToSchema;
 
@@ -537,20 +538,20 @@ pub async fn models_blob_by_hash(
     let len = metadata.len();
     let modified = metadata.modified().ok();
     let cache_control = "public, max-age=31536000, immutable";
-    let etag = ext::http::etag_value(&hash);
-    let last_modified_header = modified.and_then(ext::http::http_date_value);
+    let etag = http_utils::etag_value(&hash);
+    let last_modified_header = modified.and_then(http_utils::http_date_value);
 
-    if ext::http::if_none_match_matches(&headers, &hash) {
+    if http_utils::if_none_match_matches(&headers, &hash) {
         let mut response =
-            ext::http::not_modified_response(&etag, last_modified_header.as_ref(), cache_control);
+            http_utils::not_modified_response(&etag, last_modified_header.as_ref(), cache_control);
         response
             .headers_mut()
             .insert(ACCEPT_RANGES, HeaderValue::from_static("bytes"));
         return response;
     }
     if let Some(modified_time) = modified {
-        if ext::http::not_modified_since(&headers, modified_time) {
-            let mut response = ext::http::not_modified_response(
+        if http_utils::not_modified_since(&headers, modified_time) {
+            let mut response = http_utils::not_modified_response(
                 &etag,
                 last_modified_header.as_ref(),
                 cache_control,
@@ -568,7 +569,7 @@ pub async fn models_blob_by_hash(
         .map(str::trim)
         .filter(|s| !s.is_empty())
     {
-        Some(value) => match ext::http::parse_single_byte_range(value, len) {
+        Some(value) => match http_utils::parse_single_byte_range(value, len) {
             Ok(range) => Some(range),
             Err(_) => {
                 let content_range = format!("bytes */{len}");

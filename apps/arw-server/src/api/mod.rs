@@ -12,6 +12,7 @@ pub mod feedback;
 pub mod goldens;
 pub mod governor;
 pub mod hierarchy;
+pub mod http_utils;
 pub mod leases;
 pub mod logic_units;
 pub mod memory;
