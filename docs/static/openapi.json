@@ -1377,6 +1377,64 @@
         "description": "Models: POST /admin/models/add."
       }
     },
+    "/admin/models/by-hash/{sha256}": {
+      "get": {
+        "tags": [
+          "Models"
+        ],
+        "operationId": "models_blob_by_hash_doc",
+        "parameters": [
+          {
+            "name": "sha256",
+            "in": "path",
+            "description": "Model blob SHA-256 (hex)",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Model blob",
+            "content": {
+              "application/octet-stream": {}
+            }
+          },
+          "304": {
+            "description": "Not modified"
+          },
+          "400": {
+            "description": "Invalid hash",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          },
+          "404": {
+            "description": "Blob not found",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "500": {
+            "description": "Read error",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        },
+        "description": "Models: GET /admin/models/by-hash/{sha256}."
+      }
+    },
     "/admin/models/cas_gc": {
       "post": {
         "tags": [
@@ -3735,6 +3793,12 @@
       "ConcurrencyUpdate": {
         "type": "object",
         "properties": {
+          "block": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
           "hard_cap": {
             "type": [
               "integer",
@@ -4747,21 +4811,44 @@
           "value"
         ],
         "properties": {
-          "embed": {
+          "agent_id": {
             "type": [
-              "array",
+              "string",
               "null"
-            ],
-            "items": {
-              "type": "number",
-              "format": "float"
-            }
+            ]
           },
+          "dedupe": {
+            "type": "boolean"
+          },
+          "durability": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "embedding": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/MemoryEmbeddingReq"
+              }
+            ]
+          },
+          "entities": {},
+          "extra": {},
           "key": {
             "type": [
               "string",
               "null"
             ]
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "kind": {
             "type": [
@@ -4772,12 +4859,25 @@
           "lane": {
             "type": "string"
           },
+          "links": {},
+          "privacy": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
           "prob": {
             "type": [
               "number",
               "null"
             ],
             "format": "double"
+          },
+          "project_id": {
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "score": {
             "type": [
@@ -4786,16 +4886,55 @@
             ],
             "format": "double"
           },
+          "source": {},
           "tags": {
-            "type": [
-              "array",
-              "null"
-            ],
+            "type": "array",
             "items": {
               "type": "string"
             }
           },
+          "text": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trust": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          },
+          "ttl_s": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int64"
+          },
           "value": {}
+        }
+      },
+      "MemoryEmbeddingReq": {
+        "type": "object",
+        "required": [
+          "vector"
+        ],
+        "properties": {
+          "hint": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "vector": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "float"
+            }
+          }
         }
       },
       "MemoryQuarantineAdmit": {

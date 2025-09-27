@@ -253,6 +253,8 @@ pub struct ConcurrencyUpdate {
     pub max: Option<u64>,
     #[serde(default)]
     pub hard_cap: Option<u64>,
+    #[serde(default)]
+    pub block: Option<bool>,
 }
 
 #[utoipa::path(
@@ -286,7 +288,10 @@ pub async fn models_concurrency_set(
     if !crate::admin_ok(&headers) {
         return unauthorized();
     }
-    let value = state.models().concurrency_set(req.max, req.hard_cap).await;
+    let value = state
+        .models()
+        .concurrency_set(req.max, req.hard_cap, req.block)
+        .await;
     Json(value).into_response()
 }
 

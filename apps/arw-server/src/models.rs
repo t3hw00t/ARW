@@ -387,6 +387,17 @@ impl DownloadsState {
         }
     }
 
+    async fn wait_until_at_most(&self, limit: u64) {
+        let limit = limit.max(1);
+        loop {
+            let current = self.active_count().await as u64;
+            if current <= limit {
+                return;
+            }
+            self.notify.notified().await;
+        }
+    }
+
     async fn insert_job(&self, model_id: &str, handle: DownloadHandle) -> Result<(), ()> {
         let mut jobs = self.jobs.lock().await;
         if jobs.contains_key(model_id) {
@@ -740,7 +751,12 @@ impl ModelStore {
         &self,
         configured_max: Option<u64>,
         hard_cap: Option<u64>,
+        block: Option<bool>,
     ) -> ModelsConcurrencySnapshot {
+        let before = {
+            let state = self.concurrency.read().await;
+            state.configured()
+        };
         {
             let mut state = self.concurrency.write().await;
             if let Some(max) = configured_max {
@@ -749,6 +765,14 @@ impl ModelStore {
             state.hard_cap = hard_cap.filter(|v| *v > 0);
         }
         self.downloads.notify.notify_waiters();
+        let after = {
+            let state = self.concurrency.read().await;
+            state.configured()
+        };
+        let should_block = block.unwrap_or(true) && after < before;
+        if should_block {
+            self.downloads.wait_until_at_most(after).await;
+        }
         self.concurrency_snapshot().await
     }
 
@@ -3102,6 +3126,22 @@ fn duration_to_millis(duration: Duration) -> u64 {
 mod tests {
     use super::*;
 
+    fn dummy_download_handle(label: &str) -> DownloadHandle {
+        DownloadHandle {
+            cancel: CancellationToken::new(),
+            task: None,
+            job_id: format!("job-{label}"),
+            url_display: format!("https://example.com/{label}"),
+            corr_id: format!("corr-{label}"),
+            dest: DestInfo {
+                host: "example.com".into(),
+                port: 443,
+                protocol: "https".into(),
+            },
+            started_at: Instant::now(),
+        }
+    }
+
     #[tokio::test]
     async fn hash_guard_coalesces_followers() {
         let bus = arw_events::Bus::new_with_replay(16, 16);
@@ -3233,6 +3273,76 @@ mod tests {
         assert_eq!(filtered.total, 1);
         assert_eq!(filtered.count, 1);
         assert_eq!(filtered.items[0].sha256, first.sha256);
+    }
+
+    #[tokio::test]
+    async fn concurrency_set_blocking_shrink_waits_for_active_jobs() {
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let store = Arc::new(ModelStore::new(bus, None));
+
+        store
+            .downloads
+            .insert_job("model-a", dummy_download_handle("a"))
+            .await
+            .expect("insert job a");
+        store
+            .downloads
+            .insert_job("model-b", dummy_download_handle("b"))
+            .await
+            .expect("insert job b");
+
+        let store_clone = Arc::clone(&store);
+        let join =
+            tokio::spawn(
+                async move { store_clone.concurrency_set(Some(1), None, Some(true)).await },
+            );
+
+        tokio::time::sleep(Duration::from_millis(25)).await;
+        assert!(!join.is_finished(), "blocking shrink returned too early");
+
+        let removed = store.downloads.remove_job("model-a").await;
+        assert!(removed.is_some(), "expected job removal to succeed");
+
+        let snapshot = join.await.expect("join blocking shrink");
+        assert_eq!(snapshot.configured_max, 1);
+        assert_eq!(snapshot.pending_shrink, None);
+        assert_eq!(snapshot.held_permits, 1);
+
+        let _ = store.downloads.remove_job("model-b").await;
+    }
+
+    #[tokio::test]
+    async fn concurrency_set_non_blocking_reports_pending_shrink() {
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let store = Arc::new(ModelStore::new(bus, None));
+
+        store
+            .downloads
+            .insert_job("model-a", dummy_download_handle("a"))
+            .await
+            .expect("insert job a");
+        store
+            .downloads
+            .insert_job("model-b", dummy_download_handle("b"))
+            .await
+            .expect("insert job b");
+
+        let snapshot = tokio::time::timeout(
+            Duration::from_millis(100),
+            store.concurrency_set(Some(1), None, Some(false)),
+        )
+        .await
+        .expect("non-blocking shrink should resolve");
+
+        assert_eq!(snapshot.configured_max, 1);
+        assert_eq!(snapshot.pending_shrink, Some(1));
+        assert_eq!(snapshot.held_permits, 1);
+
+        let active = store.downloads.active_count().await as u64;
+        assert_eq!(active, 2);
+
+        let _ = store.downloads.remove_job("model-a").await;
+        let _ = store.downloads.remove_job("model-b").await;
     }
 }
 

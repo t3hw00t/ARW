@@ -6,7 +6,7 @@ title: Models Download (HTTP)
 
 ARW provides HTTP endpoints (admin‑gated) to manage local models with streaming downloads, live progress via SSE, safe cancel, and mandatory SHA‑256 verification. HTTP Range resume is supported when the upstream advertises validators (`ETag` or `Last-Modified`).
 
-Updated: 2025-09-23
+Updated: 2025-09-27
 Type: How‑to
 
 See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*), and Architecture → Managed llama.cpp Runtime for how downloaded weights plug into the runtime supervisor.
@@ -26,8 +26,8 @@ Canonical topics used by the service are defined once under [crates/arw-topics/s
     - `ETag: "<sha256>"`, `Last-Modified`, `Cache-Control: public, max-age=31536000, immutable`.
     - Honors `If-None-Match` (304 Not Modified) for repeat requests.
   - See also: [HTTP Caching Semantics](../snippets/http_caching_semantics.md)
-- POST `/admin/models/concurrency` — Set download concurrency at runtime. Body: `{ max?: number, hard_cap?: number }`.
-- GET  `/admin/models/concurrency` — Get the current concurrency settings and limits (`configured_max`, `available_permits`, `held_permits`, `hard_cap`).
+- POST `/admin/models/concurrency` — Set download concurrency at runtime. Body: `{ max?: number, hard_cap?: number, block?: boolean }`. When `block` is `true` (default), the call waits until active downloads fall under the new limit; set `block:false` to return immediately and monitor `pending_shrink` instead.
+- GET  `/admin/models/concurrency` — Get the current concurrency settings and limits (`configured_max`, `available_permits`, `held_permits`, `hard_cap`, `pending_shrink`).
 - GET  `/admin/models/jobs` — Snapshot of active jobs and inflight hashes for troubleshooting.
 
 ## Request
