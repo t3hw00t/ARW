@@ -6,7 +6,7 @@ license.workspace = true
 
 [build-dependencies]
 tauri-build = { version = "2.4.1" }
-png = "0.17"
+png = "0.18"
 
 [dependencies]
 anyhow = { workspace = true }
