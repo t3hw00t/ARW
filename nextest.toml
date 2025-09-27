@@ -1,6 +1,16 @@
 [profile.default]
 # Use default settings for local runs.
 
+[[profile.default.overrides]]
+# arw-server tests mutate global state (ARW_STATE_DIR) and can contend
+# on a global mutex; run its test binary single-threaded for reliability.
+filter = 'package("arw-server")'
+test-threads = 1
+
+[profile.default.status-level]
+# Keep output focused for faster iteration
+slow = { milliseconds = 30000 }
+
 [profile.ci]
 # Run all tests in CI without stopping at the first failure.
 fail-fast = false

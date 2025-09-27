@@ -41,6 +41,11 @@ lint-fix:
 test:
   cargo test --workspace --locked
 
+# Run only the server crate tests serially to avoid test lock contention.
+# Useful when arw-server tests appear to "hang" due to global state guards.
+test-server:
+  RUST_TEST_THREADS=1 cargo test -p arw-server -- --nocapture
+
 test-fast:
   if command -v cargo-nextest >/dev/null; then cargo nextest run --workspace; else cargo test --workspace --locked; fi
 
