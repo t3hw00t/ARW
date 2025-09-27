@@ -172,7 +172,7 @@ impl MemoryInsertOwned {
             value: &self.value,
             embed: self.embed.as_deref(),
             embed_hint: self.embed_hint.as_deref(),
-            tags: self.tags.as_ref().map(|v| v.as_slice()),
+            tags: self.tags.as_deref(),
             score: self.score,
             prob: self.prob,
             agent_id: self.agent_id.as_deref(),
@@ -182,7 +182,7 @@ impl MemoryInsertOwned {
             trust: self.trust,
             privacy: self.privacy.as_deref(),
             ttl_s: self.ttl_s,
-            keywords: self.keywords.as_ref().map(|v| v.as_slice()),
+            keywords: self.keywords.as_deref(),
             entities: self.entities.as_ref(),
             source: self.source.as_ref(),
             links: self.links.as_ref(),
@@ -612,7 +612,7 @@ impl<'c> MemoryStore<'c> {
                 .unwrap_or(now)
                 .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
             out.push(build_gc_candidate(
-                &row,
+                row,
                 MemoryGcReason::TtlExpired {
                     ttl_s: ttl,
                     expired_at,
@@ -658,7 +658,7 @@ impl<'c> MemoryStore<'c> {
         let mut out = Vec::new();
         while let Some(row) = rows.next()? {
             out.push(build_gc_candidate(
-                &row,
+                row,
                 MemoryGcReason::LaneCap { cap, overflow },
             )?);
         }
@@ -675,7 +675,7 @@ impl<'c> MemoryStore<'c> {
         {
             let mut stmt = tx.prepare("DELETE FROM memory_records WHERE id = ?1")?;
             for id in ids {
-                total_deleted = total_deleted.saturating_add(stmt.execute(params![id])? as usize);
+                total_deleted = total_deleted.saturating_add(stmt.execute(params![id])?);
             }
         }
 
@@ -837,7 +837,7 @@ fn row_to_value_common(row: &rusqlite::Row<'_>) -> Result<Value> {
     let tags_value = row
         .get::<_, Option<String>>(5)?
         .map(|s| split_list(&s))
-        .unwrap_or_else(|| Vec::new());
+        .unwrap_or_default();
     map.insert("tags".into(), Value::Array(tags_value));
 
     if let Some(hash) = row.get::<_, Option<String>>(6)? {
@@ -892,7 +892,7 @@ fn row_to_value_common(row: &rusqlite::Row<'_>) -> Result<Value> {
     let keywords_value = row
         .get::<_, Option<String>>(20)?
         .map(|s| split_list(&s))
-        .unwrap_or_else(|| Vec::new());
+        .unwrap_or_default();
     if !keywords_value.is_empty() {
         map.insert("keywords".into(), Value::Array(keywords_value));
     }

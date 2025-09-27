@@ -617,9 +617,8 @@ mod tests {
     #[tokio::test]
     async fn tool_defaults_to_synthetic() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
         let output = run_chat_tool(&state, json!({"prompt": "hi"}))
             .await
             .expect("tool output");
@@ -630,9 +629,8 @@ mod tests {
     #[tokio::test]
     async fn chat_state_tracks_history() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
         let outcome = state
             .chat()
             .send(&state, "hello", ChatSendOptions::default())

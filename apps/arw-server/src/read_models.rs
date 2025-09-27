@@ -191,6 +191,13 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
 
     handles.push(spawn_read_model(
         &state,
+        "context_metrics",
+        Duration::from_millis(2500),
+        |st| async move { Some(crate::context_metrics::snapshot(&st.bus())) },
+    ));
+
+    handles.push(spawn_read_model(
+        &state,
         "policy_leases",
         Duration::from_millis(4000),
         |st| async move {
@@ -831,11 +838,10 @@ mod tests {
     #[tokio::test]
     async fn snappy_publishes_patch_and_notice() {
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
-        env_guard.apply([
+        ctx.env.apply([
             ("ARW_SNAPPY_PUBLISH_MS", Some("10")),
             ("ARW_SNAPPY_FULL_RESULT_P95_MS", Some("15")),
             ("ARW_SNAPPY_PROTECTED_ENDPOINTS", Some("/state/")),

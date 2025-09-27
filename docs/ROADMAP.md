@@ -43,7 +43,7 @@ To keep the larger intent visible while we iterate, we track four active executi
 
 ### Never-Out-Of-Context
 - Immediate moves: land slot budgets and stable IDs in the Context API, ship the MMR selector pass, and draft the compression cascade executor so the Training Park metrics have a feed.
-- Checks & optimizations: add telemetry assertions for `context.recall_risk` and `context.coverage`; enforce hygiene caps/TTL janitor runs in integration tests.
+- Checks & optimizations: add telemetry assertions for `context.recall.risk` and `context.coverage`; enforce hygiene caps/TTL janitor runs in integration tests.
 - Documentation: expand guide coverage for the new API surfaces and annotate Backlog entries as instrumentation ships.
 
 ### Collaboration & Human-in-Loop Surfaces

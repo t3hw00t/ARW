@@ -724,9 +724,8 @@ mod tests {
     #[tokio::test]
     async fn refresh_capsules_publishes_patch_on_state_change() {
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = test_env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
         let bus = state.bus();
         let mut rx = bus.subscribe_filtered(
@@ -781,9 +780,8 @@ mod tests {
     #[tokio::test]
     async fn legacy_header_returns_gone_and_emits_failure_events() {
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = test_env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
         let bus = state.bus();
         let mut rx = bus.subscribe_filtered(
             vec![

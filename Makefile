@@ -32,3 +32,5 @@ clean:
 
 clean-venv:
 	bash scripts/clean_workspace.sh --venv
+check-style:
+	@scripts/check_env_guard.sh

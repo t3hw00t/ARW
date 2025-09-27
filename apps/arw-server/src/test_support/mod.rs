@@ -66,3 +66,19 @@ pub(crate) mod env {
         }
     }
 }
+
+// Unified test context helper to streamline correct lock ordering and cleanup.
+// Acquire the state-dir guard first, then the env guard. Hold both until drop.
+#[cfg(test)]
+pub(crate) struct TestCtx {
+    pub env: env::EnvGuard,
+    // Keep state guard last so env drops first
+    _state: crate::util::StateDirTestGuard,
+}
+
+#[cfg(test)]
+pub(crate) fn begin_state_env(path: &std::path::Path) -> TestCtx {
+    let state = crate::util::scoped_state_dir_for_tests(path);
+    let env = env::guard();
+    TestCtx { env, _state: state }
+}

@@ -731,10 +731,9 @@ mod tests {
 
     #[tokio::test]
     async fn models_blob_by_hash_serves_blob_with_headers() {
-        let mut env_guard = env::guard();
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
         let hash = make_hash();
         let payload = b"artifact-bytes";
@@ -801,10 +800,9 @@ mod tests {
 
     #[tokio::test]
     async fn models_blob_by_hash_head_omits_body() {
-        let mut env_guard = env::guard();
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
         let hash = make_hash();
         let payload = b"head-check";
@@ -844,10 +842,9 @@ mod tests {
 
     #[tokio::test]
     async fn models_blob_by_hash_honors_if_none_match() {
-        let mut env_guard = env::guard();
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
         let hash = make_hash();
         write_blob(&state, &hash, b"etag").await;
@@ -888,10 +885,9 @@ mod tests {
 
     #[tokio::test]
     async fn models_blob_by_hash_supports_range_requests() {
-        let mut env_guard = env::guard();
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
         let hash = make_hash();
         write_blob(&state, &hash, b"0123456789").await;
@@ -934,10 +930,9 @@ mod tests {
 
     #[tokio::test]
     async fn models_blob_by_hash_rejects_invalid_range() {
-        let mut env_guard = env::guard();
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
         let hash = make_hash();
         write_blob(&state, &hash, b"0123456789").await;
@@ -978,10 +973,9 @@ mod tests {
 
     #[tokio::test]
     async fn models_blob_by_hash_rejects_invalid_hash() {
-        let mut env_guard = env::guard();
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
         let response = models_blob_by_hash(
             Method::GET,

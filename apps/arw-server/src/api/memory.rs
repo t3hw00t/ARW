@@ -22,6 +22,7 @@ fn now_timestamp() -> String {
     Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
 }
 
+#[cfg(test)]
 fn compute_memory_hash(
     lane: &str,
     kind: &Option<String>,
@@ -396,6 +397,7 @@ pub async fn admin_memory_list(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::env;
     use crate::{memory_service, read_models};
     use arw_policy::PolicyEngine;
     use arw_wasi::ToolHost;
@@ -414,10 +416,10 @@ mod tests {
     use tokio::time::{timeout, Duration};
     use tower::ServiceExt;
 
-    async fn build_state(dir: &std::path::Path) -> AppState {
-        std::env::set_var("ARW_DEBUG", "1");
+    async fn build_state(dir: &std::path::Path, env_guard: &mut env::EnvGuard) -> AppState {
+        env_guard.set("ARW_DEBUG", "1");
         crate::util::reset_state_dir_for_tests();
-        std::env::set_var("ARW_STATE_DIR", dir.display().to_string());
+        env_guard.set("ARW_STATE_DIR", dir.display().to_string());
         let bus = arw_events::Bus::new_with_replay(64, 64);
         let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
         let policy = PolicyEngine::load_from_env();
@@ -459,8 +461,8 @@ mod tests {
     #[tokio::test]
     async fn memory_stream_provides_snapshot_and_patch() {
         let temp = tempdir().expect("tmp");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path()).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
         let initial_value = json!({"text": "hello"});
         let insert_owned = memory_service::MemoryUpsertInput {
@@ -516,7 +518,11 @@ mod tests {
             .iter()
             .all(|ev: &SseRecord| ev.event.as_deref() != Some(MEMORY_SNAPSHOT_EVENT))
         {
-            let frame = body.frame().await.expect("frame").expect("data frame");
+            let frame = timeout(Duration::from_secs(1), body.frame())
+                .await
+                .expect("snapshot frame timeout")
+                .expect("snapshot frame present")
+                .expect("data frame");
             let bytes = frame.into_data().expect("frame data");
             buffer.push_str(&String::from_utf8_lossy(&bytes));
             events.extend(parse_sse(&mut buffer));
@@ -614,8 +620,8 @@ mod tests {
     #[tokio::test]
     async fn memory_apply_emits_record_and_applied_events() {
         let temp = tempdir().expect("temp dir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path()).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
         let bus = state.bus();
         let mut rx = bus.subscribe_filtered(
             vec![

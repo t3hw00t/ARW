@@ -1,6 +1,6 @@
 use crate::{coverage, working_set, AppState};
 use metrics::{counter, histogram};
-use serde_json::{json, Map, Value};
+use serde_json::{json, Map, Number, Value};
 use std::collections::HashSet;
 use std::future::Future;
 use std::time::Instant;
@@ -302,6 +302,34 @@ async fn run_context_iteration(
                 duration_ms,
             );
             bus.publish(topics::TOPIC_CONTEXT_COVERAGE, &coverage_payload);
+            let recall_event = build_context_recall_risk_payload(
+                iteration,
+                &spec_used,
+                &ws.summary,
+                &verdict,
+                corr_id.as_ref(),
+                duration_ms,
+            );
+            histogram!(
+                "arw_context_recall_risk_score",
+                recall_event.score,
+                "level" => recall_event.level,
+                "needs_more" => needs_more_label,
+            );
+            counter!(
+                "arw_context_recall_risk_total",
+                1,
+                "level" => recall_event.level,
+                "needs_more" => needs_more_label,
+            );
+            if recall_event.at_risk {
+                counter!(
+                    "arw_context_recall_risk_flagged_total",
+                    1,
+                    "level" => recall_event.level,
+                );
+            }
+            bus.publish(topics::TOPIC_CONTEXT_RECALL_RISK, &recall_event.payload);
             IterationOutcome::Success(Box::new(IterationSuccess {
                 working_set: ws,
                 verdict,
@@ -412,6 +440,58 @@ mod tests {
     }
 
     #[test]
+    fn recall_risk_payload_combines_gaps() {
+        let mut lane_counts = BTreeMap::new();
+        lane_counts.insert("analysis".to_string(), 1usize);
+        let mut slot_counts = BTreeMap::new();
+        slot_counts.insert("instructions".to_string(), 0usize);
+        let mut slot_budgets = BTreeMap::new();
+        slot_budgets.insert("instructions".to_string(), 2usize);
+        let summary = WorkingSetSummary {
+            target_limit: 8,
+            lanes_requested: 2,
+            selected: 3,
+            avg_cscore: 0.25,
+            max_cscore: 0.3,
+            min_cscore: 0.6,
+            threshold_hits: 0,
+            total_candidates: 9,
+            lane_counts,
+            slot_counts,
+            slot_budgets: slot_budgets.clone(),
+            min_score: 0.6,
+            scorer: "mmrd".into(),
+        };
+
+        let ws = working_set_with_summary(summary.clone());
+        let verdict = coverage::assess(&ws);
+        let mut spec = base_spec();
+        spec.lanes = vec!["analysis".into(), "docs".into()];
+        spec.slot_budgets = slot_budgets.clone();
+        spec.project = Some("alpha".into());
+
+        let event = build_context_recall_risk_payload(0, &spec, &summary, &verdict, None, 42.0);
+        assert!(event.score >= 0.74 && event.score <= 0.76);
+        assert_eq!(event.level, "high");
+        assert!(event.at_risk);
+
+        let payload = event.payload.as_object().expect("payload object");
+        assert_eq!(payload["level"], json!("high"));
+        assert_eq!(
+            payload["components"]["coverage_shortfall"]
+                .as_f64()
+                .unwrap(),
+            0.625
+        );
+        assert_eq!(payload["components"]["slot_gap"].as_f64().unwrap(), 1.0);
+        assert_eq!(payload["selected_ratio"].as_f64().unwrap(), 0.375);
+        assert_eq!(
+            payload["spec"]["slot_budgets"].as_object().unwrap().len(),
+            1
+        );
+    }
+
+    #[test]
     fn adjust_spec_reacts_to_coverage_reasons() {
         let mut lane_counts = BTreeMap::new();
         lane_counts.insert("docs".to_string(), 3usize);
@@ -515,6 +595,159 @@ fn build_context_coverage_payload(
         payload.insert("query".into(), json!(query));
     }
     Value::Object(payload)
+}
+
+struct RecallRiskEvent {
+    payload: Value,
+    score: f64,
+    level: &'static str,
+    at_risk: bool,
+}
+
+fn json_number(value: f64) -> Value {
+    Number::from_f64(value)
+        .map(Value::Number)
+        .unwrap_or(Value::Null)
+}
+
+fn build_context_recall_risk_payload(
+    iteration: usize,
+    spec: &working_set::WorkingSetSpec,
+    summary: &working_set::WorkingSetSummary,
+    verdict: &coverage::CoverageVerdict,
+    corr_id: Option<&String>,
+    duration_ms: f64,
+) -> RecallRiskEvent {
+    const W_COVERAGE: f64 = 0.4;
+    const W_LANE: f64 = 0.2;
+    const W_SLOT: f64 = 0.2;
+    const W_QUALITY: f64 = 0.2;
+
+    let target_limit = summary.target_limit.max(1) as f64;
+    let selected = summary.selected.min(summary.target_limit) as f64;
+    let coverage_ratio = (selected / target_limit).clamp(0.0, 1.0);
+    let coverage_shortfall = (1.0 - coverage_ratio).clamp(0.0, 1.0);
+
+    let desired_lanes = summary.lanes_requested.max(1);
+    let lane_count = summary
+        .lane_counts
+        .iter()
+        .filter(|(_, count)| **count > 0)
+        .count()
+        .max(if summary.selected > 0 { 1 } else { 0 });
+    let lane_gap = if desired_lanes == 0 {
+        0.0
+    } else {
+        (desired_lanes.saturating_sub(lane_count) as f64 / desired_lanes as f64).clamp(0.0, 1.0)
+    };
+
+    let mut slot_breakdown = Map::new();
+    let mut slot_gap: f64 = 0.0;
+    for (slot, budget) in summary.slot_budgets.iter() {
+        if *budget == 0 {
+            continue;
+        }
+        let have = summary
+            .slot_counts
+            .get(slot)
+            .copied()
+            .unwrap_or(0)
+            .min(*budget);
+        let gap = ((*budget as f64 - have as f64) / *budget as f64).clamp(0.0, 1.0);
+        slot_gap = slot_gap.max(gap);
+        slot_breakdown.insert(slot.clone(), json_number(gap));
+    }
+    if slot_breakdown.is_empty() {
+        slot_gap = 0.0;
+    }
+
+    let min_score = summary.min_score as f64;
+    let avg_cscore = summary.avg_cscore as f64;
+    let max_cscore = summary.max_cscore as f64;
+    let threshold_gap: f64 = if summary.threshold_hits == 0 && max_cscore < min_score {
+        1.0
+    } else {
+        0.0
+    };
+    let avg_gap = if min_score > 0.0 {
+        ((min_score - avg_cscore).max(0.0) / min_score).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    let quality_gap = threshold_gap.max(avg_gap);
+
+    let mut weighted_total = 0.0;
+    let mut weight_sum = 0.0;
+
+    weighted_total += coverage_shortfall * W_COVERAGE;
+    weight_sum += W_COVERAGE;
+
+    if desired_lanes > 1 {
+        weighted_total += lane_gap * W_LANE;
+        weight_sum += W_LANE;
+    }
+
+    if !slot_breakdown.is_empty() {
+        weighted_total += slot_gap * W_SLOT;
+        weight_sum += W_SLOT;
+    }
+
+    weighted_total += quality_gap * W_QUALITY;
+    weight_sum += W_QUALITY;
+
+    if weight_sum == 0.0 {
+        weight_sum = 1.0;
+    }
+
+    let score = (weighted_total / weight_sum).clamp(0.0, 1.0);
+    let level = if score >= 0.7 {
+        "high"
+    } else if score >= 0.4 {
+        "medium"
+    } else {
+        "low"
+    };
+    let at_risk = verdict.needs_more || score >= 0.4;
+
+    let mut components = Map::new();
+    components.insert("coverage_shortfall".into(), json_number(coverage_shortfall));
+    components.insert("lane_gap".into(), json_number(lane_gap));
+    if !slot_breakdown.is_empty() {
+        components.insert("slot_gap".into(), json_number(slot_gap));
+        components.insert("slots".into(), Value::Object(slot_breakdown));
+    }
+    components.insert("quality_gap".into(), json_number(quality_gap));
+
+    let mut payload = Map::new();
+    payload.insert("iteration".into(), json!(iteration));
+    payload.insert("score".into(), json_number(score));
+    payload.insert("level".into(), json!(level));
+    payload.insert("at_risk".into(), json!(at_risk));
+    payload.insert("components".into(), Value::Object(components));
+    payload.insert("selected_ratio".into(), json_number(coverage_ratio));
+    payload.insert("desired_lanes".into(), json!(desired_lanes));
+    payload.insert("lane_count".into(), json!(lane_count));
+    payload.insert("needs_more".into(), json!(verdict.needs_more));
+    payload.insert("reasons".into(), json!(verdict.reasons));
+    payload.insert("summary".into(), summary.to_json());
+    payload.insert("spec".into(), spec.snapshot());
+    payload.insert("duration_ms".into(), json!(duration_ms));
+    if let Some(cid) = corr_id {
+        payload.insert("corr_id".into(), json!(cid));
+    }
+    if let Some(project) = spec.project.as_ref() {
+        payload.insert("project".into(), json!(project));
+    }
+    if let Some(query) = spec.query.as_ref() {
+        payload.insert("query".into(), json!(query));
+    }
+
+    RecallRiskEvent {
+        payload: Value::Object(payload),
+        score,
+        level,
+        at_risk,
+    }
 }
 
 fn build_working_set_error_payload(

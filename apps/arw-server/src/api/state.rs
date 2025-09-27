@@ -463,10 +463,13 @@ mod tests {
     use tempfile::tempdir;
     use tokio::sync::Mutex;
 
-    async fn build_state(path: &std::path::Path) -> AppState {
-        std::env::set_var("ARW_DEBUG", "1");
+    async fn build_state(
+        path: &std::path::Path,
+        env_guard: &mut crate::test_support::env::EnvGuard,
+    ) -> AppState {
+        env_guard.set("ARW_DEBUG", "1");
         crate::util::reset_state_dir_for_tests();
-        std::env::set_var("ARW_STATE_DIR", path.display().to_string());
+        env_guard.set("ARW_STATE_DIR", path.display().to_string());
         let bus = arw_events::Bus::new_with_replay(16, 16);
         let kernel = arw_kernel::Kernel::open(path).expect("init kernel");
         let policy = PolicyEngine::load_from_env();
@@ -482,7 +485,8 @@ mod tests {
     async fn state_actions_sanitizes_guard_metadata() {
         let temp = tempdir().expect("tempdir");
         let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path()).await;
+        let mut env_guard = crate::test_support::env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
 
         let action_id = uuid::Uuid::new_v4().to_string();
         state
@@ -539,7 +543,8 @@ mod tests {
     #[tokio::test]
     async fn state_episodes_returns_rollups() {
         let temp = tempdir().expect("tempdir");
-        let state = build_state(temp.path()).await;
+        let mut env_guard = crate::test_support::env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
 
         let corr = "run-123";
         let t1: DateTime<Utc> = Utc::now();

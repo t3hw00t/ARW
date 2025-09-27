@@ -6,14 +6,14 @@ title: Training Park
 Updated: 2025-09-28
 Type: How‑to
 
-Status: **Telemetry live, UI stub.** `arw-server` now exposes `/state/training/telemetry` and a `training_metrics` read-model; the launcher window still renders placeholder controls until we wire the new data through.
+Status: **Telemetry live, UI stub.** `arw-server` now exposes `/state/training/telemetry` plus `training_metrics` and `context_metrics` read-models; the launcher window still renders placeholder controls until we wire the new data through.
 
 The goal remains: a third primary perspective for tuning instincts, memory, and behavior without drowning in raw logs.
 
 ## What Ships Today
 
 - Shared right-sidecar lanes (Timeline, Context, Policy, Metrics, Models) via the general SSE connection.
-- `GET /state/training/telemetry` snapshot with route stats, tool success rate, cache/gov/capsule health, and bus metrics, plus `state.read.model.patch` id `training_metrics` for live updates.
+- `GET /state/training/telemetry` snapshot with route stats, tool success rate, cache/gov/capsule health, and bus metrics, plus `state.read.model.patch` ids `training_metrics` and `context_metrics` for live updates.
 - Manual A/B button stub for future experiments (launcher still toast-only until UI work lands).
 - Underlying metrics piggyback on the same collectors powering `/state/route_stats`, so telemetry remains consistent with other dashboards.
 
@@ -26,8 +26,9 @@ The goal remains: a third primary perspective for tuning instincts, memory, and 
 
 ## Inspect Telemetry
 
-- Poll `GET /state/training/telemetry` for a JSON snapshot or stream the `state.read.model.patch` feed with id `training_metrics` for live updates.
+- Poll `GET /state/training/telemetry` for a JSON snapshot or stream the `state.read.model.patch` feeds `training_metrics` and `context_metrics` for live updates.
 - Key indicators: route latencies (`/context/assemble`, `/actions`), action success rate, bus health, cache stampede suppression, governor profile/hints, capsule lease expirations, and feedback cues—all emitted from the same telemetry endpoint powering the launcher view.
+- Context telemetry now streams `context.recall.risk` (score, level, component gaps) alongside the coverage verdicts so dashboards can surface why recall dipped without diffing raw events.
 
 ### Snapshot Fields (Current)
 
@@ -43,7 +44,7 @@ The goal remains: a third primary perspective for tuning instincts, memory, and 
 | `capsules` | `count`, `expiring_soon` (≤5m), `expired`, `sample` (sanitized view with id/version/lease fields, max 5 items). |
 | `feedback` | `auto_apply`, signal count + recent five, suggestion count + three-sample. |
 | `compatibility` | Legacy gauges (e.g., capsule header sightings). |
-| `context` | Latest coverage verdict (needs_more, reasons, summary/spec) with recent history, top gaps, and most recent assembled snapshot (counts + final spec). |
+| `context` | Latest coverage verdict (needs_more, reasons, summary/spec) plus recall-risk rollups (score, level distribution, at-risk ratio), top gaps, and the most recent assembled snapshot (counts + final spec). Mirrors the `context_metrics` read-model so SSE dashboards and the launcher stay aligned without recomputing the journal replay. |
 
 ## Optimization & Refactor Notes
 

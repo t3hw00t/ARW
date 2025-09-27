@@ -12,6 +12,7 @@ mod chat;
 mod cluster;
 pub mod config;
 mod context_loop;
+mod context_metrics;
 mod coverage;
 mod distill;
 mod egress_log;
@@ -240,10 +241,9 @@ mod http_tests {
     #[tokio::test]
     async fn http_action_roundtrip_completes() {
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
         let state_dir = temp.path().to_path_buf();
-        let mut env_guard = env::guard();
-        let state = build_state(&state_dir, &mut env_guard).await;
+        let state = build_state(&state_dir, &mut ctx.env).await;
         let _worker = worker::start_local_worker(state.clone());
         let app = router_with_actions(state);
 
@@ -303,10 +303,9 @@ mod http_tests {
     #[tokio::test]
     async fn debug_alias_returns_not_found() {
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
         let state_dir = temp.path().to_path_buf();
-        let mut env_guard = env::guard();
-        let state = build_state(&state_dir, &mut env_guard).await;
+        let state = build_state(&state_dir, &mut ctx.env).await;
 
         let (router, _, _) = router::build_router();
         let app = router.with_state(state);
@@ -345,12 +344,13 @@ mod http_tests {
         let signing = SigningKey::from_bytes(&[7u8; 32]);
         let issuer = "test-issuer";
         write_trust_store(&trust_path, issuer, &signing);
-        let mut env_guard = env::guard();
-        env_guard.set("ARW_TRUST_CAPSULES", trust_path.display().to_string());
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        ctx.env
+            .set("ARW_TRUST_CAPSULES", trust_path.display().to_string());
         rpu::reload_trust();
 
         let state_dir = temp.path().to_path_buf();
-        let state = build_state(&state_dir, &mut env_guard).await;
+        let state = build_state(&state_dir, &mut ctx.env).await;
         let bus = state.bus();
         let mut rx = bus.subscribe_filtered(
             vec![
@@ -404,14 +404,14 @@ mod http_tests {
         let items = snapshot["items"].as_array().expect("capsule items");
         assert_eq!(items.len(), 1);
         assert_eq!(items[0]["id"].as_str(), Some("capsule-http"));
-        env_guard.remove("ARW_TRUST_CAPSULES");
+        ctx.env.remove("ARW_TRUST_CAPSULES");
     }
 
     #[tokio::test]
     async fn lease_creation_emits_event_and_updates_read_model() {
         let temp = tempdir().expect("tempdir");
-        let mut env_guard = env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
         let bus = state.bus();
         let mut rx = bus.subscribe_filtered(
             vec![

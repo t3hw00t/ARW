@@ -416,9 +416,8 @@ mod tests {
     #[tokio::test]
     async fn health_and_action_roundtrip() {
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
         let _worker = worker::start_local_worker(state.clone());
         let service = ArwGrpcService {
             state: state.clone(),
@@ -470,8 +469,8 @@ mod tests {
     #[tokio::test]
     async fn stream_receives_submitted_event() {
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path()).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
         let service = ArwGrpcService {
             state: state.clone(),
         };

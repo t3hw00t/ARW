@@ -1001,9 +1001,8 @@ mod tests {
     #[tokio::test]
     async fn unsupported_tool_marks_action_failed() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
         let _worker = start_local_worker(state.clone());
 
         let bus = state.bus();
@@ -1046,9 +1045,8 @@ mod tests {
     #[tokio::test]
     async fn memory_upsert_action_writes_record() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
         let _worker = start_local_worker(state.clone());
 
         let bus = state.bus();
@@ -1095,9 +1093,8 @@ mod tests {
     #[tokio::test]
     async fn memory_search_action_returns_results() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
         let _worker = start_local_worker(state.clone());
 
         let insert_body = memory_service::MemoryUpsertInput {
@@ -1150,9 +1147,8 @@ mod tests {
     #[tokio::test]
     async fn memory_pack_action_returns_working_set() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
         let _worker = start_local_worker(state.clone());
 
         for idx in 0..3 {
@@ -1220,9 +1216,8 @@ mod tests {
     #[tokio::test]
     async fn guard_action_respects_leases() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
         let ctx = WorkerContext::new(&state);
 
         assert!(
@@ -1256,9 +1251,8 @@ mod tests {
     #[tokio::test]
     async fn connector_requires_scope_lease() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
         let connectors_dir = util::state_dir().join("connectors");
         tokio::fs::create_dir_all(&connectors_dir)
@@ -1342,11 +1336,9 @@ mod tests {
     #[tokio::test]
     async fn http_get_records_egress_on_success() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = env::guard();
-        env_guard.set("ARW_EGRESS_LEDGER_ENABLE", "1");
-        let state =
-            build_state_with_host(temp.path(), &mut env_guard, Arc::new(AllowingHost)).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_EGRESS_LEDGER_ENABLE", "1");
+        let state = build_state_with_host(temp.path(), &mut ctx.env, Arc::new(AllowingHost)).await;
         let ctx = WorkerContext::new(&state);
 
         let bus = state.bus();
@@ -1404,11 +1396,9 @@ mod tests {
     #[tokio::test]
     async fn http_get_denied_without_lease_records_event() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = env::guard();
-        env_guard.set("ARW_EGRESS_LEDGER_ENABLE", "0");
-        let state =
-            build_state_with_host(temp.path(), &mut env_guard, Arc::new(AllowingHost)).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_EGRESS_LEDGER_ENABLE", "0");
+        let state = build_state_with_host(temp.path(), &mut ctx.env, Arc::new(AllowingHost)).await;
         let ctx = WorkerContext::new(&state);
 
         let bus = state.bus();
@@ -1454,11 +1444,9 @@ mod tests {
     #[tokio::test]
     async fn completed_event_includes_guard_metadata() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = env::guard();
-        env_guard.set("ARW_EGRESS_LEDGER_ENABLE", "0");
-        let state =
-            build_state_with_host(temp.path(), &mut env_guard, Arc::new(AllowingHost)).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_EGRESS_LEDGER_ENABLE", "0");
+        let state = build_state_with_host(temp.path(), &mut ctx.env, Arc::new(AllowingHost)).await;
 
         let mut rx = state
             .bus()
@@ -1536,9 +1524,8 @@ mod tests {
     #[tokio::test]
     async fn complete_action_updates_kernel_and_emits_event() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
         let ctx = WorkerContext::new(&state);
 
         let bus = state.bus();
@@ -1605,9 +1592,8 @@ mod tests {
     #[tokio::test]
     async fn fail_action_updates_kernel_and_emits_event() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
         let ctx = WorkerContext::new(&state);
 
         let bus = state.bus();

@@ -252,10 +252,10 @@ fn parse_duration_value(raw: &Value) -> Option<u64> {
             if let Some(u) = num.as_u64() {
                 Some(u)
             } else if let Some(i) = num.as_i64() {
-                (i >= 0).then(|| i as u64)
+                (i >= 0).then_some(i as u64)
             } else {
                 num.as_f64()
-                    .and_then(|f| (f >= 0.0).then(|| f.round() as u64))
+                    .and_then(|f| (f >= 0.0).then_some(f.round() as u64))
             }
         }
         Value::String(s) => parse_duration_str(s),
@@ -301,6 +301,7 @@ fn parse_duration_str(raw: &str) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support::env as test_env;
     use serial_test::serial;
 
     const ENV_KEYS: &[&str] = &[
@@ -328,7 +329,8 @@ mod tests {
     #[test]
     #[serial]
     fn applies_manifest_defaults_when_unset() {
-        clear_env();
+        let mut env = test_env::guard();
+        env.clear_keys(ENV_KEYS);
         let outcome = run_manifest(
             r#"
 cache:
@@ -370,15 +372,16 @@ cache:
         assert!(ttl_assignment.applied);
         assert_eq!(ttl_assignment.reason, None);
         assert_eq!(ttl_assignment.source, "cache.action_cache.ttl");
-        clear_env();
+        // restored by env guard
     }
 
     #[test]
     #[serial]
     fn respects_existing_env_overrides() {
-        clear_env();
-        std::env::set_var("ARW_TOOLS_CACHE_TTL_SECS", "120");
-        std::env::set_var("ARW_ROUTE_STATS_COALESCE_MS", "999");
+        let mut env = test_env::guard();
+        env.clear_keys(ENV_KEYS);
+        env.set("ARW_TOOLS_CACHE_TTL_SECS", "120");
+        env.set("ARW_ROUTE_STATS_COALESCE_MS", "999");
 
         let outcome = run_manifest(
             r#"
@@ -417,14 +420,15 @@ cache:
             coalesce_assignment.reason,
             Some(AssignmentReason::EnvOverride)
         );
-        clear_env();
+        // restored by env guard
     }
 
     #[test]
     #[serial]
     fn identical_env_value_marked_as_already_set() {
-        clear_env();
-        std::env::set_var("ARW_TOOLS_CACHE_CAP", "4096");
+        let mut env = test_env::guard();
+        env.clear_keys(ENV_KEYS);
+        env.set("ARW_TOOLS_CACHE_CAP", "4096");
 
         let outcome = run_manifest(
             r#"
@@ -445,13 +449,14 @@ cache:
             Some(AssignmentReason::AlreadySetSameValue)
         );
         assert_eq!(cap_assignment.existing.as_deref(), Some("4096"));
-        clear_env();
+        // restored by env guard
     }
 
     #[test]
     #[serial]
     fn ttl_secs_field_takes_precedence_over_duration_string() {
-        clear_env();
+        let mut env = test_env::guard();
+        env.clear_keys(ENV_KEYS);
 
         let outcome = run_manifest(
             r#"
@@ -470,13 +475,14 @@ cache:
             .unwrap();
         assert!(ttl_assignment.applied);
         assert_eq!(ttl_assignment.source, "cache.action_cache.ttl_secs");
-        clear_env();
+        // restored by env guard
     }
 
     #[test]
     #[serial]
     fn skips_empty_allow_entries() {
-        clear_env();
+        let mut env = test_env::guard();
+        env.clear_keys(ENV_KEYS);
 
         let outcome = run_manifest(
             r#"
@@ -491,13 +497,14 @@ cache:
             .assignments
             .iter()
             .any(|a| a.key == "ARW_TOOLS_CACHE_ALLOW"));
-        clear_env();
+        // restored by env guard
     }
 
     #[test]
     #[serial]
     fn duration_string_with_millis_rounds_up() {
-        clear_env();
+        let mut env = test_env::guard();
+        env.clear_keys(ENV_KEYS);
 
         let outcome = run_manifest(
             r#"
@@ -515,7 +522,7 @@ cache:
             .unwrap();
         assert!(ttl_assignment.applied);
         assert_eq!(ttl_assignment.source, "cache.action_cache.ttl");
-        clear_env();
+        // restored by env guard
     }
 
     #[test]

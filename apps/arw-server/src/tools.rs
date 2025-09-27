@@ -286,11 +286,10 @@ mod tests {
     #[tokio::test]
     async fn singleflight_coalesces_identical_tool_runs() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = test_env::guard();
-        env_guard.set("ARW_TOOLS_CACHE_CAP", "8");
-        env_guard.set("ARW_TOOLS_CACHE_TTL_SECS", "60");
-        env_guard.set("ARW_TOOLS_CACHE_ALLOW", "custom.test");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_TOOLS_CACHE_CAP", "8");
+        ctx.env.set("ARW_TOOLS_CACHE_TTL_SECS", "60");
+        ctx.env.set("ARW_TOOLS_CACHE_ALLOW", "custom.test");
 
         let bus = arw_events::Bus::new_with_replay(8, 8);
         let kernel = arw_kernel::Kernel::open(temp.path()).expect("init kernel");

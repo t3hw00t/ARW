@@ -673,21 +673,12 @@ mod tests {
     use crate::test_support::env as test_env;
     use tempfile::tempdir;
 
-    fn setup_env(
-        env_guard: &mut test_env::EnvGuard,
-        dir: &std::path::Path,
-    ) -> crate::util::StateDirTestGuard {
-        let guard = crate::util::scoped_state_dir_for_tests(dir);
-        env_guard.set("ARW_TOOLS_CACHE_CAP", "16");
-        env_guard.set("ARW_TOOLS_CACHE_TTL_SECS", "60");
-        guard
-    }
-
     #[tokio::test]
     async fn cache_roundtrip() {
         let tmp = tempdir().unwrap();
-        let mut env_guard = test_env::guard();
-        let state_guard = setup_env(&mut env_guard, tmp.path());
+        let mut ctx = crate::test_support::begin_state_env(tmp.path());
+        ctx.env.set("ARW_TOOLS_CACHE_CAP", "16");
+        ctx.env.set("ARW_TOOLS_CACHE_TTL_SECS", "60");
         let cache = ToolCache::new();
         assert!(cache.enabled());
         assert!(cache.is_cacheable("demo.echo"));
@@ -719,18 +710,19 @@ mod tests {
         assert_eq!(stats.latency_saved_ms_total, 32);
         assert_eq!(stats.latency_saved_samples, 1);
         assert!(stats.avg_hit_age_secs >= 0.0);
-        drop(state_guard);
+        // ctx holds state/env guards until end of scope
     }
 
     #[tokio::test]
     async fn allow_list_overrides_defaults() {
         let tmp = tempdir().unwrap();
-        let mut env_guard = test_env::guard();
-        let state_guard = setup_env(&mut env_guard, tmp.path());
-        env_guard.set("ARW_TOOLS_CACHE_ALLOW", "demo.echo");
+        let mut ctx = crate::test_support::begin_state_env(tmp.path());
+        ctx.env.set("ARW_TOOLS_CACHE_CAP", "16");
+        ctx.env.set("ARW_TOOLS_CACHE_TTL_SECS", "60");
+        ctx.env.set("ARW_TOOLS_CACHE_ALLOW", "demo.echo");
         let cache = ToolCache::new();
         assert!(cache.is_cacheable("demo.echo"));
         assert!(!cache.is_cacheable("guardrails.check"));
-        drop(state_guard);
+        // ctx holds state/env guards until end of scope
     }
 }

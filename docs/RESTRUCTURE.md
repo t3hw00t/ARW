@@ -269,7 +269,7 @@ Notes
 | Medium | Chat Workbench | ✅ `/admin/chat*` endpoints restored with planner, temperature, and vote-k controls; ensure docs/tests cover multi-backend flows. | Add launcher/docs walkthroughs, exercise synthetic + remote backends in CI, and keep OpenAPI examples fresh. |
 | Medium | Human-in-the-loop staging | Kernel staging queue, approvals, and debug/launcher flows are live (`docs/guide/human_in_loop.md`); next focus is richer evidence previews and posture-driven policies. | Ship sidecar evidence panes, escalation rules, and SLA alerts. |
 | Medium | Research Watcher | Poller, read-model, and approve/archive APIs are live (`docs/guide/research_watcher.md`); feeds can now seed Suggested units. | Layer prioritisation heuristics, richer payload rendering, and cross-install sharing. |
-| Medium | Training Park metrics | Launcher pane remains a stub, but `/state/training/telemetry` + `training_metrics` read-model are live (`docs/guide/training_park.md`). | Extend telemetry coverage, add adjustment actions, and bind UI charts. |
+| Medium | Training Park metrics | Launcher pane remains a stub, but `/state/training/telemetry` + `training_metrics`/`context_metrics` read-models are live (`docs/guide/training_park.md`). | Extend telemetry coverage, add adjustment actions, and bind UI charts. |
 | Medium | Interactive snappy bench | ✅ `snappy-bench` CLI hits `/actions` + `/events`, enforces budgets, and publishes quick-start docs. | ✅ CI runs `scripts/ci_snappy_bench.sh` (queue budget 500 ms); capture long-term baselines per performance preset. |
 
 ### Legacy Retirement Checklist

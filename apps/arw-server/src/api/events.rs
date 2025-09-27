@@ -320,10 +320,9 @@ mod tests {
 
     #[tokio::test]
     async fn events_sse_replays_read_model_patches() {
-        let mut env_guard = env::guard();
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
         let bus = state.bus();
         let mut rx = bus.subscribe();
@@ -373,10 +372,10 @@ mod tests {
         let mut buffer = String::new();
         let mut patch_event: Option<SseRecord> = None;
         while patch_event.is_none() {
-            let frame = body
-                .frame()
+            let frame = timeout(Duration::from_secs(1), body.frame())
                 .await
-                .expect("frame available")
+                .expect("frame available in time")
+                .expect("frame present")
                 .expect("frame data");
             let bytes = frame.into_data().expect("data frame");
             buffer.push_str(&String::from_utf8_lossy(&bytes));
@@ -444,10 +443,9 @@ mod tests {
 
     #[tokio::test]
     async fn events_sse_replays_projects_patch() {
-        let mut env_guard = env::guard();
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
         let bus = state.bus();
         let mut rx = bus.subscribe();
@@ -502,10 +500,10 @@ mod tests {
         let mut buffer = String::new();
         let mut patch_event: Option<SseRecord> = None;
         while patch_event.is_none() {
-            let frame = body
-                .frame()
+            let frame = timeout(Duration::from_secs(1), body.frame())
                 .await
-                .expect("frame available")
+                .expect("frame available in time")
+                .expect("frame present")
                 .expect("frame data");
             let bytes = frame.into_data().expect("data frame");
             buffer.push_str(&String::from_utf8_lossy(&bytes));
@@ -571,31 +569,29 @@ mod tests {
 
     #[tokio::test]
     async fn events_sse_requires_auth_without_token() {
-        let mut env_guard = env::guard();
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
-        env_guard.set("ARW_DEBUG", "0");
-        env_guard.set("ARW_ADMIN_TOKEN", "secret-token");
+        ctx.env.set("ARW_DEBUG", "0");
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret-token");
 
         let response = events_sse(State(state), Query(HashMap::new()), HeaderMap::new())
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-        env_guard.remove("ARW_ADMIN_TOKEN");
-        env_guard.remove("ARW_DEBUG");
+        ctx.env.remove("ARW_ADMIN_TOKEN");
+        ctx.env.remove("ARW_DEBUG");
     }
 
     #[tokio::test]
     async fn events_sse_rejects_replay_when_kernel_disabled() {
-        let mut env_guard = env::guard();
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state_with_kernel(temp.path(), &mut env_guard, false).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state_with_kernel(temp.path(), &mut ctx.env, false).await;
 
-        env_guard.set("ARW_DEBUG", "1");
+        ctx.env.set("ARW_DEBUG", "1");
 
         let mut params = HashMap::new();
         params.insert("after".to_string(), "1".to_string());
@@ -615,21 +611,20 @@ mod tests {
         assert_eq!(body_json["title"].as_str(), Some("Kernel Disabled"));
         assert_eq!(body_json["status"].as_u64(), Some(501));
 
-        env_guard.remove("ARW_DEBUG");
+        ctx.env.remove("ARW_DEBUG");
     }
 
     #[tokio::test]
     async fn events_sse_accepts_hashed_admin_token() {
-        let mut env_guard = env::guard();
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
-        env_guard.set("ARW_DEBUG", "0");
-        env_guard.remove("ARW_ADMIN_TOKEN");
+        ctx.env.set("ARW_DEBUG", "0");
+        ctx.env.remove("ARW_ADMIN_TOKEN");
         let presented = "secret-token";
         let digest = sha2::Sha256::digest(presented.as_bytes());
-        env_guard.set("ARW_ADMIN_TOKEN_SHA256", hex::encode(digest));
+        ctx.env.set("ARW_ADMIN_TOKEN_SHA256", hex::encode(digest));
 
         let mut headers = HeaderMap::new();
         headers.insert(

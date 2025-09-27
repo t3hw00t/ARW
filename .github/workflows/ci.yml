@@ -82,6 +82,11 @@ jobs:
       - name: Clippy (workspace)
         run: cargo clippy --workspace --all-targets -- -D warnings
 
+      - name: EnvGuard style check
+        env:
+          ENFORCE_ENV_GUARD: 1
+        run: bash scripts/check_env_guard.sh
+
       - name: Tests (workspace)
         run: cargo nextest run --workspace
 

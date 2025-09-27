@@ -114,6 +114,7 @@ pub const TOPIC_WORLD_UPDATED: &str = "world.updated";
 // Context assembly
 pub const TOPIC_CONTEXT_ASSEMBLED: &str = "context.assembled";
 pub const TOPIC_CONTEXT_COVERAGE: &str = "context.coverage";
+pub const TOPIC_CONTEXT_RECALL_RISK: &str = "context.recall.risk";
 pub const TOPIC_WORKING_SET_STARTED: &str = "working_set.started";
 pub const TOPIC_WORKING_SET_SEED: &str = "working_set.seed";
 pub const TOPIC_WORKING_SET_EXPANDED: &str = "working_set.expanded";

@@ -6,9 +6,10 @@ use serde_json::Value;
 
 pub type RuntimeId = String;
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeState {
+    #[default]
     Unknown,
     Starting,
     Ready,
@@ -17,24 +18,13 @@ pub enum RuntimeState {
     Offline,
 }
 
-impl Default for RuntimeState {
-    fn default() -> Self {
-        RuntimeState::Unknown
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeSeverity {
+    #[default]
     Info,
     Warn,
     Error,
-}
-
-impl Default for RuntimeSeverity {
-    fn default() -> Self {
-        RuntimeSeverity::Info
-    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]

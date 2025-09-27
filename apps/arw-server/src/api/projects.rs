@@ -1003,48 +1003,13 @@ mod tests {
         body::to_bytes,
         http::{HeaderMap, HeaderValue, StatusCode},
     };
-    use once_cell::sync::Lazy;
     use serde_json::Value;
-    use std::sync::{Mutex as StdMutex, MutexGuard as StdMutexGuard};
     use tempfile::tempdir;
-
-    static ENV_MUTEX: Lazy<StdMutex<()>> = Lazy::new(|| StdMutex::new(()));
-
-    struct EnvContext {
-        _lock: StdMutexGuard<'static, ()>,
-        prev: Vec<(&'static str, Option<String>)>,
-    }
-
-    impl EnvContext {
-        fn new() -> Self {
-            Self {
-                _lock: ENV_MUTEX.lock().expect("env mutex"),
-                prev: Vec::new(),
-            }
-        }
-
-        fn set(&mut self, key: &'static str, value: &str) {
-            let prior = std::env::var(key).ok();
-            std::env::set_var(key, value);
-            self.prev.push((key, prior));
-        }
-    }
-
-    impl Drop for EnvContext {
-        fn drop(&mut self) {
-            for (key, value) in self.prev.drain(..) {
-                if let Some(prev) = value {
-                    std::env::set_var(key, prev);
-                } else {
-                    std::env::remove_var(key);
-                }
-            }
-        }
-    }
 
     #[tokio::test]
     async fn state_projects_snapshot_includes_notes_and_tree() {
         let temp = tempdir().expect("tempdir");
+        let ctx = crate::test_support::begin_state_env(temp.path());
         let state_dir = temp.path().display().to_string();
 
         let projects_root = temp.path().join("projects");
@@ -1064,12 +1029,11 @@ mod tests {
         let paths = tree["paths"].as_object().expect("paths object");
         assert!(paths.contains_key(""));
 
-        let mut env = EnvContext::new();
+        let mut env_guard = ctx.env;
         let projects_dir = projects_root.display().to_string();
-
-        env.set("ARW_STATE_DIR", &state_dir);
-        env.set("ARW_PROJECTS_DIR", &projects_dir);
-        env.set("ARW_ADMIN_TOKEN", "secret");
+        env_guard.set("ARW_STATE_DIR", &state_dir);
+        env_guard.set("ARW_PROJECTS_DIR", &projects_dir);
+        env_guard.set("ARW_ADMIN_TOKEN", "secret");
 
         let mut headers = HeaderMap::new();
         headers.insert("X-ARW-Admin", HeaderValue::from_static("secret"));
@@ -1085,18 +1049,18 @@ mod tests {
     #[tokio::test]
     async fn state_projects_tree_returns_entries() {
         let temp = tempdir().expect("tempdir");
+        let ctx = crate::test_support::begin_state_env(temp.path());
         let state_dir = temp.path().display().to_string();
 
         let projects_root = temp.path().join("projects");
         std::fs::create_dir_all(projects_root.join("alpha/docs")).expect("create project dir");
         std::fs::write(projects_root.join("alpha/docs/info.txt"), "data").expect("write file");
 
-        let mut env = EnvContext::new();
+        let mut env_guard = ctx.env;
         let projects_dir = projects_root.display().to_string();
-
-        env.set("ARW_STATE_DIR", &state_dir);
-        env.set("ARW_PROJECTS_DIR", &projects_dir);
-        env.set("ARW_ADMIN_TOKEN", "secret");
+        env_guard.set("ARW_STATE_DIR", &state_dir);
+        env_guard.set("ARW_PROJECTS_DIR", &projects_dir);
+        env_guard.set("ARW_ADMIN_TOKEN", "secret");
 
         let mut headers = HeaderMap::new();
         headers.insert("X-ARW-Admin", HeaderValue::from_static("secret"));
