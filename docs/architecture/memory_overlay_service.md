@@ -230,7 +230,7 @@ All new endpoints ship via the unified action bus (`/actions`) and the SSE state
 - Emit timings for each pipeline stage (`lexical_ms`, `vector_ms`, `fusion_ms`, `pack_ms`).
 - Count hits per durability/kind to track coverage.
 - Honor `privacy` scope: default filter to `private`+`project`; require explicit override to retrieve `shared`.
-- TTL janitor removes expired rows and publishes `memory.item.expired`.
+- Hygiene loop enforces TTLs and lane caps: expired records and overflowed lanes are reclaimed (`memory.item.expired` events), Prometheus counters (`arw_memory_gc_expired_total`, `arw_memory_gc_evicted_total`) track reclaimed rows, and `/state/memory` is patched live so operators see the updated snapshot.
 - Respect egress firewall: remote adapters only allowed once guard approves.
 
 ## Implementation roadmap

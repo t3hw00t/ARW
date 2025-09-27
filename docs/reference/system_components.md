@@ -528,6 +528,7 @@ Memory overlay service on top of the MAL schema that exposes `memory.*` actions,
   - [architecture/memory_overlay_service.md](../architecture/memory_overlay_service.md)
 - Notes:
   - Lane-specific budgets, TTLs, and lifecycle policies keep the corpus explainable and auditable.
+  - Background hygiene job enforces TTLs and per-lane caps (`ARW_MEMORY_GC_INTERVAL_SECS`, `ARW_MEMORY_GC_BATCH`, `ARW_MEMORY_LANE_CAPS`), emits `memory.item.expired`, patches `/state/memory`, and exposes Prometheus counters (`arw_memory_gc_expired_total`, `arw_memory_gc_evicted_total`).
   - Overlay actions now flow entirely through `/actions`; legacy `/memory/*` REST shims have been removed.
   - Retrieval journaling captures scores/diversity decisions for working-set diagnostics.
 

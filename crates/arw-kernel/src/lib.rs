@@ -1,5 +1,6 @@
 use anyhow::{anyhow, Result};
 use arw_memory_core::{MemoryInsertArgs, MemoryInsertOwned, MemoryStore};
+use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
@@ -8,6 +9,8 @@ use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
+
+pub use arw_memory_core::{MemoryGcCandidate, MemoryGcReason};
 
 #[derive(Clone)]
 pub struct Kernel {
@@ -1526,6 +1529,33 @@ impl Kernel {
         store.find_memory_by_hash(hash)
     }
 
+    pub fn expired_memory_candidates(
+        &self,
+        now: DateTime<Utc>,
+        limit: usize,
+    ) -> Result<Vec<MemoryGcCandidate>> {
+        let conn = self.conn()?;
+        let store = MemoryStore::new(&conn);
+        store.expired_candidates(now, limit)
+    }
+
+    pub fn lane_overflow_candidates(
+        &self,
+        lane: &str,
+        cap: usize,
+        limit: usize,
+    ) -> Result<Vec<MemoryGcCandidate>> {
+        let conn = self.conn()?;
+        let store = MemoryStore::new(&conn);
+        store.lane_overflow_candidates(lane, cap, limit)
+    }
+
+    pub fn delete_memory_records(&self, ids: &[String]) -> Result<usize> {
+        let conn = self.conn()?;
+        let store = MemoryStore::new(&conn);
+        store.delete_records(ids)
+    }
+
     pub fn list_recent_memory(
         &self,
         lane: Option<&str>,
@@ -1766,6 +1796,36 @@ impl Kernel {
     ) -> Result<Option<serde_json::Value>> {
         let k = self.clone();
         tokio::task::spawn_blocking(move || k.find_memory_by_hash(&hash))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn expired_memory_candidates_async(
+        &self,
+        now: DateTime<Utc>,
+        limit: usize,
+    ) -> Result<Vec<MemoryGcCandidate>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.expired_memory_candidates(now, limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn lane_overflow_candidates_async(
+        &self,
+        lane: String,
+        cap: usize,
+        limit: usize,
+    ) -> Result<Vec<MemoryGcCandidate>> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.lane_overflow_candidates(&lane, cap, limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn delete_memory_records_async(&self, ids: Vec<String>) -> Result<usize> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.delete_memory_records(&ids))
             .await
             .map_err(|e| anyhow!("join error: {}", e))?
     }

@@ -46,7 +46,7 @@ Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143009-0003] Retrieval: add MMR‑style selector across vector/graph mounts and world beliefs — todo
 - [Pack: Research] [t-250912143013-0004] Compression cascade: summarize episodes (extract→abstract→outline) into mounts with provenance — todo
 - [Pack: Research] [t-250912143017-0005] Failure detectors: emit `context.recall_risk` and `context.coverage` with meters in UI — todo
-- [Pack: Research] [t-250912143021-0006] Memory hygiene: per‑lane caps + TTL + janitor job with rollups and evictions — todo
+- [Pack: Research] [t-250912143021-0006] Memory hygiene: per‑lane caps + TTL + janitor job with rollups and evictions — done (this change)
 - [Pack: Research] [t-250912143025-0007] Logic Unit: ship config‑only Never‑Out‑Of‑Context defaults (budgets, diversity, rehydrate rules) — todo
 - [Pack: Research] [t-250912143029-0008] UI: Project Hub panel “What’s in context now” with artifact pointers and rehydrate actions — todo
 - [Pack: Research] [t-250912143033-0009] Training Park: dials for diversity/recency/compression; recall‑risk and coverage meters — todo

@@ -2,8 +2,9 @@
 //! hybrid retrieval primitives, and lightweight ranking utilities.
 
 use anyhow::{anyhow, Result};
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Duration, Utc};
 use rusqlite::{params, Connection};
+use serde::Serialize;
 use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::cmp::Ordering;
@@ -36,6 +37,34 @@ const SELECT_COLUMN_LIST: &[&str] = &[
     "links",
     "extra",
 ];
+
+/// Summary of a memory record removed by the hygiene pass.
+#[derive(Debug, Clone, Serialize)]
+pub struct MemoryGcCandidate {
+    pub id: String,
+    pub lane: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub kind: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub project_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub agent_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub durability: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ttl_s: Option<i64>,
+    pub created: String,
+    pub updated: String,
+    pub reason: MemoryGcReason,
+}
+
+/// Reason why a memory record was reclaimed.
+#[derive(Debug, Clone, Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum MemoryGcReason {
+    TtlExpired { ttl_s: i64, expired_at: String },
+    LaneCap { cap: usize, overflow: usize },
+}
 
 fn select_columns(prefix: Option<&str>) -> String {
     match prefix {
@@ -556,6 +585,119 @@ impl<'c> MemoryStore<'c> {
             .collect())
     }
 
+    pub fn expired_candidates(
+        &self,
+        now: DateTime<Utc>,
+        limit: usize,
+    ) -> Result<Vec<MemoryGcCandidate>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let mut stmt = self.conn.prepare(
+            "SELECT id,lane,kind,project_id,agent_id,durability,ttl_s,created,updated \
+             FROM memory_records \
+             WHERE ttl_s IS NOT NULL AND ttl_s > 0 \
+               AND (strftime('%s', created) + ttl_s) <= ?1 \
+             ORDER BY updated ASC \
+             LIMIT ?2",
+        )?;
+        let mut rows = stmt.query(params![now.timestamp(), limit as i64])?;
+        let mut out = Vec::new();
+        while let Some(row) = rows.next()? {
+            let ttl = row.get::<_, Option<i64>>(6)?.unwrap_or(0);
+            let created: String = row.get(7)?;
+            let expired_at = parse_timestamp(&created)
+                .unwrap_or(now)
+                .checked_add_signed(Duration::seconds(ttl))
+                .unwrap_or(now)
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            out.push(build_gc_candidate(
+                &row,
+                MemoryGcReason::TtlExpired {
+                    ttl_s: ttl,
+                    expired_at,
+                },
+            )?);
+        }
+        Ok(out)
+    }
+
+    pub fn lane_overflow_candidates(
+        &self,
+        lane: &str,
+        cap: usize,
+        limit: usize,
+    ) -> Result<Vec<MemoryGcCandidate>> {
+        if limit == 0 {
+            return Ok(Vec::new());
+        }
+        let total: i64 = self
+            .conn
+            .query_row(
+                "SELECT COUNT(*) FROM memory_records WHERE lane = ?1",
+                params![lane],
+                |row| row.get(0),
+            )
+            .unwrap_or(0);
+        if total <= cap as i64 {
+            return Ok(Vec::new());
+        }
+        let overflow = (total as usize).saturating_sub(cap);
+        let fetch = overflow.min(limit);
+        if fetch == 0 {
+            return Ok(Vec::new());
+        }
+        let mut stmt = self.conn.prepare(
+            "SELECT id,lane,kind,project_id,agent_id,durability,ttl_s,created,updated \
+             FROM memory_records \
+             WHERE lane = ?1 \
+             ORDER BY updated ASC \
+             LIMIT ?2",
+        )?;
+        let mut rows = stmt.query(params![lane, fetch as i64])?;
+        let mut out = Vec::new();
+        while let Some(row) = rows.next()? {
+            out.push(build_gc_candidate(
+                &row,
+                MemoryGcReason::LaneCap { cap, overflow },
+            )?);
+        }
+        Ok(out)
+    }
+
+    pub fn delete_records(&self, ids: &[String]) -> Result<usize> {
+        if ids.is_empty() {
+            return Ok(0);
+        }
+        let tx = self.conn.unchecked_transaction()?;
+        let mut total_deleted = 0usize;
+
+        {
+            let mut stmt = tx.prepare("DELETE FROM memory_records WHERE id = ?1")?;
+            for id in ids {
+                total_deleted = total_deleted.saturating_add(stmt.execute(params![id])? as usize);
+            }
+        }
+
+        {
+            let mut stmt = tx.prepare("DELETE FROM memory_fts WHERE id = ?1")?;
+            for id in ids {
+                let _ = stmt.execute(params![id])?;
+            }
+        }
+
+        {
+            let mut stmt =
+                tx.prepare("DELETE FROM memory_links WHERE src_id = ?1 OR dst_id = ?1")?;
+            for id in ids {
+                let _ = stmt.execute(params![id])?;
+            }
+        }
+
+        tx.commit()?;
+        Ok(total_deleted)
+    }
+
     pub fn insert_memory_link(
         &self,
         src_id: &str,
@@ -642,6 +784,30 @@ impl<'c> MemoryStore<'c> {
             Ok(None)
         }
     }
+}
+
+fn build_gc_candidate(
+    row: &rusqlite::Row<'_>,
+    reason: MemoryGcReason,
+) -> Result<MemoryGcCandidate> {
+    Ok(MemoryGcCandidate {
+        id: row.get(0)?,
+        lane: row.get(1)?,
+        kind: row.get(2)?,
+        project_id: row.get(3)?,
+        agent_id: row.get(4)?,
+        durability: row.get(5)?,
+        ttl_s: row.get(6)?,
+        created: row.get(7)?,
+        updated: row.get(8)?,
+        reason,
+    })
+}
+
+fn parse_timestamp(raw: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(raw)
+        .map(|dt| dt.with_timezone(&Utc))
+        .ok()
 }
 
 fn row_to_value(row: &rusqlite::Row<'_>) -> Result<Value> {
@@ -813,6 +979,34 @@ mod tests {
         conn
     }
 
+    fn make_owned(id: Option<&str>, lane: &str, value: Value) -> MemoryInsertOwned {
+        MemoryInsertOwned {
+            id: id.map(|s| s.to_string()),
+            lane: lane.to_string(),
+            kind: None,
+            key: None,
+            value,
+            embed: None,
+            embed_hint: None,
+            tags: None,
+            score: None,
+            prob: None,
+            agent_id: None,
+            project_id: None,
+            text: None,
+            durability: None,
+            trust: None,
+            privacy: None,
+            ttl_s: None,
+            keywords: None,
+            entities: None,
+            source: None,
+            links: None,
+            extra: None,
+            hash: None,
+        }
+    }
+
     #[test]
     fn test_insert_and_get_memory() {
         let conn = setup_conn();
@@ -969,5 +1163,75 @@ mod tests {
             )
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn gc_finds_and_removes_expired_records() {
+        let conn = setup_conn();
+        let store = MemoryStore::new(&conn);
+        let mut owned = make_owned(Some("exp-1"), "episodic", json!({"text": "old"}));
+        owned.ttl_s = Some(1);
+        owned.durability = Some("short".to_string());
+        let args = owned.to_args();
+        store.insert_memory(&args).unwrap();
+        let old_ts = "1970-01-01T00:00:00.000Z";
+        conn.execute(
+            "UPDATE memory_records SET created=?, updated=? WHERE id='exp-1'",
+            params![old_ts, old_ts],
+        )
+        .unwrap();
+        conn.execute(
+            "UPDATE memory_fts SET lane=lane WHERE id='exp-1'",
+            params![],
+        )
+        .unwrap();
+
+        let now = DateTime::parse_from_rfc3339("1970-01-01T00:00:05Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        let expired = store.expired_candidates(now, 10).unwrap();
+        assert_eq!(expired.len(), 1);
+        assert_eq!(expired[0].id, "exp-1");
+        match &expired[0].reason {
+            MemoryGcReason::TtlExpired { ttl_s, .. } => assert_eq!(*ttl_s, 1),
+            other => panic!("unexpected reason: {other:?}"),
+        }
+        store
+            .delete_records(&expired.iter().map(|c| c.id.clone()).collect::<Vec<_>>())
+            .unwrap();
+        assert!(store.get_memory("exp-1").unwrap().is_none());
+        let count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM memory_fts WHERE id='exp-1'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn gc_lane_overflow_returns_oldest_records() {
+        let conn = setup_conn();
+        let store = MemoryStore::new(&conn);
+        for idx in 0..3 {
+            let insert_owned = make_owned(
+                Some(&format!("lane-{idx}")),
+                "episodic",
+                json!({"text": idx}),
+            );
+            store.insert_memory(&insert_owned.to_args()).unwrap();
+        }
+        let overflow = store.lane_overflow_candidates("episodic", 1, 10).unwrap();
+        assert_eq!(overflow.len(), 2);
+        assert!(overflow.iter().any(|c| c.id == "lane-0"));
+        assert!(overflow.iter().any(|c| c.id == "lane-1"));
+        match &overflow[0].reason {
+            MemoryGcReason::LaneCap { cap, overflow } => {
+                assert_eq!(*cap, 1);
+                assert_eq!(*overflow, 2);
+            }
+            other => panic!("unexpected reason: {other:?}"),
+        }
     }
 }

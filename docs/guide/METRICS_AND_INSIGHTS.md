@@ -37,6 +37,7 @@ Type: How‑to
   - `arw_tools_cache_hits` / `arw_tools_cache_miss` — deterministic action cache outcomes (hit vs. new execution)
   - `arw_tools_cache_coalesced` / `arw_tools_cache_coalesced_waiters` — number of followers served by singleflight coalescing and how many callers waited
   - `arw_tools_cache_error` / `arw_tools_cache_bypass` — serialization/store failures vs. intentionally uncached tools
+  - `arw_memory_gc_expired_total` / `arw_memory_gc_evicted_total` — TTL expirations and lane-cap evictions reclaimed by the memory hygiene loop
   - `arw_task_*` — background task starts/completions/aborts (`*_total`) and inflight gauges
   - `arw_legacy_capsule_headers_total` — legacy `X-ARW-Gate` headers rejected (should trend to zero before retiring compatibility shims)
   - `arw_build_info{service,version,sha}` — build metadata

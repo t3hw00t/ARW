@@ -123,6 +123,20 @@ fn render_prometheus(
         );
         write_metric_line(&mut out, "arw_task_aborted_total", &labels, status.aborted);
     }
+    out.push_str("# HELP arw_memory_gc_expired_total Memory records reclaimed because TTL expired\n# TYPE arw_memory_gc_expired_total counter\n");
+    write_metric_line(
+        &mut out,
+        "arw_memory_gc_expired_total",
+        &[],
+        summary.memory_gc.expired_total,
+    );
+    out.push_str("# HELP arw_memory_gc_evicted_total Memory records reclaimed because lanes exceeded caps\n# TYPE arw_memory_gc_evicted_total counter\n");
+    write_metric_line(
+        &mut out,
+        "arw_memory_gc_evicted_total",
+        &[],
+        summary.memory_gc.evicted_total,
+    );
     out.push_str("# HELP arw_legacy_capsule_headers_total Legacy capsule headers rejected\n# TYPE arw_legacy_capsule_headers_total counter\n");
     write_metric_line(
         &mut out,

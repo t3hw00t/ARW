@@ -73,12 +73,19 @@ pub struct RoutesSummary {
     pub by_path: BTreeMap<String, RouteSummary>,
 }
 
+#[derive(Clone, Serialize, Default)]
+pub struct MemoryGcSummary {
+    pub expired_total: u64,
+    pub evicted_total: u64,
+}
+
 #[derive(Clone, Serialize)]
 pub struct MetricsSummary {
     pub events: EventsSummary,
     pub routes: RoutesSummary,
     pub tasks: BTreeMap<String, TaskStatus>,
     pub compatibility: CompatibilitySummary,
+    pub memory_gc: MemoryGcSummary,
 }
 
 #[derive(Clone, Serialize, Default)]
@@ -174,6 +181,30 @@ struct TaskStat {
     last_stop: Option<String>,
 }
 
+#[derive(Default)]
+struct MemoryGcCounters {
+    expired: AtomicU64,
+    evicted: AtomicU64,
+}
+
+impl MemoryGcCounters {
+    fn record(&self, expired: u64, evicted: u64) {
+        if expired > 0 {
+            self.expired.fetch_add(expired, Ordering::Relaxed);
+        }
+        if evicted > 0 {
+            self.evicted.fetch_add(evicted, Ordering::Relaxed);
+        }
+    }
+
+    fn snapshot(&self) -> MemoryGcSummary {
+        MemoryGcSummary {
+            expired_total: self.expired.load(Ordering::Relaxed),
+            evicted_total: self.evicted.load(Ordering::Relaxed),
+        }
+    }
+}
+
 impl TaskStat {
     fn on_start(&mut self) {
         self.started = self.started.saturating_add(1);
@@ -219,6 +250,7 @@ pub struct Metrics {
     hist_buckets: Vec<u64>,
     tasks: Mutex<BTreeMap<String, TaskStat>>,
     legacy_capsule_headers: AtomicU64,
+    memory_gc: MemoryGcCounters,
 }
 
 impl Default for Metrics {
@@ -251,6 +283,7 @@ impl Metrics {
             hist_buckets,
             tasks: Mutex::new(BTreeMap::new()),
             legacy_capsule_headers: AtomicU64::new(0),
+            memory_gc: MemoryGcCounters::default(),
         }
     }
 
@@ -301,11 +334,13 @@ impl Metrics {
         let compatibility = CompatibilitySummary {
             legacy_capsule_headers: self.legacy_capsule_headers.load(Ordering::Relaxed),
         };
+        let memory_gc = self.memory_gc.snapshot();
         MetricsSummary {
             events,
             routes,
             tasks,
             compatibility,
+            memory_gc,
         }
     }
 
@@ -357,6 +392,13 @@ impl Metrics {
         self.legacy_capsule_headers.fetch_add(1, Ordering::Relaxed);
     }
 
+    pub fn record_memory_gc(&self, expired: u64, evicted: u64) {
+        if expired == 0 && evicted == 0 {
+            return;
+        }
+        self.memory_gc.record(expired, evicted);
+    }
+
     pub fn event_kind_count(&self, kind: &str) -> u64 {
         self.events
             .lock()
@@ -382,6 +424,7 @@ pub fn route_stats_snapshot(
         "routes": summary.routes,
         "tasks": summary.tasks,
         "cache": cache_stats_snapshot(cache),
+        "memory_gc": summary.memory_gc,
     })
 }
 

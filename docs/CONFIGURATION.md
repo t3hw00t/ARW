@@ -60,6 +60,11 @@ Presets seed defaults for hot-path tunables if you haven’t set them explicitly
 - `ARW_CONTEXT_COVERAGE_MAX_ITERS`: maximum iterations allowed for the coverage (CRAG) refinement loop.
 - `ARW_REHYDRATE_FILE_HEAD_KB`: preview bytes for `/context/rehydrate`.
 
+## Memory overlay
+- `ARW_MEMORY_GC_INTERVAL_SECS`: cadence (seconds) for the background memory hygiene sweep (default `60`).
+- `ARW_MEMORY_GC_BATCH`: maximum number of records reclaimed per sweep across TTL expiry and lane overflow (default `128`).
+- `ARW_MEMORY_LANE_CAPS`: comma-separated `lane=cap` overrides for per-lane retention. Example: `ephemeral=200,episodic=1500,semantic=6000`. Setting a cap to `0` removes the limit for that lane. Defaults are `ephemeral=256`, `episodic=1024`, `semantic=4096`, `profile=512`.
+
 Preset heuristics today:
 
 | Preset | `ARW_HTTP_MAX_CONC` | `ARW_ACTIONS_QUEUE_MAX` |
