@@ -10,6 +10,7 @@ members = [
   "crates/arw-topics",
   "crates/arw-heuristics",
   "crates/arw-memory-core",
+  "crates/arw-runtime",
   "apps/arw-cli",
   "crates/arw-otel",
   "apps/arw-server",

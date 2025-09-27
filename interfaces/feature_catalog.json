@@ -73,7 +73,7 @@
           "id": "extend_runtime",
           "name": "Extend the Runtime",
           "promise": "Bring new skills online through declarative packs, WASI tools, and memory layers.",
-          "features": ["wasi_tool_host", "logic_units_library", "memory_lanes"]
+          "features": ["runtime_supervisor", "wasi_tool_host", "logic_units_library", "memory_lanes"]
         }
       ]
     }

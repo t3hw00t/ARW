@@ -2,6 +2,7 @@ cache:
   # Currently supported fields map directly to environment knobs.
   action_cache:
     ttl: 7d               # -> ARW_TOOLS_CACHE_TTL_SECS (seconds)
+    ttl_secs: 604800      # Explicit seconds override when both ttl and ttl_secs set
     capacity: 4096        # -> ARW_TOOLS_CACHE_CAP (entries)
     allow:                # -> ARW_TOOLS_CACHE_ALLOW (CSV)
       - demo.echo

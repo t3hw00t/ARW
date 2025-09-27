@@ -47,7 +47,11 @@ pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
                     read_models::publish_read_model_patch(
                         &bus_for_patch,
                         "runtime_matrix",
-                        &json!({"items": snapshot}),
+                        &json!({
+                            "items": snapshot,
+                            "updated": chrono::Utc::now()
+                                .to_rfc3339_opts(SecondsFormat::Millis, true)
+                        }),
                     );
                 }
             }
@@ -80,12 +84,16 @@ async fn build_local_health_payload(state: &AppState) -> Option<Value> {
     let mut total_errors = 0u64;
     let mut ewma_sum = 0.0f64;
     let mut ewma_count = 0u64;
-    for summary in metrics.routes.by_path.values() {
+    let mut slow_routes: Vec<String> = Vec::new();
+    for (path, summary) in metrics.routes.by_path.iter() {
         total_hits = total_hits.saturating_add(summary.hits);
         total_errors = total_errors.saturating_add(summary.errors);
         if summary.ewma_ms.is_finite() && summary.ewma_ms > 0.0 {
             ewma_sum += summary.ewma_ms;
             ewma_count = ewma_count.saturating_add(1);
+            if summary.ewma_ms > 1_000.0 {
+                slow_routes.push(format!("{} ({:.0} ms)", path, summary.ewma_ms));
+            }
         }
     }
     let avg_ewma = if ewma_count == 0 {
@@ -94,9 +102,77 @@ async fn build_local_health_payload(state: &AppState) -> Option<Value> {
         Some((ewma_sum / ewma_count as f64).round())
     };
 
+    // Determine human-friendly status signal
+    let mut status_code = if state.kernel_enabled() {
+        "ok"
+    } else {
+        "offline"
+    };
+    let mut severity = if state.kernel_enabled() {
+        "info"
+    } else {
+        "error"
+    };
+    let mut reasons: Vec<String> = Vec::new();
+
+    if !state.kernel_enabled() {
+        reasons.push("Kernel runtime disabled".to_string());
+    }
+
+    if bus_stats.lagged > 0 {
+        if status_code == "ok" {
+            status_code = "degraded";
+        }
+        severity = "warn";
+        reasons.push(format!(
+            "Bus lag observed ({} lagged events)",
+            bus_stats.lagged
+        ));
+    }
+
+    if total_errors > 0 {
+        if status_code == "ok" {
+            status_code = "degraded";
+        }
+        severity = if total_errors > total_hits / 10 {
+            "error"
+        } else {
+            "warn"
+        };
+        reasons.push(format!("HTTP errors recorded: {}", total_errors));
+    }
+
+    if let Some(avg) = avg_ewma {
+        if avg > 1_500.0 {
+            if status_code == "ok" {
+                status_code = "degraded";
+            }
+            severity = "warn";
+            reasons.push(format!("High average latency {:.0} ms", avg));
+        }
+    }
+
+    if reasons.is_empty() {
+        reasons.push("Running within expected ranges".to_string());
+    }
+
+    let primary_reason = reasons.first().cloned().unwrap_or_default();
+    let status_label = match status_code {
+        "offline" => "Offline – Kernel disabled".to_string(),
+        "degraded" => format!("Degraded – {}", primary_reason),
+        _ => "Ready – Runtime telemetry nominal".to_string(),
+    };
+    let aria_hint = format!("Runtime status {}. {}", status_label, reasons.join("; "));
+
     let payload = json!({
         "target": node_id(),
-        "status": if state.kernel_enabled() { "ok" } else { "disabled" },
+        "status": {
+            "code": status_code,
+            "severity": severity,
+            "label": status_label,
+            "detail": reasons,
+            "aria_hint": aria_hint
+        },
         "generated": generated,
         "kernel": {
             "enabled": state.kernel_enabled(),
@@ -117,6 +193,7 @@ async fn build_local_health_payload(state: &AppState) -> Option<Value> {
             "hits": total_hits,
             "errors": total_errors,
             "avg_ewma_ms": avg_ewma,
+            "slow_routes": if slow_routes.is_empty() { None } else { Some(slow_routes) },
         }
     });
     Some(payload)

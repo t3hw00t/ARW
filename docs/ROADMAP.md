@@ -4,11 +4,21 @@ title: Roadmap
 
 # Roadmap
 
-Updated: 2025-09-26
+Updated: 2025-09-28
 Type: Reference
 
 See also: [Backlog](BACKLOG.md) and [Interface Roadmap](INTERFACE_ROADMAP.md).
 Roadmap highlights themes and timelines; Backlog tracks actionable items.
+
+## Priority One – Managed Runtime Supervisor
+
+Promote the managed runtime supervisor from blueprint to the primary kernel initiative. This work elevates local model orchestration to the same Class 1 footing as Model Steward so every install gets a stable, policy-aligned runtime stack.
+
+- **Phase 1: Stabilize the Runtime Matrix** — expand the existing `/state/runtime_matrix` service and `runtime.state.changed` events with health causes, restart budgets, and accessibility-focused status hints (expected completion: 2 sprints). Ship smoke tests that launch the current llama.cpp integration under CPU-only and GPU hosts to keep regressions visible.
+- **Phase 2: Supervisor Core** — land the `RuntimeRegistry` service, adapter contract, and guarded start/stop APIs for text runtimes. Ensure Cedar policy and Guardrail Gateway leases gate accelerator access. Integration tests must exercise failure recovery, lease enforcement, and Snappy budgets.
+- **Phase 3: Multimodal Expansion** — add audio (Whisper.cpp) and vision (llava.cpp/Moondream) adapters, shared prompt-cache warmers, and launcher consent flows. Accessibility requirements include captions/transcripts by default and keyboard-vs-pointer parity in quick actions.
+- **Phase 4: Federation Hooks** — expose runtime claims through orchestrator lanes and worker manifests so remote nodes advertise accelerator profiles safely. Include ledger coverage to track shared GPU usage.
+- **Documentation & UX** — replace the llama.cpp blueprint with the finalized supervisor design, add operator runbooks, and surface profiles plus consent cues in Launcher. Keep docs, feature matrix, and roadmap checkpoints in sync as phases land.
 
 ## Scope Badges
 

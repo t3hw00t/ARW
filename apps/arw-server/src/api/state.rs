@@ -755,6 +755,31 @@ pub async fn state_runtime_matrix(
     Json(json!({"items": items})).into_response()
 }
 
+/// Runtime supervisor snapshot.
+#[utoipa::path(
+    get,
+    path = "/state/runtime_supervisor",
+    tag = "State",
+    responses(
+        (status = 200, description = "Runtime supervisor snapshot", body = serde_json::Value),
+        (status = 401, description = "Unauthorized", body = serde_json::Value)
+    )
+)]
+pub async fn state_runtime_supervisor(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if !crate::admin_ok(&headers) {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
+    let snapshot: arw_runtime::RegistrySnapshot = state.runtime().snapshot().await;
+    Json(serde_json::to_value(snapshot).unwrap_or_else(|_| json!({"runtimes": []}))).into_response()
+}
+
 /// Self model index.
 #[utoipa::path(
     get,

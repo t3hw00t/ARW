@@ -8,7 +8,8 @@ use serde_json::json;
 use tokio::sync::Mutex;
 
 use crate::{
-    capsule_guard, chat, cluster, experiments, feedback, governor, metrics, models, tool_cache,
+    capsule_guard, chat, cluster, experiments, feedback, governor, metrics, models, runtime,
+    tool_cache,
 };
 
 pub(crate) type Policy = PolicyEngine;
@@ -37,6 +38,7 @@ pub(crate) struct AppState {
     experiments: Arc<experiments::Experiments>,
     capsules: Arc<capsule_guard::CapsuleStore>,
     chat: Arc<chat::ChatState>,
+    runtime: Arc<runtime::RuntimeRegistry>,
 }
 
 impl AppState {
@@ -61,6 +63,7 @@ impl AppState {
         experiments: Arc<experiments::Experiments>,
         capsules: Arc<capsule_guard::CapsuleStore>,
         chat: Arc<chat::ChatState>,
+        runtime: Arc<runtime::RuntimeRegistry>,
     ) -> Self {
         Self {
             bus,
@@ -82,6 +85,7 @@ impl AppState {
             experiments,
             capsules,
             chat,
+            runtime,
         }
     }
 
@@ -158,6 +162,10 @@ impl AppState {
         self.chat.clone()
     }
 
+    pub fn runtime(&self) -> Arc<runtime::RuntimeRegistry> {
+        self.runtime.clone()
+    }
+
     pub fn config_state(&self) -> Arc<Mutex<serde_json::Value>> {
         self.config_state.clone()
     }
@@ -196,6 +204,7 @@ pub(crate) struct AppStateBuilder {
     experiments: Option<Arc<experiments::Experiments>>,
     capsules: Option<Arc<capsule_guard::CapsuleStore>>,
     chat: Option<Arc<chat::ChatState>>,
+    runtime: Option<Arc<runtime::RuntimeRegistry>>,
 }
 
 impl AppState {
@@ -227,6 +236,7 @@ impl AppState {
             experiments: None,
             capsules: None,
             chat: None,
+            runtime: None,
         }
     }
 }
@@ -314,6 +324,11 @@ impl AppStateBuilder {
         self
     }
 
+    pub(crate) fn with_runtime(mut self, runtime: Arc<runtime::RuntimeRegistry>) -> Self {
+        self.runtime = Some(runtime);
+        self
+    }
+
     pub(crate) async fn build(self) -> AppState {
         let config_state = self
             .config_state
@@ -380,6 +395,9 @@ impl AppStateBuilder {
         let chat_state = self
             .chat
             .unwrap_or_else(|| Arc::new(chat::ChatState::new()));
+        let runtime_registry = self
+            .runtime
+            .unwrap_or_else(|| Arc::new(runtime::RuntimeRegistry::new(self.bus.clone())));
 
         AppState::new(
             self.bus,
@@ -401,6 +419,7 @@ impl AppStateBuilder {
             experiments_state,
             capsules_store,
             chat_state,
+            runtime_registry,
         )
     }
 }

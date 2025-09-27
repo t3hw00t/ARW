@@ -35,6 +35,7 @@ mod read_models;
 mod research_watcher;
 mod responses;
 mod review;
+mod runtime;
 mod runtime_matrix;
 mod security;
 mod self_model;

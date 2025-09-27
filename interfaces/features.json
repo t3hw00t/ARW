@@ -1418,6 +1418,59 @@
       ]
     },
     {
+      "id": "runtime_supervisor",
+      "name": "Managed Runtime Supervisor",
+      "owner": "platform",
+      "tier": "Core kernel",
+      "deps": [
+        "model_steward",
+        "config_plane",
+        "policy_leases",
+        "egress_sentinel"
+      ],
+      "description": "Policy-aligned lifecycle manager for local text, audio, and vision runtimes with accelerator profiles, health telemetry, and failover orchestration.",
+      "scope": {
+        "surface": "backend",
+        "audience": "operators",
+        "layer": "infrastructure",
+        "maturity": "plan"
+      },
+      "ssot": [
+        {
+          "path": "docs/architecture/managed_runtime_supervisor.md"
+        }
+      ],
+      "http": [
+        {
+          "method": "GET",
+          "path": "/state/runtime_matrix"
+        }
+      ],
+      "read_models": [
+        "runtime_matrix"
+      ],
+      "topics": [
+        "runtime.state.changed",
+        "runtime.claim.request",
+        "runtime.claim.acquired",
+        "runtime.claim.released",
+        "runtime.health"
+      ],
+      "env": [],
+      "docs": [
+        {
+          "path": "docs/architecture/multimodal_runtime_plan.md"
+        },
+        {
+          "path": "docs/architecture/managed_llamacpp_runtime.md"
+        }
+      ],
+      "notes": [
+        "Promotes the runtime matrix scaffolding to a full supervisor with adapters for llama.cpp, ONNX Runtime, and vLLM.",
+        "Bundles hardware-aware profiles and accessibility-first controls into Launcher and server surfaces."
+      ]
+    },
+    {
       "id": "logic_units_library",
       "name": "Logic Units Library",
       "owner": "platform",

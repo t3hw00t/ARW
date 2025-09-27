@@ -422,6 +422,104 @@ cache:
 
     #[test]
     #[serial]
+    fn identical_env_value_marked_as_already_set() {
+        clear_env();
+        std::env::set_var("ARW_TOOLS_CACHE_CAP", "4096");
+
+        let outcome = run_manifest(
+            r#"
+cache:
+  action_cache:
+    capacity: 4096
+"#,
+        );
+
+        let cap_assignment = outcome
+            .assignments
+            .iter()
+            .find(|a| a.key == "ARW_TOOLS_CACHE_CAP")
+            .unwrap();
+        assert!(!cap_assignment.applied);
+        assert_eq!(
+            cap_assignment.reason,
+            Some(AssignmentReason::AlreadySetSameValue)
+        );
+        assert_eq!(cap_assignment.existing.as_deref(), Some("4096"));
+        clear_env();
+    }
+
+    #[test]
+    #[serial]
+    fn ttl_secs_field_takes_precedence_over_duration_string() {
+        clear_env();
+
+        let outcome = run_manifest(
+            r#"
+cache:
+  action_cache:
+    ttl: 2h
+    ttl_secs: 90
+"#,
+        );
+
+        assert_eq!(std::env::var("ARW_TOOLS_CACHE_TTL_SECS").unwrap(), "90");
+        let ttl_assignment = outcome
+            .assignments
+            .iter()
+            .find(|a| a.key == "ARW_TOOLS_CACHE_TTL_SECS")
+            .unwrap();
+        assert!(ttl_assignment.applied);
+        assert_eq!(ttl_assignment.source, "cache.action_cache.ttl_secs");
+        clear_env();
+    }
+
+    #[test]
+    #[serial]
+    fn skips_empty_allow_entries() {
+        clear_env();
+
+        let outcome = run_manifest(
+            r#"
+cache:
+  action_cache:
+    allow: ["  ", ""]
+"#,
+        );
+
+        assert!(std::env::var("ARW_TOOLS_CACHE_ALLOW").is_err());
+        assert!(!outcome
+            .assignments
+            .iter()
+            .any(|a| a.key == "ARW_TOOLS_CACHE_ALLOW"));
+        clear_env();
+    }
+
+    #[test]
+    #[serial]
+    fn duration_string_with_millis_rounds_up() {
+        clear_env();
+
+        let outcome = run_manifest(
+            r#"
+cache:
+  action_cache:
+    ttl: 1500ms
+"#,
+        );
+
+        assert_eq!(std::env::var("ARW_TOOLS_CACHE_TTL_SECS").unwrap(), "2");
+        let ttl_assignment = outcome
+            .assignments
+            .iter()
+            .find(|a| a.key == "ARW_TOOLS_CACHE_TTL_SECS")
+            .unwrap();
+        assert!(ttl_assignment.applied);
+        assert_eq!(ttl_assignment.source, "cache.action_cache.ttl");
+        clear_env();
+    }
+
+    #[test]
+    #[serial]
     fn records_warning_on_invalid_duration() {
         clear_env();
         let outcome = run_manifest(

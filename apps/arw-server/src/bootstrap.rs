@@ -318,6 +318,7 @@ async fn initialise_state(state: &AppState, kernel_enabled: bool) -> TaskManager
 
     tasks.extend(read_models::start_read_models(state.clone()));
     tasks.extend(crate::cluster::start(state.clone()));
+    tasks.extend(crate::runtime::start(state.clone()));
     tasks.extend(crate::runtime_matrix::start(state.clone()));
     tasks.extend(crate::state_observer::start(state.clone()));
     tasks.extend(crate::world::start(state.clone()));
