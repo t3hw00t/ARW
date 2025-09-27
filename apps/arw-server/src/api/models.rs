@@ -1,9 +1,10 @@
 use axum::body::Body;
 use axum::http::{
     header::{
-        CACHE_CONTROL, CONTENT_LENGTH, CONTENT_TYPE, ETAG, LAST_MODIFIED, X_CONTENT_TYPE_OPTIONS,
+        ACCEPT_RANGES, CACHE_CONTROL, CONTENT_LENGTH, CONTENT_RANGE, CONTENT_TYPE, ETAG,
+        LAST_MODIFIED, RANGE, X_CONTENT_TYPE_OPTIONS,
     },
-    HeaderMap, Method, StatusCode,
+    HeaderMap, HeaderValue, Method, StatusCode,
 };
 use axum::response::{IntoResponse, Response};
 use axum::{
@@ -12,7 +13,9 @@ use axum::{
 };
 use serde::Deserialize;
 use serde_json::{json, Value};
+use std::io::SeekFrom;
 use tokio::fs;
+use tokio::io::{AsyncReadExt, AsyncSeekExt};
 use tokio_util::io::ReaderStream;
 
 use crate::{ext, models, AppState};
@@ -533,42 +536,103 @@ pub async fn models_blob_by_hash(
     let last_modified_header = modified.and_then(ext::http::http_date_value);
 
     if ext::http::if_none_match_matches(&headers, &hash) {
-        return ext::http::not_modified_response(
-            &etag,
-            last_modified_header.as_ref(),
-            cache_control,
-        );
+        let mut response =
+            ext::http::not_modified_response(&etag, last_modified_header.as_ref(), cache_control);
+        response
+            .headers_mut()
+            .insert(ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+        return response;
     }
     if let Some(modified_time) = modified {
         if ext::http::not_modified_since(&headers, modified_time) {
-            return ext::http::not_modified_response(
+            let mut response = ext::http::not_modified_response(
                 &etag,
                 last_modified_header.as_ref(),
                 cache_control,
             );
+            response
+                .headers_mut()
+                .insert(ACCEPT_RANGES, HeaderValue::from_static("bytes"));
+            return response;
         }
     }
 
+    let range = match headers
+        .get(RANGE)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        Some(value) => match ext::http::parse_single_byte_range(value, len) {
+            Ok(range) => Some(range),
+            Err(_) => {
+                let content_range = format!("bytes */{len}");
+                let mut builder = Response::builder()
+                    .status(StatusCode::RANGE_NOT_SATISFIABLE)
+                    .header(ETAG, etag.clone())
+                    .header(CACHE_CONTROL, cache_control)
+                    .header(X_CONTENT_TYPE_OPTIONS, "nosniff")
+                    .header(ACCEPT_RANGES, "bytes")
+                    .header(CONTENT_TYPE, "application/octet-stream")
+                    .header(
+                        CONTENT_RANGE,
+                        HeaderValue::from_str(&content_range).expect("content-range header value"),
+                    );
+                if let Some(ref last_modified) = last_modified_header {
+                    builder = builder.header(LAST_MODIFIED, last_modified.clone());
+                }
+                return builder
+                    .body(Body::empty())
+                    .unwrap_or_else(|_| Response::new(Body::empty()));
+            }
+        },
+        None => None,
+    };
+
     let mut builder = Response::builder()
-        .status(StatusCode::OK)
         .header(ETAG, etag.clone())
         .header(CACHE_CONTROL, cache_control)
         .header(X_CONTENT_TYPE_OPTIONS, "nosniff")
-        .header(CONTENT_TYPE, "application/octet-stream")
-        .header(CONTENT_LENGTH, len.to_string());
+        .header(ACCEPT_RANGES, "bytes")
+        .header(CONTENT_TYPE, "application/octet-stream");
     if let Some(ref last_modified) = last_modified_header {
         builder = builder.header(LAST_MODIFIED, last_modified.clone());
     }
 
-    if method == Method::HEAD {
-        return builder
-            .body(Body::empty())
-            .unwrap_or_else(|_| Response::new(Body::empty()));
-    }
+    if let Some(range) = range {
+        let content_length = range.len();
+        builder = builder
+            .status(StatusCode::PARTIAL_CONTENT)
+            .header(CONTENT_LENGTH, content_length.to_string())
+            .header(
+                CONTENT_RANGE,
+                HeaderValue::from_str(&format!("bytes {}-{}/{}", range.start, range.end, len))
+                    .expect("content-range header value"),
+            );
 
-    let file = match fs::File::open(&cas_path).await {
-        Ok(file) => file,
-        Err(err) => {
+        if method == Method::HEAD {
+            return builder
+                .body(Body::empty())
+                .unwrap_or_else(|_| Response::new(Body::empty()));
+        }
+
+        let mut file = match fs::File::open(&cas_path).await {
+            Ok(file) => file,
+            Err(err) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "type": "about:blank",
+                        "title": "Read error",
+                        "status": 500,
+                        "detail": err.to_string()
+                    })),
+                )
+                    .into_response();
+            }
+        };
+
+        if let Err(err) = file.seek(SeekFrom::Start(range.start)).await {
             return (
                 StatusCode::INTERNAL_SERVER_ERROR,
                 Json(json!({
@@ -580,18 +644,53 @@ pub async fn models_blob_by_hash(
             )
                 .into_response();
         }
-    };
-    let stream = ReaderStream::new(file);
-    builder
-        .body(Body::from_stream(stream))
-        .unwrap_or_else(|_| Response::new(Body::empty()))
+
+        let limited = file.take(content_length);
+        let stream = ReaderStream::new(limited);
+        builder
+            .body(Body::from_stream(stream))
+            .unwrap_or_else(|_| Response::new(Body::empty()))
+    } else {
+        builder = builder
+            .status(StatusCode::OK)
+            .header(CONTENT_LENGTH, len.to_string());
+
+        if method == Method::HEAD {
+            return builder
+                .body(Body::empty())
+                .unwrap_or_else(|_| Response::new(Body::empty()));
+        }
+
+        let file = match fs::File::open(&cas_path).await {
+            Ok(file) => file,
+            Err(err) => {
+                return (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({
+                        "type": "about:blank",
+                        "title": "Read error",
+                        "status": 500,
+                        "detail": err.to_string()
+                    })),
+                )
+                    .into_response();
+            }
+        };
+        let stream = ReaderStream::new(file);
+        builder
+            .body(Body::from_stream(stream))
+            .unwrap_or_else(|_| Response::new(Body::empty()))
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_support::env;
-    use axum::http::{header::IF_NONE_MATCH, HeaderMap, HeaderValue};
+    use axum::http::{
+        header::{ACCEPT_RANGES, CONTENT_RANGE, IF_NONE_MATCH, RANGE},
+        HeaderMap, HeaderValue,
+    };
     use http_body_util::BodyExt;
     use std::{path::Path, sync::Arc};
     use tempfile::tempdir;
@@ -648,6 +747,13 @@ mod tests {
         assert_eq!(
             parts.headers.get(ETAG).and_then(|v| v.to_str().ok()),
             Some(format!("\"{}\"", hash).as_str())
+        );
+        assert_eq!(
+            parts
+                .headers
+                .get(ACCEPT_RANGES)
+                .and_then(|v| v.to_str().ok()),
+            Some("bytes")
         );
         assert_eq!(
             parts
@@ -716,6 +822,13 @@ mod tests {
         assert_eq!(
             parts
                 .headers
+                .get(ACCEPT_RANGES)
+                .and_then(|v| v.to_str().ok()),
+            Some("bytes")
+        );
+        assert_eq!(
+            parts
+                .headers
                 .get(CONTENT_LENGTH)
                 .and_then(|v| v.to_str().ok())
                 .and_then(|s| s.parse::<u64>().ok()),
@@ -758,6 +871,103 @@ mod tests {
             parts.headers.get(ETAG).and_then(|v| v.to_str().ok()),
             Some(format!("\"{}\"", hash).as_str())
         );
+        assert_eq!(
+            parts
+                .headers
+                .get(ACCEPT_RANGES)
+                .and_then(|v| v.to_str().ok()),
+            Some("bytes")
+        );
+    }
+
+    #[tokio::test]
+    async fn models_blob_by_hash_supports_range_requests() {
+        let mut env_guard = env::guard();
+        let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let state = build_state(temp.path(), &mut env_guard).await;
+
+        let hash = make_hash();
+        write_blob(&state, &hash, b"0123456789").await;
+
+        let mut headers = HeaderMap::new();
+        headers.insert(RANGE, HeaderValue::from_static("bytes=2-5"));
+
+        let response = models_blob_by_hash(
+            Method::GET,
+            Path(hash.clone()),
+            State(state.clone()),
+            headers,
+        )
+        .await;
+
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::PARTIAL_CONTENT);
+        assert_eq!(
+            parts
+                .headers
+                .get(CONTENT_RANGE)
+                .and_then(|v| v.to_str().ok()),
+            Some("bytes 2-5/10")
+        );
+        assert_eq!(
+            parts
+                .headers
+                .get(CONTENT_LENGTH)
+                .and_then(|v| v.to_str().ok())
+                .and_then(|s| s.parse::<u64>().ok()),
+            Some(4)
+        );
+
+        let collected = BodyExt::collect(body)
+            .await
+            .expect("collect body")
+            .to_bytes();
+        assert_eq!(&collected[..], b"2345");
+    }
+
+    #[tokio::test]
+    async fn models_blob_by_hash_rejects_invalid_range() {
+        let mut env_guard = env::guard();
+        let temp = tempdir().expect("tempdir");
+        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let state = build_state(temp.path(), &mut env_guard).await;
+
+        let hash = make_hash();
+        write_blob(&state, &hash, b"0123456789").await;
+
+        let mut headers = HeaderMap::new();
+        headers.insert(RANGE, HeaderValue::from_static("bytes=20-10"));
+
+        let response = models_blob_by_hash(
+            Method::GET,
+            Path(hash.clone()),
+            State(state.clone()),
+            headers,
+        )
+        .await;
+
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::RANGE_NOT_SATISFIABLE);
+        assert_eq!(
+            parts
+                .headers
+                .get(CONTENT_RANGE)
+                .and_then(|v| v.to_str().ok()),
+            Some("bytes */10")
+        );
+        assert_eq!(
+            parts
+                .headers
+                .get(ACCEPT_RANGES)
+                .and_then(|v| v.to_str().ok()),
+            Some("bytes")
+        );
+        assert!(BodyExt::collect(body)
+            .await
+            .expect("collect body")
+            .to_bytes()
+            .is_empty());
     }
 
     #[tokio::test]

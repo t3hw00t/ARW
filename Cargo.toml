@@ -81,6 +81,14 @@ lto = "thin"
 codegen-units = 1
 incremental = false
 
+[profile.test]
+# Disable incremental compilation for test binaries. Some combinations of the
+# workspace's generics and the system linker cause hidden-symbol resolution
+# failures when incremental artifacts are reused across crate graphs; keeping
+# test builds non-incremental avoids those linker traps while leaving dev
+# builds fast.
+incremental = false
+
 [workspace.metadata.dist]
 # Configuration for cargo-dist distribution tooling
 cargo-dist-version = "0.30.0"
