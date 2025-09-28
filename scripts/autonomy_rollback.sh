@@ -243,17 +243,7 @@ latest_snapshot() {
     warn "Project id unknown; cannot auto-select snapshot"
     return 1
   fi
-  if api_call GET "/admin/projects/${PROJECT}/snapshots?limit=1"; then
-    if [[ "$API_STATUS" =~ ^20 ]]; then
-      SNAPSHOT="$(echo "$API_BODY" | jq -r '.items[0].id // .snapshots[0].id // empty')"
-      if [[ -n "$SNAPSHOT" && "$SNAPSHOT" != "null" ]]; then
-        log "Selected snapshot ${SNAPSHOT}"
-        return 0
-      fi
-    fi
-  fi
-  warn "Unable to determine latest snapshot automatically (status ${API_STATUS:-unknown})."
-  warn "Provide --snapshot SNAPSHOT_ID to restore explicitly."
+  warn "Lane metadata did not provide a snapshot id; supply --snapshot manually."
   return 1
 }
 
@@ -266,20 +256,8 @@ restore_project() {
     warn "No snapshot id available; skipping project restore"
     return 1
   fi
-  if (( DRY_RUN )); then
-    log "DRY RUN: would POST /admin/projects/${PROJECT}/restore snapshot=${SNAPSHOT}"
-    return 0
-  fi
-  local payload
-  payload="$(jq -nc --arg snap "$SNAPSHOT" '{snapshot_id: $snap}')"
-  if api_call POST "/admin/projects/${PROJECT}/restore" "$payload"; then
-    if [[ "$API_STATUS" =~ ^20 ]]; then
-      log "Project ${PROJECT} restored to snapshot ${SNAPSHOT}"
-      return 0
-    fi
-  fi
-  warn "Project restore failed (status ${API_STATUS:-unknown})."
-  warn "Manual fallback: POST ${BASE_URL}/admin/projects/${PROJECT}/restore with snapshot_id=${SNAPSHOT}"
+  warn "Automatic project restore is not yet wired to the unified API."
+  warn "Follow the docs in docs/ops/trials/autonomy_rollback_playbook.md to restore ${PROJECT} to snapshot ${SNAPSHOT}."
   return 1
 }
 

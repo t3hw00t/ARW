@@ -42,8 +42,8 @@ What the helper attempts:
 
 1. Pause the lane (`POST /admin/autonomy/{lane}/pause`).
 2. Flush in-flight and queued jobs (`DELETE /admin/autonomy/{lane}/jobs`).
-3. Discover lane metadata and pick the most recent snapshot when the read-model is available.
-4. Restore the project and runtime using the admin endpoints.
+3. Discover lane metadata and note the most recent snapshot id surfaced by `/state/autonomy/lanes/{lane}`.
+4. Restore the project and runtime using the unified helpers (see manual checklist below until the API is fully automated).
 5. Reapply guardrail presets. (Until the admin event publish helper returns, log the rollback in the incident template instead.)
 
 When an endpoint is missing (early builds) the script prints a WARN line with the equivalent manual curl invocation so the operator can finish the step by hand. Pair it with the incident note in the template below.
@@ -56,8 +56,9 @@ When an endpoint is missing (early builds) the script prints a WARN line with th
    - `DELETE /admin/autonomy/{lane_id}/jobs?state=in_flight`.
    - Revoke leases: `POST /admin/capabilities/revoke` for lane scope.
 3. **Restore project state**
-   - `GET /admin/projects/:id/snapshots` → pick the last good timestamp.
-   - `POST /admin/projects/:id/restore` with selected snapshot ID.
+   - Use `/state/projects` to confirm the current file tree.
+   - Run the project restore helper (planned unified endpoint) or follow the ops handbook to replay the snapshot from shared storage.
+   - Record the snapshot id used in the incident log.
 4. **Restore runtime state**
    - Launcher Runtime Manager → select snapshot → `Restore and restart`.
    - Verify `/state/runtimes` shows `ready` with expected profile tag.
