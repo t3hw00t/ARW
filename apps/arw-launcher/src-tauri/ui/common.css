@@ -158,6 +158,25 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .pill{ display:inline-flex; gap:6px; align-items:center; padding:4px 8px; border:1px solid var(--color-line); border-radius:999px; background: linear-gradient(180deg,#ffffff,#f6f7f9); font-size:12px }
 .pill .tag{ font-weight:600; color:#374151 }
 
+@media (prefers-contrast: more){
+  html, body{ background: #ffffff !important; color: var(--color-ink) }
+  .wrap::before{ display: none }
+  .card{ border-width: 2px; box-shadow: none; background: #ffffff }
+  .palette{ box-shadow: none; border-width: 2px }
+  .palette li:hover, .palette li.active{ background: #e5e7eb }
+  .toast{ box-shadow: none }
+}
+
+@media (forced-colors: active){
+  html, body{ background: Canvas !important; color: CanvasText !important }
+  .wrap::before{ display: none }
+  .card{ background: Canvas; color: CanvasText; border: 1px solid ButtonText; box-shadow: none }
+  .badge, .pill{ border-color: ButtonText }
+  .palette{ background: Canvas; color: CanvasText; border: 1px solid ButtonText; box-shadow: none }
+  .palette li:hover, .palette li.active{ background: Highlight; color: HighlightText }
+  .toast{ background: CanvasText; color: Canvas; box-shadow: none }
+}
+
 /* Image slider */
 .img-compare{ position: relative; height: 260px; border:1px solid var(--color-line); border-radius:8px; overflow:hidden; background:#111 }
 .img-compare img{ position:absolute; inset:0; width:100%; height:100%; object-fit:contain }

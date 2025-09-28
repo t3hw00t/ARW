@@ -150,6 +150,7 @@ Validate input → policy check → invoke → emit events → return.
 - `POST /policy/reload`
 - `POST /policy/simulate`
 - `GET /state/models`
+  - Returns the public models read-model envelope as `{ "items": [...] }`. The server always replies with an object wrapper even when no models are installed; clients should read from `items` instead of expecting a bare array.
 - `GET /spec/index.json`
 - `GET /spec/openapi.yaml`
 - `GET /spec/asyncapi.yaml`

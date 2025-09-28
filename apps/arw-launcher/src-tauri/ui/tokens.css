@@ -34,3 +34,20 @@
     --color-line: #1f232a;
   }
 }
+
+@media (prefers-contrast: more){
+  :root{
+    --color-line: currentColor;
+    --color-muted: #1f2937;
+    --shadow-1: none;
+    --shadow-2: none;
+    --shadow-3: none;
+    --noise: none;
+  }
+}
+
+@media (forced-colors: active){
+  :root{
+    --noise: none;
+  }
+}

@@ -15,3 +15,22 @@ button:hover { transform: translateY(-0.5px); box-shadow: 0 1px 0 rgba(255,255,2
 .dot.ok{ background: var(--status-ok) }
 .dot.bad{ background: var(--status-bad) }
 #port { width: 90px }
+
+@media (prefers-contrast: more){
+  html, body{ background: #ffffff !important }
+  .wrap::before{ display: none }
+  .card{ border-width: 2px; box-shadow: none; background: #ffffff }
+  button{ background-image: none; box-shadow: none; border-color: var(--color-ink) }
+  .badge{ border-width: 2px; box-shadow: none }
+  .toast{ box-shadow: none }
+}
+
+@media (forced-colors: active){
+  html, body{ background: Canvas !important; color: CanvasText !important }
+  .wrap::before{ display: none }
+  .card{ background: Canvas; color: CanvasText; border: 1px solid ButtonText; box-shadow: none }
+  button{ background: ButtonFace; color: ButtonText; border: 1px solid ButtonText; box-shadow: none }
+  button.primary{ background: Highlight; color: HighlightText; border-color: Highlight }
+  .badge{ border: 1px solid ButtonText; background: Canvas; color: CanvasText }
+  .toast{ background: CanvasText; color: Canvas; box-shadow: none }
+}

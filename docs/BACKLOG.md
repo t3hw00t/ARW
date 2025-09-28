@@ -103,7 +103,7 @@ Design System & Tokens
 - [Pack: Collaboration] [t-250914231230-dsg07] Extract `ui-kit.css` primitives (buttons/inputs/badges) for launcher pages — done
 - [Pack: Collaboration] [t-250914231235-dsg08] Contrast audit (WCAG AA) sweep; adjust any low‑contrast cases — todo
 - [Pack: Collaboration] [t-250914231245-dsg10] Add W3C tokens pipeline (Style Dictionary) to emit platform targets — plan
-- [Pack: Collaboration] [t-250914231250-dsg11] Add prefers-contrast / forced-colors styles for key components — todo
+- [Pack: Collaboration] [t-250914231250-dsg11] Add prefers-contrast / forced-colors styles for key components — done (launcher + shared UI kit high-contrast styles)
  - [Pack: Collaboration] [t-250914231255-dsg12] Tailwind tokens export (JSON) for downstream configs — done
 
 Standards & Docs
@@ -255,7 +255,7 @@ Strict dot.case normalization (no back-compat)
 
 OpenAPI/Examples
 - [Kernel] [t-250913213507-api01] Add examples for /admin/models/jobs and /admin/models/download responses — done
-- [Kernel] [t-250913213508-api02] Document public /state/models envelope explicitly or add note about envelope omission in examples — todo
+- [Kernel] [t-250913213508-api02] Document public /state/models envelope explicitly or add note about envelope omission in examples — done (docs/API_AND_SCHEMA.md)
 
 Feedback Engine (Near‑Live)
 - [Pack: Collaboration] Engine crate and integration: actor with O(1) stats, deltas via bus, snapshot+persistence [t-250909224102-8952]
@@ -266,7 +266,7 @@ Testing
 - [Kernel] End‑to‑end coverage for endpoints & gating; fixtures; CI integration [t-250911230325-2116]
 - [Kernel] [t-250914210200-test01] Scoped state dir for tests (`test_support::scoped_state_dir`) to isolate `ARW_STATE_DIR` — done
 - [Kernel] [t-250914210204-test02] Migrate env‑derived `state_dir` lookups to a process‑lifetime cache (OnceCell) with a test‑only reset hook to avoid flakiness — done (scoped cache + guard landed)
-- [Kernel] [t-250914210208-test03] Concurrency controls: add tests for `block=false` shrink path and pending_shrink reporting — todo
+- [Kernel] [t-250914210208-test03] Concurrency controls: add tests for `block=false` shrink path and pending_shrink reporting — done (apps/arw-server/src/models.rs)
 
 Stabilization & Contracts
 - [Kernel] [t-250914210300-api01] Models summary: switch handler to typed snapshots from `ModelsService` (avoid ad‑hoc JSON picks) — done

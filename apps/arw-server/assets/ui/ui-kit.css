@@ -83,14 +83,76 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 
 /* High contrast preferences */
 @media (prefers-contrast: more){
-  .card{ box-shadow: none; border-width: 2px }
-  button{ border-color: var(--color-line); box-shadow: none }
-  .badge, .pill{ border-width: 2px }
-  .toast{ opacity: 1 }
+  .card{
+    box-shadow: none;
+    border: 2px solid var(--color-ink);
+    background: #ffffff;
+  }
+  button{
+    border-color: var(--color-ink);
+    box-shadow: none;
+    background: #ffffff;
+    background-image: none;
+  }
+  button.primary{
+    background: var(--color-brand-copper);
+    color: #ffffff;
+  }
+  .badge,
+  .pill{
+    border-width: 2px;
+    background: #ffffff;
+  }
+  .toast{
+    opacity: 1;
+    box-shadow: none;
+  }
 }
 
 @media (forced-colors: active){
-  *{ outline-color: CanvasText; forced-color-adjust: none }
-  button{ background: ButtonFace; color: ButtonText; border-color: ButtonText }
-  .card{ background: Canvas; color: CanvasText; border-color: ButtonText }
+  :root{
+    color: CanvasText;
+    background-color: Canvas;
+  }
+  *{
+    forced-color-adjust: auto;
+  }
+  button,
+  .badge,
+  .pill,
+  .card,
+  .toast{
+    forced-color-adjust: none;
+    border: 1px solid ButtonText;
+  }
+  button{
+    background: ButtonFace;
+    color: ButtonText;
+  }
+  button.primary{
+    background: Highlight;
+    color: HighlightText;
+    border-color: Highlight;
+  }
+  .card{
+    background: Canvas;
+    color: CanvasText;
+    box-shadow: none;
+  }
+  .badge,
+  .pill{
+    background: Canvas;
+    color: CanvasText;
+  }
+  .toast{
+    background: CanvasText;
+    color: Canvas;
+  }
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible{
+    outline: 2px solid Highlight;
+  }
 }

@@ -3344,6 +3344,38 @@ mod tests {
         let _ = store.downloads.remove_job("model-a").await;
         let _ = store.downloads.remove_job("model-b").await;
     }
+
+    #[tokio::test]
+    async fn concurrency_pending_shrink_clears_after_job_completion() {
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let store = Arc::new(ModelStore::new(bus, None));
+
+        store
+            .downloads
+            .insert_job("model-a", dummy_download_handle("a"))
+            .await
+            .expect("insert job a");
+        store
+            .downloads
+            .insert_job("model-b", dummy_download_handle("b"))
+            .await
+            .expect("insert job b");
+
+        let snapshot = store.concurrency_set(Some(1), None, Some(false)).await;
+        assert_eq!(snapshot.pending_shrink, Some(1));
+        assert_eq!(snapshot.configured_max, 1);
+
+        let removed = store.downloads.remove_job("model-b").await;
+        assert!(removed.is_some(), "expected job removal");
+
+        let follow_up = store.concurrency_get().await;
+        assert_eq!(follow_up.pending_shrink, None);
+        assert_eq!(follow_up.configured_max, 1);
+        assert_eq!(follow_up.held_permits, 1);
+        assert_eq!(follow_up.available_permits, 0);
+
+        let _ = store.downloads.remove_job("model-a").await;
+    }
 }
 
 fn env_flag(name: &str) -> bool {
