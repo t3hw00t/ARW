@@ -603,7 +603,7 @@ impl<'a> WorkingSetBuilder<'a> {
                 entry.1 += weight;
                 lane_seed_ids
                     .entry(lane_name.clone())
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push(seed.id.clone());
             }
             seed_ids.push(seed.id.clone());
@@ -624,6 +624,7 @@ impl<'a> WorkingSetBuilder<'a> {
             }
         }
         let global_embed = avg.as_slice();
+        let global_embed_opt = (!global_embed.is_empty()).then_some(global_embed);
         let seeds_fallback = seed_ids;
         let mut added = 0usize;
         let fetch_k = ((spec.limit * 2) + spec.expand_per_seed).max(12) as i64;
@@ -631,13 +632,7 @@ impl<'a> WorkingSetBuilder<'a> {
             let embed_opt = lane
                 .as_ref()
                 .and_then(|lane_name| lane_vectors.get(lane_name).map(|vec| vec.as_slice()))
-                .or_else(|| {
-                    if global_embed.is_empty() {
-                        None
-                    } else {
-                        Some(global_embed)
-                    }
-                });
+                .or(global_embed_opt);
             let mut items = self.state.kernel().select_memory_hybrid(
                 spec.query.as_deref(),
                 embed_opt,
@@ -653,7 +648,7 @@ impl<'a> WorkingSetBuilder<'a> {
                 let seeds_for_lane = lane
                     .as_ref()
                     .and_then(|lane_name| lane_seed_ids.get(lane_name))
-                    .unwrap_or_else(|| &seeds_fallback);
+                    .unwrap_or(&seeds_fallback);
                 if let Some(candidate) = build_query_expansion_candidate(
                     item,
                     lane_override,

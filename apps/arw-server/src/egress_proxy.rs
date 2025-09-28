@@ -112,10 +112,7 @@ pub async fn apply(enable: bool, port: u16, state: AppState) {
     let bind = format!("127.0.0.1:{}", port);
     info!("egress proxy listening on {} (preview)", bind);
     let client_timeout = Duration::from_secs(desired_timeout.max(1));
-    let client = reqwest::Client::builder()
-        .timeout(client_timeout)
-        .build()
-        .expect("reqwest client");
+    let client = crate::http_client::client_with_timeout(client_timeout);
     let cancel = CancellationToken::new();
     let cancel_child = cancel.clone();
     let st_outer = state.clone();

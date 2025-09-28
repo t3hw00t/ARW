@@ -5,7 +5,7 @@ use serde_json::Value;
 use tokio::time::{sleep, Duration};
 use tracing::{debug, warn};
 
-use crate::{http_timeout, tasks::TaskHandle, AppState};
+use crate::{tasks::TaskHandle, AppState};
 use arw_topics as topics;
 
 const MIN_INTERVAL_SECS: u64 = 300;
@@ -31,19 +31,33 @@ pub fn start(state: AppState) -> Vec<TaskHandle> {
     if !state.kernel_enabled() {
         return Vec::new();
     }
-    let client = reqwest::Client::builder()
-        .timeout(http_timeout::get_duration())
-        .build()
-        .ok();
-    vec![TaskHandle::new(
+    let client = Some(crate::http_client::client().clone());
+    let bus = state.bus();
+    vec![crate::tasks::spawn_supervised_with(
         "research_watcher.poller",
-        tokio::spawn(async move {
-            loop {
-                if let Err(err) = sync_once(&state, client.as_ref()).await {
-                    warn!(target: "research_watcher", "sync error: {err:?}");
+        move || {
+            let state = state.clone();
+            let client = client.clone();
+            async move {
+                loop {
+                    if let Err(err) = sync_once(&state, client.as_ref()).await {
+                        warn!(target: "research_watcher", "sync error: {err:?}");
+                    }
+                    let interval = interval_secs();
+                    sleep(Duration::from_secs(interval)).await;
                 }
-                let interval = interval_secs();
-                sleep(Duration::from_secs(interval)).await;
+            }
+        },
+        Some(move |restarts| {
+            if restarts >= 5 {
+                let payload = serde_json::json!({
+                    "status": "degraded",
+                    "component": "research_watcher.poller",
+                    "reason": "task_thrashing",
+                    "restarts_window": restarts,
+                    "window_secs": 30,
+                });
+                bus.publish(arw_topics::TOPIC_SERVICE_HEALTH, &payload);
             }
         }),
     )]

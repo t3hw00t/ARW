@@ -1,0 +1,57 @@
+{
+  "__inputs": [],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "9.0.0" },
+    { "type": "panel", "id": "stat", "name": "Stat", "version": "9.0.0" },
+    { "type": "panel", "id": "timeseries", "name": "Time series", "version": "9.0.0" },
+    { "type": "panel", "id": "table", "name": "Table", "version": "9.0.0" }
+  ],
+  "title": "ARW Stability",
+  "timezone": "browser",
+  "editable": true,
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Safe Mode Active",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "targets": [ { "expr": "arw_safe_mode_active", "refId": "A" } ],
+      "options": { "reduceOptions": { "calcs": ["last"], "fields": "", "values": false }, "colorMode": "value" }
+    },
+    {
+      "type": "stat",
+      "title": "Minutes Since Last Crash",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "targets": [ { "expr": "(time() * 1000 - arw_last_crash_ms) / 60000", "refId": "A" } ],
+      "options": { "reduceOptions": { "calcs": ["last"], "fields": "", "values": false } }
+    },
+    {
+      "type": "table",
+      "title": "Task Restarts (Window)",
+      "gridPos": { "x": 12, "y": 0, "w": 12, "h": 8 },
+      "targets": [ { "expr": "arw_task_restarts_window", "refId": "A", "format": "table" } ],
+      "transformations": [ { "id": "seriesToColumns", "options": {"byField": "task"} } ]
+    },
+    {
+      "type": "table",
+      "title": "Route p95 (ms)",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "targets": [ { "expr": "arw_route_p95_ms", "refId": "A", "format": "table" } ],
+      "transformations": [ { "id": "labelsToFields", "options": {"mode": "columns"} } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Event Publish Rate",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "targets": [ { "expr": "rate(arw_bus_published_total[5m])", "refId": "A" } ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Bus Lagged Events",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "targets": [ { "expr": "increase(arw_bus_lagged_total[5m])", "refId": "A" } ]
+    }
+  ],
+  "version": 1,
+  "schemaVersion": 37
+}
+

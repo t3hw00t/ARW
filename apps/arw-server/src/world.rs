@@ -498,51 +498,6 @@ fn flatten_value(v: &Value, cap: usize) -> String {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn snapshot_project_map_counts_all_nodes_whilst_sampling() {
-        {
-            let mut ws = store().write().expect("world store lock");
-            *ws = WorldStore::default();
-
-            let mut graph = BeliefGraph::default();
-            for idx in 0..120 {
-                let node = Node {
-                    id: format!("entity-{idx}"),
-                    kind: NodeKind::Entity,
-                    props: Map::default(),
-                    confidence: None,
-                    last_observed: None,
-                    provenance: Vec::new(),
-                };
-                graph.nodes.insert(node.id.clone(), node);
-            }
-            for idx in 0..80 {
-                let node = Node {
-                    id: format!("claim-{idx}"),
-                    kind: NodeKind::Claim,
-                    props: Map::default(),
-                    confidence: None,
-                    last_observed: None,
-                    provenance: Vec::new(),
-                };
-                graph.nodes.insert(node.id.clone(), node);
-            }
-            ws.default_graph = graph;
-        }
-        ver().store(0, Ordering::Relaxed);
-
-        let snapshot = snapshot_project_map(None);
-        assert_eq!(snapshot.entities.len(), 50);
-        assert_eq!(snapshot.claims.len(), 50);
-        assert_eq!(snapshot.coverage["entities"].as_u64(), Some(120));
-        assert_eq!(snapshot.coverage["claims"].as_u64(), Some(80));
-    }
-}
-
 fn score_claim(node: &Node, query: &str) -> (f64, Value) {
     let query = query.trim();
     if query.is_empty() {
@@ -650,4 +605,49 @@ pub(crate) fn select_top_claims_diverse(
         }
     }
     selected
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn snapshot_project_map_counts_all_nodes_whilst_sampling() {
+        {
+            let mut ws = store().write().expect("world store lock");
+            *ws = WorldStore::default();
+
+            let mut graph = BeliefGraph::default();
+            for idx in 0..120 {
+                let node = Node {
+                    id: format!("entity-{idx}"),
+                    kind: NodeKind::Entity,
+                    props: Map::default(),
+                    confidence: None,
+                    last_observed: None,
+                    provenance: Vec::new(),
+                };
+                graph.nodes.insert(node.id.clone(), node);
+            }
+            for idx in 0..80 {
+                let node = Node {
+                    id: format!("claim-{idx}"),
+                    kind: NodeKind::Claim,
+                    props: Map::default(),
+                    confidence: None,
+                    last_observed: None,
+                    provenance: Vec::new(),
+                };
+                graph.nodes.insert(node.id.clone(), node);
+            }
+            ws.default_graph = graph;
+        }
+        ver().store(0, Ordering::Relaxed);
+
+        let snapshot = snapshot_project_map(None);
+        assert_eq!(snapshot.entities.len(), 50);
+        assert_eq!(snapshot.claims.len(), 50);
+        assert_eq!(snapshot.coverage["entities"].as_u64(), Some(120));
+        assert_eq!(snapshot.coverage["claims"].as_u64(), Some(80));
+    }
 }

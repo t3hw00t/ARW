@@ -14,6 +14,7 @@ pub mod config;
 mod context_loop;
 mod context_metrics;
 mod coverage;
+mod crashguard;
 mod distill;
 mod egress_log;
 mod egress_policy;
@@ -25,6 +26,7 @@ mod governor;
 #[cfg(feature = "grpc")]
 mod grpc;
 mod guard_metadata;
+mod http_client;
 mod http_timeout;
 mod memory_hygiene;
 mod memory_service;
@@ -60,6 +62,8 @@ pub(crate) use app_state::AppState;
 
 #[tokio::main]
 async fn main() {
+    // Crash guard: capture panics and write markers for recovery.
+    crashguard::install();
     match bootstrap::ensure_openapi_export() {
         Ok(Some(_)) => return,
         Ok(None) => {}
@@ -81,6 +85,15 @@ async fn main() {
         background_tasks,
     } = bootstrap::build().await;
 
+    // Announce service start for observability.
+    state.bus().publish(
+        arw_topics::TOPIC_SERVICE_START,
+        &serde_json::json!({
+            "ts_ms": arw_core::rpu::trust_last_reload_ms(),
+            "version": env!("CARGO_PKG_VERSION"),
+        }),
+    );
+
     let http_cfg = match bootstrap::http_config_from_env() {
         Ok(cfg) => cfg,
         Err(err) => {
@@ -90,7 +103,7 @@ async fn main() {
     };
 
     let app = bootstrap::attach_global_layers(bootstrap::attach_http_layers(
-        bootstrap::attach_stateful_layers(router, state, metrics),
+        bootstrap::attach_stateful_layers(router, state.clone(), metrics),
         http_cfg.concurrency_limit,
     ));
 
@@ -109,6 +122,14 @@ async fn main() {
     }
 
     info!("shutting down background tasks");
+    // Announce service stop for observability.
+    state.bus().publish(
+        arw_topics::TOPIC_SERVICE_STOP,
+        &serde_json::json!({
+            "ts_ms": arw_core::rpu::trust_last_reload_ms(),
+            "reason": "shutdown",
+        }),
+    );
     background_tasks
         .shutdown_with_grace(Duration::from_secs(5))
         .await;
@@ -339,7 +360,9 @@ mod http_tests {
     #[tokio::test]
     async fn capsule_middleware_applies_and_publishes_read_model() {
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        // Initialize tracing for easier debugging when running this test solo.
+        #[cfg(test)]
+        crate::test_support::init_tracing();
         let trust_path = temp.path().join("trust_capsules.json");
         let signing = SigningKey::from_bytes(&[7u8; 32]);
         let issuer = "test-issuer";

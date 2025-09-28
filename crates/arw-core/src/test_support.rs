@@ -12,7 +12,7 @@ pub mod env {
 
     pub fn guard() -> EnvGuard {
         EnvGuard {
-            _lock: ENV_LOCK.lock().expect("env lock"),
+            _lock: ENV_LOCK.lock().unwrap_or_else(|poison| poison.into_inner()),
             saved: Vec::new(),
         }
     }
@@ -53,4 +53,3 @@ pub mod env {
         }
     }
 }
-

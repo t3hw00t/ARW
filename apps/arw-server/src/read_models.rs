@@ -208,7 +208,18 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
         },
     ));
 
+    // Crash log snapshot (not kernel-dependent)
+    handles.push(spawn_read_model(
+        &state,
+        "crashlog",
+        Duration::from_millis(5_000),
+        |_st| async move { Some(crashlog_snapshot().await) },
+    ));
+
     handles.push(spawn_snappy(&state));
+
+    // Service health aggregator from service.health events
+    handles.push(spawn_service_health(&state));
 
     handles
 }
@@ -220,24 +231,116 @@ fn spawn_read_model<F, Fut>(
     builder: F,
 ) -> TaskHandle
 where
-    F: Fn(AppState) -> Fut + Send + 'static,
+    F: Fn(AppState) -> Fut + Send + Clone + 'static,
     Fut: Future<Output = Option<Value>> + Send + 'static,
 {
     let bus = state.bus();
+    let bus_for_task = bus.clone();
+    let bus_for_cb = bus; // move into callback
     let state = state.clone();
-    TaskHandle::new(
-        format!("read_model::{id}"),
-        tokio::spawn(async move {
-            let mut tick = time::interval(period);
-            loop {
-                tick.tick().await;
-                let state_clone = state.clone();
-                if let Some(value) = builder(state_clone).await {
-                    publish_read_model_patch(&bus, id, &value);
+    let name = format!("read_model::{id}");
+    crate::tasks::spawn_supervised_with(
+        name.clone(),
+        move || {
+            let bus = bus_for_task.clone();
+            let state = state.clone();
+            let builder = builder.clone();
+            async move {
+                let mut tick = time::interval(period);
+                loop {
+                    tick.tick().await;
+                    let state_clone = state.clone();
+                    if let Some(value) = builder(state_clone).await {
+                        publish_read_model_patch(&bus, id, &value);
+                    }
+                }
+            }
+        },
+        Some({
+            let bus = bus_for_cb.clone();
+            move |restarts| {
+                if restarts >= 5 {
+                    let payload = serde_json::json!({
+                        "status": "degraded",
+                        "component": name,
+                        "reason": "task_thrashing",
+                        "restarts_window": restarts,
+                        "window_secs": 30,
+                    });
+                    bus.publish(arw_topics::TOPIC_SERVICE_HEALTH, &payload);
                 }
             }
         }),
     )
+}
+
+pub(crate) async fn crashlog_snapshot() -> Value {
+    use tokio::io::AsyncReadExt;
+    let crash_root = crate::util::state_dir().join("crash");
+    let mut items = Vec::new();
+    if let Ok(mut rd) = afs::read_dir(&crash_root).await {
+        while let Ok(Some(ent)) = rd.next_entry().await {
+            let path = ent.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let mut f = match afs::File::open(&path).await {
+                Ok(f) => f,
+                Err(_) => continue,
+            };
+            let mut buf = Vec::new();
+            if f.read_to_end(&mut buf).await.is_ok() {
+                if let Ok(mut val) = serde_json::from_slice::<Value>(&buf) {
+                    if let Some(obj) = val.as_object_mut() {
+                        obj.insert(
+                            "file".into(),
+                            Value::from(
+                                path.file_name()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .to_string(),
+                            ),
+                        );
+                        obj.insert("archived".into(), Value::from(false));
+                    }
+                    items.push(val);
+                }
+            }
+        }
+    }
+    let archive = crash_root.join("archive");
+    if let Ok(mut rd) = afs::read_dir(&archive).await {
+        while let Ok(Some(ent)) = rd.next_entry().await {
+            let path = ent.path();
+            if path.extension().and_then(|e| e.to_str()) != Some("json") {
+                continue;
+            }
+            let mut f = match afs::File::open(&path).await {
+                Ok(f) => f,
+                Err(_) => continue,
+            };
+            let mut buf = Vec::new();
+            if f.read_to_end(&mut buf).await.is_ok() {
+                if let Ok(mut val) = serde_json::from_slice::<Value>(&buf) {
+                    if let Some(obj) = val.as_object_mut() {
+                        obj.insert(
+                            "file".into(),
+                            Value::from(
+                                path.file_name()
+                                    .unwrap_or_default()
+                                    .to_string_lossy()
+                                    .to_string(),
+                            ),
+                        );
+                        obj.insert("archived".into(), Value::from(true));
+                    }
+                    items.push(val);
+                }
+            }
+        }
+    }
+    items.sort_by(|a, b| b["ts_ms"].as_u64().cmp(&a["ts_ms"].as_u64()));
+    serde_json::json!({"items": items, "count": items.len()})
 }
 
 static READ_MODEL_CACHE: OnceCell<Mutex<HashMap<String, Value>>> = OnceCell::new();
@@ -267,28 +370,99 @@ pub(crate) fn cached_read_model(id: &str) -> Option<Value> {
         .and_then(|map| map.lock().ok().and_then(|guard| guard.get(id).cloned()))
 }
 
-fn spawn_snappy(state: &AppState) -> TaskHandle {
-    let state = state.clone();
-    TaskHandle::new(
-        "read_model::snappy",
-        tokio::spawn(async move {
-            let mut governor = SnappyGovernorState::new(SnappyConfig::from_env());
-            let period = Duration::from_millis(governor.config.publish_ms.max(1));
-            let mut tick = time::interval(period);
-            loop {
-                tick.tick().await;
-                let summary = state.metrics().snapshot();
-                let snapshot = SnappySnapshot::from_metrics(&governor.config, &summary);
-                let bus = state.bus();
-                if let Some(notice) = snapshot.notice_payload() {
-                    bus.publish(topics::TOPIC_SNAPPY_NOTICE, &notice);
-                }
-                if snapshot.has_routes() && governor.should_emit_detail() {
-                    if let Some(detail) = snapshot.detail_payload() {
-                        bus.publish(topics::TOPIC_SNAPPY_DETAIL, &detail);
+fn spawn_service_health(state: &AppState) -> TaskHandle {
+    let bus = state.bus();
+    let bus_for_task = bus.clone();
+    let bus_for_cb = bus;
+    crate::tasks::spawn_supervised_with(
+        "read_model::service_health",
+        move || {
+            let bus = bus_for_task.clone();
+            async move {
+                let mut rx = bus.subscribe_filtered(
+                    vec![arw_topics::TOPIC_SERVICE_HEALTH.to_string()],
+                    Some(64),
+                );
+                let mut history: std::collections::VecDeque<Value> =
+                    std::collections::VecDeque::with_capacity(50);
+                loop {
+                    if let Ok(env) = rx.recv().await {
+                        let mut item = env.payload;
+                        if let Some(obj) = item.as_object_mut() {
+                            obj.insert("time".into(), json!(env.time));
+                        }
+                        if history.len() >= 50 {
+                            history.pop_front();
+                        }
+                        history.push_back(item.clone());
+                        let value = json!({
+                            "last": item,
+                            "history": history,
+                        });
+                        publish_read_model_patch(&bus, "service_health", &value);
                     }
                 }
-                publish_read_model_patch(&bus, "snappy", &snapshot.to_json());
+            }
+        },
+        Some({
+            let bus = bus_for_cb.clone();
+            move |restarts| {
+                if restarts >= 5 {
+                    let payload = serde_json::json!({
+                        "status": "degraded",
+                        "component": "read_model::service_health",
+                        "reason": "task_thrashing",
+                        "restarts_window": restarts,
+                        "window_secs": 30,
+                    });
+                    bus.publish(arw_topics::TOPIC_SERVICE_HEALTH, &payload);
+                }
+            }
+        }),
+    )
+}
+
+fn spawn_snappy(state: &AppState) -> TaskHandle {
+    let state_for_task = state.clone();
+    let bus_for_cb = state.bus();
+    crate::tasks::spawn_supervised_with(
+        "read_model::snappy",
+        move || {
+            let state = state_for_task.clone();
+            async move {
+                let mut governor = SnappyGovernorState::new(SnappyConfig::from_env());
+                let period = Duration::from_millis(governor.config.publish_ms.max(1));
+                let mut tick = time::interval(period);
+                loop {
+                    tick.tick().await;
+                    let summary = state.metrics().snapshot();
+                    let snapshot = SnappySnapshot::from_metrics(&governor.config, &summary);
+                    let bus = state.bus();
+                    if let Some(notice) = snapshot.notice_payload() {
+                        bus.publish(topics::TOPIC_SNAPPY_NOTICE, &notice);
+                    }
+                    if snapshot.has_routes() && governor.should_emit_detail() {
+                        if let Some(detail) = snapshot.detail_payload() {
+                            bus.publish(topics::TOPIC_SNAPPY_DETAIL, &detail);
+                        }
+                    }
+                    publish_read_model_patch(&bus, "snappy", &snapshot.to_json());
+                }
+            }
+        },
+        Some({
+            let bus = bus_for_cb.clone();
+            move |restarts| {
+                if restarts >= 5 {
+                    let payload = serde_json::json!({
+                        "status": "degraded",
+                        "component": "read_model::snappy",
+                        "reason": "task_thrashing",
+                        "restarts_window": restarts,
+                        "window_secs": 30,
+                    });
+                    bus.publish(arw_topics::TOPIC_SERVICE_HEALTH, &payload);
+                }
             }
         }),
     )

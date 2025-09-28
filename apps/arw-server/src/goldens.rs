@@ -423,10 +423,7 @@ async fn llama_reply(prompt: &str, temperature: Option<f64>) -> Option<String> {
     }
     let url = format!("{}/completion", base.trim_end_matches('/'));
     let timeout = http_timeout_secs();
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(timeout))
-        .build()
-        .ok()?;
+    let client = crate::http_client::client_with_timeout(std::time::Duration::from_secs(timeout));
     let mut body = json!({
         "prompt": prompt,
         "n_predict": 128,
@@ -454,10 +451,7 @@ async fn openai_reply(prompt: &str, temperature: Option<f64>) -> Option<String> 
     }
     let url = "https://api.openai.com/v1/chat/completions";
     let timeout = http_timeout_secs();
-    let client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(timeout))
-        .build()
-        .ok()?;
+    let client = crate::http_client::client_with_timeout(std::time::Duration::from_secs(timeout));
     let mut body = json!({
         "model": std::env::var("ARW_OPENAI_MODEL").ok().unwrap_or_else(|| "gpt-4o-mini".into()),
         "messages": [{"role":"user", "content": prompt}]

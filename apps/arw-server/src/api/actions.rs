@@ -284,9 +284,8 @@ mod tests {
     #[tokio::test]
     async fn actions_get_exposes_guard_and_posture() {
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = crate::test_support::env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
         let action_id = uuid::Uuid::new_v4().to_string();
         state
@@ -350,8 +349,8 @@ mod tests {
     #[tokio::test]
     async fn actions_state_set_sanitizes_metadata() {
         let temp = tempdir().expect("tempdir");
-        let mut env_guard = crate::test_support::env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
         let bus = state.bus();
         let mut rx =

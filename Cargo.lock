@@ -417,6 +417,7 @@ dependencies = [
  "nvml-wrapper",
  "once_cell",
  "os_info",
+ "parking_lot",
  "prost 0.12.6",
  "prost-types",
  "regex",

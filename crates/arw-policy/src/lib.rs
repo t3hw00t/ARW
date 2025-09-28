@@ -741,8 +741,10 @@ mod tests {
             }),
         });
 
-        let mut request = AbacRequest::default();
-        request.action = "models.download".into();
+        let request = AbacRequest {
+            action: "models.download".into(),
+            ..Default::default()
+        };
 
         let decision = engine.evaluate_abac(&request);
         assert!(

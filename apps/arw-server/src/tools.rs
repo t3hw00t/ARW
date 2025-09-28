@@ -245,7 +245,7 @@ use screenshots_disabled as screenshots;
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{test_support::env as test_env, AppState};
+    use crate::AppState;
     use arw_policy::PolicyEngine;
     use async_trait::async_trait;
     use serde_json::json;
@@ -328,7 +328,7 @@ mod tests {
     #[tokio::test]
     async fn screenshot_tools_return_unsupported_without_feature() {
         let temp = tempfile::tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
+        let _ctx = crate::test_support::begin_state_env(temp.path());
 
         let bus = arw_events::Bus::new_with_replay(8, 8);
         let kernel = arw_kernel::Kernel::open(temp.path()).expect("init kernel");

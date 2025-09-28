@@ -181,6 +181,94 @@ pub async fn state_intents(headers: HeaderMap) -> impl IntoResponse {
     Json(json!({"items": state_observer::intents_snapshot()})).into_response()
 }
 
+/// Crash log snapshot from state_dir/crash and crash/archive.
+#[utoipa::path(
+    get,
+    path = "/state/crashlog",
+    tag = "State",
+    responses(
+        (status = 200, description = "Crash log", body = serde_json::Value),
+        (status = 401, description = "Unauthorized", body = serde_json::Value)
+    )
+)]
+pub async fn state_crashlog(headers: HeaderMap) -> impl IntoResponse {
+    if !crate::admin_ok(&headers) {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
+    let value = crate::read_models::crashlog_snapshot().await;
+    Json(value).into_response()
+}
+
+/// Aggregated service health (read-model built from service.health events).
+#[utoipa::path(
+    get,
+    path = "/state/service_health",
+    tag = "State",
+    responses(
+        (status = 200, description = "Service health", body = serde_json::Value),
+        (status = 401, description = "Unauthorized", body = serde_json::Value)
+    )
+)]
+pub async fn state_service_health(headers: HeaderMap) -> impl IntoResponse {
+    if !crate::admin_ok(&headers) {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
+    let value = crate::read_models::cached_read_model("service_health")
+        .unwrap_or_else(|| json!({"history": [], "last": null}));
+    Json(value).into_response()
+}
+
+/// Consolidated service status: safe-mode, last crash, and last health signal.
+#[utoipa::path(
+    get,
+    path = "/state/service_status",
+    tag = "State",
+    responses(
+        (status = 200, description = "Service status", body = serde_json::Value),
+        (status = 401, description = "Unauthorized", body = serde_json::Value)
+    )
+)]
+pub async fn state_service_status(headers: HeaderMap) -> impl IntoResponse {
+    if !crate::admin_ok(&headers) {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
+    let until_ms = crate::crashguard::safe_mode_until_ms();
+    let safe_mode = if until_ms > 0 {
+        json!({"active": true, "until_ms": until_ms})
+    } else {
+        json!({"active": false})
+    };
+    let crashlog = crate::read_models::cached_read_model("crashlog")
+        .unwrap_or_else(|| json!({"count": 0, "items": []}));
+    let last_crash = crashlog
+        .get("items")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.first())
+        .cloned()
+        .unwrap_or(Value::Null);
+    let service_health = crate::read_models::cached_read_model("service_health")
+        .unwrap_or_else(|| json!({"history": [], "last": null}));
+    let last_health = service_health.get("last").cloned().unwrap_or(Value::Null);
+    Json(json!({
+        "safe_mode": safe_mode,
+        "last_crash": last_crash,
+        "last_health": last_health,
+    }))
+    .into_response()
+}
+
 /// Guardrails circuit-breaker metrics snapshot.
 #[utoipa::path(
     get,
@@ -484,9 +572,8 @@ mod tests {
     #[tokio::test]
     async fn state_actions_sanitizes_guard_metadata() {
         let temp = tempdir().expect("tempdir");
-        let _state_guard = crate::util::scoped_state_dir_for_tests(temp.path());
-        let mut env_guard = crate::test_support::env::guard();
-        let state = build_state(temp.path(), &mut env_guard).await;
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
 
         let action_id = uuid::Uuid::new_v4().to_string();
         state

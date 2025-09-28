@@ -275,7 +275,7 @@ pub async fn search_memory(state: &AppState, params: MemorySearchInput) -> Resul
                 .as_ref()
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty())
-                .unwrap_or_else(|| "".to_string());
+                .unwrap_or_default();
             if query.is_empty() {
                 kernel.list_recent_memory_async(lane.clone(), limit).await?
             } else {

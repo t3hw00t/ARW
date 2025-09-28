@@ -240,6 +240,11 @@ _Note_: MSI bundles ship the launcher together with `arw-server`. Run the unifie
 
 Screenshots → https://t3hw00t.github.io/ARW/guide/screenshots/
 
+## Operations & Monitoring
+
+- Read stability and crash‑recovery details in `docs/OPERATIONS.md`.
+- Prometheus alerting examples and dashboard tips in `docs/ALERTING.md`.
+
 ## Docker Quickstart
 
 ```bash

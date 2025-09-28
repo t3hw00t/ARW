@@ -1,7 +1,6 @@
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::http_timeout;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::sync::Mutex;
@@ -397,10 +396,7 @@ async fn llama_chat(
         obj.insert("temperature".into(), json!(input.temperature));
     }
 
-    let client = reqwest::Client::builder()
-        .timeout(http_timeout::get_duration())
-        .build()
-        .map_err(|e| ToolError::Runtime(e.to_string()))?;
+    let client = crate::http_client::client().clone();
 
     match client.post(&url).json(&body).send().await {
         Ok(resp) => {
@@ -486,10 +482,7 @@ async fn openai_chat(
         "max_tokens": 512,
     });
 
-    let client = reqwest::Client::builder()
-        .timeout(http_timeout::get_duration())
-        .build()
-        .map_err(|e| ToolError::Runtime(e.to_string()))?;
+    let client = crate::http_client::client().clone();
 
     let request = client.post(&api_url).bearer_auth(&key).json(&body);
     match request.send().await {

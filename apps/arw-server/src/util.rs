@@ -1,10 +1,12 @@
 use anyhow::{anyhow, Result};
 use once_cell::sync::{Lazy, OnceCell};
+#[cfg(test)]
+use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
 use serde_json::{json, Value};
+#[cfg(test)]
+use std::path::Path;
 use std::path::PathBuf;
 use std::sync::Mutex;
-#[cfg(test)]
-use std::{path::Path, sync::MutexGuard};
 
 static STATE_DIR: Lazy<Mutex<OnceCell<PathBuf>>> = Lazy::new(|| Mutex::new(OnceCell::new()));
 
@@ -37,7 +39,9 @@ pub fn effective_posture() -> String {
 }
 
 pub fn state_dir() -> PathBuf {
-    let cell = STATE_DIR.lock().expect("state dir cache lock");
+    let cell = STATE_DIR
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
     if let Some(existing) = cell.get() {
         return existing.clone();
     }
@@ -56,25 +60,31 @@ pub fn state_dir() -> PathBuf {
 
 #[cfg(test)]
 pub(crate) fn reset_state_dir_for_tests() {
-    let mut cell = STATE_DIR.lock().expect("state dir cache lock");
+    let mut cell = STATE_DIR
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
     cell.take();
 }
 
 #[cfg(test)]
-static STATE_DIR_TEST_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+static STATE_DIR_TEST_LOCK: Lazy<ReentrantMutex<()>> = Lazy::new(|| ReentrantMutex::new(()));
 
 #[cfg(test)]
 pub(crate) struct StateDirTestGuard {
     prev: Option<String>,
-    _lock: MutexGuard<'static, ()>,
+    _lock: ReentrantMutexGuard<'static, ()>,
 }
 
 #[cfg(test)]
-pub(crate) fn scoped_state_dir_for_tests(path: &Path) -> StateDirTestGuard {
-    let lock = STATE_DIR_TEST_LOCK.lock().expect("state dir test lock");
+pub(crate) fn scoped_state_dir_for_tests(
+    path: &Path,
+    env_guard: &mut crate::test_support::env::EnvGuard,
+) -> StateDirTestGuard {
+    // ReentrantMutex allows callers to nest state guards in the same thread without deadlock.
+    let lock = STATE_DIR_TEST_LOCK.lock();
     let prev = std::env::var("ARW_STATE_DIR").ok();
     reset_state_dir_for_tests();
-    std::env::set_var("ARW_STATE_DIR", path.display().to_string());
+    env_guard.set("ARW_STATE_DIR", path.display().to_string());
     StateDirTestGuard { prev, _lock: lock }
 }
 

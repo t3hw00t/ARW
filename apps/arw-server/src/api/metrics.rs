@@ -122,6 +122,12 @@ fn render_prometheus(
             status.completed,
         );
         write_metric_line(&mut out, "arw_task_aborted_total", &labels, status.aborted);
+        write_metric_line(
+            &mut out,
+            "arw_task_restarts_window",
+            &labels,
+            status.restarts_window,
+        );
     }
     out.push_str("# HELP arw_memory_gc_expired_total Memory records reclaimed because TTL expired\n# TYPE arw_memory_gc_expired_total counter\n");
     write_metric_line(
@@ -218,6 +224,29 @@ fn render_prometheus(
         &[],
         cache.hit_age_samples,
     );
+
+    // Safe-mode and crash visibility (best-effort)
+    out.push_str("# HELP arw_safe_mode_active Safe-mode engaged due to recent crash markers\n# TYPE arw_safe_mode_active gauge\n");
+    let until_ms = crate::crashguard::safe_mode_until_ms();
+    write_metric_line(
+        &mut out,
+        "arw_safe_mode_active",
+        &[],
+        if until_ms > 0 { 1 } else { 0 },
+    );
+    out.push_str("# HELP arw_safe_mode_until_ms Epoch milliseconds until safe-mode ends (0 if inactive)\n# TYPE arw_safe_mode_until_ms gauge\n");
+    write_metric_line(&mut out, "arw_safe_mode_until_ms", &[], until_ms);
+
+    out.push_str("# HELP arw_last_crash_ms Timestamp of last known crash marker (ms since epoch, 0 if none)\n# TYPE arw_last_crash_ms gauge\n");
+    let last_crash_ms = crate::read_models::cached_read_model("crashlog")
+        .and_then(|v| {
+            v.get("items")
+                .and_then(|i| i.as_array())
+                .and_then(|arr| arr.first().cloned())
+        })
+        .and_then(|item| item.get("ts_ms").and_then(|t| t.as_u64()))
+        .unwrap_or(0);
+    write_metric_line(&mut out, "arw_last_crash_ms", &[], last_crash_ms);
     out.push_str("# HELP arw_tool_cache_last_hit_age_secs Last observed cache hit age\n# TYPE arw_tool_cache_last_hit_age_secs gauge\n");
     if let Some(last_age) = cache.last_hit_age_secs {
         write_metric_line(&mut out, "arw_tool_cache_last_hit_age_secs", &[], last_age);

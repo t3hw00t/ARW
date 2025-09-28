@@ -1,0 +1,22 @@
+name: CI (nextest)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install nextest
+        run: cargo install cargo-nextest --locked
+      - name: Build tests
+        run: cargo nextest run --no-run
+      - name: Run tests (CI profile)
+        env:
+          RUST_BACKTRACE: 1
+        run: cargo nextest run --profile ci --workspace

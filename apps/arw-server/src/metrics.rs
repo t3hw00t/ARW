@@ -169,6 +169,7 @@ pub struct TaskStatus {
     pub inflight: u64,
     pub last_start: Option<String>,
     pub last_stop: Option<String>,
+    pub restarts_window: u64,
 }
 
 #[derive(Default, Clone)]
@@ -179,6 +180,7 @@ struct TaskStat {
     inflight: u64,
     last_start: Option<String>,
     last_stop: Option<String>,
+    restarts_window: u64,
 }
 
 #[derive(Default)]
@@ -235,6 +237,7 @@ impl TaskStat {
             inflight: self.inflight,
             last_start: self.last_start.clone(),
             last_stop: self.last_stop.clone(),
+            restarts_window: self.restarts_window,
         }
     }
 }
@@ -356,6 +359,12 @@ impl Metrics {
 
     pub fn task_aborted(&self, name: &str) {
         self.record_task_outcome(name, TaskOutcome::Aborted);
+    }
+
+    pub fn task_restarts_window_set(&self, name: &str, count: u64) {
+        if let Ok(mut map) = self.tasks.lock() {
+            map.entry(name.to_string()).or_default().restarts_window = count;
+        }
     }
 
     fn record_task_outcome(&self, name: &str, outcome: TaskOutcome) {

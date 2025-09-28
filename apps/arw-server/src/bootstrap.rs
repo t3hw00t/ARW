@@ -265,45 +265,121 @@ fn spawn_bus_forwarders(
 ) -> Vec<TaskHandle> {
     let mut handles = Vec::new();
     if kernel_enabled {
-        let mut rx = bus.subscribe();
         let kernel = kernel.clone();
-        let handle = tokio::spawn(async move {
-            use sha2::Digest as _;
-
-            while let Ok(env) = rx.recv().await {
-                metrics.record_event(&env.kind);
-                if let Ok(row_id) = kernel.append_event_async(&env).await {
-                    let mut hasher = sha2::Sha256::new();
-                    hasher.update(env.time.as_bytes());
-                    hasher.update(env.kind.as_bytes());
-                    if let Ok(payload_bytes) = serde_json::to_vec(&env.payload) {
-                        hasher.update(&payload_bytes);
+        let bus_clone = bus.clone();
+        let name = "bus.forward.kernel";
+        let handle = crate::tasks::spawn_supervised_with(
+            name,
+            move || {
+                let metrics = metrics.clone();
+                let sse_id_map = sse_id_map.clone();
+                let kernel = kernel.clone();
+                let mut rx = bus_clone.subscribe();
+                async move {
+                    use sha2::Digest as _;
+                    while let Ok(env) = rx.recv().await {
+                        metrics.record_event(&env.kind);
+                        if let Ok(row_id) = kernel.append_event_async(&env).await {
+                            let mut hasher = sha2::Sha256::new();
+                            hasher.update(env.time.as_bytes());
+                            hasher.update(env.kind.as_bytes());
+                            if let Ok(payload_bytes) = serde_json::to_vec(&env.payload) {
+                                hasher.update(&payload_bytes);
+                            }
+                            let digest = hasher.finalize();
+                            let key = u64::from_le_bytes([
+                                digest[0], digest[1], digest[2], digest[3], digest[4], digest[5],
+                                digest[6], digest[7],
+                            ]);
+                            let mut cache = sse_id_map.lock().await;
+                            cache.insert(key, row_id);
+                        }
                     }
-                    let digest = hasher.finalize();
-                    let key = u64::from_le_bytes([
-                        digest[0], digest[1], digest[2], digest[3], digest[4], digest[5],
-                        digest[6], digest[7],
-                    ]);
-                    let mut cache = sse_id_map.lock().await;
-                    cache.insert(key, row_id);
                 }
-            }
-        });
-        handles.push(TaskHandle::new("bus.forward.kernel", handle));
+            },
+            Some({
+                let bus = bus.clone();
+                let name = name.to_string();
+                move |restarts| {
+                    if restarts >= 5 {
+                        let payload = serde_json::json!({
+                            "status": "degraded",
+                            "component": name,
+                            "reason": "task_thrashing",
+                            "restarts_window": restarts,
+                            "window_secs": 30,
+                        });
+                        bus.publish(arw_topics::TOPIC_SERVICE_HEALTH, &payload);
+                    }
+                }
+            }),
+        );
+        handles.push(handle);
     } else {
-        let mut rx = bus.subscribe();
-        let handle = tokio::spawn(async move {
-            while let Ok(env) = rx.recv().await {
-                metrics.record_event(&env.kind);
-            }
-        });
-        handles.push(TaskHandle::new("bus.forward.metrics", handle));
+        let bus_clone = bus.clone();
+        let name = "bus.forward.metrics";
+        let handle = crate::tasks::spawn_supervised_with(
+            name,
+            move || {
+                let metrics = metrics.clone();
+                let mut rx = bus_clone.subscribe();
+                async move {
+                    while let Ok(env) = rx.recv().await {
+                        metrics.record_event(&env.kind);
+                    }
+                }
+            },
+            Some({
+                let bus = bus.clone();
+                let name = name.to_string();
+                move |restarts| {
+                    if restarts >= 5 {
+                        let payload = serde_json::json!({
+                            "status": "degraded",
+                            "component": name,
+                            "reason": "task_thrashing",
+                            "restarts_window": restarts,
+                            "window_secs": 30,
+                        });
+                        bus.publish(arw_topics::TOPIC_SERVICE_HEALTH, &payload);
+                    }
+                }
+            }),
+        );
+        handles.push(handle);
     }
     handles
 }
 
 async fn initialise_state(state: &AppState, kernel_enabled: bool) -> TaskManager {
     let mut tasks = TaskManager::with_metrics(state.metrics());
+    // Announce and clear any crash markers from previous runs.
+    crate::crashguard::sweep_on_start(state).await;
+    // If configured and recent crashes detected, set an initial safe-mode delay that supervised tasks respect.
+    crate::crashguard::maybe_enter_safe_mode(state);
+    // If in safe mode, schedule a transition notice when the delay elapses.
+    let until = crate::crashguard::safe_mode_until_ms();
+    if until > 0 {
+        let bus = state.bus();
+        tasks.push(TaskHandle::new(
+            "safe_mode.announce_exit",
+            tokio::spawn(async move {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis() as u64;
+                if until > now {
+                    tokio::time::sleep(std::time::Duration::from_millis(until - now + 250)).await;
+                }
+                let payload = serde_json::json!({
+                    "status": "recovered",
+                    "component": "safe_mode",
+                    "reason": "delay_elapsed",
+                });
+                bus.publish(arw_topics::TOPIC_SERVICE_HEALTH, &payload);
+            }),
+        ));
+    }
     read_models::publish_read_model_patch(
         &state.bus(),
         "policy_capsules",
@@ -340,9 +416,9 @@ async fn initialise_state(state: &AppState, kernel_enabled: bool) -> TaskManager
 
 fn spawn_trust_store_watcher(state: AppState) -> TaskHandle {
     let bus = state.bus();
-    TaskHandle::new(
-        "trust.watcher",
-        tokio::spawn(async move {
+    crate::tasks::spawn_supervised("trust.watcher", move || {
+        let bus = bus.clone();
+        async move {
             use std::io::ErrorKind;
             use std::time::{Duration, SystemTime};
 
@@ -402,8 +478,8 @@ fn spawn_trust_store_watcher(state: AppState) -> TaskHandle {
 
                 tokio::time::sleep(Duration::from_secs(5)).await;
             }
-        }),
-    )
+        }
+    })
 }
 
 #[cfg(test)]

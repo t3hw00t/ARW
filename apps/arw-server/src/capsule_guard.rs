@@ -340,32 +340,48 @@ fn refresh_interval() -> Duration {
 }
 
 pub fn start_refresh_task(state: AppState) -> TaskHandle {
-    let mut ticker = interval(refresh_interval());
-    ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
-    TaskHandle::new(
+    let bus = state.bus();
+    crate::tasks::spawn_supervised_with(
         "capsules.refresh",
-        tokio::spawn(async move {
-            let initial = refresh_capsules(&state).await;
-            if initial.changed || !initial.expired.is_empty() {
-                tracing::debug!(
-                    target: "arw::policy",
-                    expired = initial.expired.len(),
-                    changed = initial.changed,
-                    "capsule refresh sweep applied",
-                );
-            }
-
-            loop {
-                ticker.tick().await;
-                let outcome = refresh_capsules(&state).await;
-                if outcome.changed || !outcome.expired.is_empty() {
+        move || {
+            let state = state.clone();
+            async move {
+                let mut ticker = interval(refresh_interval());
+                ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+                let initial = refresh_capsules(&state).await;
+                if initial.changed || !initial.expired.is_empty() {
                     tracing::debug!(
                         target: "arw::policy",
-                        expired = outcome.expired.len(),
-                        changed = outcome.changed,
+                        expired = initial.expired.len(),
+                        changed = initial.changed,
                         "capsule refresh sweep applied",
                     );
                 }
+
+                loop {
+                    ticker.tick().await;
+                    let outcome = refresh_capsules(&state).await;
+                    if outcome.changed || !outcome.expired.is_empty() {
+                        tracing::debug!(
+                            target: "arw::policy",
+                            expired = outcome.expired.len(),
+                            changed = outcome.changed,
+                            "capsule refresh sweep applied",
+                        );
+                    }
+                }
+            }
+        },
+        Some(move |restarts| {
+            if restarts >= 5 {
+                let payload = serde_json::json!({
+                    "status": "degraded",
+                    "component": "capsules.refresh",
+                    "reason": "task_thrashing",
+                    "restarts_window": restarts,
+                    "window_secs": 30,
+                });
+                bus.publish(arw_topics::TOPIC_SERVICE_HEALTH, &payload);
             }
         }),
     )

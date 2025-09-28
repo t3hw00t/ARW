@@ -602,7 +602,7 @@ impl ModelStore {
             metrics: RwLock::new(MetricsState::default()),
             downloads: DownloadsState::new(),
             hash_guard: StdMutex::new(HashGuardState::default()),
-            http_client: Client::new(),
+            http_client: crate::http_client::client().clone(),
             bus,
             kernel,
         }

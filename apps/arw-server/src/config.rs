@@ -1,6 +1,9 @@
 use once_cell::sync::Lazy;
 use serde_json::{json, Value};
-use std::{path::PathBuf, sync::Mutex};
+use std::{
+    path::{Path, PathBuf},
+    sync::Mutex,
+};
 use tracing::{info, warn};
 
 use arw_core::cache_policy::{AssignmentReason, CachePolicyOutcome};
@@ -126,7 +129,7 @@ pub fn init_cache_policy_from_manifest() {
         Some(path) if path.exists() => {
             let path_string = path.to_string_lossy().to_string();
             match arw_core::cache_policy::apply_manifest(&path_string) {
-                Ok(outcome) => emit_cache_policy_logs(&path, source, outcome),
+                Ok(outcome) => emit_cache_policy_logs(path.as_path(), source, outcome),
                 Err(err) => {
                     warn!(path = %path.display(), source, "failed to load cache policy manifest: {err}")
                 }
@@ -153,7 +156,7 @@ fn discovered_cache_policy_path() -> (Option<PathBuf>, &'static str) {
     (None, "search")
 }
 
-fn emit_cache_policy_logs(path: &PathBuf, source: &'static str, outcome: CachePolicyOutcome) {
+fn emit_cache_policy_logs(path: &Path, source: &'static str, outcome: CachePolicyOutcome) {
     let applied: Vec<String> = outcome
         .assignments
         .iter()
@@ -259,7 +262,8 @@ mod tests {
             "#,
         )
         .unwrap();
-        guard.set("ARW_CONFIG", cfg.to_string_lossy().to_string());
+        let cfg_str = cfg.to_string_lossy();
+        guard.set("ARW_CONFIG", cfg_str.as_ref());
 
         let paths = apply_effective_paths();
         assert_eq!(paths.state_dir, "./tmp_state".replace('\\', "/"));
@@ -285,7 +289,8 @@ mod tests {
             "#,
         )
         .unwrap();
-        guard.set("ARW_CONFIG", cfg.to_string_lossy().to_string());
+        let cfg_str = cfg.to_string_lossy();
+        guard.set("ARW_CONFIG", cfg_str.as_ref());
 
         let initial = load_initial_config_state();
         assert_eq!(
@@ -319,10 +324,8 @@ cache:
         )
         .unwrap();
 
-        guard.set(
-            "ARW_CACHE_POLICY_FILE",
-            manifest.to_string_lossy().to_string(),
-        );
+        let manifest_str = manifest.to_string_lossy();
+        guard.set("ARW_CACHE_POLICY_FILE", manifest_str.as_ref());
 
         init_cache_policy_from_manifest();
 

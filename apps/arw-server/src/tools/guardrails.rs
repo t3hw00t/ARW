@@ -83,9 +83,7 @@ async fn guardrails_remote(
         .and_then(|s| s.parse().ok())
         .unwrap_or(3_000);
     let client = CLIENT.get_or_init(|| {
-        reqwest::Client::builder()
-            .pool_idle_timeout(Duration::from_secs(90))
-            .tcp_keepalive(Duration::from_secs(60))
+        crate::http_client::builder()
             .connect_timeout(Duration::from_secs(1))
             .timeout(Duration::from_millis(timeout_ms.max(1)))
             .build()

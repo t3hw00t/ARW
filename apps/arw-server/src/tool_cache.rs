@@ -670,7 +670,6 @@ impl CacheCounters {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_support::env as test_env;
     use tempfile::tempdir;
 
     #[tokio::test]

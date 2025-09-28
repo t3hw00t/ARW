@@ -92,7 +92,7 @@ pub async fn state_memory_stream(State(state): State<AppState>) -> axum::respons
     tokio::spawn(async move {
         if let Ok(event) = Event::default()
             .event(MEMORY_SNAPSHOT_EVENT)
-            .json_data(&json!({"snapshot": current_snapshot.clone()}))
+            .json_data(json!({"snapshot": current_snapshot.clone()}))
         {
             if sender.send(Ok(event)).await.is_err() {
                 return;
@@ -660,10 +660,7 @@ mod tests {
             response_json["record"]["value"]["test_id"].as_str(),
             Some(target_id.as_str())
         );
-        assert_eq!(
-            response_json["applied"]["value_preview"].as_str().is_some(),
-            true
-        );
+        assert!(response_json["applied"]["value_preview"].as_str().is_some());
         let lane = response_json["record"]["lane"].as_str().expect("lane str");
         let kind_opt = response_json["record"]["kind"]
             .as_str()

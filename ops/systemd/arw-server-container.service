@@ -10,6 +10,11 @@ Environment=ARW_DEBUG=0
 Environment=ARW_BIND=127.0.0.1
 Environment=ARW_IMAGE_OWNER=t3hw00t
 Environment=ARW_IMAGE_TAG=latest
+Environment=ARW_HTTP_TIMEOUT_SECS=20
+Environment=ARW_HTTP_CONNECT_TIMEOUT_SECS=3
+Environment=ARW_HTTP_TCP_KEEPALIVE_SECS=60
+Environment=ARW_HTTP_POOL_IDLE_SECS=90
+Environment=ARW_SAFE_MODE_ON_CRASH=1
 User=%i
 ExecStart=/usr/bin/docker run --rm \
   --name arw-server-%i \

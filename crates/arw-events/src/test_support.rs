@@ -12,7 +12,9 @@ pub mod env {
     pub fn guard() -> EnvGuard {
         let lk = ENV_LOCK.get_or_init(|| Mutex::new(()));
         EnvGuard {
-            _lock: lk.lock().expect("env lock"),
+            _lock: lk
+                .lock()
+                .unwrap_or_else(|poison| poison.into_inner()),
             saved: Vec::new(),
         }
     }
@@ -50,4 +52,3 @@ pub mod env {
         }
     }
 }
-

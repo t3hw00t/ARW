@@ -19,6 +19,9 @@ pub mod rpu;
 #[cfg(feature = "wasm")]
 pub mod wasm;
 
+#[cfg(test)]
+pub mod test_support;
+
 /// Public metadata describing a tool that can be registered into the runtime.
 #[derive(Clone, Serialize)]
 pub struct ToolInfo {

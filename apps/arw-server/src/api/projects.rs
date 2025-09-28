@@ -232,7 +232,7 @@ pub async fn projects_notes_get(
 
     if let Some(meta) = &meta {
         doc.bytes = Some(meta.len());
-        doc.modified = meta.modified().ok().and_then(|t| system_time_to_rfc3339(t));
+        doc.modified = meta.modified().ok().and_then(system_time_to_rfc3339);
     }
 
     match afs::read(&path).await {
@@ -342,7 +342,7 @@ pub async fn projects_notes_set(
     };
     let (bytes_len, modified) = if let Some(meta) = meta {
         let bytes_len = meta.len();
-        let modified = meta.modified().ok().and_then(|t| system_time_to_rfc3339(t));
+        let modified = meta.modified().ok().and_then(system_time_to_rfc3339);
         (bytes_len, modified)
     } else {
         (bytes.len() as u64, None)

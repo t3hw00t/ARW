@@ -1,16 +1,19 @@
 [profile.default]
-# Use default settings for local runs.
-
-[[profile.default.overrides]]
-# arw-server tests mutate global state (ARW_STATE_DIR) and can contend
-# on a global mutex; run its test binary single-threaded for reliability.
-filter = 'package("arw-server")'
-test-threads = 1
-
-[profile.default.status-level]
-# Keep output focused for faster iteration
-slow = { milliseconds = 30000 }
+retries = 0
+status-level = "all"
+final-status-level = "flaky"
+failure-output = "immediate"
+fail-fast = true
+test-threads = "num-cpus"
+slow-timeout = { period = "60s", terminate-after = 1 }
 
 [profile.ci]
-# Run all tests in CI without stopping at the first failure.
-fail-fast = false
+retries = 0
+status-level = "all"
+final-status-level = "flaky"
+failure-output = "final"
+fail-fast = true
+test-threads = "num-cpus"
+slow-timeout = { period = "60s", terminate-after = 1 }
+run-timeout = "10m"
+

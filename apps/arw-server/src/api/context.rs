@@ -155,18 +155,18 @@ pub async fn context_assemble(
 
     let iterations_meta = collector.into_inner();
 
-    let body = build_context_response(
-        &req,
-        &base_spec,
-        &final_spec,
-        &last_verdict,
-        ws,
+    let body = build_context_response(ContextResponseInputs {
+        request: &req,
+        base_spec: &base_spec,
+        final_spec: &final_spec,
+        verdict: &last_verdict,
+        working_set: ws,
         iterations_meta,
         include_sources,
         debug,
         max_iterations,
-        corr_id.as_ref(),
-    );
+        corr_id: corr_id.as_deref(),
+    });
 
     state.bus().publish(topics::TOPIC_CONTEXT_ASSEMBLED, &body);
 
@@ -206,18 +206,18 @@ async fn stream_working_set(
         .await;
 
         if let Some(ws) = loop_result.final_working_set {
-            let body = build_context_response(
-                &req_for_task,
-                &base_spec_for_task,
-                &loop_result.final_spec,
-                &loop_result.last_verdict,
-                ws,
-                Vec::new(),
+            let body = build_context_response(ContextResponseInputs {
+                request: &req_for_task,
+                base_spec: &base_spec_for_task,
+                final_spec: &loop_result.final_spec,
+                verdict: &loop_result.last_verdict,
+                working_set: ws,
+                iterations_meta: Vec::new(),
                 include_sources,
                 debug,
                 max_iterations,
-                corr_for_task.as_ref(),
-            );
+                corr_id: corr_for_task.as_deref(),
+            });
             state_clone
                 .bus()
                 .publish(topics::TOPIC_CONTEXT_ASSEMBLED, &body);
@@ -271,25 +271,40 @@ async fn stream_working_set(
     Sse::new(stream).into_response()
 }
 
-fn build_context_response(
-    req: &AssembleReq,
-    base_spec: &working_set::WorkingSetSpec,
-    final_spec: &working_set::WorkingSetSpec,
-    last_verdict: &coverage::CoverageVerdict,
-    ws: working_set::WorkingSet,
+struct ContextResponseInputs<'a> {
+    request: &'a AssembleReq,
+    base_spec: &'a working_set::WorkingSetSpec,
+    final_spec: &'a working_set::WorkingSetSpec,
+    verdict: &'a coverage::CoverageVerdict,
+    working_set: working_set::WorkingSet,
     iterations_meta: Vec<Value>,
     include_sources: bool,
     debug: bool,
     max_iterations: usize,
-    corr_id: Option<&String>,
-) -> Value {
+    corr_id: Option<&'a str>,
+}
+
+fn build_context_response(params: ContextResponseInputs<'_>) -> Value {
+    let ContextResponseInputs {
+        request,
+        base_spec,
+        final_spec,
+        verdict,
+        working_set,
+        iterations_meta,
+        include_sources,
+        debug,
+        max_iterations,
+        corr_id,
+    } = params;
+
     let working_set::WorkingSet {
         items,
         seeds,
         expanded,
         diagnostics,
         summary,
-    } = ws;
+    } = working_set;
 
     let preview = build_context_preview(&items);
 
@@ -306,8 +321,8 @@ fn build_context_response(
         },
         "summary": summary.to_json(),
         "coverage": json!({
-            "needs_more": last_verdict.needs_more,
-            "reasons": last_verdict.reasons
+            "needs_more": verdict.needs_more,
+            "reasons": verdict.reasons
         })
     });
     working["iterations"] = Value::Array(iterations_meta);
@@ -323,8 +338,8 @@ fn build_context_response(
     let beliefs = working.get("items").cloned().unwrap_or_else(|| json!([]));
 
     let mut body = json!({
-        "query": req.q,
-        "project": req.proj,
+        "query": request.q,
+        "project": request.proj,
         "lanes": final_spec.lanes.clone(),
         "limit": final_spec.limit,
         "expand_per_seed": final_spec.expand_per_seed,
@@ -340,7 +355,7 @@ fn build_context_response(
 
     if let Some(obj) = body.as_object_mut() {
         obj.insert("requested_spec".into(), base_spec.snapshot());
-        if let Some(embed) = req.embed.clone() {
+        if let Some(embed) = request.embed.clone() {
             obj.insert("embed".into(), json!(embed));
         }
         if let Some(cid) = corr_id {
@@ -361,17 +376,16 @@ fn build_context_preview(items: &[Value]) -> Option<String> {
 
     let mut lines = Vec::new();
     for item in items.iter().take(MAX_LINES) {
-        let candidate = if let Some(obj) = item.as_object() {
-            obj.get("text")
-                .and_then(|v| v.as_str())
-                .or_else(|| obj.get("summary").and_then(|v| v.as_str()))
-                .or_else(|| obj.get("content").and_then(|v| v.as_str()))
-                .or_else(|| obj.get("value").and_then(|v| v.as_str()))
-        } else if let Some(s) = item.as_str() {
-            Some(s)
-        } else {
-            None
-        };
+        let candidate = item
+            .as_object()
+            .and_then(|obj| {
+                obj.get("text")
+                    .and_then(Value::as_str)
+                    .or_else(|| obj.get("summary").and_then(Value::as_str))
+                    .or_else(|| obj.get("content").and_then(Value::as_str))
+                    .or_else(|| obj.get("value").and_then(Value::as_str))
+            })
+            .or_else(|| item.as_str());
 
         let text = candidate
             .map(|s| s.to_string())

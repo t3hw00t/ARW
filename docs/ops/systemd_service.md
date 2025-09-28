@@ -25,6 +25,18 @@ ARW_IMAGE_OWNER=t3hw00t
 ARW_IMAGE_TAG=latest
 # Optional: uncomment to change where persistent state lives
 # ARW_STATE_DIR=/var/lib/arw-server-demo/state
+
+# Stability knobs (optional)
+# ARW_SAFE_MODE_ON_CRASH=1
+# ARW_SAFE_MODE_RECENT_MS=600000
+# ARW_SAFE_MODE_MIN_COUNT=1
+# ARW_SAFE_MODE_DEFER_SECS=30
+
+# HTTP client tuning (optional)
+# ARW_HTTP_TIMEOUT_SECS=20
+# ARW_HTTP_CONNECT_TIMEOUT_SECS=3
+# ARW_HTTP_TCP_KEEPALIVE_SECS=60
+# ARW_HTTP_POOL_IDLE_SECS=90
 ```
 
 ## Native unit

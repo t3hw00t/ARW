@@ -1,8 +1,9 @@
-use once_cell::sync::Lazy;
-use std::{
-    collections::HashMap,
-    sync::{Mutex, MutexGuard},
-};
+use once_cell::sync::{Lazy, OnceCell};
+use std::collections::HashMap;
+
+// In tests, prefer parking_lot's fast mutexes with timed try-locks
+#[cfg(test)]
+use parking_lot::{Mutex, MutexGuard};
 
 static ENV_LOCK: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
 
@@ -15,8 +16,21 @@ pub(crate) mod env {
     }
 
     pub(crate) fn guard() -> EnvGuard {
+        // Avoid indefinite hangs if another test leaked the ENV lock.
+        // Wait up to 10s, then panic with a clear message.
+        #[cfg(test)]
+        {
+            if let Some(lock) = ENV_LOCK.try_lock_for(std::time::Duration::from_secs(10)) {
+                return EnvGuard {
+                    _lock: lock,
+                    saved: HashMap::new(),
+                };
+            }
+            panic!("test ENV lock could not be acquired within 10s; another test may be stuck while holding it");
+        }
+        #[allow(unreachable_code)]
         EnvGuard {
-            _lock: ENV_LOCK.lock().expect("env lock poisoned"),
+            _lock: ENV_LOCK.lock(),
             saved: HashMap::new(),
         }
     }
@@ -68,7 +82,7 @@ pub(crate) mod env {
 }
 
 // Unified test context helper to streamline correct lock ordering and cleanup.
-// Acquire the state-dir guard first, then the env guard. Hold both until drop.
+// Acquire the env guard first (to avoid races), then scope the state-dir guard.
 #[cfg(test)]
 pub(crate) struct TestCtx {
     pub env: env::EnvGuard,
@@ -78,7 +92,18 @@ pub(crate) struct TestCtx {
 
 #[cfg(test)]
 pub(crate) fn begin_state_env(path: &std::path::Path) -> TestCtx {
-    let state = crate::util::scoped_state_dir_for_tests(path);
-    let env = env::guard();
+    let mut env = env::guard();
+    let state = crate::util::scoped_state_dir_for_tests(path, &mut env);
     TestCtx { env, _state: state }
+}
+
+// One-time tracing init for tests, honoring RUST_LOG if set.
+pub(crate) fn init_tracing() {
+    static START: OnceCell<()> = OnceCell::new();
+    START.get_or_init(|| {
+        let _ = tracing_subscriber::fmt()
+            .with_env_filter(tracing_subscriber::EnvFilter::from_default_env())
+            .with_test_writer()
+            .try_init();
+    });
 }
