@@ -3,7 +3,7 @@ title: Interface Release Notes
 ---
 
 # Interface Release Notes
-Updated: 2025-09-27
+Updated: 2025-09-28
 Type: Reference
 
 Base: `origin/main`
