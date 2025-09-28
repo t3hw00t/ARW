@@ -235,6 +235,21 @@ impl LogicUnitHistoryStore {
         self.append_entry(entry).await
     }
 
+    pub async fn snapshot(&self, offset: usize, limit: usize) -> (Vec<Value>, usize) {
+        let guard = self.inner.lock().await;
+        let total = guard.len();
+        let start = offset.min(total);
+        let end = (start + limit).min(total);
+        (guard[start..end].to_vec(), total)
+    }
+
+    pub async fn recent(&self, limit: usize) -> Vec<Value> {
+        self.snapshot(0, limit).await.0
+    }
+}
+
+#[cfg(test)]
+impl LogicUnitHistoryStore {
     pub async fn append_custom(
         &self,
         kind: &str,
@@ -250,18 +265,6 @@ impl LogicUnitHistoryStore {
             "payload": payload,
         });
         self.append_entry(entry).await
-    }
-
-    pub async fn snapshot(&self, offset: usize, limit: usize) -> (Vec<Value>, usize) {
-        let guard = self.inner.lock().await;
-        let total = guard.len();
-        let start = offset.min(total);
-        let end = (start + limit).min(total);
-        (guard[start..end].to_vec(), total)
-    }
-
-    pub async fn recent(&self, limit: usize) -> Vec<Value> {
-        self.snapshot(0, limit).await.0
     }
 }
 

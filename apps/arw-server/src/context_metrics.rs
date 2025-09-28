@@ -76,9 +76,7 @@ pub(crate) fn snapshot(bus: &arw_events::Bus) -> Value {
                             if !gap.is_finite() {
                                 continue;
                             }
-                            let stats = recall_slot_stats
-                                .entry(slot.to_string())
-                                .or_insert_with(SlotStats::default);
+                            let stats = recall_slot_stats.entry(slot.to_string()).or_default();
                             stats.sum += gap;
                             stats.count += 1;
                             if gap > stats.max {
