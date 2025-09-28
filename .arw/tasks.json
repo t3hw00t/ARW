@@ -75,9 +75,13 @@
         {
           "time": "2025-09-14 16:44:18 UTC",
           "text": "Replaced string publish in the legacy service bridge with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13."
+        },
+        {
+          "time": "2025-09-28 15:53:26 UTC",
+          "text": "Server runtime and matrix publishers now use TOPIC_RUNTIME_* constants; backlog sweep confirmed no remaining string literals."
         }
       ],
-      "updated": "2025-09-14 16:44:17 UTC",
+      "updated": "2025-09-28 15:53:26 UTC",
       "done_at": "2025-09-14 16:44:17 UTC"
     },
     {
@@ -145,9 +149,25 @@
         {
           "time": "2025-09-14 16:52:59 UTC",
           "text": "Enhanced linter: fails on string-literal Bus.publish in legacy service paths and CamelCase subjects; verified repo passes."
+        },
+        {
+          "time": "2025-09-28 15:08:51 UTC",
+          "text": "CI workflow runs lint_event_names.py and subject check covers arw.events strings (this change)."
+        },
+        {
+          "time": "2025-09-28 15:40:35 UTC",
+          "text": "Expanded lint CLI (argparse, skip flags, allowlist), added just lint-events + Makefile target, documented usage."
+        },
+        {
+          "time": "2025-09-28 15:49:36 UTC",
+          "text": "Pre-commit hook now runs event guard so local workflows catch violations early."
+        },
+        {
+          "time": "2025-09-28 16:08:41 UTC",
+          "text": "Added lint self-test flag to smoke-check regex/fallback + regression coverage."
         }
       ],
-      "updated": "2025-09-14 16:53:00 UTC",
+      "updated": "2025-09-28 16:08:41 UTC",
       "done_at": "2025-09-14 16:53:00 UTC"
     },
     {

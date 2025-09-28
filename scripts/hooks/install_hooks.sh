@@ -17,6 +17,12 @@ echo "[pre-commit] cargo fmt --check"
 cargo fmt --all -- --check
 echo "[pre-commit] cargo clippy -D warnings"
 cargo clippy --workspace --all-targets -- -D warnings
+if command -v python3 >/dev/null 2>&1; then
+  echo "[pre-commit] Event naming guard (dot.case)"
+  python3 scripts/lint_event_names.py
+else
+  echo "[pre-commit] python3 unavailable; skipping event lint"
+fi
 echo "[pre-commit] Generate interface index & deprecations"
 if command -v python3 >/dev/null 2>&1; then
   python3 scripts/interfaces_generate_index.py || true

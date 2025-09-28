@@ -1,3 +1,4 @@
+use arw_topics::TOPIC_RUNTIME_HEALTH;
 use chrono::SecondsFormat;
 use once_cell::sync::OnceCell;
 use serde_json::{json, Value};
@@ -54,7 +55,7 @@ pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
         tokio::spawn(async move {
             let mut rx = subscriber_state.bus().subscribe();
             while let Ok(env) = rx.recv().await {
-                if env.kind.as_str() == "runtime.health" {
+                if env.kind == TOPIC_RUNTIME_HEALTH {
                     let key = env
                         .payload
                         .get("target")
@@ -88,7 +89,9 @@ pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
             loop {
                 tick.tick().await;
                 if let Some(payload) = build_local_health_payload(&publisher_state).await {
-                    publisher_state.bus().publish("runtime.health", &payload);
+                    publisher_state
+                        .bus()
+                        .publish(TOPIC_RUNTIME_HEALTH, &payload);
                 }
             }
         }),

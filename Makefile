@@ -1,4 +1,4 @@
-.PHONY: build dev-build fmt lint test package docgen docs-build start clean clean-venv
+.PHONY: build dev-build fmt lint lint-events test package docgen docs-build start clean clean-venv
 
 build:
 	cargo build --workspace --release --locked
@@ -11,6 +11,9 @@ fmt:
 
 lint:
 	cargo clippy --workspace --all-targets -- -D warnings
+
+lint-events:
+	python3 scripts/lint_event_names.py
 
 test:
 	cargo test --workspace --locked

@@ -37,6 +37,9 @@ fmt-check:
 lint-fix:
   cargo clippy --workspace --all-targets --fix -Z unstable-options --allow-dirty --allow-staged || true
 
+lint-events:
+  python3 scripts/lint_event_names.py
+
 # Test
 test:
   cargo test --workspace --locked

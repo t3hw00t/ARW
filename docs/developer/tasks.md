@@ -147,13 +147,18 @@ Updated: 2025-09-28 02:23 UTC
     - 2025-09-14 16:53:02 UTC: Gating key events:task.completed confirmed in arw-core and documented for the legacy bridge; gating keys doc lists it.
 - [t-250914050910-ev15] Docs: dot.case normalization — done (updated: 2025-09-14 16:53:01 UTC)
     - 2025-09-14 16:53:00 UTC: Docs updated for dot.case: topics table includes experiment.activated; reinforced constants usage and SSE guidance.
-- [t-250914050912-ev16] CI: event kind linter — done (updated: 2025-09-14 16:53:00 UTC)
+- [t-250914050912-ev16] CI: event kind linter — done (updated: 2025-09-28 16:08:41 UTC)
     - 2025-09-14 16:52:59 UTC: Enhanced linter: fails on string-literal Bus.publish in legacy service paths and CamelCase subjects; verified repo passes.
+    - 2025-09-28 15:08:51 UTC: CI workflow now runs lint_event_names.py with arw.events subject guard (this change).
+    - 2025-09-28 15:40:35 UTC: Added argparse CLI, skip toggles, allowlist flag, and just lint-events helper.
+    - 2025-09-28 16:08:41 UTC: Added `--self-test` smoke harness to lock regex + fallback behaviour.
+    - 2025-09-28 15:49:36 UTC: Pre-commit hook runs the event guard so local commits fail fast on violations.
 - [t-250914050906-ev13] Connector: task.completed + subjects — done (updated: 2025-09-14 16:46:51 UTC)
     - 2025-09-14 16:46:50 UTC: Connector now uses dot.case constants for task.completed and builds subjects: cluster 'arw.events.task.completed' and node 'arw.events.node.<node_id>.task.completed'.
-- [t-250914050902-ev11] Events: replace publishers with constants — done (updated: 2025-09-14 16:44:17 UTC)
+- [t-250914050902-ev11] Events: replace publishers with constants — done (updated: 2025-09-28 15:53:26 UTC)
     - 2025-09-14 16:43:57 UTC: Replaced string publish in the legacy service bridge with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13.
   - 2025-09-14 16:44:18 UTC: Replaced string publish in the legacy service bridge with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13.
+  - 2025-09-28 15:53:26 UTC: Runtime + runtime_matrix publishers now emit via TOPIC_RUNTIME_* constants; backlog sweep confirms full coverage.
 - [t-250912024851-8114] Models: move download worker into ModelsService — done (updated: 2025-09-14 00:00:00 UTC)
 - [t-250912020516-8533] Phase 1: AppState builder + unified struct — done (updated: 2025-09-12 00:05:22 UTC)
     - 2025-09-12 00:05:22 UTC: Unified AppState in app_state.rs; main/lib migrated; added Resources container; built+tests green for arw-server.

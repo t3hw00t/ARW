@@ -87,6 +87,9 @@ jobs:
           ENFORCE_ENV_GUARD: 1
         run: bash scripts/check_env_guard.sh
 
+      - name: Event kind lint
+        run: python3 scripts/lint_event_names.py
+
       - name: Tests (workspace)
         run: cargo nextest run --workspace
 

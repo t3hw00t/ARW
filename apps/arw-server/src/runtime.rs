@@ -6,6 +6,7 @@ use arw_runtime::{
     RegistrySnapshot, RuntimeDescriptor, RuntimeModality, RuntimeRecord, RuntimeSeverity,
     RuntimeState, RuntimeStatus,
 };
+use arw_topics::TOPIC_RUNTIME_STATE_CHANGED;
 use chrono::{DateTime, Utc};
 use serde_json::Value;
 use tokio::sync::RwLock;
@@ -84,7 +85,7 @@ impl RuntimeRegistry {
         guard.statuses.insert(status.id.clone(), status.clone());
         guard.updated_at = Utc::now();
         drop(guard);
-        self.bus.publish("runtime.state.changed", &payload);
+        self.bus.publish(TOPIC_RUNTIME_STATE_CHANGED, &payload);
         self.publish_snapshot().await;
     }
 

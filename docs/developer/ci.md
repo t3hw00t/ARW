@@ -112,5 +112,5 @@ cargo install cargo-msrv --locked
 cargo msrv verify
 
 # Event naming (dot.case)
-python3 scripts/lint_event_names.py
+just lint-events      # or: python3 scripts/lint_event_names.py [--self-test]
 ```

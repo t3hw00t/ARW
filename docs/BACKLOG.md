@@ -243,13 +243,13 @@ Visual Capture (Screenshots)
 - [Pack: Collaboration] Next: redaction presets; labels/arrows; retention and search in gallery; Save to project macro to append Markdown in NOTES.md.
 
 Strict dot.case normalization (no back-compat)
-- [Kernel] [t-250914050900-ev10] Update topics SSoT to dot.case only (remove CamelCase constants) — in progress
-- [Kernel] [t-250914050902-ev11] Replace all publishers to use topics.rs constants (no hard-coded strings) — in progress
-- [Kernel] [t-250914050904-ev12] Debug UI: switch listeners to dot.case only — todo
-- [Kernel] [t-250914050906-ev13] Connector: publish `task.completed` and subjects `arw.events.task.completed` + node variant — todo
-- [Kernel] [t-250914050908-ev14] Update Feature Matrix topics to dot.case — in progress
-- [Kernel] [t-250914050910-ev15] Docs: update Events Vocabulary/Topics/Admin Endpoints to dot.case — todo
-- [Kernel] [t-250914050912-ev16] CI linter: fail on any `publish("...CamelCase...")` or legacy subjects — todo
+- [Kernel] [t-250914050900-ev10] Update topics SSoT to dot.case only (remove CamelCase constants) — done (topics audit confirmed all values normalized; 2025-09-28 sweep)
+- [Kernel] [t-250914050902-ev11] Replace all publishers to use topics.rs constants (no hard-coded strings) — done (runtime + matrix now emit via TOPIC_* constants; this sweep)
+- [Kernel] [t-250914050904-ev12] Debug UI: switch listeners to dot.case only — done
+- [Kernel] [t-250914050906-ev13] Connector: publish `task.completed` and subjects `arw.events.task.completed` + node variant — done
+- [Kernel] [t-250914050908-ev14] Update Feature Matrix topics to dot.case — done
+- [Kernel] [t-250914050910-ev15] Docs: update Events Vocabulary/Topics/Admin Endpoints to dot.case — done
+- [Kernel] [t-250914050912-ev16] CI linter: fail on any `publish("...CamelCase...")` or legacy subjects — done (CI guard + CLI/self-test helpers; this change)
 - [Kernel] [t-250914050914-ev17] arw-core gating keys: add `events:task.completed` and update callers — plan
 - [Kernel] [t-250914050916-ev18] Release notes: breaking change, mapping table, migration notes — todo
 

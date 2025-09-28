@@ -100,7 +100,7 @@ Benefits
 
 ### Pre‑commit & Pre‑push
 
-- Pre‑commit: fmt/clippy/tests; generates interface index + deprecations and ensures descriptions/tags; lints specs when staged.
+- Pre-commit: fmt/clippy/event lint/tests; generates interface index + deprecations and ensures descriptions/tags; lints specs when staged.
 - Pre‑push: OpenAPI sync check (codegen vs spec); Spectral lint on spec + generated OpenAPI; AsyncAPI diff (best‑effort); generates interface release notes (warn on drift).
 
 ## UI Conventions (Apps & Debug)
