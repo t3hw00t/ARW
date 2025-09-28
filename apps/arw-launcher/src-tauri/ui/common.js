@@ -69,6 +69,50 @@ window.ARW = {
       }catch{ return null }
     }
   },
+  http: {
+    _norm(base){ try{ return String(base||'').replace(/\/$/,''); }catch{ return '' } },
+    async _headers(base, extra){
+      const headers = Object.assign({}, extra || {});
+      let token = null;
+      try {
+        if (base) token = await ARW.connections.tokenFor(base);
+      } catch {}
+      if (token) {
+        const hasAuth = Object.keys(headers).some(k => k.toLowerCase() === 'authorization');
+        if (!headers['X-ARW-Admin'] && !headers['x-arw-admin']) headers['X-ARW-Admin'] = token;
+        if (!hasAuth) headers['Authorization'] = `Bearer ${token}`;
+      }
+      return headers;
+    },
+    async fetch(baseOrUrl, pathOrInit, maybeInit){
+      let url = baseOrUrl;
+      let init = {};
+      let tokenBase = null;
+      if (typeof pathOrInit === 'string') {
+        tokenBase = baseOrUrl;
+        url = this._norm(baseOrUrl) + (pathOrInit.startsWith('/') ? pathOrInit : '/' + pathOrInit);
+        init = maybeInit || {};
+      } else {
+        init = pathOrInit || {};
+        tokenBase = (()=>{
+          try { return new URL(baseOrUrl).origin; } catch { return baseOrUrl; }
+        })();
+      }
+      const opts = Object.assign({}, init);
+      opts.headers = await this._headers(tokenBase, init.headers);
+      return fetch(url, opts);
+    },
+    async json(baseOrUrl, pathOrInit, maybeInit){
+      const resp = await this.fetch(baseOrUrl, pathOrInit, maybeInit);
+      if (!resp.ok) throw new Error('HTTP '+resp.status);
+      return resp.json();
+    },
+    async text(baseOrUrl, pathOrInit, maybeInit){
+      const resp = await this.fetch(baseOrUrl, pathOrInit, maybeInit);
+      if (!resp.ok) throw new Error('HTTP '+resp.status);
+      return resp.text();
+    }
+  },
   toast(msg) {
     if (!this._toastWrap) {
       const wrap = document.createElement('div');
@@ -244,9 +288,11 @@ window.ARW = {
     _lastKind: null,
     _base: null,
     _opts: null,
+    _mode: 'eventsource',
     _retryMs: 500,
     _retryTimer: null,
     _closing: false,
+    _abortController: null,
     _updateStatus(status, extra){
       this._status = status;
       try{ if (document && document.body) document.body.setAttribute('data-sse-status', status); }catch{}
@@ -265,7 +311,12 @@ window.ARW = {
       return baseUrl.replace(/\/$/, '') + '/events' + (params.toString() ? ('?' + params.toString()) : '');
     },
     _clearTimer(){ if (this._retryTimer){ clearTimeout(this._retryTimer); this._retryTimer=null; } },
+    _teardownEventSource(){ if (this._es){ try { this._closing = true; this._es.close(); } catch {} this._es = null; this._closing = false; } },
+    _teardownFetch(){ if (this._abortController){ try { this._closing = true; this._abortController.abort(); } catch {} } this._abortController = null; this._closing = false; },
     connect(baseUrl, opts = {}, resumeLast = false) {
+      this._connectAsync(baseUrl, opts, resumeLast).catch((err)=>{ console.error('SSE connect failed', err); });
+    },
+    async _connectAsync(baseUrl, opts = {}, resumeLast = false) {
       const prevBase = this._base;
       const baseChanged = typeof prevBase === 'string' && prevBase !== baseUrl;
       this._base = baseUrl;
@@ -274,9 +325,27 @@ window.ARW = {
         this._lastId = null;
       }
       this._clearTimer();
-      if (this._es) { try { this._closing = true; this._es.close(); } catch {} this._es = null; this._closing = false; }
+      this._teardownEventSource();
+      this._teardownFetch();
       const useAfter = resumeLast && !baseChanged && this._lastId;
       const url = this._url(baseUrl, this._opts, useAfter ? this._lastId : null);
+      let token = typeof opts.token === 'function' ? null : opts.token;
+      if (token === undefined) {
+        try { token = await ARW.connections.tokenFor(baseUrl); }
+        catch { token = null; }
+      }
+      if (typeof opts.token === 'function') {
+        try { token = await opts.token(); } catch { token = null; }
+      }
+      if (token) {
+        this._mode = 'fetch';
+        await this._connectFetch(url, token);
+      } else {
+        this._mode = 'eventsource';
+        this._connectEventSource(url);
+      }
+    },
+    _connectEventSource(url) {
       this._updateStatus('connecting');
       const es = new EventSource(url, { withCredentials: false });
       es.onopen = () => {
@@ -291,12 +360,8 @@ window.ARW = {
         const closing = this._closing;
         this._emit('*error*', {});
         this._updateStatus(closing ? 'closed' : 'error', closing ? {} : { retryIn: ms });
-        // EventSource auto-reconnects, but in some environments it can stall.
-        // Kick a fresh connection with modest backoff unless we intentionally closed.
         if (!closing) {
-          this._clearTimer();
-          this._retryTimer = setTimeout(() => { try { this.reconnect(); } catch {} }, ms);
-          this._retryMs = Math.min(ms * 2, 5000);
+          this._scheduleReconnect(ms);
         }
       };
       es.onmessage = (ev) => {
@@ -310,7 +375,121 @@ window.ARW = {
         this._emit(kind, data);
       };
       this._es = es;
-      // Reconnect on network re-gain
+      this._wireOnlineReconnect();
+    },
+    async _connectFetch(url, token){
+      this._updateStatus('connecting');
+      const controller = new AbortController();
+      this._abortController = controller;
+      const headers = { 'Accept': 'text/event-stream', 'X-ARW-Admin': token };
+      let response = null;
+      try {
+        response = await fetch(url, { headers, signal: controller.signal, credentials: 'omit' });
+      } catch (err) {
+        if (controller.signal.aborted) {
+          this._updateStatus('closed');
+          return;
+        }
+        this._handleFetchError(err);
+        return;
+      }
+      if (!response || !response.ok || !response.body) {
+        this._handleFetchError(new Error('SSE fetch failed'));
+        return;
+      }
+      this._connected = true;
+      this._retryMs = 500;
+      this._emit('*open*', {});
+      this._updateStatus('open');
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      const readLoop = async () => {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buffer += decoder.decode(value, { stream: true });
+            buffer = this._processBuffer(buffer);
+          }
+          // drain remainder
+          if (buffer) {
+            this._processBuffer(buffer + '\n\n');
+          }
+        } catch (err) {
+          if (!controller.signal.aborted) {
+            this._handleFetchError(err);
+            return;
+          }
+        }
+        if (!controller.signal.aborted) {
+          this._handleFetchError(new Error('SSE stream ended'));
+        } else {
+          this._updateStatus('closed');
+        }
+      };
+      readLoop();
+      this._wireOnlineReconnect();
+    },
+    _processBuffer(buffer){
+      let remaining = buffer;
+      let idx = remaining.indexOf('\n\n');
+      while (idx >= 0) {
+        const chunk = remaining.slice(0, idx);
+        remaining = remaining.slice(idx + 2);
+        this._handleSseChunk(chunk);
+        idx = remaining.indexOf('\n\n');
+      }
+      return remaining;
+    },
+    _handleSseChunk(chunk){
+      const lines = chunk.split('\n');
+      let dataLines = [];
+      let eventName = null;
+      let lastId = null;
+      for (const rawLine of lines) {
+        const line = rawLine.trimEnd();
+        if (!line || line.startsWith(':')) continue;
+        if (line.startsWith('data:')) {
+          dataLines.push(line.slice(5).trimStart());
+        } else if (line.startsWith('event:')) {
+          eventName = line.slice(6).trimStart();
+        } else if (line.startsWith('id:')) {
+          lastId = line.slice(3).trimStart();
+        }
+      }
+      if (lastId) {
+        this._lastId = lastId;
+      }
+      const payloadRaw = dataLines.join('\n');
+      if (!payloadRaw) return;
+      let data = null;
+      try { data = JSON.parse(payloadRaw); }
+      catch { data = { raw: payloadRaw }; }
+      const kind = eventName || data?.kind || 'unknown';
+      this._last = data;
+      this._lastRaw = payloadRaw;
+      this._lastKind = kind;
+      this._emit(kind, data);
+    },
+    _handleFetchError(err){
+      console.warn('SSE fetch error', err?.message || err);
+      this._connected = false;
+      const ms = Math.min(this._retryMs, 5000);
+      const closing = this._closing;
+      this._emit('*error*', { error: err });
+      this._updateStatus(closing ? 'closed' : 'error', closing ? {} : { retryIn: ms });
+      this._abortController = null;
+      if (!closing) {
+        this._scheduleReconnect(ms);
+        this._retryMs = Math.min(ms * 2, 5000);
+      }
+    },
+    _scheduleReconnect(ms){
+      this._clearTimer();
+      this._retryTimer = setTimeout(() => { try { this.reconnect(); } catch {} }, ms);
+    },
+    _wireOnlineReconnect(){
       try {
         window.removeEventListener('online', this._onlineOnce);
       } catch {}
@@ -320,7 +499,8 @@ window.ARW = {
     reconnect(){ if (this._base) this.connect(this._base, this._opts || {}, true); },
     close(){
       this._clearTimer();
-      if (this._es){ try { this._closing = true; this._es.close(); } catch {} this._es=null; }
+      this._teardownEventSource();
+      this._teardownFetch();
       this._closing=false;
       this._connected = false;
       this._updateStatus('closed');
@@ -402,8 +582,7 @@ window.ARW = {
       const rPolicy = async () => {
         const el = sections.find(([n])=>n==='policy')?.[1]; if (!el || !opts.base) return;
         try {
-          const r = await fetch(opts.base.replace(/\/$/,'') + '/state/policy');
-          const j = await r.json();
+          const j = await ARW.http.json(opts.base, '/state/policy');
           const leases = j?.leases || j?.data?.leases || [];
           el.innerHTML = '';
           if (!Array.isArray(leases) || leases.length===0) { el.innerHTML = '<div class="dim">No active leases</div>'; return; }
@@ -424,8 +603,8 @@ window.ARW = {
       const rContext = async () => {
         const el = sections.find(([n])=>n==='context')?.[1]; if (!el || !opts.base) return;
         try {
-          const r = await fetch(opts.base.replace(/\/$/,'') + '/state/world/select?k=8');
-          const j = await r.json(); const items = j?.items || j?.data?.items || [];
+          const j = await ARW.http.json(opts.base, '/state/world/select?k=8');
+          const items = j?.items || j?.data?.items || [];
           el.innerHTML = '';
           const ul = document.createElement('ul'); ul.style.paddingLeft='16px'; ul.style.margin='0';
           for (const it of items) {

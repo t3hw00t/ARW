@@ -34,6 +34,11 @@ async function refresh(){
       <button data-ping title="Ping connection">Ping</button>
       <button data-del title="Delete connection">Delete</button>
     </td>`;
+    const statusCell = tr.querySelector('[data-st]');
+    if (statusCell) {
+      statusCell.setAttribute('role', 'status');
+      statusCell.setAttribute('aria-live', 'polite');
+    }
     tr.querySelector('[data-ev]').addEventListener('click', async ()=>{ try{ await invoke('open_events_window_base', { base: (c.base||'').replace(/\/$/,''), labelSuffix: (c.name||'') }); }catch(e){} });
     tr.querySelector('[data-logs]').addEventListener('click', async ()=>{ try{ await invoke('open_logs_window_base', { base: (c.base||'').replace(/\/$/,''), labelSuffix: (c.name||'') }); }catch(e){} });
     tr.querySelector('[data-models]').addEventListener('click', async ()=>{ try{ await invoke('open_models_window_base', { base: (c.base||'').replace(/\/$/,''), labelSuffix: (c.name||'') }); }catch(e){} });
@@ -46,13 +51,24 @@ async function refresh(){
   });
 }
 async function pingRow(tr, c){
-  const st = tr.querySelector('[data-st]'); if (st) st.textContent = '…';
+  const st = tr.querySelector('[data-st]'); if (st) { st.textContent = '…'; st.className='dim'; }
   try{
-    const url = (c.base||'').replace(/\/$/,'') + '/healthz';
-    const r = await fetch(url, { method: 'GET' });
-    if (r.ok) { st.innerHTML = '<span class="dot ok"></span> online'; st.className='ok'; }
-    else { st.innerHTML = '<span class="dot bad"></span> error'; st.className='bad'; }
-  }catch(e){ if (st) { st.innerHTML = '<span class="dot bad"></span> offline'; st.className='bad'; } }
+    const baseUrl = (c.base||'').trim();
+    const r = await ARW.http.fetch(baseUrl, '/healthz', { method: 'GET' });
+    if (r.ok) {
+      st.innerHTML = '<span class="dot ok"></span> online';
+      st.className='ok';
+      st.dataset.status = 'online';
+    } else if (r.status === 401 || r.status === 403) {
+      st.innerHTML = '<span class="dot warn"></span> auth required';
+      st.className='warn';
+      st.dataset.status = 'auth';
+    } else {
+      st.innerHTML = `<span class="dot bad"></span> error (${r.status})`;
+      st.className='bad';
+      st.dataset.status = 'error';
+    }
+  }catch(e){ if (st) { st.innerHTML = '<span class="dot bad"></span> offline'; st.className='bad'; st.dataset.status = 'offline'; } }
 }
 document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-add').addEventListener('click', async ()=>{

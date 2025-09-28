@@ -67,7 +67,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const { signal, transform } = options;
     const fetchOpts = {};
     if (signal) fetchOpts.signal = signal;
-    const resp = await fetch(base + path, fetchOpts);
+    const resp = await ARW.http.fetch(base, path, fetchOpts);
     if (!resp.ok) {
       const err = new Error(`failed to fetch read model: ${id}`);
       err.status = resp.status;
@@ -79,6 +79,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     ARW.read._emit(id);
     return model;
   }
+  const fetchJson = (path, init) => ARW.http.json(base, path, init);
+  const fetchText = (path, init) => ARW.http.text(base, path, init);
+  const fetchRaw = (path, init) => ARW.http.fetch(base, path, init);
   function formatDuration(n){
     if (!Number.isFinite(n) || n < 0) return '–';
     if (n >= 1000) return `${(n/1000).toFixed(1)} s`;
@@ -137,7 +140,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       snapAbort = new AbortController();
       let snap = null;
       try {
-        const resp = await fetch(base + '/state/episode/' + encodeURIComponent(id) + '/snapshot', { signal: snapAbort.signal });
+      const resp = await fetchRaw(`/state/episode/${encodeURIComponent(id)}/snapshot`, { signal: snapAbort.signal });
         if (resp.ok) {
           snap = await resp.json();
         }
@@ -200,6 +203,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Simple file metadata cache to avoid repeated GETs (5s TTL)
   const fileCache = new Map(); // rel -> { data, t }
   const fileTTL = 5000;
+  async function getFileMeta(rel, opts = {}){
+    const key = String(rel || '');
+    const cached = fileCache.get(key);
+    const now = Date.now();
+    if (!opts.force && cached && (now - cached.t) < fileTTL) {
+      return cached.data;
+    }
+    const data = await fetchJson(`/state/projects/${encodeURIComponent(curProj)}/file?path=${encodeURIComponent(key)}`);
+    fileCache.set(key, { data, t: now });
+    return data;
+  }
   // Nested tree cache and expansion state
   const treeCache = new Map(); // path -> items
   let expanded = new Set(); // rel paths that are expanded (persisted)
@@ -286,7 +300,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function createProj(){
     const n = (elProjName?.value||'').trim(); if (!n) return;
     try{
-      const resp = await fetch(base + '/projects', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:n }) });
+      const resp = await fetchRaw('/projects', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ name:n }) });
       if (!resp.ok) throw new Error('HTTP '+resp.status);
       await refreshProjectsSnapshot(); setProj(n); ARW.toast('Project created');
     }catch(e){ console.error(e); ARW.toast('Create failed'); }
@@ -302,12 +316,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const shouldSkip = skipFetch === true;
     if (shouldSkip) return;
     try{
-      const r = await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/notes');
-      const t = await r.text();
+      const t = await fetchText(`/state/projects/${encodeURIComponent(curProj)}/notes`);
       elNotes.value = t;
     }catch(e){ console.error(e); elNotes.value=''; }
   }
-  async function saveNotes(quiet=false){ if (!curProj||!elNotes) return; try{ const t = elNotes.value||''; await fetch(base + '/projects/'+encodeURIComponent(curProj)+'/notes', { method:'PUT', headers:{'Content-Type':'text/plain'}, body: t + '\n' }); const ns=document.getElementById('notesStat'); if (ns){ ns.textContent='Saved'; setTimeout(()=>{ if (ns.textContent==='Saved') ns.textContent=''; }, 1200); } if (!quiet) { /* optional toast removed for quieter UX */ } }catch(e){ console.error(e); const ns=document.getElementById('notesStat'); if (ns){ ns.textContent='Error'; setTimeout(()=>{ if (ns.textContent==='Error') ns.textContent=''; }, 1500); } }
+  async function saveNotes(quiet=false){ if (!curProj||!elNotes) return; try{ const t = elNotes.value||''; await fetchRaw(`/projects/${encodeURIComponent(curProj)}/notes`, { method:'PUT', headers:{'Content-Type':'text/plain'}, body: t + '\n' }); const ns=document.getElementById('notesStat'); if (ns){ ns.textContent='Saved'; setTimeout(()=>{ if (ns.textContent==='Saved') ns.textContent=''; }, 1200); } if (!quiet) { /* optional toast removed for quieter UX */ } }catch(e){ console.error(e); const ns=document.getElementById('notesStat'); if (ns){ ns.textContent='Error'; setTimeout(()=>{ if (ns.textContent==='Error') ns.textContent=''; }, 1500); } }
   async function loadTree(rel){
     if (!curProj||!elProjTree) return;
     const next = String(rel||'');
@@ -326,8 +339,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
     if (!fromModel) {
       try{
-        const r = await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/tree?path='+encodeURIComponent(currentPath));
-        const j = await r.json().catch(()=>({items:[]}));
+        const j = await fetchJson(`/state/projects/${encodeURIComponent(curProj)}/tree?path=${encodeURIComponent(currentPath)}`).catch(()=>({items:[]}));
         treeCache.set(String(currentPath||''), j.items||[]);
       }catch(e){ console.error(e); elProjTree.textContent = 'Error'; return; }
     }
@@ -343,7 +355,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const entries = Array.isArray(treePaths[key]) ? treePaths[key] : [];
         treeCache.set(key, entries);
       } else {
-        try{ const r=await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/tree?path='+encodeURIComponent(key)); const j=await r.json().catch(()=>({items:[]})); treeCache.set(key, (j.items||[])); }
+        try{ const j=await fetchJson(`/state/projects/${encodeURIComponent(curProj)}/tree?path=${encodeURIComponent(key)}`).catch(()=>({items:[]})); treeCache.set(key, (j.items||[])); }
         catch{ treeCache.set(key, []); }
       }
     }
@@ -388,8 +400,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try{
       let items = treeCache.get(parentRel);
       if (!Array.isArray(items)){
-        const r = await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/tree?path='+encodeURIComponent(parentRel||''));
-        const j = await r.json().catch(()=>({items:[]}));
+        const j = await fetchJson(`/state/projects/${encodeURIComponent(curProj)}/tree?path=${encodeURIComponent(parentRel||'')}`).catch(()=>({items:[]}));
         items = (j.items||[]);
         treeCache.set(parentRel, items);
       }
@@ -424,9 +435,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         name.addEventListener('click', ()=>{ if (it.dir) loadTree(it.rel||''); else filePreview(it.rel||''); }); nameWrap.appendChild(name);
         const actions=document.createElement('div'); actions.className='row';
         if (!it.dir){
-          const copyBtn=document.createElement('button'); copyBtn.className='ghost'; copyBtn.textContent='Copy'; copyBtn.title='Copy file contents to clipboard'; copyBtn.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const cached=fileCache.get(rel); const fresh=cached&&(Date.now()-cached.t<fileTTL); let j=fresh?cached.data:await (await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel))).json(); if(!fresh) fileCache.set(rel,{data:j,t:Date.now()}); ARW.copy(String(j.content||'')); }catch(e){ console.error(e); ARW.toast('Copy failed'); } }); actions.appendChild(copyBtn);
-          const openBtn=document.createElement('button'); openBtn.className='ghost'; openBtn.textContent='Open'; openBtn.title='Open with system default'; openBtn.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const cached=fileCache.get(rel); const fresh=cached&&(Date.now()-cached.t<fileTTL); let j=fresh?cached.data:await (await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel))).json(); if(!fresh) fileCache.set(rel,{data:j,t:Date.now()}); if(j&&j.abs_path){ await ARW.invoke('open_path',{path:j.abs_path}); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open failed'); } }); actions.appendChild(openBtn);
-          const editOpen=document.createElement('button'); editOpen.className='ghost'; editOpen.textContent='Open in Editor'; editOpen.title='Open in configured editor'; editOpen.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const cached=fileCache.get(rel); const fresh=cached&&(Date.now()-cached.t<fileTTL); let j=fresh?cached.data:await (await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel))).json(); if(!fresh) fileCache.set(rel,{data:j,t:Date.now()}); if(j&&j.abs_path){ const eff=(projPrefs&&projPrefs.editorCmd)||((await ARW.getPrefs('launcher'))||{}).editorCmd||null; await ARW.invoke('open_in_editor',{path:j.abs_path, editor_cmd: eff}); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); } }); actions.appendChild(editOpen);
+          const copyBtn=document.createElement('button'); copyBtn.className='ghost'; copyBtn.textContent='Copy'; copyBtn.title='Copy file contents to clipboard'; copyBtn.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const data=await getFileMeta(rel); ARW.copy(String(data?.content||'')); }catch(e){ console.error(e); ARW.toast('Copy failed'); } }); actions.appendChild(copyBtn);
+          const openBtn=document.createElement('button'); openBtn.className='ghost'; openBtn.textContent='Open'; openBtn.title='Open with system default'; openBtn.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const data=await getFileMeta(rel); if(data&&data.abs_path){ await ARW.invoke('open_path',{path:data.abs_path}); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open failed'); } }); actions.appendChild(openBtn);
+          const editOpen=document.createElement('button'); editOpen.className='ghost'; editOpen.textContent='Open in Editor'; editOpen.title='Open in configured editor'; editOpen.addEventListener('click', async ()=>{ try{ const rel=it.rel||''; const data=await getFileMeta(rel); if(data&&data.abs_path){ const eff=(projPrefs&&projPrefs.editorCmd)||((await ARW.getPrefs('launcher'))||{}).editorCmd||null; await ARW.invoke('open_in_editor',{path:data.abs_path, editor_cmd: eff}); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); } }); actions.appendChild(editOpen);
         }
         const left=document.createElement('div'); left.style.display='flex'; left.style.alignItems='center'; left.style.gap='6px'; left.appendChild(nameWrap); row.appendChild(left); row.appendChild(actions); host.appendChild(row);
         if (it.dir && (expanded.has(it.rel||'') || searchExpanded.has(String(it.rel||'')))){
@@ -493,26 +504,23 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (!it.dir){
         const copyBtn=document.createElement('button'); copyBtn.className='ghost'; copyBtn.textContent='Copy'; copyBtn.addEventListener('click', async ()=>{
           try{
-            const rel = it.rel||''; const cached = fileCache.get(rel); const fresh = cached && (Date.now()-cached.t < fileTTL);
-            let j = fresh ? cached.data : await (await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel))).json();
-            if (!fresh) fileCache.set(rel, { data: j, t: Date.now() });
-            ARW.copy(String(j.content||''));
+            const rel = it.rel||'';
+            const data = await getFileMeta(rel);
+            ARW.copy(String(data?.content||''));
           }catch(e){ console.error(e); ARW.toast('Copy failed'); }
         }); actions.appendChild(copyBtn);
         const openBtn=document.createElement('button'); openBtn.className='ghost'; openBtn.textContent='Open'; openBtn.addEventListener('click', async ()=>{
           try{
-            const rel = it.rel||''; const cached = fileCache.get(rel); const fresh = cached && (Date.now()-cached.t < fileTTL);
-            let j = fresh ? cached.data : await (await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel))).json();
-            if (!fresh) fileCache.set(rel, { data: j, t: Date.now() });
-            if (j && j.abs_path) { await ARW.invoke('open_path', { path: j.abs_path }); } else { ARW.toast('Path unavailable'); }
+            const rel = it.rel||'';
+            const data = await getFileMeta(rel);
+            if (data && data.abs_path) { await ARW.invoke('open_path', { path: data.abs_path }); } else { ARW.toast('Path unavailable'); }
           }catch(e){ console.error(e); ARW.toast('Open failed'); }
         }); actions.appendChild(openBtn);
         const editOpen=document.createElement('button'); editOpen.className='ghost'; editOpen.textContent='Open in Editor'; editOpen.addEventListener('click', async ()=>{
           try{
-            const rel = it.rel||''; const cached = fileCache.get(rel); const fresh = cached && (Date.now()-cached.t < fileTTL);
-            let j = fresh ? cached.data : await (await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel))).json();
-            if (!fresh) fileCache.set(rel, { data: j, t: Date.now() });
-            if (j && j.abs_path) { const eff = (projPrefs&&projPrefs.editorCmd) || ((await ARW.getPrefs('launcher'))||{}).editorCmd || null; await ARW.invoke('open_in_editor', { path: j.abs_path, editor_cmd: eff }); } else { ARW.toast('Path unavailable'); }
+            const rel = it.rel||'';
+            const data = await getFileMeta(rel);
+            if (data && data.abs_path) { const eff = (projPrefs&&projPrefs.editorCmd) || ((await ARW.getPrefs('launcher'))||{}).editorCmd || null; await ARW.invoke('open_in_editor', { path: data.abs_path, editor_cmd: eff }); } else { ARW.toast('Path unavailable'); }
           }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); }
         }); actions.appendChild(editOpen);
       }
@@ -531,7 +539,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         try{
           let dest = currentPath ? (currentPath.replace(/\/$/, '') + '/' + f.name) : f.name;
           let exists = false;
-          try{ const r = await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(dest)); exists = r.ok; }catch{}
+          try{ const r = await fetchRaw(`/state/projects/${encodeURIComponent(curProj)}/file?path=${encodeURIComponent(dest)}`); exists = r.ok; }catch{}
           if (exists){ const ow = confirm('Overwrite '+dest+'?'); if (!ow){ const m=f.name.match(/^(.*?)(\.[^.]*)?$/); const baseN=m?m[1]:f.name; const ext=m?m[2]||'':''; dest = (currentPath? currentPath+'/' : '') + baseN + ' (copy)' + ext; } }
           if (f.size > 10*1024*1024){ alert('File too large (max 10 MiB)'); continue; }
           let body = {};
@@ -541,7 +549,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const b64 = (function(u8){ let bin=''; const CHUNK=0x8000; for(let i=0;i<u8.length;i+=CHUNK){ bin += String.fromCharCode.apply(null, u8.subarray(i,i+CHUNK)); } return btoa(bin); })(new Uint8Array(ab));
             body = { content_b64: b64, prev_sha256: null };
           }
-          const resp = await fetch(base + '/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(dest), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+          const resp = await fetchRaw(`/projects/${encodeURIComponent(curProj)}/file?path=${encodeURIComponent(dest)}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
           if (!resp.ok){ console.warn('Upload failed', f.name, resp.status); continue; }
         }catch(err){ console.error('Upload error', err); }
       }
@@ -552,9 +560,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnBack = document.getElementById('btnTreeBack'); if (btnBack) btnBack.addEventListener('click', ()=>{ const prev = pathStack.pop(); loadTree(prev||''); });
   async function filePreview(rel){
     try{
-      const r=await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel||''));
-      const j=await r.json();
-      try{ fileCache.set(rel||'', { data: j, t: Date.now() }); }catch{}
+      const j=await getFileMeta(rel||'', { force: true });
       const prev=document.getElementById('treePrev'); if (!prev) return;
       prev.innerHTML='';
       // Header line
@@ -575,18 +581,17 @@ document.addEventListener('DOMContentLoaded', async () => {
       const pathRel = rel;
       function toggleEditing(on){ pre.style.display = on? 'none':'block'; ta.style.display = on? 'block':'none'; editBtn.style.display = on? 'none':'inline-block'; saveBtn.style.display = on? 'inline-block':'none'; revertBtn.style.display = on? 'inline-block':'none'; }
       editBtn.addEventListener('click', ()=> toggleEditing(true));
-      openEditor.addEventListener('click', async ()=>{ try{ const rel = pathRel||''; const cached = fileCache.get(rel); const fresh = cached && (Date.now()-cached.t < fileTTL); let jx = fresh ? cached.data : await (await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(rel))).json(); if (!fresh) fileCache.set(rel, { data: jx, t: Date.now() }); if (jx && jx.abs_path) { const eff = (projPrefs&&projPrefs.editorCmd) || ((await ARW.getPrefs('launcher'))||{}).editorCmd || null; await ARW.invoke('open_in_editor', { path: jx.abs_path, editor_cmd: eff }); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); } });
+      openEditor.addEventListener('click', async ()=>{ try{ const rel = pathRel||''; const data = await getFileMeta(rel); if (data && data.abs_path) { const eff = (projPrefs&&projPrefs.editorCmd) || ((await ARW.getPrefs('launcher'))||{}).editorCmd || null; await ARW.invoke('open_in_editor', { path: data.abs_path, editor_cmd: eff }); } else { ARW.toast('Path unavailable'); } }catch(e){ console.error(e); ARW.toast('Open in Editor failed'); } });
       revertBtn.addEventListener('click', ()=>{ ta.value = String(j.content||''); toggleEditing(false); });
       saveBtn.addEventListener('click', async ()=>{
         try{
           const body = { content: ta.value||'', prev_sha256: sha };
-          const resp = await fetch(base + '/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(pathRel||''), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+          const resp = await fetchRaw(`/projects/${encodeURIComponent(curProj)}/file?path=${encodeURIComponent(pathRel||'')}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
           if (!resp.ok){
             if (resp.status === 409){
               // Conflict: fetch latest and present a simple merge panel
               try{
-                const r3=await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(pathRel||''));
-                const j3=await r3.json();
+                const j3=await fetchJson(`/state/projects/${encodeURIComponent(curProj)}/file?path=${encodeURIComponent(pathRel||'')}`);
                 const merge = document.createElement('div'); merge.className='card'; merge.style.marginTop='6px';
                 const h=document.createElement('div'); h.className='row'; h.innerHTML = '<strong>Merge needed</strong><span class="dim">Server changed since you loaded this file</span>';
                 const help=document.createElement('p'); help.className='sr-only'; help.id='mergeHelp'; help.textContent='Conflict detected. You can replace the editor with the server version, or save your version by overwriting the server. Use Diff to inspect line differences.';
@@ -609,10 +614,10 @@ document.addEventListener('DOMContentLoaded', async () => {
                 saveMine.addEventListener('click', async ()=>{
                   try{
                     const body2 = { content: lt.value||'', prev_sha256: j3.sha256||null };
-                    const resp2 = await fetch(base + '/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(pathRel||''), { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body2) });
+                    const resp2 = await fetchRaw(`/projects/${encodeURIComponent(curProj)}/file?path=${encodeURIComponent(pathRel||'')}`, { method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body2) });
                     if (!resp2.ok){ ARW.toast('Save failed'); return; }
-                    const r4=await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(pathRel||''));
-                    const j4=await r4.json(); sha=j4.sha256||null; j.content=j4.content||''; pre.textContent=String(j.content||''); ta.value=j4.content||''; toggleEditing(false); merge.remove(); ARW.toast('Saved');
+                    const j4=await fetchJson(`/state/projects/${encodeURIComponent(curProj)}/file?path=${encodeURIComponent(pathRel||'')}`);
+                    sha=j4.sha256||null; j.content=j4.content||''; pre.textContent=String(j.content||''); ta.value=j4.content||''; toggleEditing(false); merge.remove(); ARW.toast('Saved');
                   }catch(e){ console.error(e); ARW.toast('Save failed'); }
                 });
                 // Scroll sync
@@ -666,8 +671,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             ARW.toast('Save failed'); return;
           }
           // reload to get new sha/content
-          const r2=await fetch(base + '/state/projects/'+encodeURIComponent(curProj)+'/file?path='+encodeURIComponent(pathRel||''));
-          const j2=await r2.json();
+          const j2=await fetchJson(`/state/projects/${encodeURIComponent(curProj)}/file?path=${encodeURIComponent(pathRel||'')}`);
           sha = j2.sha256||null; j.content = j2.content||''; pre.textContent = String(j.content||''); toggleEditing(false); ARW.toast('Saved');
         }catch(e){ console.error(e); ARW.toast('Save failed'); }
       });
@@ -697,8 +701,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await refreshProjectsSnapshot();
   // Quick state probe (models count)
   try {
-    const r = await fetch(base + '/state/models');
-    const j = await r.json();
+    const j = await fetchJson('/state/models');
     const sec = document.querySelector('#agents');
     if (sec) {
       const b = document.createElement('div');
@@ -958,10 +961,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   }catch{}
   // ---------- Agents: role and state ----------
   async function loadAgentState(){
-    try{ const r=await fetch(base + '/hierarchy/state'); const t=await r.text(); const el=document.getElementById('agentState'); if (el) el.textContent = t; }catch(e){ console.error(e); }
+    try{ const t=await fetchText('/hierarchy/state'); const el=document.getElementById('agentState'); if (el) el.textContent = t; }catch(e){ console.error(e); }
   }
   async function applyRole(){
-    try{ const role = (document.getElementById('roleSel')?.value||'edge'); await fetch(base + '/hierarchy/role', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ role }) }); await loadAgentState(); ARW.toast('Role applied'); }catch(e){ console.error(e); ARW.toast('Apply failed'); }
+    try{ const role = (document.getElementById('roleSel')?.value||'edge'); await fetchRaw('/hierarchy/role', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ role }) }); await loadAgentState(); ARW.toast('Role applied'); }catch(e){ console.error(e); ARW.toast('Apply failed'); }
   }
   document.getElementById('btnRoleApply')?.addEventListener('click', applyRole);
   document.getElementById('btnRoleRefresh')?.addEventListener('click', loadAgentState);

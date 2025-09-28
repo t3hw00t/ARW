@@ -216,7 +216,8 @@ async function fetchAdminJson(path){
     const tok = document.getElementById('admintok')?.value?.trim();
     if (tok) headers['X-ARW-Admin'] = tok;
   }catch{}
-  const resp = await fetch(`${ARW.base(port())}/${clean}`, { headers });
+  const baseUrl = ARW.base(port());
+  const resp = await ARW.http.fetch(baseUrl, `/${clean}`, { headers });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return await resp.json();
 }

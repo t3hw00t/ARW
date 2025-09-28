@@ -68,7 +68,24 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('pretty').addEventListener('change', ()=>{});
   document.getElementById('wrap').addEventListener('change', ()=>{});
   document.getElementById('pause').addEventListener('change', ()=>{});
-  (async () => { await ARW.applyPortFromPrefs('port'); sse(0); try{ const r=await fetch(base(ARW.getPortFromInput('port')||8091) + '/admin/probe/metrics'); const j=await r.json(); const d=j?.data||j; const cpu=d?.cpu?.avg||0; setCpuBadge(cpu); const mu=d?.memory?.used||0; const mt=d?.memory?.total||0; setMemBadge(mu,mt); const g=Array.isArray(d?.gpus)? d.gpus:[]; let t=0,u=0; for(const x of g){ t+=Number(x?.mem_total||0); u+=Number(x?.mem_used||0);} setGpuBadge(u,t);}catch{} })();
+  (async () => {
+    await ARW.applyPortFromPrefs('port');
+    sse(0);
+    try {
+      const current = base(ARW.getPortFromInput('port') || 8091);
+      const j = await ARW.http.json(current, '/admin/probe/metrics');
+      const d = j?.data || j;
+      const cpu = d?.cpu?.avg || 0;
+      setCpuBadge(cpu);
+      const mu = d?.memory?.used || 0;
+      const mt = d?.memory?.total || 0;
+      setMemBadge(mu, mt);
+      const g = Array.isArray(d?.gpus) ? d.gpus : [];
+      let t = 0, u = 0;
+      for (const x of g){ t += Number(x?.mem_total || 0); u += Number(x?.mem_used || 0); }
+      setGpuBadge(u, t);
+    } catch (e) {}
+  })();
 });
 
 // Keyboard shortcuts (view-only; ignore when typing)

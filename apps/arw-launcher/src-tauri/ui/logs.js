@@ -91,15 +91,7 @@ async function fetchRouteStatsSnapshot({ renderNow = false } = {}) {
   const statsPath = 'state/route_stats';
   const baseUrl = base(effectivePort());
   try {
-    let snapshot = null;
-    if (window.__ARW_BASE_OVERRIDE) {
-      const tok = await ARW.connections.tokenFor(baseUrl);
-      snapshot = await ARW.invoke('admin_get_json_base', { base: baseUrl, path: statsPath, token: tok });
-    } else {
-      const resp = await fetch(`${baseUrl}/${statsPath}`, { headers: { 'Accept': 'application/json' } });
-      if (!resp.ok) throw new Error('HTTP ' + resp.status);
-      snapshot = await resp.json();
-    }
+    const snapshot = await ARW.http.json(baseUrl, `/${statsPath}`, { headers: { 'Accept': 'application/json' } });
     lastJson = snapshot;
     ARW.read._store.set('route_stats', snapshot);
     ARW.read._emit('route_stats');
