@@ -238,12 +238,7 @@ interfaces-diff base="main":
   if git show origin/{{base}}:spec/openapi.yaml >/tmp/ifc/base.yaml 2>/dev/null; then :; else echo 'missing base OpenAPI in origin/{{base}}' >&2; exit 1; fi
   cp spec/openapi.yaml /tmp/ifc/rev.yaml
   # Prefer oasdiff in Docker when available; else fall back to openapi-diff (JSON)
-  command -v docker >/dev/null 2>&1 \
-    && docker run --rm -v /tmp/ifc:/tmp -w /tmp tufin/oasdiff:latest -format markdown -fail-on-breaking -base /tmp/base.yaml -revision /tmp/rev.yaml || \
-    ( echo 'docker missing; falling back to openapi-diff via npx (JSON only)'; \
-      python3 scripts/yaml_to_json.py /tmp/ifc/base.yaml /tmp/ifc/base.json; \
-      python3 scripts/yaml_to_json.py /tmp/ifc/rev.yaml /tmp/ifc/rev.json; \
-      npx --yes openapi-diff /tmp/ifc/base.json /tmp/ifc/rev.json || true )
+  if command -v docker >/dev/null 2>&1; then docker run --rm -v /tmp/ifc:/tmp -w /tmp tufin/oasdiff:latest breaking /tmp/base.yaml /tmp/rev.yaml -f markdown -o ERR || true; else echo 'docker missing; falling back to openapi-diff via npx (JSON only)'; python3 scripts/yaml_to_json.py /tmp/ifc/base.yaml /tmp/ifc/base.json; python3 scripts/yaml_to_json.py /tmp/ifc/rev.yaml /tmp/ifc/rev.json; npx --yes openapi-diff /tmp/ifc/base.json /tmp/ifc/rev.json || true; fi
 
 # Generate OpenAPI + schemas + JSON snapshot
 openapi-gen:
