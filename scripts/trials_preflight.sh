@@ -24,6 +24,7 @@ run_just() {
 
 log "Trial preflight starting"
 run_just "triad-smoke" "kernel triad smoke check"
+log "Triad endpoints verified (actions/state/events)"
 run_just "context-ci" "context telemetry checks"
 
 if [ -x "scripts/check_legacy_surface.sh" ]; then

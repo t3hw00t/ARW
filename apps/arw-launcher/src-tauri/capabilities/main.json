@@ -21,6 +21,8 @@
           "open_hub_window",
           "open_chat_window",
           "open_training_window",
+          "open_trial_window",
+          "run_trials_preflight",
           "active_window_bounds",
           "run_tool_admin",
           "projects_import",

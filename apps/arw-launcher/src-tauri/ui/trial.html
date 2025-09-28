@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Trial Control Center</title>
+    <link rel="stylesheet" href="tokens.css" />
+    <link rel="stylesheet" href="ui-kit.css" />
+    <link rel="stylesheet" href="common.css" />
+    <link rel="stylesheet" href="trial.css" />
+    <script src="common.js" defer></script>
+    <script src="trial.js" defer></script>
+  </head>
+  <body data-page="trial">
+    <a href="#main" class="skip-link">Skip to main content</a>
+    <div class="wrap">
+      <header class="card trial-header" role="banner">
+        <div class="title-block">
+          <h1>Trial Control Center</h1>
+          <p class="dim">Keep Gate G0–G3 indicators steady. Refresh before each rehearsal so we catch drift early.</p>
+        </div>
+        <div class="status-tray" id="statusTray" role="status" aria-live="polite">
+          <span class="status-pill" data-kind="systems">
+            <span class="dot" aria-hidden="true"></span>
+            <span class="label">Systems</span>
+            <span class="value">–</span>
+          </span>
+          <span class="status-pill" data-kind="memory">
+            <span class="dot" aria-hidden="true"></span>
+            <span class="label">Memory</span>
+            <span class="value">–</span>
+          </span>
+          <span class="status-pill" data-kind="approvals">
+            <span class="dot" aria-hidden="true"></span>
+            <span class="label">Approvals</span>
+            <span class="value">–</span>
+          </span>
+          <span class="status-pill" data-kind="safety">
+            <span class="dot" aria-hidden="true"></span>
+            <span class="label">Safety</span>
+            <span class="value">–</span>
+          </span>
+        </div>
+        <div class="header-controls">
+          <label>Port: <input id="port" type="number" min="1" max="65535" value="8091" /></label>
+          <button id="btn-refresh" class="ghost">Refresh</button>
+          <button id="btn-open-runbook" class="ghost">Runbook</button>
+        </div>
+      </header>
+
+      <main id="main" tabindex="-1">
+        <section class="card hero" aria-label="Preflight and focus">
+          <div class="hero-main">
+            <button id="btn-preflight" class="primary">Run preflight</button>
+            <p class="dim" id="preflightHint">Takes ~30 seconds. We will capture logs and copy <code>just trials-preflight</code> if automation is unavailable.</p>
+            <div class="dim" id="preflightStatus" role="status" aria-live="polite">Preflight not yet run.</div>
+            <pre class="log hidden" id="preflightLog"></pre>
+            <div id="dataNotice" class="hidden" role="alert"></div>
+          </div>
+          <div class="card-lite focus-card" role="region" aria-labelledby="focusTitle">
+            <h2 id="focusTitle">What’s in focus</h2>
+            <ul id="focusList" class="focus-list"></ul>
+          </div>
+        </section>
+
+        <section class="card tiles" aria-label="Gate status tiles">
+          <article class="tile" data-kind="systems">
+            <header>
+              <h3>Systems</h3>
+              <span class="pill" id="tile-systems-pill">–</span>
+            </header>
+            <p class="tile-body" id="tile-systems-body">Loading…</p>
+            <dl class="tile-meta" id="tile-systems-meta"></dl>
+          </article>
+          <article class="tile" data-kind="memory">
+            <header>
+              <h3>Memory</h3>
+              <span class="pill" id="tile-memory-pill">–</span>
+            </header>
+            <p class="tile-body" id="tile-memory-body">Loading…</p>
+            <dl class="tile-meta" id="tile-memory-meta"></dl>
+          </article>
+          <article class="tile" data-kind="approvals">
+            <header>
+              <h3>Approvals</h3>
+              <span class="pill" id="tile-approvals-pill">–</span>
+            </header>
+            <p class="tile-body" id="tile-approvals-body">Loading…</p>
+            <dl class="tile-meta" id="tile-approvals-meta"></dl>
+          </article>
+          <article class="tile" data-kind="safety">
+            <header>
+              <h3>Safety</h3>
+              <span class="pill" id="tile-safety-pill">–</span>
+            </header>
+            <p class="tile-body" id="tile-safety-body">Loading…</p>
+            <dl class="tile-meta" id="tile-safety-meta"></dl>
+          </article>
+        </section>
+
+        <section class="card tabs" aria-label="Expanded details">
+          <div class="tab-buttons" role="tablist">
+            <button id="tabbtn-overview" class="active" role="tab" aria-selected="true" aria-controls="tab-overview">Overview</button>
+            <button id="tabbtn-workflows" role="tab" aria-selected="false" aria-controls="tab-workflows">Workflows</button>
+            <button id="tabbtn-safeguards" role="tab" aria-selected="false" aria-controls="tab-safeguards">Safeguards</button>
+          </div>
+          <div id="tab-overview" class="tab-panel active" role="tabpanel" aria-labelledby="tabbtn-overview">
+            <ul id="list-overview" class="bullet-list"></ul>
+          </div>
+          <div id="tab-workflows" class="tab-panel" role="tabpanel" aria-labelledby="tabbtn-workflows">
+            <ul id="list-workflows" class="bullet-list"></ul>
+          </div>
+          <div id="tab-safeguards" class="tab-panel" role="tabpanel" aria-labelledby="tabbtn-safeguards">
+            <ul id="list-safeguards" class="bullet-list"></ul>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

@@ -169,6 +169,10 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('btn-training').addEventListener('click', async () => {
     try { await invoke('open_training_window'); } catch (e) { console.error(e); }
   });
+  const trialBtn = document.getElementById('btn-trial');
+  if (trialBtn) trialBtn.addEventListener('click', async () => {
+    try { await invoke('open_trial_window'); } catch (e) { console.error(e); }
+  });
   document.getElementById('btn-start').addEventListener('click', async () => {
     try { await invoke('start_service', { port: effectivePort() }); ARW.toast('Service starting'); } catch (e) { console.error(e); }
   });

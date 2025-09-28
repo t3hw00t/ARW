@@ -34,6 +34,7 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
     let w_hub = MenuItem::with_id(app, "win-hub", "Project Hub", true, None::<&str>)?;
     let w_chat = MenuItem::with_id(app, "win-chat", "Chat", true, None::<&str>)?;
     let w_training = MenuItem::with_id(app, "win-training", "Training Park", true, None::<&str>)?;
+    let w_trial = MenuItem::with_id(app, "win-trial", "Trial Control", true, None::<&str>)?;
     let windows_sub = Submenu::with_id_and_items(
         app,
         "windows",
@@ -47,6 +48,7 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
             &w_hub,
             &w_chat,
             &w_training,
+            &w_trial,
         ],
     )?;
 
@@ -99,6 +101,9 @@ fn create_tray<R: tauri::Runtime>(app: &tauri::AppHandle<R>) -> tauri::Result<()
             }
             "win-training" => {
                 let _ = arw_tauri::open_training_window(app.clone());
+            }
+            "win-trial" => {
+                let _ = arw_tauri::open_trial_window(app.clone());
             }
             // App
             "quit" => app.exit(0),

@@ -4,8 +4,8 @@ use once_cell::sync::OnceCell;
 use reqwest::header::{HeaderMap, HeaderValue};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::BTreeMap;
-use std::path::PathBuf;
+use std::collections::{BTreeMap, HashSet};
+use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -79,6 +79,141 @@ fn admin_token() -> Option<String> {
         }
     }
     None
+}
+
+fn candidate_trial_roots() -> Vec<PathBuf> {
+    let mut roots = Vec::new();
+    let mut seen = HashSet::new();
+    let mut push = |path: PathBuf| {
+        if seen.insert(path.clone()) {
+            roots.push(path);
+        }
+    };
+
+    if let Ok(exe) = std::env::current_exe() {
+        if let Some(mut dir) = exe.parent().map(|p| p.to_path_buf()) {
+            for _ in 0..6 {
+                push(dir.clone());
+                if !dir.pop() {
+                    break;
+                }
+            }
+        }
+    }
+
+    if let Ok(mut dir) = std::env::current_dir() {
+        for _ in 0..6 {
+            push(dir.clone());
+            if !dir.pop() {
+                break;
+            }
+        }
+    }
+
+    roots
+}
+
+fn capture_output(mut cmd: Command, label: &str) -> Result<String, String> {
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    match cmd.output() {
+        Ok(output) => {
+            let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+            if output.status.success() {
+                let mut combined = String::new();
+                if !stdout.is_empty() {
+                    combined.push_str(&stdout);
+                }
+                if !stderr.is_empty() {
+                    if !combined.is_empty() {
+                        combined.push_str("\n");
+                    }
+                    combined.push_str(&stderr);
+                }
+                if combined.is_empty() {
+                    combined.push_str(label);
+                    combined.push_str(" completed");
+                }
+                Ok(combined)
+            } else {
+                let code = output
+                    .status
+                    .code()
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "signal".into());
+                let mut detail = stdout;
+                if !detail.is_empty() && !stderr.is_empty() {
+                    detail.push_str(" | ");
+                }
+                detail.push_str(&stderr);
+                if detail.is_empty() {
+                    Err(format!("{} exited with code {}", label, code))
+                } else {
+                    Err(format!("{} exited with code {}: {}", label, code, detail))
+                }
+            }
+        }
+        Err(err) => Err(format!("{} failed: {}", label, err)),
+    }
+}
+
+fn run_trials_preflight_script(root: &Path, script: &Path) -> Result<String, String> {
+    let mut errors = Vec::new();
+
+    let mut direct = Command::new(script);
+    direct.current_dir(root);
+    match capture_output(direct, &script.display().to_string()) {
+        Ok(out) => return Ok(out),
+        Err(err) => errors.push(err),
+    }
+
+    let mut bash_cmd = Command::new("bash");
+    bash_cmd.arg(script);
+    bash_cmd.current_dir(root);
+    match capture_output(bash_cmd, "bash trials_preflight.sh") {
+        Ok(out) => return Ok(out),
+        Err(err) => errors.push(err),
+    }
+
+    let mut sh_cmd = Command::new("sh");
+    sh_cmd.arg(script);
+    sh_cmd.current_dir(root);
+    match capture_output(sh_cmd, "sh trials_preflight.sh") {
+        Ok(out) => return Ok(out),
+        Err(err) => errors.push(err),
+    }
+
+    Err(errors.join("; "))
+}
+
+fn run_trials_preflight_sync() -> Result<String, String> {
+    let mut errors = Vec::new();
+    for root in candidate_trial_roots() {
+        let script = root.join("scripts").join("trials_preflight.sh");
+        if script.exists() {
+            match run_trials_preflight_script(&root, &script) {
+                Ok(out) => return Ok(out),
+                Err(err) => errors.push(format!("{}: {}", script.display(), err)),
+            }
+        }
+
+        if root.join("Justfile").exists() {
+            let mut cmd = Command::new("just");
+            cmd.arg("trials-preflight");
+            cmd.current_dir(&root);
+            match capture_output(cmd, "just trials-preflight") {
+                Ok(out) => return Ok(out),
+                Err(err) => errors.push(format!("just@{}: {}", root.display(), err)),
+            }
+        }
+    }
+
+    if errors.is_empty() {
+        Err("trial preflight helpers not found".into())
+    } else {
+        Err(format!("trial preflight failed: {}", errors.join("; ")))
+    }
 }
 
 /// Locate the unified service binary (`arw-server`).
@@ -434,6 +569,32 @@ mod cmds {
             let _ = w.set_focus();
         }
         Ok(())
+    }
+
+    #[tauri::command]
+    pub fn open_trial_window<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+        let label = "trial";
+        if app.get_webview_window(label).is_none() {
+            tauri::WebviewWindowBuilder::new(
+                &app,
+                label,
+                tauri::WebviewUrl::App("trial.html".into()),
+            )
+            .title("Agent Hub (ARW) — Trial Control Center")
+            .inner_size(1100.0, 800.0)
+            .build()
+            .map_err(|e| e.to_string())?;
+        } else if let Some(w) = app.get_webview_window(label) {
+            let _ = w.set_focus();
+        }
+        Ok(())
+    }
+
+    #[tauri::command]
+    pub async fn run_trials_preflight() -> Result<String, String> {
+        tokio::task::spawn_blocking(run_trials_preflight_sync)
+            .await
+            .map_err(|err| err.to_string())?
     }
 
     #[tauri::command]
@@ -1018,6 +1179,8 @@ mod cmds {
                 open_hub_window,
                 open_chat_window,
                 open_training_window,
+                open_trial_window,
+                run_trials_preflight,
                 models_summary,
                 models_concurrency_get,
                 models_concurrency_set,

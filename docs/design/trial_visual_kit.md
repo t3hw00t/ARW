@@ -47,6 +47,12 @@ This brief keeps UI, docs, and training materials aligned while we polish the tr
 2. Exported PNGs for docs and training decks.
 3. SVG icon set (home/compass/shield/status) checked into `assets/icons/trial/` (`home.svg`, `compass.svg`, `shield.svg`, `status.svg`).
 
+## Implementation Notes
+
+- The launcher Trial Control Center lives in `apps/arw-launcher/src-tauri/ui/trial.html` with companion CSS/JS. It renders the tabs, status tray, tiles, focus card, and preflight button described above.
+- Preflight automation attempts to run `scripts/trials_preflight.sh` (or `just trials-preflight`) locally and falls back to copying the CLI command if the helper is unavailable.
+- Docs and ops runbooks link to the launcher window so rehearsals start from a single surface.
+
 ### Icon references
 
 - Use the shared SVGs directly in docs or UI mockups: `assets/icons/trial/home.svg`, `assets/icons/trial/compass.svg`, `assets/icons/trial/shield.svg`, `assets/icons/trial/status.svg`.

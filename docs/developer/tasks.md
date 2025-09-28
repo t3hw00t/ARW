@@ -4,18 +4,14 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-28 02:23 UTC
+Updated: 2025-09-28 18:00 UTC
 
 
 ## To Do
-- [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — todo (updated: 2025-09-26 19:57:50 UTC)
-    - 2025-09-26 19:57:50 UTC: AppState already unified in apps/arw-server/src/app_state.rs; rescope remaining work around domain-specific adapters (policy/models/cluster) and removal of legacy ext references before marking done.
-- [trial-visual-kit] Design trial visual kit — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-autonomy-governor] Autonomy governor & kill switch — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g3] Gate G3: Trial operations — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g2] Gate G2: Calm approvals — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g1] Gate G1: Reliable memory — todo (updated: 2025-09-26 12:30 UTC)
-- [trial-g0] Gate G0: Stable core ready — todo (updated: 2025-09-26 12:30 UTC)
 
 ## In Progress
 - [t-250914223220-cap03] OCR for screenshots (optional) — in_progress (updated: 2025-09-17 20:19:01 UTC)
@@ -25,6 +21,13 @@ Updated: 2025-09-28 02:23 UTC
 ## Paused
 
 ## Done
+- [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — done (updated: 2025-09-28 16:30:00 UTC)
+    - 2025-09-26 19:57:50 UTC: AppState already unified in apps/arw-server/src/app_state.rs; rescope remaining work around domain-specific adapters (policy/models/cluster) and removal of legacy ext references before marking done.
+    - 2025-09-28 16:30:00 UTC: Removed the legacy apps/arw-server/src/ext directory, verified policy/models/cluster use the shared adapters, and synced task trackers.
+- [trial-visual-kit] Design trial visual kit — done (updated: 2025-09-28 17:30:00 UTC)
+    - 2025-09-28 17:30:00 UTC: Shipped the launcher Trial Control Center window with gate tiles, focus summary, and preflight automation (apps/arw-launcher/src-tauri/ui/trial.html).
+- [trial-g0] Gate G0: Stable core ready — done (updated: 2025-09-28 18:00:00 UTC)
+    - 2025-09-28 18:00:00 UTC: Launcher preflight now runs triad smoke/context checks, confirms status tray strings (“All good / Check soon / Action needed”), and logs readiness for rehearsal.
 - [autonomy-rollback-playbook] Autonomy rollback drills — done (updated: 2025-09-26 13:52:05 UTC)
     - 2025-09-26 13:52:05 UTC: Authored autonomy rollback playbook, added automation helper (scripts/autonomy_rollback.sh), and documented usage.
 - [autonomy-lane-spec] Author Autonomy Lane ADR — done (updated: 2025-09-26 13:52:05 UTC)

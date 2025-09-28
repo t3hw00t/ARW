@@ -11,8 +11,8 @@ This runbook keeps our two-person trial routine lightweight. Use it with the Tri
 
 ## Before the day starts
 
-- Open the Trial Control Center (or `/admin/debug` dashboards) and confirm Systems, Memory, Approvals, and Safety are green. Record the numbers in a fresh copy of `docs/ops/trials/daily_log_template.md`.
-- Run `just trials-preflight` (or press the Home screen preflight button when it ships).
+- Open the launcher Trial Control Center window (`Launcher → Trial Control`) and confirm Systems, Memory, Approvals, and Safety read “All good.” Record the numbers in a fresh copy of `docs/ops/trials/daily_log_template.md`.
+- Run `just trials-preflight` (or click the preflight button in the Trial Control Center; it runs the helper and copies the CLI command if automation fails).
 - Check the approvals lane is empty; if not, ping the other person before starting.
 - Glance at the access matrix (ops/access_matrix.yaml) to verify tokens expiring today.
 

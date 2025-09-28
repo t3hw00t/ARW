@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-28 02:23 UTC",
+  "updated": "2025-09-28 18:00:00 UTC",
   "tasks": [
     {
       "id": "t-phase-a-01",
@@ -575,10 +575,14 @@
         {
           "time": "2025-09-28 15:42:00 UTC",
           "text": "Introduced policy::PolicyHandle and wired AppState, worker, and APIs to domain-specific adapters; updated builders/tests to drop legacy ext mutexes and refreshed docs/tasks to point at state_observer."
+        },
+        {
+          "time": "2025-09-28 16:30:00 UTC",
+          "text": "Removed the legacy `apps/arw-server/src/ext` module directory and confirmed all domains use the unified AppState + adapters; tracking docs updated to reflect completion."
         }
       ],
-      "updated": "2025-09-28 15:42:00 UTC",
-      "done_at": "2025-09-28 15:42:00 UTC"
+      "updated": "2025-09-28 16:30:00 UTC",
+      "done_at": "2025-09-28 16:30:00 UTC"
     },
     {
       "id": "t-250911230236-6445",
@@ -902,12 +906,12 @@
     {
       "id": "t-250914223010-ui02",
       "title": "Hub Compare: Text/JSON, Image, CSV",
-      "desc": "Add diff with Only changes/Wrap/Copy; image slider; CSV/TSV key‑diff with summary and copy.",
+      "desc": "Add diff with Only changes/Wrap/Copy; image slider; CSV/TSV key\u2011diff with summary and copy.",
       "status": "done",
       "notes": [
         {
           "time": "2025-09-14 22:31:00 UTC",
-          "text": "hub.html/js + styles; drag‑drop inputs; compact tables; documented in Workflow Views."
+          "text": "hub.html/js + styles; drag\u2011drop inputs; compact tables; documented in Workflow Views."
         }
       ],
       "updated": "2025-09-14 22:31:00 UTC",
@@ -957,7 +961,7 @@
     },
     {
       "id": "t-250914223030-ui06",
-      "title": "Command palette (Ctrl/Cmd‑K)",
+      "title": "Command palette (Ctrl/Cmd\u2011K)",
       "desc": "Open windows (Hub/Chat/Training/Debug/Events), refresh models, SSE replay, toggle focus, copy last event.",
       "status": "done",
       "notes": [
@@ -972,12 +976,12 @@
     {
       "id": "t-250914223040-ui07",
       "title": "Metrics: P95 sparkline per route",
-      "desc": "Client‑side short history sparkline in Metrics lane; P95 SLO color.",
+      "desc": "Client\u2011side short history sparkline in Metrics lane; P95 SLO color.",
       "status": "done",
       "notes": [
         {
           "time": "2025-09-14 22:36:00 UTC",
-          "text": "Sparkline added; 32‑point ring buffer per route; SLO=150ms."
+          "text": "Sparkline added; 32\u2011point ring buffer per route; SLO=150ms."
         }
       ],
       "updated": "2025-09-14 22:36:00 UTC",
@@ -991,11 +995,11 @@
       "notes": [
         {
           "time": "2025-09-14 22:37:00 UTC",
-          "text": "Hub saves focused flag + lanes; next: per‑project file persistence."
+          "text": "Hub saves focused flag + lanes; next: per\u2011project file persistence."
         },
         {
           "time": "2025-09-17 20:19:01 UTC",
-          "text": "Launcher exposes ARW.templates.save/load bound to prefs (namespaced), with debounced writes; per‑project overrides via get/setPrefs(ns)."
+          "text": "Launcher exposes ARW.templates.save/load bound to prefs (namespaced), with debounced writes; per\u2011project overrides via get/setPrefs(ns)."
         }
       ],
       "updated": "2025-09-17 20:19:01 UTC",
@@ -1003,7 +1007,7 @@
     },
     {
       "id": "t-250914223200-cap01",
-      "title": "Screenshot tool (OS‑level capture)",
+      "title": "Screenshot tool (OS\u2011level capture)",
       "desc": "Rust tool to capture display/region; save to .arw/screenshots; emit screenshots.captured; gate by io:screenshot.",
       "status": "done",
       "notes": [
@@ -1077,7 +1081,7 @@
     {
       "id": "t-250914223230-ui09",
       "title": "Runs: pin artifacts to compare",
-      "desc": "Enable pin‑to‑compare from runs/artifacts list in Hub; deep‑link compare sets.",
+      "desc": "Enable pin\u2011to\u2011compare from runs/artifacts list in Hub; deep\u2011link compare sets.",
       "status": "done",
       "notes": [
         {
@@ -1261,9 +1265,15 @@
       "id": "trial-g0",
       "title": "Gate G0: Stable core ready",
       "desc": "Verify triad endpoints, status tray strings, and preflight button ahead of internal rehearsal.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-26 12:30 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-28 18:00:00 UTC",
+          "text": "Ran triad smoke + context checks via launcher preflight, confirmed Trial Control Center status tray strings (\u201cAll good / Check soon / Action needed\u201d) and scripted log before rehearsal."
+        }
+      ],
+      "updated": "2025-09-28 18:00:00 UTC",
+      "done_at": "2025-09-28 18:00:00 UTC"
     },
     {
       "id": "trial-g1",
@@ -1329,9 +1339,15 @@
       "id": "trial-visual-kit",
       "title": "Design trial visual kit",
       "desc": "Produce mockups for home tabs, approvals lane, and trial dashboard to align UI and docs.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-26 12:30 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-28 17:30:00 UTC",
+          "text": "Launched the Trial Control Center launcher window with gate tiles, focus summary, and preflight automation (apps/arw-launcher/src-tauri/ui/trial.html)."
+        }
+      ],
+      "updated": "2025-09-28 17:30:00 UTC",
+      "done_at": "2025-09-28 17:30:00 UTC"
     }
   ]
 }
