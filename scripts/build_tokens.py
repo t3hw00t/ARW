@@ -30,6 +30,7 @@ def main():
     c = data.get('color', {})
     brand = c.get('brand', {})
     neutrals = c.get('neutrals', {})
+    surfaces = c.get('surfaces', {})
     status = c.get('status', {})
     # Brand
     if 'copper' in brand: css_vars['--color-brand-copper'] = brand['copper']['$value']
@@ -40,8 +41,10 @@ def main():
     if 'ink' in neutrals: css_vars['--color-ink'] = neutrals['ink']['$value']
     if 'muted' in neutrals: css_vars['--color-muted'] = neutrals['muted']['$value']
     if 'line' in neutrals: css_vars['--color-line'] = neutrals['line']['$value']
-    if 'surface' in neutrals: css_vars['--surface'] = neutrals['surface']['$value']
-    if 'surface_muted' in neutrals: css_vars['--surface-muted'] = neutrals['surface_muted']['$value']
+    if 'surface' in surfaces:
+        css_vars['--surface'] = surfaces['surface']['$value']
+    if 'surface_muted' in surfaces:
+        css_vars['--surface-muted'] = surfaces['surface_muted']['$value']
     # Status
     for k, v in status.items(): css_vars[f'--status-{k}'] = v['$value']
 
@@ -74,6 +77,19 @@ def main():
         lines.append(f"  {k}: {css_vars[k]};\n")
     lines.append("}\n\n@media (prefers-color-scheme: dark){\n  :root{\n")
     for k, v in dark_overrides.items(): lines.append(f"    {k}: {v};\n")
+    lines.append("  }\n}\n")
+    lines.append("\n@media (prefers-contrast: more){\n")
+    lines.append("  :root{\n")
+    lines.append("    --color-line: currentColor;\n")
+    lines.append("    --color-muted: #1f2937;\n")
+    lines.append("    --shadow-1: none;\n")
+    lines.append("    --shadow-2: none;\n")
+    lines.append("    --shadow-3: none;\n")
+    lines.append("    --noise: none;\n")
+    lines.append("  }\n}\n")
+    lines.append("\n@media (forced-colors: active){\n")
+    lines.append("  :root{\n")
+    lines.append("    --noise: none;\n")
     lines.append("  }\n}\n")
     OUT_CSS.write_text(''.join(lines))
 
@@ -109,7 +125,7 @@ def main():
         'shadow_2': css_vars.get('--shadow-2', ''),
         'shadow_3': css_vars.get('--shadow-3', ''),
     }
-    OUT_JSON.write_text(json.dumps(json_out, indent=2))
+    OUT_JSON.write_text(json.dumps(json_out, indent=2) + "\n")
 
 if __name__ == '__main__':
     main()

@@ -1,7 +1,7 @@
 use axum::http::HeaderMap;
 use sha2::Digest as _;
 use std::{net::SocketAddr, time::Duration};
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 mod access_log;
 mod api;
@@ -560,6 +560,20 @@ pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
         }
     }
     let Some(ptok) = presented else { return false };
+    let fingerprint = {
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(ptok.as_bytes());
+        hex::encode(hasher.finalize())
+    };
+    let client_addr = crate::security::client_addr();
+    if !crate::security::admin_rate_limit_allow(&fingerprint, client_addr.as_deref()) {
+        warn!(
+            target: "arw::security",
+            client_addr = client_addr.as_deref().unwrap_or("unknown"),
+            "admin auth rate limit exceeded"
+        );
+        return false;
+    }
     // Constant-time eq helper
     fn ct_eq(a: &[u8], b: &[u8]) -> bool {
         if a.len() != b.len() {
@@ -573,22 +587,86 @@ pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
     }
     if let Some(ref hpref) = token_hash {
         let want = hpref.trim().to_ascii_lowercase();
-        let got_hex = {
-            let mut hasher = sha2::Sha256::new();
-            hasher.update(ptok.as_bytes());
-            let digest = hasher.finalize();
-            hex::encode(digest)
-        };
-        return ct_eq(want.as_bytes(), got_hex.as_bytes())
-            || token_plain
-                .as_ref()
-                .map(|p| ct_eq(p.as_bytes(), ptok.as_bytes()))
-                .unwrap_or(false);
+        if ct_eq(want.as_bytes(), fingerprint.as_bytes()) {
+            return true;
+        }
+        return token_plain
+            .as_ref()
+            .map(|p| ct_eq(p.as_bytes(), ptok.as_bytes()))
+            .unwrap_or(false);
     }
     if let Some(ref p) = token_plain {
         return ct_eq(p.as_bytes(), ptok.as_bytes());
     }
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::{HeaderMap, HeaderValue};
+    use once_cell::sync::Lazy;
+    use sha2::Digest;
+    use std::sync::Mutex;
+
+    static TEST_GUARD: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+
+    fn auth_headers(token: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        let value = format!("Bearer {}", token);
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            HeaderValue::from_str(&value).expect("auth header"),
+        );
+        headers
+    }
+
+    #[test]
+    fn admin_ok_rate_limits_plain_token() {
+        let _lock = TEST_GUARD.lock().unwrap();
+        crate::security::reset_admin_rate_limiter_for_tests();
+        std::env::set_var("ARW_DEBUG", "0");
+        std::env::set_var("ARW_ADMIN_TOKEN", "secret");
+        std::env::remove_var("ARW_ADMIN_TOKEN_SHA256");
+        std::env::set_var("ARW_ADMIN_RATE_LIMIT", "2");
+        std::env::set_var("ARW_ADMIN_RATE_WINDOW_SECS", "3600");
+
+        let headers = auth_headers("secret");
+        assert!(admin_ok(&headers));
+        assert!(admin_ok(&headers));
+        assert!(!admin_ok(&headers));
+
+        crate::security::reset_admin_rate_limiter_for_tests();
+        std::env::remove_var("ARW_ADMIN_RATE_LIMIT");
+        std::env::remove_var("ARW_ADMIN_RATE_WINDOW_SECS");
+        std::env::remove_var("ARW_ADMIN_TOKEN");
+    }
+
+    #[test]
+    fn admin_ok_rate_limits_hashed_token() {
+        let _lock = TEST_GUARD.lock().unwrap();
+        crate::security::reset_admin_rate_limiter_for_tests();
+        std::env::set_var("ARW_DEBUG", "0");
+        std::env::remove_var("ARW_ADMIN_TOKEN");
+        let plain = "topsecret";
+        let digest = {
+            let mut h = sha2::Sha256::new();
+            h.update(plain.as_bytes());
+            hex::encode(h.finalize())
+        };
+        std::env::set_var("ARW_ADMIN_TOKEN_SHA256", digest);
+        std::env::set_var("ARW_ADMIN_RATE_LIMIT", "1");
+        std::env::set_var("ARW_ADMIN_RATE_WINDOW_SECS", "300");
+
+        let headers = auth_headers(plain);
+        assert!(admin_ok(&headers));
+        assert!(!admin_ok(&headers));
+
+        crate::security::reset_admin_rate_limiter_for_tests();
+        std::env::remove_var("ARW_ADMIN_RATE_LIMIT");
+        std::env::remove_var("ARW_ADMIN_RATE_WINDOW_SECS");
+        std::env::remove_var("ARW_ADMIN_TOKEN_SHA256");
+    }
 }
 
 // ---------- Config Plane (moved to api_config) ----------

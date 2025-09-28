@@ -6,7 +6,7 @@ title: Design System
 
 This documents the subtle visual language used across ARW UIs: calm, instrument-panel inspired, with copper/teal accents.
 
-Updated: 2025-09-21
+Updated: 2025-09-29
 Type: How‑to
 
 ## Tokens
@@ -18,7 +18,7 @@ Type: How‑to
   - Primary (Copper): `var(--color-brand-copper)` (dark: `var(--color-brand-copper-dark)`, light: `#dca777`)
   - Accent (Teal): `var(--color-accent-teal)`, light `var(--color-accent-teal-light)`
   - Ink/Muted/Line: `var(--color-ink)`, `var(--color-muted)`, `var(--color-line)`
-  - Status: ok `var(--status-ok)` · warn `var(--status-warn)` · bad `var(--status-bad)` · info `var(--status-info)`
+  - Status: ok `var(--status-ok)` · warn `var(--status-warn)` · bad `var(--status-bad)` · info `var(--status-info)` (all tuned for ≥4.8:1 on light surfaces)
 
 - Radii
   - Panels: `10px` · Buttons: `8px` · Badges: `999px`

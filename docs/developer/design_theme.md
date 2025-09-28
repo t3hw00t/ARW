@@ -4,7 +4,7 @@ title: Design Theme
 
 # Design Theme
 
-Updated: 2025-09-20
+Updated: 2025-09-29
 Type: Reference
 
 Microsummary: A shared visual and language system across docs, apps, and debug UIs — consistent naming, tone, layout, tokens, and colors. Stable.
@@ -47,7 +47,7 @@ Key CSS variables
 - Accent: Teal `#1bb3a3` (light `#63d3c9`).
 - Neutrals: Ink `#111827`, Muted `#6b7280`, Line `#e5e7eb`.
 - Surfaces: Page `#ffffff`, Muted `#fafaf9` (dark: `#0f1115`, `#0b0d11`).
-- Status: ok `#16a34a`, warn `#f59e0b`, bad `#dc2626`, info `#3b82f6`.
+- Status: ok `#15803d`, warn `#b45309`, bad `#dc2626`, info `#2563eb`.
 
 Usage
 - Primary CTAs use Copper; secondary actions default; low‑emphasis use Ghost.
@@ -83,7 +83,7 @@ Usage
 
 ## Accessibility
 
-- Contrast: meet WCAG AA for text and controls; mind Copper on dark surfaces (use light variant when needed).
+- Contrast: meet WCAG AA for text and controls; mind Copper on dark surfaces (use light variant when needed). Status colors (#15803d/#b45309/#dc2626/#2563eb) all clear 4.8:1 on light surfaces.
 - Focus: strong visible outline on interactive elements; use `:focus-visible`.
 - Keyboard: palette is Cmd/Ctrl‑K; Escape closes overlays; Tab order is logical.
 - Color alone: never the only signal; combine with icons/text.

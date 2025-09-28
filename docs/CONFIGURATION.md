@@ -92,7 +92,8 @@ Notes
  - `ARW_ROUTE_STATS_PUBLISH_MS`: idle publish cadence for route stats (default 2000ms; min 200ms).
  - `ARW_MODELS_METRICS_COALESCE_MS`: coalesce window for models metrics patches (default 250ms; min 10ms).
  - `ARW_MODELS_METRICS_PUBLISH_MS`: idle publish cadence for models metrics (default 2000ms; min 200ms).
-- `ARW_ADMIN_RL`: _planned_ admin rate limit control (`limit/window_secs`). Present builds ignore this variable; rely on tokens + `ARW_HTTP_MAX_CONC` until the limiter ships.
+- `ARW_ADMIN_RATE_LIMIT`: per token/IP request budget inside the sliding window (default `60`). Set to `0` to disable throttling.
+- `ARW_ADMIN_RATE_WINDOW_SECS`: sliding window length in seconds for the admin rate limiter (default `60`).
 - `ARW_DEBUG`: `1` enables local debug mode; do not use in production. When unset, admin routes require a valid `ARW_ADMIN_TOKEN` header.
 - `ARW_REFERRER_POLICY`: referrer policy header value (default `no-referrer`).
 - `ARW_HSTS`: `1` to enable `Strict-Transport-Security` header (only when served behind HTTPS).

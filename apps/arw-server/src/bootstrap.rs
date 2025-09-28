@@ -145,8 +145,9 @@ pub(crate) fn attach_http_layers(
 
 pub(crate) fn attach_global_layers(router: axum::Router<()>) -> axum::Router<()> {
     router
-        .layer(axum::middleware::from_fn(security::headers_mw))
         .layer(axum::middleware::from_fn(access_log::access_log_mw))
+        .layer(axum::middleware::from_fn(security::headers_mw))
+        .layer(axum::middleware::from_fn(security::client_addr_mw))
 }
 
 #[derive(Debug, thiserror::Error)]
