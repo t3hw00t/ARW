@@ -97,8 +97,15 @@ pub async fn leases_create(
         .bus()
         .publish(topics::TOPIC_LEASES_CREATED, &json!(payload));
 
+    let prev_snapshot =
+        read_models::cached_read_model("policy_leases").unwrap_or_else(|| json!({}));
     let snapshot = read_models::leases_snapshot(&state).await;
-    read_models::publish_read_model_patch(&state.bus(), "policy_leases", &snapshot);
+    read_models::publish_read_model_patch_with_previous(
+        &state.bus(),
+        "policy_leases",
+        Some(prev_snapshot),
+        &snapshot,
+    );
 
     let mut response = serde_json::Map::new();
     response.insert("id".into(), payload["id"].clone());

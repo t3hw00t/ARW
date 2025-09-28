@@ -396,11 +396,24 @@ where
 }
 
 pub(crate) fn publish_read_model_patch(bus: &arw_events::Bus, id: &str, value: &Value) {
+    publish_read_model_patch_with_previous(bus, id, None, value);
+}
+
+pub(crate) fn publish_read_model_patch_with_previous(
+    bus: &arw_events::Bus,
+    id: &str,
+    previous: Option<Value>,
+    value: &Value,
+) {
     let map = READ_MODEL_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
-    let mut guard = map.lock().unwrap();
-    let prev = guard.get(id).cloned().unwrap_or_else(|| json!({}));
+    let mut guard = map.lock().expect("read model cache lock");
+    let prev = match previous {
+        Some(prev) => prev,
+        None => guard.get(id).cloned().unwrap_or_else(|| json!({})),
+    };
     let patch = json_patch::diff(&prev, value);
     if patch.is_empty() {
+        guard.insert(id.to_string(), value.clone());
         return;
     }
     let patch_val = serde_json::to_value(patch).unwrap_or_else(|_| json!([]));
@@ -1127,6 +1140,41 @@ mod tests {
         let (_name, _started, handle) = snappy_handle.into_inner();
         handle.abort();
         let _ = handle.await;
+    }
+
+    #[tokio::test]
+    async fn publish_patch_after_cached_snapshot() {
+        remove_cached_read_model_for_test("test-patch-after-cache");
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let mut rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_READMODEL_PATCH.to_string()], Some(4));
+
+        publish_read_model_patch_with_previous(
+            &bus,
+            "test-patch-after-cache",
+            None,
+            &json!({"count": 0}),
+        );
+
+        // Drain initial emission so we can assert on the scenario under test.
+        let _baseline: Envelope = timeout(Duration::from_millis(200), rx.recv())
+            .await
+            .expect("baseline timeout")
+            .expect("baseline patch");
+
+        let prev = super::cached_read_model("test-patch-after-cache");
+        let next = json!({"count": 1});
+        super::store_read_model_value("test-patch-after-cache", &next);
+        publish_read_model_patch_with_previous(&bus, "test-patch-after-cache", prev, &next);
+
+        let env: Envelope = timeout(Duration::from_millis(200), rx.recv())
+            .await
+            .expect("patch timeout")
+            .expect("patch event");
+        assert_eq!(env.kind, topics::TOPIC_READMODEL_PATCH);
+        assert_eq!(env.payload["id"].as_str(), Some("test-patch-after-cache"));
+        let patch_items = env.payload["patch"].as_array().expect("patch array");
+        assert!(!patch_items.is_empty(), "expected non-empty patch diff");
     }
 
     #[tokio::test]
