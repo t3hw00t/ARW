@@ -6,7 +6,7 @@ use arw_policy::PolicyEngine;
 use arw_wasi::ToolHost;
 use serde_json::json;
 use tokio::sync::Mutex;
-use tracing::info;
+use tracing::{error, info};
 #[cfg(not(test))]
 use utoipa::OpenApi;
 
@@ -57,7 +57,26 @@ pub(crate) async fn build() -> BootstrapOutput {
         crate::policy::PolicyHandle::new(PolicyEngine::load_from_env(), bus.clone());
     let host: Arc<dyn ToolHost> = match arw_wasi::LocalHost::new() {
         Ok(host) => Arc::new(host),
-        Err(_) => Arc::new(arw_wasi::NoopHost),
+        Err(err) => {
+            error!(
+                target: "arw::tools",
+                error = %err,
+                "failed to initialise WASI host; falling back to NoopHost"
+            );
+            let ts_ms = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis() as u64;
+            let payload = json!({
+                "status": "degraded",
+                "component": "tools.host",
+                "reason": "wasi_init_failed",
+                "error": err.to_string(),
+                "ts_ms": ts_ms,
+            });
+            bus.publish(arw_topics::TOPIC_SERVICE_HEALTH, &payload);
+            Arc::new(arw_wasi::NoopHost)
+        }
     };
 
     let (router, endpoints, endpoints_meta) = build_router();

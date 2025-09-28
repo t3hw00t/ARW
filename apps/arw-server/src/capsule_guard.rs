@@ -12,10 +12,7 @@ use base64::Engine as _;
 use serde::Serialize;
 use serde_json::json;
 use sha2::{Digest, Sha256};
-use tokio::{
-    sync::Mutex,
-    time::{interval, Duration, MissedTickBehavior},
-};
+use tokio::{sync::Mutex, time::Duration};
 
 use arw_core::gating::CapsuleLeaseState;
 use arw_protocol::GatingCapsule;
@@ -32,7 +29,8 @@ const LEGACY_HEADER_DETAIL: &str =
 static CURRENT_HEADER_NAME: HeaderName = HeaderName::from_static("x-arw-capsule");
 static LEGACY_HEADER_NAME: HeaderName = HeaderName::from_static("x-arw-gate");
 const DEFAULT_REFRESH_SECS: u64 = 5;
-const MIN_REFRESH_SECS: u64 = 1;
+const MIN_REFRESH_MS: u64 = 50;
+const HOP_TICK_MS: u64 = 1_000;
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 enum CapsuleHeader<'a> {
@@ -281,6 +279,40 @@ impl CapsuleStore {
             reapplied,
         }
     }
+
+    pub async fn next_refresh_delay_ms(&self, now_ms: u64, max_wait_ms: u64) -> u64 {
+        let max_wait_ms = max_wait_ms.max(MIN_REFRESH_MS);
+        let guard = self.inner.lock().await;
+        if guard.is_empty() {
+            return max_wait_ms;
+        }
+        let mut soonest = max_wait_ms;
+        for entry in guard.values() {
+            if let Some(lease_until) = entry.lease_until_ms {
+                if now_ms >= lease_until {
+                    return 0;
+                }
+                if let Some(window) = entry.renew_within_ms {
+                    let renew_start = lease_until.saturating_sub(window);
+                    if now_ms >= renew_start {
+                        return 0;
+                    }
+                    let until_renew = renew_start.saturating_sub(now_ms);
+                    soonest = soonest.min(until_renew);
+                } else {
+                    let until_expire = lease_until.saturating_sub(now_ms);
+                    soonest = soonest.min(until_expire);
+                }
+            }
+            if let Some(hops) = entry.remaining_hops {
+                if hops > 0 {
+                    let hop_wait = max_wait_ms.min(HOP_TICK_MS);
+                    soonest = soonest.min(hop_wait);
+                }
+            }
+        }
+        soonest
+    }
 }
 
 pub async fn refresh_capsules(state: &AppState) -> ReplayOutcome {
@@ -327,16 +359,20 @@ pub async fn refresh_capsules(state: &AppState) -> ReplayOutcome {
     replay
 }
 
-fn refresh_interval_secs() -> u64 {
+fn refresh_max_wait_ms() -> u64 {
+    if let Ok(raw_ms) = std::env::var("ARW_CAPSULE_REFRESH_MS") {
+        return raw_ms
+            .trim()
+            .parse::<u64>()
+            .map(|v| v.max(MIN_REFRESH_MS))
+            .unwrap_or(DEFAULT_REFRESH_SECS * 1_000);
+    }
     std::env::var("ARW_CAPSULE_REFRESH_SECS")
         .ok()
         .and_then(|raw| raw.parse::<u64>().ok())
-        .map(|secs| secs.max(MIN_REFRESH_SECS))
-        .unwrap_or(DEFAULT_REFRESH_SECS)
-}
-
-fn refresh_interval() -> Duration {
-    Duration::from_secs(refresh_interval_secs())
+        .map(|secs| secs.max(1) * 1_000)
+        .unwrap_or(DEFAULT_REFRESH_SECS * 1_000)
+        .max(MIN_REFRESH_MS)
 }
 
 pub fn start_refresh_task(state: AppState) -> TaskHandle {
@@ -346,26 +382,42 @@ pub fn start_refresh_task(state: AppState) -> TaskHandle {
         move || {
             let state = state.clone();
             async move {
-                let mut ticker = interval(refresh_interval());
-                ticker.set_missed_tick_behavior(MissedTickBehavior::Skip);
+                let max_wait_ms = refresh_max_wait_ms();
+                if max_wait_ms < 1_000 {
+                    tracing::debug!(
+                        target: "arw::policy",
+                        max_sleep_ms = max_wait_ms,
+                        "capsule refresh cadence tightened",
+                    );
+                }
                 let initial = refresh_capsules(&state).await;
                 if initial.changed || !initial.expired.is_empty() {
                     tracing::debug!(
                         target: "arw::policy",
                         expired = initial.expired.len(),
                         changed = initial.changed,
+                        max_sleep_ms = max_wait_ms,
                         "capsule refresh sweep applied",
                     );
                 }
 
                 loop {
-                    ticker.tick().await;
+                    let delay_ms = state
+                        .capsules()
+                        .next_refresh_delay_ms(now_ms(), max_wait_ms)
+                        .await;
+                    if delay_ms > 0 {
+                        tokio::time::sleep(Duration::from_millis(delay_ms)).await;
+                    } else {
+                        tokio::task::yield_now().await;
+                    }
                     let outcome = refresh_capsules(&state).await;
                     if outcome.changed || !outcome.expired.is_empty() {
                         tracing::debug!(
                             target: "arw::policy",
                             expired = outcome.expired.len(),
                             changed = outcome.changed,
+                            max_sleep_ms = max_wait_ms,
                             "capsule refresh sweep applied",
                         );
                     }
@@ -781,16 +833,52 @@ mod tests {
         let mut env_guard = test_env::guard();
 
         env_guard.remove("ARW_CAPSULE_REFRESH_SECS");
-        assert_eq!(refresh_interval_secs(), DEFAULT_REFRESH_SECS);
+        env_guard.remove("ARW_CAPSULE_REFRESH_MS");
+        assert_eq!(refresh_max_wait_ms(), DEFAULT_REFRESH_SECS * 1_000);
 
         env_guard.set("ARW_CAPSULE_REFRESH_SECS", "0");
-        assert_eq!(refresh_interval_secs(), MIN_REFRESH_SECS);
+        assert_eq!(refresh_max_wait_ms(), 1_000);
 
         env_guard.set("ARW_CAPSULE_REFRESH_SECS", "7");
-        assert_eq!(refresh_interval_secs(), 7);
+        assert_eq!(refresh_max_wait_ms(), 7_000);
 
         env_guard.set("ARW_CAPSULE_REFRESH_SECS", "not-a-number");
-        assert_eq!(refresh_interval_secs(), DEFAULT_REFRESH_SECS);
+        assert_eq!(refresh_max_wait_ms(), DEFAULT_REFRESH_SECS * 1_000);
+
+        env_guard.set("ARW_CAPSULE_REFRESH_MS", "120");
+        assert_eq!(refresh_max_wait_ms(), 120);
+
+        env_guard.set("ARW_CAPSULE_REFRESH_MS", "5");
+        assert_eq!(refresh_max_wait_ms(), MIN_REFRESH_MS);
+    }
+
+    #[tokio::test]
+    async fn next_refresh_delay_honours_renew_window() {
+        let store = CapsuleStore::new();
+        let now = now_ms();
+        let mut capsule = sample_capsule("renew-window");
+        capsule.lease_duration_ms = Some(250);
+        capsule.renew_within_ms = Some(200);
+        capsule.signature = None;
+        store.adopt(&capsule, now).await;
+
+        let wait = store.next_refresh_delay_ms(now, 5_000).await;
+        assert!(wait <= 200);
+        assert!(wait > 0);
+    }
+
+    #[tokio::test]
+    async fn next_refresh_delay_immediate_on_expiry() {
+        let store = CapsuleStore::new();
+        let now = now_ms();
+        let mut capsule = sample_capsule("expired");
+        capsule.lease_duration_ms = Some(10);
+        capsule.renew_within_ms = Some(10);
+        capsule.signature = None;
+        store.adopt(&capsule, now.saturating_sub(20)).await;
+
+        let wait = store.next_refresh_delay_ms(now, 5_000).await;
+        assert_eq!(wait, 0);
     }
 
     #[tokio::test]

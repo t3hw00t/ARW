@@ -255,8 +255,10 @@ See also: [CLI Guide](guide/cli.md)
    - `{ "allow_all": true|false, "lease_rules": [ { "kind_prefix": "net.http.", "capability": "net:http" } ] }`
    - Presets provided in‑repo: [configs/policy/relaxed.json](https://github.com/t3hw00t/ARW/blob/main/configs/policy/relaxed.json), [configs/policy/standard.json](https://github.com/t3hw00t/ARW/blob/main/configs/policy/standard.json), [configs/policy/strict.json](https://github.com/t3hw00t/ARW/blob/main/configs/policy/strict.json). Point `ARW_POLICY_FILE` at one of these to mirror `ARW_SECURITY_POSTURE` explicitly.
   - `ARW_GUARDRAILS_URL`: optional base URL for an HTTP guardrails service exposing `POST /check` (tool `guardrails.check`).
-  - `ARW_GUARDRAILS_ALLOWLIST`: comma‑separated hostnames considered safe for URL checks (e.g., `example.com, arxiv.org`).
-  - `ARW_PATCH_SAFETY`: when set to `1`, `true`, or `enforce`, reject config/logic-unit patches that trip the built-in red-team heuristics (permission widening, SSRF markers, prompt-injection bait, secret keywords). When unset, findings are reported in responses and events but do not block writes.
+ - `ARW_GUARDRAILS_ALLOWLIST`: comma‑separated hostnames considered safe for URL checks (e.g., `example.com, arxiv.org`).
+ - `ARW_PATCH_SAFETY`: when set to `1`, `true`, or `enforce`, reject config/logic-unit patches that trip the built-in red-team heuristics (permission widening, SSRF markers, prompt-injection bait, secret keywords). When unset, findings are reported in responses and events but do not block writes.
+ - `ARW_CAPSULE_REFRESH_SECS`: upper bound (seconds) between background capsule sweeps (default `5`).
+ - `ARW_CAPSULE_REFRESH_MS`: optional millisecond override for the sweep ceiling; use when capsules carry very short leases. When unset, the scheduler derives sub-second sleeps automatically from the earliest lease renewal or hop countdown and clamps to the `ARW_CAPSULE_REFRESH_SECS` ceiling.
 
 ## Tuning Hints
 - `ARW_HTTP_TIMEOUT_SECS`: runtime-adjustable HTTP timeout applied across built-in HTTP clients; governor hints persist updates back to this environment variable.
