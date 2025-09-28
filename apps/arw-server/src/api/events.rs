@@ -23,11 +23,13 @@ use sha2::Digest as _;
     params(
         ("after" = Option<i64>, Query, description = "Resume after id or Last-Event-ID header"),
         ("replay" = Option<usize>, Query, description = "Replay the last N events (when after not set)"),
+        ("Last-Event-ID" = Option<String>, Header, description = "Resume using Last-Event-ID header"),
         ("prefix" = Option<String>, Query, description = "CSV of event kind prefixes to include")
     ),
     responses(
         (status = 200, description = "SSE stream of events", content_type = "text/event-stream"),
-        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+        (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails),
+        (status = 501, description = "Kernel disabled", body = arw_protocol::ProblemDetails)
     )
 )]
 pub async fn events_sse(
@@ -36,29 +38,18 @@ pub async fn events_sse(
     headers: HeaderMap,
 ) -> impl IntoResponse {
     if !crate::admin_ok(&headers) {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            axum::Json(serde_json::json!({
-                "type":"about:blank","title":"Unauthorized","status":401
-            })),
-        )
-            .into_response();
+        return crate::responses::unauthorized(None);
     }
     if !state.kernel_enabled()
         && (q.contains_key("after")
             || q.contains_key("replay")
             || headers.get("last-event-id").is_some())
     {
-        return (
+        return crate::responses::problem_response(
             axum::http::StatusCode::NOT_IMPLEMENTED,
-            axum::Json(serde_json::json!({
-                "type":"about:blank",
-                "title":"Kernel Disabled",
-                "status":501,
-                "detail":"Event replay is unavailable when ARW_KERNEL_ENABLE=0"
-            })),
-        )
-            .into_response();
+            "Kernel Disabled",
+            Some("Event replay is unavailable when ARW_KERNEL_ENABLE=0"),
+        );
     }
     let (tx, rx) = tokio::sync::mpsc::channel::<(arw_events::Envelope, Option<String>)>(128);
     let last_event_id_hdr: Option<String> = headers
@@ -318,6 +309,79 @@ mod tests {
         }
     }
 
+    fn assert_handshake(
+        record: &SseRecord,
+        expected_resume: Option<&str>,
+        expected_mode: &str,
+        expected_count: u64,
+        expected_prefixes: &[&str],
+    ) {
+        assert_eq!(record.event.as_deref(), Some("service.connected"));
+        assert_eq!(record.id.as_deref(), Some("0"));
+
+        let env = record
+            .data
+            .as_ref()
+            .and_then(|d| serde_json::from_str::<Value>(d).ok())
+            .expect("handshake data json");
+        assert_eq!(env["kind"].as_str(), Some("service.connected"));
+        let payload = env
+            .get("payload")
+            .and_then(|v| v.as_object())
+            .expect("handshake payload");
+
+        let request_id = payload
+            .get("request_id")
+            .and_then(|v| v.as_str())
+            .expect("request id");
+        assert!(!request_id.is_empty());
+
+        match expected_resume {
+            Some(expected) => assert_eq!(
+                payload.get("resume_from").and_then(|v| v.as_str()),
+                Some(expected)
+            ),
+            None => assert!(payload
+                .get("resume_from")
+                .map(|v| v.is_null())
+                .unwrap_or(false)),
+        }
+
+        let replay = payload
+            .get("replay")
+            .and_then(|v| v.as_object())
+            .expect("replay payload");
+        assert_eq!(
+            replay.get("mode").and_then(|v| v.as_str()),
+            Some(expected_mode)
+        );
+        assert_eq!(
+            replay.get("count").and_then(|v| v.as_u64()),
+            Some(expected_count)
+        );
+
+        if expected_prefixes.is_empty() {
+            assert!(payload
+                .get("prefixes")
+                .map(|v| v.is_null())
+                .unwrap_or(false));
+        } else {
+            let prefixes = payload
+                .get("prefixes")
+                .and_then(|v| v.as_array())
+                .expect("prefixes array");
+            assert_eq!(prefixes.len(), expected_prefixes.len());
+            for (val, expected) in prefixes.iter().zip(expected_prefixes.iter()) {
+                assert_eq!(val.as_str(), Some(*expected));
+            }
+        }
+
+        assert_eq!(
+            payload.get("kernel_replay").and_then(|v| v.as_bool()),
+            Some(true)
+        );
+    }
+
     #[tokio::test]
     async fn events_sse_replays_read_model_patches() {
         let temp = tempdir().expect("tempdir");
@@ -370,6 +434,7 @@ mod tests {
 
         let mut body = response.into_body();
         let mut buffer = String::new();
+        let mut handshake_event: Option<SseRecord> = None;
         let mut patch_event: Option<SseRecord> = None;
         while patch_event.is_none() {
             let frame = timeout(Duration::from_secs(1), body.frame())
@@ -380,12 +445,23 @@ mod tests {
             let bytes = frame.into_data().expect("data frame");
             buffer.push_str(&String::from_utf8_lossy(&bytes));
             for ev in parse_sse_events(&mut buffer) {
+                if handshake_event.is_none() && ev.event.as_deref() == Some("service.connected") {
+                    handshake_event = Some(ev.clone());
+                }
                 if ev.event.as_deref() == Some(TOPIC_READMODEL_PATCH) {
                     patch_event = Some(ev);
                     break;
                 }
             }
         }
+        let handshake_event = handshake_event.expect("handshake present");
+        assert_handshake(
+            &handshake_event,
+            None,
+            "recent",
+            5,
+            &[TOPIC_READMODEL_PATCH],
+        );
         let patch_event = patch_event.expect("patch event parsed");
         assert_eq!(patch_event.event.as_deref(), Some(TOPIC_READMODEL_PATCH));
         assert_eq!(patch_event.id.as_deref(), Some(row_id_str.as_str()));
@@ -423,18 +499,24 @@ mod tests {
         assert_eq!(resume_response.status(), StatusCode::OK);
 
         let mut resume_body = resume_response.into_body();
-        // Handshake event should arrive immediately
         let frame = resume_body
             .frame()
             .await
             .expect("resume frame")
             .expect("resume data");
         let handshake_bytes = frame.into_data().expect("handshake bytes");
-        let mut buffer = String::from_utf8_lossy(&handshake_bytes).to_string();
-        let handshake_events = parse_sse_events(&mut buffer);
-        assert!(handshake_events
-            .iter()
-            .any(|ev| ev.event.as_deref() == Some("service.connected")));
+        let mut resume_buffer = String::from_utf8_lossy(&handshake_bytes).to_string();
+        let handshake_event = parse_sse_events(&mut resume_buffer)
+            .into_iter()
+            .find(|ev| ev.event.as_deref() == Some("service.connected"))
+            .expect("handshake event");
+        assert_handshake(
+            &handshake_event,
+            Some(row_id_str.as_str()),
+            "after",
+            0,
+            &[TOPIC_READMODEL_PATCH],
+        );
 
         // No replayed patch should arrive within a short timeout
         let no_event = timeout(Duration::from_millis(100), resume_body.frame()).await;
@@ -498,6 +580,7 @@ mod tests {
 
         let mut body = response.into_body();
         let mut buffer = String::new();
+        let mut handshake_event: Option<SseRecord> = None;
         let mut patch_event: Option<SseRecord> = None;
         while patch_event.is_none() {
             let frame = timeout(Duration::from_secs(1), body.frame())
@@ -508,12 +591,23 @@ mod tests {
             let bytes = frame.into_data().expect("data frame");
             buffer.push_str(&String::from_utf8_lossy(&bytes));
             for ev in parse_sse_events(&mut buffer) {
+                if handshake_event.is_none() && ev.event.as_deref() == Some("service.connected") {
+                    handshake_event = Some(ev.clone());
+                }
                 if ev.event.as_deref() == Some(TOPIC_READMODEL_PATCH) {
                     patch_event = Some(ev);
                     break;
                 }
             }
         }
+        let handshake_event = handshake_event.expect("handshake present");
+        assert_handshake(
+            &handshake_event,
+            None,
+            "recent",
+            5,
+            &[TOPIC_READMODEL_PATCH],
+        );
         let patch_event = patch_event.expect("patch event parsed");
         assert_eq!(patch_event.event.as_deref(), Some(TOPIC_READMODEL_PATCH));
         assert_eq!(patch_event.id.as_deref(), Some(row_id_str.as_str()));
@@ -557,11 +651,18 @@ mod tests {
             .expect("resume frame")
             .expect("resume data");
         let handshake_bytes = frame.into_data().expect("handshake bytes");
-        let mut buffer = String::from_utf8_lossy(&handshake_bytes).to_string();
-        let handshake_events = parse_sse_events(&mut buffer);
-        assert!(handshake_events
-            .iter()
-            .any(|ev| ev.event.as_deref() == Some("service.connected")));
+        let mut resume_buffer = String::from_utf8_lossy(&handshake_bytes).to_string();
+        let handshake_event = parse_sse_events(&mut resume_buffer)
+            .into_iter()
+            .find(|ev| ev.event.as_deref() == Some("service.connected"))
+            .expect("handshake event");
+        assert_handshake(
+            &handshake_event,
+            Some(row_id_str.as_str()),
+            "after",
+            0,
+            &[TOPIC_READMODEL_PATCH],
+        );
 
         let no_event = timeout(Duration::from_millis(100), resume_body.frame()).await;
         assert!(no_event.is_err(), "unexpected replay events after resume");
@@ -580,6 +681,16 @@ mod tests {
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+
+        let body_bytes = response
+            .into_body()
+            .collect()
+            .await
+            .expect("collect body")
+            .to_bytes();
+        let body_json: Value = serde_json::from_slice(&body_bytes).expect("problem body");
+        assert_eq!(body_json["title"].as_str(), Some("Unauthorized"));
+        assert_eq!(body_json["status"].as_u64(), Some(401));
 
         ctx.env.remove("ARW_ADMIN_TOKEN");
         ctx.env.remove("ARW_DEBUG");

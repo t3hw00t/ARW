@@ -195,7 +195,7 @@ Observability & Eventing
 - [Kernel] Metrics registry with histograms; wire to /metrics [t-250911230320-8615]
 - [Kernel] Docs: surface route metrics/events in docs and status page — done
 - [Pack: Collaboration] RPU trust: watcher + endpoints + `rpu.trust.changed` event + Prometheus gauges — done
-- [Kernel] Event reader QA: test `Last-Event-ID` resume, ensure Spectral/OpenAPI coverage, and capture doc updates in developer guide — todo
+- [Kernel] Event reader QA: test `Last-Event-ID` resume, ensure Spectral/OpenAPI coverage, and capture doc updates in developer guide — done (tests/spec/docs refreshed in this change)
 
 Compatibility & Hardware
 - [Kernel] GPU probe fallback via wgpu: enumerate adapters across backends — done

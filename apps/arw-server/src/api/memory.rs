@@ -15,7 +15,7 @@ use tokio_stream::wrappers::ReceiverStream;
 use tracing::{error, warn};
 use utoipa::ToSchema;
 
-use crate::{admin_ok, memory_service, AppState};
+use crate::{memory_service, AppState};
 use arw_topics as topics;
 
 fn now_timestamp() -> String {
@@ -50,7 +50,7 @@ const MEMORY_PATCH_EVENT: &str = "memory.patch";
     tag = "Memory",
     responses(
         (status = 200, description = "Memory stream", content_type = "text/event-stream"),
-        (status = 501, description = "Kernel disabled", body = serde_json::Value),
+        (status = 501, description = "Kernel disabled", body = arw_protocol::ProblemDetails),
         (status = 500, description = "Kernel error", body = serde_json::Value)
     )
 )]
@@ -175,7 +175,7 @@ pub async fn state_memory_stream(State(state): State<AppState>) -> axum::respons
         params(("lane" = Option<String>, Query), ("limit" = Option<i64>, Query)),
         responses(
             (status = 200, body = serde_json::Value),
-            (status = 501, description = "Kernel disabled", body = serde_json::Value)
+            (status = 501, description = "Kernel disabled", body = arw_protocol::ProblemDetails)
         )
     )
 )]
@@ -272,8 +272,8 @@ pub struct MemoryApplyReq {
         request_body = MemoryApplyReq,
         responses(
             (status = 201, description = "Created", body = serde_json::Value),
-            (status = 401, description = "Unauthorized"),
-            (status = 501, description = "Kernel disabled", body = serde_json::Value)
+            (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails),
+            (status = 501, description = "Kernel disabled", body = arw_protocol::ProblemDetails)
         )
     )
 )]
@@ -282,12 +282,8 @@ pub async fn admin_memory_apply(
     State(state): State<AppState>,
     Json(req): Json<MemoryApplyReq>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
+    if let Err(resp) = crate::responses::require_admin(&headers) {
+        return resp;
     }
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
@@ -354,8 +350,8 @@ pub async fn admin_memory_apply(
         params(("lane" = Option<String>, Query), ("limit" = Option<i64>, Query)),
         responses(
             (status = 200, description = "Memory snapshot", body = serde_json::Value),
-            (status = 401, description = "Unauthorized"),
-            (status = 501, description = "Kernel disabled", body = serde_json::Value)
+            (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails),
+            (status = 501, description = "Kernel disabled", body = arw_protocol::ProblemDetails)
         )
     )
 )]
@@ -364,12 +360,8 @@ pub async fn admin_memory_list(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
+    if let Err(resp) = crate::responses::require_admin(&headers) {
+        return resp;
     }
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();

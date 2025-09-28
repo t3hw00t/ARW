@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use utoipa::ToSchema;
 
-use crate::{admin_ok, chat, AppState};
+use crate::{chat, AppState};
 
 #[utoipa::path(
     get,
@@ -13,16 +13,12 @@ use crate::{admin_ok, chat, AppState};
     tag = "Admin/Chat",
     responses(
         (status = 200, description = "Current chat history", body = ChatHistory),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails)
     )
 )]
 pub async fn chat_history(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
-    if !admin_ok(&headers) {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
+    if let Err(resp) = crate::responses::require_admin(&headers) {
+        return resp;
     }
     let history = state.chat().history().await;
     Json(ChatHistory { items: history }).into_response()
@@ -49,7 +45,7 @@ pub struct ChatSendReq {
     request_body = ChatSendReq,
     responses(
         (status = 200, description = "Synthetic reply", body = ChatSendResp),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails)
     )
 )]
 pub async fn chat_send(
@@ -57,12 +53,8 @@ pub async fn chat_send(
     State(state): State<AppState>,
     Json(req): Json<ChatSendReq>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
+    if let Err(resp) = crate::responses::require_admin(&headers) {
+        return resp;
     }
     let options = chat::ChatSendOptions {
         temperature: req.temperature,
@@ -92,16 +84,12 @@ pub struct ChatSendResp {
     tag = "Admin/Chat",
     responses(
         (status = 200, description = "Cleared", body = serde_json::Value),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails)
     )
 )]
 pub async fn chat_clear(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
-    if !admin_ok(&headers) {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
+    if let Err(resp) = crate::responses::require_admin(&headers) {
+        return resp;
     }
     state.chat().clear().await;
     Json(json!({"ok": true})).into_response()
@@ -114,7 +102,7 @@ pub async fn chat_clear(headers: HeaderMap, State(state): State<AppState>) -> im
     params(("probe" = Option<bool>, Query, description = "Trigger latency probe")),
     responses(
         (status = 200, description = "Backend status", body = ChatStatusResp),
-        (status = 401, description = "Unauthorized")
+        (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails)
     )
 )]
 pub async fn chat_status(
@@ -122,12 +110,8 @@ pub async fn chat_status(
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
+    if let Err(resp) = crate::responses::require_admin(&headers) {
+        return resp;
     }
     let probe = params
         .get("probe")

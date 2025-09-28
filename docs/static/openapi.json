@@ -50,10 +50,16 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
-        },
-        "description": "Chat: GET /admin/chat."
+        }
       }
     },
     "/admin/chat/clear": {
@@ -72,10 +78,16 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
-        },
-        "description": "Chat: POST /admin/chat/clear."
+        }
       }
     },
     "/admin/chat/send": {
@@ -106,10 +118,16 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
-        },
-        "description": "Chat: POST /admin/chat/send."
+        }
       }
     },
     "/admin/chat/status": {
@@ -141,10 +159,16 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
-        },
-        "description": "Chat: GET /admin/chat/status."
+        }
       }
     },
     "/admin/distill": {
@@ -164,10 +188,16 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           }
-        },
-        "description": "Trigger a manual distillation pass."
+        }
       }
     },
     "/admin/experiments/activate": {
@@ -201,8 +231,7 @@
           "404": {
             "description": "Unknown experiment"
           }
-        },
-        "description": "Experiments: POST /admin/experiments/activate."
+        }
       }
     },
     "/admin/experiments/assign": {
@@ -233,8 +262,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Experiments: POST /admin/experiments/assign."
+        }
       }
     },
     "/admin/experiments/define": {
@@ -265,8 +293,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Experiments: POST /admin/experiments/define."
+        }
       }
     },
     "/admin/experiments/list": {
@@ -289,8 +316,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Experiments: GET /admin/experiments/list."
+        }
       }
     },
     "/admin/experiments/run": {
@@ -323,8 +349,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Experiments: POST /admin/experiments/run."
+        }
       }
     },
     "/admin/experiments/scoreboard": {
@@ -347,8 +372,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Experiments: GET /admin/experiments/scoreboard."
+        }
       }
     },
     "/admin/experiments/start": {
@@ -379,8 +403,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Experiments: POST /admin/experiments/start."
+        }
       }
     },
     "/admin/experiments/stop": {
@@ -411,8 +434,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Experiments: POST /admin/experiments/stop."
+        }
       }
     },
     "/admin/experiments/winners": {
@@ -435,8 +457,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Experiments: GET /admin/experiments/winners."
+        }
       }
     },
     "/admin/feedback/analyze": {
@@ -459,8 +480,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Feedback: POST /admin/feedback/analyze."
+        }
       }
     },
     "/admin/feedback/apply": {
@@ -500,8 +520,7 @@
           "404": {
             "description": "Unknown suggestion"
           }
-        },
-        "description": "Feedback: POST /admin/feedback/apply."
+        }
       }
     },
     "/admin/feedback/auto": {
@@ -532,8 +551,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Feedback: POST /admin/feedback/auto."
+        }
       }
     },
     "/admin/feedback/policy": {
@@ -554,8 +572,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Feedback: GET /admin/feedback/policy."
+        }
       }
     },
     "/admin/feedback/reset": {
@@ -576,8 +593,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Feedback: POST /admin/feedback/reset."
+        }
       }
     },
     "/admin/feedback/rollback": {
@@ -613,8 +629,7 @@
           "404": {
             "description": "Snapshot not found"
           }
-        },
-        "description": "Feedback: POST /admin/feedback/rollback."
+        }
       }
     },
     "/admin/feedback/signal": {
@@ -647,8 +662,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Feedback: POST /admin/feedback/signal."
+        }
       }
     },
     "/admin/feedback/state": {
@@ -671,8 +685,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Feedback: GET /admin/feedback/state."
+        }
       }
     },
     "/admin/feedback/suggestions": {
@@ -693,8 +706,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Feedback: GET /admin/feedback/suggestions."
+        }
       }
     },
     "/admin/feedback/updates": {
@@ -730,8 +742,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Feedback: GET /admin/feedback/updates."
+        }
       }
     },
     "/admin/feedback/versions": {
@@ -752,8 +763,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Feedback: GET /admin/feedback/versions."
+        }
       }
     },
     "/admin/goldens/add": {
@@ -787,8 +797,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Experiments: POST /admin/goldens/add."
+        }
       }
     },
     "/admin/goldens/list": {
@@ -821,8 +830,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Experiments: GET /admin/goldens/list."
+        }
       }
     },
     "/admin/goldens/run": {
@@ -855,8 +863,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Experiments: POST /admin/goldens/run."
+        }
       }
     },
     "/admin/governor/hints": {
@@ -879,8 +886,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Introspect: GET /admin/governor/hints."
+        }
       },
       "post": {
         "tags": [
@@ -909,8 +915,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Introspect: POST /admin/governor/hints."
+        }
       }
     },
     "/admin/governor/profile": {
@@ -933,8 +938,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Introspect: GET /admin/governor/profile."
+        }
       },
       "post": {
         "tags": [
@@ -963,8 +967,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Introspect: POST /admin/governor/profile."
+        }
       }
     },
     "/admin/hierarchy/accept": {
@@ -995,8 +998,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Hierarchy: POST /admin/hierarchy/accept."
+        }
       }
     },
     "/admin/hierarchy/hello": {
@@ -1027,8 +1029,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Hierarchy: POST /admin/hierarchy/hello."
+        }
       }
     },
     "/admin/hierarchy/offer": {
@@ -1059,8 +1060,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Hierarchy: POST /admin/hierarchy/offer."
+        }
       }
     },
     "/admin/hierarchy/role": {
@@ -1091,8 +1091,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Hierarchy: POST /admin/hierarchy/role."
+        }
       }
     },
     "/admin/hierarchy/state": {
@@ -1113,8 +1112,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Hierarchy: GET /admin/hierarchy/state."
+        }
       }
     },
     "/admin/introspect/stats": {
@@ -1135,8 +1133,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Introspect: GET /admin/introspect/stats."
+        }
       }
     },
     "/admin/memory": {
@@ -1175,18 +1172,26 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           },
           "501": {
             "description": "Kernel disabled",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
               }
             }
           }
-        },
-        "description": "List recent memory items (admin helper)."
+        }
       }
     },
     "/admin/memory/apply": {
@@ -1216,18 +1221,26 @@
             }
           },
           "401": {
-            "description": "Unauthorized"
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           },
           "501": {
             "description": "Kernel disabled",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
               }
             }
           }
-        },
-        "description": "Insert a memory item (admin helper)."
+        }
       }
     },
     "/admin/memory/quarantine": {
@@ -1248,8 +1261,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Review: GET /admin/memory/quarantine."
+        }
       },
       "post": {
         "tags": [
@@ -1281,8 +1293,7 @@
           "500": {
             "description": "Storage error"
           }
-        },
-        "description": "Review: POST /admin/memory/quarantine."
+        }
       }
     },
     "/admin/memory/quarantine/admit": {
@@ -1316,8 +1327,7 @@
           "500": {
             "description": "Storage error"
           }
-        },
-        "description": "Review: POST /admin/memory/quarantine/admit."
+        }
       }
     },
     "/admin/models": {
@@ -1341,8 +1351,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Models: GET /admin/models."
+        }
       }
     },
     "/admin/models/add": {
@@ -1373,8 +1382,7 @@
           "400": {
             "description": "Invalid input"
           }
-        },
-        "description": "Models: POST /admin/models/add."
+        }
       }
     },
     "/admin/models/by-hash/{sha256}": {
@@ -1431,8 +1439,7 @@
               }
             }
           }
-        },
-        "description": "Models: GET /admin/models/by-hash/{sha256}."
+        }
       }
     },
     "/admin/models/cas_gc": {
@@ -1463,8 +1470,7 @@
           "501": {
             "description": "CAS GC unavailable"
           }
-        },
-        "description": "Models: POST /admin/models/cas_gc."
+        }
       }
     },
     "/admin/models/concurrency": {
@@ -1484,8 +1490,7 @@
               }
             }
           }
-        },
-        "description": "Models: GET /admin/models/concurrency."
+        }
       },
       "post": {
         "tags": [
@@ -1513,8 +1518,7 @@
               }
             }
           }
-        },
-        "description": "Models: POST /admin/models/concurrency."
+        }
       }
     },
     "/admin/models/default": {
@@ -1532,8 +1536,7 @@
               }
             }
           }
-        },
-        "description": "Models: GET /admin/models/default."
+        }
       },
       "post": {
         "tags": [
@@ -1562,8 +1565,7 @@
           "400": {
             "description": "Unknown model"
           }
-        },
-        "description": "Models: POST /admin/models/default."
+        }
       }
     },
     "/admin/models/download": {
@@ -1594,8 +1596,7 @@
           "501": {
             "description": "Download unavailable"
           }
-        },
-        "description": "Models: POST /admin/models/download."
+        }
       }
     },
     "/admin/models/download/cancel": {
@@ -1626,8 +1627,7 @@
           "501": {
             "description": "Cancel unavailable"
           }
-        },
-        "description": "Models: POST /admin/models/download/cancel."
+        }
       }
     },
     "/admin/models/jobs": {
@@ -1645,8 +1645,7 @@
               }
             }
           }
-        },
-        "description": "Models: GET /admin/models/jobs."
+        }
       }
     },
     "/admin/models/load": {
@@ -1670,8 +1669,7 @@
           "404": {
             "description": "Missing models.json"
           }
-        },
-        "description": "Models: POST /admin/models/load."
+        }
       }
     },
     "/admin/models/refresh": {
@@ -1692,8 +1690,7 @@
               }
             }
           }
-        },
-        "description": "Models: POST /admin/models/refresh."
+        }
       }
     },
     "/admin/models/remove": {
@@ -1721,8 +1718,7 @@
               }
             }
           }
-        },
-        "description": "Models: POST /admin/models/remove."
+        }
       }
     },
     "/admin/models/save": {
@@ -1740,8 +1736,7 @@
               }
             }
           }
-        },
-        "description": "Models: POST /admin/models/save."
+        }
       }
     },
     "/admin/models/summary": {
@@ -1762,8 +1757,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Models: GET /admin/models/summary."
+        }
       }
     },
     "/admin/probe": {
@@ -1785,8 +1779,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Effective path probe (successor to `/admin/probe`)."
+        }
       }
     },
     "/admin/probe/hw": {
@@ -1808,8 +1801,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Hardware/software probe (`/admin/probe/hw`)."
+        }
       }
     },
     "/admin/probe/metrics": {
@@ -1831,8 +1823,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Metrics snapshot probe (`/admin/probe/metrics`)."
+        }
       }
     },
     "/admin/self_model/apply": {
@@ -1884,8 +1875,7 @@
               }
             }
           }
-        },
-        "description": "SelfModel: POST /admin/self_model/apply."
+        }
       }
     },
     "/admin/self_model/propose": {
@@ -1929,8 +1919,7 @@
               }
             }
           }
-        },
-        "description": "SelfModel: POST /admin/self_model/propose."
+        }
       }
     },
     "/admin/tools": {
@@ -1951,8 +1940,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Tools: GET /admin/tools."
+        }
       }
     },
     "/admin/tools/cache_stats": {
@@ -1973,8 +1961,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Tools: GET /admin/tools/cache_stats."
+        }
       }
     },
     "/admin/tools/run": {
@@ -2017,8 +2004,7 @@
           "500": {
             "description": "Tool runtime error"
           }
-        },
-        "description": "Tools: POST /admin/tools/run."
+        }
       }
     },
     "/admin/world_diffs": {
@@ -2039,8 +2025,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Review: GET /admin/world_diffs."
+        }
       }
     },
     "/admin/world_diffs/decision": {
@@ -2077,8 +2062,7 @@
           "500": {
             "description": "Storage error"
           }
-        },
-        "description": "Review: POST /admin/world_diffs/decision."
+        }
       }
     },
     "/admin/world_diffs/queue": {
@@ -2112,8 +2096,7 @@
           "500": {
             "description": "Storage error"
           }
-        },
-        "description": "Review: POST /admin/world_diffs/queue."
+        }
       }
     },
     "/events": {
@@ -2146,6 +2129,18 @@
             }
           },
           {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "description": "Resume using Last-Event-ID header",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
             "name": "prefix",
             "in": "query",
             "description": "CSV of event kind prefixes to include",
@@ -2162,11 +2157,23 @@
               "text/event-stream": {}
             }
           },
+          "401": {
+            "description": "Unauthorized",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
+          },
           "501": {
             "description": "Kernel disabled",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
               }
             }
           }
@@ -2212,8 +2219,7 @@
               }
             }
           }
-        },
-        "description": "Public: GET /metrics."
+        }
       }
     },
     "/orchestrator/mini_agents": {
@@ -2236,12 +2242,13 @@
             "description": "Kernel disabled",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
               }
             }
           }
-        },
-        "description": "List available mini-agents (placeholder)."
+        }
       }
     },
     "/orchestrator/mini_agents/start_training": {
@@ -2271,18 +2278,26 @@
             }
           },
           "401": {
-            "description": ""
+            "description": "",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            }
           },
           "501": {
             "description": "Kernel disabled",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
               }
             }
           }
-        },
-        "description": "Start a training job that results in a suggested Logic Unit (admin)."
+        }
       }
     },
     "/projects": {
@@ -2319,8 +2334,7 @@
           "500": {
             "description": "Error"
           }
-        },
-        "description": "Projects: POST /projects."
+        }
       }
     },
     "/projects/{proj}/file": {
@@ -2380,8 +2394,7 @@
           "500": {
             "description": "Error"
           }
-        },
-        "description": "Projects: PUT /projects/{proj}/file."
+        }
       },
       "patch": {
         "tags": [
@@ -2439,8 +2452,7 @@
           "500": {
             "description": "Error"
           }
-        },
-        "description": "Projects: PATCH /projects/{proj}/file."
+        }
       }
     },
     "/projects/{proj}/import": {
@@ -2491,8 +2503,7 @@
           "500": {
             "description": "Error"
           }
-        },
-        "description": "Projects: POST /projects/{proj}/import."
+        }
       }
     },
     "/projects/{proj}/notes": {
@@ -2542,8 +2553,7 @@
           "500": {
             "description": "Error"
           }
-        },
-        "description": "Projects: PUT /projects/{proj}/notes."
+        }
       }
     },
     "/research_watcher/{id}/approve": {
@@ -2591,8 +2601,7 @@
           "500": {
             "description": "Error"
           }
-        },
-        "description": "Research: POST /research_watcher/{id}/approve."
+        }
       }
     },
     "/research_watcher/{id}/archive": {
@@ -2640,8 +2649,7 @@
           "500": {
             "description": "Error"
           }
-        },
-        "description": "Research: POST /research_watcher/{id}/archive."
+        }
       }
     },
     "/spec/health": {
@@ -2660,8 +2668,7 @@
               }
             }
           }
-        },
-        "description": "Health summary for spec artifacts (presence/size)."
+        }
       }
     },
     "/staging/actions/{id}/approve": {
@@ -2709,8 +2716,7 @@
           "500": {
             "description": "Error"
           }
-        },
-        "description": "Staging: POST /staging/actions/{id}/approve."
+        }
       }
     },
     "/staging/actions/{id}/deny": {
@@ -2758,8 +2764,7 @@
           "500": {
             "description": "Error"
           }
-        },
-        "description": "Staging: POST /staging/actions/{id}/deny."
+        }
       }
     },
     "/state/actions": {
@@ -2874,8 +2879,7 @@
               }
             }
           }
-        },
-        "description": "Experiment events snapshot (public read-model)."
+        }
       }
     },
     "/state/guardrails_metrics": {
@@ -2902,8 +2906,7 @@
               }
             }
           }
-        },
-        "description": "Guardrails circuit-breaker metrics snapshot."
+        }
       }
     },
     "/state/intents": {
@@ -3022,8 +3025,7 @@
               }
             }
           }
-        },
-        "description": "State: GET /state/models_hashes."
+        }
       }
     },
     "/state/models_metrics": {
@@ -3114,12 +3116,13 @@
             "description": "Kernel disabled",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
               }
             }
           }
-        },
-        "description": "Orchestrator jobs snapshot."
+        }
       }
     },
     "/state/projects": {
@@ -3137,8 +3140,7 @@
               }
             }
           }
-        },
-        "description": "Projects: GET /state/projects."
+        }
       }
     },
     "/state/projects/{proj}/file": {
@@ -3185,8 +3187,7 @@
           "404": {
             "description": "Not found"
           }
-        },
-        "description": "Projects: GET /state/projects/{proj}/file."
+        }
       }
     },
     "/state/projects/{proj}/notes": {
@@ -3223,8 +3224,7 @@
           "401": {
             "description": "Unauthorized"
           }
-        },
-        "description": "Projects: GET /state/projects/{proj}/notes."
+        }
       }
     },
     "/state/projects/{proj}/tree": {
@@ -3271,8 +3271,7 @@
           "404": {
             "description": "Not found"
           }
-        },
-        "description": "Projects: GET /state/projects/{proj}/tree."
+        }
       }
     },
     "/state/research_watcher": {
@@ -3323,8 +3322,7 @@
               }
             }
           }
-        },
-        "description": "Research watcher queue snapshot."
+        }
       }
     },
     "/state/route_stats": {
@@ -3343,8 +3341,7 @@
               }
             }
           }
-        },
-        "description": "Bus and per-route counters snapshot."
+        }
       }
     },
     "/state/runtime_matrix": {
@@ -3371,8 +3368,7 @@
               }
             }
           }
-        },
-        "description": "Runtime matrix snapshot."
+        }
       }
     },
     "/state/staging/actions": {
@@ -3423,8 +3419,7 @@
               }
             }
           }
-        },
-        "description": "Staging queue snapshot."
+        }
       }
     },
     "/state/tasks": {
@@ -3443,8 +3438,7 @@
               }
             }
           }
-        },
-        "description": "Background tasks status snapshot."
+        }
       }
     },
     "/state/training/telemetry": {
@@ -3457,55 +3451,6 @@
         "responses": {
           "200": {
             "description": "Training metrics",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "401": {
-            "description": "Unauthorized"
-          }
-        },
-        "description": "Training telemetry snapshot."
-      }
-    },
-    "/state/training/actions": {
-      "get": {
-        "tags": [
-          "State"
-        ],
-        "summary": "Logic unit action history.",
-        "description": "Persistent logic unit action history (newest first).",
-        "operationId": "state_training_actions_doc",
-        "parameters": [
-          {
-            "name": "limit",
-            "in": "query",
-            "description": "Items to return (1-500)",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "maximum": 500,
-              "example": 50
-            }
-          },
-          {
-            "name": "offset",
-            "in": "query",
-            "description": "Items to skip from the newest entry",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "minimum": 0,
-              "example": 0
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Logic unit action history",
             "content": {
               "application/json": {
                 "schema": {}
@@ -5422,6 +5367,52 @@
               "string",
               "null"
             ]
+          }
+        }
+      },
+      "ProblemDetails": {
+        "type": "object",
+        "description": "RFC7807-style error payload used at service edges.",
+        "required": [
+          "type",
+          "title",
+          "status"
+        ],
+        "properties": {
+          "code": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "detail": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "instance": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "title": {
+            "type": "string"
+          },
+          "trace_id": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "type": {
+            "type": "string"
           }
         }
       },

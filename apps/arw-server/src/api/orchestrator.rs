@@ -8,7 +8,7 @@ use serde::Deserialize;
 use serde_json::json;
 use utoipa::ToSchema;
 
-use crate::{admin_ok, AppState};
+use crate::AppState;
 use arw_topics as topics;
 
 /// List available mini-agents (placeholder).
@@ -18,7 +18,7 @@ use arw_topics as topics;
     tag = "Orchestrator",
     responses(
         (status = 200, body = serde_json::Value),
-        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+        (status = 501, description = "Kernel disabled", body = arw_protocol::ProblemDetails)
     )
 )]
 pub async fn orchestrator_mini_agents() -> impl IntoResponse {
@@ -46,8 +46,8 @@ pub(crate) struct OrchestratorStartReq {
     request_body = OrchestratorStartReq,
     responses(
         (status = 202, body = serde_json::Value),
-        (status = 401),
-        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+        (status = 401, body = arw_protocol::ProblemDetails),
+        (status = 501, description = "Kernel disabled", body = arw_protocol::ProblemDetails)
     )
 )]
 pub async fn orchestrator_start_training(
@@ -55,12 +55,8 @@ pub async fn orchestrator_start_training(
     headers: HeaderMap,
     Json(req): Json<OrchestratorStartReq>,
 ) -> axum::response::Response {
-    if !admin_ok(&headers) {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
+    if let Err(resp) = crate::responses::require_admin(&headers) {
+        return resp;
     }
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
@@ -144,7 +140,7 @@ pub async fn orchestrator_start_training(
     params(("limit" = Option<i64>, Query)),
     responses(
         (status = 200, body = serde_json::Value),
-        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+        (status = 501, description = "Kernel disabled", body = arw_protocol::ProblemDetails)
     )
 )]
 pub async fn state_orchestrator_jobs(

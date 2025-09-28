@@ -11,7 +11,7 @@ use crate::api::config::{
     dot_to_pointer, ensure_path, get_by_dot, infer_schema_for_target, merge_values,
     validate_patch_value,
 };
-use crate::{admin_ok, AppState};
+use crate::AppState;
 use arw_topics as topics;
 
 /// Catalog installed logic units.
@@ -88,7 +88,7 @@ pub async fn state_logic_units(
     request_body = serde_json::Value,
     responses(
         (status = 201, body = serde_json::Value),
-        (status = 401),
+        (status = 401, body = arw_protocol::ProblemDetails),
         (status = 501, description = "Kernel disabled", body = serde_json::Value)
     )
 )]
@@ -97,12 +97,8 @@ pub async fn logic_units_install(
     headers: HeaderMap,
     Json(mut manifest): Json<Value>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
+    if let Err(resp) = crate::responses::require_admin(&headers) {
+        return resp;
     }
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
@@ -135,8 +131,8 @@ pub async fn logic_units_install(
     request_body = serde_json::Value,
     responses(
         (status = 200, body = serde_json::Value),
-        (status = 401),
-        (status = 400),
+        (status = 401, body = arw_protocol::ProblemDetails),
+        (status = 400, body = arw_protocol::ProblemDetails),
         (status = 501, description = "Kernel disabled", body = serde_json::Value)
     )
 )]
@@ -145,12 +141,8 @@ pub async fn logic_units_apply(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
-    if !admin_ok(&headers) {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
+    if let Err(resp) = crate::responses::require_admin(&headers) {
+        return resp;
     }
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
@@ -357,7 +349,7 @@ pub async fn logic_units_apply(
     responses(
         (status = 200, body = serde_json::Value),
         (status = 404),
-        (status = 401),
+        (status = 401, body = arw_protocol::ProblemDetails),
         (status = 501, description = "Kernel disabled", body = serde_json::Value)
     )
 )]
@@ -366,12 +358,8 @@ pub async fn logic_units_revert(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
-    if !admin_ok(&headers) {
-        return (
-            axum::http::StatusCode::UNAUTHORIZED,
-            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-        )
-            .into_response();
+    if let Err(resp) = crate::responses::require_admin(&headers) {
+        return resp;
     }
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
