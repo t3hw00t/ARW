@@ -1,7 +1,14 @@
 use chrono::SecondsFormat;
 use serde_json::{json, Value};
+use std::path::{Path, PathBuf};
+use tokio::fs as afs;
+use tokio::sync::Mutex;
+use tracing::warn;
 
 use crate::{feedback::FeedbackState, AppState};
+use arw_topics as topics;
+
+const LOGIC_HISTORY_LIMIT: usize = 10;
 
 pub async fn telemetry_snapshot(state: &AppState) -> serde_json::Value {
     let metrics = state.metrics().snapshot();
@@ -75,6 +82,8 @@ pub async fn telemetry_snapshot(state: &AppState) -> serde_json::Value {
     let capsules_summary = summarize_capsules(capsule_view);
     let feedback_summary = summarize_feedback(feedback_state);
 
+    let logic_history = state.logic_history().recent(LOGIC_HISTORY_LIMIT).await;
+
     json!({
         "generated": generated,
         "events": {
@@ -107,7 +116,153 @@ pub async fn telemetry_snapshot(state: &AppState) -> serde_json::Value {
         "feedback": feedback_summary,
         "compatibility": compatibility,
         "context": context,
+        "logic_history": logic_history,
     })
+}
+
+#[derive(Debug)]
+pub struct LogicUnitHistoryStore {
+    path: PathBuf,
+    max_entries: usize,
+    inner: Mutex<Vec<Value>>,
+}
+
+impl LogicUnitHistoryStore {
+    pub fn new(path: PathBuf, max_entries: usize) -> Self {
+        let entries = Self::load_existing(&path, max_entries);
+        Self {
+            path,
+            max_entries: max_entries.max(1),
+            inner: Mutex::new(entries),
+        }
+    }
+
+    fn load_existing(path: &Path, max_entries: usize) -> Vec<Value> {
+        let mut items: Vec<Value> = Vec::new();
+        match std::fs::read(path) {
+            Ok(bytes) => match serde_json::from_slice::<Value>(&bytes) {
+                Ok(raw) => {
+                    let array = raw
+                        .get("items")
+                        .and_then(Value::as_array)
+                        .cloned()
+                        .or_else(|| raw.as_array().cloned())
+                        .unwrap_or_default();
+                    for entry in array.into_iter().filter_map(Self::sanitize_entry) {
+                        items.push(entry);
+                        if items.len() >= max_entries {
+                            break;
+                        }
+                    }
+                }
+                Err(err) => warn!(
+                    target: "training",
+                    error = %err,
+                    path = %path.display(),
+                    "failed to parse logic history store; starting empty"
+                ),
+            },
+            Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+            Err(err) => warn!(
+                target: "training",
+                error = %err,
+                path = %path.display(),
+                "failed to load logic history store"
+            ),
+        }
+        items
+    }
+
+    fn sanitize_entry(entry: Value) -> Option<Value> {
+        let obj = entry.as_object()?;
+        let kind = obj.get("kind")?.as_str()?.to_string();
+        if !kind.starts_with("logic.unit.") {
+            return None;
+        }
+        let time = obj
+            .get("time")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        let payload = obj.get("payload").cloned().unwrap_or_else(|| json!({}));
+        let mut clean = serde_json::Map::new();
+        clean.insert("kind".into(), Value::String(kind));
+        if !time.is_empty() {
+            clean.insert("time".into(), Value::String(time));
+        }
+        clean.insert("payload".into(), payload);
+        Some(Value::Object(clean))
+    }
+
+    async fn persist(&self, snapshot: &[Value]) -> std::io::Result<()> {
+        if let Some(parent) = self.path.parent() {
+            afs::create_dir_all(parent).await?;
+        }
+        let body = serde_json::to_vec_pretty(&json!({ "items": snapshot }))
+            .map_err(std::io::Error::other)?;
+        afs::write(&self.path, body).await
+    }
+
+    async fn append_entry(&self, entry: Value) -> std::io::Result<()> {
+        let mut guard = self.inner.lock().await;
+        guard.insert(0, entry);
+        if guard.len() > self.max_entries {
+            guard.truncate(self.max_entries);
+        }
+        let snapshot = guard.clone();
+        drop(guard);
+        if let Err(err) = self.persist(&snapshot).await {
+            warn!(
+                target: "training",
+                error = %err,
+                path = %self.path.display(),
+                "failed to persist logic history"
+            );
+            return Err(err);
+        }
+        Ok(())
+    }
+
+    pub async fn append_envelope(&self, env: &arw_events::Envelope) -> std::io::Result<()> {
+        if !env.kind.starts_with("logic.unit.") {
+            return Ok(());
+        }
+        let entry = json!({
+            "time": env.time.clone(),
+            "kind": env.kind.clone(),
+            "payload": env.payload.clone(),
+        });
+        self.append_entry(entry).await
+    }
+
+    pub async fn append_custom(
+        &self,
+        kind: &str,
+        payload: Value,
+        time: Option<String>,
+    ) -> std::io::Result<()> {
+        if !kind.starts_with("logic.unit.") {
+            return Ok(());
+        }
+        let entry = json!({
+            "time": time.unwrap_or_else(|| chrono::Utc::now().to_rfc3339()),
+            "kind": kind,
+            "payload": payload,
+        });
+        self.append_entry(entry).await
+    }
+
+    pub async fn snapshot(&self, offset: usize, limit: usize) -> (Vec<Value>, usize) {
+        let guard = self.inner.lock().await;
+        let total = guard.len();
+        let start = offset.min(total);
+        let end = (start + limit).min(total);
+        (guard[start..end].to_vec(), total)
+    }
+
+    pub async fn recent(&self, limit: usize) -> Vec<Value> {
+        self.snapshot(0, limit).await.0
+    }
 }
 
 fn compact_options(value: Value) -> Value {
@@ -253,10 +408,40 @@ fn summarize_feedback(feedback: FeedbackState) -> Value {
     })
 }
 
+pub(crate) fn start_logic_history_recorder(state: AppState) -> crate::tasks::TaskHandle {
+    let bus = state.bus();
+    let store = state.logic_history();
+    crate::tasks::spawn_supervised("training.logic_history", move || {
+        let mut rx = bus.subscribe_filtered(
+            vec![
+                topics::TOPIC_LOGICUNIT_APPLIED.to_string(),
+                topics::TOPIC_LOGICUNIT_REVERTED.to_string(),
+                topics::TOPIC_LOGICUNIT_INSTALLED.to_string(),
+                topics::TOPIC_LOGICUNIT_SUGGESTED.to_string(),
+            ],
+            Some(128),
+        );
+        let store = store.clone();
+        async move {
+            while let Ok(env) = rx.recv().await {
+                if let Err(err) = store.append_envelope(&env).await {
+                    warn!(
+                        target: "training",
+                        error = %err,
+                        "failed to record logic unit history"
+                    );
+                }
+            }
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::feedback::{FeedbackSignal, Suggestion};
+    use arw_events::Envelope;
+    use tempfile::tempdir;
 
     #[test]
     fn compact_options_drops_null_entries() {
@@ -344,5 +529,40 @@ mod tests {
             summary["suggestions"]["sample"].as_array().unwrap().len(),
             3
         );
+    }
+
+    #[tokio::test]
+    async fn logic_history_store_persists_entries() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("logic_history.json");
+        let store = LogicUnitHistoryStore::new(path.clone(), 3);
+        let env = Envelope {
+            time: "2024-11-19T10:00:00Z".into(),
+            kind: "logic.unit.applied".into(),
+            payload: json!({"id": "lu-1", "job_id": "job-1"}),
+            policy: None,
+            ce: None,
+        };
+        store.append_envelope(&env).await.expect("append env");
+        store
+            .append_custom(
+                "logic.unit.reverted",
+                json!({"snapshot_id": "snap-1"}),
+                None,
+            )
+            .await
+            .expect("append custom");
+
+        let (recent, total) = store.snapshot(0, 5).await;
+        assert_eq!(total, 2);
+        assert_eq!(recent.len(), 2);
+        assert_eq!(recent[0]["kind"], json!("logic.unit.reverted"));
+        assert_eq!(recent[1]["kind"], json!("logic.unit.applied"));
+
+        let reloaded = LogicUnitHistoryStore::new(path, 5);
+        let (again, total_again) = reloaded.snapshot(0, 5).await;
+        assert_eq!(total_again, 2);
+        assert_eq!(again.len(), 2);
+        assert_eq!(again[0]["kind"], json!("logic.unit.reverted"));
     }
 }

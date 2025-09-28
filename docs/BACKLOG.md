@@ -52,7 +52,7 @@ Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143033-0009] Training Park: dials for diversity/recency/compression; recall‑risk and coverage meters — todo
 - [Pack: Research] [t-250918120201-tp01] Training telemetry read-models in `arw-server` (context/memory/tool success stats) powering Training Park — doing (baseline snapshot live; expanding coverage)
 - [Pack: Research] [t-250918120205-tp02] Launcher Training Park window: replace stub UI with live metrics + control bindings — plan
-- [Pack: Research] Context telemetry guardrails: add CI assertions for `context.recall.risk`/`context.coverage`, capture budgets in docs, and publish a verification checklist — todo
+- [Pack: Research] Context telemetry guardrails: add CI assertions for `context.recall.risk`/`context.coverage`, capture budgets in docs, and publish a verification checklist — done (tests + docs + checklist)
 
 UI Coherence
 - [Pack: Collaboration] Universal right‑sidecar across Hub/Chat/Training; subscribe once to `/events` — done (initial lanes)

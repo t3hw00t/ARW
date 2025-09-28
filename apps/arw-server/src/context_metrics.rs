@@ -1,5 +1,6 @@
 use arw_topics as topics;
 use serde_json::{json, Number, Value};
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 const REPLAY_DEPTH: usize = 128;
@@ -17,6 +18,8 @@ pub(crate) fn snapshot(bus: &arw_events::Bus) -> Value {
     let mut recall_score_total = 0.0f64;
     let mut recall_samples = 0usize;
     let mut recall_at_risk = 0usize;
+    let mut recall_slot_stats: BTreeMap<String, SlotStats> = BTreeMap::new();
+    let mut coverage_slot_reasons: BTreeMap<String, u64> = BTreeMap::new();
 
     for env in replay.iter().rev() {
         match env.kind.as_str() {
@@ -32,6 +35,9 @@ pub(crate) fn snapshot(bus: &arw_events::Bus) -> Value {
                 if let Some(reasons) = sanitized.get("reasons").and_then(Value::as_array) {
                     for reason in reasons.iter().filter_map(Value::as_str) {
                         *coverage_reasons.entry(reason.to_string()).or_default() += 1;
+                        if let Some(slot) = reason.strip_prefix("slot_underfilled:") {
+                            *coverage_slot_reasons.entry(slot.to_string()).or_default() += 1;
+                        }
                     }
                 }
                 if coverage_latest.is_none() {
@@ -60,6 +66,27 @@ pub(crate) fn snapshot(bus: &arw_events::Bus) -> Value {
                         recall_samples += 1;
                     }
                 }
+                if let Some(components) = sanitized
+                    .get("components")
+                    .and_then(|c| c.get("slots"))
+                    .and_then(Value::as_object)
+                {
+                    for (slot, value) in components {
+                        if let Some(gap) = value.as_f64() {
+                            if !gap.is_finite() {
+                                continue;
+                            }
+                            let stats = recall_slot_stats
+                                .entry(slot.to_string())
+                                .or_insert_with(SlotStats::default);
+                            stats.sum += gap;
+                            stats.count += 1;
+                            if gap > stats.max {
+                                stats.max = gap;
+                            }
+                        }
+                    }
+                }
                 if recall_latest.is_none() {
                     recall_latest = Some(sanitized.clone());
                 }
@@ -85,6 +112,23 @@ pub(crate) fn snapshot(bus: &arw_events::Bus) -> Value {
         reason_counts.truncate(RECENT_LIMIT);
     }
 
+    let mut slot_reason_counts: Vec<Value> = coverage_slot_reasons
+        .into_iter()
+        .map(|(slot, count)| json!({"slot": slot, "count": count}))
+        .collect();
+    slot_reason_counts.sort_by(|a, b| {
+        let count_b = b["count"].as_u64().unwrap_or(0);
+        let count_a = a["count"].as_u64().unwrap_or(0);
+        count_b.cmp(&count_a).then_with(|| {
+            let slot_a = a["slot"].as_str().unwrap_or("");
+            let slot_b = b["slot"].as_str().unwrap_or("");
+            slot_a.cmp(slot_b)
+        })
+    });
+    if slot_reason_counts.len() > RECENT_LIMIT {
+        slot_reason_counts.truncate(RECENT_LIMIT);
+    }
+
     let coverage_section = coverage_latest
         .map(|latest| {
             let total = coverage_recent.len();
@@ -104,9 +148,44 @@ pub(crate) fn snapshot(bus: &arw_events::Bus) -> Value {
             if !reason_counts.is_empty() {
                 obj.insert("top_reasons".into(), Value::Array(reason_counts));
             }
+            if !slot_reason_counts.is_empty() {
+                obj.insert("top_slots".into(), Value::Array(slot_reason_counts.clone()));
+            }
             Value::Object(obj)
         })
         .unwrap_or(Value::Null);
+
+    let mut top_slots: Vec<Value> = recall_slot_stats
+        .into_iter()
+        .filter_map(|(slot, stats)| {
+            if stats.count == 0 {
+                return None;
+            }
+            let avg = stats.sum / stats.count as f64;
+            Number::from_f64(avg).map(|avg_num| {
+                json!({
+                    "slot": slot,
+                    "avg_gap": avg_num,
+                    "max_gap": stats.max,
+                    "samples": stats.count,
+                })
+            })
+        })
+        .collect();
+    top_slots.sort_by(|a, b| {
+        let left = a["avg_gap"].as_f64().unwrap_or(0.0);
+        let right = b["avg_gap"].as_f64().unwrap_or(0.0);
+        let order = right.partial_cmp(&left).unwrap_or(Ordering::Equal);
+        if order != Ordering::Equal {
+            return order;
+        }
+        let slot_a = a["slot"].as_str().unwrap_or("");
+        let slot_b = b["slot"].as_str().unwrap_or("");
+        slot_a.cmp(slot_b)
+    });
+    if top_slots.len() > RECENT_LIMIT {
+        top_slots.truncate(RECENT_LIMIT);
+    }
 
     let recall_section = recall_latest
         .map(|latest| {
@@ -146,6 +225,9 @@ pub(crate) fn snapshot(bus: &arw_events::Bus) -> Value {
             if !level_counts.is_empty() {
                 obj.insert("levels".into(), Value::Array(level_counts));
             }
+            if !top_slots.is_empty() {
+                obj.insert("top_slots".into(), Value::Array(top_slots.clone()));
+            }
             Value::Object(obj)
         })
         .unwrap_or(Value::Null);
@@ -161,6 +243,13 @@ pub(crate) fn snapshot(bus: &arw_events::Bus) -> Value {
         "recall_risk": recall_section,
         "assembled": assembled_latest,
     })
+}
+
+#[derive(Default)]
+struct SlotStats {
+    sum: f64,
+    count: u64,
+    max: f64,
 }
 
 fn sanitize_coverage_event(env: &arw_events::Envelope) -> Value {
@@ -365,7 +454,7 @@ mod tests {
             topics::TOPIC_CONTEXT_COVERAGE,
             &json!({
                 "needs_more": true,
-                "reasons": ["below_target_limit"],
+                "reasons": ["below_target_limit", "slot_underfilled:instructions"],
                 "summary": {"selected": 2},
                 "spec": {"lanes": ["semantic"], "limit": 8}
             }),
@@ -376,7 +465,10 @@ mod tests {
                 "score": 0.65,
                 "level": "medium",
                 "at_risk": true,
-                "components": {"coverage_shortfall": 0.35},
+                "components": {
+                    "coverage_shortfall": 0.35,
+                    "slots": {"instructions": 0.9, "analysis": 0.4}
+                },
                 "summary": {"selected": 2},
                 "spec": {"lanes": ["semantic"], "limit": 8},
                 "reasons": ["below_target_limit"],
@@ -410,6 +502,15 @@ mod tests {
             context["recall_risk"]["levels"][0]["level"],
             json!("medium")
         );
+        assert_eq!(
+            context["recall_risk"]["top_slots"][0]["slot"],
+            json!("instructions")
+        );
+        assert!(context["coverage"]["top_slots"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|slot| slot["slot"] == json!("instructions")));
         assert!(context["assembled"].is_object());
         assert_eq!(context["assembled"]["lanes"], json!(["semantic"]));
     }

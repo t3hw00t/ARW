@@ -138,6 +138,7 @@ pub(crate) mod paths {
     pub const STATE_RESEARCH_WATCHER: &str = "/state/research_watcher";
     pub const STATE_STAGING_ACTIONS: &str = "/state/staging/actions";
     pub const STATE_TRAINING_TELEMETRY: &str = "/state/training/telemetry";
+    pub const STATE_TRAINING_ACTIONS: &str = "/state/training/actions";
     pub const STATE_RUNTIME_MATRIX: &str = "/state/runtime_matrix";
     pub const STATE_RUNTIME_SUPERVISOR: &str = "/state/runtime_supervisor";
     pub const STATE_TASKS: &str = "/state/tasks";
@@ -782,6 +783,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
     builder.route_get(
         paths::STATE_TRAINING_TELEMETRY,
         api::state::state_training_telemetry,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::STATE_TRAINING_ACTIONS,
+        api::state::state_training_actions,
         Some(Stability::Experimental),
     );
     builder.route_post(

@@ -1,5 +1,5 @@
 use crate::{coverage, working_set, AppState};
-use metrics::{counter, histogram};
+use metrics::{counter, gauge, histogram};
 use serde_json::{json, Map, Number, Value};
 use std::collections::HashSet;
 use std::future::Future;
@@ -408,8 +408,32 @@ fn format_join_error(join_err: JoinError) -> String {
 mod tests {
     use super::*;
     use crate::working_set::{WorkingSet, WorkingSetSpec, WorkingSetSummary};
+    use crate::AppState;
+    use arw_policy::PolicyEngine;
+    use arw_wasi::ToolHost;
     use serde_json::json;
     use std::collections::{BTreeMap, HashSet};
+    use std::sync::Arc;
+    use tempfile::tempdir;
+    use tokio::sync::Mutex as AsyncMutex;
+
+    async fn build_state(
+        path: &std::path::Path,
+        env_guard: &mut crate::test_support::env::EnvGuard,
+    ) -> AppState {
+        env_guard.set("ARW_DEBUG", "1");
+        crate::util::reset_state_dir_for_tests();
+        env_guard.set("ARW_STATE_DIR", path.display().to_string());
+        let bus = arw_events::Bus::new_with_replay(16, 16);
+        let kernel = arw_kernel::Kernel::open(path).expect("init kernel");
+        let policy = PolicyEngine::load_from_env();
+        let policy_arc = Arc::new(AsyncMutex::new(policy));
+        let host: Arc<dyn ToolHost> = Arc::new(arw_wasi::NoopHost);
+        AppState::builder(bus, kernel, policy_arc, host, true)
+            .with_sse_capacity(16)
+            .build()
+            .await
+    }
 
     fn base_spec() -> WorkingSetSpec {
         WorkingSetSpec {
@@ -469,6 +493,8 @@ mod tests {
         spec.lanes = vec!["analysis".into(), "docs".into()];
         spec.slot_budgets = slot_budgets.clone();
         spec.project = Some("alpha".into());
+        spec.query = Some("how to seed".into());
+        spec.normalize();
 
         let event = build_context_recall_risk_payload(0, &spec, &summary, &verdict, None, 42.0);
         assert!(event.score >= 0.74 && event.score <= 0.76);
@@ -489,6 +515,71 @@ mod tests {
             payload["spec"]["slot_budgets"].as_object().unwrap().len(),
             1
         );
+        assert_eq!(payload["components"]["slots"]["instructions"], json!(1.0));
+        assert_eq!(payload["spec"]["slot_budgets"]["instructions"], json!(2));
+        assert_eq!(payload["query"], json!("how to seed"));
+        assert_eq!(payload["spec"]["query_provided"], json!(true));
+        assert_eq!(payload["spec"]["project"], json!("alpha"));
+        assert_eq!(payload["duration_ms"], json!(42.0));
+    }
+
+    #[test]
+    fn coverage_payload_captures_slot_budgets_and_metadata() {
+        let mut lane_counts = BTreeMap::new();
+        lane_counts.insert("docs".to_string(), 1usize);
+        let mut slot_counts = BTreeMap::new();
+        slot_counts.insert("instructions".to_string(), 0usize);
+        let mut slot_budgets = BTreeMap::new();
+        slot_budgets.insert("instructions".to_string(), 2usize);
+        let summary = WorkingSetSummary {
+            target_limit: 4,
+            lanes_requested: 2,
+            selected: 1,
+            avg_cscore: 0.35,
+            max_cscore: 0.45,
+            min_cscore: 0.6,
+            threshold_hits: 0,
+            total_candidates: 5,
+            lane_counts,
+            slot_counts: slot_counts.clone(),
+            slot_budgets: slot_budgets.clone(),
+            min_score: 0.6,
+            scorer: "mmrd".into(),
+        };
+        let ws = working_set_with_summary(summary.clone());
+        let verdict = coverage::assess(&ws);
+
+        let mut spec = base_spec();
+        spec.lanes = vec!["analysis".into(), "docs".into()];
+        spec.slot_budgets = slot_budgets.clone();
+        spec.project = Some("project-1".into());
+        spec.query = Some("seed question".into());
+        spec.normalize();
+
+        let corr = "episode-1".to_string();
+        let payload =
+            build_context_coverage_payload(0, &spec, &summary, &verdict, Some(&corr), 150.0);
+        assert_eq!(payload["iteration"], json!(0));
+        assert_eq!(payload["needs_more"], json!(true));
+        assert!(payload["reasons"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|r| r == "slot_underfilled:instructions"));
+        assert_eq!(payload["corr_id"], json!("episode-1"));
+        assert_eq!(payload["duration_ms"], json!(150.0));
+        assert_eq!(payload["project"], json!("project-1"));
+        assert_eq!(payload["query"], json!("seed question"));
+        assert_eq!(payload["spec"]["query_provided"], json!(true));
+        assert_eq!(
+            payload["summary"]["slots"]["counts"]["instructions"],
+            json!(0)
+        );
+        assert_eq!(
+            payload["summary"]["slots"]["budgets"]["instructions"],
+            json!(2)
+        );
+        assert_eq!(payload["spec"]["slot_budgets"]["instructions"], json!(2));
     }
 
     #[test]
@@ -528,6 +619,84 @@ mod tests {
         let mut lanes = next.lanes.clone();
         lanes.sort();
         assert_eq!(lanes, vec!["analysis", "code", "docs"]);
+    }
+
+    #[tokio::test]
+    async fn stream_emitter_matches_summary_payloads() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let mut spec = WorkingSetSpec {
+            query: Some("demo".into()),
+            embed: None,
+            lanes: crate::working_set::default_lanes(),
+            limit: crate::working_set::default_limit(),
+            expand_per_seed: crate::working_set::default_expand_per_seed(),
+            diversity_lambda: crate::working_set::default_diversity_lambda(),
+            min_score: crate::working_set::default_min_score(),
+            project: None,
+            lane_bonus: crate::working_set::default_lane_bonus(),
+            scorer: Some(crate::working_set::default_scorer()),
+            expand_query: crate::working_set::default_expand_query(),
+            expand_query_top_k: crate::working_set::default_expand_query_top_k(),
+            slot_budgets: BTreeMap::new(),
+        };
+        spec.normalize();
+
+        let collected = Arc::new(AsyncMutex::new(Vec::new()));
+        let collected_clone = collected.clone();
+        let (tx, mut rx) = tokio::sync::mpsc::channel(32);
+        let emitter = Arc::new(StreamIterationEmitter::new(tx.clone()));
+        let emitter_for_closure = emitter.clone();
+
+        let result = drive_context_loop(
+            state.clone(),
+            spec,
+            Some("stream-corr".to_string()),
+            2,
+            Some(tx.clone()),
+            true,
+            move |event| {
+                let collected = collected_clone.clone();
+                let emitter = emitter_for_closure.clone();
+                async move {
+                    if let ContextIterationEvent::Summary { payload, .. } = &event {
+                        collected.lock().await.push(payload.clone());
+                    }
+                    emitter.handle(event).await;
+                }
+            },
+        )
+        .await;
+
+        if let Some(err) = result.error {
+            panic!("context loop should succeed: {}", err.detail);
+        }
+        let summary_payloads = collected.lock().await.clone();
+        assert!(
+            !summary_payloads.is_empty(),
+            "expected at least one summary event"
+        );
+
+        drop(emitter);
+        drop(tx);
+
+        let mut streamed_payloads = Vec::new();
+        while let Some(ev) = rx.recv().await {
+            if ev.kind == topics::TOPIC_WORKING_SET_ITERATION_SUMMARY {
+                streamed_payloads.push(ev.payload);
+            }
+        }
+
+        assert_eq!(
+            summary_payloads.len(),
+            streamed_payloads.len(),
+            "streamed summary count should match collector",
+        );
+        for (summary, streamed) in summary_payloads.iter().zip(streamed_payloads.iter()) {
+            assert_eq!(summary, streamed);
+        }
     }
 }
 
@@ -578,6 +747,34 @@ fn build_context_coverage_payload(
     corr_id: Option<&String>,
     duration_ms: f64,
 ) -> Value {
+    for reason in verdict.reasons.iter() {
+        if let Some(slot) = reason.strip_prefix("slot_underfilled:") {
+            counter!(
+                "arw_context_slot_underfilled_total",
+                1,
+                "slot" => slot.to_string(),
+            );
+        }
+    }
+    for (slot, budget) in summary.slot_budgets.iter() {
+        if *budget == 0 {
+            continue;
+        }
+        let have = summary
+            .slot_counts
+            .get(slot)
+            .copied()
+            .unwrap_or(0)
+            .min(*budget);
+        let denom = (*budget).min(summary.selected.max(1)).max(1) as f64;
+        let ratio = (have as f64 / denom).clamp(0.0, 1.0);
+        gauge!(
+            "arw_context_slot_fill_ratio",
+            ratio,
+            "slot" => slot.clone(),
+        );
+    }
+
     let mut payload = Map::new();
     payload.insert("iteration".into(), json!(iteration));
     payload.insert("needs_more".into(), json!(verdict.needs_more));
@@ -655,6 +852,16 @@ fn build_context_recall_risk_payload(
             .min(*budget);
         let gap = ((*budget as f64 - have as f64) / *budget as f64).clamp(0.0, 1.0);
         slot_gap = slot_gap.max(gap);
+        gauge!(
+            "arw_context_slot_gap_latest",
+            gap,
+            "slot" => slot.clone(),
+        );
+        histogram!(
+            "arw_context_slot_gap",
+            gap,
+            "slot" => slot.clone(),
+        );
         slot_breakdown.insert(slot.clone(), json_number(gap));
     }
     if slot_breakdown.is_empty() {

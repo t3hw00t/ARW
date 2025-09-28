@@ -80,8 +80,64 @@ Implementation notes (ARW)
 - Compression: background job to summarize episodes and roll up entities; write summaries to mounts with provenance.
 - Failure detectors: emit `context.recall.risk` and `context.coverage` events; surface in UI and adjust next‑turn retrieval.
   - `context.recall.risk` emits a normalized `score` (`0.0–1.0`), a coarse `level` (`low`/`medium`/`high`), and component gaps (`coverage_shortfall`, `lane_gap`, `slot_gap`, `quality_gap`) so downstream dashboards can highlight _why_ recall may be at risk. Each event carries the trimmed spec/summary snapshot plus project/query metadata for cross-linking back to the originating run.
+    ```json
+    {
+      "kind": "context.recall.risk",
+      "score": 0.74,
+      "level": "high",
+      "at_risk": true,
+      "components": {
+        "coverage_shortfall": 0.625,
+        "lane_gap": 0.5,
+        "slot_gap": 1.0,
+        "slots": {
+          "instructions": 1.0
+        },
+        "quality_gap": 0.8
+      },
+      "selected_ratio": 0.375,
+      "spec": {
+        "limit": 8,
+        "lanes": ["analysis", "docs"],
+        "slot_budgets": {
+          "instructions": 2
+        }
+      },
+      "summary": {
+        "slots": {
+          "counts": { "instructions": 0 },
+          "budgets": { "instructions": 2 }
+        }
+      },
+      "project": "alpha",
+      "query": "how to seed"
+    }
+    ```
   - `context.coverage` keeps the full verdict + reasons so refinement loops can auto-adjust the next iteration while Training/Hub surfaces show the recent history.
-- The `context_metrics` read-model tails these events, delivering a ready-to-render payload (coverage verdicts, recall risk rollups, latest assembled snapshot) so SSE dashboards don’t need to replay the hourly journal window.
+    ```json
+    {
+      "kind": "context.coverage",
+      "iteration": 0,
+      "needs_more": true,
+      "reasons": ["slot_underfilled:instructions", "below_target_limit"],
+      "summary": {
+        "slots": {
+          "counts": { "instructions": 0 },
+          "budgets": { "instructions": 2 }
+        }
+      },
+      "spec": {
+        "limit": 8,
+        "slot_budgets": {
+          "instructions": 2
+        }
+      },
+      "project": "alpha",
+      "query": "how to seed",
+      "duration_ms": 150.0
+    }
+    ```
+- The `context_metrics` read-model tails these events, delivering a ready-to-render payload (coverage verdicts, recall risk rollups, latest assembled snapshot) so SSE dashboards don’t need to replay the hourly journal window. It now aggregates slot gaps (`coverage.top_slots`, `recall_risk.top_slots`) so Training Park and other surfaces can call out which slots fall behind across iterations.
 - Telemetry: publish `working_set.*` events (started/seed/expanded/selected/completed/iteration.summary/error) on the unified bus with `iteration`, `project`, `query`, and optional `corr_id` so `/events` listeners stay aligned with SSE streams. Every `working_set.iteration.summary` carries the spec snapshot plus a `coverage` object (`needs_more`, `reasons`) whether the client streamed or waited for the synchronous response.
 - Iteration summaries append `next_spec` when a follow-up pass is queued so downstream planners can anticipate the new lane mix, limits, or scoring knobs before the next CRAG step begins.
 - Long‑context: add an optional merge step in Recipes; distill back into beliefs/summaries after use.

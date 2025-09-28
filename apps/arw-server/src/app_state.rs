@@ -9,7 +9,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     capsule_guard, chat, cluster, experiments, feedback, governor, metrics, models, runtime,
-    tool_cache,
+    tool_cache, training,
 };
 
 pub(crate) type Policy = PolicyEngine;
@@ -39,6 +39,7 @@ pub(crate) struct AppState {
     capsules: Arc<capsule_guard::CapsuleStore>,
     chat: Arc<chat::ChatState>,
     runtime: Arc<runtime::RuntimeRegistry>,
+    logic_history: Arc<training::LogicUnitHistoryStore>,
 }
 
 impl AppState {
@@ -64,6 +65,7 @@ impl AppState {
         capsules: Arc<capsule_guard::CapsuleStore>,
         chat: Arc<chat::ChatState>,
         runtime: Arc<runtime::RuntimeRegistry>,
+        logic_history: Arc<training::LogicUnitHistoryStore>,
     ) -> Self {
         Self {
             bus,
@@ -86,6 +88,7 @@ impl AppState {
             capsules,
             chat,
             runtime,
+            logic_history,
         }
     }
 
@@ -166,6 +169,10 @@ impl AppState {
         self.runtime.clone()
     }
 
+    pub fn logic_history(&self) -> Arc<training::LogicUnitHistoryStore> {
+        self.logic_history.clone()
+    }
+
     pub fn config_state(&self) -> Arc<Mutex<serde_json::Value>> {
         self.config_state.clone()
     }
@@ -205,6 +212,7 @@ pub(crate) struct AppStateBuilder {
     capsules: Option<Arc<capsule_guard::CapsuleStore>>,
     chat: Option<Arc<chat::ChatState>>,
     runtime: Option<Arc<runtime::RuntimeRegistry>>,
+    logic_history: Option<Arc<training::LogicUnitHistoryStore>>,
 }
 
 impl AppState {
@@ -237,6 +245,7 @@ impl AppState {
             capsules: None,
             chat: None,
             runtime: None,
+            logic_history: None,
         }
     }
 }
@@ -329,6 +338,14 @@ impl AppStateBuilder {
         self
     }
 
+    pub(crate) fn with_logic_history(
+        mut self,
+        store: Arc<training::LogicUnitHistoryStore>,
+    ) -> Self {
+        self.logic_history = Some(store);
+        self
+    }
+
     pub(crate) async fn build(self) -> AppState {
         let config_state = self
             .config_state
@@ -398,6 +415,12 @@ impl AppStateBuilder {
         let runtime_registry = self
             .runtime
             .unwrap_or_else(|| Arc::new(runtime::RuntimeRegistry::new(self.bus.clone())));
+        let logic_history_store = self.logic_history.unwrap_or_else(|| {
+            let path = crate::util::state_dir()
+                .join("training")
+                .join("logic_history.json");
+            Arc::new(training::LogicUnitHistoryStore::new(path, 100))
+        });
 
         AppState::new(
             self.bus,
@@ -420,6 +443,7 @@ impl AppStateBuilder {
             capsules_store,
             chat_state,
             runtime_registry,
+            logic_history_store,
         )
     }
 }

@@ -399,6 +399,7 @@ async fn initialise_state(state: &AppState, kernel_enabled: bool) -> TaskManager
     tasks.extend(crate::state_observer::start(state.clone()));
     tasks.extend(crate::world::start(state.clone()));
     tasks.push(crate::distill::start(state.clone()));
+    tasks.push(crate::training::start_logic_history_recorder(state.clone()));
     tasks.push(crate::memory_hygiene::start(state.clone()));
     tasks.extend(crate::self_model::start_aggregators(state.clone()));
     tasks.extend(crate::research_watcher::start(state.clone()));

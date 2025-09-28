@@ -3470,6 +3470,54 @@
         "description": "Training telemetry snapshot."
       }
     },
+    "/state/training/actions": {
+      "get": {
+        "tags": [
+          "State"
+        ],
+        "summary": "Logic unit action history.",
+        "description": "Persistent logic unit action history (newest first).",
+        "operationId": "state_training_actions_doc",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Items to return (1-500)",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500,
+              "example": 50
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "description": "Items to skip from the newest entry",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "example": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Logic unit action history",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "401": {
+            "description": "Unauthorized"
+          }
+        }
+      }
+    },
     "/state/world": {
       "get": {
         "tags": [

@@ -808,6 +808,51 @@ pub async fn state_training_telemetry(
     Json(training::telemetry_snapshot(&state).await).into_response()
 }
 
+/// Persistent logic unit action history.
+#[utoipa::path(
+    get,
+    path = "/state/training/actions",
+    tag = "State",
+    params(
+        ("limit" = Option<usize>, Query, description = "Items to return (1-500)", example = 50),
+        ("offset" = Option<usize>, Query, description = "Items to skip from the newest entry", example = 0)
+    ),
+    responses(
+        (status = 200, description = "Logic unit action history", body = serde_json::Value),
+        (status = 401, description = "Unauthorized")
+    )
+)]
+pub async fn state_training_actions(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+) -> impl IntoResponse {
+    if !crate::admin_ok(&headers) {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
+    let limit = q
+        .get("limit")
+        .and_then(|s| s.parse::<usize>().ok())
+        .map(|n| n.clamp(1, 500))
+        .unwrap_or(50);
+    let offset = q
+        .get("offset")
+        .and_then(|s| s.parse::<usize>().ok())
+        .unwrap_or(0);
+    let (items, total) = state.logic_history().snapshot(offset, limit).await;
+    Json(json!({
+        "items": items,
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }))
+    .into_response()
+}
+
 /// Model catalog read-model.
 #[utoipa::path(
     get,

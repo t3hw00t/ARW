@@ -13,8 +13,12 @@ The goal remains: a third primary perspective for tuning instincts, memory, and 
 ## What Ships Today
 
 - Shared right-sidecar lanes (Timeline, Context, Policy, Metrics, Models) via the general SSE connection.
-- `GET /state/training/telemetry` snapshot with route stats, tool success rate, cache/gov/capsule health, and bus metrics, plus `state.read.model.patch` ids `training_metrics` and `context_metrics` for live updates.
-- Manual A/B button stub for future experiments (launcher still toast-only until UI work lands).
+- `GET /state/training/telemetry` snapshot with route stats, tool success rate, cache/gov/capsule health, and bus metrics, plus `state.read.model.patch` ids `training_metrics` and `context_metrics` for live updates. The context portion now includes aggregate slot-gap analytics (`coverage.top_slots`, `recall_risk.top_slots`) so you can spot recurring under-filled slots without diffing raw events.
+- Prometheus metrics (`arw_context_slot_gap`, `arw_context_slot_gap_latest`, `arw_context_slot_fill_ratio`, `arw_context_slot_underfilled_total`) persist slot-gap trends beyond the in-memory replay window so dashboards can chart regressions over longer horizons.
+- Launcher controls submit training runs through `/orchestrator/mini_agents/start_training`, sending preset/diversity/compression hints and streaming job progress back into the results panel.
+- Job table filters allow you to focus on running/completed/failed runs, while inline details expand to show payloads captured in `/state/orchestrator/jobs`.
+- Each job exposes the suggested logic unit (if any) with buttons to dry-run patches, apply them, or hide the job locally once handled.
+- Keyboard support: use ↑/↓ to move between jobs, `Shift+A` to apply, `Shift+D` to dry-run, and press Enter to toggle details. A “Recent logic unit actions” panel records the last 10 actions inline while `/state/training/actions` streams the longer history for export/download.
 - Underlying metrics piggyback on the same collectors powering `/state/route_stats`, so telemetry remains consistent with other dashboards.
 
 ## Implementation Plan (`arw-server` + Launcher)
@@ -29,6 +33,19 @@ The goal remains: a third primary perspective for tuning instincts, memory, and 
 - Poll `GET /state/training/telemetry` for a JSON snapshot or stream the `state.read.model.patch` feeds `training_metrics` and `context_metrics` for live updates.
 - Key indicators: route latencies (`/context/assemble`, `/actions`), action success rate, bus health, cache stampede suppression, governor profile/hints, capsule lease expirations, and feedback cues—all emitted from the same telemetry endpoint powering the launcher view.
 - Context telemetry now streams `context.recall.risk` (score, level, component gaps) alongside the coverage verdicts so dashboards can surface why recall dipped without diffing raw events.
+- Jobs panel pulls `/logic-units` alongside orchestrator state so operators can review/dry-run/apply the suggested patches without leaving the launcher.
+
+### Prometheus & Grafana quickstart
+
+- Scrape the service metrics endpoint (`/metrics`) and include the new gauges/histograms:
+  - `arw_context_slot_gap_bucket`, `arw_context_slot_gap_latest` — per-slot recall gap distribution & latest gap.
+  - `arw_context_slot_fill_ratio` — normalised coverage fill ratio per slot.
+  - `arw_context_slot_underfilled_total` — counter of `slot_underfilled:*` reasons emitted by the coverage loop.
+- Example Grafana query to chart the worst slot gap over time:
+  ```promql
+  max_over_time(arw_context_slot_gap_latest[15m])
+  ```
+- To break down by slot, group by the `slot` label (`topk(5, arw_context_slot_gap_latest)`); combine with the telemetry snapshot to link gaps back to specific projects and goals.
 
 ### Snapshot Fields (Current)
 
@@ -44,7 +61,7 @@ The goal remains: a third primary perspective for tuning instincts, memory, and 
 | `capsules` | `count`, `expiring_soon` (≤5m), `expired`, `sample` (sanitized view with id/version/lease fields, max 5 items). |
 | `feedback` | `auto_apply`, signal count + recent five, suggestion count + three-sample. |
 | `compatibility` | Legacy gauges (e.g., capsule header sightings). |
-| `context` | Latest coverage verdict (needs_more, reasons, summary/spec) plus recall-risk rollups (score, level distribution, at-risk ratio), top gaps, and the most recent assembled snapshot (counts + final spec). Mirrors the `context_metrics` read-model so SSE dashboards and the launcher stay aligned without recomputing the journal replay. |
+| `context` | Latest coverage verdict (needs_more, reasons, summary/spec), aggregated slot-gap analytics (`top_slots` identifies recurring `slot_underfilled:*` reasons), recall-risk rollups (score, level distribution, average/max slot gaps), and the most recent assembled snapshot (counts + final spec). Mirrors the `context_metrics` read-model so SSE dashboards and the launcher stay aligned without recomputing the journal replay. |
 
 ## Optimization & Refactor Notes
 

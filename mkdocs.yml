@@ -120,6 +120,7 @@ nav:
       - Interactive Performance Bench: guide/interactive_bench.md
       - Performance Presets: guide/performance_presets.md
       - Training Park: guide/training_park.md
+      - Context Telemetry Checklist: guide/context_telemetry_checklist.md
       - Admin Endpoints: guide/admin_endpoints.md
       - Troubleshooting: guide/troubleshooting.md
   - Reference:

@@ -7,6 +7,21 @@
     <link rel="stylesheet" href="tokens.css" />
     <link rel="stylesheet" href="ui-kit.css" />
     <link rel="stylesheet" href="common.css" />
+    <style>
+      .metric-block { display: grid; gap: var(--sp2); margin-bottom: var(--sp4); }
+      .metric-block:last-of-type { margin-bottom: 0; }
+      .metric-block h4 { margin: 0; font-size: 1rem; }
+      .metric-list { margin: 0; padding-left: 1.25rem; }
+      .metric-list li { margin: 0.15rem 0; }
+      .metric-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 8px; border-radius: 999px; border: 1px solid var(--color-line); background: linear-gradient(180deg,#ffffff,#f6f7f9); font-size: 0.9rem; }
+      .metric-pill.ok { color: var(--status-ok); border-color: rgba(16,185,129,0.35); }
+      .metric-pill.bad { color: var(--status-bad); border-color: rgba(220,38,38,0.35); }
+      .metric-label { font-weight: 600; margin-right: 6px; }
+      #contextTelemetryBody { display: grid; gap: var(--sp4); }
+      .metric-inline { margin: 0; }
+      .jobs-table tr.focused-row { outline: 2px solid rgba(var(--brand-copper-rgb), 0.6); outline-offset: 1px; background: rgba(27,179,163,0.08); }
+      .jobs-table tr:focus { outline: none; }
+    </style>
     <script src="common.js" defer></script>
     <script src="training.js" defer></script>
   </head>
@@ -26,12 +41,93 @@
         <main class="grid cols-3" role="region" aria-label="Training panels">
           <section class="card" role="region" aria-labelledby="controlsTitle">
             <h3 id="controlsTitle">Controls</h3>
-            <div class="row"><label>Preset <select><option>performance</option><option selected>balanced</option><option>power-saver</option></select></label></div>
-            <div class="row"><label>Diversity <input type="range" min="0" max="1" step="0.05"></label></div>
-            <div class="row"><label>Compression <input type="range" min="0" max="1" step="0.1"></label></div>
+            <div class="row">
+              <label for="presetSelect">Preset</label>
+              <select id="presetSelect">
+                <option value="performance">performance</option>
+                <option value="balanced" selected>balanced</option>
+                <option value="power-saver">power-saver</option>
+              </select>
+            </div>
+            <div class="row">
+              <label for="diversitySlider">Diversity</label>
+              <input id="diversitySlider" type="range" min="0" max="1" step="0.05" value="0.50" aria-describedby="diversityValue" />
+              <span id="diversityValue" class="mono">0.50</span>
+            </div>
+            <div class="row">
+              <label for="compressionSlider">Compression</label>
+              <input id="compressionSlider" type="range" min="0" max="1" step="0.1" value="0.50" aria-describedby="compressionValue" />
+              <span id="compressionValue" class="mono">0.50</span>
+            </div>
           </section>
-          <section class="card" role="region" aria-labelledby="datasetTitle"><h3 id="datasetTitle">Dataset/Tasks</h3><div class="dim">Coming soon</div></section>
-          <section class="card" role="region" aria-labelledby="resultsTitle"><h3 id="resultsTitle">Results</h3><div id="results" class="mono"></div></section>
+          <section class="card" role="region" aria-labelledby="contextTitle">
+            <div class="row" style="justify-content: space-between; align-items: center;">
+              <h3 id="contextTitle">Context Telemetry</h3>
+              <button id="refreshTelemetry" class="ghost" type="button">Refresh</button>
+            </div>
+            <p id="contextTelemetryStatus" class="dim mono">Loading…</p>
+            <div id="contextTelemetryBody" hidden>
+              <div class="metric-block" aria-live="polite">
+                <h4>Coverage</h4>
+                <span id="coverageNeedsMore" class="metric-pill">—</span>
+                <p class="metric-inline"><span class="metric-label">Needs more ratio:</span><span id="coverageRatio">—</span></p>
+                <div>
+                  <strong>Top reasons</strong>
+                  <ul id="coverageReasons" class="metric-list"></ul>
+                </div>
+                <div>
+                  <strong>Top slot gaps</strong>
+                  <ul id="coverageTopSlots" class="metric-list"></ul>
+                </div>
+              </div>
+              <div class="metric-block" aria-live="polite">
+                <h4>Recall risk</h4>
+                <p class="metric-inline"><span class="metric-label">Average score:</span><span id="recallAvgScore">—</span></p>
+                <p class="metric-inline"><span class="metric-label">At-risk ratio:</span><span id="recallAtRisk">—</span></p>
+                <div>
+                  <strong>Top slot gaps</strong>
+                  <ul id="recallTopSlots" class="metric-list"></ul>
+                </div>
+              </div>
+              <div class="metric-block" aria-live="polite">
+                <h4>Latest assembly</h4>
+                <p class="metric-inline mono" id="contextSummaryCounts">—</p>
+                <p class="metric-inline" id="contextSpecSummary">—</p>
+              </div>
+            </div>
+          </section>
+          <section class="card" role="region" aria-labelledby="resultsTitle">
+            <div class="row" style="justify-content: space-between; align-items: center;">
+              <h3 id="resultsTitle" title="↑/↓ to move • Enter to toggle details • Shift+A apply • Shift+D dry-run">Training jobs</h3>
+              <button id="refreshJobs" class="ghost" type="button">Refresh</button>
+            </div>
+            <div class="row" style="align-items: center; gap: var(--sp2);">
+              <label for="jobStatusFilter">Status</label>
+              <select id="jobStatusFilter">
+                <option value="all" selected>All</option>
+                <option value="running">Running</option>
+                <option value="completed">Completed</option>
+                <option value="queued">Queued</option>
+                <option value="failed">Failed</option>
+              </select>
+              <button id="resetDismissedJobs" class="ghost" type="button">Show hidden</button>
+            </div>
+            <p id="jobsStatus" class="dim mono">Loading…</p>
+            <div id="results" class="mono"></div>
+            <div id="logicUnitHistory" class="metric-block" aria-live="polite"></div>
+            <div class="row" style="margin-top: var(--sp2); align-items: center;">
+              <button id="exportHistory" class="ghost" type="button">Download history (JSON)</button>
+            </div>
+          </section>
+          <section class="card" role="region" aria-labelledby="shortcutsTitle">
+            <h3 id="shortcutsTitle">Keyboard shortcuts</h3>
+            <ul class="metric-list">
+              <li><strong>↑ / ↓</strong> — focus previous/next job</li>
+              <li><strong>Enter</strong> — toggle job details</li>
+              <li><strong>Shift + A</strong> — apply suggestion for focused job</li>
+              <li><strong>Shift + D</strong> — dry-run suggestion for focused job</li>
+            </ul>
+          </section>
         </main>
         <aside id="sidecar"></aside>
       </div>

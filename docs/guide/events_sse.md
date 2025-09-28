@@ -74,6 +74,16 @@ Event model
 Note: event kinds are normalized. Legacy `Models.*` forms have been removed.
 - See Explanations → Events Vocabulary for the canonical list. For source‑of‑truth topic names used by the service, see `crates/arw-topics/src/lib.rs`.
 
+Context assembly emits structured telemetry on the same bus:
+- `context.coverage` — carries `needs_more`, `reasons`, and the full summary/spec snapshots including `slots.budgets` and `slots.counts` so you can highlight under-filled budgets without rehydrating the request.
+- `context.recall.risk` — exposes the blended `score`, `level`, `components.slots`, and the spec snapshot (`slot_budgets`, `query_provided`, `project`) for dashboards that surface recall regressions.
+  ```bash
+  curl -N \
+    -H "Authorization: Bearer $ARW_ADMIN_TOKEN" \
+    "http://127.0.0.1:8091/events?prefix=context.coverage&prefix=context.recall.risk&replay=5" \
+  | jq '.kind as $k | if $k == "context.coverage" then {kind:$k,needs_more:.needs_more,reasons:.reasons,slot_counts:.summary.slots.counts,slot_budgets:.summary.slots.budgets} else {kind:$k,level:.level,components:.components,slot_budgets:.spec.slot_budgets} end'
+  ```
+
 Tips
 - Stitch episodes using `corr_id` on each event.
 - Use `?prefix=` to scope dashboards without client-side filtering cost.
