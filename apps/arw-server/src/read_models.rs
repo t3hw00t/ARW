@@ -1,5 +1,5 @@
 use chrono::{DateTime, SecondsFormat, Utc};
-use once_cell::sync::OnceCell;
+use once_cell::sync::{Lazy, OnceCell};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
@@ -13,6 +13,10 @@ const MAX_NOTES_LEN: usize = 64 * 1024;
 const MAX_TREE_DEPTH: usize = 5;
 const MAX_ENTRIES_PER_DIR: usize = 512;
 
+const METRIC_READ_MODEL_COALESCED_WAITERS: &str = "arw_read_model_coalesced_waiters";
+
+static READ_MODEL_FLIGHTS: Lazy<Singleflight> = Lazy::new(Singleflight::default);
+
 #[derive(Default)]
 struct NotesSnapshot {
     modified: Option<String>,
@@ -22,6 +26,7 @@ struct NotesSnapshot {
     truncated: bool,
 }
 
+use crate::singleflight::Singleflight;
 use crate::{metrics, tasks::TaskHandle, training, AppState};
 use arw_topics as topics;
 
@@ -275,6 +280,10 @@ where
 }
 
 pub(crate) async fn crashlog_snapshot() -> Value {
+    with_read_model_singleflight("crashlog", || async { build_crashlog_snapshot().await }).await
+}
+
+async fn build_crashlog_snapshot() -> Value {
     use tokio::io::AsyncReadExt;
     let crash_root = crate::util::state_dir().join("crash");
     let mut items = Vec::new();
@@ -344,6 +353,47 @@ pub(crate) async fn crashlog_snapshot() -> Value {
 }
 
 static READ_MODEL_CACHE: OnceCell<Mutex<HashMap<String, Value>>> = OnceCell::new();
+
+fn store_read_model_value(id: &str, value: &Value) {
+    let map = READ_MODEL_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
+    if let Ok(mut guard) = map.lock() {
+        guard.insert(id.to_string(), value.clone());
+    }
+}
+
+#[cfg(test)]
+fn remove_cached_read_model_for_test(id: &str) {
+    if let Some(map) = READ_MODEL_CACHE.get() {
+        if let Ok(mut guard) = map.lock() {
+            guard.remove(id);
+        }
+    }
+}
+
+async fn with_read_model_singleflight<F, Fut>(id: &'static str, builder: F) -> Value
+where
+    F: Fn() -> Fut,
+    Fut: Future<Output = Value>,
+{
+    let mut guard = READ_MODEL_FLIGHTS.begin(id);
+    if guard.is_leader() {
+        let value = builder().await;
+        store_read_model_value(id, &value);
+        guard.notify_waiters();
+        return value;
+    }
+
+    ::metrics::counter!(METRIC_READ_MODEL_COALESCED_WAITERS, 1);
+    guard.wait().await;
+    if let Some(value) = cached_read_model(id) {
+        return value;
+    }
+
+    let value = builder().await;
+    store_read_model_value(id, &value);
+    guard.notify_waiters();
+    value
+}
 
 pub(crate) fn publish_read_model_patch(bus: &arw_events::Bus, id: &str, value: &Value) {
     let map = READ_MODEL_CACHE.get_or_init(|| Mutex::new(HashMap::new()));
@@ -823,8 +873,11 @@ async fn collect_tree(
 }
 
 pub(crate) async fn projects_snapshot() -> Value {
-    let root_dir = projects_root_dir();
-    projects_snapshot_at(&root_dir).await
+    with_read_model_singleflight("projects", || async {
+        let root_dir = projects_root_dir();
+        projects_snapshot_at(&root_dir).await
+    })
+    .await
 }
 
 pub(crate) async fn projects_snapshot_at(root_dir: &Path) -> Value {
@@ -899,17 +952,24 @@ pub(crate) async fn projects_snapshot_at(root_dir: &Path) -> Value {
 }
 
 pub(crate) async fn leases_snapshot(state: &AppState) -> Value {
-    let items = state
-        .kernel()
-        .list_leases_async(200)
-        .await
-        .unwrap_or_default();
-    let generated = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
-    json!({
-        "generated": generated,
-        "count": items.len(),
-        "items": items,
+    let state = state.clone();
+    with_read_model_singleflight("policy_leases", move || {
+        let state = state.clone();
+        async move {
+            let items = state
+                .kernel()
+                .list_leases_async(200)
+                .await
+                .unwrap_or_default();
+            let generated = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+            json!({
+                "generated": generated,
+                "count": items.len(),
+                "items": items,
+            })
+        }
     })
+    .await
 }
 
 #[cfg(test)]
@@ -921,9 +981,10 @@ mod tests {
     use arw_topics as topics;
     use json_patch::Patch;
     use serde_json::Value;
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
     use tempfile::tempdir;
-    use tokio::sync::Mutex;
+    use tokio::sync::{Mutex, Notify};
     use tokio::time::timeout;
 
     #[tokio::test]
@@ -1066,6 +1127,48 @@ mod tests {
         let (_name, _started, handle) = snappy_handle.into_inner();
         handle.abort();
         let _ = handle.await;
+    }
+
+    #[tokio::test]
+    async fn read_model_singleflight_coalesces_builders() {
+        remove_cached_read_model_for_test("test-singleflight");
+        let counter = Arc::new(AtomicUsize::new(0));
+        let started = Arc::new(AtomicUsize::new(0));
+        let ready = Arc::new(Notify::new());
+
+        async fn call(
+            counter: Arc<AtomicUsize>,
+            started: Arc<AtomicUsize>,
+            ready: Arc<Notify>,
+        ) -> Value {
+            let order = started.fetch_add(1, Ordering::SeqCst) + 1;
+            if order == 3 {
+                ready.notify_waiters();
+            }
+            super::with_read_model_singleflight("test-singleflight", || {
+                let counter = counter.clone();
+                let ready = ready.clone();
+                async move {
+                    ready.notified().await;
+                    counter.fetch_add(1, Ordering::SeqCst);
+                    serde_json::json!({"ok": true})
+                }
+            })
+            .await
+        }
+
+        let (v1, v2, v3) = tokio::join!(
+            call(counter.clone(), started.clone(), ready.clone()),
+            call(counter.clone(), started.clone(), ready.clone()),
+            call(counter.clone(), started.clone(), ready.clone()),
+        );
+
+        assert_eq!(counter.load(Ordering::SeqCst), 1);
+        assert_eq!(v1, serde_json::json!({"ok": true}));
+        assert_eq!(v1, v2);
+        assert_eq!(v1, v3);
+
+        remove_cached_read_model_for_test("test-singleflight");
     }
 
     #[test]

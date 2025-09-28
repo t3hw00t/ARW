@@ -4,7 +4,8 @@ use arw_topics as topics;
 use arw_wasi::ToolHost;
 use serde_json::{json, Value};
 
-use crate::tool_cache::{SingleflightGuard, StoreOutcome, ToolCacheHit};
+use crate::singleflight::FlightGuard;
+use crate::tool_cache::{StoreOutcome, ToolCacheHit};
 use crate::{capsule_guard, AppState};
 
 mod guardrails;
@@ -71,7 +72,7 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
     let cacheable = cache.enabled() && cache.is_cacheable(id);
     let cache_key = cacheable.then(|| cache.action_key(id, &input));
 
-    let mut flight_guard: Option<SingleflightGuard<'_>> = None;
+    let mut flight_guard: Option<FlightGuard<'_>> = None;
 
     if let Some(ref key) = cache_key {
         if let Some(hit) = cache.lookup(key).await {

@@ -42,6 +42,7 @@ mod runtime;
 mod runtime_matrix;
 mod security;
 mod self_model;
+mod singleflight;
 mod sse_cache;
 mod staging;
 mod state_observer;

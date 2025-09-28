@@ -148,7 +148,7 @@ Caching & Performance (High Priority)
 - [Kernel] [t-250913001000-1001] Llama.cpp prompt cache: set `cache_prompt: true` in requests; doc server `--prompt-cache` for persistence — in progress
 - [Kernel] [t-250913001003-1002] CAS HTTP caching: add `ETag`, `Last-Modified`, long‑lived `Cache-Control`, and 304 handling to `/admin/models/by-hash/{sha256}` — done
 - [Kernel] [t-250913001006-1003] Action Cache (MVP): wrap `tools_exec::run` with deterministic key (tool id, version, canonical JSON, env signature stub) and CAS’d outputs; Moka front with TTL; `tool.cache` events — in progress
-- [Kernel] [t-250913001009-1004] Singleflight: coalesce identical in‑flight tool runs and expensive read‑model recomputes — todo
+- [Kernel] [t-250913001009-1004] Singleflight: coalesce identical in-flight tool runs and expensive read-model recomputes — done (shared guard now covers tool cache + read-model snapshots)
 - [Kernel] [t-250913001012-1005] Read‑models SSE deltas: stream JSON Patch with `Last-Event-ID` resume; wire Debug UI to apply patches — todo
 - [Kernel] [t-250913001015-1006] Metrics: expose cache hit/miss/age, bytes/latency saved, stampede suppression rate at `/state/*` and `/metrics` — done (tool cache telemetry surfaces + Prometheus counters)
 - [Kernel] [t-250913001018-1007] Cache Policy manifest + loader: define YAML format, map to env knobs, and plan migration to config‑first overrides — done (loader applies manifest on startup with env override tracking)
