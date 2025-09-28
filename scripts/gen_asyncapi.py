@@ -35,8 +35,17 @@ def build_yaml(topics: list[str], version: str) -> str:
     lines.append("  title: \"arw-server events\"")
     lines.append(f"  version: \"{version}\"")
     lines.append("  description: \"Normalized dot.case event channels for the unified server.\"")
+    # Provide minimal contact info to satisfy linters and aid discovery
+    lines.append("  contact:")
+    lines.append("    name: \"ARW Project\"")
+    lines.append("    url: \"https://github.com/t3hw00t/ARW\"")
+    lines.append("    email: \"opensource@example.com\"")
     lines.append("  license:")
     lines.append("    name: \"MIT OR Apache-2.0\"")
+    # Top-level tags as required by lint rules
+    lines.append("tags:")
+    lines.append("  - name: \"Events\"")
+    lines.append("    description: \"Event channels emitted by the unified server.\"")
     lines.append("defaultContentType: application/json")
     lines.append("channels:")
     for topic in topics:
@@ -45,6 +54,7 @@ def build_yaml(topics: list[str], version: str) -> str:
         lines.append("    subscribe:")
         lines.append(f"      operationId: {oid}")
         lines.append(f"      summary: \"{topic} event\"")
+        lines.append(f"      description: \"Event published on '{topic}' channel.\"")
         lines.append("      message:")
         lines.append(f"        name: '{topic}'")
         lines.append("        payload:")

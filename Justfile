@@ -229,21 +229,28 @@ interfaces-index:
 
 interfaces-lint:
   if ! command -v npx >/dev/null 2>&1; then echo 'npx not found (Node). Install Node.js to lint interfaces.' >&2; exit 1; fi
-  npx spectral lint -r quality/openapi-spectral.yaml spec/openapi.yaml
-  npx spectral lint -r quality/openapi-spectral.yaml spec/asyncapi.yaml
+  # Use the official Spectral CLI package; avoid relying on a global alias
+  npx --yes @stoplight/spectral-cli lint -r quality/openapi-spectral.yaml spec/openapi.yaml
+  npx --yes @stoplight/spectral-cli lint -r quality/openapi-spectral.yaml spec/asyncapi.yaml
 
 interfaces-diff base="main":
-  if ! command -v docker >/dev/null 2>&1; then echo 'docker not found; cannot run oasdiff container' >&2; exit 1; fi
   mkdir -p /tmp/ifc
   if git show origin/{{base}}:spec/openapi.yaml >/tmp/ifc/base.yaml 2>/dev/null; then :; else echo 'missing base OpenAPI in origin/{{base}}' >&2; exit 1; fi
   cp spec/openapi.yaml /tmp/ifc/rev.yaml
-  docker run --rm -v /tmp/ifc:/tmp -w /tmp tufin/oasdiff:latest -format markdown -fail-on-breaking -base /tmp/base.yaml -revision /tmp/rev.yaml || true
+  # Prefer oasdiff in Docker when available; else fall back to openapi-diff (JSON)
+  command -v docker >/dev/null 2>&1 \
+    && docker run --rm -v /tmp/ifc:/tmp -w /tmp tufin/oasdiff:latest -format markdown -fail-on-breaking -base /tmp/base.yaml -revision /tmp/rev.yaml || \
+    ( echo 'docker missing; falling back to openapi-diff via npx (JSON only)'; \
+      python3 scripts/yaml_to_json.py /tmp/ifc/base.yaml /tmp/ifc/base.json; \
+      python3 scripts/yaml_to_json.py /tmp/ifc/rev.yaml /tmp/ifc/rev.json; \
+      npx --yes openapi-diff /tmp/ifc/base.json /tmp/ifc/rev.json || true )
 
 # Generate OpenAPI + schemas + JSON snapshot
 openapi-gen:
   cargo build --release --no-default-features -p arw-server
   OPENAPI_OUT=spec/openapi.yaml target/release/arw-server
-  python3 scripts/ensure_openapi_descriptions.py
+  # ensure_openapi_descriptions.py returns 1 when it modifies the spec; keep going
+  python3 scripts/ensure_openapi_descriptions.py || true
   python3 scripts/generate_openapi_json.py
 
 check-enums:

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-25 09:14 UTC",
+  "updated": "2025-09-28 01:51 UTC",
   "tasks": [
     {
       "id": "t-phase-a-01",
@@ -877,12 +877,12 @@
     {
       "id": "t-250914223010-ui02",
       "title": "Hub Compare: Text/JSON, Image, CSV",
-      "desc": "Add diff with Only changes/Wrap/Copy; image slider; CSV/TSV key\u2011diff with summary and copy.",
+      "desc": "Add diff with Only changes/Wrap/Copy; image slider; CSV/TSV key‑diff with summary and copy.",
       "status": "done",
       "notes": [
         {
           "time": "2025-09-14 22:31:00 UTC",
-          "text": "hub.html/js + styles; drag\u2011drop inputs; compact tables; documented in Workflow Views."
+          "text": "hub.html/js + styles; drag‑drop inputs; compact tables; documented in Workflow Views."
         }
       ],
       "updated": "2025-09-14 22:31:00 UTC",
@@ -932,7 +932,7 @@
     },
     {
       "id": "t-250914223030-ui06",
-      "title": "Command palette (Ctrl/Cmd\u2011K)",
+      "title": "Command palette (Ctrl/Cmd‑K)",
       "desc": "Open windows (Hub/Chat/Training/Debug/Events), refresh models, SSE replay, toggle focus, copy last event.",
       "status": "done",
       "notes": [
@@ -947,12 +947,12 @@
     {
       "id": "t-250914223040-ui07",
       "title": "Metrics: P95 sparkline per route",
-      "desc": "Client\u2011side short history sparkline in Metrics lane; P95 SLO color.",
+      "desc": "Client‑side short history sparkline in Metrics lane; P95 SLO color.",
       "status": "done",
       "notes": [
         {
           "time": "2025-09-14 22:36:00 UTC",
-          "text": "Sparkline added; 32\u2011point ring buffer per route; SLO=150ms."
+          "text": "Sparkline added; 32‑point ring buffer per route; SLO=150ms."
         }
       ],
       "updated": "2025-09-14 22:36:00 UTC",
@@ -966,11 +966,11 @@
       "notes": [
         {
           "time": "2025-09-14 22:37:00 UTC",
-          "text": "Hub saves focused flag + lanes; next: per\u2011project file persistence."
+          "text": "Hub saves focused flag + lanes; next: per‑project file persistence."
         },
         {
           "time": "2025-09-17 20:19:01 UTC",
-          "text": "Launcher exposes ARW.templates.save/load bound to prefs (namespaced), with debounced writes; per\u2011project overrides via get/setPrefs(ns)."
+          "text": "Launcher exposes ARW.templates.save/load bound to prefs (namespaced), with debounced writes; per‑project overrides via get/setPrefs(ns)."
         }
       ],
       "updated": "2025-09-17 20:19:01 UTC",
@@ -978,7 +978,7 @@
     },
     {
       "id": "t-250914223200-cap01",
-      "title": "Screenshot tool (OS\u2011level capture)",
+      "title": "Screenshot tool (OS‑level capture)",
       "desc": "Rust tool to capture display/region; save to .arw/screenshots; emit screenshots.captured; gate by io:screenshot.",
       "status": "done",
       "notes": [
@@ -1052,7 +1052,7 @@
     {
       "id": "t-250914223230-ui09",
       "title": "Runs: pin artifacts to compare",
-      "desc": "Enable pin\u2011to\u2011compare from runs/artifacts list in Hub; deep\u2011link compare sets.",
+      "desc": "Enable pin‑to‑compare from runs/artifacts list in Hub; deep‑link compare sets.",
       "status": "done",
       "notes": [
         {

@@ -4,7 +4,7 @@ title: Workspace Status
 
 # Workspace Status
 
-Generated: 2025-09-25 09:14 UTC
+Generated: 2025-09-28 01:51 UTC
 
 
 ## Libraries
@@ -17,6 +17,7 @@ Generated: 2025-09-25 09:14 UTC
 - **arw-wasi**: 0.1.4 — [crates/arw-wasi/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-wasi/Cargo.toml)
 - **arw-topics**: 0.1.4 — [crates/arw-topics/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/Cargo.toml)
 - **arw-heuristics**: 0.1.4 — [crates/arw-heuristics/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-heuristics/Cargo.toml)
+- **arw-runtime**: 0.1.4 — [crates/arw-runtime/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-runtime/Cargo.toml)
 - **arw-otel**: 0.1.4 — [crates/arw-otel/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-otel/Cargo.toml)
 - **arw-tauri**: 0.1.4 — [crates/arw-tauri/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/crates/arw-tauri/Cargo.toml)
 - **screenshots**: 0.8.10 — [vendor/screenshots/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/vendor/screenshots/Cargo.toml)
@@ -27,6 +28,3 @@ Generated: 2025-09-25 09:14 UTC
 - **arw-connector**: 0.1.4 — [apps/arw-connector/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/arw-connector/Cargo.toml)
 - **snappy-bench**: 0.1.4 — [apps/snappy-bench/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/snappy-bench/Cargo.toml)
 - **arw-launcher**: 0.1.4 — [apps/arw-launcher/src-tauri/Cargo.toml](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri/Cargo.toml)
-
-## Advisory watchlist
-- **GTK 0.18.x (via tauri/tray-icon/wry)** — upstream `gtk-rs` GTK3 bindings are frozen (RUSTSEC-2024-0413/0416). Track Tauri’s GTK4 migration and update when `wry` releases Linux support without the legacy crate.
