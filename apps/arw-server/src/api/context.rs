@@ -486,13 +486,11 @@ pub async fn context_rehydrate(
     let kind = req.ptr.get("kind").and_then(|v| v.as_str()).unwrap_or("");
     match kind {
         "file" => {
-            let allow_action = state
+            let decision = state
                 .policy()
-                .lock()
-                .await
                 .evaluate_action("context.rehydrate")
-                .allow;
-            if !allow_action {
+                .await;
+            if !decision.allow {
                 let has_file_lease = state
                     .kernel()
                     .find_valid_lease_async("local", "context:rehydrate:file")
@@ -599,9 +597,8 @@ pub async fn context_rehydrate(
             };
             let decision = state
                 .policy()
-                .lock()
-                .await
-                .evaluate_action("context.rehydrate.memory");
+                .evaluate_action("context.rehydrate.memory")
+                .await;
             if !decision.allow {
                 let mut required_caps: Vec<String> = Vec::new();
                 if let Some(cap) = decision.require_capability.clone() {

@@ -258,7 +258,7 @@ mod tests {
     use sha2::Digest;
     use std::{collections::HashMap, sync::Arc, time::Duration};
     use tempfile::tempdir;
-    use tokio::{sync::Mutex, time::timeout};
+    use tokio::time::timeout;
 
     async fn build_state(path: &std::path::Path, env_guard: &mut env::EnvGuard) -> AppState {
         build_state_with_kernel(path, env_guard, true).await
@@ -275,9 +275,9 @@ mod tests {
         let bus = arw_events::Bus::new_with_replay(64, 64);
         let kernel = arw_kernel::Kernel::open(path).expect("init kernel for tests");
         let policy = arw_policy::PolicyEngine::load_from_env();
-        let policy_arc = Arc::new(Mutex::new(policy));
+        let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
         let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
-        AppState::builder(bus, kernel, policy_arc, host, kernel_enabled)
+        AppState::builder(bus, kernel, policy_handle, host, kernel_enabled)
             .with_sse_capacity(64)
             .build()
             .await

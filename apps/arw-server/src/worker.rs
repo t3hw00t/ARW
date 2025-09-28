@@ -5,10 +5,10 @@ use std::time::Duration;
 use tokio::time;
 
 use crate::{
-    app_state::Policy,
     egress_log::{self, EgressRecord},
     guard_metadata::apply_posture_and_guard,
     memory_service,
+    policy::PolicyHandle,
     tasks::TaskHandle,
     tools::{self, ToolError},
     util, AppState,
@@ -66,7 +66,7 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
 struct WorkerContext {
     bus: arw_events::Bus,
     kernel: arw_kernel::Kernel,
-    policy: Arc<tokio::sync::Mutex<Policy>>,
+    policy: Arc<PolicyHandle>,
     host: Arc<dyn arw_wasi::ToolHost>,
 }
 
@@ -596,7 +596,7 @@ impl WorkerContext {
     }
 
     async fn guard_action(&self, action: &str, capabilities: &[&str]) -> ActionGuard {
-        let decision = self.policy.lock().await.evaluate_action(action);
+        let decision = self.policy.evaluate_action(action).await;
         if decision.allow {
             return ActionGuard {
                 allowed: true,
@@ -944,7 +944,6 @@ mod tests {
     use chrono::{Duration as ChronoDuration, Utc};
     use serde_json::json;
     use std::sync::Arc;
-    use tokio::sync::Mutex;
     use tokio::time::{timeout, Duration};
     use uuid::Uuid;
 
@@ -966,8 +965,8 @@ mod tests {
         let bus = arw_events::Bus::new_with_replay(32, 32);
         let kernel = arw_kernel::Kernel::open(path).expect("init kernel");
         let policy = PolicyEngine::load_from_env();
-        let policy_arc = Arc::new(Mutex::new(policy));
-        AppState::builder(bus, kernel, policy_arc, host, true)
+        let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
+        AppState::builder(bus, kernel, policy_handle, host, true)
             .with_sse_capacity(16)
             .build()
             .await

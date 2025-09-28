@@ -590,7 +590,6 @@ mod tests {
     use arw_policy::PolicyEngine;
     use serde_json::json;
     use std::sync::Arc;
-    use tokio::sync::Mutex;
 
     async fn build_state(path: &std::path::Path, env_guard: &mut env::EnvGuard) -> AppState {
         env_guard.set("ARW_DEBUG", "1");
@@ -599,9 +598,9 @@ mod tests {
         let bus = arw_events::Bus::new_with_replay(8, 8);
         let kernel = arw_kernel::Kernel::open(path).expect("init kernel");
         let policy = PolicyEngine::load_from_env();
-        let policy_arc = Arc::new(Mutex::new(policy));
+        let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
         let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
-        AppState::builder(bus, kernel, policy_arc, host, true)
+        AppState::builder(bus, kernel, policy_handle, host, true)
             .with_sse_capacity(8)
             .build()
             .await

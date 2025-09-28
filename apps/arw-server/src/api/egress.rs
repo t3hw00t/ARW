@@ -110,7 +110,7 @@ pub async fn egress_preview(
             .into_response();
     }
 
-    let policy_decision = state.policy().lock().await.evaluate_action(&kind);
+    let policy_decision = state.policy().evaluate_action(&kind).await;
     if !policy_decision.allow {
         if let Some(cap) = policy_decision.require_capability.as_deref() {
             let lease_vec = vec![cap.to_string()];

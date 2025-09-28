@@ -275,11 +275,7 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
         }
     }
 
-    let policy_decision = state
-        .policy()
-        .lock()
-        .await
-        .evaluate_action("net.tcp.connect");
+    let policy_decision = state.policy().evaluate_action("net.tcp.connect").await;
     if !policy_decision.allow {
         if let Some(cap) = policy_decision.require_capability.as_deref() {
             let lease_vec = vec![cap.to_string()];
@@ -551,11 +547,7 @@ async fn handle_http_forward(
         }
     }
 
-    let dec = state
-        .policy()
-        .lock()
-        .await
-        .evaluate_action("net.http.proxy");
+    let dec = state.policy().evaluate_action("net.http.proxy").await;
     if !dec.allow {
         if let Some(cap) = dec.require_capability.as_deref() {
             let lease_ok = if let Some(kernel) = state.kernel_if_enabled() {

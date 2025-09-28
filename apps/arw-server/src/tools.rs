@@ -252,7 +252,6 @@ mod tests {
     use serde_json::json;
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
-    use tokio::sync::Mutex;
     use tokio::time::{sleep, Duration};
 
     #[derive(Clone)]
@@ -295,11 +294,11 @@ mod tests {
         let bus = arw_events::Bus::new_with_replay(8, 8);
         let kernel = arw_kernel::Kernel::open(temp.path()).expect("init kernel");
         let policy = PolicyEngine::load_from_env();
-        let policy_arc = Arc::new(Mutex::new(policy));
+        let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
         let slow_host = Arc::new(SlowHost::new(Duration::from_millis(50)));
         let host: Arc<dyn ToolHost> = slow_host.clone();
 
-        let state = AppState::builder(bus, kernel, policy_arc, host, true)
+        let state = AppState::builder(bus, kernel, policy_handle, host, true)
             .with_sse_capacity(16)
             .build()
             .await;
@@ -334,10 +333,10 @@ mod tests {
         let bus = arw_events::Bus::new_with_replay(8, 8);
         let kernel = arw_kernel::Kernel::open(temp.path()).expect("init kernel");
         let policy = PolicyEngine::load_from_env();
-        let policy_arc = Arc::new(Mutex::new(policy));
+        let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
         let host: Arc<dyn ToolHost> = Arc::new(arw_wasi::NoopHost);
 
-        let state = AppState::builder(bus, kernel, policy_arc, host, true)
+        let state = AppState::builder(bus, kernel, policy_handle, host, true)
             .with_sse_capacity(16)
             .build()
             .await;

@@ -53,7 +53,8 @@ pub(crate) async fn build() -> BootstrapOutput {
         sse_id_map.clone(),
     ));
 
-    let policy_arc = Arc::new(Mutex::new(PolicyEngine::load_from_env()));
+    let policy_handle =
+        crate::policy::PolicyHandle::new(PolicyEngine::load_from_env(), bus.clone());
     let host: Arc<dyn ToolHost> = match arw_wasi::LocalHost::new() {
         Ok(host) => Arc::new(host),
         Err(_) => Arc::new(arw_wasi::NoopHost),
@@ -72,7 +73,7 @@ pub(crate) async fn build() -> BootstrapOutput {
     let config_state = Arc::new(Mutex::new(initial_config_value));
     let config_history = Arc::new(Mutex::new(initial_history));
 
-    let state = AppState::builder(bus, kernel, policy_arc, host, kernel_enabled)
+    let state = AppState::builder(bus, kernel, policy_handle, host, kernel_enabled)
         .with_config_state(config_state)
         .with_config_history(config_history)
         .with_metrics(metrics.clone())

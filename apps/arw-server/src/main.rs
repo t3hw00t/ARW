@@ -34,6 +34,7 @@ mod metrics;
 mod models;
 mod openapi;
 mod patch_guard;
+mod policy;
 mod read_models;
 mod research_watcher;
 mod responses;
@@ -193,9 +194,9 @@ mod http_tests {
         let bus = arw_events::Bus::new_with_replay(64, 64);
         let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
         let policy = PolicyEngine::load_from_env();
-        let policy_arc = Arc::new(Mutex::new(policy));
+        let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
         let host: Arc<dyn ToolHost> = Arc::new(arw_wasi::NoopHost);
-        AppState::builder(bus, kernel, policy_arc, host, true)
+        AppState::builder(bus, kernel, policy_handle, host, true)
             .with_config_state(Arc::new(Mutex::new(json!({"mode": "test"}))))
             .with_config_history(Arc::new(Mutex::new(Vec::new())))
             .with_sse_capacity(64)

@@ -6,8 +6,7 @@ use serde_json::{json, Value};
 use utoipa::ToSchema;
 
 use crate::AppState;
-use arw_policy::{AbacRequest, Entity, PolicyEngine};
-use arw_topics as topics;
+use arw_policy::{AbacRequest, Entity};
 
 /// Current ABAC policy snapshot.
 #[utoipa::path(
@@ -17,7 +16,7 @@ use arw_topics as topics;
     responses((status = 200, description = "Policy snapshot", body = serde_json::Value))
 )]
 pub async fn state_policy(State(state): State<AppState>) -> impl axum::response::IntoResponse {
-    Json(state.policy().lock().await.snapshot())
+    Json(state.policy().snapshot().await)
 }
 
 /// Reload policy from env/config (admin token required).
@@ -41,15 +40,7 @@ pub async fn policy_reload(
         )
             .into_response();
     }
-    let newp = PolicyEngine::load_from_env();
-    {
-        let policy = state.policy();
-        let mut pol = policy.lock().await;
-        *pol = newp.clone();
-    }
-    state
-        .bus()
-        .publish(topics::TOPIC_POLICY_RELOADED, &json!(newp.snapshot()));
+    let newp = state.policy().reload_from_env().await;
     (
         axum::http::StatusCode::OK,
         Json(json!({"ok": true, "policy": newp.snapshot()})),
@@ -108,10 +99,13 @@ pub async fn policy_simulate(
             .to_string(),
         attrs: v.get("attrs").cloned().unwrap_or(serde_json::json!({})),
     });
-    let d = state.policy().lock().await.evaluate_abac(&AbacRequest {
-        action,
-        subject: subj,
-        resource: res,
-    });
+    let d = state
+        .policy()
+        .evaluate_abac(&AbacRequest {
+            action,
+            subject: subj,
+            resource: res,
+        })
+        .await;
     Json(d)
 }

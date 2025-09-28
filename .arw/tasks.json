@@ -546,14 +546,19 @@
       "id": "t-250911230219-7249",
       "title": "Refactor: split ext/ by domain & unify AppState",
       "desc": "Extract models/memory/feedback/chat/tools/projects/orchestrator into modules with their own Router<AppState> builders; unify a single AppState used by tests and runtime (trait-based EventBus+Queue); remove duplicate state and thin lib.rs to use the shared state.",
-      "status": "todo",
+      "status": "done",
       "notes": [
         {
           "time": "2025-09-26 19:57:50 UTC",
           "text": "AppState already unified in apps/arw-server/src/app_state.rs; rescope remaining work around domain-specific adapters (policy/models/cluster) and removal of legacy ext references before marking done."
+        },
+        {
+          "time": "2025-09-28 15:42:00 UTC",
+          "text": "Introduced policy::PolicyHandle and wired AppState, worker, and APIs to domain-specific adapters; updated builders/tests to drop legacy ext mutexes and refreshed docs/tasks to point at state_observer."
         }
       ],
-      "updated": "2025-09-26 19:57:50 UTC"
+      "updated": "2025-09-28 15:42:00 UTC",
+      "done_at": "2025-09-28 15:42:00 UTC"
     },
     {
       "id": "t-250911230236-6445",

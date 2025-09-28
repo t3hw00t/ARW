@@ -2,17 +2,14 @@ use std::sync::Arc;
 
 use arw_events::Bus;
 use arw_kernel::Kernel;
-use arw_policy::PolicyEngine;
 use arw_wasi::ToolHost;
 use serde_json::json;
 use tokio::sync::Mutex;
 
 use crate::{
-    capsule_guard, chat, cluster, experiments, feedback, governor, metrics, models, runtime,
-    tool_cache, training,
+    capsule_guard, chat, cluster, experiments, feedback, governor, metrics, models, policy,
+    runtime, tool_cache, training,
 };
-
-pub(crate) type Policy = PolicyEngine;
 
 type SharedConfigState = Arc<Mutex<serde_json::Value>>;
 type SharedConfigHistory = Arc<Mutex<Vec<(String, serde_json::Value)>>>;
@@ -21,7 +18,7 @@ type SharedConfigHistory = Arc<Mutex<Vec<(String, serde_json::Value)>>>;
 pub(crate) struct AppState {
     bus: Bus,
     kernel: Kernel,
-    policy: Arc<Mutex<Policy>>, // hot-reloadable
+    policy: Arc<policy::PolicyHandle>, // hot-reloadable
     host: Arc<dyn ToolHost>,
     config_state: Arc<Mutex<serde_json::Value>>, // effective config (demo)
     config_history: Arc<Mutex<Vec<(String, serde_json::Value)>>>, // snapshots
@@ -47,7 +44,7 @@ impl AppState {
     pub fn new(
         bus: Bus,
         kernel: Kernel,
-        policy: Arc<Mutex<Policy>>,
+        policy: Arc<policy::PolicyHandle>,
         host: Arc<dyn ToolHost>,
         config_state: Arc<Mutex<serde_json::Value>>,
         config_history: Arc<Mutex<Vec<(String, serde_json::Value)>>>,
@@ -116,7 +113,7 @@ impl AppState {
         self.tool_cache.clone()
     }
 
-    pub fn policy(&self) -> Arc<Mutex<Policy>> {
+    pub fn policy(&self) -> Arc<policy::PolicyHandle> {
         self.policy.clone()
     }
 
@@ -193,7 +190,7 @@ impl AppState {
 pub(crate) struct AppStateBuilder {
     bus: Bus,
     kernel: Kernel,
-    policy: Arc<Mutex<Policy>>,
+    policy: Arc<policy::PolicyHandle>,
     host: Arc<dyn ToolHost>,
     kernel_enabled: bool,
     config_state: Option<SharedConfigState>,
@@ -219,7 +216,7 @@ impl AppState {
     pub(crate) fn builder(
         bus: Bus,
         kernel: Kernel,
-        policy: Arc<Mutex<Policy>>,
+        policy: Arc<policy::PolicyHandle>,
         host: Arc<dyn ToolHost>,
         kernel_enabled: bool,
     ) -> AppStateBuilder {
