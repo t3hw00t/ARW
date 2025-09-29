@@ -154,7 +154,7 @@ allowed_files = {
     root / "CHANGELOG.md",
     root / "scripts" / "check_legacy_surface.sh",
 }
-skip_names = {".git", ".arw", "target", "site", "vendor", "sandbox", "node_modules"}
+skip_names = {".git", ".arw", "target", "site", "vendor", "sandbox", "node_modules", "dist"}
 
 def should_skip(path: pathlib.Path) -> bool:
     return any(part.name in skip_names for part in path.parents)

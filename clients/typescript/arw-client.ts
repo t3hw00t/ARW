@@ -13,9 +13,22 @@ export interface ActionState {
 }
 
 export interface EventsOptions {
+  // CSV prefixes for server-side filtering
   topics?: string[];
+  // Resume from a known event id (prefer Last-Event-ID header; falls back to ?after=)
   lastEventId?: string;
+  // Request the last N events if not resuming
+  replay?: number;
 }
+
+export interface EventEnvelope<T = Json> {
+  id?: string;
+  event?: string;
+  data?: T;
+}
+
+export type EventHandler = (e: { data: any; lastEventId?: string; type?: string }) => void;
+export type ErrorHandler = (e: Event) => void;
 
 export class ArwClient {
   constructor(public base: string, public adminToken?: string) {}
@@ -70,12 +83,85 @@ export class ArwClient {
   };
 
   events = {
-    subscribe: (opts?: EventsOptions): EventSource => {
+    // Browser EventSource (no auth headers), Node fallback uses fetch streaming with headers
+    subscribe: (opts?: EventsOptions): EventSource | { close: () => void; onmessage: EventHandler | null; onerror: ErrorHandler | null } => {
       const p = new URL(`${this.base}/events`);
       if (opts?.topics?.length) p.searchParams.set('prefix', opts.topics.join(','));
-      if (opts?.lastEventId) p.searchParams.set('after', opts.lastEventId);
-      const es = new EventSource(p.toString(), { withCredentials: false });
-      return es;
+      if (opts?.replay && !opts.lastEventId) p.searchParams.set('replay', String(opts.replay));
+      const url = p.toString();
+
+      // If EventSource exists (browser/Deno), prefer it. Cannot set headers here.
+      if (typeof (globalThis as any).EventSource !== 'undefined') {
+        if (opts?.lastEventId) {
+          // Use query param fallback for resume when headers are unavailable
+          p.searchParams.set('after', opts.lastEventId);
+        }
+        // @ts-ignore
+        return new (globalThis as any).EventSource(p.toString(), { withCredentials: false });
+      }
+
+      // Node fallback: stream and parse SSE manually; can send admin header
+      let controller = new AbortController();
+      const headers: Record<string, string> = {};
+      if (this.adminToken) headers['X-ARW-Admin'] = this.adminToken;
+      if (opts?.lastEventId) headers['Last-Event-ID'] = opts.lastEventId;
+      const out = {
+        onmessage: null as EventHandler | null,
+        onerror: null as ErrorHandler | null,
+        close: () => {
+          try { controller.abort(); } catch {}
+        },
+      };
+      (async () => {
+        try {
+          const r = await fetch(url, { headers, signal: controller.signal as any });
+          if (!r.ok || !r.body) throw new Error(`SSE failed: ${r.status}`);
+          const reader = (r.body as any).getReader();
+          let buf = '';
+          let ev: { id?: string; event?: string; data?: string } = {};
+          const flush = () => {
+            if (ev.data == null) return;
+            const payload = ev.data.endsWith('\n') ? ev.data.slice(0, -1) : ev.data;
+            const msg = {
+              data: payload,
+              // @ts-ignore
+              lastEventId: ev.id || '',
+              type: ev.event || 'message',
+            };
+            out.onmessage?.(msg);
+            ev = {};
+          };
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            buf += new TextDecoder().decode(value, { stream: true });
+            let idx: number;
+            while ((idx = buf.indexOf('\n')) >= 0) {
+              const line = buf.slice(0, idx);
+              buf = buf.slice(idx + 1);
+              if (line === '') { flush(); continue; }
+              if (line.startsWith(':')) continue; // comment
+              const colon = line.indexOf(':');
+              const field = colon === -1 ? line : line.slice(0, colon);
+              let val = colon === -1 ? '' : line.slice(colon + 1);
+              if (val.startsWith(' ')) val = val.slice(1);
+              switch (field) {
+                case 'id': ev.id = val; break;
+                case 'event': ev.event = val; break;
+                case 'data': ev.data = (ev.data || '') + val + '\n'; break;
+              }
+            }
+          }
+        } catch (e) {
+          try { out.onerror?.(e as any); } catch {}
+        }
+      })();
+      return out;
+    },
+
+    // Convenience: subscribe to read-model patch stream with resume
+    subscribePatches: (lastEventId?: string) => {
+      return this.events.subscribe({ topics: ['state.read.model.patch'], lastEventId, replay: 50 });
     },
   };
 

@@ -1,16 +1,23 @@
 {
   "name": "@arw/client",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Minimal TypeScript client for arw-server",
   "license": "MIT OR Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
     }
+  },
+  "bin": {
+    "arw-events": "dist/bin/arw-events.js"
   },
   "files": [
     "dist",

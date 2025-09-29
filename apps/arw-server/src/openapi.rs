@@ -104,7 +104,6 @@ pub struct AboutResponse {
         crate::api::probe::probe_effective_paths,
         crate::api::probe::probe_hw,
         crate::api::probe::probe_metrics,
-        crate::api::metrics::metrics_overview,
         crate::api::governor::governor_profile_get,
         crate::api::governor::governor_profile_set,
         crate::api::governor::governor_hints_get,

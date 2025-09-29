@@ -14,7 +14,6 @@ pub(crate) enum Stability {
     Stable,
     Beta,
     Experimental,
-    Deprecated,
 }
 
 impl Stability {
@@ -23,7 +22,6 @@ impl Stability {
             Stability::Stable => "stable",
             Stability::Beta => "beta",
             Stability::Experimental => "experimental",
-            Stability::Deprecated => "deprecated",
         }
     }
 }
@@ -234,7 +232,6 @@ pub(crate) mod paths {
     pub const ADMIN_PROBE: &str = "/admin/probe";
     pub const ADMIN_PROBE_HW: &str = "/admin/probe/hw";
     pub const ADMIN_PROBE_METRICS: &str = "/admin/probe/metrics";
-    pub const ADMIN_INTROSPECT_STATS: &str = "/admin/introspect/stats";
     pub const ADMIN_HIERARCHY_STATE: &str = "/admin/hierarchy/state";
     pub const ADMIN_HIERARCHY_ROLE: &str = "/admin/hierarchy/role";
     pub const ADMIN_HIERARCHY_HELLO: &str = "/admin/hierarchy/hello";
@@ -691,11 +688,6 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         paths::ADMIN_PROBE_METRICS,
         api::probe::probe_metrics,
         Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_INTROSPECT_STATS,
-        api::metrics::metrics_overview,
-        Some(Stability::Deprecated),
     );
     builder.route_post(
         paths::ADMIN_MODELS_DOWNLOAD,

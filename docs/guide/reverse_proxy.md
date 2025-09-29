@@ -3,6 +3,7 @@ title: Reverse Proxy
 ---
 
 # Reverse Proxy
+Updated: 2025-09-29
 
 Run `arw-server` behind a TLS‑terminating reverse proxy for production exposure. These snippets demonstrate Caddy and NGINX with safe headers and timeouts.
 
@@ -56,4 +57,3 @@ Server env:
 - Keep admin UIs gated: set `ARW_ADMIN_TOKEN` and do not expose them publicly without auth.
 - Enable HSTS at the proxy when serving over HTTPS in production.
 - Consider a Web Application Firewall (WAF) and egress controls for defense‑in‑depth.
-

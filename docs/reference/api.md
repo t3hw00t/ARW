@@ -13,6 +13,14 @@ Microsummary: Public endpoints, admin surfaces, specs, and eventing. Stable/expe
 - `/state/*`: read-models for actions, contributions, episodes, leases, egress, policy, models, and self snapshots.
 - Auth: Local-only by default; for admin endpoints set `ARW_ADMIN_TOKEN` and send `Authorization: Bearer <token>` or `X-ARW-Admin`. Without a token, enable `ARW_DEBUG=1` (development only) or the server returns `401` for `/admin/*`, `/state/*`, and `/events` requests. A per token/IP rate limiter (defaults to `60` requests per `60` seconds) safeguards brute-force attempts; tune via `ARW_ADMIN_RATE_LIMIT` / `ARW_ADMIN_RATE_WINDOW_SECS`.
 
+### Client CLI (events tail)
+- A small CLI ships with the TypeScript client to tail events with filters and automatic resume.
+  - Install: `npm i -g @arw/client` (after publishing)
+  - Usage:
+    - `BASE=http://127.0.0.1:8091 ARW_ADMIN_TOKEN=$ARW_ADMIN_TOKEN arw-events --prefix service.,state.read.model.patch --replay 25`
+  - Stores `Last-Event-ID` when `--store` is provided (default `.arw/last-event-id`).
+  - Shell alternative: `scripts/sse_tail.sh` (uses curl + jq).
+
 ## Endpoint overview
 
 ### Core triad (served by `arw-server` on 8091)

@@ -274,9 +274,9 @@ Stabilization & Contracts
 - [Kernel] [t-250914210303-ui01] Models UI: add Jobs panel, concurrency controls with feedback, Installed Hashes filters + reset, and persistence — done
 - [Kernel] [t-250914210304-ui02] Installed Hashes: add pagination controls (offset/next/prev) — done (pagination metadata + launcher controls)
 - [Kernel] [t-250914210304-api02] Egress ledger: add compact summarizer endpoint (time‑bounded; filters by decision/reason) — done
-- [Kernel] [t-250914210308-api03] CAS GC: centralize manifest reference extraction (single helper used by GC and any scanners) — todo
+- [Kernel] [t-250914210308-api03] CAS GC: centralize manifest reference extraction (single helper used by GC and any scanners) — done (confirmed `manifest_hash_index()` powers GC and `/state/models_hashes`; no duplicate scanners remain)
 - [Kernel] [t-250914210312-api04] Contract tests: promote spec/docs consistency checks to CI (status/code enums already validated in unit tests) — todo
-- [Kernel] [t-250914210316-api05] Sweep and remove any remaining deprecated endpoints; update docs and SDKs — todo
+- [Kernel] [t-250914210316-api05] Sweep and remove any remaining deprecated endpoints; update docs and SDKs — done (removed /admin/introspect/stats; updated debug UI to use /state/route_stats; specs/docs refreshed)
 
 ## Next (1–2 Months)
 

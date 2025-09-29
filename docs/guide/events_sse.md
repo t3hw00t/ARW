@@ -65,6 +65,17 @@ Examples
     "http://127.0.0.1:8091/events?prefix=rpu.&replay=5"
   ```
 
+CLI
+- After publishing the TypeScript client, you can tail events via the bundled CLI:
+  ```bash
+  # Install globally (or use npx once published)
+  npm i -g @arw/client
+
+  # Tail service.* and read-model patches with replay and resume
+  BASE=http://127.0.0.1:8091 ARW_ADMIN_TOKEN=$ARW_ADMIN_TOKEN \
+  arw-events --prefix service.,state.read.model.patch --replay 25 --store .arw/last-event-id
+  ```
+
 Event model
 - Events use a compact envelope with `status` (human) and `code` (machine) conventions.
 - Common kinds: `models.download.progress`, `egress.ledger.appended`, `task.completed`, `feedback.suggested`.

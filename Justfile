@@ -199,6 +199,21 @@ docs-stamp:
 docs-type-stamp:
   python3 scripts/stamp_docs_type.py
 
+# Tail SSE events (curl+jq helper)
+sse-tail prefixes='service.,state.read.model.patch' replay='25' store='.arw/last-event-id' base='http://127.0.0.1:8091':
+  BASE={{base}} ARW_ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-}" \
+    bash scripts/sse_tail.sh --prefix {{prefixes}} --replay {{replay}} --store {{store}}
+
+# Tag TypeScript client version based on clients/typescript/package.json
+ts-client-tag:
+  bash -ceu '
+  ver=$(jq -r .version clients/typescript/package.json);
+  [[ -n "$ver" && "$ver" != "null" ]] || { echo "could not read version" >&2; exit 1; }
+  tag="ts-client-v$ver";
+  if git rev-parse "$tag" >/dev/null 2>&1; then echo "Tag $tag already exists"; exit 0; fi;
+  git tag "$tag"; echo "Created tag $tag"; echo "Run: git push origin $tag";
+  '
+
 # Run service + docs together (Unix)
 dev-all port='8091' addr='127.0.0.1:8000':
   ARW_DEBUG=1 ARW_PORT={{port}} ARW_DOCS_URL=http://{{addr}} bash scripts/dev.sh {{port}} {{addr}}

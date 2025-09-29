@@ -104,7 +104,7 @@ Each operation declares: Input, Output, Error types; capabilities; stability (st
 ## Declaration Style (Rust)
 
 New endpoints (introspection, feedback, distill)
-- `GET /admin/introspect/stats`: returns event totals and per‑route metrics (hits, errors, EWMA, last/max ms).
+- `GET /state/route_stats`: returns bus counters and per‑route metrics (hits, errors, EWMA, p95, last/max ms).
 - `POST /admin/feedback/signal`: record a signal `{ kind, target, confidence, severity, note }`.
 - `POST /admin/feedback/analyze`: produce suggestions from signals and stats.
 - `POST /admin/feedback/apply`: apply a suggestion `{ id }` (updates hints/profile/memory limit conservatively).

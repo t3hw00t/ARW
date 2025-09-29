@@ -94,6 +94,7 @@ nav:
       - Context Recipes: guide/context_recipes.md
       - Metrics & Insights: guide/METRICS_AND_INSIGHTS.md
       - Monitoring & Alerts: ops/monitoring.md
+      - Alerting (Prometheus): ALERTING.md
       - Trial Planning: ops/trial_readiness.md
       - Trial Runbook: ops/trial_runbook.md
       - Participant Quickstart: ops/trial_quickstart.md
@@ -105,6 +106,7 @@ nav:
           - Dashboard Snapshot Guide: ops/trials/dashboard_snapshot.md
           - Onboarding Email Template: ops/trials/onboarding_email_template.md
           - Screenshot Checklist: ops/trials/screenshots/README.md
+          - Autonomy Rollback Playbook: ops/trials/autonomy_rollback_playbook.md
       - Chat Backends: guide/chat_backends.md
       - Guardrails Checks: guide/guardrails.md
       - Correlation & Attribution: guide/correlation.md
@@ -125,6 +127,7 @@ nav:
       - Troubleshooting: guide/troubleshooting.md
   - Reference:
       - API Reference: reference/api.md
+      - Clients: reference/clients.md
       - Models Types: reference/models_types.md
       - Feature Matrix: reference/feature_matrix.md
       - System Components: reference/system_components.md
@@ -192,6 +195,9 @@ nav:
       - Caching Layers: architecture/caching_layers.md
       - Runtime Layout: architecture/runtime_layout.md
       - SSE Patch Contract: architecture/sse_patch_contract.md
+      - Managed llama.cpp Runtime: architecture/managed_llamacpp_runtime.md
+      - Managed Runtime Supervisor: architecture/managed_runtime_supervisor.md
+      - Multimodal Runtime Plan: architecture/multimodal_runtime_plan.md
   - Contribute:
       - Overview: developer/index.md
       - Build Efficiency: developer/build_efficiency.md
@@ -223,6 +229,7 @@ nav:
   - Operations:
       - Systemd Service: ops/systemd_service.md
       - Systemd Overrides: ops/systemd_overrides.md
+      - Operations Guide: OPERATIONS.md
   - Appendix:
       - Snippets:
           - HTTP Caching Semantics: snippets/http_caching_semantics.md

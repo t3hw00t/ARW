@@ -184,6 +184,7 @@ The stack scales by refusing to recompute or resend the same work twice and by b
 #### Recently Shipped
 - [Pack: Collaboration] Debug/Launcher UIs: metrics quick-link, SSE presets (Replay 50, Models-only), insights wired to route stats, download progress.
 - [Pack: Collaboration] Workflow Views: universal right-sidecar across Hub/Chat/Training with Timeline/Context/Policy/Metrics/Models; command palette; Compare panels (Text/JSON, Image, CSV) in Hub; Chat A/B pin-to-compare; Events window presets + filters; Logs focus mode and route filter; P95 sparklines.
+- [Pack: Collaboration] TypeScript client v0.2.0: Node-friendly SSE (Last-Event-ID + replay) and `arw-events` CLI for tailing events with resume.
 
 #### Long-Term (3–6 Months)
 - [Pack: Collaboration][Future] Ledger-driven settlement tooling: contribution meter and revenue ledger mature into auditable exports for collaborators, and opt-in policy templates help teams review disputes locally without a separate governance simulator.

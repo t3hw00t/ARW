@@ -3,6 +3,7 @@ title: Security Hardening
 ---
 
 # Security Hardening
+Updated: 2025-09-29
 
 ARW ships with conservative defaults and clear toggles to harden deployments without breaking development.
 
@@ -33,4 +34,3 @@ ARW ships with conservative defaults and clear toggles to harden deployments wit
 
 - Wire admin token via Secret (recommended). The chart auto‑creates one if `adminToken.value` is set and rolls the Deployment on change.
 - Enable `networkPolicy` and `egressPolicy` for least‑privilege network access.
-

@@ -1,22 +1,10 @@
-use crate::{
-    admin_ok,
-    metrics::{cache_stats_snapshot, MetricsSummary},
-    tool_cache::ToolCacheStats,
-    AppState,
-};
-use axum::http::{HeaderMap, HeaderValue};
-use axum::response::{IntoResponse, Response};
-use axum::{extract::State, Json};
-use serde_json::json;
+use crate::{metrics::MetricsSummary, tool_cache::ToolCacheStats, AppState};
+use axum::http::HeaderValue;
+use axum::response::Response;
+use axum::extract::State;
 use std::fmt::Write;
 
-fn unauthorized() -> Response {
-    (
-        axum::http::StatusCode::UNAUTHORIZED,
-        Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
-    )
-        .into_response()
-}
+//
 
 fn sanitize_label(value: &str) -> String {
     value
@@ -302,35 +290,4 @@ pub async fn metrics_prometheus(State(state): State<AppState>) -> Response {
     response
 }
 
-#[utoipa::path(
-    get,
-    path = "/admin/introspect/stats",
-    tag = "Admin/Introspect",
-    responses(
-        (status = 200, description = "Metrics snapshot", body = serde_json::Value),
-        (status = 401, description = "Unauthorized")
-    )
-)]
-pub async fn metrics_overview(headers: HeaderMap, State(state): State<AppState>) -> Response {
-    if !admin_ok(&headers) {
-        return unauthorized();
-    }
-    let summary = state.metrics().snapshot();
-    let bus = state.bus().stats();
-    let cache_stats = state.tool_cache().stats();
-    Json(json!({
-        "events": summary.events,
-        "routes": summary.routes,
-        "tasks": summary.tasks,
-        "compatibility": summary.compatibility,
-        "cache": cache_stats_snapshot(&cache_stats),
-        "bus": {
-            "published": bus.published,
-            "delivered": bus.delivered,
-            "receivers": bus.receivers,
-            "lagged": bus.lagged,
-            "no_receivers": bus.no_receivers,
-        }
-    }))
-    .into_response()
-}
+// legacy metrics_overview removed; use /state/route_stats instead

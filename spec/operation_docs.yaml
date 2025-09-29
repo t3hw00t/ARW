@@ -149,10 +149,6 @@
   get:
     summary: Inspect hierarchy state
     description: Return the current hierarchy session map, including offers, participants, and active roles.
-/admin/introspect/stats:
-  get:
-    summary: Fetch metrics overview
-    description: Return an aggregated metrics snapshot covering events, routes, cache, and bus counters for operators.
 /admin/memory/quarantine:
   get:
     summary: List quarantined memories

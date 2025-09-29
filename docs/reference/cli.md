@@ -18,3 +18,10 @@ Commands (summary)
 - `arw-cli capsule verify-ed25519 <pk_b64> <capsule.json> <sig_b64>` — verify signature
 
 See the [CLI Guide](../guide/cli.md) for examples. Use `--help` on any command for details.
+
+Companion (TypeScript client CLI)
+- After publishing `@arw/client`, a small Node-based CLI `arw-events` is available for tailing the SSE stream with resume and filters.
+  - Install: `npm i -g @arw/client`
+  - Usage:
+    - `BASE=http://127.0.0.1:8091 ARW_ADMIN_TOKEN=$ARW_ADMIN_TOKEN arw-events --prefix service.,state.read.model.patch --replay 25`
+  - Stores `Last-Event-ID` when `--store` is provided (default `.arw/last-event-id`).

@@ -32,4 +32,4 @@ Type: How‑to
 
 Endpoints
 - Events stream: `GET /events?prefix=...&replay=50`
-- Introspection (deprecated; use `/state/route_stats` in new flows): `GET /admin/introspect/stats`
+- Route stats: `GET /state/route_stats`

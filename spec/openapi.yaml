@@ -793,22 +793,6 @@ paths:
       description: Return the current hierarchy session map, including offers, participants,
         and active roles.
       summary: Inspect hierarchy state
-  /admin/introspect/stats:
-    get:
-      tags:
-      - Admin/Introspect
-      operationId: metrics_overview_doc
-      responses:
-        '200':
-          description: Metrics snapshot
-          content:
-            application/json:
-              schema: {}
-        '401':
-          description: Unauthorized
-      description: Return an aggregated metrics snapshot covering events, routes,
-        cache, and bus counters for operators.
-      summary: Fetch metrics overview
   /admin/memory:
     get:
       tags:
