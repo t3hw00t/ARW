@@ -10,6 +10,20 @@ pub struct HealthOk {
 
 #[allow(dead_code)]
 #[derive(ToSchema)]
+pub struct AnyEnvelope {
+    pub ok: bool,
+    #[schema(value_type = serde_json::Value)]
+    pub data: serde_json::Value,
+    #[schema(nullable, value_type = Option<String>)]
+    pub corr_id: Option<String>,
+    #[schema(nullable, value_type = Option<String>)]
+    pub code: Option<String>,
+    #[schema(nullable, value_type = Option<String>)]
+    pub message: Option<String>,
+}
+
+#[allow(dead_code)]
+#[derive(ToSchema)]
 pub struct HttpInfo {
     pub bind: String,
     pub port: u16,
@@ -170,6 +184,7 @@ pub struct AboutResponse {
             AboutCounts,
             PerfPreset,
             AboutResponse,
+            AnyEnvelope,
             crate::governor::Hints,
             crate::api::hierarchy::RoleRequest,
             crate::api::self_model::SelfModelProposeRequest,

@@ -361,6 +361,135 @@ mod http_tests {
     }
 
     #[tokio::test]
+    async fn healthz_envelope_wraps_when_enabled() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_API_ENVELOPE", "1");
+
+        let state_dir = temp.path().to_path_buf();
+        let state = build_state(&state_dir, &mut ctx.env).await;
+        let (router, _, _) = router::build_router();
+        let metrics = Arc::new(crate::metrics::Metrics::default());
+        let app = crate::bootstrap::attach_stateful_layers(router, state, metrics);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(paths::HEALTHZ)
+                    .body(Body::empty())
+                    .expect("healthz request"),
+            )
+            .await
+            .expect("healthz response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        let body_bytes = response
+            .into_body()
+            .collect()
+            .await
+            .expect("collect body")
+            .to_bytes();
+        let value: Value = serde_json::from_slice(&body_bytes).expect("json envelope");
+        assert_eq!(value.get("ok"), Some(&Value::Bool(true)));
+        let data = value
+            .get("data")
+            .and_then(|d| d.as_object())
+            .expect("data object");
+        assert_eq!(data.get("ok"), Some(&Value::Bool(true)));
+    }
+
+    #[tokio::test]
+    async fn healthz_envelope_skips_when_requested() {
+        use crate::responses::{HEADER_ENVELOPE_APPLIED, HEADER_ENVELOPE_BYPASS};
+
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_API_ENVELOPE", "1");
+
+        let state_dir = temp.path().to_path_buf();
+        let state = build_state(&state_dir, &mut ctx.env).await;
+        let (router, _, _) = router::build_router();
+        let metrics = Arc::new(crate::metrics::Metrics::default());
+        let app = crate::bootstrap::attach_stateful_layers(router, state, metrics);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(paths::HEALTHZ)
+                    .header(crate::responses::HEADER_ENVELOPE_REQUEST, "0")
+                    .body(Body::empty())
+                    .expect("healthz request"),
+            )
+            .await
+            .expect("healthz response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert!(response.headers().get(HEADER_ENVELOPE_APPLIED).is_none());
+        assert_eq!(
+            response
+                .headers()
+                .get(HEADER_ENVELOPE_BYPASS)
+                .and_then(|v| v.to_str().ok()),
+            Some("1")
+        );
+        let body_bytes = response
+            .into_body()
+            .collect()
+            .await
+            .expect("collect body")
+            .to_bytes();
+        let value: Value = serde_json::from_slice(&body_bytes).expect("json raw");
+        assert_eq!(value.get("ok"), Some(&Value::Bool(true)));
+        assert!(value.get("data").is_none());
+    }
+
+    #[tokio::test]
+    async fn healthz_envelope_forced_when_requested() {
+        use crate::responses::HEADER_ENVELOPE_APPLIED;
+
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        ctx.env.remove("ARW_API_ENVELOPE");
+
+        let state_dir = temp.path().to_path_buf();
+        let state = build_state(&state_dir, &mut ctx.env).await;
+        let (router, _, _) = router::build_router();
+        let metrics = Arc::new(crate::metrics::Metrics::default());
+        let app = crate::bootstrap::attach_stateful_layers(router, state, metrics);
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri(format!("{}?arw-envelope=1", paths::HEALTHZ))
+                    .body(Body::empty())
+                    .expect("healthz request"),
+            )
+            .await
+            .expect("healthz response");
+
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get(HEADER_ENVELOPE_APPLIED)
+                .and_then(|v| v.to_str().ok()),
+            Some("1")
+        );
+        let body_bytes = response
+            .into_body()
+            .collect()
+            .await
+            .expect("collect body")
+            .to_bytes();
+        let value: Value = serde_json::from_slice(&body_bytes).expect("json envelope");
+        assert_eq!(value.get("ok"), Some(&Value::Bool(true)));
+        assert!(value.get("data").is_some());
+    }
+
+    #[tokio::test]
     async fn capsule_middleware_applies_and_publishes_read_model() {
         let temp = tempdir().expect("tempdir");
         // Initialize tracing for easier debugging when running this test solo.
@@ -517,9 +646,9 @@ mod http_tests {
 
     #[tokio::test]
     async fn admin_debug_denies_remote_even_in_debug_mode() {
+        use axum::http::{Request, StatusCode};
         use axum::{routing::get, Router};
         use tower::util::ServiceExt;
-        use axum::http::{Request, StatusCode};
 
         // Build a minimal router with client-addr middleware so admin_ok sees the caller IP.
         let app = Router::new()
@@ -544,14 +673,13 @@ mod http_tests {
 
     #[tokio::test]
     async fn admin_debug_allows_loopback_in_debug_mode() {
+        use axum::http::{Request, StatusCode};
         use axum::{routing::get, Router};
         use tower::util::ServiceExt;
-        use axum::http::{Request, StatusCode};
 
         let app = Router::new()
             .route(paths::ADMIN_DEBUG, get(crate::api::ui::debug_ui))
             .layer(axum::middleware::from_fn(crate::security::client_addr_mw));
-        
 
         std::env::set_var("ARW_DEBUG", "1");
         let req = Request::builder()
@@ -567,9 +695,9 @@ mod http_tests {
 
     #[tokio::test]
     async fn admin_ui_assets_require_auth() {
+        use axum::http::{Request, StatusCode};
         use axum::{routing::get, Router};
         use tower::util::ServiceExt;
-        use axum::http::{Request, StatusCode};
 
         let app = Router::new()
             .route(
@@ -713,8 +841,8 @@ pub(crate) static ADMIN_ENV_GUARD: once_cell::sync::Lazy<std::sync::Mutex<()>> =
 mod tests {
     use super::*;
     use axum::http::{HeaderMap, HeaderValue};
-    use sha2::Digest;
     use proptest::prelude::*;
+    use sha2::Digest;
 
     fn auth_headers(token: &str) -> HeaderMap {
         let mut headers = HeaderMap::new();
@@ -779,7 +907,6 @@ mod prop_tests {
     use super::*;
     use axum::http::{HeaderMap, HeaderValue};
     use proptest::prelude::*;
-    
 
     fn auth_headers(token: &str) -> HeaderMap {
         let mut headers = HeaderMap::new();

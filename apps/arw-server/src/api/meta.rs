@@ -19,7 +19,7 @@ use arw_core::list_admin_endpoints;
     )
 )]
 pub async fn healthz() -> impl IntoResponse {
-    Json(json!({"ok": true}))
+    crate::responses::json_ok(json!({"ok": true}))
 }
 
 /// Service metadata and endpoints index.
@@ -94,7 +94,7 @@ pub async fn about(State(state): State<crate::AppState>) -> impl IntoResponse {
 
     let endpoints_vec: Vec<String> = endpoint_set.into_iter().collect();
     let total_count = endpoints_vec.len();
-    Json(json!({
+    crate::responses::json_ok(json!({
         "service": name,
         "version": version,
         "http": {"bind": bind, "port": port},

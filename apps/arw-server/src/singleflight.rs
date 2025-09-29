@@ -143,8 +143,12 @@ mod loom_tests {
                         cv: Condvar::new(),
                     }
                 }
-                fn add_ref(&self) { self.refs.fetch_add(1, Ordering::Relaxed); }
-                fn release(&self) { self.refs.fetch_sub(1, Ordering::AcqRel); }
+                fn add_ref(&self) {
+                    self.refs.fetch_add(1, Ordering::Relaxed);
+                }
+                fn release(&self) {
+                    self.refs.fetch_sub(1, Ordering::AcqRel);
+                }
                 fn mark_done(&self) {
                     let mut d = self.done.lock().unwrap();
                     *d = true;
@@ -152,7 +156,9 @@ mod loom_tests {
                 }
                 fn wait(&self) {
                     let mut d = self.done.lock().unwrap();
-                    while !*d { d = self.cv.wait(d).unwrap(); }
+                    while !*d {
+                        d = self.cv.wait(d).unwrap();
+                    }
                 }
             }
 

@@ -80,6 +80,26 @@ RFC 7807 Problem Details errors.
 
 W3C Trace Context + OpenTelemetry.
 
+### Optional Response Envelope
+
+Set `ARW_API_ENVELOPE=1` on the server to wrap successful JSON responses in a small, generic envelope:
+
+```
+{
+  "ok": true,
+  "data": { ... original payload ... },
+  "corr_id": "optional-correlation-id"
+}
+```
+
+Errors continue to use RFC 7807 Problem Details.
+When enabled, responses include `X-ARW-Envelope-Applied: 1` so tooling can detect the wrapper.
+
+Per-request controls:
+- `X-ARW-Envelope: 0|false|raw` or query `?arw-envelope=0` → skip the envelope (even if the server default is on).
+- `X-ARW-Envelope: 1|true|force` or query `?arw-envelope=1` → request an envelope (even if the server default is off).
+- Raw responses mark `X-ARW-Envelope-Bypass: 1` so clients know no wrapping was applied.
+
 ## UI Cross‑Reference
 - In the Debug UI (`/admin/debug`, set `ARW_DEBUG=1`), the Tools panel exercises example tools and shows emitted `tool.ran` events.
 - Click the small “?” next to Tools for a tip and a link back to this page.

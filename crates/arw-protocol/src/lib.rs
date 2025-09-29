@@ -14,6 +14,28 @@ pub struct ProblemDetails {
     pub code: Option<String>,
 }
 
+/// Generic success envelope for HTTP responses.
+///
+/// When enabled by the server (or requested by clients), successful responses
+/// may be wrapped in this envelope to provide stable top-level fields while
+/// allowing the concrete payload to evolve.
+#[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ToSchema)]
+pub struct ApiEnvelope<T> {
+    /// Always true for successful responses.
+    pub ok: bool,
+    /// Concrete payload for the operation.
+    pub data: T,
+    /// Optional correlation ID to link with event/journal entries.
+    #[serde(default)]
+    pub corr_id: Option<String>,
+    /// Optional machine-friendly code for clients.
+    #[serde(default)]
+    pub code: Option<String>,
+    /// Optional human-friendly message for clients.
+    #[serde(default)]
+    pub message: Option<String>,
+}
+
 /// Opaque cursor pagination envelope.
 #[derive(Debug, Serialize, Deserialize, Clone, JsonSchema, ToSchema)]
 pub struct Page<T> {

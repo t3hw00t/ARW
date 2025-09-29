@@ -226,7 +226,7 @@ Specs & Docs
   - [Kernel] [t-250913213500-ev01] Add dual-mode warning logs when ARW_EVENTS_KIND_MODE=dual to surface remaining legacy consumers — removed (modes dropped)
   - [Kernel] [t-250913213501-ev02] Update all docs/screenshots/snippets to normalized kinds (models.download.progress, …) — in progress
   - [Kernel] Gallery guide and screenshots guide updates — done
-  - [Kernel] [t-250913213502-ev03] Add envelope schema `ApiEnvelope<T>` in OpenAPI and adopt in responses (opt-in) — todo
+- [Kernel] [t-250913213502-ev03] Add envelope schema `ApiEnvelope<T>` in OpenAPI and adopt in responses (opt-in) — done (global middleware + schema; toggle via `ARW_API_ENVELOPE`)
   - [Kernel] [t-250913213503-ev04] Add short descriptions to any endpoints with Spectral hints (e.g., /state/models) — done
   - [Kernel] [t-250913213504-ev05] Adjust Spectral AsyncAPI rule to accept dot.case explicitly to remove naming warnings — done (custom dot.case checker in Spectral ruleset)
   - [Kernel] [t-250913213505-ev06] Plan removal: switch all deployments to normalized kinds, then drop legacy/dual paths — done

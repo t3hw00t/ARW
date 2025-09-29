@@ -1,7 +1,7 @@
 use crate::{metrics::MetricsSummary, tool_cache::ToolCacheStats, AppState};
+use axum::extract::State;
 use axum::http::HeaderValue;
 use axum::response::Response;
-use axum::extract::State;
 use std::fmt::Write;
 
 //

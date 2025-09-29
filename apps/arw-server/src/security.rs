@@ -6,9 +6,9 @@ use base64::Engine;
 use once_cell::sync::Lazy;
 use std::collections::{HashMap, VecDeque};
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
-use std::sync::atomic::{AtomicU64, Ordering};
 
 tokio::task_local! {
     static CLIENT_ADDR: Option<String>;
@@ -36,7 +36,9 @@ fn csp_value_for(path: &str) -> Option<String> {
     // development panels that rely on inline handlers and scripts.
     let is_debug_ui = std::env::var("ARW_DEBUG").ok().map_or(false, |v| v != "0")
         && (path.starts_with("/admin/debug") || path.starts_with("/admin/ui"));
-    let debug_csp_strict = std::env::var("ARW_DEBUG_CSP_STRICT").ok().map_or(false, |v| v != "0");
+    let debug_csp_strict = std::env::var("ARW_DEBUG_CSP_STRICT")
+        .ok()
+        .map_or(false, |v| v != "0");
     if preset.eq_ignore_ascii_case("strict") && (!is_debug_ui || debug_csp_strict) {
         // Generate a per-response nonce for script/style sources.
         static CTR: AtomicU64 = AtomicU64::new(1);

@@ -206,6 +206,21 @@ pub fn kernel_enabled_from_env() -> bool {
         .unwrap_or(true)
 }
 
+/// Whether to wrap successful JSON responses in `ApiEnvelope<T>`.
+///
+/// Controlled by `ARW_API_ENVELOPE` (default: false). Any value other than
+/// empty/"0"/"false" enables the wrapper.
+pub fn api_envelope_enabled() -> bool {
+    std::env::var("ARW_API_ENVELOPE")
+        .map(|v| {
+            let trimmed = v.trim();
+            !(trimmed.is_empty()
+                || trimmed.eq_ignore_ascii_case("0")
+                || trimmed.eq_ignore_ascii_case("false"))
+        })
+        .unwrap_or(false)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{

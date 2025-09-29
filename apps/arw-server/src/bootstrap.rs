@@ -13,7 +13,7 @@ use utoipa::OpenApi;
 use crate::{
     access_log,
     app_state::AppState,
-    capsule_guard, config, egress_proxy, metrics, read_models,
+    capsule_guard, config, egress_proxy, metrics, read_models, responses,
     router::build_router,
     security,
     sse_cache::SseIdCache,
@@ -124,10 +124,11 @@ pub(crate) fn attach_stateful_layers(
         async move { capsule_guard::capsule_mw(state, req, next).await }
     }));
     let metrics_layer = metrics.clone();
-    router.layer(axum::middleware::from_fn(move |req, next| {
+    let router = router.layer(axum::middleware::from_fn(move |req, next| {
         let metrics = metrics_layer.clone();
         async move { metrics::track_http(metrics, req, next).await }
-    }))
+    }));
+    router.layer(axum::middleware::from_fn(responses::envelope_mw))
 }
 
 pub(crate) fn attach_http_layers(

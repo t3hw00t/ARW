@@ -1,4 +1,5 @@
 use super::http_utils;
+use crate::responses;
 use axum::body::Body;
 use axum::http::{
     header::{self, HeaderMap},
@@ -100,11 +101,10 @@ pub async fn spec_index() -> impl IntoResponse {
         }
     }
     schemas.sort();
-    (
+    responses::json_raw_status(
         StatusCode::OK,
-        Json(json!({"entries": entries, "schemas": schemas })),
+        json!({"entries": entries, "schemas": schemas }),
     )
-        .into_response()
 }
 
 /// Health summary for spec artifacts (presence/size).
@@ -156,18 +156,17 @@ pub async fn spec_health() -> impl IntoResponse {
     } else {
         (false, Vec::new())
     };
-    (
+    responses::json_raw_status(
         StatusCode::OK,
-        Json(json!({
+        json!({
             "items": items,
             "schemas": {
                 "exists": schemas_exists,
                 "count": schema_files.len(),
                 "files": schema_files,
             }
-        })),
+        }),
     )
-        .into_response()
 }
 
 fn interfaces_dir() -> std::path::PathBuf {
@@ -257,14 +256,22 @@ fn respond_bytes(
     }
 
     if method == Method::HEAD {
-        return builder
+        let mut response = builder
             .body(Body::empty())
             .unwrap_or_else(|_| Response::new(Body::empty()));
+        if content_type.starts_with("application/json") {
+            responses::mark_envelope_bypass(&mut response);
+        }
+        return response;
     }
 
-    builder
+    let mut response = builder
         .body(Body::from(bytes))
-        .unwrap_or_else(|_| Response::new(Body::empty()))
+        .unwrap_or_else(|_| Response::new(Body::empty()));
+    if content_type.starts_with("application/json") {
+        responses::mark_envelope_bypass(&mut response);
+    }
+    response
 }
 
 #[cfg(test)]
