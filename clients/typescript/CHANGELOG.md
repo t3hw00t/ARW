@@ -1,3 +1,7 @@
+## 0.2.1 - 2025-09-29
+
+- Package metadata polish: add repository/homepage/bugs/keywords for better npm discoverability and docs linking. No API changes.
+
 ## 0.2.0 - 2025-09-29
 
 - Add Node-friendly SSE implementation (no polyfills). Supports Last-Event-ID header, `replay`, and prefix filters.
@@ -9,4 +13,3 @@
 ## 0.1.0 - 2025-09-29
 
 - Initial minimal client for `/actions`, `/events`, `/healthz`, `/about`.
-

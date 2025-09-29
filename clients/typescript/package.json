@@ -1,6 +1,6 @@
 {
   "name": "@arw/client",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Minimal TypeScript client for arw-server",
   "license": "MIT OR Apache-2.0",
   "type": "module",
