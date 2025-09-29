@@ -846,16 +846,43 @@ impl ModelStore {
             }
         });
         let total = rows.len();
-        let offset = offset.min(total);
         let limit = limit.clamp(1, 10_000);
+        let pages = if total == 0 {
+            0
+        } else {
+            ((total - 1) / limit) + 1
+        };
+        let max_offset = if pages == 0 { 0 } else { (pages - 1) * limit };
+        let offset = if total == 0 {
+            0
+        } else {
+            offset.min(max_offset)
+        };
         let end = offset.saturating_add(limit).min(total);
         let slice = rows[offset..end].to_vec();
+        let count = end.saturating_sub(offset);
+        let page = if pages == 0 { 0 } else { (offset / limit) + 1 };
+        let prev_offset = if page <= 1 {
+            None
+        } else {
+            Some(offset.saturating_sub(limit))
+        };
+        let next_offset = if page == 0 || page >= pages {
+            None
+        } else {
+            Some(end)
+        };
         HashPage {
             items: slice,
             total,
-            count: end.saturating_sub(offset),
+            count,
             limit,
             offset,
+            prev_offset,
+            next_offset,
+            page,
+            pages,
+            last_offset: max_offset,
         }
     }
 
@@ -3289,6 +3316,11 @@ mod tests {
         assert_eq!(page.count, 2);
         assert_eq!(page.limit, 10);
         assert_eq!(page.offset, 0);
+        assert_eq!(page.page, 1);
+        assert_eq!(page.pages, 1);
+        assert!(page.prev_offset.is_none());
+        assert!(page.next_offset.is_none());
+        assert_eq!(page.last_offset, 0);
 
         let first = &page.items[0];
         assert_eq!(
@@ -3305,6 +3337,11 @@ mod tests {
             .await;
         assert_eq!(filtered.total, 1);
         assert_eq!(filtered.count, 1);
+        assert_eq!(filtered.page, 1);
+        assert_eq!(filtered.pages, 1);
+        assert!(filtered.prev_offset.is_none());
+        assert!(filtered.next_offset.is_none());
+        assert_eq!(filtered.last_offset, 0);
         assert_eq!(filtered.items[0].sha256, first.sha256);
     }
 
@@ -3340,8 +3377,74 @@ mod tests {
             .await;
         assert_eq!(filtered.total, 1);
         assert_eq!(filtered.items.len(), 1);
+        assert_eq!(filtered.page, 1);
+        assert_eq!(filtered.pages, 1);
+        assert!(filtered.prev_offset.is_none());
+        assert!(filtered.next_offset.is_none());
+        assert_eq!(filtered.last_offset, 0);
         let entry = &filtered.items[0];
         assert_eq!(entry.models, vec!["first-model", "follower"]);
+    }
+
+    #[tokio::test]
+    async fn hashes_page_reports_offsets() {
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let store = ModelStore::new(bus, None);
+        let mut items = Vec::new();
+        for i in 0..103 {
+            let sha = format!("{:064x}", i + 1);
+            items.push(json!({
+                "id": format!("model-{i}"),
+                "sha256": sha,
+                "bytes": 1 + i as u64,
+                "provider": "local",
+                "path": format!("/models/model-{i}.bin"),
+            }));
+        }
+        store.replace_items(items).await;
+
+        let page1 = store
+            .hashes_page(25, 0, None, None, Some("sha256".into()), Some("asc".into()))
+            .await;
+        assert_eq!(page1.count, 25);
+        assert_eq!(page1.page, 1);
+        assert_eq!(page1.pages, 5);
+        assert_eq!(page1.prev_offset, None);
+        assert_eq!(page1.next_offset, Some(25));
+        assert_eq!(page1.last_offset, 100);
+
+        let page2 = store
+            .hashes_page(
+                25,
+                page1.next_offset.expect("next offset"),
+                None,
+                None,
+                Some("sha256".into()),
+                Some("asc".into()),
+            )
+            .await;
+        assert_eq!(page2.offset, 25);
+        assert_eq!(page2.page, 2);
+        assert_eq!(page2.prev_offset, Some(0));
+        assert_eq!(page2.next_offset, Some(50));
+
+        let page_last = store
+            .hashes_page(
+                25,
+                9999,
+                None,
+                None,
+                Some("sha256".into()),
+                Some("asc".into()),
+            )
+            .await;
+        assert_eq!(page_last.offset, 100);
+        assert_eq!(page_last.count, 3);
+        assert_eq!(page_last.page, 5);
+        assert_eq!(page_last.pages, 5);
+        assert_eq!(page_last.prev_offset, Some(75));
+        assert_eq!(page_last.next_offset, None);
+        assert_eq!(page_last.last_offset, 100);
     }
 
     #[tokio::test]
@@ -3642,6 +3745,13 @@ pub struct HashPage {
     pub count: usize,
     pub limit: usize,
     pub offset: usize,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub prev_offset: Option<usize>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub next_offset: Option<usize>,
+    pub page: usize,
+    pub pages: usize,
+    pub last_offset: usize,
 }
 
 #[derive(Clone, Serialize)]

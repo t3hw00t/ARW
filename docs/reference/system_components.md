@@ -150,6 +150,7 @@ Tracks artifacts as typed nodes with provenance edges tying inputs, policies, an
   - Downloads honor preflight checks and quotas before admission.
   - Hash summaries now surface providers and referencing model IDs per CAS blob for quick triage.
   - Filter summaries by `provider=` or `model=` when calling `GET /state/models_hashes`.
+  - Paginated responses include `prev_offset`/`next_offset` plus page counters so dashboards can jump between slices without recomputing offsets.
 
 ### Asimov Capsule Guard
 

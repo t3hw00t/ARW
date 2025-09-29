@@ -48,6 +48,28 @@ button:hover { background: #f0f0f0; }
   padding: 4px 8px;
   font-size: 0.75rem;
 }
+.models-cell {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+.models-cell button.pill {
+  border: 1px solid var(--color-line);
+  background: linear-gradient(180deg,#ffffff,#f6f7f9);
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  border-radius: 999px;
+}
+.models-cell button.pill:focus {
+  outline: 2px solid var(--color-accent-teal);
+  outline-offset: 1px;
+}
+.models-cell .models-copy {
+  padding: 4px 8px;
+  font-size: 0.75rem;
+  border-radius: 8px;
+}
 #ledger-preview {
   margin-top: 8px;
   padding: 8px 12px;

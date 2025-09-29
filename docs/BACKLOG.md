@@ -272,7 +272,7 @@ Stabilization & Contracts
 - [Kernel] [t-250914210300-api01] Models summary: switch handler to typed snapshots from `ModelsService` (avoid ad‑hoc JSON picks) — done
 - [Kernel] [t-250914210302-api06] Concurrency: expose `pending_shrink` in `GET /admin/models/concurrency` and jobs snapshot — done
 - [Kernel] [t-250914210303-ui01] Models UI: add Jobs panel, concurrency controls with feedback, Installed Hashes filters + reset, and persistence — done
-- [Kernel] [t-250914210304-ui02] Installed Hashes: add pagination controls (offset/next/prev) — todo
+- [Kernel] [t-250914210304-ui02] Installed Hashes: add pagination controls (offset/next/prev) — done (pagination metadata + launcher controls)
 - [Kernel] [t-250914210304-api02] Egress ledger: add compact summarizer endpoint (time‑bounded; filters by decision/reason) — done
 - [Kernel] [t-250914210308-api03] CAS GC: centralize manifest reference extraction (single helper used by GC and any scanners) — todo
 - [Kernel] [t-250914210312-api04] Contract tests: promote spec/docs consistency checks to CI (status/code enums already validated in unit tests) — todo

@@ -65,6 +65,11 @@ Microsummary: Stable, typed response shapes for models endpoints used by UIs and
   - count: number
   - limit: number
   - offset: number
+  - prev_offset?: number | null
+  - next_offset?: number | null
+  - page: number (1-based when results exist; 0 when empty)
+  - pages: number (0 when empty)
+  - last_offset: number (final page offset)
   - items: HashItem[]
 
 - HashItem

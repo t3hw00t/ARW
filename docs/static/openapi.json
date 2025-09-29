@@ -4813,7 +4813,10 @@
           "total",
           "count",
           "limit",
-          "offset"
+          "offset",
+          "page",
+          "pages",
+          "last_offset"
         ],
         "properties": {
           "count": {
@@ -4826,12 +4829,38 @@
               "$ref": "#/components/schemas/HashItem"
             }
           },
+          "last_offset": {
+            "type": "integer",
+            "minimum": 0
+          },
           "limit": {
             "type": "integer",
             "minimum": 0
           },
+          "next_offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0
+          },
           "offset": {
             "type": "integer",
+            "minimum": 0
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "pages": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "prev_offset": {
+            "type": [
+              "integer",
+              "null"
+            ],
             "minimum": 0
           },
           "total": {

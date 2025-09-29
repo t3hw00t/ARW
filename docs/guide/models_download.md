@@ -6,7 +6,7 @@ title: Models Download (HTTP)
 
 ARW provides HTTP endpoints (admin‑gated) to manage local models with streaming downloads, live progress via SSE, safe cancel, and mandatory SHA‑256 verification. HTTP Range resume is supported when the upstream advertises validators (`ETag` or `Last-Modified`).
 
-Updated: 2025-09-27
+Updated: 2025-09-30
 Type: How‑to
 
 See also: Guide → Performance & Reasoning Playbook (budgets/admission), Reference → Configuration (ARW_DL_*, ARW_MODELS_*), and Architecture → Managed llama.cpp Runtime for how downloaded weights plug into the runtime supervisor.
@@ -20,7 +20,7 @@ Canonical topics used by the service are defined once under [crates/arw-topics/s
 - GET  `/state/models` — Public, read‑only models list (no admin token required).
 - GET  `/admin/models/summary` — Aggregated summary for UIs: `{ items, default, concurrency, metrics }`.
 - POST `/admin/models/cas_gc` — Run a one‑off CAS GC sweep; deletes unreferenced blobs older than `ttl_hours` (default `24`). Set `"verbose": true` to include per-blob deletion details in the response payload.
-- GET  `/state/models_hashes` — Summary of installed model hashes, sizes, providers, and referencing model IDs (`models`). Supports `provider=` and `model=` filters plus sorting for quick triage.
+- GET  `/state/models_hashes` — Summary of installed model hashes, sizes, providers, and referencing model IDs (`models`). Supports `provider=` and `model=` filters plus sorting for quick triage. Responses now include stable pagination metadata (`prev_offset`, `next_offset`, `page`, `pages`, `last_offset`) so UIs can jump directly to the first/previous/next/last slices without re-deriving offsets.
 - GET  `/admin/models/by-hash/:sha256` — Serve a CAS blob by hash (egress‑gated; `io:egress:models.peer`). Responses include strong validators (`ETag:"{sha256}"`, `Last-Modified`) and long-lived caching headers so repeat fetches can short-circuit with `304 Not Modified` when unchanged. HEAD requests mirror the metadata without streaming the blob.
   - Emits strong validators and immutable caching for digest‑addressed blobs:
     - `ETag: "<sha256>"`, `Last-Modified`, `Cache-Control: public, max-age=31536000, immutable`.

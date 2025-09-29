@@ -150,6 +150,30 @@ function escapeHtml(value){
     .replace(/'/g, '&#39;');
 }
 
+function escapeAttr(value){
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function renderModelsCell(models){
+  const list = Array.isArray(models) ? models.filter(Boolean) : [];
+  if (!list.length){
+    return '<span class="dim">—</span>';
+  }
+  const pills = list
+    .map(m => `<button type="button" class="pill" data-copy-model="${escapeAttr(m)}">${escapeHtml(m)}</button>`)
+    .join(' ');
+  const encoded = escapeAttr(JSON.stringify(list));
+  return `
+    <div class="models-cell" data-models="${encoded}">
+      ${pills}
+      <button type="button" class="ghost models-copy" data-copy-models title="Copy all model ids">Copy</button>
+    </div>
+  `;
+}
+
 function statusLabel(status){
   const map = {
     available: 'Available',
@@ -593,12 +617,44 @@ document.addEventListener('DOMContentLoaded', () => {
   const jfc = document.getElementById('btn-jobs-clear');
   if (jfc) jfc.addEventListener('click', ()=>{ const jf=document.getElementById('jobs-filter'); if (jf) jf.value=''; jobsRefresh();});
   const prevBtn = document.getElementById('btn-hashes-prev');
-  if (prevBtn) prevBtn.addEventListener('click', ()=>{ window.__hashOffset = Math.max(0, (window.__hashOffset|0) - (parseInt(document.getElementById('hash-limit').value||'50',10)||50)); hashesRefresh(); });
+  if (prevBtn) prevBtn.addEventListener('click', ()=>{
+    const target = parseInt(prevBtn.getAttribute('data-offset')||'', 10);
+    if (!Number.isFinite(target)) return;
+    window.__hashOffset = Math.max(0, target);
+    hashesRefresh();
+  });
   const nextBtn = document.getElementById('btn-hashes-next');
-  if (nextBtn) nextBtn.addEventListener('click', ()=>{ const lim = parseInt(document.getElementById('hash-limit').value||'50',10)||50; window.__hashOffset = (window.__hashOffset|0) + lim; hashesRefresh(); });
-  const firstBtn = document.getElementById('btn-hashes-first'); if (firstBtn) firstBtn.addEventListener('click', ()=>{ window.__hashOffset = 0; hashesRefresh(); });
-  const lastBtn = document.getElementById('btn-hashes-last'); if (lastBtn) lastBtn.addEventListener('click', ()=>{ const lim = parseInt(document.getElementById('hash-limit').value||'50',10)||50; const stat = document.getElementById('hash-page-stat'); const tot = stat? parseInt(stat.getAttribute('data-total')||'0',10) : 0; const pages = Math.max(1, Math.ceil(tot/Math.max(1,lim))); window.__hashOffset = (pages-1)*lim; hashesRefresh(); });
-  const pageInput = document.getElementById('hash-page'); if (pageInput) pageInput.addEventListener('change', ()=>{ const lim = parseInt(document.getElementById('hash-limit').value||'50',10)||50; const val = Math.max(1, parseInt(pageInput.value||'1',10)||1); window.__hashOffset = (val-1)*lim; hashesRefresh(); });
+  if (nextBtn) nextBtn.addEventListener('click', ()=>{
+    const target = parseInt(nextBtn.getAttribute('data-offset')||'', 10);
+    if (!Number.isFinite(target)) return;
+    window.__hashOffset = Math.max(0, target);
+    hashesRefresh();
+  });
+  const firstBtn = document.getElementById('btn-hashes-first');
+  if (firstBtn) firstBtn.addEventListener('click', ()=>{
+    window.__hashOffset = 0;
+    hashesRefresh();
+  });
+  const lastBtn = document.getElementById('btn-hashes-last');
+  if (lastBtn) lastBtn.addEventListener('click', ()=>{
+    const target = parseInt(lastBtn.getAttribute('data-offset')||'', 10);
+    if (!Number.isFinite(target)) return;
+    window.__hashOffset = Math.max(0, target);
+    hashesRefresh();
+  });
+  const pageInput = document.getElementById('hash-page');
+  if (pageInput) pageInput.addEventListener('change', ()=>{
+    const stat = document.getElementById('hash-page-stat');
+    const lim = parseInt(document.getElementById('hash-limit').value||'50',10)||50;
+    const totalPages = stat ? parseInt(stat.getAttribute('data-pages')||'0', 10) : 0;
+    const lastOffset = stat ? parseInt(stat.getAttribute('data-last-offset')||'0', 10) : 0;
+    const requested = Math.max(1, parseInt(pageInput.value||'1',10)||1);
+    const capped = totalPages > 0 ? Math.min(requested, totalPages) : requested;
+    pageInput.value = capped;
+    const target = Math.max(0, (capped - 1) * lim);
+    window.__hashOffset = lastOffset ? Math.min(target, lastOffset) : target;
+    hashesRefresh();
+  });
   const resetHashes = document.getElementById('btn-hashes-reset');
   if (resetHashes) resetHashes.addEventListener('click', async ()=>{
     try{
@@ -613,6 +669,7 @@ document.addEventListener('DOMContentLoaded', () => {
       p.hashLimit = 50;
       await ARW.setPrefs('launcher', p);
     }catch{}
+    window.__hashOffset = 0;
     hashesRefresh();
   });
   // Persist and react to control changes
@@ -686,27 +743,124 @@ async function hashesRefresh(){
     const fragHashes = document.createDocumentFragment();
     (page.items||[]).forEach(it => {
       const tr = document.createElement('tr');
-      const provs = (it.providers||[]).join(', ');
-      const pbtn = (it.path? ` <button data-open="${it.path}">Open</button>` : '');
-      tr.innerHTML = `<td class="mono">${it.sha256||''}</td><td>${bytesHuman(it.bytes||0)}</td><td class="mono">${it.path||''}${pbtn}</td><td>${provs}</td>`;
+      const providers = Array.isArray(it.providers) ? it.providers.filter(Boolean) : [];
+      const provsCell = providers.length
+        ? escapeHtml(providers.join(', '))
+        : '<span class="dim">—</span>';
+      const modelsCell = renderModelsCell(it.models);
+      const hasPath = typeof it.path === 'string' && it.path.length > 0;
+      const pathSafe = hasPath ? escapeHtml(it.path) : '<span class="dim">—</span>';
+      const pathAttr = hasPath ? escapeHtml(it.path) : '';
+      const pbtn = hasPath ? ` <button data-open="${pathAttr}">Open</button>` : '';
+      tr.innerHTML = `
+        <td class="mono">${it.sha256||''}</td>
+        <td>${bytesHuman(it.bytes||0)}</td>
+        <td class="mono">${pathSafe}${pbtn}</td>
+        <td>${provsCell}</td>
+        <td>${modelsCell}</td>
+      `;
       const op = tr.querySelector('[data-open]');
       if (op) op.addEventListener('click', async (e)=>{ await ivk('open_path', { path: e.target.getAttribute('data-open') }); });
       fragHashes.appendChild(tr);
     });
     tb.appendChild(fragHashes);
-    // Update page stat and prev/next
+    // Update page stat and controls
     const stat = document.getElementById('hash-page-stat');
-    const cur = page.offset||0; const tot = page.total||0; const lim = page.limit||limit;
-    const curPage = Math.floor(cur/Math.max(1,lim)) + 1;
-    const totalPages = Math.max(1, Math.ceil((tot||0)/Math.max(1,lim)));
-    if (stat){ stat.textContent = `Showing ${cur}–${cur+(page.count||0)} of ${tot} · Page ${curPage}/${totalPages}`; stat.setAttribute('data-total', String(tot||0)); }
-    const prev = document.getElementById('btn-hashes-prev'); const next = document.getElementById('btn-hashes-next');
-    if (prev) prev.disabled = (cur<=0);
-    if (next) next.disabled = (cur+lim >= tot);
-    const first = document.getElementById('btn-hashes-first'); const last = document.getElementById('btn-hashes-last');
-    if (first) first.disabled = (cur<=0);
-    if (last) last.disabled = (cur+lim >= tot);
-    const pageEl = document.getElementById('hash-page'); if (pageEl) pageEl.value = curPage;
+    const tot = Number.isInteger(page.total) ? page.total : 0;
+    const lim = Number.isInteger(page.limit) ? Math.max(1, page.limit) : Math.max(1, limit);
+    const cur = Number.isInteger(page.offset) ? Math.max(0, page.offset) : offset;
+    const count = Number.isInteger(page.count) ? Math.max(0, page.count) : (page.items||[]).length;
+    window.__hashOffset = cur;
+    const fallbackPages = Math.max(1, Math.ceil(tot/Math.max(1, lim)));
+    const pages = Number.isInteger(page.pages) && page.pages > 0 ? page.pages : fallbackPages;
+    const pageNumberRaw = Number.isInteger(page.page) && page.page > 0 ? page.page : (Math.floor(cur/Math.max(1, lim)) + 1);
+    const pageNumber = Math.min(Math.max(1, pageNumberRaw), Math.max(1, pages));
+    const fallbackPrev = cur > 0 ? Math.max(0, cur - lim) : null;
+    const fallbackNext = (cur + lim < tot) ? cur + lim : null;
+    const prevOffset = Number.isInteger(page.prev_offset) ? page.prev_offset : fallbackPrev;
+    const nextOffset = Number.isInteger(page.next_offset) ? page.next_offset : fallbackNext;
+    const fallbackLast = tot > 0 ? Math.floor((tot - 1) / lim) * lim : 0;
+    const lastOffset = Number.isInteger(page.last_offset) ? page.last_offset : fallbackLast;
+    if (stat){
+      stat.textContent = `Showing ${cur}–${cur + count} of ${tot} · Page ${pageNumber}/${Math.max(1, pages)}`;
+      stat.setAttribute('data-total', String(tot));
+      stat.setAttribute('data-pages', String(Math.max(1, pages)));
+      stat.setAttribute('data-last-offset', String(Math.max(0, lastOffset)));
+    }
+    const prev = document.getElementById('btn-hashes-prev');
+    if (prev){
+      if (prevOffset === null || prevOffset === undefined || prevOffset === cur){
+        prev.disabled = true;
+        prev.removeAttribute('data-offset');
+      }else{
+        prev.disabled = false;
+        prev.setAttribute('data-offset', String(Math.max(0, prevOffset)));
+      }
+    }
+    const next = document.getElementById('btn-hashes-next');
+    if (next){
+      if (nextOffset === null || nextOffset === undefined || nextOffset === cur){
+        next.disabled = true;
+        next.removeAttribute('data-offset');
+      }else{
+        next.disabled = false;
+        next.setAttribute('data-offset', String(Math.max(0, nextOffset)));
+      }
+    }
+    const first = document.getElementById('btn-hashes-first');
+    if (first){
+      first.disabled = (cur <= 0);
+    }
+    const last = document.getElementById('btn-hashes-last');
+    if (last){
+      if (lastOffset <= cur){
+        last.disabled = true;
+        last.removeAttribute('data-offset');
+      }else{
+        last.disabled = false;
+        last.setAttribute('data-offset', String(Math.max(0, lastOffset)));
+      }
+    }
+    const pageEl = document.getElementById('hash-page');
+    if (pageEl){
+      pageEl.value = pageNumber;
+      pageEl.setAttribute('max', String(Math.max(1, pages)));
+    }
+    tb.querySelectorAll('[data-copy-model]').forEach(btn => {
+      if (btn.dataset.boundCopy === '1') return;
+      btn.dataset.boundCopy = '1';
+      btn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        const val = btn.getAttribute('data-copy-model') || '';
+        if (!val) return;
+        try {
+          await ARW.copy(val);
+          ARW.toast?.(`Copied ${val}`);
+        } catch (err) {
+          console.error(err);
+        }
+      });
+    });
+    tb.querySelectorAll('[data-copy-models]').forEach(btn => {
+      if (btn.dataset.boundCopy === '1') return;
+      btn.dataset.boundCopy = '1';
+      btn.addEventListener('click', async (e)=>{
+        e.stopPropagation();
+        const cell = btn.closest('.models-cell');
+        if (!cell) return;
+        const raw = cell.getAttribute('data-models');
+        if (!raw) return;
+        try {
+          const list = JSON.parse(raw);
+          if (!Array.isArray(list) || !list.length) return;
+          const joined = list.join('\n');
+          await ARW.copy(joined);
+          ARW.toast?.('Copied model ids');
+        } catch (err) {
+          console.error(err);
+        }
+      });
+    });
     // Persist offset
     try{ const p = await ARW.getPrefs('launcher') || {}; p.hashOffset = cur; await ARW.setPrefs('launcher', p);}catch{}
   }catch(e){ console.error(e); }
