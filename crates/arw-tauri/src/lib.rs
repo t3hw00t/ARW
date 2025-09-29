@@ -127,7 +127,7 @@ fn capture_output(mut cmd: Command, label: &str) -> Result<String, String> {
                 }
                 if !stderr.is_empty() {
                     if !combined.is_empty() {
-                        combined.push_str("\n");
+                        combined.push('\n');
                     }
                     combined.push_str(&stderr);
                 }

@@ -283,7 +283,7 @@ pub async fn admin_memory_apply(
     Json(req): Json<MemoryApplyReq>,
 ) -> impl IntoResponse {
     if let Err(resp) = crate::responses::require_admin(&headers) {
-        return resp;
+        return *resp;
     }
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
@@ -361,7 +361,7 @@ pub async fn admin_memory_list(
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
     if let Err(resp) = crate::responses::require_admin(&headers) {
-        return resp;
+        return *resp;
     }
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();

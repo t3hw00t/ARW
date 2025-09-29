@@ -1,0 +1,323 @@
+# Curated human-facing copy for OpenAPI operations.
+#
+# Structure:
+#   /path:
+#     method:
+#       summary: ...
+#       description: ...
+# Extend with additional fields (e.g., x-sunset) when needed; the helper
+# script merges these values into spec/openapi.yaml during generation.
+/admin/chat:
+  get:
+    summary: Fetch chat transcript
+    description: Retrieve the active admin chat transcript, including message history and tool metadata.
+/admin/chat/clear:
+  post:
+    summary: Clear chat transcript
+    description: Wipe the stored admin chat transcript and reset associated tool context for a fresh session.
+/admin/chat/send:
+  post:
+    summary: Send chat message
+    description: Submit a message to the admin chat lane and receive the synthesized assistant response.
+/admin/chat/status:
+  get:
+    summary: Query chat status
+    description: Report chat lane health, including the most recent latency probe; optionally trigger a new probe.
+/admin/experiments/define:
+  post:
+    summary: Define experiment
+    description: Create or update an experiment definition with the supplied variants and configuration payload.
+/admin/experiments/run:
+  post:
+    summary: Run experiment on goldens
+    description: Execute the requested experiment variants against the chosen golden project and return the evaluation outcome.
+/admin/experiments/activate:
+  post:
+    summary: Activate experiment variant
+    description: Mark a variant as the active choice for the experiment and persist the rollout decision.
+/admin/experiments/list:
+  get:
+    summary: List experiments
+    description: Return all experiment definitions currently registered with their variant metadata.
+/admin/experiments/scoreboard:
+  get:
+    summary: Fetch experiment scoreboard
+    description: Provide aggregated performance metrics for each experiment variant to compare recent runs.
+/admin/experiments/winners:
+  get:
+    summary: List experiment winners
+    description: Return the top-performing variants for experiments based on the latest evaluation data.
+/admin/experiments/start:
+  post:
+    summary: Start experiment run
+    description: Publish a start event for a new experiment with optional assignment, budget, and variant hints.
+/admin/experiments/stop:
+  post:
+    summary: Stop experiment
+    description: Halt an experiment run by emitting a stop event for the provided experiment identifier.
+/admin/experiments/assign:
+  post:
+    summary: Assign experiment variant
+    description: Record or override an experiment assignment for a participant or agent and broadcast the decision.
+/admin/feedback/state:
+  get:
+    summary: Inspect feedback state
+    description: Return the current feedback engine snapshot, including signals, suggestions, and configuration.
+/admin/feedback/signal:
+  post:
+    summary: Record feedback signal
+    description: Submit a feedback signal with confidence and severity so it influences subsequent analysis.
+/admin/feedback/analyze:
+  post:
+    summary: Recompute feedback suggestions
+    description: Trigger an immediate feedback analysis pass to refresh suggestions from the latest signals.
+/admin/feedback/apply:
+  post:
+    summary: Apply feedback suggestion
+    description: Apply the identified suggestion and let the engine reconcile policy and audit outcomes.
+/admin/feedback/auto:
+  post:
+    summary: Toggle automatic feedback application
+    description: Enable or disable automatic application of approved feedback suggestions.
+/admin/feedback/reset:
+  post:
+    summary: Reset feedback engine
+    description: Clear feedback signals, suggestions, and cached state for a cold start.
+/admin/feedback/suggestions:
+  get:
+    summary: List feedback suggestions
+    description: Return the current queue of actionable feedback suggestions with their metadata.
+/admin/feedback/updates:
+  get:
+    summary: Fetch feedback updates
+    description: Retrieve feedback suggestions updated since a provided version cursor, enabling incremental refresh.
+/admin/feedback/policy:
+  get:
+    summary: Fetch feedback policy
+    description: Return the effective feedback application policy after merging defaults and overrides.
+/admin/feedback/versions:
+  get:
+    summary: List feedback snapshots
+    description: Enumerate available feedback snapshots that can be inspected or rolled back to.
+/admin/feedback/rollback:
+  post:
+    summary: Roll back feedback snapshot
+    description: Restore feedback state to the requested snapshot version and return the resulting suggestion set.
+/admin/goldens/list:
+  get:
+    summary: List golden records
+    description: Return the golden dataset for the requested project, including individual test cases.
+/admin/goldens/add:
+  post:
+    summary: Add golden record
+    description: Append a golden item to the specified project collection and persist the updated set.
+/admin/goldens/run:
+  post:
+    summary: Evaluate golden set
+    description: Run the supplied golden dataset against the current chat runtime and report evaluation metrics.
+/admin/governor/hints:
+  get:
+    summary: Inspect governor hints
+    description: Return the currently effective governor hints that shape scheduling and retrieval behaviour.
+  post:
+    summary: Update governor hints
+    description: Apply new governor hints to adjust scheduling, retrieval, and context construction parameters.
+/admin/governor/profile:
+  get:
+    summary: Get governor profile
+    description: Return the active governor profile name configured for the node.
+  post:
+    summary: Set governor profile
+    description: Switch the governor to the requested profile and broadcast the change.
+/admin/hierarchy/accept:
+  post:
+    summary: Accept hierarchy offer
+    description: Accept a hierarchy offer message to finalize a connection with the given participant.
+/admin/hierarchy/hello:
+  post:
+    summary: Send hierarchy hello
+    description: Emit the initial hello message in the hierarchy handshake with another participant.
+/admin/hierarchy/offer:
+  post:
+    summary: Offer hierarchy connection
+    description: Publish a hierarchy offer to negotiate roles and capabilities with a peer.
+/admin/hierarchy/role:
+  post:
+    summary: Set hierarchy roles
+    description: Update hierarchy role assignments for a participant and persist the change.
+/admin/hierarchy/state:
+  get:
+    summary: Inspect hierarchy state
+    description: Return the current hierarchy session map, including offers, participants, and active roles.
+/admin/introspect/stats:
+  get:
+    summary: Fetch metrics overview
+    description: Return an aggregated metrics snapshot covering events, routes, cache, and bus counters for operators.
+/admin/memory/quarantine:
+  get:
+    summary: List quarantined memories
+    description: Return entries awaiting review in the memory quarantine queue.
+  post:
+    summary: Queue memory for review
+    description: Enqueue a memory item for quarantine review and emit the appropriate audit event.
+/admin/memory/quarantine/admit:
+  post:
+    summary: Admit quarantined memory
+    description: Remove a memory from quarantine, optionally admitting or rejecting it, and report the outcome.
+/admin/models:
+  get:
+    summary: List models
+    description: Return the configured model entries including provider metadata.
+/admin/models/add:
+  post:
+    summary: Add model entry
+    description: Register a model entry with optional provider, path, and status metadata.
+/admin/models/by-hash/{sha256}:
+  get:
+    summary: Download model blob
+    description: Stream a CAS-stored model blob by SHA-256 with caching headers and partial range support.
+/admin/models/cas_gc:
+  post:
+    summary: Run CAS garbage collection
+    description: Execute a content-addressed store cleanup pass and report removed blobs.
+/admin/models/concurrency:
+  get:
+    summary: Inspect model concurrency
+    description: Return the current model concurrency settings and snapshot telemetry.
+  post:
+    summary: Update model concurrency
+    description: Apply new concurrency limits or blocking behaviour for model execution.
+/admin/models/default:
+  get:
+    summary: Get default model
+    description: Return the identifier of the default model selection.
+  post:
+    summary: Set default model
+    description: Select the default model to be used for future requests.
+/admin/models/download:
+  post:
+    summary: Start model download
+    description: Request download or import of a model artifact and enqueue the job if supported.
+/admin/models/download/cancel:
+  post:
+    summary: Cancel model download
+    description: Cancel an in-flight model download job when the backend supports it.
+/admin/models/jobs:
+  get:
+    summary: Inspect model jobs
+    description: Return the current queue of model download and load jobs with their statuses.
+/admin/models/load:
+  post:
+    summary: Load model manifest
+    description: Load model entries from the persisted manifest on disk.
+/admin/models/refresh:
+  post:
+    summary: Refresh models list
+    description: Refresh the live model list from runtime state and return the updated entries.
+/admin/models/remove:
+  post:
+    summary: Remove model entry
+    description: Remove a model entry by identifier and report whether it existed.
+/admin/models/save:
+  post:
+    summary: Save model manifest
+    description: Persist the current model registry to the on-disk manifest.
+/admin/models/summary:
+  get:
+    summary: Summarize model catalog
+    description: Return aggregate statistics about installed models, storage usage, and capabilities.
+/admin/self_model/propose:
+  post:
+    summary: Propose self-model update
+    description: Submit a self-model patch proposal for an agent and emit the proposal event.
+/admin/self_model/apply:
+  post:
+    summary: Apply self-model proposal
+    description: Apply a previously proposed self-model change and notify subscribers.
+/admin/tools:
+  get:
+    summary: List registered tools
+    description: Return the catalog of available tools with stability and capability metadata.
+/admin/tools/cache_stats:
+  get:
+    summary: Inspect tool cache statistics
+    description: Return cache utilisation metrics for the shared tool cache.
+/admin/tools/run:
+  post:
+    summary: Run tool
+    description: Execute a registered tool with the provided input payload and return its output.
+/admin/world_diffs:
+  get:
+    summary: List world diffs
+    description: Return the queue of pending world diffs awaiting review.
+/admin/world_diffs/decision:
+  post:
+    summary: Record world diff decision
+    description: Accept or reject a queued world diff and persist the decision outcome.
+/admin/world_diffs/queue:
+  post:
+    summary: Queue world diff
+    description: Enqueue a world diff for review with the supplied metadata.
+/metrics:
+  get:
+    summary: Export Prometheus metrics
+    description: Serve Prometheus-formatted metrics for the unified server, including tool cache counters.
+/projects:
+  post:
+    summary: Create project
+    description: Create a new project directory, seed default notes, and emit the creation event.
+/projects/{proj}/file:
+  put:
+    summary: Write project file
+    description: Create or replace a project file at the given path, enforcing optimistic concurrency and quotas.
+  patch:
+    summary: Patch project file
+    description: Apply a JSON patch or diff patch to an existing project file while checking version guards.
+/projects/{proj}/import:
+  post:
+    summary: Import project asset
+    description: Copy or move a file from the staging area into the project workspace and emit audit events.
+/projects/{proj}/notes:
+  put:
+    summary: Save project notes
+    description: Replace the project notes document and return metadata for the updated file.
+/research_watcher/{id}/approve:
+  post:
+    summary: Approve research watcher item
+    description: Mark a research watcher entry as approved, optionally attaching an operator note.
+/research_watcher/{id}/archive:
+  post:
+    summary: Archive research watcher item
+    description: Archive a research watcher entry to remove it from the active queue while preserving audit history.
+/staging/actions/{id}/approve:
+  post:
+    summary: Approve staging action
+    description: Approve a staged action so it can execute and emit the resulting workflow job.
+/staging/actions/{id}/deny:
+  post:
+    summary: Deny staging action
+    description: Deny a staged action with an optional reason, preventing it from executing.
+/state/models_hashes:
+  get:
+    summary: List installed model hashes
+    description: Return a paginated view of installed model blobs with filters for provider, size, and hash.
+/state/models_metrics:
+  get:
+    summary: Inspect model metrics
+    description: Return model runtime metrics, including cache hits and latency data, for observability dashboards.
+/state/projects:
+  get:
+    summary: Snapshot project catalog
+    description: Return the cached project snapshot with file tree, notes, and metadata for quick reads.
+/state/projects/{proj}/file:
+  get:
+    summary: Fetch project file snapshot
+    description: Return the latest stored contents for a project file identified by project and relative path.
+/state/projects/{proj}/notes:
+  get:
+    summary: Fetch project notes
+    description: Return the current project notes document with metadata such as checksum and size.
+/state/projects/{proj}/tree:
+  get:
+    summary: Browse project tree
+    description: Return a directory listing for a project path to help clients explore workspace structure.

@@ -165,7 +165,7 @@ pub(crate) fn admin_rate_limit_allow(fingerprint: &str, ip: Option<&str>) -> boo
         .expect("admin rate limiter mutex poisoned");
     let mut remove_key = false;
     let allowed = {
-        let entry = map.entry(key.clone()).or_insert_with(VecDeque::new);
+        let entry = map.entry(key.clone()).or_default();
         entry.retain(|ts| now.saturating_duration_since(*ts) <= cfg.window);
         if entry.is_empty() {
             remove_key = true;

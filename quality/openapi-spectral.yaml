@@ -2,6 +2,10 @@ extends:
   - spectral:oas
   - spectral:asyncapi
 
+functionsDir: ./spectral_functions
+functions:
+  - dotCaseChannel
+
 rules:
   # Baseline adjustments
   oas3-api-servers: off  # not documenting servers in this repo
@@ -80,19 +84,15 @@ rules:
       function: defined
       field: parameters
 
-  # Events channel naming: Title.Case with dot segments (AsyncAPI)
-  # Disabled for now: dot.case channels already enforced in code; '@key' targets subscribe/publish, and '*~' key selector is flaky across Spectral versions
+  # Events channel naming: enforce dot.case (AsyncAPI)
   x-asyncapi-channel-naming:
     description: Event channel names should use dot.case segments
-    message: "Channel '{{property}}' should be dot.case (e.g., models.download.progress)"
-    severity: off
+    severity: error
     formats:
       - asyncapi2
-    given: $.channels.*~
+    given: $.channels
     then:
-      function: pattern
-      functionOptions:
-        match: '^[a-z]+(\\.[a-z][a-z0-9]+)+$'
+      - function: dotCaseChannel
 
   # AsyncAPI triage: loosen strictness to reflect current minimal channel docs
   asyncapi-operation-operationId: warn

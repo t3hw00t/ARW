@@ -49,7 +49,7 @@ pub async fn state_autonomy_lanes(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     if let Err(resp) = responses::require_admin(&headers) {
-        return resp;
+        return *resp;
     }
     let counts = live_action_counts(&state).await;
     let mut lanes = state.autonomy().lanes().await;
@@ -83,7 +83,7 @@ pub async fn state_autonomy_lane(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     if let Err(resp) = responses::require_admin(&headers) {
-        return resp;
+        return *resp;
     }
     match state.autonomy().lane(&lane_id).await {
         Some(existing) => {
@@ -118,7 +118,7 @@ pub async fn autonomy_pause(
     payload: Option<Json<AutonomyActionRequest>>,
 ) -> impl IntoResponse {
     if let Err(resp) = responses::require_admin(&headers) {
-        return resp;
+        return *resp;
     }
     let body = payload.map(|wrapper| wrapper.0).unwrap_or_default();
     let snapshot = state
@@ -149,7 +149,7 @@ pub async fn autonomy_resume(
     payload: Option<Json<AutonomyActionRequest>>,
 ) -> impl IntoResponse {
     if let Err(resp) = responses::require_admin(&headers) {
-        return resp;
+        return *resp;
     }
     let body = payload.map(|wrapper| wrapper.0).unwrap_or_default();
     let target_mode = match body.mode.as_deref() {
@@ -210,7 +210,7 @@ pub async fn autonomy_jobs_clear(
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     if let Err(resp) = responses::require_admin(&headers) {
-        return resp;
+        return *resp;
     }
     let scope = match query.state.as_deref().map(|s| s.trim()) {
         None | Some("") | Some("all") => FlushScope::All,

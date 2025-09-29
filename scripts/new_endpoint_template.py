@@ -84,9 +84,24 @@ def main():
 
     rust_method = method
     rust_tag = tag or 'Public'
+
+    def to_rust_ident(name: str) -> str:
+        ident = ''.join(ch if (ch.isalnum() or ch == '_') else '_' for ch in name)
+        if ident and ident[0].isdigit():
+            ident = f"_{ident}"
+        return ident or 'generated_endpoint_doc'
+
+    rust_fn = to_rust_ident(opid)
+
     print('\n# Rust utoipa wrapper (annotate a handler):\n')
     depo = ', deprecated = true' if args.deprecated else ''
-    print(f"#[utoipa::path({rust_method}, path = \"{path}\", tag = \"{rust_tag}\"{depo}, responses((status=200, description=\"OK\")))]\nasync fn TODO_doc() -> impl IntoResponse {{ /* call real handler */ }}")
+    summary_comment = summary.replace('"', '\"') if summary else ''
+    if summary_comment:
+        print(f"/// {summary_comment}")
+    print(
+        f"#[utoipa::path({rust_method}, path = \"{path}\", tag = \"{rust_tag}\"{depo}, responses((status=200, description=\"OK\")))]\n"
+        f"async fn {rust_fn}() -> impl IntoResponse {{ /* call real handler */ }}"
+    )
 
     if args.apply:
         doc = load_yaml(SPEC)

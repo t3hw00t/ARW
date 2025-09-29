@@ -28,13 +28,14 @@ if command -v python3 >/dev/null 2>&1; then
   python3 scripts/interfaces_generate_index.py || true
   python3 scripts/generate_deprecations.py || true
   python3 scripts/ensure_openapi_descriptions.py || true
+  python3 scripts/apply_operation_docs.py || true
   python3 scripts/generate_openapi_json.py || true
   if ! git diff --quiet -- interfaces/index.yaml; then
     echo "::error::interfaces/index.yaml changed; commit the updated index"; git --no-pager diff -- interfaces/index.yaml | sed -n '1,120p'; exit 1; fi
   if ! git diff --quiet -- docs/reference/deprecations.md; then
     echo "::error::deprecations doc changed; commit the update"; git --no-pager diff -- docs/reference/deprecations.md | sed -n '1,120p'; exit 1; fi
   if ! git diff --quiet -- spec/openapi.yaml; then
-    echo "::error::spec/openapi.yaml updated with placeholder descriptions/tags; commit the changes"; git --no-pager diff -- spec/openapi.yaml | sed -n '1,160p'; exit 1; fi
+    echo "::error::spec/openapi.yaml updated (curated summaries/descriptions or placeholders changed); commit the regeneration"; git --no-pager diff -- spec/openapi.yaml | sed -n '1,160p'; exit 1; fi
   if ! git diff --quiet -- docs/static/openapi.json; then
     echo "::error::docs/static/openapi.json changed; commit the regenerated file"; git --no-pager diff -- docs/static/openapi.json | sed -n '1,160p'; exit 1; fi
 else

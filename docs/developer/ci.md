@@ -13,6 +13,8 @@ Type: Reference
 
 ### Interfaces workflow (APIs, events, tools)
 - Lint: Spectral on `spec/openapi.yaml` and `spec/asyncapi.yaml` using `quality/openapi-spectral.yaml`.
+- AsyncAPI channel naming: enforced via Spectral custom function (`quality/spectral_functions/dotCaseChannel.js`) so channels stay dot.case.
+- Curated endpoint copy: run `python3 scripts/apply_operation_docs.py` when new routes land so summaries/descriptions stay consistent with `spec/operation_docs.yaml`.
 - Diff: OpenAPI via `tufin/oasdiff` (breaking changes fail), AsyncAPI via `@asyncapi/diff` (markdown artifact).
 - Sync: Generate OpenAPI from code (`just openapi-gen`, wraps `OPENAPI_OUT=spec/openapi.yaml target/release/arw-server`) and normalize‑diff against `spec/openapi.yaml`.
 - Mock: Boot Prism on OpenAPI and smoke a request.

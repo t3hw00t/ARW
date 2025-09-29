@@ -249,6 +249,8 @@ openapi-gen:
   OPENAPI_OUT=spec/openapi.yaml target/release/arw-server
   # ensure_openapi_descriptions.py returns 1 when it modifies the spec; keep going
   python3 scripts/ensure_openapi_descriptions.py || true
+  # apply curated summaries/descriptions from spec/operation_docs.yaml (exit 1 when it edits)
+  python3 scripts/apply_operation_docs.py || true
   python3 scripts/generate_openapi_json.py
 
 check-enums:
@@ -300,6 +302,7 @@ verify:
   cargo clippy --workspace --all-targets -- -D warnings
   cargo test --workspace --locked
   node apps/arw-launcher/src-tauri/ui/read_store.test.js
+  python3 scripts/check_operation_docs_sync.py
   python3 scripts/lint_event_names.py
   bash scripts/docs_check.sh
 

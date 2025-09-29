@@ -14,18 +14,13 @@ use utoipa::ToSchema;
 
 use crate::responses;
 
-#[derive(Clone, Debug, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AutonomyMode {
+    #[default]
     Guided,
     Autonomous,
     Paused,
-}
-
-impl Default for AutonomyMode {
-    fn default() -> Self {
-        AutonomyMode::Guided
-    }
 }
 
 impl AutonomyMode {
@@ -361,13 +356,11 @@ impl AutonomyRegistry {
 }
 
 #[allow(dead_code)]
-#[allow(dead_code)]
 struct BudgetFlags {
     close_to_limit: bool,
     exhausted: bool,
 }
 
-#[allow(dead_code)]
 #[allow(dead_code)]
 fn budget_flags(lane: &AutonomyLaneSnapshot) -> BudgetFlags {
     let budgets = match &lane.budgets {

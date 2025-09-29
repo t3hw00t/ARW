@@ -228,7 +228,7 @@ Specs & Docs
   - [Kernel] Gallery guide and screenshots guide updates — done
   - [Kernel] [t-250913213502-ev03] Add envelope schema `ApiEnvelope<T>` in OpenAPI and adopt in responses (opt-in) — todo
   - [Kernel] [t-250913213503-ev04] Add short descriptions to any endpoints with Spectral hints (e.g., /state/models) — done
-  - [Kernel] [t-250913213504-ev05] Adjust Spectral AsyncAPI rule to accept dot.case explicitly to remove naming warnings — todo
+  - [Kernel] [t-250913213504-ev05] Adjust Spectral AsyncAPI rule to accept dot.case explicitly to remove naming warnings — done (custom dot.case checker in Spectral ruleset)
   - [Kernel] [t-250913213505-ev06] Plan removal: switch all deployments to normalized kinds, then drop legacy/dual paths — done
   - [Kernel] [t-250913213506-ev07] Add deprecation note to release notes (legacy event kinds) — done
 

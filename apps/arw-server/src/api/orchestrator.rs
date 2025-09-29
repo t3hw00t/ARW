@@ -56,7 +56,7 @@ pub async fn orchestrator_start_training(
     Json(req): Json<OrchestratorStartReq>,
 ) -> axum::response::Response {
     if let Err(resp) = crate::responses::require_admin(&headers) {
-        return resp;
+        return *resp;
     }
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();

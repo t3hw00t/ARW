@@ -90,6 +90,9 @@ jobs:
       - name: Event kind lint
         run: python3 scripts/lint_event_names.py
 
+      - name: Ensure OpenAPI summaries
+        run: python3 scripts/check_operation_docs_sync.py
+
       - name: Tests (workspace)
         run: cargo nextest run --workspace
 
