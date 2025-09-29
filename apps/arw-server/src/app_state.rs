@@ -7,8 +7,8 @@ use serde_json::json;
 use tokio::sync::Mutex;
 
 use crate::{
-    capsule_guard, chat, cluster, experiments, feedback, governor, metrics, models, policy,
-    runtime, tool_cache, training,
+    autonomy, capsule_guard, chat, cluster, experiments, feedback, governor, metrics, models,
+    policy, runtime, tool_cache, training,
 };
 
 type SharedConfigState = Arc<Mutex<serde_json::Value>>;
@@ -30,6 +30,7 @@ pub(crate) struct AppState {
     models: Arc<models::ModelStore>,
     tool_cache: Arc<tool_cache::ToolCache>,
     governor: Arc<governor::GovernorState>,
+    autonomy: Arc<autonomy::AutonomyRegistry>,
     feedback: Arc<feedback::FeedbackHub>,
     cluster: Arc<cluster::ClusterRegistry>,
     experiments: Arc<experiments::Experiments>,
@@ -56,6 +57,7 @@ impl AppState {
         models: Arc<models::ModelStore>,
         tool_cache: Arc<tool_cache::ToolCache>,
         governor: Arc<governor::GovernorState>,
+        autonomy: Arc<autonomy::AutonomyRegistry>,
         feedback: Arc<feedback::FeedbackHub>,
         cluster: Arc<cluster::ClusterRegistry>,
         experiments: Arc<experiments::Experiments>,
@@ -79,6 +81,7 @@ impl AppState {
             models,
             tool_cache,
             governor,
+            autonomy,
             feedback,
             cluster,
             experiments,
@@ -146,6 +149,10 @@ impl AppState {
         self.governor.clone()
     }
 
+    pub fn autonomy(&self) -> Arc<autonomy::AutonomyRegistry> {
+        self.autonomy.clone()
+    }
+
     pub fn feedback(&self) -> Arc<feedback::FeedbackHub> {
         self.feedback.clone()
     }
@@ -203,6 +210,7 @@ pub(crate) struct AppStateBuilder {
     models: Option<Arc<models::ModelStore>>,
     tool_cache: Option<Arc<tool_cache::ToolCache>>,
     governor: Option<Arc<governor::GovernorState>>,
+    autonomy: Option<Arc<autonomy::AutonomyRegistry>>,
     feedback: Option<Arc<feedback::FeedbackHub>>,
     cluster: Option<Arc<cluster::ClusterRegistry>>,
     experiments: Option<Arc<experiments::Experiments>>,
@@ -236,6 +244,7 @@ impl AppState {
             models: None,
             tool_cache: None,
             governor: None,
+            autonomy: None,
             feedback: None,
             cluster: None,
             experiments: None,
@@ -302,6 +311,11 @@ impl AppStateBuilder {
 
     pub(crate) fn with_governor(mut self, governor: Arc<governor::GovernorState>) -> Self {
         self.governor = Some(governor);
+        self
+    }
+
+    pub(crate) fn with_autonomy(mut self, autonomy: Arc<autonomy::AutonomyRegistry>) -> Self {
+        self.autonomy = Some(autonomy);
         self
     }
 
@@ -381,6 +395,10 @@ impl AppStateBuilder {
         let tool_cache = self
             .tool_cache
             .unwrap_or_else(|| Arc::new(tool_cache::ToolCache::new()));
+        let autonomy_registry = match self.autonomy {
+            Some(state) => state,
+            None => autonomy::AutonomyRegistry::new(self.bus.clone()).await,
+        };
         let governor_state = match self.governor {
             Some(state) => state,
             None => governor::GovernorState::new().await,
@@ -434,6 +452,7 @@ impl AppStateBuilder {
             models_store,
             tool_cache,
             governor_state,
+            autonomy_registry.clone(),
             feedback_hub,
             cluster_state,
             experiments_state,

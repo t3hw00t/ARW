@@ -859,6 +859,20 @@ impl Kernel {
         Ok(n > 0)
     }
 
+    pub fn delete_actions_by_state(&self, state: &str) -> Result<u64> {
+        let conn = self.conn()?;
+        let n = conn.execute("DELETE FROM actions WHERE state=?", params![state])?;
+        Ok(n as u64)
+    }
+
+    pub async fn delete_actions_by_state_async(&self, state: &str) -> Result<u64> {
+        let k = self.clone();
+        let state = state.to_string();
+        tokio::task::spawn_blocking(move || k.delete_actions_by_state(&state))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
     pub fn update_action_result(
         &self,
         id: &str,

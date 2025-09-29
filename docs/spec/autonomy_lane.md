@@ -59,13 +59,14 @@ The lane never runs without a fresh rollback rehearsal. The two-minute recipe li
 ## Implementation Checklist
 
 - [x] Charter published and accepted.
-- [ ] `trial-autonomy-governor`: wire scheduler kill switch, pause lane API, Trial Control Center controls.
+- [x] `trial-autonomy-governor`: wire scheduler kill switch, pause lane API, Trial Control Center controls.
 - [x] `autonomy-rollback-playbook`: keep runbook current; rehearsal tracked per cohort.
 - [ ] `autonomy-lane-spec`: keep this ADR aligned with implementation; revisit quarterly.
 - [ ] `trial-g3` / `trial-g4`: update gate criteria once kill switch and rollback rehearsals ship.
 
 ## Change History
 
+- 2025-09-29 — Implemented autonomy kill switch registry, APIs, and Trial Control Center controls.
 - 2025-09-26 — Charter promoted from draft to accepted; added lane contract, telemetry, and rollback alignment.
 - 2025-09-18 — Initial draft capturing intent and guardrail checklist.
 

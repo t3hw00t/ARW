@@ -2,7 +2,7 @@ use std::mem;
 
 use axum::{
     handler::Handler,
-    routing::{get, patch, post, put},
+    routing::{delete, get, patch, post, put},
     Router,
 };
 use serde_json::{json, Value};
@@ -118,6 +118,22 @@ impl RouterBuilder {
         self
     }
 
+    pub fn route_delete<H, T>(
+        &mut self,
+        path: &'static str,
+        handler: H,
+        stability: Option<Stability>,
+    ) -> &mut Self
+    where
+        H: Handler<T, AppState> + Clone + 'static,
+        T: Send + 'static,
+    {
+        self.record("DELETE", path, stability);
+        let router = mem::take(&mut self.router);
+        self.router = router.route(path, delete(handler));
+        self
+    }
+
     pub fn build(self) -> (Router<AppState>, Vec<String>, Vec<Value>) {
         (self.router, self.endpoints, self.endpoints_meta)
     }
@@ -164,6 +180,8 @@ pub(crate) mod paths {
     pub const STATE_SERVICE_HEALTH: &str = "/state/service_health";
     pub const STATE_SERVICE_STATUS: &str = "/state/service_status";
     pub const STATE_GUARDRAILS_METRICS: &str = "/state/guardrails_metrics";
+    pub const STATE_AUTONOMY_LANES: &str = "/state/autonomy/lanes";
+    pub const STATE_AUTONOMY_LANE: &str = "/state/autonomy/lanes/:lane";
     pub const STATE_CLUSTER: &str = "/state/cluster";
     pub const STATE_WORLD: &str = "/state/world";
     pub const STATE_WORLD_SELECT: &str = "/state/world/select";
@@ -198,6 +216,9 @@ pub(crate) mod paths {
     pub const ADMIN_MODELS_CAS_GC: &str = "/admin/models/cas_gc";
     pub const ADMIN_MODELS_BY_HASH: &str = "/admin/models/by-hash/:sha256";
     pub const ADMIN_MODELS_JOBS: &str = "/admin/models/jobs";
+    pub const ADMIN_AUTONOMY_LANE_PAUSE: &str = "/admin/autonomy/:lane/pause";
+    pub const ADMIN_AUTONOMY_LANE_RESUME: &str = "/admin/autonomy/:lane/resume";
+    pub const ADMIN_AUTONOMY_LANE_JOBS: &str = "/admin/autonomy/:lane/jobs";
     pub const ADMIN_TOOLS: &str = "/admin/tools";
     pub const ADMIN_TOOLS_RUN: &str = "/admin/tools/run";
     pub const ADMIN_TOOLS_CACHE_STATS: &str = "/admin/tools/cache_stats";
@@ -389,6 +410,21 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         paths::ADMIN_MODELS_JOBS,
         api::models::models_jobs,
         Some(Stability::Beta),
+    );
+    builder.route_post(
+        paths::ADMIN_AUTONOMY_LANE_PAUSE,
+        api::autonomy::autonomy_pause,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_AUTONOMY_LANE_RESUME,
+        api::autonomy::autonomy_resume,
+        Some(Stability::Experimental),
+    );
+    builder.route_delete(
+        paths::ADMIN_AUTONOMY_LANE_JOBS,
+        api::autonomy::autonomy_jobs_clear,
+        Some(Stability::Experimental),
     );
     builder.route_get(
         paths::STATE_MODELS_HASHES,
@@ -739,6 +775,16 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         paths::STATE_GUARDRAILS_METRICS,
         api::state::state_guardrails_metrics,
         Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::STATE_AUTONOMY_LANES,
+        api::autonomy::state_autonomy_lanes,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::STATE_AUTONOMY_LANE,
+        api::autonomy::state_autonomy_lane,
+        Some(Stability::Experimental),
     );
     builder.route_get(
         paths::STATE_ACTIONS,

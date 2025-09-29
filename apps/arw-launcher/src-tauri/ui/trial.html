@@ -40,6 +40,11 @@
             <span class="label">Safety</span>
             <span class="value">–</span>
           </span>
+          <span class="status-pill" data-kind="autonomy">
+            <span class="dot" aria-hidden="true"></span>
+            <span class="label">Autonomy</span>
+            <span class="value">–</span>
+          </span>
         </div>
         <div class="header-controls">
           <label>Port: <input id="port" type="number" min="1" max="65535" value="8091" /></label>
@@ -56,6 +61,17 @@
             <div class="dim" id="preflightStatus" role="status" aria-live="polite">Preflight not yet run.</div>
             <pre class="log hidden" id="preflightLog"></pre>
             <div id="dataNotice" class="hidden" role="alert"></div>
+            <div class="autonomy-controls" role="region" aria-labelledby="autonomyControlsTitle">
+              <h2 id="autonomyControlsTitle">Autonomy control</h2>
+              <p class="dim" id="autonomySummary">Autonomy status loading…</p>
+              <div class="button-row">
+                <button id="btn-autonomy-pause" class="danger">Pause now</button>
+                <button id="btn-autonomy-resume" class="ghost">Resume guided</button>
+                <button id="btn-autonomy-flush" class="ghost">Flush jobs</button>
+              </div>
+              <div class="dim" id="autonomyLastAction"></div>
+              <ul id="autonomyAlerts" class="autonomy-alerts hidden" role="list"></ul>
+            </div>
           </div>
           <div class="card-lite focus-card" role="region" aria-labelledby="focusTitle">
             <h2 id="focusTitle">What’s in focus</h2>
@@ -95,6 +111,14 @@
             </header>
             <p class="tile-body" id="tile-safety-body">Loading…</p>
             <dl class="tile-meta" id="tile-safety-meta"></dl>
+          </article>
+          <article class="tile" data-kind="autonomy">
+            <header>
+              <h3>Autonomy</h3>
+              <span class="pill" id="tile-autonomy-pill">–</span>
+            </header>
+            <p class="tile-body" id="tile-autonomy-body">Loading…</p>
+            <dl class="tile-meta" id="tile-autonomy-meta"></dl>
           </article>
         </section>
 

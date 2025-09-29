@@ -5,6 +5,7 @@ use std::time::Duration;
 use tokio::time;
 
 use crate::{
+    autonomy,
     egress_log::{self, EgressRecord},
     guard_metadata::apply_posture_and_guard,
     memory_service,
@@ -24,6 +25,10 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
             let state = worker_state;
             let ctx = ctx;
             loop {
+                if ctx.autonomy.is_any_paused().await {
+                    time::sleep(Duration::from_millis(250)).await;
+                    continue;
+                }
                 match ctx.kernel.dequeue_one_queued_async().await {
                     Ok(Some((id, kind, input))) => {
                         let now = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
@@ -68,6 +73,7 @@ struct WorkerContext {
     kernel: arw_kernel::Kernel,
     policy: Arc<PolicyHandle>,
     host: Arc<dyn arw_wasi::ToolHost>,
+    autonomy: Arc<autonomy::AutonomyRegistry>,
 }
 
 impl WorkerContext {
@@ -77,6 +83,7 @@ impl WorkerContext {
             kernel: state.kernel().clone(),
             policy: state.policy(),
             host: state.host(),
+            autonomy: state.autonomy(),
         }
     }
 

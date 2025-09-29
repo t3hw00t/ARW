@@ -82,6 +82,16 @@ pub const TOPIC_ACTIONS_COMPLETED: &str = "actions.completed";
 pub const TOPIC_ACTIONS_FAILED: &str = "actions.failed";
 pub const TOPIC_ACTIONS_UPDATED: &str = "actions.updated";
 
+// Autonomy
+pub const TOPIC_AUTONOMY_RUN_STARTED: &str = "autonomy.run.started";
+pub const TOPIC_AUTONOMY_RUN_PAUSED: &str = "autonomy.run.paused";
+pub const TOPIC_AUTONOMY_RUN_RESUMED: &str = "autonomy.run.resumed";
+pub const TOPIC_AUTONOMY_RUN_STOPPED: &str = "autonomy.run.stopped";
+pub const TOPIC_AUTONOMY_INTERRUPT: &str = "autonomy.interrupt";
+pub const TOPIC_AUTONOMY_ALERT: &str = "autonomy.alert";
+pub const TOPIC_AUTONOMY_BUDGET_CLOSE: &str = "autonomy.budget.close_to_limit";
+pub const TOPIC_AUTONOMY_BUDGET_EXHAUSTED: &str = "autonomy.budget.exhausted";
+
 // Service lifecycle and misc
 pub const TOPIC_SERVICE_CONNECTED: &str = "service.connected";
 pub const TOPIC_SERVICE_START: &str = "service.start";

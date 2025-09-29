@@ -6,6 +6,7 @@ use tracing::{error, info, warn};
 mod access_log;
 mod api;
 mod app_state;
+mod autonomy;
 mod bootstrap;
 mod capsule_guard;
 mod chat;

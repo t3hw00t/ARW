@@ -225,3 +225,49 @@ body[data-page="trial"] .wrap{
 @media (max-width: 720px){
   .tiles{ grid-template-columns: 1fr; }
 }
+.autonomy-controls{
+  border-top: 1px solid var(--color-line);
+  padding-top: var(--sp2);
+  margin-top: var(--sp2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp2);
+}
+
+.autonomy-controls .button-row{
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp2);
+}
+
+.autonomy-controls .dim{
+  font-size: 13px;
+}
+
+.autonomy-alerts{
+  list-style: disc;
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.autonomy-alerts.hidden{
+  display: none;
+}
+
+button.danger{
+  background: linear-gradient(180deg,#fee2e2,#fecaca);
+  border: 1px solid rgba(220,38,38,0.45);
+  color: #7f1d1d;
+}
+
+button.danger:hover:not(:disabled){
+  background: linear-gradient(180deg,#fecaca,#fca5a5);
+}
+
+button.danger:disabled{
+  opacity: 0.65;
+  cursor: not-allowed;
+}

@@ -1,4 +1,5 @@
-pub mod actions;
+﻿pub mod actions;
+pub mod autonomy;
 pub mod chat;
 pub mod config;
 pub mod connectors;

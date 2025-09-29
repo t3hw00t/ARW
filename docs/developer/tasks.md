@@ -8,7 +8,6 @@ Updated: 2025-09-28 18:00 UTC
 
 
 ## To Do
-- [trial-autonomy-governor] Autonomy governor & kill switch — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g3] Gate G3: Trial operations — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g2] Gate G2: Calm approvals — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g1] Gate G1: Reliable memory — todo (updated: 2025-09-26 12:30 UTC)
@@ -21,6 +20,8 @@ Updated: 2025-09-28 18:00 UTC
 ## Paused
 
 ## Done
+- [trial-autonomy-governor] Autonomy governor & kill switch â€” done (updated: 2025-09-29 11:45:00 UTC)
+    - 2025-09-29 11:45:00 UTC: Added autonomy lane registry/endpoints, launcher kill switch controls (pause/resume/flush), and event telemetry wiring for Trial Control Center.
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — done (updated: 2025-09-28 16:30:00 UTC)
     - 2025-09-26 19:57:50 UTC: AppState already unified in apps/arw-server/src/app_state.rs; rescope remaining work around domain-specific adapters (policy/models/cluster) and removal of legacy ext references before marking done.
     - 2025-09-28 16:30:00 UTC: Removed the legacy apps/arw-server/src/ext directory, verified policy/models/cluster use the shared adapters, and synced task trackers.
