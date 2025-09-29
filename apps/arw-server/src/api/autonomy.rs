@@ -174,10 +174,18 @@ pub async fn autonomy_resume(
         );
     }
 
-    let snapshot = state
-        .autonomy()
-        .set_lane_mode(&lane_id, target_mode, body.operator, body.reason)
-        .await;
+    let mut operator = body.operator;
+    let mut reason = body.reason;
+    let registry = state.autonomy();
+    let snapshot = if matches!(target_mode, AutonomyMode::Guided) {
+        registry
+            .resume_lane(&lane_id, operator.take(), reason.take())
+            .await
+    } else {
+        registry
+            .set_lane_mode(&lane_id, target_mode, operator.take(), reason.take())
+            .await
+    };
     let lane = if let Some((running, queued)) = live_action_counts(&state).await {
         state
             .autonomy()

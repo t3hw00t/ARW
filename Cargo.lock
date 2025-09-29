@@ -460,6 +460,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-plugin-autostart",
+ "tokio",
  "urlencoding",
 ]
 

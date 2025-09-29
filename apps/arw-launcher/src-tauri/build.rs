@@ -71,8 +71,8 @@ fn stage_external_bins(manifest_dir: &Path) -> Result<(), Box<dyn Error>> {
             if require_bins {
                 missing.push(file_name);
             } else {
-                println!(
-                    "cargo:warning=missing {file_name}; build `cargo build -p {bin}` before bundling to include it"
+                eprintln!(
+                    "note: missing {file_name}; build `cargo build -p {bin}` before bundling to include it"
                 );
             }
             continue;
