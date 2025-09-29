@@ -22,6 +22,12 @@ jobs:
         with:
           node-version: '20'
           registry-url: 'https://registry.npmjs.org'
+          always-auth: true
+
+      - name: Node info
+        run: |
+          node -v
+          npm -v
 
       - name: Install deps
         run: npm ci || npm i
@@ -44,3 +50,6 @@ jobs:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --access public
 
+      - name: No NPM token, skipping publish
+        if: ${{ secrets.NPM_TOKEN == '' }}
+        run: echo "NPM_TOKEN not set; skipping publish." && exit 0
