@@ -240,6 +240,12 @@ _Note_: MSI bundles ship the launcher together with `arw-server`. Run the unifie
 
 Screenshots → https://t3hw00t.github.io/ARW/guide/screenshots/
 
+## Clients (TypeScript)
+
+- Minimal client for `/actions`, `/events` (SSE), and `/state/*` with Node/browser support.
+- NPM: `@arw/client` — see docs for usage and the bundled `arw-events` CLI.
+- Docs: https://t3hw00t.github.io/ARW/reference/clients/
+
 ## Operations & Monitoring
 
 - Read stability and crash‑recovery details in `docs/OPERATIONS.md`.
