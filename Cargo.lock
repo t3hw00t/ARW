@@ -6757,7 +6757,7 @@ dependencies = [
  "image",
  "libwayshot",
  "percent-encoding",
- "rustc-hash 1.1.0",
+ "rustc-hash 2.1.1",
  "widestring",
  "windows 0.51.1",
  "xcb",
