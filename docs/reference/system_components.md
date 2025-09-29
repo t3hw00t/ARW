@@ -148,6 +148,8 @@ Tracks artifacts as typed nodes with provenance edges tying inputs, policies, an
 - Notes:
   - Reserved provenance events and bundle export endpoints document lineage for audit.
   - Downloads honor preflight checks and quotas before admission.
+  - Hash summaries now surface providers and referencing model IDs per CAS blob for quick triage.
+  - Filter summaries by `provider=` or `model=` when calling `GET /state/models_hashes`.
 
 ### Asimov Capsule Guard
 

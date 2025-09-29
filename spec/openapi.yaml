@@ -25,7 +25,6 @@ paths:
     get:
       tags:
       - Admin/Chat
-      summary: Fetch chat transcript
       operationId: chat_history_doc
       responses:
         '200':
@@ -42,11 +41,11 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
       description: Retrieve the active admin chat transcript, including message history
         and tool metadata.
+      summary: Fetch chat transcript
   /admin/chat/clear:
     post:
       tags:
       - Admin/Chat
-      summary: Clear chat transcript
       operationId: chat_clear_doc
       responses:
         '200':
@@ -62,11 +61,11 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
       description: Wipe the stored admin chat transcript and reset associated tool
         context for a fresh session.
+      summary: Clear chat transcript
   /admin/chat/send:
     post:
       tags:
       - Admin/Chat
-      summary: Send chat message
       operationId: chat_send_doc
       requestBody:
         content:
@@ -89,11 +88,11 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
       description: Submit a message to the admin chat lane and receive the synthesized
         assistant response.
+      summary: Send chat message
   /admin/chat/status:
     get:
       tags:
       - Admin/Chat
-      summary: Query chat status
       operationId: chat_status_doc
       parameters:
       - name: probe
@@ -117,6 +116,7 @@ paths:
                 $ref: '#/components/schemas/ProblemDetails'
       description: Report chat lane health, including the most recent latency probe;
         optionally trigger a new probe.
+      summary: Query chat status
   /admin/distill:
     post:
       tags:
@@ -2082,6 +2082,12 @@ paths:
         required: false
         schema:
           type: string
+      - name: model
+        in: query
+        description: Filter by referencing model id
+        required: false
+        schema:
+          type: string
       - name: sort
         in: query
         description: Sort key (bytes|sha256|path|providers_count)
@@ -2537,6 +2543,10 @@ components:
           - 'null'
           format: int64
           minimum: 0
+        verbose:
+          type:
+          - boolean
+          - 'null'
     ChatHistory:
       type: object
       required:
@@ -3186,6 +3196,10 @@ components:
           type: integer
           format: int64
           minimum: 0
+        models:
+          type: array
+          items:
+            type: string
         path:
           type: string
         providers:

@@ -531,7 +531,10 @@
         <button onclick="modelsDefaultSet()">Set default</button>
         <button onclick="modelsDownload()">Download</button>
         <button onclick="modelsCancel()">Cancel</button>
-        <input id="gcTtl" type="number" min="1" value="7" style="width:80px" title="ttl days">
+        <input id="gcTtl" type="number" min="1" value="7" style="width:80px" title="ttl days (converted to hours)">
+        <label style="display:flex;align-items:center;gap:4px" title="Include per-blob deletion details">
+          <input id="gcVerbose" type="checkbox" checked> verbose
+        </label>
         <button onclick="modelsGc()" title="GC CAS blobs older than ttl">GC</button>
       </div>
       <pre id="modelsOut" style="display:none">[]</pre>
@@ -2289,9 +2292,11 @@ document.addEventListener('DOMContentLoaded', ()=>{
 
 // Models helpers (extended)
 async function modelsGc(){
-  const ttl = parseInt(document.getElementById('gcTtl')?.value||'7',10) || 7;
+  const ttlDays = parseInt(document.getElementById('gcTtl')?.value||'7',10) || 7;
+  const ttlHours = Math.max(ttlDays, 0) * 24;
+  const verbose = !!document.getElementById('gcVerbose')?.checked;
   try{
-    const r = await fetch(base + '/admin/models/cas_gc', { method:'POST', headers:{'Content-Type':'application/json','X-ARW-Admin': __adminHeader||''}, body: JSON.stringify({ ttl_days: ttl }) });
+    const r = await fetch(base + '/admin/models/cas_gc', { method:'POST', headers:{'Content-Type':'application/json','X-ARW-Admin': __adminHeader||''}, body: JSON.stringify({ ttl_hours: ttlHours, verbose }) });
     const t = await r.text();
     try{ JSON.parse(t); }catch{}
     showToast(r.ok ? 'GC started' : 'GC failed');

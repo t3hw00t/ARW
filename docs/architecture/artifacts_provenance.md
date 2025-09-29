@@ -49,7 +49,7 @@ Signals and helpers
  - Schema: the per‑ID model manifest is defined at `spec/schemas/model_manifest.json`.
 
 GC & quotas
-- `POST /admin/models/cas_gc` runs a one‑off sweep of `state/models/by-hash`, deleting unreferenced blobs older than `ttl_days`; emits `models.cas.gc`.
+- `POST /admin/models/cas_gc` runs a one‑off sweep of `state/models/by-hash`, deleting unreferenced blobs older than `ttl_hours` (default 24); emits `models.cas.gc` and can return detailed `deleted_items` when `verbose` is set.
 - Optional quota `ARW_MODELS_QUOTA_MB` caps total CAS size; combined with preflight, oversize requests are denied before transfer.
 
 UI

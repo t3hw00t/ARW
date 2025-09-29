@@ -59,7 +59,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Retrieve the active admin chat transcript, including message history and tool metadata.",
+        "summary": "Fetch chat transcript"
       }
     },
     "/admin/chat/clear": {
@@ -87,7 +89,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Wipe the stored admin chat transcript and reset associated tool context for a fresh session.",
+        "summary": "Clear chat transcript"
       }
     },
     "/admin/chat/send": {
@@ -127,7 +131,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Submit a message to the admin chat lane and receive the synthesized assistant response.",
+        "summary": "Send chat message"
       }
     },
     "/admin/chat/status": {
@@ -168,7 +174,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Report chat lane health, including the most recent latency probe; optionally trigger a new probe.",
+        "summary": "Query chat status"
       }
     },
     "/admin/distill": {
@@ -197,7 +205,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Trigger a manual distillation pass."
       }
     },
     "/admin/experiments/activate": {
@@ -231,7 +240,9 @@
           "404": {
             "description": "Unknown experiment"
           }
-        }
+        },
+        "description": "Mark a variant as the active choice for the experiment and persist the rollout decision.",
+        "summary": "Activate experiment variant"
       }
     },
     "/admin/experiments/assign": {
@@ -262,7 +273,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Record or override an experiment assignment for a participant or agent and broadcast the decision.",
+        "summary": "Assign experiment variant"
       }
     },
     "/admin/experiments/define": {
@@ -293,7 +306,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Create or update an experiment definition with the supplied variants and configuration payload.",
+        "summary": "Define experiment"
       }
     },
     "/admin/experiments/list": {
@@ -316,7 +331,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return all experiment definitions currently registered with their variant metadata.",
+        "summary": "List experiments"
       }
     },
     "/admin/experiments/run": {
@@ -349,7 +366,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Execute the requested experiment variants against the chosen golden project and return the evaluation outcome.",
+        "summary": "Run experiment on goldens"
       }
     },
     "/admin/experiments/scoreboard": {
@@ -372,7 +391,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Provide aggregated performance metrics for each experiment variant to compare recent runs.",
+        "summary": "Fetch experiment scoreboard"
       }
     },
     "/admin/experiments/start": {
@@ -403,7 +424,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Publish a start event for a new experiment with optional assignment, budget, and variant hints.",
+        "summary": "Start experiment run"
       }
     },
     "/admin/experiments/stop": {
@@ -434,7 +457,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Halt an experiment run by emitting a stop event for the provided experiment identifier.",
+        "summary": "Stop experiment"
       }
     },
     "/admin/experiments/winners": {
@@ -457,7 +482,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return the top-performing variants for experiments based on the latest evaluation data.",
+        "summary": "List experiment winners"
       }
     },
     "/admin/feedback/analyze": {
@@ -480,7 +507,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Trigger an immediate feedback analysis pass to refresh suggestions from the latest signals.",
+        "summary": "Recompute feedback suggestions"
       }
     },
     "/admin/feedback/apply": {
@@ -520,7 +549,9 @@
           "404": {
             "description": "Unknown suggestion"
           }
-        }
+        },
+        "description": "Apply the identified suggestion and let the engine reconcile policy and audit outcomes.",
+        "summary": "Apply feedback suggestion"
       }
     },
     "/admin/feedback/auto": {
@@ -551,7 +582,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Enable or disable automatic application of approved feedback suggestions.",
+        "summary": "Toggle automatic feedback application"
       }
     },
     "/admin/feedback/policy": {
@@ -572,7 +605,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return the effective feedback application policy after merging defaults and overrides.",
+        "summary": "Fetch feedback policy"
       }
     },
     "/admin/feedback/reset": {
@@ -593,7 +628,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Clear feedback signals, suggestions, and cached state for a cold start.",
+        "summary": "Reset feedback engine"
       }
     },
     "/admin/feedback/rollback": {
@@ -629,7 +666,9 @@
           "404": {
             "description": "Snapshot not found"
           }
-        }
+        },
+        "description": "Restore feedback state to the requested snapshot version and return the resulting suggestion set.",
+        "summary": "Roll back feedback snapshot"
       }
     },
     "/admin/feedback/signal": {
@@ -662,7 +701,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Submit a feedback signal with confidence and severity so it influences subsequent analysis.",
+        "summary": "Record feedback signal"
       }
     },
     "/admin/feedback/state": {
@@ -685,7 +726,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return the current feedback engine snapshot, including signals, suggestions, and configuration.",
+        "summary": "Inspect feedback state"
       }
     },
     "/admin/feedback/suggestions": {
@@ -706,7 +749,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return the current queue of actionable feedback suggestions with their metadata.",
+        "summary": "List feedback suggestions"
       }
     },
     "/admin/feedback/updates": {
@@ -742,7 +787,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Retrieve feedback suggestions updated since a provided version cursor, enabling incremental refresh.",
+        "summary": "Fetch feedback updates"
       }
     },
     "/admin/feedback/versions": {
@@ -763,7 +810,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Enumerate available feedback snapshots that can be inspected or rolled back to.",
+        "summary": "List feedback snapshots"
       }
     },
     "/admin/goldens/add": {
@@ -797,7 +846,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Append a golden item to the specified project collection and persist the updated set.",
+        "summary": "Add golden record"
       }
     },
     "/admin/goldens/list": {
@@ -830,7 +881,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return the golden dataset for the requested project, including individual test cases.",
+        "summary": "List golden records"
       }
     },
     "/admin/goldens/run": {
@@ -863,7 +916,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Run the supplied golden dataset against the current chat runtime and report evaluation metrics.",
+        "summary": "Evaluate golden set"
       }
     },
     "/admin/governor/hints": {
@@ -886,7 +941,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return the currently effective governor hints that shape scheduling and retrieval behaviour.",
+        "summary": "Inspect governor hints"
       },
       "post": {
         "tags": [
@@ -915,7 +972,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Apply new governor hints to adjust scheduling, retrieval, and context construction parameters.",
+        "summary": "Update governor hints"
       }
     },
     "/admin/governor/profile": {
@@ -938,7 +997,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return the active governor profile name configured for the node.",
+        "summary": "Get governor profile"
       },
       "post": {
         "tags": [
@@ -967,7 +1028,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Switch the governor to the requested profile and broadcast the change.",
+        "summary": "Set governor profile"
       }
     },
     "/admin/hierarchy/accept": {
@@ -998,7 +1061,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Accept a hierarchy offer message to finalize a connection with the given participant.",
+        "summary": "Accept hierarchy offer"
       }
     },
     "/admin/hierarchy/hello": {
@@ -1029,7 +1094,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Emit the initial hello message in the hierarchy handshake with another participant.",
+        "summary": "Send hierarchy hello"
       }
     },
     "/admin/hierarchy/offer": {
@@ -1060,7 +1127,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Publish a hierarchy offer to negotiate roles and capabilities with a peer.",
+        "summary": "Offer hierarchy connection"
       }
     },
     "/admin/hierarchy/role": {
@@ -1091,7 +1160,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Update hierarchy role assignments for a participant and persist the change.",
+        "summary": "Set hierarchy roles"
       }
     },
     "/admin/hierarchy/state": {
@@ -1112,7 +1183,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return the current hierarchy session map, including offers, participants, and active roles.",
+        "summary": "Inspect hierarchy state"
       }
     },
     "/admin/introspect/stats": {
@@ -1133,7 +1206,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return an aggregated metrics snapshot covering events, routes, cache, and bus counters for operators.",
+        "summary": "Fetch metrics overview"
       }
     },
     "/admin/memory": {
@@ -1191,7 +1266,8 @@
               }
             }
           }
-        }
+        },
+        "description": "List recent memory items (admin helper)."
       }
     },
     "/admin/memory/apply": {
@@ -1240,7 +1316,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Insert a memory item (admin helper)."
       }
     },
     "/admin/memory/quarantine": {
@@ -1261,7 +1338,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return entries awaiting review in the memory quarantine queue.",
+        "summary": "List quarantined memories"
       },
       "post": {
         "tags": [
@@ -1293,7 +1372,9 @@
           "500": {
             "description": "Storage error"
           }
-        }
+        },
+        "description": "Enqueue a memory item for quarantine review and emit the appropriate audit event.",
+        "summary": "Queue memory for review"
       }
     },
     "/admin/memory/quarantine/admit": {
@@ -1327,7 +1408,9 @@
           "500": {
             "description": "Storage error"
           }
-        }
+        },
+        "description": "Remove a memory from quarantine, optionally admitting or rejecting it, and report the outcome.",
+        "summary": "Admit quarantined memory"
       }
     },
     "/admin/models": {
@@ -1351,7 +1434,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return the configured model entries including provider metadata.",
+        "summary": "List models"
       }
     },
     "/admin/models/add": {
@@ -1382,7 +1467,9 @@
           "400": {
             "description": "Invalid input"
           }
-        }
+        },
+        "description": "Register a model entry with optional provider, path, and status metadata.",
+        "summary": "Add model entry"
       }
     },
     "/admin/models/by-hash/{sha256}": {
@@ -1439,7 +1526,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Stream a CAS-stored model blob by SHA-256 with caching headers and partial range support.",
+        "summary": "Download model blob"
       }
     },
     "/admin/models/cas_gc": {
@@ -1470,7 +1559,9 @@
           "501": {
             "description": "CAS GC unavailable"
           }
-        }
+        },
+        "description": "Execute a content-addressed store cleanup pass and report removed blobs.",
+        "summary": "Run CAS garbage collection"
       }
     },
     "/admin/models/concurrency": {
@@ -1490,7 +1581,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Return the current model concurrency settings and snapshot telemetry.",
+        "summary": "Inspect model concurrency"
       },
       "post": {
         "tags": [
@@ -1518,7 +1611,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Apply new concurrency limits or blocking behaviour for model execution.",
+        "summary": "Update model concurrency"
       }
     },
     "/admin/models/default": {
@@ -1536,7 +1631,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Return the identifier of the default model selection.",
+        "summary": "Get default model"
       },
       "post": {
         "tags": [
@@ -1565,7 +1662,9 @@
           "400": {
             "description": "Unknown model"
           }
-        }
+        },
+        "description": "Select the default model to be used for future requests.",
+        "summary": "Set default model"
       }
     },
     "/admin/models/download": {
@@ -1596,7 +1695,9 @@
           "501": {
             "description": "Download unavailable"
           }
-        }
+        },
+        "description": "Request download or import of a model artifact and enqueue the job if supported.",
+        "summary": "Start model download"
       }
     },
     "/admin/models/download/cancel": {
@@ -1627,7 +1728,9 @@
           "501": {
             "description": "Cancel unavailable"
           }
-        }
+        },
+        "description": "Cancel an in-flight model download job when the backend supports it.",
+        "summary": "Cancel model download"
       }
     },
     "/admin/models/jobs": {
@@ -1645,7 +1748,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Return the current queue of model download and load jobs with their statuses.",
+        "summary": "Inspect model jobs"
       }
     },
     "/admin/models/load": {
@@ -1669,7 +1774,9 @@
           "404": {
             "description": "Missing models.json"
           }
-        }
+        },
+        "description": "Load model entries from the persisted manifest on disk.",
+        "summary": "Load model manifest"
       }
     },
     "/admin/models/refresh": {
@@ -1690,7 +1797,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Refresh the live model list from runtime state and return the updated entries.",
+        "summary": "Refresh models list"
       }
     },
     "/admin/models/remove": {
@@ -1718,7 +1827,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Remove a model entry by identifier and report whether it existed.",
+        "summary": "Remove model entry"
       }
     },
     "/admin/models/save": {
@@ -1736,7 +1847,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Persist the current model registry to the on-disk manifest.",
+        "summary": "Save model manifest"
       }
     },
     "/admin/models/summary": {
@@ -1757,7 +1870,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return aggregate statistics about installed models, storage usage, and capabilities.",
+        "summary": "Summarize model catalog"
       }
     },
     "/admin/probe": {
@@ -1779,7 +1894,8 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Effective path probe (successor to `/admin/probe`)."
       }
     },
     "/admin/probe/hw": {
@@ -1801,7 +1917,8 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Hardware/software probe (`/admin/probe/hw`)."
       }
     },
     "/admin/probe/metrics": {
@@ -1823,7 +1940,8 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Metrics snapshot probe (`/admin/probe/metrics`)."
       }
     },
     "/admin/self_model/apply": {
@@ -1875,7 +1993,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Apply a previously proposed self-model change and notify subscribers.",
+        "summary": "Apply self-model proposal"
       }
     },
     "/admin/self_model/propose": {
@@ -1919,7 +2039,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Submit a self-model patch proposal for an agent and emit the proposal event.",
+        "summary": "Propose self-model update"
       }
     },
     "/admin/tools": {
@@ -1940,7 +2062,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return the catalog of available tools with stability and capability metadata.",
+        "summary": "List registered tools"
       }
     },
     "/admin/tools/cache_stats": {
@@ -1961,7 +2085,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return cache utilisation metrics for the shared tool cache.",
+        "summary": "Inspect tool cache statistics"
       }
     },
     "/admin/tools/run": {
@@ -2004,7 +2130,9 @@
           "500": {
             "description": "Tool runtime error"
           }
-        }
+        },
+        "description": "Execute a registered tool with the provided input payload and return its output.",
+        "summary": "Run tool"
       }
     },
     "/admin/world_diffs": {
@@ -2025,7 +2153,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return the queue of pending world diffs awaiting review.",
+        "summary": "List world diffs"
       }
     },
     "/admin/world_diffs/decision": {
@@ -2062,7 +2192,9 @@
           "500": {
             "description": "Storage error"
           }
-        }
+        },
+        "description": "Accept or reject a queued world diff and persist the decision outcome.",
+        "summary": "Record world diff decision"
       }
     },
     "/admin/world_diffs/queue": {
@@ -2096,7 +2228,9 @@
           "500": {
             "description": "Storage error"
           }
-        }
+        },
+        "description": "Enqueue a world diff for review with the supplied metadata.",
+        "summary": "Queue world diff"
       }
     },
     "/events": {
@@ -2219,7 +2353,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Serve Prometheus-formatted metrics for the unified server, including tool cache counters.",
+        "summary": "Export Prometheus metrics"
       }
     },
     "/orchestrator/mini_agents": {
@@ -2248,7 +2384,8 @@
               }
             }
           }
-        }
+        },
+        "description": "List available mini-agents (placeholder)."
       }
     },
     "/orchestrator/mini_agents/start_training": {
@@ -2297,7 +2434,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Start a training job that results in a suggested Logic Unit (admin)."
       }
     },
     "/projects": {
@@ -2334,7 +2472,9 @@
           "500": {
             "description": "Error"
           }
-        }
+        },
+        "description": "Create a new project directory, seed default notes, and emit the creation event.",
+        "summary": "Create project"
       }
     },
     "/projects/{proj}/file": {
@@ -2394,7 +2534,9 @@
           "500": {
             "description": "Error"
           }
-        }
+        },
+        "description": "Create or replace a project file at the given path, enforcing optimistic concurrency and quotas.",
+        "summary": "Write project file"
       },
       "patch": {
         "tags": [
@@ -2452,7 +2594,9 @@
           "500": {
             "description": "Error"
           }
-        }
+        },
+        "description": "Apply a JSON patch or diff patch to an existing project file while checking version guards.",
+        "summary": "Patch project file"
       }
     },
     "/projects/{proj}/import": {
@@ -2503,7 +2647,9 @@
           "500": {
             "description": "Error"
           }
-        }
+        },
+        "description": "Copy or move a file from the staging area into the project workspace and emit audit events.",
+        "summary": "Import project asset"
       }
     },
     "/projects/{proj}/notes": {
@@ -2553,7 +2699,9 @@
           "500": {
             "description": "Error"
           }
-        }
+        },
+        "description": "Replace the project notes document and return metadata for the updated file.",
+        "summary": "Save project notes"
       }
     },
     "/research_watcher/{id}/approve": {
@@ -2601,7 +2749,9 @@
           "500": {
             "description": "Error"
           }
-        }
+        },
+        "description": "Mark a research watcher entry as approved, optionally attaching an operator note.",
+        "summary": "Approve research watcher item"
       }
     },
     "/research_watcher/{id}/archive": {
@@ -2649,7 +2799,9 @@
           "500": {
             "description": "Error"
           }
-        }
+        },
+        "description": "Archive a research watcher entry to remove it from the active queue while preserving audit history.",
+        "summary": "Archive research watcher item"
       }
     },
     "/spec/health": {
@@ -2668,7 +2820,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Health summary for spec artifacts (presence/size)."
       }
     },
     "/staging/actions/{id}/approve": {
@@ -2716,7 +2869,9 @@
           "500": {
             "description": "Error"
           }
-        }
+        },
+        "description": "Approve a staged action so it can execute and emit the resulting workflow job.",
+        "summary": "Approve staging action"
       }
     },
     "/staging/actions/{id}/deny": {
@@ -2764,7 +2919,9 @@
           "500": {
             "description": "Error"
           }
-        }
+        },
+        "description": "Deny a staged action with an optional reason, preventing it from executing.",
+        "summary": "Deny staging action"
       }
     },
     "/state/actions": {
@@ -2879,7 +3036,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Experiment events snapshot (public read-model)."
       }
     },
     "/state/guardrails_metrics": {
@@ -2906,7 +3064,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Guardrails circuit-breaker metrics snapshot."
       }
     },
     "/state/intents": {
@@ -2996,6 +3155,15 @@
             }
           },
           {
+            "name": "model",
+            "in": "query",
+            "description": "Filter by referencing model id",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
             "name": "sort",
             "in": "query",
             "description": "Sort key (bytes|sha256|path|providers_count)",
@@ -3025,7 +3193,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Return a paginated view of installed model blobs with filters for provider, size, and hash.",
+        "summary": "List installed model hashes"
       }
     },
     "/state/models_metrics": {
@@ -3033,7 +3203,7 @@
         "tags": [
           "State"
         ],
-        "description": "Models metrics snapshot.",
+        "description": "Return model runtime metrics, including cache hits and latency data, for observability dashboards.",
         "operationId": "state_models_metrics_doc",
         "responses": {
           "200": {
@@ -3054,7 +3224,8 @@
               }
             }
           }
-        }
+        },
+        "summary": "Inspect model metrics"
       }
     },
     "/state/observations": {
@@ -3122,7 +3293,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Orchestrator jobs snapshot."
       }
     },
     "/state/projects": {
@@ -3140,7 +3312,9 @@
               }
             }
           }
-        }
+        },
+        "description": "Return the cached project snapshot with file tree, notes, and metadata for quick reads.",
+        "summary": "Snapshot project catalog"
       }
     },
     "/state/projects/{proj}/file": {
@@ -3187,7 +3361,9 @@
           "404": {
             "description": "Not found"
           }
-        }
+        },
+        "description": "Return the latest stored contents for a project file identified by project and relative path.",
+        "summary": "Fetch project file snapshot"
       }
     },
     "/state/projects/{proj}/notes": {
@@ -3224,7 +3400,9 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Return the current project notes document with metadata such as checksum and size.",
+        "summary": "Fetch project notes"
       }
     },
     "/state/projects/{proj}/tree": {
@@ -3271,7 +3449,9 @@
           "404": {
             "description": "Not found"
           }
-        }
+        },
+        "description": "Return a directory listing for a project path to help clients explore workspace structure.",
+        "summary": "Browse project tree"
       }
     },
     "/state/research_watcher": {
@@ -3322,7 +3502,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Research watcher queue snapshot."
       }
     },
     "/state/route_stats": {
@@ -3341,7 +3522,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Bus and per-route counters snapshot."
       }
     },
     "/state/runtime_matrix": {
@@ -3368,7 +3550,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Runtime matrix snapshot."
       }
     },
     "/state/staging/actions": {
@@ -3419,7 +3602,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Staging queue snapshot."
       }
     },
     "/state/tasks": {
@@ -3438,7 +3622,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Background tasks status snapshot."
       }
     },
     "/state/training/telemetry": {
@@ -3460,7 +3645,8 @@
           "401": {
             "description": "Unauthorized"
           }
-        }
+        },
+        "description": "Training telemetry snapshot."
       }
     },
     "/state/world": {
@@ -3660,6 +3846,12 @@
             ],
             "format": "int64",
             "minimum": 0
+          },
+          "verbose": {
+            "type": [
+              "boolean",
+              "null"
+            ]
           }
         }
       },
@@ -4593,6 +4785,12 @@
             "type": "integer",
             "format": "int64",
             "minimum": 0
+          },
+          "models": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           },
           "path": {
             "type": "string"

@@ -24,7 +24,7 @@ Related docs:
 | models.changed             | Models list deltas               | op (add/delete/default/downloaded/canceled/error), id, path? |
 | models.refreshed           | Default models list refreshed    | count |
 | models.manifest.written    | Per‑ID manifest written          | id, manifest_path, sha256 |
-| models.cas.gc              | CAS GC sweep summary             | scanned, kept, deleted, deleted_bytes, ttl_days |
+| models.cas.gc              | CAS GC sweep summary             | scanned, kept, deleted, deleted_bytes, ttl_hours |
 | egress.preview             | Pre‑offload destination summary  | id, url (redacted), dest{host,port,protocol}, provider, corr_id |
 | egress.ledger.appended     | Egress ledger entry appended     | id?, decision, reason?, dest(host,port,protocol), bytes_in/out, corr_id?, proj?, posture |
 | state.read.model.patch     | Read‑model JSON Patch deltas     | id, patch[...] |

@@ -19,8 +19,8 @@ Canonical topics used by the service are defined once under [crates/arw-topics/s
 - GET  `/events` — Listen for `models.download.progress` events (SSE; supports `?replay=N` and repeated `prefix=` filters).
 - GET  `/state/models` — Public, read‑only models list (no admin token required).
 - GET  `/admin/models/summary` — Aggregated summary for UIs: `{ items, default, concurrency, metrics }`.
-- POST `/admin/models/cas_gc` — Run a one‑off CAS GC sweep; deletes unreferenced blobs older than `ttl_hours` (default `24`).
-- GET  `/state/models_hashes` — Summary of installed model hashes and sizes.
+- POST `/admin/models/cas_gc` — Run a one‑off CAS GC sweep; deletes unreferenced blobs older than `ttl_hours` (default `24`). Set `"verbose": true` to include per-blob deletion details in the response payload.
+- GET  `/state/models_hashes` — Summary of installed model hashes, sizes, providers, and referencing model IDs (`models`). Supports `provider=` and `model=` filters plus sorting for quick triage.
 - GET  `/admin/models/by-hash/:sha256` — Serve a CAS blob by hash (egress‑gated; `io:egress:models.peer`). Responses include strong validators (`ETag:"{sha256}"`, `Last-Modified`) and long-lived caching headers so repeat fetches can short-circuit with `304 Not Modified` when unchanged. HEAD requests mirror the metadata without streaming the blob.
   - Emits strong validators and immutable caching for digest‑addressed blobs:
     - `ETag: "<sha256>"`, `Last-Modified`, `Cache-Control: public, max-age=31536000, immutable`.
@@ -185,10 +185,10 @@ GC unused blobs:
 curl -sS -X POST "$BASE/admin/models/cas_gc" \
   -H 'Content-Type: application/json' \
   -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
- -d '{"ttl_hours":24}'
+ -d '{"ttl_hours":24,"verbose":true}'
 ```
 
-GC emits a compact `models.cas.gc` event with `{scanned, kept, deleted, deleted_bytes, ttl_hours}`.
+GC emits a compact `models.cas.gc` event with `{scanned, kept, deleted, deleted_bytes, ttl_hours}`. When `verbose` is enabled, the HTTP response also includes a `deleted_items` array that lists each removed blob (`sha256`, `path`, `bytes`, `last_modified` when available).
 
 Note: kinds are normalized; legacy CamelCase forms have been removed.
 Get a summary suitable for dashboards:

@@ -174,6 +174,7 @@ _Ship safe defaults, audit runtime tweaks, and keep specs in sync._
   _Env_: `ARW_MODELS_MAX_MB`, `ARW_MODELS_DISK_RESERVE_MB`, `ARW_MODELS_MAX_CONC`, `ARW_MODELS_MAX_CONC_HARD`, `ARW_MODELS_QUOTA_MB`
   _Source_: [apps/arw-server/src/models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/models.rs), [apps/arw-server/src/api/models.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/models.rs), [apps/arw-server/src/util.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/util.rs), …
   _References_: [architecture/artifacts_provenance.md](../architecture/artifacts_provenance.md)
+  _Notes_: CAS GC accepts `{ttl_hours, verbose}` and reports per-blob deletions when verbose; `GET /state/models_hashes` surfaces providers and referencing model IDs per digest and supports `provider`/`model` filters for faster triage.
 
 - **Interface Registry & Specs** · dev / dev / auxiliary / complete
   Descriptors and generated OpenAPI/AsyncAPI/MCP schemas with drift checks and deprecation headers.

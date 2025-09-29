@@ -85,15 +85,15 @@ Hung/idle
 - Fix: set `ARW_DL_IDLE_TIMEOUT_SECS` (>0) when no hard budget; network/proxy check.
 
 Free space via CAS GC
-- Run a one‑off GC to delete unreferenced blobs older than 14 days:
+- Run a one‑off GC to delete unreferenced blobs older than 14 hours and surface deleted blob details:
   ```bash
   BASE=http://127.0.0.1:8091
   curl -sS -X POST "$BASE/admin/models/cas_gc" \
     -H 'Content-Type: application/json' \
     -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
-    -d '{"ttl_days":14}' | jq
+    -d '{"ttl_hours":14,"verbose":true}' | jq
   ```
-  Listen for `models.cas.gc` summary events.
+  Listen for `models.cas.gc` summary events and inspect `deleted_items` in the response when `verbose` is set.
 
 Metrics
 - State endpoint: `GET /state/models_metrics` → `{ ewma_mbps, …counters }`.

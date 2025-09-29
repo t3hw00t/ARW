@@ -188,9 +188,9 @@ See the Admin Endpoints guide for details and examples. Summary:
 
 - `POST /admin/models/download` — start/resume a download `{id,url,sha256,provider?,budget?}`.
 - `POST /admin/models/download/cancel` — cancel an in-flight download for `{id}`.
-- `POST /admin/models/cas_gc` — CAS GC once `{ttl_days}`; emits `models.cas.gc`.
+- `POST /admin/models/cas_gc` — CAS GC once `{ttl_hours, verbose?}`; emits `models.cas.gc` (response includes `deleted_items` when verbose).
 - `GET  /admin/models/by-hash/:sha256` — serve a CAS blob by sha256 (egress-gated).
-- `GET  /state/models_hashes` — list installed model hashes and sizes.
+- `GET  /state/models_hashes` — list installed model hashes, sizes, providers, and referencing model IDs (`models`); supports `provider` and `model` filters.
 - `GET  /state/models_metrics` — Lightweight metrics `{ ewma_mbps, started, queued, admitted, resumed, canceled, completed, completed_cached, errors, bytes_total }`.
 
 Admin events (AsyncAPI)

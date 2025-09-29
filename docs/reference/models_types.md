@@ -72,6 +72,7 @@ Microsummary: Stable, typed response shapes for models endpoints used by UIs and
   - bytes: number
   - path: string
   - providers: string[]
+  - models?: string[] (referencing model IDs)
 
 Notes
 - OpenAPI: `GET /spec/openapi.yaml` includes these schemas for codegen.

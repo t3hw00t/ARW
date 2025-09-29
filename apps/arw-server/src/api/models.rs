@@ -339,6 +339,8 @@ pub struct HashesQuery {
     #[serde(default)]
     pub provider: Option<String>,
     #[serde(default)]
+    pub model: Option<String>,
+    #[serde(default)]
     pub sort: Option<String>,
     #[serde(default)]
     pub order: Option<String>,
@@ -358,6 +360,7 @@ impl HashesQuery {
         ("limit" = Option<usize>, Query, description = "Page size (default 100)"),
         ("offset" = Option<usize>, Query, description = "Start offset"),
         ("provider" = Option<String>, Query, description = "Filter by provider"),
+        ("model" = Option<String>, Query, description = "Filter by referencing model id"),
         ("sort" = Option<String>, Query, description = "Sort key (bytes|sha256|path|providers_count)"),
         ("order" = Option<String>, Query, description = "Order asc|desc")
     ),
@@ -377,6 +380,7 @@ pub async fn state_models_hashes(
             q.limit,
             q.offset,
             q.provider.clone(),
+            q.model.clone(),
             q.sort.clone(),
             q.order.clone(),
         )

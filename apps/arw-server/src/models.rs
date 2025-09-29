@@ -16,13 +16,15 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt, BufReader, BufWriter};
 use tokio::sync::{Mutex, Notify, RwLock};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
-use tracing::{error, warn};
+use tracing::{debug, error, warn};
 
 use crate::{http_timeout, read_models, util};
 use once_cell::sync::OnceCell;
 use utoipa::ToSchema;
 
 const DEFAULT_CONCURRENCY: u64 = 2;
+const METRIC_MANIFEST_INDEX_REBUILDS: &str = "models.manifest_index.rebuilds";
+const GAUGE_MANIFEST_INDEX_ENTRIES: &str = "models.manifest_index.entries";
 const DOWNLOAD_EVENT_KIND: &str = "models.download.progress";
 const PROGRESS_EMIT_BYTES: u64 = 5 * 1024 * 1024; // 5 MiB
 const PROGRESS_EMIT_INTERVAL: Duration = Duration::from_millis(750);
@@ -583,6 +585,7 @@ impl HashGuardState {
 
 pub struct ModelStore {
     items: RwLock<Vec<Value>>,
+    manifest_index: RwLock<Option<Arc<ManifestHashIndex>>>,
     default_id: RwLock<String>,
     concurrency: RwLock<ConcurrencyState>,
     metrics: RwLock<MetricsState>,
@@ -597,6 +600,7 @@ impl ModelStore {
     pub fn new(bus: Bus, kernel: Option<arw_kernel::Kernel>) -> Self {
         Self {
             items: RwLock::new(Vec::new()),
+            manifest_index: RwLock::new(None),
             default_id: RwLock::new(String::new()),
             concurrency: RwLock::new(ConcurrencyState::new()),
             metrics: RwLock::new(MetricsState::default()),
@@ -692,6 +696,7 @@ impl ModelStore {
                 items.push(entry);
             }
         }
+        self.invalidate_manifest_index().await;
         self.emit_patch().await;
         self.bus
             .publish(topics::TOPIC_MODELS_CHANGED, &json!({"op":"add","id": id}));
@@ -711,6 +716,7 @@ impl ModelStore {
             });
         }
         if removed {
+            self.invalidate_manifest_index().await;
             self.emit_patch().await;
             self.bus.publish(
                 topics::TOPIC_MODELS_CHANGED,
@@ -802,51 +808,20 @@ impl ModelStore {
         limit: usize,
         offset: usize,
         provider: Option<String>,
+        model: Option<String>,
         sort: Option<String>,
         order: Option<String>,
     ) -> HashPage {
-        let items = self.items.read().await.clone();
-        let mut map: HashMap<String, (u64, String, HashSet<String>)> = HashMap::new();
-        for entry in items.iter() {
-            let Some(hash) = entry.get("sha256").and_then(|v| v.as_str()) else {
-                continue;
-            };
-            if hash.len() != 64 {
-                continue;
-            }
-            let bytes = entry.get("bytes").and_then(|v| v.as_u64()).unwrap_or(0);
-            let path = entry
-                .get("path")
-                .and_then(|v| v.as_str())
-                .unwrap_or("")
-                .to_string();
-            let provider_val = entry
-                .get("provider")
-                .and_then(|v| v.as_str())
-                .unwrap_or("unknown")
-                .to_string();
-            let bucket =
-                map.entry(hash.to_string())
-                    .or_insert((bytes, path.clone(), HashSet::new()));
-            if bucket.0 == 0 && bytes > 0 {
-                bucket.0 = bytes;
-            }
-            if bucket.1.is_empty() && !path.is_empty() {
-                bucket.1 = path;
-            }
-            bucket.2.insert(provider_val);
-        }
-        let mut rows: Vec<HashItem> = map
-            .into_iter()
-            .map(|(sha256, (bytes, path, providers))| HashItem {
-                sha256,
-                bytes,
-                path,
-                providers: providers.into_iter().collect(),
-            })
+        let index = self.manifest_hash_index().await;
+        let mut rows: Vec<HashItem> = index
+            .iter()
+            .map(|(sha256, refs)| refs.to_hash_item(sha256))
             .collect();
         if let Some(filter) = provider.as_ref() {
             rows.retain(|row| row.providers.iter().any(|p| p == filter));
+        }
+        if let Some(filter) = model.as_ref() {
+            rows.retain(|row| row.models.iter().any(|m| m == filter));
         }
         let sort_key = sort
             .map(|s| s.to_ascii_lowercase())
@@ -882,6 +857,48 @@ impl ModelStore {
             limit,
             offset,
         }
+    }
+
+    async fn manifest_hash_index(&self) -> Arc<ManifestHashIndex> {
+        if let Some(cached) = self.manifest_index.read().await.as_ref().cloned() {
+            return cached;
+        }
+
+        let items_snapshot = {
+            let guard = self.items.read().await;
+            guard.clone()
+        };
+        let built = Arc::new(Self::collect_manifest_hash_index(&items_snapshot));
+        let entries = built.len();
+
+        let mut guard = self.manifest_index.write().await;
+        if let Some(existing) = guard.as_ref() {
+            return existing.clone();
+        }
+        metrics::counter!(METRIC_MANIFEST_INDEX_REBUILDS, 1);
+        metrics::gauge!(GAUGE_MANIFEST_INDEX_ENTRIES, entries as f64);
+        debug!(entries, "manifest hash index rebuilt");
+        *guard = Some(built.clone());
+        built
+    }
+
+    async fn invalidate_manifest_index(&self) {
+        self.manifest_index.write().await.take();
+    }
+
+    fn collect_manifest_hash_index(items: &[Value]) -> ManifestHashIndex {
+        let mut index = ManifestHashIndex::new();
+        for entry in items {
+            let Some(hash) = entry.get("sha256").and_then(|v| v.as_str()) else {
+                continue;
+            };
+            if hash.len() != 64 {
+                continue;
+            }
+            let bucket = index.entry(hash.to_string()).or_default();
+            bucket.ingest_manifest(entry);
+        }
+        index
     }
 
     pub async fn start_download(self: &Arc<Self>, req: DownloadRequest) -> Result<(), String> {
@@ -1115,13 +1132,15 @@ impl ModelStore {
 
     pub async fn cas_gc(&self, req: CasGcRequest) -> Result<Value, String> {
         let ttl_hours = req.ttl_hours.unwrap_or(24);
+        let verbose = req.verbose.unwrap_or(false);
         let cutoff = chrono::Utc::now() - chrono::Duration::hours(ttl_hours as i64);
-        let referenced = self.referenced_hashes().await;
+        let manifest_index = self.manifest_hash_index().await;
         let cas_dir = self.cas_dir();
         let mut scanned = 0u64;
         let mut kept = 0u64;
         let mut deleted = 0u64;
         let mut deleted_bytes = 0u64;
+        let mut deleted_items = if verbose { Some(Vec::new()) } else { None };
 
         if let Ok(mut entries) = fs::read_dir(&cas_dir).await {
             while let Ok(Some(entry)) = entries.next_entry().await {
@@ -1135,7 +1154,7 @@ impl ModelStore {
                     .and_then(|s| s.to_str())
                     .unwrap_or_default()
                     .to_string();
-                if referenced.contains(&fname) {
+                if manifest_index.contains_key(&fname) {
                     kept += 1;
                     continue;
                 }
@@ -1146,11 +1165,16 @@ impl ModelStore {
                         continue;
                     }
                 };
-                let modified: DateTime<Utc> = meta
-                    .modified()
-                    .ok()
-                    .map(DateTime::<Utc>::from)
-                    .unwrap_or_else(Utc::now);
+                let (modified, modified_str) = match meta.modified() {
+                    Ok(time) => {
+                        let dt = DateTime::<Utc>::from(time);
+                        (dt, Some(dt.to_rfc3339()))
+                    }
+                    Err(_) => {
+                        let fallback = Utc::now();
+                        (fallback, None)
+                    }
+                };
                 if modified > cutoff {
                     kept += 1;
                     continue;
@@ -1163,16 +1187,31 @@ impl ModelStore {
                 }
                 deleted += 1;
                 deleted_bytes = deleted_bytes.saturating_add(size);
+                if let Some(ref mut list) = deleted_items {
+                    let rel_path = path.strip_prefix(&cas_dir).unwrap_or(&path).to_path_buf();
+                    list.push(CasGcDeletedItem {
+                        sha256: fname.clone(),
+                        path: rel_path.to_string_lossy().into_owned(),
+                        bytes: size,
+                        last_modified: modified_str,
+                    });
+                }
             }
         }
 
-        let payload = json!({
+        let mut payload = json!({
             "scanned": scanned,
             "kept": kept,
             "deleted": deleted,
             "deleted_bytes": deleted_bytes,
             "ttl_hours": ttl_hours,
         });
+        if let Some(list) = deleted_items {
+            payload.as_object_mut().expect("payload object").insert(
+                "deleted_items".into(),
+                serde_json::to_value(list).unwrap_or(Value::Null),
+            );
+        }
         self.bus.publish(topics::TOPIC_MODELS_CAS_GC, &payload);
         Ok(payload)
     }
@@ -2063,6 +2102,7 @@ impl ModelStore {
                 &json!({"op":"add","id": model_id}),
             );
         }
+        self.invalidate_manifest_index().await;
         if let Err(err) = self.persist_items_snapshot().await {
             warn!("persist models after error failed: {err}");
         }
@@ -2110,6 +2150,7 @@ impl ModelStore {
             self.bus
                 .publish(topics::TOPIC_MODELS_CHANGED, &json!({"op":"add","id": id}));
         }
+        self.invalidate_manifest_index().await;
         if let Err(err) = self.persist_items_snapshot().await {
             warn!("persist models after status update failed: {err}");
         }
@@ -2184,6 +2225,7 @@ impl ModelStore {
                 &json!({"op":"update","id": id}),
             );
         }
+        self.invalidate_manifest_index().await;
         if let Err(err) = self.persist_items_snapshot().await {
             warn!("persist models after success failed: {err}");
         }
@@ -2845,6 +2887,7 @@ impl ModelStore {
             let mut guard = self.items.write().await;
             *guard = items;
         }
+        self.invalidate_manifest_index().await;
         let mut default_guard = self.default_id.write().await;
         if default_guard.is_empty() {
             *default_guard = self
@@ -2924,17 +2967,6 @@ impl ModelStore {
         )
         .await
         .map_err(|e| format!("persist download metrics failed: {e}"))
-    }
-
-    async fn referenced_hashes(&self) -> HashSet<String> {
-        let mut set = HashSet::new();
-        let items = self.items.read().await;
-        for entry in items.iter() {
-            if let Some(hash) = entry.get("sha256").and_then(|v| v.as_str()) {
-                set.insert(hash.to_string());
-            }
-        }
-        set
     }
 
     async fn find_model_url(&self, id: &str) -> Option<String> {
@@ -3125,6 +3157,8 @@ fn duration_to_millis(duration: Duration) -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_support;
+    use tempfile::tempdir;
 
     fn dummy_download_handle(label: &str) -> DownloadHandle {
         DownloadHandle {
@@ -3250,7 +3284,7 @@ mod tests {
         ];
         store.replace_items(items).await;
 
-        let page = store.hashes_page(10, 0, None, None, None).await;
+        let page = store.hashes_page(10, 0, None, None, None, None).await;
         assert_eq!(page.total, 2);
         assert_eq!(page.count, 2);
         assert_eq!(page.limit, 10);
@@ -3263,16 +3297,159 @@ mod tests {
         );
         assert_eq!(first.bytes, 10);
         assert_eq!(first.path, "/models/alpha.bin");
-        let mut providers = first.providers.clone();
-        providers.sort();
-        assert_eq!(providers, vec!["alpha", "beta"]);
+        assert_eq!(first.providers, vec!["alpha", "beta"]);
+        assert_eq!(first.models, vec!["m-follower", "m-primary"]);
 
         let filtered = store
-            .hashes_page(10, 0, Some("beta".into()), None, None)
+            .hashes_page(10, 0, Some("beta".into()), None, None, None)
             .await;
         assert_eq!(filtered.total, 1);
         assert_eq!(filtered.count, 1);
         assert_eq!(filtered.items[0].sha256, first.sha256);
+    }
+
+    #[tokio::test]
+    async fn hashes_page_filters_by_model_id() {
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let store = ModelStore::new(bus, None);
+        let items = vec![
+            json!({
+                "id": "first-model",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "bytes": 12,
+                "provider": "alpha",
+                "path": "/models/a.bin"
+            }),
+            json!({
+                "id": "second-model",
+                "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                "bytes": 9,
+                "provider": "alpha",
+                "path": "/models/b.bin"
+            }),
+            json!({
+                "id": "follower",
+                "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                "provider": "beta"
+            }),
+        ];
+        store.replace_items(items).await;
+
+        let filtered = store
+            .hashes_page(10, 0, None, Some("follower".into()), None, None)
+            .await;
+        assert_eq!(filtered.total, 1);
+        assert_eq!(filtered.items.len(), 1);
+        let entry = &filtered.items[0];
+        assert_eq!(entry.models, vec!["first-model", "follower"]);
+    }
+
+    #[tokio::test]
+    async fn manifest_hash_index_invalidates_on_mutation() {
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let store = ModelStore::new(bus, None);
+        store
+            .replace_items(vec![
+                json!({
+                    "id": "keep",
+                    "sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "bytes": 4,
+                    "provider": "alpha",
+                    "path": "/models/keep.bin"
+                }),
+                json!({
+                    "id": "drop",
+                    "sha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                    "bytes": 8,
+                    "provider": "beta",
+                    "path": "/models/drop.bin"
+                }),
+            ])
+            .await;
+
+        let first = store.manifest_hash_index().await;
+        assert_eq!(first.len(), 2);
+        drop(first);
+
+        let removed = store.remove_model("drop").await;
+        assert!(removed, "expected model removal to succeed");
+
+        let second = store.manifest_hash_index().await;
+        assert_eq!(second.len(), 1);
+        assert!(
+            second.contains_key("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+        );
+        assert!(!second
+            .contains_key("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"));
+    }
+
+    #[tokio::test]
+    async fn cas_gc_verbose_reports_deleted_entries() {
+        let tmp = tempdir().expect("tempdir");
+        let _ctx = test_support::begin_state_env(tmp.path());
+
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let store = ModelStore::new(bus, None);
+
+        let keep_hash = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+        let stale_hash = "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc";
+
+        store
+            .replace_items(vec![json!({
+                "id": "keep-model",
+                "sha256": keep_hash,
+                "bytes": 4,
+                "provider": "alpha",
+                "path": format!("/models/{keep_hash}"),
+            })])
+            .await;
+
+        let keep_path = store.cas_blob_path(keep_hash);
+        let stale_path = store.cas_blob_path(stale_hash);
+        if let Some(parent) = keep_path.parent() {
+            tokio::fs::create_dir_all(parent)
+                .await
+                .expect("create cas dir");
+        }
+
+        tokio::fs::write(&keep_path, b"keep")
+            .await
+            .expect("write keep blob");
+        tokio::fs::write(&stale_path, b"stale-bytes")
+            .await
+            .expect("write stale blob");
+
+        let payload = store
+            .cas_gc(CasGcRequest {
+                ttl_hours: Some(0),
+                verbose: Some(true),
+            })
+            .await
+            .expect("gc response");
+
+        assert_eq!(payload.get("scanned").and_then(Value::as_u64), Some(2));
+        assert_eq!(payload.get("deleted").and_then(Value::as_u64), Some(1));
+        assert_eq!(payload.get("kept").and_then(Value::as_u64), Some(1));
+
+        let deleted_items = payload
+            .get("deleted_items")
+            .and_then(Value::as_array)
+            .expect("deleted items array");
+        assert_eq!(deleted_items.len(), 1);
+        let first = &deleted_items[0];
+        assert_eq!(
+            first.get("sha256").and_then(Value::as_str),
+            Some(stale_hash)
+        );
+        assert_eq!(
+            first.get("bytes").and_then(Value::as_u64),
+            Some(b"stale-bytes".len() as u64)
+        );
+
+        tokio::fs::metadata(&keep_path)
+            .await
+            .expect("keep blob still present");
+        assert!(tokio::fs::metadata(&stale_path).await.is_err());
     }
 
     #[tokio::test]
@@ -3444,6 +3621,8 @@ pub struct DownloadRequest {
 pub struct CasGcRequest {
     #[serde(default)]
     pub ttl_hours: Option<u64>,
+    #[serde(default)]
+    pub verbose: Option<bool>,
 }
 
 #[derive(Clone, Serialize, ToSchema)]
@@ -3452,6 +3631,8 @@ pub struct HashItem {
     pub bytes: u64,
     pub path: String,
     pub providers: Vec<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub models: Vec<String>,
 }
 
 #[derive(Clone, Serialize, ToSchema)]
@@ -3461,4 +3642,65 @@ pub struct HashPage {
     pub count: usize,
     pub limit: usize,
     pub offset: usize,
+}
+
+#[derive(Clone, Serialize)]
+struct CasGcDeletedItem {
+    sha256: String,
+    path: String,
+    bytes: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    last_modified: Option<String>,
+}
+
+type ManifestHashIndex = HashMap<String, ManifestHashRefs>;
+
+#[derive(Clone, Default)]
+struct ManifestHashRefs {
+    bytes: u64,
+    path: Option<String>,
+    providers: HashSet<String>,
+    models: HashSet<String>,
+}
+
+impl ManifestHashRefs {
+    fn ingest_manifest(&mut self, entry: &Value) {
+        if self.bytes == 0 {
+            if let Some(bytes) = entry.get("bytes").and_then(|v| v.as_u64()) {
+                if bytes > 0 {
+                    self.bytes = bytes;
+                }
+            }
+        }
+        if self.path.as_ref().map(|p| p.is_empty()).unwrap_or(true) {
+            if let Some(path) = entry.get("path").and_then(|v| v.as_str()) {
+                if !path.is_empty() {
+                    self.path = Some(path.to_string());
+                }
+            }
+        }
+        let provider = entry
+            .get("provider")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+            .unwrap_or("unknown");
+        self.providers.insert(provider.to_string());
+        if let Some(id) = entry.get("id").and_then(|v| v.as_str()) {
+            self.models.insert(id.to_string());
+        }
+    }
+
+    fn to_hash_item(&self, sha256: &str) -> HashItem {
+        let mut providers: Vec<_> = self.providers.iter().cloned().collect();
+        providers.sort();
+        let mut models: Vec<_> = self.models.iter().cloned().collect();
+        models.sort();
+        HashItem {
+            sha256: sha256.to_string(),
+            bytes: self.bytes,
+            path: self.path.clone().unwrap_or_default(),
+            providers,
+            models,
+        }
+    }
 }

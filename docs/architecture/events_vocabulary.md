@@ -51,7 +51,7 @@ Mapping from existing ARW events
   - Common `code` values: `admission-denied`, `disk_insufficient`, `size_limit`, `sha256_mismatch`, `cache-mismatch`, `canceled-by-user`, `already-in-progress-hash`, `quota_exceeded`, `cached`, `resync`, `soft-budget`, `hard-budget`.
 - Download start is represented via `models.download.progress` with `status:"started"`.
 - `models.manifest.written` is emitted after a successful write of `<state>/models/<id>.json`.
-- `models.cas.gc` emits `{scanned, kept, deleted, deleted_bytes, ttl_days}` after a GC sweep.
+- `models.cas.gc` emits `{scanned, kept, deleted, deleted_bytes, ttl_hours}` after a GC sweep.
 - `models.changed` publishes ops like `add`, `delete`, `default`, `downloaded`, `canceled`, `error`.
 - `models.refreshed` publishes a count after resetting the models list to defaults.
 - Cluster events are additive and off by default. When enabled, Workers publish `cluster.node.advertise` (capabilities, health), periodic `cluster.node.heartbeat`, and receive `job.*` assignments. The Home Node merges remote `job.*` and `session.*` events into the unified timeline by `corr_id`.
@@ -74,7 +74,7 @@ Mapping from existing ARW events
 | models.changed             | Models list deltas               | op (add/delete/default/downloaded/canceled/error), id, path? |
 | models.refreshed           | Default models list refreshed    | count |
 | models.manifest.written    | Per‑ID manifest written          | id, manifest_path, sha256 |
-| models.cas.gc              | CAS GC sweep summary             | scanned, kept, deleted, deleted_bytes, ttl_days |
+| models.cas.gc              | CAS GC sweep summary             | scanned, kept, deleted, deleted_bytes, ttl_hours |
 | egress.preview             | Pre‑offload destination summary  | id, url (redacted), dest{host,port,protocol}, provider, corr_id |
 | egress.ledger.appended     | Egress ledger entry appended     | id?, decision, reason?, dest(host,port,protocol), bytes_in/out, corr_id?, proj?, posture |
 | state.read.model.patch     | Read‑model JSON Patch deltas     | id, patch[...] |
