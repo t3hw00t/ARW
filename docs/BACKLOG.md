@@ -250,8 +250,8 @@ Strict dot.case normalization (no back-compat)
 - [Kernel] [t-250914050908-ev14] Update Feature Matrix topics to dot.case — done
 - [Kernel] [t-250914050910-ev15] Docs: update Events Vocabulary/Topics/Admin Endpoints to dot.case — done
 - [Kernel] [t-250914050912-ev16] CI linter: fail on any `publish("...CamelCase...")` or legacy subjects — done (CI guard + CLI/self-test helpers; this change)
-- [Kernel] [t-250914050914-ev17] arw-core gating keys: add `events:task.completed` and update callers — plan
-- [Kernel] [t-250914050916-ev18] Release notes: breaking change, mapping table, migration notes — todo
+- [Kernel] [t-250914050914-ev17] arw-core gating keys: add `events:task.completed` and update callers — done (gating key shipped in arw-core; docs and tests updated)
+- [Kernel] [t-250914050916-ev18] Release notes: breaking change, mapping table, migration notes — done (dot.case mapping table + migration checklist added to release notes)
 
 OpenAPI/Examples
 - [Kernel] [t-250913213507-api01] Add examples for /admin/models/jobs and /admin/models/download responses — done
@@ -275,7 +275,7 @@ Stabilization & Contracts
 - [Kernel] [t-250914210304-ui02] Installed Hashes: add pagination controls (offset/next/prev) — done (pagination metadata + launcher controls)
 - [Kernel] [t-250914210304-api02] Egress ledger: add compact summarizer endpoint (time‑bounded; filters by decision/reason) — done
 - [Kernel] [t-250914210308-api03] CAS GC: centralize manifest reference extraction (single helper used by GC and any scanners) — done (confirmed `manifest_hash_index()` powers GC and `/state/models_hashes`; no duplicate scanners remain)
-- [Kernel] [t-250914210312-api04] Contract tests: promote spec/docs consistency checks to CI (status/code enums already validated in unit tests) — todo
+- [Kernel] [t-250914210312-api04] Contract tests: promote spec/docs consistency checks to CI (status/code enums already validated in unit tests) — done (curated coverage enforcement + spec regen)
 - [Kernel] [t-250914210316-api05] Sweep and remove any remaining deprecated endpoints; update docs and SDKs — done (removed /admin/introspect/stats; updated debug UI to use /state/route_stats; specs/docs refreshed)
 
 ## Next (1–2 Months)

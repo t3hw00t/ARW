@@ -18,3 +18,17 @@ Microsummary: Pointers to releases, changelog, and upgrade notes. Stable.
    - Cluster-wide: `arw.events.task.completed`
    - Node-scoped: `arw.events.node.<node_id>.task.completed`
 - New topic: `experiment.activated` (emitted when an experiment variant is applied via `/admin/experiments/activate`).
+
+| Legacy kind | Replacement |
+| ----------- | ----------- |
+| `Models.DownloadProgress` | `models.download.progress` |
+| `Models.Changed` | `models.changed` |
+| `Models.CasGc` | `models.cas.gc` |
+| `Models.ManifestWritten` | `models.manifest.written` |
+| `Models.Refreshed` | `models.refreshed` |
+
+**Migration guidance**
+- Update SSE subscriptions and log filters to the replacement topics above.
+- Replace any `Models.*` allowlists in dashboards, alert rules, or connectors with the dot-case values. Prometheus rules triggered on `Models.DownloadProgress` should now reference `models.download.progress`.
+- Regenerate client bindings against `spec/openapi.yaml` or rerun `python3 scripts/generate_openapi_json.py` so SDKs surface the normalized kinds.
+- Local tooling: run `python3 scripts/lint_event_names.py` to confirm no `Models.*` strings remain after updating downstream integrations.

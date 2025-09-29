@@ -317,3 +317,148 @@
   get:
     summary: Browse project tree
     description: Return a directory listing for a project path to help clients explore workspace structure.
+
+/about:
+  get:
+    summary: Inspect service metadata
+    description: Return version, build information, endpoint counts, and the enumerated public/admin routes announced by the server.
+
+/admin/distill:
+  post:
+    summary: Run distillation pass
+    description: Trigger the manual distillation pipeline to snapshot playbooks, refresh beliefs, and regenerate derived notebooks.
+
+/admin/memory:
+  get:
+    summary: List recent memory records
+    description: Return the latest memory items for inspection; supports lane and limit filters for debugging.
+
+/admin/memory/apply:
+  post:
+    summary: Upsert memory record
+    description: Insert or update a memory item via the admin helper and emit the associated memory events for auditing.
+
+/admin/probe:
+  get:
+    summary: Inspect effective paths
+    description: Return the resolved state, cache, and config directories plus runtime metadata so operators can confirm filesystem layout.
+
+/admin/probe/hw:
+  get:
+    summary: Probe runtime hardware
+    description: Report detected hardware and OS capabilities—including CPU, GPU, and accelerators—to confirm what the node can access.
+
+/admin/probe/metrics:
+  get:
+    summary: Probe metrics snapshot
+    description: Return the current metrics summary (Prometheus-style counters and histograms) for quick diagnostics.
+
+/events:
+  get:
+    summary: Stream event feed
+    description: Open the Server-Sent Events stream of normalized envelopes; supports prefix filtering and Last-Event-ID replay.
+
+/healthz:
+  get:
+    summary: Readiness probe
+    description: 'Return a simple readiness payload (`{"ok": true}`) suitable for health checks and load balancers.'
+
+/orchestrator/mini_agents:
+  get:
+    summary: List mini-agent templates
+    description: Return placeholder metadata about available mini-agents while the orchestrator capability is incubating.
+
+/orchestrator/mini_agents/start_training:
+  post:
+    summary: Start mini-agent training
+    description: Kick off a training job that will propose a Logic Unit configuration once complete; returns an async job handle when accepted.
+
+/spec/health:
+  get:
+    summary: Inspect spec artifacts
+    description: Report presence, size, and checksum information for bundled OpenAPI, AsyncAPI, and schema artifacts.
+
+/state/actions:
+  get:
+    summary: List recent actions
+    description: Return the rolling window of actions emitted by the kernel, ordered from newest to oldest.
+
+/state/beliefs:
+  get:
+    summary: Inspect belief store
+    description: Return the current belief entries derived from events so clients can reason over world facts.
+
+/state/cluster:
+  get:
+    summary: Inspect cluster nodes
+    description: Return the snapshot of known cluster nodes, their roles, and health metadata.
+
+/state/experiments:
+  get:
+    summary: List experiment events
+    description: Expose the experiment read-model summarizing variants, assignments, and recent outcomes.
+
+/state/guardrails_metrics:
+  get:
+    summary: Inspect guardrail metrics
+    description: Return guardrail circuit-breaker counters and latency measurements for monitoring automation health.
+
+/state/intents:
+  get:
+    summary: List recent intents
+    description: Return the rolling window of intent events emitted by the kernel.
+
+/state/models:
+  get:
+    summary: Inspect model catalog
+    description: Return the derived model catalog with provider metadata, install status, and version details.
+
+/state/observations:
+  get:
+    summary: List recent observations
+    description: Return the rolling window of observation events captured from the live event bus.
+
+/state/orchestrator/jobs:
+  get:
+    summary: List orchestrator jobs
+    description: Return the current orchestrator job queue including statuses, runners, and progress metadata.
+
+/state/research_watcher:
+  get:
+    summary: Inspect research watcher
+    description: Return the research watcher queue snapshot with pending items, statuses, and telemetry.
+
+/state/route_stats:
+  get:
+    summary: Inspect route metrics
+    description: Return per-route counters, durations, and cache statistics aggregated by the server.
+
+/state/runtime_matrix:
+  get:
+    summary: Inspect runtime matrix
+    description: Return the runtime matrix covering available runtimes, capabilities, and health signals.
+
+/state/staging/actions:
+  get:
+    summary: Inspect staging actions
+    description: Return staged actions awaiting review or execution in the staging queue.
+
+/state/tasks:
+  get:
+    summary: Inspect background tasks
+    description: Return the background task registry with progress, retry counts, and assigned workers.
+
+/state/training/telemetry:
+  get:
+    summary: Inspect training telemetry
+    description: Return aggregated Training Park telemetry, including success ratios, recall, and coverage metrics.
+
+/state/world:
+  get:
+    summary: Inspect world model
+    description: Return the active world graph snapshot with claims, provenance metadata, and belief relationships.
+
+/state/world/select:
+  get:
+    summary: Select world claims
+    description: Evaluate a query against the world graph and return the top-k claims that match the provided filters.

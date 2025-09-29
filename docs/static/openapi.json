@@ -15,8 +15,8 @@
         "tags": [
           "Meta"
         ],
-        "summary": "Service metadata and endpoints index.",
-        "description": "Service metadata, endpoints index, and performance preset.",
+        "summary": "Inspect service metadata",
+        "description": "Return version, build information, endpoint counts, and the enumerated public/admin routes announced by the server.",
         "operationId": "about_doc",
         "responses": {
           "200": {
@@ -184,7 +184,7 @@
         "tags": [
           "Distill"
         ],
-        "summary": "Trigger a manual distillation pass.",
+        "summary": "Run distillation pass",
         "operationId": "distill_run_doc",
         "responses": {
           "200": {
@@ -206,7 +206,7 @@
             }
           }
         },
-        "description": "Trigger a manual distillation pass."
+        "description": "Trigger the manual distillation pipeline to snapshot playbooks, refresh beliefs, and regenerate derived notebooks."
       }
     },
     "/admin/experiments/activate": {
@@ -1193,7 +1193,7 @@
         "tags": [
           "Admin/Memory"
         ],
-        "summary": "List recent memory items (admin helper).",
+        "summary": "List recent memory records",
         "operationId": "admin_memory_list_doc",
         "parameters": [
           {
@@ -1244,7 +1244,7 @@
             }
           }
         },
-        "description": "List recent memory items (admin helper)."
+        "description": "Return the latest memory items for inspection; supports lane and limit filters for debugging."
       }
     },
     "/admin/memory/apply": {
@@ -1252,7 +1252,7 @@
         "tags": [
           "Admin/Memory"
         ],
-        "summary": "Insert a memory item (admin helper).",
+        "summary": "Upsert memory record",
         "operationId": "admin_memory_apply_doc",
         "requestBody": {
           "content": {
@@ -1294,7 +1294,7 @@
             }
           }
         },
-        "description": "Insert a memory item (admin helper)."
+        "description": "Insert or update a memory item via the admin helper and emit the associated memory events for auditing."
       }
     },
     "/admin/memory/quarantine": {
@@ -1857,7 +1857,7 @@
         "tags": [
           "Admin/Introspect"
         ],
-        "summary": "Effective path probe (successor to `/admin/probe`).",
+        "summary": "Inspect effective paths",
         "operationId": "probe_effective_paths_doc",
         "responses": {
           "200": {
@@ -1872,7 +1872,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Effective path probe (successor to `/admin/probe`)."
+        "description": "Return the resolved state, cache, and config directories plus runtime metadata so operators can confirm filesystem layout."
       }
     },
     "/admin/probe/hw": {
@@ -1880,7 +1880,7 @@
         "tags": [
           "Admin/Introspect"
         ],
-        "summary": "Hardware/software probe (`/admin/probe/hw`).",
+        "summary": "Probe runtime hardware",
         "operationId": "probe_hw_doc",
         "responses": {
           "200": {
@@ -1895,7 +1895,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Hardware/software probe (`/admin/probe/hw`)."
+        "description": "Report detected hardware and OS capabilities—including CPU, GPU, and accelerators—to confirm what the node can access."
       }
     },
     "/admin/probe/metrics": {
@@ -1903,7 +1903,7 @@
         "tags": [
           "Admin/Introspect"
         ],
-        "summary": "Metrics snapshot probe (`/admin/probe/metrics`).",
+        "summary": "Probe metrics snapshot",
         "operationId": "probe_metrics_doc",
         "responses": {
           "200": {
@@ -1918,7 +1918,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Metrics snapshot probe (`/admin/probe/metrics`)."
+        "description": "Return the current metrics summary (Prometheus-style counters and histograms) for quick diagnostics."
       }
     },
     "/admin/self_model/apply": {
@@ -2215,8 +2215,8 @@
         "tags": [
           "Events"
         ],
-        "summary": "Server‑Sent Events stream of envelopes.",
-        "description": "Server‑Sent Events stream of envelopes; supports replay and prefix filters.",
+        "summary": "Stream event feed",
+        "description": "Open the Server-Sent Events stream of normalized envelopes; supports prefix filtering and Last-Event-ID replay.",
         "operationId": "events_sse_doc",
         "parameters": [
           {
@@ -2296,8 +2296,8 @@
         "tags": [
           "Meta"
         ],
-        "summary": "Health probe.",
-        "description": "Service readiness probe.",
+        "summary": "Readiness probe",
+        "description": "Return a simple readiness payload (`{\"ok\": true}`) suitable for health checks and load balancers.",
         "operationId": "healthz_doc",
         "responses": {
           "200": {
@@ -2340,7 +2340,7 @@
         "tags": [
           "Orchestrator"
         ],
-        "summary": "List available mini-agents (placeholder).",
+        "summary": "List mini-agent templates",
         "operationId": "orchestrator_mini_agents_doc",
         "responses": {
           "200": {
@@ -2362,7 +2362,7 @@
             }
           }
         },
-        "description": "List available mini-agents (placeholder)."
+        "description": "Return placeholder metadata about available mini-agents while the orchestrator capability is incubating."
       }
     },
     "/orchestrator/mini_agents/start_training": {
@@ -2370,7 +2370,7 @@
         "tags": [
           "Orchestrator"
         ],
-        "summary": "Start a training job that results in a suggested Logic Unit (admin).",
+        "summary": "Start mini-agent training",
         "operationId": "orchestrator_start_training_doc",
         "requestBody": {
           "content": {
@@ -2412,7 +2412,7 @@
             }
           }
         },
-        "description": "Start a training job that results in a suggested Logic Unit (admin)."
+        "description": "Kick off a training job that will propose a Logic Unit configuration once complete; returns an async job handle when accepted."
       }
     },
     "/projects": {
@@ -2786,7 +2786,7 @@
         "tags": [
           "Specs"
         ],
-        "summary": "Health summary for spec artifacts (presence/size).",
+        "summary": "Inspect spec artifacts",
         "operationId": "spec_health_doc",
         "responses": {
           "200": {
@@ -2798,7 +2798,7 @@
             }
           }
         },
-        "description": "Health summary for spec artifacts (presence/size)."
+        "description": "Report presence, size, and checksum information for bundled OpenAPI, AsyncAPI, and schema artifacts."
       }
     },
     "/staging/actions/{id}/approve": {
@@ -2906,8 +2906,8 @@
         "tags": [
           "State"
         ],
-        "summary": "Recent actions list.",
-        "description": "Recent actions list (most recent first).",
+        "summary": "List recent actions",
+        "description": "Return the rolling window of actions emitted by the kernel, ordered from newest to oldest.",
         "operationId": "state_actions_doc",
         "parameters": [
           {
@@ -2946,8 +2946,8 @@
         "tags": [
           "State"
         ],
-        "summary": "Current beliefs snapshot derived from events.",
-        "description": "Current beliefs snapshot derived from events.",
+        "summary": "Inspect belief store",
+        "description": "Return the current belief entries derived from events so clients can reason over world facts.",
         "operationId": "state_beliefs_doc",
         "responses": {
           "200": {
@@ -2974,8 +2974,8 @@
         "tags": [
           "State"
         ],
-        "summary": "Cluster nodes snapshot.",
-        "description": "Cluster nodes snapshot (admin-only).",
+        "summary": "Inspect cluster nodes",
+        "description": "Return the snapshot of known cluster nodes, their roles, and health metadata.",
         "operationId": "state_cluster_doc",
         "responses": {
           "200": {
@@ -3002,7 +3002,7 @@
         "tags": [
           "State"
         ],
-        "summary": "Experiment events snapshot (public read-model).",
+        "summary": "List experiment events",
         "operationId": "state_experiments_doc",
         "responses": {
           "200": {
@@ -3014,7 +3014,7 @@
             }
           }
         },
-        "description": "Experiment events snapshot (public read-model)."
+        "description": "Expose the experiment read-model summarizing variants, assignments, and recent outcomes."
       }
     },
     "/state/guardrails_metrics": {
@@ -3022,7 +3022,7 @@
         "tags": [
           "State"
         ],
-        "summary": "Guardrails circuit-breaker metrics snapshot.",
+        "summary": "Inspect guardrail metrics",
         "operationId": "state_guardrails_metrics_doc",
         "responses": {
           "200": {
@@ -3042,7 +3042,7 @@
             }
           }
         },
-        "description": "Guardrails circuit-breaker metrics snapshot."
+        "description": "Return guardrail circuit-breaker counters and latency measurements for monitoring automation health."
       }
     },
     "/state/intents": {
@@ -3050,8 +3050,8 @@
         "tags": [
           "State"
         ],
-        "summary": "Recent intents stream (rolling window).",
-        "description": "Recent intents stream (rolling window).",
+        "summary": "List recent intents",
+        "description": "Return the rolling window of intent events emitted by the kernel.",
         "operationId": "state_intents_doc",
         "responses": {
           "200": {
@@ -3078,8 +3078,8 @@
         "tags": [
           "State"
         ],
-        "summary": "Model catalog read-model.",
-        "description": "Model catalog read-model.",
+        "summary": "Inspect model catalog",
+        "description": "Return the derived model catalog with provider metadata, install status, and version details.",
         "operationId": "state_models_doc",
         "responses": {
           "200": {
@@ -3210,8 +3210,8 @@
         "tags": [
           "State"
         ],
-        "summary": "Recent observations from the event bus.",
-        "description": "Recent observations from the event bus.",
+        "summary": "List recent observations",
+        "description": "Return the rolling window of observation events captured from the live event bus.",
         "operationId": "state_observations_doc",
         "responses": {
           "200": {
@@ -3238,7 +3238,7 @@
         "tags": [
           "Orchestrator"
         ],
-        "summary": "Orchestrator jobs snapshot.",
+        "summary": "List orchestrator jobs",
         "operationId": "state_orchestrator_jobs_doc",
         "parameters": [
           {
@@ -3271,7 +3271,7 @@
             }
           }
         },
-        "description": "Orchestrator jobs snapshot."
+        "description": "Return the current orchestrator job queue including statuses, runners, and progress metadata."
       }
     },
     "/state/projects": {
@@ -3436,7 +3436,7 @@
         "tags": [
           "State"
         ],
-        "summary": "Research watcher queue snapshot.",
+        "summary": "Inspect research watcher",
         "operationId": "state_research_watcher_doc",
         "parameters": [
           {
@@ -3480,7 +3480,7 @@
             }
           }
         },
-        "description": "Research watcher queue snapshot."
+        "description": "Return the research watcher queue snapshot with pending items, statuses, and telemetry."
       }
     },
     "/state/route_stats": {
@@ -3488,7 +3488,7 @@
         "tags": [
           "State"
         ],
-        "summary": "Bus and per-route counters snapshot.",
+        "summary": "Inspect route metrics",
         "operationId": "state_route_stats_doc",
         "responses": {
           "200": {
@@ -3500,7 +3500,7 @@
             }
           }
         },
-        "description": "Bus and per-route counters snapshot."
+        "description": "Return per-route counters, durations, and cache statistics aggregated by the server."
       }
     },
     "/state/runtime_matrix": {
@@ -3508,7 +3508,7 @@
         "tags": [
           "State"
         ],
-        "summary": "Runtime matrix snapshot.",
+        "summary": "Inspect runtime matrix",
         "operationId": "state_runtime_matrix_doc",
         "responses": {
           "200": {
@@ -3528,7 +3528,7 @@
             }
           }
         },
-        "description": "Runtime matrix snapshot."
+        "description": "Return the runtime matrix covering available runtimes, capabilities, and health signals."
       }
     },
     "/state/staging/actions": {
@@ -3536,7 +3536,7 @@
         "tags": [
           "State"
         ],
-        "summary": "Staging queue snapshot.",
+        "summary": "Inspect staging actions",
         "operationId": "state_staging_actions_doc",
         "parameters": [
           {
@@ -3580,7 +3580,7 @@
             }
           }
         },
-        "description": "Staging queue snapshot."
+        "description": "Return staged actions awaiting review or execution in the staging queue."
       }
     },
     "/state/tasks": {
@@ -3588,7 +3588,7 @@
         "tags": [
           "State"
         ],
-        "summary": "Background tasks status snapshot.",
+        "summary": "Inspect background tasks",
         "operationId": "state_tasks_doc",
         "responses": {
           "200": {
@@ -3600,7 +3600,7 @@
             }
           }
         },
-        "description": "Background tasks status snapshot."
+        "description": "Return the background task registry with progress, retry counts, and assigned workers."
       }
     },
     "/state/training/telemetry": {
@@ -3608,7 +3608,7 @@
         "tags": [
           "State"
         ],
-        "summary": "Training telemetry snapshot.",
+        "summary": "Inspect training telemetry",
         "operationId": "state_training_telemetry_doc",
         "responses": {
           "200": {
@@ -3623,7 +3623,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Training telemetry snapshot."
+        "description": "Return aggregated Training Park telemetry, including success ratios, recall, and coverage metrics."
       }
     },
     "/state/world": {
@@ -3631,8 +3631,8 @@
         "tags": [
           "State"
         ],
-        "summary": "Project world model snapshot (belief graph view).",
-        "description": "Project world model snapshot (belief graph view).",
+        "summary": "Inspect world model",
+        "description": "Return the active world graph snapshot with claims, provenance metadata, and belief relationships.",
         "operationId": "state_world_doc",
         "parameters": [
           {
@@ -3670,8 +3670,8 @@
         "tags": [
           "State"
         ],
-        "summary": "Select top-k claims for a query.",
-        "description": "Select top-k claims for a query.",
+        "summary": "Select world claims",
+        "description": "Evaluate a query against the world graph and return the top-k claims that match the provided filters.",
         "operationId": "state_world_select_doc",
         "parameters": [
           {

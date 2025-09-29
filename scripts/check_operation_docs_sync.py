@@ -38,6 +38,7 @@ def main() -> int:
     curated = load_yaml(CURATED_PATH) or {}
 
     spec_index = {(path, method): op for path, method, op in collect_ops(spec)}
+    curated_index: set[tuple[str, str]] = set()
 
     errors: list[str] = []
 
@@ -57,15 +58,27 @@ def main() -> int:
             if not isinstance(fields, dict):
                 errors.append(f"{path} {method_upper(method_lower)}: expected mapping for curated fields")
                 continue
+            curated_index.add((path, method_lower))
             for field in FIELDS:
+                if field not in fields:
+                    errors.append(f"{path} {method_upper(method_lower)} missing '{field}' in curated docs")
+                    continue
                 curated_value = fields.get(field)
+                if not isinstance(curated_value, str) or not curated_value.strip():
+                    errors.append(
+                        f"{path} {method_upper(method_lower)} {field} must be a non-empty string"
+                    )
+                    continue
                 spec_value = spec_op.get(field)
-                if curated_value is not None and spec_value != curated_value:
+                if spec_value != curated_value:
                     errors.append(
                         f"{path} {method_upper(method_lower)} {field} mismatch\n"
                         f"  curated: {curated_value!r}\n"
                         f"  spec:    {spec_value!r}"
                     )
+    missing_curated = sorted(set(spec_index.keys()) - curated_index)
+    for path, method in missing_curated:
+        errors.append(f"{path} {method_upper(method)} missing from curated docs")
     if errors:
         print("Operation doc drift detected:")
         for entry in errors:
