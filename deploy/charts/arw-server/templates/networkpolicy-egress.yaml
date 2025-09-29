@@ -1,0 +1,33 @@
+{{- if .Values.egressPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "arw-server.fullname" . }}-egress
+  labels:
+    {{- include "arw-server.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "arw-server.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Egress
+  egress:
+    # Allow DNS queries to cluster DNS
+    {{- range $cidr := .Values.egressPolicy.dnsCidrs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
+    # Additional allowed CIDRs
+    {{- range $cidr := .Values.egressPolicy.allowedCidrs }}
+    - to:
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+    {{- end }}
+{{- end }}
+

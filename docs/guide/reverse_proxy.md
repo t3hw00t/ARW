@@ -1,101 +1,59 @@
 ---
-title: Reverse Proxy (Caddy/Traefik)
+title: Reverse Proxy
 ---
 
-# Reverse Proxy (Caddy/Traefik)
+# Reverse Proxy
 
-Updated: 2025-09-20
-Type: How‑to
-
-Terminate TLS and proxy to ARW running on `127.0.0.1:8091` (unified `arw-server`), or deploy via Docker.
+Run `arw-server` behind a TLS‑terminating reverse proxy for production exposure. These snippets demonstrate Caddy and NGINX with safe headers and timeouts.
 
 ## Caddy
 
-Unified server (`arw-server`) on port 8091:
-
-`Caddyfile`:
-
-```
+```caddyfile
 arw.example.com {
   encode zstd gzip
-  reverse_proxy 127.0.0.1:8091
+  reverse_proxy 127.0.0.1:8091 {
+    header_up X-Forwarded-For {remote_host}
+    header_up X-Forwarded-Proto {scheme}
+    header_up X-Forwarded-Host {host}
+  }
 }
 ```
 
-Run:
+Server env:
+- `ARW_BIND=127.0.0.1` (default)
+- `ARW_TRUST_FORWARD_HEADERS=1`
 
-```bash
-caddy run --config Caddyfile
+## NGINX
+
+```nginx
+server {
+  listen 443 ssl http2;
+  server_name arw.example.com;
+
+  # TLS config omitted for brevity
+
+  location / {
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Real-IP $remote_addr;
+
+    # SSE: disable buffering for event streams
+    proxy_buffering off;
+
+    proxy_pass http://127.0.0.1:8091;
+  }
+}
 ```
 
-Docker (compose snippet):
+Server env:
+- `ARW_BIND=127.0.0.1`
+- `ARW_TRUST_FORWARD_HEADERS=1`
 
-```yaml
-services:
-  arw-server:
-    image: ghcr.io/<owner>/arw-server:latest
-    environment:
-      - ARW_BIND=0.0.0.0
-      - ARW_PORT=8091
-      - ARW_DEBUG=0
-      - ARW_ADMIN_TOKEN=your-secret
-      - ARW_TRUST_FORWARD_HEADERS=1
-    networks: [web]
-  caddy:
-    image: caddy:2
-    ports: ["80:80", "443:443"]
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
-    networks: [web]
-volumes:
-  caddy-data: {}
-  caddy-config: {}
-networks:
-  web: {}
-```
+## Notes
 
-## Traefik
+- Keep admin UIs gated: set `ARW_ADMIN_TOKEN` and do not expose them publicly without auth.
+- Enable HSTS at the proxy when serving over HTTPS in production.
+- Consider a Web Application Firewall (WAF) and egress controls for defense‑in‑depth.
 
-Static config (file provider example):
-
-```yaml
-http:
-  routers:
-    arw:
-      rule: Host(`arw.example.com`)
-      service: arw
-      entryPoints: [ websecure ]
-      tls: {}
-  services:
-    arw:
-      loadBalancer:
-        servers:
-          - url: "http://127.0.0.1:8091"
-```
-
-Docker labels example:
-
-```yaml
-services:
-  arw-server:
-    image: ghcr.io/<owner>/arw-server:latest
-    environment:
-      - ARW_BIND=0.0.0.0
-      - ARW_PORT=8091
-      - ARW_DEBUG=0
-      - ARW_ADMIN_TOKEN=your-secret
-      - ARW_TRUST_FORWARD_HEADERS=1
-    labels:
-      - "traefik.enable=true"
-      - "traefik.http.routers.arw.rule=Host(`arw.example.com`)"
-      - "traefik.http.routers.arw.entrypoints=websecure"
-      - "traefik.http.routers.arw.tls=true"
-      - "traefik.http.services.arw.loadbalancer.server.port=8091"
-```
-
-## Security Notes
-- Keep `ARW_DEBUG=0` for the unified server and require a strong `ARW_ADMIN_TOKEN`.
-- Protect `/events`, `/actions`, and `/state/*` behind authentication and allowlists when exposing them through the proxy; `/events` streams live telemetry.
-- Add rate‑limiting and IP allowlists at the proxy where possible.

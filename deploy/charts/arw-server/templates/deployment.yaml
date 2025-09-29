@@ -4,6 +4,10 @@ metadata:
   name: {{ include "arw-server.fullname" . }}
   labels:
     {{- include "arw-server.labels" . | nindent 4 }}
+  annotations:
+    {{- if and (not .Values.adminToken.existingSecret) .Values.adminToken.value }}
+    checksum/admin-token: {{ .Values.adminToken.value | sha256sum }}
+    {{- end }}
 spec:
   replicas: 1
   selector:
@@ -44,6 +48,10 @@ spec:
               value: "{{ .Values.env.ARW_DEBUG }}"
             - name: ARW_TRUST_FORWARD_HEADERS
               value: "{{ .Values.env.ARW_TRUST_FORWARD_HEADERS }}"
+            - name: ARW_EGRESS_BLOCK_IP_LITERALS
+              value: "{{ .Values.env.ARW_EGRESS_BLOCK_IP_LITERALS }}"
+            - name: ARW_DNS_GUARD_ENABLE
+              value: "{{ .Values.env.ARW_DNS_GUARD_ENABLE }}"
             - name: ARW_ACCESS_LOG
               value: "{{ .Values.env.ARW_ACCESS_LOG }}"
             - name: ARW_ACCESS_SAMPLE_N
@@ -64,6 +72,19 @@ spec:
               value: "{{ .Values.env.ARW_ACCESS_LOG_PREFIX }}"
             - name: ARW_ACCESS_LOG_ROTATION
               value: "{{ .Values.env.ARW_ACCESS_LOG_ROTATION }}"
+            {{- if .Values.adminToken.existingSecret }}
+            - name: ARW_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.adminToken.existingSecret | quote }}
+                  key: {{ default "ARW_ADMIN_TOKEN" .Values.adminToken.key | quote }}
+            {{- else if .Values.adminToken.value }}
+            - name: ARW_ADMIN_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "arw-server.fullname" . }}-admin
+                  key: {{ default "ARW_ADMIN_TOKEN" .Values.adminToken.key | quote }}
+            {{- end }}
             {{- with .Values.env.extra }}
             {{- toYaml . | nindent 12 }}
             {{- end }}
@@ -92,4 +113,3 @@ spec:
           persistentVolumeClaim:
             claimName: {{ include "arw-server.fullname" . }}-state
       {{- end }}
-

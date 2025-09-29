@@ -1,14 +1,7 @@
 <!doctype html><meta charset="utf-8"><title>ARW Models</title>
 <link rel="stylesheet" href="/admin/ui/assets/tokens.css"/>
 <link rel="stylesheet" href="/admin/ui/assets/ui-kit.css"/>
-<style>
-  body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;color:var(--color-ink);background:var(--surface);}
-  h1{margin:0 0 10px 0;}
-  .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;}
-  pre{background:linear-gradient(180deg,var(--surface),var(--surface-muted));border:1px solid var(--color-line);border-radius:12px;padding:8px;overflow:auto;box-shadow:inset 0 1px 0 rgba(255,255,255,0.6);}
-  input,select{font:inherit;}
-  /* Rely on shared UI kit for badges, dots, tones */
-</style>
+<link rel="stylesheet" href="/admin/ui/assets/pages.css"/>
 <h1>Models <span id="mdlBadge" class="badge warn"><span class="dot"></span> 0</span></h1>
 <div class="row">
   <span class='badge' id='sseBadge' style='margin-left:auto'><span class='dot'></span> SSE: off</span>
@@ -17,43 +10,22 @@
 <div class="card">
   <div class="row" role="toolbar" aria-label="Admin token">
     <input id="adminTok" placeholder="admin token" style="width:240px" autocomplete="off">
-    <button onclick="setAdminToken()">Apply</button>
+    <button id="adminTokApply">Apply</button>
     <span id="authBadge" class="badge warn"><span class="dot"></span> Admin: off</span>
   </div>
   <div class="row" role="toolbar" aria-label="Models actions"><input id="mId" placeholder="model id" style="width:240px"><input id="mProv" placeholder="provider (local)" style="width:160px"></div>
-  <div class="row" role="toolbar" aria-label="Models actions"><button onclick="listM()">List</button><button onclick="metricsM()">Metrics</button><button onclick="addM()">Add</button><button onclick="delM()">Delete</button><button onclick="defGet()">Get default</button><button onclick="defSet()">Set default</button></div>
+  <div class="row" role="toolbar" aria-label="Models actions">
+    <button id="btnList">List</button>
+    <button id="btnMetrics">Metrics</button>
+    <button id="btnAdd">Add</button>
+    <button id="btnDel">Delete</button>
+    <button id="btnDefGet">Get default</button>
+    <button id="btnDefSet">Set default</button>
+  </div>
   <pre id="out">[]</pre>
 </div>
 <div class="card" id="runtimeCard" style="margin-top:12px;display:none">
   <div id="runtimeHints"></div>
   <div id="errorHints" style="margin-top:8px"></div>
 </div>
-<script>
-const base = location.origin;
-const ADMIN_STORAGE_KEY = 'arw_admin_token';
-let adminToken = '';
-// Lightweight SSE status indicator
-try{
-  const es = new EventSource(base + '/events');
-  es.onopen = ()=>{ const el=document.getElementById('sseBadge'); if (el){ el.innerHTML = "<span class='dot ok'></span> SSE: on"; } };
-  es.onerror = ()=>{ const el=document.getElementById('sseBadge'); if (el){ el.innerHTML = "<span class='dot bad'></span> SSE: off"; } };
-}catch{}
-function renderRuntime(metrics){ const card=document.getElementById('runtimeCard'); const hints=document.getElementById('runtimeHints'); const errors=document.getElementById('errorHints'); if(!card||!hints||!errors){return;} card.style.display='block'; const runtime=metrics.runtime||{}; const lines=[]; if(runtime.idle_timeout_secs!==undefined&&runtime.idle_timeout_secs!==null){ lines.push(`Idle timeout: ${runtime.idle_timeout_secs}s (ARW_DL_IDLE_TIMEOUT_SECS)`); } else { lines.push('Idle timeout: disabled (ARW_DL_IDLE_TIMEOUT_SECS=0)'); } lines.push(`Send retries: ${runtime.send_retries} · Stream retries: ${runtime.stream_retries}`); lines.push(`Backoff: ${runtime.retry_backoff_ms}ms · Preflight: ${runtime.preflight_enabled?'on':'off'}`); hints.innerHTML = `<strong>Download Runtime</strong><br>${lines.join('<br>')}`; let errorHtml=''; const errorsCount = metrics.errors||0; if(errorsCount>0){ errorHtml += `<p><strong>${errorsCount}</strong> download errors recorded. Inspect codes like <code>idle-timeout</code> or <code>resume-content-range</code>.</p>`; } errorHtml += '<p>Idle timeout failures emit <code>idle-timeout</code>. Adjust <code>ARW_DL_IDLE_TIMEOUT_SECS</code> if required.</p>'; errorHtml += '<p>Network instability? Increase <code>ARW_DL_SEND_RETRIES</code> or tweak <code>ARW_DL_RETRY_BACKOFF_MS</code>. Resume mismatches may require deleting partial files under <code>state/models/tmp</code>.</p>'; errors.innerHTML = errorHtml; }
-function setAdminBadge(ok){ const el=document.getElementById('authBadge'); if(!el) return; el.className = 'badge ' + (ok?'ok':'warn'); el.innerHTML = '<span class="dot"></span> Admin: ' + (ok?'on':'off'); }
-function setAdminToken(){ const input=document.getElementById('adminTok'); const value=(input?.value||'').trim(); adminToken = value; if(value){ try{ localStorage.setItem(ADMIN_STORAGE_KEY,value); }catch(_){} } else { try{ localStorage.removeItem(ADMIN_STORAGE_KEY); }catch(_){} } setAdminBadge(!!value); }
-function loadAdminToken(){ try{ const stored = localStorage.getItem(ADMIN_STORAGE_KEY); if(stored){ adminToken = stored; const input=document.getElementById('adminTok'); if(input) input.value = stored; setAdminBadge(true); return; } }catch(_){} setAdminBadge(false); }
-async function call(method,path,body){ const init={ method, headers:{} }; if(body!==undefined){ init.body=JSON.stringify(body); init.headers['Content-Type']='application/json'; }
-  if(adminToken){ init.headers['X-ARW-Admin']=adminToken; }
-  const resp = await fetch(base+path, init);
-  if(resp.status===401){ setAdminBadge(false); throw new Error('unauthorized'); }
-  const text = await resp.text();
-  try{ return JSON.parse(text); }catch{ return text; }
-}
-async function listM(){ try{ const j=await call('GET','/admin/models'); const b=document.getElementById('mdlBadge'); if(Array.isArray(j)&&b){ b.className='badge ok'; b.innerHTML='<span class="dot"></span> '+j.length; } document.getElementById('out').textContent=JSON.stringify(j,null,2); setAdminBadge(!!adminToken); }catch(err){ document.getElementById('out').textContent = `error: ${err.message}`; } }
-async function addM(){ const id=document.getElementById('mId').value.trim(); if(!id) return; const provider=(document.getElementById('mProv').value||'local').trim(); await call('POST','/admin/models/add',{id,provider}); await listM(); }
-async function delM(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await call('POST','/admin/models/remove',{id}); await listM(); }
-async function defGet(){ const j=await call('GET','/admin/models/default'); document.getElementById('out').textContent=JSON.stringify(j,null,2); }
-async function defSet(){ const id=document.getElementById('mId').value.trim(); if(!id) return; await call('POST','/admin/models/default',{id}); await listM(); }
-async function metricsM(){ try{ const j=await call('GET','/state/models_metrics'); document.getElementById('out').textContent=JSON.stringify(j,null,2); renderRuntime(j); }catch(err){ document.getElementById('out').textContent = `error: ${err.message}`; } }
-document.addEventListener('DOMContentLoaded', ()=>{ loadAdminToken(); listM(); });
-</script>
+<script src="/admin/ui/assets/models.js"></script>

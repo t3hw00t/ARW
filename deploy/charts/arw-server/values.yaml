@@ -13,6 +13,9 @@ env:
   ARW_BIND: 0.0.0.0
   ARW_DEBUG: 0
   ARW_TRUST_FORWARD_HEADERS: 0
+  # Network egress safety (recommended on in clustered deployments)
+  ARW_EGRESS_BLOCK_IP_LITERALS: 1
+  ARW_DNS_GUARD_ENABLE: 1
   # Access logs (structured)
   ARW_ACCESS_LOG: 0
   ARW_ACCESS_SAMPLE_N: 1
@@ -26,6 +29,15 @@ env:
   ARW_ACCESS_LOG_PREFIX: ""
   ARW_ACCESS_LOG_ROTATION: daily
   extra: [] # list of { name: FOO, value: BAR }
+
+# Admin token wiring
+adminToken:
+  # Prefer referencing an existing Secret; the key holds the token string.
+  existingSecret: ""
+  # Secret key name (defaults to 'ARW_ADMIN_TOKEN' if empty)
+  key: "ARW_ADMIN_TOKEN"
+  # Not recommended: provide a literal value (overridden by existingSecret when set)
+  value: ""
 
 resources: {}
 
@@ -58,3 +70,29 @@ ingress:
           pathType: Prefix
   tls: []
 
+# Optional NetworkPolicy to restrict traffic
+networkPolicy:
+  enabled: false
+  # When enabled, allow ingress to the service port from these CIDRs (empty means namespace-only)
+  allowedCidrs: []
+
+# Optional egress NetworkPolicy to restrict outbound traffic.
+egressPolicy:
+  enabled: false
+  # Allow DNS resolution to the cluster DNS service (kube-dns/k8s-dns). Set your cluster CIDR.
+  dnsCidrs:
+    - 10.96.0.0/12
+  # Additional allowed destination CIDRs (e.g., proxies). Empty denies all other egress.
+  allowedCidrs: []
+
+# Optional PodDisruptionBudget
+pdb:
+  enabled: false
+  minAvailable: 0
+
+# Optional HorizontalPodAutoscaler
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80

@@ -1,11 +1,7 @@
 <!doctype html><meta charset="utf-8"><title>ARW Agents</title>
 <link rel="stylesheet" href="/admin/ui/assets/tokens.css"/>
 <link rel="stylesheet" href="/admin/ui/assets/ui-kit.css"/>
-<style>
-  body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;color:var(--color-ink);background:var(--surface);}
-  .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0;}
-  pre{background:linear-gradient(180deg,var(--surface),var(--surface-muted));border:1px solid var(--color-line);border-radius:12px;padding:8px;overflow:auto;box-shadow:inset 0 1px 0 rgba(255,255,255,0.6);}
-</style>
+<link rel="stylesheet" href="/admin/ui/assets/pages.css"/>
 <h1>Agents</h1>
 <div class='row'>
   <span class='badge' id='sseBadge' style='margin-left:auto'><span class='dot'></span> SSE: off</span>
@@ -14,7 +10,7 @@
 <div class='card'>
   <div class='row' role='toolbar' aria-label='Admin token'>
     <input id='adminTok' placeholder='admin token' style='width:220px'>
-    <button onclick='setAdminToken()'>Apply</button>
+    <button id='adminTokApply'>Apply</button>
     <span id='authBadge' class='badge warn'><span class='dot'></span> Admin: off</span>
   </div>
   <div class='row'>
@@ -22,30 +18,9 @@
     <select id='roleSel'>
       <option>root</option><option>regional</option><option selected>edge</option><option>connector</option><option>observer</option>
     </select>
-    <button onclick='roleApply()'>Apply</button>
-    <button onclick='loadState()'>Refresh</button>
+    <button id='roleApply'>Apply</button>
+    <button id='refreshState'>Refresh</button>
   </div>
   <pre id='state'>{}</pre>
 </div>
-<script>
-const base=location.origin;
-// Lightweight SSE status indicator
-try{
-  const es = new EventSource(base + '/events');
-  es.onopen = ()=>{ const el=document.getElementById('sseBadge'); if (el){ el.innerHTML = "<span class='dot ok'></span> SSE: on"; } };
-  es.onerror = ()=>{ const el=document.getElementById('sseBadge'); if (el){ el.innerHTML = "<span class='dot bad'></span> SSE: off"; } };
-}catch{}
-let adminToken='';
-const ADMIN_STORAGE_KEY='arw_admin_token';
-function setAdminBadge(on){ const el=document.getElementById('authBadge'); if(!el) return; el.className='badge ' + (on?'ok':'warn'); el.innerHTML = '<span class="dot"></span> Admin: ' + (on?'on':'off'); }
-function setAdminToken(){ const tok=(document.getElementById('adminTok')?.value||'').trim(); adminToken=tok; if(tok){ try{ localStorage.setItem(ADMIN_STORAGE_KEY,tok); }catch(_){} } else { try{ localStorage.removeItem(ADMIN_STORAGE_KEY); }catch(_){} } setAdminBadge(!!tok); }
-function loadAdminToken(){ try{ const stored=localStorage.getItem(ADMIN_STORAGE_KEY); if(stored){ adminToken=stored; const input=document.getElementById('adminTok'); if(input) input.value=stored; setAdminBadge(true); return; } }catch(_){} setAdminBadge(false); }
-async function adminFetch(path, options={}){ const init={ ...options }; init.headers = { ...(options.headers||{}) }; if(adminToken){ init.headers['X-ARW-Admin']=adminToken; }
-  const resp = await fetch(base+path, init);
-  if(resp.status===401){ setAdminBadge(false); throw new Error('unauthorized'); }
-  return resp;
-}
-async function roleApply(){ const r=document.getElementById('roleSel').value; await adminFetch('/admin/hierarchy/role',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({role:r})}); await loadState(); }
-async function loadState(){ try{ const resp=await adminFetch('/admin/hierarchy/state'); const t=await resp.text(); try{ document.getElementById('state').textContent=JSON.stringify(JSON.parse(t),null,2);}catch{ document.getElementById('state').textContent=t; } setAdminBadge(!!adminToken); }catch(err){ document.getElementById('state').textContent='error: '+err.message; } }
-document.addEventListener('DOMContentLoaded', ()=>{ loadAdminToken(); loadState(); });
-</script>
+<script src="/admin/ui/assets/agents.js"></script>

@@ -116,3 +116,66 @@ impl Drop for FlightGuard<'_> {
         self.singleflight.release(&self.key, &self.flight);
     }
 }
+
+#[cfg(test)]
+mod loom_tests {
+    use super::*;
+    use loom::sync::atomic::{AtomicUsize, Ordering};
+    use loom::sync::{Arc, Condvar, Mutex};
+    use loom::thread;
+
+    // A minimal model of singleflight semantics using loom primitives.
+    // It verifies that followers waiting on the leader's completion are released
+    // and that refcounts are decremented without races.
+    #[test]
+    fn singleflight_no_deadlock() {
+        loom::model(|| {
+            struct Flight {
+                refs: AtomicUsize,
+                done: Mutex<bool>,
+                cv: Condvar,
+            }
+            impl Flight {
+                fn new() -> Self {
+                    Self {
+                        refs: AtomicUsize::new(1),
+                        done: Mutex::new(false),
+                        cv: Condvar::new(),
+                    }
+                }
+                fn add_ref(&self) { self.refs.fetch_add(1, Ordering::Relaxed); }
+                fn release(&self) { self.refs.fetch_sub(1, Ordering::AcqRel); }
+                fn mark_done(&self) {
+                    let mut d = self.done.lock().unwrap();
+                    *d = true;
+                    self.cv.notify_all();
+                }
+                fn wait(&self) {
+                    let mut d = self.done.lock().unwrap();
+                    while !*d { d = self.cv.wait(d).unwrap(); }
+                }
+            }
+
+            let f = Arc::new(Flight::new());
+            let f1 = f.clone();
+            let f2 = f.clone();
+
+            // Follower waits
+            let t1 = thread::spawn(move || {
+                f1.add_ref();
+                f1.wait();
+                f1.release();
+            });
+
+            // Leader marks done
+            let t2 = thread::spawn(move || {
+                // simulate work
+                f2.mark_done();
+                f2.release();
+            });
+
+            t1.join().unwrap();
+            t2.join().unwrap();
+        });
+    }
+}

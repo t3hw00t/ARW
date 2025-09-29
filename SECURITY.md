@@ -10,3 +10,7 @@ Microsummary: How to report vulnerabilities, our disclosure window, and supporte
 Scope includes the service (`arw-server`), CLI, schemas, and docs. If your report involves third-party dependencies, include details so we can coordinate upstream.
 
 Thank you for helping keep ARW users safe.
+
+Notes for operators:
+- Debug mode (`ARW_DEBUG=1`) exposes admin UIs but is now enforced as loopback‑only. Use an admin token for any remote access even in debug.
+- A default Content Security Policy (CSP) is applied to HTML responses. When `ARW_CSP_PRESET=strict`, non‑debug pages receive a strict CSP with nonces; debug pages keep a relaxed CSP to avoid breaking inline tooling during development.

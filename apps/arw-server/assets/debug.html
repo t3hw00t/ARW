@@ -153,20 +153,8 @@
     <button id="copyStatsBtn" class="iconbtn" title="Copy stats JSON" style="display:inline-block">Copy stats</button>
     <button id="copyCurlBtn" class="iconbtn" style="display:none" title="Copy last request as curl">Copy curl</button>
   </header>
-  <script>
-    (function(){
-      try{
-        const KEY = 'arw-theme';
-        const apply = t => { const r=document.documentElement; if(t==='dark'){ r.setAttribute('data-theme','dark'); } else { r.removeAttribute('data-theme'); } };
-        const cur = () => localStorage.getItem(KEY)||'';
-        apply(cur());
-        const btn = document.getElementById('themeToggle');
-        if(btn) btn.addEventListener('click', ()=>{ const t = cur()==='dark'?'light':'dark'; localStorage.setItem(KEY,t); apply(t); });
-        const back = document.getElementById('btnBack');
-        if(back) back.addEventListener('click', ()=>{ try{ if(document.referrer){ history.back(); } else { location.assign('/admin'); } } catch(e){ location.assign('/admin'); } });
-      }catch{}
-    })();
-  </script>
+  <script src="/admin/ui/assets/debug.js"></script>
+  <script src="/admin/ui/assets/debug-core.js"></script>
 
   <div class="row">
     <button onclick="hit('/version')">/version</button>
@@ -288,14 +276,14 @@
         <button class="iconbtn" id="sseOnlyModels" title="Filter to models.*">Models only</button>
         <button class="iconbtn" id="sseOnlyRpu" title="Filter to rpu.*">RPU only</button>
       </div>
-      <div id="log"></div>
+      <div id="log" role="log" aria-live="polite" aria-atomic="false"></div>
     </div>
     <div class="card" data-collapsed="1">
       <h3>Egress Preview <a href="#" class="help" data-doc="deployment" data-tip="Pre‑offload preview: where data would go and why." title="Egress preview">?</a></h3>
       <div class="row">
         <button class="iconbtn" id="egClear">Clear</button>
       </div>
-      <div id="egOut" style="max-height:28vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;background:#fff;padding:8px"></div>
+      <div id="egOut" role="region" aria-label="Egress preview output" style="max-height:28vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;background:#fff;padding:8px"></div>
     </div>
     <div class="card" data-collapsed="1">
       <h3>Training Telemetry <a href="#" class="help" data-doc="training_park" data-tip="Live metrics feeding the Training Park." title="Training telemetry">?</a></h3>
@@ -2304,48 +2292,7 @@ async function modelsGc(){
 }
 </script>
   <div id="insights" style="display:none"></div>
-  <script>
-    // Collapsible sections persisted by heading
-    (function(){
-      try{
-        document.querySelectorAll('.box>h3').forEach(h => {
-          const key = 'dbg_collapse_' + (h.textContent||'').trim().toLowerCase().replace(/\s+/g,'_');
-          const box = h.parentElement;
-          const saved = localStorage.getItem(key);
-          if (saved === '1') box.setAttribute('data-collapsed','1');
-          else if (saved === '0') box.removeAttribute('data-collapsed');
-          h.addEventListener('click', () => {
-            const collapsed = box.getAttribute('data-collapsed') === '1';
-            if (collapsed) { box.removeAttribute('data-collapsed'); localStorage.setItem(key,'0'); }
-            else { box.setAttribute('data-collapsed','1'); localStorage.setItem(key,'1'); }
-          });
-        });
-        // Expand / Collapse all
-        const exp = document.getElementById('btnExpandAll');
-        const col = document.getElementById('btnCollapseAll');
-        if (exp) exp.addEventListener('click', ()=>{
-          document.querySelectorAll('.box').forEach(b => {
-            b.removeAttribute('data-collapsed');
-            const h = b.querySelector('h3');
-            if (h) localStorage.setItem('dbg_collapse_' + (h.textContent||'').trim().toLowerCase().replace(/\s+/g,'_'), '0');
-          });
-        });
-        if (col) col.addEventListener('click', ()=>{
-          document.querySelectorAll('.box').forEach(b => {
-            b.setAttribute('data-collapsed','1');
-            const h = b.querySelector('h3');
-            if (h) localStorage.setItem('dbg_collapse_' + (h.textContent||'').trim().toLowerCase().replace(/\s+/g,'_'), '1');
-          });
-        });
-        // Density toggle
-        const dens = document.getElementById('btnDensity');
-        const setDensity = mode => { document.body.classList.toggle('density-compact', mode==='compact'); localStorage.setItem('dbg_density', mode); };
-        const savedD = localStorage.getItem('dbg_density');
-        if (savedD === 'compact') document.body.classList.add('density-compact');
-        if (dens) dens.addEventListener('click', ()=>{ const compact = document.body.classList.contains('density-compact'); setDensity(compact? 'comfortable' : 'compact'); });
-      }catch{}
-    })();
-  </script>
+  <!-- Moved to /admin/ui/assets/debug.js -->
 </body>
 </html>
 // Experiment activated (applied variant)

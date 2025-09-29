@@ -120,8 +120,13 @@ Key values:
 - `image.repository=ghcr.io/t3hw00t/arw-server` (override if you publish a fork)
 - `image.tag=vX.Y.Z`
 - `service.type=ClusterIP` (default) — front with your own ingress/TLS
-- `env.ARW_BIND=0.0.0.0` and `env.ARW_ADMIN_TOKEN` for any externally reachable deployment
-- `env.ARW_EGRESS_LEDGER_ENABLE=1` and `env.ARW_DNS_GUARD_ENABLE=1` to enforce outbound policy in cluster environments
+- `env.ARW_BIND=0.0.0.0` and an admin token for any externally reachable deployment. Prefer: `adminToken.existingSecret=<secret-name>` (key defaults to `ARW_ADMIN_TOKEN`).
+- Egress safety on by default in the chart: `env.ARW_EGRESS_BLOCK_IP_LITERALS=1`, `env.ARW_DNS_GUARD_ENABLE=1`. Adjust per cluster policy if needed.
+- Optional hardening knobs:
+  - `networkPolicy.enabled=true` with `networkPolicy.allowedCidrs=["10.0.0.0/8"]`
+  - `pdb.enabled=true` with `pdb.minAvailable=0|1`
+  - `autoscaling.enabled=true` with CPU‑based targets
+  - `egressPolicy.enabled=true` to restrict outbound traffic. Allow DNS with `egressPolicy.dnsCidrs=["10.96.0.0/12"]` (adjust for your cluster) and add explicit `egressPolicy.allowedCidrs` as needed.
 
 Legacy charts have been removed; use `deploy/charts/arw-server` for Kubernetes deployments.
 

@@ -1,0 +1,9 @@
+body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;color:var(--color-ink);background:var(--surface)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
+pre,textarea{background:linear-gradient(180deg,var(--surface),var(--surface-muted));border:1px solid var(--color-line);border-radius:12px;padding:8px;overflow:auto;box-shadow:inset 0 1px 0 rgba(255,255,255,0.6)}
+input,select,button,textarea{font:inherit}
+.grid{display:grid;grid-template-columns:260px 1fr;gap:16px}
+ul{list-style:none;padding:0;margin:0}
+li{padding:4px 6px;cursor:pointer;border-radius:6px}
+li:hover{background:var(--surface-muted)}
+h1{margin:0 0 10px 0}

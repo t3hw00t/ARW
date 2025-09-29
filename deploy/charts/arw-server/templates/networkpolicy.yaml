@@ -1,0 +1,29 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "arw-server.fullname" . }}
+  labels:
+    {{- include "arw-server.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "arw-server.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: {{ .Values.service.port }}
+      {{- if .Values.networkPolicy.allowedCidrs }}
+      from:
+      {{- range $cidr := .Values.networkPolicy.allowedCidrs }}
+        - ipBlock:
+            cidr: {{ $cidr | quote }}
+      {{- end }}
+      {{- else }}
+      from:
+        - namespaceSelector: {}
+      {{- end }}
+{{- end }}
+

@@ -248,6 +248,12 @@ pub(crate) mod paths {
     pub const ADMIN_UI_FLOWS: &str = "/admin/ui/flows";
     pub const ADMIN_UI_TOKENS: &str = "/admin/ui/assets/tokens.css";
     pub const ADMIN_UI_KIT: &str = "/admin/ui/assets/ui-kit.css";
+    pub const ADMIN_UI_PAGES: &str = "/admin/ui/assets/pages.css";
+    pub const ADMIN_UI_MODELS_JS: &str = "/admin/ui/assets/models.js";
+    pub const ADMIN_UI_AGENTS_JS: &str = "/admin/ui/assets/agents.js";
+    pub const ADMIN_UI_PROJECTS_JS: &str = "/admin/ui/assets/projects.js";
+    pub const ADMIN_UI_DEBUG_JS: &str = "/admin/ui/assets/debug.js";
+    pub const ADMIN_UI_DEBUG_CORE_JS: &str = "/admin/ui/assets/debug-core.js";
     pub const CATALOG_INDEX: &str = "/catalog/index";
     pub const CATALOG_HEALTH: &str = "/catalog/health";
     pub const ADMIN_RPU_TRUST: &str = "/admin/rpu/trust";
@@ -349,6 +355,36 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
     builder.route_get(
         paths::ADMIN_UI_KIT,
         api::ui::ui_kit_css,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_PAGES,
+        api::ui::ui_pages_css,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_MODELS_JS,
+        api::ui::ui_models_js,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_AGENTS_JS,
+        api::ui::ui_agents_js,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_PROJECTS_JS,
+        api::ui::ui_projects_js,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_DEBUG_JS,
+        api::ui::ui_debug_js,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_DEBUG_CORE_JS,
+        api::ui::ui_debug_core_js,
         Some(Stability::Beta),
     );
     builder.route_get(

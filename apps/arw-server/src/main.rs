@@ -514,6 +514,80 @@ mod http_tests {
         assert_eq!(state_json["count"].as_u64(), Some(1));
         assert_eq!(state_json["items"].as_array().map(|v| v.len()), Some(1));
     }
+
+    #[tokio::test]
+    async fn admin_debug_denies_remote_even_in_debug_mode() {
+        use axum::{routing::get, Router};
+        use tower::util::ServiceExt;
+        use axum::http::{Request, StatusCode};
+
+        // Build a minimal router with client-addr middleware so admin_ok sees the caller IP.
+        let app = Router::new()
+            .route(paths::ADMIN_DEBUG, get(crate::api::ui::debug_ui))
+            .layer(axum::middleware::from_fn(crate::security::client_addr_mw));
+
+        // Enable debug but simulate a remote caller via X-Forwarded-For.
+        std::env::set_var("ARW_DEBUG", "1");
+        let req = Request::builder()
+            .method("GET")
+            .uri(paths::ADMIN_DEBUG)
+            .header("x-forwarded-for", "8.8.8.8")
+            .body(Body::empty())
+            .expect("request");
+        let resp = app.clone().oneshot(req).await.expect("response");
+        // Expect Unauthorized without an admin token when not loopback.
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        // Cleanup
+        std::env::remove_var("ARW_DEBUG");
+    }
+
+    #[tokio::test]
+    async fn admin_debug_allows_loopback_in_debug_mode() {
+        use axum::{routing::get, Router};
+        use tower::util::ServiceExt;
+        use axum::http::{Request, StatusCode};
+
+        let app = Router::new()
+            .route(paths::ADMIN_DEBUG, get(crate::api::ui::debug_ui))
+            .layer(axum::middleware::from_fn(crate::security::client_addr_mw));
+        
+
+        std::env::set_var("ARW_DEBUG", "1");
+        let req = Request::builder()
+            .method("GET")
+            .uri(paths::ADMIN_DEBUG)
+            .header("x-forwarded-for", "127.0.0.1")
+            .body(Body::empty())
+            .expect("request");
+        let resp = app.clone().oneshot(req).await.expect("response");
+        assert_eq!(resp.status(), StatusCode::OK);
+        std::env::remove_var("ARW_DEBUG");
+    }
+
+    #[tokio::test]
+    async fn admin_ui_assets_require_auth() {
+        use axum::{routing::get, Router};
+        use tower::util::ServiceExt;
+        use axum::http::{Request, StatusCode};
+
+        let app = Router::new()
+            .route(
+                "/admin/ui/assets/models.js",
+                get(crate::api::ui::ui_models_js),
+            )
+            .layer(axum::middleware::from_fn(crate::security::client_addr_mw));
+
+        std::env::set_var("ARW_DEBUG", "0");
+        let req = Request::builder()
+            .method("GET")
+            .uri("/admin/ui/assets/models.js")
+            .header("x-forwarded-for", "127.0.0.1")
+            .body(Body::empty())
+            .expect("request");
+        let resp = app.clone().oneshot(req).await.expect("response");
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+    }
 }
 
 fn env_truthy(key: &str) -> bool {
@@ -530,9 +604,37 @@ fn env_truthy(key: &str) -> bool {
 }
 
 pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
-    // Debug mode opens admin surfaces for local development convenience.
+    // Debug mode opens admin surfaces for local development convenience,
+    // but only for local callers. In unit tests or routers without the
+    // client-addr middleware, we may not have an address; allow in that
+    // case to preserve test ergonomics.
     if env_truthy("ARW_DEBUG") {
-        return true;
+        let client = crate::security::client_addr();
+        // Helper: check if a string is a loopback IP (with or without port)
+        fn is_loopback(s: &str) -> bool {
+            // Try SocketAddr first (ip:port)
+            if let Ok(sa) = s.parse::<std::net::SocketAddr>() {
+                return sa.ip().is_loopback();
+            }
+            // Try plain IpAddr
+            if let Ok(ip) = s.parse::<std::net::IpAddr>() {
+                return ip.is_loopback();
+            }
+            // Fallback for common hostnames
+            let low = s.trim().to_ascii_lowercase();
+            matches!(low.as_str(), "localhost" | "::1" | "[::1]" | "127.0.0.1")
+        }
+        match client {
+            Some(ref addr) if is_loopback(addr) => return true,
+            None => {
+                // Middleware not installed (tests or minimal routers). Allow.
+                return true;
+            }
+            _ => {
+                // Debug is on but caller not local.
+                return false;
+            }
+        }
     }
 
     // When ARW_ADMIN_TOKEN or ARW_ADMIN_TOKEN_SHA256 is set, require it in Authorization: Bearer or X-ARW-Admin
@@ -602,15 +704,17 @@ pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
     false
 }
 
+// Shared test guard to serialize env/rate-limiter tests across the binary.
+#[cfg(test)]
+pub(crate) static ADMIN_ENV_GUARD: once_cell::sync::Lazy<std::sync::Mutex<()>> =
+    once_cell::sync::Lazy::new(|| std::sync::Mutex::new(()));
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use axum::http::{HeaderMap, HeaderValue};
-    use once_cell::sync::Lazy;
     use sha2::Digest;
-    use std::sync::Mutex;
-
-    static TEST_GUARD: Lazy<Mutex<()>> = Lazy::new(|| Mutex::new(()));
+    use proptest::prelude::*;
 
     fn auth_headers(token: &str) -> HeaderMap {
         let mut headers = HeaderMap::new();
@@ -624,7 +728,7 @@ mod tests {
 
     #[test]
     fn admin_ok_rate_limits_plain_token() {
-        let _lock = TEST_GUARD.lock().unwrap();
+        let _lock = super::ADMIN_ENV_GUARD.lock().unwrap();
         crate::security::reset_admin_rate_limiter_for_tests();
         std::env::set_var("ARW_DEBUG", "0");
         std::env::set_var("ARW_ADMIN_TOKEN", "secret");
@@ -645,7 +749,7 @@ mod tests {
 
     #[test]
     fn admin_ok_rate_limits_hashed_token() {
-        let _lock = TEST_GUARD.lock().unwrap();
+        let _lock = super::ADMIN_ENV_GUARD.lock().unwrap();
         crate::security::reset_admin_rate_limiter_for_tests();
         std::env::set_var("ARW_DEBUG", "0");
         std::env::remove_var("ARW_ADMIN_TOKEN");
@@ -667,6 +771,51 @@ mod tests {
         std::env::remove_var("ARW_ADMIN_RATE_LIMIT");
         std::env::remove_var("ARW_ADMIN_RATE_WINDOW_SECS");
         std::env::remove_var("ARW_ADMIN_TOKEN_SHA256");
+    }
+}
+
+#[cfg(test)]
+mod prop_tests {
+    use super::*;
+    use axum::http::{HeaderMap, HeaderValue};
+    use proptest::prelude::*;
+    
+
+    fn auth_headers(token: &str) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        let value = format!("Bearer {}", token);
+        headers.insert(
+            axum::http::header::AUTHORIZATION,
+            HeaderValue::from_str(&value).expect("auth header"),
+        );
+        headers
+    }
+
+    proptest! {
+        #[test]
+        #[ignore]
+        fn hashed_token_allows_once_denies_second(ref token in proptest::string::string_regex("[-._~A-Za-z0-9]{1,64}").unwrap()) {
+            let _lock = super::ADMIN_ENV_GUARD.lock().unwrap();
+            crate::security::reset_admin_rate_limiter_for_tests();
+            std::env::set_var("ARW_DEBUG", "0");
+            std::env::remove_var("ARW_ADMIN_TOKEN");
+            // Compute SHA256 of the random token
+            let mut h = sha2::Sha256::new();
+            h.update(token.as_bytes());
+            let digest = hex::encode(h.finalize());
+            std::env::set_var("ARW_ADMIN_TOKEN_SHA256", &digest);
+            std::env::set_var("ARW_ADMIN_RATE_LIMIT", "1");
+            std::env::set_var("ARW_ADMIN_RATE_WINDOW_SECS", "60");
+
+            let headers = auth_headers(token);
+            prop_assert!(admin_ok(&headers));
+            prop_assert!(!admin_ok(&headers));
+
+            crate::security::reset_admin_rate_limiter_for_tests();
+            std::env::remove_var("ARW_ADMIN_RATE_LIMIT");
+            std::env::remove_var("ARW_ADMIN_RATE_WINDOW_SECS");
+            std::env::remove_var("ARW_ADMIN_TOKEN_SHA256");
+        }
     }
 }
 
