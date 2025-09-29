@@ -6,6 +6,7 @@
 [![Docs Check](https://github.com/t3hw00t/ARW/actions/workflows/docs-check.yml/badge.svg)](https://github.com/t3hw00t/ARW/actions/workflows/docs-check.yml)
 [![Docs](https://img.shields.io/badge/docs-material%20for%20mkdocs-blue)](https://t3hw00t.github.io/ARW/)
 [![Container](https://img.shields.io/badge/ghcr-arw--server-blue?logo=docker)](https://ghcr.io/t3hw00t/arw-server)
+[![npm](https://img.shields.io/npm/v/%40arw%2Fclient?label=%40arw%2Fclient)](https://www.npmjs.com/package/@arw/client)
 [![License](https://img.shields.io/badge/license-MIT%20OR%20Apache--2.0-informational)](#licensing)
 [![Release](https://img.shields.io/github/v/release/t3hw00t/ARW?display_name=tag)](https://github.com/t3hw00t/ARW/releases)
 [![Windows x64 MSI](https://img.shields.io/badge/Windows%20x64-MSI-blue?logo=windows)](https://github.com/t3hw00t/ARW/releases/latest/download/arw-launcher-x64.msi)
