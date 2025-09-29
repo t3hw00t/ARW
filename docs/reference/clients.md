@@ -11,6 +11,9 @@ This repo includes a minimal TypeScript client for `arw-server`. It focuses on t
 
 Location: `clients/typescript/`
 
+Install (after publish):
+- `npm i @arw/client`
+
 Use cases:
 - Submit and poll actions (fire‑and‑wait or fire‑and‑forget)
 - Subscribe to SSE events (browser EventSource or Node stream fallback)

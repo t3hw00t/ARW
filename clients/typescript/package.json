@@ -6,6 +6,22 @@
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/t3hw00t/ARW.git"
+  },
+  "homepage": "https://t3hw00t.github.io/ARW/reference/clients/",
+  "bugs": {
+    "url": "https://github.com/t3hw00t/ARW/issues"
+  },
+  "keywords": [
+    "arw",
+    "agent",
+    "sse",
+    "events",
+    "client",
+    "typescript"
+  ],
   "sideEffects": false,
   "engines": {
     "node": ">=18"
