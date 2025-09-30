@@ -38,8 +38,8 @@ Type: Explanation
 - Caching layers: Action Cache with CAS and singleflight; digest-addressed blob serving with strong validators; read-models over SSE (JSON Patch deltas with coalescing); llama.cpp prompt caching. See: Architecture → Caching Layers.
 - Security & Policy: Central gating keys and deny contracts; ingress/egress guards; Policy Capsules; roadmap RPU for signatures/ABAC. See: [Security Hardening](guide/security_hardening.md), [Policy & Permissions](guide/policy_permissions.md).
 - Visual capture: Agents and UIs call `ui.screenshot.capture` for screen/window/region snapshots with Activity lane previews, gallery management, annotation tooling, and optional OCR. See: [Screenshots](guide/screenshots.md).
-- Managed runtimes (in progress): the priority-one supervisor will download, activate, and monitor llama.cpp/ONNX Runtime/vLLM bundles with automatic accelerator detection (CUDA/ROCm/DirectML/Metal/CoreML/Vulkan) and prompt cache warm-up. See: [Managed Runtime Supervisor](architecture/managed_runtime_supervisor.md) and [Managed llama.cpp Runtime](architecture/managed_llamacpp_runtime.md).
-- Multi-modal adapters: voice (Whisper.cpp, local TTS) and vision (llava.cpp, Moondream) share the same runtime lifecycle, with consent-first mic/camera leases and provenance events, plus optional pointer/keyboard automation under strict leases. See: Architecture → Managed llama.cpp Runtime → Multi-Modal Hooks.
+- Managed runtimes (in progress): scaffolding seeds the runtime registry and health stream; today you can connect to external llama.cpp hosts, while automated downloads and ONNX Runtime/vLLM adapters remain under active development. See: [Managed Runtime Supervisor](architecture/managed_runtime_supervisor.md) and [Managed llama.cpp Runtime](architecture/managed_llamacpp_runtime.md).
+- Multi-modal adapters (roadmap): planned voice (Whisper.cpp, local TTS) and vision (llava.cpp, Moondream) lifecycles will reuse the runtime supervisor with consent-first leases and provenance. See: Architecture → Managed llama.cpp Runtime → Multi-Modal Hooks and [Multi-Modal Runtime Plan](architecture/multimodal_runtime_plan.md).
 - Self-improvement loop: goldens + rewards, A/B runner (with shadow), config patch engine, policy-aware tuner, calibrated self-model, nightly distillation (and on-demand via `POST /admin/distill`), and a persisted experiments scoreboard + winners. See: Experiments (guide/experiments_ab.md).
 - Egress control (preview): enable the Guardrail Gateway for a policy-backed loopback proxy, DNS guard, project-level network posture, and an egress ledger. See: Architecture → Egress Firewall; Guide → Network Posture.
 - Lightweight mitigations (planned): memory quarantine; project isolation; belief-diff review; cluster manifest pinning; hardened headless browsing; safe archive handling; DNS anomaly guard; accelerator zeroing; event sequencing; context rehydration check. See: Architecture → Lightweight Mitigations.
@@ -49,7 +49,7 @@ Type: Explanation
 - Connections & Hierarchy: Connection registry, health checks, rate limits, QoS, tracing, policy; roles and negotiation (hello/offer/accept). See: Federated Clustering (architecture/cluster_federation.md).
 
 ## Adapters
-- llama.cpp (GGUF; CPU/GPU/NPU offload), ONNX Runtime (DirectML/CUDA/ROCm/OpenVINO/CoreML), OpenAI‑compatible HTTP. CPU fallback is mandatory.
+- llama.cpp (external server via `ARW_LLAMA_URL`), OpenAI-compatible HTTP (including LiteLLM proxies). Planned: ONNX Runtime, vLLM, and additional local adapters.
 
 ## Companion Apps (Rust)
 - Launcher (Tauri): tray, notifications, Events/Logs windows, Debug UI opener; optional autostart. See: Desktop Launcher (guide/launcher.md).

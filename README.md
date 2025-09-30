@@ -16,7 +16,7 @@
 
 Your private AI control room that can scale and share when you choose.
 
-In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” on your computer to research, plan, write, build—and now see and hear—while you stay in charge. It is local‑first and privacy‑first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.
+In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” on your computer to research, plan, write, and build—while laying the groundwork for upcoming voice and vision helpers—all under your control. It is local‑first and privacy‑first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.
 
 > **Restructure update:** `arw-server` is now the sole API surface (headless-first) across every deployment. The legacy `arw-svc` bridge and its launch flags have been removed in favour of the unified stack.
 
@@ -70,7 +70,7 @@ These ship with `arw-server` out of the box and keep working even when you stay 
 ### Opt-in packs
 
 - Watch sites or docs for changes and get short, actionable updates after you enable the connectors or watcher packs you trust.
-- Enable voice, vision, and pointer helpers: capture audio/video with consent prompts, transcribe or describe locally, narrate results, and (when granted) drive pointer/keyboard automations under tight leases.
+- **Preview** Prepare for voice, vision, and pointer helpers: consent-first audio/video capture, narration, and high-trust automation are under active development. Track the [Multi-Modal Runtime Plan](docs/architecture/multimodal_runtime_plan.md) for progress.
 
 <a id="opt-in-collaboration-extensions"></a>
 ### Remote collaborator packs
@@ -112,9 +112,9 @@ If you want AI that is useful, private, and accountable—and that can team up a
 The details that make ARW practical in real workflows.
 
 - Local‑first: runs offline by default; portable, per‑user state. See https://t3hw00t.github.io/ARW/guide/offline_sync/
-- Unified object graph: consistent state across Hub, Chat, Training, and Voice & Vision. See https://t3hw00t.github.io/ARW/architecture/object_graph/
+- Unified object graph: consistent state across Hub, Chat, and Training today, with planned Voice & Vision surfaces sharing the same backbone. See https://t3hw00t.github.io/ARW/architecture/object_graph/
 - Live events (SSE): one stream drives UIs and tools. See https://t3hw00t.github.io/ARW/architecture/events_vocabulary/ and https://t3hw00t.github.io/ARW/architecture/sse_patch_contract/
-- Managed runtime supervisor: download, activate, and monitor llama.cpp/ONNX Runtime/vLLM bundles with automatic accelerator detection, fallback, and health telemetry. See docs/architecture/managed_llamacpp_runtime.md.
+- Managed runtime supervisor (in progress): `arw-server` seeds the runtime registry and health stream; today you can point ARW at external llama.cpp hosts, while automated downloads and adapters for ONNX Runtime/vLLM remain on the roadmap. See docs/architecture/managed_llamacpp_runtime.md and docs/architecture/managed_runtime_supervisor.md.
 - Debug UI: inspect episodes, state snapshots, and traces. See https://t3hw00t.github.io/ARW/guide/troubleshooting/
 - Recipes + Schemas: installable strategy packs with JSON Schemas. See https://t3hw00t.github.io/ARW/guide/recipes/ and https://github.com/t3hw00t/ARW/tree/main/spec/schemas
 - Observability: tracing/logging/metrics and journal. See https://t3hw00t.github.io/ARW/architecture/observability_otel/. CI enforces interactive performance budgets; see https://t3hw00t.github.io/ARW/guide/interactive_bench/
@@ -299,7 +299,7 @@ Three primary perspectives
 - Project Hub: the center of real‑world work (files/notes/agents/data/runs)
 - Chat: an episode viewer/controller bound to project+agent with a live sidecar
 - Training Park: impressionistic dials for instincts/priorities, retrieval diversity, tool success, hallucination risk
-- Voice & Vision Studio: consent-first capture, transcription, description, narration, and playback powered by the managed runtime supervisor
+- Voice & Vision Studio (roadmap): consent-first capture, transcription, description, narration, and playback will ship with the managed runtime supervisor
  - Agent Card: compact self‑model (confidence, competence, costs, active leases) with reliability mini‑chart
 
 Logic Units (config‑first strategy packs)

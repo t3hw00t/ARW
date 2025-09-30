@@ -6,7 +6,7 @@ title: Agent Hub (ARW)
 
 Your private AI control room that can scale and share when you choose.
 
-In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” on your computer to research, plan, write, build—and now see and hear—while you stay in charge. It is local‑first and privacy‑first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.
+In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” on your computer to research, plan, write, and build—while laying the groundwork for upcoming voice and vision helpers—and stay in charge. It is local‑first and privacy‑first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.
 
 Updated: 2025-09-24
 Type: Explanation
@@ -23,8 +23,8 @@ Type: Explanation
 - Watch sites or docs for changes and get actionable updates.
 - Turn vague goals into concrete plans and next steps.
 - Chat to explore data and export both answers and evidence.
-- Spin up managed llama.cpp/ONNX/vLLM runtimes with automatic accelerator detection and fallback.
-- Capture voice, vision, and pointer input safely: consent-first mic/camera access, local transcription/description/narration, plus gated pointer/keyboard automation when explicitly approved.
+- Point ARW at external llama.cpp hosts today; managed downloads and adapters for ONNX Runtime and vLLM remain on the roadmap.
+- Prepare for voice, vision, and pointer tooling: consent-first audio/video capture, local narration, and high-trust automation are under active development. Follow the [Multi-Modal Runtime Plan](architecture/multimodal_runtime_plan.md) for status.
 
 ## Scaling & Sharing (Opt‑In)
 - Stay local-first by default; remote workers and co-drive remain off until you flip them on.
@@ -41,7 +41,7 @@ Type: Explanation
 - A project world view tracks key facts, open questions, and constraints so agents act on evidence, not guesses.
 - Budgets for time, tokens, and spend; stay within plan with a visible meter.
 - Signed plugins and sandboxed tools by default.
-- Managed runtime supervisor respects guardrails: accelerator access is lease-gated, telemetry is recorded, and fallbacks never break privacy promises.
+- Managed runtime supervisor (in progress) respects guardrails: accelerator access is lease-gated, telemetry is recorded, and fallbacks never break privacy promises as the supervisor matures toward full automation.
 
 ## Get Started
 - [Quickstart](guide/quickstart.md): run ARW locally in minutes.
