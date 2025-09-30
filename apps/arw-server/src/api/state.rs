@@ -203,6 +203,30 @@ pub async fn state_crashlog(headers: HeaderMap) -> impl IntoResponse {
     Json(value).into_response()
 }
 
+/// Screenshots OCR index snapshot.
+#[utoipa::path(
+    get,
+    path = "/state/screenshots",
+    tag = "State",
+    operation_id = "state_screenshots_doc",
+    description = "Indexed OCR sidecars for captured screenshots, grouped by source path and language.",
+    responses(
+        (status = 200, description = "Screenshots index", body = serde_json::Value),
+        (status = 401, description = "Unauthorized", body = serde_json::Value)
+    )
+)]
+pub async fn state_screenshots(headers: HeaderMap) -> impl IntoResponse {
+    if !crate::admin_ok(&headers) {
+        return (
+            axum::http::StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
+    let value = crate::read_models::screenshots_snapshot().await;
+    Json(value).into_response()
+}
+
 /// Aggregated service health (read-model built from service.health events).
 #[utoipa::path(
     get,

@@ -154,8 +154,10 @@ Screen/window/region capture with annotate/blur, gallery, Save to project, and o
   - [guide/screenshots.md](../guide/screenshots.md)
 - HTTP:
   - `POST /admin/tools/run`
+  - `GET /state/screenshots`
 - Events:
   - `screenshots.captured`
+  - `screenshots.ocr.completed`
 - References:
   - [architecture/screenshot_capture_pipeline.md](../architecture/screenshot_capture_pipeline.md)
   - [guide/screenshots.md](../guide/screenshots.md)

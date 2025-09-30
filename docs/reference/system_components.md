@@ -740,14 +740,17 @@ Capture, annotate, and OCR tools return screenshot metadata, enforce io:screensh
   - SSE + JSON Patch Streaming Contract
 - Signals & Telemetry:
   - `screenshots.captured`
+  - `screenshots.ocr.completed`
 - HTTP:
   - `POST /admin/tools/run`
+  - `GET /state/screenshots`
 - Tools:
   - `ui.screenshot.capture`
   - `ui.screenshot.annotate_burn`
   - `ui.screenshot.ocr`
 - Topics:
   - `screenshots.captured`
+  - `screenshots.ocr.completed`
 - Storage:
   - `.arw/screenshots/YYYY/MM/DD/`
 - References:
@@ -756,6 +759,7 @@ Capture, annotate, and OCR tools return screenshot metadata, enforce io:screensh
 - Notes:
   - Launcher integrations trigger captures and render previews with annotate/OCR quick actions.
   - Lease gating keeps capture and OCR auditable with Activity lane telemetry.
+  - OCR responses emit cache hits (`cached: true`) when sidecars satisfy the request; force re-run for fresh text or new language packs.
 
 ### Unified Object Graph & Event Stream
 

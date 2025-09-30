@@ -66,8 +66,8 @@ _Keep loops under budget with shared event vocabulary and debugging surfaces._
 
 - **Screenshot Capture Pipeline** · runtime / admin / auxiliary / complete
   Screen/window/region capture with annotate/blur, gallery, Save to project, and optional OCR for agents and operators.
-  _Routes_: `POST /admin/tools/run`
-  _Signals_: `screenshots.captured`
+  _Routes_: `POST /admin/tools/run`, `GET /state/screenshots`
+  _Signals_: `screenshots.captured`, `screenshots.ocr.completed`
   _Source_: [apps/arw-server/src/tools.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/tools.rs), [apps/arw-launcher/src-tauri/ui/common.js](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri/ui/common.js), [guide/screenshots.md](../guide/screenshots.md)
   _References_: [architecture/screenshot_capture_pipeline.md](../architecture/screenshot_capture_pipeline.md)
 

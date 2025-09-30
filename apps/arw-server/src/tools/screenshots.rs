@@ -5,11 +5,31 @@ use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use chrono::{Datelike, Utc};
 use image::{self, imageops, DynamicImage, ImageOutputFormat, RgbaImage};
-use serde_json::json;
+use serde_json::{json, Value as JsonValue};
 use std::fs::{self, File};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use tokio::task::spawn_blocking;
+
+const OCR_SIDECAR_VERSION: u32 = 1;
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct OcrBlock {
+    text: String,
+    x: i32,
+    y: i32,
+    w: i32,
+    h: i32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    confidence: Option<f32>,
+}
+
+#[derive(Debug, Clone)]
+struct OcrResult {
+    text: String,
+    blocks: Vec<OcrBlock>,
+    lang: String,
+}
 
 pub(super) async fn capture(input: Value) -> Result<Value, ToolError> {
     spawn_blocking(move || capture_blocking(&input))
@@ -232,8 +252,75 @@ fn ocr_blocking(input: &Value) -> Result<Value, ToolError> {
         .get("path")
         .and_then(|v| v.as_str())
         .ok_or_else(|| ToolError::Invalid("missing 'path'".into()))?;
-    let text = ocr_image_text(path)?;
-    Ok(json!({"text": text, "blocks": []}))
+    let lang = input
+        .get("lang")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.trim().is_empty())
+        .unwrap_or("eng");
+    let force = input
+        .get("force")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+
+    let src = Path::new(path);
+    let parent = src.parent().unwrap_or_else(|| Path::new("."));
+    let stem = src
+        .file_stem()
+        .map(|s| s.to_string_lossy())
+        .ok_or_else(|| ToolError::Invalid("invalid 'path'".into()))?;
+
+    let requested_lang = lang.trim();
+    let requested_lang = if requested_lang.is_empty() {
+        "eng"
+    } else {
+        requested_lang
+    };
+    let requested_fragment = sanitize_lang_fragment(requested_lang);
+
+    let stem_str = stem.as_ref();
+
+    if !force {
+        if let Some(cached) = load_cached_ocr(parent, stem_str, &requested_fragment) {
+            return Ok(cached);
+        }
+    }
+
+    let result = ocr_image_text(path, requested_lang)?;
+    let effective_fragment = sanitize_lang_fragment(&result.lang);
+    if !force && effective_fragment != requested_fragment {
+        if let Some(cached) = load_cached_ocr(parent, stem_str, &effective_fragment) {
+            return Ok(cached);
+        }
+    }
+
+    let ocr_path = sidecar_path(parent, stem_str, &effective_fragment);
+    let blocks_value =
+        serde_json::to_value(&result.blocks).map_err(|e| ToolError::Runtime(e.to_string()))?;
+
+    let generated_at = Utc::now().to_rfc3339();
+    let mut sidecar_map = serde_json::Map::new();
+    sidecar_map.insert("schema_version".into(), json!(OCR_SIDECAR_VERSION));
+    sidecar_map.insert("generated_at".into(), json!(generated_at.clone()));
+    sidecar_map.insert("source_path".into(), json!(path));
+    sidecar_map.insert("lang".into(), json!(result.lang.clone()));
+    sidecar_map.insert("text".into(), json!(result.text.clone()));
+    sidecar_map.insert("blocks".into(), blocks_value.clone());
+    let sidecar_value = JsonValue::Object(sidecar_map);
+    let sidecar_bytes =
+        serde_json::to_vec_pretty(&sidecar_value).map_err(|e| ToolError::Runtime(e.to_string()))?;
+    write_sidecar_atomic(&ocr_path, &sidecar_bytes)?;
+
+    let response = json!({
+        "text": result.text,
+        "blocks": blocks_value,
+        "lang": result.lang,
+        "ocr_path": ocr_path.to_string_lossy(),
+        "source_path": path,
+        "generated_at": generated_at,
+        "cached": false,
+    });
+
+    Ok(response)
 }
 
 fn screenshot_base_dir() -> PathBuf {
@@ -303,17 +390,195 @@ fn capture_rgba(scope: &str) -> Result<(u32, u32, Vec<u8>), String> {
 }
 
 #[cfg(feature = "ocr_tesseract")]
-fn ocr_image_text(path: &str) -> Result<String, ToolError> {
-    let mut lt =
-        leptess::LepTess::new(None, "eng").map_err(|e| ToolError::Runtime(e.to_string()))?;
-    lt.set_image(path);
-    lt.get_utf8_text()
-        .map_err(|e| ToolError::Runtime(e.to_string()))
+fn ocr_image_text(path: &str, lang: &str) -> Result<OcrResult, ToolError> {
+    let requested_lang = lang.trim();
+    let engine_lang = if requested_lang.is_empty() {
+        "eng"
+    } else {
+        requested_lang
+    };
+    let mut lang_used = engine_lang.to_string();
+    let mut lt = match leptess::LepTess::new(None, engine_lang) {
+        Ok(engine) => engine,
+        Err(err) => {
+            if engine_lang != "eng" {
+                tracing::warn!(
+                    %engine_lang,
+                    %path,
+                    "falling back to 'eng' for OCR ({}); is the language data installed?",
+                    err
+                );
+                lang_used = "eng".to_string();
+                leptess::LepTess::new(None, "eng")
+                    .map_err(|fallback| ToolError::Runtime(fallback.to_string()))?
+            } else {
+                return Err(ToolError::Runtime(err.to_string()));
+            }
+        }
+    };
+    lt.set_image(path)
+        .map_err(|e| ToolError::Runtime(e.to_string()))?;
+    lt.set_fallback_source_resolution(300);
+    if lt.recognize() != 0 {
+        return Err(ToolError::Runtime("tesseract recognize failed".into()));
+    }
+    let full_text = lt
+        .get_utf8_text()
+        .map_err(|e| ToolError::Runtime(e.to_string()))?;
+    let normalized_text = normalize_ocr_text(full_text);
+    let tsv = lt
+        .get_tsv_text(0)
+        .map_err(|e| ToolError::Runtime(e.to_string()))?;
+    let blocks = parse_tsv_blocks(&tsv);
+    Ok(OcrResult {
+        text: normalized_text,
+        blocks,
+        lang: lang_used,
+    })
 }
 
 #[cfg(not(feature = "ocr_tesseract"))]
-fn ocr_image_text(_path: &str) -> Result<String, ToolError> {
+fn ocr_image_text(_path: &str, _lang: &str) -> Result<OcrResult, ToolError> {
     Err(ToolError::Runtime(
         "ocr feature not compiled (enable arw-server/ocr_tesseract)".into(),
     ))
+}
+
+#[cfg(feature = "ocr_tesseract")]
+fn parse_tsv_blocks(tsv: &str) -> Vec<OcrBlock> {
+    tsv.lines()
+        .skip(1)
+        .filter_map(|line| parse_tsv_line(line))
+        .collect()
+}
+
+#[cfg(feature = "ocr_tesseract")]
+fn parse_tsv_line(line: &str) -> Option<OcrBlock> {
+    let cols: Vec<&str> = line.split('\t').collect();
+    if cols.len() < 12 {
+        return None;
+    }
+    if cols[0].trim() != "5" {
+        return None;
+    }
+    let text = cols[11].trim();
+    if text.is_empty() {
+        return None;
+    }
+    let left = cols[6].parse().ok()?;
+    let top = cols[7].parse().ok()?;
+    let width = cols[8].parse().ok()?;
+    let height = cols[9].parse().ok()?;
+    if width <= 0 || height <= 0 {
+        return None;
+    }
+    let confidence = cols[10]
+        .parse::<f32>()
+        .ok()
+        .filter(|v| *v >= 0.0)
+        .map(|v| (v * 100.0).round() / 100.0);
+    Some(OcrBlock {
+        text: text.to_string(),
+        x: left,
+        y: top,
+        w: width,
+        h: height,
+        confidence,
+    })
+}
+
+#[cfg(feature = "ocr_tesseract")]
+fn normalize_ocr_text(text: String) -> String {
+    let cleaned = text.replace("\r\n", "\n");
+    cleaned.trim_end().to_string()
+}
+
+fn sanitize_lang_fragment(lang: &str) -> String {
+    let mut out = String::new();
+    for c in lang.trim().chars() {
+        if c.is_ascii_alphanumeric() {
+            out.push(c.to_ascii_lowercase());
+        } else if matches!(c, '+' | '-' | '_') {
+            out.push(c);
+        } else {
+            out.push('_');
+        }
+    }
+    if out.is_empty() {
+        "eng".into()
+    } else {
+        out
+    }
+}
+
+fn sidecar_path(parent: &Path, stem: &str, lang_fragment: &str) -> PathBuf {
+    parent.join(format!("{}.ocr.{}.json", stem, lang_fragment))
+}
+
+fn guess_screenshot_path(parent: &Path, stem: &str) -> Option<String> {
+    const EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp"]; // seen capture formats
+    for ext in EXTENSIONS {
+        let candidate = parent.join(format!("{}.{}", stem, ext));
+        if candidate.exists() {
+            return Some(candidate.to_string_lossy().into_owned());
+        }
+    }
+    None
+}
+
+fn load_cached_ocr(parent: &Path, stem: &str, lang_fragment: &str) -> Option<Value> {
+    let path = sidecar_path(parent, stem, lang_fragment);
+    let data = fs::read(&path).ok()?;
+    let doc: JsonValue = serde_json::from_slice(&data).ok()?;
+    let text = doc.get("text")?.as_str()?.to_owned();
+    let blocks = doc.get("blocks")?.clone();
+    let lang = doc
+        .get("lang")
+        .and_then(|v| v.as_str())
+        .unwrap_or(lang_fragment)
+        .to_owned();
+    let generated_at = doc
+        .get("generated_at")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_owned());
+    let source_path = doc
+        .get("source_path")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_owned())
+        .or_else(|| guess_screenshot_path(parent, stem))
+        .unwrap_or_else(|| parent.join(stem).to_string_lossy().into_owned());
+
+    let mut response = json!({
+        "text": text,
+        "blocks": blocks.clone(),
+        "lang": lang,
+        "ocr_path": path.to_string_lossy(),
+        "source_path": source_path,
+        "cached": true,
+    });
+    if let Some(ts) = generated_at {
+        response["generated_at"] = json!(ts);
+    }
+    Some(response)
+}
+
+fn write_sidecar_atomic(path: &Path, bytes: &[u8]) -> Result<(), ToolError> {
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent).map_err(|e| ToolError::Runtime(e.to_string()))?;
+    }
+    let tmp = path.with_extension("tmp");
+    fs::write(&tmp, bytes).map_err(|e| ToolError::Runtime(e.to_string()))?;
+    match fs::rename(&tmp, path) {
+        Ok(_) => Ok(()),
+        Err(_) => {
+            let _ = fs::remove_file(path);
+            match fs::rename(&tmp, path) {
+                Ok(_) => Ok(()),
+                Err(err) => {
+                    let _ = fs::remove_file(&tmp);
+                    Err(ToolError::Runtime(err.to_string()))
+                }
+            }
+        }
+    }
 }

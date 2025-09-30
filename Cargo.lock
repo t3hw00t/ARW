@@ -197,8 +197,10 @@ dependencies = [
  "rand_core 0.9.3",
  "reqwest 0.12.23",
  "serde_json",
+ "tempfile",
  "tracing",
  "tracing-subscriber",
+ "walkdir",
 ]
 
 [[package]]
@@ -445,6 +447,7 @@ dependencies = [
  "url",
  "utoipa",
  "uuid",
+ "walkdir",
  "wgpu",
  "windows 0.57.0",
 ]

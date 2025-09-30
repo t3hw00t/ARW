@@ -18,4 +18,4 @@ Actions per item
 
 Tips
 - Use the “Capture screen/window/region” palette actions or Chat buttons to add new screenshots.
-- OCR (optional): enable “Auto OCR” (Chat toggle) to extract text for instruction generation and to improve search.
+- OCR (optional): enable “Auto OCR” (Chat toggle) to extract text for instruction generation and to improve search. Results are stored per language in `<name>.ocr.<lang>.json` next to the image so the gallery and future search lanes can reuse them without re-running OCR; cached responses surface immediately unless `force: true` is supplied.

@@ -13,13 +13,14 @@ Updated: 2025-09-28 18:00 UTC
 - [trial-g1] Gate G1: Reliable memory — todo (updated: 2025-09-26 12:30 UTC)
 
 ## In Progress
-- [t-250914223220-cap03] OCR for screenshots (optional) — in_progress (updated: 2025-09-17 20:19:01 UTC)
-    - 2025-09-14 23:05:00 UTC: Tool stub added using leptess behind feature ocr_tesseract; Chat can auto-run OCR if enabled.
-  - 2025-09-17 20:19:01 UTC: Fixed parameter use in ocr_image_text (leptess set_image now receives path). Feature remains optional (enable with --features ocr_tesseract).
 
 ## Paused
 
 ## Done
+- [t-250914223220-cap03] OCR for screenshots (optional) — done (updated: 2025-09-29 15:45:00 UTC)
+    - 2025-09-14 23:05:00 UTC: Tool stub added using leptess behind feature ocr_tesseract; Chat can auto-run OCR if enabled.
+    - 2025-09-17 20:19:01 UTC: Fixed parameter use in ocr_image_text (leptess set_image now receives path). Feature remains optional (enable with --features ocr_tesseract).
+    - 2025-09-29 15:45:00 UTC: OCR output adds word-level boxes + confidence, optional language selection, fallback reporting, per-language `<name>.ocr.<lang>.json` caching, and a `screenshots.ocr.completed` event for UI sync.
 - [trial-autonomy-governor] Autonomy governor & kill switch â€” done (updated: 2025-09-29 11:45:00 UTC)
     - 2025-09-29 11:45:00 UTC: Added autonomy lane registry/endpoints, launcher kill switch controls (pause/resume/flush), and event telemetry wiring for Trial Control Center.
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — done (updated: 2025-09-28 16:30:00 UTC)

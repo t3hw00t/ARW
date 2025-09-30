@@ -35,12 +35,17 @@ Events
 - On success, emit `screenshots.captured` with metadata for UI thumbnails
 
 OCR (optional)
-- `ui.screenshot.ocr(path) → { text, blocks[] }`
+- `ui.screenshot.ocr(path, lang?, force?) → { text, blocks[], lang, source_path, ocr_path, generated_at, cached }`
+- Each block includes bounding box coordinates and (when available) a `confidence` score
 - Local OCR engine only; no network egress by default
 - Build‑time feature: `ocr_tesseract` enables Tesseract via `leptess`. Enable it
   with `--features "tool_screenshots ocr_tesseract"` and install system deps
   (e.g., `tesseract-ocr` + `libtesseract-dev` on Linux). If the libs are not
   present, omit the `ocr_tesseract` feature.
+- If the requested language pack is missing, ARW falls back to `eng` and reports the effective language in the response.
+- OCR runs persist per-language sidecars (`<name>.ocr.<lang>.json`) next to the source image so downstream tooling can index text + bounding boxes.
+- Setting `force: true` in the tool input bypasses the cached sidecar and recomputes OCR, updating the timestamp.
+- Read model: `GET /state/screenshots` (SSE id `screenshots_index`) returns the indexed sidecars grouped by source for search and gallery surfaces.
 
 Storage
 - Default save directory: `<ARW_STATE_DIR>/screenshots/YYYY/MM/DD/<ts>_<scope>.png`

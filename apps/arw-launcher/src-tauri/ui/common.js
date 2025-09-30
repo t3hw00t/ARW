@@ -5,6 +5,7 @@
 window.ARW = {
   _prefsCache: new Map(),
   _prefsTimers: new Map(),
+  _ocrCache: new Map(),
   util: {
     pageId(){
       try{
@@ -156,9 +157,49 @@ window.ARW = {
       return { proj, dest };
     }catch(e){ console.error(e); this.toast('Import failed'); return null; }
   },
+  _bestAltForPath(path, fallback){
+    const record = path ? this._ocrCache.get(path) : null;
+    if (record && typeof record.text === 'string'){
+      const firstLine = record.text.split(/\r?\n/).find(line => line.trim());
+      if (firstLine){
+        const trimmed = firstLine.trim();
+        if (trimmed.length > 120) return trimmed.slice(0, 117) + '…';
+        return trimmed;
+      }
+    }
+    if (fallback && fallback.trim()) return fallback;
+    return 'screenshot';
+  },
+  _updateAltForPath(path){
+    if (!path) return;
+    const alt = this._bestAltForPath(path, path.split(/[\\/]/).pop() || 'screenshot');
+    try{
+      const selector = `[data-screenshot-path="${window.CSS?.escape ? CSS.escape(path) : path.replace(/"/g,'\\"')}"]`;
+      document.querySelectorAll(selector).forEach(img => { if (img instanceof HTMLImageElement){ img.alt = alt; img.dataset.alt = alt; } });
+    }catch{}
+  },
+  _storeOcrResult(path, payload){
+    if (!path) return;
+    const record = {
+      text: typeof payload?.text === 'string' ? payload.text : '',
+      lang: payload?.lang || 'eng',
+      generated_at: payload?.generated_at || new Date().toISOString(),
+      cached: !!payload?.cached,
+    };
+    this._ocrCache.set(path, record);
+    if (this._ocrCache.size > 200){
+      try{
+        const firstKey = this._ocrCache.keys().next?.().value;
+        if (typeof firstKey === 'string') this._ocrCache.delete(firstKey);
+      }catch{}
+    }
+    this._updateAltForPath(path);
+  },
   copyMarkdown(path, alt){
     try{
-      const md = `![${(alt||'')}](${path})`;
+      const altText = this._bestAltForPath(path, alt);
+      const safeAlt = String(altText || '').replace(/[\[\]]/g, ' ');
+      const md = `![${safeAlt}](${path})`;
       navigator.clipboard.writeText(md);
       this.toast('Markdown copied');
     }catch{ this.toast('Copy failed'); }
@@ -705,21 +746,31 @@ window.ARW = {
         const p = env?.payload || env;
         const kind = env?.kind || '';
         if (!kind.startsWith('screenshots.')) return;
+        if (kind === 'screenshots.ocr.completed') {
+          const src = p?.source_path || p?.sourcePath || p?.path;
+          ARW._storeOcrResult(src, p);
+          return;
+        }
+        if (kind !== 'screenshots.captured') return;
         const box = document.createElement('div'); box.className='evt';
         const ts = env?.time || new Date().toISOString();
-        const img = document.createElement('img'); img.alt = p?.path||''; img.style.maxWidth='100%'; img.style.maxHeight='120px';
+        const img = document.createElement('img');
+        img.dataset.screenshotPath = p?.path||'';
+        img.alt = ARW._bestAltForPath(p?.path, p?.path||'');
+        img.style.maxWidth='100%'; img.style.maxHeight='120px';
         if (p?.preview_b64 && /^data:image\//.test(p.preview_b64)) { img.src = p.preview_b64; }
         else { img.src = ''; img.style.display='none'; }
         const cap = document.createElement('div'); cap.className='dim mono'; cap.textContent = `${ts} ${p?.path||''}`;
       const actions = document.createElement('div'); actions.className='row';
       const openBtn = document.createElement('button'); openBtn.className='ghost'; openBtn.textContent='Open'; openBtn.addEventListener('click', async ()=>{ try{ if (p?.path) await ARW.invoke('open_path', { path: p.path }); }catch(e){ console.error(e); } });
       const copyBtn = document.createElement('button'); copyBtn.className='ghost'; copyBtn.textContent='Copy path'; copyBtn.addEventListener('click', ()=>{ if (p?.path) ARW.copy(String(p.path)); });
-        const mdBtn = document.createElement('button'); mdBtn.className='ghost'; mdBtn.textContent='Copy MD'; mdBtn.addEventListener('click', ()=>{ if (p?.path) ARW.copyMarkdown(p.path, 'screenshot'); });
+        const mdBtn = document.createElement('button'); mdBtn.className='ghost'; mdBtn.textContent='Copy MD'; mdBtn.addEventListener('click', ()=>{ if (p?.path) ARW.copyMarkdown(p.path); });
         const annBtn = document.createElement('button'); annBtn.className='ghost'; annBtn.textContent='Annotate'; annBtn.addEventListener('click', async ()=>{ try{ if (p?.preview_b64){ const rects = await ARW.annot.start(p.preview_b64); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: p.path, annotate: rects, downscale:640 }, port: ARW.getPortFromInput('port') }); if (res && res.preview_b64){ img.src = res.preview_b64; cap.textContent = `${ts} ${res.path||''}`; } } else { ARW.toast('No preview for annotate'); } }catch(e){ console.error(e); }});
         const saveBtn = document.createElement('button'); saveBtn.className='ghost'; saveBtn.textContent='Save to project'; saveBtn.addEventListener('click', async ()=>{ if (p?.path){ const res = await ARW.saveToProjectPrompt(p.path); if (res) await ARW.maybeAppendToNotes(res.proj, res.dest); } });
         actions.appendChild(openBtn); actions.appendChild(copyBtn); actions.appendChild(mdBtn); actions.appendChild(annBtn); actions.appendChild(saveBtn);
         box.appendChild(img); box.appendChild(cap); box.appendChild(actions);
         el.prepend(box);
+        if (p?.path) ARW._updateAltForPath(p.path);
         while (el.childElementCount>6) el.removeChild(el.lastChild);
       };
       const idActivity = ARW.sse.subscribe((k)=> k.startsWith('screenshots.'), rActivity);
@@ -955,7 +1006,7 @@ window.ARW.gallery = {
     w.addEventListener('click', (e)=>{ if (e.target===w) this.hide(); });
   },
   render(){ if (!this._wrap) this.mount(); const grid=this._wrap.querySelector('.grid-thumbs'); if (!grid) return; grid.innerHTML='';
-    for (const it of this._items){ const d=document.createElement('div'); d.className='thumb'; const img=document.createElement('img'); if (it.preview_b64) img.src=it.preview_b64; img.alt=it.path; const meta=document.createElement('div'); meta.className='dim mono'; meta.textContent = `${it.time} ${it.path}`; const row=document.createElement('div'); row.className='row'; const open=document.createElement('button'); open.className='ghost'; open.textContent='Open'; open.addEventListener('click', async ()=>{ try{ await ARW.invoke('open_path', { path: it.path }); }catch(e){ console.error(e); } }); const copy=document.createElement('button'); copy.className='ghost'; copy.textContent='Copy path'; copy.addEventListener('click', ()=> ARW.copy(it.path)); const md=document.createElement('button'); md.className='ghost'; md.textContent='Copy MD'; md.addEventListener('click', ()=> ARW.copyMarkdown(it.path, 'screenshot')); const save=document.createElement('button'); save.className='ghost'; save.textContent='Save to project'; save.addEventListener('click', async ()=>{ await ARW.saveToProjectPrompt(it.path); }); const ann=document.createElement('button'); ann.className='ghost'; ann.textContent='Annotate'; ann.addEventListener('click', async ()=>{ try{ if (it.preview_b64){ const rects = await ARW.annot.start(it.preview_b64); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: it.path, annotate: rects, downscale:640 }, port: ARW.getPortFromInput('port') }); if (res && res.preview_b64){ img.src = res.preview_b64; meta.textContent = `${it.time} ${res.path||''}`; it.path = res.path||it.path; it.preview_b64 = res.preview_b64||it.preview_b64; } } else { ARW.toast('No preview for annotate'); } }catch(e){ console.error(e); } }); row.appendChild(open); row.appendChild(copy); row.appendChild(md); row.appendChild(save); row.appendChild(ann); d.appendChild(img); d.appendChild(meta); d.appendChild(row); grid.appendChild(d); }
+    for (const it of this._items){ const d=document.createElement('div'); d.className='thumb'; const img=document.createElement('img'); if (it.preview_b64) img.src=it.preview_b64; img.dataset.screenshotPath = it.path; img.alt=ARW._bestAltForPath(it.path, it.path); const meta=document.createElement('div'); meta.className='dim mono'; meta.textContent = `${it.time} ${it.path}`; const row=document.createElement('div'); row.className='row'; const open=document.createElement('button'); open.className='ghost'; open.textContent='Open'; open.addEventListener('click', async ()=>{ try{ await ARW.invoke('open_path', { path: it.path }); }catch(e){ console.error(e); } }); const copy=document.createElement('button'); copy.className='ghost'; copy.textContent='Copy path'; copy.addEventListener('click', ()=> ARW.copy(it.path)); const md=document.createElement('button'); md.className='ghost'; md.textContent='Copy MD'; md.addEventListener('click', ()=> ARW.copyMarkdown(it.path)); const save=document.createElement('button'); save.className='ghost'; save.textContent='Save to project'; save.addEventListener('click', async ()=>{ await ARW.saveToProjectPrompt(it.path); }); const ann=document.createElement('button'); ann.className='ghost'; ann.textContent='Annotate'; ann.addEventListener('click', async ()=>{ try{ if (it.preview_b64){ const rects = await ARW.annot.start(it.preview_b64); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: it.path, annotate: rects, downscale:640 }, port: ARW.getPortFromInput('port') }); if (res && res.preview_b64){ img.src = res.preview_b64; meta.textContent = `${it.time} ${res.path||''}`; it.path = res.path||it.path; it.preview_b64 = res.preview_b64||it.preview_b64; img.dataset.screenshotPath = it.path; ARW._updateAltForPath(it.path); } } else { ARW.toast('No preview for annotate'); } }catch(e){ console.error(e); } }); row.appendChild(open); row.appendChild(copy); row.appendChild(md); row.appendChild(save); row.appendChild(ann); d.appendChild(img); d.appendChild(meta); d.appendChild(row); grid.appendChild(d); ARW._updateAltForPath(it.path); }
   },
   show(){ if (!this._wrap) this.mount(); this.render(); this._wrap.style.display='grid'; try{ const btn=this._wrap.querySelector('header button'); btn?.focus({ preventScroll:true }); }catch{} },
   hide(){ if (this._wrap) this._wrap.style.display='none'; }

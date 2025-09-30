@@ -16,6 +16,7 @@ Commands (summary)
 - `arw-cli capsule gen-ed25519 [--issuer <name>] [--out-pub <file>] [--out-priv <file>]` — generate keys
 - `arw-cli capsule sign-ed25519 <sk_b64> <capsule.json> [--out <file>]` — sign capsule
 - `arw-cli capsule verify-ed25519 <pk_b64> <capsule.json> <sig_b64>` — verify signature
+- `arw-cli screenshots backfill-ocr [--lang <code>] [--force] [--dry-run]` — regenerate OCR sidecars via `/admin/tools/run`
 
 See the [CLI Guide](../guide/cli.md) for examples. Use `--help` on any command for details.
 

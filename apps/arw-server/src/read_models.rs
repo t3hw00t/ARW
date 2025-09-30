@@ -8,10 +8,16 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant, SystemTime};
 use tokio::{fs as afs, time};
+use walkdir::WalkDir;
 
 const MAX_NOTES_LEN: usize = 64 * 1024;
 const MAX_TREE_DEPTH: usize = 5;
 const MAX_ENTRIES_PER_DIR: usize = 512;
+const MAX_SCREENSHOTS_INDEX: usize = 120;
+const MAX_SCREENSHOTS_TEXT_LEN: usize = 800;
+const MAX_SCREENSHOTS_PREVIEW_LEN: usize = 160;
+const MAX_SCREENSHOTS_LANGS_PER_SOURCE: usize = 6;
+const SCREENSHOT_CAPTURE_EXTENSIONS: [&str; 5] = ["png", "jpg", "jpeg", "webp", "bmp"];
 
 const METRIC_READ_MODEL_COALESCED_WAITERS: &str = "arw_read_model_coalesced_waiters";
 
@@ -94,6 +100,13 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
     ));
 
     handles.push(spawn_projects_read_model(&state));
+
+    handles.push(spawn_read_model(
+        &state,
+        "screenshots_index",
+        Duration::from_millis(5000),
+        |_st| async move { Some(screenshots_snapshot().await) },
+    ));
 
     handles.push(spawn_read_model(
         &state,
@@ -746,6 +759,391 @@ fn env_csv(key: &str, default: &str) -> Vec<String> {
         .collect()
 }
 
+pub(crate) async fn screenshots_snapshot() -> Value {
+    with_read_model_singleflight("screenshots_index", || async {
+        build_screenshots_snapshot().await
+    })
+    .await
+}
+
+async fn build_screenshots_snapshot() -> Value {
+    let state_dir = crate::util::state_dir();
+    let base_dir = state_dir.join("screenshots");
+    let generated = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    if !base_dir.exists() {
+        return json!({
+            "generated": generated,
+            "total_sources": 0,
+            "total_langs": 0,
+            "items": [],
+            "limit": MAX_SCREENSHOTS_INDEX,
+            "more_sources": false,
+        });
+    }
+
+    let max_items = env_u64("ARW_SCREENSHOTS_INDEX_LIMIT", MAX_SCREENSHOTS_INDEX as u64)
+        .max(1)
+        .min(512) as usize;
+    let text_limit = env_u64(
+        "ARW_SCREENSHOTS_TEXT_LIMIT",
+        MAX_SCREENSHOTS_TEXT_LEN as u64,
+    )
+    .max(32)
+    .min(4096) as usize;
+    let preview_limit = env_u64(
+        "ARW_SCREENSHOTS_PREVIEW_LIMIT",
+        MAX_SCREENSHOTS_PREVIEW_LEN as u64,
+    )
+    .max(16)
+    .min(text_limit as u64) as usize;
+    let langs_limit = env_u64(
+        "ARW_SCREENSHOTS_LANGS_LIMIT",
+        MAX_SCREENSHOTS_LANGS_PER_SOURCE as u64,
+    )
+    .max(1)
+    .min(16) as usize;
+
+    let state_dir_clone = state_dir.clone();
+    let base_clone = base_dir.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        collect_screenshots_blocking(
+            &state_dir_clone,
+            &base_clone,
+            max_items,
+            text_limit,
+            preview_limit,
+            langs_limit,
+        )
+    })
+    .await
+    .unwrap_or_else(|_| ScreenshotsIndex::default());
+
+    json!({
+        "generated": generated,
+        "total_sources": result.total_sources,
+        "total_langs": result.total_langs,
+        "more_sources": result.more_sources,
+        "limit": max_items,
+        "items": result.items,
+    })
+}
+
+#[derive(Default)]
+struct ScreenshotsIndex {
+    total_sources: usize,
+    total_langs: usize,
+    more_sources: bool,
+    items: Vec<Value>,
+}
+
+fn collect_screenshots_blocking(
+    state_dir: &Path,
+    base_dir: &Path,
+    max_items: usize,
+    text_limit: usize,
+    preview_limit: usize,
+    langs_limit: usize,
+) -> ScreenshotsIndex {
+    use std::collections::HashMap;
+
+    let mut aggregates: HashMap<String, ScreenshotAggregate> = HashMap::new();
+    let mut total_langs = 0usize;
+
+    for entry in WalkDir::new(base_dir).follow_links(false).into_iter() {
+        let entry = match entry {
+            Ok(ent) => ent,
+            Err(_) => continue,
+        };
+        let path = entry.path();
+        if !path.is_file() {
+            continue;
+        }
+        let file_name = match path.file_name().and_then(|s| s.to_str()) {
+            Some(name) => name,
+            None => continue,
+        };
+        if !file_name.ends_with(".json") {
+            continue;
+        }
+        let (base_stem, lang_from_name) = match parse_sidecar_filename(file_name) {
+            Some(parts) => parts,
+            None => continue,
+        };
+
+        let json_bytes = match std::fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(_) => continue,
+        };
+        let sidecar: Value = match serde_json::from_slice(&json_bytes) {
+            Ok(val) => val,
+            Err(_) => continue,
+        };
+
+        let lang = sidecar
+            .get("lang")
+            .and_then(|v| v.as_str())
+            .unwrap_or(lang_from_name)
+            .trim()
+            .to_string();
+
+        let generated_at = sidecar
+            .get("generated_at")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .or_else(|| {
+                std::fs::metadata(path)
+                    .ok()
+                    .and_then(|m| m.modified().ok())
+                    .and_then(system_time_to_rfc3339)
+            });
+
+        let source_path_string = sidecar
+            .get("source_path")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim().to_string())
+            .or_else(|| guess_source_path(path, base_stem).map(|p| normalized_path_string(&p)));
+
+        let source_path_display = source_path_string.clone().unwrap_or_else(|| {
+            normalized_path_string(&path.parent().unwrap_or(base_dir).join(base_stem))
+        });
+
+        let source_rel = source_path_string
+            .as_deref()
+            .and_then(|s| relative_path_string(state_dir, Path::new(s)))
+            .or_else(|| {
+                relative_path_string(base_dir, &path.parent().unwrap_or(base_dir).join(base_stem))
+            });
+
+        let ocr_rel = relative_path_string(state_dir, path);
+        let ocr_path = normalized_path_string(path);
+
+        let text_raw = sidecar
+            .get("text")
+            .and_then(|v| v.as_str())
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+            .map(|s| s.to_string());
+
+        let (text, text_truncated) = match text_raw {
+            Some(ref text) => truncate_to_chars(text, text_limit),
+            None => (String::new(), false),
+        };
+        let text_opt = if text.is_empty() {
+            None
+        } else {
+            Some(text.clone())
+        };
+        let (preview, _) = if text.is_empty() {
+            (String::new(), false)
+        } else {
+            truncate_to_chars(&text, preview_limit)
+        };
+        let preview_opt = if preview.is_empty() {
+            None
+        } else {
+            Some(preview)
+        };
+
+        let lang_entry = ScreenshotLangEntry {
+            lang,
+            ocr_path,
+            ocr_rel,
+            generated_at,
+            generated_sort: None,
+            text: text_opt,
+            text_truncated,
+            text_preview: preview_opt,
+        };
+
+        let key = source_path_display.clone();
+        let aggregate = aggregates.entry(key.clone()).or_insert_with(|| {
+            ScreenshotAggregate::new(source_path_display.clone(), source_rel.clone())
+        });
+        aggregate.push_lang(lang_entry);
+        total_langs += 1;
+    }
+
+    if aggregates.is_empty() {
+        return ScreenshotsIndex::default();
+    }
+
+    let total_sources_all = aggregates.len();
+    let mut items: Vec<_> = aggregates.into_iter().map(|(_, agg)| agg).collect();
+    items.sort_by(|a, b| {
+        compare_optional_datetime(&b.latest, &a.latest)
+            .then_with(|| a.source_path.cmp(&b.source_path))
+    });
+
+    let more_sources = items.len() > max_items;
+    if items.len() > max_items {
+        items.truncate(max_items);
+    }
+
+    let items_json: Vec<Value> = items
+        .into_iter()
+        .map(|agg| agg.into_value(langs_limit))
+        .collect();
+
+    ScreenshotsIndex {
+        total_sources: total_sources_all,
+        total_langs,
+        more_sources,
+        items: items_json,
+    }
+}
+
+fn compare_optional_datetime(
+    a: &Option<DateTime<Utc>>,
+    b: &Option<DateTime<Utc>>,
+) -> std::cmp::Ordering {
+    match (a, b) {
+        (Some(a), Some(b)) => a.cmp(b),
+        (Some(_), None) => std::cmp::Ordering::Greater,
+        (None, Some(_)) => std::cmp::Ordering::Less,
+        (None, None) => std::cmp::Ordering::Equal,
+    }
+}
+
+struct ScreenshotAggregate {
+    source_path: String,
+    source_rel: Option<String>,
+    langs: Vec<ScreenshotLangEntry>,
+    latest: Option<DateTime<Utc>>,
+}
+
+impl ScreenshotAggregate {
+    fn new(source_path: String, source_rel: Option<String>) -> Self {
+        Self {
+            source_path,
+            source_rel,
+            langs: Vec::new(),
+            latest: None,
+        }
+    }
+
+    fn push_lang(&mut self, mut entry: ScreenshotLangEntry) {
+        if entry.text_truncated {
+            // already truncated in caller
+        }
+        if entry.generated_at.is_none() && entry.ocr_rel.is_none() {
+            // nothing special
+        }
+        if let Some(ref ts) = entry.generated_at {
+            if let Ok(dt) = DateTime::parse_from_rfc3339(ts) {
+                let utc = dt.with_timezone(&Utc);
+                if self.latest.map_or(true, |cur| utc > cur) {
+                    self.latest = Some(utc);
+                }
+                entry.generated_sort = Some(utc);
+            }
+        }
+        self.langs.push(entry);
+    }
+
+    fn into_value(mut self, langs_limit: usize) -> Value {
+        self.langs.sort_by(|a, b| {
+            compare_optional_datetime(&b.generated_sort, &a.generated_sort)
+                .then_with(|| a.lang.cmp(&b.lang))
+        });
+        let more_langs = self.langs.len() > langs_limit;
+        if self.langs.len() > langs_limit {
+            self.langs.truncate(langs_limit);
+        }
+        let langs_json: Vec<Value> = self
+            .langs
+            .into_iter()
+            .map(|lang| lang.into_value())
+            .collect();
+
+        json!({
+            "source_path": self.source_path,
+            "source_rel": self.source_rel,
+            "latest_generated_at": self.latest.map(|dt| dt.to_rfc3339_opts(SecondsFormat::Millis, true)),
+            "lang_count": langs_json.len(),
+            "more_langs": more_langs,
+            "langs": langs_json,
+        })
+    }
+}
+
+struct ScreenshotLangEntry {
+    lang: String,
+    ocr_path: String,
+    ocr_rel: Option<String>,
+    generated_at: Option<String>,
+    generated_sort: Option<DateTime<Utc>>,
+    text: Option<String>,
+    text_truncated: bool,
+    text_preview: Option<String>,
+}
+
+impl ScreenshotLangEntry {
+    fn into_value(self) -> Value {
+        let mut obj = serde_json::Map::new();
+        obj.insert("lang".into(), json!(self.lang));
+        obj.insert("ocr_path".into(), json!(self.ocr_path));
+        if let Some(rel) = self.ocr_rel {
+            obj.insert("ocr_rel".into(), json!(rel));
+        }
+        if let Some(ts) = self.generated_at {
+            obj.insert("generated_at".into(), json!(ts));
+        }
+        if let Some(text) = self.text {
+            obj.insert("text".into(), json!(text));
+            obj.insert("text_truncated".into(), json!(self.text_truncated));
+        }
+        if let Some(preview) = self.text_preview {
+            obj.insert("text_preview".into(), json!(preview));
+        }
+        Value::Object(obj)
+    }
+}
+
+fn parse_sidecar_filename(name: &str) -> Option<(&str, &str)> {
+    let idx = name.rfind(".ocr.")?;
+    let base = &name[..idx];
+    let rest = &name[(idx + 5)..];
+    let lang = rest.strip_suffix(".json")?;
+    if base.is_empty() || lang.is_empty() {
+        return None;
+    }
+    Some((base, lang))
+}
+
+fn guess_source_path(sidecar: &Path, base_stem: &str) -> Option<PathBuf> {
+    let parent = sidecar.parent()?;
+    for ext in SCREENSHOT_CAPTURE_EXTENSIONS {
+        let candidate = parent.join(format!("{base_stem}.{ext}"));
+        if candidate.exists() {
+            return Some(candidate);
+        }
+    }
+    None
+}
+
+fn relative_path_string(base: &Path, path: &Path) -> Option<String> {
+    path.strip_prefix(base)
+        .ok()
+        .map(|rel| normalized_path_string(rel))
+}
+
+fn normalized_path_string(path: &Path) -> String {
+    path.to_string_lossy().replace('\\', "/")
+}
+
+fn truncate_to_chars(input: &str, max_chars: usize) -> (String, bool) {
+    let mut buf = String::new();
+    let mut truncated = false;
+    for (idx, ch) in input.chars().enumerate() {
+        if idx >= max_chars {
+            truncated = true;
+            break;
+        }
+        buf.push(ch);
+    }
+    (buf, truncated)
+}
+
 fn spawn_projects_read_model(state: &AppState) -> TaskHandle {
     let bus = state.bus();
     TaskHandle::new(
@@ -1217,6 +1615,60 @@ mod tests {
         assert_eq!(v1, v3);
 
         remove_cached_read_model_for_test("test-singleflight");
+    }
+
+    #[tokio::test]
+    async fn screenshots_snapshot_collects_sidecars() {
+        use std::collections::HashSet;
+
+        remove_cached_read_model_for_test("screenshots_index");
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        ctx.env
+            .set("ARW_STATE_DIR", temp.path().display().to_string());
+
+        let shots_dir = temp.path().join("screenshots/2025/09/30");
+        std::fs::create_dir_all(&shots_dir).unwrap();
+        let shot_path = shots_dir.join("example.png");
+        std::fs::write(&shot_path, b"fake").unwrap();
+
+        let sidecar_eng = shots_dir.join("example.ocr.eng.json");
+        std::fs::write(
+            &sidecar_eng,
+            serde_json::to_vec(&json!({
+                "source_path": shot_path.to_string_lossy(),
+                "lang": "eng",
+                "generated_at": "2025-09-29T12:00:00Z",
+                "text": "English summary of the screenshot content."
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let sidecar_de = shots_dir.join("example.ocr.de.json");
+        std::fs::write(
+            &sidecar_de,
+            serde_json::to_vec(&json!({
+                "source_path": shot_path.to_string_lossy(),
+                "lang": "de",
+                "generated_at": "2025-09-30T08:30:00Z",
+                "text": "Deutsche Zusammenfassung des Screenshots."
+            }))
+            .unwrap(),
+        )
+        .unwrap();
+
+        let snapshot = build_screenshots_snapshot().await;
+        assert_eq!(snapshot["total_sources"].as_u64(), Some(1));
+        assert_eq!(snapshot["total_langs"].as_u64(), Some(2));
+        let items = snapshot["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        let langs = items[0]["langs"].as_array().expect("langs array");
+        assert_eq!(langs.len(), 2);
+        let langs_set: HashSet<_> = langs.iter().filter_map(|l| l["lang"].as_str()).collect();
+        assert!(langs_set.contains("eng"));
+        assert!(langs_set.contains("de"));
+        assert_eq!(items[0]["more_langs"].as_bool(), Some(false));
     }
 
     #[test]

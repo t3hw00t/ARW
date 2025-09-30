@@ -156,6 +156,7 @@ pub const TOPIC_TOOL_RAN: &str = "tool.ran";
 
 // Screenshots
 pub const TOPIC_SCREENSHOTS_CAPTURED: &str = "screenshots.captured";
+pub const TOPIC_SCREENSHOTS_OCR_COMPLETED: &str = "screenshots.ocr.completed";
 
 // Connectors & policy plane
 pub const TOPIC_CONNECTORS_REGISTERED: &str = "connectors.registered";

@@ -175,6 +175,7 @@ pub(crate) mod paths {
     pub const STATE_BELIEFS: &str = "/state/beliefs";
     pub const STATE_INTENTS: &str = "/state/intents";
     pub const STATE_CRASHLOG: &str = "/state/crashlog";
+    pub const STATE_SCREENSHOTS: &str = "/state/screenshots";
     pub const STATE_SERVICE_HEALTH: &str = "/state/service_health";
     pub const STATE_SERVICE_STATUS: &str = "/state/service_status";
     pub const STATE_GUARDRAILS_METRICS: &str = "/state/guardrails_metrics";
@@ -787,6 +788,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
     builder.route_get(
         paths::STATE_CRASHLOG,
         api::state::state_crashlog,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::STATE_SCREENSHOTS,
+        api::state::state_screenshots,
         Some(Stability::Beta),
     );
     builder.route_get(

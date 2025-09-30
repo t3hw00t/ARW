@@ -1037,7 +1037,7 @@
       "id": "t-250914223220-cap03",
       "title": "OCR for screenshots (optional)",
       "desc": "Integrate OCR (tesseract/rapidocr) to extract text from captured images for search/instructions.",
-      "status": "in_progress",
+      "status": "done",
       "notes": [
         {
           "time": "2025-09-14 23:05:00 UTC",
@@ -1046,9 +1046,14 @@
         {
           "time": "2025-09-17 20:19:01 UTC",
           "text": "Fixed parameter use in ocr_image_text (leptess set_image now receives path). Feature remains optional (enable with --features ocr_tesseract)."
+        },
+        {
+          "time": "2025-09-29 15:45:00 UTC",
+          "text": "OCR tool now returns word-level bounding boxes with confidence, accepts optional language codes, reports fallback to 'eng', caches per-language <name>.ocr.<lang>.json sidecars, and emits screenshots.ocr.completed events for UI consumers."
         }
       ],
-      "updated": "2025-09-17 20:19:01 UTC"
+      "updated": "2025-09-29 15:45:00 UTC",
+      "done_at": "2025-09-29 15:45:00 UTC"
     },
     {
       "id": "t-250914230000-ui12",

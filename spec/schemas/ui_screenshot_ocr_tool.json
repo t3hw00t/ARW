@@ -4,8 +4,15 @@
   "title": "ui.screenshot.ocr",
   "type": "object",
   "properties": {
-    "path": { "type": "string" }
+    "path": { "type": "string" },
+    "lang": {
+      "type": "string",
+      "description": "Optional tessdata language code; defaults to 'eng' when omitted"
+    },
+    "force": {
+      "type": "boolean",
+      "description": "Set true to bypass cached OCR sidecars and recompute"
+    }
   },
   "required": ["path"]
 }
-

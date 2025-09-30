@@ -198,6 +198,11 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
         ensure_corr(&mut shot);
         bus.publish(topics::TOPIC_SCREENSHOTS_CAPTURED, &shot);
     }
+    if id == "ui.screenshot.ocr" {
+        let mut ocr = output.clone();
+        ensure_corr(&mut ocr);
+        bus.publish(topics::TOPIC_SCREENSHOTS_OCR_COMPLETED, &ocr);
+    }
 
     Ok(output)
 }
