@@ -136,7 +136,19 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
         Duration::from_millis(5000),
         |st| async move {
             let nodes = st.cluster().snapshot().await;
-            Some(json!({ "nodes": nodes }))
+            let now = chrono::Utc::now();
+            let generated = now.to_rfc3339_opts(SecondsFormat::Millis, true);
+            let generated_ms = now.timestamp_millis();
+            let generated_ms = if generated_ms < 0 {
+                0
+            } else {
+                generated_ms as u64
+            };
+            Some(json!({
+                "nodes": nodes,
+                "generated": generated,
+                "generated_ms": generated_ms,
+            }))
         },
     ));
 
@@ -191,9 +203,17 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
                 .list_staging_actions_async(None, 40)
                 .await
                 .unwrap_or_default();
-            let generated = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+            let now = chrono::Utc::now();
+            let generated = now.to_rfc3339_opts(SecondsFormat::Millis, true);
+            let generated_ms = now.timestamp_millis();
+            let generated_ms = if generated_ms < 0 {
+                0
+            } else {
+                generated_ms as u64
+            };
             Some(json!({
                 "generated": generated,
+                "generated_ms": generated_ms,
                 "pending": pending,
                 "recent": decided,
             }))

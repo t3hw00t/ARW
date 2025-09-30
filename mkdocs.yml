@@ -104,6 +104,7 @@ nav:
           - Daily Log Template: ops/trials/daily_log_template.md
           - Stand-up Template: ops/trials/standup_template.md
           - Dashboard Snapshot Guide: ops/trials/dashboard_snapshot.md
+          - Approvals Lane Guide: ops/trials/approvals_lane_guide.md
           - Onboarding Email Template: ops/trials/onboarding_email_template.md
           - Screenshot Checklist: ops/trials/screenshots/README.md
           - Autonomy Rollback Playbook: ops/trials/autonomy_rollback_playbook.md

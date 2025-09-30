@@ -369,6 +369,7 @@ GET /state/beliefs
 GET /state/cluster
 - Summary changed from 'Inspect cluster nodes' to 'Cluster nodes snapshot.'
 - Description changed from 'Return the snapshot of known cluster nodes, their roles, and health metadata.' to 'Cluster nodes snapshot (admin-only).'
+- Response now includes `generated` (RFC3339) and `generated_ms` (epoch milliseconds) so clients can surface the snapshot age without relying on local clocks.
 
 GET /state/experiments
 - Summary changed from 'List experiment events' to 'Experiment events snapshot (public read-model).'
@@ -433,6 +434,7 @@ GET /state/runtime_matrix
 GET /state/staging/actions
 - Summary changed from 'Inspect staging actions' to 'Staging queue snapshot.'
 - Description changed from 'Return staged actions awaiting review or execution in the staging queue.' to 'Staging queue snapshot.'
+- Response now includes `generated` (RFC3339) and `generated_ms` (epoch milliseconds) timestamps for stable freshness indicators across clients.
 
 GET /state/tasks
 - Summary changed from 'Inspect background tasks' to 'Background tasks status snapshot.'
@@ -698,4 +700,3 @@ GET /state/world/select
 -            description: "Disk utilization snapshot ({reserve, available, need})."
 -            additionalProperties: true
 ```
-

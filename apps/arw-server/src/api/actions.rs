@@ -144,6 +144,7 @@ pub(crate) async fn submit_action(
             {
                 return Err(SubmitActionError::Internal(err));
             }
+            state.signal_action_queue();
             (id, false)
         }
     } else {
@@ -155,6 +156,7 @@ pub(crate) async fn submit_action(
         {
             return Err(SubmitActionError::Internal(err));
         }
+        state.signal_action_queue();
         (id, false)
     };
 

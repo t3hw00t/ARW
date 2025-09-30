@@ -14,6 +14,9 @@ use utoipa::ToSchema;
 
 use crate::responses;
 
+const ALERT_BUDGET_NEAR: &str = "Budgets nearing limit";
+const ALERT_BUDGET_EXHAUSTED: &str = "Budgets exhausted";
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize, ToSchema, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
 pub enum AutonomyMode {
@@ -129,6 +132,10 @@ impl AutonomyRegistry {
                 HashMap::new()
             }
         };
+        let mut initial = initial;
+        for lane in initial.values_mut() {
+            Self::normalize_alerts(lane);
+        }
 
         Arc::new(Self {
             bus,
@@ -310,6 +317,7 @@ impl AutonomyRegistry {
             .or_insert_with(|| AutonomyLaneSnapshot::new(lane_id));
         apply(lane);
         lane.updated_ms = Some(now_ms());
+        Self::normalize_alerts(lane);
         lane.clone()
     }
 
@@ -388,6 +396,44 @@ fn now_ms() -> u64 {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_millis() as u64
+}
+
+impl AutonomyRegistry {
+    fn normalize_alerts(lane: &mut AutonomyLaneSnapshot) {
+        lane.alerts.retain(|alert| !alert.trim().is_empty());
+        // Deduplicate while keeping the first occurrence order.
+        let mut seen: Vec<String> = Vec::new();
+        lane.alerts.retain(|alert| {
+            if seen.iter().any(|existing| existing == alert) {
+                false
+            } else {
+                seen.push(alert.clone());
+                true
+            }
+        });
+
+        // Remove budget alerts if budgets are absent.
+        if lane.budgets.is_none() {
+            lane.alerts
+                .retain(|alert| alert != ALERT_BUDGET_NEAR && alert != ALERT_BUDGET_EXHAUSTED);
+            return;
+        }
+
+        let flags = budget_flags(lane);
+        lane.alerts
+            .retain(|alert| alert != ALERT_BUDGET_NEAR && alert != ALERT_BUDGET_EXHAUSTED);
+        if flags.exhausted {
+            push_unique_alert(&mut lane.alerts, ALERT_BUDGET_EXHAUSTED);
+        } else if flags.close_to_limit {
+            push_unique_alert(&mut lane.alerts, ALERT_BUDGET_NEAR);
+        }
+    }
+}
+
+fn push_unique_alert(alerts: &mut Vec<String>, value: &str) {
+    if !alerts.iter().any(|existing| existing == value) {
+        alerts.push(value.to_string());
+    }
 }
 
 #[cfg(test)]

@@ -36,6 +36,7 @@ mod models;
 mod openapi;
 mod patch_guard;
 mod policy;
+mod queue;
 mod read_models;
 mod research_watcher;
 mod responses;

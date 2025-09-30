@@ -8,7 +8,7 @@ use tokio::sync::Mutex;
 
 use crate::{
     autonomy, capsule_guard, chat, cluster, experiments, feedback, governor, metrics, models,
-    policy, runtime, tool_cache, training,
+    policy, queue, runtime, tool_cache, training,
 };
 
 type SharedConfigState = Arc<Mutex<serde_json::Value>>;
@@ -22,13 +22,14 @@ pub(crate) struct AppState {
     host: Arc<dyn ToolHost>,
     config_state: Arc<Mutex<serde_json::Value>>, // effective config (demo)
     config_history: Arc<Mutex<Vec<(String, serde_json::Value)>>>, // snapshots
-    sse_id_map: Arc<Mutex<crate::sse_cache::SseIdCache>>,
-    endpoints: Arc<Vec<String>>,
-    endpoints_meta: Arc<Vec<serde_json::Value>>,
-    metrics: Arc<metrics::Metrics>,
-    kernel_enabled: bool,
-    models: Arc<models::ModelStore>,
-    tool_cache: Arc<tool_cache::ToolCache>,
+        sse_id_map: Arc<Mutex<crate::sse_cache::SseIdCache>>,
+        endpoints: Arc<Vec<String>>,
+        endpoints_meta: Arc<Vec<serde_json::Value>>,
+        metrics: Arc<metrics::Metrics>,
+        queue_signals: Arc<queue::QueueSignals>,
+        kernel_enabled: bool,
+        models: Arc<models::ModelStore>,
+        tool_cache: Arc<tool_cache::ToolCache>,
     governor: Arc<governor::GovernorState>,
     autonomy: Arc<autonomy::AutonomyRegistry>,
     feedback: Arc<feedback::FeedbackHub>,
@@ -48,12 +49,13 @@ impl AppState {
         policy: Arc<policy::PolicyHandle>,
         host: Arc<dyn ToolHost>,
         config_state: Arc<Mutex<serde_json::Value>>,
-        config_history: Arc<Mutex<Vec<(String, serde_json::Value)>>>,
-        sse_id_map: Arc<Mutex<crate::sse_cache::SseIdCache>>,
-        endpoints: Arc<Vec<String>>,
-        endpoints_meta: Arc<Vec<serde_json::Value>>,
-        metrics: Arc<metrics::Metrics>,
-        kernel_enabled: bool,
+    config_history: Arc<Mutex<Vec<(String, serde_json::Value)>>>,
+    sse_id_map: Arc<Mutex<crate::sse_cache::SseIdCache>>,
+    endpoints: Arc<Vec<String>>,
+    endpoints_meta: Arc<Vec<serde_json::Value>>,
+    metrics: Arc<metrics::Metrics>,
+    queue_signals: Arc<queue::QueueSignals>,
+    kernel_enabled: bool,
         models: Arc<models::ModelStore>,
         tool_cache: Arc<tool_cache::ToolCache>,
         governor: Arc<governor::GovernorState>,
@@ -77,6 +79,7 @@ impl AppState {
             endpoints,
             endpoints_meta,
             metrics,
+            queue_signals,
             kernel_enabled,
             models,
             tool_cache,
@@ -126,6 +129,14 @@ impl AppState {
 
     pub fn metrics(&self) -> Arc<metrics::Metrics> {
         self.metrics.clone()
+    }
+
+    pub fn queue_signals(&self) -> Arc<queue::QueueSignals> {
+        self.queue_signals.clone()
+    }
+
+    pub fn signal_action_queue(&self) {
+        self.queue_signals.wake();
     }
 
     pub fn bus(&self) -> Bus {
@@ -207,6 +218,7 @@ pub(crate) struct AppStateBuilder {
     endpoints: Option<Arc<Vec<String>>>,
     endpoints_meta: Option<Arc<Vec<serde_json::Value>>>,
     metrics: Option<Arc<metrics::Metrics>>,
+    queue_signals: Option<Arc<queue::QueueSignals>>,
     models: Option<Arc<models::ModelStore>>,
     tool_cache: Option<Arc<tool_cache::ToolCache>>,
     governor: Option<Arc<governor::GovernorState>>,
@@ -241,6 +253,7 @@ impl AppState {
             endpoints: None,
             endpoints_meta: None,
             metrics: None,
+            queue_signals: None,
             models: None,
             tool_cache: None,
             governor: None,
@@ -296,6 +309,11 @@ impl AppStateBuilder {
 
     pub(crate) fn with_metrics(mut self, metrics: Arc<metrics::Metrics>) -> Self {
         self.metrics = Some(metrics);
+        self
+    }
+
+    pub(crate) fn with_queue_signals(mut self, signals: Arc<queue::QueueSignals>) -> Self {
+        self.queue_signals = Some(signals);
         self
     }
 
@@ -378,6 +396,9 @@ impl AppStateBuilder {
         let metrics = self
             .metrics
             .unwrap_or_else(|| Arc::new(metrics::Metrics::default()));
+        let queue_signals = self
+            .queue_signals
+            .unwrap_or_else(|| Arc::new(queue::QueueSignals::default()));
 
         let kernel_for_models = if self.kernel_enabled {
             Some(self.kernel.clone())
@@ -447,7 +468,8 @@ impl AppStateBuilder {
             sse_id_map,
             endpoints,
             endpoints_meta,
-            metrics,
+            metrics.clone(),
+            queue_signals.clone(),
             self.kernel_enabled,
             models_store,
             tool_cache,

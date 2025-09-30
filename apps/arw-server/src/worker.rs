@@ -13,6 +13,7 @@ use crate::{
     tasks::TaskHandle,
     tools::{self, ToolError},
     util, AppState,
+    queue,
 };
 use arw_topics as topics;
 
@@ -24,9 +25,13 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
         tokio::spawn(async move {
             let state = worker_state;
             let ctx = ctx;
+            let queue_signals = ctx.queue_signals.clone();
+            let mut idle_seq = queue_signals.version();
             loop {
                 if ctx.autonomy.is_any_paused().await {
-                    time::sleep(Duration::from_millis(250)).await;
+                    idle_seq = queue_signals
+                        .wait_for_change(idle_seq, Duration::from_millis(250))
+                        .await;
                     continue;
                 }
                 match ctx.kernel.dequeue_one_queued_async().await {
@@ -51,15 +56,22 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                                 continue;
                             }
                         }
+                        idle_seq = queue_signals.version();
                     }
-                    Ok(None) => time::sleep(Duration::from_millis(200)).await,
+                    Ok(None) => {
+                        idle_seq = queue_signals
+                            .wait_for_change(idle_seq, Duration::from_millis(500))
+                            .await;
+                    }
                     Err(err) => {
                         tracing::warn!(
                             target: "arw::worker",
                             error = ?err,
                             "kernel dequeue failed; retrying",
                         );
-                        time::sleep(Duration::from_millis(500)).await;
+                        idle_seq = queue_signals
+                            .wait_for_change(idle_seq, Duration::from_millis(500))
+                            .await;
                     }
                 }
             }
@@ -74,6 +86,7 @@ struct WorkerContext {
     policy: Arc<PolicyHandle>,
     host: Arc<dyn arw_wasi::ToolHost>,
     autonomy: Arc<autonomy::AutonomyRegistry>,
+    queue_signals: Arc<queue::QueueSignals>,
 }
 
 impl WorkerContext {
@@ -84,6 +97,7 @@ impl WorkerContext {
             policy: state.policy(),
             host: state.host(),
             autonomy: state.autonomy(),
+            queue_signals: state.queue_signals(),
         }
     }
 
@@ -1021,6 +1035,7 @@ mod tests {
             .insert_action_async(&action_id, "tool.missing", &json!({}), None, None, "queued")
             .await
             .expect("enqueue action");
+        state.signal_action_queue();
 
         let env = timeout(Duration::from_secs(2), rx.recv())
             .await
@@ -1071,6 +1086,7 @@ mod tests {
             .insert_action_async(&action_id, "memory.upsert", &payload, None, None, "queued")
             .await
             .expect("enqueue memory action");
+        state.signal_action_queue();
 
         let completed_env = timeout(Duration::from_secs(2), rx.recv())
             .await
@@ -1129,6 +1145,7 @@ mod tests {
             .insert_action_async(&action_id, "memory.search", &payload, None, None, "queued")
             .await
             .expect("enqueue memory.search action");
+        state.signal_action_queue();
 
         let completed_env = timeout(Duration::from_secs(2), rx.recv())
             .await
@@ -1190,6 +1207,7 @@ mod tests {
             .insert_action_async(&action_id, "memory.pack", &payload, None, None, "queued")
             .await
             .expect("enqueue memory.pack action");
+        state.signal_action_queue();
 
         let completed_env = timeout(Duration::from_secs(3), rx.recv())
             .await
@@ -1488,6 +1506,7 @@ mod tests {
             )
             .await
             .expect("enqueue action");
+        state.signal_action_queue();
 
         let env = timeout(Duration::from_secs(2), rx.recv())
             .await
@@ -1544,6 +1563,8 @@ mod tests {
             .insert_action_async(&action_id, "demo.echo", &json!({}), None, None, "queued")
             .await
             .expect("insert action");
+        state.signal_action_queue();
+        state.signal_action_queue();
 
         let expected_capability = "net:http".to_string();
         let guard = ActionGuard {

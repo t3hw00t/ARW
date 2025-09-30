@@ -1,6 +1,6 @@
 # Trial Dossier
 
-Updated: 2025-09-26
+Updated: 2025-09-30
 
 Use this folder to store lightweight records during the trial. Keep files short and human-friendly so anyone joining mid-stream can catch up.
 
@@ -16,5 +16,6 @@ Use this folder to store lightweight records during the trial. Keep files short 
 - `daily_log_template.md` — copy once per day for Cohort A/B.
 - `dashboard_snapshot.md` — jot the numbers you expect to see when saving a screenshot.
 - `autonomy_rollback_playbook.md` — step-by-step rollback instructions when the Autonomy Lane is active.
+- `approvals_lane_guide.md` — illustrated walkthrough for Gate G2 (approvals lane + connections drawer).
 
 Store sensitive data elsewhere; this dossier is for coordination only.

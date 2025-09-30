@@ -3,6 +3,15 @@
   const STATUS_LABELS = { ok: 'All good', warn: 'Check soon', bad: 'Action needed', unknown: 'Unknown' };
   const AUTONOMY_OPERATOR_KEY = 'arw:trial:autonomy-operator';
   const APPROVAL_REVIEWER_KEY = 'arw:trial:approvals-reviewer';
+  const AUTO_REFRESH_INTERVALS = Object.freeze({ approvals: 25000, connections: 35000, autonomy: 45000 });
+
+  let approvalsTimer = null;
+  let connectionsTimer = null;
+  let autonomyTimer = null;
+  let approvalsInflight = false;
+  let connectionsInflight = false;
+  let autonomyInflight = false;
+  let visibilityHandlerAttached = false;
 
   const STATE = {
     systems: { level: 'unknown', summary: 'Loading...', meta: [] },
@@ -41,7 +50,12 @@
     bindEvents();
     STATE.approvals.reviewer = getStoredApprovalReviewer();
     setTab('overview');
-    refresh();
+    try {
+      await refresh();
+    } finally {
+      startAutoRefreshLoops();
+      window.addEventListener('beforeunload', stopAutoRefreshLoops, { once: true });
+    }
   }
 
   function bindEvents(){
@@ -70,7 +84,12 @@
     if (focusSourcesBtn) focusSourcesBtn.addEventListener('click', openFocusSources);
 
     const approvalsRefresh = document.getElementById('btn-approvals-refresh');
-    if (approvalsRefresh) approvalsRefresh.addEventListener('click', refresh);
+    if (approvalsRefresh) approvalsRefresh.addEventListener('click', () => {
+      if (STATE.approvals.loading) return;
+      STATE.approvals.loading = true;
+      renderApprovalsLane();
+      refreshApprovalsLane(false);
+    });
 
     const approvalsReviewer = document.getElementById('btn-approvals-reviewer');
     if (approvalsReviewer) approvalsReviewer.addEventListener('click', () => requestApprovalReviewerChange());
@@ -265,6 +284,188 @@
     };
   }
 
+  function startAutoRefreshLoops(){
+    stopAutoRefreshLoops();
+    const approvalsLoop = () => {
+      if (!document.hidden) refreshApprovalsLane(true);
+    };
+    const connectionsLoop = () => {
+      if (!document.hidden) refreshConnectionsSnapshot({ auto: true });
+    };
+    const autonomyLoop = () => {
+      if (!document.hidden) refreshAutonomySnapshot(true);
+    };
+    if (AUTO_REFRESH_INTERVALS.approvals > 0) {
+      approvalsTimer = setInterval(approvalsLoop, AUTO_REFRESH_INTERVALS.approvals);
+    }
+    if (AUTO_REFRESH_INTERVALS.connections > 0) {
+      connectionsTimer = setInterval(connectionsLoop, AUTO_REFRESH_INTERVALS.connections);
+    }
+    if (AUTO_REFRESH_INTERVALS.autonomy > 0) {
+      autonomyTimer = setInterval(autonomyLoop, AUTO_REFRESH_INTERVALS.autonomy);
+    }
+    if (!visibilityHandlerAttached) {
+      document.addEventListener('visibilitychange', () => {
+        if (!document.hidden) {
+          approvalsLoop();
+          connectionsLoop();
+          autonomyLoop();
+        }
+      });
+      visibilityHandlerAttached = true;
+    }
+  }
+
+  function stopAutoRefreshLoops(){
+    if (approvalsTimer) {
+      clearInterval(approvalsTimer);
+      approvalsTimer = null;
+    }
+    if (connectionsTimer) {
+      clearInterval(connectionsTimer);
+      connectionsTimer = null;
+    }
+    if (autonomyTimer) {
+      clearInterval(autonomyTimer);
+      autonomyTimer = null;
+    }
+  }
+
+  async function refreshApprovalsLane(auto = false){
+    if (approvalsInflight || (auto && STATE.approvals.loading)) return;
+    if (!STATE.base) {
+      try {
+        const port = ARW.getPortFromInput('port');
+        STATE.base = ARW.base(port);
+      } catch {}
+    }
+    if (!STATE.base) {
+      if (!auto) ARW.toast('Start the server first');
+      return;
+    }
+    approvalsInflight = true;
+    try {
+      const { pending, recent, errors, unauthorized } = await fetchStagingSnapshot(STATE.base);
+      if (unauthorized) STATE.unauthorized = true;
+      updateApprovals(pending, recent, { errors });
+      if (auto && errors.length) {
+        console.debug('Approvals auto-refresh warnings', errors);
+      }
+    } catch (err) {
+      console.error('Approvals auto-refresh failed', err);
+    } finally {
+      approvalsInflight = false;
+    }
+  }
+
+  async function refreshConnectionsSnapshot({ auto = false, showLoading = false } = {}){
+    if (connectionsInflight || (STATE.connections.loading && showLoading)) return;
+    if (!STATE.base) {
+      try {
+        const port = ARW.getPortFromInput('port');
+        STATE.base = ARW.base(port);
+      } catch {}
+    }
+    if (!STATE.base) {
+      if (!auto) ARW.toast('Start the server first');
+      return;
+    }
+    if (showLoading) {
+      STATE.connections.loading = true;
+      renderConnections();
+    }
+    connectionsInflight = true;
+    try {
+      const { payload, errors, unauthorized } = await fetchClusterSnapshot(STATE.base);
+      if (unauthorized) STATE.unauthorized = true;
+      updateConnections(payload, { errors, preservePrevious: auto });
+      if (auto && errors.length) {
+        console.debug('Connections auto-refresh warnings', errors);
+      }
+    } catch (err) {
+      console.error('Connections refresh failed', err);
+      updateConnections(null, { errors: [`/state/cluster: ${err?.message || 'unknown error'}`], preservePrevious: auto });
+    } finally {
+      connectionsInflight = false;
+    }
+  }
+
+  async function refreshAutonomySnapshot(auto = false){
+    if (autonomyInflight) return;
+    if (!STATE.base) {
+      try {
+        const port = ARW.getPortFromInput('port');
+        STATE.base = ARW.base(port);
+      } catch {}
+    }
+    if (!STATE.base) {
+      if (!auto) ARW.toast('Start the server first');
+      return;
+    }
+    autonomyInflight = true;
+    try {
+      const { payload, errors, unauthorized } = await fetchAutonomySnapshot(STATE.base);
+      if (unauthorized) STATE.unauthorized = true;
+      if (payload) {
+        updateAutonomy(payload);
+      }
+      if (auto && errors.length) {
+        console.debug('Autonomy auto-refresh warnings', errors);
+      }
+    } catch (err) {
+      console.error('Autonomy auto-refresh failed', err);
+    } finally {
+      autonomyInflight = false;
+    }
+  }
+
+  async function fetchStagingSnapshot(base){
+    const [pendingRes, recentRes] = await Promise.all([
+      safeJsonWithErrors(base, '/state/staging/actions?status=pending&limit=50'),
+      safeJsonWithErrors(base, '/state/staging/actions?limit=30'),
+    ]);
+    const errors = [];
+    if (pendingRes.error) errors.push(pendingRes.error);
+    if (recentRes.error) errors.push(recentRes.error);
+    return {
+      pending: pendingRes.data,
+      recent: recentRes.data,
+      errors,
+      unauthorized: pendingRes.unauthorized || recentRes.unauthorized,
+    };
+  }
+
+  async function fetchClusterSnapshot(base){
+    const result = await safeJsonWithErrors(base, '/state/cluster');
+    const errors = result.error ? [result.error] : [];
+    return {
+      payload: result.data,
+      errors,
+      unauthorized: result.unauthorized,
+    };
+  }
+
+  async function fetchAutonomySnapshot(base){
+    const result = await safeJsonWithErrors(base, '/state/autonomy/lanes');
+    const errors = result.error ? [result.error] : [];
+    return {
+      payload: result.data,
+      errors,
+      unauthorized: result.unauthorized,
+    };
+  }
+
+  async function safeJsonWithErrors(base, path){
+    try {
+      const data = await ARW.http.json(base, path);
+      return { data, error: null, unauthorized: false };
+    } catch (err) {
+      const msg = err && err.message ? String(err.message) : 'unknown error';
+      const unauthorized = /401/.test(msg);
+      return { data: null, error: `${path}: ${msg}`, unauthorized };
+    }
+  }
+
   function updateSystems(status, routeStats){
     if (!status) {
       const summary = STATE.unauthorized ? 'Authorize to read service status' : 'Service status unavailable';
@@ -408,14 +609,19 @@
     setTile('memory', STATE.memory);
   }
 
-  function updateApprovals(pendingPayload, recentPayload){
-    const pendingItems = Array.isArray(pendingPayload?.items) ? pendingPayload.items : [];
-    const pending = pendingItems.filter(it => !it.status || String(it.status).toLowerCase() === 'pending');
-    const recent = Array.isArray(recentPayload?.items) ? recentPayload.items : [];
-    const stagingErrors = (STATE.errors || []).filter(line => line.includes('/state/staging/actions'));
-    const errorMsg = stagingErrors.length ? stagingErrors.join('; ') : null;
+  function updateApprovals(pendingPayload, recentPayload, opts = {}){
+    const errorList = errorsForPath('/state/staging/actions', opts);
+    const errorMsg = errorList.length ? errorList.join('; ') : null;
+    let pending = STATE.approvals.pending || [];
+    if (Array.isArray(pendingPayload?.items)) {
+      pending = pendingPayload.items.filter(it => !it.status || String(it.status).toLowerCase() === 'pending');
+    }
+    let recent = STATE.approvals.recent || [];
+    if (Array.isArray(recentPayload?.items)) {
+      recent = recentPayload.items;
+    }
 
-    if (!pendingPayload && !recentPayload) {
+    if (!Array.isArray(pendingPayload?.items) && !Array.isArray(recentPayload?.items) && !pending.length && !recent.length) {
       const summary = STATE.unauthorized
         ? 'Authorize to view approvals queue'
         : errorMsg || 'Approvals queue unavailable';
@@ -476,9 +682,25 @@
     STATE.approvals.meta = meta;
     STATE.approvals.pending = pending;
     STATE.approvals.recent = recent;
-    STATE.approvals.generatedMs = Date.now();
     STATE.approvals.loading = false;
     STATE.approvals.error = errorMsg;
+
+    const hasSnapshot = Array.isArray(pendingPayload?.items) || Array.isArray(recentPayload?.items);
+    if (hasSnapshot) {
+      let generatedMs = readGeneratedMs(pendingPayload);
+      if (!Number.isFinite(generatedMs) || generatedMs == null) {
+        generatedMs = readGeneratedMs(recentPayload);
+      }
+      if (!Number.isFinite(generatedMs) && (pending.length || recent.length)) {
+        generatedMs = Date.now();
+      }
+      if (Number.isFinite(generatedMs)) {
+        STATE.approvals.generatedMs = generatedMs;
+      } else {
+        STATE.approvals.generatedMs = null;
+      }
+    }
+
     renderApprovalsLane();
   }
 
@@ -521,52 +743,68 @@
     setTile('safety', STATE.safety);
   }
 
-  function updateConnections(cluster){
-    const clusterErrors = (STATE.errors || []).filter(line => line.includes('/state/cluster'));
-    const errorMsg = clusterErrors.length ? clusterErrors.join('; ') : null;
+  function updateConnections(cluster, opts = {}){
+    const preservePrevious = opts && typeof opts.preservePrevious === 'boolean' ? opts.preservePrevious : false;
+    const errorList = errorsForPath('/state/cluster', opts);
+    const errorMsg = errorList.length ? errorList.join('; ') : null;
 
-    if (!cluster || !Array.isArray(cluster?.nodes)) {
+    if (!cluster || !Array.isArray(cluster.nodes)) {
+      if (!preservePrevious) {
+        STATE.connections.nodes = [];
+        STATE.connections.updatedMs = null;
+      }
       const summary = STATE.unauthorized
         ? 'Authorize to view connections'
         : errorMsg || 'Connections data unavailable';
-      STATE.connections.nodes = [];
       STATE.connections.summary = summary;
       STATE.connections.error = errorMsg;
       STATE.connections.loading = false;
-      if (!STATE.connections.updatedMs) STATE.connections.updatedMs = null;
       renderConnections();
       return;
     }
 
-    const nodes = cluster.nodes
-      .filter(Boolean)
-      .map(raw => {
-        const caps = raw && typeof raw.capabilities === 'object' && raw.capabilities !== null ? raw.capabilities : {};
-        const os = typeof caps.os === 'string' ? caps.os : null;
-        const arch = typeof caps.arch === 'string' ? caps.arch : null;
-        const version = typeof caps.arw_version === 'string' ? caps.arw_version : null;
-        const healthRaw = raw && raw.health ? String(raw.health).toLowerCase() : 'unknown';
-        return {
-          id: raw && raw.id ? String(raw.id) : (raw && raw.name ? String(raw.name) : 'node'),
-          name: raw && raw.name ? String(raw.name) : null,
-          role: raw && raw.role ? String(raw.role) : 'member',
-          health: healthRaw || 'unknown',
-          capabilities: { os, arch, version },
-        };
-      });
+    if (Array.isArray(cluster.nodes)) {
+      const nodes = cluster.nodes
+        .filter(Boolean)
+        .map(raw => {
+          const caps = raw && typeof raw.capabilities === 'object' && raw.capabilities !== null ? raw.capabilities : {};
+          const os = typeof caps.os === 'string' ? caps.os : null;
+          const arch = typeof caps.arch === 'string' ? caps.arch : null;
+          const version = typeof caps.arw_version === 'string' ? caps.arw_version : null;
+          const healthRaw = raw && raw.health ? String(raw.health).toLowerCase() : 'unknown';
+          return {
+            id: raw && raw.id ? String(raw.id) : (raw && raw.name ? String(raw.name) : 'node'),
+            name: raw && raw.name ? String(raw.name) : null,
+            role: raw && raw.role ? String(raw.role) : 'member',
+            health: healthRaw || 'unknown',
+            capabilities: { os, arch, version },
+          };
+        });
+      nodes.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+      STATE.connections.nodes = nodes;
 
-    nodes.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+      let generatedMs = readGeneratedMs(cluster);
+      if (!Number.isFinite(generatedMs)) {
+        generatedMs = Date.now();
+      }
+      if (Number.isFinite(generatedMs)) {
+        STATE.connections.updatedMs = generatedMs;
+      }
+    }
 
+    const nodes = Array.isArray(STATE.connections.nodes) ? STATE.connections.nodes : [];
     const onlineCount = nodes.filter(node => node.health === 'ok').length;
-    const summaryBase = nodes.length
+    let summaryBase = nodes.length
       ? `${onlineCount}/${nodes.length} connection${nodes.length === 1 ? '' : 's'} online`
-      : 'No remote connections';
+      : (STATE.unauthorized ? 'Authorize to view connections' : 'No remote connections');
 
-    STATE.connections.nodes = nodes;
+    if (errorMsg) {
+      summaryBase = errorMsg;
+    }
+
     STATE.connections.summary = summaryBase;
     STATE.connections.error = errorMsg;
     STATE.connections.loading = false;
-    STATE.connections.updatedMs = Date.now();
     renderConnections();
   }
   function updateAutonomy(payload){
@@ -1458,19 +1696,7 @@
       ARW.toast('Start the server first');
       return;
     }
-    STATE.connections.loading = true;
-    renderConnections();
-    try {
-      const snapshot = await ARW.http.json(STATE.base, '/state/cluster');
-      updateConnections(snapshot);
-    } catch (err) {
-      console.error('Refresh connections failed', err);
-      const msg = err && err.message ? String(err.message) : 'Unable to load connections';
-      STATE.connections.loading = false;
-      STATE.connections.error = /401/.test(msg) ? 'Authorize to view connections' : msg;
-      STATE.connections.summary = STATE.connections.error;
-      renderConnections();
-    }
+    await refreshConnectionsSnapshot({ showLoading: true });
   }
 
   function handleGlobalKeydown(evt){
@@ -1544,6 +1770,18 @@
         metaList.appendChild(dd);
       });
     }
+  }
+
+  function errorsForPath(path, opts){
+    const source = Array.isArray(opts?.errors) ? opts.errors : (STATE.errors || []);
+    return source.filter(line => line && line.includes(path));
+  }
+
+  function readGeneratedMs(payload){
+    if (!payload || typeof payload !== 'object') return null;
+    const direct = toNumber(payload.generated_ms ?? payload.generatedMs);
+    if (Number.isFinite(direct)) return direct;
+    return parseTimestamp(payload.generated);
   }
 
   function resolveMemoryTitle(item){

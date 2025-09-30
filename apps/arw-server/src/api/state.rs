@@ -8,6 +8,7 @@ use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
 use crate::{metrics, runtime_matrix, self_model, state_observer, training, world, AppState};
+use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -346,7 +347,20 @@ pub async fn state_cluster(headers: HeaderMap, State(state): State<AppState>) ->
             .into_response();
     }
     let nodes = state.cluster().snapshot().await;
-    Json(json!({"nodes": nodes})).into_response()
+    let now = Utc::now();
+    let generated = now.to_rfc3339_opts(SecondsFormat::Millis, true);
+    let generated_ms = now.timestamp_millis();
+    let generated_ms = if generated_ms < 0 {
+        0
+    } else {
+        generated_ms as u64
+    };
+    Json(json!({
+        "nodes": nodes,
+        "generated": generated,
+        "generated_ms": generated_ms,
+    }))
+    .into_response()
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -799,10 +813,20 @@ pub async fn state_staging_actions(
         .list_staging_actions_async(status_filter.clone(), limit)
         .await
         .unwrap_or_default();
+    let now = Utc::now();
+    let generated = now.to_rfc3339_opts(SecondsFormat::Millis, true);
+    let generated_ms = now.timestamp_millis();
+    let generated_ms = if generated_ms < 0 {
+        0
+    } else {
+        generated_ms as u64
+    };
     Json(json!({
         "items": items,
         "status": status_filter,
-        "limit": limit
+        "limit": limit,
+        "generated": generated,
+        "generated_ms": generated_ms
     }))
     .into_response()
 }

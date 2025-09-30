@@ -10,13 +10,14 @@ Updated: 2025-09-30 13:38 UTC
 ## To Do
 - [trial-autonomy-governor] Autonomy governor & kill switch — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g3] Gate G3: Trial operations — todo (updated: 2025-09-26 12:30 UTC)
-- [trial-g2] Gate G2: Calm approvals — todo (updated: 2025-09-26 12:30 UTC)
 
 ## In Progress
 
 ## Paused
 
 ## Done
+- [trial-g2] Gate G2: Calm approvals — done (updated: 2025-09-30 15:20:00 UTC)
+    - 2025-09-30 15:20:00 UTC: Published approvals lane operator guide with illustrated layout, linked from mkdocs nav and runbook; connections drawer instructions included.
 - [trial-g1] Gate G1: Reliable memory — done (updated: 2025-09-30 12:23:46 UTC)
     - 2025-09-30 11:24:44 UTC: Trial Control Center focus card shows recent memory with freshness stamp and sources link; context telemetry meta surfaces updated and recall scores; memory recent API now returns a generated timestamp.
   - 2025-09-30 12:05:19 UTC: Memory endpoints and SSE snapshots now include generated_ms fields with tests and docs; launcher focus card consumes the numeric timestamp for accessible freshness messaging.
@@ -212,4 +213,3 @@ Updated: 2025-09-30 13:38 UTC
 - [t-250909170247-6008] Start service and verify /about — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
-
