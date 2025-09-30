@@ -2,13 +2,25 @@
   const STORAGE_KEY = 'arw:trial:last-preflight';
   const STATUS_LABELS = { ok: 'All good', warn: 'Check soon', bad: 'Action needed', unknown: 'Unknown' };
   const AUTONOMY_OPERATOR_KEY = 'arw:trial:autonomy-operator';
+  const APPROVAL_REVIEWER_KEY = 'arw:trial:approvals-reviewer';
 
   const STATE = {
     systems: { level: 'unknown', summary: 'Loading...', meta: [] },
     memory: { level: 'unknown', summary: 'Loading...', meta: [] },
-    approvals: { level: 'unknown', summary: 'Loading...', meta: [] },
+    approvals: {
+      level: 'unknown',
+      summary: 'Loading...',
+      meta: [],
+      pending: [],
+      recent: [],
+      generatedMs: null,
+      reviewer: null,
+      loading: true,
+      error: null,
+    },
     safety: { level: 'unknown', summary: 'Loading...', meta: [] },
     autonomy: { level: 'unknown', summary: 'Loading...', meta: [], lane: null, snapshot: null, line: 'Autonomy status loading...', operator: null, alerts: [], updatedMs: null, lastEvent: null, lastReason: null },
+    connections: { nodes: [], summary: 'Loading connections…', error: null, loading: true, updatedMs: null },
     overview: [],
     workflows: [],
     safeguards: [],
@@ -17,6 +29,8 @@
     errors: [],
     unauthorized: false,
     base: null,
+    connectionsOpen: false,
+    connectionsRestore: null,
   };
 
   document.addEventListener('DOMContentLoaded', init); // eslint-disable-line no-undef
@@ -25,6 +39,7 @@
     try{ await ARW.applyPortFromPrefs('port'); }catch{}
     loadStoredPreflight();
     bindEvents();
+    STATE.approvals.reviewer = getStoredApprovalReviewer();
     setTab('overview');
     refresh();
   }
@@ -36,11 +51,32 @@
     const runbookBtn = document.getElementById('btn-open-runbook');
     if (runbookBtn) runbookBtn.addEventListener('click', openRunbook);
 
+    const connectionsBtn = document.getElementById('btn-open-connections');
+    if (connectionsBtn) connectionsBtn.addEventListener('click', openConnectionsDrawer);
+
+    const connectionsClose = document.getElementById('btn-close-connections');
+    if (connectionsClose) connectionsClose.addEventListener('click', closeConnectionsDrawer);
+
+    const connectionsOverlay = document.getElementById('connectionsOverlay');
+    if (connectionsOverlay) connectionsOverlay.addEventListener('click', closeConnectionsDrawer);
+
+    const connectionsRefresh = document.getElementById('btn-connections-refresh');
+    if (connectionsRefresh) connectionsRefresh.addEventListener('click', refreshConnections);
+
     const preflightBtn = document.getElementById('btn-preflight');
     if (preflightBtn) preflightBtn.addEventListener('click', runPreflight);
 
     const focusSourcesBtn = document.getElementById('btn-focus-sources');
     if (focusSourcesBtn) focusSourcesBtn.addEventListener('click', openFocusSources);
+
+    const approvalsRefresh = document.getElementById('btn-approvals-refresh');
+    if (approvalsRefresh) approvalsRefresh.addEventListener('click', refresh);
+
+    const approvalsReviewer = document.getElementById('btn-approvals-reviewer');
+    if (approvalsReviewer) approvalsReviewer.addEventListener('click', () => requestApprovalReviewerChange());
+
+    const approvalsOpenDebug = document.getElementById('btn-approvals-open-debug');
+    if (approvalsOpenDebug) approvalsOpenDebug.addEventListener('click', openApprovalsInDebug);
 
     const autoPauseBtn = document.getElementById('btn-autonomy-pause');
     if (autoPauseBtn) autoPauseBtn.addEventListener('click', pauseAutonomy);
@@ -61,6 +97,8 @@
         }
       });
     });
+
+    document.addEventListener('keydown', handleGlobalKeydown);
   }
 
   function loadStoredPreflight(){
@@ -121,6 +159,19 @@
       lastReason: null,
     };
     syncAutonomyControlsFromState();
+    STATE.approvals.loading = true;
+    STATE.approvals.summary = 'Loading approvals…';
+    STATE.approvals.pending = [];
+    STATE.approvals.recent = [];
+    STATE.approvals.generatedMs = null;
+    STATE.approvals.error = null;
+    renderApprovalsLane();
+    STATE.connections.loading = true;
+    STATE.connections.nodes = [];
+    STATE.connections.summary = 'Loading connections…';
+    STATE.connections.error = null;
+    STATE.connections.updatedMs = null;
+    renderConnections();
     setFocus([]);
     STATE.focusUpdatedMs = null;
     setFocusUpdated(null);
@@ -141,8 +192,10 @@
       STATE.unauthorized = payload.unauthorized;
       updateSystems(payload.serviceStatus, payload.routeStats);
       updateMemory(payload.telemetry, payload.memoryRecent);
-      updateApprovals(payload.staging);
+      updateApprovals(payload.stagingPending, payload.stagingRecent);
       updateSafety(payload.serviceStatus, payload.guardrails);
+      updateAutonomy(payload.autonomy);
+      updateConnections(payload.cluster);
       updateFocus(payload.memoryRecent);
       updateLists(payload.routeStats);
       renderLists();
@@ -175,16 +228,41 @@
       }
     }
 
-    const [serviceStatus, routeStats, staging, telemetry, guardrails, memoryRecent] = await Promise.all([
+    const [
+      serviceStatus,
+      routeStats,
+      stagingPending,
+      telemetry,
+      guardrails,
+      memoryRecent,
+      stagingRecent,
+      autonomy,
+      cluster,
+    ] = await Promise.all([
       safeJson('/state/service_status'),
       safeJson('/state/route_stats'),
       safeJson('/state/staging/actions?status=pending&limit=50'),
       safeJson('/state/training/telemetry'),
       safeJson('/state/guardrails_metrics'),
-      safeJson('/state/memory/recent?limit=5')
+      safeJson('/state/memory/recent?limit=5'),
+      safeJson('/state/staging/actions?limit=30'),
+      safeJson('/state/autonomy/lanes'),
+      safeJson('/state/cluster'),
     ]);
 
-    return { serviceStatus, routeStats, staging, telemetry, guardrails, memoryRecent, errors, unauthorized };
+    return {
+      serviceStatus,
+      routeStats,
+      stagingPending,
+      telemetry,
+      guardrails,
+      memoryRecent,
+      stagingRecent,
+      autonomy,
+      cluster,
+      errors,
+      unauthorized,
+    };
   }
 
   function updateSystems(status, routeStats){
@@ -330,36 +408,78 @@
     setTile('memory', STATE.memory);
   }
 
-  function updateApprovals(staging){
-    if (!staging) {
-      const summary = STATE.unauthorized ? 'Authorize to view approvals queue' : 'Approvals queue unavailable';
-      STATE.approvals = { level: 'unknown', summary, meta: [] };
+  function updateApprovals(pendingPayload, recentPayload){
+    const pendingItems = Array.isArray(pendingPayload?.items) ? pendingPayload.items : [];
+    const pending = pendingItems.filter(it => !it.status || String(it.status).toLowerCase() === 'pending');
+    const recent = Array.isArray(recentPayload?.items) ? recentPayload.items : [];
+    const stagingErrors = (STATE.errors || []).filter(line => line.includes('/state/staging/actions'));
+    const errorMsg = stagingErrors.length ? stagingErrors.join('; ') : null;
+
+    if (!pendingPayload && !recentPayload) {
+      const summary = STATE.unauthorized
+        ? 'Authorize to view approvals queue'
+        : errorMsg || 'Approvals queue unavailable';
+      STATE.approvals.level = 'unknown';
+      STATE.approvals.summary = summary;
+      STATE.approvals.meta = [];
+      STATE.approvals.pending = [];
+      STATE.approvals.recent = [];
+      STATE.approvals.generatedMs = null;
+      STATE.approvals.loading = false;
+      STATE.approvals.error = errorMsg;
       setStatus('approvals', 'unknown', summary);
-      setTile('approvals', STATE.approvals);
+      setTile('approvals', { level: 'unknown', summary, meta: [] });
+      renderApprovalsLane();
       return;
     }
-    const items = Array.isArray(staging?.items) ? staging.items : [];
-    const pending = items.filter(it => !it.status || String(it.status).toLowerCase() === 'pending');
+
     const count = pending.length;
     let level = 'ok';
     let summary = 'No approvals waiting';
-    if (count > 0) {
+    if (STATE.unauthorized) {
+      level = 'unknown';
+      summary = 'Authorize to view approvals queue';
+    } else if (count > 0) {
       summary = `${count} approval${count === 1 ? '' : 's'} waiting`;
       if (count > 3) level = 'bad'; else level = 'warn';
+    } else if (errorMsg && !pendingPayload) {
+      level = 'unknown';
+      summary = 'Approvals queue unavailable';
     }
+
     const meta = [];
     if (count) {
       const oldestTs = pending
-        .map(it => parseTimestamp(it.time_ms || it.ts_ms || it.created_ms || it.created_at))
+        .map(it => parseTimestamp(it.created_ms || it.created_at || it.created))
         .filter(Boolean)
         .sort((a, b) => a - b)[0];
       if (oldestTs) meta.push(['Oldest request', formatRelativeWithAbs(oldestTs)]);
-      const lanes = new Set(pending.map(it => it.lane || it.kind || it.scope).filter(Boolean));
-      if (lanes.size) meta.push(['Lanes', Array.from(lanes).join(', ')]);
+      const projects = new Set(
+        pending
+          .map(it => (it.project || '').toString().trim())
+          .filter(Boolean)
+      );
+      if (projects.size) meta.push(['Projects', Array.from(projects).join(', ')]);
+      const requesters = new Set(
+        pending
+          .map(it => (it.requested_by || '').toString().trim())
+          .filter(Boolean)
+      );
+      if (requesters.size) meta.push(['Requested by', Array.from(requesters).join(', ')]);
     }
-    STATE.approvals = { level, summary, meta };
+
     setStatus('approvals', level, summary);
-    setTile('approvals', STATE.approvals);
+    setTile('approvals', { level, summary, meta });
+
+    STATE.approvals.level = level;
+    STATE.approvals.summary = summary;
+    STATE.approvals.meta = meta;
+    STATE.approvals.pending = pending;
+    STATE.approvals.recent = recent;
+    STATE.approvals.generatedMs = Date.now();
+    STATE.approvals.loading = false;
+    STATE.approvals.error = errorMsg;
+    renderApprovalsLane();
   }
 
   function updateSafety(status, guardrails){
@@ -399,6 +519,55 @@
     STATE.safety = { level, summary, meta };
     setStatus('safety', level, summary);
     setTile('safety', STATE.safety);
+  }
+
+  function updateConnections(cluster){
+    const clusterErrors = (STATE.errors || []).filter(line => line.includes('/state/cluster'));
+    const errorMsg = clusterErrors.length ? clusterErrors.join('; ') : null;
+
+    if (!cluster || !Array.isArray(cluster?.nodes)) {
+      const summary = STATE.unauthorized
+        ? 'Authorize to view connections'
+        : errorMsg || 'Connections data unavailable';
+      STATE.connections.nodes = [];
+      STATE.connections.summary = summary;
+      STATE.connections.error = errorMsg;
+      STATE.connections.loading = false;
+      if (!STATE.connections.updatedMs) STATE.connections.updatedMs = null;
+      renderConnections();
+      return;
+    }
+
+    const nodes = cluster.nodes
+      .filter(Boolean)
+      .map(raw => {
+        const caps = raw && typeof raw.capabilities === 'object' && raw.capabilities !== null ? raw.capabilities : {};
+        const os = typeof caps.os === 'string' ? caps.os : null;
+        const arch = typeof caps.arch === 'string' ? caps.arch : null;
+        const version = typeof caps.arw_version === 'string' ? caps.arw_version : null;
+        const healthRaw = raw && raw.health ? String(raw.health).toLowerCase() : 'unknown';
+        return {
+          id: raw && raw.id ? String(raw.id) : (raw && raw.name ? String(raw.name) : 'node'),
+          name: raw && raw.name ? String(raw.name) : null,
+          role: raw && raw.role ? String(raw.role) : 'member',
+          health: healthRaw || 'unknown',
+          capabilities: { os, arch, version },
+        };
+      });
+
+    nodes.sort((a, b) => (a.name || a.id).localeCompare(b.name || b.id));
+
+    const onlineCount = nodes.filter(node => node.health === 'ok').length;
+    const summaryBase = nodes.length
+      ? `${onlineCount}/${nodes.length} connection${nodes.length === 1 ? '' : 's'} online`
+      : 'No remote connections';
+
+    STATE.connections.nodes = nodes;
+    STATE.connections.summary = summaryBase;
+    STATE.connections.error = errorMsg;
+    STATE.connections.loading = false;
+    STATE.connections.updatedMs = Date.now();
+    renderConnections();
   }
   function updateAutonomy(payload){
     const currentOperator = STATE.autonomy?.operator || null;
@@ -804,6 +973,10 @@
     const approvalLine = STATE.approvals.summary;
     const safetyLine = STATE.safety.summary;
     const autonomyLine = STATE.autonomy?.line || (STATE.unauthorized ? 'Authorize to view autonomy lane.' : 'Autonomy lane idle.');
+    let connectionsLine = STATE.connections.summary || (STATE.unauthorized ? 'Authorize to view connections' : 'Connections idle.');
+    if (STATE.connections.updatedMs) {
+      connectionsLine = `${connectionsLine} (updated ${formatRelativeWithAbs(STATE.connections.updatedMs)})`;
+    }
 
     const topRoutes = Array.isArray(routeStats?.routes)
       ? [...routeStats.routes]
@@ -813,18 +986,20 @@
           .map(r => `${r.path} | p95 ${(Number(r.p95_ms) || 0).toFixed(0)} ms (hits ${(Number(r.hits) || 0).toLocaleString()})`)
       : [];
 
-    STATE.overview = [systemLine, memoryLine, approvalLine, safetyLine, autonomyLine];
+    STATE.overview = [systemLine, memoryLine, approvalLine, safetyLine, autonomyLine, connectionsLine];
     STATE.workflows = [
       MEMORY_WORKFLOW_TEXT(STATE.memory, STATE.focus),
       topRoutes.length ? `Slowest routes: ${topRoutes.join('; ')}` : 'Route latencies steady.',
       approvalLine,
       autonomyLine,
+      connectionsLine,
     ];
     STATE.safeguards = [
       safetyLine,
       STATE.systems.meta.find(([label]) => label === 'Safe mode')?.join(': ') || 'Safe mode off',
       `Guardrails retries: ${STATE.safety.meta[0]?.[1] || '0'}`,
       autonomyLine,
+      connectionsLine,
     ];
   }
 
@@ -891,6 +1066,418 @@
     setList('list-overview', STATE.overview);
     setList('list-workflows', STATE.workflows);
     setList('list-safeguards', STATE.safeguards);
+  }
+
+  function renderApprovalsLane(){
+    const summaryEl = document.getElementById('approvalsLaneSummary');
+    const listEl = document.getElementById('approvalsLaneList');
+    const emptyEl = document.getElementById('approvalsLaneEmpty');
+    const noticeEl = document.getElementById('approvalsLaneNotice');
+    const recentWrap = document.getElementById('approvalsRecent');
+    const recentList = document.getElementById('approvalsRecentList');
+
+    const { summary, reviewer, generatedMs, pending, recent, loading, error } = STATE.approvals;
+
+    if (summaryEl) {
+      let line = summary || '';
+      if (reviewer) line = line ? `${line} • Reviewer: ${reviewer}` : `Reviewer: ${reviewer}`;
+      if (generatedMs) line = line ? `${line} • updated ${formatRelativeWithAbs(generatedMs)}` : `Updated ${formatRelativeWithAbs(generatedMs)}`;
+      summaryEl.textContent = line;
+      summaryEl.title = generatedMs ? formatRelativeAbs(generatedMs) : '';
+    }
+
+    if (noticeEl) {
+      if (error && !STATE.unauthorized) {
+        noticeEl.textContent = error;
+        noticeEl.classList.remove('hidden');
+      } else {
+        noticeEl.textContent = '';
+        noticeEl.classList.add('hidden');
+      }
+    }
+
+    if (listEl) {
+      listEl.innerHTML = '';
+      if (loading) {
+        if (emptyEl) {
+          emptyEl.textContent = 'Loading approvals…';
+          emptyEl.classList.remove('hidden');
+        }
+      } else if (!pending || pending.length === 0) {
+        if (emptyEl) {
+          emptyEl.textContent = summary || (STATE.unauthorized ? 'Authorize to view approvals queue' : 'No approvals waiting');
+          emptyEl.classList.remove('hidden');
+        }
+      } else {
+        if (emptyEl) emptyEl.classList.add('hidden');
+        pending.slice(0, 12).forEach(item => {
+          const card = buildApprovalCard(item);
+          if (card) listEl.appendChild(card);
+        });
+      }
+    }
+
+    if (recentWrap && recentList) {
+      recentList.innerHTML = '';
+      const decided = Array.isArray(recent)
+        ? recent.filter(it => it && String(it.status || '').toLowerCase() !== 'pending').slice(0, 8)
+        : [];
+      if (!decided.length) {
+        recentWrap.classList.add('hidden');
+      } else {
+        recentWrap.classList.remove('hidden');
+        decided.forEach(item => {
+          const li = document.createElement('li');
+          const createdMs = parseTimestamp(item.decided_at || item.updated || item.created);
+          const status = item.status ? humanizeStatus(item.status) : 'Decided';
+          const actor = item.decided_by || item.requested_by || 'unknown';
+          const kind = humanizeActionKind(item.action_kind);
+          const parts = [status, `by ${actor}`];
+          li.textContent = `${kind} — ${parts.join(' ')}${createdMs ? ` (${formatRelativeWithAbs(createdMs)})` : ''}`;
+          if (createdMs) li.title = formatRelativeAbs(createdMs);
+          recentList.appendChild(li);
+        });
+      }
+    }
+  }
+
+  function buildApprovalCard(item){
+    if (!item || typeof item !== 'object') return null;
+    const li = document.createElement('li');
+    li.className = 'approval-card';
+    if (item.id) li.dataset.approvalId = String(item.id);
+
+    const headline = document.createElement('div');
+    headline.className = 'approval-headline';
+    const title = document.createElement('h3');
+    title.className = 'approval-kind';
+    title.textContent = humanizeActionKind(item.action_kind);
+    headline.appendChild(title);
+    if (item.project) {
+      const project = document.createElement('span');
+      project.className = 'approval-project';
+      project.textContent = item.project;
+      headline.appendChild(project);
+    }
+    li.appendChild(headline);
+
+    const metaRow = document.createElement('div');
+    metaRow.className = 'approval-meta';
+    const createdMs = parseTimestamp(item.created_ms || item.created_at || item.created);
+    if (createdMs) metaRow.appendChild(createMetaChip(`Created ${formatRelative(createdMs)}`));
+    if (item.requested_by) metaRow.appendChild(createMetaChip(`Requested by ${item.requested_by}`));
+    if (item.project) metaRow.appendChild(createMetaChip(`Project ${item.project}`));
+    metaRow.appendChild(createMetaChip(`ID ${item.id || 'unknown'}`));
+    li.appendChild(metaRow);
+
+    const payloadText = formatActionInput(item.action_input);
+    if (payloadText) {
+      const pre = document.createElement('pre');
+      pre.className = 'approval-payload';
+      pre.textContent = payloadText;
+      li.appendChild(pre);
+    }
+
+    const actionsRow = document.createElement('div');
+    actionsRow.className = 'approval-actions';
+    const approveBtn = document.createElement('button');
+    approveBtn.type = 'button';
+    approveBtn.className = 'primary';
+    approveBtn.textContent = 'Approve';
+    const holdBtn = document.createElement('button');
+    holdBtn.type = 'button';
+    holdBtn.className = 'danger';
+    holdBtn.textContent = 'Hold';
+    approveBtn.addEventListener('click', () => decideApproval(item, 'approve', approveBtn, holdBtn));
+    holdBtn.addEventListener('click', () => decideApproval(item, 'deny', approveBtn, holdBtn));
+    actionsRow.appendChild(approveBtn);
+    actionsRow.appendChild(holdBtn);
+    li.appendChild(actionsRow);
+
+    return li;
+  }
+
+  function createMetaChip(text){
+    const span = document.createElement('span');
+    span.textContent = text;
+    return span;
+  }
+
+  function humanizeActionKind(kind){
+    if (!kind) return 'Action';
+    const cleaned = String(kind).replace(/[._]/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!cleaned) return 'Action';
+    return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+
+  function humanizeStatus(value){
+    if (!value) return 'Unknown';
+    const cleaned = String(value).trim();
+    if (!cleaned) return 'Unknown';
+    return cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+
+  function formatActionInput(input){
+    if (input == null) return '';
+    try {
+      const text = JSON.stringify(input, null, 2);
+      if (!text) return '';
+      if (text.length > 900) return `${text.slice(0, 880)}…`;
+      return text;
+    } catch {
+      return String(input);
+    }
+  }
+
+  async function decideApproval(item, action, approveBtn, holdBtn){
+    if (!item || !item.id) {
+      ARW.toast('Approval id missing');
+      return;
+    }
+    if (!STATE.base) {
+      const port = ARW.getPortFromInput('port');
+      STATE.base = ARW.base(port);
+    }
+    if (!STATE.base) {
+      ARW.toast('Start the server first');
+      return;
+    }
+    const reviewer = ensureApprovalReviewer();
+    if (!reviewer) {
+      ARW.toast('Reviewer required');
+      return;
+    }
+    let reason = null;
+    if (action === 'deny') {
+      const input = prompt('Reason to hold?', 'Needs teammate approval');
+      if (input === null) return;
+      reason = input.trim();
+    }
+    const buttons = [approveBtn, holdBtn].filter(Boolean);
+    buttons.forEach(btn => {
+      btn.dataset.approvalBusy = '1';
+      btn.disabled = true;
+    });
+    try {
+      const body = { decided_by: reviewer };
+      if (reason) body.reason = reason;
+      const path = action === 'approve'
+        ? `/staging/actions/${encodeURIComponent(item.id)}/approve`
+        : `/staging/actions/${encodeURIComponent(item.id)}/deny`;
+      const resp = await ARW.http.fetch(STATE.base, path, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      ARW.toast(action === 'approve' ? 'Approved' : 'Held');
+      await refresh();
+    } catch (err) {
+      console.error('Approval decision failed', err);
+      ARW.toast(err && err.message ? err.message : 'Decision failed');
+    } finally {
+      buttons.forEach(btn => {
+        btn.disabled = false;
+        delete btn.dataset.approvalBusy;
+      });
+    }
+  }
+
+  function requestApprovalReviewerChange(){
+    const current = STATE.approvals?.reviewer || '';
+    const input = prompt('Reviewer name (shown on the audit log)?', current);
+    if (input === null) return;
+    const trimmed = input.trim();
+    if (!trimmed) {
+      STATE.approvals.reviewer = null;
+      rememberApprovalReviewer('');
+      ARW.toast('Reviewer cleared');
+    } else {
+      STATE.approvals.reviewer = trimmed;
+      rememberApprovalReviewer(trimmed);
+      ARW.toast(`Reviewer set to ${trimmed}`);
+    }
+    renderApprovalsLane();
+  }
+
+  function ensureApprovalReviewer(){
+    const cached = STATE.approvals?.reviewer;
+    if (cached && cached.trim()) return cached.trim();
+    const stored = getStoredApprovalReviewer();
+    if (stored) {
+      STATE.approvals.reviewer = stored;
+      renderApprovalsLane();
+      return stored;
+    }
+    const input = prompt('Reviewer name (shown on the audit log)?');
+    if (input === null) return null;
+    const trimmed = input.trim();
+    if (!trimmed) return null;
+    STATE.approvals.reviewer = trimmed;
+    rememberApprovalReviewer(trimmed);
+    renderApprovalsLane();
+    return trimmed;
+  }
+
+  function getStoredApprovalReviewer(){
+    try {
+      const raw = localStorage.getItem(APPROVAL_REVIEWER_KEY);
+      if (!raw) return null;
+      const trimmed = raw.trim();
+      return trimmed || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function rememberApprovalReviewer(name){
+    try {
+      if (name && name.trim()) {
+        localStorage.setItem(APPROVAL_REVIEWER_KEY, name.trim());
+      } else {
+        localStorage.removeItem(APPROVAL_REVIEWER_KEY);
+      }
+    } catch {}
+  }
+
+  function renderConnections(){
+    const summaryEl = document.getElementById('connectionsSummary');
+    const noticeEl = document.getElementById('connectionsNotice');
+    const listEl = document.getElementById('connectionsList');
+    const emptyEl = document.getElementById('connectionsEmpty');
+
+    if (summaryEl) {
+      let text = STATE.connections.summary || '';
+      if (STATE.connections.updatedMs) {
+        text = text ? `${text} • updated ${formatRelativeWithAbs(STATE.connections.updatedMs)}` : `Updated ${formatRelativeWithAbs(STATE.connections.updatedMs)}`;
+        summaryEl.title = formatRelativeAbs(STATE.connections.updatedMs);
+      } else {
+        summaryEl.title = '';
+      }
+      summaryEl.textContent = text;
+    }
+
+    if (noticeEl) {
+      if (STATE.connections.error && !STATE.unauthorized) {
+        noticeEl.textContent = STATE.connections.error;
+        noticeEl.classList.remove('hidden');
+      } else {
+        noticeEl.textContent = '';
+        noticeEl.classList.add('hidden');
+      }
+    }
+
+    if (!listEl || !emptyEl) return;
+    listEl.innerHTML = '';
+    if (STATE.connections.loading) {
+      emptyEl.textContent = 'Loading connections…';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    const nodes = STATE.connections.nodes || [];
+    if (!nodes.length) {
+      const fallback = STATE.connections.summary || (STATE.unauthorized ? 'Authorize to view connections' : 'No remote connections');
+      emptyEl.textContent = fallback;
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    emptyEl.classList.add('hidden');
+    nodes.forEach(node => {
+      const li = document.createElement('li');
+      li.className = `connection-card ${node.health || 'unknown'}`;
+      const title = document.createElement('h3');
+      title.textContent = node.name || node.id;
+      li.appendChild(title);
+      const metaRow = document.createElement('div');
+      metaRow.className = 'connection-meta';
+      metaRow.appendChild(createMetaChip(`Role ${node.role || 'member'}`));
+      metaRow.appendChild(createMetaChip(`Health ${humanizeStatus(node.health)}`));
+      if (node.capabilities?.os || node.capabilities?.arch) {
+        const parts = [node.capabilities.os, node.capabilities.arch].filter(Boolean).join('/');
+        metaRow.appendChild(createMetaChip(parts));
+      }
+      if (node.capabilities?.version) {
+        metaRow.appendChild(createMetaChip(`v${node.capabilities.version}`));
+      }
+      metaRow.appendChild(createMetaChip(`ID ${node.id}`));
+      li.appendChild(metaRow);
+      listEl.appendChild(li);
+    });
+  }
+
+  function openConnectionsDrawer(){
+    const overlay = document.getElementById('connectionsOverlay');
+    const drawer = document.getElementById('connectionsDrawer');
+    if (!overlay || !drawer) return;
+    STATE.connectionsRestore = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    overlay.classList.remove('hidden');
+    drawer.classList.remove('hidden');
+    requestAnimationFrame(() => {
+      overlay.classList.add('open');
+      drawer.classList.add('open');
+    });
+    overlay.setAttribute('aria-hidden', 'false');
+    drawer.setAttribute('aria-hidden', 'false');
+    drawer.focus();
+    STATE.connectionsOpen = true;
+    if (!STATE.connections.loading && (!STATE.connections.nodes || STATE.connections.nodes.length === 0)) {
+      refreshConnections();
+    }
+  }
+
+  function closeConnectionsDrawer(){
+    const overlay = document.getElementById('connectionsOverlay');
+    const drawer = document.getElementById('connectionsDrawer');
+    if (!overlay || !drawer) return;
+    overlay.classList.remove('open');
+    drawer.classList.remove('open');
+    overlay.setAttribute('aria-hidden', 'true');
+    drawer.setAttribute('aria-hidden', 'true');
+    STATE.connectionsOpen = false;
+    setTimeout(() => {
+      if (!STATE.connectionsOpen) {
+        overlay.classList.add('hidden');
+        drawer.classList.add('hidden');
+      }
+    }, 220);
+    const restore = STATE.connectionsRestore;
+    STATE.connectionsRestore = null;
+    if (restore && typeof restore.focus === 'function') {
+      try { restore.focus(); } catch {}
+    }
+  }
+
+  async function refreshConnections(){
+    if (!STATE.base) {
+      const port = ARW.getPortFromInput('port');
+      STATE.base = ARW.base(port);
+    }
+    if (!STATE.base) {
+      ARW.toast('Start the server first');
+      return;
+    }
+    STATE.connections.loading = true;
+    renderConnections();
+    try {
+      const snapshot = await ARW.http.json(STATE.base, '/state/cluster');
+      updateConnections(snapshot);
+    } catch (err) {
+      console.error('Refresh connections failed', err);
+      const msg = err && err.message ? String(err.message) : 'Unable to load connections';
+      STATE.connections.loading = false;
+      STATE.connections.error = /401/.test(msg) ? 'Authorize to view connections' : msg;
+      STATE.connections.summary = STATE.connections.error;
+      renderConnections();
+    }
+  }
+
+  function handleGlobalKeydown(evt){
+    if (evt.key === 'Escape' && STATE.connectionsOpen) {
+      evt.preventDefault();
+      closeConnectionsDrawer();
+    }
   }
 
   function setList(id, entries){
@@ -1008,6 +1595,19 @@
     } catch (err) {
       console.error('Open focus sources failed', err);
       ARW.toast('Unable to open memory view');
+    }
+  }
+
+  async function openApprovalsInDebug(){
+    if (!STATE.base) {
+      ARW.toast('Start the server first');
+      return;
+    }
+    try {
+      await ARW.invoke('open_url', { url: `${STATE.base}/admin/debug#approvals` });
+    } catch (err) {
+      console.error('Open approvals queue failed', err);
+      ARW.toast('Unable to open approvals queue');
     }
   }
 

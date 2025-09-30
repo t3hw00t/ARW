@@ -13,14 +13,15 @@ This runbook keeps our two-person trial routine lightweight. Use it with the Tri
 
 - Open the launcher Trial Control Center window (`Launcher → Trial Control`) and confirm Systems, Memory, Approvals, and Safety read “All good.” Record the numbers in a fresh copy of `docs/ops/trials/daily_log_template.md`.
 - Run `just trials-preflight` (or click the preflight button in the Trial Control Center; it runs the helper and copies the CLI command if automation fails).
-- Check the approvals lane is empty; if not, ping the other person before starting.
+- In the Trial Control Center, open the **Approvals lane**, confirm your reviewer label with the **Set reviewer** button, and clear or assign any waiting items before we begin.
+- Click **Connections** in the header to open the drawer and double-check the remote roster (it should just list the two of us during rehearsal).
 - Glance at the access matrix (ops/access_matrix.yaml) to verify tokens expiring today.
 
 ## During the day
 
 - Keep helpers in Guided mode unless we both agree to flip on Autonomy Lane. If one of us is unsure, stay guided.
-- Review approvals after each major step (target: decisions cleared before we leave the session).
-- If an alert appears (“Needs a teammate’s OK”), capture a quick note in the incident log and mention it in chat.
+- Clear approvals after each major step (target: no cards waiting before we leave the session). The lane highlights who requested each action and how long it has been waiting.
+- If an alert appears (“Needs a teammate’s OK”), capture a quick note in the incident log and mention it in chat. Use the drawer to see who is connected before approving anything sensitive.
 - Drop observations straight into the shared feedback doc; no extra survey needed while it’s just us.
 
 ## Daily stand-up template (see `docs/ops/trials/standup_template.md` for slide layout)

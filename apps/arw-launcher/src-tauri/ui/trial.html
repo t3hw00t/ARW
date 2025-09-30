@@ -49,6 +49,7 @@
         <div class="header-controls">
           <label>Port: <input id="port" type="number" min="1" max="65535" value="8091" /></label>
           <button id="btn-refresh" class="ghost">Refresh</button>
+          <button id="btn-open-connections" class="ghost">Connections</button>
           <button id="btn-open-runbook" class="ghost">Runbook</button>
         </div>
       </header>
@@ -132,6 +133,27 @@
           </article>
         </section>
 
+        <section class="card approvals-lane" aria-label="Approvals lane">
+          <header class="approvals-header">
+            <div class="approvals-title">
+              <h2>Approvals lane</h2>
+              <p class="dim approvals-summary" id="approvalsLaneSummary" role="status" aria-live="polite"></p>
+            </div>
+            <div class="approvals-actions">
+              <button id="btn-approvals-reviewer" class="ghost" type="button">Set reviewer</button>
+              <button id="btn-approvals-refresh" class="ghost" type="button">Refresh</button>
+              <button id="btn-approvals-open-debug" class="ghost" type="button">Open debug queue</button>
+            </div>
+          </header>
+          <div id="approvalsLaneNotice" class="approvals-notice hidden" role="alert"></div>
+          <ul id="approvalsLaneList" class="approvals-list" role="list"></ul>
+          <div id="approvalsLaneEmpty" class="dim approvals-empty hidden"></div>
+          <div id="approvalsRecent" class="approvals-recent hidden" role="region" aria-label="Recent approvals decisions">
+            <h3>Recent decisions</h3>
+            <ul id="approvalsRecentList" class="approvals-recent-list" role="list"></ul>
+          </div>
+        </section>
+
         <section class="card tabs" aria-label="Expanded details">
           <div class="tab-buttons" role="tablist">
             <button id="tabbtn-overview" class="active" role="tab" aria-selected="true" aria-controls="tab-overview">Overview</button>
@@ -150,5 +172,27 @@
         </section>
       </main>
     </div>
+
+    <div id="connectionsOverlay" class="connections-overlay hidden" role="presentation" aria-hidden="true"></div>
+    <aside
+      id="connectionsDrawer"
+      class="connections-drawer hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-hidden="true"
+      tabindex="-1"
+    >
+      <header class="connections-header">
+        <h2>Connections</h2>
+        <div class="connections-controls">
+          <button id="btn-connections-refresh" class="ghost" type="button">Refresh</button>
+          <button id="btn-close-connections" class="ghost" type="button" aria-label="Close connections drawer">Close</button>
+        </div>
+      </header>
+      <div id="connectionsSummary" class="dim connections-summary" role="status" aria-live="polite"></div>
+      <div id="connectionsNotice" class="connections-notice hidden" role="alert"></div>
+      <ul id="connectionsList" class="connections-list" role="list"></ul>
+      <div id="connectionsEmpty" class="dim connections-empty hidden"></div>
+    </aside>
   </body>
 </html>
