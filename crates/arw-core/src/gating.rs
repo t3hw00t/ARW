@@ -70,35 +70,48 @@ pub struct CapsuleLeaseState {
     pub renew_within_ms: Option<u64>,
 }
 
-#[derive(Debug, Deserialize)]
-struct GatingCfg {
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+struct GatingPolicyConfig {
+    /// Immutable denies applied at startup (supports trailing `*`).
     #[serde(default)]
     deny_user: Vec<String>,
+    /// Conditional contracts evaluated alongside runtime capsules.
     #[serde(default)]
     contracts: Vec<ContractCfg>,
 }
 
-#[derive(Debug, Deserialize, Clone, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
 pub struct ContractCfg {
+    /// Stable identifier recorded in audits and renewals.
     id: String,
+    /// List of gating key patterns (supports trailing `*`).
     #[serde(default)]
-    patterns: Vec<String>, // e.g., ["events:*", "task:math.*"]
+    patterns: Vec<String>,
+    /// Optional role filter (e.g., `edge`, `regional`).
     #[serde(default)]
     subject_role: Option<String>,
+    /// Optional node identifier filter (matches `ARW_NODE_ID`).
     #[serde(default)]
     subject_node: Option<String>,
+    /// Match when any tag is present on the caller (case-sensitive).
     #[serde(default)]
-    tags_any: Option<Vec<String>>, // match any of these tags
+    tags_any: Option<Vec<String>>,
+    /// Contract activates after this epoch millisecond (inclusive).
     #[serde(default)]
     valid_from_ms: Option<u64>,
+    /// Contract expires at this epoch millisecond (inclusive).
     #[serde(default)]
     valid_to_ms: Option<u64>,
+    /// Automatically renew by this many seconds when expired.
     #[serde(default)]
     auto_renew_secs: Option<u64>,
+    /// Treat contract as immutable within its active window (default true).
     #[serde(default)]
     immutable: Option<bool>,
+    /// Maximum allowed hits within the quota window (optional).
     #[serde(default)]
     quota_limit: Option<u64>,
+    /// Sliding window size in seconds paired with `quota_limit`.
     #[serde(default)]
     quota_window_secs: Option<u64>,
 }
@@ -155,7 +168,7 @@ pub fn init_from_config(path: &str) {
     // File
     if Path::new(path).exists() {
         if let Ok(s) = std::fs::read_to_string(path) {
-            if let Ok(cfg) = toml::from_str::<GatingCfg>(&s) {
+            if let Ok(cfg) = toml::from_str::<GatingPolicyConfig>(&s) {
                 for k in cfg.deny_user {
                     denies.insert(k);
                 }
@@ -443,6 +456,41 @@ pub fn adopt_capsule(cap: &arw_protocol::GatingCapsule) -> CapsuleLeaseState {
     }
 }
 
+/// Return the JSON Schema describing `configs/gating.toml`.
+pub fn gating_config_schema_json() -> serde_json::Value {
+    let schema = schemars::schema_for!(GatingPolicyConfig);
+    serde_json::to_value(&schema).expect("schema json")
+}
+
+/// Render the gating config reference in Markdown.
+pub fn render_config_markdown(generated_at: &str) -> String {
+    let mut out = format!(
+        "---\ntitle: Gating Config\n---\n\n# Gating Config\nGenerated: {}\nType: Reference\n\n",
+        generated_at
+    );
+
+    out.push_str("Immutable gating policy boots from `configs/gating.toml` or the `ARW_GATING_FILE` override. It layers with hierarchy defaults, runtime capsules, and leases so denies remain traceable and auditable. Keys support trailing `*` wildcards.\n\n");
+
+    out.push_str("## Load order\n- `ARW_GATING_FILE` (absolute or relative) if set\n- `configs/gating.toml` discovered via `ARW_CONFIG_DIR`, the executable directory, or the workspace root\n- `ARW_GATING_DENY` environment variable (comma-separated)\n\n");
+
+    out.push_str("## Schema\n- JSON Schema: [`gating_config.schema.json`](gating_config.schema.json)\n- Validate with `jsonschema`, `ajv`, or `arw-cli gate config schema`\n\n");
+
+    out.push_str("## Top-level keys\n\n| Key | Type | Description |\n| --- | --- | --- |\n| `deny_user` | `array<string>` | Immutable deny-list applied at boot; supports trailing `*`. |\n| `contracts` | `array<Contract>` | Conditional denies evaluated on every request; supports filters, TTLs, quotas, and auto-renew. |\n\n");
+
+    out.push_str("## Contract fields\n\n| Field | Type | Description |\n| --- | --- | --- |\n| `id` | `string` | Unique identifier recorded in audits and renewals. |\n| `patterns` | `array<string>` | Gating key patterns (supports trailing `*`). |\n| `subject_role` | `string?` | Optional caller role filter (`root`, `regional`, `edge`, `connector`, `observer`). |\n| `subject_node` | `string?` | Optional node id filter (`ARW_NODE_ID`). |\n| `tags_any` | `array<string>?` | Match when any tag from the caller overlaps. |\n| `valid_from_ms` | `integer?` | Epoch milliseconds that activate the contract (inclusive). |\n| `valid_to_ms` | `integer?` | Epoch milliseconds that expire the contract (inclusive). |\n| `auto_renew_secs` | `integer?` | Seconds to extend the contract after expiry. |\n| `immutable` | `bool?` | Defaults to `true`; when `false`, runtime may remove before expiry. |\n| `quota_limit` | `integer?` | Maximum invocations allowed within the sliding window. |\n| `quota_window_secs` | `integer?` | Sliding window size in seconds paired with `quota_limit`. |\n\n");
+
+    out.push_str("## Field notes\n- `valid_from_ms` and `valid_to_ms` use milliseconds since Unix epoch.\n- Quotas require both `quota_limit` and `quota_window_secs`.\n- `auto_renew_secs` updates the next expiry relative to the evaluation time.\n\n");
+
+    out.push_str("## Examples\n\n### Deny introspection by default\n```toml\ndeny_user = [\"introspect:*\"]\n```\n\n");
+    out.push_str("### Nightly freeze for actions and tools\n```toml\n[[contracts]]\nid = \"night-freeze\"\npatterns = [\"actions:*\", \"tools:*\"]\nvalid_from_ms = 1735689600000  # 2024-12-01T00:00:00Z\nvalid_to_ms = 1735776000000    # 2024-12-02T00:00:00Z\nimmutable = true\n```\n\n");
+    out.push_str("### Quota-limited edge tools burst\n```toml\n[[contracts]]\nid = \"edge-tools-burst\"\npatterns = [\"tools:run\"]\nsubject_role = \"edge\"\ntags_any = [\"lab\"]\nquota_limit = 5\nquota_window_secs = 60\nauto_renew_secs = 0\n```\n");
+
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out
+}
+
 #[cfg(test)]
 /// Test-only: reset gating state to a clean slate for isolated tests.
 pub fn __test_reset() {
@@ -465,7 +513,52 @@ pub fn __test_reset() {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use serde_json::Value;
     use serial_test::serial;
+    use std::path::PathBuf;
+
+    fn repo_path(relative: &str) -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(relative)
+    }
+
+    fn normalize_markdown(input: &str) -> String {
+        let mut out = Vec::new();
+        for line in input.replace("\r\n", "\n").lines() {
+            if line.starts_with("Generated: ") {
+                out.push("Generated: <timestamp>".to_string());
+            } else {
+                out.push(line.to_string());
+            }
+        }
+        out.push(String::new());
+        out.join("\n")
+    }
+
+    #[test]
+    fn gating_config_markdown_fixture_in_sync() {
+        let path = repo_path("../../docs/reference/gating_config.md");
+        let disk = std::fs::read_to_string(&path).expect("read gating_config.md");
+        let generated = super::render_config_markdown("GENERATED");
+        assert_eq!(
+            normalize_markdown(&disk),
+            normalize_markdown(&generated),
+            "docs/reference/gating_config.md is out of sync with render_config_markdown()"
+        );
+    }
+
+    #[test]
+    fn gating_config_schema_fixture_in_sync() {
+        let path = repo_path("../../docs/reference/gating_config.schema.json");
+        let disk: Value =
+            serde_json::from_str(&std::fs::read_to_string(&path).expect("read schema"))
+                .expect("parse schema json");
+        let generated = super::gating_config_schema_json();
+        assert_eq!(
+            disk,
+            generated,
+            "docs/reference/gating_config.schema.json is out of sync with gating_config_schema_json()"
+        );
+    }
 
     #[test]
     #[serial]

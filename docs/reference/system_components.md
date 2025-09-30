@@ -148,9 +148,6 @@ Tracks artifacts as typed nodes with provenance edges tying inputs, policies, an
 - Notes:
   - Reserved provenance events and bundle export endpoints document lineage for audit.
   - Downloads honor preflight checks and quotas before admission.
-  - Hash summaries now surface providers and referencing model IDs per CAS blob for quick triage.
-  - Filter summaries by `provider=` or `model=` when calling `GET /state/models_hashes`.
-  - Paginated responses include `prev_offset`/`next_offset` plus page counters so dashboards can jump between slices without recomputing offsets.
 
 ### Asimov Capsule Guard
 
@@ -532,7 +529,6 @@ Memory overlay service on top of the MAL schema that exposes `memory.*` actions,
   - Lane-specific budgets, TTLs, and lifecycle policies keep the corpus explainable and auditable.
   - Overlay actions now flow entirely through `/actions`; legacy `/memory/*` REST shims have been removed.
   - Retrieval journaling captures scores/diversity decisions for working-set diagnostics.
-  - Recent snapshot endpoint returns `generated` and `generated_ms` timestamps so launch surfaces can display freshness directly.
 
 ### Policy & Gating Core
 
@@ -741,17 +737,14 @@ Capture, annotate, and OCR tools return screenshot metadata, enforce io:screensh
   - SSE + JSON Patch Streaming Contract
 - Signals & Telemetry:
   - `screenshots.captured`
-  - `screenshots.ocr.completed`
 - HTTP:
   - `POST /admin/tools/run`
-  - `GET /state/screenshots`
 - Tools:
   - `ui.screenshot.capture`
   - `ui.screenshot.annotate_burn`
   - `ui.screenshot.ocr`
 - Topics:
   - `screenshots.captured`
-  - `screenshots.ocr.completed`
 - Storage:
   - `.arw/screenshots/YYYY/MM/DD/`
 - References:
@@ -760,7 +753,6 @@ Capture, annotate, and OCR tools return screenshot metadata, enforce io:screensh
 - Notes:
   - Launcher integrations trigger captures and render previews with annotate/OCR quick actions.
   - Lease gating keeps capture and OCR auditable with Activity lane telemetry.
-  - OCR responses emit cache hits (`cached: true`) when sidecars satisfy the request; force re-run for fresh text or new language packs.
 
 ### Unified Object Graph & Event Stream
 

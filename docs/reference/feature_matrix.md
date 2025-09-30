@@ -53,8 +53,6 @@ Manage local models with safe HTTP download, resume, checksum verification, CAS 
   - `ARW_MODELS_QUOTA_MB`
 - References:
   - [architecture/artifacts_provenance.md](../architecture/artifacts_provenance.md)
-- Notes:
-  - CAS GC accepts `{ttl_hours, verbose}` and returns optional `deleted_items`; hash listings include referencing model IDs alongside providers and support `provider`/`model` filters.
 
 ## Event Spine
 
@@ -154,10 +152,8 @@ Screen/window/region capture with annotate/blur, gallery, Save to project, and o
   - [guide/screenshots.md](../guide/screenshots.md)
 - HTTP:
   - `POST /admin/tools/run`
-  - `GET /state/screenshots`
 - Events:
   - `screenshots.captured`
-  - `screenshots.ocr.completed`
 - References:
   - [architecture/screenshot_capture_pipeline.md](../architecture/screenshot_capture_pipeline.md)
   - [guide/screenshots.md](../guide/screenshots.md)

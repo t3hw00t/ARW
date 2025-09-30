@@ -94,6 +94,86 @@ channels:
         payload:
           type: object
           additionalProperties: true
+  'autonomy.alert':
+    subscribe:
+      operationId: autonomy_alert_event
+      summary: "autonomy.alert event"
+      description: "Event published on 'autonomy.alert' channel."
+      message:
+        name: 'autonomy.alert'
+        payload:
+          type: object
+          additionalProperties: true
+  'autonomy.budget.close_to_limit':
+    subscribe:
+      operationId: autonomy_budget_close_to_limit_event
+      summary: "autonomy.budget.close_to_limit event"
+      description: "Event published on 'autonomy.budget.close_to_limit' channel."
+      message:
+        name: 'autonomy.budget.close_to_limit'
+        payload:
+          type: object
+          additionalProperties: true
+  'autonomy.budget.exhausted':
+    subscribe:
+      operationId: autonomy_budget_exhausted_event
+      summary: "autonomy.budget.exhausted event"
+      description: "Event published on 'autonomy.budget.exhausted' channel."
+      message:
+        name: 'autonomy.budget.exhausted'
+        payload:
+          type: object
+          additionalProperties: true
+  'autonomy.interrupt':
+    subscribe:
+      operationId: autonomy_interrupt_event
+      summary: "autonomy.interrupt event"
+      description: "Event published on 'autonomy.interrupt' channel."
+      message:
+        name: 'autonomy.interrupt'
+        payload:
+          type: object
+          additionalProperties: true
+  'autonomy.run.paused':
+    subscribe:
+      operationId: autonomy_run_paused_event
+      summary: "autonomy.run.paused event"
+      description: "Event published on 'autonomy.run.paused' channel."
+      message:
+        name: 'autonomy.run.paused'
+        payload:
+          type: object
+          additionalProperties: true
+  'autonomy.run.resumed':
+    subscribe:
+      operationId: autonomy_run_resumed_event
+      summary: "autonomy.run.resumed event"
+      description: "Event published on 'autonomy.run.resumed' channel."
+      message:
+        name: 'autonomy.run.resumed'
+        payload:
+          type: object
+          additionalProperties: true
+  'autonomy.run.started':
+    subscribe:
+      operationId: autonomy_run_started_event
+      summary: "autonomy.run.started event"
+      description: "Event published on 'autonomy.run.started' channel."
+      message:
+        name: 'autonomy.run.started'
+        payload:
+          type: object
+          additionalProperties: true
+  'autonomy.run.stopped':
+    subscribe:
+      operationId: autonomy_run_stopped_event
+      summary: "autonomy.run.stopped event"
+      description: "Event published on 'autonomy.run.stopped' channel."
+      message:
+        name: 'autonomy.run.stopped'
+        payload:
+          type: object
+          additionalProperties: true
   'beliefs.updated':
     subscribe:
       operationId: beliefs_updated_event
@@ -630,7 +710,10 @@ channels:
       summary: "models.download.progress event"
       description: "Event published on 'models.download.progress' channel."
       message:
-        $ref: '#/components/messages/models.download.progress'
+        name: 'models.download.progress'
+        payload:
+          type: object
+          additionalProperties: true
   'models.manifest.written':
     subscribe:
       operationId: models_manifest_written_event
@@ -858,6 +941,16 @@ channels:
       description: "Event published on 'screenshots.captured' channel."
       message:
         name: 'screenshots.captured'
+        payload:
+          type: object
+          additionalProperties: true
+  'screenshots.ocr.completed':
+    subscribe:
+      operationId: screenshots_ocr_completed_event
+      summary: "screenshots.ocr.completed event"
+      description: "Event published on 'screenshots.ocr.completed' channel."
+      message:
+        name: 'screenshots.ocr.completed'
         payload:
           type: object
           additionalProperties: true
@@ -1141,125 +1234,3 @@ channels:
         payload:
           type: object
           additionalProperties: true
-components:
-  messages:
-    'models.download.progress':
-      name: 'models.download.progress'
-      title: "Models download progress"
-      summary: "Download lifecycle progress, errors, and budget hints."
-      contentType: application/json
-      correlationId:
-        description: "Correlation id shared across previews, progress, and ledger entries (when present)."
-        location: "$message.payload#/corr_id"
-      payload:
-        type: object
-        required:
-          - id
-        additionalProperties: true
-        properties:
-          id:
-            type: string
-            description: "Download identifier (model id or follower target)."
-          status:
-            type: string
-            description: "Lifecycle phase for this download entry."
-            enum:
-              - started
-              - preflight
-              - downloading
-              - resumed
-              - degraded
-              - complete
-              - error
-              - canceled
-              - no-active-job
-              - coalesced
-          code:
-            type: string
-            description: "Stable machine-readable code describing the current status."
-            enum:
-              - hash-guard
-              - skipped
-              - resumed
-              - http
-              - request-timeout
-              - resume-http-status
-              - resume-content-range
-              - idle-timeout
-              - io
-              - sha256_mismatch
-              - quota_exceeded
-              - disk_insufficient
-              - size_limit
-              - soft-budget
-              - hard-budget
-          error_code:
-            type: string
-            description: "When status is error, mirrors the failure code for quick filtering."
-          corr_id:
-            type: string
-            description: "Correlation id shared across previews, progress, and ledger entries."
-          downloaded:
-            type: integer
-            format: int64
-            description: "Bytes persisted so far for this download attempt."
-          bytes:
-            type: integer
-            format: int64
-            description: "Alias for downloaded bytes retained for backwards compatibility."
-          total:
-            type: integer
-            format: int64
-            description: "Total expected bytes when advertised by the source."
-          percent:
-            type: number
-            format: double
-            minimum: 0
-            maximum: 100
-            description: "Percent complete when total is known."
-          url:
-            type: string
-            description: "Source URL (redacted to drop secrets for logs/previews)."
-          mode:
-            type: string
-            description: "Preflight/coalescing mode indicator (e.g., ok, skip, coalesced)."
-          primary:
-            type: string
-            description: "Primary download id when this entry was coalesced behind it."
-          content_length:
-            type: integer
-            format: int64
-            description: "Content length advertised during preflight."
-          etag:
-            type: string
-            description: "Source ETag observed during preflight (if provided)."
-          last_modified:
-            type: string
-            description: "Last-Modified header captured during preflight."
-          reason:
-            type: string
-            description: "Reason string for skipped preflight validations."
-          offset:
-            type: integer
-            format: int64
-            description: "Resume offset applied when a partial download continued."
-          sha256:
-            type: string
-            description: "Computed SHA-256 digest once the download completes."
-          cached:
-            type: boolean
-            description: "Whether the completed download reused an existing CAS entry."
-          source:
-            type: string
-            description: "Source indicator for coalesced completions (e.g., coalesced)."
-          error:
-            type: string
-            description: "Human-readable error message when status is error."
-          budget:
-            type: object
-            description: "Soft/hard budget snapshot with elapsed timings."
-            additionalProperties: true
-          disk:
-            type: object
-            description: "Disk utilization snapshot ({reserve, available, need})."
-            additionalProperties: true

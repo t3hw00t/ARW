@@ -3,1005 +3,699 @@ title: Interface Release Notes
 ---
 
 # Interface Release Notes
-Updated: 2025-09-28
+Updated: 2025-09-30
 Type: Reference
 
 Base: `origin/main`
 
 ## OpenAPI (REST)
 
-No changes
+### New Endpoints: None
+-----------------------
+
+### Deleted Endpoints: None
+---------------------------
+
+### Modified Endpoints: 108
+---------------------------
+GET /about
+- Summary changed from 'Inspect service metadata' to 'Service metadata and endpoints index.'
+- Description changed from 'Return version, build information, endpoint counts, and the enumerated public/admin routes announced by the server.' to 'Service metadata, endpoints index, and performance preset.'
+
+GET /admin/chat
+- Summary changed from 'Fetch chat transcript' to ''
+- Description changed from 'Retrieve the active admin chat transcript, including message history and tool metadata.' to 'Chat: GET /admin/chat.'
+
+POST /admin/chat/clear
+- Summary changed from 'Clear chat transcript' to ''
+- Description changed from 'Wipe the stored admin chat transcript and reset associated tool context for a fresh session.' to 'Chat: POST /admin/chat/clear.'
+
+POST /admin/chat/send
+- Summary changed from 'Send chat message' to ''
+- Description changed from 'Submit a message to the admin chat lane and receive the synthesized assistant response.' to 'Chat: POST /admin/chat/send.'
+
+GET /admin/chat/status
+- Summary changed from 'Query chat status' to ''
+- Description changed from 'Report chat lane health, including the most recent latency probe; optionally trigger a new probe.' to 'Chat: GET /admin/chat/status.'
+
+POST /admin/distill
+- Summary changed from 'Run distillation pass' to 'Trigger a manual distillation pass.'
+- Description changed from 'Trigger the manual distillation pipeline to snapshot playbooks, refresh beliefs, and regenerate derived notebooks.' to 'Trigger a manual distillation pass.'
+
+POST /admin/experiments/activate
+- Summary changed from 'Activate experiment variant' to ''
+- Description changed from 'Mark a variant as the active choice for the experiment and persist the rollout decision.' to 'Experiments: POST /admin/experiments/activate.'
+
+POST /admin/experiments/assign
+- Summary changed from 'Assign experiment variant' to ''
+- Description changed from 'Record or override an experiment assignment for a participant or agent and broadcast the decision.' to 'Experiments: POST /admin/experiments/assign.'
+
+POST /admin/experiments/define
+- Summary changed from 'Define experiment' to ''
+- Description changed from 'Create or update an experiment definition with the supplied variants and configuration payload.' to 'Experiments: POST /admin/experiments/define.'
+
+GET /admin/experiments/list
+- Summary changed from 'List experiments' to ''
+- Description changed from 'Return all experiment definitions currently registered with their variant metadata.' to 'Experiments: GET /admin/experiments/list.'
+
+POST /admin/experiments/run
+- Summary changed from 'Run experiment on goldens' to ''
+- Description changed from 'Execute the requested experiment variants against the chosen golden project and return the evaluation outcome.' to 'Experiments: POST /admin/experiments/run.'
+
+GET /admin/experiments/scoreboard
+- Summary changed from 'Fetch experiment scoreboard' to ''
+- Description changed from 'Provide aggregated performance metrics for each experiment variant to compare recent runs.' to 'Experiments: GET /admin/experiments/scoreboard.'
+
+POST /admin/experiments/start
+- Summary changed from 'Start experiment run' to ''
+- Description changed from 'Publish a start event for a new experiment with optional assignment, budget, and variant hints.' to 'Experiments: POST /admin/experiments/start.'
+
+POST /admin/experiments/stop
+- Summary changed from 'Stop experiment' to ''
+- Description changed from 'Halt an experiment run by emitting a stop event for the provided experiment identifier.' to 'Experiments: POST /admin/experiments/stop.'
+
+GET /admin/experiments/winners
+- Summary changed from 'List experiment winners' to ''
+- Description changed from 'Return the top-performing variants for experiments based on the latest evaluation data.' to 'Experiments: GET /admin/experiments/winners.'
+
+POST /admin/feedback/analyze
+- Summary changed from 'Recompute feedback suggestions' to ''
+- Description changed from 'Trigger an immediate feedback analysis pass to refresh suggestions from the latest signals.' to 'Feedback: POST /admin/feedback/analyze.'
+
+POST /admin/feedback/apply
+- Summary changed from 'Apply feedback suggestion' to ''
+- Description changed from 'Apply the identified suggestion and let the engine reconcile policy and audit outcomes.' to 'Feedback: POST /admin/feedback/apply.'
+
+POST /admin/feedback/auto
+- Summary changed from 'Toggle automatic feedback application' to ''
+- Description changed from 'Enable or disable automatic application of approved feedback suggestions.' to 'Feedback: POST /admin/feedback/auto.'
+
+GET /admin/feedback/policy
+- Summary changed from 'Fetch feedback policy' to ''
+- Description changed from 'Return the effective feedback application policy after merging defaults and overrides.' to 'Feedback: GET /admin/feedback/policy.'
+
+POST /admin/feedback/reset
+- Summary changed from 'Reset feedback engine' to ''
+- Description changed from 'Clear feedback signals, suggestions, and cached state for a cold start.' to 'Feedback: POST /admin/feedback/reset.'
+
+POST /admin/feedback/rollback
+- Summary changed from 'Roll back feedback snapshot' to ''
+- Description changed from 'Restore feedback state to the requested snapshot version and return the resulting suggestion set.' to 'Feedback: POST /admin/feedback/rollback.'
+
+POST /admin/feedback/signal
+- Summary changed from 'Record feedback signal' to ''
+- Description changed from 'Submit a feedback signal with confidence and severity so it influences subsequent analysis.' to 'Feedback: POST /admin/feedback/signal.'
+
+GET /admin/feedback/state
+- Summary changed from 'Inspect feedback state' to ''
+- Description changed from 'Return the current feedback engine snapshot, including signals, suggestions, and configuration.' to 'Feedback: GET /admin/feedback/state.'
+
+GET /admin/feedback/suggestions
+- Summary changed from 'List feedback suggestions' to ''
+- Description changed from 'Return the current queue of actionable feedback suggestions with their metadata.' to 'Feedback: GET /admin/feedback/suggestions.'
+
+GET /admin/feedback/updates
+- Summary changed from 'Fetch feedback updates' to ''
+- Description changed from 'Retrieve feedback suggestions updated since a provided version cursor, enabling incremental refresh.' to 'Feedback: GET /admin/feedback/updates.'
+
+GET /admin/feedback/versions
+- Summary changed from 'List feedback snapshots' to ''
+- Description changed from 'Enumerate available feedback snapshots that can be inspected or rolled back to.' to 'Feedback: GET /admin/feedback/versions.'
+
+POST /admin/goldens/add
+- Summary changed from 'Add golden record' to ''
+- Description changed from 'Append a golden item to the specified project collection and persist the updated set.' to 'Experiments: POST /admin/goldens/add.'
+
+GET /admin/goldens/list
+- Summary changed from 'List golden records' to ''
+- Description changed from 'Return the golden dataset for the requested project, including individual test cases.' to 'Experiments: GET /admin/goldens/list.'
+
+POST /admin/goldens/run
+- Summary changed from 'Evaluate golden set' to ''
+- Description changed from 'Run the supplied golden dataset against the current chat runtime and report evaluation metrics.' to 'Experiments: POST /admin/goldens/run.'
+
+GET /admin/governor/hints
+- Summary changed from 'Inspect governor hints' to ''
+- Description changed from 'Return the currently effective governor hints that shape scheduling and retrieval behaviour.' to 'Introspect: GET /admin/governor/hints.'
+
+POST /admin/governor/hints
+- Summary changed from 'Update governor hints' to ''
+- Description changed from 'Apply new governor hints to adjust scheduling, retrieval, and context construction parameters.' to 'Introspect: POST /admin/governor/hints.'
+
+GET /admin/governor/profile
+- Summary changed from 'Get governor profile' to ''
+- Description changed from 'Return the active governor profile name configured for the node.' to 'Introspect: GET /admin/governor/profile.'
+
+POST /admin/governor/profile
+- Summary changed from 'Set governor profile' to ''
+- Description changed from 'Switch the governor to the requested profile and broadcast the change.' to 'Introspect: POST /admin/governor/profile.'
+
+POST /admin/hierarchy/accept
+- Summary changed from 'Accept hierarchy offer' to ''
+- Description changed from 'Accept a hierarchy offer message to finalize a connection with the given participant.' to 'Hierarchy: POST /admin/hierarchy/accept.'
+
+POST /admin/hierarchy/hello
+- Summary changed from 'Send hierarchy hello' to ''
+- Description changed from 'Emit the initial hello message in the hierarchy handshake with another participant.' to 'Hierarchy: POST /admin/hierarchy/hello.'
+
+POST /admin/hierarchy/offer
+- Summary changed from 'Offer hierarchy connection' to ''
+- Description changed from 'Publish a hierarchy offer to negotiate roles and capabilities with a peer.' to 'Hierarchy: POST /admin/hierarchy/offer.'
+
+POST /admin/hierarchy/role
+- Summary changed from 'Set hierarchy roles' to ''
+- Description changed from 'Update hierarchy role assignments for a participant and persist the change.' to 'Hierarchy: POST /admin/hierarchy/role.'
+
+GET /admin/hierarchy/state
+- Summary changed from 'Inspect hierarchy state' to ''
+- Description changed from 'Return the current hierarchy session map, including offers, participants, and active roles.' to 'Hierarchy: GET /admin/hierarchy/state.'
+
+GET /admin/memory
+- Summary changed from 'List recent memory records' to 'List recent memory items (admin helper).'
+- Description changed from 'Return the latest memory items for inspection; supports lane and limit filters for debugging.' to 'List recent memory items (admin helper).'
+
+POST /admin/memory/apply
+- Summary changed from 'Upsert memory record' to 'Insert a memory item (admin helper).'
+- Description changed from 'Insert or update a memory item via the admin helper and emit the associated memory events for auditing.' to 'Insert a memory item (admin helper).'
+
+GET /admin/memory/quarantine
+- Summary changed from 'List quarantined memories' to ''
+- Description changed from 'Return entries awaiting review in the memory quarantine queue.' to 'Review: GET /admin/memory/quarantine.'
+
+POST /admin/memory/quarantine
+- Summary changed from 'Queue memory for review' to ''
+- Description changed from 'Enqueue a memory item for quarantine review and emit the appropriate audit event.' to 'Review: POST /admin/memory/quarantine.'
+
+POST /admin/memory/quarantine/admit
+- Summary changed from 'Admit quarantined memory' to ''
+- Description changed from 'Remove a memory from quarantine, optionally admitting or rejecting it, and report the outcome.' to 'Review: POST /admin/memory/quarantine/admit.'
+
+GET /admin/models
+- Summary changed from 'List models' to ''
+- Description changed from 'Return the configured model entries including provider metadata.' to 'Models: GET /admin/models.'
+
+POST /admin/models/add
+- Summary changed from 'Add model entry' to ''
+- Description changed from 'Register a model entry with optional provider, path, and status metadata.' to 'Models: POST /admin/models/add.'
+
+GET /admin/models/by-hash/{sha256}
+- Summary changed from 'Download model blob' to ''
+- Description changed from 'Stream a CAS-stored model blob by SHA-256 with caching headers and partial range support.' to 'Models: GET /admin/models/by-hash/{sha256}.'
+
+POST /admin/models/cas_gc
+- Summary changed from 'Run CAS garbage collection' to ''
+- Description changed from 'Execute a content-addressed store cleanup pass and report removed blobs.' to 'Models: POST /admin/models/cas_gc.'
+
+GET /admin/models/concurrency
+- Summary changed from 'Inspect model concurrency' to ''
+- Description changed from 'Return the current model concurrency settings and snapshot telemetry.' to 'Models: GET /admin/models/concurrency.'
+
+POST /admin/models/concurrency
+- Summary changed from 'Update model concurrency' to ''
+- Description changed from 'Apply new concurrency limits or blocking behaviour for model execution.' to 'Models: POST /admin/models/concurrency.'
+
+GET /admin/models/default
+- Summary changed from 'Get default model' to ''
+- Description changed from 'Return the identifier of the default model selection.' to 'Models: GET /admin/models/default.'
+
+POST /admin/models/default
+- Summary changed from 'Set default model' to ''
+- Description changed from 'Select the default model to be used for future requests.' to 'Models: POST /admin/models/default.'
+
+POST /admin/models/download
+- Summary changed from 'Start model download' to ''
+- Description changed from 'Request download or import of a model artifact and enqueue the job if supported.' to 'Models: POST /admin/models/download.'
+
+POST /admin/models/download/cancel
+- Summary changed from 'Cancel model download' to ''
+- Description changed from 'Cancel an in-flight model download job when the backend supports it.' to 'Models: POST /admin/models/download/cancel.'
+
+GET /admin/models/jobs
+- Summary changed from 'Inspect model jobs' to ''
+- Description changed from 'Return the current queue of model download and load jobs with their statuses.' to 'Models: GET /admin/models/jobs.'
+
+POST /admin/models/load
+- Summary changed from 'Load model manifest' to ''
+- Description changed from 'Load model entries from the persisted manifest on disk.' to 'Models: POST /admin/models/load.'
+
+POST /admin/models/refresh
+- Summary changed from 'Refresh models list' to ''
+- Description changed from 'Refresh the live model list from runtime state and return the updated entries.' to 'Models: POST /admin/models/refresh.'
+
+POST /admin/models/remove
+- Summary changed from 'Remove model entry' to ''
+- Description changed from 'Remove a model entry by identifier and report whether it existed.' to 'Models: POST /admin/models/remove.'
+
+POST /admin/models/save
+- Summary changed from 'Save model manifest' to ''
+- Description changed from 'Persist the current model registry to the on-disk manifest.' to 'Models: POST /admin/models/save.'
+
+GET /admin/models/summary
+- Summary changed from 'Summarize model catalog' to ''
+- Description changed from 'Return aggregate statistics about installed models, storage usage, and capabilities.' to 'Models: GET /admin/models/summary.'
+
+GET /admin/probe
+- Summary changed from 'Inspect effective paths' to 'Effective path probe (successor to `/admin/probe`).'
+- Description changed from 'Return the resolved state, cache, and config directories plus runtime metadata so operators can confirm filesystem layout.' to 'Effective path probe (successor to `/admin/probe`).'
+
+GET /admin/probe/hw
+- Summary changed from 'Probe runtime hardware' to 'Hardware/software probe (`/admin/probe/hw`).'
+- Description changed from 'Report detected hardware and OS capabilities—including CPU, GPU, and accelerators—to confirm what the node can access.' to 'Hardware/software probe (`/admin/probe/hw`).'
+
+GET /admin/probe/metrics
+- Summary changed from 'Probe metrics snapshot' to 'Metrics snapshot probe (`/admin/probe/metrics`).'
+- Description changed from 'Return the current metrics summary (Prometheus-style counters and histograms) for quick diagnostics.' to 'Metrics snapshot probe (`/admin/probe/metrics`).'
+
+POST /admin/self_model/apply
+- Summary changed from 'Apply self-model proposal' to ''
+- Description changed from 'Apply a previously proposed self-model change and notify subscribers.' to 'SelfModel: POST /admin/self_model/apply.'
+
+POST /admin/self_model/propose
+- Summary changed from 'Propose self-model update' to ''
+- Description changed from 'Submit a self-model patch proposal for an agent and emit the proposal event.' to 'SelfModel: POST /admin/self_model/propose.'
+
+GET /admin/tools
+- Summary changed from 'List registered tools' to ''
+- Description changed from 'Return the catalog of available tools with stability and capability metadata.' to 'Tools: GET /admin/tools.'
+
+GET /admin/tools/cache_stats
+- Summary changed from 'Inspect tool cache statistics' to ''
+- Description changed from 'Return cache utilisation metrics for the shared tool cache.' to 'Tools: GET /admin/tools/cache_stats.'
+
+POST /admin/tools/run
+- Summary changed from 'Run tool' to ''
+- Description changed from 'Execute a registered tool with the provided input payload and return its output.' to 'Tools: POST /admin/tools/run.'
+
+GET /admin/world_diffs
+- Summary changed from 'List world diffs' to ''
+- Description changed from 'Return the queue of pending world diffs awaiting review.' to 'Review: GET /admin/world_diffs.'
+
+POST /admin/world_diffs/decision
+- Summary changed from 'Record world diff decision' to ''
+- Description changed from 'Accept or reject a queued world diff and persist the decision outcome.' to 'Review: POST /admin/world_diffs/decision.'
+
+POST /admin/world_diffs/queue
+- Summary changed from 'Queue world diff' to ''
+- Description changed from 'Enqueue a world diff for review with the supplied metadata.' to 'Review: POST /admin/world_diffs/queue.'
+
+GET /events
+- Summary changed from 'Stream event feed' to 'Server‑Sent Events stream of envelopes.'
+- Description changed from 'Open the Server-Sent Events stream of normalized envelopes; supports prefix filtering and Last-Event-ID replay.' to 'Server‑Sent Events stream of envelopes; supports replay and prefix filters.'
+
+GET /healthz
+- Summary changed from 'Readiness probe' to 'Health probe.'
+- Description changed from 'Return a simple readiness payload (`{"ok": true}`) suitable for health checks and load balancers.' to 'Service readiness probe.'
+
+GET /metrics
+- Summary changed from 'Export Prometheus metrics' to ''
+- Description changed from 'Serve Prometheus-formatted metrics for the unified server, including tool cache counters.' to 'Public: GET /metrics.'
+
+GET /orchestrator/mini_agents
+- Summary changed from 'List mini-agent templates' to 'List available mini-agents (placeholder).'
+- Description changed from 'Return placeholder metadata about available mini-agents while the orchestrator capability is incubating.' to 'List available mini-agents (placeholder).'
+
+POST /orchestrator/mini_agents/start_training
+- Summary changed from 'Start mini-agent training' to 'Start a training job that results in a suggested Logic Unit (admin).'
+- Description changed from 'Kick off a training job that will propose a Logic Unit configuration once complete; returns an async job handle when accepted.' to 'Start a training job that results in a suggested Logic Unit (admin).'
+
+POST /projects
+- Summary changed from 'Create project' to ''
+- Description changed from 'Create a new project directory, seed default notes, and emit the creation event.' to 'Projects: POST /projects.'
+
+PATCH /projects/{proj}/file
+- Summary changed from 'Patch project file' to ''
+- Description changed from 'Apply a JSON patch or diff patch to an existing project file while checking version guards.' to 'Projects: PATCH /projects/{proj}/file.'
+
+PUT /projects/{proj}/file
+- Summary changed from 'Write project file' to ''
+- Description changed from 'Create or replace a project file at the given path, enforcing optimistic concurrency and quotas.' to 'Projects: PUT /projects/{proj}/file.'
+
+POST /projects/{proj}/import
+- Summary changed from 'Import project asset' to ''
+- Description changed from 'Copy or move a file from the staging area into the project workspace and emit audit events.' to 'Projects: POST /projects/{proj}/import.'
+
+PUT /projects/{proj}/notes
+- Summary changed from 'Save project notes' to ''
+- Description changed from 'Replace the project notes document and return metadata for the updated file.' to 'Projects: PUT /projects/{proj}/notes.'
+
+POST /research_watcher/{id}/approve
+- Summary changed from 'Approve research watcher item' to ''
+- Description changed from 'Mark a research watcher entry as approved, optionally attaching an operator note.' to 'Research: POST /research_watcher/{id}/approve.'
+
+POST /research_watcher/{id}/archive
+- Summary changed from 'Archive research watcher item' to ''
+- Description changed from 'Archive a research watcher entry to remove it from the active queue while preserving audit history.' to 'Research: POST /research_watcher/{id}/archive.'
+
+GET /spec/health
+- Summary changed from 'Inspect spec artifacts' to 'Health summary for spec artifacts (presence/size).'
+- Description changed from 'Report presence, size, and checksum information for bundled OpenAPI, AsyncAPI, and schema artifacts.' to 'Health summary for spec artifacts (presence/size).'
+
+POST /staging/actions/{id}/approve
+- Summary changed from 'Approve staging action' to ''
+- Description changed from 'Approve a staged action so it can execute and emit the resulting workflow job.' to 'Staging: POST /staging/actions/{id}/approve.'
+
+POST /staging/actions/{id}/deny
+- Summary changed from 'Deny staging action' to ''
+- Description changed from 'Deny a staged action with an optional reason, preventing it from executing.' to 'Staging: POST /staging/actions/{id}/deny.'
+
+GET /state/actions
+- Summary changed from 'List recent actions' to 'Recent actions list.'
+- Description changed from 'Return the rolling window of actions emitted by the kernel, ordered from newest to oldest.' to 'Recent actions list (most recent first).'
+
+GET /state/beliefs
+- Summary changed from 'Inspect belief store' to 'Current beliefs snapshot derived from events.'
+- Description changed from 'Return the current belief entries derived from events so clients can reason over world facts.' to 'Current beliefs snapshot derived from events.'
+
+GET /state/cluster
+- Summary changed from 'Inspect cluster nodes' to 'Cluster nodes snapshot.'
+- Description changed from 'Return the snapshot of known cluster nodes, their roles, and health metadata.' to 'Cluster nodes snapshot (admin-only).'
+
+GET /state/experiments
+- Summary changed from 'List experiment events' to 'Experiment events snapshot (public read-model).'
+- Description changed from 'Expose the experiment read-model summarizing variants, assignments, and recent outcomes.' to 'Experiment events snapshot (public read-model).'
+
+GET /state/guardrails_metrics
+- Summary changed from 'Inspect guardrail metrics' to 'Guardrails circuit-breaker metrics snapshot.'
+- Description changed from 'Return guardrail circuit-breaker counters and latency measurements for monitoring automation health.' to 'Guardrails circuit-breaker metrics snapshot.'
+
+GET /state/intents
+- Summary changed from 'List recent intents' to 'Recent intents stream (rolling window).'
+- Description changed from 'Return the rolling window of intent events emitted by the kernel.' to 'Recent intents stream (rolling window).'
+
+GET /state/models
+- Summary changed from 'Inspect model catalog' to 'Model catalog read-model.'
+- Description changed from 'Return the derived model catalog with provider metadata, install status, and version details.' to 'Model catalog read-model.'
+
+GET /state/models_hashes
+- Summary changed from 'List installed model hashes' to ''
+- Description changed from 'Return a paginated view of installed model blobs with filters for provider, size, and hash.' to 'State: GET /state/models_hashes.'
+
+GET /state/models_metrics
+- Summary changed from 'Inspect model metrics' to ''
+- Description changed from 'Return model runtime metrics, including cache hits and latency data, for observability dashboards.' to 'Models metrics snapshot.'
+
+GET /state/observations
+- Summary changed from 'List recent observations' to 'Recent observations from the event bus.'
+- Description changed from 'Return the rolling window of observation events captured from the live event bus.' to 'Recent observations from the event bus.'
+
+GET /state/orchestrator/jobs
+- Summary changed from 'List orchestrator jobs' to 'Orchestrator jobs snapshot.'
+- Description changed from 'Return the current orchestrator job queue including statuses, runners, and progress metadata.' to 'Orchestrator jobs snapshot.'
+
+GET /state/projects
+- Summary changed from 'Snapshot project catalog' to ''
+- Description changed from 'Return the cached project snapshot with file tree, notes, and metadata for quick reads.' to 'Projects: GET /state/projects.'
+
+GET /state/projects/{proj}/file
+- Summary changed from 'Fetch project file snapshot' to ''
+- Description changed from 'Return the latest stored contents for a project file identified by project and relative path.' to 'Projects: GET /state/projects/{proj}/file.'
+
+GET /state/projects/{proj}/notes
+- Summary changed from 'Fetch project notes' to ''
+- Description changed from 'Return the current project notes document with metadata such as checksum and size.' to 'Projects: GET /state/projects/{proj}/notes.'
+
+GET /state/projects/{proj}/tree
+- Summary changed from 'Browse project tree' to ''
+- Description changed from 'Return a directory listing for a project path to help clients explore workspace structure.' to 'Projects: GET /state/projects/{proj}/tree.'
+
+GET /state/research_watcher
+- Summary changed from 'Inspect research watcher' to 'Research watcher queue snapshot.'
+- Description changed from 'Return the research watcher queue snapshot with pending items, statuses, and telemetry.' to 'Research watcher queue snapshot.'
+
+GET /state/route_stats
+- Summary changed from 'Inspect route metrics' to 'Bus and per-route counters snapshot.'
+- Description changed from 'Return per-route counters, durations, and cache statistics aggregated by the server.' to 'Bus and per-route counters snapshot.'
+
+GET /state/runtime_matrix
+- Summary changed from 'Inspect runtime matrix' to 'Runtime matrix snapshot.'
+- Description changed from 'Return the runtime matrix covering available runtimes, capabilities, and health signals.' to 'Runtime matrix snapshot.'
+
+GET /state/staging/actions
+- Summary changed from 'Inspect staging actions' to 'Staging queue snapshot.'
+- Description changed from 'Return staged actions awaiting review or execution in the staging queue.' to 'Staging queue snapshot.'
+
+GET /state/tasks
+- Summary changed from 'Inspect background tasks' to 'Background tasks status snapshot.'
+- Description changed from 'Return the background task registry with progress, retry counts, and assigned workers.' to 'Background tasks status snapshot.'
+
+GET /state/training/telemetry
+- Summary changed from 'Inspect training telemetry' to 'Training telemetry snapshot.'
+- Description changed from 'Return aggregated Training Park telemetry, including success ratios, recall, and coverage metrics.' to 'Training telemetry snapshot.'
+
+GET /state/world
+- Summary changed from 'Inspect world model' to 'Project world model snapshot (belief graph view).'
+- Description changed from 'Return the active world graph snapshot with claims, provenance metadata, and belief relationships.' to 'Project world model snapshot (belief graph view).'
+
+GET /state/world/select
+- Summary changed from 'Select world claims' to 'Select top-k claims for a query.'
+- Description changed from 'Evaluate a query against the world graph and return the top-k claims that match the provided filters.' to 'Select top-k claims for a query.'
 
 ## AsyncAPI (Events)
 
 ```diff
 --- asyncapi.base.yaml
 +++ asyncapi.head.yaml
-@@ -3,14 +3,22 @@
-   title: "arw-server events"
-   version: "0.1.4"
-   description: "Normalized dot.case event channels for the unified server."
-+  contact:
-+    name: "ARW Project"
-+    url: "https://github.com/t3hw00t/ARW"
-+    email: "opensource@example.com"
-   license:
-     name: "MIT OR Apache-2.0"
-+tags:
-+  - name: "Events"
-+    description: "Event channels emitted by the unified server."
- defaultContentType: application/json
- channels:
-   'actions.applied':
-     subscribe:
-       operationId: actions_applied_event
-       summary: "actions.applied event"
-+      description: "Event published on 'actions.applied' channel."
-       message:
-         name: 'actions.applied'
+@@ -94,6 +94,86 @@
          payload:
-@@ -20,6 +28,7 @@
-     subscribe:
-       operationId: actions_completed_event
-       summary: "actions.completed event"
-+      description: "Event published on 'actions.completed' channel."
-       message:
-         name: 'actions.completed'
-         payload:
-@@ -29,6 +38,7 @@
-     subscribe:
-       operationId: actions_failed_event
-       summary: "actions.failed event"
-+      description: "Event published on 'actions.failed' channel."
-       message:
-         name: 'actions.failed'
-         payload:
-@@ -38,6 +48,7 @@
-     subscribe:
-       operationId: actions_hint_applied_event
-       summary: "actions.hint.applied event"
-+      description: "Event published on 'actions.hint.applied' channel."
-       message:
-         name: 'actions.hint.applied'
-         payload:
-@@ -47,6 +58,7 @@
-     subscribe:
-       operationId: actions_running_event
-       summary: "actions.running event"
-+      description: "Event published on 'actions.running' channel."
-       message:
-         name: 'actions.running'
-         payload:
-@@ -56,6 +68,7 @@
-     subscribe:
-       operationId: actions_submitted_event
-       summary: "actions.submitted event"
-+      description: "Event published on 'actions.submitted' channel."
-       message:
-         name: 'actions.submitted'
-         payload:
-@@ -65,6 +78,7 @@
-     subscribe:
-       operationId: actions_updated_event
-       summary: "actions.updated event"
-+      description: "Event published on 'actions.updated' channel."
-       message:
-         name: 'actions.updated'
-         payload:
-@@ -74,6 +88,7 @@
-     subscribe:
-       operationId: apps_vscode_opened_event
-       summary: "apps.vscode.opened event"
-+      description: "Event published on 'apps.vscode.opened' channel."
-       message:
-         name: 'apps.vscode.opened'
-         payload:
-@@ -83,6 +98,7 @@
+           type: object
+           additionalProperties: true
++  'autonomy.alert':
++    subscribe:
++      operationId: autonomy_alert_event
++      summary: "autonomy.alert event"
++      description: "Event published on 'autonomy.alert' channel."
++      message:
++        name: 'autonomy.alert'
++        payload:
++          type: object
++          additionalProperties: true
++  'autonomy.budget.close_to_limit':
++    subscribe:
++      operationId: autonomy_budget_close_to_limit_event
++      summary: "autonomy.budget.close_to_limit event"
++      description: "Event published on 'autonomy.budget.close_to_limit' channel."
++      message:
++        name: 'autonomy.budget.close_to_limit'
++        payload:
++          type: object
++          additionalProperties: true
++  'autonomy.budget.exhausted':
++    subscribe:
++      operationId: autonomy_budget_exhausted_event
++      summary: "autonomy.budget.exhausted event"
++      description: "Event published on 'autonomy.budget.exhausted' channel."
++      message:
++        name: 'autonomy.budget.exhausted'
++        payload:
++          type: object
++          additionalProperties: true
++  'autonomy.interrupt':
++    subscribe:
++      operationId: autonomy_interrupt_event
++      summary: "autonomy.interrupt event"
++      description: "Event published on 'autonomy.interrupt' channel."
++      message:
++        name: 'autonomy.interrupt'
++        payload:
++          type: object
++          additionalProperties: true
++  'autonomy.run.paused':
++    subscribe:
++      operationId: autonomy_run_paused_event
++      summary: "autonomy.run.paused event"
++      description: "Event published on 'autonomy.run.paused' channel."
++      message:
++        name: 'autonomy.run.paused'
++        payload:
++          type: object
++          additionalProperties: true
++  'autonomy.run.resumed':
++    subscribe:
++      operationId: autonomy_run_resumed_event
++      summary: "autonomy.run.resumed event"
++      description: "Event published on 'autonomy.run.resumed' channel."
++      message:
++        name: 'autonomy.run.resumed'
++        payload:
++          type: object
++          additionalProperties: true
++  'autonomy.run.started':
++    subscribe:
++      operationId: autonomy_run_started_event
++      summary: "autonomy.run.started event"
++      description: "Event published on 'autonomy.run.started' channel."
++      message:
++        name: 'autonomy.run.started'
++        payload:
++          type: object
++          additionalProperties: true
++  'autonomy.run.stopped':
++    subscribe:
++      operationId: autonomy_run_stopped_event
++      summary: "autonomy.run.stopped event"
++      description: "Event published on 'autonomy.run.stopped' channel."
++      message:
++        name: 'autonomy.run.stopped'
++        payload:
++          type: object
++          additionalProperties: true
+   'beliefs.updated':
      subscribe:
        operationId: beliefs_updated_event
-       summary: "beliefs.updated event"
-+      description: "Event published on 'beliefs.updated' channel."
+@@ -630,7 +710,10 @@
+       summary: "models.download.progress event"
+       description: "Event published on 'models.download.progress' channel."
        message:
-         name: 'beliefs.updated'
-         payload:
-@@ -92,6 +108,7 @@
-     subscribe:
-       operationId: catalog_updated_event
-       summary: "catalog.updated event"
-+      description: "Event published on 'catalog.updated' channel."
-       message:
-         name: 'catalog.updated'
-         payload:
-@@ -101,6 +118,7 @@
-     subscribe:
-       operationId: chat_message_event
-       summary: "chat.message event"
-+      description: "Event published on 'chat.message' channel."
-       message:
-         name: 'chat.message'
-         payload:
-@@ -110,6 +128,7 @@
-     subscribe:
-       operationId: chat_planner_event
-       summary: "chat.planner event"
-+      description: "Event published on 'chat.planner' channel."
-       message:
-         name: 'chat.planner'
-         payload:
-@@ -119,6 +138,7 @@
-     subscribe:
-       operationId: chat_probe_event
-       summary: "chat.probe event"
-+      description: "Event published on 'chat.probe' channel."
-       message:
-         name: 'chat.probe'
-         payload:
-@@ -128,6 +148,7 @@
-     subscribe:
-       operationId: cluster_node_advertise_event
-       summary: "cluster.node.advertise event"
-+      description: "Event published on 'cluster.node.advertise' channel."
-       message:
-         name: 'cluster.node.advertise'
-         payload:
-@@ -137,6 +158,7 @@
-     subscribe:
-       operationId: cluster_node_changed_event
-       summary: "cluster.node.changed event"
-+      description: "Event published on 'cluster.node.changed' channel."
-       message:
-         name: 'cluster.node.changed'
-         payload:
-@@ -146,6 +168,7 @@
-     subscribe:
-       operationId: config_patch_applied_event
-       summary: "config.patch.applied event"
-+      description: "Event published on 'config.patch.applied' channel."
-       message:
-         name: 'config.patch.applied'
-         payload:
-@@ -155,6 +178,7 @@
-     subscribe:
-       operationId: connectors_registered_event
-       summary: "connectors.registered event"
-+      description: "Event published on 'connectors.registered' channel."
-       message:
-         name: 'connectors.registered'
-         payload:
-@@ -164,6 +188,7 @@
-     subscribe:
-       operationId: connectors_token_updated_event
-       summary: "connectors.token.updated event"
-+      description: "Event published on 'connectors.token.updated' channel."
-       message:
-         name: 'connectors.token.updated'
-         payload:
-@@ -173,6 +198,7 @@
-     subscribe:
-       operationId: context_assembled_event
-       summary: "context.assembled event"
-+      description: "Event published on 'context.assembled' channel."
-       message:
-         name: 'context.assembled'
-         payload:
-@@ -182,15 +208,27 @@
-     subscribe:
-       operationId: context_coverage_event
-       summary: "context.coverage event"
-+      description: "Event published on 'context.coverage' channel."
-       message:
-         name: 'context.coverage'
-         payload:
-           type: object
-           additionalProperties: true
-+  'context.recall.risk':
-+    subscribe:
-+      operationId: context_recall_risk_event
-+      summary: "context.recall.risk event"
-+      description: "Event published on 'context.recall.risk' channel."
-+      message:
-+        name: 'context.recall.risk'
+-        $ref: '#/components/messages/models.download.progress'
++        name: 'models.download.progress'
 +        payload:
 +          type: object
 +          additionalProperties: true
-   'distill.completed':
-     subscribe:
-       operationId: distill_completed_event
-       summary: "distill.completed event"
-+      description: "Event published on 'distill.completed' channel."
-       message:
-         name: 'distill.completed'
-         payload:
-@@ -200,6 +238,7 @@
-     subscribe:
-       operationId: egress_ledger_appended_event
-       summary: "egress.ledger.appended event"
-+      description: "Event published on 'egress.ledger.appended' channel."
-       message:
-         name: 'egress.ledger.appended'
-         payload:
-@@ -209,6 +248,7 @@
-     subscribe:
-       operationId: egress_preview_event
-       summary: "egress.preview event"
-+      description: "Event published on 'egress.preview' channel."
-       message:
-         name: 'egress.preview'
-         payload:
-@@ -218,6 +258,7 @@
-     subscribe:
-       operationId: egress_settings_updated_event
-       summary: "egress.settings.updated event"
-+      description: "Event published on 'egress.settings.updated' channel."
-       message:
-         name: 'egress.settings.updated'
-         payload:
-@@ -227,6 +268,7 @@
-     subscribe:
-       operationId: experiment_activated_event
-       summary: "experiment.activated event"
-+      description: "Event published on 'experiment.activated' channel."
-       message:
-         name: 'experiment.activated'
-         payload:
-@@ -236,6 +278,7 @@
-     subscribe:
-       operationId: experiment_completed_event
-       summary: "experiment.completed event"
-+      description: "Event published on 'experiment.completed' channel."
-       message:
-         name: 'experiment.completed'
-         payload:
-@@ -245,6 +288,7 @@
-     subscribe:
-       operationId: experiment_result_event
-       summary: "experiment.result event"
-+      description: "Event published on 'experiment.result' channel."
-       message:
-         name: 'experiment.result'
-         payload:
-@@ -254,6 +298,7 @@
-     subscribe:
-       operationId: experiment_started_event
-       summary: "experiment.started event"
-+      description: "Event published on 'experiment.started' channel."
-       message:
-         name: 'experiment.started'
-         payload:
-@@ -263,6 +308,7 @@
-     subscribe:
-       operationId: experiment_variant_chosen_event
-       summary: "experiment.variant.chosen event"
-+      description: "Event published on 'experiment.variant.chosen' channel."
-       message:
-         name: 'experiment.variant.chosen'
-         payload:
-@@ -272,6 +318,7 @@
-     subscribe:
-       operationId: experiment_winner_event
-       summary: "experiment.winner event"
-+      description: "Event published on 'experiment.winner' channel."
-       message:
-         name: 'experiment.winner'
-         payload:
-@@ -281,6 +328,7 @@
-     subscribe:
-       operationId: feedback_applied_event
-       summary: "feedback.applied event"
-+      description: "Event published on 'feedback.applied' channel."
-       message:
-         name: 'feedback.applied'
-         payload:
-@@ -290,6 +338,7 @@
-     subscribe:
-       operationId: feedback_signal_event
-       summary: "feedback.signal event"
-+      description: "Event published on 'feedback.signal' channel."
-       message:
-         name: 'feedback.signal'
-         payload:
-@@ -299,6 +348,7 @@
-     subscribe:
-       operationId: feedback_suggested_event
-       summary: "feedback.suggested event"
-+      description: "Event published on 'feedback.suggested' channel."
-       message:
-         name: 'feedback.suggested'
-         payload:
-@@ -308,6 +358,7 @@
-     subscribe:
-       operationId: feedback_updated_event
-       summary: "feedback.updated event"
-+      description: "Event published on 'feedback.updated' channel."
-       message:
-         name: 'feedback.updated'
-         payload:
-@@ -317,6 +368,7 @@
-     subscribe:
-       operationId: goldens_evaluated_event
-       summary: "goldens.evaluated event"
-+      description: "Event published on 'goldens.evaluated' channel."
-       message:
-         name: 'goldens.evaluated'
-         payload:
-@@ -326,6 +378,7 @@
-     subscribe:
-       operationId: governor_changed_event
-       summary: "governor.changed event"
-+      description: "Event published on 'governor.changed' channel."
-       message:
-         name: 'governor.changed'
-         payload:
-@@ -335,6 +388,7 @@
-     subscribe:
-       operationId: hierarchy_accepted_event
-       summary: "hierarchy.accepted event"
-+      description: "Event published on 'hierarchy.accepted' channel."
-       message:
-         name: 'hierarchy.accepted'
-         payload:
-@@ -344,6 +398,7 @@
-     subscribe:
-       operationId: hierarchy_hello_event
-       summary: "hierarchy.hello event"
-+      description: "Event published on 'hierarchy.hello' channel."
-       message:
-         name: 'hierarchy.hello'
-         payload:
-@@ -353,6 +408,7 @@
-     subscribe:
-       operationId: hierarchy_offer_event
-       summary: "hierarchy.offer event"
-+      description: "Event published on 'hierarchy.offer' channel."
-       message:
-         name: 'hierarchy.offer'
-         payload:
-@@ -362,6 +418,7 @@
-     subscribe:
-       operationId: hierarchy_role_changed_event
-       summary: "hierarchy.role.changed event"
-+      description: "Event published on 'hierarchy.role.changed' channel."
-       message:
-         name: 'hierarchy.role.changed'
-         payload:
-@@ -371,6 +428,7 @@
-     subscribe:
-       operationId: hierarchy_state_event
-       summary: "hierarchy.state event"
-+      description: "Event published on 'hierarchy.state' channel."
-       message:
-         name: 'hierarchy.state'
-         payload:
-@@ -380,6 +438,7 @@
-     subscribe:
-       operationId: intents_approved_event
-       summary: "intents.approved event"
-+      description: "Event published on 'intents.approved' channel."
-       message:
-         name: 'intents.approved'
-         payload:
-@@ -389,6 +448,7 @@
-     subscribe:
-       operationId: intents_proposed_event
-       summary: "intents.proposed event"
-+      description: "Event published on 'intents.proposed' channel."
-       message:
-         name: 'intents.proposed'
-         payload:
-@@ -398,6 +458,7 @@
-     subscribe:
-       operationId: intents_rejected_event
-       summary: "intents.rejected event"
-+      description: "Event published on 'intents.rejected' channel."
-       message:
-         name: 'intents.rejected'
-         payload:
-@@ -407,6 +468,7 @@
-     subscribe:
-       operationId: leases_created_event
-       summary: "leases.created event"
-+      description: "Event published on 'leases.created' channel."
-       message:
-         name: 'leases.created'
-         payload:
-@@ -416,6 +478,7 @@
-     subscribe:
-       operationId: logic_unit_applied_event
-       summary: "logic.unit.applied event"
-+      description: "Event published on 'logic.unit.applied' channel."
-       message:
-         name: 'logic.unit.applied'
-         payload:
-@@ -425,6 +488,7 @@
-     subscribe:
-       operationId: logic_unit_installed_event
-       summary: "logic.unit.installed event"
-+      description: "Event published on 'logic.unit.installed' channel."
-       message:
-         name: 'logic.unit.installed'
-         payload:
-@@ -434,6 +498,7 @@
-     subscribe:
-       operationId: logic_unit_reverted_event
-       summary: "logic.unit.reverted event"
-+      description: "Event published on 'logic.unit.reverted' channel."
-       message:
-         name: 'logic.unit.reverted'
-         payload:
-@@ -443,6 +508,7 @@
-     subscribe:
-       operationId: logic_unit_suggested_event
-       summary: "logic.unit.suggested event"
-+      description: "Event published on 'logic.unit.suggested' channel."
-       message:
-         name: 'logic.unit.suggested'
-         payload:
-@@ -452,6 +518,7 @@
-     subscribe:
-       operationId: memory_admitted_event
-       summary: "memory.admitted event"
-+      description: "Event published on 'memory.admitted' channel."
-       message:
-         name: 'memory.admitted'
-         payload:
-@@ -460,63 +527,18 @@
-   'memory.applied':
-     subscribe:
-       operationId: memory_applied_event
--      summary: "memory.applied event (id, lane, key, tags[], hash, value, ptr, value_preview, value_bytes, source)"
-+      summary: "memory.applied event"
-+      description: "Event published on 'memory.applied' channel."
-       message:
-         name: 'memory.applied'
-         payload:
-           type: object
-           additionalProperties: true
--          properties:
--            id:
--              type: string
--            lane:
--              type: string
--            kind:
--              type: string
--              nullable: true
--            key:
--              type: string
--              nullable: true
--            tags:
--              type: array
--              items:
--                type: string
--            hash:
--              type: string
--            score:
--              type: number
--              nullable: true
--            prob:
--              type: number
--              nullable: true
--            value:
--              description: Full memory payload (arbitrary JSON value)
--            value_preview:
--              type: string
--              description: Human-friendly snippet for dashboards
--            value_preview_truncated:
--              type: boolean
--            value_bytes:
--              type: integer
--              format: int64
--            ptr:
--              type: object
--              additionalProperties: true
--            source:
--              type: string
--            updated:
--              type: string
--              format: date-time
--            applied_at:
--              type: string
--              format: date-time
--          required:
--            - id
--            - lane
-   'memory.item.expired':
-     subscribe:
-       operationId: memory_item_expired_event
-       summary: "memory.item.expired event"
-+      description: "Event published on 'memory.item.expired' channel."
-       message:
-         name: 'memory.item.expired'
-         payload:
-@@ -526,6 +548,7 @@
-     subscribe:
-       operationId: memory_item_upserted_event
-       summary: "memory.item.upserted event"
-+      description: "Event published on 'memory.item.upserted' channel."
-       message:
-         name: 'memory.item.upserted'
-         payload:
-@@ -535,6 +558,7 @@
-     subscribe:
-       operationId: memory_link_put_event
-       summary: "memory.link.put event"
-+      description: "Event published on 'memory.link.put' channel."
-       message:
-         name: 'memory.link.put'
-         payload:
-@@ -544,6 +568,7 @@
-     subscribe:
-       operationId: memory_pack_journaled_event
-       summary: "memory.pack.journaled event"
-+      description: "Event published on 'memory.pack.journaled' channel."
-       message:
-         name: 'memory.pack.journaled'
-         payload:
-@@ -553,6 +578,7 @@
-     subscribe:
-       operationId: memory_quarantined_event
-       summary: "memory.quarantined event"
-+      description: "Event published on 'memory.quarantined' channel."
-       message:
-         name: 'memory.quarantined'
-         payload:
-@@ -562,6 +588,7 @@
-     subscribe:
-       operationId: memory_record_put_event
-       summary: "memory.record.put event"
-+      description: "Event published on 'memory.record.put' channel."
-       message:
-         name: 'memory.record.put'
-         payload:
-@@ -571,6 +598,7 @@
-     subscribe:
-       operationId: models_cas_gc_event
-       summary: "models.cas.gc event"
-+      description: "Event published on 'models.cas.gc' channel."
-       message:
-         name: 'models.cas.gc'
-         payload:
-@@ -580,6 +608,7 @@
-     subscribe:
-       operationId: models_changed_event
-       summary: "models.changed event"
-+      description: "Event published on 'models.changed' channel."
-       message:
-         name: 'models.changed'
-         payload:
-@@ -589,6 +618,7 @@
-     subscribe:
-       operationId: models_concurrency_changed_event
-       summary: "models.concurrency.changed event"
-+      description: "Event published on 'models.concurrency.changed' channel."
-       message:
-         name: 'models.concurrency.changed'
-         payload:
-@@ -598,6 +628,7 @@
-     subscribe:
-       operationId: models_download_progress_event
-       summary: "models.download.progress event"
-+      description: "Event published on 'models.download.progress' channel."
-       message:
-         name: 'models.download.progress'
-         payload:
-@@ -607,6 +638,7 @@
+   'models.manifest.written':
      subscribe:
        operationId: models_manifest_written_event
-       summary: "models.manifest.written event"
-+      description: "Event published on 'models.manifest.written' channel."
-       message:
-         name: 'models.manifest.written'
-         payload:
-@@ -616,6 +648,7 @@
-     subscribe:
-       operationId: models_refreshed_event
-       summary: "models.refreshed event"
-+      description: "Event published on 'models.refreshed' channel."
-       message:
-         name: 'models.refreshed'
-         payload:
-@@ -625,6 +658,7 @@
-     subscribe:
-       operationId: orchestrator_job_completed_event
-       summary: "orchestrator.job.completed event"
-+      description: "Event published on 'orchestrator.job.completed' channel."
-       message:
-         name: 'orchestrator.job.completed'
-         payload:
-@@ -634,6 +668,7 @@
-     subscribe:
-       operationId: orchestrator_job_created_event
-       summary: "orchestrator.job.created event"
-+      description: "Event published on 'orchestrator.job.created' channel."
-       message:
-         name: 'orchestrator.job.created'
-         payload:
-@@ -643,6 +678,7 @@
-     subscribe:
-       operationId: orchestrator_job_progress_event
-       summary: "orchestrator.job.progress event"
-+      description: "Event published on 'orchestrator.job.progress' channel."
-       message:
-         name: 'orchestrator.job.progress'
-         payload:
-@@ -652,6 +688,7 @@
-     subscribe:
-       operationId: policy_capsule_applied_event
-       summary: "policy.capsule.applied event"
-+      description: "Event published on 'policy.capsule.applied' channel."
-       message:
-         name: 'policy.capsule.applied'
-         payload:
-@@ -661,6 +698,7 @@
-     subscribe:
-       operationId: policy_capsule_expired_event
-       summary: "policy.capsule.expired event"
-+      description: "Event published on 'policy.capsule.expired' channel."
-       message:
-         name: 'policy.capsule.expired'
-         payload:
-@@ -670,6 +708,7 @@
-     subscribe:
-       operationId: policy_capsule_failed_event
-       summary: "policy.capsule.failed event"
-+      description: "Event published on 'policy.capsule.failed' channel."
-       message:
-         name: 'policy.capsule.failed'
-         payload:
-@@ -679,6 +718,7 @@
-     subscribe:
-       operationId: policy_decision_event
-       summary: "policy.decision event"
-+      description: "Event published on 'policy.decision' channel."
-       message:
-         name: 'policy.decision'
-         payload:
-@@ -688,6 +728,7 @@
-     subscribe:
-       operationId: policy_reloaded_event
-       summary: "policy.reloaded event"
-+      description: "Event published on 'policy.reloaded' channel."
-       message:
-         name: 'policy.reloaded'
-         payload:
-@@ -697,6 +738,7 @@
-     subscribe:
-       operationId: probe_hw_event
-       summary: "probe.hw event"
-+      description: "Event published on 'probe.hw' channel."
-       message:
-         name: 'probe.hw'
-         payload:
-@@ -706,6 +748,7 @@
-     subscribe:
-       operationId: probe_metrics_event
-       summary: "probe.metrics event"
-+      description: "Event published on 'probe.metrics' channel."
-       message:
-         name: 'probe.metrics'
-         payload:
-@@ -715,6 +758,7 @@
-     subscribe:
-       operationId: projects_created_event
-       summary: "projects.created event"
-+      description: "Event published on 'projects.created' channel."
-       message:
-         name: 'projects.created'
-         payload:
-@@ -724,6 +768,7 @@
-     subscribe:
-       operationId: projects_file_written_event
-       summary: "projects.file.written event"
-+      description: "Event published on 'projects.file.written' channel."
-       message:
-         name: 'projects.file.written'
-         payload:
-@@ -733,6 +778,7 @@
-     subscribe:
-       operationId: projects_notes_saved_event
-       summary: "projects.notes.saved event"
-+      description: "Event published on 'projects.notes.saved' channel."
-       message:
-         name: 'projects.notes.saved'
-         payload:
-@@ -742,6 +788,7 @@
-     subscribe:
-       operationId: research_watcher_updated_event
-       summary: "research.watcher.updated event"
-+      description: "Event published on 'research.watcher.updated' channel."
-       message:
-         name: 'research.watcher.updated'
-         payload:
-@@ -751,15 +798,67 @@
-     subscribe:
-       operationId: rpu_trust_changed_event
-       summary: "rpu.trust.changed event"
-+      description: "Event published on 'rpu.trust.changed' channel."
-       message:
-         name: 'rpu.trust.changed'
+@@ -861,6 +944,16 @@
          payload:
            type: object
            additionalProperties: true
-+  'runtime.claim.acquired':
++  'screenshots.ocr.completed':
 +    subscribe:
-+      operationId: runtime_claim_acquired_event
-+      summary: "runtime.claim.acquired event"
-+      description: "Event published on 'runtime.claim.acquired' channel."
++      operationId: screenshots_ocr_completed_event
++      summary: "screenshots.ocr.completed event"
++      description: "Event published on 'screenshots.ocr.completed' channel."
 +      message:
-+        name: 'runtime.claim.acquired'
++        name: 'screenshots.ocr.completed'
 +        payload:
 +          type: object
 +          additionalProperties: true
-+  'runtime.claim.released':
-+    subscribe:
-+      operationId: runtime_claim_released_event
-+      summary: "runtime.claim.released event"
-+      description: "Event published on 'runtime.claim.released' channel."
-+      message:
-+        name: 'runtime.claim.released'
-+        payload:
-+          type: object
-+          additionalProperties: true
-+  'runtime.claim.request':
-+    subscribe:
-+      operationId: runtime_claim_request_event
-+      summary: "runtime.claim.request event"
-+      description: "Event published on 'runtime.claim.request' channel."
-+      message:
-+        name: 'runtime.claim.request'
-+        payload:
-+          type: object
-+          additionalProperties: true
-+  'runtime.health':
-+    subscribe:
-+      operationId: runtime_health_event
-+      summary: "runtime.health event"
-+      description: "Event published on 'runtime.health' channel."
-+      message:
-+        name: 'runtime.health'
-+        payload:
-+          type: object
-+          additionalProperties: true
-+  'runtime.state.changed':
-+    subscribe:
-+      operationId: runtime_state_changed_event
-+      summary: "runtime.state.changed event"
-+      description: "Event published on 'runtime.state.changed' channel."
-+      message:
-+        name: 'runtime.state.changed'
-+        payload:
-+          type: object
-+          additionalProperties: true
-   'screenshots.captured':
-     subscribe:
-       operationId: screenshots_captured_event
-       summary: "screenshots.captured event"
-+      description: "Event published on 'screenshots.captured' channel."
-       message:
-         name: 'screenshots.captured'
-         payload:
-@@ -769,6 +868,7 @@
+   'self.model.proposed':
      subscribe:
        operationId: self_model_proposed_event
-       summary: "self.model.proposed event"
-+      description: "Event published on 'self.model.proposed' channel."
-       message:
-         name: 'self.model.proposed'
+@@ -1141,125 +1234,3 @@
          payload:
-@@ -778,6 +878,7 @@
-     subscribe:
-       operationId: self_model_updated_event
-       summary: "self.model.updated event"
-+      description: "Event published on 'self.model.updated' channel."
-       message:
-         name: 'self.model.updated'
-         payload:
-@@ -787,6 +888,7 @@
-     subscribe:
-       operationId: service_connected_event
-       summary: "service.connected event"
-+      description: "Event published on 'service.connected' channel."
-       message:
-         name: 'service.connected'
-         payload:
-@@ -796,6 +898,7 @@
-     subscribe:
-       operationId: service_health_event
-       summary: "service.health event"
-+      description: "Event published on 'service.health' channel."
-       message:
-         name: 'service.health'
-         payload:
-@@ -805,6 +908,7 @@
-     subscribe:
-       operationId: service_start_event
-       summary: "service.start event"
-+      description: "Event published on 'service.start' channel."
-       message:
-         name: 'service.start'
-         payload:
-@@ -814,6 +918,7 @@
-     subscribe:
-       operationId: service_stop_event
-       summary: "service.stop event"
-+      description: "Event published on 'service.stop' channel."
-       message:
-         name: 'service.stop'
-         payload:
-@@ -823,6 +928,7 @@
-     subscribe:
-       operationId: service_test_event
-       summary: "service.test event"
-+      description: "Event published on 'service.test' channel."
-       message:
-         name: 'service.test'
-         payload:
-@@ -832,6 +938,7 @@
-     subscribe:
-       operationId: snappy_detail_event
-       summary: "snappy.detail event"
-+      description: "Event published on 'snappy.detail' channel."
-       message:
-         name: 'snappy.detail'
-         payload:
-@@ -841,6 +948,7 @@
-     subscribe:
-       operationId: snappy_notice_event
-       summary: "snappy.notice event"
-+      description: "Event published on 'snappy.notice' channel."
-       message:
-         name: 'snappy.notice'
-         payload:
-@@ -850,6 +958,7 @@
-     subscribe:
-       operationId: staging_decided_event
-       summary: "staging.decided event"
-+      description: "Event published on 'staging.decided' channel."
-       message:
-         name: 'staging.decided'
-         payload:
-@@ -859,6 +968,7 @@
-     subscribe:
-       operationId: staging_pending_event
-       summary: "staging.pending event"
-+      description: "Event published on 'staging.pending' channel."
-       message:
-         name: 'staging.pending'
-         payload:
-@@ -868,6 +978,7 @@
-     subscribe:
-       operationId: state_read_model_patch_event
-       summary: "state.read.model.patch event"
-+      description: "Event published on 'state.read.model.patch' channel."
-       message:
-         name: 'state.read.model.patch'
-         payload:
-@@ -877,6 +988,7 @@
-     subscribe:
-       operationId: task_completed_event
-       summary: "task.completed event"
-+      description: "Event published on 'task.completed' channel."
-       message:
-         name: 'task.completed'
-         payload:
-@@ -886,6 +998,7 @@
-     subscribe:
-       operationId: tool_cache_event
-       summary: "tool.cache event"
-+      description: "Event published on 'tool.cache' channel."
-       message:
-         name: 'tool.cache'
-         payload:
-@@ -895,6 +1008,7 @@
-     subscribe:
-       operationId: tool_ran_event
-       summary: "tool.ran event"
-+      description: "Event published on 'tool.ran' channel."
-       message:
-         name: 'tool.ran'
-         payload:
-@@ -904,6 +1018,7 @@
-     subscribe:
-       operationId: training_metrics_updated_event
-       summary: "training.metrics.updated event"
-+      description: "Event published on 'training.metrics.updated' channel."
-       message:
-         name: 'training.metrics.updated'
-         payload:
-@@ -913,6 +1028,7 @@
-     subscribe:
-       operationId: working_set_completed_event
-       summary: "working_set.completed event"
-+      description: "Event published on 'working_set.completed' channel."
-       message:
-         name: 'working_set.completed'
-         payload:
-@@ -922,6 +1038,7 @@
-     subscribe:
-       operationId: working_set_error_event
-       summary: "working_set.error event"
-+      description: "Event published on 'working_set.error' channel."
-       message:
-         name: 'working_set.error'
-         payload:
-@@ -931,6 +1048,7 @@
-     subscribe:
-       operationId: working_set_expand_query_event
-       summary: "working_set.expand_query event"
-+      description: "Event published on 'working_set.expand_query' channel."
-       message:
-         name: 'working_set.expand_query'
-         payload:
-@@ -940,6 +1058,7 @@
-     subscribe:
-       operationId: working_set_expanded_event
-       summary: "working_set.expanded event"
-+      description: "Event published on 'working_set.expanded' channel."
-       message:
-         name: 'working_set.expanded'
-         payload:
-@@ -949,6 +1068,7 @@
-     subscribe:
-       operationId: working_set_iteration_summary_event
-       summary: "working_set.iteration.summary event"
-+      description: "Event published on 'working_set.iteration.summary' channel."
-       message:
-         name: 'working_set.iteration.summary'
-         payload:
-@@ -958,6 +1078,7 @@
-     subscribe:
-       operationId: working_set_seed_event
-       summary: "working_set.seed event"
-+      description: "Event published on 'working_set.seed' channel."
-       message:
-         name: 'working_set.seed'
-         payload:
-@@ -967,6 +1088,7 @@
-     subscribe:
-       operationId: working_set_selected_event
-       summary: "working_set.selected event"
-+      description: "Event published on 'working_set.selected' channel."
-       message:
-         name: 'working_set.selected'
-         payload:
-@@ -976,6 +1098,7 @@
-     subscribe:
-       operationId: working_set_started_event
-       summary: "working_set.started event"
-+      description: "Event published on 'working_set.started' channel."
-       message:
-         name: 'working_set.started'
-         payload:
-@@ -985,6 +1108,7 @@
-     subscribe:
-       operationId: world_diff_applied_event
-       summary: "world.diff.applied event"
-+      description: "Event published on 'world.diff.applied' channel."
-       message:
-         name: 'world.diff.applied'
-         payload:
-@@ -994,6 +1118,7 @@
-     subscribe:
-       operationId: world_diff_queued_event
-       summary: "world.diff.queued event"
-+      description: "Event published on 'world.diff.queued' channel."
-       message:
-         name: 'world.diff.queued'
-         payload:
-@@ -1003,6 +1128,7 @@
-     subscribe:
-       operationId: world_diff_rejected_event
-       summary: "world.diff.rejected event"
-+      description: "Event published on 'world.diff.rejected' channel."
-       message:
-         name: 'world.diff.rejected'
-         payload:
-@@ -1012,6 +1138,7 @@
-     subscribe:
-       operationId: world_updated_event
-       summary: "world.updated event"
-+      description: "Event published on 'world.updated' channel."
-       message:
-         name: 'world.updated'
-         payload:
+           type: object
+           additionalProperties: true
+-components:
+-  messages:
+-    'models.download.progress':
+-      name: 'models.download.progress'
+-      title: "Models download progress"
+-      summary: "Download lifecycle progress, errors, and budget hints."
+-      contentType: application/json
+-      correlationId:
+-        description: "Correlation id shared across previews, progress, and ledger entries (when present)."
+-        location: "$message.payload#/corr_id"
+-      payload:
+-        type: object
+-        required:
+-          - id
+-        additionalProperties: true
+-        properties:
+-          id:
+-            type: string
+-            description: "Download identifier (model id or follower target)."
+-          status:
+-            type: string
+-            description: "Lifecycle phase for this download entry."
+-            enum:
+-              - started
+-              - preflight
+-              - downloading
+-              - resumed
+-              - degraded
+-              - complete
+-              - error
+-              - canceled
+-              - no-active-job
+-              - coalesced
+-          code:
+-            type: string
+-            description: "Stable machine-readable code describing the current status."
+-            enum:
+-              - hash-guard
+-              - skipped
+-              - resumed
+-              - http
+-              - request-timeout
+-              - resume-http-status
+-              - resume-content-range
+-              - idle-timeout
+-              - io
+-              - sha256_mismatch
+-              - quota_exceeded
+-              - disk_insufficient
+-              - size_limit
+-              - soft-budget
+-              - hard-budget
+-          error_code:
+-            type: string
+-            description: "When status is error, mirrors the failure code for quick filtering."
+-          corr_id:
+-            type: string
+-            description: "Correlation id shared across previews, progress, and ledger entries."
+-          downloaded:
+-            type: integer
+-            format: int64
+-            description: "Bytes persisted so far for this download attempt."
+-          bytes:
+-            type: integer
+-            format: int64
+-            description: "Alias for downloaded bytes retained for backwards compatibility."
+-          total:
+-            type: integer
+-            format: int64
+-            description: "Total expected bytes when advertised by the source."
+-          percent:
+-            type: number
+-            format: double
+-            minimum: 0
+-            maximum: 100
+-            description: "Percent complete when total is known."
+-          url:
+-            type: string
+-            description: "Source URL (redacted to drop secrets for logs/previews)."
+-          mode:
+-            type: string
+-            description: "Preflight/coalescing mode indicator (e.g., ok, skip, coalesced)."
+-          primary:
+-            type: string
+-            description: "Primary download id when this entry was coalesced behind it."
+-          content_length:
+-            type: integer
+-            format: int64
+-            description: "Content length advertised during preflight."
+-          etag:
+-            type: string
+-            description: "Source ETag observed during preflight (if provided)."
+-          last_modified:
+-            type: string
+-            description: "Last-Modified header captured during preflight."
+-          reason:
+-            type: string
+-            description: "Reason string for skipped preflight validations."
+-          offset:
+-            type: integer
+-            format: int64
+-            description: "Resume offset applied when a partial download continued."
+-          sha256:
+-            type: string
+-            description: "Computed SHA-256 digest once the download completes."
+-          cached:
+-            type: boolean
+-            description: "Whether the completed download reused an existing CAS entry."
+-          source:
+-            type: string
+-            description: "Source indicator for coalesced completions (e.g., coalesced)."
+-          error:
+-            type: string
+-            description: "Human-readable error message when status is error."
+-          budget:
+-            type: object
+-            description: "Soft/hard budget snapshot with elapsed timings."
+-            additionalProperties: true
+-          disk:
+-            type: object
+-            description: "Disk utilization snapshot ({reserve, available, need})."
+-            additionalProperties: true
 ```
 

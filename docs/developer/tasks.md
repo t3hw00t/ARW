@@ -4,10 +4,11 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-28 18:00 UTC
+Updated: 2025-09-30 13:38 UTC
 
 
 ## To Do
+- [trial-autonomy-governor] Autonomy governor & kill switch — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g3] Gate G3: Trial operations — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g2] Gate G2: Calm approvals — todo (updated: 2025-09-26 12:30 UTC)
 
@@ -16,23 +17,32 @@ Updated: 2025-09-28 18:00 UTC
 ## Paused
 
 ## Done
-- [trial-g1] Gate G1: Reliable memory — done (updated: 2025-09-30 11:24:44 UTC)
-    - 2025-09-30 11:24:44 UTC: Trial Control Center focus card shows recent memory with freshness stamp and sources link; context telemetry tile now surfaces telemetry updated time and recall scores; memory recent API returns a generated timestamp for UI freshness.
-    - 2025-09-30 12:05:19 UTC: Memory snapshots expose `generated_ms` alongside `generated`, SSE coverage refreshed, and the launcher focus card uses the numeric timestamp for accessible freshness messaging.
-    - 2025-09-30 12:23:46 UTC: Approvals lanes, Training telemetry status, and debug views display relative + absolute freshness using `generated_ms`; workflow docs include handling guidance.
+- [trial-g1] Gate G1: Reliable memory — done (updated: 2025-09-30 12:23:46 UTC)
+    - 2025-09-30 11:24:44 UTC: Trial Control Center focus card shows recent memory with freshness stamp and sources link; context telemetry meta surfaces updated and recall scores; memory recent API now returns a generated timestamp.
+  - 2025-09-30 12:05:19 UTC: Memory endpoints and SSE snapshots now include generated_ms fields with tests and docs; launcher focus card consumes the numeric timestamp for accessible freshness messaging.
+  - 2025-09-30 12:23:46 UTC: Approvals tile, Training Park telemetry, and debug tools now render relative + absolute freshness via generated_ms; workflow docs updated with guidance.
 - [t-250914223220-cap03] OCR for screenshots (optional) — done (updated: 2025-09-29 15:45:00 UTC)
     - 2025-09-14 23:05:00 UTC: Tool stub added using leptess behind feature ocr_tesseract; Chat can auto-run OCR if enabled.
-    - 2025-09-17 20:19:01 UTC: Fixed parameter use in ocr_image_text (leptess set_image now receives path). Feature remains optional (enable with --features ocr_tesseract).
-    - 2025-09-29 15:45:00 UTC: OCR output adds word-level boxes + confidence, optional language selection, fallback reporting, per-language `<name>.ocr.<lang>.json` caching, and a `screenshots.ocr.completed` event for UI sync.
-- [trial-autonomy-governor] Autonomy governor & kill switch â€” done (updated: 2025-09-29 11:45:00 UTC)
-    - 2025-09-29 11:45:00 UTC: Added autonomy lane registry/endpoints, launcher kill switch controls (pause/resume/flush), and event telemetry wiring for Trial Control Center.
+  - 2025-09-17 20:19:01 UTC: Fixed parameter use in ocr_image_text (leptess set_image now receives path). Feature remains optional (enable with --features ocr_tesseract).
+  - 2025-09-29 15:45:00 UTC: OCR tool now returns word-level bounding boxes with confidence, accepts optional language codes, reports fallback to 'eng', caches per-language <name>.ocr.<lang>.json sidecars, and emits screenshots.ocr.completed events for UI consumers.
+- [trial-g0] Gate G0: Stable core ready — done (updated: 2025-09-28 18:00:00 UTC)
+    - 2025-09-28 18:00:00 UTC: Ran triad smoke + context checks via launcher preflight, confirmed Trial Control Center status tray strings (“All good / Check soon / Action needed”) and scripted log before rehearsal.
+- [trial-visual-kit] Design trial visual kit — done (updated: 2025-09-28 17:30:00 UTC)
+    - 2025-09-28 17:30:00 UTC: Launched the Trial Control Center launcher window with gate tiles, focus summary, and preflight automation (apps/arw-launcher/src-tauri/ui/trial.html).
 - [t-250911230219-7249] Refactor: split ext/ by domain & unify AppState — done (updated: 2025-09-28 16:30:00 UTC)
     - 2025-09-26 19:57:50 UTC: AppState already unified in apps/arw-server/src/app_state.rs; rescope remaining work around domain-specific adapters (policy/models/cluster) and removal of legacy ext references before marking done.
-    - 2025-09-28 16:30:00 UTC: Removed the legacy apps/arw-server/src/ext directory, verified policy/models/cluster use the shared adapters, and synced task trackers.
-- [trial-visual-kit] Design trial visual kit — done (updated: 2025-09-28 17:30:00 UTC)
-    - 2025-09-28 17:30:00 UTC: Shipped the launcher Trial Control Center window with gate tiles, focus summary, and preflight automation (apps/arw-launcher/src-tauri/ui/trial.html).
-- [trial-g0] Gate G0: Stable core ready — done (updated: 2025-09-28 18:00:00 UTC)
-    - 2025-09-28 18:00:00 UTC: Launcher preflight now runs triad smoke/context checks, confirms status tray strings (“All good / Check soon / Action needed”), and logs readiness for rehearsal.
+  - 2025-09-28 15:42:00 UTC: Introduced policy::PolicyHandle and wired AppState, worker, and APIs to domain-specific adapters; updated builders/tests to drop legacy ext mutexes and refreshed docs/tasks to point at state_observer.
+  - 2025-09-28 16:30:00 UTC: Removed the legacy `apps/arw-server/src/ext` module directory and confirmed all domains use the unified AppState + adapters; tracking docs updated to reflect completion.
+- [t-250914050912-ev16] CI: event kind linter — done (updated: 2025-09-28 16:08:41 UTC)
+    - 2025-09-14 16:52:59 UTC: Enhanced linter: fails on string-literal Bus.publish in legacy service paths and CamelCase subjects; verified repo passes.
+  - 2025-09-28 15:08:51 UTC: CI workflow runs lint_event_names.py and subject check covers arw.events strings (this change).
+  - 2025-09-28 15:40:35 UTC: Expanded lint CLI (argparse, skip flags, allowlist), added just lint-events + Makefile target, documented usage.
+  - 2025-09-28 15:49:36 UTC: Pre-commit hook now runs event guard so local workflows catch violations early.
+  - 2025-09-28 16:08:41 UTC: Added lint self-test flag to smoke-check regex/fallback + regression coverage.
+- [t-250914050902-ev11] Events: replace publishers with constants — done (updated: 2025-09-28 15:53:26 UTC)
+    - 2025-09-14 16:43:57 UTC: Replaced string publish in the legacy service bridge with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13.
+  - 2025-09-14 16:44:18 UTC: Replaced string publish in the legacy service bridge with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13.
+  - 2025-09-28 15:53:26 UTC: Server runtime and matrix publishers now use TOPIC_RUNTIME_* constants; backlog sweep confirmed no remaining string literals.
 - [autonomy-rollback-playbook] Autonomy rollback drills — done (updated: 2025-09-26 13:52:05 UTC)
     - 2025-09-26 13:52:05 UTC: Authored autonomy rollback playbook, added automation helper (scripts/autonomy_rollback.sh), and documented usage.
 - [autonomy-lane-spec] Author Autonomy Lane ADR — done (updated: 2025-09-26 13:52:05 UTC)
@@ -142,7 +152,7 @@ Updated: 2025-09-28 18:00 UTC
 - [t-250912001100-3438] Phase 2: Beliefs/Intents/Actions stores + endpoints — done (updated: 2025-09-14 17:02:36 UTC)
     - 2025-09-14 17:02:36 UTC: Beliefs/Intents/Actions rolling stores implemented; endpoints: /state/{beliefs,intents,actions} and admin variants; wired via on_event with corr_id episodes stitching.
 - [t-250912001055-0044] Phase 2: Observations read-model + /state/observations — done (updated: 2025-09-14 17:02:35 UTC)
-    - 2025-09-14 17:02:35 UTC: Public /state/observations exists; admin wrapper at /admin/state/observations; rolling store wired via state_observer::on_event and bus subscriber.
+    - 2025-09-14 17:02:35 UTC: Public /state/observations exists; admin wrapper at /admin/state/observations; rolling store wired via ext::state_api::obs_on_event and bus subscriber.
 - [t-250914050908-ev14] Feature Matrix: dot.case topics — done (updated: 2025-09-14 16:59:13 UTC)
     - 2025-09-14 16:59:12 UTC: Feature Matrix events verified/updated: experiments list now includes experiment.activated; all entries dot.case.
 - [t-250914050900-ev10] Events: topics.rs dot.case only — done (updated: 2025-09-14 16:59:12 UTC)
@@ -155,18 +165,8 @@ Updated: 2025-09-28 18:00 UTC
     - 2025-09-14 16:53:02 UTC: Gating key events:task.completed confirmed in arw-core and documented for the legacy bridge; gating keys doc lists it.
 - [t-250914050910-ev15] Docs: dot.case normalization — done (updated: 2025-09-14 16:53:01 UTC)
     - 2025-09-14 16:53:00 UTC: Docs updated for dot.case: topics table includes experiment.activated; reinforced constants usage and SSE guidance.
-- [t-250914050912-ev16] CI: event kind linter — done (updated: 2025-09-28 16:08:41 UTC)
-    - 2025-09-14 16:52:59 UTC: Enhanced linter: fails on string-literal Bus.publish in legacy service paths and CamelCase subjects; verified repo passes.
-    - 2025-09-28 15:08:51 UTC: CI workflow now runs lint_event_names.py with arw.events subject guard (this change).
-    - 2025-09-28 15:40:35 UTC: Added argparse CLI, skip toggles, allowlist flag, and just lint-events helper.
-    - 2025-09-28 16:08:41 UTC: Added `--self-test` smoke harness to lock regex + fallback behaviour.
-    - 2025-09-28 15:49:36 UTC: Pre-commit hook runs the event guard so local commits fail fast on violations.
 - [t-250914050906-ev13] Connector: task.completed + subjects — done (updated: 2025-09-14 16:46:51 UTC)
     - 2025-09-14 16:46:50 UTC: Connector now uses dot.case constants for task.completed and builds subjects: cluster 'arw.events.task.completed' and node 'arw.events.node.<node_id>.task.completed'.
-- [t-250914050902-ev11] Events: replace publishers with constants — done (updated: 2025-09-28 15:53:26 UTC)
-    - 2025-09-14 16:43:57 UTC: Replaced string publish in the legacy service bridge with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13.
-  - 2025-09-14 16:44:18 UTC: Replaced string publish in the legacy service bridge with TOPIC_EXPERIMENT_ACTIVATED; added constant to topics.rs; workspace builds. Connector string subject left for task t-250914050906-ev13.
-  - 2025-09-28 15:53:26 UTC: Runtime + runtime_matrix publishers now emit via TOPIC_RUNTIME_* constants; backlog sweep confirms full coverage.
 - [t-250912024851-8114] Models: move download worker into ModelsService — done (updated: 2025-09-14 00:00:00 UTC)
 - [t-250912020516-8533] Phase 1: AppState builder + unified struct — done (updated: 2025-09-12 00:05:22 UTC)
     - 2025-09-12 00:05:22 UTC: Unified AppState in app_state.rs; main/lib migrated; added Resources container; built+tests green for arw-server.
@@ -212,3 +212,4 @@ Updated: 2025-09-28 18:00 UTC
 - [t-250909170247-6008] Start service and verify /about — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
+

@@ -1,6 +1,7 @@
 use anyhow::{Context, Result};
-use arw_core::{gating_keys, hello_core, introspect_tools, load_effective_paths};
+use arw_core::{gating, gating_keys, hello_core, introspect_tools, load_effective_paths};
 use base64::Engine;
+use chrono::Utc;
 use clap::CommandFactory;
 use clap::{Args, Parser, Subcommand};
 use reqwest::blocking::Client;
@@ -53,6 +54,19 @@ enum Commands {
 enum GateCmd {
     /// List known gating keys
     Keys(GateKeysArgs),
+    /// Gating policy helpers
+    Config {
+        #[command(subcommand)]
+        cmd: GateConfigCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum GateConfigCmd {
+    /// Print the gating config JSON schema
+    Schema(GateConfigSchemaArgs),
+    /// Render the gating config reference (Markdown)
+    Doc(GateConfigDocArgs),
 }
 
 #[derive(Subcommand)]
@@ -84,15 +98,28 @@ struct ToolsArgs {
 #[derive(Args)]
 struct GateKeysArgs {
     /// Show grouped metadata and stability details
-    #[arg(long, conflicts_with = "json")]
+    #[arg(long, conflicts_with_all = ["json", "doc"])]
     details: bool,
     /// Emit JSON instead of text
-    #[arg(long, conflicts_with = "details")]
+    #[arg(long, conflicts_with_all = ["details", "doc"])]
     json: bool,
     /// Pretty-print JSON output
     #[arg(long, requires = "json")]
     pretty: bool,
+    /// Render the Markdown reference (matches docs)
+    #[arg(long, conflicts_with_all = ["json", "details"])]
+    doc: bool,
 }
+
+#[derive(Args)]
+struct GateConfigSchemaArgs {
+    /// Pretty-print JSON output
+    #[arg(long)]
+    pretty: bool,
+}
+
+#[derive(Args)]
+struct GateConfigDocArgs {}
 
 #[derive(Args)]
 struct GenKeyArgs {
@@ -270,6 +297,9 @@ fn main() {
                             serde_json::to_string(&payload).unwrap_or_else(|_| "{}".into())
                         );
                     }
+                } else if args.doc {
+                    let now = Utc::now().format("%Y-%m-%d %H:%M UTC").to_string();
+                    print!("{}", gating_keys::render_markdown(&now));
                 } else if args.details {
                     let groups = gating_keys::groups();
                     let total_keys: usize = groups.iter().map(|g| g.keys.len()).sum();
@@ -291,6 +321,27 @@ fn main() {
                     }
                 }
             }
+            GateCmd::Config { cmd } => match cmd {
+                GateConfigCmd::Schema(args) => {
+                    let schema = gating::gating_config_schema_json();
+                    if args.pretty {
+                        println!(
+                            "{}",
+                            serde_json::to_string_pretty(&schema)
+                                .unwrap_or_else(|_| "{}".to_string())
+                        );
+                    } else {
+                        println!(
+                            "{}",
+                            serde_json::to_string(&schema).unwrap_or_else(|_| "{}".to_string())
+                        );
+                    }
+                }
+                GateConfigCmd::Doc(_) => {
+                    let now = Utc::now().format("%Y-%m-%d %H:%M UTC").to_string();
+                    print!("{}", gating::render_config_markdown(&now));
+                }
+            },
         },
         Some(Commands::Capsule { cmd }) => match cmd {
             CapCmd::Template(args) => {

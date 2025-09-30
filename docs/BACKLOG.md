@@ -220,7 +220,7 @@ Queues, NATS & Orchestration
 
 Specs & Docs
 - [Kernel] Generate AsyncAPI + MCP artifacts and serve under /spec/* [t-250909224102-9629]
-- [Kernel] Docgen: gating keys listing + config schema and examples
+- [Kernel] Docgen: gating keys listing + config schema and examples — done (CLI docgen + gating_config reference)
 - [Kernel] AsyncAPI: include `rpu.trust.changed` channel — done
 - [Kernel] Event normalization rollout
   - [Kernel] [t-250913213500-ev01] Add dual-mode warning logs when ARW_EVENTS_KIND_MODE=dual to surface remaining legacy consumers — removed (modes dropped)

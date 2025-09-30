@@ -1,0 +1,130 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GatingPolicyConfig",
+  "type": "object",
+  "properties": {
+    "contracts": {
+      "description": "Conditional contracts evaluated alongside runtime capsules.",
+      "default": [],
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/ContractCfg"
+      }
+    },
+    "deny_user": {
+      "description": "Immutable denies applied at startup (supports trailing `*`).",
+      "default": [],
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
+  },
+  "definitions": {
+    "ContractCfg": {
+      "type": "object",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "auto_renew_secs": {
+          "description": "Automatically renew by this many seconds when expired.",
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "id": {
+          "description": "Stable identifier recorded in audits and renewals.",
+          "type": "string"
+        },
+        "immutable": {
+          "description": "Treat contract as immutable within its active window (default true).",
+          "default": null,
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "patterns": {
+          "description": "List of gating key patterns (supports trailing `*`).",
+          "default": [],
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "quota_limit": {
+          "description": "Maximum allowed hits within the quota window (optional).",
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "quota_window_secs": {
+          "description": "Sliding window size in seconds paired with `quota_limit`.",
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "subject_node": {
+          "description": "Optional node identifier filter (matches `ARW_NODE_ID`).",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "subject_role": {
+          "description": "Optional role filter (e.g., `edge`, `regional`).",
+          "default": null,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "tags_any": {
+          "description": "Match when any tag is present on the caller (case-sensitive).",
+          "default": null,
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "type": "string"
+          }
+        },
+        "valid_from_ms": {
+          "description": "Contract activates after this epoch millisecond (inclusive).",
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        },
+        "valid_to_ms": {
+          "description": "Contract expires at this epoch millisecond (inclusive).",
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint64",
+          "minimum": 0.0
+        }
+      }
+    }
+  }
+}

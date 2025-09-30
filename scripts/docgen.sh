@@ -136,6 +136,30 @@ else
   warn "cargo build --release (arw-server/arw-cli) failed"
 fi
 
+if [ "$build_ok" -eq 1 ]; then
+  info "Rendering gating references"
+  if "$root_dir/target/release/arw-cli" gate keys --json --pretty > "$root_dir/docs/GATING_KEYS.json"; then
+    info "Wrote docs/GATING_KEYS.json"
+  else
+    warn "failed to generate GATING_KEYS.json"
+  fi
+  if "$root_dir/target/release/arw-cli" gate keys --doc > "$root_dir/docs/GATING_KEYS.md"; then
+    info "Wrote docs/GATING_KEYS.md"
+  else
+    warn "failed to render GATING_KEYS.md"
+  fi
+  if "$root_dir/target/release/arw-cli" gate config schema --pretty > "$root_dir/docs/reference/gating_config.schema.json"; then
+    info "Wrote docs/reference/gating_config.schema.json"
+  else
+    warn "failed to generate gating_config.schema.json"
+  fi
+  if "$root_dir/target/release/arw-cli" gate config doc > "$root_dir/docs/reference/gating_config.md"; then
+    info "Wrote docs/reference/gating_config.md"
+  else
+    warn "failed to render gating_config.md"
+  fi
+fi
+
 # OpenAPI output directly from annotated ApiDoc
 if [ "$build_ok" -eq 1 ]; then
   info "Generating OpenAPI from annotations"

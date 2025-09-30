@@ -1,5 +1,5 @@
 # CLI Reference
-Updated: 2025-09-16
+Updated: 2025-09-30
 Type: Reference
 
 Microsummary: Commands, subcommands, and flags for `arw-cli` with pointers to tutorials. Beta.
@@ -11,7 +11,9 @@ Commands (summary)
 - `arw-cli` — prints version, hello, and effective paths
 - `arw-cli paths [--pretty]` — effective runtime/cache/logs paths
 - `arw-cli tools [--pretty]` — list registered tools
-- `arw-cli gate keys` — list known gating keys
+- `arw-cli gate keys [--doc|--details|--json {--pretty}]` — list known gating keys or render docs
+- `arw-cli gate config schema [--pretty]` — print gating policy JSON schema
+- `arw-cli gate config doc` — render the gating policy reference (Markdown)
 - `arw-cli capsule template [--pretty|--compact]` — print a minimal capsule template
 - `arw-cli capsule gen-ed25519 [--issuer <name>] [--out-pub <file>] [--out-priv <file>]` — generate keys
 - `arw-cli capsule sign-ed25519 <sk_b64> <capsule.json> [--out <file>]` — sign capsule

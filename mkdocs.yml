@@ -140,6 +140,7 @@ nav:
       - Specs Index: reference/specs.md
       - Interface Release Notes: reference/interface-release-notes.md
       - Gating Keys: GATING_KEYS.md
+      - Gating Config: reference/gating_config.md
       - Tools:
           - UI Screenshot Tools: reference/tools/ui_screenshot.md
       - Schemas:
