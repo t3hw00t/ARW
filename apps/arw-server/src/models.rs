@@ -3186,6 +3186,7 @@ mod tests {
     use super::*;
     use crate::test_support;
     use tempfile::tempdir;
+    use tokio::sync::broadcast::error::TryRecvError;
 
     fn dummy_download_handle(label: &str) -> DownloadHandle {
         DownloadHandle {
@@ -3655,6 +3656,65 @@ mod tests {
         assert_eq!(follow_up.available_permits, 0);
 
         let _ = store.downloads.remove_job("model-a").await;
+    }
+
+    #[tokio::test]
+    async fn budget_notifier_emits_degraded_once() {
+        let bus = arw_events::Bus::new_with_replay(8, 8);
+        let store = Arc::new(ModelStore::new(bus.clone(), None));
+        let mut rx = bus.subscribe();
+
+        let limits = Box::leak(Box::new(DownloadBudgetLimits {
+            soft_ms: Some(100),
+            hard_ms: Some(250),
+            soft_degrade_pct: 50,
+        }));
+        let mut notifier = BudgetNotifier {
+            limits,
+            degraded_sent: false,
+        };
+
+        notifier.maybe_emit(
+            store.as_ref(),
+            "model-budget-test",
+            Duration::from_millis(40),
+            Some(5),
+            Some(10),
+            "corr-budget",
+        );
+        tokio::task::yield_now().await;
+        assert!(matches!(rx.try_recv(), Err(TryRecvError::Empty)));
+
+        notifier.maybe_emit(
+            store.as_ref(),
+            "model-budget-test",
+            Duration::from_millis(60),
+            Some(6),
+            Some(12),
+            "corr-budget",
+        );
+        let env = rx.recv().await.expect("budget event");
+        assert_eq!(env.kind, topics::TOPIC_PROGRESS);
+        let payload = env.payload;
+        assert_eq!(
+            payload.get("status").and_then(Value::as_str),
+            Some("degraded")
+        );
+        assert_eq!(
+            payload.get("code").and_then(Value::as_str),
+            Some("soft-budget")
+        );
+
+        notifier.maybe_emit(
+            store.as_ref(),
+            "model-budget-test",
+            Duration::from_millis(90),
+            Some(9),
+            Some(18),
+            "corr-budget",
+        );
+        tokio::task::yield_now().await;
+        assert!(matches!(rx.try_recv(), Err(TryRecvError::Empty)));
     }
 }
 

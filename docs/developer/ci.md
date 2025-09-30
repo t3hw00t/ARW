@@ -89,7 +89,7 @@ just interfaces-diff        # OpenAPI diff vs origin/main (Docker)
 just docs-deprecations
 # generate interface release notes (BASE_REF=... override)
 just docs-release-notes
-just check-enums            # verify ModelsDownloadProgress status/code enums match code
+just check-enums            # verify models.download.progress status/code enums match the server
 
 # Design tokens (single source)
 just tokens-sync            # copy assets/design tokens to docs and launcher UI

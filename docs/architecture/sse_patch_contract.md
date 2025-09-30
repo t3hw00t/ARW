@@ -1,5 +1,5 @@
 # SSE + JSON Patch Contract
-Updated: 2025-09-21
+Updated: 2025-09-30
 Type: Explanation
 
 Purpose: stream deltas, not snapshots, to keep interaction latency low and bytes small. Resume connections without losing context.
@@ -25,8 +25,8 @@ data: {"request_id":"2d0f6a82-5be8-4e5c-8a5d-2b799d8d9f9e","resume_from":"2025-0
 
 Read‑model patch topics:
 
-- `State.<Name>.Patch` — specific topic for a model. Payload: `{ id: "<id>", patch: <json-patch-array> }`.
-- `state.read.model.patch` — generic topic. Payload: `{ id: "<id>", patch: <json-patch-array> }`. See `TOPIC_READMODEL_PATCH` in [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs).
+- `state.read.model.patch` — canonical topic for all read-model deltas. Payload: `{ id: "<id>", patch: <json-patch-array> }`. See `TOPIC_READMODEL_PATCH` in [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs).
+- Per-model topics (e.g., `state.projects.patch`) were retired with the dot.case rollout. Consumers should filter by the payload `id` to target a specific read-model.
 
 Clients can apply patches to a local object and render without re-fetching full snapshots.
 

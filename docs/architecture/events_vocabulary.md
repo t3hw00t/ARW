@@ -3,7 +3,7 @@ title: Events Vocabulary
 ---
 
 # Events Vocabulary
-Updated: 2025-09-20
+Updated: 2025-09-30
 Type: Explanation
 
 Normalize ARW events into a small internal vocabulary. Drive all live UI from this stream via `GET /events` (SSE; admin‑gated). Use `corr_id` to stitch episodes.
@@ -21,7 +21,7 @@ Canonical categories (normalized)
 - Runtime: `runtime.health`, `runtime.profile.changed`
 - Models: `models.download.progress`, `models.changed`, `models.cas.gc`, `models.manifest.written`, `models.refreshed`
  - Interactive performance (snappy): read‑model id=`snappy` via `state.read.model.patch`; events `snappy.notice` (breach), `snappy.detail` (periodic detail).
-  - models.download.progress statuses may include: `started`, `queued`, `admitted`, `resumed`, `downloading`, `resync`, `degraded` (soft budget), `cancel-requested`, `complete`, `error`, `canceled`, `no-active-job`, `cache-mismatch`.
+  - `models.download.progress` statuses are limited to: `started`, `preflight`, `downloading`, `resumed`, `degraded`, `complete`, `error`, `canceled`, `no-active-job`, and `coalesced` (hash guard reuse).
 - Self‑Model: `self.model.proposed`, `self.model.updated`
 - Logic Units: `logic.unit.suggested`, `logic.unit.installed`, `logic.unit.applied`, `logic.unit.reverted`, `logic.unit.promoted`
 - Cluster: `cluster.node.advertise`, `cluster.node.heartbeat`, `cluster.node.changed`
@@ -47,8 +47,8 @@ Notes
 
 Mapping from existing ARW events
 - Observations/Beliefs/Intents/Actions are already exposed under `/state/*` and emitted in debug builds; clients can mirror or subscribe.
-- `models.download.progress` supports `{ id, status|error, code, budget?, disk? }` — see `apps/arw-server/src/models.rs`.
-  - Common `code` values: `admission-denied`, `disk_insufficient`, `size_limit`, `sha256_mismatch`, `cache-mismatch`, `canceled-by-user`, `already-in-progress-hash`, `quota_exceeded`, `cached`, `resync`, `soft-budget`, `hard-budget`.
+- `models.download.progress` supports `{ id, status|error, code, budget?, disk?, downloaded?, total?, corr_id? }` — see `apps/arw-server/src/models.rs`.
+  - Stable `code` values today: `hash-guard`, `skipped`, `resumed`, `http`, `resume-http-status`, `resume-content-range`, `idle-timeout`, `io`, `sha256_mismatch`, `quota_exceeded`, `disk_insufficient`, `size_limit`, `soft-budget`, and `hard-budget`.
 - Download start is represented via `models.download.progress` with `status:"started"`.
 - `models.manifest.written` is emitted after a successful write of `<state>/models/<id>.json`.
 - `models.cas.gc` emits `{scanned, kept, deleted, deleted_bytes, ttl_hours}` after a GC sweep.

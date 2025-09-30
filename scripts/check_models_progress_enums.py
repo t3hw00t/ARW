@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Verify that spec/asyncapi.yaml ModelsDownloadProgress status/code enums
+Verify that spec/asyncapi.yaml models.download.progress status/code enums
 match the set of values emitted by the unified server in
 apps/arw-server/src/models.rs (publish_progress + DownloadOutcome::Failed).
 Exits non-zero if mismatched.
@@ -41,28 +41,31 @@ def main() -> int:
     doc = yaml.safe_load(ASYNCAPI.read_text(encoding='utf-8'))
     components = doc.get('components', {})
     messages = components.get('messages', {})
-    msg = messages.get('ModelsDownloadProgress')
+    msg = messages.get('models.download.progress')
     if msg is None:
-        print("error: spec/asyncapi.yaml is missing components.messages.ModelsDownloadProgress", file=sys.stderr)
+        print(
+            "error: spec/asyncapi.yaml is missing components.messages." "models.download.progress",
+            file=sys.stderr,
+        )
         return 2
 
     payload = msg.get('payload')
     if payload is None:
-        print("error: ModelsDownloadProgress message has no payload", file=sys.stderr)
+        print("error: models.download.progress message has no payload", file=sys.stderr)
         return 2
 
     pen = payload.get('properties')
     if pen is None:
-        print("error: ModelsDownloadProgress payload lacks properties", file=sys.stderr)
+        print("error: models.download.progress payload lacks properties", file=sys.stderr)
         return 2
     status_prop = pen.get('status')
     if status_prop is None or 'enum' not in status_prop:
-        print("error: ModelsDownloadProgress.status lacks an enum", file=sys.stderr)
+        print("error: models.download.progress.status lacks an enum", file=sys.stderr)
         return 2
 
     code_prop = pen.get('code')
     if code_prop is None or 'enum' not in code_prop:
-        print("error: ModelsDownloadProgress.code lacks an enum", file=sys.stderr)
+        print("error: models.download.progress.code lacks an enum", file=sys.stderr)
         return 2
 
     s_en = status_prop['enum']
