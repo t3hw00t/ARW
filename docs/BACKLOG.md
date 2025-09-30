@@ -97,7 +97,7 @@ Design System & Tokens
 - [Pack: Collaboration] [t-250914231205-dsg02] Sync helper and task (`scripts/sync_tokens.sh`, `just tokens-sync`) — done
 - [Pack: Collaboration] [t-250914231210-dsg03] Docs: load tokens via `extra_css`; add Design Theme page — done
 - [Pack: Collaboration] [t-250914231215-dsg04] Launcher: adopt tokens across common/index/events/logs/models/connections — done (initial)
-- [Pack: Collaboration] [t-250914231220-dsg05] Service Debug UI: replace inline styles with token vars — in progress
+- [Pack: Collaboration] [t-250914231220-dsg05] Service Debug UI: replace inline styles with token vars — done (CSS extraction + utility classes)
 - [Pack: Collaboration] [t-250914231225-dsg06] Docs overrides: dedupe variables; rely on tokens only — done
 - [Pack: Collaboration] [t-250914231240-dsg09] CI: add tokens sync check step (uses `just tokens-check`) — done
 - [Pack: Collaboration] [t-250914231230-dsg07] Extract `ui-kit.css` primitives (buttons/inputs/badges) for launcher pages — done

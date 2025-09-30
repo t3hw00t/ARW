@@ -4,98 +4,10 @@
   <title>ARW Debug</title>
   <link rel="stylesheet" href="/admin/ui/assets/tokens.css"/>
   <link rel="stylesheet" href="/admin/ui/assets/ui-kit.css"/>
+  <link rel="stylesheet" href="/admin/ui/assets/pages.css"/>
+  <link rel="stylesheet" href="/admin/ui/assets/debug.css"/>
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <style>
-    :root{
-      color-scheme:light dark;
-    }
-    body{font-family:system-ui,Segoe UI,Roboto,Ubuntu,Arial,sans-serif;margin:20px;line-height:1.45;color:var(--color-ink);background: var(--surface)}
-    /* manual theme override */
-    [data-theme="dark"]{ --bg:#0b0b0f; --color-ink:#e5e7eb; --color-line:#1f232a; --color-muted:#889 }
-    header{display:flex;gap:12px;align-items:center;margin-bottom:16px;position:sticky;top:0;background:rgba(255,255,255,0.7);backdrop-filter:saturate(140%) blur(6px);padding:8px 12px;border:1px solid var(--color-line);border-radius:10px;box-shadow:0 10px 24px rgba(0,0,0,0.06)}
-    code,pre{background:#0b0b0c10;padding:2px 4px;border-radius:4px}
-    .row{display:flex;gap:8px;flex-wrap:wrap;margin:8px 0}
-    button,input,select,textarea{font:inherit}
-    button{padding:8px 12px;border:1px solid #cfd6de;background-image:linear-gradient(180deg,#ffffff,#f3f4f6), var(--noise);background-blend-mode:overlay,normal;border-radius:8px;cursor:pointer;box-shadow:0 1px 0 rgba(255,255,255,0.9) inset, 0 8px 18px rgba(0,0,0,0.06);transition:transform .06s ease, box-shadow .12s ease}
-    button:hover{transform:translateY(-0.5px);box-shadow:0 1px 0 rgba(255,255,255,0.95) inset, 0 14px 28px rgba(0,0,0,0.08)}
-    .iconbtn{padding:6px 8px;font-size:12px}
-    .cols{display:grid;grid-template-columns:repeat(auto-fit, minmax(280px, 1fr));gap:16px}
-    .card>h3{margin:4px 0 8px 0; cursor:pointer; display:flex; align-items:center; gap:8px}
-    .card>h3::after{ content:"▾"; font-size:12px; color:var(--color-muted) }
-    .card[data-collapsed="1"]>h3::after{ content:"▸" }
-    .card[data-collapsed="1"]>:not(h3){ display:none }
-    #log{max-height:40vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;padding:8px;background:linear-gradient(180deg,#ffffff,#fafafa);box-shadow:inset 0 1px 0 rgba(255,255,255,0.6)}
-    .evt{padding:4px 6px;border-bottom:1px dashed #eee;font-family:ui-monospace,Menlo,Consolas,monospace}
-    .key{color:var(--color-muted)}
-    textarea{width:100%;min-height:100px}
-    .pass{color:var(--status-ok)}.fail{color:var(--status-bad)}
-    /* badges/dots/tones provided by shared UI kit */
-    /* Iconography */
-    .icons{ display:inline-flex; gap:6px; align-items:center; margin-right:6px }
-    .ico{ width:14px; height:14px; display:inline-block; vertical-align:-2px; color:currentColor; opacity:.9 }
-    .ico.ok{ color:var(--status-ok) }
-    .ico.warn{ color:var(--status-warn) }
-    .ico.bad{ color:var(--status-bad) }
-    .ico.info{ color:var(--color-muted) }
-    .ico.accent{ color: var(--color-accent-teal) }
-    /* Subtle hint block */
-    .hint{ font-size:12px; color:#374151; background:#f8fafc; border:1px solid var(--color-line); border-left:3px solid var(--color-accent-teal); padding:8px 10px; border-radius:8px; margin:6px 0 }
-    .hint .dismiss{ float:right; text-decoration:none; color:var(--color-muted); font-weight:600 }
-    /* Downloads list */
-    .dlrow{ display:flex; align-items:center; gap:10px; padding:6px 0; border-bottom:1px dashed #eee }
-    /* Models compact table */
-    .mtable{ font-size:12px; margin-top:6px }
-    .mrow{ display:flex; align-items:center; gap:10px; padding:4px 0; border-bottom:1px dashed #eee }
-    .mcell{ min-width:80px }
-    .mcell.id{ font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:600; min-width:180px }
-    .mcell.sha{ font-family:ui-monospace,Menlo,Consolas,monospace; color:var(--color-muted); min-width:110px }
-    .mhead{ font-weight:700; color:#555 }
-    .badge.small{ font-size:10px; padding:2px 6px }
-    .mcell.actions{ margin-left:auto; display:flex; align-items:center; gap:6px }
-    .mini{ font-size:12px; padding:2px 6px; width:180px }
-    .dlid{ font-family:ui-monospace,Menlo,Consolas,monospace; font-weight:600; min-width:140px }
-    .dlstat{ font-size:12px; color:var(--color-muted); min-width:90px }
-    .dlmeta{ font-size:12px; color:var(--color-muted) }
-    .pbar{ width:180px; height:8px; background:var(--color-line); border-radius:999px; overflow:hidden; box-shadow:inset 0 1px 0 rgba(255,255,255,0.6) }
-    .pfill{ height:100%; background:linear-gradient(90deg, var(--color-accent-teal), var(--status-ok)); width:0% }
-    .ghost{ padding:6px 10px; border:1px dashed #cfd6de; background:#fff; border-radius:6px; cursor:pointer }
-    a.help{display:inline-block;margin-left:8px;width:18px;height:18px;border-radius:50%;border:1px solid #d1d5db;color:var(--color-muted);text-align:center;line-height:16px;text-decoration:none;font-weight:600;font-size:12px}
-    a.help:hover{background:#f3f4f6;color:#374151}
-    .tip{position:fixed;z-index:50;max-width:360px;background:#ffffff;border:1px solid var(--color-line);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,0.14);padding:10px 12px}
-    .tip .t-title{font-weight:600;margin-bottom:4px}
-    .tip .t-more{color:var(--color-accent-teal);text-decoration:none}
-    .t-hidden{display:none}
-    .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:#f2e0d3;background:color-mix(in srgb, var(--status-warn) 18%, #ffffff 82%);border:1px solid var(--status-warn);color:#5a2a04;color:color-mix(in srgb, var(--status-warn) 55%, #000000 45%);padding:8px 12px;border-radius:10px;display:none;max-width:70vw;box-shadow:0 16px 40px rgba(0,0,0,0.14)}
-    #insights{position:fixed;right:16px;bottom:16px;background:#fff;border:1px solid var(--color-line);border-radius:12px;box-shadow:0 18px 48px rgba(0,0,0,0.12);padding:10px 12px;display:none;min-width:260px;max-width:50vw}
-    #insights .kv{display:flex;justify-content:space-between;color:#374151}
-    #insights h4{margin:4px 0 6px 0;font-size:14px}
-    .palette{position:fixed;inset:0;background:rgba(0,0,0,0.2);display:none;align-items:flex-start;justify-content:center;padding-top:10vh}
-    .pal-box{background:#fff;color:#111;width:min(680px,90vw);border:1px solid var(--color-line);border-radius:10px;box-shadow:0 20px 50px rgba(0,0,0,0.15);overflow:hidden}
-    .pal-box input{width:100%;padding:10px 12px;border:none;outline:none;font:inherit}
-    .pal-list{max-height:50vh;overflow:auto}
-    .pal-item{padding:8px 12px;border-top:1px solid #f1f5f9;cursor:pointer;display:flex;justify-content:space-between}
-    .pal-item.sel{background:var(--surface-muted)}
-    .pal-item .hint{color:var(--color-muted);font-size:12px}
-    @media (max-width:900px){ .cols{grid-template-columns:1fr} }
-    @media (pointer: coarse){ button{ padding:12px 16px } .iconbtn{ padding:10px 12px; font-size:14px } }
-    button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{ outline:2px solid rgba(184,115,51,0.55); outline-offset:2px }
-    @media (prefers-reduced-motion: reduce){ *{ transition:none !important; animation:none !important } }
-    @media (prefers-color-scheme: dark){
-      body{ background: var(--surface) }
-      header{ background: rgba(16,18,24,0.7); border-color:#1f232a; box-shadow:0 10px 24px rgba(0,0,0,0.35) }
-      #log{ background: linear-gradient(180deg,#12161f,#0f141a); border-color:#1f232a; box-shadow: inset 0 1px 0 rgba(255,255,255,0.06) }
-      .tip{ background:#0f141a; border-color:#1f232a; box-shadow:0 16px 40px rgba(0,0,0,0.6) }
-      .toast{ background:#411527; background:color-mix(in srgb, var(--status-warn) 35%, #0f141a 65%); color:#f7ede6; color:color-mix(in srgb, var(--status-warn) 18%, #f8fafb 82%); border-color:color-mix(in srgb, var(--status-warn) 55%, #1f232a 45%) }
-      #insights{ background:#0f141a; border-color:#1f232a; box-shadow:0 18px 48px rgba(0,0,0,0.6) }
-    }
-    /* Compact density override */
-    body.density-compact .row{ gap:6px; margin:6px 0 }
-    body.density-compact header{ gap:10px; padding:6px 10px }
-    body.density-compact .cols{ gap:12px }
-    body.density-compact .card{ padding:10px; border-radius:10px }
-    body.density-compact .iconbtn{ padding:6px 8px }
-  </style>
-</head>
+  </head>
 <body>
   <header>
     <h1>ARW Debug</h1>
@@ -106,9 +18,9 @@
     <span id="toolsBadge" class="badge warn" title="Tools activity"><span class="dot"></span> Tools: idle</span>
     <span id="eventsBadge" class="badge warn" title="Events activity"><span class="dot"></span> Events: 0</span>
     <span id="modelsBadge" class="badge warn" title="Models activity"><span class="dot"></span> Models: idle</span>
-    <a id="metricsLink" class="help" href="#" title="Open /metrics" style="display:inline-block">M</a>
+    <a id="metricsLink" class="help u-inline-block" href="#" title="Open /metrics">M</a>
     <button id="copyMetrics" class="iconbtn" title="Copy /metrics to clipboard">Copy metrics</button>
-    <a id="catalogLink" class="help" href="#" title="Open Interface Catalog (/catalog/index)" style="display:inline-block">C</a>
+    <a id="catalogLink" class="help u-inline-block" href="#" title="Open Interface Catalog (/catalog/index)">C</a>
     <span id="catalogBadge" class="badge warn" title="Interface Catalog status"><span class="dot"></span> Catalog: …</span>
     <button class="iconbtn" id="btnExpandAll" title="Expand all">Expand</button>
     <button class="iconbtn" id="btnCollapseAll" title="Collapse all">Collapse</button>
@@ -124,7 +36,7 @@
     <span id="sloBadge" class="badge warn" title="Interactive SLO (P95)"><span class="dot"></span> SLO: 1500 ms</span>
     <span id="egressBadge" class="badge warn" title="Pre‑offload preview"><span class="dot"></span> Egress: idle</span>
     <button id="chatTestBtn" class="iconbtn" title="Test chat backend">Test</button>
-    <input id="adminToken" placeholder="token" style="width: 120px;" title="X-ARW-Admin header">
+    <input id="adminToken" class="u-w-120" placeholder="token" title="X-ARW-Admin header">
     <button id="useTok" class="iconbtn" title="Use admin token">Use</button>
     <label class="key" title="Remember token locally"><input type="checkbox" id="rememberTok"> remember</label>
     <button id="openPalette" class="iconbtn" title="Command palette (Ctrl/Cmd+K)">Palette</button>
@@ -143,15 +55,15 @@
     </select>
     <a href="#" class="help" data-doc="playbook" data-tip="Modes: Quick/Balanced/Deep/Verified; SLO‑aware scheduling and previews." title="Performance & Reasoning">?</a>
     <label class="key" title="Interactive latency target (P95)">SLO ms</label>
-    <input id="hdrSlo" type="number" min="100" step="50" value="1500" style="width: 90px;" title="Interactive SLO (P95) in ms">
+    <input id="hdrSlo" class="u-w-90" type="number" min="100" step="50" value="1500" title="Interactive SLO (P95) in ms">
     <button id="applyModeSlo" class="iconbtn" title="Apply mode/SLO">Apply</button>
     <button id="openShortcuts" class="iconbtn" title="Show shortcuts (Ctrl+/)">Shortcuts</button>
     <label class="key" title="Enable keyboard shortcuts"><input type="checkbox" id="shortcutsToggle" checked> shortcuts</label>
-    <a id="docsLink" class="help" title="Open docs" href="#" target="_blank" style="margin-left:auto;display:none">?</a>
-    <a id="secLink" class="help" data-doc="security" data-tip="Hardening guidance and recommended deployment settings." title="Security hardening" href="#" style="display:inline-block">!</a>
-    <button id="toggleInsights" class="iconbtn" title="Insights" style="display:inline-block">Insights</button>
-    <button id="copyStatsBtn" class="iconbtn" title="Copy stats JSON" style="display:inline-block">Copy stats</button>
-    <button id="copyCurlBtn" class="iconbtn" style="display:none" title="Copy last request as curl">Copy curl</button>
+    <a id="docsLink" class="help u-ml-auto u-hidden" title="Open docs" href="#" target="_blank">?</a>
+    <a id="secLink" class="help u-inline-block" data-doc="security" data-tip="Hardening guidance and recommended deployment settings." title="Security hardening" href="#">!</a>
+    <button id="toggleInsights" class="iconbtn u-inline-block" title="Insights">Insights</button>
+    <button id="copyStatsBtn" class="iconbtn u-inline-block" title="Copy stats JSON">Copy stats</button>
+    <button id="copyCurlBtn" class="iconbtn u-hidden" title="Copy last request as curl">Copy curl</button>
   </header>
   <script src="/admin/ui/assets/debug.js"></script>
   <script src="/admin/ui/assets/debug-core.js"></script>
@@ -170,9 +82,9 @@
       <h3>Chat <a href="#" class="help" data-doc="orchestrator" data-tip="Super simple debug chat; models are stubbed (echo/reverse/time)." title="Chat docs">?</a></h3>
       <div class="row" role="toolbar" aria-label="Chat settings">
         <label class="key" for="chatTemp">temperature</label>
-        <input id="chatTemp" type="number" step="0.1" min="-5" max="5" value="0.2" style="width: 80px;">
+        <input id="chatTemp" class="u-w-80" type="number" step="0.1" min="-5" max="5" value="0.2">
         <label class="key" for="chatVoteK">vote-k</label>
-        <input id="chatVoteK" type="number" min="1" max="5" value="1" style="width: 70px;">
+        <input id="chatVoteK" class="u-w-70" type="number" min="1" max="5" value="1">
         <span class="key" id="chatBackendLabel" title="Last backend"></span>
       </div>
       <textarea id="chatInput" placeholder="Say hello"></textarea>
@@ -185,10 +97,10 @@
         <button onclick="stagingFetch()">Refresh</button>
         <label class="key"><input type="checkbox" id="stagingLive" checked> live</label>
       </div>
-      <div id="stagingList" class="mtable" style="max-height:32vh;overflow:auto"></div>
-      <details id="stagingRecentShell" style="margin-top:8px;display:none">
+      <div id="stagingList" class="mtable u-scroll-32vh"></div>
+      <details id="stagingRecentShell" class="u-mt-8 u-hidden">
         <summary class="key">Recent decisions</summary>
-        <div id="stagingRecent" style="font-size:12px;color:var(--color-muted);margin-top:6px"></div>
+        <div id="stagingRecent" class="u-text-small u-text-muted u-mt-6"></div>
       </details>
     </div>
     <div class="card" data-collapsed="1">
@@ -197,10 +109,10 @@
         <button onclick="rwFetch()">Refresh</button>
         <label class="key"><input type="checkbox" id="rwLive" checked> live</label>
       </div>
-      <div id="rwPending" style="display:flex;flex-direction:column;gap:8px;max-height:32vh;overflow:auto"></div>
-      <details style="margin-top:8px">
+      <div id="rwPending" class="u-flex-column u-scroll-32vh"></div>
+      <details class="u-mt-8">
         <summary class="key">Recent decisions</summary>
-        <div id="rwRecent" style="font-size:12px;color:var(--color-muted);margin-top:6px"></div>
+        <div id="rwRecent" class="u-text-small u-text-muted u-mt-6"></div>
       </details>
     </div>
     <div class="card" data-collapsed="1">
@@ -212,7 +124,7 @@
         <button class="iconbtn" onclick="copyJson('contextMetricsOut','context metrics')">Copy</button>
       </div>
       <div id="contextMetricsSummary" class="kv"></div>
-      <div id="contextMetricsSlots" class="kv" style="font-size:12px;color:var(--color-muted)"></div>
+      <div id="contextMetricsSlots" class="kv u-text-small u-text-muted"></div>
       <pre id="contextMetricsOut">{}</pre>
     </div>
     <div class="card" data-collapsed="1">
@@ -223,10 +135,10 @@
         <label class="key"><input type="checkbox" id="policyLeasesLive" checked> live</label>
         <button class="iconbtn" onclick="copyJson('policyLeasesOut','policy leases')">Copy</button>
         <button class="iconbtn" onclick="clearPolicyLeasesFilter()">Clear</button>
-        <input id="policyLeasesFilter" class="mini" placeholder="Filter (capability, subject, scope)" style="margin-left:auto">
+        <input id="policyLeasesFilter" class="mini u-ml-auto" placeholder="Filter (capability, subject, scope)">
       </div>
-      <div id="policyLeasesMeta" class="kv" style="font-size:12px;color:var(--color-muted)"></div>
-      <div id="policyLeasesTable" class="mtable" style="max-height:32vh;overflow:auto"></div>
+      <div id="policyLeasesMeta" class="kv u-text-small u-text-muted"></div>
+      <div id="policyLeasesTable" class="mtable u-scroll-32vh"></div>
       <pre id="policyLeasesOut">{}</pre>
     </div>
     <div class="card" data-collapsed="1">
@@ -238,7 +150,7 @@
         <button class="iconbtn" onclick="copyJson('serviceHealthOut','service health')">Copy</button>
       </div>
       <div id="serviceHealthSummary" class="kv"></div>
-      <div id="serviceHealthHistory" class="mtable" style="max-height:32vh;overflow:auto"></div>
+      <div id="serviceHealthHistory" class="mtable u-scroll-32vh"></div>
       <pre id="serviceHealthOut">{}</pre>
     </div>
     <div class="card" data-collapsed="1">
@@ -249,10 +161,10 @@
         <label class="key"><input type="checkbox" id="crashlogLive" checked> live</label>
         <button class="iconbtn" onclick="copyJson('crashlogOut','crash log')">Copy</button>
         <button class="iconbtn" onclick="clearCrashlogFilter()">Clear</button>
-        <input id="crashlogFilter" class="mini" placeholder="Filter (file, reason, status)" style="margin-left:auto">
+        <input id="crashlogFilter" class="mini u-ml-auto" placeholder="Filter (file, reason, status)">
       </div>
-      <div id="crashlogMeta" class="kv" style="font-size:12px;color:var(--color-muted)"></div>
-      <div id="crashlogList" class="mtable" style="max-height:32vh;overflow:auto"></div>
+      <div id="crashlogMeta" class="kv u-text-small u-text-muted"></div>
+      <div id="crashlogList" class="mtable u-scroll-32vh"></div>
       <pre id="crashlogOut">{}</pre>
     </div>
     <div class="card">
@@ -275,17 +187,17 @@
       </div>
       <div class="row" role="toolbar" aria-label="Hints">
         <label class="key">hints</label>
-        <input id="hintConc" type="number" min="1" placeholder="concurrency" style="width:120px;">
-        <input id="hintBuf" type="number" min="1" placeholder="event buffer" style="width:140px;">
-        <input id="hintTimeout" type="number" min="1" placeholder="http timeout s" style="width:140px;">
-        <input id="hintRetrK" type="number" min="1" placeholder="retrieval k" style="width:120px;">
-        <input id="hintDiv" type="number" step="0.05" min="0" max="1" placeholder="diversity/λ" style="width:120px;">
-        <input id="hintLambda" type="number" step="0.05" min="0" max="1" placeholder="mmr λ" style="width:120px;">
-        <input id="hintCompr" type="number" step="0.1" min="0" max="1" placeholder="compression" style="width:120px;">
-        <input id="hintVoteK" type="number" min="0" max="9" placeholder="vote-k" style="width:100px;">
-        <input id="hintCtxBudget" type="number" min="0" placeholder="ctx tokens" style="width:110px;">
-        <input id="hintCtxPer" type="number" min="0" placeholder="per-item tokens" style="width:140px;">
-        <select id="hintCtxFmt" title="context format" style="width:120px;">
+        <input id="hintConc" class="u-w-120" type="number" min="1" placeholder="concurrency">
+        <input id="hintBuf" class="u-w-140" type="number" min="1" placeholder="event buffer">
+        <input id="hintTimeout" class="u-w-140" type="number" min="1" placeholder="http timeout s">
+        <input id="hintRetrK" class="u-w-120" type="number" min="1" placeholder="retrieval k">
+        <input id="hintDiv" class="u-w-120" type="number" step="0.05" min="0" max="1" placeholder="diversity/λ">
+        <input id="hintLambda" class="u-w-120" type="number" step="0.05" min="0" max="1" placeholder="mmr λ">
+        <input id="hintCompr" class="u-w-120" type="number" step="0.1" min="0" max="1" placeholder="compression">
+        <input id="hintVoteK" class="u-w-100" type="number" min="0" max="9" placeholder="vote-k">
+        <input id="hintCtxBudget" class="u-w-110" type="number" min="0" placeholder="ctx tokens">
+        <input id="hintCtxPer" class="u-w-140" type="number" min="0" placeholder="per-item tokens">
+        <select id="hintCtxFmt" class="u-w-120" title="context format">
           <option value="">format</option>
           <option value="bullets">bullets</option>
           <option value="jsonl">jsonl</option>
@@ -297,17 +209,17 @@
         <button onclick="orHintsGet()">Get</button>
       </div>
       <div class="row">
-        <input id="hintCtxHeader" placeholder="header" style="flex:1;min-width:180px">
-        <input id="hintCtxFooter" placeholder="footer" style="flex:1;min-width:180px">
+        <input id="hintCtxHeader" class="u-flex-1 u-min-180" placeholder="header">
+        <input id="hintCtxFooter" class="u-flex-1 u-min-180" placeholder="footer">
       </div>
       <div class="row">
-        <input id="hintCtxTpl" placeholder="custom item template (for format=custom)" style="flex:1;min-width:280px">
-        <input id="hintJoiner" placeholder="joiner (e.g., \n)" style="width:140px">
+        <input id="hintCtxTpl" class="u-flex-1 u-min-280" placeholder="custom item template (for format=custom)">
+        <input id="hintJoiner" class="u-w-140" placeholder="joiner (e.g., \n)">
       </div>
       <div class="row"><span class="key">time</span> <code id="rt-orch">–</code></div>
     </div>
     <div class="card">
-      <h3>Memory <a href="#" class="help" data-doc="memory" data-tip="Understand memory kinds and how /memory endpoints work." title="Memory docs">?</a> <span id="memHdrBadge" class="badge ok" style="margin-left:6px"><span class="dot"></span> Mem: –</span></h3>
+      <h3>Memory <a href="#" class="help" data-doc="memory" data-tip="Understand memory kinds and how /memory endpoints work." title="Memory docs">?</a> <span id="memHdrBadge" class="badge ok u-ml-6"><span class="dot"></span> Mem: –</span></h3>
       <div class="row">
         <button onclick="refreshMemory()">Refresh</button>
         <select id="memKind">
@@ -341,7 +253,7 @@
       <div class="row">
         <button class="iconbtn" id="egClear">Clear</button>
       </div>
-      <div id="egOut" role="region" aria-label="Egress preview output" style="max-height:28vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;background:#fff;padding:8px"></div>
+      <div id="egOut" class="u-box u-scroll-28vh" role="region" aria-label="Egress preview output"></div>
     </div>
     <div class="card" data-collapsed="1">
       <h3>Training Telemetry <a href="#" class="help" data-doc="training_park" data-tip="Live metrics feeding the Training Park." title="Training telemetry">?</a></h3>
@@ -364,7 +276,7 @@
         <button class="iconbtn" onclick="refreshHW()">Refresh HW</button>
         <button class="iconbtn" id="gpuToggle">GPU adapters</button>
       </div>
-      <div id="gpuList" style="display:none; padding:8px; border:1px dashed var(--color-line); border-radius:8px; background:#fff"></div>
+      <div id="gpuList" class="u-box dashed u-hidden u-radius-8"></div>
       <pre id="sysOut">{}</pre>
     </div>
     <div class="card" data-collapsed="1">
@@ -382,7 +294,7 @@
     </div>
   </div>
 
-  <div class="cols" style="margin-top:16px">
+  <div class="cols u-mt-16">
     <div class="card" data-collapsed="1">
       <h3>Experiments (Live) <a href="#" class="help" data-doc="testing" data-tip="Recent experiment activity and quick scoreboard." title="Experiments">?</a></h3>
       <div class="row">
@@ -392,8 +304,8 @@
         <button class="iconbtn" onclick="expExportCSV()">Export CSV</button>
         <button class="iconbtn" onclick="expCopyJSON()">Copy JSON</button>
       </div>
-      <div id="expDefs" style="max-height:20vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;background:#fff;padding:8px"></div>
-      <div id="expBoard" style="max-height:28vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;background:#fff;padding:8px;margin-top:8px"></div>
+      <div id="expDefs" class="u-box u-scroll-20vh"></div>
+      <div id="expBoard" class="u-box u-scroll-28vh u-mt-8"></div>
     </div>
     <div class="card" data-collapsed="1">
       <h3>Models Metrics <a href="#" class="help" data-doc="events" data-tip="Live counters and EWMA for model downloads." title="Models metrics">?</a></h3>
@@ -434,20 +346,20 @@
     <div class="card">
       <h3>Goldens / Experiments <a href="#" class="help" data-doc="testing" data-tip="Run goldens and A/B variants offline; activate a live variant by applying hints." title="Goldens/Experiments">?</a></h3>
       <div class="row">
-        <input id="goldProj" placeholder="project" value="default" style="width: 160px;">
+        <input id="goldProj" class="u-w-160" placeholder="project" value="default">
         <button class="iconbtn" onclick="goldList()">List</button>
         <button class="iconbtn" onclick="goldRun()">Run</button>
         <label class="key">vote‑k</label>
-        <input id="goldVoteK" type="number" min="1" max="9" value="3" style="width: 60px;">
+        <input id="goldVoteK" class="u-w-60" type="number" min="1" max="9" value="3">
       </div>
       <div class="row">
-        <input id="expId" placeholder="exp id" style="width: 180px;">
-        <input id="expVar" placeholder="variants (A,B)" value="A,B" style="width: 160px;">
+        <input id="expId" class="u-w-180" placeholder="exp id">
+        <input id="expVar" class="u-w-160" placeholder="variants (A,B)" value="A,B">
         <button class="iconbtn" onclick="expDefine()">Define</button>
         <button class="iconbtn" onclick="expRun()">Run A/B</button>
         <button class="iconbtn" onclick="expActivate()" title="Apply selected variant hints">Activate</button>
       </div>
-      <div class="row" id="expKpis" style="display:none"></div>
+      <div class="row u-hidden" id="expKpis"></div>
       <div class="row"><span class="key">solve rate</span> <code id="goldSolve">–</code> <span class="key">avg ms</span> <code id="goldLat">–</code></div>
       <pre id="goldOut">{}</pre>
     </div>
@@ -466,9 +378,9 @@
         <button onclick="episodesRefresh()">Refresh</button>
         <label><input type="checkbox" id="epLive"> live</label>
         <label><input type="checkbox" id="epErrOnly"> errors only</label>
-        <input id="epFilter" placeholder="filter id/kind/substr" style="flex:1;min-width:200px">
+        <input id="epFilter" class="u-flex-1 u-min-200" placeholder="filter id/kind/substr">
       </div>
-      <div id="epList" style="max-height:36vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;background:#fff;padding:8px"></div>
+      <div id="epList" class="u-box u-scroll-36vh"></div>
     </div>
     <div class="card" data-collapsed="1">
       <h3>State Snapshots</h3>
@@ -481,16 +393,16 @@
         <button onclick="pullState('episodes')">Episodes</button>
       </div>
       <div class="row">
-        <input id="worldQ" placeholder="world: query" style="flex:1;min-width:200px">
-        <input id="worldK" type="number" min="1" max="50" step="1" value="8" style="width:70px">
+        <input id="worldQ" class="u-flex-1 u-min-200" placeholder="world: query">
+        <input id="worldK" class="u-w-70" type="number" min="1" max="50" step="1" value="8">
         <button class="ghost" onclick="worldSelect()">Select</button>
         <label class="key"><input type="checkbox" id="asmOverride"> overrides</label>
         <button class="primary" onclick="contextAssemble()">Assemble</button>
       </div>
-      <div class="row" id="plannerMeta" style="display:none"></div>
-      <div class="row" id="ctxKpis" style="display:none"></div>
+      <div class="row u-hidden" id="plannerMeta"></div>
+      <div class="row u-hidden" id="ctxKpis"></div>
       <div class="row"><span class="key">context preview</span></div>
-      <pre id="ctxPreview" style="white-space:pre-wrap">(assemble to render)</pre>
+      <pre id="ctxPreview" class="u-pre-wrap">(assemble to render)</pre>
       <pre id="stateOut">{}</pre>
     </div>
     <div class="card" data-collapsed="1">
@@ -499,7 +411,7 @@
         <button class="ghost" onclick="worldMapRefresh()">Refresh</button>
         <label><input type="checkbox" id="wmLive"> live</label>
       </div>
-      <div id="worldMap" style="max-height:28vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;background:#fff;padding:8px"></div>
+      <div id="worldMap" class="u-box u-scroll-28vh"></div>
     </div>
     <div class="card" data-collapsed="1">
       <h3>Routes <a href="#" class="help" data-doc="events" data-tip="Live HTTP route stats (p95/ewma/hits/errors)." title="Routes stats">?</a></h3>
@@ -512,9 +424,9 @@
           <option value="hits">hits</option>
           <option value="errors">errors</option>
         </select>
-        <input id="routesTopN" type="number" min="1" value="10" style="width:80px" title="Top N">
+        <input id="routesTopN" class="u-w-80" type="number" min="1" value="10" title="Top N">
       </div>
-      <div id="routesTable" style="max-height:36vh;overflow:auto;border:1px solid var(--color-line);border-radius:10px;background:#fff;padding:8px"></div>
+      <div id="routesTable" class="u-box u-scroll-36vh"></div>
     </div>
   <div class="card" data-collapsed="1">
       <h3>Self‑Learning <a href="#" class="help" data-doc="orchestrator" data-tip="Signals → suggestions. Gently embedded feedback." title="Self‑Learning docs">?</a></h3>
@@ -525,12 +437,12 @@
           <option value="memory">memory</option>
           <option value="cpu">cpu</option>
         </select>
-        <input id="sigTarget" placeholder="target (/path or id)" style="width:220px;">
-        <input id="sigConf" type="number" step="0.05" min="0" max="1" value="0.7" style="width:90px;">
-        <input id="sigSev" type="number" step="1" min="1" max="5" value="2" style="width:70px;">
+        <input id="sigTarget" class="u-w-220" placeholder="target (/path or id)">
+        <input id="sigConf" class="u-w-90" type="number" step="0.05" min="0" max="1" value="0.7">
+        <input id="sigSev" class="u-w-70" type="number" step="1" min="1" max="5" value="2">
       </div>
       <div class="row">
-        <input id="sigNote" placeholder="note (optional)" style="width:60%">
+        <input id="sigNote" class="u-w-60p" placeholder="note (optional)">
         <button class="ghost" onclick="fbSignal()">Signal</button>
         <button class="primary" onclick="fbAnalyze()">Analyze now</button>
         <label><input type="checkbox" id="autoApply"> auto‑apply safe</label>
@@ -539,35 +451,35 @@
       <div class="row">
         <button onclick="fbState()">Refresh</button>
         <button class="ghost" onclick="fbReset()">Reset</button>
-        <input id="fbApplyId" placeholder="suggestion id" style="width:160px;">
+        <input id="fbApplyId" class="u-w-160" placeholder="suggestion id">
         <button class="primary" onclick="fbApply()">Apply</button>
       </div>
       <pre id="fbOut">{"signals":[],"suggestions":[]}</pre>
-      <h4 style="margin-top:10px">Live Suggestions <a href="#" class="help" data-doc="feedback" data-tip="Near-live heuristic suggestions. Applies are policy-gated." title="Feedback docs">?</a> <span class="badge warn" id="fbVerBadge"><span class="dot"></span> v0</span> <span class="key" id="fbBounds"></span></h4>
+      <h4 class="u-mt-10">Live Suggestions <a href="#" class="help" data-doc="feedback" data-tip="Near-live heuristic suggestions. Applies are policy-gated." title="Feedback docs">?</a> <span class="badge warn" id="fbVerBadge"><span class="dot"></span> v0</span> <span class="key" id="fbBounds"></span></h4>
       <div class="row">
         <button class="iconbtn" onclick="fbFetchSuggestions()">Refresh</button>
         <label><input type="checkbox" id="fbLive" checked> live</label>
       </div>
       <div id="fbList"></div>
-      <pre id="fbLiveOut" style="display:none">{"version":0,"suggestions":[]}</pre>
+      <pre id="fbLiveOut" class="u-hidden">{"version":0,"suggestions":[]}</pre>
     </div>
     <div class="card">
-      <h3>Models <a href="#" class="help" data-doc="orchestrator" data-tip="Add/delete and set default model." title="Models docs">?</a> <span id="modelsHdrBadge" class="badge warn" style="margin-left:6px"><span class="dot"></span> 0</span></h3>
-      <div id="modelsHint" class="hint" style="display:none">
+      <h3>Models <a href="#" class="help" data-doc="orchestrator" data-tip="Add/delete and set default model." title="Models docs">?</a> <span id="modelsHdrBadge" class="badge warn u-ml-6"><span class="dot"></span> 0</span></h3>
+      <div id="modelsHint" class="hint u-hidden">
         <a href="#" class="dismiss" title="dismiss" onclick="modelsHintDismiss(); return false;">×</a>
         <b>Get started:</b>
         <span class="key">1)</span> Add a model id
         <span class="key">2)</span> Paste file URL + SHA256
         <span class="key">3)</span> Click Download
-        <a href="#" onclick="modelsPrefillSample(); return false;" style="margin-left:10px; color:#2563eb; text-decoration:underline">prefill sample</a>
+        <a href="#" class="u-ml-10 u-link-accent" onclick="modelsPrefillSample(); return false;">prefill sample</a>
       </div>
       <div class="row">
-        <input id="mId" placeholder="model id" style="width:220px;">
-        <input id="mProv" placeholder="provider (local)" style="width:160px;">
+        <input id="mId" class="u-w-220" placeholder="model id">
+        <input id="mProv" class="u-w-160" placeholder="provider (local)">
       </div>
       <div class="row">
-        <input id="mUrl" placeholder="download url (https://...)" style="flex:1; min-width:320px;">
-        <input id="mSha" placeholder="sha256 (64 hex)" style="width:360px;">
+        <input id="mUrl" class="u-flex-1 u-min-320" placeholder="download url (https://...)">
+        <input id="mSha" class="u-w-360" placeholder="sha256 (64 hex)">
       </div>
       <div class="row">
         <button onclick="modelsList()">List</button>
@@ -577,13 +489,13 @@
         <button onclick="modelsDefaultSet()">Set default</button>
         <button onclick="modelsDownload()">Download</button>
         <button onclick="modelsCancel()">Cancel</button>
-        <input id="gcTtl" type="number" min="1" value="7" style="width:80px" title="ttl days (converted to hours)">
-        <label style="display:flex;align-items:center;gap:4px" title="Include per-blob deletion details">
+        <input id="gcTtl" class="u-w-80" type="number" min="1" value="7" title="ttl days (converted to hours)">
+        <label class="u-flex-row" title="Include per-blob deletion details">
           <input id="gcVerbose" type="checkbox" checked> verbose
         </label>
         <button onclick="modelsGc()" title="GC CAS blobs older than ttl">GC</button>
       </div>
-      <pre id="modelsOut" style="display:none">[]</pre>
+      <pre id="modelsOut" class="u-hidden">[]</pre>
       <div id="modelsTable" class="mtable"></div>
     </div>
     <div class="card" id="dlBox">
@@ -596,22 +508,22 @@
       <div id="dlRows"></div>
     </div>
     <div class="card" data-collapsed="1">
-      <h3>Agent Card <a href="#" class="help" data-doc="events" data-tip="Self‑model: capabilities, competence, calibration, costs, failure modes." title="Self‑Model docs">?</a> <span id="selfHdrBadge" class="badge warn" style="margin-left:6px"><span class="dot"></span> 0</span></h3>
+      <h3>Agent Card <a href="#" class="help" data-doc="events" data-tip="Self‑model: capabilities, competence, calibration, costs, failure modes." title="Self‑Model docs">?</a> <span id="selfHdrBadge" class="badge warn u-ml-6"><span class="dot"></span> 0</span></h3>
       <div class="row" role="toolbar" aria-label="Agent Card actions">
         <button class="iconbtn" onclick="selfRefreshList()">Refresh</button>
-        <select id="selfAgentSel" style="min-width:180px"></select>
-        <input id="selfAgentId" placeholder="or type agent id" style="width:200px">
+        <select id="selfAgentSel" class="u-min-180"></select>
+        <input id="selfAgentId" class="u-w-200" placeholder="or type agent id">
         <button class="primary" onclick="selfView()">View</button>
         <label><input type="checkbox" id="selfLive"> live</label>
       </div>
-      <div id="selfSummary" class="row" style="flex-direction:column;gap:6px"></div>
+      <div id="selfSummary" class="row u-column-tight"></div>
       <div class="row"><button class="iconbtn" id="copyJsonSelf" title="Copy JSON">Copy</button></div>
       <pre id="selfOut">{}</pre>
-      <h4 style="margin-top:10px">Propose update <span class="key">(admin)</span></h4>
+      <h4 class="u-mt-10">Propose update <span class="key">(admin)</span></h4>
       <div class="row">
-        <input id="selfWhy" placeholder="rationale" style="flex:1;min-width:200px">
+        <input id="selfWhy" class="u-flex-1 u-min-200" placeholder="rationale">
         <button class="ghost" onclick="selfPropose()">Propose</button>
-        <input id="selfApplyId" placeholder="proposal id" style="width:200px">
+        <input id="selfApplyId" class="u-w-200" placeholder="proposal id">
         <button class="ghost" onclick="selfApply()">Apply</button>
       </div>
       <textarea id="selfPatch">{}</textarea>
@@ -875,7 +787,8 @@ function renderDownloads(){
     const code = d.code; const note = d.error || codeExplain(code, d);
     const disk = d.disk; const diskTxt = (disk && typeof disk.available==='number') ? ` · disk ${bytesHuman(disk.available)} free` : '';
     const cancelBtn = (!d.finished) ? `<button class="ghost" onclick="modelsCancelId('${id.replace(/'/g,"%27")}')">Cancel</button>` : '';
-    const pbar = (pct!=null) ? `<div class="pbar"><div class="pfill" style="width:${pct}%"></div></div>` : `<div class="pbar"><div class="pfill" style="width:0%"></div></div>`;
+    const prog = pct!=null ? Math.max(0, Math.min(100, pct)) : 0;
+    const pbar = `<div class="pbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(prog)}"><div class="pfill" style="--progress:${prog}%"></div></div>`;
     const metaL = (total>0) ? `${bytesHuman(downloaded)} / ${bytesHuman(total)}` : `${bytesHuman(downloaded)} / ?`;
     const metaR = `${(spd!=null? spd.toFixed(2)+' MB/s' : '–')} · ETA ${etaMs!=null? msHuman(etaMs): '–'}`;
     lines.push(`<div class="dlrow">
@@ -883,9 +796,9 @@ function renderDownloads(){
       <div class="dlstat">${status}${code? ' ('+code+')':''}</div>
       ${pbar}
       <div class="dlmeta" title="bytes/speed/eta">${metaL} · ${metaR}${diskTxt}</div>
-      <div style="margin-left:auto; display:flex; gap:8px; align-items:center">${cancelBtn}</div>
+      <div class="u-flex u-ml-auto">${cancelBtn}</div>
     </div>
-    ${note? `<div class="dlmeta" style="margin:-4px 0 4px 150px">${note}</div>`:''}`);
+    ${note? `<div class="dlmeta u-note-spill">${note}</div>`:''}`);
   });
   el.innerHTML = lines.join('');
 }
@@ -1131,7 +1044,7 @@ function expDefs(){ (async()=>{ try{
     const safeVars = String(varsCsv).replace(/'/g, "%27");
     const btnRun = vkeys.length ? `<button class="ghost" onclick="expRunFromDef('${safeId}','${safeVars}')">Run A/B</button>` : '';
     const btnAct = vkeys.length ? `<button class="ghost" onclick="expActivateWinner('${safeId}')">Activate Winner</button>` : '';
-    return `<div class="dlrow"><code>${it.id||''}</code> <span class="key">name</span><code>${it.name||''}</code> <span class="key">variants</span><code>${vs||'<em>none</em>'}</code> <span style="margin-left:auto">${btnRun} ${btnAct}</span></div>`;
+    return `<div class="dlrow"><code>${it.id||''}</code> <span class="key">name</span><code>${it.name||''}</code> <span class="key">variants</span><code>${vs||'<em>none</em>'}</code> <span class="u-ml-auto">${btnRun} ${btnAct}</span></div>`;
   });
   el.innerHTML = rows.join('') || '<div class="key">no defs</div>';
 }catch{ showToast('defs fetch failed'); } })(); }
@@ -1800,8 +1713,8 @@ function routesPanelRender(){ try{
   const rows = entries.slice(0, topN).map(({p,st})=>{
     const hits = st.hits||0, errs = st.errors||0, p95=st.p95_ms||0, ew=st.ewma_ms||0, mx=st.max_ms||0;
     const errRate = hits>0 ? ((errs*100/hits).toFixed(1)+'%') : '0%';
-    return `<div class="dlrow" style="gap:6px">
-      <code style="min-width:220px">${p}</code>
+    return `<div class="dlrow u-gap-6">
+      <code class="u-min-220">${p}</code>
       <span class="key">hits</span><code>${hits}</code>
       <span class="key">errors</span><code>${errs} <span class="key">(${errRate})</span></code>
       <span class="key">p95</span><code>${msfmt(p95)}</code>
@@ -1935,8 +1848,8 @@ function fbRenderList(j){
     const conf = cnum.toFixed(2);
     const rationale = s.rationale || '';
     const params = JSON.stringify(s.params||{}, null, 0);
-    return `<div style="display:flex; gap:8px; align-items:center; margin:4px 0">
-      <code style="min-width:120px">${action}</code>
+    return `<div class="u-flex u-my-4">
+      <code class="u-min-120">${action}</code>
       <span class="key">id</span><code>${id}</code>
       <span class="badge ${cls(cnum)}" title="confidence">${conf}</span>
       <button class="iconbtn" onclick="fbApplyId('${id}')">Apply</button>
@@ -2000,7 +1913,7 @@ function showTip(anchor, text, key){
   const tip = document.createElement('div');
   tip.className = 'tip';
   const more = docsBase ? `<a class="t-more" target="_blank" href="${docsBase}${docPath(key)}">Read more →</a>` : '';
-  tip.innerHTML = `<div class="t-title">${key.charAt(0).toUpperCase()+key.slice(1)}</div><div>${text}</div><div style="margin-top:6px">${more}</div>`;
+  tip.innerHTML = `<div class="t-title">${key.charAt(0).toUpperCase()+key.slice(1)}</div><div>${text}</div><div class="u-mt-6">${more}</div>`;
   document.body.appendChild(tip);
   positionTip(anchor, tip);
   const close = () => { tip.remove(); document.removeEventListener('click', onClickAway); window.removeEventListener('resize', onResize); };
@@ -2125,7 +2038,7 @@ function stagingRender(data){
         const id = item.id || item.action_id || '—';
         const verdict = item.status || item.decision || 'completed';
         const when = fmt(item.decided_at || item.updated || item.created);
-        return `<div style="margin-bottom:4px"><strong>${id}</strong> · ${verdict} · ${when}</div>`;
+        return `<div class="u-mb-4"><strong>${id}</strong> · ${verdict} · ${when}</div>`;
       }).join('');
       if(recentShell){ recentShell.open = true; recentShell.style.display = 'block'; }
     }
@@ -2311,8 +2224,8 @@ function serviceHealthRender(state){ try{
         const comp = item.component || 'service';
         const reason = item.reason || item.message || '';
         const when = item.time ? `${item.time} (${relTime(item.time)})` : '–';
-        return `<div class="dlrow" style="gap:6px">
-          <code style="min-width:160px">${st}</code>
+        return `<div class="dlrow u-gap-6">
+          <code class="u-min-160">${st}</code>
           <span class="key">component</span><code>${comp}</code>
           <span class="key">when</span><code>${when}</code>
           <span class="key">reason</span><code>${reason || '–'}</code>
@@ -2379,8 +2292,8 @@ const crashlogRender = debounce(function(state){ try{
         const when = it.ts_ms ? new Date(it.ts_ms).toISOString() : it.time || '–';
         const note = it.reason || it.message || it.error || '';
         const archived = it.archived ? 'archived' : 'active';
-        return `<div class="dlrow" style="gap:6px">
-          <code style="min-width:160px">${file}</code>
+        return `<div class="dlrow u-gap-6">
+          <code class="u-min-160">${file}</code>
           <span class="key">time</span><code>${when} (${relTime(when)})</code>
           <span class="key">status</span><code>${archived}</code>
           <span class="key">note</span><code>${note || '–'}</code>
@@ -2426,11 +2339,11 @@ function rwRender(data){
         const summary = it.summary || (it.payload ? JSON.stringify(it.payload).slice(0, 280) : '');
         const url = it.url ? `<a href="${it.url}" target="_blank">open</a>` : '';
         const project = it.project || 'library';
-        return `<div style="border:1px solid var(--color-line);border-radius:8px;padding:8px;background:#fff;">
-          <div style="font-weight:600;margin-bottom:4px">${title}</div>
-          <div style="font-size:12px;color:var(--color-muted);margin-bottom:6px">${source} · ${project}</div>
-          <div style="font-size:13px;margin-bottom:8px">${summary || '(no summary)'}${url ? ' · ' + url : ''}</div>
-          <div class="row" style="margin:0">
+        return `<div class="u-box u-radius-8 u-my-6">
+          <div class="u-weight-600 u-mb-4">${title}</div>
+          <div class="u-text-small u-text-muted u-mb-6">${source} · ${project}</div>
+          <div class="u-text-13 u-mb-8">${summary || '(no summary)'}${url ? ' · ' + url : ''}</div>
+          <div class="row u-m-0">
             <button class="iconbtn" onclick="rwAct('${it.id}','approve')">Approve</button>
             <button class="iconbtn" onclick="rwAct('${it.id}','archive')">Archive</button>
           </div>
@@ -2664,7 +2577,7 @@ const Shortcuts = {
   setEnabled(on){ this.enabled = !!on; savePref('shortcuts.enabled', this.enabled); const cb=document.getElementById('shortcutsToggle'); if(cb) cb.checked = this.enabled; },
   list(){ return this.binds.map(b => ({ seq: b.seq, desc: b.desc })).filter((v,i,a)=> a.findIndex(x=> x.seq===v.seq && x.desc===v.desc)===i); },
   ensureHelp(){ if(document.getElementById('scut')) return; const wrap=document.createElement('div'); wrap.className='palette'; wrap.id='scut';
-    wrap.innerHTML = `<div class="pal-box"><div style="padding:10px 12px;display:flex;align-items:center;gap:8px"><b>Shortcuts</b><span class="key" style="margin-left:auto">enable</span><input type="checkbox" id="shortcutsToggle2"></div><div id="scutList" class="pal-list"></div></div>`; document.body.appendChild(wrap);
+    wrap.innerHTML = `<div class="pal-box"><div class="pal-head"><b>Shortcuts</b><span class="key u-ml-auto">enable</span><input type="checkbox" id="shortcutsToggle2"></div><div id="scutList" class="pal-list"></div></div>`; document.body.appendChild(wrap);
     document.getElementById('shortcutsToggle2').addEventListener('change', (e)=> this.setEnabled(e.target.checked));
   },
   showHelp(){ this.ensureHelp(); const el=document.getElementById('scut'); const list=document.getElementById('scutList'); const rows=this.list().map(x=> `<div class="pal-item"><span>${x.desc}</span><span class="hint">${x.seq}</span></div>`).join(''); list.innerHTML = rows || '<div class="pal-item"><span>No shortcuts</span></div>'; el.style.display='flex'; document.getElementById('shortcutsToggle2').checked = this.enabled; },
@@ -2851,9 +2764,9 @@ function episodesRender(j){ try{
     const last = ep.last || '';
     const dur = ep.duration_ms!=null ? ` · ${ep.duration_ms} ms` : '';
     const errs = ep.errors||0;
-    const badge = errs>0 ? `<span class="badge bad" style="margin-left:6px"><span class="dot"></span> ${errs} err</span>` : `<span class="badge ok" style="margin-left:6px"><span class="dot"></span> OK</span>`;
+    const badge = errs>0 ? `<span class="badge bad u-ml-6"><span class="dot"></span> ${errs} err</span>` : `<span class="badge ok u-ml-6"><span class="dot"></span> OK</span>`;
     const eid = `epd-${(ep.id||String(idx)).replace(/[^a-zA-Z0-9_-]/g,'_')}`;
-    const head = `<div style="font-weight:600;display:flex;justify-content:space-between;align-items:center"><span>${ep.id} <span style="color:var(--color-muted);font-weight:400"> · ${count} events${dur} · ${last}</span>${badge}</span><button class="iconbtn" onclick="const d=document.getElementById('${eid}'); d.style.display = (d.style.display==='none'||!d.style.display)?'block':'none';">Details</button></div>`;
+    const head = `<div class="u-flex-between u-weight-600"><span>${ep.id} <span class="dim"> · ${count} events${dur} · ${last}</span>${badge}</span><button class="iconbtn" onclick="const d=document.getElementById('${eid}'); d.style.display = (d.style.display==='none'||!d.style.display)?'block':'none';">Details</button></div>`;
     const bodyAll = (ep.items||[]).map(ev=>{
       const k = ev.kind || '';
       const t = ev.time || '';
@@ -2863,7 +2776,7 @@ function episodesRender(j){ try{
       try{ const sid = ev?.payload?.suggestion?.id; if (sid){ applyBtn = ` <button class="iconbtn" onclick="epApply('${sid}')">Apply</button>`; } }catch{}
       return `<div class="evt">[${t}] ${k}: ${p}${applyBtn}</div>`;
     }).join('');
-    return `<div class="card" style="border:1px dashed #e5e7eb;margin:6px 0;padding:6px">${head}<div id="${eid}" style="display:none">${bodyAll}</div></div>`;
+    return `<div class="u-box dashed u-radius-8 u-my-6">${head}<div id="${eid}" class="u-hidden">${bodyAll}</div></div>`;
   }).join('');
   el.innerHTML = html;
 }catch{}}
@@ -2974,7 +2887,7 @@ async function modelsGc(){
   }catch{ showToast('GC error'); }
 }
 </script>
-  <div id="insights" style="display:none"></div>
+  <div id="insights" class="u-hidden"></div>
   <!-- Moved to /admin/ui/assets/debug.js -->
 </body>
 </html>

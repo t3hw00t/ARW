@@ -6,19 +6,8 @@
     <title>ARW Flows (Logic Units)</title>
     <link rel="stylesheet" href="/admin/ui/assets/tokens.css" />
     <link rel="stylesheet" href="/admin/ui/assets/ui-kit.css" />
-    <style>
-      body { padding: 12px; font-family: var(--font-sans, system-ui, sans-serif); background: var(--surface); color: var(--color-ink); }
-      header { display:flex; align-items:center; gap:12px; margin-bottom:12px; }
-      h1 { font-size: 18px; margin: 0; }
-      .card { background: var(--surface-muted); border: 1px solid var(--color-line); border-radius: 8px; padding: 12px; margin-bottom: 12px; }
-      label { display:block; font-size: 12px; color: var(--color-muted); margin-bottom: 4px; }
-      input[type=text], textarea { width: 100%; background: var(--surface); color: var(--color-ink); border: 1px solid var(--color-line); border-radius: 6px; padding: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-      textarea { min-height: 160px; }
-      .row { display:flex; gap: 12px; }
-      .row > .col { flex:1; }
-      .btns { display:flex; gap:8px; align-items:center; }
-      .out { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; background: var(--surface); padding: 8px; border-radius: 6px; border: 1px solid var(--color-line); min-height: 80px; }
-    </style>
+    <link rel="stylesheet" href="/admin/ui/assets/pages.css" />
+    <link rel="stylesheet" href="/admin/ui/assets/flows.css" />
   </head>
   <body>
     <header>
@@ -27,18 +16,18 @@
     </header>
     <div class="card">
       <div class="row">
-        <div class="col">
-          <label for="unit">Unit ID</label>
-          <input id="unit" type="text" placeholder="my.flow.unit@local" />
+        <div class="flow-col">
+          <label class="flow-label" for="unit">Unit ID</label>
+          <input id="unit" class="flow-input" type="text" placeholder="my.flow.unit@local" />
         </div>
-        <div class="col">
-          <label for="scope">Scope (optional)</label>
-          <input id="scope" type="text" placeholder="project:demo" />
+        <div class="flow-col">
+          <label class="flow-label" for="scope">Scope (optional)</label>
+          <input id="scope" class="flow-input" type="text" placeholder="project:demo" />
         </div>
       </div>
-      <div style="margin-top:8px">
-        <label for="patches">Patches (JSON array)</label>
-        <textarea id="patches" spellcheck="false">[
+      <div class="flow-field">
+        <label class="flow-label" for="patches">Patches (JSON array)</label>
+        <textarea id="patches" class="flow-textarea" spellcheck="false">[
   {
     "target": "governor.hints",
     "op": "merge",
@@ -46,15 +35,15 @@
   }
 ]</textarea>
       </div>
-      <div class="btns" style="margin-top:8px">
+      <div class="flow-actions">
         <button id="dry" class="btn ghost">Dry Run</button>
         <button id="apply" class="btn">Apply</button>
         <span id="status" class="badge">idle</span>
       </div>
     </div>
     <div class="card">
-      <label>Result</label>
-      <div id="out" class="out"></div>
+      <label class="flow-label" for="out">Result</label>
+      <div id="out" class="flow-output" aria-live="polite"></div>
     </div>
     <script>
       async function call(path, body) {
@@ -87,4 +76,3 @@
     </script>
   </body>
   </html>
-

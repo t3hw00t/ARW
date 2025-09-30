@@ -55,7 +55,7 @@
     const hints = document.getElementById('runtimeHints');
     const errors = document.getElementById('errorHints');
     if (!card || !hints || !errors) return;
-    card.style.display = 'block';
+    card.hidden = false;
     const runtime = metrics.runtime || {};
     const lines = [];
     if (runtime.idle_timeout_secs !== undefined && runtime.idle_timeout_secs !== null) {
@@ -102,4 +102,3 @@
     listM();
   });
 })();
-

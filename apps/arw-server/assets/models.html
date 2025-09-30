@@ -1,31 +1,43 @@
-<!doctype html><meta charset="utf-8"><title>ARW Models</title>
-<link rel="stylesheet" href="/admin/ui/assets/tokens.css"/>
-<link rel="stylesheet" href="/admin/ui/assets/ui-kit.css"/>
-<link rel="stylesheet" href="/admin/ui/assets/pages.css"/>
-<h1>Models <span id="mdlBadge" class="badge warn"><span class="dot"></span> 0</span></h1>
-<div class="row">
-  <span class='badge' id='sseBadge' style='margin-left:auto'><span class='dot'></span> SSE: off</span>
-  <span id='statusBadges' style='margin-left:8px'></span>
-  </div>
-<div class="card">
-  <div class="row" role="toolbar" aria-label="Admin token">
-    <input id="adminTok" placeholder="admin token" style="width:240px" autocomplete="off">
-    <button id="adminTokApply">Apply</button>
-    <span id="authBadge" class="badge warn"><span class="dot"></span> Admin: off</span>
-  </div>
-  <div class="row" role="toolbar" aria-label="Models actions"><input id="mId" placeholder="model id" style="width:240px"><input id="mProv" placeholder="provider (local)" style="width:160px"></div>
-  <div class="row" role="toolbar" aria-label="Models actions">
-    <button id="btnList">List</button>
-    <button id="btnMetrics">Metrics</button>
-    <button id="btnAdd">Add</button>
-    <button id="btnDel">Delete</button>
-    <button id="btnDefGet">Get default</button>
-    <button id="btnDefSet">Set default</button>
-  </div>
-  <pre id="out">[]</pre>
-</div>
-<div class="card" id="runtimeCard" style="margin-top:12px;display:none">
-  <div id="runtimeHints"></div>
-  <div id="errorHints" style="margin-top:8px"></div>
-</div>
-<script src="/admin/ui/assets/models.js"></script>
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <title>ARW Models</title>
+    <link rel="stylesheet" href="/admin/ui/assets/tokens.css"/>
+    <link rel="stylesheet" href="/admin/ui/assets/ui-kit.css"/>
+    <link rel="stylesheet" href="/admin/ui/assets/pages.css"/>
+    <link rel="stylesheet" href="/admin/ui/assets/models.css"/>
+  </head>
+  <body>
+    <h1>Models <span id="mdlBadge" class="badge warn"><span class="dot"></span> 0</span></h1>
+    <div class="models-status">
+      <span class="models-status__spacer badge" id="sseBadge"><span class="dot"></span> SSE: off</span>
+      <span id="statusBadges" class="models-status__extra"></span>
+    </div>
+    <div class="card">
+      <div class="row" role="toolbar" aria-label="Admin token">
+        <input id="adminTok" class="models-input models-input--wide" placeholder="admin token" autocomplete="off">
+        <button id="adminTokApply">Apply</button>
+        <span id="authBadge" class="badge warn"><span class="dot"></span> Admin: off</span>
+      </div>
+      <div class="row" role="toolbar" aria-label="Models actions">
+        <input id="mId" class="models-input models-input--wide" placeholder="model id">
+        <input id="mProv" class="models-input models-input--provider" placeholder="provider (local)">
+      </div>
+      <div class="row" role="toolbar" aria-label="Models actions">
+        <button id="btnList">List</button>
+        <button id="btnMetrics">Metrics</button>
+        <button id="btnAdd">Add</button>
+        <button id="btnDel">Delete</button>
+        <button id="btnDefGet">Get default</button>
+        <button id="btnDefSet">Set default</button>
+      </div>
+      <pre id="out" class="models-output">[]</pre>
+    </div>
+    <div class="card models-runtime" id="runtimeCard" hidden>
+      <div id="runtimeHints"></div>
+      <div id="errorHints" class="models-runtime__errors"></div>
+    </div>
+    <script src="/admin/ui/assets/models.js"></script>
+  </body>
+</html>

@@ -1,0 +1,75 @@
+body{
+  margin: var(--sp3);
+  font-family: system-ui, Segoe UI, Roboto, Ubuntu, Arial, sans-serif;
+  background: var(--surface);
+  color: var(--color-ink);
+}
+
+h1{
+  margin: 0;
+  font-size: 22px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp2);
+}
+
+.models-status{
+  display: flex;
+  align-items: center;
+  gap: var(--sp2);
+  margin: var(--sp2) 0 var(--sp3);
+}
+
+.models-status__spacer{
+  margin-left: auto;
+}
+
+.models-status__extra{
+  margin-left: var(--sp2);
+}
+
+.models-input{
+  width: 100%;
+  max-width: 100%;
+  background: var(--surface);
+  color: var(--color-ink);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-2);
+  padding: 8px;
+  font-family: inherit;
+}
+
+.models-input--wide{
+  max-width: 240px;
+}
+
+.models-input--provider{
+  max-width: 160px;
+}
+
+.models-output{
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.models-runtime{
+  margin-top: var(--sp3);
+}
+
+.models-runtime[hidden]{
+  display: none;
+}
+
+.models-runtime__errors{
+  margin-top: var(--sp2);
+}
+
+@media (max-width: 720px){
+  .models-status{
+    flex-wrap: wrap;
+  }
+  .models-status__spacer{
+    margin-left: 0;
+  }
+}

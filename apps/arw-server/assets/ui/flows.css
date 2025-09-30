@@ -1,0 +1,73 @@
+body{
+  margin: var(--sp3);
+  font-family: system-ui, Segoe UI, Roboto, Ubuntu, Arial, sans-serif;
+  background: var(--surface);
+  color: var(--color-ink);
+}
+
+header{
+  display: flex;
+  align-items: center;
+  gap: var(--sp3);
+  margin-bottom: var(--sp3);
+}
+
+header h1{
+  margin: 0;
+  font-size: 20px;
+}
+
+.flow-label{
+  display: block;
+  font-size: 12px;
+  color: var(--color-muted);
+  margin-bottom: 4px;
+}
+
+.flow-col{
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.flow-field{
+  margin-top: var(--sp2);
+}
+
+.flow-input,
+.flow-textarea{
+  width: 100%;
+  background: var(--surface);
+  color: var(--color-ink);
+  border: 1px solid var(--color-line);
+  border-radius: var(--radius-2);
+  padding: 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.flow-textarea{
+  min-height: 160px;
+}
+
+.flow-actions{
+  display: flex;
+  align-items: center;
+  gap: var(--sp2);
+  margin-top: var(--sp2);
+}
+
+.flow-output{
+  white-space: pre-wrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  background: var(--surface);
+  padding: 8px;
+  border-radius: var(--radius-2);
+  border: 1px solid var(--color-line);
+  min-height: 80px;
+}
+
+@media (max-width: 720px){
+  header{
+    flex-wrap: wrap;
+  }
+}
