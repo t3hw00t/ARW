@@ -993,7 +993,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const portInput = document.getElementById('port');
   telemetryBase = getCurrentBase();
   const base = telemetryBase;
-  ARW.sidecar.mount('sidecar', ['timeline','context','policy','metrics','models'], { base });
+  ARW.sidecar.mount('sidecar', ['timeline','approvals','context','policy','metrics','models'], { base });
   ARW.sse.indicator('sseStat', { prefix: 'SSE' });
   const sseFilters = ['state.', 'models.', 'logic.unit.', 'config.patch.'];
   ARW.sse.connect(base, { replay: 10, prefix: sseFilters });

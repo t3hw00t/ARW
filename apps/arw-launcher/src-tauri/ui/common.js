@@ -609,6 +609,922 @@ window.ARW = {
         node.appendChild(sec);
         sections.push([name, body]);
       }
+      const bodyFor = (lane) => sections.find(([n]) => n === lane)?.[1] || null;
+      let approvalsSub = null;
+      if (lanes.includes('approvals')) {
+        const approvalsState = {
+          error: null,
+          detail: null,
+          loading: false,
+          reviewer: null,
+          reviewerLoaded: false,
+          filter: '',
+          filterMode: 'text',
+          filterCaret: null,
+          staleThresholdMs: 60 * 60 * 1000,
+          lanePrefsLoaded: false,
+          shortcutHandler: null,
+          shortcutMap: {},
+          sortMode: 'newest',
+        };
+        const fmtRelative = (iso) => {
+          if (!iso) return '';
+          const dt = new Date(iso);
+          if (Number.isNaN(dt.getTime())) return '';
+          const diffMs = Date.now() - dt.getTime();
+          const absSec = Math.round(Math.abs(diffMs) / 1000);
+          const units = [
+            { limit: 60, div: 1, label: 's' },
+            { limit: 3600, div: 60, label: 'm' },
+            { limit: 86400, div: 3600, label: 'h' },
+            { limit: 2592000, div: 86400, label: 'd' },
+            { limit: 31536000, div: 2592000, label: 'mo' },
+          ];
+          for (const unit of units) {
+            if (absSec < unit.limit) {
+              const value = Math.max(1, Math.floor(absSec / unit.div));
+              return diffMs >= 0 ? `${value}${unit.label} ago` : `in ${value}${unit.label}`;
+            }
+          }
+          const years = Math.max(1, Math.floor(absSec / 31536000));
+          return diffMs >= 0 ? `${years}y ago` : `in ${years}y`;
+        };
+        const formatJson = (value, maxLen = 2000) => {
+          try {
+            let text = JSON.stringify(value ?? {}, null, 2);
+            if (text === '{}' || text === '[]') {
+              text = JSON.stringify(value);
+            }
+            if (typeof text !== 'string') {
+              text = String(value ?? '');
+            }
+            if (text.length > maxLen) {
+              return `${text.slice(0, maxLen - 1)}…`;
+            }
+            return text;
+          } catch {
+            const str = typeof value === 'string' ? value : String(value ?? '');
+            return str.length > maxLen ? `${str.slice(0, maxLen - 1)}…` : str;
+          }
+        };
+        const setReviewerPref = async (name) => {
+          try {
+            const prefs = (await ARW.getPrefs('launcher')) || {};
+            if (name) {
+              prefs.approvalsReviewer = name;
+            } else {
+              delete prefs.approvalsReviewer;
+            }
+            await ARW.setPrefs('launcher', prefs);
+          } catch {}
+        };
+        const setFilterPref = async (value) => {
+          try {
+            const prefs = (await ARW.getPrefs('launcher')) || {};
+            if (value) {
+              prefs.approvalsFilter = value;
+            } else {
+              delete prefs.approvalsFilter;
+            }
+            await ARW.setPrefs('launcher', prefs);
+          } catch {}
+        };
+        const setStalePref = async (ms) => {
+          try {
+            const prefs = (await ARW.getPrefs('launcher')) || {};
+            prefs.approvalsStaleMs = ms;
+            await ARW.setPrefs('launcher', prefs);
+          } catch {}
+        };
+        const setFilterModePref = async (mode) => {
+          try {
+            const prefs = (await ARW.getPrefs('launcher')) || {};
+            prefs.approvalsFilterMode = mode;
+            await ARW.setPrefs('launcher', prefs);
+          } catch {}
+        };
+        const setSortPref = async (mode) => {
+          try {
+            const prefs = (await ARW.getPrefs('launcher')) || {};
+            prefs.approvalsSortMode = mode;
+            await ARW.setPrefs('launcher', prefs);
+          } catch {}
+        };
+        const promptReviewer = async () => {
+          const current = approvalsState.reviewer || '';
+          const input = window.prompt('Reviewer (stored for audit trail):', current);
+          if (input === null) {
+            return approvalsState.reviewer;
+          }
+          const trimmed = input.trim();
+          if (!trimmed) {
+            approvalsState.reviewer = null;
+            await setReviewerPref(null);
+            return null;
+          }
+          approvalsState.reviewer = trimmed;
+          await setReviewerPref(trimmed);
+          return trimmed;
+        };
+        const ensureReviewer = async () => {
+          if (approvalsState.reviewer) {
+            return approvalsState.reviewer;
+          }
+          return await promptReviewer();
+        };
+        const parseIso = (maybeIso) => {
+          if (!maybeIso) return null;
+          const ts = Date.parse(maybeIso);
+          return Number.isFinite(ts) ? ts : null;
+        };
+        const ageMs = (item) => {
+          const ts = parseIso(item?.created) ?? parseIso(item?.updated);
+          if (ts == null) return null;
+          return Date.now() - ts;
+        };
+        const formatAge = (ms) => {
+          if (!Number.isFinite(ms) || ms < 0) return '';
+          const min = Math.round(ms / 60000);
+          if (min < 1) return '<1m';
+          if (min < 60) return `${min}m`;
+          const hr = Math.floor(min / 60);
+          const rem = min % 60;
+          if (hr < 24) {
+            return rem ? `${hr}h ${rem}m` : `${hr}h`;
+          }
+          const days = Math.floor(hr / 24);
+          const hRem = hr % 24;
+          return hRem ? `${days}d ${hRem}h` : `${days}d`;
+        };
+        const makePill = (label, value, { mono = false } = {}) => {
+          if (value === null || value === undefined || value === '') return null;
+          const pill = document.createElement('span');
+          pill.className = 'pill';
+          const tag = document.createElement('span');
+          tag.className = 'tag';
+          tag.textContent = label;
+          const val = document.createElement('span');
+          if (mono) val.classList.add('mono');
+          val.textContent = String(value);
+          pill.append(tag, val);
+          return pill;
+        };
+        const makeJsonBlock = (label, value) => {
+          const wrap = document.createElement('div');
+          wrap.className = 'approval-evidence-block';
+          const head = document.createElement('div');
+          head.className = 'approval-evidence-head';
+          const title = document.createElement('span');
+          title.className = 'approval-evidence-title';
+          title.textContent = label;
+          head.appendChild(title);
+          const copyBtn = document.createElement('button');
+          copyBtn.type = 'button';
+          copyBtn.className = 'ghost btn-small';
+          copyBtn.textContent = 'Copy';
+          copyBtn.addEventListener('click', (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            try {
+              ARW.copy(JSON.stringify(value ?? {}, null, 2));
+            } catch {
+              ARW.toast('Copy failed');
+            }
+          });
+          head.appendChild(copyBtn);
+          wrap.appendChild(head);
+          const pre = document.createElement('pre');
+          pre.className = 'approval-evidence-json mono';
+          pre.textContent = formatJson(value);
+          wrap.appendChild(pre);
+          return wrap;
+        };
+        const appendReviewerRow = (parent) => {
+          const wrap = document.createElement('div');
+          wrap.className = 'approval-reviewer';
+          const label = document.createElement('span');
+          label.className = 'dim';
+          label.textContent = approvalsState.reviewer
+            ? `Reviewer: ${approvalsState.reviewer}`
+            : 'Reviewer not set';
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'ghost btn-small';
+          btn.textContent = approvalsState.reviewer ? 'Change reviewer' : 'Set reviewer';
+          btn.addEventListener('click', async (ev) => {
+            ev.preventDefault();
+            ev.stopPropagation();
+            const prev = approvalsState.reviewer;
+            const updated = await promptReviewer();
+            if (updated === prev) {
+              return;
+            }
+            if (updated) {
+              ARW.toast(`Reviewer set to ${updated}`);
+            } else {
+              ARW.toast('Reviewer cleared');
+            }
+            renderApprovals();
+          });
+          wrap.append(label, btn);
+          parent.appendChild(wrap);
+        };
+        const createApprovalCard = (item = {}, autoOpen = false) => {
+          const card = document.createElement('article');
+          card.className = 'approval-card';
+          const itemAge = ageMs(item);
+          if (Number.isFinite(itemAge) && itemAge >= approvalsState.staleThresholdMs) {
+            card.classList.add('stale');
+          }
+          const head = document.createElement('div');
+          head.className = 'approval-head';
+          const kindPill = makePill('Kind', item.action_kind || 'unknown', { mono: true });
+          if (kindPill) head.appendChild(kindPill);
+          const projPill = makePill('Project', item.project);
+          if (projPill) head.appendChild(projPill);
+          const reqPill = makePill('By', item.requested_by);
+          if (reqPill) head.appendChild(reqPill);
+          if (Number.isFinite(itemAge)) {
+            const agePill = makePill('Age', formatAge(itemAge), { mono: true });
+            if (agePill) head.appendChild(agePill);
+          }
+          if (head.childElementCount) card.appendChild(head);
+          const meta = document.createElement('div');
+          meta.className = 'approval-meta';
+          if (item.created) {
+            const timeEl = document.createElement('time');
+            timeEl.dateTime = item.created;
+            timeEl.title = new Date(item.created).toLocaleString();
+            timeEl.textContent = fmtRelative(item.created) || item.created;
+            meta.appendChild(timeEl);
+          }
+          if (item.status && item.status !== 'pending') {
+            const statusSpan = document.createElement('span');
+            statusSpan.textContent = item.status;
+            meta.appendChild(statusSpan);
+          }
+          if (item.project && !projPill) {
+            const projectSpan = document.createElement('span');
+            projectSpan.textContent = item.project;
+            meta.appendChild(projectSpan);
+          }
+          if (meta.childElementCount) card.appendChild(meta);
+          const details = document.createElement('details');
+          details.className = 'approval-details';
+          if (autoOpen) details.open = true;
+          const summary = document.createElement('summary');
+          summary.textContent = 'Review details';
+          details.appendChild(summary);
+          const body = document.createElement('div');
+          body.className = 'approval-evidence';
+          body.appendChild(makeJsonBlock('Action input', item.action_input ?? {}));
+          const hasEvidence =
+            item.evidence &&
+            ((typeof item.evidence === 'object' && Object.keys(item.evidence).length > 0) ||
+              typeof item.evidence === 'string');
+          if (hasEvidence) {
+            body.appendChild(makeJsonBlock('Evidence', item.evidence));
+          } else {
+            const none = document.createElement('div');
+            none.className = 'dim';
+            none.textContent = 'No evidence provided';
+            body.appendChild(none);
+          }
+          details.appendChild(body);
+          card.appendChild(details);
+
+          const addDecisionButtons = () => {
+            if (!opts.base || !item.id) return;
+            const actionsRow = document.createElement('div');
+            actionsRow.className = 'row approval-actions';
+
+            const runDecision = async (verb, payload = {}) => {
+              approvalsState.loading = true;
+              renderApprovals();
+              const bodyPayload = { ...payload };
+              if (approvalsState.reviewer && !bodyPayload.decided_by) {
+                bodyPayload.decided_by = approvalsState.reviewer;
+              }
+              try {
+                const path = `/staging/actions/${encodeURIComponent(item.id)}/${verb}`;
+                const hasBody = Object.keys(bodyPayload).length > 0;
+                const fetchOpts = { method: 'POST' };
+                if (hasBody) {
+                  fetchOpts.headers = { 'Content-Type': 'application/json' };
+                  fetchOpts.body = JSON.stringify(bodyPayload);
+                }
+                const resp = await ARW.http.fetch(opts.base, path, fetchOpts);
+                if (!resp.ok) {
+                  throw new Error(`HTTP ${resp.status}`);
+                }
+                const toastMsg = verb === 'approve' ? 'Action approved' : 'Action denied';
+                ARW.toast(toastMsg);
+              } catch (err) {
+                console.error('decision failed', err);
+                ARW.toast('Decision failed');
+              } finally {
+                approvalsState.loading = false;
+              }
+              await primeApprovals();
+            };
+
+            const approveBtn = document.createElement('button');
+            approveBtn.type = 'button';
+            approveBtn.className = 'primary btn-small';
+            approveBtn.textContent = 'Approve';
+            approveBtn.addEventListener('click', async (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              const confirmMsg = `Approve ${item.action_kind || 'action'}${item.project ? ` in ${item.project}` : ''}?`;
+              if (!window.confirm(confirmMsg)) return;
+              const reviewer = approvalsState.reviewer || await ensureReviewer();
+              if (!reviewer) {
+                ARW.toast('Reviewer required');
+                return;
+              }
+              await runDecision('approve', { decided_by: reviewer });
+            });
+
+            const denyBtn = document.createElement('button');
+            denyBtn.type = 'button';
+            denyBtn.className = 'ghost btn-small';
+            denyBtn.textContent = 'Deny';
+            denyBtn.addEventListener('click', async (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              const reason = window.prompt('Enter a reason (optional):');
+              if (reason === null) return;
+              const reviewer = approvalsState.reviewer || await ensureReviewer();
+              if (!reviewer) {
+                ARW.toast('Reviewer required');
+                return;
+              }
+              const trimmedReason = reason.trim();
+              const payload = { decided_by: reviewer };
+              if (trimmedReason) payload.reason = trimmedReason;
+              await runDecision('deny', payload);
+            });
+
+            actionsRow.append(approveBtn, denyBtn);
+            card.appendChild(actionsRow);
+          };
+
+          addDecisionButtons();
+          return card;
+        };
+        const renderApprovals = (restoreFilterFocus = false) => {
+          const el = bodyFor('approvals');
+          if (!el) return;
+          el.innerHTML = '';
+          if (approvalsState.error) {
+            const msg = document.createElement('div');
+            msg.className = 'dim';
+            msg.textContent = approvalsState.error;
+            if (approvalsState.detail) msg.title = approvalsState.detail;
+            el.appendChild(msg);
+            return;
+          }
+          const model = ARW.read.get('staging_actions');
+          if (approvalsState.loading && !model) {
+            const msg = document.createElement('div');
+            msg.className = 'dim';
+            msg.textContent = 'Loading approvals…';
+            el.appendChild(msg);
+            return;
+          }
+          if (!model) {
+            const msg = document.createElement('div');
+            msg.className = 'dim';
+            msg.textContent = 'Waiting for approvals data';
+            el.appendChild(msg);
+            return;
+          }
+          const pending = Array.isArray(model.pending) ? model.pending : [];
+          const recent = Array.isArray(model.recent) ? model.recent : [];
+          const filterMode = approvalsState.filterMode || 'text';
+          const filterNeedle = filterMode === 'text' ? (approvalsState.filter || '').trim().toLowerCase() : '';
+          const matchesFilter = (item) => {
+            if (filterMode === 'stale') {
+              const age = ageMs(item);
+              return Number.isFinite(age) && age >= approvalsState.staleThresholdMs;
+            }
+            if (!filterNeedle) return true;
+            const haystackParts = [
+              item?.action_kind,
+              item?.project,
+              item?.requested_by,
+              item?.id,
+            ];
+            try {
+              if (item?.action_input) {
+                haystackParts.push(JSON.stringify(item.action_input));
+              }
+            } catch {}
+            return haystackParts
+              .filter(Boolean)
+              .some((part) =>
+                String(part)
+                  .toLowerCase()
+                  .includes(filterNeedle),
+              );
+          };
+          const applyFilterChip = (mode, value, caret) => {
+            if (mode === 'stale') {
+              if (approvalsState.filterMode === 'stale') return;
+              approvalsState.filterMode = 'stale';
+              approvalsState.filter = '';
+              approvalsState.filterCaret = null;
+              setFilterModePref('stale');
+              setFilterPref('');
+              window.requestAnimationFrame(() => renderApprovals(true));
+              return;
+            }
+            const next = value || '';
+            const caretPos = caret ?? next.length;
+            if (
+              approvalsState.filterMode === 'text' &&
+              approvalsState.filter === next &&
+              approvalsState.filterCaret === caretPos
+            ) {
+              return;
+            }
+            approvalsState.filterMode = 'text';
+            approvalsState.filter = next;
+            approvalsState.filterCaret = caretPos;
+            setFilterModePref('text');
+            setFilterPref(next.trim());
+            window.requestAnimationFrame(() => renderApprovals(true));
+          };
+
+          const filtered =
+            filterMode === 'text' && filterNeedle
+              ? pending.filter(matchesFilter)
+              : filterMode === 'stale'
+              ? pending.filter(matchesFilter)
+              : pending;
+          const sorted = filtered.slice();
+          if (sortMode === 'oldest') {
+            sorted.sort((a, b) => {
+              const ageA = ageMs(a) ?? -Infinity;
+              const ageB = ageMs(b) ?? -Infinity;
+              return ageB - ageA;
+            });
+          } else if (sortMode === 'project') {
+            sorted.sort((a, b) => {
+              const projA = (a?.project || 'unassigned').toLowerCase();
+              const projB = (b?.project || 'unassigned').toLowerCase();
+              if (projA !== projB) return projA.localeCompare(projB);
+              const ageA = ageMs(a) ?? -Infinity;
+              const ageB = ageMs(b) ?? -Infinity;
+              return ageB - ageA;
+            });
+          }
+          const summary = document.createElement('div');
+          summary.className = 'approval-summary';
+          const count = document.createElement('strong');
+          if (!pending.length) {
+            count.textContent = 'No approvals waiting';
+          } else if (filterMode === 'stale') {
+            count.textContent = `${sorted.length}/${pending.length} stale (≥ ${formatAge(
+              approvalsState.staleThresholdMs,
+            )})`;
+          } else if (filterNeedle) {
+            count.textContent = `${sorted.length}/${pending.length} pending`;
+          } else {
+            count.textContent = `${pending.length} pending`;
+          }
+          summary.appendChild(count);
+          if (model.generated) {
+            const timeEl = document.createElement('time');
+            timeEl.dateTime = model.generated;
+            timeEl.title = new Date(model.generated).toLocaleString();
+            timeEl.textContent = fmtRelative(model.generated) || model.generated;
+            summary.appendChild(timeEl);
+          }
+          let oldestTs = null;
+          if (pending.length) {
+            oldestTs = pending.reduce((acc, item) => {
+              const ts = item?.created || item?.updated || null;
+              if (!ts) return acc;
+              return !acc || new Date(ts).getTime() < new Date(acc).getTime() ? ts : acc;
+            }, oldestTs);
+            if (oldestTs) {
+              const span = document.createElement('span');
+              span.className = 'dim';
+              span.textContent = `oldest ${fmtRelative(oldestTs) || oldestTs}`;
+              summary.appendChild(span);
+            }
+          }
+          el.appendChild(summary);
+          const filterRow = document.createElement('div');
+          filterRow.className = 'approval-filter row';
+          const filterLabel = document.createElement('span');
+          filterLabel.className = 'dim';
+          filterLabel.textContent = 'Filter';
+          const filterInput = document.createElement('input');
+          filterInput.type = 'search';
+          filterInput.placeholder = 'project, action, reviewer…';
+          filterInput.dataset.approvalsFilter = '1';
+          filterInput.value = filterMode === 'text' ? approvalsState.filter || '' : '';
+          filterInput.addEventListener('input', (ev) => {
+            const caret = ev.target.selectionStart ?? ev.target.value.length;
+            applyFilterChip('text', ev.target.value, caret);
+          });
+          filterRow.append(filterLabel, filterInput);
+          el.appendChild(filterRow);
+          const staleRow = document.createElement('div');
+          staleRow.className = 'approval-stale row';
+          const staleLabel = document.createElement('span');
+          staleLabel.className = 'dim';
+          staleLabel.textContent = 'Highlight ≥';
+          const staleSelect = document.createElement('select');
+          const staleOptions = [
+            { label: '15m', value: 15 * 60 * 1000 },
+            { label: '30m', value: 30 * 60 * 1000 },
+            { label: '1h', value: 60 * 60 * 1000 },
+            { label: '4h', value: 4 * 60 * 60 * 1000 },
+            { label: '1d', value: 24 * 60 * 60 * 1000 },
+          ];
+          staleOptions.forEach((opt) => {
+            const option = document.createElement('option');
+            option.value = String(opt.value);
+            option.textContent = opt.label;
+            if (opt.value === approvalsState.staleThresholdMs) option.selected = true;
+            staleSelect.appendChild(option);
+          });
+          staleSelect.addEventListener('change', (ev) => {
+            const next = parseInt(ev.target.value, 10);
+            if (!Number.isFinite(next) || next <= 0) return;
+            approvalsState.staleThresholdMs = next;
+            window.requestAnimationFrame(() => renderApprovals());
+            (async () => setStalePref(next))();
+          });
+          staleRow.append(staleLabel, staleSelect);
+          el.appendChild(staleRow);
+          const sortRow = document.createElement('div');
+          sortRow.className = 'approval-sort row';
+          const sortLabel = document.createElement('span');
+          sortLabel.className = 'dim';
+          sortLabel.textContent = 'Sort';
+          const sortSelect = document.createElement('select');
+          const sortOptions = [
+            { label: 'Newest first', value: 'newest' },
+            { label: 'Oldest first', value: 'oldest' },
+            { label: 'Project', value: 'project' },
+          ];
+          sortOptions.forEach((opt) => {
+            const option = document.createElement('option');
+            option.value = opt.value;
+            option.textContent = opt.label;
+            if (opt.value === sortMode) option.selected = true;
+            sortSelect.appendChild(option);
+          });
+          sortSelect.addEventListener('change', (ev) => {
+            const next = String(ev.target.value || 'newest');
+            if (next === approvalsState.sortMode) return;
+            approvalsState.sortMode = next;
+            setSortPref(next);
+            window.requestAnimationFrame(() => renderApprovals(true));
+          });
+          sortRow.append(sortLabel, sortSelect);
+          el.appendChild(sortRow);
+          const chips = [];
+          chips.push({ label: 'Clear', value: '', mode: 'text' });
+          chips.push({ label: 'Stale only', value: '', mode: 'stale' });
+          if (approvalsState.reviewer) {
+            chips.push({
+              label: `Mine (${approvalsState.reviewer})`,
+              value: approvalsState.reviewer,
+              mode: 'text',
+            });
+          }
+          const projectSeen = new Set();
+          for (const item of pending) {
+            const proj = (item?.project || '').trim();
+            if (!proj || projectSeen.has(proj)) continue;
+            projectSeen.add(proj);
+            chips.push({ label: `Project: ${proj}`, value: proj, mode: 'text' });
+            if (projectSeen.size >= 3) break;
+          }
+          const shortcutKeys = ['1', '2', '3', '4', '5'];
+          let shortcutIndex = 0;
+          chips.forEach((chip) => {
+            if (shortcutIndex < shortcutKeys.length) {
+              chip.shortcut = shortcutKeys[shortcutIndex++];
+            }
+          });
+          approvalsState.shortcutMap = {};
+          const quickWrap = document.createElement('div');
+          quickWrap.className = 'approval-filter-chips row';
+          const makeChip = (chip) => {
+            const { label, value, mode, shortcut } = chip;
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = 'ghost btn-small';
+            const isActive =
+              mode === 'stale'
+                ? filterMode === 'stale'
+                : filterMode === 'text' && (approvalsState.filter || '') === (value || '');
+            if (isActive) {
+              btn.classList.add('active');
+            }
+            btn.dataset.mode = mode;
+            btn.textContent = label;
+            btn.addEventListener('click', (ev) => {
+              ev.preventDefault();
+              if (mode === 'stale') {
+                applyFilterChip('stale', '');
+              } else {
+                applyFilterChip('text', value || '');
+              }
+            });
+            if (shortcut) {
+              btn.dataset.shortcut = shortcut;
+              btn.title = `${label} (Alt+${shortcut})`;
+              approvalsState.shortcutMap[shortcut] = chip;
+            } else {
+              btn.title = label;
+            }
+            return btn;
+          };
+          chips.forEach((chip) => quickWrap.appendChild(makeChip(chip)));
+          if (quickWrap.childElementCount) {
+            el.appendChild(quickWrap);
+          }
+          if (!approvalsState.shortcutHandler) {
+            approvalsState.shortcutHandler = (ev) => {
+              if (!ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+              const key = (ev.key || '').toLowerCase();
+              if (!key) return;
+              const chip = approvalsState.shortcutMap?.[key];
+              if (!chip) return;
+              const node = bodyFor('approvals');
+              if (!node || !node.isConnected) return;
+              const tag = (ev.target?.tagName || '').toLowerCase();
+              if (['input', 'textarea', 'select'].includes(tag)) return;
+              ev.preventDefault();
+              if (chip.mode === 'stale') {
+                applyFilterChip('stale', '');
+              } else {
+                applyFilterChip('text', chip.value || '');
+              }
+            };
+            window.addEventListener('keydown', approvalsState.shortcutHandler);
+          }
+          appendReviewerRow(el);
+          if (!pending.length) {
+            const empty = document.createElement('div');
+            empty.className = 'dim';
+            empty.textContent = 'Queue is clear.';
+            el.appendChild(empty);
+            approvalsState.filterCaret = null;
+            return;
+          }
+          if (!sorted.length) {
+            const empty = document.createElement('div');
+            empty.className = 'dim';
+            empty.textContent = 'No approvals match filter.';
+            el.appendChild(empty);
+          } else {
+            const maxItems = 8;
+            const frag = document.createDocumentFragment();
+            sorted.slice(0, maxItems).forEach((item) => {
+              frag.appendChild(createApprovalCard(item, sorted.length <= 2));
+            });
+            el.appendChild(frag);
+            if (sorted.length > maxItems) {
+              const more = document.createElement('div');
+              more.className = 'dim';
+              more.textContent = `+${sorted.length - maxItems} more pending`;
+              el.appendChild(more);
+            }
+          }
+          const projectMap = new Map();
+          const staleProjectMap = new Map();
+          let staleTotal = 0;
+          sorted.forEach((item) => {
+            const proj = (item?.project || 'unassigned').trim() || 'unassigned';
+            projectMap.set(proj, (projectMap.get(proj) || 0) + 1);
+            const age = ageMs(item);
+            if (Number.isFinite(age) && age >= approvalsState.staleThresholdMs) {
+              staleTotal += 1;
+              staleProjectMap.set(proj, (staleProjectMap.get(proj) || 0) + 1);
+            }
+          });
+          if (staleTotal > 0) {
+            const badge = document.createElement('span');
+            badge.className = 'badge warn';
+            badge.textContent = `≥${formatAge(approvalsState.staleThresholdMs)}: ${staleTotal}`;
+            summary.appendChild(badge);
+          }
+          if (projectMap.size) {
+            const stats = Array.from(projectMap.entries())
+              .map(([proj, count]) => ({ proj, count }))
+              .sort((a, b) => b.count - a.count || a.proj.localeCompare(b.proj))
+              .slice(0, 5);
+            const statsWrap = document.createElement('div');
+            statsWrap.className = 'approval-project-stats';
+            const headingRow = document.createElement('div');
+            headingRow.className = 'approval-project-stats-header row';
+            const heading = document.createElement('div');
+            heading.className = 'dim';
+            heading.textContent = 'Projects waiting';
+            const copyBtn = document.createElement('button');
+            copyBtn.type = 'button';
+            copyBtn.className = 'ghost btn-small';
+            copyBtn.textContent = 'Copy summary';
+            copyBtn.addEventListener('click', (ev) => {
+              ev.preventDefault();
+              ev.stopPropagation();
+              const lines = [];
+              lines.push(
+                `Approvals pending: ${sorted.length}${
+                  filterMode === 'text' && filterNeedle ? ` (filtered from ${pending.length})` : ''
+                }`,
+              );
+              lines.push(`Sort mode: ${sortMode}`);
+              if (filterMode === 'stale') {
+                lines.push(
+                  `Mode: stale (≥ ${formatAge(approvalsState.staleThresholdMs)})`,
+                );
+              }
+              if (oldestTs) {
+                const rel = fmtRelative(oldestTs) || oldestTs;
+                lines.push(`Oldest pending: ${rel}`);
+              }
+              if (approvalsState.reviewer) {
+                lines.push(`Reviewer: ${approvalsState.reviewer}`);
+              }
+              if (staleTotal > 0) {
+                lines.push(`Stale (≥ ${formatAge(approvalsState.staleThresholdMs)}): ${staleTotal}`);
+              }
+              const projectSummary = stats
+                .map(({ proj, count }) => {
+                  const staleCount = staleProjectMap.get(proj) || 0;
+                  return staleCount
+                    ? `${proj}: ${count} (${staleCount} stale)`
+                    : `${proj}: ${count}`;
+                })
+                .join(', ');
+              if (projectSummary) {
+                lines.push(`Projects: ${projectSummary}`);
+              }
+              if (projectMap.size > stats.length) {
+                lines.push(`(+${projectMap.size - stats.length} more projects)`);
+              }
+              const text = lines.join('\n');
+              try {
+                ARW.copy(text);
+                ARW.toast('Summary copied');
+              } catch (err) {
+                console.error('copy summary failed', err);
+                ARW.toast('Copy failed');
+              }
+            });
+            headingRow.append(heading, copyBtn);
+            statsWrap.appendChild(headingRow);
+            const list = document.createElement('ul');
+            stats.forEach(({ proj, count }) => {
+              const li = document.createElement('li');
+              const staleCount = staleProjectMap.get(proj) || 0;
+              li.innerHTML = `<span class="mono">${proj}</span> <span class="badge">${count}</span>${
+                staleCount ? ` <span class="badge warn">${staleCount} stale</span>` : ''
+              }`;
+              list.appendChild(li);
+            });
+            if (projectMap.size > stats.length) {
+              const remaining = projectMap.size - stats.length;
+              const li = document.createElement('li');
+              li.className = 'dim';
+              li.textContent = `+${remaining} more project${remaining === 1 ? '' : 's'}`;
+              list.appendChild(li);
+            }
+            statsWrap.appendChild(list);
+            el.appendChild(statsWrap);
+          }
+          if (recent.length) {
+            const details = document.createElement('details');
+            details.className = 'approval-recent';
+            const sum = document.createElement('summary');
+            sum.textContent = 'Recent decisions';
+            details.appendChild(sum);
+            const list = document.createElement('ul');
+            recent.slice(0, 5).forEach((item) => {
+              const li = document.createElement('li');
+              const label = `${item.decision || item.status || 'updated'} · ${item.action_kind || ''}`.trim();
+              const span = document.createElement('span');
+              span.textContent = label;
+              li.appendChild(span);
+              const ts = item.updated || item.decided_at || item.created;
+              if (ts) {
+                li.appendChild(document.createTextNode(' — '));
+                const timeEl = document.createElement('time');
+                timeEl.dateTime = ts;
+                timeEl.title = new Date(ts).toLocaleString();
+                timeEl.textContent = fmtRelative(ts) || ts;
+                li.appendChild(timeEl);
+              }
+              list.appendChild(li);
+            });
+            details.appendChild(list);
+            el.appendChild(details);
+          }
+          if (restoreFilterFocus) {
+            window.requestAnimationFrame(() => {
+              const field = bodyFor('approvals')?.querySelector('[data-approvals-filter]');
+              if (field instanceof HTMLInputElement) {
+                field.focus();
+                const caret = approvalsState.filterCaret ?? field.value.length;
+                try {
+                  field.setSelectionRange(caret, caret);
+                } catch {}
+              }
+            });
+          } else {
+            approvalsState.filterCaret = null;
+          }
+        };
+        const loadLanePrefs = async () => {
+          if (approvalsState.lanePrefsLoaded) return;
+          approvalsState.lanePrefsLoaded = true;
+          try {
+            const prefs = await ARW.getPrefs('launcher');
+            if (prefs && typeof prefs.approvalsFilter === 'string') {
+              approvalsState.filter = prefs.approvalsFilter;
+            }
+            if (prefs && typeof prefs.approvalsFilterMode === 'string') {
+              approvalsState.filterMode = prefs.approvalsFilterMode === 'stale' ? 'stale' : 'text';
+            }
+            if (prefs && Number.isFinite(prefs.approvalsStaleMs)) {
+              approvalsState.staleThresholdMs = prefs.approvalsStaleMs;
+            }
+            if (prefs && typeof prefs.approvalsSortMode === 'string') {
+              approvalsState.sortMode = ['newest', 'oldest', 'project'].includes(
+                prefs.approvalsSortMode,
+              )
+                ? prefs.approvalsSortMode
+                : 'newest';
+            }
+          } catch {}
+        };
+        const loadReviewerPref = async () => {
+          if (approvalsState.reviewerLoaded) return;
+          approvalsState.reviewerLoaded = true;
+          try {
+            const prefs = await ARW.getPrefs('launcher');
+            const saved =
+              prefs && typeof prefs.approvalsReviewer === 'string'
+                ? prefs.approvalsReviewer.trim()
+                : '';
+            if (saved) {
+              approvalsState.reviewer = saved;
+              renderApprovals();
+            }
+          } catch {}
+        };
+        const primeApprovals = async () => {
+          if (!opts.base) return;
+          approvalsState.loading = true;
+          renderApprovals();
+          try {
+            const pendingSnap = await ARW.http.json(opts.base, '/state/staging/actions?status=pending&limit=50');
+            let recentSnap = null;
+            try {
+              recentSnap = await ARW.http.json(opts.base, '/state/staging/actions?limit=30');
+            } catch (err) {
+              console.warn('approvals recent fetch failed', err);
+            }
+            const current = ARW.read.get('staging_actions') || {};
+            const next = { ...current };
+            next.generated = new Date().toISOString();
+            next.pending = Array.isArray(pendingSnap?.items) ? pendingSnap.items : [];
+            if (recentSnap && Array.isArray(recentSnap.items)) {
+              next.recent = recentSnap.items;
+            }
+            approvalsState.error = null;
+            approvalsState.detail = null;
+            approvalsState.loading = false;
+            ARW.read._store.set('staging_actions', next);
+            ARW.read._emit('staging_actions');
+          } catch (err) {
+            const msg = err?.message || String(err);
+            approvalsState.loading = false;
+            approvalsState.detail = msg;
+            approvalsState.error = /HTTP\s+401/.test(msg)
+              ? 'Authorize to view approvals queue'
+              : 'Approvals queue unavailable';
+            renderApprovals();
+          }
+        };
+        Promise.all([loadLanePrefs(), loadReviewerPref()]).then(() => renderApprovals());
+        approvalsSub = ARW.read.subscribe('staging_actions', () => renderApprovals());
+        if (!approvalsState.lanePrefsLoaded) {
+          renderApprovals();
+        }
+        if (opts.base) {
+          primeApprovals();
+        }
+      }
       // Micro-batched updaters to reduce DOM thrash
       let tlQ = []; let tlTimer = null;
       const rTimeline = (env) => { if (!env) return; tlQ.push(env); if (tlTimer) return; tlTimer = setTimeout(()=>{
@@ -776,7 +1692,23 @@ window.ARW = {
       const idActivity = ARW.sse.subscribe((k)=> k.startsWith('screenshots.'), rActivity);
       // initial render for metrics if any
       rMetrics();
-      return { dispose(){ ARW.sse.unsubscribe(idAll); ARW.sse.unsubscribe(idModels); ARW.read.unsubscribe(idMetrics); ARW.read.unsubscribe(idSnappy); ARW.sse.unsubscribe(idActivity); if(policyTimer) clearInterval(policyTimer); node.innerHTML=''; } }
+      return {
+        dispose() {
+          ARW.sse.unsubscribe(idAll);
+          ARW.sse.unsubscribe(idModels);
+          ARW.read.unsubscribe(idMetrics);
+          ARW.read.unsubscribe(idSnappy);
+          if (approvalsSub) ARW.read.unsubscribe(approvalsSub);
+          ARW.sse.unsubscribe(idActivity);
+          if (policyTimer) clearInterval(policyTimer);
+          if (approvalsState.shortcutHandler) {
+            window.removeEventListener('keydown', approvalsState.shortcutHandler);
+            approvalsState.shortcutHandler = null;
+          }
+          approvalsState.shortcutMap = {};
+          node.innerHTML = '';
+        },
+      };
     }
   }
 }

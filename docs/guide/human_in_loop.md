@@ -4,10 +4,10 @@ title: Human‑in‑the‑Loop
 
 # Human‑in‑the‑Loop
 
-Updated: 2025-09-20
+Updated: 2025-09-30
 Type: How‑to
 
-Status: **Available (phase one).** `arw-server` now stages actions when `ARW_ACTION_STAGING_MODE` demands review, backs approvals with the kernel, and exposes live views in `/state/staging/actions` and the Debug UI. Launcher sidecar cards render the same data; richer evidence previews remain on the roadmap.
+Status: **Available (phase one).** `arw-server` now stages actions when `ARW_ACTION_STAGING_MODE` demands review, backs approvals with the kernel, and exposes live views in `/state/staging/actions` and the Debug UI. The launcher sidecar now mirrors the queue with inline evidence previews so reviewers can inspect payloads without leaving the Hub; richer diff tooling and annotations remain on the roadmap.
 
 This page explains the shipped experience and the remaining roadmap for Human-in-the-loop approvals on the unified stack.
 
@@ -18,12 +18,12 @@ This page explains the shipped experience and the remaining roadmap for Human-in
   - `POST /actions` responds with `{ staged: true }` when submissions enter the queue.
   - `GET /state/staging/actions` enumerates pending and decided entries (`status`, `project`, `requested_by`, `created`).
   - `POST /staging/actions/{id}/approve|deny` promotes or rejects staged items, emits `staging.decided`, and replays `actions.submitted` for downstream consumers.
-- Live surfaces: `/admin/debug` lists staged items with approve/deny controls; the launcher mirrors the feed and badges attention alongside notifications.
+- Live surfaces: `/admin/debug` lists staged items with approve/deny controls; the launcher mirrors the feed, adds inline approve/deny buttons in the sidecar, and badges attention alongside notifications.
 - Event telemetry: `staging.pending` and `staging.decided` fire through `/events`; policy denials continue to emit `policy.decision` when leases are missing.
 
 ## Next Enhancements
 
-1. **Evidence & context lanes** — inline previews, diffs, and artifact links in the sidecar (`t-250918120305-hitl02`).
+1. **Inline diff helpers** — highlight structured diffs and artifacts inside the sidecar evidence blocks.
 2. **Per-project policy hints** — richer `always/ask/auto` presets rooted in project posture, plus escalation rules.
 3. **Queue ergonomics** — dedupe on action cache hashes, paging for long queues, and SLA alerts to keep approvals timely.
 4. **Audit trails** — fold reviewer notes into the contribution ledger view with filters and retention controls.
@@ -36,6 +36,7 @@ This page explains the shipped experience and the remaining roadmap for Human-in
 - `GET /state/staging/actions`: returns pending or decided entries; add `?status=pending` and `?limit=500` for focused dashboards.
 - `state.read.model.patch` with id `staging_actions`: feeds sidecars and headless clients with incremental updates.
 - `POST /staging/actions/{id}/approve|deny`: send `{ "decided_by": "name" }` or `{ "reason": "why" }` (JSON body) to approve or deny a queued action.
+- Launcher approvals lane: review payloads inline, remember your reviewer label for reuse, click Approve/Deny (with reason), see how long the oldest item has waited, use quick filter chips (per project, “Mine”, or “Stale only”), trigger them with `Alt+1..5`, adjust stale thresholds that highlight aging cards, pick a sort order (newest/oldest/project) that also persists, glance at per-project wait counts, and copy a summary for stand-ups—your filter/sort/threshold settings persist between sessions.
 
 Example:
 
@@ -59,6 +60,6 @@ curl -s -X POST http://127.0.0.1:8091/staging/actions/$ID/approve \
 
 ## Related Work
 
-- Backlog: `t-250918120301-hitl01`, `t-250918120305-hitl02`
+- Backlog: `t-250918120301-hitl01`
 - Roadmap: Pack Collaboration → Human-in-the-loop staging
 - See also: [guide/policy_permissions.md](policy_permissions.md), [architecture/capability_consent_ledger.md](../architecture/capability_consent_ledger.md)

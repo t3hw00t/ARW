@@ -1,8 +1,20 @@
 document.addEventListener('DOMContentLoaded', async () => {
   await ARW.applyPortFromPrefs('port');
   const port = ARW.getPortFromInput('port') || 8091;
+  const ensureLane = (list, lane, opts = {}) => {
+    const lanes = Array.isArray(list) ? [...list] : [];
+    if (lanes.includes(lane)) return lanes;
+    if (opts.after && lanes.includes(opts.after)) {
+      const idx = lanes.indexOf(opts.after);
+      lanes.splice(idx + 1, 0, lane);
+      return lanes;
+    }
+    lanes.unshift(lane);
+    return lanes;
+  };
   const base = ARW.base(port);
-  const sc = ARW.sidecar.mount('sidecar', ['timeline','context','policy','metrics','models','activity'], { base });
+  const defaultLanes = ensureLane(['timeline','context','policy','metrics','models','activity'], 'approvals', { after: 'timeline' });
+  let sc = ARW.sidecar.mount('sidecar', defaultLanes, { base });
   ARW.sse.indicator('sseStat', { prefix: 'SSE' });
   ARW.sse.connect(base, { replay: 25 });
   // ---------- Runs: episodes list + snapshot ----------
@@ -915,7 +927,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   document.getElementById('btn-save').addEventListener('click', async ()=>{
     const layout = {
-      lanes: ['timeline','context','policy','metrics','models','activity'],
+      lanes: ensureLane(['timeline','context','policy','metrics','models','activity'], 'approvals', { after: 'timeline' }),
       grid: 'cols-2',
       focused: document.querySelector('.layout').classList.contains('full')
     };
@@ -939,7 +951,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         main.classList.add(tpl.grid);
       }
       // Lanes: re-mount sidecar if lanes differ
-      if (Array.isArray(tpl.lanes) && tpl.lanes.length){ try{ sc.dispose?.(); }catch{} ARW.sidecar.mount('sidecar', tpl.lanes, { base }); }
+      if (Array.isArray(tpl.lanes) && tpl.lanes.length){
+        try{ sc?.dispose?.(); }catch{}
+        const lanes = ensureLane(tpl.lanes, 'approvals', { after: 'timeline' });
+        sc = ARW.sidecar.mount('sidecar', lanes, { base });
+      }
       ARW.toast('Layout applied');
     }catch(e){ console.error(e); ARW.toast('Apply failed'); }
   }

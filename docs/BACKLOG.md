@@ -81,7 +81,7 @@ UI Coherence
 - [Pack: Collaboration] Next: labels/arrows in annotator; redaction presets (regex+OCR); append Markdown to NOTES.md; Pin‑to‑compare from Runs; retention/tagging for gallery; guided countdown for capture.
  - [Pack: Collaboration] Next: keyboard shortcuts (global) cheatsheet and discoverability; ARIA polish for Agents/Runs actions; skip‑links across pages; unit tests for /projects/file content_b64 path; virtualize large trees.
 - [Pack: Collaboration] [t-250918120301-hitl01] Human-in-the-loop staging queue in `arw-server` with `/state/staging/actions` read-model and leases — done (shipped kernel + API; follow-up UX tracked separately)
-- [Pack: Collaboration] [t-250918120305-hitl02] Sidecar approvals UI: replace placeholder copy with live staging actions + evidence preview — todo (evidence/diff pass)
+- [Pack: Collaboration] [t-250918120305-hitl02] Sidecar approvals UI: replace placeholder copy with live staging actions + evidence preview — done (sidecar lane shows staging queue, evidence viewer, approve/deny buttons, persisted filters/sort, stale-mode triage chips with shortcuts, copyable summaries)
 - [Pack: Collaboration] Feedback loop readiness: validate Heuristic Feedback Engine shadow runs, log deltas, and document sidecar approvals before enabling auto-apply — todo
 - [Pack: Collaboration] Project Hub SSE bridge: consume `state.read.model.patch` (Event Spine) for notes/files/live context in the SPA swap — doing (metadata feed wired)
 

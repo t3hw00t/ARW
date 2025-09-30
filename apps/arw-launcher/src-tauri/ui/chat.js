@@ -2,7 +2,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   await ARW.applyPortFromPrefs('port');
   const port = ARW.getPortFromInput('port') || 8091;
   const base = ARW.base(port);
-  const sc = ARW.sidecar.mount('sidecar', ['timeline','context','policy','metrics','models'], { base });
+  const sc = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','policy','metrics','models'], { base });
   // Load auto OCR pref
   try{ const prefs = await ARW.getPrefs('launcher'); const v = !!(prefs && prefs.autoOcr); const el=document.getElementById('autoOcr'); if (el) el.checked = v; }catch{}
   document.getElementById('autoOcr').addEventListener('change', async (e)=>{
