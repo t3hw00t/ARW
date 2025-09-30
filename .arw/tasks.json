@@ -1284,9 +1284,23 @@
       "id": "trial-g1",
       "title": "Gate G1: Reliable memory",
       "desc": "Ship focus card, freshness stamps, and context telemetry scores before Cohort A onboarding.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-26 12:30 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-09-30 11:24:44 UTC",
+          "text": "Trial Control Center focus card shows recent memory with freshness stamp and sources link; context telemetry meta surfaces updated and recall scores; memory recent API now returns a generated timestamp."
+        },
+        {
+          "time": "2025-09-30 12:05:19 UTC",
+          "text": "Memory endpoints and SSE snapshots now include generated_ms fields with tests and docs; launcher focus card consumes the numeric timestamp for accessible freshness messaging."
+        },
+        {
+          "time": "2025-09-30 12:23:46 UTC",
+          "text": "Approvals tile, Training Park telemetry, and debug tools now render relative + absolute freshness via generated_ms; workflow docs updated with guidance."
+        }
+      ],
+      "updated": "2025-09-30 12:23:46 UTC",
+      "done_at": "2025-09-30 11:24:44 UTC"
     },
     {
       "id": "trial-g2",

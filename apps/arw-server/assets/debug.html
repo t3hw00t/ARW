@@ -762,10 +762,13 @@ function debounce(fn, wait){
   };
 }
 function msHuman(ms){ if(!ms && ms!==0) return '–'; const s=Math.max(0, Math.round(ms/1000)); const m=Math.floor(s/60); const ss=(s%60).toString().padStart(2,'0'); return (m>0? m+':':'0:')+ss; }
+function escapeHtml(value){
+  return String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
 function relTime(ts){
   try{
-    if(!ts) return '–';
-    const date = new Date(ts);
+    if(ts == null) return '–';
+    const date = typeof ts === 'number' ? new Date(ts) : new Date(ts);
     if(Number.isNaN(date.getTime())) return ts;
     const diff = date.getTime() - Date.now();
     const abs = Math.abs(diff);
@@ -779,6 +782,24 @@ function relTime(ts){
   }catch{
     return ts || '–';
   }
+}
+function absTime(ts){
+  try{
+    const date = typeof ts === 'number' ? new Date(ts) : new Date(ts);
+    if(Number.isNaN(date.getTime())) return '–';
+    return date.toLocaleString();
+  }catch{
+    return '–';
+  }
+}
+function buildTimestampDisplay(iso, ms){
+  const numeric = (typeof ms === 'number' && Number.isFinite(ms)) ? ms : Date.parse(iso || '');
+  if(!Number.isFinite(numeric)){
+    if(!iso) return null;
+    return { iso, rel: relTime(iso), abs: absTime(iso) };
+  }
+  const isoText = iso || new Date(numeric).toISOString();
+  return { iso: isoText, rel: relTime(numeric), abs: absTime(numeric) };
 }
 async function copyJson(id, label){
   try{
@@ -2139,7 +2160,8 @@ function contextMetricsRender(state){ try{
   const summary = document.getElementById('contextMetricsSummary');
   if(summary){
     if(data && Object.keys(data).length){
-      const generated = data.generated ? `${data.generated} (${relTime(data.generated)})` : '–';
+      const stamp = buildTimestampDisplay(data.generated, data.generated_ms);
+      const generated = stamp ? `<span title="${escapeHtml(stamp.abs)}">${escapeHtml(stamp.iso)} (${escapeHtml(stamp.rel)})</span>` : '–';
       const recall = data?.recall_risk?.score;
       const recallLevel = data?.recall_risk?.level || data?.recall_risk?.verdict;
       const coverageSummary = data?.coverage?.summary || data?.coverage?.verdict || '–';
@@ -2233,7 +2255,8 @@ const policyLeasesRender = debounce(function(state){ try{
   }
   const meta = document.getElementById('policyLeasesMeta');
   if(meta){
-    const generated = data.generated ? `${data.generated} (${relTime(data.generated)})` : '–';
+    const stamp = buildTimestampDisplay(data.generated, data.generated_ms);
+    const generated = stamp ? `<span title="${escapeHtml(stamp.abs)}">${escapeHtml(stamp.iso)} (${escapeHtml(stamp.rel)})</span>` : '–';
     meta.innerHTML = `<div class="kv"><span>Generated</span><span>${generated}</span></div>`;
   }
   const out = document.getElementById('policyLeasesOut');

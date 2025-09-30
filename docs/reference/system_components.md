@@ -532,6 +532,7 @@ Memory overlay service on top of the MAL schema that exposes `memory.*` actions,
   - Lane-specific budgets, TTLs, and lifecycle policies keep the corpus explainable and auditable.
   - Overlay actions now flow entirely through `/actions`; legacy `/memory/*` REST shims have been removed.
   - Retrieval journaling captures scores/diversity decisions for working-set diagnostics.
+  - Recent snapshot endpoint returns `generated` and `generated_ms` timestamps so launch surfaces can display freshness directly.
 
 ### Policy & Gating Core
 

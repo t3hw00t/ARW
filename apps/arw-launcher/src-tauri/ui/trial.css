@@ -109,6 +109,33 @@ body[data-page="trial"] .wrap{
   min-width: 280px;
 }
 
+.focus-header{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp2);
+}
+
+.focus-header h2{
+  margin: 0;
+  font-size: 18px;
+}
+
+.focus-card .focus-link{
+  font-size: 12px;
+  padding: 6px 12px;
+}
+
+.focus-card .focus-link[disabled]{
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.focus-updated{
+  margin-top: 6px;
+  font-size: 12px;
+}
+
 .focus-list{
   list-style: none;
   padding: 0;

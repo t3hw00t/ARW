@@ -5,9 +5,9 @@ use axum::{
     extract::{Query, State},
     Json,
 };
-use chrono::{SecondsFormat, Utc};
-use serde::Deserialize;
-use serde_json::{json, Value};
+use chrono::{DateTime, SecondsFormat, Utc};
+use serde::{Deserialize, Serialize};
+use serde_json::{json, Number, Value};
 use std::convert::Infallible;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -18,8 +18,12 @@ use utoipa::ToSchema;
 use crate::{memory_service, AppState};
 use arw_topics as topics;
 
-fn now_timestamp() -> String {
-    Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)
+fn now_timestamp_pair() -> (String, i64) {
+    let now = Utc::now();
+    (
+        now.to_rfc3339_opts(SecondsFormat::Millis, true),
+        now.timestamp_millis(),
+    )
 }
 
 #[cfg(test)]
@@ -42,6 +46,50 @@ fn compute_memory_hash(
 
 const MEMORY_SNAPSHOT_EVENT: &str = "memory.snapshot";
 const MEMORY_PATCH_EVENT: &str = "memory.patch";
+
+fn ensure_memory_recent_snapshot(snapshot: &mut Value, refresh_generated: bool) {
+    let Some(obj) = snapshot.as_object_mut() else {
+        return;
+    };
+    if let Some(items) = obj.get_mut("items").and_then(|value| value.as_array_mut()) {
+        memory_service::attach_memory_ptrs(items);
+    }
+
+    let mut generated_iso = obj
+        .get("generated")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
+    let mut generated_ms = obj.get("generated_ms").and_then(Value::as_i64);
+
+    if refresh_generated {
+        let (iso, ms) = now_timestamp_pair();
+        generated_iso = Some(iso);
+        generated_ms = Some(ms);
+    } else {
+        if generated_iso.is_none() {
+            let (iso, ms) = now_timestamp_pair();
+            generated_iso = Some(iso);
+            generated_ms = Some(ms);
+        } else if generated_ms.is_none() {
+            generated_ms = generated_iso
+                .as_ref()
+                .and_then(|iso| DateTime::parse_from_rfc3339(iso).ok())
+                .map(|dt| dt.timestamp_millis())
+                .or_else(|| {
+                    let (iso, ms) = now_timestamp_pair();
+                    generated_iso = Some(iso);
+                    Some(ms)
+                });
+        }
+    }
+
+    if let Some(iso) = generated_iso {
+        obj.insert("generated".into(), Value::String(iso));
+    }
+    if let Some(ms) = generated_ms {
+        obj.insert("generated_ms".into(), Value::Number(Number::from(ms)));
+    }
+}
 
 /// Stream memory read-model patches and snapshots via SSE.
 #[utoipa::path(
@@ -66,9 +114,11 @@ pub async fn state_memory_stream(State(state): State<AppState>) -> axum::respons
             match state.kernel().list_recent_memory_async(None, 200).await {
                 Ok(mut items) => {
                     memory_service::attach_memory_ptrs(&mut items);
+                    let (generated, generated_ms) = now_timestamp_pair();
                     json!({
                         "items": items,
-                        "generated": now_timestamp(),
+                        "generated": generated,
+                        "generated_ms": generated_ms,
                     })
                 }
                 Err(err) => {
@@ -85,6 +135,8 @@ pub async fn state_memory_stream(State(state): State<AppState>) -> axum::respons
                 }
             }
         };
+
+    ensure_memory_recent_snapshot(&mut current_snapshot, false);
 
     let (tx, rx) = mpsc::channel::<Result<Event, Infallible>>(64);
     let state_clone = state.clone();
@@ -128,12 +180,7 @@ pub async fn state_memory_stream(State(state): State<AppState>) -> axum::respons
                 continue;
             }
             current_snapshot = next_snapshot;
-            if let Some(items) = current_snapshot
-                .get_mut("items")
-                .and_then(|value| value.as_array_mut())
-            {
-                memory_service::attach_memory_ptrs(items);
-            }
+            ensure_memory_recent_snapshot(&mut current_snapshot, true);
             let payload = json!({
                 "patch": patch_val.clone(),
                 "snapshot": current_snapshot.clone(),
@@ -165,6 +212,14 @@ pub async fn state_memory_stream(State(state): State<AppState>) -> axum::respons
         .into_response()
 }
 
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
+pub struct MemoryRecentResponse {
+    pub items: Vec<Value>,
+    pub generated: String,
+    #[serde(rename = "generated_ms")]
+    pub generated_ms: i64,
+}
+
 /// Most recent memories (per lane).
 #[cfg_attr(
     not(test),
@@ -174,7 +229,7 @@ pub async fn state_memory_stream(State(state): State<AppState>) -> axum::respons
         tag = "Memory",
         params(("lane" = Option<String>, Query), ("limit" = Option<i64>, Query)),
         responses(
-            (status = 200, body = serde_json::Value),
+            (status = 200, body = MemoryRecentResponse),
             (status = 501, description = "Kernel disabled", body = arw_protocol::ProblemDetails)
         )
     )
@@ -199,7 +254,16 @@ pub async fn state_memory_recent(
     {
         Ok(mut items) => {
             memory_service::attach_memory_ptrs(&mut items);
-            (axum::http::StatusCode::OK, Json(json!({"items": items}))).into_response()
+            let (generated, generated_ms) = now_timestamp_pair();
+            (
+                axum::http::StatusCode::OK,
+                Json(MemoryRecentResponse {
+                    items,
+                    generated,
+                    generated_ms,
+                }),
+            )
+                .into_response()
         }
         Err(e) => (
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -450,6 +514,67 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn memory_recent_includes_generated_and_ptrs() {
+        let temp = tempdir().expect("tmp");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let insert_owned = memory_service::MemoryUpsertInput {
+            lane: "semantic".to_string(),
+            kind: Some("note".to_string()),
+            key: Some("focus".to_string()),
+            value: json!({"text": "focus test"}),
+            ..Default::default()
+        }
+        .into_insert_owned();
+        state
+            .kernel()
+            .insert_memory_async(insert_owned)
+            .await
+            .expect("insert memory");
+
+        let app = Router::new()
+            .route("/state/memory/recent", get(state_memory_recent))
+            .with_state(state.clone());
+
+        let response = app
+            .oneshot(
+                axum::http::Request::builder()
+                    .uri("/state/memory/recent")
+                    .body(axum::body::Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(response.status(), axum::http::StatusCode::OK);
+
+        let body_bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("body bytes");
+        let parsed: MemoryRecentResponse =
+            serde_json::from_slice(&body_bytes).expect("memory recent json");
+        assert!(
+            !parsed.items.is_empty(),
+            "expected at least one memory item"
+        );
+        assert!(
+            chrono::DateTime::parse_from_rfc3339(&parsed.generated).is_ok(),
+            "generated timestamp should be RFC3339"
+        );
+        assert!(
+            parsed.items.iter().all(|item| item.get("ptr").is_some()),
+            "memory items should include ptr metadata"
+        );
+        let parsed_dt = DateTime::parse_from_rfc3339(&parsed.generated).expect("parse generated");
+        assert_eq!(
+            parsed_dt.timestamp_millis(),
+            parsed.generated_ms,
+            "generated_ms should align with generated timestamp",
+        );
+        assert!(parsed.generated_ms > 0, "generated_ms should be positive");
+    }
+
+    #[tokio::test]
     async fn memory_stream_provides_snapshot_and_patch() {
         let temp = tempdir().expect("tmp");
         let mut ctx = crate::test_support::begin_state_env(temp.path());
@@ -479,10 +604,15 @@ mod tests {
             .expect("list memory");
         let mut snapshot_items = snapshot_now.clone();
         memory_service::attach_memory_ptrs(&mut snapshot_items);
+        let (generated, generated_ms) = now_timestamp_pair();
         read_models::publish_read_model_patch(
             &state.bus(),
             "memory_recent",
-            &json!({"items": snapshot_items, "generated": now_timestamp()}),
+            &json!({
+                "items": snapshot_items,
+                "generated": generated,
+                "generated_ms": generated_ms,
+            }),
         );
 
         let app = Router::new()
@@ -537,6 +667,14 @@ mod tests {
                 .unwrap_or_default(),
             1,
         );
+        let snapshot_generated = snapshot_json["snapshot"]["generated"]
+            .as_str()
+            .expect("snapshot generated");
+        let snapshot_generated_ms = snapshot_json["snapshot"]["generated_ms"]
+            .as_i64()
+            .expect("snapshot generated ms");
+        let snapshot_dt = DateTime::parse_from_rfc3339(snapshot_generated).expect("snapshot dt");
+        assert_eq!(snapshot_dt.timestamp_millis(), snapshot_generated_ms);
 
         let insert_owned = memory_service::MemoryUpsertInput {
             lane: "semantic".to_string(),
@@ -560,12 +698,14 @@ mod tests {
             .await
             .expect("list updated memory");
         memory_service::attach_memory_ptrs(&mut updated_snapshot);
+        let (generated, generated_ms) = now_timestamp_pair();
         read_models::publish_read_model_patch(
             &state.bus(),
             "memory_recent",
             &json!({
                 "items": updated_snapshot,
-                "generated": now_timestamp()
+                "generated": generated,
+                "generated_ms": generated_ms,
             }),
         );
 
@@ -606,6 +746,14 @@ mod tests {
             items_len, 2,
             "snapshot after patch should include two items"
         );
+        let patch_generated = patch_json["snapshot"]["generated"]
+            .as_str()
+            .expect("patch generated");
+        let patch_generated_ms = patch_json["snapshot"]["generated_ms"]
+            .as_i64()
+            .expect("patch generated ms");
+        let patch_dt = DateTime::parse_from_rfc3339(patch_generated).expect("patch dt");
+        assert_eq!(patch_dt.timestamp_millis(), patch_generated_ms);
     }
 
     #[tokio::test]

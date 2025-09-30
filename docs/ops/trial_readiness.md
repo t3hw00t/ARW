@@ -34,6 +34,7 @@ When this loop feels smooth we can think about inviting more teammates.
 ## Keeping the interface friendly
 
 - One landing page with **Overview / Workflows / Safeguards** tabs; use the same names in training decks (see `docs/design/trial_visual_kit.md` for the mock + implementation guidance).
+- The "What's in focus" card now includes a See sources button that opens `/admin/debug#memory` so we can jump from summary to evidence quickly, and it shows both relative and absolute freshness for accessibility.
 - “What’s in focus” appears in the Overview tab, the approvals card, and the Training Park so nobody wonders where facts came from. If the launcher preview isn’t available, surface the same facts through the Project Hub Activity panel.
 - Alerts say things like “Needs a teammate’s OK” instead of protocol names, and every action in the queue pairs with a suggested decision.
 - Recipe cards carry a picture, a one-line summary, and an optional “Explain as we go” toggle; treat the visual kit as the source of truth until the launcher panel lands.

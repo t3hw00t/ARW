@@ -72,7 +72,7 @@ Actions (unified server)
 Memory
 - `POST /admin/memory/apply` — insert or update a memory item (admin helper)
 - `GET /admin/memory` — list recent memory items (admin helper; supports `lane`/`limit`)
-- `GET /state/memory/recent` — most recent memories (per lane)
+- `GET /state/memory/recent` — most recent memories (per lane) with `generated` / `generated_ms` timestamps for freshness checks
 - Action-first interface: `POST /actions (memory.upsert|memory.search|memory.pack)` handles durable updates, retrieval, and packing with event telemetry.
 - Review queue (admin): `GET /admin/memory/quarantine`, `POST /admin/memory/quarantine`, `POST /admin/memory/quarantine/admit` — track quarantined extracts before admitting to world/memory lanes.
 - World diff decisions (admin): `GET /admin/world_diffs`, `POST /admin/world_diffs/queue`, `POST /admin/world_diffs/decision` — queue diffs, record human decisions, and emit `world.diff.*` events.

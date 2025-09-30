@@ -189,6 +189,34 @@ function escapeText(value) {
   return String(value ?? '').replace(/[\u0000-\u001f\u007f-\u009f]/g, '');
 }
 
+function formatRelativeTraining(ms) {
+  if (!Number.isFinite(ms)) return 'recently';
+  const diff = Date.now() - ms;
+  if (!Number.isFinite(diff)) return 'recently';
+  if (Math.abs(diff) < 1000) return 'just now';
+  const abs = Math.abs(diff);
+  const sign = diff >= 0 ? 'ago' : 'from now';
+  const minutes = abs / 60000;
+  if (minutes < 1) return `${Math.round(abs / 1000)} s ${sign}`;
+  if (minutes < 60) return `${Math.round(minutes)} m ${sign}`;
+  const hours = minutes / 60;
+  if (hours < 24) return `${Math.round(hours)} h ${sign}`;
+  const days = hours / 24;
+  if (days < 7) return `${Math.round(days)} d ${sign}`;
+  const weeks = days / 7;
+  if (weeks < 4) return `${Math.round(weeks)} w ${sign}`;
+  const months = days / 30;
+  if (months < 12) return `${Math.round(months)} mo ${sign}`;
+  const years = days / 365;
+  return `${Math.round(years)} yr ${sign}`;
+}
+
+function formatRelativeAbsTraining(ms) {
+  if (!Number.isFinite(ms)) return new Date().toLocaleString();
+  const date = new Date(ms);
+  return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}`;
+}
+
 function formatPercent(value, digits = 0) {
   if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
   const pct = (value * 100).toFixed(digits);
@@ -227,11 +255,18 @@ function renderList(targetId, items, formatter, emptyText) {
 
 function renderTelemetry(data) {
   lastTelemetry = data;
-  const updated = data && data.generated ? new Date(data.generated) : new Date();
-  const readable = Number.isNaN(updated.getTime())
-    ? escapeText(data && data.generated)
-    : updated.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-  setTelemetryStatus(`Updated ${readable}`);
+  let updatedMs = Number(data?.generated_ms ?? data?.generatedMs);
+  if (!Number.isFinite(updatedMs)) {
+    const parsed = Date.parse(data && data.generated ? data.generated : '');
+    updatedMs = Number.isNaN(parsed) ? null : parsed;
+  }
+  if (Number.isFinite(updatedMs)) {
+    setTelemetryStatus(`Updated ${formatRelativeTraining(updatedMs)} (${formatRelativeAbsTraining(updatedMs)})`);
+  } else if (data && data.generated) {
+    setTelemetryStatus(`Updated ${escapeText(data.generated)}`);
+  } else {
+    setTelemetryStatus('Updated (time unknown)');
+  }
 
   const context = data && data.context ? data.context : {};
   const coverage = context.coverage || {};

@@ -16,7 +16,9 @@ pub async fn telemetry_snapshot(state: &AppState) -> serde_json::Value {
     let bus_stats = bus.stats();
     let context = crate::context_metrics::snapshot(&bus);
     let cache = state.tool_cache().stats();
-    let generated = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    let now = chrono::Utc::now();
+    let generated = now.to_rfc3339_opts(SecondsFormat::Millis, true);
+    let generated_ms = now.timestamp_millis();
 
     let routes: Vec<Value> = metrics
         .routes
@@ -86,6 +88,7 @@ pub async fn telemetry_snapshot(state: &AppState) -> serde_json::Value {
 
     json!({
         "generated": generated,
+        "generated_ms": generated_ms,
         "events": {
             "start": metrics.events.start,
             "total": metrics.events.total,

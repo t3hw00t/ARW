@@ -17,33 +17,33 @@
       <header class="card trial-header" role="banner">
         <div class="title-block">
           <h1>Trial Control Center</h1>
-          <p class="dim">Keep Gate G0–G3 indicators steady. Refresh before each rehearsal so we catch drift early.</p>
+          <p class="dim">Keep Gate G0-G3 indicators steady. Refresh before each rehearsal so we catch drift early.</p>
         </div>
         <div class="status-tray" id="statusTray" role="status" aria-live="polite">
           <span class="status-pill" data-kind="systems">
             <span class="dot" aria-hidden="true"></span>
             <span class="label">Systems</span>
-            <span class="value">–</span>
+            <span class="value">-</span>
           </span>
           <span class="status-pill" data-kind="memory">
             <span class="dot" aria-hidden="true"></span>
             <span class="label">Memory</span>
-            <span class="value">–</span>
+            <span class="value">-</span>
           </span>
           <span class="status-pill" data-kind="approvals">
             <span class="dot" aria-hidden="true"></span>
             <span class="label">Approvals</span>
-            <span class="value">–</span>
+            <span class="value">-</span>
           </span>
           <span class="status-pill" data-kind="safety">
             <span class="dot" aria-hidden="true"></span>
             <span class="label">Safety</span>
-            <span class="value">–</span>
+            <span class="value">-</span>
           </span>
           <span class="status-pill" data-kind="autonomy">
             <span class="dot" aria-hidden="true"></span>
             <span class="label">Autonomy</span>
-            <span class="value">–</span>
+            <span class="value">-</span>
           </span>
         </div>
         <div class="header-controls">
@@ -63,7 +63,7 @@
             <div id="dataNotice" class="hidden" role="alert"></div>
             <div class="autonomy-controls" role="region" aria-labelledby="autonomyControlsTitle">
               <h2 id="autonomyControlsTitle">Autonomy control</h2>
-              <p class="dim" id="autonomySummary">Autonomy status loading…</p>
+              <p class="dim" id="autonomySummary">Autonomy status loading...</p>
               <div class="button-row">
                 <button id="btn-autonomy-pause" class="danger">Pause now</button>
                 <button id="btn-autonomy-resume" class="ghost">Resume guided</button>
@@ -74,7 +74,17 @@
             </div>
           </div>
           <div class="card-lite focus-card" role="region" aria-labelledby="focusTitle">
-            <h2 id="focusTitle">What’s in focus</h2>
+            <div class="focus-header">
+              <h2 id="focusTitle">What's in focus</h2>
+              <button
+                id="btn-focus-sources"
+                class="ghost focus-link"
+                type="button"
+                aria-label="Open memory sources in debug view"
+                title="Open memory sources in debug view"
+              >See sources</button>
+            </div>
+            <div id="focusUpdated" class="focus-updated dim" role="status" aria-live="polite" aria-atomic="true"></div>
             <ul id="focusList" class="focus-list"></ul>
           </div>
         </section>
@@ -83,41 +93,41 @@
           <article class="tile" data-kind="systems">
             <header>
               <h3>Systems</h3>
-              <span class="pill" id="tile-systems-pill">–</span>
+              <span class="pill" id="tile-systems-pill">-</span>
             </header>
-            <p class="tile-body" id="tile-systems-body">Loading…</p>
+            <p class="tile-body" id="tile-systems-body">Loading...</p>
             <dl class="tile-meta" id="tile-systems-meta"></dl>
           </article>
           <article class="tile" data-kind="memory">
             <header>
               <h3>Memory</h3>
-              <span class="pill" id="tile-memory-pill">–</span>
+              <span class="pill" id="tile-memory-pill">-</span>
             </header>
-            <p class="tile-body" id="tile-memory-body">Loading…</p>
+            <p class="tile-body" id="tile-memory-body">Loading...</p>
             <dl class="tile-meta" id="tile-memory-meta"></dl>
           </article>
           <article class="tile" data-kind="approvals">
             <header>
               <h3>Approvals</h3>
-              <span class="pill" id="tile-approvals-pill">–</span>
+              <span class="pill" id="tile-approvals-pill">-</span>
             </header>
-            <p class="tile-body" id="tile-approvals-body">Loading…</p>
+            <p class="tile-body" id="tile-approvals-body">Loading...</p>
             <dl class="tile-meta" id="tile-approvals-meta"></dl>
           </article>
           <article class="tile" data-kind="safety">
             <header>
               <h3>Safety</h3>
-              <span class="pill" id="tile-safety-pill">–</span>
+              <span class="pill" id="tile-safety-pill">-</span>
             </header>
-            <p class="tile-body" id="tile-safety-body">Loading…</p>
+            <p class="tile-body" id="tile-safety-body">Loading...</p>
             <dl class="tile-meta" id="tile-safety-meta"></dl>
           </article>
           <article class="tile" data-kind="autonomy">
             <header>
               <h3>Autonomy</h3>
-              <span class="pill" id="tile-autonomy-pill">–</span>
+              <span class="pill" id="tile-autonomy-pill">-</span>
             </header>
-            <p class="tile-body" id="tile-autonomy-body">Loading…</p>
+            <p class="tile-body" id="tile-autonomy-body">Loading...</p>
             <dl class="tile-meta" id="tile-autonomy-meta"></dl>
           </article>
         </section>

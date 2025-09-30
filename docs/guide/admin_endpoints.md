@@ -193,7 +193,7 @@ The triad groups operations by intent:
   - `GET /state/connectors` — connector manifests with secrets scrubbed.
 - **Memory & context**
   - `GET /state/memory` — SSE stream emitting `memory.snapshot` and `memory.patch` events (JSON Patches plus live snapshot).
-  - `GET /state/memory/recent` — snapshot of recent records (lane/limit filters).
+  - `GET /state/memory/recent` — snapshot of recent records (lane/limit filters) with `generated` and `generated_ms` timestamps for freshness checks.
 - **Self introspection**
   - `GET /state/self` — list available self models on disk.
   - `GET /state/self/:agent` — fetch a specific self model JSON snapshot.

@@ -10,13 +10,16 @@ Updated: 2025-09-28 18:00 UTC
 ## To Do
 - [trial-g3] Gate G3: Trial operations — todo (updated: 2025-09-26 12:30 UTC)
 - [trial-g2] Gate G2: Calm approvals — todo (updated: 2025-09-26 12:30 UTC)
-- [trial-g1] Gate G1: Reliable memory — todo (updated: 2025-09-26 12:30 UTC)
 
 ## In Progress
 
 ## Paused
 
 ## Done
+- [trial-g1] Gate G1: Reliable memory — done (updated: 2025-09-30 11:24:44 UTC)
+    - 2025-09-30 11:24:44 UTC: Trial Control Center focus card shows recent memory with freshness stamp and sources link; context telemetry tile now surfaces telemetry updated time and recall scores; memory recent API returns a generated timestamp for UI freshness.
+    - 2025-09-30 12:05:19 UTC: Memory snapshots expose `generated_ms` alongside `generated`, SSE coverage refreshed, and the launcher focus card uses the numeric timestamp for accessible freshness messaging.
+    - 2025-09-30 12:23:46 UTC: Approvals lanes, Training telemetry status, and debug views display relative + absolute freshness using `generated_ms`; workflow docs include handling guidance.
 - [t-250914223220-cap03] OCR for screenshots (optional) — done (updated: 2025-09-29 15:45:00 UTC)
     - 2025-09-14 23:05:00 UTC: Tool stub added using leptess behind feature ocr_tesseract; Chat can auto-run OCR if enabled.
     - 2025-09-17 20:19:01 UTC: Fixed parameter use in ocr_image_text (leptess set_image now receives path). Feature remains optional (enable with --features ocr_tesseract).

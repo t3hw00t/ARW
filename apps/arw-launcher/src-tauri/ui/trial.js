@@ -4,15 +4,16 @@
   const AUTONOMY_OPERATOR_KEY = 'arw:trial:autonomy-operator';
 
   const STATE = {
-    systems: { level: 'unknown', summary: 'Loadingâ€¦', meta: [] },
-    memory: { level: 'unknown', summary: 'Loadingâ€¦', meta: [] },
-    approvals: { level: 'unknown', summary: 'Loadingâ€¦', meta: [] },
-    safety: { level: 'unknown', summary: 'Loadingâ€¦', meta: [] },
-    autonomy: { level: 'unknown', summary: 'Loading…', meta: [], lane: null, snapshot: null, line: 'Autonomy status loading…', operator: null, alerts: [], updatedMs: null, lastEvent: null, lastReason: null },
+    systems: { level: 'unknown', summary: 'Loading...', meta: [] },
+    memory: { level: 'unknown', summary: 'Loading...', meta: [] },
+    approvals: { level: 'unknown', summary: 'Loading...', meta: [] },
+    safety: { level: 'unknown', summary: 'Loading...', meta: [] },
+    autonomy: { level: 'unknown', summary: 'Loading...', meta: [], lane: null, snapshot: null, line: 'Autonomy status loading...', operator: null, alerts: [], updatedMs: null, lastEvent: null, lastReason: null },
     overview: [],
     workflows: [],
     safeguards: [],
     focus: [],
+    focusUpdatedMs: null,
     errors: [],
     unauthorized: false,
     base: null,
@@ -37,6 +38,9 @@
 
     const preflightBtn = document.getElementById('btn-preflight');
     if (preflightBtn) preflightBtn.addEventListener('click', runPreflight);
+
+    const focusSourcesBtn = document.getElementById('btn-focus-sources');
+    if (focusSourcesBtn) focusSourcesBtn.addEventListener('click', openFocusSources);
 
     const autoPauseBtn = document.getElementById('btn-autonomy-pause');
     if (autoPauseBtn) autoPauseBtn.addEventListener('click', pauseAutonomy);
@@ -93,23 +97,23 @@
   }
 
   function setLoading(){
-    setStatus('systems', 'unknown', 'Loading…');
-    setStatus('memory', 'unknown', 'Loading…');
-    setStatus('approvals', 'unknown', 'Loading…');
-    setStatus('safety', 'unknown', 'Loading…');
-    setStatus('autonomy', 'unknown', 'Loading…');
-    setTile('systems', { level: 'unknown', summary: 'Loading…', meta: [] });
-    setTile('memory', { level: 'unknown', summary: 'Loading…', meta: [] });
-    setTile('approvals', { level: 'unknown', summary: 'Loading…', meta: [] });
-    setTile('safety', { level: 'unknown', summary: 'Loading…', meta: [] });
-    setTile('autonomy', { level: 'unknown', summary: 'Loading…', meta: [] });
+    setStatus('systems', 'unknown', 'Loading...');
+    setStatus('memory', 'unknown', 'Loading...');
+    setStatus('approvals', 'unknown', 'Loading...');
+    setStatus('safety', 'unknown', 'Loading...');
+    setStatus('autonomy', 'unknown', 'Loading...');
+    setTile('systems', { level: 'unknown', summary: 'Loading...', meta: [] });
+    setTile('memory', { level: 'unknown', summary: 'Loading...', meta: [] });
+    setTile('approvals', { level: 'unknown', summary: 'Loading...', meta: [] });
+    setTile('safety', { level: 'unknown', summary: 'Loading...', meta: [] });
+    setTile('autonomy', { level: 'unknown', summary: 'Loading...', meta: [] });
     STATE.autonomy = {
       level: 'unknown',
-      summary: 'Loading…',
+      summary: 'Loading...',
       meta: [],
       lane: null,
       snapshot: null,
-      line: 'Autonomy status loading…',
+      line: 'Autonomy status loading...',
       operator: STATE.autonomy?.operator || null,
       alerts: [],
       updatedMs: null,
@@ -118,6 +122,8 @@
     };
     syncAutonomyControlsFromState();
     setFocus([]);
+    STATE.focusUpdatedMs = null;
+    setFocusUpdated(null);
     renderLists();
   }
 
@@ -141,7 +147,7 @@
       updateLists(payload.routeStats);
       renderLists();
       if (STATE.unauthorized) {
-        showNotice('Add an admin token in Launcher â†’ Preferences to see live metrics.');
+        showNotice('Add an admin token in Launcher -> Preferences to see live metrics.');
       } else if (STATE.errors.length) {
         showNotice(`Partial data: ${STATE.errors.join('; ')}`);
       }
@@ -235,7 +241,7 @@
         .sort((a, b) => (Number(b?.p95_ms) || 0) - (Number(a?.p95_ms) || 0))
         .slice(0, 1)[0];
       if (worst) {
-        meta.push(['Slowest route', `${worst.path} Â· p95 ${(Number(worst.p95_ms) || 0).toFixed(0)} ms`]);
+        meta.push(['Slowest route', `${worst.path} | p95 ${(Number(worst.p95_ms) || 0).toFixed(0)} ms`]);
       }
     }
 
@@ -257,10 +263,25 @@
     const coverage = context.coverage || {};
     const recall = context.recall_risk || context.recallRisk || {};
     const assembled = context.assembled || {};
+    let generatedMs = toNumber(
+      telemetry.generated_ms ??
+      telemetry.generatedMs ??
+      context.generated_ms ??
+      context.generatedMs
+    );
+    if (!Number.isFinite(generatedMs)) {
+      generatedMs = parseTimestamp(telemetry.generated || context.generated);
+    }
+    const coverageLatest = coverage?.latest || {};
+    const recallLatest = recall?.latest || {};
+    const coverageSummary = summaryFromPayload(coverageLatest.summary);
+    const recallSummary = summaryFromPayload(recallLatest.summary);
 
     const needsMore = Number(coverage.needs_more_ratio ?? coverage.needsMoreRatio ?? 0);
     const riskRatio = Number(recall.at_risk_ratio ?? recall.atRiskRatio ?? 0);
     const avgScore = Number(recall.avg_score ?? recall.avgScore ?? NaN);
+    const latestScore = Number(recallLatest.score ?? NaN);
+    const latestLevel = typeof recallLatest.level === 'string' ? recallLatest.level : '';
 
     let level = 'ok';
     let summary = 'Context coverage steady';
@@ -270,12 +291,21 @@
     } else if (needsMore > 0 || riskRatio > 0) {
       level = 'warn';
       summary = 'Context needs widening';
+    } else if (coverageSummary) {
+      summary = coverageSummary;
+    } else if (recallSummary) {
+      summary = recallSummary;
     }
 
     const meta = [];
+    if (Number.isFinite(generatedMs)) {
+      meta.push(['Telemetry updated', `${formatRelative(generatedMs)} (${formatRelativeAbs(generatedMs)})`]);
+    }
     if (Number.isFinite(needsMore)) meta.push(['Needs more ratio', (needsMore * 100).toFixed(0) + '%']);
     if (Number.isFinite(riskRatio)) meta.push(['Recall risk', (riskRatio * 100).toFixed(0) + '%']);
     if (Number.isFinite(avgScore)) meta.push(['Avg recall score', avgScore.toFixed(2)]);
+    if (Number.isFinite(latestScore)) meta.push(['Latest recall score', latestScore.toFixed(2)]);
+    if (latestLevel) meta.push(['Latest recall level', latestLevel]);
     if (Array.isArray(assembled?.working_set?.counts)) {
       const counts = assembled.working_set.counts;
       if (typeof counts === 'object') {
@@ -283,8 +313,19 @@
         meta.push(['Working set size', String(total)]);
       }
     }
+    if (coverageSummary && summary !== coverageSummary) {
+      meta.push(['Coverage summary', coverageSummary]);
+    }
+    if (recallSummary && summary !== recallSummary) {
+      meta.push(['Recall summary', recallSummary]);
+    }
 
     STATE.memory = { level, summary, meta };
+    if (Number.isFinite(generatedMs)) {
+      STATE.memory.generatedMs = generatedMs;
+    } else {
+      delete STATE.memory.generatedMs;
+    }
     setStatus('memory', level, summary);
     setTile('memory', STATE.memory);
   }
@@ -312,7 +353,7 @@
         .map(it => parseTimestamp(it.time_ms || it.ts_ms || it.created_ms || it.created_at))
         .filter(Boolean)
         .sort((a, b) => a - b)[0];
-      if (oldestTs) meta.push(['Oldest request', formatRelative(oldestTs)]);
+      if (oldestTs) meta.push(['Oldest request', formatRelativeWithAbs(oldestTs)]);
       const lanes = new Set(pending.map(it => it.lane || it.kind || it.scope).filter(Boolean));
       if (lanes.size) meta.push(['Lanes', Array.from(lanes).join(', ')]);
     }
@@ -432,7 +473,7 @@
     }
 
     const meta = [
-      ['Lane', laneId || '—'],
+      ['Lane', laneId || '--'],
       ['Mode', mode],
       ['Active jobs', active.toString()],
       ['Queued jobs', queued.toString()],
@@ -455,7 +496,7 @@
       if (wall != null) parts.push(`${formatSeconds(wall)} wall clock`);
       if (tokens != null) parts.push(`${tokens.toLocaleString()} tokens`);
       if (spend != null) parts.push(`$${(spend / 100).toFixed(2)} spend`);
-      if (parts.length) meta.push(['Budgets', parts.join(' · ')]);
+      if (parts.length) meta.push(['Budgets', parts.join(' | ')]);
     }
 
     const overviewLine = `${summary}${laneId ? ` (${laneId})` : ''}`;
@@ -509,8 +550,8 @@
         const bits = [];
         if (lastEvent) bits.push(readableAutonomyEvent(lastEvent));
         if (updatedMs) bits.push(formatRelative(updatedMs));
-        if (lastReason) bits.push(`“${lastReason}”`);
-        lastEl.textContent = bits.length ? `Last change: ${bits.join(' · ')}` : '';
+        if (lastReason) bits.push(`"${lastReason}"`);
+        lastEl.textContent = bits.length ? `Last change: ${bits.join(' | ')}` : '';
       }
     }
     if (alertsEl) {
@@ -728,24 +769,38 @@
   function updateFocus(memoryRecent){
     if (!memoryRecent) {
       STATE.focus = [];
+      STATE.focusUpdatedMs = null;
       setFocus([]);
+      setFocusUpdated(null);
       return;
     }
     const items = Array.isArray(memoryRecent?.items) ? memoryRecent.items : [];
-    STATE.focus = items.slice(0, 5).map((item) => {
+    let updatedMs = toNumber(memoryRecent.generated_ms ?? memoryRecent.generatedMs);
+    if (!Number.isFinite(updatedMs)) {
+      updatedMs = parseTimestamp(memoryRecent.generated);
+    }
+    const focusEntries = items.slice(0, 5).map((item) => {
       const lane = item.lane || item.kind || (item.ptr && item.ptr.lane) || 'memory';
       const title = resolveMemoryTitle(item);
       const ts = parseTimestamp(item.time_ms || item.ts_ms || item.created_ms || item.time);
       const rel = ts ? formatRelative(ts) : 'recent';
       const project = item.project_id || item.project || (item.spec && item.spec.project);
+      if (!updatedMs && ts) updatedMs = ts;
       return { lane, title, rel, project };
     });
+    if (!updatedMs && Number.isFinite(STATE.memory?.generatedMs)) {
+      updatedMs = STATE.memory.generatedMs;
+    }
+    STATE.focus = focusEntries;
+    STATE.focusUpdatedMs = updatedMs || null;
     setFocus(STATE.focus);
+    setFocusUpdated(STATE.focusUpdatedMs);
   }
 
   function updateLists(routeStats){
     const systemLine = `${STATE.systems.summary}${STATE.systems.meta[0] ? ` (${STATE.systems.meta[0][1]})` : ''}`;
-    const memoryLine = STATE.memory.summary;
+    const memoryStamp = STATE.focusUpdatedMs ? ` (updated ${formatRelativeWithAbs(STATE.focusUpdatedMs)})` : '';
+    const memoryLine = `${STATE.memory.summary}${memoryStamp}`;
     const approvalLine = STATE.approvals.summary;
     const safetyLine = STATE.safety.summary;
     const autonomyLine = STATE.autonomy?.line || (STATE.unauthorized ? 'Authorize to view autonomy lane.' : 'Autonomy lane idle.');
@@ -755,7 +810,7 @@
           .filter(r => typeof r?.path === 'string')
           .sort((a, b) => (Number(b?.p95_ms) || 0) - (Number(a?.p95_ms) || 0))
           .slice(0, 3)
-          .map(r => `${r.path} · p95 ${(Number(r.p95_ms) || 0).toFixed(0)} ms (hits ${(Number(r.hits) || 0).toLocaleString()})`)
+          .map(r => `${r.path} | p95 ${(Number(r.p95_ms) || 0).toFixed(0)} ms (hits ${(Number(r.hits) || 0).toLocaleString()})`)
       : [];
 
     STATE.overview = [systemLine, memoryLine, approvalLine, safetyLine, autonomyLine];
@@ -780,7 +835,7 @@
       laneCounts.set(item.lane, (laneCounts.get(item.lane) || 0) + 1);
     }
     const laneSummary = Array.from(laneCounts.entries()).map(([lane, count]) => `${lane}: ${count}`).join(', ');
-    return `Recent focus lanes â€” ${laneSummary}. ${memoryState.summary}`;
+    return `Recent focus lanes - ${laneSummary}. ${memoryState.summary}`;
   }
 
   function setFocus(entries){
@@ -801,10 +856,35 @@
       li.appendChild(title);
       const meta = document.createElement('span');
       meta.className = 'meta dim';
-      meta.textContent = `[${item.lane}] ${item.rel}${item.project ? ` Â· ${item.project}` : ''}`;
+      meta.textContent = `[${item.lane}] ${item.rel}${item.project ? ` | ${item.project}` : ''}`;
       li.appendChild(meta);
       list.appendChild(li);
     });
+  }
+
+  function setFocusUpdated(ms){
+    const el = document.getElementById('focusUpdated');
+    if (!el) return;
+    const focusBtn = document.getElementById('btn-focus-sources');
+    if (focusBtn) {
+      const disabled = STATE.unauthorized || !STATE.base;
+      focusBtn.disabled = disabled;
+      focusBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      focusBtn.title = disabled
+        ? 'Connect with an admin token to open memory sources'
+        : 'Open memory sources in debug view';
+    }
+    if (!ms || !Number.isFinite(ms)) {
+      el.textContent = '';
+      el.title = '';
+      el.classList.add('hidden');
+      el.setAttribute('aria-hidden', 'true');
+      return;
+    }
+    el.classList.remove('hidden');
+    el.setAttribute('aria-hidden', 'false');
+    el.textContent = `Updated ${formatRelative(ms)} (${formatRelativeAbs(ms)})`;
+    el.title = `Snapshot captured ${formatRelativeAbs(ms)}`;
   }
 
   function renderLists(){
@@ -864,7 +944,7 @@
         pill.classList.add(data.level);
       }
     }
-    if (body) body.textContent = data.summary || 'â€”';
+    if (body) body.textContent = data.summary || '--';
     if (metaList) {
       metaList.innerHTML = '';
       (data.meta || []).forEach(([label, value]) => {
@@ -897,11 +977,38 @@
     return 'Memory item';
   }
 
+  function summaryFromPayload(payload){
+    if (!payload) return '';
+    if (typeof payload === 'string') {
+      const trimmed = payload.trim();
+      return trimmed;
+    }
+    if (typeof payload === 'object') {
+      if (typeof payload.text === 'string' && payload.text.trim()) return payload.text.trim();
+      if (typeof payload.title === 'string' && payload.title.trim()) return payload.title.trim();
+      if (typeof payload.summary === 'string' && payload.summary.trim()) return payload.summary.trim();
+    }
+    return '';
+  }
+
   function showNotice(text){
     const notice = document.getElementById('dataNotice');
     if (!notice) return;
     notice.textContent = text || '';
     notice.classList.toggle('hidden', !text);
+  }
+
+  async function openFocusSources(){
+    if (!STATE.base) {
+      ARW.toast('Start the server first');
+      return;
+    }
+    try {
+      await ARW.invoke('open_url', { url: `${STATE.base}/admin/debug#memory` });
+    } catch (err) {
+      console.error('Open focus sources failed', err);
+      ARW.toast('Unable to open memory view');
+    }
   }
 
   async function openRunbook(){
@@ -1016,9 +1123,14 @@
     return `${date.toLocaleDateString()} ${date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   }
 
+  function formatRelativeWithAbs(ms){
+    if (!Number.isFinite(ms)) return '--';
+    return `${formatRelative(ms)} (${formatRelativeAbs(ms)})`;
+  }
+
   function formatSeconds(sec){
     const value = Number(sec);
-    if (!Number.isFinite(value) || value < 0) return '—';
+    if (!Number.isFinite(value) || value < 0) return '--';
     if (value >= 3600) return `${Math.round(value / 3600)} h`;
     if (value >= 120) return `${Math.round(value / 60)} min`;
     if (value >= 1) return `${Math.round(value)} s`;
@@ -1031,10 +1143,3 @@
     return Number.isFinite(num) ? num : null;
   }
 })();
-
-
-
-
-
-
-
