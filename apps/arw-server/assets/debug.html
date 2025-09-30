@@ -183,19 +183,77 @@
       <h3>Staging Queue <a href="#" class="help" data-doc="human_in_loop" data-tip="Approve or deny human-in-the-loop actions awaiting review." title="Staging docs">?</a></h3>
       <div class="row" role="toolbar" aria-label="Staging actions">
         <button onclick="stagingFetch()">Refresh</button>
+        <label class="key"><input type="checkbox" id="stagingLive" checked> live</label>
       </div>
       <div id="stagingList" class="mtable" style="max-height:32vh;overflow:auto"></div>
+      <details id="stagingRecentShell" style="margin-top:8px;display:none">
+        <summary class="key">Recent decisions</summary>
+        <div id="stagingRecent" style="font-size:12px;color:var(--color-muted);margin-top:6px"></div>
+      </details>
     </div>
     <div class="card" data-collapsed="1">
       <h3>Research Watcher <a href="#" class="help" data-doc="research_watcher" data-tip="Approve or archive suggested logic units and research items." title="Research watcher">?</a></h3>
       <div class="row" role="toolbar" aria-label="Research watcher actions">
         <button onclick="rwFetch()">Refresh</button>
+        <label class="key"><input type="checkbox" id="rwLive" checked> live</label>
       </div>
       <div id="rwPending" style="display:flex;flex-direction:column;gap:8px;max-height:32vh;overflow:auto"></div>
       <details style="margin-top:8px">
         <summary class="key">Recent decisions</summary>
         <div id="rwRecent" style="font-size:12px;color:var(--color-muted);margin-top:6px"></div>
       </details>
+    </div>
+    <div class="card" data-collapsed="1">
+      <h3>Context Metrics <a href="#" class="help" data-doc="training_park" data-tip="Coverage verdicts, recall risk, and slot gap analytics from the context window." title="Context metrics">?</a></h3>
+      <div class="row" role="toolbar" aria-label="Context metrics actions">
+        <button onclick="contextMetricsRefresh()">Refresh</button>
+        <span id="contextCoverageBadge" class="badge warn"><span class="dot"></span> unknown</span>
+        <label class="key"><input type="checkbox" id="contextLive" checked> live</label>
+        <button class="iconbtn" onclick="copyJson('contextMetricsOut','context metrics')">Copy</button>
+      </div>
+      <div id="contextMetricsSummary" class="kv"></div>
+      <div id="contextMetricsSlots" class="kv" style="font-size:12px;color:var(--color-muted)"></div>
+      <pre id="contextMetricsOut">{}</pre>
+    </div>
+    <div class="card" data-collapsed="1">
+      <h3>Policy Leases <a href="#" class="help" data-doc="security" data-tip="Active capability leases with TTL, scope, and budget." title="Policy leases">?</a></h3>
+      <div class="row" role="toolbar" aria-label="Policy leases actions">
+        <button onclick="policyLeasesRefresh()">Refresh</button>
+        <span id="policyLeasesBadge" class="badge warn"><span class="dot"></span> 0</span>
+        <label class="key"><input type="checkbox" id="policyLeasesLive" checked> live</label>
+        <button class="iconbtn" onclick="copyJson('policyLeasesOut','policy leases')">Copy</button>
+        <button class="iconbtn" onclick="clearPolicyLeasesFilter()">Clear</button>
+        <input id="policyLeasesFilter" class="mini" placeholder="Filter (capability, subject, scope)" style="margin-left:auto">
+      </div>
+      <div id="policyLeasesMeta" class="kv" style="font-size:12px;color:var(--color-muted)"></div>
+      <div id="policyLeasesTable" class="mtable" style="max-height:32vh;overflow:auto"></div>
+      <pre id="policyLeasesOut">{}</pre>
+    </div>
+    <div class="card" data-collapsed="1">
+      <h3>Service Health <a href="#" class="help" data-doc="operations" data-tip="Aggregated service.health events and recent incidents." title="Service health">?</a></h3>
+      <div class="row" role="toolbar" aria-label="Service health actions">
+        <button onclick="serviceHealthRefresh()">Refresh</button>
+        <span id="serviceHealthBadge" class="badge warn"><span class="dot"></span> unknown</span>
+        <label class="key"><input type="checkbox" id="serviceHealthLive" checked> live</label>
+        <button class="iconbtn" onclick="copyJson('serviceHealthOut','service health')">Copy</button>
+      </div>
+      <div id="serviceHealthSummary" class="kv"></div>
+      <div id="serviceHealthHistory" class="mtable" style="max-height:32vh;overflow:auto"></div>
+      <pre id="serviceHealthOut">{}</pre>
+    </div>
+    <div class="card" data-collapsed="1">
+      <h3>Crash Log <a href="#" class="help" data-doc="operations" data-tip="Recent crash reports captured under the server state directory." title="Crash log">?</a></h3>
+      <div class="row" role="toolbar" aria-label="Crash log actions">
+        <button onclick="crashlogRefresh()">Refresh</button>
+        <span id="crashlogBadge" class="badge warn"><span class="dot"></span> 0</span>
+        <label class="key"><input type="checkbox" id="crashlogLive" checked> live</label>
+        <button class="iconbtn" onclick="copyJson('crashlogOut','crash log')">Copy</button>
+        <button class="iconbtn" onclick="clearCrashlogFilter()">Clear</button>
+        <input id="crashlogFilter" class="mini" placeholder="Filter (file, reason, status)" style="margin-left:auto">
+      </div>
+      <div id="crashlogMeta" class="kv" style="font-size:12px;color:var(--color-muted)"></div>
+      <div id="crashlogList" class="mtable" style="max-height:32vh;overflow:auto"></div>
+      <pre id="crashlogOut">{}</pre>
     </div>
     <div class="card">
       <h3>Orchestration <a href="#" class="help" data-doc="orchestrator" data-tip="Common actions to manage the local agent service." title="Orchestration docs">?</a></h3>
@@ -696,7 +754,43 @@ function modelsPrefillSample(){
 // --- Download Manager ---
 const downloads = Object.create(null); // id -> entry
 function nowMs(){ return (typeof performance!=='undefined' && performance.now) ? performance.now() : Date.now(); }
+function debounce(fn, wait){
+  let timer = null;
+  return (...args) => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => fn(...args), wait);
+  };
+}
 function msHuman(ms){ if(!ms && ms!==0) return '–'; const s=Math.max(0, Math.round(ms/1000)); const m=Math.floor(s/60); const ss=(s%60).toString().padStart(2,'0'); return (m>0? m+':':'0:')+ss; }
+function relTime(ts){
+  try{
+    if(!ts) return '–';
+    const date = new Date(ts);
+    if(Number.isNaN(date.getTime())) return ts;
+    const diff = date.getTime() - Date.now();
+    const abs = Math.abs(diff);
+    const mins = Math.round(abs / 60000);
+    if (mins < 1) return diff >= 0 ? 'now' : 'just now';
+    if (mins < 60) return diff >= 0 ? `in ${mins}m` : `${mins}m ago`;
+    const hours = Math.round(mins / 60);
+    if (hours < 48) return diff >= 0 ? `in ${hours}h` : `${hours}h ago`;
+    const days = Math.round(hours / 24);
+    return diff >= 0 ? `in ${days}d` : `${days}d ago`;
+  }catch{
+    return ts || '–';
+  }
+}
+async function copyJson(id, label){
+  try{
+    const el = document.getElementById(id);
+    if(!el){ showToast('Nothing to copy'); return; }
+    const text = el.textContent || '';
+    await navigator.clipboard.writeText(text);
+    showToast(`Copied ${label || 'JSON'}`);
+  }catch{
+    showToast('Copy failed');
+  }
+}
 function codeExplain(code, extra){
   switch(String(code||'')){
     case 'cached': return 'using cached file';
@@ -927,27 +1021,16 @@ es.addEventListener('models.download.progress', (e)=>{
     else { b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: active'; }
   }catch{}
 });
-// Live patches for models metrics (RFC 6902)
-// Live patches for models metrics (RFC 6902)
-// Dedicated metrics patch topic removed in favor of unified ReadModel
-// Generic read-model patch stream: handle models_metrics id
+// Unified read-model patch stream dispatch
 es.addEventListener('state.read.model.patch', (e)=>{
   try{
     const env = JSON.parse(e.data||'{}');
-    const pl = env?.payload || env;
-    const p = pl?.payload || pl;
-    if (p?.id === 'models_metrics' && document.getElementById('mmLive')?.checked){
-      const patch = Array.isArray(p?.patch) ? p.patch : [];
-      modelsMetricsApplyPatch(patch);
-      modelsMetricsRender();
-    }
-    // Live models list/default
-    if (p?.id === 'models'){
-      const patch = Array.isArray(p?.patch) ? p.patch : [];
-      window.__modelsRM = window.__modelsRM || { items: [], default: null };
-      applyPatchObj(window.__modelsRM, patch);
-      modelsRender();
-    }
+    const payload = env?.payload || env;
+    const rm = payload?.payload || payload;
+    const patch = Array.isArray(rm?.patch) ? rm.patch : [];
+    const id = rm?.id || rm?.read_model || '';
+    if (!id) return;
+    handleReadModelPatch(id, patch);
   }catch{}
 });
 // Start event + model changes
@@ -1175,6 +1258,16 @@ es.addEventListener('chat.probe', (e)=>{
 // Insights aggregation overlay
 const agg = { total:0, kinds:{} };
 let routesCache = {};
+window.__routeStatsRM = window.__routeStatsRM || { by_path: {} };
+window.__trainingRM = window.__trainingRM || {};
+let modelsMetrics = window.__modelsMetrics || {};
+window.__modelsMetrics = modelsMetrics;
+window.__stagingRM = window.__stagingRM || { pending: [], recent: [] };
+window.__researchRM = window.__researchRM || { pending: [], approved_recent: [], archived_recent: [] };
+window.__contextMetrics = window.__contextMetrics || {};
+window.__policyLeases = window.__policyLeases || { items: [], count: 0 };
+window.__serviceHealth = window.__serviceHealth || { last: null, history: [] };
+window.__crashlog = window.__crashlog || { items: [], count: 0 };
 function renderInsights(){
   const el = document.getElementById('insights'); if(!el) return;
   const lines = [ `<h4>Events</h4>`, `<div class='kv'><b>Total</b><span>${agg.total}</span></div>` ];
@@ -1186,61 +1279,320 @@ function renderInsights(){
   }
   el.innerHTML = lines.join('');
 }
-// Apply JSON Patch to a nested object (add/replace/remove for simple paths)
-function applyPatchObj(target, patch){ try{
-  const unesc = (s)=> s.replace(/~1/g,'/').replace(/~0/g,'~');
-  const getSegs = (path)=> path.split('/').slice(1).map(decodeURIComponent).map(unesc);
-  for(const op of patch||[]){
-    const segs = getSegs(op.path||'');
-    if(segs.length===0) continue;
-    let cur = target;
-    for(let i=0;i<segs.length-1;i++){
-      const k = segs[i];
-      if(!(k in cur) || typeof cur[k] !== 'object' || cur[k]===null){ cur[k] = {}; }
-      cur = cur[k];
+const isPlainObject = (val)=> Object.prototype.toString.call(val) === '[object Object]';
+function cloneJson(value){
+  if (Array.isArray(value)) return value.map(cloneJson);
+  if (isPlainObject(value)) {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) { out[k] = cloneJson(v); }
+    return out;
+  }
+  return value;
+}
+// Apply JSON Patch (RFC 6902 subset) to JSON-compatible data; returns the updated root reference.
+function applyPatchObj(target, patch){
+  let root = target;
+  let rootChanged = false;
+  if (root === undefined || root === null) {
+    root = {};
+    rootChanged = true;
+  }
+  const assignRoot = (value)=>{
+    if (Array.isArray(root) && Array.isArray(value)) {
+      root.length = 0;
+      value.forEach((item)=> root.push(cloneJson(item)));
+      return;
     }
-    const last = segs[segs.length-1];
-    if(op.op==='remove'){
-      delete cur[last];
-    } else if(op.op==='add' || op.op==='replace'){
-      cur[last] = op.value;
+    if (isPlainObject(root) && isPlainObject(value)) {
+      Object.keys(root).forEach((k)=> delete root[k]);
+      Object.entries(value).forEach(([k, v])=> { root[k] = cloneJson(v); });
+      return;
+    }
+    root = cloneJson(value);
+    rootChanged = true;
+  };
+  const decodePtr = (segment)=> decodeURIComponent(segment.replace(/~1/g, '/').replace(/~0/g, '~'));
+  const resolveContainer = (segments)=>{
+    if (segments.length === 0) return { container: null, key: null };
+    let node = root;
+    let parent = null;
+    let parentKey = null;
+    for (let i = 0; i < segments.length - 1; i++) {
+      const seg = decodePtr(segments[i]);
+      parent = node;
+      parentKey = seg;
+      if (Array.isArray(node)) {
+        let idx = seg === '-' ? node.length - 1 : Number(seg);
+        if (!Number.isFinite(idx)) idx = node.length - 1;
+        if (idx < 0) idx = 0;
+        while (node.length <= idx) { node.push({}); }
+        if (node[idx] === undefined || node[idx] === null || (!isPlainObject(node[idx]) && !Array.isArray(node[idx]))) {
+          node[idx] = {};
+        }
+        node = node[idx];
+      } else if (isPlainObject(node)) {
+        if (!(seg in node) || node[seg] === undefined || node[seg] === null || (!isPlainObject(node[seg]) && !Array.isArray(node[seg]))) {
+          node[seg] = {};
+        }
+        node = node[seg];
+      } else {
+        const replacement = {};
+        if (parent === null) {
+          assignRoot(replacement);
+          node = root;
+        } else if (Array.isArray(parent)) {
+          const idx = Number(parentKey);
+          parent[idx] = replacement;
+          node = replacement;
+        } else if (isPlainObject(parent)) {
+          parent[parentKey] = replacement;
+          node = replacement;
+        } else {
+          node = replacement;
+        }
+      }
+    }
+    return { container: node, key: decodePtr(segments[segments.length - 1]) };
+  };
+  for (const op of patch || []) {
+    const path = typeof op.path === 'string' ? op.path : '';
+    const segments = path.split('/').slice(1);
+    if (segments.length === 0) {
+      if (op.op === 'remove') {
+        if (Array.isArray(root)) {
+          root.length = 0;
+        } else if (isPlainObject(root)) {
+          Object.keys(root).forEach((k)=> delete root[k]);
+        } else {
+          root = {};
+          rootChanged = true;
+        }
+      } else if (op.op === 'add' || op.op === 'replace') {
+        assignRoot(op.value);
+      }
+      continue;
+    }
+    const { container, key } = resolveContainer(segments);
+    if (container === null) {
+      if (op.op === 'remove') assignRoot({});
+      else assignRoot(op.value);
+      continue;
+    }
+    if (Array.isArray(container)) {
+      let idx;
+      if (key === '-') {
+        idx = container.length;
+      } else {
+        idx = Number(key);
+        if (!Number.isFinite(idx)) continue;
+      }
+      switch (op.op) {
+        case 'add': {
+          const val = cloneJson(op.value);
+          if (idx > container.length) idx = container.length;
+          container.splice(idx, 0, val);
+          break;
+        }
+        case 'replace':
+          if (idx >= container.length) break;
+          container[idx] = cloneJson(op.value);
+          break;
+        case 'remove':
+          if (idx >= container.length) break;
+          container.splice(idx, 1);
+          break;
+        default:
+          break;
+      }
+    } else if (isPlainObject(container)) {
+      switch (op.op) {
+        case 'add':
+        case 'replace':
+          container[key] = cloneJson(op.value);
+          break;
+        case 'remove':
+          delete container[key];
+          break;
+        default:
+          break;
+      }
     }
   }
+  return rootChanged ? root : target;
+}
+const READ_MODEL_HANDLERS = {
+  models: {
+    init: () => ({ items: [], default: null }),
+    get: () => window.__modelsRM,
+    assign: (state) => { window.__modelsRM = state; return window.__modelsRM; },
+    render: () => modelsRender(),
+  },
+  models_metrics: {
+    init: () => ({}),
+    get: () => modelsMetrics,
+    assign: (state) => { modelsMetrics = state; window.__modelsMetrics = modelsMetrics; return modelsMetrics; },
+    shouldRender: () => document.getElementById('mmLive')?.checked ?? false,
+    render: () => modelsMetricsRender(),
+  },
+  context_metrics: {
+    init: () => ({}),
+    get: () => window.__contextMetrics,
+    assign: (state) => {
+      if (!state || typeof state !== 'object') {
+        state = {};
+      }
+      window.__contextMetrics = state;
+      return window.__contextMetrics;
+    },
+    shouldRender: () => document.getElementById('contextLive')?.checked ?? false,
+    render: (state) => contextMetricsRender(state),
+  },
+  route_stats: {
+    init: () => ({ by_path: {} }),
+    get: () => window.__routeStatsRM,
+    assign: (state) => {
+      window.__routeStatsRM = state;
+      routesCache = (state && state.by_path) || {};
+      return window.__routeStatsRM;
+    },
+    render: () => {
+      renderInsights();
+      if (document.getElementById('routesLive')?.checked) routesPanelRender();
+    },
+  },
+  training_metrics: {
+    init: () => ({}),
+    get: () => window.__trainingRM,
+    assign: (state) => { window.__trainingRM = state; return window.__trainingRM; },
+    render: () => trainingRender(),
+  },
+  staging_actions: {
+    init: () => ({ pending: [], recent: [] }),
+    get: () => window.__stagingRM,
+    assign: (state) => {
+      if (!state || typeof state !== 'object') {
+        state = { pending: [], recent: [] };
+      }
+      if (!Array.isArray(state.pending)) state.pending = [];
+      if (!Array.isArray(state.recent)) {
+        const prev = window.__stagingRM;
+        state.recent = Array.isArray(prev?.recent) ? prev.recent : [];
+      }
+      window.__stagingRM = state;
+      return window.__stagingRM;
+    },
+    shouldRender: () => document.getElementById('stagingLive')?.checked ?? false,
+    render: (state) => stagingRender(state),
+  },
+  research_watcher: {
+    init: () => ({ pending: [], approved_recent: [], archived_recent: [] }),
+    get: () => window.__researchRM,
+    assign: (state) => {
+      if (!state || typeof state !== 'object') {
+        state = { pending: [], approved_recent: [], archived_recent: [] };
+      }
+      if (!Array.isArray(state.pending)) state.pending = [];
+      if (!Array.isArray(state.approved_recent)) state.approved_recent = [];
+      if (!Array.isArray(state.archived_recent)) state.archived_recent = [];
+      window.__researchRM = state;
+      return window.__researchRM;
+    },
+    shouldRender: () => document.getElementById('rwLive')?.checked ?? false,
+    render: (state) => rwRender(state),
+  },
+  policy_leases: {
+    init: () => ({ items: [], count: 0 }),
+    get: () => window.__policyLeases,
+    assign: (state) => {
+      if (!state || typeof state !== 'object') {
+        state = { items: [], count: 0 };
+      }
+      if (!Array.isArray(state.items)) state.items = [];
+      if (typeof state.count !== 'number') state.count = state.items.length;
+      if (!state.generated && window.__policyLeases?.generated) {
+        state.generated = window.__policyLeases.generated;
+      }
+      window.__policyLeases = state;
+      return window.__policyLeases;
+    },
+    shouldRender: () => document.getElementById('policyLeasesLive')?.checked ?? false,
+    render: (state) => policyLeasesRender(state),
+  },
+  service_health: {
+    init: () => ({ last: null, history: [] }),
+    get: () => window.__serviceHealth,
+    assign: (state) => {
+      if (!state || typeof state !== 'object') {
+        state = { last: null, history: [] };
+      }
+      if (!Array.isArray(state.history)) {
+        state.history = Array.isArray(window.__serviceHealth?.history)
+          ? window.__serviceHealth.history
+          : [];
+      }
+      window.__serviceHealth = state;
+      return window.__serviceHealth;
+    },
+    shouldRender: () => document.getElementById('serviceHealthLive')?.checked ?? false,
+    render: (state) => serviceHealthRender(state),
+  },
+  crashlog: {
+    init: () => ({ items: [], count: 0 }),
+    get: () => window.__crashlog,
+    assign: (state) => {
+      if (!state || typeof state !== 'object') {
+        state = { items: [], count: 0 };
+      }
+      if (!Array.isArray(state.items)) state.items = [];
+      if (typeof state.count !== 'number') state.count = state.items.length;
+      window.__crashlog = state;
+      return window.__crashlog;
+    },
+    shouldRender: () => document.getElementById('crashlogLive')?.checked ?? false,
+    render: (state) => crashlogRender(state),
+  },
+};
+function setReadModelState(id, value, opts){
+  const handler = READ_MODEL_HANDLERS[id];
+  if (!handler) return;
+  const normalized = value == null
+    ? (handler.init ? handler.init() : {})
+    : (opts?.clone === false ? value : cloneJson(value));
+  const stored = handler.assign ? handler.assign(normalized) : normalized;
+  const wantsRender = opts?.forceRender ? true : (!handler.shouldRender || handler.shouldRender(stored));
+  if (opts?.render !== false && wantsRender) {
+    handler.render && handler.render(stored);
+  }
+  if (opts?.record) recordReadModelPatch(id);
+}
+function recordReadModelPatch(id){ try{
+  agg.total++;
+  const key = 'rm:' + id;
+  agg.kinds[key] = (agg.kinds[key]||0) + 1;
+  renderInsights();
 }catch{}}
+function handleReadModelPatch(id, patch){
+  const handler = READ_MODEL_HANDLERS[id];
+  if (!handler) {
+    recordReadModelPatch(id);
+    return;
+  }
+  const base = handler.get ? handler.get() : undefined;
+  const state = base || (handler.assign ? handler.assign(handler.init ? handler.init() : {}) : handler.init ? handler.init() : {});
+  const ops = Array.isArray(patch) ? patch : [];
+  const updated = applyPatchObj(state || {}, ops) || state;
+  const stored = handler.assign ? handler.assign(updated) : updated;
+  if (!handler.shouldRender || handler.shouldRender(stored)) {
+    handler.render && handler.render(stored);
+  }
+  recordReadModelPatch(id);
+}
 ['service.connected','service.health','service.test','memory.applied','models.refreshed','tool.ran','chat.message','governor.changed','bus.gap','beliefs.updated','intents.proposed','intents.approved','intents.rejected','actions.applied','actions.hint.applied','world.updated','egress.preview','task.completed','experiment.activated','feedback.updated','catalog.updated'].forEach(k => {
   es.addEventListener(k, (e)=>{ agg.total++; agg.kinds[k]=(agg.kinds[k]||0)+1; renderInsights(); });
 });
   // System metrics (low-frequency)
   es.addEventListener('probe.metrics', (e)=>{
     try{ const j=JSON.parse(e.data||'{}'); updateSystemFromMetrics(j); }catch{}
-  });
-  // Route stats read-model patches
-  es.addEventListener('state.read.model.patch', (e)=>{
-    try{
-      const env = JSON.parse(e.data||'{}');
-      const p = env && env.payload ? env.payload : env;
-      const patch = Array.isArray(p?.patch) ? p.patch : [];
-      window.__routeStatsRM = window.__routeStatsRM || { by_path: {} };
-      applyPatchObj(window.__routeStatsRM, patch);
-      routesCache = (window.__routeStatsRM && window.__routeStatsRM.by_path) || {};
-      renderInsights();
-      if (document.getElementById('routesLive')?.checked) routesPanelRender();
-    }catch{}
-  });
-  es.addEventListener('state.read.model.patch', (e)=>{
-    try{
-      const env = JSON.parse(e.data||'{}');
-      const pl = env?.payload || env;
-      const p = pl?.payload || pl;
-      if(p?.id === 'route_stats'){
-        const patch = Array.isArray(p?.patch) ? p.patch : [];
-        window.__routeStatsRM = window.__routeStatsRM || { by_path: {} };
-        applyPatchObj(window.__routeStatsRM, patch);
-        routesCache = (window.__routeStatsRM && window.__routeStatsRM.by_path) || {};
-        renderInsights();
-        if (document.getElementById('routesLive')?.checked) routesPanelRender();
-      }
-    }catch{}
   });
   // Self‑model live refresh on related events
   es.addEventListener('tool.ran', ()=>{ try{ const cb=document.getElementById('selfLive'); if(cb && cb.checked){ selfView(); } }catch{} });
@@ -1299,7 +1651,6 @@ document.addEventListener('DOMContentLoaded', ()=>{
   });
 });
 // --- Models Metrics (read-model) ---
-let modelsMetrics = {};
 function modelsMetricsRender(){ try{
   const get = (k)=> modelsMetrics && (modelsMetrics[k] ?? modelsMetrics.data?.[k]);
   const setTxt = (id, v)=>{ const el=document.getElementById(id); if(el) el.textContent = (id==='mmBytes')? bytesHuman(v||0) : String(v??'0'); };
@@ -1318,25 +1669,11 @@ async function modelsMetricsRefresh(){
   try{
     const r = await fetch(base + '/state/models_metrics', { headers: { 'X-ARW-Admin': __adminHeader || '' } });
     const j = await r.json();
-    modelsMetrics = j?.data || j || {};
-    modelsMetricsRender();
+    setReadModelState('models_metrics', j?.data || j || {}, { clone: false, forceRender: true });
   }catch{ showToast('models metrics fetch failed'); }
 }
-function modelsMetricsApplyPatch(patch){ try{
-  if(!Array.isArray(patch)) return;
-  const ptrKey = (p)=> decodeURIComponent(String(p||'').replace(/^\//,'').replace(/~1/g,'/').replace(/~0/g,'~'));
-  for(const op of patch){
-    const k = ptrKey(op.path);
-    if(!k) continue;
-    if(op.op==='remove'){
-      delete modelsMetrics[k];
-    } else if(op.op==='add' || op.op==='replace'){
-      modelsMetrics[k] = op.value;
-    }
-  }
-}catch{}}
 document.addEventListener('DOMContentLoaded', ()=>{
-  const cb=document.getElementById('mmLive'); if(cb){ cb.addEventListener('change', ()=>{}); }
+  const cb=document.getElementById('mmLive'); if(cb){ cb.addEventListener('change', ()=>{ if(cb.checked) modelsMetricsRender(); }); }
   modelsMetricsRefresh();
 });
 // --- Models read-model live rendering ---
@@ -1456,8 +1793,7 @@ function routesPanelRender(){ try{
 async function routesPanelRefresh(){ try{
   const r = await fetch(base + '/state/route_stats');
   const j = await r.json();
-  window.__routeStatsRM = j || { by_path:{} };
-  routesCache = (window.__routeStatsRM && window.__routeStatsRM.by_path) || {};
+  setReadModelState('route_stats', j?.data || j || { by_path:{} }, { clone: false });
   routesPanelRender();
 }catch{ showToast('routes fetch failed'); }}
 document.addEventListener('DOMContentLoaded', ()=>{
@@ -1626,7 +1962,9 @@ function docPath(key){
     case 'orchestrator': return '/guide/quickstart/';
     case 'chat': return '/guide/chat_backends/';
     case 'models': return '/guide/models_download/';
+    case 'training_park': return '/guide/training_park/';
     case 'security': return '/guide/security_hardening/';
+    case 'operations': return '/operations/';
     case 'deployment': return '/deployment/';
     case 'playbook': return '/guide/performance_reasoning_playbook/';
     default: return '/';
@@ -1724,34 +2062,59 @@ async function chatClear(){ try{
   if(r.ok){ chatRender([]); showToast('chat cleared'); }
   else { showToast('chat clear failed ('+r.status+')'); }
 }catch(e){ console.error(e); showToast('chat clear failed'); }}
-function stagingRender(items){
+function stagingRender(data){
   const host = document.getElementById('stagingList');
   if(!host) return;
-  if(!items || !items.length){ host.innerHTML = '<div class="hint">No pending actions.</div>'; return; }
-  const rows = items.map(it=>{
-    const id = it.id || '-';
-    const kind = it.action_kind || '-';
-    const proj = it.project || 'local';
-    const by = it.requested_by || 'system';
-    const status = it.status || '-';
-    const created = it.created ? new Date(it.created).toISOString() : '–';
-    return `<div class="mrow">
-      <div class="mcell id">${id}</div>
-      <div class="mcell">${kind}</div>
-      <div class="mcell">${proj}</div>
-      <div class="mcell">${by}</div>
-      <div class="mcell">${status}</div>
-      <div class="mcell">${created}</div>
-      <div class="mcell actions"><button class="iconbtn" onclick="stagingAct('${id}','approve')">Approve</button><button class="iconbtn" onclick="stagingAct('${id}','deny')">Deny</button></div>
-    </div>`;
-  }).join('');
-  host.innerHTML = `<div class="mrow mhead"><div class="mcell id">id</div><div class="mcell">kind</div><div class="mcell">project</div><div class="mcell">requested</div><div class="mcell">status</div><div class="mcell">created</div><div class="mcell actions">actions</div></div>${rows}`;
+  const state = Array.isArray(data) ? { pending: data } : (data || {});
+  const pending = Array.isArray(state.pending)
+    ? state.pending
+    : Array.isArray(state.items) ? state.items : [];
+  if(!pending || !pending.length){
+    host.innerHTML = '<div class="hint">No pending actions.</div>';
+  } else {
+    const rows = pending.map(it=>{
+      const id = it.id || '-';
+      const kind = it.action_kind || '-';
+      const proj = it.project || 'local';
+      const by = it.requested_by || 'system';
+      const status = it.status || '-';
+      const created = it.created ? new Date(it.created).toISOString() : '–';
+      return `<div class="mrow">
+        <div class="mcell id">${id}</div>
+        <div class="mcell">${kind}</div>
+        <div class="mcell">${proj}</div>
+        <div class="mcell">${by}</div>
+        <div class="mcell">${status}</div>
+        <div class="mcell">${created}</div>
+        <div class="mcell actions"><button class="iconbtn" onclick="stagingAct('${id}','approve')">Approve</button><button class="iconbtn" onclick="stagingAct('${id}','deny')">Deny</button></div>
+      </div>`;
+    }).join('');
+    host.innerHTML = `<div class="mrow mhead"><div class="mcell id">id</div><div class="mcell">kind</div><div class="mcell">project</div><div class="mcell">requested</div><div class="mcell">status</div><div class="mcell">created</div><div class="mcell actions">actions</div></div>${rows}`;
+  }
+  const recentShell = document.getElementById('stagingRecentShell');
+  const recentHost = document.getElementById('stagingRecent');
+  if(recentHost){
+    const recent = Array.isArray(state.recent) ? state.recent.slice(0, 5) : [];
+    if(!recent.length){
+      recentHost.innerHTML = '<div class="key">No recent decisions.</div>';
+      if(recentShell){ recentShell.open = false; recentShell.style.display = 'none'; }
+    } else {
+      const fmt = (ts)=>{ try{ return new Date(ts).toISOString(); }catch{ return ts || '–'; } };
+      recentHost.innerHTML = recent.map(item=>{
+        const id = item.id || item.action_id || '—';
+        const verdict = item.status || item.decision || 'completed';
+        const when = fmt(item.decided_at || item.updated || item.created);
+        return `<div style="margin-bottom:4px"><strong>${id}</strong> · ${verdict} · ${when}</div>`;
+      }).join('');
+      if(recentShell){ recentShell.open = true; recentShell.style.display = 'block'; }
+    }
+  }
 }
 async function stagingFetch(){ try{
   const r = await fetch(base + '/state/staging/actions?status=pending&limit=100', { headers: adminHeaders(false) });
   if(!r.ok){ if(r.status===401) showToast('set admin token for staging'); return; }
   const j = await r.json();
-  stagingRender(j?.items || j?.data || []);
+  setReadModelState('staging_actions', { pending: j?.items || j?.data || [] }, { clone: false, forceRender: true });
 }catch(e){ console.error(e); showToast('staging fetch failed'); }}
 async function stagingAct(id, action){
   if(!id) return;
@@ -1762,6 +2125,272 @@ async function stagingAct(id, action){
     else { showToast(`staging ${action} failed (${r.status})`); }
   }catch(e){ console.error(e); showToast(`staging ${action} failed`); }
 }
+function contextMetricsRender(state){ try{
+  const data = state || window.__contextMetrics || {};
+  const badge = document.getElementById('contextCoverageBadge');
+  if(badge){
+    const hasData = data && Object.keys(data).length > 0;
+    const needs = !!(data && data.coverage && data.coverage.needs_more);
+    const tone = hasData ? (needs ? 'warn' : 'ok') : 'warn';
+    const label = hasData ? (needs ? 'needs more' : 'covered') : 'unknown';
+    badge.className = 'badge ' + tone;
+    badge.innerHTML = `<span class="dot"></span> ${label}`;
+  }
+  const summary = document.getElementById('contextMetricsSummary');
+  if(summary){
+    if(data && Object.keys(data).length){
+      const generated = data.generated ? `${data.generated} (${relTime(data.generated)})` : '–';
+      const recall = data?.recall_risk?.score;
+      const recallLevel = data?.recall_risk?.level || data?.recall_risk?.verdict;
+      const coverageSummary = data?.coverage?.summary || data?.coverage?.verdict || '–';
+      const needs = data?.coverage?.needs_more ? 'yes' : 'no';
+      summary.innerHTML = `
+        <div class="kv"><span>Generated</span><span>${generated}</span></div>
+        <div class="kv"><span>Needs more</span><span>${needs}</span></div>
+        <div class="kv"><span>Coverage</span><span>${coverageSummary}</span></div>
+        <div class="kv"><span>Recall risk</span><span>${recall != null ? (Math.round(recall * 1000) / 1000) : '–'}${recallLevel ? ` (${recallLevel})` : ''}</span></div>
+      `;
+    } else {
+      summary.innerHTML = '<div class="key">No context metrics yet.</div>';
+    }
+  }
+  const slots = document.getElementById('contextMetricsSlots');
+  if(slots){
+    const list = data?.coverage?.top_slots || data?.slot_gaps?.top_slots || data?.recall_risk?.top_slots || [];
+    if(Array.isArray(list) && list.length){
+      const top = list.slice(0, 5).map((item)=>{
+        if(typeof item === 'string') return item;
+        if(item && typeof item === 'object'){
+          const label = item.slot || item.name || item.id || 'slot';
+          const gap = item.gap ?? item.score ?? item.count;
+          return `${label}${gap != null ? ` (${gap})` : ''}`;
+        }
+        return String(item);
+      }).join(', ');
+      slots.innerHTML = `<div class="kv"><span>Top slots</span><span>${top}</span></div>`;
+    } else {
+      slots.innerHTML = '<div class="key">No slot gaps reported.</div>';
+    }
+  }
+  const out = document.getElementById('contextMetricsOut');
+  if(out){ out.textContent = JSON.stringify(data || {}, null, 2); }
+}catch{}}
+function contextMetricsRefresh(){ return trainingFetch(); }
+const policyLeasesRender = debounce(function(state){ try{
+  const data = state || window.__policyLeases || {};
+  const items = Array.isArray(data.items) ? data.items.slice() : [];
+  const count = typeof data.count === 'number' ? data.count : items.length;
+  const filterText = (document.getElementById('policyLeasesFilter')?.value || '').toLowerCase().trim();
+  const badge = document.getElementById('policyLeasesBadge');
+  if(badge){
+    const tone = count > 0 ? 'ok' : 'warn';
+    badge.className = 'badge ' + tone;
+    badge.innerHTML = `<span class="dot"></span> ${count}`;
+  }
+  const table = document.getElementById('policyLeasesTable');
+  if(table){
+    if(!items.length){
+      table.innerHTML = '<div class="hint">No active leases.</div>';
+    } else {
+      const filtered = filterText
+        ? items.filter(it => {
+            const cap = (it.capability || '').toString().toLowerCase();
+            const subj = (it.subject || '').toString().toLowerCase();
+            const scope = (it.scope || '').toString().toLowerCase();
+            const id = (it.id || '').toString().toLowerCase();
+            return cap.includes(filterText) || subj.includes(filterText) || scope.includes(filterText) || id.includes(filterText);
+          })
+        : items;
+      const rows = filtered
+        .slice()
+        .sort((a,b)=>{
+          const ta = a.ttl_until || '';
+          const tb = b.ttl_until || '';
+          return String(ta).localeCompare(String(tb));
+        })
+        .slice(0, 40)
+        .map(it=>{
+          const ttl = it.ttl_until ? `${it.ttl_until} (${relTime(it.ttl_until)})` : '–';
+          const created = it.created ? `${it.created} (${relTime(it.created)})` : '–';
+          const scope = it.scope || '—';
+          const cap = it.capability || '—';
+          const subj = it.subject || 'local';
+          const budget = it.budget != null ? it.budget : '–';
+          return `<div class="mrow">
+            <div class="mcell id">${cap}</div>
+            <div class="mcell">${subj}</div>
+            <div class="mcell">${scope}</div>
+            <div class="mcell">${budget}</div>
+            <div class="mcell" title="${created}">${created.split('T')[0] || created}</div>
+            <div class="mcell" title="${ttl}">${ttl.split('T')[0] || ttl}</div>
+          </div>`;
+        })
+        .join('');
+      table.innerHTML = rows
+        ? `<div class="mrow mhead"><div class="mcell id">capability</div><div class="mcell">subject</div><div class="mcell">scope</div><div class="mcell">budget</div><div class="mcell">created</div><div class="mcell">ttl</div></div>${rows}`
+        : '<div class="hint">No leases match this filter.</div>';
+    }
+  }
+  const meta = document.getElementById('policyLeasesMeta');
+  if(meta){
+    const generated = data.generated ? `${data.generated} (${relTime(data.generated)})` : '–';
+    meta.innerHTML = `<div class="kv"><span>Generated</span><span>${generated}</span></div>`;
+  }
+  const out = document.getElementById('policyLeasesOut');
+  if(out){ out.textContent = JSON.stringify(data || {}, null, 2); }
+}catch{}}, 120);
+function clearPolicyLeasesFilter(){
+  const input = document.getElementById('policyLeasesFilter');
+  if(!input) return;
+  input.value = '';
+  savePref('policyLeasesFilter', '');
+  policyLeasesRender(window.__policyLeases);
+}
+async function policyLeasesRefresh(){ try{
+  const r = await fetch(base + '/state/leases', { headers: adminHeaders(false) });
+  if(!r.ok){ showToast(`leases fetch failed (${r.status})`); return; }
+  const j = await r.json();
+  setReadModelState('policy_leases', j?.data || j || {}, { clone: false, forceRender: true });
+}catch(e){ console.error(e); showToast('leases fetch failed'); }}
+function serviceHealthRender(state){ try{
+  const data = state || window.__serviceHealth || {};
+  const last = data.last || null;
+  const status = last?.status || last?.state || last?.health || 'unknown';
+  const component = last?.component || 'service';
+  const reason = last?.reason || last?.message || '';
+  const badge = document.getElementById('serviceHealthBadge');
+  if(badge){
+    const tone = (status || '').toLowerCase();
+    const mapped = tone.includes('degraded') || tone.includes('warn') ? 'warn'
+      : tone.includes('fail') || tone.includes('critical') ? 'bad'
+      : tone.includes('ok') || tone.includes('ready') ? 'ok'
+      : 'warn';
+    badge.className = 'badge ' + mapped;
+    badge.innerHTML = `<span class="dot"></span> ${status}`;
+  }
+  const summary = document.getElementById('serviceHealthSummary');
+  if(summary){
+    const when = last?.time ? `${last.time} (${relTime(last.time)})` : '–';
+    summary.innerHTML = `
+      <div class="kv"><span>Component</span><span>${component}</span></div>
+      <div class="kv"><span>Time</span><span>${when}</span></div>
+      <div class="kv"><span>Reason</span><span>${reason || '–'}</span></div>
+    `;
+  }
+  const history = document.getElementById('serviceHealthHistory');
+  if(history){
+    const list = Array.isArray(data.history) ? data.history.slice().reverse().slice(0, 25) : [];
+    if(!list.length){
+      history.innerHTML = '<div class="hint">No service.health events observed.</div>';
+    } else {
+      const rows = list.map(item=>{
+        const st = item.status || item.state || 'event';
+        const comp = item.component || 'service';
+        const reason = item.reason || item.message || '';
+        const when = item.time ? `${item.time} (${relTime(item.time)})` : '–';
+        return `<div class="dlrow" style="gap:6px">
+          <code style="min-width:160px">${st}</code>
+          <span class="key">component</span><code>${comp}</code>
+          <span class="key">when</span><code>${when}</code>
+          <span class="key">reason</span><code>${reason || '–'}</code>
+        </div>`;
+      }).join('');
+      history.innerHTML = rows;
+    }
+  }
+  const out = document.getElementById('serviceHealthOut');
+  if(out){ out.textContent = JSON.stringify(data || {}, null, 2); }
+}catch{}}
+async function serviceHealthRefresh(){ try{
+  const r = await fetch(base + '/state/service_health', { headers: adminHeaders(false) });
+  if(r.status === 401){
+    const history = document.getElementById('serviceHealthHistory');
+    if(history){ history.innerHTML = '<div class="hint">Admin token required to inspect service health.</div>'; }
+    const badge = document.getElementById('serviceHealthBadge');
+    if(badge){ badge.className = 'badge warn'; badge.innerHTML = '<span class="dot"></span> unauthorized'; }
+    const out = document.getElementById('serviceHealthOut');
+    if(out){ out.textContent = '{}'; }
+    showToast('Set admin token to inspect service health.');
+    return;
+  }
+  if(!r.ok){ showToast(`service health fetch failed (${r.status})`); return; }
+  const j = await r.json();
+  setReadModelState('service_health', j?.data || j || {}, { clone: false, forceRender: true });
+}catch(e){ console.error(e); showToast('service health fetch failed'); }}
+const crashlogRender = debounce(function(state){ try{
+  const data = state || window.__crashlog || {};
+  const items = Array.isArray(data.items) ? data.items.slice() : [];
+  const count = typeof data.count === 'number' ? data.count : items.length;
+  const filterText = (document.getElementById('crashlogFilter')?.value || '').toLowerCase().trim();
+  const badge = document.getElementById('crashlogBadge');
+  if(badge){
+    const tone = count > 0 ? 'warn' : 'ok';
+    badge.className = 'badge ' + tone;
+    badge.innerHTML = `<span class="dot"></span> ${count}`;
+  }
+  const meta = document.getElementById('crashlogMeta');
+  if(meta){
+    const latest = items[0];
+    if(latest){
+      const stamp = latest.ts_ms ? new Date(latest.ts_ms).toISOString() : latest.time || latest.timestamp || '–';
+      meta.innerHTML = `<div class="kv"><span>Latest</span><span>${stamp} (${relTime(stamp)})</span></div>`;
+    } else {
+      meta.innerHTML = '<div class="key">No crashes recorded.</div>';
+    }
+  }
+  const listEl = document.getElementById('crashlogList');
+  if(listEl){
+    if(!items.length){
+      listEl.innerHTML = '<div class="hint">No crash reports.</div>';
+    } else {
+      const filtered = filterText
+        ? items.filter(it => {
+            const file = (it.file || it.path || '').toString().toLowerCase();
+            const reason = (it.reason || it.message || it.error || '').toString().toLowerCase();
+            const status = it.archived ? 'archived' : 'active';
+            return file.includes(filterText) || reason.includes(filterText) || status.includes(filterText);
+          })
+        : items;
+      const rows = filtered.slice(0, 20).map(it=>{
+        const file = it.file || it.path || 'crash.json';
+        const when = it.ts_ms ? new Date(it.ts_ms).toISOString() : it.time || '–';
+        const note = it.reason || it.message || it.error || '';
+        const archived = it.archived ? 'archived' : 'active';
+        return `<div class="dlrow" style="gap:6px">
+          <code style="min-width:160px">${file}</code>
+          <span class="key">time</span><code>${when} (${relTime(when)})</code>
+          <span class="key">status</span><code>${archived}</code>
+          <span class="key">note</span><code>${note || '–'}</code>
+        </div>`;
+      }).join('');
+      listEl.innerHTML = rows || '<div class="hint">No crash entries match this filter.</div>';
+    }
+  }
+  const out = document.getElementById('crashlogOut');
+  if(out){ out.textContent = JSON.stringify(data || {}, null, 2); }
+}catch{}}, 120);
+function clearCrashlogFilter(){
+  const input = document.getElementById('crashlogFilter');
+  if(!input) return;
+  input.value = '';
+  savePref('crashlogFilter', '');
+  crashlogRender(window.__crashlog);
+}
+async function crashlogRefresh(){ try{
+  const r = await fetch(base + '/state/crashlog', { headers: adminHeaders(false) });
+  if(r.status === 401){
+    const list = document.getElementById('crashlogList');
+    if(list){ list.innerHTML = '<div class="hint">Admin token required to inspect crash logs.</div>'; }
+    const badge = document.getElementById('crashlogBadge');
+    if(badge){ badge.className = 'badge warn'; badge.innerHTML = '<span class="dot"></span> unauthorized'; }
+    const out = document.getElementById('crashlogOut'); if(out){ out.textContent = '{}'; }
+    showToast('Set admin token to inspect crash logs.');
+    return;
+  }
+  if(!r.ok){ showToast(`crashlog fetch failed (${r.status})`); return; }
+  const j = await r.json();
+  setReadModelState('crashlog', j?.data || j || {}, { clone: false, forceRender: true });
+}catch(e){ console.error(e); showToast('crashlog fetch failed'); }}
 function rwRender(data){
   const host = document.getElementById('rwPending');
   if(host){
@@ -1797,7 +2426,7 @@ async function rwFetch(){ try{
   const r = await fetch(base + '/state/research_watcher', { headers: adminHeaders(false) });
   if(!r.ok){ if(r.status===401){ const host=document.getElementById('rwPending'); if(host){ host.innerHTML = '<div class="hint">Set admin token to inspect research items.</div>'; } } return; }
   const j = await r.json();
-  rwRender(j?.data || j);
+  setReadModelState('research_watcher', j?.data || j || {}, { render: true, clone: false, forceRender: true });
 }catch(e){ console.error(e); showToast('research watcher fetch failed'); }}
 async function rwAct(id, action){
   if(!id) return;
@@ -1809,12 +2438,20 @@ async function rwAct(id, action){
     else { showToast(`research ${action} failed (${r.status})`); }
   }catch(e){ console.error(e); showToast(`research ${action} failed`); }
 }
+function trainingRender(){ try{
+  const out = document.getElementById('trainingOut');
+  if(out){ out.textContent = JSON.stringify(window.__trainingRM || {}, null, 2); }
+}catch{}}
 async function trainingFetch(){ try{
   const r = await fetch(base + '/state/training/telemetry', { headers: adminHeaders(false) });
-  if(!r.ok){ return; }
+  if(r.status === 401){ showToast('Set admin token to inspect training telemetry.'); return; }
+  if(!r.ok){ showToast(`training fetch failed (${r.status})`); return; }
   const j = await r.json();
-  const out = document.getElementById('trainingOut');
-  if(out){ out.textContent = JSON.stringify(j?.data || j, null, 2); }
+  const data = j?.data || j || {};
+  setReadModelState('training_metrics', data, { clone: false });
+  if (data && data.context) {
+    setReadModelState('context_metrics', data.context, { clone: false, forceRender: true });
+  }
 }catch(e){ console.error(e); showToast('training fetch failed'); }}
 async function probeAdmin(){ try{ const r = await fetch(base + '/admin/tools'); setAdmin(r.ok); }catch{ setAdmin(false); } }
 document.addEventListener('DOMContentLoaded', probeAdmin);
@@ -1822,6 +2459,9 @@ document.addEventListener('DOMContentLoaded', ()=>{ var b=document.getElementByI
 document.addEventListener('DOMContentLoaded', stagingFetch);
 document.addEventListener('DOMContentLoaded', rwFetch);
 document.addEventListener('DOMContentLoaded', trainingFetch);
+document.addEventListener('DOMContentLoaded', policyLeasesRefresh);
+document.addEventListener('DOMContentLoaded', serviceHealthRefresh);
+document.addEventListener('DOMContentLoaded', crashlogRefresh);
 document.addEventListener('DOMContentLoaded', ()=>{ try{ initBadges(); }catch(e){} });
 document.addEventListener('DOMContentLoaded', ()=>{ try{ updateModelsCount(); }catch(e){} });
 document.addEventListener('DOMContentLoaded', ()=>{ try{ renderDownloads(); }catch(e){} });
@@ -1866,7 +2506,8 @@ function loadPref(k,def){ try{ const v = localStorage.getItem(prefKey(k)); retur
 function bindPersist(id, key, isCheckbox){ const el=document.getElementById(id); if(!el) return; const val = loadPref(key, isCheckbox ? false : ''); if(val !== undefined && val !== null){ if(isCheckbox) el.checked = !!val; else if(val !== '') el.value = val; }
   el.addEventListener('change', ()=>{ const v = isCheckbox ? !!el.checked : el.value; savePref(key, v); }); }
 document.addEventListener('DOMContentLoaded', ()=>{
-  [['chatModel',false],['memKind',false],['profileSel',false],['hintConc',false],['hintBuf',false],['hintTimeout',false],['hintRetrK',false],['hintDiv',false],['hintLambda',false],['hintCompr',false],['hintVoteK',false],['hintCtxBudget',false],['hintCtxPer',false],['hintCtxFmt',false],['hintProv',true],['hintCtxHeader',false],['hintCtxFooter',false],['hintCtxTpl',false],['hintJoiner',false],['autoApply',true],['fbLive',true],['memBody',false],['toolBody',false],['mId',false],['mProv',false],['mUrl',false],['mSha',false],['goldProj',false],['expId',false],['expVar',false]].forEach(([id,isCb])=> bindPersist(id, id, isCb));
+  [['chatModel',false],['memKind',false],['profileSel',false],['hintConc',false],['hintBuf',false],['hintTimeout',false],['hintRetrK',false],['hintDiv',false],['hintLambda',false],['hintCompr',false],['hintVoteK',false],['hintCtxBudget',false],['hintCtxPer',false],['hintCtxFmt',false],['hintProv',true],['hintCtxHeader',false],['hintCtxFooter',false],['hintCtxTpl',false],['hintJoiner',false],['autoApply',true],['fbLive',true],['memBody',false],['toolBody',false],['mId',false],['mProv',false],['mUrl',false],['mSha',false],['goldProj',false],['expId',false],['expVar',false],['policyLeasesFilter',false],['crashlogFilter',false]].forEach(([id,isCb])=> bindPersist(id, id, isCb));
+  [['stagingLive',true],['rwLive',true],['contextLive',true],['policyLeasesLive',true],['serviceHealthLive',true],['crashlogLive',true]].forEach(([id,isCb])=> bindPersist(id, id, isCb));
   bindPersist('asmOverride', true, true);
   const remember = loadPref('admin.remember', false); const tok = loadPref('admin.token', '');
   const cb=document.getElementById('rememberTok'); const t=document.getElementById('adminToken'); if(cb) cb.checked = !!remember; if(t && remember && tok){ t.value = tok; __adminHeader = tok; setAdmin(true); }
@@ -1876,6 +2517,25 @@ document.addEventListener('DOMContentLoaded', ()=>{
     const t=document.getElementById('adminToken').value.trim(); __adminHeader = t; setAdmin(!!t);
     const remember = document.getElementById('rememberTok').checked; savePref('admin.remember', !!remember); if(remember){ savePref('admin.token', t); } else { try{ localStorage.removeItem(prefKey('admin.token')); }catch{} }
   });
+});
+document.addEventListener('DOMContentLoaded', ()=>{
+  const wiring = [
+    ['stagingLive', ()=> stagingRender(window.__stagingRM)],
+    ['rwLive', ()=> rwRender(window.__researchRM)],
+    ['contextLive', ()=> contextMetricsRender(window.__contextMetrics)],
+    ['policyLeasesLive', ()=> policyLeasesRender(window.__policyLeases)],
+    ['serviceHealthLive', ()=> serviceHealthRender(window.__serviceHealth)],
+    ['crashlogLive', ()=> crashlogRender(window.__crashlog)],
+  ];
+  wiring.forEach(([id, fn])=>{
+    const el = document.getElementById(id);
+    if(el){ el.addEventListener('change', ()=>{ if(el.checked){ try{ fn(); }catch{} } }); }
+    try{ fn(); }catch{}
+  });
+  const policyFilter = document.getElementById('policyLeasesFilter');
+  if(policyFilter){ policyFilter.addEventListener('input', ()=>{ try{ policyLeasesRender(window.__policyLeases); }catch{} }); }
+  const crashFilter = document.getElementById('crashlogFilter');
+  if(crashFilter){ crashFilter.addEventListener('input', ()=>{ try{ crashlogRender(window.__crashlog); }catch{} }); }
 });
 document.addEventListener('DOMContentLoaded', ()=>{
   const sel=document.getElementById('hdrProfile'); if(sel){ sel.addEventListener('change', async ()=>{ try{ await fetch(base+'/governor/profile',{method:'POST',headers:{'Content-Type':'application/json'}, body: JSON.stringify({name: sel.value})}); const b=document.getElementById('govBadge'); if(b){ b.className='badge ok'; b.innerHTML='<span class=\"dot\"></span> Gov: '+sel.value; } showToast('Profile set to '+sel.value); }catch{ showToast('Profile change failed'); } }); }
