@@ -39,6 +39,36 @@ Node tips:
 
 Patches shortcut:
 - `client.events.subscribePatches(lastId?)` subscribes to `state.read.model.patch` with a small replay for UI warm‑up.
+- `client.events.subscribeReadModel(id, opts)` keeps a local snapshot updated (applies JSON Patch deltas, exposes `getSnapshot()`/`lastEventId()` accessors, optional `loadInitial()` hydrates the starting snapshot).
+
+```ts
+const sub = client.events.subscribeReadModel('projects', {
+  loadInitial: async () => {
+    const headers: Record<string, string> = {};
+    if (process.env.ARW_ADMIN_TOKEN) headers['X-ARW-Admin'] = process.env.ARW_ADMIN_TOKEN;
+    const res = await fetch(`${client.base}/state/projects`, { headers });
+    if (!res.ok) throw new Error(`snapshot failed: ${res.status}`);
+    return res.json();
+  },
+  onUpdate: (snapshot) => {
+    console.log('projects items', snapshot?.items?.length ?? 0);
+  },
+});
+
+// Later
+sub.close();
+```
+
+Node streaming helper:
+
+```ts
+const controller = new AbortController();
+setTimeout(() => controller.abort(), 10_000);
+
+for await (const evt of client.events.stream({ topics: ['service.'], replay: 5, signal: controller.signal })) {
+  console.log(`[${evt.lastEventId ?? 'live'}] ${evt.type ?? 'message'}`, evt.data);
+}
+```
 
 CLI:
-- Install or use via NPX after publishing: `arw-events --prefix service.,state.read.model.patch --replay 25` (uses `BASE` and `ARW_ADMIN_TOKEN` env vars).
+- Install or use via NPX after publishing: `arw-events --prefix service.,state.read.model.patch --replay 25` (uses `BASE` and `ARW_ADMIN_TOKEN` env vars). The CLI now uses `events.stream()` so it respects `SIGINT` via `AbortController` and keeps your last-event id in `--store`.

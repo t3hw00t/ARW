@@ -43,19 +43,35 @@ async function main() {
   let lastId = args.after || loadLastId(store);
 
   const client = new ArwClient(base, token);
-  const sub = client.events.subscribe({ topics: prefixes, lastEventId: lastId, replay });
-  (sub as any).onmessage = (e: any) => {
-    lastId = e.lastEventId || lastId;
-    try {
-      const env = JSON.parse(String(e.data));
-      console.log(JSON.stringify({ id: lastId, kind: env.kind, payload: env.payload }));
+  const controller = new AbortController();
+  process.on('SIGINT', () => {
+    controller.abort();
+  });
+
+  try {
+    for await (const evt of client.events.stream({ topics: prefixes, lastEventId: lastId, replay, signal: controller.signal })) {
+      lastId = evt.lastEventId || lastId;
+      const payload = evt.data;
+      if (payload && typeof payload === 'object') {
+        const kind = (payload as any).kind;
+        const out = {
+          id: lastId,
+          kind,
+          payload: (payload as any).payload ?? payload,
+        };
+        console.log(JSON.stringify(out));
+      } else {
+        console.log(JSON.stringify({ id: lastId, type: evt.type ?? 'message', data: payload }));
+      }
       saveLastId(store, lastId);
-    } catch {}
-  };
-  (sub as any).onerror = (err: any) => {
+    }
+  } catch (err) {
+    if ((err as any)?.name === 'AbortError') {
+      return;
+    }
     console.error('events error', err);
-  };
+    process.exitCode = 1;
+  }
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
-

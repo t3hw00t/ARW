@@ -1,3 +1,8 @@
+## 0.2.2 - 2025-09-30
+
+- Add `events.subscribeReadModel(id, opts)` helper that applies JSON Patch deltas, queues updates until an initial snapshot is available, and exposes `getSnapshot()`/`lastEventId()`. `loadInitial()` can hydrate via `GET /state/*`. Example `projects_patches.ts` now demonstrates it.
+- Add `events.stream(opts)` for Node runtimes: yields parsed SSE payloads as an async generator with optional JSON parsing and `AbortSignal` support. CLI `arw-events` now uses it and keeps last-event id persistence.
+
 ## 0.2.1 - 2025-09-29
 
 - Package metadata polish: add repository/homepage/bugs/keywords for better npm discoverability and docs linking. No API changes.
