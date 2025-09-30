@@ -13,7 +13,7 @@ use utoipa::OpenApi;
 use crate::{
     access_log,
     app_state::AppState,
-    capsule_guard, config, egress_proxy, metrics, read_models, responses,
+    capsule_guard, config, config_watcher, egress_proxy, metrics, queue, read_models, responses,
     router::build_router,
     security,
     sse_cache::SseIdCache,
@@ -41,6 +41,7 @@ pub(crate) async fn build() -> BootstrapOutput {
     let kernel = Kernel::open(&crate::util::state_dir()).expect("init kernel");
     let kernel_enabled = config::kernel_enabled_from_env();
     let metrics = Arc::new(metrics::Metrics::default());
+    let queue_signals = Arc::new(queue::QueueSignals::default());
     let sse_id_map = Arc::new(Mutex::new(SseIdCache::with_capacity(2048)));
 
     let mut background_tasks = TaskManager::with_metrics(metrics.clone());
@@ -97,12 +98,14 @@ pub(crate) async fn build() -> BootstrapOutput {
         .with_config_history(config_history)
         .with_metrics(metrics.clone())
         .with_sse_cache(sse_id_map)
+        .with_queue_signals(queue_signals.clone())
         .with_endpoints(Arc::new(endpoints))
         .with_endpoints_meta(Arc::new(endpoints_meta))
         .build()
         .await;
 
     background_tasks.merge(initialise_state(&state, kernel_enabled).await);
+    background_tasks.extend(config_watcher::start(state.clone()));
 
     BootstrapOutput {
         router,

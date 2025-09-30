@@ -131,7 +131,7 @@ pub async fn state_observations(headers: HeaderMap) -> impl IntoResponse {
         )
             .into_response();
     }
-    let (version, items) = state_observer::observations_snapshot();
+    let (version, items) = state_observer::observations_snapshot().await;
     Json(json!({"version": version, "items": items})).into_response()
 }
 
@@ -155,7 +155,7 @@ pub async fn state_beliefs(headers: HeaderMap) -> impl IntoResponse {
         )
             .into_response();
     }
-    let (version, items) = state_observer::beliefs_snapshot();
+    let (version, items) = state_observer::beliefs_snapshot().await;
     Json(json!({"version": version, "items": items})).into_response()
 }
 
@@ -179,7 +179,8 @@ pub async fn state_intents(headers: HeaderMap) -> impl IntoResponse {
         )
             .into_response();
     }
-    Json(json!({"items": state_observer::intents_snapshot()})).into_response()
+    let items = state_observer::intents_snapshot().await;
+    Json(json!({"items": items})).into_response()
 }
 
 /// Crash log snapshot from state_dir/crash and crash/archive.
@@ -390,7 +391,7 @@ pub async fn state_world(headers: HeaderMap, Query(q): Query<WorldQuery>) -> imp
         )
             .into_response();
     }
-    let map = world::snapshot_project_map(q.proj.as_deref());
+    let map = world::snapshot_project_map(q.proj.as_deref()).await;
     Json(serde_json::to_value(map).unwrap_or_else(|_| json!({}))).into_response()
 }
 
@@ -438,7 +439,7 @@ pub async fn state_world_select(
     let query = q.q.unwrap_or_default();
     let k = q.k.unwrap_or(8);
     let lambda = q.lambda.unwrap_or(0.5);
-    let items = world::select_top_claims_diverse(q.proj.as_deref(), &query, k, lambda);
+    let items = world::select_top_claims_diverse(q.proj.as_deref(), &query, k, lambda).await;
     Json(json!({"items": items})).into_response()
 }
 
@@ -935,7 +936,7 @@ pub async fn state_runtime_matrix(
         )
             .into_response();
     }
-    let items = runtime_matrix::snapshot();
+    let items = runtime_matrix::snapshot().await;
     Json(json!({"items": items})).into_response()
 }
 

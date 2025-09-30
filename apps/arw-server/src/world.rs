@@ -1,13 +1,13 @@
 use arw_events::Envelope;
 use arw_topics as topics;
-use chrono::SecondsFormat;
+use chrono::{SecondsFormat, Utc};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::RwLock;
+use tokio::sync::RwLock;
 
 use crate::{tasks::TaskHandle, util, AppState};
 
@@ -153,12 +153,12 @@ pub(crate) async fn load_persisted() {
     if let Some(v) = maybe {
         if let Some(default) = v.get("default") {
             if let Ok(graph) = serde_json::from_value::<BeliefGraph>(default.clone()) {
-                let mut ws = store().write().unwrap();
+                let mut ws = store().write().await;
                 ws.default_graph = graph;
             }
         }
         if let Some(projects) = v.get("projects").and_then(|p| p.as_object()) {
-            let mut ws = store().write().unwrap();
+            let mut ws = store().write().await;
             for (k, val) in projects {
                 if let Ok(g) = serde_json::from_value::<BeliefGraph>(val.clone()) {
                     ws.proj_graphs.insert(k.clone(), g);
@@ -188,7 +188,7 @@ async fn process_event(bus: &arw_events::Bus, env: &Envelope) {
     let proj = proj_from_env(env);
     let now = now_iso();
     let touched = {
-        let mut ws = store().write().unwrap();
+        let mut ws = store().write().await;
         let g = ensure_graph(&mut ws, proj.as_deref());
         apply_event(g, env, &now)
     };
@@ -196,7 +196,7 @@ async fn process_event(bus: &arw_events::Bus, env: &Envelope) {
         return;
     }
     let snapshot = {
-        let ws = store().read().unwrap();
+        let ws = store().read().await;
         ws.clone()
     };
     persist_world(&snapshot).await;
@@ -310,12 +310,13 @@ async fn prune_versions(dir: &PathBuf) {
 }
 
 async fn publish_world_update(bus: &arw_events::Bus, proj: Option<&str>) {
-    let ws = store().read().unwrap();
+    let ws = store().read().await;
     let graph = if let Some(p) = proj {
         ws.proj_graphs.get(p)
     } else {
         Some(&ws.default_graph)
     };
+    let telemetry = compute_world_telemetry(&ws, proj);
     if let Some(g) = graph {
         let claims = g
             .nodes
@@ -338,6 +339,10 @@ async fn publish_world_update(bus: &arw_events::Bus, proj: Option<&str>) {
         });
         bus.publish(topics::TOPIC_WORLD_UPDATED, &payload);
     }
+    drop(ws);
+    if let Some(data) = telemetry {
+        bus.publish(topics::TOPIC_WORLD_TELEMETRY, &data);
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -351,8 +356,8 @@ pub struct ProjectMap {
     pub coverage: Value,
 }
 
-pub(crate) fn snapshot_project_map(project: Option<&str>) -> ProjectMap {
-    let ws = store().read().unwrap();
+pub(crate) async fn snapshot_project_map(project: Option<&str>) -> ProjectMap {
+    let ws = store().read().await;
     let global_version = ver().load(Ordering::Relaxed);
     let (graph, graph_version) = if let Some(p) = project {
         let g = ws.proj_graphs.get(p);
@@ -539,8 +544,8 @@ fn score_claim(node: &Node, query: &str) -> (f64, Value) {
     )
 }
 
-pub(crate) fn select_top_claims(proj: Option<&str>, query: &str, k: usize) -> Vec<Value> {
-    let ws = store().read().unwrap();
+pub(crate) async fn select_top_claims(proj: Option<&str>, query: &str, k: usize) -> Vec<Value> {
+    let ws = store().read().await;
     let graph = if let Some(p) = proj {
         ws.proj_graphs.get(p)
     } else {
@@ -572,14 +577,14 @@ pub(crate) fn select_top_claims(proj: Option<&str>, query: &str, k: usize) -> Ve
     scored.into_iter().take(top).map(|(_, v)| v).collect()
 }
 
-pub(crate) fn select_top_claims_diverse(
+pub(crate) async fn select_top_claims_diverse(
     proj: Option<&str>,
     query: &str,
     k: usize,
     lambda: f64,
 ) -> Vec<Value> {
     let lambda = lambda.clamp(0.0, 1.0);
-    let candidates = select_top_claims(proj, query, k.max(20));
+    let candidates = select_top_claims(proj, query, k.max(20)).await;
     let mut selected = Vec::new();
     let mut selected_tokens: Vec<HashSet<String>> = Vec::new();
     for item in candidates {
@@ -607,14 +612,112 @@ pub(crate) fn select_top_claims_diverse(
     selected
 }
 
+const RECENT_NODE_SECS: i64 = 3600;
+const STALE_NODE_SECS: i64 = 86_400;
+
+fn node_age_secs(node: &Node) -> Option<i64> {
+    node.last_observed.as_deref().and_then(|ts| {
+        chrono::DateTime::parse_from_rfc3339(ts)
+            .ok()
+            .map(|dt| (chrono::Utc::now() - dt.with_timezone(&chrono::Utc)).num_seconds())
+    })
+}
+
+fn extract_excerpt(props: &Map<String, Value>) -> Option<String> {
+    for key in ["summary", "text", "description", "body"] {
+        if let Some(Value::String(raw)) = props.get(key) {
+            let trimmed = raw.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.chars().take(160).collect());
+            }
+        }
+    }
+    None
+}
+
+fn compute_world_telemetry(store: &WorldStore, project: Option<&str>) -> Option<Value> {
+    let graph = if let Some(p) = project {
+        store.proj_graphs.get(p)
+    } else {
+        Some(&store.default_graph)
+    }?;
+
+    let mut counts_by_kind: HashMap<String, u64> = HashMap::new();
+    let mut recent_nodes = 0u64;
+    let mut stale_nodes = 0u64;
+    let mut isolated_nodes = 0u64;
+    let mut top_claims: Vec<(f64, Value)> = Vec::new();
+
+    for node in graph.nodes.values() {
+        *counts_by_kind
+            .entry(format!("{:?}", node.kind))
+            .or_default() += 1;
+        if let Some(age) = node_age_secs(node) {
+            if age <= RECENT_NODE_SECS {
+                recent_nodes = recent_nodes.saturating_add(1);
+            }
+            if age >= STALE_NODE_SECS {
+                stale_nodes = stale_nodes.saturating_add(1);
+            }
+        }
+
+        let is_isolated = !graph
+            .edges
+            .iter()
+            .any(|edge| edge.src == node.id || edge.dst == node.id);
+        if is_isolated {
+            isolated_nodes = isolated_nodes.saturating_add(1);
+        }
+
+        if matches!(node.kind, NodeKind::Claim) {
+            let confidence = node.confidence.unwrap_or(0.5);
+            let entry = json!({
+                "id": node.id,
+                "confidence": confidence,
+                "last": node.last_observed,
+                "excerpt": extract_excerpt(&node.props),
+            });
+            top_claims.push((confidence, entry));
+        }
+    }
+
+    top_claims.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+    let top_claims: Vec<Value> = top_claims.into_iter().take(5).map(|(_, v)| v).collect();
+
+    let contradictions = graph
+        .edges
+        .iter()
+        .filter(|e| matches!(e.kind, EdgeKind::Contradicts))
+        .count();
+
+    let mut coverage = serde_json::Map::new();
+    for (kind, count) in counts_by_kind {
+        coverage.insert(kind, json!(count));
+    }
+
+    Some(json!({
+        "proj": project,
+        "graph_version": graph.version,
+        "nodes": graph.nodes.len(),
+        "edges": graph.edges.len(),
+        "coverage": coverage,
+        "recent_nodes": recent_nodes,
+        "stale_nodes": stale_nodes,
+        "isolated_nodes": isolated_nodes,
+        "contradictions": contradictions,
+        "top_claims": top_claims,
+        "ts_ms": Utc::now().timestamp_millis(),
+    }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn snapshot_project_map_counts_all_nodes_whilst_sampling() {
+    #[tokio::test]
+    async fn snapshot_project_map_counts_all_nodes_whilst_sampling() {
         {
-            let mut ws = store().write().expect("world store lock");
+            let mut ws = store().write().await;
             *ws = WorldStore::default();
 
             let mut graph = BeliefGraph::default();
@@ -644,7 +747,7 @@ mod tests {
         }
         ver().store(0, Ordering::Relaxed);
 
-        let snapshot = snapshot_project_map(None);
+        let snapshot = snapshot_project_map(None).await;
         assert_eq!(snapshot.entities.len(), 50);
         assert_eq!(snapshot.claims.len(), 50);
         assert_eq!(snapshot.coverage["entities"].as_u64(), Some(120));

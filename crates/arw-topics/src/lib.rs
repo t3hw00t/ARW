@@ -102,6 +102,9 @@ pub const TOPIC_PROBE_HW: &str = "probe.hw";
 pub const TOPIC_PROBE_METRICS: &str = "probe.metrics";
 pub const TOPIC_CATALOG_UPDATED: &str = "catalog.updated";
 pub const TOPIC_CONFIG_PATCH_APPLIED: &str = "config.patch.applied";
+pub const TOPIC_CONFIG_RELOADED: &str = "config.reloaded";
+pub const TOPIC_GATING_RELOADED: &str = "policy.gating.reloaded";
+pub const TOPIC_CACHE_POLICY_RELOADED: &str = "cache.policy.reloaded";
 pub const TOPIC_POLICY_DECISION: &str = "policy.decision";
 pub const TOPIC_POLICY_RELOADED: &str = "policy.reloaded";
 pub const TOPIC_POLICY_CAPSULE_APPLIED: &str = "policy.capsule.applied";
@@ -120,6 +123,7 @@ pub const TOPIC_ORCHESTRATOR_JOB_COMPLETED: &str = "orchestrator.job.completed";
 
 // World model
 pub const TOPIC_WORLD_UPDATED: &str = "world.updated";
+pub const TOPIC_WORLD_TELEMETRY: &str = "world.telemetry";
 
 // Context assembly
 pub const TOPIC_CONTEXT_ASSEMBLED: &str = "context.assembled";

@@ -22,7 +22,7 @@ features = ["trace"]
 [dependencies.opentelemetry-otlp]
 version = "0.30"
 optional = true
-features = ["trace"]
+features = ["trace", "tonic"]
 
 [dependencies.tracing-opentelemetry]
 version = "0.31"

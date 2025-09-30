@@ -2,7 +2,6 @@ use chrono::SecondsFormat;
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::time;
 
 use crate::{
     autonomy,
@@ -10,10 +9,10 @@ use crate::{
     guard_metadata::apply_posture_and_guard,
     memory_service,
     policy::PolicyHandle,
+    queue,
     tasks::TaskHandle,
     tools::{self, ToolError},
     util, AppState,
-    queue,
 };
 use arw_topics as topics;
 

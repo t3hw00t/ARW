@@ -3,14 +3,40 @@ use chrono::SecondsFormat;
 use once_cell::sync::OnceCell;
 use serde_json::{json, Value};
 use std::collections::HashMap;
-use std::sync::RwLock;
+use std::time::{Duration as StdDuration, Instant};
+use tokio::sync::RwLock;
 use tokio::time::{interval, Duration};
 
 use crate::{read_models, tasks::TaskHandle, AppState};
 
-fn store() -> &'static RwLock<HashMap<String, Value>> {
-    static MATRIX: OnceCell<RwLock<HashMap<String, Value>>> = OnceCell::new();
+const MATRIX_TTL: StdDuration = StdDuration::from_secs(60);
+
+#[derive(Clone)]
+struct TimedValue {
+    inserted_at: Instant,
+    value: Value,
+}
+
+impl TimedValue {
+    fn new(value: Value) -> Self {
+        Self {
+            inserted_at: Instant::now(),
+            value,
+        }
+    }
+
+    fn is_expired(&self, now: Instant) -> bool {
+        now.duration_since(self.inserted_at) > MATRIX_TTL
+    }
+}
+
+fn store() -> &'static RwLock<HashMap<String, TimedValue>> {
+    static MATRIX: OnceCell<RwLock<HashMap<String, TimedValue>>> = OnceCell::new();
     MATRIX.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+fn prune_expired(store: &mut HashMap<String, TimedValue>, now: Instant) {
+    store.retain(|_, entry| !entry.is_expired(now));
 }
 
 fn node_id() -> String {
@@ -42,8 +68,14 @@ fn node_id() -> String {
         .clone()
 }
 
-pub(crate) fn snapshot() -> HashMap<String, Value> {
-    store().read().unwrap().clone()
+pub(crate) async fn snapshot() -> HashMap<String, Value> {
+    let mut guard = store().write().await;
+    let now = Instant::now();
+    prune_expired(&mut guard, now);
+    guard
+        .iter()
+        .map(|(key, entry)| (key.clone(), entry.value.clone()))
+        .collect()
 }
 
 pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
@@ -63,9 +95,14 @@ pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
                         .unwrap_or("runtime")
                         .to_string();
                     let snapshot = {
-                        let mut guard = store().write().unwrap();
-                        guard.insert(key, env.payload.clone());
-                        guard.clone()
+                        let mut guard = store().write().await;
+                        let now = Instant::now();
+                        guard.insert(key, TimedValue::new(env.payload.clone()));
+                        prune_expired(&mut guard, now);
+                        guard
+                            .iter()
+                            .map(|(k, entry)| (k.clone(), entry.value.clone()))
+                            .collect::<HashMap<_, _>>()
                     };
                     read_models::publish_read_model_patch(
                         &bus_for_patch,

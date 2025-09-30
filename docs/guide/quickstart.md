@@ -196,4 +196,4 @@ Generate the secret with any equivalent tool if `openssl` is unavailable.
 
 - Read the [Restructure Handbook](../RESTRUCTURE.md) for the canonical roadmap.
 - Explore [Context Recipes](context_recipes.md) and [Performance Presets](performance_presets.md) to tune retrieval speed and coverage.
-- Run `cargo run -p arw-server` during development for hot reloads and tracing; set `ARW_OTEL=1` to exercise the upcoming OTLP pipeline (currently falls back to standard tracing with a warning).
+- Run `cargo run -p arw-server` during development for hot reloads and tracing; set `ARW_OTEL=1` (optionally combine with `ARW_OTEL_ENDPOINT=http://collector:4317`) to stream traces to your OTLP collector.

@@ -114,7 +114,11 @@ Notes
 - `ARW_REHYDRATE_FILE_HEAD_KB`: max head bytes when rehydrating local files via `/context/rehydrate` (default `64`).
 
 ## Observability & Logs
-- `ARW_OTEL=1`: enable OpenTelemetry initialization (preview; pipeline placeholder logs a warning until configured with exporters).
+- `ARW_OTEL=1`: enable the OpenTelemetry OTLP tracing exporter. Optional overrides:
+  - `ARW_OTEL_ENDPOINT`: OTLP gRPC endpoint (default `http://127.0.0.1:4317`).
+  - `ARW_OTEL_HEADERS`: comma-separated `key=value` list appended as gRPC metadata (useful for API keys).
+  - `ARW_OTEL_TIMEOUT_MS`: exporter timeout in milliseconds (default `10000`).
+  - `ARW_OTEL_SERVICE_NAME`: override the reported `service.name` (default `arw-server`).
 - `ARW_ACCESS_LOG_ROLL=1`: enable rolling access logs filtered to `http.access` target.
   - `ARW_ACCESS_LOG_DIR`: directory for rolled logs (default `${ARW_LOGS_DIR:-./logs}`)
   - `ARW_ACCESS_LOG_PREFIX`: file prefix (default `http-access`)

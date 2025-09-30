@@ -12,7 +12,7 @@ Type: Reference
 ## Key Ideas
 - Single workspace with focused crates and clean boundaries.
 - Inventory-based tool registration via `#[arw_tool]`.
-- Observability ready: tracing everywhere, OTEL wiring optional.
+- Observability ready: structured tracing by default with optional OTLP exporter (`ARW_OTEL=1`).
 - Open standards and coherence: Design Tokens SSoT, dot.case events, CloudEvents, and documented ADRs.
 
 ## Useful Commands

@@ -9,9 +9,9 @@ use arw_topics as topics;
 /// Run a single distillation pass: stitch recent intents/actions into compact playbooks,
 /// persist belief snapshots for ops/debug, prune stale world versions, and emit an event.
 pub(crate) async fn run_once(state: &AppState) -> Value {
-    let intents = state_observer::intents_snapshot();
-    let actions = state_observer::actions_snapshot();
-    let (beliefs_version, beliefs_items) = state_observer::beliefs_snapshot();
+    let intents = state_observer::intents_snapshot().await;
+    let actions = state_observer::actions_snapshot().await;
+    let (beliefs_version, beliefs_items) = state_observer::beliefs_snapshot().await;
 
     let mut playbooks: Vec<Value> = Vec::new();
     for intent in intents.iter().rev().take(50) {

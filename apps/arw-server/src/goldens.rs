@@ -118,7 +118,7 @@ pub async fn evaluate_chat_items(
             .and_then(|v| v.as_str())
             .unwrap_or("");
         let (context, ctx_tokens, ctx_items) =
-            assemble_context(prompt, opts, proj.unwrap_or("default"));
+            assemble_context(prompt, opts, proj.unwrap_or("default")).await;
         if ctx_tokens > 0 {
             ctx_tokens_acc += ctx_tokens;
             ctx_items_acc += ctx_items;
@@ -187,17 +187,17 @@ pub async fn evaluate_chat_items(
     }
 }
 
-fn assemble_context(prompt: &str, opts: &EvalOptions, proj: &str) -> (String, u64, u64) {
-    let mut entries = if let Some(k) = opts.retrieval_k {
+async fn assemble_context(prompt: &str, opts: &EvalOptions, proj: &str) -> (String, u64, u64) {
+    let mut entries = Vec::new();
+    if let Some(k) = opts.retrieval_k {
         let k = k.clamp(1, 50);
-        if let Some(lambda) = opts.mmr_lambda {
-            world::select_top_claims_diverse(Some(proj), prompt, k, lambda)
+        let fetched = if let Some(lambda) = opts.mmr_lambda {
+            world::select_top_claims_diverse(Some(proj), prompt, k, lambda).await
         } else {
-            world::select_top_claims(Some(proj), prompt, k)
-        }
-    } else {
-        Vec::new()
-    };
+            world::select_top_claims(Some(proj), prompt, k).await
+        };
+        entries = fetched;
+    }
     let mut ctx_tokens = 0u64;
     let mut ctx_items = entries.len() as u64;
     if let Some(budget) = opts.context_budget_tokens {

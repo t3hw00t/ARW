@@ -79,6 +79,10 @@ pub fn load_initial_config_state() -> InitialConfigState {
     state
 }
 
+pub(crate) fn runtime_config_path() -> Option<PathBuf> {
+    discovered_config_path().0
+}
+
 fn discovered_config_path() -> (Option<PathBuf>, &'static str) {
     if let Ok(explicit) = std::env::var("ARW_CONFIG") {
         if !explicit.trim().is_empty() {
@@ -111,6 +115,10 @@ pub fn init_gating_from_configs() {
     }
 }
 
+pub(crate) fn gating_config_path() -> Option<PathBuf> {
+    discovered_gating_path().0
+}
+
 fn discovered_gating_path() -> (Option<PathBuf>, &'static str) {
     if let Ok(explicit) = std::env::var("ARW_GATING_FILE") {
         if !explicit.trim().is_empty() {
@@ -140,6 +148,10 @@ pub fn init_cache_policy_from_manifest() {
         }
         None => info!("no cache policy manifest discovered; relying on env defaults"),
     }
+}
+
+pub(crate) fn cache_policy_manifest_path() -> Option<PathBuf> {
+    discovered_cache_policy_path().0
 }
 
 fn discovered_cache_policy_path() -> (Option<PathBuf>, &'static str) {

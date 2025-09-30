@@ -12,10 +12,6 @@ pub(crate) struct QueueSignals {
 }
 
 impl QueueSignals {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
     /// Return the last emitted sequence number.
     pub fn version(&self) -> u64 {
         self.seq.load(Ordering::SeqCst)
