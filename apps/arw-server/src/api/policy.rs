@@ -9,9 +9,10 @@ use tokio::fs as afs;
 use utoipa::ToSchema;
 
 use crate::config;
-use crate::AppState;
+use crate::{tools::guardrails, AppState};
 use arw_policy::{AbacRequest, Entity};
 use arw_topics as topics;
+use tracing::warn;
 
 /// Current ABAC policy snapshot.
 #[utoipa::path(
@@ -212,6 +213,9 @@ pub async fn policy_guardrails_apply(
                 "digest": digest,
             }),
         );
+        if let Err(err) = guardrails::record_applied(preset, &digest, &dest_display).await {
+            warn!(%preset, %dest_display, error = %err, "failed to persist guardrail metadata");
+        }
     }
 
     Json(GuardrailApplyResponse {

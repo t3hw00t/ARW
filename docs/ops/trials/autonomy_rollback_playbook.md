@@ -4,7 +4,7 @@ title: Autonomy Rollback Playbook
 
 # Autonomy Rollback Playbook
 
-Updated: 2025-09-27
+Updated: 2025-10-01
 Type: Runbook
 Status: Active
 
@@ -16,7 +16,7 @@ Return an autonomous lane to a known-good guided state in two minutes or less. O
 
 - Latest project snapshot captured via `POST /projects/{proj}/snapshot` within the last 30 minutes.
 - Runtime profile snapshot (launcher Runtime Manager → `Save profile snapshot`).
-- Guardrail preset bundle exported (`configs/gating.toml`, `configs/trust_capsules.json`).
+- Guardrail preset bundle exported (`configs/gating.toml`, `configs/trust_capsules.json`) and the trial preset available at `configs/guardrails/trial.toml`.
 - Operator console open to Trial Control Center (pause/stop visible).
 - Pager channel bookmark ready for status updates.
 
@@ -36,7 +36,7 @@ Optional flags:
 - `base=<url>` — point at a different server origin.
 - `--dry-run` — print the planned API calls without mutating anything.
 
-When passing options that start with `-`, insert `--` after the `just` target (example: `just autonomy-rollback -- --dry-run lane=<lane_id>`).
+When passing options that start with `-`, insert `--` after the `just` target (example: `just autonomy-rollback -- --dry-run lane=<lane_id>`). For quick guardrail checks outside a full rollback, use `./scripts/trials_guardrails.sh --preset trial` (add `--dry-run` during rehearsal).
 
 What the helper attempts:
 
@@ -45,7 +45,7 @@ What the helper attempts:
 3. Discover lane metadata and note the most recent snapshot id surfaced by `/state/autonomy/lanes/{lane}`.
 4. Capture a fresh snapshot with `POST /projects/{proj}/snapshot`.
 5. Request a runtime restore via `POST /orchestrator/runtimes/{id}/restore` (falls back to Launcher Runtime Manager when unavailable).
-6. Reapply guardrail presets using `POST /policy/guardrails/apply` (`dry_run:true` for rehearsal).
+6. Reapply guardrail presets using `POST /policy/guardrails/apply` (`dry_run:true` for rehearsal). The helper shells out to the same logic exposed via `scripts/trials_guardrails.sh`.
 
 When an endpoint is missing (early builds) the script prints a WARN line with the equivalent manual curl invocation so the operator can finish the step by hand. Pair it with the incident note in the template below.
 
@@ -65,7 +65,7 @@ When an endpoint is missing (early builds) the script prints a WARN line with th
    - Launcher Runtime Manager → select snapshot → `Restore and restart` if automation is unavailable.
    - Verify `/state/runtime_supervisor` shows `ready` with expected profile tag.
 5. **Reapply guardrails**
-   - `POST /policy/guardrails/apply` with the saved preset (`dry_run:true` permitted for rehearsal).
+   - `POST /policy/guardrails/apply` with the saved preset (`dry_run:true` permitted for rehearsal) or run `./scripts/trials_guardrails.sh --preset trial` for the default trial profile.
    - Confirm `capsule.guard.state=healthy` in `/state/policy/capsules`.
 6. **Validate**
    - Ensure `/state/autonomy/lanes/:lane_id` reports `mode="guided"` and zero active jobs.

@@ -4,12 +4,11 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-09-30 13:38 UTC
+Updated: 2025-10-01 19:24 UTC
 
 
 ## To Do
 - [trial-autonomy-governor] Autonomy governor & kill switch — todo (updated: 2025-09-26 12:30 UTC)
-- [trial-g3] Gate G3: Trial operations — todo (updated: 2025-09-26 12:30 UTC)
 
 ## In Progress
 
@@ -18,6 +17,8 @@ Updated: 2025-09-30 13:38 UTC
 ## Done
 - [trial-g2] Gate G2: Calm approvals — done (updated: 2025-09-30 15:20:00 UTC)
     - 2025-09-30 15:20:00 UTC: Published approvals lane operator guide with illustrated layout, linked from mkdocs nav and runbook; connections drawer instructions included.
+- [trial-g3] Gate G3: Trial operations — done (updated: 2025-10-01 19:24:42 UTC)
+    - 2025-10-01 19:24:42 UTC: Trial Control Center exposes guardrail preset status and stand-up workflow; added `scripts/trials_guardrails.sh`, new trial guardrail preset, and refreshed runbook/readiness docs for the dashboard bundle and rollback drills.
 - [trial-g1] Gate G1: Reliable memory — done (updated: 2025-09-30 12:23:46 UTC)
     - 2025-09-30 11:24:44 UTC: Trial Control Center focus card shows recent memory with freshness stamp and sources link; context telemetry meta surfaces updated and recall scores; memory recent API now returns a generated timestamp.
   - 2025-09-30 12:05:19 UTC: Memory endpoints and SSE snapshots now include generated_ms fields with tests and docs; launcher focus card consumes the numeric timestamp for accessible freshness messaging.

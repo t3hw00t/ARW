@@ -1,10 +1,12 @@
 use super::{ToolError, Value};
+use chrono::{SecondsFormat, Utc};
 use once_cell::sync::{Lazy, OnceCell};
 use regex::Regex;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::{fs, path::PathBuf, sync::Mutex};
 use tokio::time::sleep;
 use url::Url;
 
@@ -18,6 +20,8 @@ struct CircuitBreaker {
 }
 
 static CB: OnceCell<CircuitBreaker> = OnceCell::new();
+static LAST_APPLIED: Lazy<Mutex<Option<GuardrailMeta>>> =
+    Lazy::new(|| Mutex::new(load_guardrail_meta()));
 
 static RE_EMAIL: Lazy<Regex> = Lazy::new(|| {
     Regex::new(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}").expect("email regex")
@@ -28,6 +32,82 @@ static RE_GAPI: Lazy<Regex> =
 static RE_SLACK: Lazy<Regex> =
     Lazy::new(|| Regex::new(r"xox[baprs]-[0-9A-Za-z-]{10,}").expect("slack regex"));
 static RE_URL: Lazy<Regex> = Lazy::new(|| Regex::new(r"https?://[^\\s)]+").expect("url regex"));
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct GuardrailMeta {
+    pub preset: String,
+    pub digest: String,
+    pub path: String,
+    pub applied_ms: u64,
+    pub applied_iso: String,
+}
+
+pub(crate) async fn record_applied(preset: &str, digest: &str, path: &str) -> std::io::Result<()> {
+    let applied_ms = now_millis();
+    let applied_iso = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+    let meta = GuardrailMeta {
+        preset: preset.to_string(),
+        digest: digest.to_string(),
+        path: path.to_string(),
+        applied_ms,
+        applied_iso,
+    };
+
+    {
+        let mut guard = LAST_APPLIED
+            .lock()
+            .unwrap_or_else(|poison| poison.into_inner());
+        *guard = Some(meta.clone());
+    }
+
+    persist_guardrail_meta(&meta).await
+}
+
+fn last_applied_snapshot() -> Option<GuardrailMeta> {
+    LAST_APPLIED
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner())
+        .clone()
+}
+
+fn load_guardrail_meta() -> Option<GuardrailMeta> {
+    let path = guardrail_meta_path();
+    let bytes = fs::read(path).ok()?;
+    serde_json::from_slice(&bytes).ok()
+}
+
+fn guardrail_meta_path() -> PathBuf {
+    crate::util::state_dir()
+        .join("configs")
+        .join("guardrails_meta.json")
+}
+
+async fn persist_guardrail_meta(meta: &GuardrailMeta) -> std::io::Result<()> {
+    let path = guardrail_meta_path();
+    if let Some(parent) = path.parent() {
+        tokio::fs::create_dir_all(parent).await?;
+    }
+    let bytes = serde_json::to_vec_pretty(meta)
+        .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+    let tmp = path.with_extension("tmp");
+    tokio::fs::write(&tmp, &bytes).await?;
+    if let Err(_err) = tokio::fs::rename(&tmp, &path).await {
+        let _ = tokio::fs::remove_file(&path).await;
+        if let Err(err2) = tokio::fs::rename(&tmp, &path).await {
+            let _ = tokio::fs::remove_file(&tmp).await;
+            return Err(err2);
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+pub(crate) fn reset_last_applied_for_tests() {
+    let mut guard = LAST_APPLIED
+        .lock()
+        .unwrap_or_else(|poison| poison.into_inner());
+    *guard = None;
+}
 
 pub(crate) async fn run(input: &Value) -> Result<Value, ToolError> {
     let text = input
@@ -62,13 +142,21 @@ pub(crate) fn metrics() -> Value {
     });
     let now = now_millis();
     let open_until = cb.open_until_ms.load(Ordering::Relaxed);
-    json!({
+    let mut value = json!({
         "retries": GUARD_RETRIES.load(Ordering::Relaxed),
         "http_errors": GUARD_HTTP_ERRORS.load(Ordering::Relaxed),
         "cb_trips": GUARD_CB_TRIPS.load(Ordering::Relaxed),
         "cb_open": (now < open_until) as u8,
         "cb_open_until_ms": open_until,
-    })
+    });
+
+    if let Some(meta) = last_applied_snapshot() {
+        if let Ok(meta_value) = serde_json::to_value(meta) {
+            value["last_applied"] = meta_value;
+        }
+    }
+
+    value
 }
 
 async fn guardrails_remote(
@@ -271,6 +359,52 @@ fn guardrails_local(text: &str) -> Result<Value, ToolError> {
         "issues": issues,
         "suggestions": []
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support;
+    use serde_json::Value as JsonValue;
+    use tempfile::tempdir;
+
+    #[tokio::test]
+    async fn record_applied_persists_metadata_and_updates_metrics() {
+        let dir = tempdir().expect("tempdir");
+        let _ctx = test_support::begin_state_env(dir.path());
+        reset_last_applied_for_tests();
+
+        let preset = "trial";
+        let digest = "abc123";
+        let dest = dir
+            .path()
+            .join("configs")
+            .join("gating.toml")
+            .display()
+            .to_string();
+
+        record_applied(preset, digest, &dest)
+            .await
+            .expect("record applied");
+
+        let meta_path = dir.path().join("configs").join("guardrails_meta.json");
+        let bytes = fs::read(&meta_path).expect("meta file");
+        let persisted: GuardrailMeta = serde_json::from_slice(&bytes).expect("meta json");
+        assert_eq!(persisted.preset, preset);
+        assert_eq!(persisted.digest, digest);
+        assert_eq!(persisted.path, dest);
+
+        let metrics_value = metrics();
+        let last = metrics_value
+            .get("last_applied")
+            .expect("last_applied")
+            .as_object()
+            .expect("last_applied object");
+        assert_eq!(last.get("preset"), Some(&JsonValue::String(preset.into())));
+        assert_eq!(last.get("digest"), Some(&JsonValue::String(digest.into())));
+        assert!(last.get("applied_ms").is_some());
+        assert!(last.get("applied_iso").is_some());
+    }
 }
 
 fn now_millis() -> u64 {

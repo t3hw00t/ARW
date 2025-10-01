@@ -27,7 +27,7 @@
       loading: true,
       error: null,
     },
-    safety: { level: 'unknown', summary: 'Loading...', meta: [] },
+    safety: { level: 'unknown', summary: 'Loading...', meta: [], lastApplied: null, metrics: null },
     autonomy: { level: 'unknown', summary: 'Loading...', meta: [], lane: null, snapshot: null, line: 'Autonomy status loading...', operator: null, alerts: [], updatedMs: null, lastEvent: null, lastReason: null },
     connections: { nodes: [], summary: 'Loading connections…', error: null, loading: true, updatedMs: null },
     overview: [],
@@ -164,6 +164,8 @@
     setTile('approvals', { level: 'unknown', summary: 'Loading...', meta: [] });
     setTile('safety', { level: 'unknown', summary: 'Loading...', meta: [] });
     setTile('autonomy', { level: 'unknown', summary: 'Loading...', meta: [] });
+    STATE.safety.lastApplied = null;
+    STATE.safety.metrics = null;
     STATE.autonomy = {
       level: 'unknown',
       summary: 'Loading...',
@@ -707,7 +709,7 @@
   function updateSafety(status, guardrails){
     if (!guardrails) {
       const summary = STATE.unauthorized ? 'Authorize to read guardrail metrics' : 'Guardrail metrics unavailable';
-      STATE.safety = { level: 'unknown', summary, meta: [] };
+      STATE.safety = { level: 'unknown', summary, meta: [], lastApplied: null };
       setStatus('safety', 'unknown', summary);
       setTile('safety', STATE.safety);
       return;
@@ -717,6 +719,23 @@
     const httpErrors = Number(metrics.http_errors ?? metrics.httpErrors ?? 0);
     const retries = Number(metrics.retries ?? 0);
     const trips = Number(metrics.cb_trips ?? metrics.cbTrips ?? 0);
+    const lastAppliedRaw = metrics.last_applied || metrics.lastApplied || null;
+    let lastApplied = null;
+    if (lastAppliedRaw && typeof lastAppliedRaw === 'object') {
+      const preset = typeof lastAppliedRaw.preset === 'string' ? lastAppliedRaw.preset : null;
+      const digest = typeof lastAppliedRaw.digest === 'string' ? lastAppliedRaw.digest : null;
+      const path = typeof lastAppliedRaw.path === 'string' ? lastAppliedRaw.path : null;
+      let appliedMs = toNumber(lastAppliedRaw.applied_ms ?? lastAppliedRaw.appliedMs);
+      if (!Number.isFinite(appliedMs)) {
+        const iso = typeof lastAppliedRaw.applied_iso === 'string' ? lastAppliedRaw.applied_iso : null;
+        if (iso) {
+          const parsed = parseTimestamp(iso);
+          if (parsed) appliedMs = parsed;
+        }
+      }
+      const appliedIso = typeof lastAppliedRaw.applied_iso === 'string' ? lastAppliedRaw.applied_iso : null;
+      lastApplied = { preset, digest, path, appliedMs: Number.isFinite(appliedMs) ? appliedMs : null, appliedIso };
+    }
 
     let level = 'ok';
     let summary = 'Guardrails stable';
@@ -726,6 +745,8 @@
     } else if (httpErrors > 0 || retries > 0) {
       level = 'warn';
       summary = 'Guardrails recovering';
+    } else if (lastApplied?.preset) {
+      summary = `Preset ${lastApplied.preset} steady`;
     }
 
     const meta = [
@@ -737,8 +758,16 @@
     if (status?.safe_mode?.active) {
       meta.push(['Safe mode', 'engaged']);
     }
+    if (lastApplied?.preset) {
+      meta.push(['Preset', lastApplied.preset]);
+    }
+    if (lastApplied?.appliedMs) {
+      meta.push(['Applied', formatRelativeWithAbs(lastApplied.appliedMs)]);
+    } else if (lastApplied?.appliedIso) {
+      meta.push(['Applied at', lastApplied.appliedIso]);
+    }
 
-    STATE.safety = { level, summary, meta };
+    STATE.safety = { level, summary, meta, lastApplied, metrics: { retries, httpErrors, trips, cbOpen } };
     setStatus('safety', level, summary);
     setTile('safety', STATE.safety);
   }
@@ -1216,6 +1245,25 @@
       connectionsLine = `${connectionsLine} (updated ${formatRelativeWithAbs(STATE.connections.updatedMs)})`;
     }
 
+    let guardrailLine = safetyLine;
+    if (STATE.safety.lastApplied?.preset) {
+      const preset = STATE.safety.lastApplied.preset;
+      const appliedMs = STATE.safety.lastApplied.appliedMs;
+      const appliedText = appliedMs ? `applied ${formatRelativeWithAbs(appliedMs)}`
+        : (STATE.safety.lastApplied.appliedIso ? `applied ${STATE.safety.lastApplied.appliedIso}` : 'applied recently');
+      guardrailLine = `Guardrails preset ${preset} (${appliedText})`;
+    }
+
+    let guardrailMetricLine = null;
+    if (STATE.safety.metrics) {
+      const { retries = 0, httpErrors = 0, trips = 0, cbOpen = false } = STATE.safety.metrics;
+      guardrailMetricLine = `Guardrail metrics – retries ${retries}, HTTP errors ${httpErrors}, trips ${trips}, circuit breaker ${cbOpen ? 'open' : 'closed'}.`;
+    }
+
+    const standupLine = 'Daily stand-up template lives in docs/ops/trials/standup_template.md (dashboard → approvals → highlights → risks → next steps).';
+    const rollbackLine = 'Rollback drill: run scripts/autonomy_rollback.sh --dry-run and follow docs/ops/trials/autonomy_rollback_playbook.md.';
+    const guardrailWorkflowLine = `Guardrail preset helper: scripts/trials_guardrails.sh --preset ${STATE.safety.lastApplied?.preset || 'trial'} (see docs/ops/trial_runbook.md).`;
+
     const topRoutes = Array.isArray(routeStats?.routes)
       ? [...routeStats.routes]
           .filter(r => typeof r?.path === 'string')
@@ -1224,18 +1272,19 @@
           .map(r => `${r.path} | p95 ${(Number(r.p95_ms) || 0).toFixed(0)} ms (hits ${(Number(r.hits) || 0).toLocaleString()})`)
       : [];
 
-    STATE.overview = [systemLine, memoryLine, approvalLine, safetyLine, autonomyLine, connectionsLine];
+    STATE.overview = [systemLine, memoryLine, approvalLine, guardrailLine, autonomyLine, connectionsLine];
     STATE.workflows = [
       MEMORY_WORKFLOW_TEXT(STATE.memory, STATE.focus),
-      topRoutes.length ? `Slowest routes: ${topRoutes.join('; ')}` : 'Route latencies steady.',
       approvalLine,
-      autonomyLine,
-      connectionsLine,
+      standupLine,
+      rollbackLine,
+      (topRoutes.length ? `Slowest routes: ${topRoutes.join('; ')}` : 'Route latencies steady.'),
     ];
+    STATE.workflows.push(guardrailWorkflowLine);
     STATE.safeguards = [
-      safetyLine,
-      STATE.systems.meta.find(([label]) => label === 'Safe mode')?.join(': ') || 'Safe mode off',
-      `Guardrails retries: ${STATE.safety.meta[0]?.[1] || '0'}`,
+      guardrailLine,
+      guardrailMetricLine || 'Guardrail metrics steady.',
+      (STATE.systems.meta.find(([label]) => label === 'Safe mode')?.join(': ') || 'Safe mode off'),
       autonomyLine,
       connectionsLine,
     ];

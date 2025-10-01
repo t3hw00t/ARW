@@ -8,7 +8,7 @@ use crate::singleflight::FlightGuard;
 use crate::tool_cache::{StoreOutcome, ToolCacheHit};
 use crate::{capsule_guard, AppState};
 
-mod guardrails;
+pub(crate) mod guardrails;
 pub(crate) use guardrails::metrics as guardrails_metrics_value;
 mod error;
 pub use error::ToolError;

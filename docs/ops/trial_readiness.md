@@ -4,7 +4,7 @@ title: Trial Readiness Plan
 
 # Trial Readiness Plan
 
-Updated: 2025-09-30
+Updated: 2025-10-01
 Type: Playbook (quick guide)
 
 Use this short guide to decide when Agent Hub feels good enough for **the two of us** to run a focused trial. Keep [the facilitator checklist](trial_facilitator_checklist.md) and [onboarding note](trials/onboarding_email_template.md) nearby—the scope stays intentionally small so we can iterate quickly before inviting anyone else.
@@ -16,7 +16,7 @@ Use this short guide to decide when Agent Hub feels good enough for **the two of
 | **G0 · Core feels steady** | Launch & status lights | Home opens quickly, status tray says “All good,” scripted preflight checks pass. | Run `just triad-smoke` (hits `/actions`, `/state/projects`, `/events` resume), run `just trials-preflight` or the launcher preflight button, verify the Project Hub Home surface loads, refresh sign-in tokens, document the preflight outcome in the log. |
 | **G1 · Memory makes sense** | Briefs & context | “What’s in focus” card (or Project Hub Activity panel) shows key facts with timestamps and sources. | Run `just context-ci`, confirm “needs background” nudges render in the activity view, and verify the memory metrics tile in `/admin/debug` updates. |
 | **G2 · Approvals feel calm** | Queue & sharing | Approvals drawer (launcher) or `/admin/debug` queue shows clear Approve / Hold actions; connections drawer names who is online. | Queue service working, preview panel live, latest screenshots stored in `docs/ops/trials/screenshots/` with filenames logged per [Trial Runbook](trial_runbook.md); see the [approvals guide](trials/approvals_lane_guide.md) for daily flow. |
-| **G3 · Ops stay in control** | Dashboards & safeguards | Trial Control Center launcher window (see `docs/design/trial_visual_kit.md`) or `/admin/debug` tiles cover Systems, Memory, Approvals, Safety. Approvals/Connections/Autonomy cards auto-refresh with “updated …” stamps so drift is visible, pause/rollback flow rehearsed, daily stand-up template in use. | Guardrail presets loaded, stop flow rehearsed, runbook printed or shared, notes capture how to reach the dashboard today. |
+| **G3 · Ops stay in control** | Dashboards & safeguards | Trial Control Center launcher window (see `docs/design/trial_visual_kit.md`) or `/admin/debug` tiles cover Systems, Memory, Approvals, Safety. Approvals/Connections/Autonomy cards auto-refresh with “updated …” stamps so drift is visible, pause/rollback flow rehearsed, daily stand-up template in use. | Guardrail preset `configs/guardrails/trial.toml` applied via `just trials-guardrails` (Safety tile shows the latest stamp), stop flow rehearsed with `scripts/autonomy_rollback.sh --dry-run`, runbook printed or shared, notes capture how to reach the dashboard today. |
 
 G4 expands the Trial Control Center with an Autonomy tile once we open that gate; until then we lean on the four-tile dashboard pattern (mock or live) described in the visual kit.
 
@@ -63,7 +63,7 @@ Until those are done we keep trials in guided mode.
 - Memory fidelity: selector, compression, hygiene, context telemetry, Training Park dials.
 - Approvals + sharing: staging queue, approvals lane, connections drawer, feedback readiness.
 - Safety bundle: GTK/GLib upgrade, egress firewall presets, capsule guard, Prometheus tiles, red-team rehearsal.
-- Automation helpers: `just triad-smoke`, `just context-ci`, `just trials-preflight`, `scripts/trials_preflight.sh`, [Trial Runbook](trial_runbook.md), `ops/access_matrix.yaml`, [`docs/ops/trials/`](trials/README.md).
+- Automation helpers: `just triad-smoke`, `just context-ci`, `just trials-preflight`, `just trials-guardrails`, `scripts/trials_preflight.sh`, `scripts/trials_guardrails.sh`, [Trial Runbook](trial_runbook.md), `ops/access_matrix.yaml`, [`docs/ops/trials/`](trials/README.md).
 - Visual kit: home tabs, approvals lane, and dashboard mocks (task `trial-visual-kit`).
 - Autonomy prep: tasks added (`trial-g0`–`trial-g3`, `trial-autonomy-governor`, `autonomy-lane-spec`, `autonomy-rollback-playbook`).
 

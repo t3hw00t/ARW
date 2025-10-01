@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-09-30 13:38 UTC",
+  "updated": "2025-10-01 19:24 UTC",
   "tasks": [
     {
       "id": "t-phase-a-01",
@@ -1320,9 +1320,15 @@
       "id": "trial-g3",
       "title": "Gate G3: Trial operations",
       "desc": "Bundle trial dashboard, guardrails presets, stop/rollback drills, and daily stand-up template.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-26 12:30 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-10-01 19:24:42 UTC",
+          "text": "Trial Control Center surfaces guardrail presets and workflows; scripts/trials_guardrails.sh + docs cover dashboard bundle, rollback drill, and stand-up template."
+        }
+      ],
+      "updated": "2025-10-01 19:24:42 UTC",
+      "done_at": "2025-10-01 19:24:42 UTC"
     },
     {
       "id": "trial-autonomy-governor",

@@ -4,7 +4,7 @@ title: Trial Quickstart
 
 # Trial Quickstart
 
-Updated: 2025-09-26
+Updated: 2025-10-01
 Type: Participant guide
 
 It’s just the two of us in this trial, but keep this one-page guide handy so either person can get started in five minutes.
@@ -25,7 +25,7 @@ It’s just the two of us in this trial, but keep this one-page guide handy so e
 
 - **Overview tab** – shows the status tray (“All good” means you’re set), “What’s in focus,” and quick links.
 - **Workflows tab** – start a Recipe, review helper progress, or drop notes for the team.
-- **Safeguards tab** – pause helpers, see approvals waiting, and read the safety checklist.
+- **Safeguards tab** – pause helpers, see approvals waiting, and read the safety checklist (Safety tile shows the guardrail preset + applied timestamp).
 
 ## 3. Running a Recipe
 

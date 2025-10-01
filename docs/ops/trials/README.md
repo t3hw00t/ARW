@@ -1,6 +1,6 @@
 # Trial Dossier
 
-Updated: 2025-09-30
+Updated: 2025-10-01
 
 Use this folder to store lightweight records during the trial. Keep files short and human-friendly so anyone joining mid-stream can catch up.
 
@@ -19,3 +19,8 @@ Use this folder to store lightweight records during the trial. Keep files short 
 - `approvals_lane_guide.md` — illustrated walkthrough for Gate G2 (approvals lane + connections drawer).
 
 Store sensitive data elsewhere; this dossier is for coordination only.
+
+## Helpers
+
+- `scripts/trials_guardrails.sh` — applies the trial guardrail preset; pass `--dry-run` during rehearsal and run without it when locking in the day’s config.
+- `scripts/autonomy_rollback.sh` — autonomy lane rollback helper (see `autonomy_rollback_playbook.md`).

@@ -1,6 +1,6 @@
 # Trial Stand-up Template
 
-Updated: 2025-09-26
+Updated: 2025-10-01
 
 Use this outline for our quick daily sync (5–10 minutes). We can keep it in a shared note instead of slides while it’s just us.
 
@@ -8,7 +8,7 @@ Use this outline for our quick daily sync (5–10 minutes). We can keep it in a 
    - Systems tile
    - Memory tile
    - Approvals tile (count + oldest age)
-   - Safety tile
+   - Safety tile (preset + applied timestamp)
 
 2. **Highlights (3 min)**
    - Wins or insights from helpers

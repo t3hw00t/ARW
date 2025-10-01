@@ -4,7 +4,7 @@ title: Trial Runbook
 
 # Trial Runbook
 
-Updated: 2025-09-30
+Updated: 2025-10-01
 Type: Checklist (quick reference)
 
 This runbook keeps our two-person trial routine lightweight. Use it with the Trial Readiness Plan, facilitator checklist, and quickstart note so we stay in sync without extra meetings.
@@ -13,6 +13,7 @@ This runbook keeps our two-person trial routine lightweight. Use it with the Tri
 
 - Open the launcher Trial Control Center window (`Launcher → Trial Control`) and confirm Systems, Memory, Approvals, and Safety read “All good.” Record the numbers in a fresh copy of `docs/ops/trials/daily_log_template.md`.
 - Run `just trials-preflight` (or click the preflight button in the Trial Control Center; it runs the helper and copies the CLI command if automation fails).
+- Apply the trial guardrail preset with `just trials-guardrails preset=trial` (or `./scripts/trials_guardrails.sh --preset trial`). Check the Safety tile for the preset name and a fresh “applied …” timestamp before moving on.
 - In the Trial Control Center, open the **Approvals lane** (see the [approvals guide](trials/approvals_lane_guide.md)), confirm your reviewer label with the **Set reviewer** button, and clear or assign any waiting items before we begin.
 - Click **Connections** in the header to open the drawer and double-check the remote roster (it should just list the two of us during rehearsal). The drawer auto-refreshes, but glance at the “updated …” stamp to confirm the snapshot is current.
 - Glance at the access matrix (ops/access_matrix.yaml) to verify tokens expiring today.
@@ -36,16 +37,18 @@ This runbook keeps our two-person trial routine lightweight. Use it with the Tri
 
 1. Pause helpers from the Trial Control Center (or kill switch) immediately.
 2. If the run was under Autonomy Lane, jump to the [Autonomy rollback playbook](trials/autonomy_rollback_playbook.md) after pausing.
-3. Capture the time and what people saw in the incident log.
-4. Run `just triad-smoke` to confirm the core service.
-5. DM each other with the incident note so we decide fast.
-6. Decide whether to resume, retry, or end the session.
+3. Reapply the guardrail preset (`just trials-guardrails preset=trial --dry_run=false`) when the stop is real; keep `--dry-run` for rehearsals so we can preview without touching the config file.
+4. Capture the time and what people saw in the incident log.
+5. Run `just triad-smoke` to confirm the core service.
+6. DM each other with the incident note so we decide fast.
+7. Decide whether to resume, retry, or end the session.
 
 ## End-of-day wrap
 
 - Clear or hand off approvals.
 - Snapshot the dashboard tiles, save them in `docs/ops/trials/screenshots/` (add a short caption in the daily log), and log the filename in the daily log (see `docs/ops/trials/dashboard_snapshot.md`).
 - Update the incident log and highlight the day’s wins. Log any “Budgets nearing limit” / “Budgets exhausted” alerts from the Autonomy tile so we can tune default budgets.
+- Reapply the trial guardrail preset (`just trials-guardrails preset=trial`) if you rehearsed with `--dry-run`; the Safety tile should match the final recorded time.
 - Check the access matrix for tokens or leases expiring overnight.
 
 ## Weekly review

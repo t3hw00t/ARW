@@ -1,0 +1,11 @@
+# Trial guardrail preset
+# Keeps trial rehearsals safe: blocks high-privilege tools, raw introspection, and risky queue writes while allowing guided workflows.
+
+deny_user = [
+  "introspect:*",
+  "tools:high_privilege",
+  "queue:admin*",
+  "memory:delete",
+  "egress:untrusted",
+  "context:rehydrate"
+]
