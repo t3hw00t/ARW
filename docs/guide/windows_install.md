@@ -10,10 +10,12 @@ This guide covers running ARW on Windows with the desktop launcher and the headl
 
 Requirements
 - Windows 10/11 (Desktop Experience). Standard user OK (no admin required).
-- Rust toolchain (for developer builds): https://rustup.rs
+- Rust 1.90+ toolchain (for developer builds): https://rustup.rs
 - WebView2 Runtime for the Tauri‑based launcher:
   - Windows 11: in‑box
   - Windows 10/Server: install Evergreen Runtime (see below)
+
+> The project follows the latest stable Rust release. Run `rustup update` before major pulls to keep scripts and builds aligned.
 
 Quickstart (developer path)
 ```powershell

@@ -109,9 +109,9 @@ rustup toolchain install nightly --profile minimal
 cargo +nightly install cargo-udeps --locked
 cargo +nightly udeps --workspace --all-targets
 
-# Verify MSRV
+# Toolchain sanity check (latest stable)
 cargo install cargo-msrv --locked
-cargo msrv verify
+cargo msrv verify --release=stable
 
 # Event naming (dot.case)
 just lint-events      # or: python3 scripts/lint_event_names.py [--self-test]

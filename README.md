@@ -346,6 +346,8 @@ If you use an AI pair‑programmer, start here:
 - Open a small “AI Task” issue → follow the PLAN → submit a tight PR.
 
 - Enter Nix dev shell: `nix develop`
+- Ensure your Rust toolchain is 1.90+ (`rustup update` keeps you on the latest stable)
+- We iterate on the latest stable Rust; expect sharp edges and flag risky features behind toggles when contributing
 - Fast loop: `just dev` (runs `arw-server` with `ARW_DEBUG=1`)
 - Docs locally: `just docs-serve` → http://127.0.0.1:8000
 - Workspace cleanup: `just clean` (append `--venv` to drop the local virtualenv)

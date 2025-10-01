@@ -16,8 +16,10 @@ Run the unified ARW server locally in minutes. The architecture centres on the `
     - Leave `ARW_DEBUG` unset in production
 
 ## Prerequisites
-- Rust toolchain (`rustup`): https://rustup.rs
+- Rust 1.90+ toolchain (`rustup`): https://rustup.rs
 - `curl` for quick verification (or `Invoke-WebRequest` on Windows)
+
+> ARW tracks the latest stable Rust release; run `rustup update` regularly to avoid toolchain drift.
 
 ## Build and Test
 

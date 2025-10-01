@@ -14,8 +14,10 @@ Updated: 2025-09-20
 Type: Reference
 
 ## Quick pre-reqs
-- Install Rust toolchain (rustup): https://rustup.rs
+- Install Rust 1.90+ toolchain (rustup): https://rustup.rs
 - Optional: build once `powershell -ExecutionPolicy Bypass -File scripts\build.ps1`
+
+> Keep `rustup update` handy—the repo expects the latest stable toolchain when validating scripts.
 
 ## Unified `arw-server` validation (default)
 

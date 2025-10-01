@@ -16,6 +16,7 @@ Workflow
 6. During the restructure, keep `docs/RESTRUCTURE.md` up to date for any changes to the triad API (`/actions`, `/events`, `/state`), kernel schemas/behavior, runtime/policy, or migration status.
 
 Prerequisites
+- Rust 1.90+ (latest stable via `rustup`)
 - Install `cargo-nextest`: `cargo install cargo-nextest`
 
 Commands
@@ -37,14 +38,14 @@ just features-gen  # regenerates docs/reference/feature_matrix.md from interface
 # Event kinds linter (dot.case)
 python3 scripts/lint_event_kinds.py
 
-## Stability window
-We are currently in a short stability/consolidation phase. Please:
-- Favor bug fixes, tests, docs, and internal cleanups over new features
-- Keep HTTP/SSE surfaces backward compatible (additive changes only)
-- Ensure clippy clean builds (`-D warnings`) for core crates
-- Regenerate specs and docs on changes touching APIs/tools
+## Rapid iteration guardrails
+We track the latest stable Rust toolchain and ship frequently. To keep the project broadly usable while moving fast:
+- Keep HTTP/SSE surfaces backward compatible inside a release train; document migrations when breaking changes are unavoidable
+- Ship feature flags or toggles with risky changes so rollbacks stay easy
+- Ensure clippy stays clean (`-D warnings`) on the current stable toolchain
+- Regenerate specs/docs whenever APIs, tools, or schemas change
 
-See `docs/developer/stability.md` for the freeze checklist.
+See `docs/developer/stability.md` for the full move-fast checklist.
 ```
 
 Rolling optimization checklist

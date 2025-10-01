@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="800" height="480" viewBox="0 0 800 480" role="img" aria-labelledby="title desc">
+  <title id="title">Approvals lane overview</title>
+  <desc id="desc">Diagram showing the approvals lane layout with cards, reviewer badge, queue summary, and action buttons.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#f9fafb" />
+      <stop offset="100%" stop-color="#eef1f6" />
+    </linearGradient>
+    <style><![CDATA[
+      .label { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 16px; fill: #223048; }
+      .caption { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 13px; fill: #4c5d75; }
+      .callout { fill: rgba(47, 99, 235, 0.08); stroke: #2f63eb; stroke-width: 1.2; }
+      .callout-text { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 14px; fill: #1c2b45; }
+      .card { fill: #ffffff; stroke: #d3dae6; stroke-width: 1; rx: 12; }
+      .chip { fill: #e8eef9; stroke: #b8c7e8; stroke-width: 1; rx: 10; }
+      .chip-text { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 12px; fill: #30405f; }
+      .btn-primary { fill: #2f63eb; rx: 10; }
+      .btn-danger { fill: #f97066; rx: 10; }
+      .btn-text { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 13px; fill: #ffffff; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
+      .badge { fill: #f4f6ff; stroke: #9aa8d9; stroke-width: 1; rx: 10; }
+      .badge-text { font-family: 'Inter', 'Segoe UI', sans-serif; font-size: 12px; fill: #324063; }
+    ]]></style>
+  </defs>
+
+  <rect width="800" height="480" fill="url(#bg)" rx="24" />
+
+  <rect x="60" y="48" width="680" height="88" class="card" />
+  <text class="label" x="88" y="92">Approvals lane summary</text>
+  <text class="caption" x="88" y="118">Shows reviewer, queue length, and last refresh timestamp.</text>
+  <rect x="472" y="78" width="132" height="28" class="badge" />
+  <text class="badge-text" x="538" y="96" text-anchor="middle">Reviewer: Taylor</text>
+
+  <rect x="60" y="160" width="420" height="240" class="card" />
+  <text class="label" x="88" y="196">Pending requests (cards)</text>
+  <rect x="88" y="216" width="356" height="76" class="card" />
+  <text class="label" x="108" y="244">Launch marketing email?</text>
+  <rect x="108" y="254" width="90" height="20" class="chip" />
+  <text class="chip-text" x="153" y="268" text-anchor="middle">Project Atlas</text>
+  <rect x="206" y="254" width="122" height="20" class="chip" />
+  <text class="chip-text" x="267" y="268" text-anchor="middle">Requested by Alex</text>
+  <rect x="108" y="280" width="140" height="32" class="btn-primary" />
+  <text class="btn-text" x="178" y="296">Approve</text>
+  <rect x="256" y="280" width="140" height="32" class="btn-danger" />
+  <text class="btn-text" x="326" y="296">Hold</text>
+
+  <rect x="88" y="308" width="356" height="76" class="card" opacity="0.72" />
+  <text class="caption" x="108" y="338">Cards stack with newest at the top. Buttons stay fixed for fast review.</text>
+
+  <rect x="508" y="160" width="232" height="240" class="card" />
+  <text class="label" x="536" y="196">Recent decisions</text>
+  <text class="caption" x="536" y="222">Keeps eight latest approvals or holds for quick context.</text>
+  <text class="caption" x="536" y="254">• Approved – Supplier sync (2m ago)</text>
+  <text class="caption" x="536" y="282">• Held – API deploy (8m ago)</text>
+  <text class="caption" x="536" y="310">• Approved – Notebook export (17m ago)</text>
+
+  <path d="M126 420 h208" stroke="#c0c8da" stroke-width="1.5" stroke-dasharray="6 6" />
+  <rect x="144" y="408" width="172" height="48" class="callout" />
+  <text class="callout-text" x="230" y="438" text-anchor="middle">Set reviewer once; stored locally for audit trail.</text>
+
+  <path d="M530 408 h120" stroke="#c0c8da" stroke-width="1.5" stroke-dasharray="6 6" />
+  <rect x="564" y="396" width="156" height="60" class="callout" />
+  <text class="callout-text" x="642" y="420" text-anchor="middle">Use recent list to confirm follow-up is done.</text>
+  <text class="callout-text" x="642" y="444" text-anchor="middle">Each entry links back to the staging log.</text>
+</svg>

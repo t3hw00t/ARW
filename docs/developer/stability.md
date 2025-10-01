@@ -1,55 +1,50 @@
-# Stability Freeze Checklist
-Updated: 2025-09-21
+# Rapid Iteration Guardrails
+Updated: 2025-10-01
 Type: Reference
 
-This project is in a stability/consolidation phase. Use this checklist before
-adding new features.
+We operate with short iteration cycles and track the latest stable Rust toolchain (currently 1.90+). This page captures the lightweight guardrails that keep ARW broadly compatible across platforms while we move fast.
 
-## Scope (what we stabilize now)
-- Core crates: `arw-protocol`, `arw-events`, `arw-core`, `arw-otel`
-- Binaries: `arw-server`, `arw-cli`, `arw-connector`
-- CI: build/test, clippy, audit, deny, docs+link-check
-- Docs: generated specs, guides, and nav
+## Scope
+- Core crates and binaries: `arw-protocol`, `arw-events`, `arw-core`, `arw-otel`, `arw-server`, `arw-cli`, `arw-connector`
+- Desktop surfaces (`arw-tauri`, `arw-launcher`) follow the same policies but can experiment behind feature flags
+- CI surfaces: build, test, clippy, deny/audit, docs + link checks, packaging scripts
 
-Desktop UI crates (`arw-tauri`, `arw-launcher`) are kept out of Linux CI builds.
-and can evolve independently while core stabilizes.
+## Guardrails (keep these true even during rapid changes)
+- HTTP and SSE contracts remain backward compatible inside a release train; additive changes are welcome, breaking ones need a clear migration plan
+- Tool IDs stay semver’d and policy-gated; ship migrations alongside schema changes
+- Docs (`mkdocs build --strict`) and generated specs stay current with code
+- Clippy remains clean (`-D warnings`) on the latest stable toolchain
+- Cross-platform scripts remain runnable on macOS/Linux/Windows shells
 
-## Invariants
-- HTTP surface remains compatible (OpenAPI regenerates without breaking changes)
-- SSE event kinds remain stable (new events append-only)
-- Tool IDs are semver’d and gated by policy
-- Docs build cleanly (`mkdocs build --strict`)
-- Clippy passes on core crates with `-D warnings`
-
-## Release checklist
+## Fast Release Loop
 - Format: `cargo fmt --all -- --check`
-- Lint: `cargo clippy -p arw-protocol -p arw-events -p arw-core -p arw-macros -p arw-cli -p arw-otel -p arw-connector --all-targets -- -D warnings`
-- Build: `cargo build --workspace --locked --exclude arw-tauri --exclude arw-launcher`
-- Test: `cargo test --workspace --locked --exclude arw-tauri --exclude arw-launcher`
+- Lint: `cargo clippy --workspace --all-targets -- -D warnings`
+- Build: `cargo build --workspace --locked`
+- Test: `cargo test --workspace --locked`
+- Specs & docs: `just openapi-gen` and `bash scripts/docgen.sh && mkdocs build --strict`
 
-Notes for Tauri 2
-- The launcher uses Tauri 2’s capabilities + permissions model. Custom app commands must be explicitly allowed.
-- Capability file: `apps/arw-launcher/src-tauri/capabilities/main.json`.
-- App permissions: `apps/arw-launcher/src-tauri/permissions/arw.json` (contains allowlist of ARW commands).
-- To add new app commands, update the allow list and rebuild. With `build.removeUnusedCommands: true`, commands not allowed are stripped.
-- Security: `cargo audit`; `cargo deny check advisories bans sources licenses`
-- Spec: `just openapi-gen` (wraps `OPENAPI_OUT=spec/openapi.yaml target/release/arw-server`)
-- Docs: `bash scripts/docgen.sh && mkdocs build --strict`
+## Desktop Launcher Notes
+- Tauri 2 capabilities live at `apps/arw-launcher/src-tauri/capabilities/main.json`
+- Permissions allowlist: `apps/arw-launcher/src-tauri/permissions/arw.json`
+- Enable new commands by updating the allow list; unused commands are stripped when `build.removeUnusedCommands: true`
+- Security hygiene: `cargo audit` and `cargo deny check advisories bans sources licenses`
 
-## Versioning
-- Patch: docs, internal improvements, non-breaking changes
-- Minor: new endpoints/events/tools; additive changes only
-- Major: any breaking change (avoid during stabilization)
+## Versioning Guidance
+- Patch: bug fixes, doc updates, internal refactors
+- Minor: additive APIs/events/tools, new feature flags
+- Major: intentional contract breaks; announce early and document migrations
 
-## Branch policy
-- Work from short-lived topic branches; PRs must be green on CI
-- Avoid force-push on `main`; use PR merge (fast-forward or merge commit)
+## Branch & Review Flow
+- Prefer short-lived branches; keep CI green before merge
+- Avoid force pushes on `main`; fast-forward merges are fine when CI results are reused
+- Call out follow-up tasks or breakpoints in PR descriptions when shipping stepping stones
 
-## Observability
-- Prefer structured logs (key=value) and consistent error variants
-- Emit `service.*` lifecycle events around startup/shutdown
+## Observability & Diagnostics
+- Emit structured logs (`key=value`), especially around orchestrator decisions
+- Continue publishing `service.*` lifecycle events so dashboards stay accurate
+- Update Grafana and alert templates when telemetry fields change
 
-## When to unfreeze
-- CI is green on multiple runs
-- Recent changes sit without regressions for a few days
-- Docs published and verified (links OK)
+## Move-Fast Playbook
+- When adding high-impact features, stage with feature flags or environment toggles so rollbacks remain easy
+- If a change requires new platform dependencies, update install docs and scripts in the same PR
+- Use `cargo msrv verify` as a “latest stable sanity check” whenever bumping toolchains or adding nightly-only suggestions; expect it to pass on the newest stable channel

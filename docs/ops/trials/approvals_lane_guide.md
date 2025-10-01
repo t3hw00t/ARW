@@ -9,7 +9,7 @@ Type: Operator walkthrough
 
 This guide shows how to clear Gate G2 (“Calm approvals”) during trial rehearsals. It pairs the launcher Trial Control Center UI with the runbook so operators can keep approvals moving without leaving the hub.
 
-![Approvals lane layout](../../../assets/ops/approvals_lane.svg)
+![Approvals lane layout](../../images/approvals_lane.svg)
 
 ## 1. Set the reviewer badge
 
