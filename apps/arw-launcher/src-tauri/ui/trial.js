@@ -19,6 +19,8 @@
   let connectionsInflight = false;
   let autonomyInflight = false;
   let visibilityHandlerAttached = false;
+  let baseMeta = null;
+  const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 
   const STATE = {
     systems: { level: 'unknown', summary: 'Loading...', meta: [] },
@@ -68,6 +70,11 @@
 
   async function init(){
     try{ await ARW.applyPortFromPrefs('port'); }catch{}
+    baseMeta = updateBaseMeta();
+    try {
+      const port = ARW.getPortFromInput('port');
+      STATE.base = (baseMeta && baseMeta.base) || ARW.base(port);
+    } catch {}
     loadStoredPreflight();
     bindEvents();
     STATE.approvals.reviewer = getStoredApprovalReviewer();
@@ -83,6 +90,17 @@
   function bindEvents(){
     const refreshBtn = document.getElementById('btn-refresh');
     if (refreshBtn) refreshBtn.addEventListener('click', refresh);
+
+    const portInput = document.getElementById('port');
+    if (portInput) {
+      portInput.addEventListener('change', () => {
+        baseMeta = updateBaseMeta();
+        try {
+          const port = ARW.getPortFromInput('port');
+          STATE.base = (baseMeta && baseMeta.base) || ARW.base(port);
+        } catch {}
+      });
+    }
 
     const runbookBtn = document.getElementById('btn-open-runbook');
     if (runbookBtn) runbookBtn.addEventListener('click', openRunbook);
@@ -140,6 +158,16 @@
     });
 
     document.addEventListener('keydown', handleGlobalKeydown);
+    window.addEventListener('arw:base-override-changed', () => {
+      baseMeta = updateBaseMeta();
+      try {
+        const port = ARW.getPortFromInput('port');
+        STATE.base = (baseMeta && baseMeta.base) || ARW.base(port);
+      } catch {
+        STATE.base = null;
+      }
+      refresh().catch(() => {});
+    });
   }
 
   function loadStoredPreflight(){
@@ -228,8 +256,9 @@
     const notice = document.getElementById('dataNotice');
     if (notice) notice.classList.add('hidden');
     try {
+      baseMeta = updateBaseMeta();
       const port = ARW.getPortFromInput('port');
-      STATE.base = ARW.base(port);
+      STATE.base = (baseMeta && baseMeta.base) || ARW.base(port);
       const payload = await fetchSnapshots(STATE.base);
       STATE.errors = payload.errors;
       STATE.unauthorized = payload.unauthorized;

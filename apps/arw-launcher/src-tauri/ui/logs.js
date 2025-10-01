@@ -2,9 +2,8 @@ let lastJson = null;
 let routeStatsSubId = null;
 let probeMetricsSubId = null;
 let sseIndicatorHandle = null;
-const base = (port) => ARW.base(port);
+const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 function bytesHuman(n){ if(!n && n!==0) return '–'; const kb=1024, mb=kb*1024, gb=mb*1024, tb=gb*1024; if(n>=tb) return (n/tb).toFixed(2)+' TiB'; if(n>=gb) return (n/gb).toFixed(2)+' GiB'; if(n>=mb) return (n/mb).toFixed(1)+' MiB'; if(n>=kb) return (n/kb).toFixed(1)+' KiB'; return n+' B'; }
-const effectivePort = () => ARW.getPortFromInput('port') || 8091;
 function setCpuBadge(p){ try{ const el=document.getElementById('cpuBadge'); if(!el) return; const v = Number(p)||0; el.textContent = 'CPU: ' + v.toFixed(1) + '%'; el.className = 'badge ' + (v>=90? 'bad' : v>=75? 'warn':''); }catch{} }
 function setMemBadge(used,total){ try{ const el=document.getElementById('memBadge'); if(!el) return; const pct = total>0? (100*used/total):0; el.textContent = 'Mem: ' + pct.toFixed(1) + '% ('+bytesHuman(used)+'/'+bytesHuman(total)+')'; el.className = 'badge ' + (pct>=90? 'bad' : pct>=75? 'warn':''); }catch{} }
 function setGpuBadge(used,total){ try{ const el=document.getElementById('gpuBadge'); if(!el) return; const pct = total>0? (100*used/total):0; el.textContent = 'GPU: ' + pct.toFixed(1) + '%'; el.className = 'badge ' + (pct>=95? 'bad' : pct>=80? 'warn':''); }catch{} }
@@ -52,7 +51,8 @@ function ensureSseIndicator() {
 
 function connectSse({ replay = 25, resume = false } = {}) {
   ensureSseIndicator();
-  ARW.sse.connect(base(effectivePort()), { replay, prefix: ['state.read.model.patch', 'probe.metrics'] }, resume);
+  const meta = updateBaseMeta();
+  ARW.sse.connect(meta.base, { replay, prefix: ['state.read.model.patch', 'probe.metrics'] }, resume);
 }
 
 function autoEnabled(){
@@ -89,7 +89,8 @@ async function fetchRouteStatsSnapshot({ renderNow = false } = {}) {
   if (renderNow) out.innerHTML = '';
   document.getElementById('stat').textContent = 'Loading…';
   const statsPath = 'state/route_stats';
-  const baseUrl = base(effectivePort());
+  const meta = updateBaseMeta();
+  const baseUrl = meta.base;
   try {
     const snapshot = await ARW.http.json(baseUrl, `/${statsPath}`, { headers: { 'Accept': 'application/json' } });
     lastJson = snapshot;
@@ -142,19 +143,33 @@ function downloadCsv(filename, rows){
 function exportRoutesCsv(routes){ const by = routes?.by_path || {}; const rows = [['route','hits','p95','ewma','max']]; Object.entries(by).forEach(([p,s])=> rows.push([p, s.hits||0, s.p95_ms||0, s.ewma_ms||0, s.max_ms||0])); downloadCsv('routes.csv', rows); }
 function exportKindsCsv(ev){ const kinds = ev?.kinds || {}; const rows = [['kind','count']]; Object.entries(kinds).forEach(([k,c])=> rows.push([k,c])); downloadCsv('event_kinds.csv', rows); }
 document.addEventListener('DOMContentLoaded', () => {
+  updateBaseMeta();
   document.getElementById('btn-refresh').addEventListener('click', () => fetchRouteStatsSnapshot({ renderNow: true }));
   document.getElementById('wrap').addEventListener('change', ()=> render(lastJson||{}));
   document.getElementById('auto').addEventListener('change', ()=>{ if (autoEnabled() && lastJson) render(lastJson); });
   document.getElementById('focus').addEventListener('change', ()=> render(lastJson||{}));
   document.getElementById('routeFilter').addEventListener('input', ()=> render(lastJson||{}));
   document.getElementById('btn-copy').addEventListener('click', ()=>{ if (lastJson) ARW.copy(JSON.stringify(lastJson, null, 2)); });
+  const rebindBase = async () => {
+    const meta = updateBaseMeta();
+    const p = ARW.getPortFromInput('port') || meta.port || 8091;
+    try {
+      const prefs = (await ARW.getPrefs('launcher')) || {};
+      if (prefs.port !== p) {
+        prefs.port = p;
+        await ARW.setPrefs('launcher', prefs);
+      }
+    } catch {}
+    connectSse({ replay: 25, resume: false });
+    await fetchRouteStatsSnapshot({ renderNow: true });
+  };
   const portInput = document.getElementById('port');
   if (portInput) portInput.addEventListener('change', () => {
-    connectSse({ replay: 25, resume: false });
-    fetchRouteStatsSnapshot({ renderNow: true });
+    rebindBase().catch(() => {});
   });
   (async () => {
     await ARW.applyPortFromPrefs('port');
+    updateBaseMeta();
     connectSse({ replay: 25, resume: false });
     if (routeStatsSubId) ARW.read.unsubscribe(routeStatsSubId);
     routeStatsSubId = ARW.read.subscribe('route_stats', applyRouteStatsModel);
@@ -162,6 +177,9 @@ document.addEventListener('DOMContentLoaded', () => {
     probeMetricsSubId = ARW.sse.subscribe('probe.metrics', handleProbeMetrics);
     await fetchRouteStatsSnapshot({ renderNow: true });
   })();
+  window.addEventListener('arw:base-override-changed', () => {
+    rebindBase().catch(() => {});
+  });
 });
 
 // Keyboard shortcuts (ignore when typing)

@@ -1,6 +1,29 @@
 // Lightweight helpers shared by launcher pages
 // Capture optional base override from query string (`?base=http://host:port`)
-(() => { try { const u = new URL(window.location.href); const b = u.searchParams.get('base'); if (b) { window.__ARW_BASE_OVERRIDE = String(b).replace(/\/?$/, ''); } } catch {} })();
+(() => {
+  try {
+    const current = new URL(window.location.href);
+    const raw = current.searchParams.get('base');
+    if (!raw) return;
+    const cleaned = (() => {
+      const str = String(raw).trim();
+      if (!str) return '';
+      const strip = (val) => val.replace(/\/+$/, '');
+      try {
+        return strip(new URL(str).origin || str);
+      } catch {
+        if (!/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(str)) {
+          try { return strip(new URL(`http://${str}`).origin || str); }
+          catch { return strip(str); }
+        }
+        return strip(str);
+      }
+    })();
+    if (cleaned) {
+      window.__ARW_BASE_OVERRIDE = cleaned;
+    }
+  } catch {}
+})();
 
 window.ARW = {
   _prefsCache: new Map(),
@@ -59,19 +82,33 @@ window.ARW = {
     }
   },
   connections: {
-    _norm(b){ try{ return String(b||'').trim().replace(/\/$/,''); }catch{ return '' } },
+    _norm(b){
+      try{
+        const normalized = ARW.normalizeBase(b);
+        return normalized || '';
+      }catch{ return ''; }
+    },
     async tokenFor(base){
       try{
         const prefs = await ARW.getPrefs('launcher') || {};
         const norm = this._norm(base);
         const list = Array.isArray(prefs.connections) ? prefs.connections : [];
         const hit = list.find(c => this._norm(c.base) === norm);
-        return (hit && hit.token) || prefs.adminToken || null;
+        const connToken = typeof hit?.token === 'string' ? hit.token.trim() : '';
+        if (connToken) return connToken;
+        const fallback = typeof prefs.adminToken === 'string' ? prefs.adminToken.trim() : '';
+        return fallback || null;
       }catch{ return null }
     }
   },
   http: {
-    _norm(base){ try{ return String(base||'').replace(/\/$/,''); }catch{ return '' } },
+    _norm(base){
+      try{
+        const norm = ARW.normalizeBase(base);
+        if (norm) return norm;
+      }catch{}
+      try{ return String(base||'').replace(/\/+$/,''); }catch{ return ''; }
+    },
     async _headers(base, extra){
       const headers = Object.assign({}, extra || {});
       let token = null;
@@ -233,10 +270,185 @@ window.ARW = {
     this._prefsTimers.set(key, timer);
     return Promise.resolve();
   },
+  normalizeBase(base) {
+    const raw = (base ?? '').toString().trim();
+    if (!raw) return '';
+    const strip = (val) => val.replace(/\/+$/, '');
+    const parse = (input) => {
+      const url = new URL(input);
+      if (!url || url.origin === 'null') return strip(input.toLowerCase());
+      return strip(url.origin.toLowerCase());
+    };
+    const attempts = [raw, `http://${raw}`];
+    for (const attempt of attempts) {
+      try {
+        return parse(attempt);
+      } catch {}
+    }
+    const lowered = strip(raw.toLowerCase());
+    if (!lowered) return '';
+    return /^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(lowered) ? lowered : `http://${lowered}`;
+  },
+  baseMeta(port) {
+    const override = this.baseOverride();
+    if (override) {
+      const info = {
+        base: override,
+        origin: override,
+        override: true,
+        protocol: null,
+        host: override,
+        port: null,
+      };
+      const parseUrl = (value) => {
+        if (typeof URL === 'function') {
+          try { return new URL(value); }
+          catch {}
+        }
+        return null;
+      };
+      let url = parseUrl(override);
+      if (!url && !override.endsWith('/')) {
+        url = parseUrl(`${override}/`);
+      }
+      if (url) {
+        info.origin = url.origin || info.origin;
+        info.protocol = url.protocol ? url.protocol.replace(/:$/, '') : info.protocol;
+        info.host = url.host || info.host;
+        if (url.port) {
+          const parsedPort = Number(url.port);
+          info.port = Number.isFinite(parsedPort) ? parsedPort : null;
+        } else if (url.protocol === 'https:') {
+          info.port = 443;
+        } else if (url.protocol === 'http:') {
+          info.port = 80;
+        }
+      } else {
+        const match = override.match(/^(https?):\/\/([^\/#?]+)/i);
+        if (match) {
+          info.protocol = match[1].toLowerCase();
+          info.host = match[2].toLowerCase();
+          info.origin = `${info.protocol}://${info.host}`;
+          const portMatch = info.host.match(/:(\d+)$/);
+          if (portMatch) {
+            const parsedPort = Number(portMatch[1]);
+            if (Number.isFinite(parsedPort)) info.port = parsedPort;
+          } else if (info.protocol === 'https') {
+            info.port = 443;
+          } else if (info.protocol === 'http') {
+            info.port = 80;
+          }
+        }
+      }
+      if (!info.origin) info.origin = info.base;
+      return info;
+    }
+    const resolved = Number.isFinite(port) && port > 0 ? Number(port) : 8091;
+    const baseUrl = `http://127.0.0.1:${resolved}`;
+    return {
+      base: baseUrl,
+      origin: baseUrl,
+      override: false,
+      protocol: 'http',
+      host: `127.0.0.1:${resolved}`,
+      port: resolved,
+    };
+  },
+  baseOverride() {
+    try {
+      const override = typeof window.__ARW_BASE_OVERRIDE === 'string'
+        ? window.__ARW_BASE_OVERRIDE.trim()
+        : '';
+      if (override) return this.normalizeBase(override);
+    } catch {
+    }
+    try {
+      const stored = typeof localStorage !== 'undefined'
+        ? (localStorage.getItem(this._BASE_OVERRIDE_KEY) || '').trim()
+        : '';
+      if (stored) return this.normalizeBase(stored);
+    } catch {}
+    return '';
+  },
+  baseOverridePort() {
+    const override = this.baseOverride();
+    if (!override) return null;
+    const parsed = (() => {
+      try { return new URL(override); }
+      catch {
+        if (!/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(override)) {
+          try { return new URL(`http://${override}`); }
+          catch { return null; }
+        }
+        return null;
+      }
+    })();
+    if (!parsed) return null;
+    if (parsed.port) {
+      const asNum = Number(parsed.port);
+      return Number.isFinite(asNum) ? asNum : null;
+    }
+    if (parsed.protocol === 'https:') return 443;
+    if (parsed.protocol === 'http:') return 80;
+    return null;
+  },
+  applyBaseMeta({ portInputId, badgeId, label = 'Base' } = {}) {
+    const portInput = portInputId ? document.getElementById(portInputId) : null;
+    const currentPort = portInput ? parseInt(portInput.value, 10) : null;
+    const meta = this.baseMeta(currentPort);
+    if (portInput) {
+      if (meta.override) {
+        if (meta.port != null) portInput.value = String(meta.port);
+        portInput.disabled = true;
+        portInput.setAttribute('aria-disabled', 'true');
+        portInput.title = 'Port pinned by saved connection base';
+      } else {
+        portInput.disabled = false;
+        portInput.removeAttribute('aria-disabled');
+        portInput.removeAttribute('title');
+      }
+    }
+    if (badgeId) {
+      const badge = document.getElementById(badgeId);
+      if (badge) {
+        const text = `${label}: ${meta.origin || meta.base}`;
+        badge.textContent = text;
+        badge.setAttribute('data-override', meta.override ? 'true' : 'false');
+        badge.setAttribute('title', text);
+      }
+    }
+    return meta;
+  },
   base(port) {
-    try { if (window.__ARW_BASE_OVERRIDE && typeof window.__ARW_BASE_OVERRIDE === 'string') return window.__ARW_BASE_OVERRIDE; } catch {}
+    const override = this.baseOverride();
+    if (override) return override;
     const p = Number.isFinite(port) && port > 0 ? port : 8091
     return `http://127.0.0.1:${p}`
+  },
+  toolPort() {
+    const meta = this.baseMeta(this.getPortFromInput('port'));
+    return meta.port || 8091;
+  },
+  _BASE_OVERRIDE_KEY: 'arw:base:override',
+  setBaseOverride(base) {
+    const normalized = this.normalizeBase(base || '');
+    if (!normalized) {
+      this.clearBaseOverride();
+      return '';
+    }
+    try { localStorage.setItem(this._BASE_OVERRIDE_KEY, normalized); } catch {}
+    try { window.__ARW_BASE_OVERRIDE = normalized; } catch {}
+    this._emitBaseOverride(normalized);
+    return normalized;
+  },
+  clearBaseOverride() {
+    try { localStorage.removeItem(this._BASE_OVERRIDE_KEY); } catch {}
+    try { delete window.__ARW_BASE_OVERRIDE; } catch {}
+    this._emitBaseOverride('');
+    return '';
+  },
+  _emitBaseOverride(base) {
+    try { window.dispatchEvent(new CustomEvent('arw:base-override-changed', { detail: { base } })); } catch {}
   },
   // Theme override (Auto/Light/Dark) — OS-first when 'auto'
   theme: {
@@ -1681,7 +1893,7 @@ window.ARW = {
       const openBtn = document.createElement('button'); openBtn.className='ghost'; openBtn.textContent='Open'; openBtn.addEventListener('click', async ()=>{ try{ if (p?.path) await ARW.invoke('open_path', { path: p.path }); }catch(e){ console.error(e); } });
       const copyBtn = document.createElement('button'); copyBtn.className='ghost'; copyBtn.textContent='Copy path'; copyBtn.addEventListener('click', ()=>{ if (p?.path) ARW.copy(String(p.path)); });
         const mdBtn = document.createElement('button'); mdBtn.className='ghost'; mdBtn.textContent='Copy MD'; mdBtn.addEventListener('click', ()=>{ if (p?.path) ARW.copyMarkdown(p.path); });
-        const annBtn = document.createElement('button'); annBtn.className='ghost'; annBtn.textContent='Annotate'; annBtn.addEventListener('click', async ()=>{ try{ if (p?.preview_b64){ const rects = await ARW.annot.start(p.preview_b64); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: p.path, annotate: rects, downscale:640 }, port: ARW.getPortFromInput('port') }); if (res && res.preview_b64){ img.src = res.preview_b64; cap.textContent = `${ts} ${res.path||''}`; } } else { ARW.toast('No preview for annotate'); } }catch(e){ console.error(e); }});
+        const annBtn = document.createElement('button'); annBtn.className='ghost'; annBtn.textContent='Annotate'; annBtn.addEventListener('click', async ()=>{ try{ if (p?.preview_b64){ const rects = await ARW.annot.start(p.preview_b64); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: p.path, annotate: rects, downscale:640 }, port: ARW.toolPort() }); if (res && res.preview_b64){ img.src = res.preview_b64; cap.textContent = `${ts} ${res.path||''}`; } } else { ARW.toast('No preview for annotate'); } }catch(e){ console.error(e); }});
         const saveBtn = document.createElement('button'); saveBtn.className='ghost'; saveBtn.textContent='Save to project'; saveBtn.addEventListener('click', async ()=>{ if (p?.path){ const res = await ARW.saveToProjectPrompt(p.path); if (res) await ARW.maybeAppendToNotes(res.proj, res.dest); } });
         actions.appendChild(openBtn); actions.appendChild(copyBtn); actions.appendChild(mdBtn); actions.appendChild(annBtn); actions.appendChild(saveBtn);
         box.appendChild(img); box.appendChild(cap); box.appendChild(actions);
@@ -1822,7 +2034,11 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
       { id:'open:events', label:'Open Events Window', hint:'window', run:()=> ARW.invoke('open_events_window') },
       { id:'open:docs', label:'Open Docs Website', hint:'web', run:()=> ARW.invoke('open_url', { url: 'https://t3hw00t.github.io/ARW/' }) },
       { id:'models:refresh', label:'Refresh Models', hint:'action', run:()=> ARW.invoke('models_refresh', { port: ARW.getPortFromInput('port') }) },
-      { id:'sse:replay', label:'Replay SSE (50)', hint:'sse', run:()=> ARW.sse.connect((base||ARW.base(ARW.getPortFromInput('port'))), { replay:50 }) },
+          { id:'sse:replay', label:'Replay SSE (50)', hint:'sse', run:()=> {
+              const meta = ARW.baseMeta(ARW.getPortFromInput('port'));
+              ARW.sse.connect(meta.base, { replay: 50 });
+            }
+          },
       { id:'layout:focus', label:'Toggle Focus Mode', hint:'layout', run:()=> ARW.layout.toggle() },
       { id:'layout:density', label:'Toggle Compact Density', hint:'layout', run:()=> ARW.density.toggle() },
       { id:'copy:last', label:'Copy last event JSON', hint:'sse', run:()=> ARW.copy(JSON.stringify(ARW.sse._last||{}, null, 2)) },
@@ -1836,8 +2052,8 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
       },
       { id:'shot:capture', label:'Capture screen (preview)', hint:'screenshot', run: async ()=>{
           try{
-            const p = ARW.getPortFromInput('port');
-            const out = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.capture', input: { scope:'screen', format:'png', downscale:640 }, port: p });
+            const port = ARW.toolPort();
+            const out = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.capture', input: { scope:'screen', format:'png', downscale:640 }, port });
             ARW.toast(out && out.path ? ('Saved: ' + out.path) : 'Capture requested');
           }catch(e){ console.error(e); ARW.toast('Capture failed'); }
         }
@@ -1847,8 +2063,8 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
             const bounds = await ARW.invoke('active_window_bounds', { label: null });
             const x = bounds?.x ?? 0, y = bounds?.y ?? 0, w = bounds?.w ?? 0, h = bounds?.h ?? 0;
             const scope = `region:${x},${y},${w},${h}`;
-            const p = ARW.getPortFromInput('port');
-            const out = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.capture', input: { scope, format:'png', downscale:640 }, port: p });
+            const port = ARW.toolPort();
+            const out = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.capture', input: { scope, format:'png', downscale:640 }, port });
             ARW.toast(out && out.path ? ('Saved: ' + out.path) : 'Capture requested');
           }catch(e){ console.error(e); ARW.toast('Capture failed'); }
         }
@@ -1938,7 +2154,7 @@ window.ARW.gallery = {
     w.addEventListener('click', (e)=>{ if (e.target===w) this.hide(); });
   },
   render(){ if (!this._wrap) this.mount(); const grid=this._wrap.querySelector('.grid-thumbs'); if (!grid) return; grid.innerHTML='';
-    for (const it of this._items){ const d=document.createElement('div'); d.className='thumb'; const img=document.createElement('img'); if (it.preview_b64) img.src=it.preview_b64; img.dataset.screenshotPath = it.path; img.alt=ARW._bestAltForPath(it.path, it.path); const meta=document.createElement('div'); meta.className='dim mono'; meta.textContent = `${it.time} ${it.path}`; const row=document.createElement('div'); row.className='row'; const open=document.createElement('button'); open.className='ghost'; open.textContent='Open'; open.addEventListener('click', async ()=>{ try{ await ARW.invoke('open_path', { path: it.path }); }catch(e){ console.error(e); } }); const copy=document.createElement('button'); copy.className='ghost'; copy.textContent='Copy path'; copy.addEventListener('click', ()=> ARW.copy(it.path)); const md=document.createElement('button'); md.className='ghost'; md.textContent='Copy MD'; md.addEventListener('click', ()=> ARW.copyMarkdown(it.path)); const save=document.createElement('button'); save.className='ghost'; save.textContent='Save to project'; save.addEventListener('click', async ()=>{ await ARW.saveToProjectPrompt(it.path); }); const ann=document.createElement('button'); ann.className='ghost'; ann.textContent='Annotate'; ann.addEventListener('click', async ()=>{ try{ if (it.preview_b64){ const rects = await ARW.annot.start(it.preview_b64); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: it.path, annotate: rects, downscale:640 }, port: ARW.getPortFromInput('port') }); if (res && res.preview_b64){ img.src = res.preview_b64; meta.textContent = `${it.time} ${res.path||''}`; it.path = res.path||it.path; it.preview_b64 = res.preview_b64||it.preview_b64; img.dataset.screenshotPath = it.path; ARW._updateAltForPath(it.path); } } else { ARW.toast('No preview for annotate'); } }catch(e){ console.error(e); } }); row.appendChild(open); row.appendChild(copy); row.appendChild(md); row.appendChild(save); row.appendChild(ann); d.appendChild(img); d.appendChild(meta); d.appendChild(row); grid.appendChild(d); ARW._updateAltForPath(it.path); }
+    for (const it of this._items){ const d=document.createElement('div'); d.className='thumb'; const img=document.createElement('img'); if (it.preview_b64) img.src=it.preview_b64; img.dataset.screenshotPath = it.path; img.alt=ARW._bestAltForPath(it.path, it.path); const meta=document.createElement('div'); meta.className='dim mono'; meta.textContent = `${it.time} ${it.path}`; const row=document.createElement('div'); row.className='row'; const open=document.createElement('button'); open.className='ghost'; open.textContent='Open'; open.addEventListener('click', async ()=>{ try{ await ARW.invoke('open_path', { path: it.path }); }catch(e){ console.error(e); } }); const copy=document.createElement('button'); copy.className='ghost'; copy.textContent='Copy path'; copy.addEventListener('click', ()=> ARW.copy(it.path)); const md=document.createElement('button'); md.className='ghost'; md.textContent='Copy MD'; md.addEventListener('click', ()=> ARW.copyMarkdown(it.path)); const save=document.createElement('button'); save.className='ghost'; save.textContent='Save to project'; save.addEventListener('click', async ()=>{ await ARW.saveToProjectPrompt(it.path); }); const ann=document.createElement('button'); ann.className='ghost'; ann.textContent='Annotate'; ann.addEventListener('click', async ()=>{ try{ if (it.preview_b64){ const rects = await ARW.annot.start(it.preview_b64); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: it.path, annotate: rects, downscale:640 }, port: ARW.toolPort() }); if (res && res.preview_b64){ img.src = res.preview_b64; meta.textContent = `${it.time} ${res.path||''}`; it.path = res.path||it.path; it.preview_b64 = res.preview_b64||it.preview_b64; img.dataset.screenshotPath = it.path; ARW._updateAltForPath(it.path); } } else { ARW.toast('No preview for annotate'); } }catch(e){ console.error(e); } }); row.appendChild(open); row.appendChild(copy); row.appendChild(md); row.appendChild(save); row.appendChild(ann); d.appendChild(img); d.appendChild(meta); d.appendChild(row); grid.appendChild(d); ARW._updateAltForPath(it.path); }
   },
   show(){ if (!this._wrap) this.mount(); this.render(); this._wrap.style.display='grid'; try{ const btn=this._wrap.querySelector('header button'); btn?.focus({ preventScroll:true }); }catch{} },
   hide(){ if (this._wrap) this._wrap.style.display='none'; }
@@ -2025,8 +2241,8 @@ window.addEventListener('keydown', (e)=>{
       const W = Math.max(1, Math.round(r.w * dpr));
       const H = Math.max(1, Math.round(r.h * dpr));
       const scope = `region:${X},${Y},${W},${H}`;
-      const p = ARW.getPortFromInput('port');
-      const out = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.capture', input: { scope, format:'png', downscale:640 }, port: p });
+      const port = ARW.toolPort();
+      const out = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.capture', input: { scope, format:'png', downscale:640 }, port });
       ARW.toast(out && out.path ? ('Saved: ' + out.path) : 'Capture requested');
       return out;
     }catch(e){ ARW.toast('Region capture canceled'); return null; }

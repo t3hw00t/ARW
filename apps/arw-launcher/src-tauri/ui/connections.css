@@ -6,7 +6,16 @@ table { width: 100%; border-collapse: collapse; }
 .dot{ width:8px; height:8px; border-radius:999px; display:inline-block; background:#aaa; margin-right:6px }
 .dot.ok{ background: var(--status-ok) }
 .dot.bad{ background: var(--status-bad) }
+.dot.warn{ background: var(--status-warn) }
 .ok { color: var(--status-ok); }
 .bad { color: var(--status-bad); }
+.warn { color: var(--status-warn); }
+#rows tr[data-clickable="true"]{ cursor: pointer; transition: background 0.12s ease; }
+#rows tr[data-clickable="true"]:hover{ background: rgba(15,23,42,0.04); }
+#rows tr[data-active="true"]{ background: rgba(27,179,163,0.12); }
+.pill-token{ border-color: var(--status-ok); color: var(--status-ok); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; }
+.hint{ font-size:13px; margin-top:6px; }
+.pill-token{ border-color: var(--status-ok); color: var(--status-ok); font-size:11px; text-transform:uppercase; letter-spacing:0.04em; }
+.hint{ font-size:13px; margin-top:6px; }
 #cname{ width: 180px; }
 #curl{ width: 280px; }

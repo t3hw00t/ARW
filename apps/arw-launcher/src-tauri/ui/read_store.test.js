@@ -103,40 +103,108 @@ function resetStore() {
   read._next = 1;
 }
 
-// Basic add/replace/remove flows
-resetStore();
-const model = {};
-read._store.set('projects', model);
-read._applyOp(model, { op: 'add', path: '/items', value: [] });
-read._applyOp(model, { op: 'add', path: '/items/-', value: { name: 'alpha' } });
-read._applyOp(model, { op: 'add', path: '/items/0/notes', value: { content: 'hi' } });
-assert.strictEqual(model.items.length, 1);
-assert.strictEqual(model.items[0].name, 'alpha');
-assert.strictEqual(model.items[0].notes.content, 'hi');
+async function run() {
+  // Basic add/replace/remove flows
+  resetStore();
+  const model = {};
+  read._store.set('projects', model);
+  read._applyOp(model, { op: 'add', path: '/items', value: [] });
+  read._applyOp(model, { op: 'add', path: '/items/-', value: { name: 'alpha' } });
+  read._applyOp(model, { op: 'add', path: '/items/0/notes', value: { content: 'hi' } });
+  assert.strictEqual(model.items.length, 1);
+  assert.strictEqual(model.items[0].name, 'alpha');
+  assert.strictEqual(model.items[0].notes.content, 'hi');
 
-read._applyOp(model, { op: 'replace', path: '/items/0/notes/content', value: 'hello' });
-assert.strictEqual(model.items[0].notes.content, 'hello');
+  read._applyOp(model, { op: 'replace', path: '/items/0/notes/content', value: 'hello' });
+  assert.strictEqual(model.items[0].notes.content, 'hello');
 
-read._applyOp(model, { op: 'remove', path: '/items/0/notes' });
-assert.strictEqual(model.items[0].notes, undefined);
+  read._applyOp(model, { op: 'remove', path: '/items/0/notes' });
+  assert.strictEqual(model.items[0].notes, undefined);
 
-// copy/move semantics
-read._applyOp(model, { op: 'add', path: '/items/0/routes', value: ['a', 'b'] });
-read._applyOp(model, { op: 'copy', path: '/items/1', from: '/items/0' });
-assert.strictEqual(model.items[1].routes.length, 2);
-read._applyOp(model, { op: 'move', path: '/items/0/routes/0', from: '/items/0/routes/1' });
-assert.strictEqual(model.items[0].routes[0], 'b');
+  // copy/move semantics
+  read._applyOp(model, { op: 'add', path: '/items/0/routes', value: ['a', 'b'] });
+  read._applyOp(model, { op: 'copy', path: '/items/1', from: '/items/0' });
+  assert.strictEqual(model.items[1].routes.length, 2);
+  read._applyOp(model, { op: 'move', path: '/items/0/routes/0', from: '/items/0/routes/1' });
+  assert.strictEqual(model.items[0].routes[0], 'b');
 
-// pointer auto-creation for nested objects
-read._applyOp(model, { op: 'add', path: '/meta/info/value', value: 42 });
-assert.strictEqual(model.meta.info.value, 42);
+  // pointer auto-creation for nested objects
+  read._applyOp(model, { op: 'add', path: '/meta/info/value', value: 42 });
+  assert.strictEqual(model.meta.info.value, 42);
 
-// verify emit/subscription
-let observed = null;
-const subId = read.subscribe('projects', (val) => { observed = val; });
-read._store.set('projects', model);
-read._emit('projects');
-assert.ok(observed === model);
-read.unsubscribe(subId);
+  // verify emit/subscription
+  let observed = null;
+  const subId = read.subscribe('projects', (val) => { observed = val; });
+  read._store.set('projects', model);
+  read._emit('projects');
+  assert.ok(observed === model);
+  read.unsubscribe(subId);
 
-console.log('ARW.read store patch tests passed');
+  console.log('ARW.read store patch tests passed');
+
+  const { ARW } = windowObj;
+  assert.ok(ARW, 'ARW helpers missing');
+
+  // normalizeBase should lowercase host, drop trailing slash, and add http:// when missing
+  assert.strictEqual(ARW.normalizeBase('HTTP://Example.COM:8091/'), 'http://example.com:8091');
+  assert.strictEqual(ARW.normalizeBase('example.org:9000'), 'http://example.org:9000');
+  assert.strictEqual(ARW.normalizeBase('https://Example.com'), 'https://example.com');
+
+  // baseMeta returns local origin when no override is present
+  const localMeta = ARW.baseMeta(9000);
+  assert.strictEqual(localMeta.base, 'http://127.0.0.1:9000');
+  assert.strictEqual(localMeta.override, false);
+  assert.strictEqual(localMeta.port, 9000);
+
+  // baseMeta reflects remote overrides and inferred ports
+  windowObj.__ARW_BASE_OVERRIDE = 'https://REMOTE.example.com';
+  const remoteMeta = ARW.baseMeta();
+  assert.strictEqual(remoteMeta.override, true);
+  assert.strictEqual(remoteMeta.origin, 'https://remote.example.com');
+  assert.strictEqual(remoteMeta.port, 443);
+  delete windowObj.__ARW_BASE_OVERRIDE;
+
+  // Connection token resolution prefers exact match token, trimmed, then falls back to admin token
+  ARW._prefsCache.clear();
+  ARW._prefsCache.set('launcher', {
+    connections: [
+      { name: 'remote', base: 'http://Example.com:8091/', token: ' conn-token ' },
+    ],
+  });
+  let token = await ARW.connections.tokenFor('http://example.com:8091');
+  assert.strictEqual(token, 'conn-token');
+
+  ARW.clearBaseOverride();
+  const storedOverride = ARW.setBaseOverride('https://REMOTE.example.com:9001/');
+  assert.strictEqual(storedOverride, 'https://remote.example.com:9001');
+  assert.strictEqual(ARW.baseOverride(), 'https://remote.example.com:9001');
+  ARW.clearBaseOverride();
+  assert.strictEqual(ARW.baseOverride(), '');
+
+  ARW._prefsCache.clear();
+  ARW._prefsCache.set('launcher', {
+    connections: [
+      { name: 'remote', base: 'http://example.com:8091/', token: '   ' },
+    ],
+    adminToken: ' admin-secret ',
+  });
+  token = await ARW.connections.tokenFor('http://other.example:8091');
+  assert.strictEqual(token, 'admin-secret');
+
+  ARW._prefsCache.clear();
+  ARW._prefsCache.set('launcher', {
+    connections: [
+      { name: 'remote', base: 'http://example.com:8091/', token: '   ' },
+    ],
+    adminToken: '   ',
+  });
+  token = await ARW.connections.tokenFor('http://example.com:8091/');
+  assert.strictEqual(token, null);
+
+  console.log('ARW.connections helpers tests passed');
+}
+
+run().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

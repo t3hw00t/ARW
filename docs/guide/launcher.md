@@ -40,6 +40,15 @@ Status
 - Home, Models, Chat, Hub, Training, and Events windows share an SSE indicator (`connecting → on → retrying`) that resumes with the last journal id after transient drops.
 - The home card’s mini downloads row mirrors `models.download.progress` events, including live speed estimates and completion cleanup, without a separate polling loop.
 
+## Connections Manager
+
+- Save multiple local or remote server bases plus optional per-connection admin tokens. Bases are normalised (scheme/host/port) so HTTP helpers and SSE reconnects can reuse the credentials reliably.
+- The Events, Logs, and Models windows launched from Connections honour the saved base (via the `?base=` override) and reuse the token when present. Status badges distinguish `online`, `auth required`, and `token rejected` responses from `/healthz`.
+- Clicking a saved row reloads it into the form for quick edits. Tokens are trimmed client-side and never echoed back in the table; the badge simply signals that a token is stored.
+- Rows poll every 10 seconds; the in-page SSE indicator follows the same base so metrics stay scoped to the selected connection.
+- Every launcher window now renders a base badge and disables the local port field whenever a saved override is active, making it explicit which host/port is being queried (and preventing accidental port mismatches).
+- Activate any saved connection to make it the global override (stored locally); a quick “Deactivate” control and badge highlight make it easy to flip between local and remote targets.
+
 Build locally
 ```bash
 cargo build -p arw-launcher

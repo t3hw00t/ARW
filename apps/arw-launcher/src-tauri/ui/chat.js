@@ -1,8 +1,26 @@
+const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
+
 document.addEventListener('DOMContentLoaded', async () => {
   await ARW.applyPortFromPrefs('port');
-  const port = ARW.getPortFromInput('port') || 8091;
-  const base = ARW.base(port);
-  const sc = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','policy','metrics','models'], { base });
+  let meta = updateBaseMeta();
+  let port = ARW.getPortFromInput('port') || meta.port || 8091;
+  let base = ARW.base(port);
+  let sc = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','policy','metrics','models'], { base });
+  const applyBaseChange = async () => {
+    meta = updateBaseMeta();
+    port = ARW.getPortFromInput('port') || meta.port || 8091;
+    base = ARW.base(port);
+    try {
+      const prefs = (await ARW.getPrefs('launcher')) || {};
+      if (prefs.port !== port) {
+        prefs.port = port;
+        await ARW.setPrefs('launcher', prefs);
+      }
+    } catch {}
+    try { sc?.dispose?.(); } catch {}
+    sc = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','policy','metrics','models'], { base });
+    ARW.sse.connect(base, { replay: 10 });
+  };
   // Load auto OCR pref
   try{ const prefs = await ARW.getPrefs('launcher'); const v = !!(prefs && prefs.autoOcr); const el=document.getElementById('autoOcr'); if (el) el.checked = v; }catch{}
   document.getElementById('autoOcr').addEventListener('change', async (e)=>{
@@ -62,8 +80,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   document.getElementById('capture').addEventListener('click', async ()=>{
     try{
-      const p = ARW.getPortFromInput('port');
-      const out = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.capture', input: { scope:'screen', format:'png', downscale:640 }, port: p });
+      const portForTools = ARW.toolPort();
+      const out = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.capture', input: { scope:'screen', format:'png', downscale:640 }, port: portForTools });
       const wrap = document.createElement('div');
       wrap.className = 'msg';
       const meta = document.createElement('div'); meta.className='dim'; meta.textContent = 'capture';
@@ -73,14 +91,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       const tools = document.createElement('div'); tools.className='row';
       const mdBtn=document.createElement('button'); mdBtn.className='ghost'; mdBtn.textContent='Copy MD'; mdBtn.addEventListener('click', ()=>{ if (out && out.path) ARW.copyMarkdown(out.path, 'screenshot'); });
       const saveBtn=document.createElement('button'); saveBtn.className='ghost'; saveBtn.textContent='Save to project'; saveBtn.addEventListener('click', async ()=>{ if (out && out.path){ const res = await ARW.saveToProjectPrompt(out.path); if (res) await ARW.maybeAppendToNotes(res.proj, res.dest); } });
-      const annBtn=document.createElement('button'); annBtn.className='ghost'; annBtn.textContent='Annotate'; annBtn.addEventListener('click', async ()=>{ try{ const rects = await ARW.annot.start(out.preview_b64||''); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: out.path, annotate: rects, downscale:640 }, port: ARW.getPortFromInput('port') }); if (res && res.preview_b64){ body.innerHTML=''; const img=document.createElement('img'); img.src=res.preview_b64; img.alt=res.path||''; img.style.maxWidth='100%'; body.appendChild(img); cap.textContent = res.path || ''; } }catch(e){ console.error(e); } });
+      const annBtn=document.createElement('button'); annBtn.className='ghost'; annBtn.textContent='Annotate'; annBtn.addEventListener('click', async ()=>{ try{ const rects = await ARW.annot.start(out.preview_b64||''); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: out.path, annotate: rects, downscale:640 }, port: ARW.toolPort() }); if (res && res.preview_b64){ body.innerHTML=''; const img=document.createElement('img'); img.src=res.preview_b64; img.alt=res.path||''; img.style.maxWidth='100%'; body.appendChild(img); cap.textContent = res.path || ''; } }catch(e){ console.error(e); } });
       tools.appendChild(mdBtn); tools.appendChild(saveBtn); tools.appendChild(annBtn);
       wrap.appendChild(meta); wrap.appendChild(body); wrap.appendChild(cap); wrap.appendChild(tools);
       document.getElementById('messages').appendChild(wrap);
       // OCR (optional)
       try{
         if (document.getElementById('autoOcr').checked && out && out.path){
-          const o = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.ocr', input: { path: out.path }, port: ARW.getPortFromInput('port') });
+          const o = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.ocr', input: { path: out.path }, port: ARW.toolPort() });
           const txt = (o && o.text) ? String(o.text).trim() : '';
           if (txt){ const pre = document.createElement('pre'); pre.className='mono'; pre.textContent = txt; wrap.appendChild(pre); }
         }
@@ -91,8 +109,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     try{
       const b = await ARW.invoke('active_window_bounds', { label: null });
       const scope = `region:${b?.x??0},${b?.y??0},${b?.w??0},${b?.h??0}`;
-      const p = ARW.getPortFromInput('port');
-      const out = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.capture', input: { scope, format:'png', downscale:640 }, port: p });
+            const portForTools = ARW.toolPort();
+            const out = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.capture', input: { scope, format:'png', downscale:640 }, port: portForTools });
       const wrap = document.createElement('div');
       wrap.className = 'msg';
       const meta = document.createElement('div'); meta.className='dim'; meta.textContent = 'capture-window';
@@ -102,14 +120,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       const tools2 = document.createElement('div'); tools2.className='row';
       const mdBtn2=document.createElement('button'); mdBtn2.className='ghost'; mdBtn2.textContent='Copy MD'; mdBtn2.addEventListener('click', ()=>{ if (out && out.path) ARW.copyMarkdown(out.path, 'screenshot'); });
       const saveBtn2=document.createElement('button'); saveBtn2.className='ghost'; saveBtn2.textContent='Save to project'; saveBtn2.addEventListener('click', async ()=>{ if (out && out.path){ const res = await ARW.saveToProjectPrompt(out.path); if (res) await ARW.maybeAppendToNotes(res.proj, res.dest); } });
-      const annBtn2=document.createElement('button'); annBtn2.className='ghost'; annBtn2.textContent='Annotate'; annBtn2.addEventListener('click', async ()=>{ try{ const rects = await ARW.annot.start(out.preview_b64||''); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: out.path, annotate: rects, downscale:640 }, port: ARW.getPortFromInput('port') }); if (res && res.preview_b64){ body.innerHTML=''; const img=document.createElement('img'); img.src=res.preview_b64; img.alt=res.path||''; img.style.maxWidth='100%'; body.appendChild(img); cap.textContent = res.path || ''; } }catch(e){ console.error(e); } });
+      const annBtn2=document.createElement('button'); annBtn2.className='ghost'; annBtn2.textContent='Annotate'; annBtn2.addEventListener('click', async ()=>{ try{ const rects = await ARW.annot.start(out.preview_b64||''); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: out.path, annotate: rects, downscale:640 }, port: ARW.toolPort() }); if (res && res.preview_b64){ body.innerHTML=''; const img=document.createElement('img'); img.src=res.preview_b64; img.alt=res.path||''; img.style.maxWidth='100%'; body.appendChild(img); cap.textContent = res.path || ''; } }catch(e){ console.error(e); } });
       tools2.appendChild(mdBtn2); tools2.appendChild(saveBtn2); tools2.appendChild(annBtn2);
       wrap.appendChild(meta); wrap.appendChild(body); wrap.appendChild(cap); wrap.appendChild(tools2);
       document.getElementById('messages').appendChild(wrap);
       // OCR (optional)
       try{
         if (document.getElementById('autoOcr').checked && out && out.path){
-          const o = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.ocr', input: { path: out.path }, port: ARW.getPortFromInput('port') });
+          const o = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.ocr', input: { path: out.path }, port: ARW.toolPort() });
           const txt = (o && o.text) ? String(o.text).trim() : '';
           if (txt){ const pre = document.createElement('pre'); pre.className='mono'; pre.textContent = txt; wrap.appendChild(pre); }
         }
@@ -129,12 +147,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       const tools3 = document.createElement('div'); tools3.className='row';
       const mdBtn3=document.createElement('button'); mdBtn3.className='ghost'; mdBtn3.textContent='Copy MD'; mdBtn3.addEventListener('click', ()=>{ if (out && out.path) ARW.copyMarkdown(out.path, 'screenshot'); });
       const saveBtn3=document.createElement('button'); saveBtn3.className='ghost'; saveBtn3.textContent='Save to project'; saveBtn3.addEventListener('click', async ()=>{ if (out && out.path){ const res = await ARW.saveToProjectPrompt(out.path); if (res) await ARW.maybeAppendToNotes(res.proj, res.dest); } });
-      const annBtn3=document.createElement('button'); annBtn3.className='ghost'; annBtn3.textContent='Annotate'; annBtn3.addEventListener('click', async ()=>{ try{ const rects = await ARW.annot.start(out.preview_b64||''); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: out.path, annotate: rects, downscale:640 }, port: ARW.getPortFromInput('port') }); if (res && res.preview_b64){ body.innerHTML=''; const img=document.createElement('img'); img.src=res.preview_b64; img.alt=res.path||''; img.style.maxWidth='100%'; body.appendChild(img); cap.textContent = res.path || ''; } }catch(e){ console.error(e); } });
+      const annBtn3=document.createElement('button'); annBtn3.className='ghost'; annBtn3.textContent='Annotate'; annBtn3.addEventListener('click', async ()=>{ try{ const rects = await ARW.annot.start(out.preview_b64||''); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: out.path, annotate: rects, downscale:640 }, port: ARW.toolPort() }); if (res && res.preview_b64){ body.innerHTML=''; const img=document.createElement('img'); img.src=res.preview_b64; img.alt=res.path||''; img.style.maxWidth='100%'; body.appendChild(img); cap.textContent = res.path || ''; } }catch(e){ console.error(e); } });
       tools3.appendChild(mdBtn3); tools3.appendChild(saveBtn3); tools3.appendChild(annBtn3);
       wrap.appendChild(meta); wrap.appendChild(body); wrap.appendChild(cap); wrap.appendChild(tools3);
       document.getElementById('messages').appendChild(wrap);
       if (document.getElementById('autoOcr').checked && out.path){
-        try{ const o = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.ocr', input: { path: out.path }, port: ARW.getPortFromInput('port') }); const txt=(o&&o.text)?String(o.text).trim():''; if (txt){ const pre=document.createElement('pre'); pre.className='mono'; pre.textContent=txt; wrap.appendChild(pre); } }catch(e){ console.warn('OCR failed', e); }
+        try{ const o = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.ocr', input: { path: out.path }, port: ARW.toolPort() }); const txt=(o&&o.text)?String(o.text).trim():''; if (txt){ const pre=document.createElement('pre'); pre.className='mono'; pre.textContent=txt; wrap.appendChild(pre); } }catch(e){ console.warn('OCR failed', e); }
       }
     }catch(e){ console.error(e); ARW.toast('Capture canceled'); }
   });
@@ -150,10 +168,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (only){ [...frag.childNodes].forEach(node=>{ if (node.classList && !/add|del/.test(node.className)) node.remove(); }); }
     out.appendChild(frag);
   });
-  document.getElementById('port').addEventListener('change', async ()=>{
-    const p = ARW.getPortFromInput('port') || 8091;
-    await ARW.setPrefs('launcher', { ...(await ARW.getPrefs('launcher')), port: p });
-    ARW.sse.connect(ARW.base(p), { replay: 5 });
+  document.getElementById('port').addEventListener('change', () => {
+    applyBaseChange().catch(() => {});
+  });
+  window.addEventListener('arw:base-override-changed', () => {
+    applyBaseChange().catch(() => {});
   });
   ARW.palette.mount({ base });
 });

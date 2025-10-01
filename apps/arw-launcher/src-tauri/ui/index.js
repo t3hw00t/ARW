@@ -1,13 +1,17 @@
 const invoke = (cmd, args) => ARW.invoke(cmd, args);
 const getPort = () => ARW.getPortFromInput('port');
-const effectivePort = () => getPort() || 8091;
+const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
+let baseMeta = null;
+const effectivePort = () => getPort() || (baseMeta && baseMeta.port) || 8091;
 
 let miniDownloadsSub = null;
 
 function connectSse({ replay = 0, resume = true } = {}) {
+  baseMeta = updateBaseMeta();
+  const base = (baseMeta && baseMeta.base) || ARW.base(effectivePort());
   const opts = { prefix: 'models.' };
   if (replay > 0) opts.replay = replay;
-  ARW.sse.connect(ARW.base(effectivePort()), opts, resume);
+  ARW.sse.connect(base, opts, resume);
 }
 
 function initStatusBadges() {
@@ -36,6 +40,7 @@ async function loadPrefs() {
     const enabled = await invoke('launcher_autostart_status');
     document.getElementById('loginstart').checked = !!enabled
   } catch {}
+  baseMeta = updateBaseMeta();
   connectSse({ replay: 5, resume: false });
   miniDownloads();
   health();
@@ -191,6 +196,24 @@ document.addEventListener('DOMContentLoaded', () => {
       await invoke('open_url', { url: 'https://github.com/t3hw00t/ARW/releases' });
     } catch (e) { console.error(e); }
   });
+  const portInput = document.getElementById('port');
+  if (portInput) {
+    portInput.addEventListener('change', async () => {
+      baseMeta = updateBaseMeta();
+      try {
+        const prefs = (await ARW.getPrefs('launcher')) || {};
+        prefs.port = effectivePort();
+        await ARW.setPrefs('launcher', prefs);
+      } catch {}
+      connectSse({ replay: 5, resume: false });
+      miniDownloads();
+    });
+  }
+  window.addEventListener('arw:base-override-changed', () => {
+    connectSse({ replay: 5, resume: false });
+    miniDownloads();
+    health();
+  });
   const healthBtn = document.getElementById('btn-health');
   if (healthBtn) healthBtn.addEventListener('click', async () => {
     const el = document.getElementById('health');
@@ -202,11 +225,6 @@ document.addEventListener('DOMContentLoaded', () => {
       if (el) { el.textContent = 'Error'; el.className = 'bad'; }
       console.error(e);
     }
-  });
-  const portInput = document.getElementById('port');
-  if (portInput) portInput.addEventListener('change', () => {
-    connectSse({ replay: 5, resume: false });
-    miniDownloads();
   });
   // Service health polling
   health(); setInterval(health, 4000);

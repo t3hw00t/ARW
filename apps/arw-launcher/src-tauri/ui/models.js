@@ -1,12 +1,9 @@
 const port = () => ARW.getPortFromInput('port');
-const __BASE = (()=>{ try{ return window.__ARW_BASE_OVERRIDE ? String(window.__ARW_BASE_OVERRIDE).replace(/\/$/,'') : null; }catch{ return null } })();
+const REMOTE_BASE = ARW.baseOverride() || null;
+const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 
 let modelsSseSub = null;
 let modelsSseIndicator = null;
-
-function modelsBase() {
-  return __BASE || ARW.base(port() || 8091);
-}
 
 function ensureSseIndicator() {
   const wrap = document.getElementById('statusBadges');
@@ -26,14 +23,15 @@ function connectModelsSse({ replay = 0, resume = true } = {}) {
   ensureSseIndicator();
   const opts = { prefix: 'models.' };
   if (replay > 0) opts.replay = replay;
-  ARW.sse.connect(modelsBase(), opts, resume);
+  const meta = updateBaseMeta();
+  ARW.sse.connect(meta.base, opts, resume);
 }
 
 async function ivk(cmd, args){
-  if (!__BASE) return ARW.invoke(cmd, args);
-  const tok = await ARW.connections.tokenFor(__BASE);
-  const get = (p)=> ARW.invoke('admin_get_json_base', { base: __BASE, path: p, token: tok });
-  const post = (p, body)=> ARW.invoke('admin_post_json_base', { base: __BASE, path: p, body: body||{}, token: tok });
+  if (!REMOTE_BASE) return ARW.invoke(cmd, args);
+  const tok = await ARW.connections.tokenFor(REMOTE_BASE);
+  const get = (p)=> ARW.invoke('admin_get_json_base', { base: REMOTE_BASE, path: p, token: tok });
+  const post = (p, body)=> ARW.invoke('admin_post_json_base', { base: REMOTE_BASE, path: p, body: body||{}, token: tok });
   switch(cmd){
     case 'models_summary':{
       const env = await get('admin/models/summary');
@@ -74,7 +72,7 @@ async function ivk(cmd, args){
       const order= args?.order ? `&order=${encodeURIComponent(args.order)}` : '';
       const path = `state/models_hashes?limit=${limit}&offset=${offset}${prov}${sort}${order}`;
       // public endpoint
-      return ARW.invoke('admin_get_json_base', { base: __BASE, path, token: null });
+      return ARW.invoke('admin_get_json_base', { base: REMOTE_BASE, path, token: null });
     }
     default:
       // Fallback to local behavior
@@ -230,9 +228,9 @@ function renderStatusBadge(model){
 async function fetchAdminJson(path){
   const clean = String(path || '').replace(/^\/+/, '');
   try{
-    if (window.__ARW_BASE_OVERRIDE){
-      const token = await ARW.connections.tokenFor(window.__ARW_BASE_OVERRIDE);
-      return await ARW.invoke('admin_get_json_base', { base: window.__ARW_BASE_OVERRIDE, path: clean, token });
+    if (REMOTE_BASE){
+      const token = await ARW.connections.tokenFor(REMOTE_BASE);
+      return await ARW.invoke('admin_get_json_base', { base: REMOTE_BASE, path: clean, token });
     }
   }catch(e){ console.error(e); }
   const headers = {};
@@ -240,7 +238,8 @@ async function fetchAdminJson(path){
     const tok = document.getElementById('admintok')?.value?.trim();
     if (tok) headers['X-ARW-Admin'] = tok;
   }catch{}
-  const baseUrl = ARW.base(port());
+  const meta = updateBaseMeta();
+  const baseUrl = meta.base;
   const resp = await ARW.http.fetch(baseUrl, `/${clean}`, { headers });
   if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
   return await resp.json();
@@ -254,6 +253,7 @@ function shortSha(value){
 
 async function loadPrefs() {
   await ARW.applyPortFromPrefs('port');
+  updateBaseMeta();
   const v = await ARW.getPrefs('launcher');
   if (v && v.adminToken) document.getElementById('admintok').value = v.adminToken;
   try{
@@ -274,6 +274,7 @@ async function savePrefs() {
   v.adminToken = document.getElementById('admintok').value || '';
   await ARW.setPrefs('launcher', v);
   document.getElementById('stat').textContent = 'Saved prefs';
+  updateBaseMeta();
   connectModelsSse({ replay: 10, resume: false });
   startModelsSse();
 }
@@ -334,7 +335,7 @@ async function refresh() {
     `;
 
     const pathCell = tr.children[3];
-    if (!__BASE && m.path){
+    if (!REMOTE_BASE && m.path){
       const openBtn = document.createElement('button');
       openBtn.textContent = 'Open';
       openBtn.title = 'Open path locally';
@@ -500,7 +501,7 @@ function startModelsSse() {
               await refresh();
               const list = await ivk('models_list', { port: port() });
               const found = (list || []).find((mm) => mm.id === id);
-              if (!__BASE && found && found.path) {
+              if (!REMOTE_BASE && found && found.path) {
                 try { await ivk('open_path', { path: found.path }); } catch (e) { console.error(e); }
               }
               removeBar(id);
@@ -535,6 +536,7 @@ function startModelsSse() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  updateBaseMeta();
   document.getElementById('btn-refresh').addEventListener('click', refresh);
   document.getElementById('btn-load').addEventListener('click', async ()=>{ await ivk('models_load', { port: port() }); refresh(); });
   document.getElementById('btn-save').addEventListener('click', async ()=>{ await ivk('models_save', { port: port() }); document.getElementById('stat').textContent='Saved'; });
@@ -672,6 +674,24 @@ document.addEventListener('DOMContentLoaded', () => {
     window.__hashOffset = 0;
     hashesRefresh();
   });
+  const rebindBase = async () => {
+    const meta = updateBaseMeta();
+    const p = ARW.getPortFromInput('port') || meta.port || 8091;
+    try {
+      const prefs = (await ARW.getPrefs('launcher')) || {};
+      if (prefs.port !== p) {
+        prefs.port = p;
+        await ARW.setPrefs('launcher', prefs);
+      }
+    } catch {}
+    connectModelsSse({ replay: 10, resume: false });
+    startModelsSse();
+    await Promise.allSettled([
+      (async () => { try { await refresh(); } catch (err) { console.error(err); } })(),
+      (async () => { try { await hashesRefresh(); } catch (err) { console.error(err); } })(),
+      (async () => { try { await jobsRefresh(); } catch (err) { console.error(err); } })(),
+    ]);
+  };
   // Persist and react to control changes
   const autoEl = document.getElementById('jobs-auto'); if (autoEl) autoEl.addEventListener('change', async (e)=>{
     setJobsAuto(!!e.target.checked);
@@ -679,8 +699,7 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   const portInput = document.getElementById('port');
   if (portInput) portInput.addEventListener('change', () => {
-    connectModelsSse({ replay: 10, resume: false });
-    startModelsSse();
+    rebindBase().catch((err) => console.error(err));
   });
   const hp = document.getElementById('hash-prov'); if (hp) hp.addEventListener('change', async (e)=>{ try{ const p = await ARW.getPrefs('launcher')||{}; p.hashProvider = e.target.value||''; await ARW.setPrefs('launcher', p);}catch{}; hashesRefresh(); });
   const hs = document.getElementById('hash-sort'); if (hs) hs.addEventListener('change', async (e)=>{ try{ const p = await ARW.getPrefs('launcher')||{}; p.hashSort = e.target.value||'bytes'; await ARW.setPrefs('launcher', p);}catch{}; hashesRefresh(); });
@@ -689,12 +708,11 @@ document.addEventListener('DOMContentLoaded', () => {
   const cb = document.getElementById('concblock'); if (cb) cb.addEventListener('change', async (e)=>{ try{ const p = await ARW.getPrefs('launcher')||{}; p.concBlock = !!e.target.checked; await ARW.setPrefs('launcher', p);}catch{}; });
   (async () => {
     await loadPrefs();
-    await refresh();
-    await hashesRefresh();
-    await jobsRefresh();
-    connectModelsSse({ replay: 10, resume: false });
-    startModelsSse();
+    await rebindBase();
   })();
+  window.addEventListener('arw:base-override-changed', () => {
+    rebindBase().catch((err) => console.error(err));
+  });
 });
 
 // Keyboard shortcuts (ignore when typing)

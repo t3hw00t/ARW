@@ -74,7 +74,7 @@ UI Coherence
 - [Pack: Collaboration] Accessibility: tree roles/aria‑level/expanded; regions labeled; command palette and gallery as dialogs; focus ring on rows; Compare tabs with role=tablist and roving tabindex — done
 - [Pack: Collaboration] Routes: canonicalize admin UI paths (`/admin/debug`, `/admin/ui/*`); remove the legacy `/debug` alias; update launcher open path — done
 - [Pack: Collaboration] SSE store: add connection status + resilient auto-reconnect with modest backoff; reuse filters and replay across reconnect — done
-- [Pack: Collaboration] Connections window: allow per-connection admin token; open Events/Logs/Models windows pointed at that base — todo
+- [Pack: Collaboration] Connections window: allow per-connection admin token; open Events/Logs/Models windows pointed at that base — done (launcher now stores per-connection tokens, normalises bases, surfaces status, and remote windows honour the saved base)
 - [Pack: Collaboration] Per‑project templates: save/apply lanes/grid/focus in Hub — done
 - [Pack: Collaboration] Route SLO selector UI: adjustable p95 threshold in Logs/Events — done
 - [Pack: Collaboration] Export CSV: route/kind tables — done; table diff export — done (two‑row or wide)

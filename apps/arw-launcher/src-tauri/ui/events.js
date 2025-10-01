@@ -1,7 +1,7 @@
 let lastRaw = '';
 let logSubId = null;
 let metricsSubId = null;
-const base = (port) => ARW.base(port);
+const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 function bytesHuman(n){ if(!n && n!==0) return '–'; const kb=1024, mb=kb*1024, gb=mb*1024, tb=gb*1024; if(n>=tb) return (n/tb).toFixed(2)+' TiB'; if(n>=gb) return (n/gb).toFixed(2)+' GiB'; if(n>=mb) return (n/mb).toFixed(1)+' MiB'; if(n>=kb) return (n/kb).toFixed(1)+' KiB'; return n+' B'; }
 function setCpuBadge(p){ try{ const el=document.getElementById('cpuBadge'); if(!el) return; const v = Number(p)||0; el.textContent = 'CPU: ' + v.toFixed(1) + '%'; el.className = 'badge ' + (v>=90? 'bad' : v>=75? 'warn':''); }catch{} }
 function setMemBadge(used,total){ try{ const el=document.getElementById('memBadge'); if(!el) return; const pct = total>0? (100*used/total):0; el.textContent = 'Mem: ' + pct.toFixed(1) + '% ('+bytesHuman(used)+'/'+bytesHuman(total)+')'; el.className = 'badge ' + (pct>=90? 'bad' : pct>=75? 'warn':''); }catch{} }
@@ -49,14 +49,16 @@ function ensureSubscriptions(){
   }
 }
 function sse(replay) {
-  const port = ARW.getPortFromInput('port') || 8091;
+  const meta = updateBaseMeta();
+  const currentBase = meta.base;
   const filter = document.getElementById('filter').value.trim();
   const opts = {};
   if (replay) opts.replay = replay;
   if (filter) opts.prefix = filter;
-  ARW.sse.connect(ARW.base(port), opts);
+  ARW.sse.connect(currentBase, opts);
 }
 document.addEventListener('DOMContentLoaded', () => {
+  updateBaseMeta();
   ensureSubscriptions();
   ARW.sse.indicator('stat', { prefix: null, labels: { open:'on', connecting:'connecting', idle:'off', error:'retrying', closed:'off' } });
   document.getElementById('btn-replay').addEventListener('click', ()=> sse(50));
@@ -68,11 +70,31 @@ document.addEventListener('DOMContentLoaded', () => {
   document.getElementById('pretty').addEventListener('change', ()=>{});
   document.getElementById('wrap').addEventListener('change', ()=>{});
   document.getElementById('pause').addEventListener('change', ()=>{});
+  const rebindBase = async () => {
+    const meta = updateBaseMeta();
+    const p = ARW.getPortFromInput('port') || meta.port || 8091;
+    try {
+      const prefs = (await ARW.getPrefs('launcher')) || {};
+      if (prefs.port !== p) {
+        prefs.port = p;
+        await ARW.setPrefs('launcher', prefs);
+      }
+    } catch {}
+    sse(0);
+    await fetchRouteStatsSnapshot({ renderNow: true });
+  };
+  const portInput = document.getElementById('port');
+  if (portInput) {
+    portInput.addEventListener('change', async () => {
+      rebindBase().catch(() => {});
+    });
+  }
   (async () => {
     await ARW.applyPortFromPrefs('port');
+    const meta = updateBaseMeta();
     sse(0);
     try {
-      const current = base(ARW.getPortFromInput('port') || 8091);
+      const current = meta.base;
       const j = await ARW.http.json(current, '/admin/probe/metrics');
       const d = j?.data || j;
       const cpu = d?.cpu?.avg || 0;
@@ -86,6 +108,9 @@ document.addEventListener('DOMContentLoaded', () => {
       setGpuBadge(u, t);
     } catch (e) {}
   })();
+  window.addEventListener('arw:base-override-changed', () => {
+    rebindBase().catch(() => {});
+  });
 });
 
 // Keyboard shortcuts (view-only; ignore when typing)

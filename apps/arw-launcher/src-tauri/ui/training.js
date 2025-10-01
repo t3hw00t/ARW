@@ -3,6 +3,8 @@ const JOBS_POLL_MS = 12_000;
 let telemetryTimer = null;
 let jobsTimer = null;
 let telemetryBase = null;
+let trainingSidecar = null;
+let baseMeta = null;
 let lastTelemetry = null;
 let lastJobs = null;
 let jobStatusFilter = 'all';
@@ -13,6 +15,8 @@ let logicUnitHistoryRaw = [];
 let lastFetchedHistorySignature = '';
 let historyHydrated = false;
 let pendingHistoryFetch = null;
+
+const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 
 function clearTelemetryTimer() {
   if (telemetryTimer) {
@@ -991,9 +995,26 @@ document.addEventListener('visibilitychange', () => {
 document.addEventListener('DOMContentLoaded', async () => {
   await ARW.applyPortFromPrefs('port');
   const portInput = document.getElementById('port');
-  telemetryBase = getCurrentBase();
+  baseMeta = updateBaseMeta();
+  telemetryBase = baseMeta.base || getCurrentBase();
   const base = telemetryBase;
-  ARW.sidecar.mount('sidecar', ['timeline','approvals','context','policy','metrics','models'], { base });
+  trainingSidecar = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','policy','metrics','models'], { base });
+  const applyBaseChange = async () => {
+    baseMeta = updateBaseMeta();
+    const p = ARW.getPortFromInput('port') || baseMeta.port || 8091;
+    try {
+      const prefs = (await ARW.getPrefs('launcher')) || {};
+      if (prefs.port !== p) {
+        prefs.port = p;
+        await ARW.setPrefs('launcher', prefs);
+      }
+    } catch {}
+    telemetryBase = ARW.base(p);
+    try { trainingSidecar?.dispose?.(); } catch {}
+    trainingSidecar = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','policy','metrics','models'], { base: telemetryBase });
+    ARW.sse.connect(telemetryBase, { replay: 5 });
+    await Promise.allSettled([refreshTelemetry(), refreshJobs()]);
+  };
   ARW.sse.indicator('sseStat', { prefix: 'SSE' });
   const sseFilters = ['state.', 'models.', 'logic.unit.', 'config.patch.'];
   ARW.sse.connect(base, { replay: 10, prefix: sseFilters });
@@ -1168,13 +1189,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   if (portInput) {
-    portInput.addEventListener('change', async () => {
-      const p = ARW.getPortFromInput('port') || 8091;
-      await ARW.setPrefs('launcher', { ...(await ARW.getPrefs('launcher')), port: p });
-      telemetryBase = ARW.base(p);
-      ARW.sse.connect(telemetryBase, { replay: 5 });
-      refreshTelemetry().catch(() => {});
-      refreshJobs().catch(() => {});
+    portInput.addEventListener('change', () => {
+      applyBaseChange().catch(() => {});
     });
   }
 
@@ -1190,5 +1206,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   refreshJobs().catch(() => {});
   window.addEventListener('beforeunload', () => {
     ARW.sse.unsubscribe(logicUnitSub);
+  });
+  window.addEventListener('arw:base-override-changed', () => {
+    applyBaseChange().catch(() => {});
   });
 });

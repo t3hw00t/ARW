@@ -1,6 +1,9 @@
+const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
+
 document.addEventListener('DOMContentLoaded', async () => {
   await ARW.applyPortFromPrefs('port');
-  const port = ARW.getPortFromInput('port') || 8091;
+  let meta = updateBaseMeta();
+  let port = ARW.getPortFromInput('port') || meta.port || 8091;
   const ensureLane = (list, lane, opts = {}) => {
     const lanes = Array.isArray(list) ? [...list] : [];
     if (lanes.includes(lane)) return lanes;
@@ -12,9 +15,27 @@ document.addEventListener('DOMContentLoaded', async () => {
     lanes.unshift(lane);
     return lanes;
   };
-  const base = ARW.base(port);
+  let base = ARW.base(port);
   const defaultLanes = ensureLane(['timeline','context','policy','metrics','models','activity'], 'approvals', { after: 'timeline' });
   let sc = ARW.sidecar.mount('sidecar', defaultLanes, { base });
+  const applyBaseChange = async () => {
+    meta = updateBaseMeta();
+    port = ARW.getPortFromInput('port') || meta.port || 8091;
+    base = ARW.base(port);
+    try {
+      const prefs = (await ARW.getPrefs('launcher')) || {};
+      if (prefs.port !== port) {
+        prefs.port = port;
+        await ARW.setPrefs('launcher', prefs);
+      }
+    } catch {}
+    try {
+      sc?.dispose?.();
+    } catch {}
+    sc = ARW.sidecar.mount('sidecar', defaultLanes, { base });
+    ARW.sse.connect(base, { replay: 25 });
+    await Promise.allSettled([refreshEpisodesSnapshot(), refreshProjectsSnapshot()]);
+  };
   ARW.sse.indicator('sseStat', { prefix: 'SSE' });
   ARW.sse.connect(base, { replay: 25 });
   // ---------- Runs: episodes list + snapshot ----------
@@ -920,10 +941,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btn-csv-copy').addEventListener('click', ()=>{
     const sum = document.getElementById('csvSummary').textContent.trim(); if (sum) ARW.copy(sum);
   });
-  document.getElementById('port').addEventListener('change', async ()=>{
-    const p = ARW.getPortFromInput('port') || 8091;
-    await ARW.setPrefs('launcher', { ...(await ARW.getPrefs('launcher')), port: p });
-    ARW.sse.connect(ARW.base(p), { replay: 10 });
+  document.getElementById('port').addEventListener('change', () => {
+    applyBaseChange().catch(() => {});
+  });
+  window.addEventListener('arw:base-override-changed', () => {
+    applyBaseChange().catch(() => {});
   });
   document.getElementById('btn-save').addEventListener('click', async ()=>{
     const layout = {
