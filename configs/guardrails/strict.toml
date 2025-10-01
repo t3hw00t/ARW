@@ -1,0 +1,10 @@
+# Strict guardrail preset
+# Locks down tool execution, model writes, and memory mutation.
+
+deny_user = [
+  "introspect:*",
+  "tools:*",
+  "models:*",
+  "memory:*",
+  "queue:*"
+]

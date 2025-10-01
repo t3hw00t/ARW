@@ -464,12 +464,26 @@
         {
           "method": "POST",
           "path": "/projects/{proj}/import"
+        },
+        {
+          "method": "POST",
+          "path": "/projects/{proj}/snapshot"
+        },
+        {
+          "method": "GET",
+          "path": "/projects/{proj}/snapshots"
+        },
+        {
+          "method": "POST",
+          "path": "/projects/{proj}/snapshots/{snapshot}/restore"
         }
       ],
       "read_models": [],
       "topics": [
         "projects.created",
-        "projects.file.written"
+        "projects.file.written",
+        "projects.snapshot.created",
+        "projects.snapshot.restored"
       ],
       "env": [
         "ARW_PROJECTS_DIR",
@@ -818,11 +832,17 @@
           "path": "docs/architecture/egress_firewall.md"
         }
       ],
-      "http": [],
+      "http": [
+        {
+          "method": "POST",
+          "path": "/policy/guardrails/apply"
+        }
+      ],
       "read_models": [],
       "topics": [
         "egress.preview",
-        "egress.ledger.appended"
+        "egress.ledger.appended",
+        "policy.guardrails.applied"
       ],
       "env": [
         "ARW_EGRESS_LEDGER_ENABLE",
@@ -917,22 +937,106 @@
           "path": "/orchestrator/mini_agents/start_training"
         },
         {
+          "method": "POST",
+          "path": "/orchestrator/runtimes/{id}/restore"
+        },
+        {
           "method": "GET",
           "path": "/state/orchestrator/jobs"
         }
       ],
       "read_models": [],
       "topics": [
-        "task.completed"
+        "task.completed",
+        "runtime.restore.requested",
+        "runtime.restore.completed"
       ],
       "env": [
         "ARW_NATS_URL",
         "ARW_NODE_ID",
         "ARW_NATS_OUT"
       ],
+    "docs": [
+      {
+        "path": "docs/architecture/agent_orchestrator.md"
+      }
+    ]
+    },
+    {
+      "id": "autonomy_lane_controls",
+      "name": "Autonomy Lane Controls",
+      "owner": "platform",
+      "tier": "Remote collaborator pack",
+      "deps": [
+        "project_hub_primitives",
+        "event_spine"
+      ],
+      "description": "Pause/resume lanes, flush queues, capture snapshots, and manage budgets for trusted autonomy runs.",
+      "scope": {
+        "surface": "backend",
+        "audience": "operators",
+        "layer": "governance",
+        "maturity": "beta"
+      },
+      "ssot": [
+        {
+          "path": "apps/arw-server/src/api/autonomy.rs"
+        },
+        {
+          "path": "apps/arw-server/src/api/projects.rs"
+        },
+        {
+          "path": "scripts/autonomy_rollback.sh"
+        }
+      ],
+      "http": [
+        {
+          "method": "POST",
+          "path": "/admin/autonomy/{lane}/pause"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/autonomy/{lane}/resume"
+        },
+        {
+          "method": "DELETE",
+          "path": "/admin/autonomy/{lane}/jobs"
+        },
+        {
+          "method": "POST",
+          "path": "/admin/autonomy/{lane}/budgets"
+        },
+        {
+          "method": "POST",
+          "path": "/projects/{proj}/snapshot"
+        },
+        {
+          "method": "GET",
+          "path": "/projects/{proj}/snapshots"
+        },
+        {
+          "method": "POST",
+          "path": "/projects/{proj}/snapshots/{snapshot}/restore"
+        }
+      ],
+      "read_models": [],
+      "topics": [
+        "autonomy.run.paused",
+        "autonomy.run.resumed",
+        "autonomy.interrupt",
+        "autonomy.budget.updated",
+        "projects.snapshot.restored"
+      ],
+      "env": [
+        "ARW_PROJECTS_DIR",
+        "ARW_PROJECT_MAX_FILE_MB"
+      ],
       "docs": [
         {
-          "path": "docs/architecture/agent_orchestrator.md"
+          "path": "docs/spec/autonomy_lane.md"
+        },
+        {
+          "path": "docs/ops/trials/autonomy_rollback_playbook.md"
         }
       ]
     },
@@ -1381,7 +1485,7 @@
         },
         {
           "method": "POST",
-          "path": "/patch/dry-run"
+          "path": "/patch/apply (dry_run=true)"
         },
         {
           "method": "POST",
@@ -1444,6 +1548,10 @@
         {
           "method": "GET",
           "path": "/state/runtime_matrix"
+        },
+        {
+          "method": "POST",
+          "path": "/orchestrator/runtimes/{id}/restore"
         }
       ],
       "read_models": [
@@ -1454,7 +1562,9 @@
         "runtime.claim.request",
         "runtime.claim.acquired",
         "runtime.claim.released",
-        "runtime.health"
+        "runtime.health",
+        "runtime.restore.requested",
+        "runtime.restore.completed"
       ],
       "env": [],
       "docs": [

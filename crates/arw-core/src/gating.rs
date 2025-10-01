@@ -164,48 +164,13 @@ fn gate_denied(key: &str, source: &str, pattern: Option<&str>) -> bool {
 
 /// Initialize immutable user policy denies from a TOML file and env var.
 pub fn init_from_config(path: &str) {
-    let mut denies: HashSet<String> = HashSet::new();
-    // File
-    if Path::new(path).exists() {
-        if let Ok(s) = std::fs::read_to_string(path) {
-            if let Ok(cfg) = toml::from_str::<GatingPolicyConfig>(&s) {
-                for k in cfg.deny_user {
-                    denies.insert(k);
-                }
-                if !cfg.contracts.is_empty() {
-                    let mut out: Vec<Contract> = Vec::new();
-                    for c in cfg.contracts.into_iter() {
-                        out.push(Contract {
-                            id: c.id,
-                            patterns: c.patterns,
-                            subject_role: c.subject_role,
-                            subject_node: c.subject_node,
-                            tags_any: c.tags_any,
-                            valid_from_ms: c.valid_from_ms,
-                            valid_to_ms: c.valid_to_ms,
-                            auto_renew_secs: c.auto_renew_secs,
-                            immutable: c.immutable.unwrap_or(true),
-                            quota_limit: c.quota_limit,
-                            quota_window_secs: c.quota_window_secs,
-                        });
-                    }
-                    *contracts_cell().write().unwrap() = out;
-                }
-            }
-        }
-    }
-    // Env: comma-separated
-    if let Ok(s) = std::env::var("ARW_GATING_DENY") {
-        for k in s.split(',') {
-            let k = k.trim();
-            if !k.is_empty() {
-                denies.insert(k.to_string());
-            }
-        }
-    }
-    if !denies.is_empty() {
+    let (deny_user, contracts) = load_config_entries(path);
+    if !deny_user.is_empty() {
         let mut st = cell().write().unwrap();
-        st.deny_user.extend(denies);
+        st.deny_user.extend(deny_user);
+    }
+    if !contracts.is_empty() {
+        *contracts_cell().write().unwrap() = contracts;
     }
 }
 
@@ -214,6 +179,70 @@ pub fn deny_user<I: IntoIterator<Item = String>>(keys: I) {
     let mut st = cell().write().unwrap();
     for k in keys {
         st.deny_user.insert(k);
+    }
+}
+
+fn contract_from_cfg(c: ContractCfg) -> Contract {
+    Contract {
+        id: c.id,
+        patterns: c.patterns,
+        subject_role: c.subject_role,
+        subject_node: c.subject_node,
+        tags_any: c.tags_any,
+        valid_from_ms: c.valid_from_ms,
+        valid_to_ms: c.valid_to_ms,
+        auto_renew_secs: c.auto_renew_secs,
+        immutable: c.immutable.unwrap_or(true),
+        quota_limit: c.quota_limit,
+        quota_window_secs: c.quota_window_secs,
+    }
+}
+
+fn load_config_entries(path: &str) -> (HashSet<String>, Vec<Contract>) {
+    let mut denies: HashSet<String> = HashSet::new();
+    let mut contracts: Vec<Contract> = Vec::new();
+
+    if Path::new(path).exists() {
+        if let Ok(s) = std::fs::read_to_string(path) {
+            if let Ok(cfg) = toml::from_str::<GatingPolicyConfig>(&s) {
+                denies.extend(cfg.deny_user.into_iter());
+                if !cfg.contracts.is_empty() {
+                    contracts.extend(cfg.contracts.into_iter().map(contract_from_cfg));
+                }
+            }
+        }
+    }
+
+    if let Ok(s) = std::env::var("ARW_GATING_DENY") {
+        for k in s.split(',') {
+            let trimmed = k.trim();
+            if !trimmed.is_empty() {
+                denies.insert(trimmed.to_string());
+            }
+        }
+    }
+
+    (denies, contracts)
+}
+
+pub fn reload_from_config(path: &str) {
+    let (deny_user, mut contracts) = load_config_entries(path);
+    {
+        let mut st = cell().write().unwrap();
+        st.deny_user.clear();
+        st.deny_user.extend(deny_user);
+    }
+    let contract_ids: HashSet<String> = contracts.iter().map(|c| c.id.clone()).collect();
+    {
+        let mut list = contracts_cell().write().unwrap();
+        *list = contracts.drain(..).collect();
+    }
+    {
+        let mut runtime = runtime_cell().write().unwrap();
+        runtime.expires.retain(|id, _| contract_ids.contains(id));
+        runtime
+            .budgets
+            .retain(|(id, _), _| contract_ids.contains(id));
     }
 }
 

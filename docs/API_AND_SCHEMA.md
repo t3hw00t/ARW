@@ -169,6 +169,7 @@ Validate input → policy check → invoke → emit events → return.
 - `GET /state/policy`
 - `POST /policy/reload`
 - `POST /policy/simulate`
+- `POST /policy/guardrails/apply`
 - `GET /state/models`
   - Returns the public models read-model envelope as `{ "items": [...] }`. The server always replies with an object wrapper even when no models are installed; clients should read from `items` instead of expecting a bare array.
 - `GET /spec/index.json`
@@ -188,7 +189,7 @@ header when calling these endpoints.
 Admin probes
 ```bash
 H "$BASE/admin/tools" | jq '.items[0:5]'
-H "$BASE/admin/introspect/schemas/memory.probe@1.0.0" | jq
+curl -sS "$BASE/spec/schemas/memory.probe@1.0.0" | jq
 ```
 
 Admin event stream (SSE)
@@ -198,9 +199,14 @@ curl -N -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" "$BASE/events?replay=10"
 
 Key admin endpoints
 - `GET /admin/tools`
-- `GET /admin/introspect/schemas/{tool_id}`
 - `GET /admin/probe?task_id=...&step=...`
 - `SSE /events`
+- `POST /policy/guardrails/apply`
+- `POST /admin/autonomy/{lane}/budgets`
+- `POST /projects/{proj}/snapshot`
+- `GET /projects/{proj}/snapshots`
+- `POST /projects/{proj}/snapshots/{snapshot}/restore`
+- `POST /orchestrator/runtimes/{id}/restore`
 
 ### Models Admin Endpoints
 

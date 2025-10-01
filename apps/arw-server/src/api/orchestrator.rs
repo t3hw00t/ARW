@@ -1,10 +1,10 @@
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     Json,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::json;
 use utoipa::ToSchema;
 
@@ -164,4 +164,61 @@ pub async fn state_orchestrator_jobs(
         )
             .into_response(),
     }
+}
+
+fn default_restart_true() -> bool {
+    true
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct RuntimeRestoreRequest {
+    #[serde(default = "default_restart_true")]
+    pub restart: bool,
+    #[serde(default)]
+    pub preset: Option<String>,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct RuntimeRestoreResponse {
+    pub ok: bool,
+    pub runtime_id: String,
+    pub pending: bool,
+}
+
+/// Request a managed runtime restore.
+#[utoipa::path(
+    post,
+    path = "/orchestrator/runtimes/{id}/restore",
+    tag = "Orchestrator",
+    params(("id" = String, Path, description = "Runtime identifier")),
+    request_body = RuntimeRestoreRequest,
+    responses(
+        (status = 202, description = "Restore requested", body = RuntimeRestoreResponse),
+        (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails)
+    )
+)]
+pub async fn orchestrator_runtime_restore(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(runtime_id): Path<String>,
+    Json(req): Json<RuntimeRestoreRequest>,
+) -> impl IntoResponse {
+    if let Err(resp) = crate::responses::require_admin(&headers) {
+        return *resp;
+    }
+
+    state
+        .runtime()
+        .request_restore(&runtime_id, req.restart, req.preset.clone())
+        .await;
+
+    (
+        axum::http::StatusCode::ACCEPTED,
+        Json(RuntimeRestoreResponse {
+            ok: true,
+            runtime_id,
+            pending: true,
+        }),
+    )
+        .into_response()
 }

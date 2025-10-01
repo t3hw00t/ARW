@@ -131,6 +131,18 @@ fn discovered_gating_path() -> (Option<PathBuf>, &'static str) {
     )
 }
 
+pub(crate) fn guardrail_preset_path(preset: &str) -> Option<PathBuf> {
+    if let Ok(explicit) = std::env::var("ARW_GUARDRAIL_PRESETS_DIR") {
+        if !explicit.trim().is_empty() {
+            let candidate = PathBuf::from(explicit).join(format!("{preset}.toml"));
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+    arw_core::resolve_config_path(&format!("configs/guardrails/{preset}.toml"))
+}
+
 pub fn init_cache_policy_from_manifest() {
     let (path_opt, source) = discovered_cache_policy_path();
     match path_opt {

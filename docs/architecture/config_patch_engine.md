@@ -19,9 +19,8 @@ Flow
 2) Apply: atomically update config; emit events; snapshot effective config; offer one‑click rollback.
 3) Revert: restore last snapshot; emit `logic.unit.reverted`.
 
-Endpoints (planned)
-- `POST /patch/dry-run` → `{ diff, warnings }`
-- `POST /patch/apply` → apply unit or bundle; emits events
+Endpoints
+- `POST /patch/apply` → set `dry_run=true` to preview `{diff, warnings}` without mutating state; omit or `false` to apply and emit events
 - `POST /patch/revert` → snapshot id or unit id
 
 See also: Logic Units, Permissions & Policies, Replay & Time Travel.

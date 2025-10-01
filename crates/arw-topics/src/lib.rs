@@ -49,6 +49,8 @@ pub const TOPIC_FEEDBACK_UPDATED: &str = "feedback.updated";
 pub const TOPIC_PROJECTS_CREATED: &str = "projects.created";
 pub const TOPIC_PROJECTS_NOTES_SAVED: &str = "projects.notes.saved";
 pub const TOPIC_PROJECTS_FILE_WRITTEN: &str = "projects.file.written";
+pub const TOPIC_PROJECTS_SNAPSHOT_CREATED: &str = "projects.snapshot.created";
+pub const TOPIC_PROJECTS_SNAPSHOT_RESTORED: &str = "projects.snapshot.restored";
 
 // Experiments
 pub const TOPIC_EXPERIMENT_RESULT: &str = "experiment.result";
@@ -91,6 +93,7 @@ pub const TOPIC_AUTONOMY_INTERRUPT: &str = "autonomy.interrupt";
 pub const TOPIC_AUTONOMY_ALERT: &str = "autonomy.alert";
 pub const TOPIC_AUTONOMY_BUDGET_CLOSE: &str = "autonomy.budget.close_to_limit";
 pub const TOPIC_AUTONOMY_BUDGET_EXHAUSTED: &str = "autonomy.budget.exhausted";
+pub const TOPIC_AUTONOMY_BUDGET_UPDATED: &str = "autonomy.budget.updated";
 
 // Service lifecycle and misc
 pub const TOPIC_SERVICE_CONNECTED: &str = "service.connected";
@@ -110,6 +113,7 @@ pub const TOPIC_POLICY_RELOADED: &str = "policy.reloaded";
 pub const TOPIC_POLICY_CAPSULE_APPLIED: &str = "policy.capsule.applied";
 pub const TOPIC_POLICY_CAPSULE_FAILED: &str = "policy.capsule.failed";
 pub const TOPIC_POLICY_CAPSULE_EXPIRED: &str = "policy.capsule.expired";
+pub const TOPIC_POLICY_GUARDRAILS_APPLIED: &str = "policy.guardrails.applied";
 pub const TOPIC_LEASES_CREATED: &str = "leases.created";
 
 // Apps / desktop integration
@@ -183,3 +187,5 @@ pub const TOPIC_RUNTIME_HEALTH: &str = "runtime.health";
 pub const TOPIC_RUNTIME_CLAIM_RELEASED: &str = "runtime.claim.released";
 pub const TOPIC_RUNTIME_CLAIM_REQUEST: &str = "runtime.claim.request";
 pub const TOPIC_RUNTIME_STATE_CHANGED: &str = "runtime.state.changed";
+pub const TOPIC_RUNTIME_RESTORE_REQUESTED: &str = "runtime.restore.requested";
+pub const TOPIC_RUNTIME_RESTORE_COMPLETED: &str = "runtime.restore.completed";

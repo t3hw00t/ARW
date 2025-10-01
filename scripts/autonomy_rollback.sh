@@ -247,6 +247,32 @@ latest_snapshot() {
   return 1
 }
 
+capture_snapshot() {
+  if [[ -z "$PROJECT" ]]; then
+    warn "Project id unknown; skipping snapshot capture"
+    return 1
+  fi
+  local encoded_proj="${PROJECT// /%20}"
+  if (( DRY_RUN )); then
+    log "DRY RUN: would POST /projects/${encoded_proj}/snapshot"
+    return 0
+  fi
+  if api_call POST "/projects/${encoded_proj}/snapshot"; then
+    if [[ "$API_STATUS" =~ ^20 ]]; then
+      local snap_id
+      snap_id="$(echo "$API_BODY" | jq -r '.snapshot.id // empty')"
+      if [[ -n "$snap_id" ]]; then
+        SNAPSHOT="$snap_id"
+      fi
+      log "Captured project snapshot ${SNAPSHOT:-<unknown>}"
+      return 0
+    fi
+  fi
+  warn "Snapshot capture failed (status ${API_STATUS:-unknown})."
+  warn "Manual fallback: POST ${BASE_URL}/projects/${PROJECT}/snapshot"
+  return 1
+}
+
 restore_project() {
   if [[ -z "$PROJECT" ]]; then
     warn "No project id available; skipping project restore"
@@ -256,8 +282,20 @@ restore_project() {
     warn "No snapshot id available; skipping project restore"
     return 1
   fi
-  warn "Automatic project restore is not yet wired to the unified API."
-  warn "Follow the docs in docs/ops/trials/autonomy_rollback_playbook.md to restore ${PROJECT} to snapshot ${SNAPSHOT}."
+  local encoded_proj="${PROJECT// /%20}"
+  local encoded_snapshot="${SNAPSHOT// /%20}"
+  if (( DRY_RUN )); then
+    log "DRY RUN: would POST /projects/${encoded_proj}/snapshots/${encoded_snapshot}/restore"
+    return 0
+  fi
+  if api_call POST "/projects/${encoded_proj}/snapshots/${encoded_snapshot}/restore"; then
+    if [[ "$API_STATUS" =~ ^20 ]]; then
+      log "Project ${PROJECT} restored from snapshot ${SNAPSHOT}"
+      return 0
+    fi
+  fi
+  warn "Project restore failed (status ${API_STATUS:-unknown})."
+  warn "Manual fallback: POST ${BASE_URL}/projects/${PROJECT}/snapshots/${SNAPSHOT}/restore"
   return 1
 }
 
@@ -266,11 +304,14 @@ restore_runtime() {
     warn "No runtime id provided; skipping runtime restore"
     return 1
   fi
+  local encoded_runtime="${RUNTIME// /%20}"
   if (( DRY_RUN )); then
-    log "DRY RUN: would POST /admin/runtimes/${RUNTIME}/restore"
+    log "DRY RUN: would POST /orchestrator/runtimes/${encoded_runtime}/restore"
     return 0
   fi
-  if api_call POST "/admin/runtimes/${RUNTIME}/restore"; then
+  local payload
+  payload="$(jq -nc '{restart: true}')"
+  if api_call POST "/orchestrator/runtimes/${encoded_runtime}/restore" "$payload"; then
     if [[ "$API_STATUS" =~ ^20 ]]; then
       log "Runtime ${RUNTIME} restore requested"
       return 0
@@ -286,20 +327,20 @@ reapply_guardrails() {
     warn "No guardrail preset provided; skipping guardrail reapply"
     return 1
   fi
-  if (( DRY_RUN )); then
-    log "DRY RUN: would PATCH /admin/gating preset=${GUARDRAIL_PRESET}"
-    return 0
-  fi
   local payload
-  payload="$(jq -nc --arg preset "$GUARDRAIL_PRESET" '{preset: $preset}')"
-  if api_call PATCH "/admin/gating" "$payload"; then
+  if (( DRY_RUN )); then
+    payload="$(jq -nc --arg preset "$GUARDRAIL_PRESET" '{preset: $preset, dry_run: true}')"
+  else
+    payload="$(jq -nc --arg preset "$GUARDRAIL_PRESET" '{preset: $preset}')"
+  fi
+  if api_call POST "/policy/guardrails/apply" "$payload"; then
     if [[ "$API_STATUS" =~ ^20 ]]; then
-      log "Guardrail preset ${GUARDRAIL_PRESET} re-applied"
+      log "Guardrail preset ${GUARDRAIL_PRESET} applied"
       return 0
     fi
   fi
   warn "Guardrail preset apply failed (status ${API_STATUS:-unknown})."
-  warn "Manual fallback: PATCH ${BASE_URL}/admin/gating with preset ${GUARDRAIL_PRESET}"
+  warn "Manual fallback: POST ${BASE_URL}/policy/guardrails/apply with preset ${GUARDRAIL_PRESET}"
   return 1
 }
 
@@ -321,6 +362,7 @@ run_step "Discover lane metadata" lane_metadata || true
 run_step "Select snapshot" latest_snapshot || true
 run_step "Pause lane" pause_lane
 run_step "Flush jobs" flush_jobs
+run_step "Capture project snapshot" capture_snapshot || true
 run_step "Restore project" restore_project || true
 run_step "Restore runtime" restore_runtime || true
 run_step "Reapply guardrails" reapply_guardrails || true

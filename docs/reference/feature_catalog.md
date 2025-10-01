@@ -34,8 +34,8 @@ _Spin up projects with live state, context-on-demand, and predictable response t
 
 - **Project Hub Primitives** · backend / admin / core / complete
   Projects tree/creation/notes and safe file IO (atomic write, SHA precondition), with audit/events.
-  _Routes_: `GET /state/projects`, `POST /projects`, `GET /state/projects/{proj}/tree`, `GET /state/projects/{proj}/notes`, `PUT /projects/{proj}/notes`, `GET /state/projects/{proj}/file`, `PUT /projects/{proj}/file`, `PATCH /projects/{proj}/file`, `POST /projects/{proj}/import`
-  _Signals_: `projects.created`, `projects.file.written`
+  _Routes_: `GET /state/projects`, `POST /projects`, `GET /state/projects/{proj}/tree`, `GET /state/projects/{proj}/notes`, `PUT /projects/{proj}/notes`, `GET /state/projects/{proj}/file`, `PUT /projects/{proj}/file`, `PATCH /projects/{proj}/file`, `POST /projects/{proj}/import`, `POST /projects/{proj}/snapshot`
+  _Signals_: `projects.created`, `projects.file.written`, `projects.snapshot.created`
   _Env_: `ARW_PROJECTS_DIR`, `ARW_PROJECT_MAX_FILE_MB`
   _Source_: [apps/arw-server/src/api/projects.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/projects.rs), [apps/arw-server/src/util.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/util.rs)
 
@@ -145,7 +145,8 @@ _Grant capabilities with leases, previews, and clear denials before anything lea
 
 - **Guardrail Gateway (Policy + Egress)** · backend / admin / connectivity / partial
   Ingress/egress policy gating with previews and append-only egress ledger. Full proxy/DNS guard is planned.
-  _Signals_: `egress.preview`, `egress.ledger.appended`
+  _Routes_: `POST /policy/guardrails/apply`
+  _Signals_: `egress.preview`, `egress.ledger.appended`, `policy.guardrails.applied`
   _Env_: `ARW_EGRESS_LEDGER_ENABLE`, `ARW_NET_POSTURE`
   _Source_: [apps/arw-server/src/egress_proxy.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/egress_proxy.rs), [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs), [architecture/egress_firewall.md](../architecture/egress_firewall.md)
 
@@ -161,7 +162,7 @@ _Ship safe defaults, audit runtime tweaks, and keep specs in sync._
 
 - **Config Plane** · backend / admin / core / beta
   Schema-aware config snapshots, diffable patches, and validation helpers for runtime tuning.
-  _Routes_: `GET /state/config`, `GET /state/config/snapshots`, `GET /state/config/snapshots/:id`, `POST /patch/apply`, `POST /patch/dry-run`, `POST /patch/revert`, `POST /patch/validate`, `GET /state/schema_map`, `POST /patch/infer_schema`
+  _Routes_: `GET /state/config`, `GET /state/config/snapshots`, `GET /state/config/snapshots/:id`, `POST /patch/apply` (set `dry_run=true` to preview), `POST /patch/revert`, `POST /patch/validate`, `GET /state/schema_map`, `POST /patch/infer_schema`
   _Signals_: `config.patch.applied`, `logic.unit.reverted`
   _Env_: `ARW_SCHEMA_MAP`
   _Source_: [apps/arw-server/src/api/config.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/config.rs)
@@ -188,11 +189,19 @@ _Queue, schedule, and observe heavier jobs as the team or workload grows._
 
 - **Orchestrator Plane** · backend / dev / connectivity / complete
   Local queue for tasks with optional NATS bridge and background worker(s) for offloads.
-  _Routes_: `GET /orchestrator/mini_agents`, `POST /orchestrator/mini_agents/start_training`, `GET /state/orchestrator/jobs`
-  _Signals_: `task.completed`
+  _Routes_: `GET /orchestrator/mini_agents`, `POST /orchestrator/mini_agents/start_training`, `POST /orchestrator/runtimes/{id}/restore`, `GET /state/orchestrator/jobs`
+  _Signals_: `task.completed`, `runtime.restore.requested`, `runtime.restore.completed`
   _Env_: `ARW_NATS_URL`, `ARW_NODE_ID`, `ARW_NATS_OUT`
   _Source_: [apps/arw-server/src/worker.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/worker.rs), [apps/arw-connector/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-connector/src/main.rs), [apps/arw-server/src/api/orchestrator.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/orchestrator.rs)
   _References_: [architecture/agent_orchestrator.md](../architecture/agent_orchestrator.md)
+
+- **Autonomy Lane Controls** · backend / operators / governance / beta
+  Pause/resume lanes, flush queues, capture snapshots, and manage budgets for trusted autonomy runs.
+  _Routes_: `POST /admin/autonomy/{lane}/pause`, `POST /admin/autonomy/{lane}/resume`, `DELETE /admin/autonomy/{lane}/jobs`, `POST /admin/autonomy/{lane}/budgets`, `POST /projects/{proj}/snapshot`, `GET /projects/{proj}/snapshots`, `POST /projects/{proj}/snapshots/{snapshot}/restore`
+  _Signals_: `autonomy.run.paused`, `autonomy.run.resumed`, `autonomy.interrupt`, `autonomy.budget.updated`, `projects.snapshot.restored`
+  _Env_: `ARW_PROJECTS_DIR`, `ARW_PROJECT_MAX_FILE_MB`
+  _Source_: [apps/arw-server/src/api/autonomy.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/autonomy.rs), [apps/arw-server/src/api/projects.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/projects.rs), [scripts/autonomy_rollback.sh](https://github.com/t3hw00t/ARW/blob/main/scripts/autonomy_rollback.sh)
+  _References_: [spec/autonomy_lane.md](../spec/autonomy_lane.md), [ops/trials/autonomy_rollback_playbook.md](../ops/trials/autonomy_rollback_playbook.md)
 
 - **Federated Clustering** · runtime / operators / infrastructure / plan
   Shared node registry and adverts for optional multi-node deployments.
@@ -221,8 +230,8 @@ _Bring new skills online through declarative packs, WASI tools, and memory layer
 
 - **Managed Runtime Supervisor** · backend / operators / infrastructure / plan
   Policy-aligned lifecycle manager for local text, audio, and vision runtimes with accelerator profiles, health telemetry, and failover orchestration.
-  _Routes_: `GET /state/runtime_matrix`
-  _Signals_: `runtime.state.changed`, `runtime.claim.request`, `runtime.claim.acquired`, `runtime.claim.released`, `runtime.health`
+  _Routes_: `GET /state/runtime_matrix`, `POST /orchestrator/runtimes/{id}/restore`
+  _Signals_: `runtime.state.changed`, `runtime.claim.request`, `runtime.claim.acquired`, `runtime.claim.released`, `runtime.health`, `runtime.restore.requested`, `runtime.restore.completed`
   _Source_: [architecture/managed_runtime_supervisor.md](../architecture/managed_runtime_supervisor.md)
   _References_: [architecture/multimodal_runtime_plan.md](../architecture/multimodal_runtime_plan.md), [architecture/managed_llamacpp_runtime.md](../architecture/managed_llamacpp_runtime.md)
 

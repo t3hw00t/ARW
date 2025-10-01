@@ -11,7 +11,7 @@ use std::time::SystemTime;
 use tokio::fs as afs;
 use tokio::io::AsyncWriteExt;
 
-use crate::{admin_ok, read_models, AppState};
+use crate::{admin_ok, project_snapshots, read_models, AppState};
 use arw_topics as topics;
 
 fn unauthorized() -> Response {
@@ -187,6 +187,21 @@ pub struct ProjectNotesSaveResponse {
     pub modified: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub corr_id: Option<String>,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ProjectSnapshotResponseBody {
+    pub ok: bool,
+    pub proj: String,
+    pub snapshot: project_snapshots::ProjectSnapshotMetadata,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub corr_id: Option<String>,
+}
+
+#[derive(Serialize, utoipa::ToSchema)]
+pub struct ProjectSnapshotsListBody {
+    pub count: usize,
+    pub items: Vec<project_snapshots::ProjectSnapshotMetadata>,
 }
 
 #[derive(Deserialize)]
@@ -867,6 +882,234 @@ pub async fn projects_import_unified(
     Json(req): Json<ProjectImportRequest>,
 ) -> impl IntoResponse {
     projects_import(headers, state, Json(ProjectImportRequest { proj, ..req })).await
+}
+
+/// Capture a project snapshot for rollback and audit.
+#[utoipa::path(
+    post,
+    path = "/projects/{proj}/snapshot",
+    tag = "Projects",
+    params(("proj" = String, Path, description = "Project name")),
+    responses(
+        (status = 201, description = "Snapshot created", body = ProjectSnapshotResponseBody),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Project not found"),
+        (status = 500, description = "Error")
+    )
+)]
+pub async fn projects_snapshot_create(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path(proj): Path<String>,
+) -> impl IntoResponse {
+    if !admin_ok(&headers) {
+        return unauthorized();
+    }
+    let Some(safe) = sanitize_project_name(&proj) else {
+        return problem(
+            axum::http::StatusCode::BAD_REQUEST,
+            "Bad Request",
+            Some("invalid project name"),
+        );
+    };
+    let Some(root) = project_root(&safe) else {
+        return problem(
+            axum::http::StatusCode::NOT_FOUND,
+            "Not Found",
+            Some("project missing"),
+        );
+    };
+
+    match project_snapshots::create_snapshot(&root, &safe).await {
+        Ok(snapshot) => {
+            let mut payload = json!({
+                "proj": safe.clone(),
+                "snapshot": snapshot.id.clone(),
+                "path": snapshot.path.clone(),
+                "bytes": snapshot.bytes,
+                "files": snapshot.files,
+                "digest": snapshot.digest,
+                "skipped": snapshot.skipped,
+            });
+            ensure_corr(&mut payload);
+            state
+                .bus()
+                .publish(topics::TOPIC_PROJECTS_SNAPSHOT_CREATED, &payload);
+            publish_audit("projects.snapshot.created", &payload).await;
+            let corr_id = payload
+                .get("corr_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            (
+                axum::http::StatusCode::CREATED,
+                Json(ProjectSnapshotResponseBody {
+                    ok: true,
+                    proj: safe,
+                    snapshot,
+                    corr_id,
+                }),
+            )
+                .into_response()
+        }
+        Err(project_snapshots::SnapshotError::ProjectMissing(_)) => problem(
+            axum::http::StatusCode::NOT_FOUND,
+            "Not Found",
+            Some("project missing"),
+        ),
+        Err(err) => problem(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Error",
+            Some(&err.to_string()),
+        ),
+    }
+}
+
+/// Restore a project from a snapshot.
+#[utoipa::path(
+    post,
+    path = "/projects/{proj}/snapshots/{snapshot}/restore",
+    tag = "Projects",
+    params(
+        ("proj" = String, Path, description = "Project name"),
+        ("snapshot" = String, Path, description = "Snapshot identifier")
+    ),
+    responses(
+        (status = 200, description = "Snapshot restored", body = ProjectSnapshotResponseBody),
+        (status = 400, description = "Invalid request"),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Snapshot not found"),
+        (status = 500, description = "Error")
+    )
+)]
+pub async fn projects_snapshot_restore(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+    Path((proj, snapshot_id)): Path<(String, String)>,
+) -> impl IntoResponse {
+    if !admin_ok(&headers) {
+        return unauthorized();
+    }
+    let Some(safe) = sanitize_project_name(&proj) else {
+        return problem(
+            axum::http::StatusCode::BAD_REQUEST,
+            "Bad Request",
+            Some("invalid project name"),
+        );
+    };
+    let Some(root) = project_root(&safe) else {
+        return problem(
+            axum::http::StatusCode::NOT_FOUND,
+            "Not Found",
+            Some("project missing"),
+        );
+    };
+
+    match project_snapshots::restore_snapshot(&root, &safe, &snapshot_id).await {
+        Ok(snapshot) => {
+            let mut payload = json!({
+                "proj": safe.clone(),
+                "snapshot": snapshot.id.clone(),
+                "path": snapshot.path.clone(),
+                "bytes": snapshot.bytes,
+                "files": snapshot.files,
+            });
+            ensure_corr(&mut payload);
+            state
+                .bus()
+                .publish(topics::TOPIC_PROJECTS_SNAPSHOT_RESTORED, &payload);
+            publish_audit("projects.snapshot.restored", &payload).await;
+            let corr_id = payload
+                .get("corr_id")
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string());
+            Json(ProjectSnapshotResponseBody {
+                ok: true,
+                proj: safe,
+                snapshot,
+                corr_id,
+            })
+            .into_response()
+        }
+        Err(project_snapshots::SnapshotError::ProjectMissing(_)) => problem(
+            axum::http::StatusCode::NOT_FOUND,
+            "Not Found",
+            Some("project missing"),
+        ),
+        Err(project_snapshots::SnapshotError::SnapshotMissing(_)) => problem(
+            axum::http::StatusCode::NOT_FOUND,
+            "Not Found",
+            Some("snapshot missing"),
+        ),
+        Err(err) => problem(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Error",
+            Some(&err.to_string()),
+        ),
+    }
+}
+
+/// List recent project snapshots.
+#[utoipa::path(
+    get,
+    path = "/projects/{proj}/snapshots",
+    tag = "Projects",
+    params(
+        ("proj" = String, Path, description = "Project name"),
+        ("limit" = Option<usize>, Query, description = "Maximum snapshots to return (default 20)")
+    ),
+    responses(
+        (status = 200, description = "Snapshots", body = ProjectSnapshotsListBody),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Project not found"),
+        (status = 500, description = "Error")
+    )
+)]
+pub async fn projects_snapshots_list(
+    headers: HeaderMap,
+    Query(q): Query<std::collections::HashMap<String, String>>,
+    Path(proj): Path<String>,
+) -> impl IntoResponse {
+    if !admin_ok(&headers) {
+        return unauthorized();
+    }
+    let Some(safe) = sanitize_project_name(&proj) else {
+        return problem(
+            axum::http::StatusCode::BAD_REQUEST,
+            "Bad Request",
+            Some("invalid project name"),
+        );
+    };
+    let Some(root) = project_root(&safe) else {
+        return problem(
+            axum::http::StatusCode::NOT_FOUND,
+            "Not Found",
+            Some("project missing"),
+        );
+    };
+    let limit = q
+        .get("limit")
+        .and_then(|v| v.parse::<usize>().ok())
+        .unwrap_or(20)
+        .min(100);
+
+    match project_snapshots::list_snapshots(&root, &safe, limit).await {
+        Ok(items) => Json(ProjectSnapshotsListBody {
+            count: items.len(),
+            items,
+        })
+        .into_response(),
+        Err(project_snapshots::SnapshotError::ProjectMissing(_)) => problem(
+            axum::http::StatusCode::NOT_FOUND,
+            "Not Found",
+            Some("project missing"),
+        ),
+        Err(err) => problem(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Error",
+            Some(&err.to_string()),
+        ),
+    }
 }
 
 fn projects_dir() -> std::path::PathBuf {

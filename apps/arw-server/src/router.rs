@@ -169,6 +169,7 @@ pub(crate) mod paths {
     pub const STATE_POLICY_CAPSULES: &str = "/state/policy/capsules";
     pub const POLICY_RELOAD: &str = "/policy/reload";
     pub const POLICY_SIMULATE: &str = "/policy/simulate";
+    pub const POLICY_GUARDRAILS_APPLY: &str = "/policy/guardrails/apply";
     pub const STATE_MODELS: &str = "/state/models";
     pub const STATE_MODELS_METRICS: &str = "/state/models_metrics";
     pub const STATE_OBSERVATIONS: &str = "/state/observations";
@@ -194,6 +195,9 @@ pub(crate) mod paths {
     pub const PROJECTS_NOTES: &str = "/projects/:proj/notes";
     pub const PROJECTS_FILE: &str = "/projects/:proj/file";
     pub const PROJECTS_IMPORT: &str = "/projects/:proj/import";
+    pub const PROJECTS_SNAPSHOT: &str = "/projects/:proj/snapshot";
+    pub const PROJECTS_SNAPSHOTS: &str = "/projects/:proj/snapshots";
+    pub const PROJECTS_SNAPSHOT_RESTORE: &str = "/projects/:proj/snapshots/:snapshot/restore";
     pub const SPEC_OPENAPI: &str = "/spec/openapi.yaml";
     pub const SPEC_ASYNCAPI: &str = "/spec/asyncapi.yaml";
     pub const SPEC_MCP: &str = "/spec/mcp-tools.json";
@@ -218,6 +222,7 @@ pub(crate) mod paths {
     pub const ADMIN_AUTONOMY_LANE_PAUSE: &str = "/admin/autonomy/:lane/pause";
     pub const ADMIN_AUTONOMY_LANE_RESUME: &str = "/admin/autonomy/:lane/resume";
     pub const ADMIN_AUTONOMY_LANE_JOBS: &str = "/admin/autonomy/:lane/jobs";
+    pub const ADMIN_AUTONOMY_LANE_BUDGETS: &str = "/admin/autonomy/:lane/budgets";
     pub const ADMIN_TOOLS: &str = "/admin/tools";
     pub const ADMIN_TOOLS_RUN: &str = "/admin/tools/run";
     pub const ADMIN_TOOLS_CACHE_STATS: &str = "/admin/tools/cache_stats";
@@ -458,6 +463,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
     builder.route_delete(
         paths::ADMIN_AUTONOMY_LANE_JOBS,
         api::autonomy::autonomy_jobs_clear,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_AUTONOMY_LANE_BUDGETS,
+        api::autonomy::autonomy_budgets_update,
         Some(Stability::Experimental),
     );
     builder.route_get(
@@ -760,6 +770,21 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         api::projects::projects_import_unified,
         Some(Stability::Beta),
     );
+    builder.route_post(
+        paths::PROJECTS_SNAPSHOT,
+        api::projects::projects_snapshot_create,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::PROJECTS_SNAPSHOTS,
+        api::projects::projects_snapshots_list,
+        Some(Stability::Beta),
+    );
+    builder.route_post(
+        paths::PROJECTS_SNAPSHOT_RESTORE,
+        api::projects::projects_snapshot_restore,
+        Some(Stability::Beta),
+    );
     builder.route_get(
         paths::STATE_ROUTE_STATS,
         api::state::state_route_stats,
@@ -918,6 +943,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
     builder.route_post(
         paths::POLICY_SIMULATE,
         api::policy::policy_simulate,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::POLICY_GUARDRAILS_APPLY,
+        api::policy::policy_guardrails_apply,
         Some(Stability::Experimental),
     );
     builder.route_get(
@@ -1093,6 +1123,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
     builder.route_post(
         "/orchestrator/mini_agents/start_training",
         api::orchestrator::orchestrator_start_training,
+        None,
+    );
+    builder.route_post(
+        "/orchestrator/runtimes/:id/restore",
+        api::orchestrator::orchestrator_runtime_restore,
         None,
     );
     builder.route_get(

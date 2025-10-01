@@ -80,6 +80,8 @@ pub struct AutonomyLaneSnapshot {
     pub budgets: Option<AutonomyBudgets>,
     #[serde(default)]
     pub alerts: Vec<String>,
+    #[serde(default)]
+    pub last_budget_update_ms: Option<u64>,
 }
 
 impl AutonomyLaneSnapshot {
@@ -95,6 +97,7 @@ impl AutonomyLaneSnapshot {
             updated_ms: None,
             budgets: None,
             alerts: Vec::new(),
+            last_budget_update_ms: None,
         }
     }
 }
@@ -281,6 +284,7 @@ impl AutonomyRegistry {
                 lane.budgets = budgets.clone();
                 lane.last_event
                     .get_or_insert_with(|| "budgets_updated".to_string());
+                lane.last_budget_update_ms = Some(now_ms());
             })
             .await;
         self.persist().await;

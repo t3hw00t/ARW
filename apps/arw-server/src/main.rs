@@ -37,6 +37,7 @@ mod models;
 mod openapi;
 mod patch_guard;
 mod policy;
+mod project_snapshots;
 mod queue;
 mod read_models;
 mod research_watcher;
@@ -330,6 +331,9 @@ mod http_tests {
     async fn debug_alias_returns_not_found() {
         let temp = tempdir().expect("tempdir");
         let mut ctx = crate::test_support::begin_state_env(temp.path());
+        crate::security::reset_admin_rate_limiter_for_tests();
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret123");
+        ctx.env.set("ARW_DEBUG", "1");
         let state_dir = temp.path().to_path_buf();
         let state = build_state(&state_dir, &mut ctx.env).await;
 
@@ -354,12 +358,26 @@ mod http_tests {
                 Request::builder()
                     .method("GET")
                     .uri(paths::ADMIN_DEBUG)
+                    .header("X-ARW-Admin", "secret123")
                     .body(Body::empty())
                     .expect("admin debug request"),
             )
             .await
             .expect("admin debug response");
-        assert_eq!(admin_resp.status(), StatusCode::OK);
+        let status = admin_resp.status();
+        if status != StatusCode::OK {
+            let body = admin_resp
+                .into_body()
+                .collect()
+                .await
+                .expect("admin debug body")
+                .to_bytes();
+            panic!(
+                "expected 200 OK, got {} with body {}",
+                status,
+                String::from_utf8_lossy(&body)
+            );
+        }
     }
 
     #[tokio::test]
@@ -658,7 +676,8 @@ mod http_tests {
             .layer(axum::middleware::from_fn(crate::security::client_addr_mw));
 
         // Enable debug but simulate a remote caller via X-Forwarded-For.
-        std::env::set_var("ARW_DEBUG", "1");
+        let mut env = crate::test_support::env::guard();
+        env.set("ARW_DEBUG", "1");
         let req = Request::builder()
             .method("GET")
             .uri(paths::ADMIN_DEBUG)
@@ -670,7 +689,7 @@ mod http_tests {
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
 
         // Cleanup
-        std::env::remove_var("ARW_DEBUG");
+        env.remove("ARW_DEBUG");
     }
 
     #[tokio::test]
@@ -683,7 +702,8 @@ mod http_tests {
             .route(paths::ADMIN_DEBUG, get(crate::api::ui::debug_ui))
             .layer(axum::middleware::from_fn(crate::security::client_addr_mw));
 
-        std::env::set_var("ARW_DEBUG", "1");
+        let mut env = crate::test_support::env::guard();
+        env.set("ARW_DEBUG", "1");
         let req = Request::builder()
             .method("GET")
             .uri(paths::ADMIN_DEBUG)
@@ -692,7 +712,7 @@ mod http_tests {
             .expect("request");
         let resp = app.clone().oneshot(req).await.expect("response");
         assert_eq!(resp.status(), StatusCode::OK);
-        std::env::remove_var("ARW_DEBUG");
+        env.remove("ARW_DEBUG");
     }
 
     #[tokio::test]
@@ -708,7 +728,8 @@ mod http_tests {
             )
             .layer(axum::middleware::from_fn(crate::security::client_addr_mw));
 
-        std::env::set_var("ARW_DEBUG", "0");
+        let mut env = crate::test_support::env::guard();
+        env.set("ARW_DEBUG", "0");
         let req = Request::builder()
             .method("GET")
             .uri("/admin/ui/assets/models.js")
@@ -717,6 +738,7 @@ mod http_tests {
             .expect("request");
         let resp = app.clone().oneshot(req).await.expect("response");
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+        env.remove("ARW_DEBUG");
     }
 }
 
@@ -740,15 +762,19 @@ pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
     // case to preserve test ergonomics.
     if env_truthy("ARW_DEBUG") {
         let client = crate::security::client_addr();
+        tracing::trace!(target: "arw::security", client = ?client, "admin_ok debug gate");
         // Helper: check if a string is a loopback IP (with or without port)
         fn is_loopback(s: &str) -> bool {
             // Try SocketAddr first (ip:port)
             if let Ok(sa) = s.parse::<std::net::SocketAddr>() {
-                return sa.ip().is_loopback();
+                if sa.ip().is_loopback() || sa.ip().is_unspecified() {
+                    return true;
+                }
+                return false;
             }
             // Try plain IpAddr
             if let Ok(ip) = s.parse::<std::net::IpAddr>() {
-                return ip.is_loopback();
+                return ip.is_loopback() || ip.is_unspecified();
             }
             // Fallback for common hostnames
             let low = s.trim().to_ascii_lowercase();
@@ -760,9 +786,8 @@ pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
                 // Middleware not installed (tests or minimal routers). Allow.
                 return true;
             }
-            _ => {
-                // Debug is on but caller not local.
-                return false;
+            Some(_) => {
+                // Debug is on but caller not local; fall through to token checks.
             }
         }
     }

@@ -33,7 +33,7 @@ struct NotesSnapshot {
 }
 
 use crate::singleflight::Singleflight;
-use crate::{metrics, tasks::TaskHandle, training, AppState};
+use crate::{metrics, project_snapshots, tasks::TaskHandle, training, AppState};
 use arw_topics as topics;
 
 pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
@@ -1353,6 +1353,19 @@ pub(crate) async fn projects_snapshot_at(root_dir: &Path) -> Value {
                         .collect(),
                 )
             };
+            let digest_hex = format!("{:x}", digest.finalize());
+            let snapshots = match project_snapshots::list_snapshots(&project_root, &name, 5).await {
+                Ok(list) => list,
+                Err(_) => Vec::new(),
+            };
+            let snapshots_count = snapshots.len() as u64;
+            let snapshots_items =
+                serde_json::to_value(&snapshots).unwrap_or_else(|_| Value::Array(Vec::new()));
+            let snapshots_latest = snapshots
+                .first()
+                .cloned()
+                .map(|s| serde_json::to_value(s).unwrap_or(Value::Null))
+                .unwrap_or(Value::Null);
             items.push(json!({
                 "name": name,
                 "notes": {
@@ -1363,9 +1376,14 @@ pub(crate) async fn projects_snapshot_at(root_dir: &Path) -> Value {
                     "truncated": notes.truncated,
                 },
                 "tree": {
-                    "digest": format!("{:x}", digest.finalize()),
+                    "digest": digest_hex,
                     "paths": Value::Object(tree_value),
                     "truncated": truncated_value,
+                },
+                "snapshots": {
+                    "count": snapshots_count,
+                    "latest": snapshots_latest,
+                    "items": snapshots_items,
                 }
             }));
         }

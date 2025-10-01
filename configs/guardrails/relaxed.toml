@@ -1,0 +1,4 @@
+# Relaxed guardrail preset
+# Minimal denies; suitable for local single-user experimentation.
+
+deny_user = []

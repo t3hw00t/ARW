@@ -1,0 +1,8 @@
+# Standard guardrail preset
+# Denies high-risk admin surfaces by default while allowing routine developer workflows.
+
+deny_user = [
+  "introspect:*",
+  "tools:high_privilege",
+  "queue:admin*"
+]

@@ -4,7 +4,7 @@ title: Autonomy Rollback Playbook
 
 # Autonomy Rollback Playbook
 
-Updated: 2025-09-26
+Updated: 2025-09-27
 Type: Runbook
 Status: Active
 
@@ -14,7 +14,7 @@ Return an autonomous lane to a known-good guided state in two minutes or less. O
 
 ## Preflight (keep current)
 
-- Latest project snapshot (`/admin/projects/:id/snapshot`) stored with timestamp < 30 min.
+- Latest project snapshot captured via `POST /projects/{proj}/snapshot` within the last 30 minutes.
 - Runtime profile snapshot (launcher Runtime Manager → `Save profile snapshot`).
 - Guardrail preset bundle exported (`configs/gating.toml`, `configs/trust_capsules.json`).
 - Operator console open to Trial Control Center (pause/stop visible).
@@ -43,8 +43,9 @@ What the helper attempts:
 1. Pause the lane (`POST /admin/autonomy/{lane}/pause`).
 2. Flush in-flight and queued jobs (`DELETE /admin/autonomy/{lane}/jobs`).
 3. Discover lane metadata and note the most recent snapshot id surfaced by `/state/autonomy/lanes/{lane}`.
-4. Restore the project and runtime using the unified helpers (see manual checklist below until the API is fully automated).
-5. Reapply guardrail presets. (Until the admin event publish helper returns, log the rollback in the incident template instead.)
+4. Capture a fresh snapshot with `POST /projects/{proj}/snapshot`.
+5. Request a runtime restore via `POST /orchestrator/runtimes/{id}/restore` (falls back to Launcher Runtime Manager when unavailable).
+6. Reapply guardrail presets using `POST /policy/guardrails/apply` (`dry_run:true` for rehearsal).
 
 When an endpoint is missing (early builds) the script prints a WARN line with the equivalent manual curl invocation so the operator can finish the step by hand. Pair it with the incident note in the template below.
 
@@ -54,16 +55,17 @@ When an endpoint is missing (early builds) the script prints a WARN line with th
    - Hit Pause in Trial Control Center → confirm alert note (include reason).
 2. **Cut automation**
    - `DELETE /admin/autonomy/{lane_id}/jobs?state=in_flight`.
-   - Revoke leases: `POST /admin/capabilities/revoke` for lane scope.
+   - `POST /policy/guardrails/apply` with the safety preset (`dry_run:true` when rehearsing).
 3. **Restore project state**
    - Use `/state/projects` to confirm the current file tree.
-   - Run the project restore helper (planned unified endpoint) or follow the ops handbook to replay the snapshot from shared storage.
+   - `POST /projects/{proj}/snapshots/{snapshot}/restore` to rewind, or follow the manual replay checklist.
    - Record the snapshot id used in the incident log.
 4. **Restore runtime state**
-   - Launcher Runtime Manager → select snapshot → `Restore and restart`.
-   - Verify `/state/runtimes` shows `ready` with expected profile tag.
+   - `POST /orchestrator/runtimes/{runtime}/restore` to trigger the automation hook.
+   - Launcher Runtime Manager → select snapshot → `Restore and restart` if automation is unavailable.
+   - Verify `/state/runtime_supervisor` shows `ready` with expected profile tag.
 5. **Reapply guardrails**
-   - `PATCH /admin/gating` with autonomy preset (stored in `docs/ops/trials/README.md` dossier).
+   - `POST /policy/guardrails/apply` with the saved preset (`dry_run:true` permitted for rehearsal).
    - Confirm `capsule.guard.state=healthy` in `/state/policy/capsules`.
 6. **Validate**
    - Ensure `/state/autonomy/lanes/:lane_id` reports `mode="guided"` and zero active jobs.
@@ -93,5 +95,5 @@ Follow-up: {next steps or "monitoring"}
 
 - Charter: [spec/autonomy_lane.md](../../spec/autonomy_lane.md)
 - Trial dossier guidance: [ops/trials/README.md](README.md)
-- Budget tuning: `/admin/autonomy/{lane_id}/budgets`
+- Budget tuning: `POST /admin/autonomy/{lane}/budgets` (use `dry_run:true` to preview).
 - Event watch: `/events?kind=autonomy.*`

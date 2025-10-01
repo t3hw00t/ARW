@@ -223,9 +223,14 @@ Projects tree/creation/notes and safe file IO (atomic write, SHA precondition), 
   - `PUT /projects/{proj}/file`
   - `PATCH /projects/{proj}/file`
   - `POST /projects/{proj}/import`
+  - `POST /projects/{proj}/snapshot`
+  - `GET /projects/{proj}/snapshots`
+  - `POST /projects/{proj}/snapshots/{snapshot}/restore`
 - Events:
   - `projects.created`
   - `projects.file.written`
+  - `projects.snapshot.created`
+  - `projects.snapshot.restored`
 - Env:
   - `ARW_PROJECTS_DIR`
   - `ARW_PROJECT_MAX_FILE_MB`
@@ -374,8 +379,11 @@ Ingress/egress policy gating with previews and append-only egress ledger. Full p
   - [apps/arw-server/src/egress_proxy.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/egress_proxy.rs)
   - [crates/arw-topics/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-topics/src/lib.rs)
   - [architecture/egress_firewall.md](../architecture/egress_firewall.md)
+- HTTP:
+  - `POST /policy/guardrails/apply`
 - Events:
   - `egress.preview`
+  - `policy.guardrails.applied`
   - `egress.ledger.appended`
 - Env:
   - `ARW_EGRESS_LEDGER_ENABLE`
@@ -422,15 +430,52 @@ Local queue for tasks with optional NATS bridge and background worker(s) for off
 - HTTP:
   - `GET /orchestrator/mini_agents`
   - `POST /orchestrator/mini_agents/start_training`
+  - `POST /orchestrator/runtimes/{id}/restore`
   - `GET /state/orchestrator/jobs`
 - Events:
   - `task.completed`
+  - `runtime.restore.requested`
+  - `runtime.restore.completed`
 - Env:
   - `ARW_NATS_URL`
   - `ARW_NODE_ID`
   - `ARW_NATS_OUT`
 - References:
   - [architecture/agent_orchestrator.md](../architecture/agent_orchestrator.md)
+
+## Autonomy Lane Controls
+
+Pause/resume lanes, flush queues, capture snapshots, and manage budgets for trusted autonomy runs.
+
+- Scope: Remote collaborator pack / backend / operators / governance / beta
+- Owner: platform
+- Depends on:
+  - project_hub_primitives
+  - event_spine
+- Single Sources of Truth:
+  - [apps/arw-server/src/api/autonomy.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/autonomy.rs)
+  - [apps/arw-server/src/api/projects.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/projects.rs)
+  - [scripts/autonomy_rollback.sh](https://github.com/t3hw00t/ARW/blob/main/scripts/autonomy_rollback.sh)
+- HTTP:
+  - `POST /admin/autonomy/{lane}/pause`
+  - `POST /admin/autonomy/{lane}/resume`
+  - `DELETE /admin/autonomy/{lane}/jobs`
+  - `POST /admin/autonomy/{lane}/budgets`
+  - `POST /projects/{proj}/snapshot`
+  - `GET /projects/{proj}/snapshots`
+  - `POST /projects/{proj}/snapshots/{snapshot}/restore`
+- Events:
+  - `autonomy.run.paused`
+  - `autonomy.run.resumed`
+  - `autonomy.interrupt`
+  - `autonomy.budget.updated`
+  - `projects.snapshot.restored`
+- Env:
+  - `ARW_PROJECTS_DIR`
+  - `ARW_PROJECT_MAX_FILE_MB`
+- References:
+  - [spec/autonomy_lane.md](../spec/autonomy_lane.md)
+  - [ops/trials/autonomy_rollback_playbook.md](../ops/trials/autonomy_rollback_playbook.md)
 
 ## Interface Registry & Specs
 
@@ -630,8 +675,7 @@ Schema-aware config snapshots, diffable patches, and validation helpers for runt
   - `GET /state/config`
   - `GET /state/config/snapshots`
   - `GET /state/config/snapshots/:id`
-  - `POST /patch/apply`
-  - `POST /patch/dry-run`
+  - `POST /patch/apply` (use `dry_run=true` to preview)
   - `POST /patch/revert`
   - `POST /patch/validate`
   - `GET /state/schema_map`
@@ -658,8 +702,9 @@ Policy-aligned lifecycle manager for local text, audio, and vision runtimes with
   - egress_sentinel
 - Single Sources of Truth:
   - [architecture/managed_runtime_supervisor.md](../architecture/managed_runtime_supervisor.md)
-- HTTP:
+ - HTTP:
   - `GET /state/runtime_matrix`
+  - `POST /orchestrator/runtimes/{id}/restore`
 - Read‑models:
   - `runtime_matrix`
 - Events:
@@ -668,6 +713,8 @@ Policy-aligned lifecycle manager for local text, audio, and vision runtimes with
   - `runtime.claim.acquired`
   - `runtime.claim.released`
   - `runtime.health`
+  - `runtime.restore.requested`
+  - `runtime.restore.completed`
 - References:
   - [architecture/multimodal_runtime_plan.md](../architecture/multimodal_runtime_plan.md)
   - [architecture/managed_llamacpp_runtime.md](../architecture/managed_llamacpp_runtime.md)

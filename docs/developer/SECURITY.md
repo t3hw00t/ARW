@@ -14,7 +14,7 @@ Type: Reference
 - CORS: remains restrictive; `ARW_CORS_ANY` is reserved for a future dev override once the hardened policy ships.
 
 ## Sensitive Endpoints
-- `/admin/debug`, `/admin/probe*`, `/admin/memory*`, `/admin/models*`, `/admin/governor*`, `/admin/introspect*`, `/admin/chat*`, `/admin/feedback*`, `/events`, `/admin/shutdown`.
+- `/admin/debug`, `/admin/probe*`, `/admin/memory*`, `/admin/models*`, `/admin/governor*`, `/admin/chat*`, `/admin/feedback*`, `/policy/guardrails/apply`, `/events`, `/shutdown`.
 - Adjust the list conservatively; prefer to over‑protect and open case‑by‑case.
 
 ## Recommendations

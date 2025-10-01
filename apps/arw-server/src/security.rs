@@ -237,32 +237,35 @@ mod tests {
 
     #[test]
     fn csp_relaxed_default_for_html() {
-        std::env::remove_var("ARW_CSP");
-        std::env::remove_var("ARW_CSP_PRESET");
-        std::env::remove_var("ARW_DEBUG");
+        let mut env = crate::test_support::env::guard();
+        env.remove("ARW_CSP");
+        env.remove("ARW_CSP_PRESET");
+        env.remove("ARW_DEBUG");
         let v = super::csp_value_for("/admin/ui/models");
         assert!(v.unwrap().contains("script-src 'self' 'unsafe-inline'"));
     }
 
     #[test]
     fn csp_strict_non_debug_uses_nonce() {
-        std::env::set_var("ARW_CSP_PRESET", "strict");
-        std::env::remove_var("ARW_DEBUG");
+        let mut env = crate::test_support::env::guard();
+        env.set("ARW_CSP_PRESET", "strict");
+        env.remove("ARW_DEBUG");
         let v = super::csp_value_for("/about").unwrap();
         assert!(v.contains("script-src 'self' 'nonce-"));
         // Ensure we did not allow inline scripts
         assert!(!v.contains("script-src 'self' 'unsafe-inline'"));
-        std::env::remove_var("ARW_CSP_PRESET");
+        env.remove("ARW_CSP_PRESET");
     }
 
     #[test]
     fn csp_debug_relaxed_even_when_strict_preset() {
-        std::env::set_var("ARW_CSP_PRESET", "strict");
-        std::env::set_var("ARW_DEBUG", "1");
-        std::env::remove_var("ARW_DEBUG_CSP_STRICT");
+        let mut env = crate::test_support::env::guard();
+        env.set("ARW_CSP_PRESET", "strict");
+        env.set("ARW_DEBUG", "1");
+        env.remove("ARW_DEBUG_CSP_STRICT");
         let v = super::csp_value_for("/admin/debug").unwrap();
         assert!(v.contains("script-src 'self' 'unsafe-inline'"));
-        std::env::remove_var("ARW_CSP_PRESET");
-        std::env::remove_var("ARW_DEBUG");
+        env.remove("ARW_CSP_PRESET");
+        env.remove("ARW_DEBUG");
     }
 }

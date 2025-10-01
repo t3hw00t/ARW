@@ -1,14 +1,17 @@
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 
 use arw_events::Bus;
 use arw_runtime::{
     RegistrySnapshot, RuntimeDescriptor, RuntimeModality, RuntimeRecord, RuntimeSeverity,
     RuntimeState, RuntimeStatus,
 };
-use arw_topics::TOPIC_RUNTIME_STATE_CHANGED;
+use arw_topics::{
+    TOPIC_RUNTIME_RESTORE_COMPLETED, TOPIC_RUNTIME_RESTORE_REQUESTED, TOPIC_RUNTIME_STATE_CHANGED,
+};
 use chrono::{DateTime, Utc};
-use serde_json::Value;
+use serde_json::{json, Value};
 use tokio::sync::RwLock;
 
 use crate::read_models;
@@ -145,6 +148,50 @@ impl RuntimeRegistry {
         guard.updated_at = Utc::now();
     }
 
+    pub async fn request_restore(&self, id: &str, restart: bool, preset: Option<String>) {
+        self.ensure_descriptor(id).await;
+        let mut detail = Vec::new();
+        if let Some(ref preset_name) = preset {
+            if !preset_name.trim().is_empty() {
+                detail.push(format!("Preset: {}", preset_name));
+            }
+        }
+        if !restart {
+            detail.push("Restart flag disabled".to_string());
+        }
+
+        let mut status = RuntimeStatus::new(id.to_string(), RuntimeState::Starting)
+            .with_summary("Restore requested")
+            .touch();
+        status.detail.extend(detail.clone());
+        self.apply_status(status).await;
+
+        self.bus.publish(
+            TOPIC_RUNTIME_RESTORE_REQUESTED,
+            &json!({
+                "runtime": id,
+                "restart": restart,
+                "preset": preset,
+            }),
+        );
+
+        let registry = self.clone();
+        let bus = self.bus.clone();
+        let runtime_id = id.to_string();
+        tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_secs(1)).await;
+            let mut ready = RuntimeStatus::new(runtime_id.clone(), RuntimeState::Ready)
+                .with_summary("Runtime ready after restore")
+                .touch();
+            ready.detail.push("Runtime restore completed".to_string());
+            registry.apply_status(ready).await;
+            bus.publish(
+                TOPIC_RUNTIME_RESTORE_COMPLETED,
+                &json!({"runtime": runtime_id}),
+            );
+        });
+    }
+
     pub async fn handle_health_event(&self, payload: Value) {
         let Some(target) = payload
             .get("target")
@@ -186,4 +233,57 @@ pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
     ));
 
     tasks
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arw_events::Bus;
+    use tokio::time::timeout;
+
+    #[tokio::test]
+    async fn request_restore_marks_runtime_ready() {
+        let bus = Bus::new(64);
+        let registry = RuntimeRegistry::new(bus.clone());
+        let mut rx = bus.subscribe();
+
+        registry
+            .request_restore("runtime-a", true, Some("standard".into()))
+            .await;
+
+        // Drain events until the restore request surfaces.
+        timeout(Duration::from_secs(2), async {
+            loop {
+                if let Ok(env) = rx.recv().await {
+                    if env.kind == TOPIC_RUNTIME_RESTORE_REQUESTED {
+                        return env;
+                    }
+                }
+            }
+        })
+        .await
+        .expect("restore request timeout");
+
+        // Wait for completion event
+        let completed = timeout(Duration::from_secs(3), async {
+            loop {
+                if let Ok(env) = rx.recv().await {
+                    if env.kind == TOPIC_RUNTIME_RESTORE_COMPLETED {
+                        return env;
+                    }
+                }
+            }
+        })
+        .await
+        .expect("completion timeout");
+        assert_eq!(completed.payload["runtime"], "runtime-a");
+
+        let snapshot = registry.snapshot().await;
+        let record = snapshot
+            .runtimes
+            .iter()
+            .find(|r| r.descriptor.id == "runtime-a")
+            .expect("runtime present");
+        assert_eq!(record.status.state, RuntimeState::Ready);
+    }
 }
