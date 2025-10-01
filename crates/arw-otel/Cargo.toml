@@ -15,15 +15,15 @@ tracing-appender = "0.2"
 once_cell = { workspace = true }
 
 [dependencies.opentelemetry]
-version = "0.22"
+version = "0.30"
 optional = true
 features = ["trace"]
 
 [dependencies.opentelemetry-otlp]
-version = "0.30"
+version = "0.31"
 optional = true
 features = ["trace", "tonic"]
 
 [dependencies.tracing-opentelemetry]
-version = "0.31"
+version = "0.32"
 optional = true
