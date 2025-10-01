@@ -317,19 +317,32 @@ impl FeedbackHub {
 
     async fn collect_features(&self) -> arw_heuristics::Features {
         let mut features = arw_heuristics::Features::default();
-        let routes = self.metrics.routes_for_analysis();
-        for (path, (ewma, hits, errors)) in routes.into_iter() {
+        let metrics_snapshot = self.metrics.snapshot();
+        for (path, summary) in metrics_snapshot.routes.by_path.iter() {
             features.routes.insert(
-                path,
+                path.clone(),
                 arw_heuristics::RouteStat {
-                    ewma_ms: ewma,
-                    hits,
-                    errors,
+                    ewma_ms: summary.ewma_ms,
+                    p95_ms: summary.p95_ms as f64,
+                    hits: summary.hits,
+                    errors: summary.errors,
                 },
             );
         }
         features.mem_applied_count = self.metrics.event_kind_count("memory.applied");
         features.cur_mem_limit = self.governor.memory_limit().await;
+        let bus_stats = self.bus.stats();
+        features.bus_lagged = bus_stats.lagged;
+        features.bus_receivers = bus_stats.receivers;
+
+        let state_snapshot = self.state.read().await.clone();
+        features.pending_suggestions = state_snapshot.suggestions.len();
+        features.pending_signals = state_snapshot.signals.len();
+        features.auto_apply_enabled = state_snapshot.auto_apply;
+
+        let profile = self.governor.profile().await;
+        features.current_profile = Some(profile);
+
         features
     }
 
@@ -444,6 +457,72 @@ impl FeedbackHub {
                     .and_then(|v| v.as_str())
                     .ok_or_else(|| FeedbackError::Invalid("missing profile name".into()))?;
                 self.governor.set_profile(&self.bus, name.to_string()).await;
+            }
+            "governor.hints" => {
+                let max_concurrency = params
+                    .get("max_concurrency")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v.min(2048) as usize);
+                let event_buffer = params
+                    .get("event_buffer")
+                    .and_then(|v| v.as_u64())
+                    .map(|v| v.min(10_000) as usize);
+                let http_timeout_secs = params.get("http_timeout_secs").and_then(|v| v.as_u64());
+                let mode = params
+                    .get("mode")
+                    .and_then(|v| v.as_str())
+                    .map(|s| s.to_string());
+                let slo_ms = params.get("slo_ms").and_then(|v| v.as_u64());
+                self.governor
+                    .apply_hints(
+                        &self.bus,
+                        max_concurrency,
+                        event_buffer,
+                        http_timeout_secs,
+                        mode,
+                        slo_ms,
+                        params
+                            .get("retrieval_k")
+                            .and_then(|v| v.as_u64())
+                            .map(|v| v as usize),
+                        params.get("retrieval_div").and_then(|v| v.as_f64()),
+                        params.get("mmr_lambda").and_then(|v| v.as_f64()),
+                        params.get("compression_aggr").and_then(|v| v.as_f64()),
+                        params
+                            .get("vote_k")
+                            .and_then(|v| v.as_u64())
+                            .map(|v| v.min(32) as u8),
+                        params
+                            .get("context_budget_tokens")
+                            .and_then(|v| v.as_u64())
+                            .map(|v| v as usize),
+                        params
+                            .get("context_item_budget_tokens")
+                            .and_then(|v| v.as_u64())
+                            .map(|v| v as usize),
+                        params
+                            .get("context_format")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        params.get("include_provenance").and_then(|v| v.as_bool()),
+                        params
+                            .get("context_item_template")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        params
+                            .get("context_header")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        params
+                            .get("context_footer")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                        params
+                            .get("joiner")
+                            .and_then(|v| v.as_str())
+                            .map(|s| s.to_string()),
+                    )
+                    .await;
             }
             "mem_limit" => {
                 let limit = params

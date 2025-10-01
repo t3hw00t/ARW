@@ -448,9 +448,16 @@ impl AppStateBuilder {
         let chat_state = self
             .chat
             .unwrap_or_else(|| Arc::new(chat::ChatState::new()));
-        let runtime_registry = self
-            .runtime
-            .unwrap_or_else(|| Arc::new(runtime::RuntimeRegistry::new(self.bus.clone())));
+        let runtime_registry = match self.runtime {
+            Some(state) => state,
+            None => {
+                let bus = self.bus.clone();
+                let path = crate::util::state_dir()
+                    .join("runtime")
+                    .join("registry.json");
+                Arc::new(runtime::RuntimeRegistry::with_storage(bus, path).await)
+            }
+        };
         let logic_history_store = self.logic_history.unwrap_or_else(|| {
             let path = crate::util::state_dir()
                 .join("training")

@@ -8,6 +8,7 @@ use tokio::sync::mpsc;
 use tokio::task::JoinError;
 
 use arw_topics as topics;
+#[derive(Debug, Clone)]
 pub(crate) enum ContextIterationEvent {
     Summary {
         iteration: usize,
@@ -1046,4 +1047,511 @@ fn adjust_spec_for_iteration(
 
     next.normalize();
     next
+}
+
+#[cfg(any(test, feature = "context_harness"))]
+pub mod harness {
+    #![allow(dead_code)]
+    //! Synthetic scenario harness for the context loop. It lets tests compose
+    //! pre-canned working set iterations, replay transcripts, and run Monte Carlo
+    //! shuffles so we can probe iteration breakpoints without live data.
+    use super::*;
+    use rand::seq::SliceRandom;
+    use rand::{rngs::StdRng, Rng, SeedableRng};
+    use serde_json::{json, Value};
+    use std::collections::BTreeMap;
+
+    #[derive(Debug, Clone)]
+    pub struct MonteCarloSpec {
+        pub runs: usize,
+        pub shuffle_steps: bool,
+        pub jitter_ms: Option<f64>,
+        pub seed: u64,
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum NextSpec {
+        Keep,
+        AutoAdjust,
+        Override(working_set::WorkingSetSpec),
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct WorkingSetFixture {
+        pub summary: working_set::WorkingSetSummary,
+        pub items: Vec<Value>,
+        pub seeds: Vec<Value>,
+        pub expanded: Vec<Value>,
+        pub diagnostics: Value,
+    }
+
+    impl WorkingSetFixture {
+        pub fn new(summary: working_set::WorkingSetSummary) -> Self {
+            Self {
+                summary,
+                items: Vec::new(),
+                seeds: Vec::new(),
+                expanded: Vec::new(),
+                diagnostics: json!({}),
+            }
+        }
+
+        pub fn with_seed(mut self, value: Value) -> Self {
+            self.seeds.push(value);
+            self
+        }
+
+        pub fn with_item(mut self, value: Value) -> Self {
+            self.items.push(value);
+            self
+        }
+
+        pub fn with_expanded(mut self, value: Value) -> Self {
+            self.expanded.push(value);
+            self
+        }
+
+        pub fn diagnostics(mut self, value: Value) -> Self {
+            self.diagnostics = value;
+            self
+        }
+
+        pub fn build(&self) -> working_set::WorkingSet {
+            working_set::WorkingSet {
+                items: self.items.clone(),
+                seeds: self.seeds.clone(),
+                expanded: self.expanded.clone(),
+                diagnostics: self.diagnostics.clone(),
+                summary: self.summary.clone(),
+            }
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ScenarioSuccess {
+        pub label: String,
+        pub fixture: WorkingSetFixture,
+        pub verdict: coverage::CoverageVerdict,
+        pub next_spec: NextSpec,
+        pub diagnostics: Option<Value>,
+        pub duration_ms: Option<f64>,
+    }
+
+    impl ScenarioSuccess {
+        pub fn new(label: impl Into<String>, fixture: WorkingSetFixture) -> Self {
+            Self {
+                label: label.into(),
+                fixture,
+                verdict: coverage::CoverageVerdict::satisfied(),
+                next_spec: NextSpec::Keep,
+                diagnostics: None,
+                duration_ms: None,
+            }
+        }
+
+        pub fn with_verdict(mut self, verdict: coverage::CoverageVerdict) -> Self {
+            self.verdict = verdict;
+            self
+        }
+
+        pub fn with_next(mut self, next: NextSpec) -> Self {
+            self.next_spec = next;
+            self
+        }
+
+        pub fn with_diagnostics(mut self, diagnostics: Value) -> Self {
+            self.diagnostics = Some(diagnostics);
+            self
+        }
+
+        pub fn with_duration(mut self, duration: f64) -> Self {
+            self.duration_ms = Some(duration);
+            self
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ScenarioError {
+        pub label: String,
+        pub detail: String,
+        pub spec_override: Option<working_set::WorkingSetSpec>,
+        pub duration_ms: Option<f64>,
+    }
+
+    impl ScenarioError {
+        pub fn new(label: impl Into<String>, detail: impl Into<String>) -> Self {
+            Self {
+                label: label.into(),
+                detail: detail.into(),
+                spec_override: None,
+                duration_ms: None,
+            }
+        }
+
+        pub fn with_spec(mut self, spec: working_set::WorkingSetSpec) -> Self {
+            self.spec_override = Some(spec);
+            self
+        }
+
+        pub fn with_duration(mut self, duration: f64) -> Self {
+            self.duration_ms = Some(duration);
+            self
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum ScenarioStep {
+        Success(ScenarioSuccess),
+        Error(ScenarioError),
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct Scenario {
+        pub name: String,
+        pub base_spec: working_set::WorkingSetSpec,
+        pub steps: Vec<ScenarioStep>,
+        pub max_iterations: usize,
+        pub corr_id: Option<String>,
+        pub monte_carlo: Option<MonteCarloSpec>,
+    }
+
+    impl Scenario {
+        pub fn run(&self) -> ScenarioReport {
+            let mut runs = Vec::new();
+            if let Some(mc) = &self.monte_carlo {
+                let total_runs = mc.runs.max(1);
+                for idx in 0..total_runs {
+                    let mut rng = StdRng::seed_from_u64(mc.seed.wrapping_add(idx as u64));
+                    let mut steps = self.steps.clone();
+                    if mc.shuffle_steps && steps.len() > 1 {
+                        steps.shuffle(&mut rng);
+                    }
+                    runs.push(self.execute_steps(steps, idx, Some(mc), Some(&mut rng)));
+                }
+            } else {
+                runs.push(self.execute_steps(self.steps.clone(), 0, None, None));
+            }
+            ScenarioReport {
+                name: self.name.clone(),
+                runs,
+            }
+        }
+
+        fn execute_steps(
+            &self,
+            steps: Vec<ScenarioStep>,
+            run_index: usize,
+            mc: Option<&MonteCarloSpec>,
+            mut rng: Option<&mut StdRng>,
+        ) -> ScenarioRun {
+            let mut spec = self.base_spec.clone();
+            spec.normalize();
+            let mut final_spec = spec.clone();
+            let mut last_verdict = coverage::CoverageVerdict::satisfied();
+            let mut events = Vec::new();
+            let mut iteration_reasons: Vec<Vec<String>> = Vec::new();
+            let mut exit = ScenarioExit::Exhausted;
+
+            for (iteration, step) in steps.into_iter().enumerate().take(self.max_iterations) {
+                match step {
+                    ScenarioStep::Success(success) => {
+                        let spec_used = spec.clone();
+                        let fixture = success.fixture.clone();
+                        let ws = fixture.build();
+                        let verdict = success.verdict.clone();
+
+                        let next_spec_candidate = match &success.next_spec {
+                            NextSpec::Keep => None,
+                            NextSpec::AutoAdjust => Some(super::adjust_spec_for_iteration(
+                                iteration, &spec_used, &ws, &verdict,
+                            )),
+                            NextSpec::Override(custom) => Some(custom.clone()),
+                        };
+
+                        let base_duration = success.duration_ms.unwrap_or(48.0);
+                        let duration_ms = if let (Some(cfg), Some(r_ref)) = (mc, rng.as_mut()) {
+                            if let Some(span) = cfg.jitter_ms {
+                                let rng_inner = &mut **r_ref;
+                                let delta: f64 = rng_inner.gen_range(-span..=span);
+                                (base_duration + delta).max(1.0)
+                            } else {
+                                base_duration
+                            }
+                        } else {
+                            base_duration
+                        };
+
+                        let summary_payload = super::build_iteration_summary_payload(
+                            iteration,
+                            &spec_used,
+                            &ws.summary,
+                            &verdict,
+                            self.corr_id.as_ref(),
+                            next_spec_candidate.as_ref(),
+                            duration_ms,
+                        );
+
+                        let diagnostics = success.diagnostics.clone();
+                        events.push(ContextIterationEvent::Summary {
+                            iteration,
+                            payload: summary_payload,
+                            diagnostics,
+                        });
+
+                        iteration_reasons.push(verdict.reasons.clone());
+                        last_verdict = verdict.clone();
+                        final_spec = spec_used.clone();
+
+                        if !verdict.needs_more || next_spec_candidate.is_none() {
+                            exit = ScenarioExit::Completed {
+                                working_set: fixture,
+                            };
+                            break;
+                        }
+
+                        spec = next_spec_candidate.expect("next spec present");
+                        spec.normalize();
+                    }
+                    ScenarioStep::Error(error) => {
+                        let spec_used = error.spec_override.clone().unwrap_or_else(|| spec.clone());
+                        let base_duration = error.duration_ms.unwrap_or(52.0);
+                        let duration_ms = if let (Some(cfg), Some(r_ref)) = (mc, rng.as_mut()) {
+                            if let Some(span) = cfg.jitter_ms {
+                                let rng_inner = &mut **r_ref;
+                                let delta: f64 = rng_inner.gen_range(-span..=span);
+                                (base_duration + delta).max(1.0)
+                            } else {
+                                base_duration
+                            }
+                        } else {
+                            base_duration
+                        };
+                        let payload = super::build_working_set_error_payload(
+                            iteration,
+                            &spec_used,
+                            error.detail.clone(),
+                            self.corr_id.as_ref(),
+                            duration_ms,
+                        );
+                        events.push(ContextIterationEvent::Error { iteration, payload });
+                        final_spec = spec_used;
+                        exit = ScenarioExit::Error {
+                            detail: error.detail,
+                        };
+                        break;
+                    }
+                }
+            }
+
+            ScenarioRun {
+                run_index,
+                events,
+                iteration_reasons,
+                exit,
+                final_spec,
+                last_verdict,
+            }
+        }
+    }
+
+    #[derive(Debug, Clone)]
+    pub enum ScenarioExit {
+        Completed { working_set: WorkingSetFixture },
+        Error { detail: String },
+        Exhausted,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ScenarioRun {
+        pub run_index: usize,
+        pub events: Vec<ContextIterationEvent>,
+        pub iteration_reasons: Vec<Vec<String>>,
+        pub exit: ScenarioExit,
+        pub final_spec: working_set::WorkingSetSpec,
+        pub last_verdict: coverage::CoverageVerdict,
+    }
+
+    #[derive(Debug, Clone)]
+    pub struct ScenarioReport {
+        pub name: String,
+        pub runs: Vec<ScenarioRun>,
+    }
+
+    impl ScenarioReport {
+        pub fn total_runs(&self) -> usize {
+            self.runs.len()
+        }
+
+        pub fn failure_count(&self) -> usize {
+            self.runs
+                .iter()
+                .filter(|run| matches!(run.exit, ScenarioExit::Error { .. }))
+                .count()
+        }
+
+        pub fn aggregate_reasons(&self) -> BTreeMap<String, usize> {
+            let mut counts = BTreeMap::new();
+            for run in &self.runs {
+                for reasons in &run.iteration_reasons {
+                    for reason in reasons {
+                        *counts.entry(reason.clone()).or_default() += 1;
+                    }
+                }
+            }
+            counts
+        }
+    }
+
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+
+        fn base_spec() -> working_set::WorkingSetSpec {
+            working_set::WorkingSetSpec {
+                query: Some("multi-agent synthesis".into()),
+                embed: None,
+                lanes: vec!["semantic".into(), "procedural".into()],
+                limit: 6,
+                expand_per_seed: 2,
+                diversity_lambda: 0.7,
+                min_score: 0.5,
+                project: Some("demo".into()),
+                lane_bonus: 0.1,
+                scorer: Some("mmr".into()),
+                expand_query: false,
+                expand_query_top_k: 4,
+                slot_budgets: BTreeMap::new(),
+            }
+        }
+
+        fn summary_with_counts(target: usize, selected: usize) -> working_set::WorkingSetSummary {
+            let mut lanes = BTreeMap::new();
+            lanes.insert("semantic".into(), selected.min(target));
+            working_set::WorkingSetSummary {
+                target_limit: target,
+                lanes_requested: 2,
+                selected,
+                avg_cscore: 0.42,
+                max_cscore: 0.52,
+                min_cscore: 0.2,
+                threshold_hits: 1,
+                total_candidates: selected + 2,
+                lane_counts: lanes,
+                slot_counts: BTreeMap::new(),
+                slot_budgets: BTreeMap::new(),
+                min_score: 0.4,
+                scorer: "mmr".into(),
+            }
+        }
+
+        #[test]
+        fn completes_after_covering_gaps() {
+            let spec = base_spec();
+            let base_limit = spec.limit;
+            let first_summary = summary_with_counts(6, 3);
+            let first_fixture = WorkingSetFixture::new(first_summary.clone())
+                .with_seed(json!({"lane": "semantic"}))
+                .with_seed(json!({"lane": "procedural"}));
+            let success_first = ScenarioSuccess::new("first", first_fixture.clone())
+                .with_verdict(coverage::CoverageVerdict {
+                    needs_more: true,
+                    reasons: vec!["below_target_limit".into()],
+                })
+                .with_next(NextSpec::AutoAdjust)
+                .with_duration(64.0);
+
+            let second_summary = summary_with_counts(10, 8);
+            let second_fixture = WorkingSetFixture::new(second_summary.clone());
+            let success_second = ScenarioSuccess::new("second", second_fixture.clone())
+                .with_verdict(coverage::CoverageVerdict {
+                    needs_more: false,
+                    reasons: Vec::new(),
+                });
+
+            let scenario = Scenario {
+                name: "two-pass".into(),
+                base_spec: spec.clone(),
+                steps: vec![
+                    ScenarioStep::Success(success_first),
+                    ScenarioStep::Success(success_second),
+                ],
+                max_iterations: 6,
+                corr_id: Some("corr-001".into()),
+                monte_carlo: None,
+            };
+
+            let report = scenario.run();
+            assert_eq!(report.total_runs(), 1);
+            let run = &report.runs[0];
+            assert_eq!(run.events.len(), 2);
+            if let ScenarioExit::Completed { .. } = run.exit {
+                assert!(!run.last_verdict.needs_more);
+            } else {
+                panic!("scenario expected to complete, got {:?}", run.exit);
+            }
+            assert!(run.final_spec.limit > base_limit);
+            let reasons = report.aggregate_reasons();
+            assert_eq!(reasons.get("below_target_limit"), Some(&1usize));
+        }
+
+        #[test]
+        fn monte_carlo_runs_multiple_permutations() {
+            let summary = summary_with_counts(5, 4);
+            let fixture = WorkingSetFixture::new(summary.clone());
+            let success = ScenarioSuccess::new("steady", fixture.clone())
+                .with_verdict(coverage::CoverageVerdict {
+                    needs_more: false,
+                    reasons: Vec::new(),
+                })
+                .with_duration(40.0);
+
+            let scenario = Scenario {
+                name: "monte".into(),
+                base_spec: base_spec(),
+                steps: vec![ScenarioStep::Success(success)],
+                max_iterations: 4,
+                corr_id: None,
+                monte_carlo: Some(MonteCarloSpec {
+                    runs: 5,
+                    shuffle_steps: true,
+                    jitter_ms: Some(12.0),
+                    seed: 7,
+                }),
+            };
+
+            let report = scenario.run();
+            assert_eq!(report.total_runs(), 5);
+            assert_eq!(report.failure_count(), 0);
+            for run in &report.runs {
+                assert!(matches!(run.exit, ScenarioExit::Completed { .. }));
+                assert!(!run.last_verdict.needs_more);
+            }
+        }
+
+        #[test]
+        fn marks_run_exhausted_when_iterations_cap_hit() {
+            let summary = summary_with_counts(6, 2);
+            let fixture = WorkingSetFixture::new(summary.clone());
+            let success = ScenarioSuccess::new("cap", fixture)
+                .with_verdict(coverage::CoverageVerdict {
+                    needs_more: true,
+                    reasons: vec!["below_target_limit".into()],
+                })
+                .with_next(NextSpec::AutoAdjust);
+
+            let scenario = Scenario {
+                name: "exhaust".into(),
+                base_spec: base_spec(),
+                steps: vec![ScenarioStep::Success(success)],
+                max_iterations: 1,
+                corr_id: None,
+                monte_carlo: None,
+            };
+
+            let report = scenario.run();
+            let run = &report.runs[0];
+            assert!(matches!(run.exit, ScenarioExit::Exhausted));
+            assert!(run.last_verdict.needs_more);
+        }
+    }
 }

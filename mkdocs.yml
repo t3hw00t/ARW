@@ -124,6 +124,7 @@ nav:
       - Performance Presets: guide/performance_presets.md
       - Training Park: guide/training_park.md
       - Context Telemetry Checklist: guide/context_telemetry_checklist.md
+      - Context Scenario Harness: guide/context_harness.md
       - Admin Endpoints: guide/admin_endpoints.md
       - Troubleshooting: guide/troubleshooting.md
   - Reference:

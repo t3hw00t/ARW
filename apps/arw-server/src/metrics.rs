@@ -4,7 +4,7 @@ use axum::middleware::Next;
 use axum::response::Response;
 use serde::Serialize;
 use serde_json::{json, Value};
-use std::collections::{BTreeMap, HashMap, VecDeque};
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
@@ -380,19 +380,6 @@ impl Metrics {
                 map.iter()
                     .map(|(name, stat)| (name.clone(), stat.summary()))
                     .collect()
-            })
-            .unwrap_or_default()
-    }
-
-    pub fn routes_for_analysis(&self) -> HashMap<String, (f64, u64, u64)> {
-        self.routes
-            .lock()
-            .map(|stats| {
-                stats
-                    .by_path
-                    .iter()
-                    .map(|(path, stat)| (path.clone(), (stat.ewma_ms, stat.hits, stat.errors)))
-                    .collect::<HashMap<_, _>>()
             })
             .unwrap_or_default()
     }

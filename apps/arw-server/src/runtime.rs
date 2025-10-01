@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -12,7 +13,9 @@ use arw_topics::{
 };
 use chrono::{DateTime, Utc};
 use serde_json::{json, Value};
-use tokio::sync::RwLock;
+use tokio::fs as afs;
+use tokio::sync::{Mutex as TokioMutex, RwLock};
+use tracing::warn;
 
 use crate::read_models;
 use crate::tasks::TaskHandle;
@@ -41,6 +44,7 @@ impl RuntimeStore {
 pub(crate) struct RuntimeRegistry {
     state: Arc<RwLock<RuntimeStore>>,
     bus: Bus,
+    storage: Option<Arc<RuntimeStorage>>,
 }
 
 impl RuntimeRegistry {
@@ -48,7 +52,25 @@ impl RuntimeRegistry {
         Self {
             state: Arc::new(RwLock::new(RuntimeStore::new())),
             bus,
+            storage: None,
         }
+    }
+
+    pub async fn with_storage(bus: Bus, path: PathBuf) -> Self {
+        let storage = Arc::new(RuntimeStorage::new(path));
+        let registry = Self {
+            state: Arc::new(RwLock::new(RuntimeStore::new())),
+            bus,
+            storage: Some(storage.clone()),
+        };
+        if let Err(err) = registry.restore_from_storage().await {
+            warn!(
+                target: "arw::runtime",
+                error = %err,
+                "failed to restore runtime registry snapshot"
+            );
+        }
+        registry
     }
 
     #[allow(dead_code)]
@@ -136,6 +158,17 @@ impl RuntimeRegistry {
         if let Ok(value) = serde_json::to_value(&snapshot) {
             read_models::publish_read_model_patch(&self.bus, READ_MODEL_KEY, &value);
         }
+        if let Some(storage) = &self.storage {
+            if let Err(err) = storage.persist(&snapshot).await {
+                let path = storage.path.clone();
+                warn!(
+                    target: "arw::runtime",
+                    error = %err,
+                    path = %path.display(),
+                    "failed to persist runtime registry snapshot"
+                );
+            }
+        }
     }
 
     async fn ensure_descriptor(&self, id: &str) {
@@ -207,6 +240,93 @@ impl RuntimeRegistry {
     }
 }
 
+impl RuntimeRegistry {
+    async fn restore_from_storage(&self) -> Result<(), std::io::Error> {
+        let Some(storage) = &self.storage else {
+            return Ok(());
+        };
+        let maybe_snapshot = storage.load().await?;
+        let Some(snapshot) = maybe_snapshot else {
+            return Ok(());
+        };
+        let mut guard = self.state.write().await;
+        guard.desired.clear();
+        guard.statuses.clear();
+        for record in snapshot.runtimes {
+            guard
+                .desired
+                .insert(record.descriptor.id.clone(), record.descriptor);
+            guard
+                .statuses
+                .insert(record.status.id.clone(), record.status);
+        }
+        guard.updated_at = snapshot.updated_at;
+        Ok(())
+    }
+}
+
+struct RuntimeStorage {
+    path: PathBuf,
+    lock: TokioMutex<()>,
+}
+
+impl RuntimeStorage {
+    fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            lock: TokioMutex::new(()),
+        }
+    }
+
+    async fn load(&self) -> Result<Option<RegistrySnapshot>, std::io::Error> {
+        match afs::read(&self.path).await {
+            Ok(bytes) => {
+                if bytes.is_empty() {
+                    return Ok(None);
+                }
+                match serde_json::from_slice::<RegistrySnapshot>(&bytes) {
+                    Ok(snapshot) => Ok(Some(snapshot)),
+                    Err(err) => Err(std::io::Error::new(std::io::ErrorKind::InvalidData, err)),
+                }
+            }
+            Err(err) => {
+                if err.kind() == std::io::ErrorKind::NotFound {
+                    Ok(None)
+                } else {
+                    Err(err)
+                }
+            }
+        }
+    }
+
+    async fn persist(&self, snapshot: &RegistrySnapshot) -> Result<(), std::io::Error> {
+        let _guard = self.lock.lock().await;
+        if let Some(parent) = self.path.parent() {
+            afs::create_dir_all(parent).await?;
+        }
+        let mut json_bytes = serde_json::to_vec_pretty(snapshot)
+            .map_err(|err| std::io::Error::new(std::io::ErrorKind::InvalidData, err))?;
+        json_bytes.push(b'\n');
+        write_atomic(self.path.as_path(), &json_bytes).await
+    }
+}
+
+async fn write_atomic(path: &Path, bytes: &[u8]) -> Result<(), std::io::Error> {
+    let tmp = path.with_extension("tmp");
+    afs::write(&tmp, bytes).await?;
+    match afs::rename(&tmp, path).await {
+        Ok(_) => Ok(()),
+        Err(_) => {
+            let _ = afs::remove_file(path).await;
+            let result = afs::rename(&tmp, path).await;
+            if result.is_err() {
+                let _ = afs::remove_file(&tmp).await;
+            }
+            result
+        }
+    }
+}
+
 pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
     let registry = state.runtime();
     let mut tasks = Vec::new();
@@ -239,6 +359,7 @@ pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
 mod tests {
     use super::*;
     use arw_events::Bus;
+    use tempfile::tempdir;
     use tokio::time::timeout;
 
     #[tokio::test]
@@ -285,5 +406,43 @@ mod tests {
             .find(|r| r.descriptor.id == "runtime-a")
             .expect("runtime present");
         assert_eq!(record.status.state, RuntimeState::Ready);
+    }
+
+    #[tokio::test]
+    async fn persists_and_restores_runtime_registry_snapshot() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().join("registry.json");
+
+        let bus = Bus::new(64);
+        let registry = RuntimeRegistry::with_storage(bus.clone(), path.clone()).await;
+
+        let mut descriptor = RuntimeDescriptor::new("runtime-a", "llama.cpp");
+        descriptor.name = Some("LLaMA CPU".into());
+        descriptor.modalities.push(RuntimeModality::Text);
+        registry.register_descriptor(descriptor.clone()).await;
+
+        let mut status =
+            RuntimeStatus::new("runtime-a", RuntimeState::Ready).with_summary("Runtime ready");
+        status.detail.push("warm cache".into());
+        let expected_status = status.clone();
+        registry.apply_status(status).await;
+
+        let on_disk = tokio::fs::read(&path)
+            .await
+            .expect("registry snapshot persisted");
+        assert!(!on_disk.is_empty(), "snapshot should not be empty");
+
+        drop(registry);
+
+        let bus2 = Bus::new(64);
+        let restored = RuntimeRegistry::with_storage(bus2.clone(), path.clone()).await;
+        let snapshot = restored.snapshot().await;
+        assert_eq!(snapshot.runtimes.len(), 1);
+        let record = &snapshot.runtimes[0];
+        assert_eq!(record.descriptor.id, descriptor.id);
+        assert_eq!(record.descriptor.adapter, descriptor.adapter);
+        assert_eq!(record.status.state, RuntimeState::Ready);
+        assert_eq!(record.status.summary, expected_status.summary);
+        assert!(record.status.detail.contains(&"warm cache".to_string()));
     }
 }
