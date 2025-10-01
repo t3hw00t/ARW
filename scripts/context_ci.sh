@@ -7,6 +7,19 @@ STATE_DIR="$(mktemp -d)"
 LOG_FILE="$(mktemp)"
 SERVER_BIN="${ROOT_DIR}/target/debug/arw-server"
 
+# Ensure we have an admin token so guarded endpoints succeed locally.
+ADMIN_TOKEN="${ARW_ADMIN_TOKEN:-}"
+if [[ -z "$ADMIN_TOKEN" ]]; then
+  ADMIN_TOKEN="context-ci-token"
+  export ARW_ADMIN_TOKEN="$ADMIN_TOKEN"
+  if command -v sha256sum >/dev/null 2>&1; then
+    export ARW_ADMIN_TOKEN_SHA256="$(printf '%s' "$ADMIN_TOKEN" | sha256sum | cut -d' ' -f1)"
+  elif command -v shasum >/dev/null 2>&1; then
+    export ARW_ADMIN_TOKEN_SHA256="$(printf '%s' "$ADMIN_TOKEN" | shasum -a 256 | cut -d' ' -f1)"
+  fi
+fi
+export ARW_CONTEXT_CI_TOKEN="$ADMIN_TOKEN"
+
 cleanup() {
   local status=$?
   if [[ -n "${SERVER_PID:-}" ]]; then
@@ -50,6 +63,7 @@ fi
 
 python3 - "$BASE" <<'PY'
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -58,12 +72,20 @@ from datetime import datetime
 
 base = sys.argv[1]
 opener = urllib.request.build_opener()
+ADMIN_TOKEN = os.environ.get("ARW_CONTEXT_CI_TOKEN")
+
+
+def attach_admin(req: urllib.request.Request) -> urllib.request.Request:
+    if ADMIN_TOKEN:
+        req.add_header("authorization", f"Bearer {ADMIN_TOKEN}")
+    return req
 
 
 def submit(msg: str) -> str:
     payload = json.dumps({"kind": "demo.echo", "input": {"msg": msg}}).encode()
     req = urllib.request.Request(f"{base}/actions", data=payload, method="POST")
     req.add_header("content-type", "application/json")
+    attach_admin(req)
     with opener.open(req, timeout=10) as resp:
         reply = json.loads(resp.read())
     action_id = reply.get("id") or reply.get("action", {}).get("id")
@@ -77,7 +99,9 @@ def wait_complete(action_id: str) -> None:
     last_state = None
     while time.time() < deadline:
         try:
-            with opener.open(f"{base}/actions/{action_id}", timeout=10) as resp:
+            req = urllib.request.Request(f"{base}/actions/{action_id}")
+            attach_admin(req)
+            with opener.open(req, timeout=10) as resp:
                 doc = json.loads(resp.read())
         except urllib.error.HTTPError as http_err:
             if http_err.code == 404:
@@ -98,8 +122,9 @@ def wait_complete(action_id: str) -> None:
 ids = [submit(f"context-ci-{idx}") for idx in range(2)]
 for action_id in ids:
     wait_complete(action_id)
-
-with opener.open(f"{base}/state/training/telemetry", timeout=10) as resp:
+req = urllib.request.Request(f"{base}/state/training/telemetry")
+attach_admin(req)
+with opener.open(req, timeout=10) as resp:
     telemetry = json.loads(resp.read())
 
 required_root = ["generated", "events", "routes", "bus", "tools"]

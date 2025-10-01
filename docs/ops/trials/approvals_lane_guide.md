@@ -2,7 +2,7 @@
 title: Approvals Lane Guide
 ---
 
-# Approvals Lane & Connections Drawer
+# Approvals Lane Guide
 
 Updated: 2025-09-30
 Type: Operator walkthrough
