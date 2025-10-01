@@ -302,17 +302,16 @@ async fn persist_lane_budget(state: &AppState, lane: &str, budgets: &Option<Auto
             "updated_at".into(),
             Value::String(Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true)),
         );
-    } else {
-        if let Some(existing) = lanes_obj.get_mut(lane) {
-            if let Some(obj) = existing.as_object_mut() {
-                obj.remove("budgets");
-                obj.remove("updated_at");
-                if obj.is_empty() {
-                    lanes_obj.remove(lane);
-                }
-            } else {
-                lanes_obj.remove(lane);
-            }
+    } else if let Some(existing) = lanes_obj.get_mut(lane) {
+        let remove_lane = if let Some(obj) = existing.as_object_mut() {
+            obj.remove("budgets");
+            obj.remove("updated_at");
+            obj.is_empty()
+        } else {
+            true
+        };
+        if remove_lane {
+            lanes_obj.remove(lane);
         }
     }
     if lanes_obj.is_empty() {

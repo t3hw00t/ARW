@@ -61,26 +61,20 @@ fn ensure_memory_recent_snapshot(snapshot: &mut Value, refresh_generated: bool) 
         .map(str::to_owned);
     let mut generated_ms = obj.get("generated_ms").and_then(Value::as_i64);
 
-    if refresh_generated {
+    if refresh_generated || generated_iso.is_none() {
         let (iso, ms) = now_timestamp_pair();
         generated_iso = Some(iso);
         generated_ms = Some(ms);
-    } else {
-        if generated_iso.is_none() {
-            let (iso, ms) = now_timestamp_pair();
-            generated_iso = Some(iso);
-            generated_ms = Some(ms);
-        } else if generated_ms.is_none() {
-            generated_ms = generated_iso
-                .as_ref()
-                .and_then(|iso| DateTime::parse_from_rfc3339(iso).ok())
-                .map(|dt| dt.timestamp_millis())
-                .or_else(|| {
-                    let (iso, ms) = now_timestamp_pair();
-                    generated_iso = Some(iso);
-                    Some(ms)
-                });
-        }
+    } else if generated_ms.is_none() {
+        generated_ms = generated_iso
+            .as_ref()
+            .and_then(|iso| DateTime::parse_from_rfc3339(iso).ok())
+            .map(|dt| dt.timestamp_millis())
+            .or_else(|| {
+                let (iso, ms) = now_timestamp_pair();
+                generated_iso = Some(iso);
+                Some(ms)
+            });
     }
 
     if let Some(iso) = generated_iso {

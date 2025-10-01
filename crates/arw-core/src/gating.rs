@@ -205,7 +205,7 @@ fn load_config_entries(path: &str) -> (HashSet<String>, Vec<Contract>) {
     if Path::new(path).exists() {
         if let Ok(s) = std::fs::read_to_string(path) {
             if let Ok(cfg) = toml::from_str::<GatingPolicyConfig>(&s) {
-                denies.extend(cfg.deny_user.into_iter());
+                denies.extend(cfg.deny_user);
                 if !cfg.contracts.is_empty() {
                     contracts.extend(cfg.contracts.into_iter().map(contract_from_cfg));
                 }
@@ -226,7 +226,7 @@ fn load_config_entries(path: &str) -> (HashSet<String>, Vec<Contract>) {
 }
 
 pub fn reload_from_config(path: &str) {
-    let (deny_user, mut contracts) = load_config_entries(path);
+    let (deny_user, contracts) = load_config_entries(path);
     {
         let mut st = cell().write().unwrap();
         st.deny_user.clear();
@@ -235,7 +235,7 @@ pub fn reload_from_config(path: &str) {
     let contract_ids: HashSet<String> = contracts.iter().map(|c| c.id.clone()).collect();
     {
         let mut list = contracts_cell().write().unwrap();
-        *list = contracts.drain(..).collect();
+        *list = contracts;
     }
     {
         let mut runtime = runtime_cell().write().unwrap();

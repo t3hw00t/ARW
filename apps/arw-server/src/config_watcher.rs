@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::SystemTime;
 
 use crate::{config, tasks::TaskHandle, AppState};
@@ -150,11 +150,7 @@ fn watch_cache_policy(state: AppState, path: PathBuf) -> TaskHandle {
     )
 }
 
-async fn reload_runtime_config(
-    state: &AppState,
-    path: &PathBuf,
-    digest: &str,
-) -> Result<(), String> {
+async fn reload_runtime_config(state: &AppState, path: &Path, digest: &str) -> Result<(), String> {
     let path_string = path.to_string_lossy().to_string();
     let path_clone = path_string.clone();
     let cfg = tokio::task::spawn_blocking(move || arw_core::load_config(&path_clone))

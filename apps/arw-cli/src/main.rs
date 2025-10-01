@@ -678,59 +678,6 @@ fn collect_screenshot_targets(
     Ok((targets, stats))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::fs;
-    use std::io::Write;
-    use tempfile::TempDir;
-
-    #[test]
-    fn sanitize_lang_fragment_cli_normalizes() {
-        assert_eq!(sanitize_lang_fragment_cli("ENg"), "eng");
-        assert_eq!(sanitize_lang_fragment_cli("fr+best"), "fr+best");
-        assert_eq!(sanitize_lang_fragment_cli(" zh - Hans "), "zh_-_hans");
-        assert_eq!(sanitize_lang_fragment_cli(""), "eng");
-        assert_eq!(sanitize_lang_fragment_cli("@!#"), "___");
-    }
-
-    #[test]
-    fn collect_screenshot_targets_skips_sidecars_and_respects_limit() -> Result<()> {
-        const EXT: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp"];
-        let tmp = TempDir::new().unwrap();
-        let root = tmp.path().join("2025/09/30");
-        fs::create_dir_all(&root)?;
-
-        let shot1 = root.join("one.png");
-        fs::write(&shot1, b"fake")?;
-        let shot2 = root.join("two.png");
-        fs::write(&shot2, b"fake")?;
-        let shot3 = root.join("three.ann.png");
-        fs::write(&shot3, b"fake")?;
-        let not_image = root.join("note.txt");
-        fs::write(&not_image, b"text")?;
-
-        let sidecar1 = root.join("one.ocr.eng.json");
-        let mut f = fs::File::create(&sidecar1)?;
-        writeln!(f, "{{}}")?;
-
-        let (targets, stats) = collect_screenshot_targets(tmp.path(), "eng", false, Some(5), EXT)?;
-
-        assert_eq!(stats.scanned, 2); // one.png and two.png
-        assert_eq!(stats.skipped_cached, 1);
-        assert!(stats.skipped_other >= 2); // .ann + text + sidecar pattern
-        assert_eq!(targets.len(), 1);
-        assert_eq!(targets[0].path, shot2);
-        assert!(targets[0].sidecar.ends_with("two.ocr.eng.json"));
-
-        let (targets_force, _stats_force) =
-            collect_screenshot_targets(tmp.path(), "eng", true, Some(1), EXT)?;
-        assert_eq!(targets_force.len(), 1);
-
-        Ok(())
-    }
-}
-
 fn cmd_gen_ed25519(
     out_pub: Option<&str>,
     out_priv: Option<&str>,
@@ -863,4 +810,57 @@ fn cmd_spec_health(args: &SpecHealthArgs) -> Result<()> {
         println!("{}", txt);
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::io::Write;
+    use tempfile::TempDir;
+
+    #[test]
+    fn sanitize_lang_fragment_cli_normalizes() {
+        assert_eq!(sanitize_lang_fragment_cli("ENg"), "eng");
+        assert_eq!(sanitize_lang_fragment_cli("fr+best"), "fr+best");
+        assert_eq!(sanitize_lang_fragment_cli(" zh - Hans "), "zh_-_hans");
+        assert_eq!(sanitize_lang_fragment_cli(""), "eng");
+        assert_eq!(sanitize_lang_fragment_cli("@!#"), "___");
+    }
+
+    #[test]
+    fn collect_screenshot_targets_skips_sidecars_and_respects_limit() -> Result<()> {
+        const EXT: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp"];
+        let tmp = TempDir::new().unwrap();
+        let root = tmp.path().join("2025/09/30");
+        fs::create_dir_all(&root)?;
+
+        let shot1 = root.join("one.png");
+        fs::write(&shot1, b"fake")?;
+        let shot2 = root.join("two.png");
+        fs::write(&shot2, b"fake")?;
+        let shot3 = root.join("three.ann.png");
+        fs::write(&shot3, b"fake")?;
+        let not_image = root.join("note.txt");
+        fs::write(&not_image, b"text")?;
+
+        let sidecar1 = root.join("one.ocr.eng.json");
+        let mut f = fs::File::create(&sidecar1)?;
+        writeln!(f, "{{}}")?;
+
+        let (targets, stats) = collect_screenshot_targets(tmp.path(), "eng", false, Some(5), EXT)?;
+
+        assert_eq!(stats.scanned, 2); // one.png and two.png
+        assert_eq!(stats.skipped_cached, 1);
+        assert!(stats.skipped_other >= 2); // .ann + text + sidecar pattern
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].path, shot2);
+        assert!(targets[0].sidecar.ends_with("two.ocr.eng.json"));
+
+        let (targets_force, _stats_force) =
+            collect_screenshot_targets(tmp.path(), "eng", true, Some(1), EXT)?;
+        assert_eq!(targets_force.len(), 1);
+
+        Ok(())
+    }
 }

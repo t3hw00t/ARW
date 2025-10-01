@@ -801,27 +801,23 @@ async fn build_screenshots_snapshot() -> Value {
         });
     }
 
-    let max_items = env_u64("ARW_SCREENSHOTS_INDEX_LIMIT", MAX_SCREENSHOTS_INDEX as u64)
-        .max(1)
-        .min(512) as usize;
+    let max_items =
+        env_u64("ARW_SCREENSHOTS_INDEX_LIMIT", MAX_SCREENSHOTS_INDEX as u64).clamp(1, 512) as usize;
     let text_limit = env_u64(
         "ARW_SCREENSHOTS_TEXT_LIMIT",
         MAX_SCREENSHOTS_TEXT_LEN as u64,
     )
-    .max(32)
-    .min(4096) as usize;
+    .clamp(32, 4096) as usize;
     let preview_limit = env_u64(
         "ARW_SCREENSHOTS_PREVIEW_LIMIT",
         MAX_SCREENSHOTS_PREVIEW_LEN as u64,
     )
-    .max(16)
-    .min(text_limit as u64) as usize;
+    .clamp(16, text_limit as u64) as usize;
     let langs_limit = env_u64(
         "ARW_SCREENSHOTS_LANGS_LIMIT",
         MAX_SCREENSHOTS_LANGS_PER_SOURCE as u64,
     )
-    .max(1)
-    .min(16) as usize;
+    .clamp(1, 16) as usize;
 
     let state_dir_clone = state_dir.clone();
     let base_clone = base_dir.clone();
@@ -988,7 +984,7 @@ fn collect_screenshots_blocking(
     }
 
     let total_sources_all = aggregates.len();
-    let mut items: Vec<_> = aggregates.into_iter().map(|(_, agg)| agg).collect();
+    let mut items: Vec<_> = aggregates.into_values().collect();
     items.sort_by(|a, b| {
         compare_optional_datetime(&b.latest, &a.latest)
             .then_with(|| a.source_path.cmp(&b.source_path))
@@ -1051,7 +1047,7 @@ impl ScreenshotAggregate {
         if let Some(ref ts) = entry.generated_at {
             if let Ok(dt) = DateTime::parse_from_rfc3339(ts) {
                 let utc = dt.with_timezone(&Utc);
-                if self.latest.map_or(true, |cur| utc > cur) {
+                if self.latest.is_none_or(|cur| utc > cur) {
                     self.latest = Some(utc);
                 }
                 entry.generated_sort = Some(utc);
@@ -1142,9 +1138,7 @@ fn guess_source_path(sidecar: &Path, base_stem: &str) -> Option<PathBuf> {
 }
 
 fn relative_path_string(base: &Path, path: &Path) -> Option<String> {
-    path.strip_prefix(base)
-        .ok()
-        .map(|rel| normalized_path_string(rel))
+    path.strip_prefix(base).ok().map(normalized_path_string)
 }
 
 fn normalized_path_string(path: &Path) -> String {
@@ -1354,10 +1348,9 @@ pub(crate) async fn projects_snapshot_at(root_dir: &Path) -> Value {
                 )
             };
             let digest_hex = format!("{:x}", digest.finalize());
-            let snapshots = match project_snapshots::list_snapshots(&project_root, &name, 5).await {
-                Ok(list) => list,
-                Err(_) => Vec::new(),
-            };
+            let snapshots = project_snapshots::list_snapshots(&project_root, &name, 5)
+                .await
+                .unwrap_or_default();
             let snapshots_count = snapshots.len() as u64;
             let snapshots_items =
                 serde_json::to_value(&snapshots).unwrap_or_else(|_| Value::Array(Vec::new()));

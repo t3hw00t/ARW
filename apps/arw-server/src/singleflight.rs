@@ -119,7 +119,6 @@ impl Drop for FlightGuard<'_> {
 
 #[cfg(test)]
 mod loom_tests {
-    use super::*;
     use loom::sync::atomic::{AtomicUsize, Ordering};
     use loom::sync::{Arc, Condvar, Mutex};
     use loom::thread;

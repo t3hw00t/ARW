@@ -313,12 +313,12 @@ fn update_digest_for_dir(
     if let Ok(rel) = entry_path.strip_prefix(base_root) {
         let rel_norm = normalise_rel(rel);
         let len_bytes = (rel_norm.len() as u64).to_le_bytes();
-        stats.digest.update(&len_bytes);
+        stats.digest.update(len_bytes);
         stats.digest.update(rel_norm.as_bytes());
         stats.digest.update(b"D");
     } else {
         let len_bytes = (name_str.len() as u64).to_le_bytes();
-        stats.digest.update(&len_bytes);
+        stats.digest.update(len_bytes);
         stats.digest.update(name_str.as_bytes());
         stats.digest.update(b"D");
     }
@@ -357,11 +357,11 @@ async fn record_file(
         file_hasher.update(&buf[..n]);
     }
     let file_digest = file_hasher.finalize();
-    stats.digest.update(&name_len_bytes[..]);
+    stats.digest.update(name_len_bytes);
     stats.digest.update(rel_norm.as_bytes());
     stats.digest.update(b"F");
     let size_bytes = bytes_copied.to_le_bytes();
-    stats.digest.update(&size_bytes);
+    stats.digest.update(size_bytes);
     stats.digest.update(file_digest.as_slice());
     Ok(())
 }
@@ -391,8 +391,11 @@ mod tests {
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].id, meta.id);
 
-        let latest = latest_snapshot(&project_dir, "demo").await.unwrap();
-        assert!(latest.is_some());
+        let latest = list_snapshots(&project_dir, "demo", 1).await.unwrap();
+        assert_eq!(
+            latest.first().map(|s| s.id.as_str()),
+            Some(meta.id.as_str())
+        );
     }
 
     #[tokio::test]
@@ -448,12 +451,4 @@ mod tests {
             "snapshot digest should include file content changes"
         );
     }
-}
-
-pub async fn latest_snapshot(
-    project_root: &Path,
-    project: &str,
-) -> Result<Option<ProjectSnapshotMetadata>, SnapshotError> {
-    let mut list = list_snapshots(project_root, project, 1).await?;
-    Ok(list.pop())
 }

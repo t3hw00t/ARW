@@ -868,7 +868,6 @@ pub(crate) static ADMIN_ENV_GUARD: once_cell::sync::Lazy<std::sync::Mutex<()>> =
 mod tests {
     use super::*;
     use axum::http::{HeaderMap, HeaderValue};
-    use proptest::prelude::*;
     use sha2::Digest;
 
     fn auth_headers(token: &str) -> HeaderMap {

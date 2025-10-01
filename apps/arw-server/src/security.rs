@@ -34,11 +34,11 @@ fn csp_value_for(path: &str) -> Option<String> {
     let preset = std::env::var("ARW_CSP_PRESET").unwrap_or_else(|_| "relaxed".into());
     // In debug UI paths we intentionally relax the CSP to avoid breaking
     // development panels that rely on inline handlers and scripts.
-    let is_debug_ui = std::env::var("ARW_DEBUG").ok().map_or(false, |v| v != "0")
+    let is_debug_ui = std::env::var("ARW_DEBUG").ok().is_some_and(|v| v != "0")
         && (path.starts_with("/admin/debug") || path.starts_with("/admin/ui"));
     let debug_csp_strict = std::env::var("ARW_DEBUG_CSP_STRICT")
         .ok()
-        .map_or(false, |v| v != "0");
+        .is_some_and(|v| v != "0");
     if preset.eq_ignore_ascii_case("strict") && (!is_debug_ui || debug_csp_strict) {
         // Generate a per-response nonce for script/style sources.
         static CTR: AtomicU64 = AtomicU64::new(1);
@@ -233,8 +233,6 @@ pub(crate) fn reset_admin_rate_limiter_for_tests() {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-
     #[test]
     fn csp_relaxed_default_for_html() {
         let mut env = crate::test_support::env::guard();
