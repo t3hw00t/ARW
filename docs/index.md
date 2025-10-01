@@ -11,11 +11,21 @@ In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” o
 Updated: 2025-09-24
 Type: Explanation
 
+## At a Glance
+
+| Surface / Pack | Status | Notes |
+| --- | --- | --- |
+| Project Hub | Shipping | Primary workspace for projects, files, notes, and runs. |
+| Chat | Shipping | Episode-first chat with the shared sidecar and evidence replay. |
+| Training Park | Preview | Launcher telemetry and controls live; richer charts and adjustments landing next. |
+| Remote collaborator packs | Preview (opt-in) | Federation, pooled compute, Guardrail Gateway; off until you enable them. |
+| Future packs | Roadmap | Voice & vision studio, runtime supervisor automation, capsule guard extensions. |
+
 ## Why It’s Different
 - You decide access: files, web, mic, and camera are off until you grant time‑limited permission.
 - You can see and replay everything: sources, steps, tools used, and cost; snapshot any run and compare later.
 - It grows with you: start on one laptop; federation preview lets invited machines help or co-drive under your supervision.
-- Configurable, not brittle: “Logic Units” are safe strategy packs you can A/B test, apply, and roll back.
+- Configurable, not brittle: “[Logic Units](architecture/logic_units.md)” are safe strategy packs you can A/B test, apply, and roll back.
 
 ## What You Can Do
 - Turn messy folders, PDFs, and links into clean briefs, reports, or knowledge bases.
@@ -30,7 +40,7 @@ Type: Explanation
 - Stay local-first by default; remote workers and co-drive remain off until you flip them on.
 - **Preview** Pool compute to your GPU box or a trusted collaborator’s machine; offload heavy jobs under your rules and budget.
 - **Preview** Live co-drive sessions: others can watch, suggest, or take the wheel with your approval; risky actions wait for your sign-off.
-- **Preview** Clear boundaries: enable the Guardrail Gateway proxy + ledger to preview egress and capture an audit trail.
+- **Preview** Clear boundaries: enable the [Guardrail Gateway](architecture/egress_firewall.md) proxy + ledger to preview egress and capture an audit trail.
 - **Preview** Managed runtimes share accelerator capacity across collaborators with signed bundles and automatic fallbacks.
 - **Future** Fair splits: meter GPU time, tokens, and tasks for transparent revenue sharing later.
 
@@ -38,7 +48,7 @@ Type: Explanation
 
 ## Safety & Control
 - Permission leases with timers and scopes; no silent escalation.
-- A project world view tracks key facts, open questions, and constraints so agents act on evidence, not guesses.
+- A project [world view](architecture/object_graph.md) tracks key facts, open questions, and constraints so agents act on evidence, not guesses.
 - Budgets for time, tokens, and spend; stay within plan with a visible meter.
 - Signed plugins and sandboxed tools by default.
 - Managed runtime supervisor (in progress) respects guardrails: accelerator access is lease-gated, telemetry is recorded, and fallbacks never break privacy promises as the supervisor matures toward full automation.

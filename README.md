@@ -27,6 +27,16 @@ Universal Feature Catalog → https://t3hw00t.github.io/ARW/reference/feature_ca
 
 General direction: a unified object graph + a single live event stream (SSE). Every surface—Project Hub, Chat, Training Park, and Managers (Agents/Models/Hardware/Permissions/Containers/Plugins)—is just a different lens on the same shared objects, driven by the same live events. This keeps the system coherent, inspectable, and easy to extend.
 
+## At a Glance
+
+| Surface / Pack | Status | Notes |
+| --- | --- | --- |
+| Project Hub | Shipping | Primary workspace for files, notes, agents, runs. |
+| Chat | Shipping | Episode-first chat bound to projects with the shared sidecar. |
+| Training Park | Preview | Launcher telemetry and controls live; richer charts and automation in progress. |
+| Remote collaborator packs | Preview (opt-in) | Federation, pooled compute, and Guardrail Gateway stay disabled until you enable them. |
+| Future packs | Roadmap | Voice & vision studio, Asimov Capsule Guard extensions, automated federation policies. |
+
 > **Staying minimal:** Start with the [Core kernel defaults](#kernel-defaults-core) and stay entirely local. Anything tagged as an [Opt-in pack](#opt-in-pack-tier), a [Remote collaborator pack](#remote-collaborator-pack-tier), or a [Future pack](#future-pack-tier) is optional and stays disabled until you flip it on.
 
 ## Feature Tiers
@@ -45,17 +55,17 @@ These ship with `arw-server` out of the box and keep working even when you stay 
 - You decide access: files, web, mic, and camera are off until you grant time‑limited permission.
 - You can see and replay everything: each result shows sources, steps, tools used, and cost; any run can be snapshotted and compared later.
 - It grows with you: start on one laptop; when you opt in, federation preview lets invited machines help or co-drive under your policies.
-- It is configurable, not brittle: frontier techniques arrive as “Logic Units” (safe strategy packs) you can turn on, A/B test, and roll back in one click.
+- It is configurable, not brittle: frontier techniques arrive as “[Logic Units](docs/architecture/logic_units.md)” (safe strategy packs) you can turn on, A/B test, and roll back in one click.
 
 ### Safety & Control
 
 - **[Core kernel]** Permission leases with timers and scopes; no silent escalation.
-- **[Core kernel]** A project “world view” tracks key facts, open questions, and constraints so agents act on evidence, not guesses.
+- **[Core kernel]** A project “[world view](docs/architecture/object_graph.md)” tracks key facts, open questions, and constraints so agents act on evidence, not guesses.
 - **[Core kernel]** Budgets for time, tokens, and spend; the system stays within plan and shows the meter.
 - **[Core kernel]** Signed plugins and sandboxed tools by default.
-- **[Opt-in pack]** Install Logic Units with schema checks so you can stage, audit, and roll back higher-risk automation before it touches production projects.
-- **[Remote collaborator pack · Preview]** Turn on the Guardrail Gateway to preview and log outbound requests before any data leaves your machine.
-- **[Future pack]** Asimov Capsule Guard (alpha) keeps capsules refreshed across the unified runtime today; additional propagation hooks and remote presets land as they harden.
+- **[Opt-in pack]** Install [Logic Units](docs/architecture/logic_units.md) with schema checks so you can stage, audit, and roll back higher-risk automation before it touches production projects.
+- **[Remote collaborator pack · Preview]** Turn on the [Guardrail Gateway](docs/architecture/egress_firewall.md) to preview and log outbound requests before any data leaves your machine.
+- **[Future pack]** [Asimov Capsule Guard](docs/architecture/asimov_capsule_guard.md) (alpha) keeps capsules refreshed across the unified runtime today; additional propagation hooks and remote presets land as they harden.
 
 ## What You Can Do
 
@@ -75,13 +85,13 @@ These ship with `arw-server` out of the box and keep working even when you stay 
 <a id="opt-in-collaboration-extensions"></a>
 ### Remote collaborator packs
 
-These unlock when you choose to collaborate or federate resources. Remote compute, co‑drive, and the Guardrail Gateway run as opt-in previews while we finish the shared sidecar and cluster matrix.
+These unlock when you choose to collaborate or federate resources. Remote compute, co‑drive, and the [Guardrail Gateway](docs/architecture/egress_firewall.md) run as opt-in previews while we finish the shared sidecar and cluster matrix.
 
 - **[Core kernel]** Start on one machine and keep every workflow local until you explicitly invite more help.
 - **[Opt-in pack]** Install automation packs (Logic Units, experiments, or debugger surfaces) to prep work before you bring collaborators into the loop.
 - **[Remote collaborator pack · Preview]** Pool compute: add your own GPU box or a trusted friend’s machine as a worker. Heavy jobs offload there under your rules and budget.
 - **[Remote collaborator pack · Preview]** Live co‑drive: share an agent session so others can watch, suggest, or take the wheel with your approval. Risky actions still wait in a staging area for you to approve.
-- **[Remote collaborator pack · Preview]** Clear boundaries: before anything leaves your machine, you see what would be sent, to whom, and the estimated cost. Enable the Guardrail Gateway proxy + ledger to capture the audit trail.
+- **[Remote collaborator pack · Preview]** Clear boundaries: before anything leaves your machine, you see what would be sent, to whom, and the estimated cost. Enable the [Guardrail Gateway](docs/architecture/egress_firewall.md) proxy + ledger to capture the audit trail.
 - **[Future pack]** Fair splits: contributions (GPU time, tokens, tasks) are metered per collaborator so shared project revenue can be split transparently later.
 
 > **Enable federation preview** Add a `[cluster]` section with `enabled = true` to a config file the server loads by default (for example `configs/default.toml` beside the binaries). If you maintain overrides under `${ARW_STATE_DIR}`, export `ARW_CONFIG` or `ARW_CONFIG_DIR` so the server picks it up. Optionally set `bus`/`queue` to `"nats"`, export `ARW_EGRESS_PROXY_ENABLE=1` and `ARW_EGRESS_LEDGER_ENABLE=1`, then restart `arw-server`.
@@ -298,11 +308,11 @@ Pull from GHCR (on releases): `ghcr.io/t3hw00t/arw-server:latest`. See the Docke
 Three primary perspectives
 - Project Hub: the center of real‑world work (files/notes/agents/data/runs)
 - Chat: an episode viewer/controller bound to project+agent with a live sidecar
-- Training Park: impressionistic dials for instincts/priorities, retrieval diversity, tool success, hallucination risk
+- Training Park (preview): impressionistic dials for instincts/priorities, retrieval diversity, tool success, hallucination risk
 - Voice & Vision Studio (roadmap): consent-first capture, transcription, description, narration, and playback will ship with the managed runtime supervisor
  - Agent Card: compact self‑model (confidence, competence, costs, active leases) with reliability mini‑chart
 
-Logic Units (config‑first strategy packs)
+[Logic Units](docs/architecture/logic_units.md) (config‑first strategy packs)
 - Installable “strategy packs” that reconfigure agents safely (config‑only preferred).
 - Library UI with tabs (Installed/Experimental/Suggested/Archived), diff preview, A/B try, apply/revert/promote.
 - Pairs with a Research Watcher that drafts suggested units from frontier work.

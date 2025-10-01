@@ -6,7 +6,7 @@ title: Training Park
 Updated: 2025-09-28
 Type: How‑to
 
-Status: **Telemetry live, UI stub.** `arw-server` now exposes `/state/training/telemetry` plus `training_metrics` and `context_metrics` read-models; the launcher window still renders placeholder controls until we wire the new data through.
+Status: **Telemetry and launcher controls are live; richer charts are still in flight.** `arw-server` now exposes `/state/training/telemetry` plus `training_metrics` and `context_metrics` read-models, and the launcher streams live metrics, job actions, and logic-unit history while we finish the advanced visualization pass.
 
 The goal remains: a third primary perspective for tuning instincts, memory, and behavior without drowning in raw logs.
 
@@ -24,8 +24,8 @@ The goal remains: a third primary perspective for tuning instincts, memory, and 
 ## Implementation Plan (`arw-server` + Launcher)
 
 1. **Expand telemetry** — extend the current read-model with context assembly stats, memory coverage, and retriever diagnostics (`t-250918120201-tp01`). _Progress_: cache hit/miss, governor hints, capsule lease health, and feedback cues now ship in the snapshot; context/memory metrics remain.
-2. **Expose controls** — model tunable presets (`ARW_CONTEXT_*`, `ARW_PERF_PRESET`) as structured actions so adjustments flow through `/actions` with policy/lease checks.
-3. **Upgrade UI** — replace the launcher stub with live meters, sparklines, and controls bound to the telemetry + actions (`t-250918120205-tp02`).
+2. **Expose controls** — model tunable presets (`ARW_CONTEXT_*`, `ARW_PERF_PRESET`) as structured actions so adjustments flow through `/actions` with policy/lease checks. _Status: live in the launcher; iterating on preset quality._
+3. **Upgrade UI** — finish the richer charts, sparklines, and adjustment controls now that the launcher streams live telemetry (`t-250918120205-tp02`).
 4. **Record sessions** — append adjustments to the kernel so Training runs can promote configs into Logic Units or project hints with provenance.
 
 ## Inspect Telemetry

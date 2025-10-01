@@ -19,7 +19,7 @@ Windows
 - Chat: Launcher → Windows → Chat
 - Training Park: Launcher → Windows → Training Park
 
-Training Park runs as a preview: telemetry feeds are live, but the launcher window still renders placeholder controls until we wire the live data through. See `guide/training_park.md` for the current status.
+Training Park runs as a preview: telemetry feeds and launcher controls are live, and we are finishing richer visualizations and automation passes. See `guide/training_park.md` for the current status.
 
 Compare
 - Hub: Compare panel for Text/JSON (pretty + Only changes + Wrap + Copy), Image slider, and CSV/Table diff (key‑based, Only changes, Copy summary, Export CSV). CSV export supports two modes: wide (after values only) and two‑row (chg‑before/chg‑after rows).
