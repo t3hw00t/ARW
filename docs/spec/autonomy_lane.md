@@ -39,7 +39,7 @@ Give trusted operators a predictable, high-signal way to let helpers run without
 
 - **Pause / Resume** — Trial Control Center exposes a single pause toggle wiring into `scheduler.pause_lane(lane_id)`. Resume requires operator authentication plus reason logging.
 - **Stop & Snapshot** — `Stop` flushes outstanding jobs. Operators capture a project snapshot manually (see the Autonomy Rollback Playbook) and record an `autonomy.run.stopped` event with the operator ID until the dedicated endpoint returns.
-- **Stop & Snapshot** — `Stop` flushes outstanding jobs. Operators capture a fresh snapshot via `POST /projects/{proj}/snapshot` and record an `autonomy.run.stopped` event with the operator ID.
+- **Stop & Snapshot** — `Stop` flushes outstanding jobs via `POST /admin/autonomy/{lane}/stop` (records operator + reason and emits `autonomy.run.stopped`). Operators capture a fresh snapshot via `POST /projects/{proj}/snapshot` and record an `autonomy.run.stopped` event with the operator ID.
 - **Rollback** — Control bar links directly to the Runbook (see [ops/trials/autonomy_rollback_playbook.md](../ops/trials/autonomy_rollback_playbook.md)). Operators can invoke the automated recipe or the manual checklist.
 - **Escalation** — Pager channel receives structured alerts (`autonomy.alert.*`). Playbook lists escalation tree (primary operator → owner → security liaison).
 
@@ -47,7 +47,7 @@ Give trusted operators a predictable, high-signal way to let helpers run without
 
 - Emit structured events: `autonomy.run.started`, `.paused`, `.resumed`, `.stopped`, `.rollback.started/completed`, `.budget.*`, `.egress.blocked`, `.tool.denied`.
 - `/state/autonomy/lanes` read-model summarizes current runs, budget headroom, outstanding alerts, and last operator action.
-- Prometheus counters: `autonomy_runs_total{status}` and `autonomy_interrupts_total{reason}`. Gauges capture `autonomy_budget_remaining_seconds` and `autonomy_budget_remaining_tokens`.
+- Prometheus counters: `autonomy_runs_total{status}` and `autonomy_interrupts_total{reason}` (reasons: `pause`, `stop_flush_all`, `stop_flush_inflight`, `stop_flush_queued`). Gauges capture `autonomy_budget_remaining_seconds` and `autonomy_budget_remaining_tokens`.
 - Trial dossier receives a run summary snapshot (`ops/trials/README.md` guidance) after each autonomous session.
 
 ## Rollback & Recovery

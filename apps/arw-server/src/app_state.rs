@@ -418,7 +418,7 @@ impl AppStateBuilder {
             .unwrap_or_else(|| Arc::new(tool_cache::ToolCache::new()));
         let autonomy_registry = match self.autonomy {
             Some(state) => state,
-            None => autonomy::AutonomyRegistry::new(self.bus.clone()).await,
+            None => autonomy::AutonomyRegistry::new(self.bus.clone(), metrics.clone()).await,
         };
         let governor_state = match self.governor {
             Some(state) => state,

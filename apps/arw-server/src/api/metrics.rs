@@ -78,6 +78,18 @@ fn render_prometheus(
     }
 
     out.push_str(
+        "# HELP arw_autonomy_interrupts_total Autonomy interrupts by reason\n# TYPE arw_autonomy_interrupts_total counter\n",
+    );
+    for (reason, count) in summary.autonomy.interrupts.iter() {
+        write_metric_line(
+            &mut out,
+            "arw_autonomy_interrupts_total",
+            &[("reason", reason.clone())],
+            count,
+        );
+    }
+
+    out.push_str(
         "# HELP arw_route_hits_total HTTP hits per route\n# TYPE arw_route_hits_total counter\n",
     );
     out.push_str("# HELP arw_route_errors_total HTTP errors per route\n# TYPE arw_route_errors_total counter\n");

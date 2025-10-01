@@ -159,6 +159,64 @@ pub async fn autonomy_pause(
     Json(AutonomyLaneResponse { lane }).into_response()
 }
 
+#[utoipa::path(
+    post,
+    path = "/admin/autonomy/{lane}/stop",
+    tag = "Admin/Autonomy",
+    request_body = AutonomyActionRequest,
+    responses((status = 200, description = "Lane stopped", body = AutonomyLaneResponse))
+)]
+pub async fn autonomy_stop(
+    headers: HeaderMap,
+    Path(lane_id): Path<String>,
+    State(state): State<AppState>,
+    payload: Option<Json<AutonomyActionRequest>>,
+) -> impl IntoResponse {
+    if let Err(resp) = responses::require_admin(&headers) {
+        return *resp;
+    }
+
+    let body = payload.map(|wrapper| wrapper.0).unwrap_or_default();
+    let operator = body.operator;
+    let reason = body.reason;
+
+    state
+        .autonomy()
+        .pause_lane(&lane_id, operator.clone(), reason.clone())
+        .await;
+
+    if state.kernel_enabled() {
+        for state_name in states_for_scope(FlushScope::All) {
+            if let Err(err) = state
+                .kernel()
+                .delete_actions_by_state_async(state_name)
+                .await
+            {
+                warn!(?err, lane = %lane_id, state = %state_name, "failed to clear autonomy jobs");
+                return responses::problem_response(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Failed to flush jobs",
+                    Some("Unable to clear actions from queue"),
+                );
+            }
+        }
+    }
+
+    let snapshot = state
+        .autonomy()
+        .flush_jobs(&lane_id, FlushScope::All, operator.clone(), reason.clone())
+        .await;
+    let lane = if let Some((running, queued)) = live_action_counts(&state).await {
+        state
+            .autonomy()
+            .record_job_counts(&lane_id, Some(running), Some(queued))
+            .await
+    } else {
+        snapshot
+    };
+    Json(AutonomyLaneResponse { lane }).into_response()
+}
+
 /// Update or clear autonomy lane budgets.
 #[utoipa::path(
     post,
@@ -432,7 +490,10 @@ pub async fn autonomy_jobs_clear(
     } else {
         None
     };
-    let snapshot = state.autonomy().flush_jobs(&lane_id, scope).await;
+    let snapshot = state
+        .autonomy()
+        .flush_jobs(&lane_id, scope, None, None)
+        .await;
     let lane = if let Some((running, queued)) = counts_after_clear {
         state
             .autonomy()
@@ -446,9 +507,8 @@ pub async fn autonomy_jobs_clear(
 
 fn states_for_scope(scope: FlushScope) -> &'static [&'static str] {
     match scope {
-        FlushScope::All => &["queued", "running"],
-        FlushScope::QueuedOnly => &["queued"],
-        FlushScope::InFlightOnly => &["running"],
+        FlushScope::All | FlushScope::QueuedOnly => &["queued"],
+        FlushScope::InFlightOnly => &[],
     }
 }
 

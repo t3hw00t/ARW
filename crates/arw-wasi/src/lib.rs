@@ -19,6 +19,8 @@ pub enum WasiError {
     Unsupported(String),
     #[error("runtime error: {0}")]
     Runtime(String),
+    #[error("interrupted: {0}")]
+    Interrupted(String),
     #[error("denied: {reason}")]
     Denied {
         reason: String,

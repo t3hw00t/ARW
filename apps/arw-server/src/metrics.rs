@@ -74,6 +74,11 @@ pub struct RoutesSummary {
 }
 
 #[derive(Clone, Serialize, Default)]
+pub struct AutonomySummary {
+    pub interrupts: BTreeMap<String, u64>,
+}
+
+#[derive(Clone, Serialize, Default)]
 pub struct MemoryGcSummary {
     pub expired_total: u64,
     pub evicted_total: u64,
@@ -86,6 +91,7 @@ pub struct MetricsSummary {
     pub tasks: BTreeMap<String, TaskStatus>,
     pub compatibility: CompatibilitySummary,
     pub memory_gc: MemoryGcSummary,
+    pub autonomy: AutonomySummary,
 }
 
 #[derive(Clone, Serialize, Default)]
@@ -254,6 +260,7 @@ pub struct Metrics {
     tasks: Mutex<BTreeMap<String, TaskStat>>,
     legacy_capsule_headers: AtomicU64,
     memory_gc: MemoryGcCounters,
+    autonomy_interrupts: Mutex<BTreeMap<String, u64>>,
 }
 
 impl Default for Metrics {
@@ -287,6 +294,7 @@ impl Metrics {
             tasks: Mutex::new(BTreeMap::new()),
             legacy_capsule_headers: AtomicU64::new(0),
             memory_gc: MemoryGcCounters::default(),
+            autonomy_interrupts: Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -338,12 +346,20 @@ impl Metrics {
             legacy_capsule_headers: self.legacy_capsule_headers.load(Ordering::Relaxed),
         };
         let memory_gc = self.memory_gc.snapshot();
+        let autonomy = self
+            .autonomy_interrupts
+            .lock()
+            .map(|map| AutonomySummary {
+                interrupts: map.clone(),
+            })
+            .unwrap_or_default();
         MetricsSummary {
             events,
             routes,
             tasks,
             compatibility,
             memory_gc,
+            autonomy,
         }
     }
 
@@ -401,6 +417,13 @@ impl Metrics {
             .map(|stats| stats.kinds.get(kind).copied().unwrap_or(0))
             .unwrap_or(0)
     }
+
+    pub fn record_autonomy_interrupt(&self, reason: &str) {
+        let key = if reason.is_empty() { "unknown" } else { reason };
+        if let Ok(mut map) = self.autonomy_interrupts.lock() {
+            *map.entry(key.to_string()).or_default() += 1;
+        }
+    }
 }
 
 pub fn route_stats_snapshot(
@@ -421,6 +444,7 @@ pub fn route_stats_snapshot(
         "tasks": summary.tasks,
         "cache": cache_stats_snapshot(cache),
         "memory_gc": summary.memory_gc,
+        "autonomy": summary.autonomy,
     })
 }
 

@@ -15,6 +15,7 @@ use crate::{
     util, AppState,
 };
 use arw_topics as topics;
+use tokio::sync::broadcast;
 
 pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
     let ctx = WorkerContext::new(&state);
@@ -45,13 +46,28 @@ pub(crate) fn start_local_worker(state: AppState) -> TaskHandle {
                         };
                         ctx.bus.publish(&running_env.kind, &running_env.payload);
 
-                        let action_result = ctx.handle_action(&state, &id, &kind, &input).await;
-                        match action_result {
-                            Ok(outcome) => {
+                        match ctx
+                            .run_action_with_interrupt(&state, &id, &kind, &input)
+                            .await
+                        {
+                            ActionDispatchResult::Completed(outcome) => {
                                 ctx.complete_action(&id, outcome).await;
                             }
-                            Err(failure) => {
+                            ActionDispatchResult::Failed(failure) => {
                                 ctx.fail_action(&id, &kind, failure).await;
+                                continue;
+                            }
+                            ActionDispatchResult::Interrupted(signal) => {
+                                let interrupt = interrupt_error_info(&signal);
+                                ctx.fail_action(
+                                    &id,
+                                    &kind,
+                                    ActionFailure::new(ToolError::Interrupted {
+                                        reason: interrupt.reason,
+                                        detail: interrupt.detail,
+                                    }),
+                                )
+                                .await;
                                 continue;
                             }
                         }
@@ -88,6 +104,17 @@ struct WorkerContext {
     queue_signals: Arc<queue::QueueSignals>,
 }
 
+enum ActionDispatchResult {
+    Completed(ActionOutcome),
+    Failed(ActionFailure),
+    Interrupted(autonomy::AutonomySignal),
+}
+
+struct InterruptErrorInfo {
+    reason: String,
+    detail: Option<String>,
+}
+
 impl WorkerContext {
     fn new(state: &AppState) -> Self {
         Self {
@@ -97,6 +124,43 @@ impl WorkerContext {
             host: state.host(),
             autonomy: state.autonomy(),
             queue_signals: state.queue_signals(),
+        }
+    }
+
+    async fn run_action_with_interrupt(
+        &self,
+        state: &AppState,
+        id: &str,
+        kind: &str,
+        input: &Value,
+    ) -> ActionDispatchResult {
+        let mut action_fut = Box::pin(self.handle_action(state, id, kind, input));
+        let mut signals = self.autonomy.subscribe();
+        loop {
+            tokio::select! {
+                biased;
+                result = &mut action_fut => {
+                    match result {
+                        Ok(outcome) => return ActionDispatchResult::Completed(outcome),
+                        Err(failure) => return ActionDispatchResult::Failed(failure),
+                    }
+                }
+                signal = signals.recv() => {
+                    match signal {
+                        Ok(sig) => {
+                            if sig.kind.interrupts_execution() {
+                                return ActionDispatchResult::Interrupted(sig);
+                            }
+                        }
+                        Err(broadcast::error::RecvError::Lagged(_)) => {
+                            continue;
+                        }
+                        Err(broadcast::error::RecvError::Closed) => {
+                            return ActionDispatchResult::Failed(ActionFailure::new(ToolError::Runtime("autonomy signal channel closed".into())));
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -801,6 +865,43 @@ fn enrich_output(value: Value, guard: Option<ActionGuard>, posture: &str) -> Val
     }
 }
 
+fn interrupt_error_info(signal: &autonomy::AutonomySignal) -> InterruptErrorInfo {
+    match &signal.kind {
+        autonomy::AutonomySignalKind::ModeChanged {
+            mode: autonomy::AutonomyMode::Paused,
+            operator,
+            reason,
+        } => {
+            let mut detail_parts = vec![format!("lane {}", signal.lane)];
+            if let Some(op) = operator.as_ref().filter(|s| !s.is_empty()) {
+                detail_parts.push(format!("operator {op}"));
+            }
+            if let Some(reason_text) = reason.as_ref().filter(|s| !s.is_empty()) {
+                detail_parts.push(reason_text.clone());
+            }
+            InterruptErrorInfo {
+                reason: "autonomy_pause".to_string(),
+                detail: Some(detail_parts.join(" | ")),
+            }
+        }
+        autonomy::AutonomySignalKind::ModeChanged { mode, .. } => InterruptErrorInfo {
+            reason: "autonomy_mode_change".to_string(),
+            detail: Some(format!("lane {} -> {}", signal.lane, mode.as_str())),
+        },
+        autonomy::AutonomySignalKind::Flush { scope } => {
+            let scope_label = match scope {
+                autonomy::FlushScope::All => "all",
+                autonomy::FlushScope::QueuedOnly => "queued_only",
+                autonomy::FlushScope::InFlightOnly => "in_flight",
+            };
+            InterruptErrorInfo {
+                reason: "autonomy_flush".to_string(),
+                detail: Some(format!("lane {} scope {}", signal.lane, scope_label)),
+            }
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 struct LeaseSummary {
     id: String,
@@ -888,6 +989,27 @@ fn tool_error_details(
             });
             (error_msg, payload, None)
         }
+        ToolError::Interrupted { reason, detail } => {
+            let detail_str = detail.as_deref();
+            let error_msg = if let Some(detail) = detail_str {
+                format!("interrupted: {} ({})", reason, detail)
+            } else {
+                format!("interrupted: {}", reason)
+            };
+            let mut error_obj = json!({
+                "type": "interrupted",
+                "reason": reason,
+            });
+            if let (Value::Object(ref mut obj), Some(detail)) = (&mut error_obj, detail_str) {
+                obj.insert("detail".into(), Value::String(detail.to_string()));
+            }
+            let payload = json!({
+                "id": id,
+                "kind": kind,
+                "error": error_obj,
+            });
+            (error_msg, payload, None)
+        }
         ToolError::Runtime(detail) => {
             let detail_cloned = detail.clone();
             let error_msg = format!("runtime error: {}", detail_cloned);
@@ -964,6 +1086,7 @@ mod tests {
     use chrono::{Duration as ChronoDuration, Utc};
     use serde_json::json;
     use std::sync::Arc;
+    use tokio::sync::Notify;
     use tokio::time::{timeout, Duration};
     use uuid::Uuid;
 
@@ -1013,6 +1136,27 @@ mod tests {
                 "fs.patch" => Ok(json!({"path": "/tmp/file.txt", "sha256": "abc123"})),
                 "app.vscode.open" => Ok(json!({"opened": true})),
                 _ => Err(arw_wasi::WasiError::Unsupported(id.to_string())),
+            }
+        }
+    }
+
+    #[derive(Clone)]
+    struct BlockingHost {
+        notify: Arc<Notify>,
+    }
+
+    #[async_trait]
+    impl arw_wasi::ToolHost for BlockingHost {
+        async fn run_tool(
+            &self,
+            id: &str,
+            _input: &serde_json::Value,
+        ) -> Result<serde_json::Value, arw_wasi::WasiError> {
+            if id == "blocking.wait" {
+                self.notify.notified().await;
+                Ok(json!({"stopped": false}))
+            } else {
+                Err(arw_wasi::WasiError::Unsupported(id.to_string()))
             }
         }
     }
@@ -1680,5 +1824,83 @@ mod tests {
         assert_eq!(stored_caps, required_caps);
         assert_eq!(stored_output["guard"]["allowed"].as_bool(), Some(false));
         assert_eq!(stored.error.as_deref(), Some("invalid request: bad input"));
+    }
+
+    #[tokio::test]
+    async fn autonomy_kill_switch_aborts_running_action() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let notify = Arc::new(Notify::new());
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(BlockingHost {
+            notify: notify.clone(),
+        });
+        let state = build_state_with_host(temp.path(), &mut ctx.env, host).await;
+        let _worker = start_local_worker(state.clone());
+
+        let bus = state.bus();
+        let mut running_rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_ACTIONS_RUNNING.to_string()], Some(8));
+        let mut failed_rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_ACTIONS_FAILED.to_string()], Some(8));
+
+        let action_id = Uuid::new_v4().to_string();
+        state
+            .kernel()
+            .insert_action_async(
+                &action_id,
+                "blocking.wait",
+                &json!({}),
+                None,
+                None,
+                "queued",
+            )
+            .await
+            .expect("enqueue blocking action");
+        state.signal_action_queue();
+
+        timeout(Duration::from_secs(2), running_rx.recv())
+            .await
+            .expect("running event timeout")
+            .expect("running event recorded");
+
+        state
+            .autonomy()
+            .pause_lane(
+                "trial-g4-autonomy",
+                Some("alice".into()),
+                Some("kill switch".into()),
+            )
+            .await;
+
+        let failed_env = timeout(Duration::from_secs(3), failed_rx.recv())
+            .await
+            .expect("failed event timeout")
+            .expect("failed event value");
+        assert_eq!(failed_env.payload["id"], json!(action_id));
+        assert_eq!(
+            failed_env.payload["error"]["type"].as_str(),
+            Some("interrupted")
+        );
+        assert_eq!(
+            failed_env.payload["error"]["reason"].as_str(),
+            Some("autonomy_pause")
+        );
+        let detail = failed_env.payload["error"]["detail"]
+            .as_str()
+            .unwrap_or_default();
+        assert!(detail.contains("trial-g4-autonomy"));
+
+        let stored = state
+            .kernel()
+            .get_action_async(&action_id)
+            .await
+            .expect("load action")
+            .expect("action row");
+        assert_eq!(stored.state, "failed");
+        let output = stored.output.unwrap_or_default();
+        assert_eq!(output["error"]["type"].as_str(), Some("interrupted"));
+        assert_eq!(output["error"]["reason"].as_str(), Some("autonomy_pause"));
+
+        notify.notify_waiters();
     }
 }

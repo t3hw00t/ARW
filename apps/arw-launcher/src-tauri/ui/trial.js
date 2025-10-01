@@ -4,6 +4,13 @@
   const AUTONOMY_OPERATOR_KEY = 'arw:trial:autonomy-operator';
   const APPROVAL_REVIEWER_KEY = 'arw:trial:approvals-reviewer';
   const AUTO_REFRESH_INTERVALS = Object.freeze({ approvals: 25000, connections: 35000, autonomy: 45000 });
+  const AUTONOMY_INTERRUPT_KEYS = Object.freeze(['pause', 'stop_flush_all', 'stop_flush_inflight', 'stop_flush_queued']);
+  const AUTONOMY_INTERRUPT_LABELS = Object.freeze({
+    pause: 'Pause',
+    stop_flush_all: 'Stop · flush all',
+    stop_flush_inflight: 'Stop · flush in-flight',
+    stop_flush_queued: 'Stop · flush queued',
+  });
 
   let approvalsTimer = null;
   let connectionsTimer = null;
@@ -28,7 +35,22 @@
       error: null,
     },
     safety: { level: 'unknown', summary: 'Loading...', meta: [], lastApplied: null, metrics: null },
-    autonomy: { level: 'unknown', summary: 'Loading...', meta: [], lane: null, snapshot: null, line: 'Autonomy status loading...', operator: null, alerts: [], updatedMs: null, lastEvent: null, lastReason: null },
+    autonomy: {
+      level: 'unknown',
+      summary: 'Loading...',
+      meta: [],
+      lane: null,
+      snapshot: null,
+      line: 'Autonomy status loading...',
+      operator: null,
+      alerts: [],
+      interruptCounts: {},
+      newInterruptCounts: {},
+      newInterrupts: 0,
+      updatedMs: null,
+      lastEvent: null,
+      lastReason: null,
+    },
     connections: { nodes: [], summary: 'Loading connections…', error: null, loading: true, updatedMs: null },
     overview: [],
     workflows: [],
@@ -103,8 +125,8 @@
     const autoResumeBtn = document.getElementById('btn-autonomy-resume');
     if (autoResumeBtn) autoResumeBtn.addEventListener('click', resumeAutonomy);
 
-    const autoFlushBtn = document.getElementById('btn-autonomy-flush');
-    if (autoFlushBtn) autoFlushBtn.addEventListener('click', flushAutonomy);
+    const autoStopBtn = document.getElementById('btn-autonomy-stop');
+    if (autoStopBtn) autoStopBtn.addEventListener('click', stopAutonomy);
 
     const tabs = document.querySelectorAll('.tab-buttons [role="tab"]');
     tabs.forEach(btn => {
@@ -448,12 +470,19 @@
   }
 
   async function fetchAutonomySnapshot(base){
-    const result = await safeJsonWithErrors(base, '/state/autonomy/lanes');
-    const errors = result.error ? [result.error] : [];
+    const [lanesRes, statsRes] = await Promise.all([
+      safeJsonWithErrors(base, '/state/autonomy/lanes'),
+      safeJsonWithErrors(base, '/state/route_stats'),
+    ]);
+    const errors = [];
+    if (lanesRes.error) errors.push(lanesRes.error);
+    if (statsRes.error) errors.push(statsRes.error);
+    const interruptCounts = extractAutonomyInterrupts(statsRes);
+    const payload = lanesRes.data ? { ...lanesRes.data, interruptCounts } : null;
     return {
-      payload: result.data,
+      payload,
       errors,
-      unauthorized: result.unauthorized,
+      unauthorized: lanesRes.unauthorized || statsRes.unauthorized,
     };
   }
 
@@ -841,6 +870,12 @@
     const fallbackSummary = STATE.unauthorized
       ? 'Authorize to manage the autonomy lane.'
       : 'No autonomy lane configured.';
+    const previousCounts = STATE.autonomy?.interruptCounts || {};
+    const interruptCounts = normalizeInterrupts(
+      payload?.interruptCounts || payload?.stats?.autonomy?.interrupts,
+    );
+    const newInterruptCounts = diffInterrupts(previousCounts, interruptCounts);
+    const newInterruptTotal = Object.values(newInterruptCounts).reduce((acc, value) => acc + value, 0);
     if (!payload || !Array.isArray(payload?.lanes)) {
       STATE.autonomy = {
         level: 'unknown',
@@ -851,6 +886,9 @@
         line: fallbackSummary,
         operator: currentOperator,
         alerts: [],
+        interruptCounts,
+        newInterruptCounts: {},
+        newInterrupts: 0,
         updatedMs: null,
         lastEvent: null,
         lastReason: null,
@@ -872,6 +910,9 @@
         line: noLane,
         operator: currentOperator,
         alerts: [],
+        interruptCounts,
+        newInterruptCounts: {},
+        newInterrupts: 0,
         updatedMs: null,
         lastEvent: null,
         lastReason: null,
@@ -935,24 +976,43 @@
       if (parts.length) meta.push(['Budgets', parts.join(' | ')]);
     }
 
-    const overviewLine = `${summary}${laneId ? ` (${laneId})` : ''}`;
+    const laneSuffix = laneId ? ` (${laneId})` : '';
+    let overviewLine = `${summary}${laneSuffix}`;
+    if (newInterruptTotal > 0) {
+      overviewLine = `Autonomy interrupts (${newInterruptTotal} new)${laneSuffix}`;
+    }
+    const interruptLine = formatInterruptSummary(interruptCounts);
+    const newInterruptLine = newInterruptTotal > 0 ? formatInterruptSummary(newInterruptCounts) : null;
+    const augmentedAlerts = newInterruptTotal > 0
+      ? [...alerts, `${newInterruptTotal} new interrupt${newInterruptTotal === 1 ? '' : 's'} detected`]
+      : alerts;
+    if (newInterruptTotal > 0 && level === 'ok') {
+      level = 'warn';
+      summary = `Autonomy interrupts (${newInterruptTotal} new)`;
+    }
+    const extendedMeta = interruptLine
+      ? [...meta, ['Interrupts', interruptLine]].concat(newInterruptLine ? [['New interrupts', newInterruptLine]] : [])
+      : meta;
 
     STATE.autonomy = {
       level,
       summary,
-      meta,
+      meta: extendedMeta,
       lane: laneId,
       snapshot: lane,
       line: overviewLine,
       operator: currentOperator,
-      alerts,
+      alerts: augmentedAlerts,
+      interruptCounts,
+      newInterruptCounts,
+      newInterrupts: newInterruptTotal,
       updatedMs,
       lastEvent,
       lastReason,
     };
 
     setStatus('autonomy', level, summary);
-    setTile('autonomy', { level, summary, meta });
+    setTile('autonomy', { level, summary, meta: extendedMeta });
     syncAutonomyControlsFromState();
   }
 
@@ -1003,6 +1063,36 @@
         });
       }
     }
+  const interruptsEl = document.getElementById('autonomyInterrupts');
+  if (interruptsEl) {
+    interruptsEl.innerHTML = '';
+    const counts = STATE.autonomy?.interruptCounts || {};
+    const entries = AUTONOMY_INTERRUPT_KEYS.map(key => [key, counts[key] || 0]);
+    const totalInterrupts = entries.reduce((acc, [, value]) => acc + Number(value || 0), 0);
+    if (!lane || !entries.some(([, value]) => value > 0)) {
+      interruptsEl.classList.add('hidden');
+    } else {
+      interruptsEl.classList.remove('hidden');
+      const header = document.createElement('li');
+      header.className = 'interrupt-total';
+      header.textContent = `Total interrupts: ${totalInterrupts}`;
+      interruptsEl.appendChild(header);
+
+      entries.forEach(([reason, value]) => {
+        if (value <= 0) return;
+        const li = document.createElement('li');
+        const label = AUTONOMY_INTERRUPT_LABELS[reason] || reason.replace(/_/g, ' ');
+        const delta = STATE.autonomy?.newInterruptCounts?.[reason] || 0;
+        li.textContent = delta > 0
+          ? `${label} — ${value} (+${delta})`
+          : `${label} — ${value}`;
+        if (delta > 0) {
+          li.classList.add('is-new');
+        }
+        interruptsEl.appendChild(li);
+      });
+    }
+  }
     const disableAll = unauthorized || !lane;
     const pauseBtn = document.getElementById('btn-autonomy-pause');
     if (pauseBtn && pauseBtn.dataset.autonomyBusy !== '1') {
@@ -1012,16 +1102,25 @@
     if (resumeBtn && resumeBtn.dataset.autonomyBusy !== '1') {
       resumeBtn.disabled = disableAll || modeIsGuided(mode);
     }
-    const flushBtn = document.getElementById('btn-autonomy-flush');
-    if (flushBtn && flushBtn.dataset.autonomyBusy !== '1') {
+    const stopBtn = document.getElementById('btn-autonomy-stop');
+    if (stopBtn && stopBtn.dataset.autonomyBusy !== '1') {
       const activeJobs = toNumber(lane?.active_jobs ?? lane?.activeJobs) ?? 0;
       const queuedJobs = toNumber(lane?.queued_jobs ?? lane?.queuedJobs) ?? 0;
-      flushBtn.disabled = disableAll || (activeJobs === 0 && queuedJobs === 0);
+      const disabled = disableAll || (activeJobs === 0 && queuedJobs === 0);
+      stopBtn.disabled = disabled;
+      stopBtn.classList.toggle('danger', !disabled);
+      stopBtn.textContent = 'Stop now';
+      const title = disabled
+        ? (disableAll
+            ? (unauthorized ? 'Authorize to manage the autonomy lane.' : 'No autonomy lane configured.')
+            : 'No autonomy jobs to flush')
+        : 'Pause lane and flush jobs';
+      stopBtn.title = title;
     }
   }
 
   function markAutonomyBusy(flag) {
-    ['btn-autonomy-pause', 'btn-autonomy-resume', 'btn-autonomy-flush'].forEach(id => {
+    ['btn-autonomy-pause', 'btn-autonomy-resume', 'btn-autonomy-stop'].forEach(id => {
       const btn = document.getElementById(id);
       if (!btn) return;
       if (flag) {
@@ -1029,6 +1128,9 @@
         btn.disabled = true;
       } else {
         delete btn.dataset.autonomyBusy;
+        if (id === 'btn-autonomy-stop') {
+          btn.textContent = 'Stop now';
+        }
       }
     });
   }
@@ -1144,7 +1246,7 @@
     }
   }
 
-  async function flushAutonomy() {
+  async function stopAutonomy() {
     if (!STATE.base) {
       ARW.toast('Start the server first');
       return;
@@ -1154,19 +1256,33 @@
       ARW.toast('No autonomy lane configured');
       return;
     }
-    const confirmFlush = confirm('Flush all in-flight and queued autonomy jobs?');
-    if (!confirmFlush) return;
+    const operator = ensureAutonomyOperator();
+    if (!operator) {
+      ARW.toast('Operator required');
+      return;
+    }
+    const reason = promptAutonomyReason('Emergency stop (kill switch)');
+    if (reason === null) return;
+    const confirmStop = confirm('Immediately pause and flush all autonomy jobs?');
+    if (!confirmStop) return;
     markAutonomyBusy(true);
+    const stopBtn = document.getElementById('btn-autonomy-stop');
+    if (stopBtn) {
+      stopBtn.textContent = 'Stopping…';
+      stopBtn.classList.add('danger');
+    }
     try {
-      const resp = await ARW.http.fetch(STATE.base, `/admin/autonomy/${encodeURIComponent(lane)}/jobs`, {
-        method: 'DELETE',
+      const resp = await ARW.http.fetch(STATE.base, `/admin/autonomy/${encodeURIComponent(lane)}/stop`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ operator, reason }),
       });
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-      ARW.toast('Autonomy jobs flushed');
+      ARW.toast('Autonomy stopped');
       await refresh();
     } catch (err) {
-      console.error('Flush autonomy failed', err);
-      ARW.toast(err && err.message ? err.message : 'Flush failed');
+      console.error('Stop autonomy failed', err);
+      ARW.toast(err && err.message ? err.message : 'Stop failed');
     } finally {
       markAutonomyBusy(false);
       syncAutonomyControlsFromState();
@@ -2028,5 +2144,43 @@
   function toNumber(value){
     const num = Number(value);
     return Number.isFinite(num) ? num : null;
+  }
+
+  function normalizeInterrupts(raw) {
+    const normalized = {};
+    AUTONOMY_INTERRUPT_KEYS.forEach(key => {
+      const value = raw && typeof raw === 'object' ? Number(raw[key]) : 0;
+      normalized[key] = Number.isFinite(value) && value > 0 ? Math.trunc(value) : 0;
+    });
+    return normalized;
+  }
+
+  function diffInterrupts(previous, next) {
+    const deltas = {};
+    AUTONOMY_INTERRUPT_KEYS.forEach(key => {
+      const prevVal = Number(previous?.[key]) || 0;
+      const nextVal = Number(next?.[key]) || 0;
+      deltas[key] = nextVal > prevVal ? nextVal - prevVal : 0;
+    });
+    return deltas;
+  }
+
+  function formatInterruptSummary(counts, includeZeros = false) {
+    if (!counts || typeof counts !== 'object') return '';
+    const parts = AUTONOMY_INTERRUPT_KEYS
+      .map(key => ({
+        key,
+        label: AUTONOMY_INTERRUPT_LABELS[key] || key.replace(/_/g, ' '),
+        value: Number(counts[key]) || 0,
+      }))
+      .filter(item => includeZeros || item.value > 0);
+    if (!parts.length) return '';
+    return parts.map(({ label, value }) => `${label}: ${value}`).join(' · ');
+  }
+
+  function extractAutonomyInterrupts(statsRes) {
+    if (!statsRes || !statsRes.data) return normalizeInterrupts();
+    const raw = statsRes.data?.autonomy?.interrupts;
+    return normalizeInterrupts(raw);
   }
 })();

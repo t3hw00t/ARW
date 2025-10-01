@@ -8,13 +8,14 @@ Updated: 2025-10-01 19:24 UTC
 
 
 ## To Do
-- [trial-autonomy-governor] Autonomy governor & kill switch — todo (updated: 2025-09-26 12:30 UTC)
 
 ## In Progress
 
 ## Paused
 
 ## Done
+- [trial-autonomy-governor] Autonomy governor & kill switch — done (updated: 2025-10-02 14:45:00 UTC)
+    - 2025-10-02 14:45:00 UTC: Wired broadcast interrupts for pause/flush, auto-aborted running tasks, introduced `/admin/autonomy/{lane}/stop`, and refreshed launcher controls + runbook for the kill switch flow.
 - [trial-g2] Gate G2: Calm approvals — done (updated: 2025-09-30 15:20:00 UTC)
     - 2025-09-30 15:20:00 UTC: Published approvals lane operator guide with illustrated layout, linked from mkdocs nav and runbook; connections drawer instructions included.
 - [trial-g3] Gate G3: Trial operations — done (updated: 2025-10-01 19:24:42 UTC)

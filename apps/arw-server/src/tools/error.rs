@@ -7,6 +7,10 @@ pub enum ToolError {
     Unsupported(String),
     Invalid(String),
     Runtime(String),
+    Interrupted {
+        reason: String,
+        detail: Option<String>,
+    },
     Denied {
         reason: String,
         dest_host: Option<String>,
@@ -21,6 +25,13 @@ impl fmt::Display for ToolError {
             ToolError::Unsupported(id) => write!(f, "unsupported tool: {}", id),
             ToolError::Invalid(msg) => write!(f, "invalid request: {}", msg),
             ToolError::Runtime(msg) => write!(f, "runtime error: {}", msg),
+            ToolError::Interrupted { reason, detail } => {
+                if let Some(detail) = detail {
+                    write!(f, "interrupted: {} ({})", reason, detail)
+                } else {
+                    write!(f, "interrupted: {}", reason)
+                }
+            }
             ToolError::Denied {
                 reason,
                 dest_host,
@@ -50,6 +61,10 @@ impl From<WasiError> for ToolError {
         match err {
             WasiError::Unsupported(name) => ToolError::Unsupported(name),
             WasiError::Runtime(msg) => ToolError::Runtime(msg),
+            WasiError::Interrupted(reason) => ToolError::Interrupted {
+                reason,
+                detail: None,
+            },
             WasiError::Denied {
                 reason,
                 dest_host,

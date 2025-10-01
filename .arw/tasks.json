@@ -1334,9 +1334,15 @@
       "id": "trial-autonomy-governor",
       "title": "Autonomy governor & kill switch",
       "desc": "Wire scheduler preemption, approvals override, and emergency stop flow for autonomy lane.",
-      "status": "todo",
-      "notes": [],
-      "updated": "2025-09-26 12:30 UTC"
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-10-02 14:45:00 UTC",
+          "text": "Broadcast kill signals pause/flush, preempt running tasks, added /admin/autonomy/{lane}/stop endpoint + launcher stop control, updated docs/runbook."
+        }
+      ],
+      "updated": "2025-10-02 14:45:00 UTC",
+      "done_at": "2025-10-02 14:45:00 UTC"
     },
     {
       "id": "autonomy-lane-spec",

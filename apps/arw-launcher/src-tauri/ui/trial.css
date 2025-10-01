@@ -518,6 +518,29 @@ body[data-page="trial"] .wrap{
   display: none;
 }
 
+.autonomy-interrupts{
+  list-style: disc;
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+}
+
+.autonomy-interrupts.hidden{
+  display: none;
+}
+
+.autonomy-interrupts .interrupt-total{
+  font-weight: 600;
+  color: var(--color-text, #111827);
+}
+
+.autonomy-interrupts .is-new{
+  color: var(--color-warn, #b45309);
+}
+
 button.danger{
   background: linear-gradient(180deg,#fee2e2,#fecaca);
   border: 1px solid rgba(220,38,38,0.45);

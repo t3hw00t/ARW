@@ -126,6 +126,18 @@ pub async fn tools_run(
                     "Tool runtime error",
                     Some(&msg),
                 ),
+                tools::ToolError::Interrupted { reason, detail } => {
+                    let message = if let Some(detail) = detail {
+                        format!("tool interrupted: {} ({})", reason, detail)
+                    } else {
+                        format!("tool interrupted: {}", reason)
+                    };
+                    problem(
+                        StatusCode::SERVICE_UNAVAILABLE,
+                        "Tool interrupted",
+                        Some(message.as_str()),
+                    )
+                }
                 tools::ToolError::Denied {
                     reason,
                     dest_host,

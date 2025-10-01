@@ -186,6 +186,34 @@ pause_lane() {
   return 1
 }
 
+stop_lane() {
+  if (( DRY_RUN )); then
+    log "DRY RUN: would POST /admin/autonomy/${LANE}/stop"
+    return 0
+  fi
+  local payload
+  payload="$(jq -nc '{reason: "autonomy rollback helper stop"}')"
+  if api_call POST "/admin/autonomy/${LANE}/stop" "$payload"; then
+    if [[ "$API_STATUS" =~ ^20 ]]; then
+      log "Lane stopped via kill switch"
+      return 0
+    fi
+  fi
+  warn "Stop endpoint unavailable (status ${API_STATUS:-unknown}); falling back to pause+flush"
+  local pause_ok=0
+  local flush_ok=0
+  if pause_lane; then
+    pause_ok=1
+  fi
+  if flush_jobs; then
+    flush_ok=1
+  fi
+  if (( pause_ok && flush_ok )); then
+    return 0
+  fi
+  return 1
+}
+
 flush_jobs() {
   if (( DRY_RUN )); then
     log "DRY RUN: would DELETE /admin/autonomy/${LANE}/jobs?state=in_flight"
@@ -360,8 +388,7 @@ summarize_context
 
 run_step "Discover lane metadata" lane_metadata || true
 run_step "Select snapshot" latest_snapshot || true
-run_step "Pause lane" pause_lane
-run_step "Flush jobs" flush_jobs
+run_step "Stop lane" stop_lane
 run_step "Capture project snapshot" capture_snapshot || true
 run_step "Restore project" restore_project || true
 run_step "Restore runtime" restore_runtime || true

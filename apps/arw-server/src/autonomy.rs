@@ -8,11 +8,11 @@ use arw_events::Bus;
 use arw_topics as topics;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
-use tokio::sync::RwLock;
+use tokio::sync::{broadcast, RwLock};
 use tracing::warn;
 use utoipa::ToSchema;
 
-use crate::responses;
+use crate::{metrics, responses};
 
 const ALERT_BUDGET_NEAR: &str = "Budgets nearing limit";
 const ALERT_BUDGET_EXHAUSTED: &str = "Budgets exhausted";
@@ -59,6 +59,35 @@ pub struct AutonomyBudgets {
     pub spend_remaining_cents: Option<u64>,
 }
 
+#[derive(Clone, Debug)]
+pub struct AutonomySignal {
+    pub lane: String,
+    pub kind: AutonomySignalKind,
+    #[allow(dead_code)]
+    pub issued_ms: u64,
+}
+
+#[derive(Clone, Debug)]
+pub enum AutonomySignalKind {
+    ModeChanged {
+        mode: AutonomyMode,
+        operator: Option<String>,
+        reason: Option<String>,
+    },
+    Flush {
+        scope: FlushScope,
+    },
+}
+
+impl AutonomySignalKind {
+    pub fn interrupts_execution(&self) -> bool {
+        match self {
+            AutonomySignalKind::ModeChanged { mode, .. } => matches!(mode, AutonomyMode::Paused),
+            AutonomySignalKind::Flush { scope } => !matches!(scope, FlushScope::QueuedOnly),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub struct AutonomyLaneSnapshot {
     pub lane_id: String,
@@ -102,7 +131,7 @@ impl AutonomyLaneSnapshot {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum FlushScope {
     All,
     QueuedOnly,
@@ -113,10 +142,12 @@ pub struct AutonomyRegistry {
     bus: Bus,
     lanes: RwLock<HashMap<String, AutonomyLaneSnapshot>>,
     path: PathBuf,
+    interrupts: broadcast::Sender<AutonomySignal>,
+    metrics: Arc<metrics::Metrics>,
 }
 
 impl AutonomyRegistry {
-    pub async fn new(bus: Bus) -> Arc<Self> {
+    pub async fn new(bus: Bus, metrics: Arc<metrics::Metrics>) -> Arc<Self> {
         let path = crate::util::state_dir().join("autonomy").join("lanes.json");
         let initial = match tokio::fs::read(&path).await {
             Ok(bytes) => match serde_json::from_slice::<Vec<AutonomyLaneSnapshot>>(&bytes) {
@@ -144,6 +175,8 @@ impl AutonomyRegistry {
             bus,
             lanes: RwLock::new(initial),
             path,
+            interrupts: broadcast::channel(32).0,
+            metrics,
         })
     }
 
@@ -168,6 +201,10 @@ impl AutonomyRegistry {
             .any(|lane| matches!(lane.mode, AutonomyMode::Paused))
     }
 
+    pub fn subscribe(&self) -> broadcast::Receiver<AutonomySignal> {
+        self.interrupts.subscribe()
+    }
+
     pub async fn set_lane_mode(
         &self,
         lane_id: &str,
@@ -178,6 +215,7 @@ impl AutonomyRegistry {
         let operator_clone = operator.clone();
         let reason_clone = reason.clone();
         let mode_clone = mode.clone();
+        let previous_mode = self.lane(lane_id).await.map(|lane| lane.mode);
         let snapshot = self
             .update_lane(lane_id, |lane| {
                 lane.mode = mode_clone.clone();
@@ -198,6 +236,19 @@ impl AutonomyRegistry {
             AutonomyMode::Autonomous => topics::TOPIC_AUTONOMY_RUN_STARTED,
         };
         self.publish_event(topic, &snapshot, operator, reason);
+        if matches!(mode, AutonomyMode::Paused) {
+            self.metrics.record_autonomy_interrupt("pause");
+        }
+        if previous_mode != Some(mode_clone.clone()) {
+            self.emit_signal(
+                lane_id,
+                AutonomySignalKind::ModeChanged {
+                    mode: mode_clone,
+                    operator: operator_clone,
+                    reason: reason_clone,
+                },
+            );
+        }
         snapshot
     }
 
@@ -221,10 +272,27 @@ impl AutonomyRegistry {
             .await
     }
 
-    pub async fn flush_jobs(&self, lane_id: &str, scope: FlushScope) -> AutonomyLaneSnapshot {
+    pub async fn flush_jobs(
+        &self,
+        lane_id: &str,
+        scope: FlushScope,
+        operator: Option<String>,
+        reason: Option<String>,
+    ) -> AutonomyLaneSnapshot {
+        let operator_clone = operator.clone();
+        let reason_clone = reason.clone();
         let snapshot = self
             .update_lane(lane_id, |lane| {
-                lane.last_event = Some("jobs_flushed".to_string());
+                lane.last_event = Some(match scope {
+                    FlushScope::QueuedOnly => "jobs_flushed".to_string(),
+                    FlushScope::InFlightOnly | FlushScope::All => "stopped".to_string(),
+                });
+                if let Some(op) = operator_clone.clone() {
+                    lane.last_operator = Some(op);
+                }
+                if let Some(rs) = reason_clone.clone() {
+                    lane.last_reason = Some(rs);
+                }
                 match scope {
                     FlushScope::All => {
                         lane.active_jobs = 0;
@@ -241,12 +309,29 @@ impl AutonomyRegistry {
             .await;
         self.persist().await;
 
-        let reason = match scope {
+        let scope_reason = match scope {
             FlushScope::All => Some("all".to_string()),
             FlushScope::QueuedOnly => Some("queued".to_string()),
             FlushScope::InFlightOnly => Some("in_flight".to_string()),
         };
-        self.publish_event(topics::TOPIC_AUTONOMY_INTERRUPT, &snapshot, None, reason);
+        let interrupt_reason = reason_clone.clone().or_else(|| scope_reason.clone());
+        self.publish_event(
+            topics::TOPIC_AUTONOMY_INTERRUPT,
+            &snapshot,
+            operator.clone(),
+            interrupt_reason,
+        );
+        if matches!(scope, FlushScope::All | FlushScope::InFlightOnly) {
+            self.publish_event(
+                topics::TOPIC_AUTONOMY_RUN_STOPPED,
+                &snapshot,
+                operator,
+                reason_clone,
+            );
+        }
+        self.metrics
+            .record_autonomy_interrupt(metric_reason_for_scope(scope));
+        self.emit_signal(lane_id, AutonomySignalKind::Flush { scope });
         snapshot
     }
 
@@ -365,6 +450,15 @@ impl AutonomyRegistry {
         responses::attach_corr(&mut payload);
         self.bus.publish(topic, &payload);
     }
+
+    fn emit_signal(&self, lane_id: &str, kind: AutonomySignalKind) {
+        let signal = AutonomySignal {
+            lane: lane_id.to_string(),
+            kind,
+            issued_ms: now_ms(),
+        };
+        let _ = self.interrupts.send(signal);
+    }
 }
 
 #[allow(dead_code)]
@@ -440,6 +534,14 @@ fn push_unique_alert(alerts: &mut Vec<String>, value: &str) {
     }
 }
 
+fn metric_reason_for_scope(scope: FlushScope) -> &'static str {
+    match scope {
+        FlushScope::All => "stop_flush_all",
+        FlushScope::QueuedOnly => "stop_flush_queued",
+        FlushScope::InFlightOnly => "stop_flush_inflight",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -452,7 +554,8 @@ mod tests {
         let dir = tempdir().unwrap();
         let _ctx = test_support::begin_state_env(dir.path());
         let bus = Bus::new(32);
-        let registry = AutonomyRegistry::new(bus).await;
+        let metrics = Arc::new(metrics::Metrics::default());
+        let registry = AutonomyRegistry::new(bus, metrics.clone()).await;
 
         let paused = registry
             .pause_lane(
@@ -481,19 +584,78 @@ mod tests {
         let dir = tempdir().unwrap();
         let _ctx = test_support::begin_state_env(dir.path());
         let bus = Bus::new(8);
-        let registry = AutonomyRegistry::new(bus).await;
+        let metrics = Arc::new(metrics::Metrics::default());
+        let registry = AutonomyRegistry::new(bus, metrics.clone()).await;
 
         registry
             .record_job_counts("trial-lane", Some(3), Some(7))
             .await;
 
         let after_flush = registry
-            .flush_jobs("trial-lane", FlushScope::InFlightOnly)
+            .flush_jobs("trial-lane", FlushScope::InFlightOnly, None, None)
             .await;
         assert_eq!(after_flush.active_jobs, 0);
         assert_eq!(after_flush.queued_jobs, 7);
 
-        let final_state = registry.flush_jobs("trial-lane", FlushScope::All).await;
+        let final_state = registry
+            .flush_jobs("trial-lane", FlushScope::All, None, None)
+            .await;
         assert_eq!(final_state.queued_jobs, 0);
+    }
+
+    #[tokio::test]
+    async fn pause_and_flush_emit_signals() {
+        test_support::init_tracing();
+        let dir = tempdir().unwrap();
+        let _ctx = test_support::begin_state_env(dir.path());
+        let bus = Bus::new(8);
+        let metrics = Arc::new(metrics::Metrics::default());
+        let registry = AutonomyRegistry::new(bus, metrics.clone()).await;
+        let mut rx = registry.subscribe();
+
+        registry
+            .pause_lane(
+                "trial-g4-autonomy",
+                Some("alice".into()),
+                Some("kill switch".into()),
+            )
+            .await;
+        let pause_signal = rx.recv().await.expect("pause signal");
+        assert_eq!(pause_signal.lane, "trial-g4-autonomy");
+        match pause_signal.kind {
+            AutonomySignalKind::ModeChanged {
+                mode,
+                reason,
+                operator,
+            } => {
+                assert_eq!(mode, AutonomyMode::Paused);
+                assert_eq!(reason.as_deref(), Some("kill switch"));
+                assert_eq!(operator.as_deref(), Some("alice"));
+            }
+            other => panic!("unexpected signal: {:?}", other),
+        }
+
+        registry
+            .flush_jobs(
+                "trial-g4-autonomy",
+                FlushScope::InFlightOnly,
+                Some("alice".into()),
+                Some("kill switch".into()),
+            )
+            .await;
+        let flush_signal = rx.recv().await.expect("flush signal");
+        match flush_signal.kind {
+            AutonomySignalKind::Flush { scope } => {
+                assert_eq!(scope, FlushScope::InFlightOnly);
+            }
+            other => panic!("unexpected signal kind {:?}", other),
+        }
+
+        let summary = metrics.snapshot();
+        assert_eq!(summary.autonomy.interrupts.get("pause"), Some(&1));
+        assert_eq!(
+            summary.autonomy.interrupts.get("stop_flush_inflight"),
+            Some(&1)
+        );
     }
 }

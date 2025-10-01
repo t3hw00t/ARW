@@ -220,6 +220,7 @@ pub(crate) mod paths {
     pub const ADMIN_MODELS_BY_HASH: &str = "/admin/models/by-hash/:sha256";
     pub const ADMIN_MODELS_JOBS: &str = "/admin/models/jobs";
     pub const ADMIN_AUTONOMY_LANE_PAUSE: &str = "/admin/autonomy/:lane/pause";
+    pub const ADMIN_AUTONOMY_LANE_STOP: &str = "/admin/autonomy/:lane/stop";
     pub const ADMIN_AUTONOMY_LANE_RESUME: &str = "/admin/autonomy/:lane/resume";
     pub const ADMIN_AUTONOMY_LANE_JOBS: &str = "/admin/autonomy/:lane/jobs";
     pub const ADMIN_AUTONOMY_LANE_BUDGETS: &str = "/admin/autonomy/:lane/budgets";
@@ -453,6 +454,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
     builder.route_post(
         paths::ADMIN_AUTONOMY_LANE_PAUSE,
         api::autonomy::autonomy_pause,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_AUTONOMY_LANE_STOP,
+        api::autonomy::autonomy_stop,
         Some(Stability::Experimental),
     );
     builder.route_post(
