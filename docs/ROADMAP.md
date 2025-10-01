@@ -48,13 +48,24 @@ To keep the larger intent visible while we iterate, we track four active executi
 
 ### Collaboration & Human-in-Loop Surfaces
 - Immediate moves: finalize the recipes runner/gallery, wire the Heuristic Feedback Engine shadow lane, surface the pending action queue in the sidecar, and plug Hub/Project surfaces into the Event Spine patch stream.
+- Accessibility focus: bring Launcher runtime panels to parity (keyboard flows, ARIA labeling, high-contrast audits) and fold consent copy from the onboarding kit into shared help surfaces.
 - Checks & optimizations: ensure SSE reconnection/backoff is captured in the universal right-sidecar and validate feedback deltas via snapshot tests.
 - Documentation: update showcase/install paths and add the approval queue walkthrough once the sidecar panel is interactive.
 
 ### Security Hardening & Observability
-- Immediate moves: stage the egress firewall scope manifest, wire capsule telemetry, and expose the event journal reader and metrics registry endpoints.
+- Immediate moves: stage the egress firewall scope manifest, wire capsule telemetry, expose the event journal reader and metrics registry endpoints, and land the GTK/GLib ≥0.20 supply-chain upgrade so we can drop the RUSTSEC ignore.
 - Checks & optimizations: exercise DNS guard and proxy posture in CI; audit new endpoints with Spectral rules and Prometheus scrapes.
-- Documentation: fold the guardrail posture presets into the security hardening guide and keep Backlog observability rows in sync as we ship readers.
+- Documentation: fold the guardrail posture presets into the security hardening guide, close the loop on supply-chain rollback notes, and keep Backlog observability rows in sync as we ship readers.
+
+## User Outcomes & Storytelling
+
+We keep the high-level promise (“your private AI control room”) tangible by committing to a handful of experience-first checkpoints alongside the technical work:
+
+- **Trusted Onboarding Journey (Q4)** — deliver a narrated first-run flow and companion walkthrough deck that explains leases, consent, and local-first defaults in plain language; circulate with the beta cohort and fold feedback into Launcher help cards.
+- **Consent UX Validation Sprint (Q4)** — run moderated sessions with three partner teams to confirm audio/vision consent dialogs and accessibility cues are comprehensible; publish a one-page findings brief and close the loop in Launcher/Docs copies.
+- **Complexity Collapse Mission Brief (monthly)** — ship a short stakeholder update summarizing wins, risks, and upcoming user-facing moments; archive briefs under `docs/release_notes.md` so non-technical sponsors can track progress without scanning engineering backlogs.
+
+These artifacts make sure the roadmap keeps aiming at confidence, clarity, and control for people—not just kernel correctness.
 
 ## Near-Term (Weeks)
 

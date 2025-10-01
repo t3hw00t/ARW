@@ -26,33 +26,33 @@ Badges can be combined (for example, `[Pack: Collaboration][Future]`) to show bo
 ## Now (Weeks)
 
 Complexity Collapse (Cross-cutting)
-- [Kernel] One service API surface (`/state`, `/events`, `/actions`) with no side channels
-- [Kernel] Single SQLite journal with content-addressed blobs; derive read-models and caches
-- [Kernel] Job model & scheduler as the only execution path; unify local and remote runners
-- [Kernel] Patch engine for all writes with diff preview and rollback
-- [Kernel] Documented event taxonomy; views/read-models subscribe to the event stream
-- [Kernel] Flows as DAG data executed by a single flow-runner; tools are schema-defined nodes
-- [Kernel] Unified retrieval pipeline and memory abstraction (vector/graph/kv/doc) with shared CRUD/stats and index hygiene
-- [Kernel] Capability/lease system with node-local egress proxy; remove per-tool allowlists
-- [Kernel] UI: shared right-sidecar, schema-generated forms, and global command palette
-- [Kernel] Legacy feature migration (Phases A–E) — done; see `docs/RESTRUCTURE.md` for the final summary and hand-off notes.
-- [Kernel] Snappy Governor verification sweep: confirm `/metrics`, `/state/route_stats`, and `snappy.*` events match the journal paths; add regression tests — done (snappy read-model + notice test)
-- [Kernel] Event Spine patch streaming rollout: wire patch tail to `/events` SSE, validate resume via JSON Patch fixtures, document cleanup of legacy paths — done (SSE replay test + docs)
-- [Kernel] Phase handoff coordination: assign owners/dates for remaining Phase A bullets and publish them to `.arw/tasks.json` — done (see items `t-phase-a-01..03`).
+- [Kernel] One service API surface (`/state`, `/events`, `/actions`) with no side channels — stabilize instrumentation and error budgets as new packs land.
+- [Kernel] Single SQLite journal with content-addressed blobs; derive read-models and caches — optimize compaction + vacuum cadence and document HA restore drills.
+- [Kernel] Job model & scheduler as the only execution path; unify local and remote runners — converge legacy code paths and expand coverage for remote runner fallbacks.
+- [Kernel] Patch engine for all writes with diff preview and rollback — add end-to-end tests for Project/Policy flows and CI drift alerts.
+- [Kernel] Documented event taxonomy; views/read-models subscribe to the event stream — keep taxonomy registry in sync with Event Spine patches and launcher consumers.
+- [Kernel] Flows as DAG data executed by a single flow-runner; tools are schema-defined nodes — graduate existing flows to the unified runner and remove bespoke executors.
+- [Kernel] Unified retrieval pipeline and memory abstraction (vector/graph/kv/doc) with shared CRUD/stats and index hygiene — wire production hygiene dashboards and janitor tooling.
+- [Kernel] Capability/lease system with node-local egress proxy; remove per-tool allowlists — align policy manifests with lease scopes and document operator responses.
+- [Kernel] UI: shared right-sidecar, schema-generated forms, and global command palette — sustain accessibility audits and ensure new packs ship with parity.
+- **Recently shipped:** Legacy feature migration (Phases A–E); Snappy Governor verification; Event Spine patch streaming; Phase A handoff (see `docs/RESTRUCTURE.md` and tasks `t-phase-a-01..03`).
+
+Managed Runtime Supervisor (Priority One)
+- [Kernel] Runtime Matrix Phase 1: land health reasons, restart budgets, and accessible status strings; add CPU/GPU smoke tests exercising llama.cpp integration — in_progress (health strings merged; tests + restart budgets outstanding).
+- [Kernel] Supervisor Core Phase 2: finalize `RuntimeRegistry` adapter trait, lease-gated start/stop APIs, structured logs, and policy simulator coverage — plan.
+- [Pack: Collaboration][Kernel] Launcher runtime panels: expose profiles, consent cues, and start/stop controls with keyboard parity; publish operator runbook excerpt in Launcher help cards — plan.
+- [Kernel] Supply-chain readiness for bundled runtimes: sign binary manifests, document update cadence, and ship rollback checklist — plan.
 
 Never‑Out‑Of‑Context (High Priority)
-- [Pack: Research] [t-250912143001-0001] Context Working Set doc + mkdocs nav — done (this change)
-- [Pack: Research] [t-250912143005-0002] Context API: allow slot budgets and return stable pointers (IDs) for all included items — done (slot budgets + slot coverage landed in this change)
 - [Pack: Research] [t-250912143009-0003] Retrieval: add MMR‑style selector across vector/graph mounts and world beliefs — todo
 - [Pack: Research] [t-250912143013-0004] Compression cascade: summarize episodes (extract→abstract→outline) into mounts with provenance — todo
 - [Pack: Research] [t-250912143017-0005] Failure detectors: emit `context.recall.risk` and `context.coverage` with meters in UI — in_progress (recall risk events + telemetry landed; UI meters pending)
-- [Pack: Research] [t-250912143021-0006] Memory hygiene: per‑lane caps + TTL + janitor job with rollups and evictions — done (this change)
 - [Pack: Research] [t-250912143025-0007] Logic Unit: ship config‑only Never‑Out‑Of‑Context defaults (budgets, diversity, rehydrate rules) — todo
 - [Pack: Research] [t-250912143029-0008] UI: Project Hub panel “What’s in context now” with artifact pointers and rehydrate actions — todo
 - [Pack: Research] [t-250912143033-0009] Training Park: dials for diversity/recency/compression; recall‑risk and coverage meters — todo
 - [Pack: Research] [t-250918120201-tp01] Training telemetry read-models in `arw-server` (context/memory/tool success stats) powering Training Park — doing (baseline snapshot live; expanding coverage)
 - [Pack: Research] [t-250918120205-tp02] Launcher Training Park window: replace stub UI with live metrics + control bindings — plan
-- [Pack: Research] Context telemetry guardrails: add CI assertions for `context.recall.risk`/`context.coverage`, capture budgets in docs, and publish a verification checklist — done (tests + docs + checklist)
+- **Recently shipped:** Context Working Set doc; Context API budgets + stable IDs; Memory hygiene janitor; Context telemetry guardrails.
 
 UI Coherence
 - [Pack: Collaboration] Universal right‑sidecar across Hub/Chat/Training; subscribe once to `/events` — done (initial lanes)
@@ -84,6 +84,11 @@ UI Coherence
 - [Pack: Collaboration] [t-250918120305-hitl02] Sidecar approvals UI: replace placeholder copy with live staging actions + evidence preview — done (sidecar lane shows staging queue, evidence viewer, approve/deny buttons, persisted filters/sort, stale-mode triage chips with shortcuts, copyable summaries)
 - [Pack: Collaboration] Feedback loop readiness: validate Heuristic Feedback Engine shadow runs, log deltas, and document sidecar approvals before enabling auto-apply — todo
 - [Pack: Collaboration] Project Hub SSE bridge: consume `state.read.model.patch` (Event Spine) for notes/files/live context in the SPA swap — doing (metadata feed wired)
+
+Experience Outcomes
+- [Pack: Collaboration] Trusted Onboarding Journey kit: scripted first-run narration, beta walk-through deck, Launcher help-card refresh — plan (ship alongside Runtime Supervisor Phase 2 enabling)
+- [Pack: Collaboration] Consent UX validation sprint: moderated sessions with partner teams validating audio/vision consent dialogs and accessibility cues; publish findings brief — todo
+- [Kernel] Complexity Collapse mission brief cadence: monthly stakeholder digest (wins, risks, upcoming user moments) archived into `docs/release_notes.md` — recurring (kick off with Runtime Supervisor beta)
 
 Kernel & Triad (NOW)
 - [Kernel] [t-250915090001-kern01] Add `arw-kernel` crate with SQLite/WAL schema (events, artifacts, actions) and CAS helpers — done
