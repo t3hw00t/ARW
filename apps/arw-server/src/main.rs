@@ -946,7 +946,6 @@ mod prop_tests {
 
     proptest! {
         #[test]
-        #[ignore]
         fn hashed_token_allows_once_denies_second(ref token in proptest::string::string_regex("[-._~A-Za-z0-9]{1,64}").unwrap()) {
             let _lock = super::ADMIN_ENV_GUARD.lock().unwrap();
             crate::security::reset_admin_rate_limiter_for_tests();
