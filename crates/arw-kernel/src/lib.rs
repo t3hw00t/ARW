@@ -942,7 +942,7 @@ impl Kernel {
         }
 
         sql.push_str(" ORDER BY updated DESC LIMIT ?");
-        params.push(Value::Integer(opts.clamped_limit() as i64));
+        params.push(Value::Integer(opts.clamped_limit()));
 
         let mut stmt = conn.prepare(&sql)?;
         let mut rows = stmt.query(rusqlite::params_from_iter(params.iter()))?;

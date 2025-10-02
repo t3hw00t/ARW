@@ -884,11 +884,12 @@ mod tests {
     fn admin_ok_rate_limits_plain_token() {
         let _lock = super::ADMIN_ENV_GUARD.lock().unwrap();
         crate::security::reset_admin_rate_limiter_for_tests();
-        std::env::set_var("ARW_DEBUG", "0");
-        std::env::set_var("ARW_ADMIN_TOKEN", "secret");
-        std::env::remove_var("ARW_ADMIN_TOKEN_SHA256");
-        std::env::set_var("ARW_ADMIN_RATE_LIMIT", "2");
-        std::env::set_var("ARW_ADMIN_RATE_WINDOW_SECS", "3600");
+        let mut env = crate::test_support::env::guard();
+        env.set("ARW_DEBUG", "0");
+        env.set("ARW_ADMIN_TOKEN", "secret");
+        env.remove("ARW_ADMIN_TOKEN_SHA256");
+        env.set("ARW_ADMIN_RATE_LIMIT", "2");
+        env.set("ARW_ADMIN_RATE_WINDOW_SECS", "3600");
 
         let headers = auth_headers("secret");
         assert!(admin_ok(&headers));
@@ -896,35 +897,30 @@ mod tests {
         assert!(!admin_ok(&headers));
 
         crate::security::reset_admin_rate_limiter_for_tests();
-        std::env::remove_var("ARW_ADMIN_RATE_LIMIT");
-        std::env::remove_var("ARW_ADMIN_RATE_WINDOW_SECS");
-        std::env::remove_var("ARW_ADMIN_TOKEN");
     }
 
     #[test]
     fn admin_ok_rate_limits_hashed_token() {
         let _lock = super::ADMIN_ENV_GUARD.lock().unwrap();
         crate::security::reset_admin_rate_limiter_for_tests();
-        std::env::set_var("ARW_DEBUG", "0");
-        std::env::remove_var("ARW_ADMIN_TOKEN");
+        let mut env = crate::test_support::env::guard();
+        env.set("ARW_DEBUG", "0");
+        env.remove("ARW_ADMIN_TOKEN");
         let plain = "topsecret";
         let digest = {
             let mut h = sha2::Sha256::new();
             h.update(plain.as_bytes());
             hex::encode(h.finalize())
         };
-        std::env::set_var("ARW_ADMIN_TOKEN_SHA256", digest);
-        std::env::set_var("ARW_ADMIN_RATE_LIMIT", "1");
-        std::env::set_var("ARW_ADMIN_RATE_WINDOW_SECS", "300");
+        env.set("ARW_ADMIN_TOKEN_SHA256", digest);
+        env.set("ARW_ADMIN_RATE_LIMIT", "1");
+        env.set("ARW_ADMIN_RATE_WINDOW_SECS", "300");
 
         let headers = auth_headers(plain);
         assert!(admin_ok(&headers));
         assert!(!admin_ok(&headers));
 
         crate::security::reset_admin_rate_limiter_for_tests();
-        std::env::remove_var("ARW_ADMIN_RATE_LIMIT");
-        std::env::remove_var("ARW_ADMIN_RATE_WINDOW_SECS");
-        std::env::remove_var("ARW_ADMIN_TOKEN_SHA256");
     }
 }
 
@@ -949,24 +945,22 @@ mod prop_tests {
         fn hashed_token_allows_once_denies_second(ref token in proptest::string::string_regex("[-._~A-Za-z0-9]{1,64}").unwrap()) {
             let _lock = super::ADMIN_ENV_GUARD.lock().unwrap();
             crate::security::reset_admin_rate_limiter_for_tests();
-            std::env::set_var("ARW_DEBUG", "0");
-            std::env::remove_var("ARW_ADMIN_TOKEN");
+            let mut env = crate::test_support::env::guard();
+            env.set("ARW_DEBUG", "0");
+            env.remove("ARW_ADMIN_TOKEN");
             // Compute SHA256 of the random token
             let mut h = sha2::Sha256::new();
             h.update(token.as_bytes());
             let digest = hex::encode(h.finalize());
-            std::env::set_var("ARW_ADMIN_TOKEN_SHA256", &digest);
-            std::env::set_var("ARW_ADMIN_RATE_LIMIT", "1");
-            std::env::set_var("ARW_ADMIN_RATE_WINDOW_SECS", "60");
+            env.set("ARW_ADMIN_TOKEN_SHA256", &digest);
+            env.set("ARW_ADMIN_RATE_LIMIT", "1");
+            env.set("ARW_ADMIN_RATE_WINDOW_SECS", "60");
 
             let headers = auth_headers(token);
             prop_assert!(admin_ok(&headers));
             prop_assert!(!admin_ok(&headers));
 
             crate::security::reset_admin_rate_limiter_for_tests();
-            std::env::remove_var("ARW_ADMIN_RATE_LIMIT");
-            std::env::remove_var("ARW_ADMIN_RATE_WINDOW_SECS");
-            std::env::remove_var("ARW_ADMIN_TOKEN_SHA256");
         }
     }
 }

@@ -953,7 +953,7 @@ fn cmd_admin_token_hash(args: &AdminTokenHashArgs) -> Result<()> {
         std::io::stdin()
             .read_to_string(&mut buf)
             .context("reading token from stdin")?;
-        let trimmed = buf.trim_end_matches(|c| matches!(c, '\n' | '\r'));
+        let trimmed = buf.trim_end_matches(['\n', '\r']);
         if trimmed.is_empty() {
             anyhow::bail!("stdin provided no token bytes");
         }
@@ -1856,11 +1856,10 @@ fn cmd_state_actions(args: &StateActionsArgs) -> Result<()> {
 
     let kind_width = args.kind_width.max(8);
     println!(
-        "{:<28} {:<10} {:<width$} {}",
+        "{:<28} {:<10} {:<width$} Id",
         "Updated",
         "State",
         "Kind",
-        "Id",
         width = kind_width
     );
 
@@ -2069,9 +2068,7 @@ fn resolve_since_param(args: &EventsObservationsArgs) -> Result<SinceResolution>
 fn parse_relative_duration(input: &str) -> Result<chrono::Duration> {
     let mut total_seconds: i64 = 0;
     let mut current = String::new();
-    let mut chars = input.chars().peekable();
-
-    while let Some(ch) = chars.next() {
+    for ch in input.chars() {
         if ch.is_whitespace() {
             continue;
         }
@@ -2891,7 +2888,7 @@ fn format_payload_snippet(value: &JsonValue, width: usize) -> String {
         return "-".to_string();
     }
     let raw = serde_json::to_string(value).unwrap_or_else(|_| value.to_string());
-    let cleaned = raw.replace('\n', " ").replace('\r', " ");
+    let cleaned = raw.replace(['\n', '\r'], " ");
     let trimmed = cleaned.trim();
     if trimmed.is_empty() {
         "-".to_string()
