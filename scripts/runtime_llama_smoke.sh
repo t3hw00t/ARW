@@ -13,6 +13,7 @@ TMP_DIR=$(mktemp -d -t arw-runtime-smoke.XXXX)
 SERVER_LOG="$TMP_DIR/arw-server.log"
 BACKEND_LOG="$TMP_DIR/llama.log"
 CHAT_LOG="$TMP_DIR/chat-response.json"
+BACKEND_REQ="$TMP_DIR/llama-request.json"
 BACKEND_PORT=""
 BACKEND_PID=""
 SERVER_PID=""
@@ -50,13 +51,14 @@ PY
 
 start_stub() {
   local port_file="$TMP_DIR/stub-port"
-  python3 - "$port_file" "$BACKEND_LOG" <<'PY' &
+  python3 - "$port_file" "$BACKEND_LOG" "$BACKEND_REQ" <<'PY' &
 import json
 import sys
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 port_file = sys.argv[1]
 log_path = sys.argv[2]
+req_path = sys.argv[3]
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, *args, **kwargs):
@@ -70,6 +72,13 @@ class Handler(BaseHTTPRequestHandler):
             payload = json.loads(raw)
         except json.JSONDecodeError:
             payload = {}
+        try:
+            with open(req_path, 'w', encoding='utf-8') as fh:
+                json.dump(payload, fh, ensure_ascii=False)
+                fh.write('\n')
+        except OSError as exc:
+            with open(log_path, 'a', encoding='utf-8') as fh:
+                fh.write(f"stub: failed to write payload capture: {exc}\n")
         prompt = payload.get('prompt', '')
         reply = f"llama-stub:{prompt[-48:]}"
         body = json.dumps({'content': reply}).encode('utf-8')
@@ -218,6 +227,26 @@ if not text.strip():
 if mode == 'stub' and 'llama-stub' not in text:
     raise SystemExit(f"stub backend reply missing marker: {text!r}")
 PY
+
+  if [[ "$MODE" = "stub" ]]; then
+    python3 - "$BACKEND_REQ" <<'PY'
+import json
+import sys
+path = sys.argv[1]
+try:
+    with open(path, 'r', encoding='utf-8') as fh:
+        payload = json.load(fh)
+except FileNotFoundError:
+    raise SystemExit('missing llama payload capture')
+
+if 'cache_prompt' not in payload:
+    raise SystemExit('cache_prompt not present in llama payload')
+if payload['cache_prompt'] is not True:
+    raise SystemExit(f"cache_prompt expected True, got {payload['cache_prompt']!r}")
+if payload.get('prompt') is None:
+    raise SystemExit('prompt missing in llama payload')
+PY
+  fi
 }
 
 start_backend
