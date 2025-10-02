@@ -26,6 +26,7 @@
       "icons/icon.ico"
     ],
     "windows": {
+      "installMode": "perUser",
       "webviewInstallMode": { "type": "downloadBootstrapper" }
     }
   }

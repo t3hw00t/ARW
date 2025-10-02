@@ -25,11 +25,15 @@ Steps
 3) Generate a manifest with the helper script:
    ```powershell
    powershell -ExecutionPolicy Bypass -File scripts\winget-gen.ps1 `
-     -Version 0.1.3 `
-     -InstallerUrl "https://github.com/t3hw00t/ARW/releases/download/v0.1.3/$msi" `
-     -InstallerSha256 <SHA256_FROM_STEP_2> `
-     -OutDir out-winget
+  -Version 0.1.3 `
+  -InstallerUrl "https://github.com/t3hw00t/ARW/releases/download/v0.1.3/$msi" `
+  -InstallerSha256 <SHA256_FROM_STEP_2> `
+  -OutDir out-winget
+# Optional: include both parameters once the ARM64 MSI ships
+#  -InstallerUrlArm64 "https://github.com/t3hw00t/ARW/releases/download/v0.1.3/$msiArm64" `
+#  -InstallerSha256Arm64 <SHA256_ARM64>
    ```
+Add the optional ARM64 parameters only when that MSI is published; the helper enforces providing both values together.
 4) Fork `winget-pkgs` and place the generated YAMLs under the correct path:
    `manifests\a\ARW\Launcher\0.1.3\*.yaml`
 5) Submit PR. Address automated checks (naming, URLs, sha). Once merged, `winget install` works.

@@ -54,23 +54,6 @@ function Show-GeneratedToken {
   }
 }
 
-function Show-GeneratedToken {
-  param(
-    [string]$Token,
-    [string]$Label = 'admin token'
-  )
-  $dir = Join-Path $root '.arw'
-  New-Item -ItemType Directory -Force $dir | Out-Null
-  if (-not [Console]::IsOutputRedirected) {
-    Info ("Generated $Label: $Token")
-  } else {
-    $fileLabel = ($Label -replace '\s+', '_')
-    $path = Join-Path $dir ("last_$fileLabel.txt")
-    $Token | Set-Content -Path $path -Encoding utf8
-    Info ("Generated $Label stored at $path")
-  }
-}
-
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $localBin = Join-Path $root '.arw\bin'
 New-Item -ItemType Directory -Force $localBin | Out-Null
