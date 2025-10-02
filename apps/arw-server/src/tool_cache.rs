@@ -17,7 +17,9 @@ use crate::util;
 static DEFAULT_DENY_LIST: Lazy<HashSet<&'static str>> =
     Lazy::new(|| HashSet::from(["http.fetch", "fs.patch", "app.vscode.open"]));
 
-static DEFAULT_DENY_PREFIXES: &[&str] = &["http.", "net.", "fs.", "app.", "ui.", "proc.", "exec."];
+static DEFAULT_DENY_PREFIXES: &[&str] = &[
+    "http.", "net.", "fs.", "app.", "ui.", "proc.", "exec.", "project.",
+];
 
 fn parse_env_set(name: &str) -> Option<HashSet<String>> {
     let raw = std::env::var(name).ok()?.trim().to_string();

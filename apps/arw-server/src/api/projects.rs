@@ -198,6 +198,141 @@ pub struct ProjectSnapshotResponseBody {
     pub corr_id: Option<String>,
 }
 
+#[derive(Debug)]
+pub(crate) enum ProjectNotesReadError {
+    InvalidProject,
+    InvalidUtf8,
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for ProjectNotesReadError {
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value)
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum ProjectNotesWriteError {
+    InvalidProject,
+    MissingNotes,
+    ShaMismatch,
+    Io(std::io::Error),
+}
+
+impl From<std::io::Error> for ProjectNotesWriteError {
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value)
+    }
+}
+
+pub(crate) async fn load_project_notes(
+    proj: &str,
+) -> Result<ProjectNotesDocument, ProjectNotesReadError> {
+    let Some(safe) = sanitize_project_name(proj) else {
+        return Err(ProjectNotesReadError::InvalidProject);
+    };
+    let Some(path) = project_notes_path(&safe) else {
+        return Err(ProjectNotesReadError::InvalidProject);
+    };
+
+    let meta = match afs::metadata(&path).await {
+        Ok(m) => Some(m),
+        Err(err) if err.kind() == ErrorKind::NotFound => None,
+        Err(err) => return Err(ProjectNotesReadError::Io(err)),
+    };
+
+    let mut doc = ProjectNotesDocument {
+        proj: safe,
+        content: String::new(),
+        sha256: None,
+        bytes: None,
+        modified: None,
+    };
+
+    if let Some(meta) = &meta {
+        doc.bytes = Some(meta.len());
+        doc.modified = meta.modified().ok().and_then(system_time_to_rfc3339);
+    }
+
+    match afs::read(&path).await {
+        Ok(bytes) => {
+            doc.sha256 = Some(sha256_hex(&bytes));
+            doc.content =
+                String::from_utf8(bytes).map_err(|_| ProjectNotesReadError::InvalidUtf8)?;
+        }
+        Err(err) if err.kind() == ErrorKind::NotFound => {
+            doc.content.clear();
+        }
+        Err(err) => return Err(ProjectNotesReadError::Io(err)),
+    }
+
+    Ok(doc)
+}
+
+pub(crate) async fn write_project_notes(
+    state: &AppState,
+    proj: &str,
+    content: String,
+    prev_sha256: Option<&str>,
+) -> Result<ProjectNotesSaveResponse, ProjectNotesWriteError> {
+    let Some(safe) = sanitize_project_name(proj) else {
+        return Err(ProjectNotesWriteError::InvalidProject);
+    };
+    let Some(path) = project_notes_path(&safe) else {
+        return Err(ProjectNotesWriteError::InvalidProject);
+    };
+
+    if let Some(expected) = prev_sha256 {
+        match afs::read(&path).await {
+            Ok(current) => {
+                if sha256_hex(&current) != expected {
+                    return Err(ProjectNotesWriteError::ShaMismatch);
+                }
+            }
+            Err(err) if err.kind() == ErrorKind::NotFound => {
+                return Err(ProjectNotesWriteError::MissingNotes);
+            }
+            Err(err) => return Err(ProjectNotesWriteError::Io(err)),
+        }
+    }
+
+    let bytes = content.into_bytes();
+    let sha = sha256_hex(&bytes);
+    save_bytes_atomic(&path, &bytes)
+        .await
+        .map_err(ProjectNotesWriteError::Io)?;
+
+    let meta = afs::metadata(&path)
+        .await
+        .map_err(ProjectNotesWriteError::Io)?;
+    let bytes_len = meta.len();
+    let modified = meta.modified().ok().and_then(system_time_to_rfc3339);
+
+    let mut evt = json!({
+        "name": safe.clone(),
+        "sha256": sha.clone(),
+        "bytes": bytes_len,
+        "modified": modified.clone(),
+    });
+    ensure_corr(&mut evt);
+    state
+        .bus()
+        .publish(topics::TOPIC_PROJECTS_NOTES_SAVED, &evt);
+    publish_audit("projects.notes.saved", &evt).await;
+
+    Ok(ProjectNotesSaveResponse {
+        ok: true,
+        proj: safe,
+        sha256: sha,
+        bytes: bytes_len,
+        modified,
+        corr_id: evt
+            .get("corr_id")
+            .and_then(|v| v.as_str())
+            .map(|s| s.to_string()),
+    })
+}
+
 #[derive(Serialize, utoipa::ToSchema)]
 pub struct ProjectSnapshotsListBody {
     pub count: usize,
@@ -216,67 +351,24 @@ pub async fn projects_notes_get(
     if !admin_ok(&headers) {
         return unauthorized();
     }
-    let proj = q.proj;
-    let Some(path) = project_notes_path(&proj) else {
-        return problem(
+    match load_project_notes(&q.proj).await {
+        Ok(doc) => Json(doc).into_response(),
+        Err(ProjectNotesReadError::InvalidProject) => problem(
             axum::http::StatusCode::BAD_REQUEST,
             "Bad Request",
             Some("invalid proj"),
-        );
-    };
-
-    let meta = match afs::metadata(&path).await {
-        Ok(m) => Some(m),
-        Err(err) if err.kind() == ErrorKind::NotFound => None,
-        Err(err) => {
-            return problem(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "Error",
-                Some(&err.to_string()),
-            )
-        }
-    };
-
-    let mut doc = ProjectNotesDocument {
-        proj: proj.clone(),
-        content: String::new(),
-        sha256: None,
-        bytes: None,
-        modified: None,
-    };
-
-    if let Some(meta) = &meta {
-        doc.bytes = Some(meta.len());
-        doc.modified = meta.modified().ok().and_then(system_time_to_rfc3339);
+        ),
+        Err(ProjectNotesReadError::InvalidUtf8) => problem(
+            axum::http::StatusCode::BAD_REQUEST,
+            "Bad Request",
+            Some("notes not valid utf-8"),
+        ),
+        Err(ProjectNotesReadError::Io(err)) => problem(
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "Error",
+            Some(&err.to_string()),
+        ),
     }
-
-    match afs::read(&path).await {
-        Ok(bytes) => {
-            doc.sha256 = Some(sha256_hex(&bytes));
-            match String::from_utf8(bytes) {
-                Ok(text) => {
-                    doc.content = text;
-                }
-                Err(_) => {
-                    return problem(
-                        axum::http::StatusCode::BAD_REQUEST,
-                        "Bad Request",
-                        Some("notes not valid utf-8"),
-                    )
-                }
-            }
-        }
-        Err(err) if err.kind() == ErrorKind::NotFound => {}
-        Err(err) => {
-            return problem(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "Error",
-                Some(&err.to_string()),
-            )
-        }
-    }
-
-    Json(doc).into_response()
 }
 
 pub async fn projects_notes_set(
@@ -288,108 +380,33 @@ pub async fn projects_notes_set(
     if !admin_ok(&headers) {
         return unauthorized();
     }
-    let proj = q.proj;
-    let Some(path) = project_notes_path(&proj) else {
-        return problem(
+    let ProjectNotesWrite {
+        content,
+        prev_sha256,
+    } = body;
+    match write_project_notes(&state, &q.proj, content, prev_sha256.as_deref()).await {
+        Ok(resp) => Json(resp).into_response(),
+        Err(ProjectNotesWriteError::InvalidProject) => problem(
             axum::http::StatusCode::BAD_REQUEST,
             "Bad Request",
             Some("invalid proj"),
-        );
-    };
-    if let Some(expected) = body.prev_sha256.as_deref() {
-        match afs::read(&path).await {
-            Ok(current) => {
-                let have = sha256_hex(&current);
-                if have != expected {
-                    return problem(
-                        axum::http::StatusCode::CONFLICT,
-                        "Conflict",
-                        Some("sha mismatch"),
-                    );
-                }
-            }
-            Err(err) if err.kind() == ErrorKind::NotFound => {
-                return problem(
-                    axum::http::StatusCode::CONFLICT,
-                    "Conflict",
-                    Some("notes missing"),
-                );
-            }
-            Err(err) => {
-                return problem(
-                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                    "Error",
-                    Some(&err.to_string()),
-                );
-            }
-        }
-    }
-
-    if let Some(parent) = path.parent() {
-        if let Err(e) = afs::create_dir_all(parent).await {
-            return problem(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "Error",
-                Some(&e.to_string()),
-            );
-        }
-    }
-
-    let bytes = body.content.into_bytes();
-    let sha = sha256_hex(&bytes);
-    if let Err(e) = save_bytes_atomic(&path, &bytes).await {
-        return problem(
+        ),
+        Err(ProjectNotesWriteError::MissingNotes) => problem(
+            axum::http::StatusCode::CONFLICT,
+            "Conflict",
+            Some("notes missing"),
+        ),
+        Err(ProjectNotesWriteError::ShaMismatch) => problem(
+            axum::http::StatusCode::CONFLICT,
+            "Conflict",
+            Some("sha mismatch"),
+        ),
+        Err(ProjectNotesWriteError::Io(err)) => problem(
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,
             "Error",
-            Some(&e.to_string()),
-        );
+            Some(&err.to_string()),
+        ),
     }
-
-    let meta = match afs::metadata(&path).await {
-        Ok(m) => Some(m),
-        Err(err) => {
-            return problem(
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "Error",
-                Some(&err.to_string()),
-            )
-        }
-    };
-    let (bytes_len, modified) = if let Some(meta) = meta {
-        let bytes_len = meta.len();
-        let modified = meta.modified().ok().and_then(system_time_to_rfc3339);
-        (bytes_len, modified)
-    } else {
-        (bytes.len() as u64, None)
-    };
-
-    let corr = uuid::Uuid::new_v4().to_string();
-    let mut evt = json!({
-        "name": proj.clone(),
-        "sha256": sha,
-        "bytes": bytes_len,
-        "modified": modified.clone(),
-        "corr_id": corr,
-    });
-    ensure_corr(&mut evt);
-    state
-        .bus()
-        .publish(topics::TOPIC_PROJECTS_NOTES_SAVED, &evt);
-    publish_audit("projects.notes.saved", &evt).await;
-
-    let resp = ProjectNotesSaveResponse {
-        ok: true,
-        proj,
-        sha256: sha,
-        bytes: bytes_len,
-        modified,
-        corr_id: evt
-            .get("corr_id")
-            .and_then(|v| v.as_str())
-            .map(|s| s.to_string()),
-    };
-
-    Json(resp).into_response()
 }
 
 #[derive(Deserialize)]

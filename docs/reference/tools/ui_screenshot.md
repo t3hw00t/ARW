@@ -79,3 +79,5 @@ Output
 Confidence is reported per word when the OCR engine provides it. `-1` confidence values are omitted. If the requested language is unavailable, the tool falls back to `eng` and reports the effective language under `lang`. Results are cached per language in `<name>.ocr.<lang>.json` (see `ocr_path`); rerunning the tool reuses the sidecar unless `force` is set. The `cached` flag signals whether the response was served from disk, and `generated_at` marks the sidecar timestamp. Each run emits `screenshots.ocr.completed` with the payload above so launch surfaces can update alt text and search indexes without re-running OCR.
 
 Security: capture and annotate require `io:screenshot`; OCR also requires `io:ocr`. No network egress.
+
+See also: [Project Notes Tools](project_notes.md) for the `project.notes.append` macro that links captures into project notes.

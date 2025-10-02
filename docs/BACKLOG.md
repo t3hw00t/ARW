@@ -245,7 +245,8 @@ Visual Capture (Screenshots)
 - [Pack: Collaboration] Annotation: overlay + burn tool with sidecar JSON; blur+border — done
 - [Pack: Collaboration] Gallery: modal with actions and annotate — done
 - [Pack: Collaboration] Policy: gate under `io:screenshot` and `io:ocr`; leases and audit — done
-- [Pack: Collaboration] Next: redaction presets; labels/arrows; retention and search in gallery; Save to project macro to append Markdown in NOTES.md.
+- [Pack: Collaboration] Next: redaction presets; labels/arrows; retention and search in gallery.
+- [Pack: Collaboration] Save to project macro to append Markdown in NOTES.md — done (`project.notes.append` tool, launcher integration).
 
 Strict dot.case normalization (no back-compat)
 - [Kernel] [t-250914050900-ev10] Update topics SSoT to dot.case only (remove CamelCase constants) — done (topics audit confirmed all values normalized; 2025-09-28 sweep)

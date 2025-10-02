@@ -287,6 +287,9 @@
           "path": "apps/arw-server/src/tools.rs"
         },
         {
+          "path": "apps/arw-server/src/tools/projects.rs"
+        },
+        {
           "path": "apps/arw-launcher/src-tauri/ui/common.js"
         },
         {

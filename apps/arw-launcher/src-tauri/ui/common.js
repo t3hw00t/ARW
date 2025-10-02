@@ -241,19 +241,29 @@ window.ARW = {
       this.toast('Markdown copied');
     }catch{ this.toast('Copy failed'); }
   },
-  async appendMarkdownToNotes(proj, relPath){
+  async appendMarkdownToNotes(proj, relPath, sourcePath){
     try{
-      const get = await this.invoke('projects_file_get', { proj, path: 'NOTES.md', port: this.getPortFromInput('port') });
-      const prev = get && get.sha256 || null;
-      const existing = (get && get.content) || '';
-      const line = `\n![screenshot](${relPath})\n`;
-      const content = existing + line;
-      await this.invoke('projects_file_set', { proj, path: 'NOTES.md', content, prev_sha256: prev, port: this.getPortFromInput('port') });
+      const alt = this._bestAltForPath(sourcePath || relPath, relPath);
+      const md = `![${String(alt || '').replace(/[\[\]]/g, ' ')}](${relPath})`;
+      await this.invoke('run_tool_admin', {
+        id: 'project.notes.append',
+        input: {
+          project: proj,
+          markdown: md,
+          timestamp: false
+        },
+        port: this.toolPort()
+      });
       this.toast('Appended to NOTES.md');
     }catch(e){ console.error(e); this.toast('Append failed'); }
   },
-  async maybeAppendToNotes(proj, relPath){
-    try{ const prefs = await this.getPrefs('launcher') || {}; if (prefs.appendToNotes){ await this.appendMarkdownToNotes(proj, relPath); } }catch{}
+  async maybeAppendToNotes(proj, relPath, sourcePath){
+    try{
+      const prefs = await this.getPrefs('launcher') || {};
+      if (prefs.appendToNotes){
+        await this.appendMarkdownToNotes(proj, relPath, sourcePath);
+      }
+    }catch(e){ console.error(e); }
   },
   async setPrefs(ns, value) {
     // Update cache immediately
@@ -1894,7 +1904,7 @@ window.ARW = {
       const copyBtn = document.createElement('button'); copyBtn.className='ghost'; copyBtn.textContent='Copy path'; copyBtn.addEventListener('click', ()=>{ if (p?.path) ARW.copy(String(p.path)); });
         const mdBtn = document.createElement('button'); mdBtn.className='ghost'; mdBtn.textContent='Copy MD'; mdBtn.addEventListener('click', ()=>{ if (p?.path) ARW.copyMarkdown(p.path); });
         const annBtn = document.createElement('button'); annBtn.className='ghost'; annBtn.textContent='Annotate'; annBtn.addEventListener('click', async ()=>{ try{ if (p?.preview_b64){ const rects = await ARW.annot.start(p.preview_b64); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: p.path, annotate: rects, downscale:640 }, port: ARW.toolPort() }); if (res && res.preview_b64){ img.src = res.preview_b64; cap.textContent = `${ts} ${res.path||''}`; } } else { ARW.toast('No preview for annotate'); } }catch(e){ console.error(e); }});
-        const saveBtn = document.createElement('button'); saveBtn.className='ghost'; saveBtn.textContent='Save to project'; saveBtn.addEventListener('click', async ()=>{ if (p?.path){ const res = await ARW.saveToProjectPrompt(p.path); if (res) await ARW.maybeAppendToNotes(res.proj, res.dest); } });
+        const saveBtn = document.createElement('button'); saveBtn.className='ghost'; saveBtn.textContent='Save to project'; saveBtn.addEventListener('click', async ()=>{ if (p?.path){ const res = await ARW.saveToProjectPrompt(p.path); if (res) await ARW.maybeAppendToNotes(res.proj, res.dest, p.path); } });
         actions.appendChild(openBtn); actions.appendChild(copyBtn); actions.appendChild(mdBtn); actions.appendChild(annBtn); actions.appendChild(saveBtn);
         box.appendChild(img); box.appendChild(cap); box.appendChild(actions);
         el.prepend(box);
@@ -2154,7 +2164,7 @@ window.ARW.gallery = {
     w.addEventListener('click', (e)=>{ if (e.target===w) this.hide(); });
   },
   render(){ if (!this._wrap) this.mount(); const grid=this._wrap.querySelector('.grid-thumbs'); if (!grid) return; grid.innerHTML='';
-    for (const it of this._items){ const d=document.createElement('div'); d.className='thumb'; const img=document.createElement('img'); if (it.preview_b64) img.src=it.preview_b64; img.dataset.screenshotPath = it.path; img.alt=ARW._bestAltForPath(it.path, it.path); const meta=document.createElement('div'); meta.className='dim mono'; meta.textContent = `${it.time} ${it.path}`; const row=document.createElement('div'); row.className='row'; const open=document.createElement('button'); open.className='ghost'; open.textContent='Open'; open.addEventListener('click', async ()=>{ try{ await ARW.invoke('open_path', { path: it.path }); }catch(e){ console.error(e); } }); const copy=document.createElement('button'); copy.className='ghost'; copy.textContent='Copy path'; copy.addEventListener('click', ()=> ARW.copy(it.path)); const md=document.createElement('button'); md.className='ghost'; md.textContent='Copy MD'; md.addEventListener('click', ()=> ARW.copyMarkdown(it.path)); const save=document.createElement('button'); save.className='ghost'; save.textContent='Save to project'; save.addEventListener('click', async ()=>{ await ARW.saveToProjectPrompt(it.path); }); const ann=document.createElement('button'); ann.className='ghost'; ann.textContent='Annotate'; ann.addEventListener('click', async ()=>{ try{ if (it.preview_b64){ const rects = await ARW.annot.start(it.preview_b64); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: it.path, annotate: rects, downscale:640 }, port: ARW.toolPort() }); if (res && res.preview_b64){ img.src = res.preview_b64; meta.textContent = `${it.time} ${res.path||''}`; it.path = res.path||it.path; it.preview_b64 = res.preview_b64||it.preview_b64; img.dataset.screenshotPath = it.path; ARW._updateAltForPath(it.path); } } else { ARW.toast('No preview for annotate'); } }catch(e){ console.error(e); } }); row.appendChild(open); row.appendChild(copy); row.appendChild(md); row.appendChild(save); row.appendChild(ann); d.appendChild(img); d.appendChild(meta); d.appendChild(row); grid.appendChild(d); ARW._updateAltForPath(it.path); }
+    for (const it of this._items){ const d=document.createElement('div'); d.className='thumb'; const img=document.createElement('img'); if (it.preview_b64) img.src=it.preview_b64; img.dataset.screenshotPath = it.path; img.alt=ARW._bestAltForPath(it.path, it.path); const meta=document.createElement('div'); meta.className='dim mono'; meta.textContent = `${it.time} ${it.path}`; const row=document.createElement('div'); row.className='row'; const open=document.createElement('button'); open.className='ghost'; open.textContent='Open'; open.addEventListener('click', async ()=>{ try{ await ARW.invoke('open_path', { path: it.path }); }catch(e){ console.error(e); } }); const copy=document.createElement('button'); copy.className='ghost'; copy.textContent='Copy path'; copy.addEventListener('click', ()=> ARW.copy(it.path)); const md=document.createElement('button'); md.className='ghost'; md.textContent='Copy MD'; md.addEventListener('click', ()=> ARW.copyMarkdown(it.path)); const save=document.createElement('button'); save.className='ghost'; save.textContent='Save to project'; save.addEventListener('click', async ()=>{ const res = await ARW.saveToProjectPrompt(it.path); if (res) await ARW.maybeAppendToNotes(res.proj, res.dest, it.path); }); const ann=document.createElement('button'); ann.className='ghost'; ann.textContent='Annotate'; ann.addEventListener('click', async ()=>{ try{ if (it.preview_b64){ const rects = await ARW.annot.start(it.preview_b64); const res = await ARW.invoke('run_tool_admin', { id: 'ui.screenshot.annotate_burn', input: { path: it.path, annotate: rects, downscale:640 }, port: ARW.toolPort() }); if (res && res.preview_b64){ img.src = res.preview_b64; meta.textContent = `${it.time} ${res.path||''}`; it.path = res.path||it.path; it.preview_b64 = res.preview_b64||it.preview_b64; img.dataset.screenshotPath = it.path; ARW._updateAltForPath(it.path); } } else { ARW.toast('No preview for annotate'); } }catch(e){ console.error(e); } }); row.appendChild(open); row.appendChild(copy); row.appendChild(md); row.appendChild(save); row.appendChild(ann); d.appendChild(img); d.appendChild(meta); d.appendChild(row); grid.appendChild(d); ARW._updateAltForPath(it.path); }
   },
   show(){ if (!this._wrap) this.mount(); this.render(); this._wrap.style.display='grid'; try{ const btn=this._wrap.querySelector('header button'); btn?.focus({ preventScroll:true }); }catch{} },
   hide(){ if (this._wrap) this._wrap.style.display='none'; }

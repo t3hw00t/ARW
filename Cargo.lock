@@ -422,6 +422,7 @@ dependencies = [
  "once_cell",
  "os_info",
  "parking_lot",
+ "pathdiff",
  "proptest",
  "prost 0.12.6",
  "prost-types",

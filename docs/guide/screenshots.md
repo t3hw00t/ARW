@@ -3,14 +3,14 @@ title: Screenshots
 ---
 
 # Screenshots
-Updated: 2025-09-21
+Updated: 2025-10-03
 Status: Capture + annotate shipping behind optional features; OCR optional (build‑time)
 Type: How‑to
 
 Purpose: allow AI agents and the user to capture the screen or a window region, attach it to a conversation, and optionally run OCR for instruction generation.
 
 The capability is live end‑to‑end when the screenshot toolchain features are enabled:
-- Service exposes `ui.screenshot.capture`, `ui.screenshot.annotate_burn`, and (optional) `ui.screenshot.ocr`.
+- Service exposes `ui.screenshot.capture`, `ui.screenshot.annotate_burn`, the optional `ui.screenshot.ocr`, and the new `project.notes.append` helper for appending captures to project notes.
 - The launcher and chat clients surface palette shortcuts, chat buttons, and the Screenshots Gallery.
 - `screenshots.captured` SSE events fan out previews immediately so the UI can react in real time.
 
@@ -30,6 +30,12 @@ Tool interface
 - `downscale`: optional max width for the preview (e.g., 640)
 
 Use `ui.screenshot.annotate_burn(path, annotate[], downscale?)` to blur/highlight regions after capture.
+
+### `project.notes.append`
+- Append a Markdown snippet to `<project>/NOTES.md` with one call (no manual read/write cycles).
+- Accepts either a `screenshot_path` (under `<state_dir>/screenshots/...`) or raw `markdown` so callers can link the original capture or its imported copy.
+- Optional fields (`heading`, `timestamp`, `note`, `caption`) let launch surfaces add context without duplicating string templates.
+- Emits `projects.notes.saved` so existing Launcher panels refresh automatically. See also [Project Notes Tools](../reference/tools/project_notes.md).
 
 Events
 - On success, emit `screenshots.captured` with metadata for UI thumbnails
@@ -57,7 +63,7 @@ UI integration
 - Palette: “Capture screen (preview)”, “Capture this window (preview)”, and “Capture region (drag)”.
 - Chat: buttons for “Capture”, “Capture window”, and “Capture region”; inserts preview + path inline.
 - Auto OCR: toggle under the Chat composer; when on, OCR runs after capture and inserts extracted text under the preview.
-- Gallery: open from the palette; shows recent captures with Open/Copy/Copy Markdown/Annotate/Save to project actions.
+- Gallery: open from the palette; shows recent captures with Open/Copy/Copy Markdown/Annotate/Save to project actions. When the "Append to notes" preference is enabled, Save to project now calls `project.notes.append` and links the copied asset inside the project's `NOTES.md`.
 
 Window capture
 - Bounds: obtained via a Tauri command (`active_window_bounds`) that reports `x,y,w,h` for the active window.

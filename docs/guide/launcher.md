@@ -73,7 +73,7 @@ Windows
 Screenshots & Gallery
 - Command palette exposes “Capture screen/window/region” actions that invoke `ui.screenshot.capture` with preview downscaling; annotate and OCR follow-ups surface automatically when the tool returns `preview_b64`.
 - Chat toolbar mirrors the palette with Capture, Capture window, and Capture region buttons plus inline Annotate/OCR toggles so agents can share their current view on request.
-- Activity lane thumbnails and the Screenshots Gallery subscribe to `screenshots.captured`; recent captures gain quick actions (Open, Copy MD, Save to project, Annotate). OCR completions arrive on `screenshots.ocr.completed`, automatically refreshing alt text and cached Markdown snippets.
+- Activity lane thumbnails and the Screenshots Gallery subscribe to `screenshots.captured`; recent captures gain quick actions (Open, Copy MD, Save to project, Annotate). Save to project now pipes through `project.notes.append` when “Append to notes” is enabled, so copied assets are linked in `NOTES.md` automatically. OCR completions arrive on `screenshots.ocr.completed`, automatically refreshing alt text and cached Markdown snippets.
 - Requires leases: capture/annotate prompt for `io:screenshot`, OCR additionally needs `io:ocr`.
 
 Design & UI

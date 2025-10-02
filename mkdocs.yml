@@ -145,6 +145,7 @@ nav:
       - Gating Config: reference/gating_config.md
       - Tools:
           - UI Screenshot Tools: reference/tools/ui_screenshot.md
+          - Project Notes Tools: reference/tools/project_notes.md
       - Schemas:
           - API and Schema: API_AND_SCHEMA.md
           - Egress Schemas: api/egress_schemas.md

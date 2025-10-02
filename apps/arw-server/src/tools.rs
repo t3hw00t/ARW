@@ -11,6 +11,7 @@ use crate::{capsule_guard, AppState};
 pub(crate) mod guardrails;
 pub(crate) use guardrails::metrics as guardrails_metrics_value;
 mod error;
+mod projects;
 pub use error::ToolError;
 
 const METRIC_CACHE_HIT: &str = "arw_tools_cache_hits";
@@ -212,6 +213,7 @@ async fn run_tool_inner(state: &AppState, id: &str, input: &Value) -> Result<Val
         "ui.screenshot.capture" => screenshots::capture(input.clone()).await,
         "ui.screenshot.annotate_burn" => screenshots::annotate(input.clone()).await,
         "ui.screenshot.ocr" => screenshots::ocr(input.clone()).await,
+        "project.notes.append" => projects::append_note(state, input.clone()).await,
         "guardrails.check" => guardrails::run(input).await,
         "chat.respond" => crate::chat::run_chat_tool(state, input.clone()).await,
         "demo.echo" => Ok(json!({"echo": input.clone()})),
