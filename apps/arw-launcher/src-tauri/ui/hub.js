@@ -18,6 +18,140 @@ document.addEventListener('DOMContentLoaded', async () => {
   let base = ARW.base(port);
   const defaultLanes = ensureLane(['timeline','context','policy','metrics','models','activity'], 'approvals', { after: 'timeline' });
   let sc = ARW.sidecar.mount('sidecar', defaultLanes, { base });
+  const elRuntimeBadge = document.getElementById('runtimeBadge');
+
+  function setRuntimeBadge(text, level = 'neutral', hint = '') {
+    if (!elRuntimeBadge) return;
+    const cls = level === 'warn' ? 'badge warn' : 'badge';
+    elRuntimeBadge.className = cls;
+    elRuntimeBadge.textContent = text;
+    elRuntimeBadge.title = hint || text;
+    elRuntimeBadge.setAttribute('aria-label', hint ? `${text}. ${hint}` : text);
+  }
+
+  setRuntimeBadge('Runtime: loading…');
+
+  function formatReset(ts) {
+    try {
+      const dt = new Date(ts);
+      if (!Number.isFinite(dt.getTime())) return String(ts || '');
+      const opts = { hour: '2-digit', minute: '2-digit' };
+      return `${dt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} ${dt.toLocaleTimeString(undefined, opts)}`;
+    } catch {
+      return String(ts || '');
+    }
+  }
+
+  let runtimeModel = null;
+  function renderRuntimeSupervisor(model) {
+    runtimeModel = model || runtimeModel;
+    if (!elRuntimeBadge) return;
+    const snapshot = runtimeModel;
+    const runtimes = Array.isArray(snapshot?.runtimes) ? snapshot.runtimes : [];
+    if (!runtimes.length) {
+      setRuntimeBadge('Runtime: none', 'neutral', 'No managed runtimes registered');
+      return;
+    }
+    let readyCount = 0;
+    let warn = false;
+    let err = false;
+    let minRemaining = null;
+    let resetAt = null;
+    const details = [];
+    for (const entry of runtimes) {
+      const descriptor = entry?.descriptor || {};
+      const status = entry?.status || {};
+      const name = descriptor.name || descriptor.id || 'runtime';
+      const state = String(status.state || 'unknown').toLowerCase();
+      const severity = String(status.severity || 'info').toLowerCase();
+      if (state === 'ready') readyCount += 1;
+      if (state === 'error' || severity === 'error' || state === 'offline') {
+        err = true;
+      } else if (state === 'degraded' || severity === 'warn') {
+        warn = true;
+      }
+      const budget = status.restart_budget;
+      if (budget && typeof budget === 'object') {
+        const remaining = Number(budget.remaining ?? NaN);
+        if (Number.isFinite(remaining)) {
+          if (minRemaining == null || remaining < minRemaining) {
+            minRemaining = remaining;
+            resetAt = budget.reset_at || resetAt;
+          } else if (remaining === minRemaining && !resetAt && budget.reset_at) {
+            resetAt = budget.reset_at;
+          }
+        }
+        if (remaining === 0) warn = true;
+      }
+      let detail = `${name}: ${status.summary || state}`;
+      if (budget && typeof budget === 'object') {
+        const used = Number(budget.used ?? NaN);
+        const max = Number(budget.max_restarts ?? NaN);
+        const remaining = Number(budget.remaining ?? NaN);
+        const parts = [];
+        if (Number.isFinite(remaining) && Number.isFinite(max)) {
+          parts.push(`${remaining}/${max} restarts left`);
+        }
+        if (budget.reset_at) {
+          parts.push(`reset ${formatReset(budget.reset_at)}`);
+        }
+        if (parts.length) {
+          detail += ` — ${parts.join(', ')}`;
+        }
+      }
+      details.push(detail);
+    }
+    const total = runtimes.length;
+    const badgeParts = [`${readyCount}/${total} ready`];
+    if (minRemaining != null) {
+      const plural = minRemaining === 1 ? '' : 's';
+      badgeParts.push(`${minRemaining} restart${plural} left`);
+    }
+    if (resetAt) {
+      badgeParts.push(`resets ${formatReset(resetAt)}`);
+    }
+    const title = details.join('\n');
+    const level = err ? 'warn' : warn ? 'warn' : 'neutral';
+    setRuntimeBadge(`Runtime: ${badgeParts.join(' · ')}`, level, title);
+  }
+
+  let runtimeAbort = null;
+  async function refreshRuntimeSupervisor() {
+    try {
+      if (runtimeAbort) {
+        try {
+          runtimeAbort.abort();
+        } catch {}
+      }
+      runtimeAbort = new AbortController();
+      await fetchReadModel('runtime_supervisor', '/state/runtime_supervisor', {
+        signal: runtimeAbort.signal,
+        transform(raw) {
+          if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
+            const out = { ...raw };
+            if (!Array.isArray(out.runtimes)) out.runtimes = [];
+            return out;
+          }
+          return { runtimes: [] };
+        },
+      });
+    } catch (err) {
+      if (!(err && err.name === 'AbortError')) {
+        console.warn('runtime supervisor fetch failed', err);
+        setRuntimeBadge('Runtime: unavailable', 'warn', 'Failed to load runtime supervisor snapshot');
+      }
+    }
+  }
+
+  let runtimeRefreshScheduled = false;
+  function scheduleRuntimeRefresh() {
+    if (runtimeRefreshScheduled) return;
+    runtimeRefreshScheduled = true;
+    setTimeout(() => {
+      runtimeRefreshScheduled = false;
+      refreshRuntimeSupervisor();
+    }, 400);
+  }
   const applyBaseChange = async () => {
     meta = updateBaseMeta();
     port = ARW.getPortFromInput('port') || meta.port || 8091;
@@ -34,10 +168,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch {}
     sc = ARW.sidecar.mount('sidecar', defaultLanes, { base });
     ARW.sse.connect(base, { replay: 25 });
-    await Promise.allSettled([refreshEpisodesSnapshot(), refreshProjectsSnapshot()]);
+    await Promise.allSettled([
+      refreshEpisodesSnapshot(),
+      refreshProjectsSnapshot(),
+      refreshRuntimeSupervisor(),
+    ]);
   };
   ARW.sse.indicator('sseStat', { prefix: 'SSE' });
   ARW.sse.connect(base, { replay: 25 });
+  await refreshRuntimeSupervisor();
   // ---------- Runs: episodes list + snapshot ----------
   let runsCache = [];
   let episodesPrimed = false;
@@ -214,6 +353,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderRuns();
   };
   const idEpisodesRead = ARW.read.subscribe('episodes', applyEpisodesModel);
+  const idRuntimeRead = ARW.read.subscribe('runtime_supervisor', renderRuntimeSupervisor);
   await refreshEpisodesSnapshot();
   // Throttle SSE-driven refresh on episode-related activity
   let _lastRunsAt = 0;
@@ -231,6 +371,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       return !!p.corr_id || /^intents\.|^actions\.|^feedback\./.test(k||'');
     }catch{ return false }
   }, runsTick);
+  ARW.sse.subscribe((kind) => kind === 'runtime.state.changed' || kind === 'runtime.restore.completed', scheduleRuntimeRefresh);
   // ---------- Projects: list/create/tree/notes ----------
   let curProj = null;
   // Simple file metadata cache to avoid repeated GETs (5s TTL)

@@ -135,6 +135,9 @@ ops-export out='ops/out':
 triad-smoke:
   bash scripts/triad_smoke.sh
 
+runtime-smoke:
+  bash scripts/runtime_llama_smoke.sh
+
 context-ci:
   bash scripts/context_ci.sh
 

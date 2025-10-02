@@ -1,7 +1,7 @@
 use anyhow::{Context, Result};
 use arw_core::{gating, gating_keys, hello_core, introspect_tools, load_effective_paths};
 use base64::Engine;
-use chrono::Utc;
+use chrono::{DateTime, Local, Utc};
 use clap::CommandFactory;
 use clap::{Args, Parser, Subcommand};
 use reqwest::blocking::Client;
@@ -47,6 +47,11 @@ enum Commands {
     Screenshots {
         #[command(subcommand)]
         cmd: ScreenshotsCmd,
+    },
+    /// Managed runtime supervisor helpers
+    Runtime {
+        #[command(subcommand)]
+        cmd: RuntimeCmd,
     },
 }
 
@@ -207,6 +212,53 @@ struct SpecHealthArgs {
 enum ScreenshotsCmd {
     /// Re-run OCR for screenshots missing per-language sidecars
     BackfillOcr(BackfillOcrArgs),
+}
+
+#[derive(Subcommand)]
+enum RuntimeCmd {
+    /// Show runtime supervisor snapshot with restart budgets
+    Status(RuntimeStatusArgs),
+    /// Request a managed runtime restore
+    Restore(RuntimeRestoreArgs),
+}
+
+#[derive(Args)]
+struct RuntimeBaseArgs {
+    /// Base URL of the service
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds
+    #[arg(long, default_value_t = 10)]
+    timeout: u64,
+}
+
+#[derive(Args)]
+struct RuntimeStatusArgs {
+    #[command(flatten)]
+    base: RuntimeBaseArgs,
+    /// Emit JSON instead of human summary
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output
+    #[arg(long, requires = "json")]
+    pretty: bool,
+}
+
+#[derive(Args)]
+struct RuntimeRestoreArgs {
+    #[command(flatten)]
+    base: RuntimeBaseArgs,
+    /// Runtime identifier
+    id: String,
+    /// Disable automatic restart flag in the request payload
+    #[arg(long)]
+    no_restart: bool,
+    /// Optional preset name to pass through to the supervisor
+    #[arg(long)]
+    preset: Option<String>,
 }
 
 #[derive(Args)]
@@ -428,6 +480,20 @@ fn main() {
                 }
             }
         },
+        Some(Commands::Runtime { cmd }) => match cmd {
+            RuntimeCmd::Status(args) => {
+                if let Err(e) = cmd_runtime_status(&args) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
+            }
+            RuntimeCmd::Restore(args) => {
+                if let Err(e) = cmd_runtime_restore(&args) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
+            }
+        },
         None => {
             println!("arw-cli {} — bootstrap", env!("CARGO_PKG_VERSION"));
             hello_core();
@@ -592,6 +658,122 @@ fn cmd_backfill_ocr(args: &BackfillOcrArgs) -> Result<()> {
     Ok(())
 }
 
+fn cmd_runtime_status(args: &RuntimeStatusArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base.trim_end_matches('/');
+    let url = format!("{}/state/runtime_supervisor", base);
+    let mut req = client.get(&url);
+    req = with_admin_headers(req, token.as_deref());
+    let resp = req
+        .send()
+        .context("requesting runtime supervisor snapshot")?;
+    let status = resp.status();
+    let body: JsonValue = resp.json().context("parsing runtime supervisor response")?;
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Err(anyhow::anyhow!(
+            "unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN"
+        ));
+    }
+    if !status.is_success() {
+        return Err(anyhow::anyhow!(
+            "runtime supervisor request failed: {} {}",
+            status,
+            body
+        ));
+    }
+
+    if args.json {
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string())
+            );
+        } else {
+            println!("{}", body);
+        }
+        return Ok(());
+    }
+
+    println!("{}", render_runtime_summary(&body));
+    Ok(())
+}
+
+fn cmd_runtime_restore(args: &RuntimeRestoreArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base.trim_end_matches('/');
+    let url = format!("{}/orchestrator/runtimes/{}/restore", base, args.id);
+
+    let mut payload = serde_json::Map::new();
+    payload.insert("restart".to_string(), JsonValue::Bool(!args.no_restart));
+    if let Some(preset) = &args.preset {
+        if !preset.trim().is_empty() {
+            payload.insert("preset".to_string(), JsonValue::String(preset.clone()));
+        }
+    }
+
+    let body = JsonValue::Object(payload);
+    let mut req = client.post(&url).json(&body);
+    req = with_admin_headers(req, token.as_deref());
+    let resp = req
+        .send()
+        .with_context(|| format!("requesting runtime restore for {}", args.id))?;
+    let status = resp.status();
+    let body: JsonValue = resp.json().context("parsing runtime restore response")?;
+
+    match status {
+        reqwest::StatusCode::ACCEPTED => {
+            let runtime_id = body
+                .get("runtime_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or(&args.id);
+            let pending = body
+                .get("pending")
+                .and_then(|v| v.as_bool())
+                .unwrap_or(true);
+            println!(
+                "Restore accepted for {} (pending: {}).",
+                runtime_id, pending
+            );
+            if let Some(budget) = body.get("restart_budget") {
+                if let Some(line) = budget_summary(budget) {
+                    println!("{}", line);
+                }
+            }
+            Ok(())
+        }
+        reqwest::StatusCode::TOO_MANY_REQUESTS => {
+            let runtime_id = body
+                .get("runtime_id")
+                .and_then(|v| v.as_str())
+                .unwrap_or(&args.id);
+            let reason = body
+                .get("reason")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Restart budget exhausted");
+            println!("Restore denied for {}: {}", runtime_id, reason);
+            if let Some(budget) = body.get("restart_budget") {
+                if let Some(line) = budget_summary(budget) {
+                    println!("{}", line);
+                }
+            }
+            Err(anyhow::anyhow!("restart budget exhausted"))
+        }
+        _ => Err(anyhow::anyhow!(
+            "runtime restore failed: {} {}",
+            status,
+            body
+        )),
+    }
+}
+
 fn sanitize_lang_fragment_cli(lang: &str) -> String {
     let mut out = String::new();
     for c in lang.trim().chars() {
@@ -707,6 +889,211 @@ fn cmd_gen_ed25519(
     );
     eprintln!("Note: store private key securely; add pubkey to configs/trust_capsules.json");
     Ok(())
+}
+
+fn render_runtime_summary(snapshot: &JsonValue) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    let updated = snapshot
+        .get("updated_at")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    let runtimes = snapshot
+        .get("runtimes")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if runtimes.is_empty() {
+        lines.push(format!(
+            "Runtime supervisor snapshot (updated {}): no managed runtimes registered.",
+            updated
+        ));
+        return lines.join("\n");
+    }
+
+    let mut ready = 0usize;
+    let total = runtimes.len();
+    let mut min_remaining: Option<u64> = None;
+    let mut next_reset: Option<DateTime<Utc>> = None;
+    let mut next_reset_raw: Option<String> = None;
+    let mut exhausted = false;
+
+    for runtime in &runtimes {
+        let descriptor = runtime
+            .get("descriptor")
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_default();
+        let status = runtime
+            .get("status")
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_default();
+        let id = descriptor
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("runtime");
+        let name = descriptor
+            .get("name")
+            .and_then(|v| v.as_str())
+            .unwrap_or(id);
+        let adapter = descriptor
+            .get("adapter")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let state = status
+            .get("state")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown")
+            .to_lowercase();
+        let severity = status
+            .get("severity")
+            .and_then(|v| v.as_str())
+            .unwrap_or("info")
+            .to_lowercase();
+        let summary = status
+            .get("summary")
+            .and_then(|v| v.as_str())
+            .unwrap_or("(no summary)");
+        if state == "ready" {
+            ready += 1;
+        }
+        if state == "error" || severity == "error" || state == "offline" {
+            exhausted = true;
+        }
+        let mut detail_lines: Vec<String> = Vec::new();
+        if let Some(detail) = status.get("detail").and_then(|v| v.as_array()) {
+            let mut parts: Vec<String> = Vec::new();
+            for entry in detail {
+                if let Some(s) = entry.as_str() {
+                    if !s.trim().is_empty() {
+                        parts.push(s.trim().to_string());
+                    }
+                }
+            }
+            if !parts.is_empty() {
+                detail_lines.push(parts.join(" | "));
+            }
+        }
+
+        let mut budget_line = None;
+        if let Some(budget_obj) = status.get("restart_budget").and_then(|v| v.as_object()) {
+            let remaining = budget_obj.get("remaining").and_then(|v| v.as_u64());
+            if let Some(rem) = remaining {
+                if rem == 0 {
+                    exhausted = true;
+                }
+                if min_remaining.map(|cur| rem < cur).unwrap_or(true) {
+                    min_remaining = Some(rem);
+                    next_reset = budget_obj
+                        .get("reset_at")
+                        .and_then(|v| v.as_str())
+                        .and_then(parse_reset_utc);
+                    next_reset_raw = budget_obj
+                        .get("reset_at")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.to_string());
+                }
+            }
+            if let Some(line) = budget_summary(&JsonValue::Object(budget_obj.clone())) {
+                budget_line = Some(line);
+            }
+        }
+
+        let line = format!(
+            "- {} ({}) [{}] — {} ({})",
+            name, adapter, id, summary, state
+        );
+        lines.push(line);
+        if let Some(bl) = budget_line {
+            lines.push(format!("    {}", bl));
+        }
+        for extra in detail_lines {
+            lines.push(format!("    {}", extra));
+        }
+    }
+
+    let mut header = format!(
+        "Runtime supervisor snapshot (updated {}): {}/{} ready",
+        updated, ready, total
+    );
+    if let Some(rem) = min_remaining {
+        let plural = if rem == 1 { "" } else { "s" };
+        header.push_str(&format!(", minimum {} restart{} left", rem, plural));
+    }
+    if let Some(reset) = next_reset {
+        header.push_str(&format!(", next reset {}", format_reset_time_local(&reset)));
+    } else if let Some(raw) = next_reset_raw {
+        header.push_str(&format!(", next reset {}", raw));
+    }
+    if exhausted {
+        header.push_str(" — attention required");
+    }
+    lines.insert(0, header);
+    lines.join("\n")
+}
+
+fn budget_summary(budget: &JsonValue) -> Option<String> {
+    let obj = budget.as_object()?;
+    let remaining = obj.get("remaining").and_then(|v| v.as_u64());
+    let max = obj.get("max_restarts").and_then(|v| v.as_u64());
+    let used = obj.get("used").and_then(|v| v.as_u64());
+    let window = obj.get("window_seconds").and_then(|v| v.as_u64());
+    let reset_raw = obj.get("reset_at").and_then(|v| v.as_str());
+    let mut parts: Vec<String> = Vec::new();
+    if let (Some(rem), Some(mx)) = (remaining, max) {
+        parts.push(format!("{} of {} restarts remaining", rem, mx));
+    } else if let Some(rem) = remaining {
+        parts.push(format!("{} restarts remaining", rem));
+    } else if let Some(mx) = max {
+        parts.push(format!("max {} restarts", mx));
+    }
+    if let Some(u) = used {
+        parts.push(format!("{} used", u));
+    }
+    if let Some(win) = window {
+        parts.push(format!("window {}s", win));
+    }
+    if let Some(reset) = reset_raw {
+        if let Some(dt) = parse_reset_utc(reset) {
+            parts.push(format!("resets {}", format_reset_time_local(&dt)));
+        } else {
+            parts.push(format!("resets {}", reset));
+        }
+    }
+    if parts.is_empty() {
+        None
+    } else {
+        Some(format!("Restart budget: {}", parts.join(" · ")))
+    }
+}
+
+fn resolve_admin_token(opt: &Option<String>) -> Option<String> {
+    opt.clone()
+        .or_else(|| std::env::var("ARW_ADMIN_TOKEN").ok())
+        .filter(|s| !s.trim().is_empty())
+}
+
+fn with_admin_headers(
+    mut req: reqwest::blocking::RequestBuilder,
+    token: Option<&str>,
+) -> reqwest::blocking::RequestBuilder {
+    if let Some(tok) = token {
+        req = req.header("X-ARW-Admin", tok);
+        req = req.bearer_auth(tok);
+    }
+    req
+}
+
+fn parse_reset_utc(raw: &str) -> Option<DateTime<Utc>> {
+    chrono::DateTime::parse_from_rfc3339(raw)
+        .map(|dt| dt.with_timezone(&Utc))
+        .ok()
+}
+
+fn format_reset_time_local(dt: &DateTime<Utc>) -> String {
+    dt.with_timezone(&Local)
+        .format("%Y-%m-%d %H:%M %Z")
+        .to_string()
 }
 
 fn cmd_sign_ed25519(sk_b64: &str, capsule_file: &str, out: Option<&str>) -> Result<()> {

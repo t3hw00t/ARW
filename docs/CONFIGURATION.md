@@ -254,11 +254,17 @@ These posture toggles remain in backlog until the sandboxing work solidifies; th
 
 See also: [CLI Guide](guide/cli.md)
 
+## Managed Runtime Supervisor
+- `ARW_RUNTIME_RESTART_MAX`: maximum automatic restarts allowed within the sliding window before the supervisor refuses a new restore (default `3`). Values ≤ `0` fall back to the default; raise the ceiling if you tolerate additional crash loops while debugging.
+- `ARW_RUNTIME_RESTART_WINDOW_SEC`: sliding window (seconds) used to evaluate the restart budget (default `600`, i.e., 10 minutes). Combine with `ARW_RUNTIME_RESTART_MAX` to tune how aggressively the supervisor will attempt recoveries on unstable adapters.
+
+When the budget is exhausted, `/state/runtime_matrix` and `runtime.state.changed` events include a restart quota summary so operators can see when the window resets or expand the limit explicitly.
+
 ## Trust & Policy
  - `ARW_TRUST_CAPSULES`: path to trusted capsule issuers/keys JSON.
  - `ARW_POLICY_FILE`: JSON file for the ABAC facade (see Guide → Policy (ABAC Facade)). Shape:
    - `{ "allow_all": true|false, "lease_rules": [ { "kind_prefix": "net.http.", "capability": "net:http" } ] }`
-   - Presets provided in‑repo: [configs/policy/relaxed.json](https://github.com/t3hw00t/ARW/blob/main/configs/policy/relaxed.json), [configs/policy/standard.json](https://github.com/t3hw00t/ARW/blob/main/configs/policy/standard.json), [configs/policy/strict.json](https://github.com/t3hw00t/ARW/blob/main/configs/policy/strict.json). Point `ARW_POLICY_FILE` at one of these to mirror `ARW_SECURITY_POSTURE` explicitly.
+   - Presets provided in-repo: [configs/policy/relaxed.json](https://github.com/t3hw00t/ARW/blob/main/configs/policy/relaxed.json), [configs/policy/standard.json](https://github.com/t3hw00t/ARW/blob/main/configs/policy/standard.json), [configs/policy/strict.json](https://github.com/t3hw00t/ARW/blob/main/configs/policy/strict.json). Point `ARW_POLICY_FILE` at one of these to mirror `ARW_SECURITY_POSTURE` explicitly.
   - `ARW_GUARDRAILS_URL`: optional base URL for an HTTP guardrails service exposing `POST /check` (tool `guardrails.check`).
  - `ARW_GUARDRAILS_ALLOWLIST`: comma‑separated hostnames considered safe for URL checks (e.g., `example.com, arxiv.org`).
  - `ARW_PATCH_SAFETY`: when set to `1`, `true`, or `enforce`, reject config/logic-unit patches that trip the built-in red-team heuristics (permission widening, SSRF markers, prompt-injection bait, secret keywords). When unset, findings are reported in responses and events but do not block writes.

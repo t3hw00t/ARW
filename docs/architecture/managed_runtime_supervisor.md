@@ -67,8 +67,7 @@ Promote the runtime manager from proposal to a first-class kernel capability. Th
 
 ## Next Actions
 
-1. Land Runtime Matrix enhancements (Phase 1) with accessible Launcher indicators.
+1. Land Runtime Matrix enhancements (Phase 1) with accessible Launcher indicators — restart budgets now block auto-restores once the window is exhausted; stubbed llama smoke (`just runtime-smoke`) keeps the pipeline honest while we wire real CPU/GPU llama builds.
 2. Draft supervisor module scaffolding (`crates/arw-runtime`) and adapter trait tests.
 3. Coordinate with Policy team to define accelerator lease keys and guardrail presets.
 4. Produce operator runbook (checklist + rollback steps) before default-on rollout.
-

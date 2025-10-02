@@ -35,6 +35,7 @@ Operators still depend on a mostly manual rollback flow after the restructure. T
    - Endpoint: `POST /orchestrator/runtimes/{id}/restore`.
    - Delegate to the managed runtime supervisor (already exposes state via `/state/runtime_supervisor`).
    - Body allows `{ restart: bool, preset?: string }` so future enhancements can warm caches or apply profiles.
+   - Supervisor enforces restart budgets; callers should handle `429 Too Many Requests` responses that return the current `{ window_seconds, used, remaining, reset_at }` snapshot.
    - Emit `runtime.restore.requested`/`runtime.restore.completed` events to track execution and fallback to manual if supervisor offline.
 
 4. **Lane Budget Management** _(shipped)_

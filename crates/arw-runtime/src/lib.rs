@@ -86,6 +86,16 @@ pub struct RuntimeHealth {
     pub prompt_cache_warm: Option<bool>,
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct RuntimeRestartBudget {
+    pub window_seconds: u64,
+    pub max_restarts: u32,
+    pub used: u32,
+    pub remaining: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reset_at: Option<DateTime<Utc>>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct RuntimeStatus {
     pub id: RuntimeId,
@@ -96,6 +106,8 @@ pub struct RuntimeStatus {
     pub detail: Vec<String>,
     #[serde(default)]
     pub health: Option<RuntimeHealth>,
+    #[serde(default)]
+    pub restart_budget: Option<RuntimeRestartBudget>,
     pub updated_at: DateTime<Utc>,
 }
 
@@ -109,6 +121,7 @@ impl RuntimeStatus {
             summary: state_label,
             detail: Vec::new(),
             health: None,
+            restart_budget: None,
             updated_at: Utc::now(),
         }
     }

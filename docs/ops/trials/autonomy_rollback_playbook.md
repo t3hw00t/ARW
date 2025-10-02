@@ -61,6 +61,8 @@ When an endpoint is missing (early builds) the script prints a WARN line with th
    - Record the snapshot id used in the incident log.
 4. **Restore runtime state**
    - `POST /orchestrator/runtimes/{runtime}/restore` to trigger the automation hook.
+   - `arw-cli runtime restore --id {runtime}` offers the same call from the terminal and reports whether the restart budget would block the request.
+   - If the call returns `429 Too Many Requests`, the restart budget window is exhausted; wait for the reset timestamp in the payload or widen the limit via `ARW_RUNTIME_RESTART_MAX` / `ARW_RUNTIME_RESTART_WINDOW_SEC` before retrying.
    - Launcher Runtime Manager → select snapshot → `Restore and restart` if automation is unavailable.
    - Verify `/state/runtime_supervisor` shows `ready` with expected profile tag.
 5. **Reapply guardrails**

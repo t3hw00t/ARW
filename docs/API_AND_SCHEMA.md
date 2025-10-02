@@ -206,7 +206,7 @@ Key admin endpoints
 - `POST /projects/{proj}/snapshot`
 - `GET /projects/{proj}/snapshots`
 - `POST /projects/{proj}/snapshots/{snapshot}/restore`
-- `POST /orchestrator/runtimes/{id}/restore`
+- `POST /orchestrator/runtimes/{id}/restore` — returns `202 Accepted` with the current restart budget when the supervisor queues a restore; responds `429 Too Many Requests` (including the budget snapshot) if the automatic restart window is exhausted.
 
 ### Models Admin Endpoints
 

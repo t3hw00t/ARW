@@ -11,6 +11,9 @@ use utoipa::ToSchema;
 use crate::AppState;
 use arw_topics as topics;
 
+use arw_runtime::RuntimeRestartBudget;
+use chrono::SecondsFormat as ChronoSecondsFormat;
+
 /// List available mini-agents (placeholder).
 #[utoipa::path(
     get,
@@ -183,6 +186,41 @@ pub struct RuntimeRestoreResponse {
     pub ok: bool,
     pub runtime_id: String,
     pub pending: bool,
+    pub restart_budget: RuntimeRestartBudgetView,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct RuntimeRestoreDeniedResponse {
+    pub ok: bool,
+    pub runtime_id: String,
+    pub pending: bool,
+    pub reason: String,
+    pub restart_budget: RuntimeRestartBudgetView,
+}
+
+#[derive(Clone, Debug, Serialize, ToSchema)]
+pub struct RuntimeRestartBudgetView {
+    pub window_seconds: u64,
+    pub max_restarts: u32,
+    pub used: u32,
+    pub remaining: u32,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reset_at: Option<String>,
+}
+
+impl From<RuntimeRestartBudget> for RuntimeRestartBudgetView {
+    fn from(budget: RuntimeRestartBudget) -> Self {
+        let reset_at = budget
+            .reset_at
+            .map(|ts| ts.to_rfc3339_opts(ChronoSecondsFormat::Secs, true));
+        Self {
+            window_seconds: budget.window_seconds,
+            max_restarts: budget.max_restarts,
+            used: budget.used,
+            remaining: budget.remaining,
+            reset_at,
+        }
+    }
 }
 
 /// Request a managed runtime restore.
@@ -194,6 +232,7 @@ pub struct RuntimeRestoreResponse {
     request_body = RuntimeRestoreRequest,
     responses(
         (status = 202, description = "Restore requested", body = RuntimeRestoreResponse),
+        (status = 429, description = "Restart budget exhausted", body = RuntimeRestoreDeniedResponse),
         (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails)
     )
 )]
@@ -207,18 +246,31 @@ pub async fn orchestrator_runtime_restore(
         return *resp;
     }
 
-    state
+    match state
         .runtime()
         .request_restore(&runtime_id, req.restart, req.preset.clone())
-        .await;
-
-    (
-        axum::http::StatusCode::ACCEPTED,
-        Json(RuntimeRestoreResponse {
-            ok: true,
-            runtime_id,
-            pending: true,
-        }),
-    )
-        .into_response()
+        .await
+    {
+        Ok(budget) => (
+            axum::http::StatusCode::ACCEPTED,
+            Json(RuntimeRestoreResponse {
+                ok: true,
+                runtime_id,
+                pending: true,
+                restart_budget: budget.into(),
+            }),
+        )
+            .into_response(),
+        Err(denied) => (
+            axum::http::StatusCode::TOO_MANY_REQUESTS,
+            Json(RuntimeRestoreDeniedResponse {
+                ok: false,
+                runtime_id,
+                pending: false,
+                reason: "Restart budget exhausted".to_string(),
+                restart_budget: denied.budget.into(),
+            }),
+        )
+            .into_response(),
+    }
 }

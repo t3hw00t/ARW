@@ -105,6 +105,11 @@ jobs:
       - name: Trial context telemetry check
         run: bash scripts/context_ci.sh
 
+      - name: Runtime llama smoke (stub)
+        env:
+          MODE: stub
+        run: bash scripts/runtime_llama_smoke.sh
+
       - name: Legacy surface guard
         env:
           ARW_LEGACY_CHECK_WAIT_SECS: 120
