@@ -12,6 +12,15 @@ export interface ActionState {
   error?: Json;
 }
 
+export type EventStreamState = 'connecting' | 'open' | 'retrying' | 'closed';
+
+export interface EventsStateChange {
+  state: EventStreamState;
+  attempt: number;
+  delayMs?: number;
+  error?: unknown;
+}
+
 export interface EventsOptions {
   // CSV prefixes for server-side filtering
   topics?: string[];
@@ -19,6 +28,18 @@ export interface EventsOptions {
   lastEventId?: string;
   // Request the last N events if not resuming
   replay?: number;
+  // Enable automatic reconnect with exponential backoff (Node fallback only)
+  autoReconnect?: boolean;
+  // Initial delay before attempting reconnect (ms)
+  reconnectInitialDelayMs?: number;
+  // Cap for reconnect delay (ms)
+  reconnectMaxDelayMs?: number;
+  // Jitter added to reconnect delay to avoid thundering herd (ms)
+  reconnectJitterMs?: number;
+  // Observe connection lifecycle changes (Node fallback emits granular states)
+  onStateChange?: (change: EventsStateChange) => void;
+  // Force reconnect when no events arrive within this window (Node fallback only)
+  inactivityTimeoutMs?: number;
 }
 
 export interface EventEnvelope<T = Json> {
@@ -44,6 +65,12 @@ export interface SubscribeReadModelOptions {
   signal?: AbortSignal;
   onUpdate?: (snapshot: Json) => void;
   loadInitial?: () => Promise<Json>;
+  autoReconnect?: boolean;
+  reconnectInitialDelayMs?: number;
+  reconnectMaxDelayMs?: number;
+  reconnectJitterMs?: number;
+  onStateChange?: (change: EventsStateChange) => void;
+  inactivityTimeoutMs?: number;
 }
 
 export interface ReadModelSubscription {
@@ -404,79 +431,281 @@ export class ArwClient {
       if (opts?.topics?.length) p.searchParams.set('prefix', opts.topics.join(','));
       if (opts?.replay && !opts.lastEventId) p.searchParams.set('replay', String(opts.replay));
       const url = p.toString();
+      const autoReconnect = opts?.autoReconnect !== false;
+      const inactivityBudgetMs = opts?.inactivityTimeoutMs && opts.inactivityTimeoutMs > 0
+        ? opts.inactivityTimeoutMs
+        : undefined;
+      const emitState = (change: EventsStateChange) => {
+        try {
+          opts?.onStateChange?.(change);
+        } catch {
+          // ignore observer errors
+        }
+      };
 
       // If EventSource exists (browser/Deno), prefer it. Cannot set headers here.
       if (typeof (globalThis as any).EventSource !== 'undefined') {
+        emitState({ state: 'connecting', attempt: 0 });
         if (opts?.lastEventId) {
           // Use query param fallback for resume when headers are unavailable
           p.searchParams.set('after', opts.lastEventId);
         }
-        // @ts-ignore
-        return new (globalThis as any).EventSource(p.toString(), { withCredentials: false });
+        const es: EventSource = new (globalThis as any).EventSource(p.toString(), { withCredentials: false });
+        let attempt = 0;
+        const originalClose = es.close.bind(es);
+
+        const handleOpen = () => {
+          attempt = 0;
+          emitState({ state: 'open', attempt });
+        };
+
+        const handleError = (event: Event) => {
+          if (!autoReconnect) {
+            cleanup();
+            emitState({ state: 'closed', attempt, error: event });
+            originalClose();
+            return;
+          }
+          attempt += 1;
+          const readyState = (es as any).readyState;
+          if (readyState === 2 /* CLOSED */) {
+            emitState({ state: 'closed', attempt, error: event });
+          } else {
+            emitState({ state: 'retrying', attempt, error: event });
+          }
+        };
+
+        const cleanup = () => {
+          es.removeEventListener('open', handleOpen as EventListener);
+          es.removeEventListener('error', handleError as EventListener);
+        };
+
+        es.addEventListener('open', handleOpen as EventListener);
+        es.addEventListener('error', handleError as EventListener);
+
+        (es as EventSource & { close(): void }).close = () => {
+          cleanup();
+          emitState({ state: 'closed', attempt });
+          originalClose();
+        };
+        return es;
       }
 
       // Node fallback: stream and parse SSE manually; can send admin header
-      let controller = new AbortController();
+      let controller: AbortController | null = null;
+      let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+      let reconnectAttempt = 0;
+      let lastEventId = opts?.lastEventId;
+      let serverRetryMs: number | undefined;
+      let inactivityTimer: ReturnType<typeof setTimeout> | null = null;
+      const nodeInactivityMs = inactivityBudgetMs;
+      const initialDelay = Math.max(opts?.reconnectInitialDelayMs ?? 500, 0);
+      const maxDelay = Math.max(opts?.reconnectMaxDelayMs ?? 30_000, initialDelay);
+      const jitterMs = Math.max(opts?.reconnectJitterMs ?? 250, 0);
+      const clearInactivity = () => {
+        if (inactivityTimer) {
+          clearTimeout(inactivityTimer);
+          inactivityTimer = null;
+        }
+      };
+      const armInactivity = () => {
+        if (!nodeInactivityMs) {
+          return;
+        }
+        clearInactivity();
+        inactivityTimer = setTimeout(() => {
+          if (closed) {
+            return;
+          }
+          clearInactivity();
+          const timeoutErr = new Error('SSE idle timeout');
+          // Surface as regular error before forcing reconnect.
+          try {
+            out.onerror?.(timeoutErr as any);
+          } catch {}
+          if (controller) {
+            try {
+              controller.abort();
+            } catch {}
+          }
+          scheduleReconnect(timeoutErr);
+        }, nodeInactivityMs);
+      };
+      const clearTimer = () => {
+        if (reconnectTimer) {
+          clearTimeout(reconnectTimer);
+          reconnectTimer = null;
+        }
+      };
+
+      const scheduleReconnect = (error: unknown) => {
+        clearInactivity();
+        if (!autoReconnect) {
+          emitState({ state: 'closed', attempt: reconnectAttempt, error });
+          return;
+        }
+        clearTimer();
+        const baseDelay = serverRetryMs ?? Math.min(maxDelay, initialDelay * Math.pow(2, reconnectAttempt));
+        const jitter = jitterMs ? Math.random() * jitterMs : 0;
+        const delay = baseDelay + jitter;
+        emitState({ state: 'retrying', attempt: reconnectAttempt + 1, delayMs: delay, error });
+        reconnectTimer = setTimeout(() => {
+          reconnectTimer = null;
+          if (closed) {
+            return;
+          }
+          reconnectAttempt += 1;
+          startStream();
+        }, delay);
+      };
+
+      let closed = false;
+
       const headers: Record<string, string> = {};
       if (this.adminToken) headers['X-ARW-Admin'] = this.adminToken;
-      if (opts?.lastEventId) headers['Last-Event-ID'] = opts.lastEventId;
+
       const out = {
         onmessage: null as EventHandler | null,
         onerror: null as ErrorHandler | null,
         close: () => {
-          try { controller.abort(); } catch {}
+          closed = true;
+          emitState({ state: 'closed', attempt: reconnectAttempt });
+          clearTimer();
+          clearInactivity();
+          if (controller) {
+            try { controller.abort(); } catch {}
+            controller = null;
+          }
         },
       };
-      (async () => {
+
+      const startStream = async () => {
+        if (closed) {
+          return;
+        }
+        clearTimer();
+        emitState({ state: 'connecting', attempt: reconnectAttempt });
+        controller = new AbortController();
+        const requestHeaders: Record<string, string> = { ...headers };
+        if (lastEventId) {
+          requestHeaders['Last-Event-ID'] = lastEventId;
+        }
         try {
-          const r = await fetch(url, { headers, signal: controller.signal as any });
-          if (!r.ok || !r.body) throw new Error(`SSE failed: ${r.status}`);
-          const reader = (r.body as any).getReader();
-          let buf = '';
-          let ev: { id?: string; event?: string; data?: string } = {};
+          const response = await fetch(url, { headers: requestHeaders, signal: controller.signal as any });
+          if (!response.ok || !response.body) {
+            throw new Error(`SSE failed: ${response.status}`);
+          }
+          reconnectAttempt = 0;
+          emitState({ state: 'open', attempt: 0 });
+          armInactivity();
+          const reader = (response.body as any).getReader();
+          const decoder = new TextDecoder();
+          let buffer = '';
+          let event: { id?: string; event?: string; data?: string } = {};
           const flush = () => {
-            if (ev.data == null) return;
-            const payload = ev.data.endsWith('\n') ? ev.data.slice(0, -1) : ev.data;
+            if (event.data == null) {
+              return;
+            }
+            const payload = event.data.endsWith('\n') ? event.data.slice(0, -1) : event.data;
+            if (event.id) {
+              lastEventId = event.id;
+            }
             const msg = {
               data: payload,
-              // @ts-ignore
-              lastEventId: ev.id || '',
-              type: ev.event || 'message',
+              lastEventId,
+              type: event.event || 'message',
             };
             out.onmessage?.(msg);
-            ev = {};
+            event = {};
           };
-          while (true) {
+          while (!closed) {
             const { done, value } = await reader.read();
-            if (done) break;
-            buf += new TextDecoder().decode(value, { stream: true });
+            if (done) {
+              break;
+            }
+            buffer += decoder.decode(value, { stream: true });
+            armInactivity();
             let idx: number;
-            while ((idx = buf.indexOf('\n')) >= 0) {
-              const line = buf.slice(0, idx);
-              buf = buf.slice(idx + 1);
-              if (line === '') { flush(); continue; }
-              if (line.startsWith(':')) continue; // comment
+            while ((idx = buffer.indexOf('\n')) >= 0) {
+              let line = buffer.slice(0, idx);
+              buffer = buffer.slice(idx + 1);
+              if (line.endsWith('\r')) {
+                line = line.slice(0, -1);
+              }
+              if (line === '') {
+                flush();
+                continue;
+              }
+              if (line.startsWith(':')) {
+                continue;
+              }
               const colon = line.indexOf(':');
               const field = colon === -1 ? line : line.slice(0, colon);
               let val = colon === -1 ? '' : line.slice(colon + 1);
-              if (val.startsWith(' ')) val = val.slice(1);
+              if (val.startsWith(' ')) {
+                val = val.slice(1);
+              }
               switch (field) {
-                case 'id': ev.id = val; break;
-                case 'event': ev.event = val; break;
-                case 'data': ev.data = (ev.data || '') + val + '\n'; break;
+                case 'id':
+                  event.id = val;
+                  break;
+                case 'event':
+                  event.event = val;
+                  break;
+                case 'data':
+                  event.data = (event.data || '') + val + '\n';
+                  break;
+                case 'retry': {
+                  const retryMs = Number(val);
+                  if (Number.isFinite(retryMs) && retryMs >= 0) {
+                    serverRetryMs = retryMs;
+                  }
+                  break;
+                }
               }
             }
           }
-        } catch (e) {
-          try { out.onerror?.(e as any); } catch {}
+          if (!closed) {
+            scheduleReconnect(new Error('SSE stream ended'));
+          }
+        } catch (err) {
+          const name = (err as any)?.name;
+          if (closed || name === 'AbortError') {
+            return;
+          }
+          try {
+            out.onerror?.(err as any);
+          } catch {}
+          scheduleReconnect(err);
+        } finally {
+          controller = null;
         }
-      })();
+      };
+
+      startStream().catch((err) => {
+        if (!closed) {
+          try {
+            out.onerror?.(err as any);
+          } catch {}
+          scheduleReconnect(err);
+        }
+      });
+
       return out;
     },
 
     // Convenience: subscribe to read-model patch stream with resume
-    subscribePatches: (lastEventId?: string) => {
-      return this.events.subscribe({ topics: ['state.read.model.patch'], lastEventId, replay: 50 });
+    subscribePatches: (arg?: string | EventsOptions) => {
+      const baseOptions: EventsOptions =
+        typeof arg === 'string' || typeof arg === 'undefined' ? { lastEventId: arg } : arg;
+      const effectiveReplay = baseOptions.lastEventId
+        ? baseOptions.replay ?? 0
+        : baseOptions.replay ?? 50;
+      return this.events.subscribe({
+        ...baseOptions,
+        topics: [READ_MODEL_TOPIC],
+        replay: effectiveReplay,
+      });
     },
 
     subscribeReadModel: (
@@ -518,6 +747,12 @@ export class ArwClient {
         topics: [READ_MODEL_TOPIC],
         lastEventId: opts.lastEventId,
         replay,
+        autoReconnect: opts.autoReconnect,
+        reconnectInitialDelayMs: opts.reconnectInitialDelayMs,
+        reconnectMaxDelayMs: opts.reconnectMaxDelayMs,
+        reconnectJitterMs: opts.reconnectJitterMs,
+        onStateChange: opts.onStateChange,
+        inactivityTimeoutMs: opts.inactivityTimeoutMs,
       });
 
       let closed = false;

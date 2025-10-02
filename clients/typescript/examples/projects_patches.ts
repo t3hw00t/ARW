@@ -34,6 +34,16 @@ async function main() {
       const last = subscription.lastEventId() ?? 'n/a';
       console.log(`[patch] projects updated — items=${items}, lastEventId=${last}`);
     },
+    onStateChange: ({ state, attempt, delayMs }) => {
+      if (state === 'open') {
+        console.error('read-model stream connected');
+      } else if (state === 'retrying') {
+        console.error(`read-model retry in ${Math.round(delayMs ?? 0)}ms (attempt ${attempt})`);
+      } else if (state === 'closed') {
+        console.error('read-model stream closed');
+      }
+    },
+    inactivityTimeoutMs: 60_000,
   });
 
   process.on('SIGINT', () => {

@@ -18,7 +18,23 @@ async function main() {
   setTimeout(() => controller.abort(), 10_000);
 
   try {
-    for await (const evt of client.events.stream({ topics: ['service.'], replay: 5, signal: controller.signal })) {
+    const stream = client.events.stream({
+      topics: ['service.'],
+      replay: 5,
+      signal: controller.signal,
+      inactivityTimeoutMs: 60_000,
+      onStateChange: ({ state, attempt, delayMs }) => {
+        if (state === 'open') {
+          console.error('stream connected');
+        } else if (state === 'retrying') {
+          console.error(`retrying in ${Math.round(delayMs ?? 0)}ms (attempt ${attempt})`);
+        } else if (state === 'closed') {
+          console.error('stream closed');
+        }
+      },
+    });
+
+    for await (const evt of stream) {
       logEvent(evt);
     }
   } catch (err) {

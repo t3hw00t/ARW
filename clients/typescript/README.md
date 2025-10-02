@@ -36,9 +36,10 @@ Node tips:
 - No polyfill required. The client streams SSE via `fetch` in Node and parses it internally.
 - Ensure `fetch`/`ReadableStream` are available (Node 18+ includes them by default).
 - Admin endpoints and `/events` require an admin token unless you run with `ARW_DEBUG=1` locally. Pass it as the second arg to `ArwClient` or via `client.setAdminToken()`.
+- Both the browser `EventSource` path and the Node fallback automatically reconnect when the stream drops. Tune the behaviour with `autoReconnect`, `reconnectInitialDelayMs`, `reconnectMaxDelayMs`, `reconnectJitterMs`, or `inactivityTimeoutMs` (Node fallback) and observe lifecycle changes via `onStateChange` to drive status badges or accessibility announcements.
 
 Patches shortcut:
-- `client.events.subscribePatches(lastId?)` subscribes to `state.read.model.patch` with a small replay for UI warm‑up.
+- `client.events.subscribePatches(lastIdOrOptions?)` subscribes to `state.read.model.patch` with a small replay for UI warm‑up (accepts either a `lastEventId` string or the richer `EventsOptions`).
 - `client.events.subscribeReadModel(id, opts)` keeps a local snapshot updated (applies JSON Patch deltas, exposes `getSnapshot()`/`lastEventId()` accessors, optional `loadInitial()` hydrates the starting snapshot).
 
 ```ts
@@ -53,6 +54,12 @@ const sub = client.events.subscribeReadModel('projects', {
   onUpdate: (snapshot) => {
     console.log('projects items', snapshot?.items?.length ?? 0);
   },
+  onStateChange: ({ state, attempt, delayMs }) => {
+    if (state === 'retrying') {
+      console.log(`retrying read-model stream in ${Math.round(delayMs ?? 0)}ms (attempt ${attempt})`);
+    }
+  },
+  inactivityTimeoutMs: 60_000,
 });
 
 // Later
@@ -65,10 +72,25 @@ Node streaming helper:
 const controller = new AbortController();
 setTimeout(() => controller.abort(), 10_000);
 
-for await (const evt of client.events.stream({ topics: ['service.'], replay: 5, signal: controller.signal })) {
+const stream = client.events.stream({
+  topics: ['service.'],
+  replay: 5,
+  signal: controller.signal,
+  inactivityTimeoutMs: 60_000,
+  onStateChange: ({ state, attempt, delayMs }) => {
+    if (state === 'retrying') {
+      console.warn(`events retry #${attempt} in ${Math.round(delayMs ?? 0)}ms`);
+    }
+  },
+});
+
+for await (const evt of stream) {
   console.log(`[${evt.lastEventId ?? 'live'}] ${evt.type ?? 'message'}`, evt.data);
 }
 ```
 
+See `clients/typescript/examples/reliable_stream.ts` for a fuller Node example that emits structured lifecycle logs, honors idle timeouts, and optionally appends every record to a JSONL file via `--out` for later analysis. The CLI adds rotation/retention/compression knobs when you combine it with `--out-format`, `--out-max-bytes`, `--out-keep`, and `--out-compress`.
+
 CLI:
-- Install or use via NPX after publishing: `arw-events --prefix service.,state.read.model.patch --replay 25` (uses `BASE` and `ARW_ADMIN_TOKEN` env vars). The CLI now uses `events.stream()` so it respects `SIGINT` via `AbortController` and keeps your last-event id in `--store`.
+- Install or use via NPX after publishing: `arw-events --prefix service.,state.read.model.patch --replay 25 --store .arw/last-event-id` (uses `BASE` and `ARW_ADMIN_TOKEN` env vars).
+- Flags like `--no-reconnect`, `--delay`, `--max-delay`, `--jitter`, `--idle`, `--structured`, `--out`, `--out-format`, `--out-max-bytes`, `--out-keep`, and `--out-compress` tweak reconnect/idle policy, output format, and persistence (idle/structured/out/* only affect the Node fallback). Structured mode mirrors the `reliable_stream.ts` JSONL schema so operators can parse lifecycle logs without extra scripting, and the `--out` family appends, rotates, prunes, and optionally gzips JSONL logs for replay/backfill workflows.

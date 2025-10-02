@@ -51,7 +51,21 @@ async function main() {
   const client = new ArwClient(base, token);
   let lastId = loadLastId(store);
 
-  const sub = client.events.subscribe({ topics: prefixes, lastEventId: lastId, replay });
+  const sub = client.events.subscribe({
+    topics: prefixes,
+    lastEventId: lastId,
+    replay,
+    inactivityTimeoutMs: 60_000,
+    onStateChange: ({ state, attempt, delayMs }) => {
+      if (state === 'open') {
+        console.error('subscription connected');
+      } else if (state === 'retrying') {
+        console.error(`subscription retry in ${Math.round(delayMs ?? 0)}ms (attempt ${attempt})`);
+      } else if (state === 'closed') {
+        console.error('subscription closed');
+      }
+    },
+  });
   (sub as any).onmessage = (e: any) => {
     lastId = e.lastEventId || lastId;
     try {
@@ -66,4 +80,3 @@ async function main() {
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
-
