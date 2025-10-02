@@ -18,7 +18,9 @@ use crate::{read_models, tasks::TaskHandle, AppState};
 #[cfg(test)]
 use arw_runtime::{RuntimeDescriptor, RuntimeStatus};
 
-const MATRIX_TTL: StdDuration = StdDuration::from_secs(60);
+const MATRIX_TTL_DEFAULT_SECS: u64 = 60;
+const MATRIX_TTL_MIN_SECS: u64 = 10;
+const MATRIX_TTL_MAX_SECS: u64 = 900;
 
 const STATE_READY: u8 = 0;
 const STATE_STARTING: u8 = 1;
@@ -125,7 +127,7 @@ impl TimedValue {
     }
 
     fn is_expired(&self, now: Instant) -> bool {
-        now.duration_since(self.inserted_at) > MATRIX_TTL
+        now.duration_since(self.inserted_at) > matrix_ttl()
     }
 }
 
@@ -142,6 +144,30 @@ struct AcceleratorRollup {
 
 fn prune_expired(store: &mut HashMap<String, TimedValue>, now: Instant) {
     store.retain(|_, entry| !entry.is_expired(now));
+}
+
+fn matrix_ttl() -> StdDuration {
+    static TTL: OnceCell<StdDuration> = OnceCell::new();
+    *TTL.get_or_init(compute_matrix_ttl)
+}
+
+pub(crate) fn ttl_seconds() -> u64 {
+    matrix_ttl().as_secs()
+}
+
+fn compute_matrix_ttl() -> StdDuration {
+    let raw = std::env::var("ARW_RUNTIME_MATRIX_TTL_SEC").ok();
+    parse_matrix_ttl(raw.as_deref())
+}
+
+fn parse_matrix_ttl(raw: Option<&str>) -> StdDuration {
+    let ttl_secs = raw
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .map(|value| value.clamp(MATRIX_TTL_MIN_SECS, MATRIX_TTL_MAX_SECS))
+        .unwrap_or(MATRIX_TTL_DEFAULT_SECS);
+    // Matrix snapshots can now live longer on busy nodes: clamp to a
+    // reasonable range so misconfigured values do not turn stale or churny.
+    StdDuration::from_secs(ttl_secs)
 }
 
 fn node_id() -> String {
@@ -227,6 +253,7 @@ pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
                             "runtime_matrix",
                             &json!({
                                 "items": payload,
+                                "ttl_seconds": ttl_seconds(),
                                 "updated": chrono::Utc::now()
                                     .to_rfc3339_opts(SecondsFormat::Millis, true)
                             }),
@@ -654,6 +681,33 @@ fn runtime_restart_message(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_matrix_ttl_defaults_when_missing() {
+        assert_eq!(parse_matrix_ttl(None).as_secs(), MATRIX_TTL_DEFAULT_SECS);
+    }
+
+    #[test]
+    fn parse_matrix_ttl_trims_valid_values() {
+        assert_eq!(parse_matrix_ttl(Some(" 120 ")).as_secs(), 120);
+    }
+
+    #[test]
+    fn parse_matrix_ttl_clamps_minimum_and_maximum() {
+        assert_eq!(parse_matrix_ttl(Some("5")).as_secs(), MATRIX_TTL_MIN_SECS);
+        assert_eq!(
+            parse_matrix_ttl(Some("1200")).as_secs(),
+            MATRIX_TTL_MAX_SECS
+        );
+    }
+
+    #[test]
+    fn parse_matrix_ttl_falls_back_on_invalid_values() {
+        assert_eq!(
+            parse_matrix_ttl(Some("abc")).as_secs(),
+            MATRIX_TTL_DEFAULT_SECS
+        );
+    }
 
     fn make_record(
         id: &str,

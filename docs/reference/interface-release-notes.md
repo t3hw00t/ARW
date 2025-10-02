@@ -430,6 +430,7 @@ GET /state/route_stats
 GET /state/runtime_matrix
 - Summary changed from 'Inspect runtime matrix' to 'Runtime matrix snapshot.'
 - Description changed from 'Return the runtime matrix covering available runtimes, capabilities, and health signals.' to 'Runtime matrix snapshot.'
+- Response now includes `ttl_seconds` to mirror `ARW_RUNTIME_MATRIX_TTL_SEC` and help clients decide when to refresh the snapshot proactively.
 
 GET /state/staging/actions
 - Summary changed from 'Inspect staging actions' to 'Staging queue snapshot.'

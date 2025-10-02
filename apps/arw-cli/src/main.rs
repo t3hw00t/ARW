@@ -773,19 +773,35 @@ fn cmd_runtime_status(args: &RuntimeStatusArgs) -> Result<()> {
         ));
     }
 
+    let matrix_snapshot = match fetch_runtime_matrix(&client, base, token.as_deref()) {
+        Ok(snapshot) => snapshot,
+        Err(err) => {
+            if args.json {
+                return Err(err);
+            }
+            eprintln!("warning: {}", err);
+            None
+        }
+    };
+
     if args.json {
+        let json = combine_runtime_snapshots(&body, matrix_snapshot);
         if args.pretty {
             println!(
                 "{}",
-                serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string())
+                serde_json::to_string_pretty(&json).unwrap_or_else(|_| json.to_string())
             );
         } else {
-            println!("{}", body);
+            println!("{}", json);
         }
         return Ok(());
     }
 
     println!("{}", render_runtime_summary(&body));
+    if let Some(matrix) = matrix_snapshot {
+        println!();
+        println!("{}", render_runtime_matrix_summary(&matrix));
+    }
     Ok(())
 }
 
@@ -859,6 +875,40 @@ fn cmd_runtime_restore(args: &RuntimeRestoreArgs) -> Result<()> {
             body
         )),
     }
+}
+
+fn fetch_runtime_matrix(
+    client: &Client,
+    base: &str,
+    token: Option<&str>,
+) -> Result<Option<JsonValue>> {
+    let url = format!("{}/state/runtime_matrix", base);
+    let mut req = client.get(&url);
+    req = with_admin_headers(req, token);
+    let resp = req
+        .send()
+        .with_context(|| format!("requesting runtime matrix snapshot from {}", url))?;
+    let status = resp.status();
+    let body: JsonValue = resp.json().context("parsing runtime matrix response")?;
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(None);
+    }
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        anyhow::bail!(
+            "runtime matrix request unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN"
+        );
+    }
+    if !status.is_success() {
+        anyhow::bail!("runtime matrix request failed: {} {}", status, body);
+    }
+    Ok(Some(body))
+}
+
+fn combine_runtime_snapshots(supervisor: &JsonValue, matrix: Option<JsonValue>) -> JsonValue {
+    let mut wrapper = serde_json::Map::new();
+    wrapper.insert("supervisor".to_string(), supervisor.clone());
+    wrapper.insert("matrix".to_string(), matrix.unwrap_or(JsonValue::Null));
+    JsonValue::Object(wrapper)
 }
 
 fn cmd_events_journal(args: &EventsJournalArgs) -> Result<()> {
@@ -1282,6 +1332,93 @@ fn cmd_gen_ed25519(
     );
     eprintln!("Note: store private key securely; add pubkey to configs/trust_capsules.json");
     Ok(())
+}
+
+fn render_runtime_matrix_summary(matrix: &JsonValue) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    let ttl = matrix
+        .get("ttl_seconds")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(60);
+    let items = matrix
+        .get("items")
+        .and_then(|v| v.as_object())
+        .cloned()
+        .unwrap_or_default();
+    let node_count = items.len();
+    lines.push(format!(
+        "Runtime matrix snapshot: ttl {}s ({} node{}).",
+        ttl,
+        node_count,
+        if node_count == 1 { "" } else { "s" }
+    ));
+    if items.is_empty() {
+        lines.push("No runtime matrix entries available.".to_string());
+        return lines.join("\n");
+    }
+
+    let mut sorted: Vec<(String, JsonValue)> = items.into_iter().map(|(k, v)| (k, v)).collect();
+    sorted.sort_by(|a, b| a.0.cmp(&b.0));
+
+    for (node, entry) in sorted {
+        let status = entry
+            .get("status")
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_default();
+        let label = status
+            .get("label")
+            .and_then(|v| v.as_str())
+            .unwrap_or("Unknown");
+        let severity = status
+            .get("severity")
+            .and_then(|v| v.as_str())
+            .unwrap_or("info");
+        let aria_hint = status
+            .get("aria_hint")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let runtime = entry
+            .get("runtime")
+            .and_then(|v| v.as_object())
+            .cloned()
+            .unwrap_or_default();
+        let total = runtime.get("total").and_then(|v| v.as_u64()).unwrap_or(0);
+        let states_summary = runtime
+            .get("states")
+            .and_then(|v| v.as_object())
+            .map(|states| {
+                let mut pairs: Vec<String> = states
+                    .iter()
+                    .filter_map(|(k, val)| val.as_u64().map(|count| format!("{}:{}", k, count)))
+                    .collect();
+                pairs.sort();
+                pairs.join(", ")
+            })
+            .unwrap_or_default();
+        let states_fragment = if states_summary.is_empty() {
+            String::new()
+        } else {
+            format!(" [{}]", states_summary)
+        };
+        let detail = status
+            .get("detail")
+            .and_then(|v| v.as_array())
+            .and_then(|arr| arr.first())
+            .and_then(|v| v.as_str())
+            .unwrap_or(aria_hint);
+        let detail_fragment = if detail.is_empty() {
+            String::new()
+        } else {
+            format!(" — {}", detail)
+        };
+        lines.push(format!(
+            "- {}: {} (severity {}) — runtimes total {}{}{}",
+            node, label, severity, total, states_fragment, detail_fragment
+        ));
+    }
+
+    lines.join("\n")
 }
 
 fn render_runtime_summary(snapshot: &JsonValue) -> String {
@@ -1816,6 +1953,24 @@ mod tests {
     use std::fs;
     use std::io::Write;
     use tempfile::TempDir;
+
+    #[test]
+    fn combine_snapshots_includes_matrix_and_supervisor() {
+        let supervisor = json!({"runtimes":[], "updated_at":"2025-10-02T05:30:00Z"});
+        let matrix = json!({"ttl_seconds": 120, "items": {}});
+        let combined = combine_runtime_snapshots(&supervisor, Some(matrix.clone()));
+        assert_eq!(combined["supervisor"], supervisor);
+        assert_eq!(combined["matrix"], matrix);
+        assert_eq!(combined["matrix"]["ttl_seconds"].as_u64(), Some(120));
+    }
+
+    #[test]
+    fn combine_snapshots_defaults_matrix_to_null() {
+        let supervisor = json!({"runtimes": [json!({"descriptor": {"id": "rt"}})]});
+        let combined = combine_runtime_snapshots(&supervisor, None);
+        assert!(combined["matrix"].is_null());
+        assert_eq!(combined["supervisor"], supervisor);
+    }
 
     #[test]
     fn sanitize_lang_fragment_cli_normalizes() {

@@ -215,7 +215,7 @@ Hierarchy & Governor Services
 - [Kernel] Encapsulate hierarchy (hello/offer/accept/state/role_set) and governor (profile/hints) into typed services; endpoints prefer services; publish corr_id events; persist orchestration [t-250912024843-7597]
 
 CLI & Introspection
-- [Kernel] Migrate arw-cli to clap (derive, help, completions, JSON flag) [t-250911230329-4722]
+- [Kernel] Migrate arw-cli to clap (derive, help, completions, JSON flag) [t-250911230329-4722] — done
 - [Kernel] Auto‑generate /about endpoints from router/introspection [t-250911230306-7961] — done
   - [Kernel] /about merges public endpoints (runtime recorder) and admin endpoints (macro registry); entries are `METHOD path`; deduped and sorted.
 

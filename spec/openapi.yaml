@@ -4221,6 +4221,7 @@ components:
       type: object
       required:
       - items
+      - ttl_seconds
       properties:
         items:
           type: object
@@ -4228,6 +4229,10 @@ components:
             $ref: '#/components/schemas/RuntimeMatrixEntry'
           propertyNames:
             type: string
+        ttl_seconds:
+          type: integer
+          format: int64
+          minimum: 0
     RuntimeMatrixRuntimeSummary:
       type: object
       required:

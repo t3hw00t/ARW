@@ -25,6 +25,7 @@ pub struct ModelsCatalogResponse {
 #[derive(Clone, Serialize, ToSchema)]
 pub struct RuntimeMatrixResponse {
     pub items: BTreeMap<String, RuntimeMatrixEntry>,
+    pub ttl_seconds: u64,
 }
 
 pub(crate) async fn build_episode_rollups(state: &AppState, limit: usize) -> Vec<Value> {
@@ -947,7 +948,11 @@ pub async fn state_runtime_matrix(
     }
     let items = runtime_matrix::snapshot().await;
     let items: BTreeMap<String, RuntimeMatrixEntry> = items.into_iter().collect();
-    Json(RuntimeMatrixResponse { items }).into_response()
+    Json(RuntimeMatrixResponse {
+        items,
+        ttl_seconds: runtime_matrix::ttl_seconds(),
+    })
+    .into_response()
 }
 
 /// Runtime supervisor snapshot.

@@ -6206,7 +6206,8 @@
       "RuntimeMatrixResponse": {
         "type": "object",
         "required": [
-          "items"
+          "items",
+          "ttl_seconds"
         ],
         "properties": {
           "items": {
@@ -6217,6 +6218,11 @@
             "propertyNames": {
               "type": "string"
             }
+          },
+          "ttl_seconds": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
           }
         }
       },

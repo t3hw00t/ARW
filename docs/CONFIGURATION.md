@@ -259,6 +259,7 @@ See also: [CLI Guide](guide/cli.md)
 ## Managed Runtime Supervisor
 - `ARW_RUNTIME_RESTART_MAX`: maximum automatic restarts allowed within the sliding window before the supervisor refuses a new restore (default `3`). Values ≤ `0` fall back to the default; raise the ceiling if you tolerate additional crash loops while debugging.
 - `ARW_RUNTIME_RESTART_WINDOW_SEC`: sliding window (seconds) used to evaluate the restart budget (default `600`, i.e., 10 minutes). Combine with `ARW_RUNTIME_RESTART_MAX` to tune how aggressively the supervisor will attempt recoveries on unstable adapters.
+- `ARW_RUNTIME_MATRIX_TTL_SEC`: cache window (seconds) for `/state/runtime_matrix` snapshots (default `60`). Values are clamped between `10` and `900` seconds to balance freshness with large-cluster stability and surface back to clients as `ttl_seconds` in the runtime matrix response.
 
 When the budget is exhausted, `/state/runtime_matrix` and `runtime.state.changed` events include a restart quota summary so operators can see when the window resets or expand the limit explicitly.
 

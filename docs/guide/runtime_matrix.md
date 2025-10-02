@@ -11,12 +11,15 @@ ARW seeds a runtime matrix read-model from `runtime.health` events. Today it mer
 
 ## Current state
 - Local node health published every five seconds; payloads now merge HTTP telemetry with the runtime registry snapshot so readiness, degraded/error counts, and restart pressure all travel together.
+- Read-model payloads include `ttl_seconds` so dashboards know exactly how long a snapshot should be treated as fresh before polling or prompting for an updated heartbeat.
 - Accelerator rollups highlight CPU/GPU/NPU availability and the state mix per accelerator so operators can spot when a GPU lane degrades or drops offline.
 - Node identifiers resolve from `ARW_NODE_ID` (or fallback hostname) and feed the runtime matrix read-model.
 - Accessibility strings accompany each status so dashboards can surface the same context.
 - Restart budgets surface remaining automatic restarts, the configured window, and the reset horizon so operators can decide when to intervene or widen the budget.
 - Launcher now mirrors the snapshot with a header badge in Project Hub, highlighting readiness counts, restart headroom, and next reset.
 - CLI shortcuts: `arw-cli runtime status` prints the same snapshot (or `--json` for raw), and `arw-cli runtime restore --id <runtime>` triggers supervised restores while echoing the remaining budget or budget exhaustion.
+  - Text mode now reports the active `ttl_seconds` so operators know when the matrix snapshot should be considered stale.
+  - JSON mode emits `{ "supervisor": ..., "matrix": ... }` so scripts can consume both views (including `ttl_seconds`) in one call.
 - Smoke check: `just runtime-smoke` launches a stub llama endpoint, points the server at it, and verifies `chat.respond` flows end-to-end without needing model weights (extend with MODE=real once hardware-backed smoke rigs land).
   - To exercise a real llama.cpp build: `MODE=real LLAMA_SERVER_BIN=/path/to/server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`. Optionally pass `LLAMA_SERVER_ARGS="--your --flags"` or `LLAMA_SERVER_PORT=XXXX` to match your deployment.
 
