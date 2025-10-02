@@ -1,9 +1,11 @@
-#!powershell
+﻿#!powershell
 param(
   [switch]$Yes,
   [switch]$RunTests,
   [switch]$NoDocs,
-  [switch]$MaxPerf
+  [switch]$MaxPerf,
+  [switch]$StrictReleaseGate,
+  [switch]$SkipReleaseGate
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
@@ -85,10 +87,17 @@ try { & (Join-Path $PSScriptRoot 'docgen.ps1') } catch { Warn "docgen failed: $(
 
 Title 'Package portable bundle'
 try {
-  & (Join-Path $PSScriptRoot 'package.ps1') -NoBuild
+  $packageScript = Join-Path $PSScriptRoot 'package.ps1'
+  $packageParams = @{ NoBuild = $true }
+  if ($StrictReleaseGate) { $packageParams['StrictReleaseGate'] = $true }
+  if ($SkipReleaseGate) { $packageParams['SkipReleaseGate'] = $true }
+  & $packageScript @packageParams
 } catch {
   Warn "package.ps1 blocked by execution policy; retrying via child PowerShell with Bypass"
-  & powershell -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'package.ps1') -NoBuild
+  $fallback = @('-ExecutionPolicy','Bypass','-File',(Join-Path $PSScriptRoot 'package.ps1'),'-NoBuild')
+  if ($StrictReleaseGate) { $fallback += '-StrictReleaseGate' }
+  if ($SkipReleaseGate) { $fallback += '-SkipReleaseGate' }
+  & powershell @fallback
 }
 'DIR target','DIR dist' | ForEach-Object { Add-Content $installLog $_ }
 if (Test-Path (Join-Path $root 'site')) { Add-Content $installLog 'DIR site' }
@@ -123,3 +132,4 @@ if ($warnings.Count -gt 0) {
   foreach ($w in $warnings) { Write-Host "- $w" -ForegroundColor Yellow }
 }
 Info 'Done. See dist/ for portable bundle.'
+

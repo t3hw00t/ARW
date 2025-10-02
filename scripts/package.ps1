@@ -1,17 +1,49 @@
-#!powershell
+﻿#!powershell
 param(
   [switch]$NoBuild,
-  [string]$Target
+  [string]$Target,
+  [switch]$StrictReleaseGate,
+  [switch]$SkipReleaseGate
 )
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
 function Info($msg){ Write-Host "[package] $msg" -ForegroundColor Cyan }
+function Warn($msg){ Write-Warning $msg }
 function Die($msg){ Write-Error $msg; exit 1 }
 
 if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) { Die 'Rust `cargo` not found in PATH. Install Rust: https://rustup.rs' }
 
-& (Join-Path $PSScriptRoot 'check_release_blockers.ps1')
+$skipGate = $SkipReleaseGate.IsPresent
+if (-not $skipGate) {
+  $skipEnv = $env:ARW_SKIP_RELEASE_GATE
+  if ($skipEnv -and $skipEnv -notmatch '^(?i:false|0)$') { $skipGate = $true }
+}
+
+$strictGate = $StrictReleaseGate.IsPresent
+if (-not $strictGate) {
+  $strictEnv = $env:ARW_STRICT_RELEASE_GATE
+  if ($strictEnv -and $strictEnv -notmatch '^(?i:false|0)$') { $strictGate = $true }
+}
+if (-not $strictGate) {
+  $ciEnv = $env:CI
+  if ($ciEnv -and $ciEnv -notmatch '^(?i:false|0)$') { $strictGate = $true }
+}
+
+if ($skipGate) {
+  Info 'Release blocker check skipped by configuration.'
+} else {
+  try {
+    & (Join-Path $PSScriptRoot 'check_release_blockers.ps1')
+  } catch {
+    if ($strictGate) {
+      throw
+    }
+    $reason = if ($_.Exception -and $_.Exception.Message) { $_.Exception.Message } else { 'release gate unavailable' }
+    Warn "Release blocker check skipped: $reason"
+    Warn 'Set ARW_STRICT_RELEASE_GATE=1 or pass -StrictReleaseGate to enforce blocking.'
+  }
+}
 
 if (-not $NoBuild) {
   if ($Target) {
@@ -120,3 +152,4 @@ if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path (Join-Path $out '*') -DestinationPath $zip
 
 Info "Wrote $zip"
+

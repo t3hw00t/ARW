@@ -11,6 +11,7 @@ This guide covers running ARW on Windows with the desktop launcher and the headl
 Requirements
 - Windows 10/11 (Desktop Experience). Standard user OK (no admin required).
 - Rust 1.90+ toolchain (for developer builds): https://rustup.rs
+- Visual Studio Build Tools 2022 with the "Desktop development with C++" workload (for the MSVC linker used by the Rust toolchain): https://aka.ms/vs/17/release/vs_BuildTools.exe
 - WebView2 Runtime for the Tauri‑based launcher:
   - Windows 11: in‑box
   - Windows 10/Server: install Evergreen Runtime (see below)
@@ -22,6 +23,7 @@ Quickstart (developer path)
 powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHealth
 ```
+- Packaging now tolerates missing Git remotes or offline hosts and surfaces a warning instead of failing. Set `ARW_STRICT_RELEASE_GATE=1` (or pass `-StrictReleaseGate`) if you need the setup to stop on open release blockers; CI environments continue to enforce the gate by default.
 - The start script launches the service in the background and, if present, the desktop launcher.
 - If the launcher isn’t built yet, the script attempts a `cargo build -p arw-launcher`.
 - If WebView2 is missing, you’ll see a friendly warning and the launcher may prompt to install it.
