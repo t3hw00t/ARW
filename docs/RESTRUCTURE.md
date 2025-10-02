@@ -204,7 +204,7 @@ Status: Completed (ongoing refinements flow through the security backlog).
   - Future: host WASI Component plugins (tools) declared by WIT; enforce capability manifests and policy at spawn.
 
 - Legacy bridge (status)
-  - `apps/arw-svc` and its launch flags have been removed. Debug UI assets now live under `apps/arw-server/assets` and render when `ARW_DEBUG=1`.
+- The legacy service bridge and its launch flags have been removed. Debug UI assets now live under `apps/arw-server/assets` and render when `ARW_DEBUG=1`.
 - `/events` is the canonical SSE endpoint; the legacy `/admin/events` alias has been removed.
 - Legacy feature migration (unified target — completed)
   - ✅ Core services: Model Steward, Tool Forge, Feedback Loop, Experiment Deck, Memory Lanes, Project Hub primitives, Project Map read models, Snappy Governor, and Event Spine patch streaming now run on the unified server.
@@ -226,7 +226,7 @@ Status: Completed (ongoing refinements flow through the security backlog).
 - ✅ Expanded `/state/models_metrics` with resume counters, hash-group inflight listings, and EWMA telemetry (typed schema + tests).
 - **Docs & rollout**
   - ✅ Guide updates cover resume semantics and correlation IDs.
-  - ✅ README and release notes highlight the `arw-svc` retirement and unified entry points; subsequent releases reference the unified server exclusively.
+- ✅ README and release notes highlight the bridge retirement and unified entry points; subsequent releases reference the unified server exclusively.
 - **UI follow-ups**
   - ✅ Launcher/admin models UI shows status badges for `resumed`/`degraded`/`cancel-requested`, and adds inline ledger previews with copy helpers for correlation IDs.
 - ✅ Debug Models/Agents/Projects pages (and launcher mirrors) now call `/admin/*` endpoints with admin headers. Legacy `/models/*` shims are no longer required.
@@ -274,7 +274,7 @@ Notes
 
 ### Legacy Retirement Checklist
 - Instrumentation is in place: legacy capsule headers increment `arw_legacy_capsule_headers_total`; the `/debug` alias is removed, so watch access logs or 404 gauges (or run `scripts/check_legacy_surface.sh` / `just legacy-check` for a quick static + optional HTTP probe when a server is running) for any lingering requests.
-- Packaging no longer bundles the legacy `arw-svc` binaries; launcher distributions ship `arw-server` exclusively.
+- Packaging no longer bundles the legacy bridge binaries; launcher distributions ship `arw-server` exclusively.
 - Capsule leases refresh before every action submission, egress policy resolution, and tool invocation; passive renewals emit `policy.capsule.expired` without requiring HTTP traffic through the middleware.
 - Guardrail defaults now assume DNS guard + loopback proxy unless explicitly disabled (`ARW_DNS_GUARD_ENABLE=0`, `ARW_EGRESS_PROXY_ENABLE=0`), keeping new nodes locked down by default.
 - Start scripts (`scripts/start.{sh,ps1}`) and interactive helpers inherit those hardened defaults; verify staging starts without overriding them and document any environments that must opt out.
@@ -301,7 +301,7 @@ Notes
    - Contribution ledger roll‑up; split capsules; negotiation flows; model cards with splits
 8) UI Unification
    - SPA (Memory Canvas, World Map, Influence Console); retire legacy UI
-9) Decommission legacy `arw-svc` ✅
+9) Decommission legacy service bridge ✅
 
 ## What’s Implemented (Quick Index)
 - Kernel + CAS: `crates/arw-kernel/src/lib.rs`

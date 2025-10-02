@@ -18,7 +18,7 @@ Your private AI control room that can scale and share when you choose.
 
 In plain terms: Agent Hub (ARW) lets you run your own team of AI “helpers” on your computer to research, plan, write, and build—while laying the groundwork for upcoming voice and vision helpers—all under your control. It is local‑first and privacy‑first by default, with the option to securely pool computing power with trusted peers when a project needs more muscle.
 
-> **Restructure update:** `arw-server` is now the sole API surface (headless-first) across every deployment. The legacy `arw-svc` bridge and its launch flags have been removed in favour of the unified stack.
+> **Restructure update:** `arw-server` is now the sole API surface (headless-first) across every deployment. The old bridge layer and its launch flags have been retired in favour of the unified stack.
 
 Full documentation → https://t3hw00t.github.io/ARW/
 

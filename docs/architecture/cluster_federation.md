@@ -33,7 +33,7 @@ Protocol types (lived in `arw-protocol` already):
 - `CoreAccept(child_id, parent_id, role, epoch)`
 
 Status:
-- Legacy `arw-svc` exposed `/hierarchy/*`; the unified server now ships `/admin/hierarchy/state`, `/admin/hierarchy/role`, and the negotiation helpers (`hello`, `offer`, `accept`) as experimental HTTP endpoints.
+- The unified server now ships `/admin/hierarchy/state`, `/admin/hierarchy/role`, and the negotiation helpers (`hello`, `offer`, `accept`) as experimental HTTP endpoints.
 - AsyncAPI topics `hierarchy.role.changed` and `hierarchy.state` continue to stream updates from both servers; cluster matrix views still land in the upcoming read-model work.
 
 ## Policy Capsules & Gating

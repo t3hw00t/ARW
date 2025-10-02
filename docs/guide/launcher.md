@@ -6,7 +6,7 @@ title: Desktop Launcher (Tauri 2)
 Updated: 2025-09-22
 Type: How‑to
 
-The tray-based launcher lives at [apps/arw-launcher/src-tauri](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri). It uses Tauri 2 with the capabilities + permissions model and exclusively targets the unified `arw-server` binary (the legacy `arw-svc` bridge is no longer supported).
+The tray-based launcher lives at [apps/arw-launcher/src-tauri](https://github.com/t3hw00t/ARW/blob/main/apps/arw-launcher/src-tauri). It uses Tauri 2 with the capabilities + permissions model and exclusively targets the unified `arw-server` binary that now provides the full API surface.
 
 Launch
 ```bash

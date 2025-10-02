@@ -64,7 +64,7 @@ Updated: 2025-10-01 19:24 UTC
 - [t-250922105500-ops01] Grafana: re-import quick panels — done (updated: 2025-09-22 23:23:55 UTC)
     - 2025-09-22 23:23:44 UTC: Grafana quick panels snippet updated to drop legacy capsule gauge; remaining panels unchanged.
 - [t-250917235820-3900] Decommission legacy artifacts — done (updated: 2025-09-22 23:20:29 UTC)
-    - 2025-09-22 23:05:11 UTC: Windows packaging + CI now ship arw-server only; removed arw-svc workflow/docs references (labels, templates, env example, interfaces OpenAPI generation).
+    - 2025-09-22 23:05:11 UTC: Windows packaging + CI now ship arw-server only; removed legacy workflow/docs references (labels, templates, env example, interfaces OpenAPI generation).
 - [t-250917235818-8075] Replace static OpenAPI with ApiDoc emission — done (updated: 2025-09-22 22:56:13 UTC)
     - 2025-09-22 19:54:01 UTC: Focus next: replace remaining static spec/openapi.yaml usage with runtime ApiDoc export; audit docgen + release scripts.
   - 2025-09-22 20:43:25 UTC: Updated docgen + release/openapi workflows to emit spec/openapi.yaml via ApiDoc (release build) and refreshed docs to reference just openapi-gen.

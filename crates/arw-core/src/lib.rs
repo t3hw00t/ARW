@@ -136,7 +136,7 @@ pub fn hello_core() -> &'static str {
 // ---------------- Administrative Endpoint Registry ----------------
 /// Metadata describing an admin/ops HTTP endpoint served by the platform.
 /// In the unified server these surface under the triad routes; historically they
-/// were exposed under `/admin` via the retired `arw-svc` bridge.
+/// were exposed under `/admin` via a separate bridge component.
 #[derive(Clone, Serialize)]
 pub struct AdminEndpoint {
     pub method: &'static str,

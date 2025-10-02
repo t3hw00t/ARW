@@ -1195,12 +1195,12 @@
     {
       "id": "t-250917235820-3900",
       "title": "Decommission legacy artifacts",
-      "desc": "Remove arw-svc chart and docker publish once launcher retargeted and docs updated.",
+      "desc": "Remove legacy service chart and docker publish once launcher retargeted and docs updated.",
       "status": "done",
       "notes": [
         {
           "time": "2025-09-22 23:05:11 UTC",
-          "text": "Windows packaging + CI now ship arw-server only; removed arw-svc workflow/docs references (labels, templates, env example, interfaces OpenAPI generation)."
+          "text": "Windows packaging + CI now ship arw-server only; removed legacy workflow/docs references (labels, templates, env example, interfaces OpenAPI generation)."
         }
       ],
       "updated": "2025-09-22 23:20:29 UTC",

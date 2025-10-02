@@ -272,6 +272,6 @@ curl -N -H "Authorization: Bearer $ARW_ADMIN_TOKEN" "${BASE}/events?replay=5"
 - Enable `ARW_EGRESS_LEDGER_ENABLE=1` to persist outbound decisions and audit them via `/state/egress`.
 - Use leases to scope dangerous operations (`POST /leases` → `context:rehydrate:file` capability) and require the lease before invoking filesystem helpers.
 
-## Legacy bridge (historical)
+## Unified admin routes
 
-The former `arw-svc` bridge has been removed. All `/admin/*` routes now live in the unified `arw-server`; enable `ARW_DEBUG=1` when you need the browser UI surfaces.
+Administrative tooling now lives entirely inside `arw-server`. Enable `ARW_DEBUG=1` when you need the browser UI surfaces.

@@ -356,7 +356,9 @@ gen_launchagent() {
   if [[ -z "$svc" ]]; then ic_warn "Service binary not found; build first"; ic_press_enter; return; fi
   local plist_dir="$HOME/Library/LaunchAgents"
   mkdir -p "$plist_dir"
-  local plist="$plist_dir/com.arw.svc.plist"
+  local legacy_plist="$plist_dir/com.arw.svc.plist"
+  [[ -f "$legacy_plist" ]] && ic_warn "Legacy LaunchAgent detected ($legacy_plist); unload and delete it after switching to the new label to avoid duplicate auto-start entries."
+  local plist="$plist_dir/com.arw.server.plist"
   local logs="$ROOT/.arw/logs"
   mkdir -p "$logs" && ic_log_dir_rel ".arw/logs"
   cat > "$plist" <<PLIST
@@ -364,7 +366,7 @@ gen_launchagent() {
 <!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>com.arw.svc</string>
+  <key>Label</key><string>com.arw.server</string>
   <key>ProgramArguments</key>
   <array>
     <string>$svc</string>
