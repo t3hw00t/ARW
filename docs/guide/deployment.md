@@ -67,7 +67,9 @@ Overrides:
 
 ## Tauri Launcher (Unified)
 - Launcher bundles layer tray controls and inspectors on top of `arw-server`; enable `ARW_DEBUG=1` to serve the debug panels from the same process.
-- Linux builds need `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `libjavascriptcoregtk-4.1-dev`, and `libsoup-3.0-dev` (or the Nix shell via `nix develop`).
+- Linux builds need `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `libjavascriptcoregtk-4.1-dev`, and `libsoup-3.0-dev` (or the Nix shell via `nix develop`). These packages are
+  available on Ubuntu 24.04 LTS and newer; Ubuntu 22.04 is not supported because
+  it lacks WebKitGTK 4.1 packages.
 - Use `just tauri-launcher-run -- --open` to launch the UI with `/admin/debug` available during development.
 
 ## Containers

@@ -39,6 +39,11 @@ General direction: a unified object graph + a single live event stream (SSE). Ev
 
 > **Staying minimal:** Start with the [Core kernel defaults](#kernel-defaults-core) and stay entirely local. Anything tagged as an [Opt-in pack](#opt-in-pack-tier), a [Remote collaborator pack](#remote-collaborator-pack-tier), or a [Future pack](#future-pack-tier) is optional and stays disabled until you flip it on.
 
+## Platform Support
+
+- **Linux:** Desktop Launcher targets Ubuntu 24.04 LTS (or newer) and matching distros with WebKitGTK 4.1 + libsoup3 packages. Headless components (`arw-server`, `arw-cli`) often run on older releases but are only validated on the 24.04+ stack. See [Compatibility Notes](docs/guide/compatibility.md) for distro specifics and alternatives such as the Nix dev shell.
+- **Windows/macOS:** Supported per the Tauri/WebView requirements; refer to the compatibility guide for current details.
+
 ## Feature Tiers
 
 - <a id="core-kernel-tier"></a>**Core kernel** – local-first foundations that run in every install. [Details](#kernel-defaults-core).

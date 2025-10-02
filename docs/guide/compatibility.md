@@ -29,11 +29,15 @@ problems.
 
 - Linux (x64/ARM64)
   - Service and CLI have minimal dependencies.
-  - Desktop Launcher (Tauri 2) uses WebKitGTK 4.1 and libsoup3. Install these
-    packages to build locally:
-    - Debian/Ubuntu: `sudo apt install -y libgtk-3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev`
+  - Desktop Launcher (Tauri 2) relies on WebKitGTK 4.1 and libsoup3. Ubuntu 24.04 LTS
+    (or newer) ships those libraries; Ubuntu 22.04 is no longer supported because the
+    required 4.1 packages do not exist there.
+    - Debian testing/unstable, Ubuntu 24.04+: `sudo apt install -y libgtk-3-dev libwebkit2gtk-4.1-dev libjavascriptcoregtk-4.1-dev libsoup-3.0-dev`
     - Fedora: `sudo dnf install -y gtk3-devel webkit2gtk4.1-devel libsoup3-devel`
     - Arch: `sudo pacman -S --needed gtk3 webkit2gtk-4.1 libsoup3`
+  - Headless components (server/CLI) often continue to run on older glibc-based
+    distros, but we only validate and support the full stack on Ubuntu 24.04 LTS+
+    and equivalents.
   - Using Nix: `nix develop` provides the required libraries in the dev shell.
 
 ## Containers and Cloud
