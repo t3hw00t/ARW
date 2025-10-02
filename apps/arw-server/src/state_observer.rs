@@ -1,4 +1,5 @@
 use arw_events::Envelope;
+use chrono::{DateTime, Utc};
 use once_cell::sync::OnceCell;
 use serde_json::{json, Value};
 use std::collections::VecDeque;
@@ -40,8 +41,8 @@ fn prune_deque<T>(deque: &mut VecDeque<Timed<T>>, ttl: Duration, now: Instant) {
     }
 }
 
-fn observations_store() -> &'static RwLock<VecDeque<Timed<Envelope>>> {
-    static STORE: OnceCell<RwLock<VecDeque<Timed<Envelope>>>> = OnceCell::new();
+fn observations_store() -> &'static RwLock<VecDeque<Timed<StoredObservation>>> {
+    static STORE: OnceCell<RwLock<VecDeque<Timed<StoredObservation>>>> = OnceCell::new();
     STORE.get_or_init(|| RwLock::new(VecDeque::with_capacity(OBS_CAP)))
 }
 
@@ -108,7 +109,7 @@ async fn push_observation(env: &Envelope) {
     if store.len() == OBS_CAP {
         store.pop_front();
     }
-    store.push_back(Timed::new(env.clone()));
+    store.push_back(Timed::new(StoredObservation::new(env.clone())));
     observations_version().fetch_add(1, Ordering::Relaxed);
 }
 
@@ -163,6 +164,7 @@ async fn update_actions(env: &Envelope) {
 pub(crate) async fn observations_snapshot(
     limit: Option<usize>,
     kind_prefix: Option<&str>,
+    since: Option<DateTime<Utc>>,
 ) -> (u64, Vec<Envelope>) {
     let version = observations_version().load(Ordering::Relaxed);
     let guard = observations_store().read().await;
@@ -172,30 +174,61 @@ pub(crate) async fn observations_snapshot(
     }
 
     let prefix = kind_prefix.unwrap_or("");
-    let needs_filter = !prefix.is_empty();
+    let needs_prefix_filter = !prefix.is_empty();
+    let has_since_filter = since.is_some();
     let requested = limit.unwrap_or(total);
     let effective_limit = requested.min(total);
 
-    if effective_limit == total && !needs_filter {
-        let items: Vec<Envelope> = guard.iter().map(|entry| entry.value.clone()).collect();
+    if effective_limit == total && !needs_prefix_filter && !has_since_filter {
+        let items: Vec<Envelope> = guard
+            .iter()
+            .map(|entry| entry.value.envelope.clone())
+            .collect();
         return (version, items);
     }
 
     let mut items: Vec<Envelope> = guard
         .iter()
         .rev()
-        .filter(|entry| {
-            if prefix.is_empty() {
-                true
-            } else {
-                entry.value.kind.starts_with(prefix)
-            }
-        })
+        .filter(|entry| entry.value.matches_prefix(prefix))
+        .filter(|entry| entry.value.is_after(since.as_ref()))
         .take(effective_limit)
-        .map(|entry| entry.value.clone())
+        .map(|entry| entry.value.envelope.clone())
         .collect();
     items.reverse();
     (version, items)
+}
+
+#[derive(Clone)]
+struct StoredObservation {
+    envelope: Envelope,
+    timestamp: Option<DateTime<Utc>>,
+}
+
+impl StoredObservation {
+    fn new(envelope: Envelope) -> Self {
+        let timestamp = chrono::DateTime::parse_from_rfc3339(&envelope.time)
+            .map(|dt| dt.with_timezone(&Utc))
+            .ok();
+        Self {
+            envelope,
+            timestamp,
+        }
+    }
+
+    fn matches_prefix(&self, prefix: &str) -> bool {
+        prefix.is_empty() || self.envelope.kind.starts_with(prefix)
+    }
+
+    fn is_after(&self, threshold: Option<&DateTime<Utc>>) -> bool {
+        match threshold {
+            Some(ts) => match self.timestamp {
+                Some(ref event_ts) => event_ts > ts,
+                None => true,
+            },
+            None => true,
+        }
+    }
 }
 
 pub(crate) async fn beliefs_snapshot() -> (u64, Vec<Value>) {
@@ -260,7 +293,7 @@ pub(crate) async fn ingest_for_tests(env: &Envelope) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use chrono::{SecondsFormat, Utc};
+    use chrono::{Duration, SecondsFormat, Utc};
     use std::sync::atomic::Ordering;
 
     fn intents_version_value() -> u64 {
@@ -310,15 +343,57 @@ mod tests {
             push_observation(env).await;
         }
 
-        let (_, limited) = observations_snapshot(Some(2), None).await;
+        let (_, limited) = observations_snapshot(Some(2), None, None).await;
         assert_eq!(limited.len(), 2);
         assert_eq!(limited[0].payload["seq"].as_i64(), Some(2));
         assert_eq!(limited[1].payload["seq"].as_i64(), Some(3));
 
-        let (_, filtered) = observations_snapshot(None, Some("obs.")).await;
+        let (_, filtered) = observations_snapshot(None, Some("obs."), None).await;
         assert_eq!(filtered.len(), 2);
         assert_eq!(filtered[0].payload["seq"].as_i64(), Some(1));
         assert_eq!(filtered[1].payload["seq"].as_i64(), Some(3));
+    }
+
+    #[tokio::test]
+    async fn observations_snapshot_respects_since_threshold() {
+        let _env_lock = crate::test_support::env::guard();
+        reset_for_tests().await;
+
+        let older = Utc::now() - Duration::seconds(10);
+        let newer = Utc::now();
+
+        let events = [
+            Envelope {
+                time: older.to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "obs.old".to_string(),
+                payload: json!({"seq": 1}),
+                policy: None,
+                ce: None,
+            },
+            Envelope {
+                time: newer.to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "obs.new".to_string(),
+                payload: json!({"seq": 2}),
+                policy: None,
+                ce: None,
+            },
+        ];
+
+        for env in &events {
+            push_observation(env).await;
+        }
+
+        let (_, all_items) = observations_snapshot(None, None, None).await;
+        assert_eq!(all_items.len(), 2);
+
+        let (_, recent_only) =
+            observations_snapshot(None, None, Some(older + Duration::milliseconds(1))).await;
+        assert_eq!(recent_only.len(), 1);
+        assert_eq!(recent_only[0].kind, "obs.new");
+
+        let (_, none_match) =
+            observations_snapshot(None, None, Some(newer + Duration::seconds(1))).await;
+        assert!(none_match.is_empty());
     }
 
     #[tokio::test]

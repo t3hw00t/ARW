@@ -414,7 +414,7 @@ GET /state/observations
 - Summary changed from 'List recent observations' to 'Recent observations from the event bus.'
 - Description changed from 'Return the rolling window of observation events captured from the live event bus.' to 'Recent observations from the event bus.'
 - Response now sets `version`, `ETag: "state-observations-v<version>"`, and `Cache-Control: private, max-age=2` to support conditional polling.
-- Query parameters added: `limit` (most recent N items) and `kind_prefix` (match event kind prefix) for lightweight filtering.
+- Query parameters added: `limit` (most recent N items), `kind_prefix` (match event kind prefix), and `since` (RFC3339, include only envelopes emitted after the timestamp) for lightweight filtering. `arw-cli events observations` now also supports `--since-relative <window>` to derive the timestamp client-side (e.g., last 15 minutes).
 
 GET /state/orchestrator/jobs
 - Summary changed from 'List orchestrator jobs' to 'Orchestrator jobs snapshot.'

@@ -2207,9 +2207,8 @@ paths:
     get:
       tags:
       - State
-      summary: List recent observations
-      description: Return the rolling window of observation events captured from the
-        live event bus.
+      summary: Recent observations from the event bus.
+      description: Recent observations from the event bus.
       operationId: state_observations_doc
       parameters:
       - name: limit
@@ -2225,6 +2224,14 @@ paths:
       - name: kind_prefix
         in: query
         description: Restrict results to event kinds matching this prefix (e.g. `actions.`).
+        required: false
+        schema:
+          type:
+          - string
+          - 'null'
+      - name: since
+        in: query
+        description: Only include observations emitted after this RFC3339 timestamp.
         required: false
         schema:
           type:

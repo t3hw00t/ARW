@@ -392,6 +392,12 @@ struct EventsObservationsArgs {
     /// Filter to observation kinds starting with this prefix (e.g., actions.)
     #[arg(long)]
     kind_prefix: Option<String>,
+    /// Only include observations newer than this RFC3339 timestamp
+    #[arg(long, conflicts_with = "since_relative")]
+    since: Option<String>,
+    /// Relative lookback (e.g., 15m, 2h30m) converted to an absolute `since`
+    #[arg(long, value_name = "WINDOW", conflicts_with = "since")]
+    since_relative: Option<String>,
     /// Emit raw JSON instead of a formatted summary
     #[arg(long)]
     json: bool,
@@ -1623,6 +1629,10 @@ fn cmd_events_observations(args: &EventsObservationsArgs) -> Result<()> {
     {
         params.push(("kind_prefix".into(), prefix.to_string()));
     }
+    let since_resolution = resolve_since_param(args)?;
+    if let Some(ref since_value) = since_resolution.query {
+        params.push(("since".into(), since_value.clone()));
+    }
     if !params.is_empty() {
         req = req.query(&params);
     }
@@ -1661,6 +1671,21 @@ fn cmd_events_observations(args: &EventsObservationsArgs) -> Result<()> {
         items.len(),
         version
     );
+    let mut filters: Vec<String> = Vec::new();
+    if let Some(ref prefix) = args.kind_prefix {
+        if !prefix.trim().is_empty() {
+            filters.push(format!("prefix={}", prefix.trim()));
+        }
+    }
+    if let Some(ref label) = since_resolution.relative_display {
+        filters.push(label.clone());
+    }
+    if let Some(ref label) = since_resolution.display {
+        filters.push(label.clone());
+    }
+    if !filters.is_empty() {
+        println!("Filters: {}", filters.join(", "));
+    }
     if items.is_empty() {
         return Ok(());
     }
@@ -1711,6 +1736,94 @@ fn cmd_events_observations(args: &EventsObservationsArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+struct SinceResolution {
+    query: Option<String>,
+    display: Option<String>,
+    relative_display: Option<String>,
+}
+
+fn resolve_since_param(args: &EventsObservationsArgs) -> Result<SinceResolution> {
+    if let Some(ref raw) = args.since_relative {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            anyhow::bail!("--since-relative requires a value such as 15m or 2h");
+        }
+        let duration = parse_relative_duration(trimmed)?;
+        let ts = (Utc::now() - duration).to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+        return Ok(SinceResolution {
+            query: Some(ts.clone()),
+            display: Some(format!("since>{}", ts)),
+            relative_display: Some(format!("since_relative={}", trimmed)),
+        });
+    }
+
+    if let Some(ref raw) = args.since {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            anyhow::bail!("--since cannot be empty");
+        }
+        return Ok(SinceResolution {
+            query: Some(trimmed.to_string()),
+            display: Some(format!("since>{}", trimmed)),
+            relative_display: None,
+        });
+    }
+
+    Ok(SinceResolution {
+        query: None,
+        display: None,
+        relative_display: None,
+    })
+}
+
+fn parse_relative_duration(input: &str) -> Result<chrono::Duration> {
+    let mut total_seconds: i64 = 0;
+    let mut current = String::new();
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch.is_whitespace() {
+            continue;
+        }
+        if ch.is_ascii_digit() {
+            current.push(ch);
+            continue;
+        }
+        if current.is_empty() {
+            anyhow::bail!("expected digits before unit in '{}'", input);
+        }
+        let value: i64 = current
+            .parse()
+            .map_err(|_| anyhow::anyhow!("invalid number in '{}'", input))?;
+        current.clear();
+        let unit = ch.to_ascii_lowercase();
+        let component = match unit {
+            's' => value,
+            'm' => value
+                .checked_mul(60)
+                .ok_or_else(|| anyhow::anyhow!("duration overflow"))?,
+            'h' => value
+                .checked_mul(3600)
+                .ok_or_else(|| anyhow::anyhow!("duration overflow"))?,
+            'd' => value
+                .checked_mul(86400)
+                .ok_or_else(|| anyhow::anyhow!("duration overflow"))?,
+            _ => anyhow::bail!("unsupported unit '{}' in '{}'", ch, input),
+        };
+        total_seconds = total_seconds
+            .checked_add(component)
+            .ok_or_else(|| anyhow::anyhow!("duration overflow"))?;
+    }
+
+    if !current.is_empty() {
+        anyhow::bail!("missing unit after '{}' in '{}'", current, input);
+    }
+    if total_seconds <= 0 {
+        anyhow::bail!("relative duration must be greater than zero");
+    }
+    Ok(chrono::Duration::seconds(total_seconds))
 }
 
 fn cmd_events_journal(args: &EventsJournalArgs) -> Result<()> {
@@ -2801,6 +2914,19 @@ mod tests {
     use std::fs;
     use std::io::Write;
     use tempfile::TempDir;
+
+    #[test]
+    fn parse_relative_duration_supports_composites() {
+        let duration = parse_relative_duration("1h30m").expect("duration");
+        assert_eq!(duration.num_seconds(), 5400);
+    }
+
+    #[test]
+    fn parse_relative_duration_rejects_invalid_input() {
+        assert!(parse_relative_duration("abc").is_err());
+        assert!(parse_relative_duration("15").is_err());
+        assert!(parse_relative_duration("0s").is_err());
+    }
 
     #[test]
     fn combine_snapshots_includes_matrix_and_supervisor() {
