@@ -145,13 +145,7 @@ trials-preflight:
   bash scripts/trials_preflight.sh
 
 trials-guardrails preset='trial' dry_run='false' base='http://127.0.0.1:8091' token='':
-  bash -ceu '
-    preset="$1"; dry="$2"; base="$3"; token="$4";
-    args=( --preset "$preset" --base "$base" )
-    if [ "$dry" = "true" ]; then args+=( --dry-run ); fi
-    if [ -n "$token" ]; then args+=( --token "$token" ); fi
-    exec bash scripts/trials_guardrails.sh "${args[@]}"
-  ' _ {{preset}} {{dry_run}} {{base}} {{token}}
+	bash -ceu 'preset="$1"; dry="$2"; base="$3"; token="$4"; args=( --preset "$preset" --base "$base" ); if [ "$dry" = "true" ]; then args+=( --dry-run ); fi; if [ -n "$token" ]; then args+=( --token "$token" ); fi; exec bash scripts/trials_guardrails.sh "${args[@]}"' _ {{preset}} {{dry_run}} {{base}} {{token}}
 
 autonomy-rollback *params:
   bash scripts/autonomy_rollback.sh {{params}}

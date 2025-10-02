@@ -3,14 +3,15 @@ title: Runtime Matrix
 ---
 
 # Runtime Matrix
-Updated: 2025-09-29
+Updated: 2025-10-02
 Type: Blueprint
 Status: In progress
 
-ARW seeds a runtime matrix read-model from `runtime.health` events. Today it reports per-node health derived from HTTP telemetry; the full grid of models and hardware remains under active development.
+ARW seeds a runtime matrix read-model from `runtime.health` events. Today it merges per-node HTTP telemetry with runtime registry states and accelerator summaries while the full grid of models and hardware remains under active development.
 
 ## Current state
-- Local node health published every five seconds with latency/error summaries drawn from server metrics.
+- Local node health published every five seconds; payloads now merge HTTP telemetry with the runtime registry snapshot so readiness, degraded/error counts, and restart pressure all travel together.
+- Accelerator rollups highlight CPU/GPU/NPU availability and the state mix per accelerator so operators can spot when a GPU lane degrades or drops offline.
 - Node identifiers resolve from `ARW_NODE_ID` (or fallback hostname) and feed the runtime matrix read-model.
 - Accessibility strings accompany each status so dashboards can surface the same context.
 - Restart budgets surface remaining automatic restarts, the configured window, and the reset horizon so operators can decide when to intervene or widen the budget.
@@ -27,6 +28,6 @@ ARW seeds a runtime matrix read-model from `runtime.health` events. Today it rep
 - Capability-aware leases per cell (gpu, sandbox:<kind>) with TTL expirations.
 - Backends: local llama.cpp, planned ONNX Runtime/vLLM/whisper adapters, and opt-in remote fallbacks.
 
-Telemetry payloads will continue to grow: aggregated HTTP error counts, request totals, derived error rates, and slow-route annotations help dashboards distinguish latency spikes from outright failures while the matrix expands to multi-runtime tracking.
+Telemetry payloads will continue to grow: aggregated HTTP error counts, request totals, derived error rates, slow-route annotations, runtime-state rollups, and accelerator summaries help dashboards distinguish latency spikes from outright failures while the matrix expands to multi-runtime tracking.
 
 See also: Performance & Reasoning Playbook for how the scheduler selects Quick/Balanced/Deep/Verified against SLOs and budgets.

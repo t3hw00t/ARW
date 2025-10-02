@@ -7,7 +7,11 @@ use axum::{
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 
-use crate::{metrics, runtime_matrix, self_model, state_observer, training, world, AppState};
+use crate::{
+    metrics,
+    runtime_matrix::{self, RuntimeMatrixEntry},
+    self_model, state_observer, training, world, AppState,
+};
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -16,6 +20,11 @@ use utoipa::ToSchema;
 pub struct ModelsCatalogResponse {
     #[schema(value_type = Vec<serde_json::Value>)]
     pub items: Vec<Value>,
+}
+
+#[derive(Clone, Serialize, ToSchema)]
+pub struct RuntimeMatrixResponse {
+    pub items: BTreeMap<String, RuntimeMatrixEntry>,
 }
 
 pub(crate) async fn build_episode_rollups(state: &AppState, limit: usize) -> Vec<Value> {
@@ -921,7 +930,7 @@ pub async fn state_models(State(state): State<AppState>) -> impl IntoResponse {
     path = "/state/runtime_matrix",
     tag = "State",
     responses(
-        (status = 200, description = "Runtime matrix", body = serde_json::Value),
+        (status = 200, description = "Runtime matrix", body = RuntimeMatrixResponse),
         (status = 401, description = "Unauthorized", body = serde_json::Value)
     )
 )]
@@ -937,7 +946,8 @@ pub async fn state_runtime_matrix(
             .into_response();
     }
     let items = runtime_matrix::snapshot().await;
-    Json(json!({"items": items})).into_response()
+    let items: BTreeMap<String, RuntimeMatrixEntry> = items.into_iter().collect();
+    Json(RuntimeMatrixResponse { items }).into_response()
 }
 
 /// Runtime supervisor snapshot.
