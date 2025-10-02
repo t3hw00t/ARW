@@ -196,7 +196,7 @@ Remote Access & TLS
 - [Kernel] Setup wizards to pick domain/email, validate DNS, and dry‑run cert issuance
 
 Observability & Eventing
-- [Kernel] Event journal: reader endpoint (tail N) and topic‑filtered consumers across workers/connectors
+- [Kernel] Event journal: reader endpoint (tail N) and topic‑filtered consumers across workers/connectors — done (GET /admin/events/journal with prefix filters; connectors consume via subscribe_filtered; `arw-cli events journal --follow` tails from the CLI)
 - [Kernel] Metrics registry with histograms; wire to /metrics [t-250911230320-8615]
 - [Kernel] Docs: surface route metrics/events in docs and status page — done
 - [Pack: Collaboration] RPU trust: watcher + endpoints + `rpu.trust.changed` event + Prometheus gauges — done

@@ -6,7 +6,7 @@ use clap::CommandFactory;
 use clap::{Args, Parser, Subcommand};
 use reqwest::blocking::Client;
 use serde_json::{json, Value as JsonValue};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tracing_subscriber::{fmt, EnvFilter};
@@ -53,6 +53,11 @@ enum Commands {
     Runtime {
         #[command(subcommand)]
         cmd: RuntimeCmd,
+    },
+    /// Event journal helpers
+    Events {
+        #[command(subcommand)]
+        cmd: EventsCmd,
     },
 }
 
@@ -247,6 +252,12 @@ enum RuntimeCmd {
     Restore(RuntimeRestoreArgs),
 }
 
+#[derive(Subcommand)]
+enum EventsCmd {
+    /// Tail the journal via /admin/events/journal
+    Journal(EventsJournalArgs),
+}
+
 #[derive(Args)]
 struct RuntimeBaseArgs {
     /// Base URL of the service
@@ -284,6 +295,43 @@ struct RuntimeRestoreArgs {
     /// Optional preset name to pass through to the supervisor
     #[arg(long)]
     preset: Option<String>,
+}
+
+#[derive(Args)]
+struct EventsJournalArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+    /// Maximum number of entries to request (server caps at 1000)
+    #[arg(long, default_value_t = 200)]
+    limit: usize,
+    /// CSV of event prefixes to include (dot.case)
+    #[arg(long)]
+    prefix: Option<String>,
+    /// Emit raw JSON instead of text summary
+    #[arg(long, conflicts_with = "follow")]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+    /// Show journal source files in text mode
+    #[arg(long)]
+    show_sources: bool,
+    /// Poll continuously for new entries
+    #[arg(long)]
+    follow: bool,
+    /// Poll interval in seconds when following (default 5)
+    #[arg(long, default_value_t = 5, requires = "follow")]
+    interval: u64,
+    /// Skip entries at or before this RFC3339 timestamp on the first fetch
+    #[arg(long = "after")]
+    after_cursor: Option<String>,
 }
 
 #[derive(Args)]
@@ -520,6 +568,14 @@ fn main() {
             }
             RuntimeCmd::Restore(args) => {
                 if let Err(e) = cmd_runtime_restore(&args) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
+            }
+        },
+        Some(Commands::Events { cmd }) => match cmd {
+            EventsCmd::Journal(args) => {
+                if let Err(e) = cmd_events_journal(&args) {
                     eprintln!("{}", e);
                     std::process::exit(1);
                 }
@@ -803,6 +859,312 @@ fn cmd_runtime_restore(args: &RuntimeRestoreArgs) -> Result<()> {
             body
         )),
     }
+}
+
+fn cmd_events_journal(args: &EventsJournalArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.trim_end_matches('/');
+
+    let after_time = if let Some(ref cursor) = args.after_cursor {
+        match chrono::DateTime::parse_from_rfc3339(cursor) {
+            Ok(dt) => Some(dt.with_timezone(&chrono::Utc)),
+            Err(_) => {
+                anyhow::bail!("--after must be an RFC3339 timestamp (e.g. 2025-10-02T17:15:00Z)");
+            }
+        }
+    } else {
+        None
+    };
+
+    let mut body = fetch_journal_snapshot(
+        &client,
+        base,
+        token.as_deref(),
+        args.limit,
+        args.prefix.as_deref(),
+    )?;
+
+    if args.json {
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string())
+            );
+        } else {
+            println!("{}", body);
+        }
+        return Ok(());
+    }
+
+    let mut first_pass = true;
+    let mut state = if args.follow {
+        Some(JournalPrintState::new(args.limit.max(512)))
+    } else {
+        None
+    };
+
+    loop {
+        let apply_after = if first_pass {
+            after_time.as_ref()
+        } else {
+            None
+        };
+        let _printed = render_journal_text(
+            &body,
+            args.show_sources,
+            first_pass,
+            apply_after,
+            state.as_mut(),
+        );
+        if !args.follow {
+            return Ok(());
+        }
+        first_pass = false;
+        std::thread::sleep(Duration::from_secs(args.interval.max(1)));
+        body = fetch_journal_snapshot(
+            &client,
+            base,
+            token.as_deref(),
+            args.limit,
+            args.prefix.as_deref(),
+        )?;
+    }
+}
+
+fn fetch_journal_snapshot(
+    client: &Client,
+    base: &str,
+    token: Option<&str>,
+    limit: usize,
+    prefix: Option<&str>,
+) -> Result<JsonValue> {
+    let url = format!("{}/admin/events/journal", base);
+    let mut params: Vec<(String, String)> = vec![("limit".into(), limit.to_string())];
+    if let Some(pref) = prefix {
+        let trimmed = pref.trim();
+        if !trimmed.is_empty() {
+            params.push(("prefix".into(), trimmed.to_string()));
+        }
+    }
+    let mut req = client.get(&url);
+    if !params.is_empty() {
+        req = req.query(&params);
+    }
+    req = with_admin_headers(req, token);
+    let resp = req.send().with_context(|| format!("requesting {}", url))?;
+    let status = resp.status();
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        anyhow::bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if status == reqwest::StatusCode::NOT_FOUND {
+        anyhow::bail!("journal disabled: set ARW_EVENTS_JOURNAL on the server and restart");
+    }
+    let body: JsonValue = resp.json().context("parsing journal response")?;
+    if !status.is_success() {
+        anyhow::bail!("journal request failed: {} {}", status, body);
+    }
+    Ok(body)
+}
+
+fn render_journal_text(
+    body: &JsonValue,
+    show_sources: bool,
+    first_pass: bool,
+    after: Option<&chrono::DateTime<chrono::Utc>>,
+    mut state: Option<&mut JournalPrintState>,
+) -> usize {
+    let limit = body
+        .get("limit")
+        .and_then(|v| v.as_u64())
+        .unwrap_or_default();
+    let total = body
+        .get("total_matched")
+        .and_then(|v| v.as_u64())
+        .unwrap_or_default();
+    let truncated = body
+        .get("truncated")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    let skipped = body
+        .get("skipped_lines")
+        .and_then(|v| v.as_u64())
+        .unwrap_or_default();
+    let prefixes: Vec<String> = body
+        .get("prefixes")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+    let entries = body
+        .get("entries")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let source_files: Vec<String> = body
+        .get("source_files")
+        .and_then(|v| v.as_array())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+
+    let mut printable: Vec<(JsonValue, String)> = Vec::new();
+    for entry in entries {
+        let key = entry_identity(&entry);
+        if let Some(st) = state.as_ref() {
+            if st.seen(&key) {
+                continue;
+            }
+        }
+        if let Some(after_ts) = after {
+            if let Some(entry_ts) = entry_timestamp(&entry) {
+                if entry_ts <= *after_ts {
+                    if let Some(st) = state.as_mut() {
+                        st.record(key);
+                    }
+                    continue;
+                }
+            }
+        }
+        printable.push((entry, key));
+    }
+
+    if first_pass {
+        let prefix_label = if prefixes.is_empty() {
+            "(none)".to_string()
+        } else {
+            prefixes.join(", ")
+        };
+        println!(
+            "Journal entries: returned {} (limit {}), total matches {}, truncated: {}, skipped lines {}",
+            printable.len(),
+            limit,
+            total,
+            truncated,
+            skipped
+        );
+        println!("Prefixes: {}", prefix_label);
+        if show_sources && !source_files.is_empty() {
+            println!("Sources:");
+            for path in source_files {
+                println!("  {}", path);
+            }
+        }
+        if printable.is_empty() {
+            println!("No journal entries matched the query.");
+            return 0;
+        }
+    } else if printable.is_empty() {
+        return 0;
+    } else {
+        let now = chrono::Local::now().format("%Y-%m-%d %H:%M:%S");
+        println!("-- poll @ {}: {} new entries --", now, printable.len());
+    }
+
+    let mut new_count = 0usize;
+    for (entry, key) in printable {
+        let time = entry.get("time").and_then(|v| v.as_str()).unwrap_or("-");
+        let kind = entry
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .unwrap_or("unknown");
+        let payload = entry.get("payload").cloned().unwrap_or(JsonValue::Null);
+        let payload_str = serde_json::to_string(&payload).unwrap_or_else(|_| "null".into());
+        let preview = truncate_payload(&payload_str, 160);
+        println!("[{}] {}", time, kind);
+        println!("  payload: {}", preview);
+        if let Some(policy) = entry.get("policy") {
+            if !policy.is_null() {
+                let policy_str = serde_json::to_string(policy).unwrap_or_else(|_| "{}".into());
+                println!("  policy: {}", truncate_payload(&policy_str, 120));
+            }
+        }
+        if let Some(ce) = entry.get("ce") {
+            if !ce.is_null() {
+                let ce_str = serde_json::to_string(ce).unwrap_or_else(|_| "{}".into());
+                println!("  ce: {}", truncate_payload(&ce_str, 120));
+            }
+        }
+        if let Some(st) = state.as_mut() {
+            st.record(key);
+        }
+        new_count += 1;
+    }
+
+    new_count
+}
+
+struct JournalPrintState {
+    seen: HashSet<String>,
+    order: VecDeque<String>,
+    cap: usize,
+}
+
+impl JournalPrintState {
+    fn new(cap: usize) -> Self {
+        Self {
+            seen: HashSet::new(),
+            order: VecDeque::new(),
+            cap: cap.max(64),
+        }
+    }
+
+    fn seen(&self, key: &str) -> bool {
+        self.seen.contains(key)
+    }
+
+    fn record(&mut self, key: String) {
+        if self.seen.insert(key.clone()) {
+            self.order.push_back(key);
+            if self.order.len() > self.cap {
+                if let Some(old) = self.order.pop_front() {
+                    self.seen.remove(&old);
+                }
+            }
+        }
+    }
+}
+
+fn entry_identity(entry: &JsonValue) -> String {
+    let payload = entry.get("payload").cloned().unwrap_or(JsonValue::Null);
+    let policy = entry.get("policy").cloned().unwrap_or(JsonValue::Null);
+    let ce = entry.get("ce").cloned().unwrap_or(JsonValue::Null);
+    format!(
+        "{}|{}|{}|{}|{}",
+        entry.get("time").and_then(|v| v.as_str()).unwrap_or(""),
+        entry.get("kind").and_then(|v| v.as_str()).unwrap_or(""),
+        serde_json::to_string(&payload).unwrap_or_default(),
+        serde_json::to_string(&policy).unwrap_or_default(),
+        serde_json::to_string(&ce).unwrap_or_default()
+    )
+}
+
+fn entry_timestamp(entry: &JsonValue) -> Option<chrono::DateTime<chrono::Utc>> {
+    let time_str = entry.get("time")?.as_str()?;
+    chrono::DateTime::parse_from_rfc3339(time_str)
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .ok()
+}
+
+fn truncate_payload(input: &str, max_chars: usize) -> String {
+    let mut out = String::new();
+    for (idx, ch) in input.chars().enumerate() {
+        if idx >= max_chars {
+            out.push_str("...");
+            return out;
+        }
+        out.push(ch);
+    }
+    out
 }
 
 fn sanitize_lang_fragment_cli(lang: &str) -> String {

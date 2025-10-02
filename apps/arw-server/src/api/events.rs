@@ -1,11 +1,15 @@
-use axum::http::HeaderMap;
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::{
     extract::{Query, State},
     response::sse::{Event as SseEvent, KeepAlive, Sse},
+    Json,
 };
 use chrono::SecondsFormat;
+use serde::{Deserialize, Serialize};
+use tokio::task::spawn_blocking;
 use tokio_stream::StreamExt as _;
+use utoipa::ToSchema;
 use uuid::Uuid;
 // no local json macro use here
 
@@ -234,6 +238,202 @@ pub async fn events_sse(
         .headers_mut()
         .insert("x-request-id", request_id.parse().unwrap());
     response
+}
+
+#[derive(Debug, Deserialize, ToSchema, Default)]
+#[serde(default)]
+pub struct EventsJournalQuery {
+    /// Maximum number of entries to return (default 200, max 1000).
+    pub limit: Option<usize>,
+    /// Optional CSV of event kind prefixes to include (dot.case).
+    pub prefix: Option<String>,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct EventsJournalResponse {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[schema(nullable, value_type = Option<Vec<String>>)]
+    pub prefixes: Option<Vec<String>>,
+    pub limit: usize,
+    pub total_matched: usize,
+    pub truncated: bool,
+    pub skipped_lines: usize,
+    pub source_files: Vec<String>,
+    #[schema(value_type = Vec<serde_json::Value>)]
+    pub entries: Vec<arw_events::Envelope>,
+}
+
+#[utoipa::path(
+    get,
+    path = "/admin/events/journal",
+    tag = "Events",
+    operation_id = "events_journal_tail",
+    params(
+        ("limit" = Option<usize>, Query, description = "Max entries to return (default 200, max 1000)"),
+        ("prefix" = Option<String>, Query, description = "CSV of event kind prefixes to include")
+    ),
+    responses(
+        (status = 200, description = "Tail of journal entries", body = EventsJournalResponse),
+        (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails),
+        (status = 404, description = "Journal disabled", body = arw_protocol::ProblemDetails),
+        (status = 500, description = "Journal read failed", body = arw_protocol::ProblemDetails)
+    )
+)]
+pub async fn events_journal(
+    State(state): State<AppState>,
+    Query(query): Query<EventsJournalQuery>,
+    headers: HeaderMap,
+) -> impl IntoResponse {
+    if !crate::admin_ok(&headers) {
+        return crate::responses::unauthorized(None);
+    }
+    let Some(journal_path) = state.bus().journal_path() else {
+        return crate::responses::problem_response(
+            StatusCode::NOT_FOUND,
+            "Journal Disabled",
+            Some("Set ARW_EVENTS_JOURNAL to enable event journaling."),
+        );
+    };
+    let limit = query.limit.unwrap_or(200).min(1000);
+    let prefixes: Vec<String> = query
+        .prefix
+        .as_ref()
+        .map(|s| {
+            s.split(',')
+                .map(|p| p.trim())
+                .filter(|p| !p.is_empty())
+                .map(|p| p.to_ascii_lowercase())
+                .collect()
+        })
+        .unwrap_or_default();
+    let prefixes_clone = prefixes.clone();
+    let journal_result =
+        spawn_blocking(move || read_journal_tail(journal_path, limit, prefixes_clone)).await;
+    match journal_result {
+        Ok(Ok(result)) => {
+            let truncated = result.total_matched > result.entries.len();
+            let response = EventsJournalResponse {
+                prefixes: if prefixes.is_empty() {
+                    None
+                } else {
+                    Some(prefixes)
+                },
+                limit,
+                total_matched: result.total_matched,
+                truncated,
+                skipped_lines: result.skipped_lines,
+                source_files: result.source_files,
+                entries: result.entries,
+            };
+            (StatusCode::OK, Json(response)).into_response()
+        }
+        Ok(Err(err)) => crate::responses::problem_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Journal Read Failed",
+            Some(&err),
+        ),
+        Err(join_err) => crate::responses::problem_response(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "Journal Read Failed",
+            Some(&format!("blocking task panicked: {}", join_err)),
+        ),
+    }
+}
+
+struct JournalTail {
+    entries: Vec<arw_events::Envelope>,
+    source_files: Vec<String>,
+    total_matched: usize,
+    skipped_lines: usize,
+}
+
+fn read_journal_tail(
+    path: std::path::PathBuf,
+    limit: usize,
+    prefixes: Vec<String>,
+) -> Result<JournalTail, String> {
+    use std::collections::VecDeque;
+    use std::fs::File;
+    use std::io::{BufRead, BufReader};
+
+    let mut ordered_paths: Vec<std::path::PathBuf> = Vec::with_capacity(4);
+    for idx in (1..=3).rev() {
+        let candidate = path.with_extension(format!("log.{}", idx));
+        if candidate.exists() {
+            ordered_paths.push(candidate);
+        }
+    }
+    if path.exists() {
+        ordered_paths.push(path.clone());
+    }
+    if ordered_paths.is_empty() {
+        return Ok(JournalTail {
+            entries: Vec::new(),
+            source_files: Vec::new(),
+            total_matched: 0,
+            skipped_lines: 0,
+        });
+    }
+    let source_files: Vec<String> = ordered_paths
+        .iter()
+        .map(|p| p.display().to_string())
+        .collect();
+    if limit == 0 {
+        return Ok(JournalTail {
+            entries: Vec::new(),
+            source_files,
+            total_matched: 0,
+            skipped_lines: 0,
+        });
+    }
+    let mut buffer = VecDeque::with_capacity(limit);
+    let mut matched = 0usize;
+    let mut skipped = 0usize;
+    for path in &ordered_paths {
+        let file = match File::open(path) {
+            Ok(f) => f,
+            Err(err) => {
+                skipped += 1;
+                tracing::debug!("events_journal: failed to open {:?}: {}", path, err);
+                continue;
+            }
+        };
+        let reader = BufReader::new(file);
+        for line in reader.lines() {
+            let line = match line {
+                Ok(l) => l,
+                Err(_) => {
+                    skipped += 1;
+                    continue;
+                }
+            };
+            if line.trim().is_empty() {
+                continue;
+            }
+            let env: arw_events::Envelope = match serde_json::from_str(&line) {
+                Ok(env) => env,
+                Err(_) => {
+                    skipped += 1;
+                    continue;
+                }
+            };
+            if !prefixes.is_empty() && !prefixes.iter().any(|p| env.kind.starts_with(p)) {
+                continue;
+            }
+            matched += 1;
+            if buffer.len() == limit {
+                buffer.pop_front();
+            }
+            buffer.push_back(env);
+        }
+    }
+
+    Ok(JournalTail {
+        entries: buffer.into_iter().collect(),
+        source_files,
+        total_matched: matched,
+        skipped_lines: skipped,
+    })
 }
 
 #[cfg(test)]
@@ -747,5 +947,76 @@ mod tests {
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn events_journal_tails_recent_entries() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let journal_path = temp.path().join("events.jsonl");
+        ctx.env.set("ARW_DEBUG", "1");
+        ctx.env
+            .set("ARW_EVENTS_JOURNAL", journal_path.display().to_string());
+
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let bus = state.bus();
+        bus.publish("test.event", &json!({"msg": "first"}));
+        bus.publish("test.other", &json!({"msg": "second"}));
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let response = events_journal(
+            State(state.clone()),
+            Query(EventsJournalQuery {
+                limit: Some(1),
+                prefix: None,
+            }),
+            HeaderMap::new(),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+
+        let body_bytes = response
+            .into_body()
+            .collect()
+            .await
+            .expect("collect body")
+            .to_bytes();
+        let body_json: Value = serde_json::from_slice(&body_bytes).expect("json body");
+        let entries = body_json["entries"].as_array().expect("entries array");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0]["kind"].as_str(), Some("test.other"));
+        assert!(body_json["total_matched"].as_u64().unwrap_or(0) >= 2);
+        assert!(body_json["truncated"].as_bool().unwrap_or(false));
+
+        let response_prefix = events_journal(
+            State(state),
+            Query(EventsJournalQuery {
+                limit: Some(5),
+                prefix: Some("test.event".into()),
+            }),
+            HeaderMap::new(),
+        )
+        .await
+        .into_response();
+        assert_eq!(response_prefix.status(), StatusCode::OK);
+        let bytes = response_prefix
+            .into_body()
+            .collect()
+            .await
+            .expect("collect body")
+            .to_bytes();
+        let body_json: Value = serde_json::from_slice(&bytes).expect("json body");
+        let entries = body_json["entries"].as_array().expect("entries array");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0]["kind"].as_str(), Some("test.event"));
+        assert_eq!(body_json["prefixes"].as_array().map(|a| a.len()), Some(1));
+        assert!(body_json["total_matched"].as_u64().unwrap_or(0) >= 1);
+        assert!(!body_json["truncated"].as_bool().unwrap());
+
+        ctx.env.remove("ARW_EVENTS_JOURNAL");
+        ctx.env.remove("ARW_DEBUG");
     }
 }

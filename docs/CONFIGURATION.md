@@ -109,8 +109,10 @@ Notes
 - `ARW_DOCS_URL`: URL to your hosted docs for UI links. Appears in `GET /about` as `docs_url` so clients can discover your manual.
 - Debug UI is accessible at `/admin/debug` when enabled (`ARW_DEBUG=1`).
 - `ARW_EVENTS_SSE_MODE`: format for SSE `data` payloads. `envelope` (default) emits the ARW envelope `{ time, kind, payload, ce }`. `ce-structured` emits CloudEvents 1.0 structured JSON with `data` holding the payload.
- - `ARW_EVENTS_JOURNAL`: optional path to a JSONL events journal for local replay/inspection.
+- `ARW_EVENTS_JOURNAL`: optional path to a JSONL events journal for local replay/inspection.
 - `ARW_EVENTS_JOURNAL_MAX_MB`: rotate/journal size cap in MiB (default `20`).
+- Inspect recent entries via `GET /admin/events/journal?limit=200` (requires admin auth). Use `prefix=kind.` CSV filters to scope to specific event families.
+- CLI mirror: `arw-cli events journal --limit 200 --prefix memory.` prints a summary without crafting curl calls (`--json` yields raw response; add `--follow --interval 3` to poll continuously; `--after 2025-10-02T17:15:00Z` skips older entries on the first fetch).
 - `ARW_REHYDRATE_FILE_HEAD_KB`: max head bytes when rehydrating local files via `/context/rehydrate` (default `64`).
 
 ## Observability & Logs

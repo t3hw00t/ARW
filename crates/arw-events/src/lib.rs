@@ -203,6 +203,9 @@ impl LocalBus {
         let take = n.min(len);
         rb.iter().skip(len.saturating_sub(take)).cloned().collect()
     }
+    pub fn journal_path(&self) -> Option<PathBuf> {
+        self.journal.clone()
+    }
 }
 
 impl EventBus for LocalBus {
@@ -375,6 +378,9 @@ impl Bus {
         capacity: Option<usize>,
     ) -> broadcast::Receiver<Envelope> {
         self.inner.subscribe_filtered(prefixes, capacity)
+    }
+    pub fn journal_path(&self) -> Option<PathBuf> {
+        self.inner.journal_path()
     }
 }
 

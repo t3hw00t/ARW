@@ -141,6 +141,7 @@ pub(crate) mod paths {
     pub const HEALTHZ: &str = "/healthz";
     pub const ABOUT: &str = "/about";
     pub const EVENTS: &str = "/events";
+    pub const ADMIN_EVENTS_JOURNAL: &str = "/admin/events/journal";
     pub const METRICS: &str = "/metrics";
     pub const ACTIONS: &str = "/actions";
     pub const ACTIONS_ID: &str = "/actions/:id";
@@ -324,6 +325,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         paths::EVENTS,
         api::events::events_sse,
         Some(Stability::Stable),
+    );
+    builder.route_get(
+        paths::ADMIN_EVENTS_JOURNAL,
+        api::events::events_journal,
+        Some(Stability::Beta),
     );
     builder.route_get(
         paths::METRICS,

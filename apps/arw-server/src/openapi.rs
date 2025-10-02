@@ -89,6 +89,7 @@ pub struct AboutResponse {
         crate::api::state::state_world_select,
         crate::api::state::state_guardrails_metrics,
         crate::api::events::events_sse,
+        crate::api::events::events_journal,
         crate::api::models::models_summary,
         crate::api::models::models_list,
         crate::api::models::models_refresh,
