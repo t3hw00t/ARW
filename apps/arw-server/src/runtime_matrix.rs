@@ -466,11 +466,11 @@ async fn build_local_health_payload(state: &AppState) -> Option<RuntimeMatrixEnt
             enabled: state.kernel_enabled(),
         },
         bus: RuntimeMatrixBus {
-            published: bus_stats.published as u64,
-            delivered: bus_stats.delivered as u64,
+            published: bus_stats.published,
+            delivered: bus_stats.delivered,
             receivers: bus_stats.receivers as u64,
-            lagged: bus_stats.lagged as u64,
-            no_receivers: bus_stats.no_receivers as u64,
+            lagged: bus_stats.lagged,
+            no_receivers: bus_stats.no_receivers,
         },
         events: RuntimeMatrixEvents {
             total: metrics.events.total,

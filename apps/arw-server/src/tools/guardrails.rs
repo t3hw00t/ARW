@@ -87,8 +87,7 @@ async fn persist_guardrail_meta(meta: &GuardrailMeta) -> std::io::Result<()> {
     if let Some(parent) = path.parent() {
         tokio::fs::create_dir_all(parent).await?;
     }
-    let bytes = serde_json::to_vec_pretty(meta)
-        .map_err(|err| std::io::Error::new(std::io::ErrorKind::Other, err))?;
+    let bytes = serde_json::to_vec_pretty(meta).map_err(std::io::Error::other)?;
     let tmp = path.with_extension("tmp");
     tokio::fs::write(&tmp, &bytes).await?;
     if let Err(_err) = tokio::fs::rename(&tmp, &path).await {
@@ -361,6 +360,21 @@ fn guardrails_local(text: &str) -> Result<Value, ToolError> {
     }))
 }
 
+fn now_millis() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .ok()
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
+}
+
+fn random_jitter(cap: u64) -> u64 {
+    if cap == 0 {
+        return 0;
+    }
+    now_millis() % cap.max(1)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -405,19 +419,4 @@ mod tests {
         assert!(last.get("applied_ms").is_some());
         assert!(last.get("applied_iso").is_some());
     }
-}
-
-fn now_millis() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .ok()
-        .map(|d| d.as_millis() as u64)
-        .unwrap_or(0)
-}
-
-fn random_jitter(cap: u64) -> u64 {
-    if cap == 0 {
-        return 0;
-    }
-    now_millis() % cap.max(1)
 }

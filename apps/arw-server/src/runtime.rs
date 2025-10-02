@@ -146,6 +146,7 @@ impl RuntimeRegistry {
         }
     }
 
+    #[cfg(test)]
     pub fn new(bus: Bus) -> Self {
         Self::new_internal(bus, None, RestartBudgetConfig::from_env())
     }
@@ -688,17 +689,12 @@ mod tests {
         assert_eq!(denied.budget.remaining, 0);
 
         let mut saw_restore_request = false;
-        loop {
-            match tokio::time::timeout(Duration::from_millis(200), rx.recv()).await {
-                Ok(Ok(env)) => {
-                    if env.kind == TOPIC_RUNTIME_RESTORE_REQUESTED
-                        && env.payload["runtime"] == "runtime-budget"
-                    {
-                        saw_restore_request = true;
-                        break;
-                    }
-                }
-                _ => break,
+        while let Ok(Ok(env)) = tokio::time::timeout(Duration::from_millis(200), rx.recv()).await {
+            if env.kind == TOPIC_RUNTIME_RESTORE_REQUESTED
+                && env.payload["runtime"] == "runtime-budget"
+            {
+                saw_restore_request = true;
+                break;
             }
         }
         assert!(

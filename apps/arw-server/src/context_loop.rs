@@ -1201,8 +1201,8 @@ pub mod harness {
 
     #[derive(Debug, Clone)]
     pub enum ScenarioStep {
-        Success(ScenarioSuccess),
-        Error(ScenarioError),
+        Success(Box<ScenarioSuccess>),
+        Error(Box<ScenarioError>),
     }
 
     #[derive(Debug, Clone)]
@@ -1255,6 +1255,7 @@ pub mod harness {
             for (iteration, step) in steps.into_iter().enumerate().take(self.max_iterations) {
                 match step {
                     ScenarioStep::Success(success) => {
+                        let success = success.as_ref();
                         let spec_used = spec.clone();
                         let fixture = success.fixture.clone();
                         let ws = fixture.build();
@@ -1304,7 +1305,7 @@ pub mod harness {
 
                         if !verdict.needs_more || next_spec_candidate.is_none() {
                             exit = ScenarioExit::Completed {
-                                working_set: fixture,
+                                working_set: Box::new(fixture),
                             };
                             break;
                         }
@@ -1313,6 +1314,7 @@ pub mod harness {
                         spec.normalize();
                     }
                     ScenarioStep::Error(error) => {
+                        let error = error.as_ref();
                         let spec_used = error.spec_override.clone().unwrap_or_else(|| spec.clone());
                         let base_duration = error.duration_ms.unwrap_or(52.0);
                         let duration_ms = if let (Some(cfg), Some(r_ref)) = (mc, rng.as_mut()) {
@@ -1336,7 +1338,7 @@ pub mod harness {
                         events.push(ContextIterationEvent::Error { iteration, payload });
                         final_spec = spec_used;
                         exit = ScenarioExit::Error {
-                            detail: error.detail,
+                            detail: error.detail.clone(),
                         };
                         break;
                     }
@@ -1356,7 +1358,7 @@ pub mod harness {
 
     #[derive(Debug, Clone)]
     pub enum ScenarioExit {
-        Completed { working_set: WorkingSetFixture },
+        Completed { working_set: Box<WorkingSetFixture> },
         Error { detail: String },
         Exhausted,
     }
@@ -1472,8 +1474,8 @@ pub mod harness {
                 name: "two-pass".into(),
                 base_spec: spec.clone(),
                 steps: vec![
-                    ScenarioStep::Success(success_first),
-                    ScenarioStep::Success(success_second),
+                    ScenarioStep::Success(Box::new(success_first)),
+                    ScenarioStep::Success(Box::new(success_second)),
                 ],
                 max_iterations: 6,
                 corr_id: Some("corr-001".into()),
@@ -1508,7 +1510,7 @@ pub mod harness {
             let scenario = Scenario {
                 name: "monte".into(),
                 base_spec: base_spec(),
-                steps: vec![ScenarioStep::Success(success)],
+                steps: vec![ScenarioStep::Success(Box::new(success))],
                 max_iterations: 4,
                 corr_id: None,
                 monte_carlo: Some(MonteCarloSpec {
@@ -1542,7 +1544,7 @@ pub mod harness {
             let scenario = Scenario {
                 name: "exhaust".into(),
                 base_spec: base_spec(),
-                steps: vec![ScenarioStep::Success(success)],
+                steps: vec![ScenarioStep::Success(Box::new(success))],
                 max_iterations: 1,
                 corr_id: None,
                 monte_carlo: None,

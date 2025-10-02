@@ -74,8 +74,8 @@ let scenario = ctx::Scenario {
     name: "two-pass".into(),
     base_spec,
     steps: vec![
-        ctx::ScenarioStep::Success(first_pass),
-        ctx::ScenarioStep::Success(second_pass),
+        ctx::ScenarioStep::Success(Box::new(first_pass)),
+        ctx::ScenarioStep::Success(Box::new(second_pass)),
     ],
     max_iterations: 6,
     corr_id: Some("demo-corr".into()),

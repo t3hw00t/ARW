@@ -214,8 +214,10 @@ mod tests {
 
     #[test]
     fn produces_latency_hint() {
-        let mut features = Features::default();
-        features.auto_apply_enabled = true;
+        let mut features = Features {
+            auto_apply_enabled: true,
+            ..Features::default()
+        };
         features.routes.insert(
             "/chat".into(),
             RouteStat {
@@ -238,9 +240,11 @@ mod tests {
 
     #[test]
     fn suggests_governor_hints_when_overloaded() {
-        let mut features = Features::default();
-        features.current_profile = Some("balance".into());
-        features.bus_lagged = 320;
+        let mut features = Features {
+            current_profile: Some("balance".into()),
+            bus_lagged: 320,
+            ..Features::default()
+        };
         features.routes.insert(
             "/chat".into(),
             RouteStat {
