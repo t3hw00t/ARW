@@ -362,9 +362,22 @@
       ],
       "env": [
         "ARW_LLAMA_URL",
+        "ARW_LLAMA_N_PREDICT",
+        "ARW_LLAMA_TOP_P",
+        "ARW_LLAMA_TOP_K",
+        "ARW_LLAMA_MIN_P",
+        "ARW_LLAMA_REPEAT_PENALTY",
+        "ARW_LLAMA_STOP",
         "ARW_OPENAI_API_KEY",
         "ARW_OPENAI_BASE_URL",
-        "ARW_OPENAI_MODEL"
+        "ARW_OPENAI_MODEL",
+        "ARW_OPENAI_MAX_TOKENS",
+        "ARW_OPENAI_TOP_P",
+        "ARW_OPENAI_FREQUENCY_PENALTY",
+        "ARW_OPENAI_PRESENCE_PENALTY",
+        "ARW_OPENAI_STOP",
+        "ARW_CHAT_DEFAULT_TEMPERATURE",
+        "ARW_CHAT_DEFAULT_VOTE_K"
       ]
     },
     {

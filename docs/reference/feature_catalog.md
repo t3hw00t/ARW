@@ -69,7 +69,7 @@ _Keep loops under budget with shared event vocabulary and debugging surfaces._
   Debug chat UI surface with synthetic replies or llama/OpenAI backends; planner hints, optional self-consistency and verifier (gated).
   _Routes_: `GET /admin/chat`, `POST /admin/chat/send`, `POST /admin/chat/clear`, `GET /admin/chat/status`
   _Signals_: `chat.message`, `chat.planner`, `chat.probe`
-  _Env_: `ARW_LLAMA_URL`, `ARW_OPENAI_API_KEY`, `ARW_OPENAI_BASE_URL`, `ARW_OPENAI_MODEL`
+  _Env_: `ARW_LLAMA_URL`, `ARW_LLAMA_N_PREDICT`, `ARW_LLAMA_TOP_P`, `ARW_LLAMA_TOP_K`, `ARW_LLAMA_MIN_P`, `ARW_LLAMA_REPEAT_PENALTY`, `ARW_LLAMA_STOP`, `ARW_OPENAI_API_KEY`, …
   _Source_: [apps/arw-server/src/context_loop.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/context_loop.rs), [apps/arw-server/src/api/context.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/context.rs)
 
 - **Screenshot Capture Pipeline** · runtime / admin / auxiliary / complete

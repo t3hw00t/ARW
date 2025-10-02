@@ -33,10 +33,19 @@ export ARW_LLAMA_URL=http://127.0.0.1:8080
 The service will POST to `ARW_LLAMA_URL/completion` with prompt caching enabled for KV/prefix reuse:
 
 ```json
-{ "prompt": "...", "n_predict": 128, "cache_prompt": true, "temperature": 0.7 }
+{ "prompt": "...", "n_predict": 256, "cache_prompt": true, "temperature": 0.7 }
 ```
 
 Tip: run llama.cpp with a persistent prompt cache file (e.g., `--prompt-cache llama.prompt.bin`) to reuse KV across sessions.
+
+Optional tuning knobs (forwarded verbatim when set):
+
+- `ARW_LLAMA_N_PREDICT` (`1-8192`)
+- `ARW_LLAMA_TOP_P` (`0.0-1.0`)
+- `ARW_LLAMA_TOP_K` (`1-5000`)
+- `ARW_LLAMA_MIN_P` (`0.0-1.0`)
+- `ARW_LLAMA_REPEAT_PENALTY` (`0.0-4.0`)
+- `ARW_LLAMA_STOP` (comma/newline separated stop sequences)
 
 If the server returns `{ "content": "..." }`, ARW uses it. It also supports an OpenAI-like `{ choices[0].message.content }` fallback shape.
 
@@ -50,6 +59,8 @@ Environment variables:
 - `ARW_OPENAI_BASE_URL` (optional, default `https://api.openai.com`)
 - `ARW_OPENAI_MODEL` (optional, default `gpt-4o-mini`)
 - `ARW_CHAT_SYSTEM_PROMPT` (optional, default `You are a helpful assistant.`)
+- `ARW_OPENAI_MAX_TOKENS`, `ARW_OPENAI_TOP_P`, `ARW_OPENAI_FREQUENCY_PENALTY`, `ARW_OPENAI_PRESENCE_PENALTY`, `ARW_OPENAI_STOP` (optional overrides)
+- `ARW_CHAT_DEFAULT_TEMPERATURE`, `ARW_CHAT_DEFAULT_VOTE_K` (override defaults when the request omits `temperature`/`vote_k`)
 
 Example:
 
@@ -72,6 +83,8 @@ Optional fields that ARW forwards:
 
 - `temperature` — overrides the sampling temperature (default `0.2`).
 - `vote_k` — enables server-side self-consistency by sampling multiple candidates; ARW clamps this to `1..=5`.
+- Environment overrides listed above — forwarded verbatim when present.
+- When a request omits `temperature`/`vote_k`, `ARW_CHAT_DEFAULT_TEMPERATURE` and `ARW_CHAT_DEFAULT_VOTE_K` (if set) provide the fallback values.
 
 ### LiteLLM (OpenAI-compatible proxy)
 

@@ -147,9 +147,22 @@ Config discovery (CWD‑independent)
 
 ## Chat & Models
 - `ARW_LLAMA_URL`: llama.cpp server endpoint (e.g., `http://127.0.0.1:8080`).
+- `ARW_LLAMA_N_PREDICT`: override the llama.cpp token budget per request (default `256`, clamped `1-8192`).
+- `ARW_LLAMA_TOP_P`: optional nucleus sampling cap forwarded to llama.cpp (`0.0-1.0`).
+- `ARW_LLAMA_TOP_K`: optional top-k sampling limit forwarded to llama.cpp (`1-5000`).
+- `ARW_LLAMA_MIN_P`: optional minimum token probability forwarded to llama.cpp (`0.0-1.0`).
+- `ARW_LLAMA_REPEAT_PENALTY`: optional repetition penalty forwarded to llama.cpp (`0.0-4.0`).
+- `ARW_LLAMA_STOP`: comma or newline separated stop sequences forwarded to llama.cpp.
 - `ARW_OPENAI_API_KEY`: OpenAI‑compatible API key.
 - `ARW_OPENAI_BASE_URL`: custom base URL for OpenAI‑compatible servers.
 - `ARW_OPENAI_MODEL`: default model name when using OpenAI‑compatible backend.
+- `ARW_OPENAI_MAX_TOKENS`: override requested max tokens (default `512`, clamped `16-4096`).
+- `ARW_OPENAI_TOP_P`: override nucleus sampling cap (`0.0-1.0`).
+- `ARW_OPENAI_FREQUENCY_PENALTY`: set OpenAI `frequency_penalty` (`-2.0` to `2.0`).
+- `ARW_OPENAI_PRESENCE_PENALTY`: set OpenAI `presence_penalty` (`-2.0` to `2.0`).
+- `ARW_OPENAI_STOP`: comma or newline separated stop sequences forwarded to the OpenAI-compatible backend.
+- `ARW_CHAT_DEFAULT_TEMPERATURE`: default sampling temperature when none is supplied (default `0.2`, clamped `-5.0` to `5.0`).
+- `ARW_CHAT_DEFAULT_VOTE_K`: default self-consistency vote count when none is supplied (default `1`, clamped `1-5`).
 - `ARW_CHAT_SYSTEM_PROMPT`: optional system prompt prepended to chat requests (default `"You are a helpful assistant."`).
 - `ARW_HTTP_TIMEOUT_SECS`: shared HTTP timeout in seconds (default `20`). The unified server seeds this value on startup and governor hints update it live.
 - `ARW_HTTP_BODY_HEAD_KB`: number of KB of response body retained in memory for previews (default `64`).

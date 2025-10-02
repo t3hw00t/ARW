@@ -15,6 +15,56 @@ use crate::{
 const HISTORY_LIMIT: usize = 48;
 const TOOL_HISTORY_LIMIT: usize = 12;
 
+fn env_u64_in_range(key: &str, min: u64, max: u64) -> Option<u64> {
+    let raw = std::env::var(key).ok()?;
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    trimmed
+        .parse::<u64>()
+        .ok()
+        .map(|value| value.clamp(min, max))
+}
+
+fn env_f64_in_range(key: &str, min: f64, max: f64) -> Option<f64> {
+    let raw = std::env::var(key).ok()?;
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    trimmed
+        .parse::<f64>()
+        .ok()
+        .filter(|value| value.is_finite())
+        .map(|value| value.clamp(min, max))
+}
+
+fn env_list(key: &str) -> Option<Vec<String>> {
+    let raw = std::env::var(key).ok()?;
+    let items = raw
+        .split(|c| c == ',' || c == '\n')
+        .map(|item| item.trim())
+        .filter(|item| !item.is_empty())
+        .map(|item| item.to_string())
+        .collect::<Vec<_>>();
+    if items.is_empty() {
+        None
+    } else {
+        Some(items)
+    }
+}
+
+fn default_temperature() -> f64 {
+    env_f64_in_range("ARW_CHAT_DEFAULT_TEMPERATURE", -5.0, 5.0).unwrap_or(0.2)
+}
+
+fn default_vote_k() -> usize {
+    env_u64_in_range("ARW_CHAT_DEFAULT_VOTE_K", 1, 5)
+        .map(|value| value as usize)
+        .unwrap_or(1)
+}
+
 #[derive(Clone)]
 pub struct ChatState {
     inner: Arc<Mutex<ChatLog>>,
@@ -286,13 +336,14 @@ impl ChatToolInput {
         let temperature = value
             .get("temperature")
             .and_then(|v| v.as_f64())
-            .unwrap_or(0.2)
+            .unwrap_or_else(default_temperature)
             .clamp(-5.0, 5.0);
 
         let vote_k = value
             .get("vote_k")
             .and_then(|v| v.as_u64())
-            .unwrap_or(1)
+            .map(|v| v as usize)
+            .unwrap_or_else(default_vote_k)
             .clamp(1, 5) as usize;
 
         Ok(Self {
@@ -394,6 +445,24 @@ async fn llama_chat(
     });
     if let Some(obj) = body.as_object_mut() {
         obj.insert("temperature".into(), json!(input.temperature));
+        if let Some(n_predict) = env_u64_in_range("ARW_LLAMA_N_PREDICT", 1, 8192) {
+            obj.insert("n_predict".into(), json!(n_predict));
+        }
+        if let Some(top_p) = env_f64_in_range("ARW_LLAMA_TOP_P", 0.0, 1.0) {
+            obj.insert("top_p".into(), json!(top_p));
+        }
+        if let Some(top_k) = env_u64_in_range("ARW_LLAMA_TOP_K", 1, 5000) {
+            obj.insert("top_k".into(), json!(top_k));
+        }
+        if let Some(min_p) = env_f64_in_range("ARW_LLAMA_MIN_P", 0.0, 1.0) {
+            obj.insert("min_p".into(), json!(min_p));
+        }
+        if let Some(repeat_penalty) = env_f64_in_range("ARW_LLAMA_REPEAT_PENALTY", 0.0, 4.0) {
+            obj.insert("repeat_penalty".into(), json!(repeat_penalty));
+        }
+        if let Some(stop) = env_list("ARW_LLAMA_STOP") {
+            obj.insert("stop".into(), json!(stop));
+        }
     }
 
     let client = crate::http_client::client().clone();
@@ -475,12 +544,29 @@ async fn openai_chat(
     }
     messages.push(json!({"role": "user", "content": input.prompt.clone()}));
 
-    let body = json!({
+    let mut body = json!({
         "model": model,
         "messages": messages,
         "temperature": input.temperature,
         "max_tokens": 512,
     });
+    if let Some(obj) = body.as_object_mut() {
+        if let Some(max_tokens) = env_u64_in_range("ARW_OPENAI_MAX_TOKENS", 16, 4096) {
+            obj.insert("max_tokens".into(), json!(max_tokens));
+        }
+        if let Some(top_p) = env_f64_in_range("ARW_OPENAI_TOP_P", 0.0, 1.0) {
+            obj.insert("top_p".into(), json!(top_p));
+        }
+        if let Some(freq) = env_f64_in_range("ARW_OPENAI_FREQUENCY_PENALTY", -2.0, 2.0) {
+            obj.insert("frequency_penalty".into(), json!(freq));
+        }
+        if let Some(presence) = env_f64_in_range("ARW_OPENAI_PRESENCE_PENALTY", -2.0, 2.0) {
+            obj.insert("presence_penalty".into(), json!(presence));
+        }
+        if let Some(stop) = env_list("ARW_OPENAI_STOP") {
+            obj.insert("stop".into(), json!(stop));
+        }
+    }
 
     let client = crate::http_client::client().clone();
 
@@ -590,6 +676,72 @@ mod tests {
     use arw_policy::PolicyEngine;
     use serde_json::json;
     use std::sync::Arc;
+
+    #[test]
+    fn env_helpers_clamp_and_filter_values() {
+        let mut guard = env::guard();
+        guard.set("ARW_LLAMA_N_PREDICT", "9000");
+        assert_eq!(
+            super::env_u64_in_range("ARW_LLAMA_N_PREDICT", 1, 8192),
+            Some(8192)
+        );
+
+        guard.set("ARW_LLAMA_TOP_P", "1.4");
+        assert_eq!(
+            super::env_f64_in_range("ARW_LLAMA_TOP_P", 0.0, 1.0),
+            Some(1.0)
+        );
+
+        guard.set("ARW_LLAMA_STOP", " stop , next \n finish ");
+        assert_eq!(
+            super::env_list("ARW_LLAMA_STOP"),
+            Some(vec!["stop".into(), "next".into(), "finish".into()])
+        );
+
+        guard.set("ARW_OPENAI_MAX_TOKENS", "8");
+        assert_eq!(
+            super::env_u64_in_range("ARW_OPENAI_MAX_TOKENS", 16, 4096),
+            Some(16)
+        );
+
+        guard.set("ARW_OPENAI_TOP_P", "-0.5");
+        assert_eq!(
+            super::env_f64_in_range("ARW_OPENAI_TOP_P", 0.0, 1.0),
+            Some(0.0)
+        );
+
+        guard.set("ARW_OPENAI_STOP", "foo,,bar");
+        assert_eq!(
+            super::env_list("ARW_OPENAI_STOP"),
+            Some(vec!["foo".into(), "bar".into()])
+        );
+
+        guard.set("ARW_LLAMA_TOP_P", "not-a-number");
+        assert_eq!(super::env_f64_in_range("ARW_LLAMA_TOP_P", 0.0, 1.0), None);
+
+        guard.set("ARW_LLAMA_STOP", "   ");
+        assert_eq!(super::env_list("ARW_LLAMA_STOP"), None);
+    }
+
+    #[test]
+    fn chat_tool_input_respects_env_defaults() {
+        let mut guard = env::guard();
+        guard.set("ARW_CHAT_DEFAULT_TEMPERATURE", "1.5");
+        guard.set("ARW_CHAT_DEFAULT_VOTE_K", "4");
+
+        let input =
+            super::ChatToolInput::from_value(json!({"prompt": "hello"})).expect("chat input");
+
+        assert!((input.temperature - 1.5).abs() < f64::EPSILON);
+        assert_eq!(input.vote_k, 4);
+
+        guard.set("ARW_CHAT_DEFAULT_TEMPERATURE", "-3.5");
+        guard.set("ARW_CHAT_DEFAULT_VOTE_K", "9");
+        let input = super::ChatToolInput::from_value(json!({"prompt": "world"}))
+            .expect("chat input clamped");
+        assert!((input.temperature - (-3.5)).abs() < f64::EPSILON);
+        assert_eq!(input.vote_k, 5);
+    }
 
     async fn build_state(path: &std::path::Path, env_guard: &mut env::EnvGuard) -> AppState {
         env_guard.set("ARW_DEBUG", "1");
