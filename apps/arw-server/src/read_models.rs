@@ -94,8 +94,8 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
             if !st.kernel_enabled() {
                 return None;
             }
-            let items = crate::api::state::build_episode_rollups(&st, 1000).await;
-            Some(json!({ "items": items }))
+            let (items, version) = crate::api::state::build_episode_rollups(&st, 1000).await;
+            Some(json!({ "version": version, "items": items }))
         },
     ));
 
@@ -125,8 +125,8 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
         "background_tasks",
         Duration::from_millis(3000),
         |st| async move {
-            let tasks = st.metrics().tasks_snapshot();
-            Some(json!({ "tasks": tasks }))
+            let (version, tasks) = st.metrics().tasks_snapshot_with_version();
+            Some(json!({ "version": version, "tasks": tasks }))
         },
     ));
 

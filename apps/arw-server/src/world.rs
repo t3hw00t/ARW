@@ -309,6 +309,25 @@ async fn prune_versions(dir: &PathBuf) {
     }
 }
 
+#[cfg(test)]
+pub(crate) async fn reset_for_tests() {
+    let mut ws = store().write().await;
+    ws.proj_graphs.clear();
+    ws.default_graph = BeliefGraph::default();
+    ver().store(0, Ordering::Relaxed);
+}
+
+#[cfg(test)]
+pub(crate) async fn ingest_for_tests(env: &Envelope) {
+    let proj = proj_from_env(env);
+    let now = now_iso();
+    {
+        let mut ws = store().write().await;
+        let g = ensure_graph(&mut ws, proj.as_deref());
+        apply_event(g, env, &now);
+    }
+}
+
 async fn publish_world_update(bus: &arw_events::Bus, proj: Option<&str>) {
     let ws = store().read().await;
     let graph = if let Some(p) = proj {

@@ -3,6 +3,8 @@ use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
 use axum::response::Response;
 use std::time::{Duration, SystemTime};
 
+const STATE_CACHE_CONTROL: &str = "private, max-age=2";
+
 /// Build a quoted strong ETag header value (e.g., "\"abc...\"").
 pub fn etag_value(tag: &str) -> HeaderValue {
     let mut quoted = String::with_capacity(tag.len() + 2);
@@ -90,6 +92,41 @@ pub fn not_modified_response(
     builder
         .body(Body::empty())
         .unwrap_or_else(|_| Response::new(Body::empty()))
+}
+
+fn state_version_tag(scope: &str, version: u64) -> String {
+    format!("state-{scope}-v{version}")
+}
+
+pub fn state_version_etag(scope: &str, version: u64) -> HeaderValue {
+    etag_value(&state_version_tag(scope, version))
+}
+
+pub fn state_version_not_modified(
+    headers: &HeaderMap,
+    scope: &str,
+    version: u64,
+) -> Option<Response> {
+    let tag = state_version_tag(scope, version);
+    if if_none_match_matches(headers, &tag) {
+        let etag = etag_value(&tag);
+        Some(not_modified_response(&etag, None, STATE_CACHE_CONTROL))
+    } else {
+        None
+    }
+}
+
+pub fn apply_state_version_headers(headers: &mut HeaderMap, scope: &str, version: u64) {
+    let etag = state_version_etag(scope, version);
+    headers.insert(header::ETAG, etag);
+    headers.insert(
+        header::CACHE_CONTROL,
+        HeaderValue::from_static(STATE_CACHE_CONTROL),
+    );
+    headers.insert(
+        header::X_CONTENT_TYPE_OPTIONS,
+        HeaderValue::from_static("nosniff"),
+    );
 }
 
 /// Inclusive byte range describing the slice `[start, end]`.

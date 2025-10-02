@@ -65,9 +65,27 @@ fn intents_store() -> &'static RwLock<VecDeque<Timed<Value>>> {
     INTENTS.get_or_init(|| RwLock::new(VecDeque::with_capacity(INTENTS_CAP)))
 }
 
+fn intents_version() -> &'static AtomicU64 {
+    static VERSION: OnceCell<AtomicU64> = OnceCell::new();
+    VERSION.get_or_init(|| AtomicU64::new(0))
+}
+
+pub(crate) fn intents_version_value() -> u64 {
+    intents_version().load(Ordering::Relaxed)
+}
+
 fn actions_store() -> &'static RwLock<VecDeque<Timed<Value>>> {
     static ACTIONS: OnceCell<RwLock<VecDeque<Timed<Value>>>> = OnceCell::new();
     ACTIONS.get_or_init(|| RwLock::new(VecDeque::with_capacity(ACTIONS_CAP)))
+}
+
+fn actions_version() -> &'static AtomicU64 {
+    static VERSION: OnceCell<AtomicU64> = OnceCell::new();
+    VERSION.get_or_init(|| AtomicU64::new(0))
+}
+
+pub(crate) fn actions_version_value() -> u64 {
+    actions_version().load(Ordering::Relaxed)
 }
 
 pub(crate) fn start(state: AppState) -> Vec<TaskHandle> {
@@ -125,6 +143,7 @@ async fn update_intents(env: &Envelope) {
             "kind": env.kind,
             "payload": env.payload
         })));
+        intents_version().fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -141,6 +160,7 @@ async fn update_actions(env: &Envelope) {
             "kind": env.kind,
             "payload": env.payload
         })));
+        actions_version().fetch_add(1, Ordering::Relaxed);
     }
 }
 
@@ -157,20 +177,109 @@ pub(crate) async fn beliefs_snapshot() -> (u64, Vec<Value>) {
     (version, items)
 }
 
-pub(crate) async fn intents_snapshot() -> Vec<Value> {
-    intents_store()
+pub(crate) async fn intents_snapshot() -> (u64, Vec<Value>) {
+    let version = intents_version().load(Ordering::Relaxed);
+    let items = intents_store()
         .read()
         .await
         .iter()
         .map(|item| item.value.clone())
-        .collect()
+        .collect();
+    (version, items)
 }
 
-pub(crate) async fn actions_snapshot() -> Vec<Value> {
-    actions_store()
+pub(crate) async fn actions_snapshot() -> (u64, Vec<Value>) {
+    let version = actions_version().load(Ordering::Relaxed);
+    let items = actions_store()
         .read()
         .await
         .iter()
         .map(|item| item.value.clone())
-        .collect()
+        .collect();
+    (version, items)
+}
+
+#[cfg(test)]
+pub(crate) async fn reset_for_tests() {
+    fn reset_version(cell: &AtomicU64) {
+        cell.store(0, Ordering::Relaxed);
+    }
+
+    async fn clear_store<T>(lock: &RwLock<VecDeque<T>>) {
+        let mut guard = lock.write().await;
+        guard.clear();
+    }
+
+    async fn clear_vec_store(lock: &RwLock<Vec<Value>>) {
+        let mut guard = lock.write().await;
+        guard.clear();
+    }
+
+    clear_store(observations_store()).await;
+    reset_version(observations_version());
+    clear_vec_store(beliefs_store()).await;
+    reset_version(beliefs_version());
+    clear_store(intents_store()).await;
+    reset_version(intents_version());
+    clear_store(actions_store()).await;
+    reset_version(actions_version());
+}
+
+#[cfg(test)]
+pub(crate) async fn ingest_for_tests(env: &Envelope) {
+    on_event(env).await;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::{SecondsFormat, Utc};
+
+    fn env(kind: &str) -> Envelope {
+        Envelope {
+            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: kind.to_string(),
+            payload: json!({"corr_id": "test"}),
+            policy: None,
+            ce: None,
+        }
+    }
+
+    #[tokio::test]
+    async fn intents_snapshot_increments_version() {
+        let _env_lock = crate::test_support::env::guard();
+        reset_for_tests().await;
+        assert_eq!(intents_version_value(), 0);
+
+        update_intents(&env("intents.proposed")).await;
+        let (v1, items1) = intents_snapshot().await;
+        assert_eq!(v1, 1);
+        assert_eq!(items1.len(), 1);
+        assert_eq!(intents_version_value(), v1);
+
+        update_intents(&env("intents.accepted")).await;
+        let (v2, items2) = intents_snapshot().await;
+        assert!(v2 > v1);
+        assert_eq!(items2.len(), 2);
+        assert_eq!(intents_version_value(), v2);
+    }
+
+    #[tokio::test]
+    async fn actions_snapshot_increments_version() {
+        let _env_lock = crate::test_support::env::guard();
+        reset_for_tests().await;
+        assert_eq!(actions_version_value(), 0);
+
+        update_actions(&env("actions.completed")).await;
+        let (v1, items1) = actions_snapshot().await;
+        assert_eq!(v1, 1);
+        assert_eq!(items1.len(), 1);
+        assert_eq!(actions_version_value(), v1);
+
+        update_actions(&env("actions.failed")).await;
+        let (v2, items2) = actions_snapshot().await;
+        assert!(v2 > v1);
+        assert_eq!(items2.len(), 2);
+        assert_eq!(actions_version_value(), v2);
+    }
 }

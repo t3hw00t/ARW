@@ -9,9 +9,10 @@ use arw_topics as topics;
 /// Run a single distillation pass: stitch recent intents/actions into compact playbooks,
 /// persist belief snapshots for ops/debug, prune stale world versions, and emit an event.
 pub(crate) async fn run_once(state: &AppState) -> Value {
-    let intents = state_observer::intents_snapshot().await;
-    let actions = state_observer::actions_snapshot().await;
+    let (intents_version, intents) = state_observer::intents_snapshot().await;
+    let (actions_version, actions) = state_observer::actions_snapshot().await;
     let (beliefs_version, beliefs_items) = state_observer::beliefs_snapshot().await;
+    let playbooks_version = intents_version.max(actions_version);
 
     let mut playbooks: Vec<Value> = Vec::new();
     for intent in intents.iter().rev().take(50) {
@@ -45,8 +46,11 @@ pub(crate) async fn run_once(state: &AppState) -> Value {
     let state_dir = util::state_dir();
     let playbooks_path = state_dir.join("distilled.playbooks.json");
     let beliefs_path = state_dir.join("distilled.beliefs.json");
-    if let Err(err) =
-        write_json_pretty(&playbooks_path, &json!({ "items": playbooks.clone() })).await
+    if let Err(err) = write_json_pretty(
+        &playbooks_path,
+        &json!({ "version": playbooks_version, "items": playbooks.clone() }),
+    )
+    .await
     {
         warn!("distill failed to persist playbooks: {}", err);
     }
@@ -76,6 +80,8 @@ pub(crate) async fn run_once(state: &AppState) -> Value {
         "playbooks": playbooks_count,
         "beliefs": beliefs_count,
         "beliefs_version": beliefs_version,
+        "intents_version": intents_version,
+        "actions_version": actions_version,
         "files": {
             "playbooks": playbooks_path.to_string_lossy(),
             "beliefs": beliefs_path.to_string_lossy(),

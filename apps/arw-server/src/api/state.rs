@@ -16,6 +16,16 @@ use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
+fn numeric_version_from_field(items: &[Value], field: &str) -> u64 {
+    items
+        .iter()
+        .filter_map(|item| item.get(field))
+        .filter_map(|value| value.as_i64())
+        .map(|id| id.max(0) as u64)
+        .max()
+        .unwrap_or(0)
+}
+
 #[derive(Clone, Serialize, ToSchema)]
 pub struct ModelsCatalogResponse {
     #[schema(value_type = Vec<serde_json::Value>)]
@@ -28,17 +38,21 @@ pub struct RuntimeMatrixResponse {
     pub ttl_seconds: u64,
 }
 
-pub(crate) async fn build_episode_rollups(state: &AppState, limit: usize) -> Vec<Value> {
+pub(crate) async fn build_episode_rollups(state: &AppState, limit: usize) -> (Vec<Value>, u64) {
     let rows = state
         .kernel()
         .recent_events_async(limit as i64, None)
         .await
         .unwrap_or_default();
     let mut by_corr: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+    let mut max_id: u64 = 0;
     for r in rows {
         let corr_id = r.corr_id.unwrap_or_default();
         if corr_id.is_empty() {
             continue;
+        }
+        if r.id > 0 {
+            max_id = max_id.max(r.id as u64);
         }
         by_corr.entry(corr_id).or_default().push(json!({
             "id": r.id,
@@ -64,7 +78,7 @@ pub(crate) async fn build_episode_rollups(state: &AppState, limit: usize) -> Vec
             "end": end,
         }));
     }
-    items
+    (items, max_id)
 }
 
 /// Episode rollups grouped by correlation id.
@@ -91,8 +105,19 @@ pub async fn state_episodes(
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
-    let items = build_episode_rollups(&state, 1000).await;
-    Json(json!({"items": items})).into_response()
+    let (items, version) = build_episode_rollups(&state, 1000).await;
+    if let Some(resp) =
+        crate::api::http_utils::state_version_not_modified(&headers, "episodes", version)
+    {
+        return resp;
+    }
+    let mut response = Json(json!({"version": version, "items": items})).into_response();
+    crate::api::http_utils::apply_state_version_headers(
+        response.headers_mut(),
+        "episodes",
+        version,
+    );
+    response
 }
 
 /// Bus and per-route counters snapshot.
@@ -102,11 +127,24 @@ pub async fn state_episodes(
     tag = "State",
     responses((status = 200, description = "Route stats", body = serde_json::Value))
 )]
-pub async fn state_route_stats(State(state): State<AppState>) -> impl IntoResponse {
+pub async fn state_route_stats(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
     let summary = state.metrics().snapshot();
     let bus = state.bus().stats();
     let cache = state.tool_cache().stats();
-    Json(metrics::route_stats_snapshot(&summary, &bus, &cache))
+    let version = state.metrics().routes_version();
+    if let Some(resp) =
+        crate::api::http_utils::state_version_not_modified(&headers, "route-stats", version)
+    {
+        return resp;
+    }
+    let body = metrics::route_stats_snapshot(&summary, &bus, &cache);
+    let mut response = Json(body).into_response();
+    crate::api::http_utils::apply_state_version_headers(
+        response.headers_mut(),
+        "route-stats",
+        version,
+    );
+    response
 }
 
 /// Background tasks status snapshot.
@@ -116,9 +154,16 @@ pub async fn state_route_stats(State(state): State<AppState>) -> impl IntoRespon
     tag = "State",
     responses((status = 200, description = "Background tasks", body = serde_json::Value))
 )]
-pub async fn state_tasks(State(state): State<AppState>) -> impl IntoResponse {
-    let tasks = state.metrics().tasks_snapshot();
-    Json(json!({ "tasks": tasks }))
+pub async fn state_tasks(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
+    let (version, tasks) = state.metrics().tasks_snapshot_with_version();
+    if let Some(resp) =
+        crate::api::http_utils::state_version_not_modified(&headers, "tasks", version)
+    {
+        return resp;
+    }
+    let mut response = Json(json!({ "version": version, "tasks": tasks })).into_response();
+    crate::api::http_utils::apply_state_version_headers(response.headers_mut(), "tasks", version);
+    response
 }
 
 /// Recent observations from the event bus.
@@ -142,7 +187,18 @@ pub async fn state_observations(headers: HeaderMap) -> impl IntoResponse {
             .into_response();
     }
     let (version, items) = state_observer::observations_snapshot().await;
-    Json(json!({"version": version, "items": items})).into_response()
+    if let Some(resp) =
+        crate::api::http_utils::state_version_not_modified(&headers, "observations", version)
+    {
+        return resp;
+    }
+    let mut response = Json(json!({"version": version, "items": items})).into_response();
+    crate::api::http_utils::apply_state_version_headers(
+        response.headers_mut(),
+        "observations",
+        version,
+    );
+    response
 }
 
 /// Current beliefs snapshot derived from events.
@@ -166,16 +222,23 @@ pub async fn state_beliefs(headers: HeaderMap) -> impl IntoResponse {
             .into_response();
     }
     let (version, items) = state_observer::beliefs_snapshot().await;
-    Json(json!({"version": version, "items": items})).into_response()
+    if let Some(resp) =
+        crate::api::http_utils::state_version_not_modified(&headers, "beliefs", version)
+    {
+        return resp;
+    }
+    let mut response = Json(json!({"version": version, "items": items})).into_response();
+    crate::api::http_utils::apply_state_version_headers(response.headers_mut(), "beliefs", version);
+    response
 }
 
-/// Recent intents stream (rolling window).
+/// Recent intents stream (rolling window) with a monotonic version counter.
 #[utoipa::path(
     get,
     path = "/state/intents",
     tag = "State",
     operation_id = "state_intents_doc",
-    description = "Recent intents stream (rolling window).",
+    description = "Recent intents stream (rolling window) with a monotonic version counter.",
     responses(
         (status = 200, description = "Recent intents", body = serde_json::Value),
         (status = 401, description = "Unauthorized", body = serde_json::Value)
@@ -189,8 +252,15 @@ pub async fn state_intents(headers: HeaderMap) -> impl IntoResponse {
         )
             .into_response();
     }
-    let items = state_observer::intents_snapshot().await;
-    Json(json!({"items": items})).into_response()
+    let (version, items) = state_observer::intents_snapshot().await;
+    if let Some(resp) =
+        crate::api::http_utils::state_version_not_modified(&headers, "intents", version)
+    {
+        return resp;
+    }
+    let mut response = Json(json!({"version": version, "items": items})).into_response();
+    crate::api::http_utils::apply_state_version_headers(response.headers_mut(), "intents", version);
+    response
 }
 
 /// Crash log snapshot from state_dir/crash and crash/archive.
@@ -402,7 +472,16 @@ pub async fn state_world(headers: HeaderMap, Query(q): Query<WorldQuery>) -> imp
             .into_response();
     }
     let map = world::snapshot_project_map(q.proj.as_deref()).await;
-    Json(serde_json::to_value(map).unwrap_or_else(|_| json!({}))).into_response()
+    let version = map.version;
+    if let Some(resp) =
+        crate::api::http_utils::state_version_not_modified(&headers, "world", version)
+    {
+        return resp;
+    }
+    let body = serde_json::to_value(map).unwrap_or_else(|_| json!({}));
+    let mut response = Json(body).into_response();
+    crate::api::http_utils::apply_state_version_headers(response.headers_mut(), "world", version);
+    response
 }
 
 #[derive(Deserialize, utoipa::ToSchema)]
@@ -482,7 +561,19 @@ pub async fn state_contributions(
         .list_contributions_async(200)
         .await
         .unwrap_or_default();
-    Json(json!({"items": items})).into_response()
+    let version = numeric_version_from_field(&items, "id");
+    if let Some(resp) =
+        crate::api::http_utils::state_version_not_modified(&headers, "contributions", version)
+    {
+        return resp;
+    }
+    let mut response = Json(json!({"version": version, "items": items})).into_response();
+    crate::api::http_utils::apply_state_version_headers(
+        response.headers_mut(),
+        "contributions",
+        version,
+    );
+    response
 }
 
 /// Experiment events snapshot (public read-model).
@@ -492,9 +583,23 @@ pub async fn state_contributions(
     tag = "State",
     responses((status = 200, description = "Experiment events", body = serde_json::Value))
 )]
-pub async fn state_experiments(State(state): State<AppState>) -> impl IntoResponse {
-    let items = state.experiments().state_events().await;
-    Json(json!({"items": items})).into_response()
+pub async fn state_experiments(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    let (version, items) = state.experiments().state_events_snapshot().await;
+    if let Some(resp) =
+        crate::api::http_utils::state_version_not_modified(&headers, "experiments", version)
+    {
+        return resp;
+    }
+    let mut response = Json(json!({"version": version, "items": items})).into_response();
+    crate::api::http_utils::apply_state_version_headers(
+        response.headers_mut(),
+        "experiments",
+        version,
+    );
+    response
 }
 
 /// Recent actions list.
@@ -531,6 +636,12 @@ pub async fn state_actions(
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
+    let version = crate::state_observer::actions_version_value();
+    if let Some(resp) =
+        crate::api::http_utils::state_version_not_modified(&headers, "actions", version)
+    {
+        return resp;
+    }
     let items = state
         .kernel()
         .list_actions_async(limit.clamp(1, 2000))
@@ -540,7 +651,9 @@ pub async fn state_actions(
         .into_iter()
         .map(crate::api::actions::sanitize_action_record)
         .collect();
-    Json(json!({"items": items})).into_response()
+    let mut response = Json(json!({"version": version, "items": items})).into_response();
+    crate::api::http_utils::apply_state_version_headers(response.headers_mut(), "actions", version);
+    response
 }
 
 /// Recent egress ledger list.
@@ -579,20 +692,34 @@ pub async fn state_egress(
         .await
         .unwrap_or_default();
     let count = items.len();
+    let version = numeric_version_from_field(&items, "id");
+    if let Some(resp) =
+        crate::api::http_utils::state_version_not_modified(&headers, "egress", version)
+    {
+        return resp;
+    }
     let settings = crate::api::egress_settings::current_settings(&state).await;
-    Json(json!({
+    let mut response = Json(json!({
+        "version": version,
         "count": count,
         "items": items,
         "settings": settings,
     }))
-    .into_response()
+    .into_response();
+    crate::api::http_utils::apply_state_version_headers(response.headers_mut(), "egress", version);
+    response
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use arw_policy::PolicyEngine;
-    use axum::{body::to_bytes, http::StatusCode};
+    use arw_topics;
+    use axum::{
+        body::to_bytes,
+        extract::Query,
+        http::{header, HeaderMap, HeaderValue, StatusCode},
+    };
     use chrono::{DateTime, SecondsFormat, Utc};
     use serde_json::{json, Value};
     use std::collections::HashMap;
@@ -621,6 +748,7 @@ mod tests {
     async fn state_actions_sanitizes_guard_metadata() {
         let temp = tempdir().expect("tempdir");
         let mut ctx = crate::test_support::begin_state_env(temp.path());
+        crate::state_observer::reset_for_tests().await;
         let state = build_state(temp.path(), &mut ctx.env).await;
 
         let action_id = uuid::Uuid::new_v4().to_string();
@@ -660,12 +788,29 @@ mod tests {
             .await
             .expect("store output");
 
+        let env = arw_events::Envelope {
+            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: "actions.completed".to_string(),
+            payload: json!({"id": action_id, "status": "completed"}),
+            policy: None,
+            ce: None,
+        };
+        crate::state_observer::ingest_for_tests(&env).await;
+
         let params: HashMap<String, String> = HashMap::new();
         let response = state_actions(HeaderMap::new(), State(state.clone()), Query(params)).await;
         let (parts, body) = response.into_response().into_parts();
         assert_eq!(parts.status, StatusCode::OK);
+        assert_eq!(
+            parts
+                .headers
+                .get(header::ETAG)
+                .and_then(|v| v.to_str().ok()),
+            Some("\"state-actions-v1\"")
+        );
         let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
         let value: Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(value["version"].as_u64(), Some(1));
         let items = value["items"].as_array().expect("items array");
         assert_eq!(items.len(), 1);
         let item = &items[0];
@@ -673,6 +818,400 @@ mod tests {
         assert!(item["output"].is_null());
         assert!(item.get("guard").is_none());
         assert!(item.get("posture").is_none());
+    }
+
+    #[tokio::test]
+    async fn state_intents_includes_version() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        crate::state_observer::reset_for_tests().await;
+
+        let _state = build_state(temp.path(), &mut ctx.env).await;
+
+        let env = arw_events::Envelope {
+            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: "intents.proposed".to_string(),
+            payload: json!({"corr_id": "demo", "goal": "test"}),
+            policy: None,
+            ce: None,
+        };
+
+        crate::state_observer::ingest_for_tests(&env).await;
+
+        let response = state_intents(HeaderMap::new()).await.into_response();
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        assert_eq!(
+            parts
+                .headers
+                .get(header::ETAG)
+                .and_then(|v| v.to_str().ok()),
+            Some("\"state-intents-v1\"")
+        );
+        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(value["version"].as_u64(), Some(1));
+        let items = value["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["kind"].as_str(), Some("intents.proposed"));
+
+        // Ingest another event and ensure version increments.
+        let env2 = arw_events::Envelope {
+            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: "intents.accepted".to_string(),
+            payload: json!({"corr_id": "demo", "goal": "test"}),
+            policy: None,
+            ce: None,
+        };
+        crate::state_observer::ingest_for_tests(&env2).await;
+
+        let response = state_intents(HeaderMap::new()).await.into_response();
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        assert_eq!(
+            parts
+                .headers
+                .get(header::ETAG)
+                .and_then(|v| v.to_str().ok()),
+            Some("\"state-intents-v2\"")
+        );
+        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes 2");
+        let value: Value = serde_json::from_slice(&bytes).expect("json 2");
+        assert_eq!(value["version"].as_u64(), Some(2));
+        let items = value["items"].as_array().expect("items array 2");
+        assert_eq!(items.len(), 2);
+
+        crate::state_observer::reset_for_tests().await;
+    }
+
+    #[tokio::test]
+    async fn state_intents_honors_if_none_match() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        crate::state_observer::reset_for_tests().await;
+
+        let _state = build_state(temp.path(), &mut ctx.env).await;
+        let env = arw_events::Envelope {
+            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: "intents.proposed".to_string(),
+            payload: json!({"corr_id": "demo", "goal": "test"}),
+            policy: None,
+            ce: None,
+        };
+        crate::state_observer::ingest_for_tests(&env).await;
+
+        let first = state_intents(HeaderMap::new()).await.into_response();
+        let etag = first.headers().get(header::ETAG).cloned().expect("etag");
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, etag.clone());
+        let response = state_intents(headers).await.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+        crate::state_observer::reset_for_tests().await;
+    }
+
+    #[tokio::test]
+    async fn state_actions_honors_if_none_match() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        crate::state_observer::reset_for_tests().await;
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let action_id = uuid::Uuid::new_v4().to_string();
+        state
+            .kernel()
+            .insert_action_async(
+                &action_id,
+                "net.http.get",
+                &json!({"url": "https://example.com"}),
+                None,
+                None,
+                "completed",
+            )
+            .await
+            .expect("insert action");
+        state
+            .kernel()
+            .update_action_result_async(action_id.clone(), None, None)
+            .await
+            .expect("store result");
+        let env = arw_events::Envelope {
+            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: "actions.completed".to_string(),
+            payload: json!({"id": "action-1", "status": "completed"}),
+            policy: None,
+            ce: None,
+        };
+        crate::state_observer::ingest_for_tests(&env).await;
+
+        let params: HashMap<String, String> = HashMap::new();
+        let first = state_actions(
+            HeaderMap::new(),
+            State(state.clone()),
+            Query(params.clone()),
+        )
+        .await
+        .into_response();
+        let etag = first
+            .headers()
+            .get(header::ETAG)
+            .cloned()
+            .unwrap_or_else(|| HeaderValue::from_static("\"state-actions-v0\""));
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, etag);
+        let response = state_actions(headers, State(state), Query(params))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+        crate::state_observer::reset_for_tests().await;
+    }
+
+    #[tokio::test]
+    async fn state_observations_honors_if_none_match() {
+        let mut env_guard = crate::test_support::env::guard();
+        env_guard.set("ARW_DEBUG", "1");
+        crate::state_observer::reset_for_tests().await;
+
+        let envelope = arw_events::Envelope {
+            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: "obs.debug".to_string(),
+            payload: json!({"message": "hello"}),
+            policy: None,
+            ce: None,
+        };
+        crate::state_observer::ingest_for_tests(&envelope).await;
+
+        let first = state_observations(HeaderMap::new()).await.into_response();
+        let etag = first
+            .headers()
+            .get(header::ETAG)
+            .cloned()
+            .expect("observations etag");
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, etag);
+        let response = state_observations(headers).await.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+        crate::state_observer::reset_for_tests().await;
+    }
+
+    #[tokio::test]
+    async fn state_beliefs_honors_if_none_match() {
+        let mut env_guard = crate::test_support::env::guard();
+        env_guard.set("ARW_DEBUG", "1");
+        crate::state_observer::reset_for_tests().await;
+
+        let envelope = arw_events::Envelope {
+            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: "beliefs.updated".to_string(),
+            payload: json!({"claim": "alpha"}),
+            policy: None,
+            ce: None,
+        };
+        crate::state_observer::ingest_for_tests(&envelope).await;
+
+        let first = state_beliefs(HeaderMap::new()).await.into_response();
+        let etag = first
+            .headers()
+            .get(header::ETAG)
+            .cloned()
+            .expect("beliefs etag");
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, etag);
+        let response = state_beliefs(headers).await.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+        crate::state_observer::reset_for_tests().await;
+    }
+
+    #[tokio::test]
+    async fn state_world_honors_if_none_match() {
+        let mut env_guard = crate::test_support::env::guard();
+        env_guard.set("ARW_DEBUG", "1");
+        crate::world::reset_for_tests().await;
+
+        let env = arw_events::Envelope {
+            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: arw_topics::TOPIC_PROJECTS_CREATED.to_string(),
+            payload: json!({"name": "demo"}),
+            policy: None,
+            ce: None,
+        };
+        crate::world::ingest_for_tests(&env).await;
+
+        let first = state_world(HeaderMap::new(), Query(WorldQuery { proj: None }))
+            .await
+            .into_response();
+        let etag = first
+            .headers()
+            .get(header::ETAG)
+            .cloned()
+            .expect("world etag");
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, etag);
+        let response = state_world(headers, Query(WorldQuery { proj: None }))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+
+        crate::world::reset_for_tests().await;
+    }
+
+    #[tokio::test]
+    async fn state_contributions_honors_if_none_match() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        state
+            .kernel()
+            .append_contribution_async("local", "test", 1.0, "unit", None, None, None)
+            .await
+            .expect("append contribution");
+
+        let first = state_contributions(HeaderMap::new(), State(state.clone()))
+            .await
+            .into_response();
+        let etag = first
+            .headers()
+            .get(header::ETAG)
+            .cloned()
+            .expect("contributions etag");
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, etag);
+        let response = state_contributions(headers, State(state))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+    }
+
+    #[tokio::test]
+    async fn state_egress_honors_if_none_match() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        state
+            .kernel()
+            .append_egress_async(
+                "allow".to_string(),
+                None,
+                None,
+                None,
+                None,
+                Some(128),
+                Some(256),
+                Some("corr".to_string()),
+                None,
+                Some("secure".to_string()),
+                None,
+            )
+            .await
+            .expect("append egress");
+
+        let params: HashMap<String, String> = HashMap::new();
+        let first = state_egress(
+            HeaderMap::new(),
+            State(state.clone()),
+            Query(params.clone()),
+        )
+        .await
+        .into_response();
+        let etag = first
+            .headers()
+            .get(header::ETAG)
+            .cloned()
+            .expect("egress etag");
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, etag);
+        let response = state_egress(headers, State(state), Query(params))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+    }
+
+    #[tokio::test]
+    async fn state_tasks_honors_if_none_match() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let metrics = state.metrics();
+        metrics.task_started("demo");
+        metrics.task_completed("demo");
+
+        let first = state_tasks(HeaderMap::new(), State(state.clone()))
+            .await
+            .into_response();
+        let etag = first
+            .headers()
+            .get(header::ETAG)
+            .cloned()
+            .expect("tasks etag");
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, etag);
+        let response = state_tasks(headers, State(state)).await.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+    }
+
+    #[tokio::test]
+    async fn state_experiments_honors_if_none_match() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let experiments = state.experiments();
+        experiments.reset_for_tests().await;
+        experiments
+            .publish_start("demo".into(), vec!["A".into()], None, None)
+            .await;
+
+        let first = state_experiments(HeaderMap::new(), State(state.clone()))
+            .await
+            .into_response();
+        let etag = first
+            .headers()
+            .get(header::ETAG)
+            .cloned()
+            .expect("experiments etag");
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, etag);
+        let response = state_experiments(headers, State(state))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+    }
+
+    #[tokio::test]
+    async fn state_route_stats_honors_if_none_match() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        // Simulate route metrics update
+        state.metrics().record_route("GET /demo", 200, 42);
+
+        let first = state_route_stats(HeaderMap::new(), State(state.clone()))
+            .await
+            .into_response();
+        let etag = first
+            .headers()
+            .get(header::ETAG)
+            .cloned()
+            .expect("route stats etag");
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, etag);
+        let response = state_route_stats(headers, State(state))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
     }
 
     #[tokio::test]
@@ -717,6 +1256,7 @@ mod tests {
         assert_eq!(parts.status, StatusCode::OK);
         let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
         let value: Value = serde_json::from_slice(&bytes).expect("json");
+        assert!(value["version"].as_u64().unwrap_or_default() > 0);
         let items = value["items"].as_array().expect("items array");
         assert_eq!(items.len(), 1);
         let item = &items[0];
@@ -733,6 +1273,41 @@ mod tests {
         let end = item["end"].as_str().expect("end time");
         assert!(start == env1.time || start == env2.time);
         assert!(end == env1.time || end == env2.time);
+    }
+
+    #[tokio::test]
+    async fn state_episodes_honors_if_none_match() {
+        let temp = tempdir().expect("tempdir");
+        let mut env_guard = crate::test_support::env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
+
+        let corr = "run-etag";
+        let env = arw_events::Envelope {
+            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: "tasks.started".to_string(),
+            payload: json!({"corr_id": corr}),
+            policy: None,
+            ce: None,
+        };
+        state
+            .kernel()
+            .append_event_async(&env)
+            .await
+            .expect("append event");
+
+        let first = state_episodes(HeaderMap::new(), State(state.clone()))
+            .await
+            .into_response();
+        let etag = first
+            .headers()
+            .get(header::ETAG)
+            .cloned()
+            .expect("episodes etag");
+
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, etag);
+        let response = state_episodes(headers, State(state)).await.into_response();
+        assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
     }
 }
 

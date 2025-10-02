@@ -361,10 +361,20 @@ POST /staging/actions/{id}/deny
 GET /state/actions
 - Summary changed from 'List recent actions' to 'Recent actions list.'
 - Description changed from 'Return the rolling window of actions emitted by the kernel, ordered from newest to oldest.' to 'Recent actions list (most recent first).'
+- Response now includes `version` (monotonic counter) aligned with the state observer so clients can detect updates without refetching entire histories.
+- Response now sets `ETag: "state-actions-v<version>"` so caches and polling clients can reuse conditional requests.
+- Response now sets `Cache-Control: private, max-age=2` for short-lived conditional polling.
+
+GET /state/contributions
+- Response now sets `version`, `ETag: "state-contributions-v<version>"`, and `Cache-Control: private, max-age=2` for conditional polling.
+
+GET /state/episodes
+- Response now sets `version`, `ETag: "state-episodes-v<version>"`, and `Cache-Control: private, max-age=2` for conditional polling.
 
 GET /state/beliefs
 - Summary changed from 'Inspect belief store' to 'Current beliefs snapshot derived from events.'
 - Description changed from 'Return the current belief entries derived from events so clients can reason over world facts.' to 'Current beliefs snapshot derived from events.'
+- Response now sets `version`, `ETag: "state-beliefs-v<version>"`, and `Cache-Control: private, max-age=2` for lightweight conditional polling.
 
 GET /state/cluster
 - Summary changed from 'Inspect cluster nodes' to 'Cluster nodes snapshot.'
@@ -374,6 +384,7 @@ GET /state/cluster
 GET /state/experiments
 - Summary changed from 'List experiment events' to 'Experiment events snapshot (public read-model).'
 - Description changed from 'Expose the experiment read-model summarizing variants, assignments, and recent outcomes.' to 'Experiment events snapshot (public read-model).'
+- Response now sets `version`, `ETag: "state-experiments-v<version>"`, and `Cache-Control: private, max-age=2` for conditional polling.
 
 GET /state/guardrails_metrics
 - Summary changed from 'Inspect guardrail metrics' to 'Guardrails circuit-breaker metrics snapshot.'
@@ -382,6 +393,9 @@ GET /state/guardrails_metrics
 GET /state/intents
 - Summary changed from 'List recent intents' to 'Recent intents stream (rolling window).'
 - Description changed from 'Return the rolling window of intent events emitted by the kernel.' to 'Recent intents stream (rolling window).'
+- Response now includes `version` (monotonic counter) so clients can detect refreshes and wire delta polling.
+- Response now sets `ETag: "state-intents-v<version>"` to support If-None-Match polling loops.
+- Response now sets `Cache-Control: private, max-age=2` for short-lived conditional polling.
 
 GET /state/models
 - Summary changed from 'Inspect model catalog' to 'Model catalog read-model.'
@@ -398,6 +412,7 @@ GET /state/models_metrics
 GET /state/observations
 - Summary changed from 'List recent observations' to 'Recent observations from the event bus.'
 - Description changed from 'Return the rolling window of observation events captured from the live event bus.' to 'Recent observations from the event bus.'
+- Response now sets `version`, `ETag: "state-observations-v<version>"`, and `Cache-Control: private, max-age=2` to support conditional polling.
 
 GET /state/orchestrator/jobs
 - Summary changed from 'List orchestrator jobs' to 'Orchestrator jobs snapshot.'
@@ -426,6 +441,7 @@ GET /state/research_watcher
 GET /state/route_stats
 - Summary changed from 'Inspect route metrics' to 'Bus and per-route counters snapshot.'
 - Description changed from 'Return per-route counters, durations, and cache statistics aggregated by the server.' to 'Bus and per-route counters snapshot.'
+- Response now sets `version`, `ETag: "state-route-stats-v<version>"`, and `Cache-Control: private, max-age=2` for conditional polling.
 
 GET /state/runtime_matrix
 - Summary changed from 'Inspect runtime matrix' to 'Runtime matrix snapshot.'
@@ -440,6 +456,7 @@ GET /state/staging/actions
 GET /state/tasks
 - Summary changed from 'Inspect background tasks' to 'Background tasks status snapshot.'
 - Description changed from 'Return the background task registry with progress, retry counts, and assigned workers.' to 'Background tasks status snapshot.'
+- Response now sets `version`, `ETag: "state-tasks-v<version>"`, and `Cache-Control: private, max-age=2` for conditional polling.
 
 GET /state/training/telemetry
 - Summary changed from 'Inspect training telemetry' to 'Training telemetry snapshot.'
@@ -448,6 +465,10 @@ GET /state/training/telemetry
 GET /state/world
 - Summary changed from 'Inspect world model' to 'Project world model snapshot (belief graph view).'
 - Description changed from 'Return the active world graph snapshot with claims, provenance metadata, and belief relationships.' to 'Project world model snapshot (belief graph view).'
+- Response now sets `version`, `ETag: "state-world-v<version>"`, and `Cache-Control: private, max-age=2` for conditional polling.
+
+GET /state/egress
+- Response now sets `version`, `ETag: "state-egress-v<version>"`, and `Cache-Control: private, max-age=2` for conditional polling.
 
 GET /state/world/select
 - Summary changed from 'Select world claims' to 'Select top-k claims for a query.'

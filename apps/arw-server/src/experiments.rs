@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 
 use arw_events::Bus;
@@ -140,6 +141,7 @@ pub struct Experiments {
     winners: RwLock<HashMap<String, WinnerInfo>>,
     scoreboard: RwLock<HashMap<String, HashMap<String, VariantScore>>>,
     events: RwLock<VecDeque<Value>>,
+    events_version: AtomicU64,
     bus: Bus,
     governor: Arc<GovernorState>,
     state_path: PathBuf,
@@ -153,6 +155,7 @@ impl Experiments {
             winners: RwLock::new(HashMap::new()),
             scoreboard: RwLock::new(HashMap::new()),
             events: RwLock::new(VecDeque::with_capacity(EVENTS_CAP)),
+            events_version: AtomicU64::new(0),
             bus,
             governor,
             state_path,
@@ -344,8 +347,10 @@ impl Experiments {
         out
     }
 
-    pub async fn state_events(&self) -> Vec<Value> {
-        self.events.read().await.iter().cloned().collect()
+    pub async fn state_events_snapshot(&self) -> (u64, Vec<Value>) {
+        let version = self.events_version.load(Ordering::Relaxed);
+        let items = self.events.read().await.iter().cloned().collect();
+        (version, items)
     }
 
     pub async fn publish_start(
@@ -391,6 +396,13 @@ impl Experiments {
             guard.pop_front();
         }
         guard.push_back(json!({"time": now_iso(), "event": payload}));
+        self.events_version.fetch_add(1, Ordering::Relaxed);
+    }
+
+    #[cfg(test)]
+    pub async fn reset_for_tests(&self) {
+        self.events.write().await.clear();
+        self.events_version.store(0, Ordering::Relaxed);
     }
 
     async fn update_scoreboard(

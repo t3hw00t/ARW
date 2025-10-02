@@ -258,6 +258,8 @@ pub struct Metrics {
     routes: Mutex<RouteStats>,
     hist_buckets: Vec<u64>,
     tasks: Mutex<BTreeMap<String, TaskStat>>,
+    tasks_version: AtomicU64,
+    routes_version: AtomicU64,
     legacy_capsule_headers: AtomicU64,
     memory_gc: MemoryGcCounters,
     autonomy_interrupts: Mutex<BTreeMap<String, u64>>,
@@ -292,6 +294,8 @@ impl Metrics {
             routes: Mutex::new(RouteStats::default()),
             hist_buckets,
             tasks: Mutex::new(BTreeMap::new()),
+            tasks_version: AtomicU64::new(0),
+            routes_version: AtomicU64::new(0),
             legacy_capsule_headers: AtomicU64::new(0),
             memory_gc: MemoryGcCounters::default(),
             autonomy_interrupts: Mutex::new(BTreeMap::new()),
@@ -322,6 +326,7 @@ impl Metrics {
                 .or_insert_with(|| RouteStat::new(self.hist_buckets.len() + 1));
             entry.update(status, ms, bucket);
         }
+        self.routes_version.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn snapshot(&self) -> MetricsSummary {
@@ -363,10 +368,15 @@ impl Metrics {
         }
     }
 
+    pub fn routes_version(&self) -> u64 {
+        self.routes_version.load(Ordering::Relaxed)
+    }
+
     pub fn task_started(&self, name: &str) {
         if let Ok(mut map) = self.tasks.lock() {
             map.entry(name.to_string()).or_default().on_start();
         }
+        self.tasks_version.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn task_completed(&self, name: &str) {
@@ -387,6 +397,7 @@ impl Metrics {
         if let Ok(mut map) = self.tasks.lock() {
             map.entry(name.to_string()).or_default().on_finish(outcome);
         }
+        self.tasks_version.fetch_add(1, Ordering::Relaxed);
     }
 
     pub fn tasks_snapshot(&self) -> BTreeMap<String, TaskStatus> {
@@ -398,6 +409,12 @@ impl Metrics {
                     .collect()
             })
             .unwrap_or_default()
+    }
+
+    pub fn tasks_snapshot_with_version(&self) -> (u64, BTreeMap<String, TaskStatus>) {
+        let version = self.tasks_version.load(Ordering::Relaxed);
+        let items = self.tasks_snapshot();
+        (version, items)
     }
 
     pub fn record_legacy_capsule_header(&self) {
