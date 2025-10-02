@@ -67,9 +67,14 @@ pub(super) async fn append_note(state: &AppState, input: Value) -> Result<Value,
     let doc = load_project_notes(&payload.project)
         .await
         .map_err(map_read_error)?;
-    let project_root = util::state_dir().join("projects").join(&doc.proj);
-    let notes_path = project_root.join("NOTES.md");
+
     let state_dir = util::state_dir();
+    let state_dir_canon = fs::canonicalize(&state_dir)
+        .await
+        .unwrap_or_else(|_| state_dir.clone());
+    let project_root = state_dir.join("projects").join(&doc.proj);
+    let project_root_canon = state_dir_canon.join("projects").join(&doc.proj);
+    let notes_path = project_root.join("NOTES.md");
 
     let screenshot_meta = if let Some(path) =
         payload
@@ -81,15 +86,19 @@ pub(super) async fn append_note(state: &AppState, input: Value) -> Result<Value,
         let canonical = fs::canonicalize(&shot_path)
             .await
             .map_err(|err| ToolError::Invalid(format!("invalid screenshot_path: {err}")))?;
-        let expected_base = state_dir.join("screenshots");
-        if !canonical.starts_with(&expected_base) {
+        let screenshots_root = state_dir_canon.join("screenshots");
+        if !path_starts_with(&canonical, &screenshots_root) {
             return Err(ToolError::Invalid(
                 "screenshot_path must reside under state_dir/screenshots".into(),
             ));
         }
         let absolute = normalize_path(&canonical);
-        let rel_project = diff_paths(&canonical, &project_root).map(|p| normalize_path(&p));
-        let rel_state = diff_paths(&canonical, &state_dir).map(|p| normalize_path(&p));
+        let rel_project = diff_paths(&canonical, &project_root_canon)
+            .or_else(|| diff_paths(&canonical, &project_root))
+            .map(|p| normalize_path(&p));
+        let rel_state = diff_paths(&canonical, &state_dir_canon)
+            .or_else(|| diff_paths(&canonical, &state_dir))
+            .map(|p| normalize_path(&p));
         let markdown_path = rel_project.clone().unwrap_or_else(|| absolute.clone());
         Some(ScreenshotMeta {
             absolute,
@@ -258,6 +267,41 @@ fn escape_brackets(input: &str) -> String {
 
 fn normalize_path(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
+}
+
+fn normalized_path_string(path: &Path) -> String {
+    let raw = normalize_path(path);
+    #[cfg(windows)]
+    {
+        if let Some(stripped) = raw.strip_prefix("//?/") {
+            return stripped.to_ascii_lowercase();
+        }
+        return raw.to_ascii_lowercase();
+    }
+    #[cfg(not(windows))]
+    {
+        raw
+    }
+}
+
+fn path_starts_with(candidate: &Path, base: &Path) -> bool {
+    if candidate.starts_with(base) {
+        return true;
+    }
+
+    let candidate_norm = normalized_path_string(candidate);
+    let base_norm = normalized_path_string(base);
+
+    if !candidate_norm.starts_with(&base_norm) {
+        return false;
+    }
+
+    let base_len = base_norm.len();
+    if candidate_norm.len() == base_len {
+        return true;
+    }
+
+    matches!(candidate_norm.as_bytes().get(base_len), Some(b'/'))
 }
 
 fn select_heading(payload: &AppendNoteInput, now: DateTime<Utc>) -> Option<String> {
