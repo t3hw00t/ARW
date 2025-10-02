@@ -5,6 +5,8 @@ This is a lightweight, hand‑written client for `arw-server` focusing on the co
 - `POST /actions` → submit an action
 - `GET /actions/:id` → poll action state
 - `GET /events` (SSE) → subscribe to events (browser and Node supported)
+- `GET /state/observations` → admin snapshot with optional `limit` / `kind_prefix` filters
+- `GET /state/actions` → admin snapshot with optional `limit` / `state` / `kind_prefix` / `updated_since`
 - `GET /about` and `GET /healthz`
 
 It does not rely on a generator and has no runtime dependencies beyond the standard browser/Node `fetch` and `EventSource` APIs.
@@ -30,6 +32,14 @@ es.onmessage = (e) => console.log('event', e.data);
 
 // Resume from a known event id (browser falls back to ?after=, Node sends Last-Event-ID header)
 const es2 = client.events.subscribe({ lastEventId: '12345' });
+
+// Snapshot latest observations (admin token required)
+const observations = await client.state.observations({ limit: 50, kindPrefix: 'service.' });
+console.log('service observations', observations.items?.length ?? 0);
+
+// Filter action history (admin token required)
+const recentActions = await client.state.actions({ state: 'completed', kindPrefix: 'chat.' });
+console.log('completed chat actions', recentActions.items?.length ?? 0);
 ```
 
 Node tips:

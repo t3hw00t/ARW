@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use arw_memory_core::{MemoryInsertArgs, MemoryInsertOwned, MemoryStore};
 use chrono::{DateTime, Utc};
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, types::Value, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
@@ -890,11 +890,62 @@ impl Kernel {
     }
 
     pub fn list_actions(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
+        let opts = ActionListOptions {
+            limit,
+            ..Default::default()
+        };
+        self.list_actions_filtered(&opts)
+    }
+
+    pub fn list_actions_filtered(
+        &self,
+        opts: &ActionListOptions,
+    ) -> Result<Vec<serde_json::Value>> {
         let conn = self.conn()?;
-        let mut stmt = conn.prepare(
-            "SELECT id,kind,state,created,updated FROM actions ORDER BY updated DESC LIMIT ?",
-        )?;
-        let mut rows = stmt.query([limit])?;
+        let mut sql = String::from("SELECT id,kind,state,created,updated FROM actions");
+        let mut clauses: Vec<&str> = Vec::new();
+        let mut params: Vec<Value> = Vec::new();
+
+        if let Some(state) = opts
+            .state
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
+            clauses.push("state = ?");
+            params.push(Value::Text(state.to_string()))
+        }
+
+        if let Some(prefix) = opts
+            .kind_prefix
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
+            clauses.push("kind LIKE ?");
+            params.push(Value::Text(format!("{}%", prefix)));
+        }
+
+        if let Some(since) = opts
+            .updated_since
+            .as_ref()
+            .map(|s| s.trim())
+            .filter(|s| !s.is_empty())
+        {
+            clauses.push("updated >= ?");
+            params.push(Value::Text(since.to_string()));
+        }
+
+        if !clauses.is_empty() {
+            sql.push_str(" WHERE ");
+            sql.push_str(&clauses.join(" AND "));
+        }
+
+        sql.push_str(" ORDER BY updated DESC LIMIT ?");
+        params.push(Value::Integer(opts.clamped_limit() as i64));
+
+        let mut stmt = conn.prepare(&sql)?;
+        let mut rows = stmt.query(rusqlite::params_from_iter(params.iter()))?;
         let mut out = Vec::new();
         while let Some(r) = rows.next()? {
             out.push(serde_json::json!({
@@ -2291,9 +2342,12 @@ impl Kernel {
             .map_err(|e| anyhow!("join error: {}", e))?
     }
 
-    pub async fn list_actions_async(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
+    pub async fn list_actions_async(
+        &self,
+        opts: ActionListOptions,
+    ) -> Result<Vec<serde_json::Value>> {
         let k = self.clone();
-        tokio::task::spawn_blocking(move || k.list_actions(limit))
+        tokio::task::spawn_blocking(move || k.list_actions_filtered(&opts))
             .await
             .map_err(|e| anyhow!("join error: {}", e))?
     }
@@ -2303,6 +2357,27 @@ impl Kernel {
         tokio::task::spawn_blocking(move || k.list_egress(limit))
             .await
             .map_err(|e| anyhow!("join error: {}", e))?
+    }
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct ActionListOptions {
+    pub limit: i64,
+    pub state: Option<String>,
+    pub kind_prefix: Option<String>,
+    pub updated_since: Option<String>,
+}
+
+impl ActionListOptions {
+    pub fn new(limit: i64) -> Self {
+        Self {
+            limit,
+            ..Default::default()
+        }
+    }
+
+    pub fn clamped_limit(&self) -> i64 {
+        self.limit.clamp(1, 2000)
     }
 }
 

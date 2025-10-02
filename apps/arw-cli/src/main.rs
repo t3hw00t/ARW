@@ -55,6 +55,11 @@ enum Commands {
         #[command(subcommand)]
         cmd: RuntimeCmd,
     },
+    /// State snapshots
+    State {
+        #[command(subcommand)]
+        cmd: StateCmd,
+    },
     /// Context and training telemetry helpers
     Context {
         #[command(subcommand)]
@@ -259,6 +264,12 @@ enum RuntimeCmd {
 }
 
 #[derive(Subcommand)]
+enum StateCmd {
+    /// Snapshot filtered actions via /state/actions
+    Actions(StateActionsArgs),
+}
+
+#[derive(Subcommand)]
 enum ContextCmd {
     /// Fetch /state/training/telemetry and render a summary
     Telemetry(ContextTelemetryArgs),
@@ -266,6 +277,8 @@ enum ContextCmd {
 
 #[derive(Subcommand)]
 enum EventsCmd {
+    /// Snapshot the observations read-model via /state/observations
+    Observations(EventsObservationsArgs),
     /// Tail the journal via /admin/events/journal
     Journal(EventsJournalArgs),
 }
@@ -326,6 +339,71 @@ struct ContextTelemetryArgs {
     /// Pretty-print JSON output (requires --json)
     #[arg(long, requires = "json")]
     pretty: bool,
+}
+
+#[derive(Args)]
+struct StateActionsArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+    /// Maximum number of items to request (server clamps 1-2000)
+    #[arg(long)]
+    limit: Option<usize>,
+    /// Filter by action state (queued|running|completed|failed)
+    #[arg(long)]
+    state: Option<String>,
+    /// Restrict kinds by prefix (e.g., chat.)
+    #[arg(long)]
+    kind_prefix: Option<String>,
+    /// Only include actions updated at or after this RFC3339 timestamp
+    #[arg(long)]
+    updated_since: Option<String>,
+    /// Emit raw JSON instead of formatted text
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+    /// Width for the rendered kind column in text output (ignored in JSON mode)
+    #[arg(long, default_value_t = 36)]
+    kind_width: usize,
+}
+
+#[derive(Args)]
+struct EventsObservationsArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+    /// Maximum number of items to request (defaults to server window when omitted)
+    #[arg(long)]
+    limit: Option<usize>,
+    /// Filter to observation kinds starting with this prefix (e.g., actions.)
+    #[arg(long)]
+    kind_prefix: Option<String>,
+    /// Emit raw JSON instead of a formatted summary
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+    /// Maximum characters of payload JSON to show per row (set 0 to hide)
+    #[arg(long, default_value_t = 120)]
+    payload_width: usize,
+    /// Include policy metadata if present on events
+    #[arg(long)]
+    show_policy: bool,
 }
 
 #[derive(Args)]
@@ -604,6 +682,14 @@ fn main() {
                 }
             }
         },
+        Some(Commands::State { cmd }) => match cmd {
+            StateCmd::Actions(args) => {
+                if let Err(e) = cmd_state_actions(&args) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
+            }
+        },
         Some(Commands::Context { cmd }) => match cmd {
             ContextCmd::Telemetry(args) => {
                 if let Err(e) = cmd_context_telemetry(&args) {
@@ -613,6 +699,12 @@ fn main() {
             }
         },
         Some(Commands::Events { cmd }) => match cmd {
+            EventsCmd::Observations(args) => {
+                if let Err(e) = cmd_events_observations(&args) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
+            }
             EventsCmd::Journal(args) => {
                 if let Err(e) = cmd_events_journal(&args) {
                     eprintln!("{}", e);
@@ -1384,6 +1476,243 @@ fn clean_text(value: &str) -> String {
     cleaned.trim().to_string()
 }
 
+fn cmd_state_actions(args: &StateActionsArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.trim_end_matches('/');
+    let url = format!("{}/state/actions", base);
+
+    let mut params: Vec<(String, String)> = Vec::new();
+    if let Some(limit) = args.limit {
+        let clamped = limit.clamp(1, 2000);
+        params.push(("limit".into(), clamped.to_string()));
+    }
+    if let Some(state) = args
+        .state
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        params.push(("state".into(), state.to_string()));
+    }
+    if let Some(prefix) = args
+        .kind_prefix
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        params.push(("kind_prefix".into(), prefix.to_string()));
+    }
+    if let Some(since) = args
+        .updated_since
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        params.push(("updated_since".into(), since.to_string()));
+    }
+
+    let mut req = client.get(&url);
+    if !params.is_empty() {
+        req = req.query(&params);
+    }
+    req = with_admin_headers(req, token.as_deref());
+
+    let resp = req.send().with_context(|| format!("requesting {}", url))?;
+    let status = resp.status();
+    let body: JsonValue = resp.json().context("parsing actions response")?;
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        anyhow::bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !status.is_success() {
+        anyhow::bail!("server returned {}: {}", status, body);
+    }
+
+    if args.json {
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string())
+            );
+        } else {
+            println!("{}", body);
+        }
+        return Ok(());
+    }
+
+    let version = body.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
+    let items = body
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    println!(
+        "Actions snapshot ({} items, version {})",
+        items.len(),
+        version
+    );
+    if items.is_empty() {
+        println!("(no actions matched the filters)");
+        return Ok(());
+    }
+
+    let kind_width = args.kind_width.max(8);
+    println!(
+        "{:<28} {:<10} {:<width$} {}",
+        "Updated",
+        "State",
+        "Kind",
+        "Id",
+        width = kind_width
+    );
+
+    for item in items {
+        let updated_raw = item.get("updated").and_then(|v| v.as_str()).unwrap_or("");
+        let updated_display = if updated_raw.is_empty() {
+            "-".to_string()
+        } else {
+            format_observation_timestamp(updated_raw)
+        };
+        let state_display = item
+            .get("state")
+            .and_then(|v| v.as_str())
+            .unwrap_or("-")
+            .to_string();
+        let kind_display = item
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .map(|k| ellipsize_str(k, kind_width))
+            .unwrap_or_else(|| "-".to_string());
+        let id_display = item.get("id").and_then(|v| v.as_str()).unwrap_or("-");
+
+        println!(
+            "{:<28} {:<10} {:<width$} {}",
+            updated_display,
+            state_display,
+            kind_display,
+            id_display,
+            width = kind_width
+        );
+    }
+
+    Ok(())
+}
+
+fn cmd_events_observations(args: &EventsObservationsArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.trim_end_matches('/');
+    let url = format!("{}/state/observations", base);
+    let mut req = client.get(&url);
+    let mut params: Vec<(String, String)> = Vec::new();
+    if let Some(limit) = args.limit {
+        params.push(("limit".into(), limit.to_string()));
+    }
+    if let Some(prefix) = args
+        .kind_prefix
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        params.push(("kind_prefix".into(), prefix.to_string()));
+    }
+    if !params.is_empty() {
+        req = req.query(&params);
+    }
+    req = with_admin_headers(req, token.as_deref());
+    let resp = req.send().with_context(|| format!("requesting {}", url))?;
+    let status = resp.status();
+    let body: JsonValue = resp.json().context("parsing observations response")?;
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        anyhow::bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !status.is_success() {
+        anyhow::bail!("server returned {}: {}", status, body);
+    }
+
+    if args.json {
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string())
+            );
+        } else {
+            println!("{}", body);
+        }
+        return Ok(());
+    }
+
+    let version = body.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
+    let items = body
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    println!(
+        "Observations snapshot ({} items, version {})",
+        items.len(),
+        version
+    );
+    if items.is_empty() {
+        return Ok(());
+    }
+
+    for item in items {
+        let time_raw = item.get("time").and_then(|v| v.as_str()).unwrap_or("");
+        let when = if time_raw.is_empty() {
+            "-".to_string()
+        } else {
+            format_observation_timestamp(time_raw)
+        };
+        let kind = item.get("kind").and_then(|v| v.as_str()).unwrap_or("-");
+        let kind_display = ellipsize_str(kind, 36);
+
+        let payload_display = if args.payload_width == 0 {
+            "-".to_string()
+        } else if let Some(payload) = item.get("payload") {
+            format_payload_snippet(payload, args.payload_width)
+        } else {
+            "-".to_string()
+        };
+
+        let mut extras: Vec<String> = Vec::new();
+        if args.show_policy {
+            if let Some(policy) = item.get("policy") {
+                let snippet = format_payload_snippet(policy, args.payload_width.max(48));
+                if snippet != "-" {
+                    extras.push(format!("policy={}", snippet));
+                }
+            }
+            if let Some(ce) = item.get("ce") {
+                let snippet = format_payload_snippet(ce, args.payload_width.max(48));
+                if snippet != "-" {
+                    extras.push(format!("ce={}", snippet));
+                }
+            }
+        }
+        let extra_str = if extras.is_empty() {
+            String::new()
+        } else {
+            format!(" {}", extras.join(" "))
+        };
+
+        println!(
+            "{:<28} {:<36} {}{}",
+            when, kind_display, payload_display, extra_str
+        );
+    }
+
+    Ok(())
+}
+
 fn cmd_events_journal(args: &EventsJournalArgs) -> Result<()> {
     let token = resolve_admin_token(&args.admin_token);
     let client = Client::builder()
@@ -2068,6 +2397,52 @@ fn budget_summary(budget: &JsonValue) -> Option<String> {
     } else {
         Some(format!("Restart budget: {}", parts.join(" · ")))
     }
+}
+
+fn format_observation_timestamp(raw: &str) -> String {
+    match chrono::DateTime::parse_from_rfc3339(raw) {
+        Ok(dt) => dt
+            .with_timezone(&Local)
+            .format("%Y-%m-%d %H:%M:%S%.3f %Z")
+            .to_string(),
+        Err(_) => raw.to_string(),
+    }
+}
+
+fn format_payload_snippet(value: &JsonValue, width: usize) -> String {
+    if width == 0 {
+        return "-".to_string();
+    }
+    let raw = serde_json::to_string(value).unwrap_or_else(|_| value.to_string());
+    let cleaned = raw.replace('\n', " ").replace('\r', " ");
+    let trimmed = cleaned.trim();
+    if trimmed.is_empty() {
+        "-".to_string()
+    } else {
+        ellipsize_str(trimmed, width)
+    }
+}
+
+fn ellipsize_str(input: &str, max_chars: usize) -> String {
+    if max_chars == 0 {
+        return String::new();
+    }
+    let mut chars = input.chars();
+    let mut collected: Vec<char> = Vec::new();
+    while let Some(ch) = chars.next() {
+        collected.push(ch);
+        if collected.len() == max_chars {
+            if !chars.as_str().is_empty() {
+                if max_chars == 1 {
+                    return "…".to_string();
+                }
+                collected.pop();
+                collected.push('…');
+            }
+            return collected.iter().collect();
+        }
+    }
+    collected.iter().collect()
 }
 
 fn resolve_admin_token(opt: &Option<String>) -> Option<String> {

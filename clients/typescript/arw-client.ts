@@ -58,6 +58,24 @@ export type JsonPatchOp = {
   from?: string;
 };
 
+export interface StateObservationsOptions {
+  /** Most recent N observations to return (defaults to the full rolling window). */
+  limit?: number;
+  /** Filter to event kinds with this prefix, e.g. `actions.` or `service.`. */
+  kindPrefix?: string;
+}
+
+export interface StateActionsOptions {
+  /** Max rows (1-2000). */
+  limit?: number;
+  /** Filter by exact state (queued|running|completed|failed). */
+  state?: string;
+  /** Restrict kinds to this prefix, e.g. `chat.`. */
+  kindPrefix?: string;
+  /** RFC3339 timestamp; only include actions updated after this point. */
+  updatedSince?: string;
+}
+
 export interface SubscribeReadModelOptions {
   lastEventId?: string;
   replay?: number;
@@ -1029,6 +1047,49 @@ export class ArwClient {
       };
 
       return iterator;
+    },
+  };
+
+  state = {
+    observations: async (options: StateObservationsOptions = {}): Promise<Json> => {
+      const params = new URLSearchParams();
+      if (options.limit !== undefined) {
+        const limit = Math.max(0, Math.floor(options.limit));
+        if (Number.isFinite(limit)) {
+          params.set('limit', limit.toString());
+        }
+      }
+      if (options.kindPrefix) {
+        params.set('kind_prefix', options.kindPrefix);
+      }
+      const query = params.toString();
+      const url = `${this.base}/state/observations${query ? `?${query}` : ''}`;
+      const r = await fetch(url, { headers: this.headers() });
+      if (!r.ok) throw new Error(`observations fetch failed: ${r.status}`);
+      return r.json();
+    },
+    actions: async (options: StateActionsOptions = {}): Promise<Json> => {
+      const params = new URLSearchParams();
+      if (options.limit !== undefined) {
+        const limit = Math.max(1, Math.min(2000, Math.floor(options.limit)));
+        if (Number.isFinite(limit)) {
+          params.set('limit', limit.toString());
+        }
+      }
+      if (options.state) {
+        params.set('state', options.state);
+      }
+      if (options.kindPrefix) {
+        params.set('kind_prefix', options.kindPrefix);
+      }
+      if (options.updatedSince) {
+        params.set('updated_since', options.updatedSince);
+      }
+      const query = params.toString();
+      const url = `${this.base}/state/actions${query ? `?${query}` : ''}`;
+      const r = await fetch(url, { headers: this.headers() });
+      if (!r.ok) throw new Error(`actions fetch failed: ${r.status}`);
+      return r.json();
     },
   };
 

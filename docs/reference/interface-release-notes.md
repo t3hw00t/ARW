@@ -364,6 +364,7 @@ GET /state/actions
 - Response now includes `version` (monotonic counter) aligned with the state observer so clients can detect updates without refetching entire histories.
 - Response now sets `ETag: "state-actions-v<version>"` so caches and polling clients can reuse conditional requests.
 - Response now sets `Cache-Control: private, max-age=2` for short-lived conditional polling.
+- Query parameters added: `state`, `kind_prefix`, and `updated_since`, alongside the existing `limit`, enabling filtered action snapshots without client-side scanning.
 
 GET /state/contributions
 - Response now sets `version`, `ETag: "state-contributions-v<version>"`, and `Cache-Control: private, max-age=2` for conditional polling.
@@ -413,6 +414,7 @@ GET /state/observations
 - Summary changed from 'List recent observations' to 'Recent observations from the event bus.'
 - Description changed from 'Return the rolling window of observation events captured from the live event bus.' to 'Recent observations from the event bus.'
 - Response now sets `version`, `ETag: "state-observations-v<version>"`, and `Cache-Control: private, max-age=2` to support conditional polling.
+- Query parameters added: `limit` (most recent N items) and `kind_prefix` (match event kind prefix) for lightweight filtering.
 
 GET /state/orchestrator/jobs
 - Summary changed from 'List orchestrator jobs' to 'Orchestrator jobs snapshot.'

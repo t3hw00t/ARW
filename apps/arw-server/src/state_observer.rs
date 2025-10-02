@@ -160,10 +160,41 @@ async fn update_actions(env: &Envelope) {
     }
 }
 
-pub(crate) async fn observations_snapshot() -> (u64, Vec<Envelope>) {
+pub(crate) async fn observations_snapshot(
+    limit: Option<usize>,
+    kind_prefix: Option<&str>,
+) -> (u64, Vec<Envelope>) {
     let version = observations_version().load(Ordering::Relaxed);
     let guard = observations_store().read().await;
-    let items: Vec<Envelope> = guard.iter().map(|entry| entry.value.clone()).collect();
+    let total = guard.len();
+    if total == 0 {
+        return (version, Vec::new());
+    }
+
+    let prefix = kind_prefix.unwrap_or("");
+    let needs_filter = !prefix.is_empty();
+    let requested = limit.unwrap_or(total);
+    let effective_limit = requested.min(total);
+
+    if effective_limit == total && !needs_filter {
+        let items: Vec<Envelope> = guard.iter().map(|entry| entry.value.clone()).collect();
+        return (version, items);
+    }
+
+    let mut items: Vec<Envelope> = guard
+        .iter()
+        .rev()
+        .filter(|entry| {
+            if prefix.is_empty() {
+                true
+            } else {
+                entry.value.kind.starts_with(prefix)
+            }
+        })
+        .take(effective_limit)
+        .map(|entry| entry.value.clone())
+        .collect();
+    items.reverse();
     (version, items)
 }
 
@@ -244,6 +275,50 @@ mod tests {
             policy: None,
             ce: None,
         }
+    }
+
+    #[tokio::test]
+    async fn observations_snapshot_supports_filters() {
+        let _env_lock = crate::test_support::env::guard();
+        reset_for_tests().await;
+
+        let events = [
+            Envelope {
+                time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "obs.one".to_string(),
+                payload: json!({"seq": 1}),
+                policy: None,
+                ce: None,
+            },
+            Envelope {
+                time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "intents.proposed".to_string(),
+                payload: json!({"seq": 2}),
+                policy: None,
+                ce: None,
+            },
+            Envelope {
+                time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "obs.two".to_string(),
+                payload: json!({"seq": 3}),
+                policy: None,
+                ce: None,
+            },
+        ];
+
+        for env in &events {
+            push_observation(env).await;
+        }
+
+        let (_, limited) = observations_snapshot(Some(2), None).await;
+        assert_eq!(limited.len(), 2);
+        assert_eq!(limited[0].payload["seq"].as_i64(), Some(2));
+        assert_eq!(limited[1].payload["seq"].as_i64(), Some(3));
+
+        let (_, filtered) = observations_snapshot(None, Some("obs.")).await;
+        assert_eq!(filtered.len(), 2);
+        assert_eq!(filtered[0].payload["seq"].as_i64(), Some(1));
+        assert_eq!(filtered[1].payload["seq"].as_i64(), Some(3));
     }
 
     #[tokio::test]

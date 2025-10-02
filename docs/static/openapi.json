@@ -2985,11 +2985,50 @@
           {
             "name": "limit",
             "in": "query",
-            "description": "Max items (1-2000)",
+            "description": "Max number of rows to return (1-2000).",
             "required": false,
             "schema": {
-              "type": "integer",
+              "type": [
+                "integer",
+                "null"
+              ],
               "format": "int64"
+            }
+          },
+          {
+            "name": "state",
+            "in": "query",
+            "description": "Filter by exact action state (e.g., queued, running, completed).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "kind_prefix",
+            "in": "query",
+            "description": "Restrict results to action kinds beginning with this prefix (e.g., `chat.`).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "updated_since",
+            "in": "query",
+            "description": "Only include actions updated at or after this RFC3339 timestamp.",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
             }
           }
         ],
@@ -3285,6 +3324,33 @@
         "summary": "List recent observations",
         "description": "Return the rolling window of observation events captured from the live event bus.",
         "operationId": "state_observations_doc",
+        "parameters": [
+          {
+            "name": "limit",
+            "in": "query",
+            "description": "Limit the number of items returned (most recent first); defaults to all retained observations.",
+            "required": false,
+            "schema": {
+              "type": [
+                "integer",
+                "null"
+              ],
+              "minimum": 0
+            }
+          },
+          {
+            "name": "kind_prefix",
+            "in": "query",
+            "description": "Restrict results to event kinds matching this prefix (e.g. `actions.`).",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Recent observations",

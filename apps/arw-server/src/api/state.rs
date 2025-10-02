@@ -14,7 +14,30 @@ use crate::{
 };
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
+use utoipa::{IntoParams, ToSchema};
+
+#[derive(Debug, Default, Deserialize, ToSchema, IntoParams)]
+#[serde(default)]
+pub struct StateObservationsQuery {
+    /// Limit the number of items returned (most recent first); defaults to all retained observations.
+    pub limit: Option<usize>,
+    /// Restrict results to event kinds matching this prefix (e.g. `actions.`).
+    pub kind_prefix: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize, IntoParams)]
+#[serde(default)]
+pub struct StateActionsQuery {
+    /// Max number of rows to return (1-2000).
+    pub limit: Option<i64>,
+    /// Filter by exact action state (e.g., queued, running, completed).
+    pub state: Option<String>,
+    /// Restrict results to action kinds beginning with this prefix (e.g., `chat.`).
+    pub kind_prefix: Option<String>,
+    /// Only include actions updated at or after this RFC3339 timestamp.
+    #[serde(rename = "updated_since")]
+    pub updated_since: Option<String>,
+}
 
 fn numeric_version_from_field(items: &[Value], field: &str) -> u64 {
     items
@@ -176,12 +199,16 @@ pub async fn state_tasks(headers: HeaderMap, State(state): State<AppState>) -> i
     tag = "State",
     operation_id = "state_observations_doc",
     description = "Recent observations from the event bus.",
+    params(StateObservationsQuery),
     responses(
         (status = 200, description = "Recent observations", body = serde_json::Value),
         (status = 401, description = "Unauthorized", body = serde_json::Value)
     )
 )]
-pub async fn state_observations(headers: HeaderMap) -> impl IntoResponse {
+pub async fn state_observations(
+    headers: HeaderMap,
+    Query(params): Query<StateObservationsQuery>,
+) -> impl IntoResponse {
     if !crate::admin_ok(&headers) {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
@@ -189,7 +216,9 @@ pub async fn state_observations(headers: HeaderMap) -> impl IntoResponse {
         )
             .into_response();
     }
-    let (version, items) = state_observer::observations_snapshot().await;
+    let StateObservationsQuery { limit, kind_prefix } = params;
+    let kind_prefix_ref = kind_prefix.as_deref();
+    let (version, items) = state_observer::observations_snapshot(limit, kind_prefix_ref).await;
     if let Some(resp) =
         crate::api::http_utils::state_version_not_modified(&headers, "observations", version)
     {
@@ -612,9 +641,7 @@ pub async fn state_experiments(
     tag = "State",
     operation_id = "state_actions_doc",
     description = "Recent actions list (most recent first).",
-    params(
-        ("limit" = Option<i64>, Query, description = "Max items (1-2000)")
-    ),
+    params(StateActionsQuery),
     responses(
         (status = 200, description = "Actions list", body = serde_json::Value),
         (status = 501, description = "Kernel disabled", body = serde_json::Value)
@@ -623,7 +650,7 @@ pub async fn state_experiments(
 pub async fn state_actions(
     headers: HeaderMap,
     State(state): State<AppState>,
-    Query(q): Query<std::collections::HashMap<String, String>>,
+    Query(params): Query<StateActionsQuery>,
 ) -> impl IntoResponse {
     if !crate::admin_ok(&headers) {
         return (
@@ -632,10 +659,6 @@ pub async fn state_actions(
         )
             .into_response();
     }
-    let limit = q
-        .get("limit")
-        .and_then(|s| s.parse::<i64>().ok())
-        .unwrap_or(200);
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
@@ -645,9 +668,14 @@ pub async fn state_actions(
     {
         return resp;
     }
+    let mut options = arw_kernel::ActionListOptions::new(params.limit.unwrap_or(200));
+    options.limit = options.clamped_limit();
+    options.state = params.state;
+    options.kind_prefix = params.kind_prefix;
+    options.updated_since = params.updated_since;
     let items = state
         .kernel()
-        .list_actions_async(limit.clamp(1, 2000))
+        .list_actions_async(options)
         .await
         .unwrap_or_default();
     let items: Vec<Value> = items
@@ -800,8 +828,12 @@ mod tests {
         };
         crate::state_observer::ingest_for_tests(&env).await;
 
-        let params: HashMap<String, String> = HashMap::new();
-        let response = state_actions(HeaderMap::new(), State(state.clone()), Query(params)).await;
+        let response = state_actions(
+            HeaderMap::new(),
+            State(state.clone()),
+            Query(StateActionsQuery::default()),
+        )
+        .await;
         let (parts, body) = response.into_response().into_parts();
         assert_eq!(parts.status, StatusCode::OK);
         assert_eq!(
@@ -947,11 +979,10 @@ mod tests {
         };
         crate::state_observer::ingest_for_tests(&env).await;
 
-        let params: HashMap<String, String> = HashMap::new();
         let first = state_actions(
             HeaderMap::new(),
             State(state.clone()),
-            Query(params.clone()),
+            Query(StateActionsQuery::default()),
         )
         .await
         .into_response();
@@ -963,10 +994,59 @@ mod tests {
 
         let mut headers = HeaderMap::new();
         headers.insert(header::IF_NONE_MATCH, etag);
-        let response = state_actions(headers, State(state), Query(params))
+        let response = state_actions(headers, State(state), Query(StateActionsQuery::default()))
             .await
             .into_response();
         assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+        crate::state_observer::reset_for_tests().await;
+    }
+
+    #[tokio::test]
+    async fn state_actions_supports_filters() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_DEBUG", "1");
+        crate::state_observer::reset_for_tests().await;
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let kernel = state.kernel();
+        kernel
+            .insert_action_async(
+                "a1",
+                "chat.reply",
+                &json!({"input": "ok"}),
+                None,
+                None,
+                "completed",
+            )
+            .await
+            .expect("insert action a1");
+        kernel
+            .insert_action_async("a2", "chat.search", &json!({}), None, None, "failed")
+            .await
+            .expect("insert action a2");
+        kernel
+            .insert_action_async("a3", "tools.build", &json!({}), None, None, "running")
+            .await
+            .expect("insert action a3");
+
+        let query = StateActionsQuery {
+            limit: Some(10),
+            state: Some("completed".to_string()),
+            kind_prefix: Some("chat.".to_string()),
+            updated_since: None,
+        };
+        let response = state_actions(HeaderMap::new(), State(state), Query(query))
+            .await
+            .into_response();
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        let bytes = to_bytes(body, usize::MAX).await.expect("body");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+        let items = value["items"].as_array().cloned().unwrap_or_default();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["id"].as_str(), Some("a1"));
+
         crate::state_observer::reset_for_tests().await;
     }
 
@@ -985,7 +1065,9 @@ mod tests {
         };
         crate::state_observer::ingest_for_tests(&envelope).await;
 
-        let first = state_observations(HeaderMap::new()).await.into_response();
+        let first = state_observations(HeaderMap::new(), Query(StateObservationsQuery::default()))
+            .await
+            .into_response();
         let etag = first
             .headers()
             .get(header::ETAG)
@@ -994,8 +1076,76 @@ mod tests {
 
         let mut headers = HeaderMap::new();
         headers.insert(header::IF_NONE_MATCH, etag);
-        let response = state_observations(headers).await.into_response();
+        let response = state_observations(headers, Query(StateObservationsQuery::default()))
+            .await
+            .into_response();
         assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+        crate::state_observer::reset_for_tests().await;
+    }
+
+    #[tokio::test]
+    async fn state_observations_supports_limit_and_prefix() {
+        let mut env_guard = crate::test_support::env::guard();
+        env_guard.set("ARW_DEBUG", "1");
+        crate::state_observer::reset_for_tests().await;
+
+        let envs = [
+            arw_events::Envelope {
+                time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "obs.one".to_string(),
+                payload: json!({"seq": 1}),
+                policy: None,
+                ce: None,
+            },
+            arw_events::Envelope {
+                time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "intents.proposed".to_string(),
+                payload: json!({"seq": 2}),
+                policy: None,
+                ce: None,
+            },
+            arw_events::Envelope {
+                time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "obs.two".to_string(),
+                payload: json!({"seq": 3}),
+                policy: None,
+                ce: None,
+            },
+        ];
+
+        for env in &envs {
+            crate::state_observer::ingest_for_tests(env).await;
+        }
+
+        let params = StateObservationsQuery {
+            limit: Some(1),
+            kind_prefix: None,
+        };
+        let response = state_observations(HeaderMap::new(), Query(params))
+            .await
+            .into_response();
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(value["items"].as_array().map(|a| a.len()), Some(1));
+        assert_eq!(value["items"][0]["payload"]["seq"].as_i64(), Some(3));
+
+        let params = StateObservationsQuery {
+            limit: None,
+            kind_prefix: Some("obs.".to_string()),
+        };
+        let response = state_observations(HeaderMap::new(), Query(params))
+            .await
+            .into_response();
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(value["items"].as_array().map(|a| a.len()), Some(2));
+        assert_eq!(value["items"][0]["payload"]["seq"].as_i64(), Some(1));
+        assert_eq!(value["items"][1]["payload"]["seq"].as_i64(), Some(3));
+
         crate::state_observer::reset_for_tests().await;
     }
 
