@@ -43,7 +43,7 @@ fn env_f64_in_range(key: &str, min: f64, max: f64) -> Option<f64> {
 fn env_list(key: &str) -> Option<Vec<String>> {
     let raw = std::env::var(key).ok()?;
     let items = raw
-        .split(|c| c == ',' || c == '\n')
+        .split([',', '\n'])
         .map(|item| item.trim())
         .filter(|item| !item.is_empty())
         .map(|item| item.to_string())
@@ -344,7 +344,7 @@ impl ChatToolInput {
             .and_then(|v| v.as_u64())
             .map(|v| v as usize)
             .unwrap_or_else(default_vote_k)
-            .clamp(1, 5) as usize;
+            .clamp(1, 5);
 
         Ok(Self {
             prompt,

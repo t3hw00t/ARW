@@ -70,10 +70,6 @@ fn intents_version() -> &'static AtomicU64 {
     VERSION.get_or_init(|| AtomicU64::new(0))
 }
 
-pub(crate) fn intents_version_value() -> u64 {
-    intents_version().load(Ordering::Relaxed)
-}
-
 fn actions_store() -> &'static RwLock<VecDeque<Timed<Value>>> {
     static ACTIONS: OnceCell<RwLock<VecDeque<Timed<Value>>>> = OnceCell::new();
     ACTIONS.get_or_init(|| RwLock::new(VecDeque::with_capacity(ACTIONS_CAP)))
@@ -234,6 +230,11 @@ pub(crate) async fn ingest_for_tests(env: &Envelope) {
 mod tests {
     use super::*;
     use chrono::{SecondsFormat, Utc};
+    use std::sync::atomic::Ordering;
+
+    fn intents_version_value() -> u64 {
+        super::intents_version().load(Ordering::Relaxed)
+    }
 
     fn env(kind: &str) -> Envelope {
         Envelope {

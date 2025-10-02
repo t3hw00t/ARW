@@ -232,8 +232,7 @@ mod tests {
         assert!(suggestions.iter().any(|value| {
             value["id"]
                 .as_str()
-                .map(|s| s.contains("hint-http-timeout"))
-                .unwrap_or(false)
+                .is_some_and(|s| s.contains("hint-http-timeout"))
                 && value["params"]["http_timeout_secs"].is_u64()
         }));
     }

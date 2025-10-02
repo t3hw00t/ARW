@@ -17,7 +17,7 @@ pub struct RuntimeConfig {
     /// Optional HTTP port for the local service
     #[serde(default)]
     pub port: Option<u16>,
-    /// Optional external base URL for reverse-proxy (e.g., https://arw.example.com)
+    /// Optional external base URL for reverse-proxy (e.g., <https://arw.example.com>)
     #[serde(default)]
     pub external_base_url: Option<String>,
 }
@@ -36,6 +36,11 @@ static CONFIG_SCHEMA: Lazy<JSONSchema> = Lazy::new(|| {
     JSONSchema::compile(&schema_value).expect("valid schema")
 });
 
+/// Returns the JSON schema describing the configuration structure.
+///
+/// # Panics
+///
+/// Panics if schema generation fails; this indicates a programming error.
 pub fn config_schema_json() -> serde_json::Value {
     let schema = schemars::schema_for!(Config);
     serde_json::to_value(&schema).expect("schema json")
@@ -69,7 +74,7 @@ pub struct ClusterConfig {
     /// Work queue backend: "local" (default), "nats".
     #[serde(default)]
     pub queue: Option<String>,
-    /// NATS connection URL, e.g. nats://127.0.0.1:4222
+    /// NATS connection URL, e.g. <nats://127.0.0.1:4222>
     #[serde(default)]
     pub nats_url: Option<String>,
     /// Optional explicit node id (defaults to hostname)

@@ -127,7 +127,10 @@ pub async fn state_episodes(
     tag = "State",
     responses((status = 200, description = "Route stats", body = serde_json::Value))
 )]
-pub async fn state_route_stats(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
+pub async fn state_route_stats(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
     let summary = state.metrics().snapshot();
     let bus = state.bus().stats();
     let cache = state.tool_cache().stats();

@@ -1305,7 +1305,7 @@ fn summarize_working_set_section(out: &mut String, assembled: Option<&JsonValue>
                 let labels: Vec<String> = lanes
                     .iter()
                     .filter_map(JsonValue::as_str)
-                    .map(|lane| clean_text(lane))
+                    .map(clean_text)
                     .collect();
                 if !labels.is_empty() {
                     let _ = writeln!(out, "  Lanes: {}", labels.join(", "));
@@ -1830,7 +1830,7 @@ fn render_runtime_matrix_summary(matrix: &JsonValue) -> String {
         return lines.join("\n");
     }
 
-    let mut sorted: Vec<(String, JsonValue)> = items.into_iter().map(|(k, v)| (k, v)).collect();
+    let mut sorted: Vec<(String, JsonValue)> = items.into_iter().collect();
     sorted.sort_by(|a, b| a.0.cmp(&b.0));
 
     for (node, entry) in sorted {

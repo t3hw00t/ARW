@@ -221,12 +221,8 @@ fn build_snippet(
             Some(s.trim())
         }
     }) {
-        for (idx, line) in note.lines().enumerate() {
-            if idx == 0 {
-                buf.push_str("> ");
-            } else {
-                buf.push_str("> ");
-            }
+        for line in note.lines() {
+            buf.push_str("> ");
             buf.push_str(line.trim());
             buf.push('\n');
         }

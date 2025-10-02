@@ -14,7 +14,7 @@ pub struct Envelope {
     pub payload: Value,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub policy: Option<arw_protocol::GatingCapsule>,
-    /// Optional CloudEvents metadata (structured as an extension for SSE)
+    /// Optional `CloudEvents` metadata (structured as an extension for SSE)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ce: Option<CloudEventMeta>,
 }
@@ -105,7 +105,6 @@ impl LocalBus {
                     let token: String = chars[i..j].iter().collect();
                     tokens.push(token.to_lowercase());
                     i = j;
-                    continue;
                 } else {
                     // Acronym run: consume consecutive uppercase letters
                     while j < chars.len() && chars[j].is_uppercase() {
@@ -116,12 +115,10 @@ impl LocalBus {
                         let head: String = chars[i..j - 1].iter().collect();
                         tokens.push(head.to_lowercase());
                         i = j - 1; // leave last uppercase for the next iteration
-                        continue;
                     } else {
                         let token: String = chars[i..j].iter().collect();
                         tokens.push(token.to_lowercase());
                         i = j;
-                        continue;
                     }
                 }
             } else {
@@ -197,6 +194,12 @@ impl LocalBus {
     pub fn note_lag(&self, n: u64) {
         self.counters.lagged.fetch_add(n, Ordering::Relaxed);
     }
+    /// Returns up to `n` recent envelopes from the replay buffer, ordered from
+    /// oldest to newest.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the replay buffer mutex is poisoned.
     pub fn replay(&self, n: usize) -> Vec<Envelope> {
         let rb = self.replay.lock().unwrap();
         let len = rb.len();
@@ -353,7 +356,7 @@ impl Bus {
         self.inner.subscribe()
     }
     pub fn publish<T: Serialize>(&self, kind: &str, payload: &T) {
-        self.inner.publish(kind, payload)
+        self.inner.publish(kind, payload);
     }
     pub fn publish_with_policy<T: Serialize>(
         &self,
@@ -361,14 +364,20 @@ impl Bus {
         payload: &T,
         policy: Option<arw_protocol::GatingCapsule>,
     ) {
-        self.inner.publish_with_policy(kind, payload, policy)
+        self.inner.publish_with_policy(kind, payload, policy);
     }
     pub fn note_lag(&self, n: u64) {
-        self.inner.note_lag(n)
+        self.inner.note_lag(n);
     }
     pub fn stats(&self) -> BusStats {
         self.inner.stats()
     }
+    /// Returns up to `n` recent envelopes from the replay buffer, ordered from
+    /// oldest to newest.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the underlying replay buffer mutex is poisoned.
     pub fn replay(&self, n: usize) -> Vec<Envelope> {
         self.inner.replay(n)
     }
