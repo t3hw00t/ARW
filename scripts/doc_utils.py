@@ -51,6 +51,34 @@ def _stable_now_timestamp(paths: Sequence[pathlib.Path]) -> str:
     )
 
 
+def stable_updated_date(paths: Sequence[pathlib.Path]) -> str:
+    """Return a YYYY-MM-DD string tied to the newest commit touching paths."""
+    return _stable_now_timestamp(paths).split("T", 1)[0]
+
+
+def metadata_block(
+    *,
+    status: str,
+    doc_type: str,
+    updated: str,
+    microsummary: Sequence[str] | None = None,
+) -> List[str]:
+    """Render a standard metadata block for docs (Updated/Status/Type/Microsummary)."""
+
+    lines: List[str] = [
+        f"Updated: {updated}",
+        f"Status: {status}",
+        f"Type: {doc_type}",
+        "",
+    ]
+    if microsummary:
+        lines.append("Microsummary:")
+        for item in microsummary:
+            lines.append(f"- {item}")
+        lines.append("")
+    return lines
+
+
 def parse_topics_rs(path: pathlib.Path | None = None, *, include_defaults: Iterable[str] | None = None) -> Set[str]:
     """Parse telemetry topic constants from the arw-topics crate."""
     topic_path = path or TOPICS_RS_DEFAULT

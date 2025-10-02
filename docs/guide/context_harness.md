@@ -4,6 +4,16 @@ title: Context Scenario Harness
 
 # Context Scenario Harness
 
+Updated: 2025-10-01
+Status: Preview
+Type: How-to
+
+Microsummary:
+- Exercise the context loop with deterministic fixtures that emit the same summaries and events as production.
+- Shuffle steps via an optional Monte Carlo driver to stress coverage heuristics and timing boundaries.
+- Enable the `context_harness` feature flag to expose the helpers in downstream tests or custom tools.
+- Use the harness to replay tricky regressions before exposing changes to users.
+
 The context loop now ships with a synthetic scenario harness so you can exercise
 multi-iteration plans without stitching together live event streams. Use it to
 stress coverage heuristics, replay known regressions, or dial Monte Carlo runs
