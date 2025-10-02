@@ -1,11 +1,12 @@
 use anyhow::{Context, Result};
 use arw_core::{gating, gating_keys, hello_core, introspect_tools, load_effective_paths};
 use base64::Engine;
-use chrono::{DateTime, Local, Utc};
+use chrono::{DateTime, Local, TimeZone, Utc};
 use clap::CommandFactory;
 use clap::{Args, Parser, Subcommand};
 use reqwest::blocking::Client;
 use serde_json::{json, Value as JsonValue};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tracing_subscriber::{fmt, EnvFilter};
@@ -84,6 +85,8 @@ enum CapCmd {
     SignEd25519(SignArgs),
     /// Verify a capsule file signature with ed25519 public key (b64)
     VerifyEd25519(VerifyArgs),
+    /// Fetch active policy capsules from the server
+    Status(CapsuleStatusArgs),
 }
 
 #[derive(Args)]
@@ -168,6 +171,28 @@ struct VerifyArgs {
     capsule_json: String,
     /// Signature (b64)
     sig_b64: String,
+}
+
+#[derive(Args)]
+struct CapsuleStatusArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+    /// Emit raw JSON instead of text
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+    /// Number of capsules to display (text mode only)
+    #[arg(long, default_value_t = 5)]
+    limit: usize,
 }
 
 #[derive(Args)]
@@ -449,6 +474,12 @@ fn main() {
                     std::process::exit(1);
                 } else {
                     println!("ok");
+                }
+            }
+            CapCmd::Status(args) => {
+                if let Err(e) = cmd_capsule_status(&args) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
                 }
             }
         },
@@ -1094,6 +1125,224 @@ fn format_reset_time_local(dt: &DateTime<Utc>) -> String {
     dt.with_timezone(&Local)
         .format("%Y-%m-%d %H:%M %Z")
         .to_string()
+}
+
+fn cmd_capsule_status(args: &CapsuleStatusArgs) -> Result<()> {
+    const CAPSULE_EXPIRING_SOON_WINDOW_MS: u64 = 60_000;
+
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let token = resolve_admin_token(&args.admin_token);
+    let base = args.base.trim_end_matches('/');
+    let url = format!("{}/state/policy/capsules", base);
+    let resp = with_admin_headers(client.get(&url), token.as_deref())
+        .send()
+        .with_context(|| format!("requesting {}", url))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().unwrap_or_default();
+        anyhow::bail!("server returned {}: {}", status, text.trim());
+    }
+    let snapshot: JsonValue = resp.json().context("parsing capsule snapshot")?;
+
+    if args.json {
+        if args.pretty {
+            println!("{}", serde_json::to_string_pretty(&snapshot)?);
+        } else {
+            println!("{}", serde_json::to_string(&snapshot)?);
+        }
+        return Ok(());
+    }
+
+    let now_ms = Utc::now().timestamp_millis() as u64;
+    let count = snapshot
+        .get("count")
+        .and_then(JsonValue::as_u64)
+        .unwrap_or(0);
+    let generated_ms = snapshot.get("generated_ms").and_then(JsonValue::as_u64);
+    let generated_label = generated_ms
+        .map(|ms| {
+            format!(
+                "{} ({})",
+                format_local_timestamp(ms),
+                format_relative_from_now(ms, now_ms)
+            )
+        })
+        .or_else(|| {
+            snapshot
+                .get("generated")
+                .and_then(JsonValue::as_str)
+                .map(|s| s.to_string())
+        });
+
+    println!("Active policy capsules: {}", count);
+    if let Some(label) = generated_label {
+        println!("Generated: {}", label);
+    }
+
+    let items: Vec<JsonValue> = snapshot
+        .get("items")
+        .and_then(JsonValue::as_array)
+        .cloned()
+        .unwrap_or_default();
+
+    if items.is_empty() {
+        println!("No capsule entries.");
+        return Ok(());
+    }
+
+    let mut status_counts: BTreeMap<String, u64> = BTreeMap::new();
+    let mut expiring_soon: u64 = 0;
+    let mut expired: u64 = 0;
+    let mut next_expiry: Option<(u64, String, String)> = None;
+
+    for item in &items {
+        if let Some(status) = item.get("status").and_then(JsonValue::as_str) {
+            *status_counts.entry(status.to_string()).or_insert(0) += 1;
+        }
+
+        if let Some(lease_until) = item.get("lease_until_ms").and_then(JsonValue::as_u64) {
+            if lease_until <= now_ms {
+                expired += 1;
+            } else if lease_until.saturating_sub(now_ms) <= CAPSULE_EXPIRING_SOON_WINDOW_MS {
+                expiring_soon += 1;
+            }
+            let should_update = next_expiry
+                .as_ref()
+                .map(|(current, _, _)| lease_until < *current)
+                .unwrap_or(true);
+            if should_update && lease_until > now_ms {
+                let label = item
+                    .get("status_label")
+                    .and_then(JsonValue::as_str)
+                    .unwrap_or("Expiry")
+                    .to_string();
+                let id = item
+                    .get("id")
+                    .and_then(JsonValue::as_str)
+                    .unwrap_or("capsule")
+                    .to_string();
+                next_expiry = Some((lease_until, label, id));
+            }
+        }
+    }
+
+    let renew_due = status_counts.get("renew_due").copied().unwrap_or(0);
+    let expiring_status = status_counts
+        .get("expiring")
+        .copied()
+        .unwrap_or(expiring_soon);
+
+    let summary_line = if count == 0 {
+        "No active policy capsules.".to_string()
+    } else {
+        match (renew_due, expiring_status, expired) {
+            (0, 0, 0) => "All policy capsules are healthy.".to_string(),
+            _ => format!(
+                "{} capsule{} healthy; {} awaiting renewal; {} expiring; {} expired.",
+                count.saturating_sub(renew_due + expiring_status + expired),
+                if count == 1 { "" } else { "s" },
+                renew_due,
+                expiring_status,
+                expired
+            ),
+        }
+    };
+
+    println!("Summary: {}", summary_line);
+    if let Some((expiry, label, id)) = &next_expiry {
+        let cleaned_label = label.trim_end_matches('.');
+        println!(
+            "Next expiry: {} ({} · {})",
+            format_relative_from_now(*expiry, now_ms),
+            format_local_timestamp(*expiry),
+            cleaned_label
+        );
+        println!("             capsule: {}", id);
+    }
+
+    if !status_counts.is_empty() {
+        println!("Status counts:");
+        for (status, total) in &status_counts {
+            println!("  - {}: {}", format_status_label(status), total);
+        }
+    }
+
+    let limit = args.limit.max(1);
+    println!("Capsule sample (showing up to {}):", limit);
+    for item in items.iter().take(limit) {
+        let id = item
+            .get("id")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("capsule");
+        let label = item
+            .get("status_label")
+            .and_then(JsonValue::as_str)
+            .or_else(|| item.get("status").and_then(JsonValue::as_str))
+            .unwrap_or("unknown");
+        let aria = item
+            .get("aria_hint")
+            .and_then(JsonValue::as_str)
+            .unwrap_or("");
+        if aria.is_empty() {
+            println!("  - {} :: {}", id, label);
+        } else {
+            println!("  - {} :: {} :: {}", id, label, aria);
+        }
+    }
+
+    Ok(())
+}
+
+fn format_status_label(raw: &str) -> String {
+    match raw {
+        "active" => "Active".to_string(),
+        "renew_due" => "Renew window".to_string(),
+        "expiring" => "Expiring soon".to_string(),
+        "expired" => "Expired".to_string(),
+        "unbounded" => "No lease".to_string(),
+        other => other.replace('_', " "),
+    }
+}
+
+fn format_local_timestamp(ms: u64) -> String {
+    match Utc.timestamp_millis_opt(ms as i64).single() {
+        Some(dt) => dt
+            .with_timezone(&Local)
+            .format("%Y-%m-%d %H:%M:%S %Z")
+            .to_string(),
+        None => "(invalid timestamp)".to_string(),
+    }
+}
+
+fn format_relative_from_now(target_ms: u64, now_ms: u64) -> String {
+    let diff = target_ms as i128 - now_ms as i128;
+    let future = diff >= 0;
+    let abs = if future {
+        diff as u128
+    } else {
+        (-diff) as u128
+    };
+    let seconds = (abs / 1_000) as u64;
+    let minutes = seconds / 60;
+    let hours = minutes / 60;
+    let days = hours / 24;
+    let label = if days > 0 {
+        format!("{}d", days)
+    } else if hours > 0 {
+        format!("{}h", hours)
+    } else if minutes > 0 {
+        format!("{}m", minutes)
+    } else {
+        format!("{}s", seconds)
+    };
+    if future {
+        format!("in {}", label)
+    } else {
+        format!("{} ago", label)
+    }
 }
 
 fn cmd_sign_ed25519(sk_b64: &str, capsule_file: &str, out: Option<&str>) -> Result<()> {

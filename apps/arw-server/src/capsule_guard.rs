@@ -9,9 +9,11 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use base64::engine::general_purpose::STANDARD as BASE64_STD;
 use base64::Engine as _;
+use chrono::{SecondsFormat, TimeZone, Utc};
 use serde::Serialize;
-use serde_json::json;
+use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::convert::TryFrom;
 use tokio::{sync::Mutex, time::Duration};
 
 use arw_core::gating::CapsuleLeaseState;
@@ -23,6 +25,7 @@ use arw_topics::{
     TOPIC_POLICY_DECISION,
 };
 
+pub const CAPSULE_EXPIRING_SOON_WINDOW_MS: u64 = 60_000;
 const EVENT_THROTTLE_MS: u64 = 2_000;
 const LEGACY_HEADER_DETAIL: &str =
     "Legacy X-ARW-Gate header is no longer supported; send X-ARW-Capsule instead";
@@ -63,6 +66,17 @@ struct CapsuleEntry {
     renew_within_ms: Option<u64>,
 }
 
+struct CapsuleStatusInfo {
+    status: &'static str,
+    status_label: String,
+    aria_hint: String,
+    expires_in_ms: Option<u64>,
+    renew_in_ms: Option<u64>,
+    renew_window_start_ms: Option<u64>,
+    renew_window_started: bool,
+    expired_since_ms: Option<u64>,
+}
+
 impl CapsuleSnapshot {
     fn from_capsule(
         capsule: &GatingCapsule,
@@ -100,6 +114,85 @@ impl CapsuleSnapshot {
         self.remaining_hops = remaining_hops;
         self.lease_until_ms = lease.lease_until_ms;
         self.renew_within_ms = lease.renew_within_ms;
+    }
+
+    fn to_json(&self, now_ms: u64) -> Value {
+        let info = classify_capsule(self, now_ms);
+        let CapsuleStatusInfo {
+            status,
+            status_label,
+            aria_hint,
+            expires_in_ms,
+            renew_in_ms,
+            renew_window_start_ms,
+            renew_window_started,
+            expired_since_ms,
+        } = info;
+
+        let mut obj = serde_json::Map::new();
+        obj.insert("id".into(), Value::String(self.id.clone()));
+        obj.insert("version".into(), Value::String(self.version.clone()));
+        if let Some(issuer) = &self.issuer {
+            obj.insert("issuer".into(), Value::String(issuer.clone()));
+        }
+        obj.insert("applied_ms".into(), Value::Number(self.applied_ms.into()));
+        if let Some(applied_iso) = ms_to_rfc3339(self.applied_ms) {
+            obj.insert("applied".into(), Value::String(applied_iso));
+        }
+        if let Some(hop_ttl) = self.hop_ttl {
+            obj.insert("hop_ttl".into(), Value::Number(u64::from(hop_ttl).into()));
+        }
+        obj.insert("denies".into(), Value::Number((self.denies as u64).into()));
+        obj.insert(
+            "contracts".into(),
+            Value::Number((self.contracts as u64).into()),
+        );
+        if let Some(remaining) = self.remaining_hops {
+            obj.insert(
+                "remaining_hops".into(),
+                Value::Number(u64::from(remaining).into()),
+            );
+        }
+        if let Some(lease_until) = self.lease_until_ms {
+            obj.insert("lease_until_ms".into(), Value::Number(lease_until.into()));
+            if let Some(lease_iso) = ms_to_rfc3339(lease_until) {
+                obj.insert("lease_until".into(), Value::String(lease_iso));
+            }
+        }
+        if let Some(renew_within) = self.renew_within_ms {
+            obj.insert("renew_within_ms".into(), Value::Number(renew_within.into()));
+        }
+
+        obj.insert("status".into(), Value::String(status.to_string()));
+        obj.insert("status_label".into(), Value::String(status_label));
+        obj.insert("aria_hint".into(), Value::String(aria_hint));
+        if let Some(expires) = expires_in_ms {
+            obj.insert("expires_in_ms".into(), Value::Number(expires.into()));
+        }
+        if let Some(expired_since) = expired_since_ms {
+            obj.insert(
+                "expired_since_ms".into(),
+                Value::Number(expired_since.into()),
+            );
+        }
+        if let Some(renew_in) = renew_in_ms {
+            obj.insert("renew_in_ms".into(), Value::Number(renew_in.into()));
+        }
+        obj.insert(
+            "renew_window_started".into(),
+            Value::Bool(renew_window_started),
+        );
+        if let Some(renew_start) = renew_window_start_ms {
+            obj.insert(
+                "renew_window_start_ms".into(),
+                Value::Number(renew_start.into()),
+            );
+            if let Some(renew_iso) = ms_to_rfc3339(renew_start) {
+                obj.insert("renew_window_start".into(), Value::String(renew_iso));
+            }
+        }
+
+        Value::Object(obj)
     }
 }
 
@@ -177,11 +270,20 @@ impl CapsuleStore {
 
     pub async fn snapshot(&self) -> serde_json::Value {
         let guard = self.inner.lock().await;
-        let mut items: Vec<CapsuleSnapshot> = guard.values().map(|e| e.snapshot.clone()).collect();
-        items.sort_by(|a, b| b.applied_ms.cmp(&a.applied_ms));
+        let now_ms = now_ms();
+        let mut items: Vec<(u64, Value)> = guard
+            .values()
+            .map(|entry| (entry.snapshot.applied_ms, entry.snapshot.to_json(now_ms)))
+            .collect();
+        items.sort_by(|a, b| b.0.cmp(&a.0));
+        let items: Vec<Value> = items.into_iter().map(|(_, value)| value).collect();
+        let generated_iso = ms_to_rfc3339(now_ms)
+            .unwrap_or_else(|| Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true));
         json!({
             "items": items,
-            "count": items.len(),
+            "count": guard.len(),
+            "generated_ms": now_ms,
+            "generated": generated_iso,
         })
     }
 
@@ -614,6 +716,187 @@ fn fingerprint_capsule(cap: &GatingCapsule) -> String {
     hex::encode(hasher.finalize())
 }
 
+fn classify_capsule(snapshot: &CapsuleSnapshot, now_ms: u64) -> CapsuleStatusInfo {
+    let lease_until = snapshot.lease_until_ms;
+    let renew_window = snapshot.renew_within_ms;
+    let renew_window_start_ms =
+        lease_until.and_then(|lease| renew_window.map(|window| lease.saturating_sub(window)));
+    let renew_window_started = renew_window_start_ms
+        .map(|start| now_ms >= start)
+        .unwrap_or(false);
+
+    let mut expires_in_ms = lease_until.map(|lease| lease.saturating_sub(now_ms));
+    let mut renew_in_ms = renew_window_start_ms.map(|start| start.saturating_sub(now_ms));
+    let mut expired_since_ms = None;
+
+    #[allow(unused_mut)]
+    let mut status: &'static str;
+    #[allow(unused_mut)]
+    let mut status_label: String;
+    let mut aria_hint = format!("Capsule {}.", snapshot.id);
+
+    if let Some(lease) = lease_until {
+        let expires_in = lease.saturating_sub(now_ms);
+        expires_in_ms = Some(expires_in);
+
+        if now_ms >= lease {
+            status = "expired";
+            status_label = "Expired – renew required".to_string();
+            let since = now_ms.saturating_sub(lease);
+            expired_since_ms = Some(since);
+            aria_hint.push(' ');
+            aria_hint.push_str(&format!(
+                "Expired {}. Apply a new capsule to restore enforcement.",
+                format_relative_past(since)
+            ));
+            renew_in_ms = None;
+        } else if renew_window_started {
+            status = "renew_due";
+            status_label = if expires_in == 0 {
+                "Renew now – expires immediately".to_string()
+            } else {
+                format!(
+                    "Renew now – expires in {}",
+                    format_duration_units(expires_in)
+                )
+            };
+            aria_hint.push(' ');
+            aria_hint.push_str(&format!(
+                "Renewal window active. Capsule expires {}.",
+                format_relative_future(expires_in)
+            ));
+        } else if expires_in <= CAPSULE_EXPIRING_SOON_WINDOW_MS {
+            status = "expiring";
+            status_label = if expires_in == 0 {
+                "Expiring now".to_string()
+            } else {
+                format!("Expiring soon – {} left", format_duration_units(expires_in))
+            };
+            aria_hint.push(' ');
+            aria_hint.push_str(&format!(
+                "Capsule expires {}.",
+                format_relative_future(expires_in)
+            ));
+        } else {
+            status = "active";
+            if let Some(renew_in) = renew_in_ms {
+                if renew_in == 0 {
+                    status_label = "Active – renewal window opening".to_string();
+                    aria_hint.push(' ');
+                    aria_hint.push_str(&format!(
+                        "Healthy. Renewal window begins soon and expires {}.",
+                        format_relative_future(expires_in)
+                    ));
+                } else {
+                    status_label = format!("Active – renew in {}", format_duration_units(renew_in));
+                    aria_hint.push(' ');
+                    aria_hint.push_str(&format!(
+                        "Healthy. Renewal window opens {} and expiry follows {}.",
+                        format_relative_future(renew_in),
+                        format_relative_future(expires_in)
+                    ));
+                }
+            } else {
+                status_label = format!("Active – expires in {}", format_duration_units(expires_in));
+                aria_hint.push(' ');
+                aria_hint.push_str(&format!(
+                    "Healthy. Capsule expires {}.",
+                    format_relative_future(expires_in)
+                ));
+            }
+        }
+    } else {
+        status = "unbounded";
+        status_label = "Active – lease not set".to_string();
+        aria_hint.push(' ');
+        aria_hint.push_str(
+            "Healthy. Capsule does not define a lease duration; renew manually when required.",
+        );
+    }
+
+    if let Some(hops) = snapshot.remaining_hops {
+        aria_hint.push(' ');
+        if hops > 0 {
+            aria_hint.push_str(&format!(
+                "{} hop{} remaining before forced refresh.",
+                hops,
+                if hops == 1 { "" } else { "s" }
+            ));
+        } else {
+            aria_hint.push_str("Hop limit reached; awaiting refresh.");
+        }
+    }
+
+    CapsuleStatusInfo {
+        status,
+        status_label,
+        aria_hint,
+        expires_in_ms,
+        renew_in_ms,
+        renew_window_start_ms,
+        renew_window_started,
+        expired_since_ms,
+    }
+}
+
+fn ms_to_rfc3339(ms: u64) -> Option<String> {
+    let millis = i64::try_from(ms).ok()?;
+    Utc.timestamp_millis_opt(millis)
+        .single()
+        .map(|dt| dt.to_rfc3339_opts(SecondsFormat::Millis, true))
+}
+
+fn format_duration_units(ms: u64) -> String {
+    const SECOND: u64 = 1_000;
+    let total_seconds = ms / SECOND;
+    if total_seconds == 0 {
+        return "under 1 second".to_string();
+    }
+
+    let units: &[(u64, &str, &str)] = &[
+        (86_400, "day", "days"),
+        (3_600, "hour", "hours"),
+        (60, "minute", "minutes"),
+        (1, "second", "seconds"),
+    ];
+
+    let mut remaining = total_seconds;
+    let mut parts: Vec<String> = Vec::new();
+    for (unit_secs, singular, plural) in units.iter().copied() {
+        if remaining >= unit_secs {
+            let value = remaining / unit_secs;
+            remaining %= unit_secs;
+            let label = if value == 1 { singular } else { plural };
+            parts.push(format!("{} {}", value, label));
+            if parts.len() == 2 {
+                break;
+            }
+        }
+    }
+
+    if parts.is_empty() {
+        "under 1 second".to_string()
+    } else {
+        parts.join(" ")
+    }
+}
+
+fn format_relative_future(ms: u64) -> String {
+    if ms == 0 {
+        "now".to_string()
+    } else {
+        format!("in {}", format_duration_units(ms))
+    }
+}
+
+fn format_relative_past(ms: u64) -> String {
+    if ms == 0 {
+        "just now".to_string()
+    } else {
+        format!("{} ago", format_duration_units(ms))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -747,6 +1030,80 @@ mod tests {
             signature: None,
             ..sample_capsule(id)
         }
+    }
+
+    #[test]
+    fn classify_capsule_reports_status_transitions() {
+        let base_now = 1_000_000u64;
+        let snapshot = CapsuleSnapshot {
+            id: "status".into(),
+            version: "1".into(),
+            issuer: Some("issuer".into()),
+            applied_ms: base_now,
+            hop_ttl: None,
+            denies: 2,
+            contracts: 1,
+            remaining_hops: Some(2),
+            lease_until_ms: Some(base_now + 120_000),
+            renew_within_ms: Some(60_000),
+        };
+
+        let active = classify_capsule(&snapshot, base_now);
+        assert_eq!(active.status, "active");
+        assert_eq!(active.expires_in_ms, Some(120_000));
+        assert_eq!(active.renew_in_ms, Some(60_000));
+        assert!(active.aria_hint.contains("Healthy"));
+
+        let renew_due = classify_capsule(&snapshot, base_now + 70_000);
+        assert_eq!(renew_due.status, "renew_due");
+        assert!(renew_due.aria_hint.contains("Renewal window active"));
+        assert!(renew_due.renew_window_started);
+
+        let expired = classify_capsule(&snapshot, base_now + 150_000);
+        assert_eq!(expired.status, "expired");
+        assert!(expired.aria_hint.contains("Expired"));
+        assert!(expired.expired_since_ms.is_some());
+    }
+
+    #[test]
+    fn snapshot_to_json_enriches_metadata() {
+        let base_now = 1_000_000u64;
+        let snapshot = CapsuleSnapshot {
+            id: "json".into(),
+            version: "1".into(),
+            issuer: None,
+            applied_ms: base_now,
+            hop_ttl: Some(3),
+            denies: 0,
+            contracts: 0,
+            remaining_hops: Some(1),
+            lease_until_ms: Some(base_now + 10_000),
+            renew_within_ms: Some(5_000),
+        };
+
+        let value = snapshot.to_json(base_now + 6_000);
+        let obj = value.as_object().expect("snapshot json object");
+        assert_eq!(obj.get("status").and_then(Value::as_str), Some("renew_due"));
+        assert!(obj
+            .get("status_label")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .contains("Renew"));
+        assert!(obj
+            .get("aria_hint")
+            .and_then(Value::as_str)
+            .unwrap_or_default()
+            .contains("Renewal window active"));
+        assert!(obj.get("renew_in_ms").and_then(Value::as_u64).is_some());
+        assert!(obj
+            .get("renew_window_start_ms")
+            .and_then(Value::as_u64)
+            .is_some());
+        assert_eq!(
+            obj.get("renew_window_started").and_then(Value::as_bool),
+            Some(true)
+        );
+        assert!(obj.get("expires_in_ms").and_then(Value::as_u64).is_some());
     }
 
     #[tokio::test]

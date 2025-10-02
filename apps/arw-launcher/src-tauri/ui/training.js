@@ -231,6 +231,18 @@ function formatSlotName(slot) {
   return escapeText((slot || '').replace(/[_-]/g, ' '));
 }
 
+function formatStatusLabel(status) {
+  if (!status) return 'unknown';
+  const map = {
+    active: 'Active',
+    renew_due: 'Renew window',
+    expiring: 'Expiring soon',
+    expired: 'Expired',
+    unbounded: 'No lease',
+  };
+  return map[status] || status.replace(/_/g, ' ');
+}
+
 function renderList(targetId, items, formatter, emptyText) {
   const el = typeof targetId === 'string' ? document.getElementById(targetId) : targetId;
   if (!el) return;
@@ -367,6 +379,58 @@ function renderTelemetry(data) {
   if (specEl) {
     specEl.textContent = parts.length ? parts.join(' · ') : '—';
   }
+
+  const capsules = data && typeof data.capsules === 'object' ? data.capsules : {};
+  const capsuleSummaryEl = document.getElementById('capsuleAccessibleSummary');
+  if (capsuleSummaryEl) {
+    capsuleSummaryEl.textContent = capsules.accessible_summary || 'No policy capsules active.';
+  }
+  const nextExpiryEl = document.getElementById('capsuleNextExpiry');
+  if (nextExpiryEl) {
+    const nextExpiryMs = Number(capsules.next_expiry_ms);
+    if (Number.isFinite(nextExpiryMs)) {
+      const rel = formatRelativeTraining(nextExpiryMs);
+      const abs = formatRelativeAbsTraining(nextExpiryMs);
+      const label = capsules.next_expiry_label ? `${capsules.next_expiry_label} · ` : '';
+      nextExpiryEl.textContent = `${label}${rel} (${abs})`;
+    } else {
+      nextExpiryEl.textContent = '—';
+    }
+  }
+  const statusCounts = capsules.status_counts && typeof capsules.status_counts === 'object'
+    ? Object.entries(capsules.status_counts)
+    : [];
+  renderList(
+    'capsuleStatusCounts',
+    statusCounts,
+    ([status, total]) => {
+      const count = Number(total || 0);
+      return `${formatStatusLabel(status)} · ${count}`;
+    },
+    capsules.count ? 'No recent status changes' : 'No policy capsules active'
+  );
+  const capsuleSample = Array.isArray(capsules.sample) ? capsules.sample : [];
+  renderList(
+    'capsuleSample',
+    capsuleSample,
+    (item) => {
+      if (!item || typeof item !== 'object') return null;
+      const id = item.id || 'capsule';
+      const label = item.status_label || formatStatusLabel(item.status);
+      const leaseUntil = Number(item.lease_until_ms);
+      const renewStarted = item.renew_window_started === true;
+      let suffix = '';
+      if (Number.isFinite(leaseUntil)) {
+        suffix = ` · ${formatRelativeTraining(leaseUntil)} (${formatRelativeAbsTraining(leaseUntil)})`;
+      } else if (Number.isFinite(Number(item.expires_in_ms))) {
+        suffix = ` · expires ${formatRelativeTraining(Date.now() + Number(item.expires_in_ms))}`;
+      } else if (renewStarted) {
+        suffix = ' · renewal window open';
+      }
+      return `${id} · ${label}${suffix}`;
+    },
+    capsules.count ? 'No sample available' : 'No policy capsules active'
+  );
 
   showTelemetryBody(true);
 }

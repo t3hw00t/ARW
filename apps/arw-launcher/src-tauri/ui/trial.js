@@ -659,6 +659,16 @@
       meta.push(['Recall summary', recallSummary]);
     }
 
+    const capsules = telemetry?.capsules || {};
+    if (capsules.accessible_summary) {
+      meta.push(['Policy capsules', capsules.accessible_summary]);
+    }
+    const nextExpiryMs = toNumber(capsules.next_expiry_ms ?? capsules.nextExpiryMs);
+    if (Number.isFinite(nextExpiryMs)) {
+      const label = typeof capsules.next_expiry_label === 'string' ? `${capsules.next_expiry_label} · ` : '';
+      meta.push(['Next capsule expiry', `${label}${formatRelative(nextExpiryMs)} (${formatRelativeAbs(nextExpiryMs)})`]);
+    }
+
     STATE.memory = { level, summary, meta };
     if (Number.isFinite(generatedMs)) {
       STATE.memory.generatedMs = generatedMs;

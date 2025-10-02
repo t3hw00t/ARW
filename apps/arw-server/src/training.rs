@@ -5,7 +5,7 @@ use tokio::fs as afs;
 use tokio::sync::Mutex;
 use tracing::warn;
 
-use crate::{feedback::FeedbackState, AppState};
+use crate::{capsule_guard::CAPSULE_EXPIRING_SOON_WINDOW_MS, feedback::FeedbackState, AppState};
 use arw_topics as topics;
 
 const LOGIC_HISTORY_LIMIT: usize = 10;
@@ -305,18 +305,24 @@ fn compact_options(value: Value) -> Value {
     }
 }
 
-const CAPSULE_EXPIRING_SOON_WINDOW_MS: u64 = 60_000;
-
 fn summarize_capsules(snapshot: Value) -> Value {
     let count = snapshot.get("count").and_then(Value::as_u64).unwrap_or(0);
     let now_ms = chrono::Utc::now().timestamp_millis() as u64;
     let mut expiring_soon: u64 = 0;
     let mut expired: u64 = 0;
+    let mut status_counts: std::collections::BTreeMap<String, u64> =
+        std::collections::BTreeMap::new();
     let mut sample: Vec<Value> = Vec::new();
+    let mut next_expiry_ms: Option<u64> = None;
+    let mut next_expiry_id: Option<String> = None;
+    let mut next_expiry_label: Option<String> = None;
     if let Some(items) = snapshot.get("items").and_then(Value::as_array) {
         for item in items.iter() {
             if sample.len() < 5 {
                 sample.push(sanitize_capsule(item));
+            }
+            if let Some(status) = item.get("status").and_then(Value::as_str) {
+                *status_counts.entry(status.to_string()).or_insert(0) += 1;
             }
             if let Some(expiry) = item.get("lease_until_ms").and_then(Value::as_u64) {
                 if expiry <= now_ms {
@@ -324,16 +330,82 @@ fn summarize_capsules(snapshot: Value) -> Value {
                 } else if expiry.saturating_sub(now_ms) <= CAPSULE_EXPIRING_SOON_WINDOW_MS {
                     expiring_soon += 1;
                 }
+                if expiry > now_ms
+                    && next_expiry_ms
+                        .map(|current| expiry < current)
+                        .unwrap_or(true)
+                {
+                    next_expiry_ms = Some(expiry);
+                    next_expiry_id = item
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .map(|s| s.to_string());
+                    next_expiry_label = item
+                        .get("status_label")
+                        .and_then(Value::as_str)
+                        .map(|s| s.to_string());
+                }
             }
         }
     }
 
-    json!({
-        "count": count,
-        "expiring_soon": expiring_soon,
-        "expired": expired,
-        "sample": sample,
-    })
+    let renew_due_count = status_counts.get("renew_due").copied().unwrap_or(0);
+    let expiring_status_count = status_counts
+        .get("expiring")
+        .copied()
+        .unwrap_or(expiring_soon);
+
+    let status_counts_value = if status_counts.is_empty() {
+        Value::Object(serde_json::Map::new())
+    } else {
+        let mut map = serde_json::Map::with_capacity(status_counts.len());
+        for (status, total) in status_counts {
+            map.insert(status, Value::Number(total.into()));
+        }
+        Value::Object(map)
+    };
+
+    let next_expiry_in_ms = next_expiry_ms.map(|expiry| expiry.saturating_sub(now_ms));
+    let accessible_summary = if count == 0 {
+        "No active policy capsules.".to_string()
+    } else {
+        match (renew_due_count, expiring_status_count, expired) {
+            (0, 0, 0) => "All policy capsules are healthy.".to_string(),
+            _ => format!(
+                "{} capsule{} healthy; {} awaiting renewal; {} expiring; {} expired.",
+                count.saturating_sub(renew_due_count + expiring_status_count + expired),
+                if count == 1 { "" } else { "s" },
+                renew_due_count,
+                expiring_status_count,
+                expired
+            ),
+        }
+    };
+
+    let mut summary = serde_json::Map::new();
+    summary.insert("count".into(), Value::Number(count.into()));
+    summary.insert("expiring_soon".into(), Value::Number(expiring_soon.into()));
+    summary.insert("expired".into(), Value::Number(expired.into()));
+    summary.insert("sample".into(), Value::Array(sample));
+    summary.insert("status_counts".into(), status_counts_value);
+    summary.insert(
+        "accessible_summary".into(),
+        Value::String(accessible_summary),
+    );
+    if let Some(expiry) = next_expiry_ms {
+        summary.insert("next_expiry_ms".into(), Value::Number(expiry.into()));
+    }
+    if let Some(expiry_in) = next_expiry_in_ms {
+        summary.insert("next_expiry_in_ms".into(), Value::Number(expiry_in.into()));
+    }
+    if let Some(id) = next_expiry_id {
+        summary.insert("next_expiry_id".into(), Value::String(id));
+    }
+    if let Some(label) = next_expiry_label {
+        summary.insert("next_expiry_label".into(), Value::String(label));
+    }
+
+    Value::Object(summary)
 }
 
 fn sanitize_capsule(raw: &Value) -> Value {
@@ -360,6 +432,30 @@ fn sanitize_capsule(raw: &Value) -> Value {
     }
     if let Some(renew_within) = raw.get("renew_within_ms") {
         obj.insert("renew_within_ms".into(), renew_within.clone());
+    }
+    if let Some(status) = raw.get("status") {
+        obj.insert("status".into(), status.clone());
+    }
+    if let Some(status_label) = raw.get("status_label") {
+        obj.insert("status_label".into(), status_label.clone());
+    }
+    if let Some(aria_hint) = raw.get("aria_hint") {
+        obj.insert("aria_hint".into(), aria_hint.clone());
+    }
+    if let Some(expires_in) = raw.get("expires_in_ms") {
+        obj.insert("expires_in_ms".into(), expires_in.clone());
+    }
+    if let Some(expired_since) = raw.get("expired_since_ms") {
+        obj.insert("expired_since_ms".into(), expired_since.clone());
+    }
+    if let Some(renew_in) = raw.get("renew_in_ms") {
+        obj.insert("renew_in_ms".into(), renew_in.clone());
+    }
+    if let Some(renew_started) = raw.get("renew_window_started") {
+        obj.insert("renew_window_started".into(), renew_started.clone());
+    }
+    if let Some(renew_start_ms) = raw.get("renew_window_start_ms") {
+        obj.insert("renew_window_start_ms".into(), renew_start_ms.clone());
     }
 
     Value::Object(obj)
@@ -474,10 +570,34 @@ mod tests {
         let snapshot = json!({
             "count": 3,
             "items": [
-                {"lease_until_ms": now_ms + 30_000},
-                {"lease_until_ms": now_ms + 4 * 60 * 1000},
-                {"lease_until_ms": now_ms.saturating_sub(2_000)},
-                {"lease_until_ms": Value::Null},
+                {
+                    "id": "soon",
+                    "lease_until_ms": now_ms + 30_000,
+                    "status": "expiring",
+                    "status_label": "Expiring soon",
+                    "aria_hint": "Capsule expires soon",
+                },
+                {
+                    "id": "later",
+                    "lease_until_ms": now_ms + 4 * 60 * 1000,
+                    "status": "active",
+                    "status_label": "Active",
+                    "aria_hint": "Healthy",
+                },
+                {
+                    "id": "expired",
+                    "lease_until_ms": now_ms.saturating_sub(2_000),
+                    "status": "expired",
+                    "status_label": "Expired",
+                    "aria_hint": "Expired capsule",
+                    "expired_since_ms": 2_000,
+                },
+                {
+                    "id": "renew",
+                    "lease_until_ms": Value::Null,
+                    "status": "renew_due",
+                    "status_label": "Renew now",
+                },
             ]
         });
 
@@ -496,7 +616,20 @@ mod tests {
             .collect();
         assert!(keys.contains(&"id"));
         assert!(keys.contains(&"version"));
-        assert!(!keys.contains(&"denies"));
+        assert!(keys.contains(&"status"));
+        let status_counts = summary["status_counts"].as_object().unwrap();
+        assert_eq!(
+            status_counts.get("expiring").and_then(Value::as_u64),
+            Some(1)
+        );
+        assert_eq!(
+            status_counts.get("expired").and_then(Value::as_u64),
+            Some(1)
+        );
+        assert!(summary["accessible_summary"].as_str().is_some());
+        if let Some(next_expiry_in) = summary["next_expiry_in_ms"].as_u64() {
+            assert!(next_expiry_in > 0);
+        }
     }
 
     #[test]
