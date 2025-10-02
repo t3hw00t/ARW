@@ -86,6 +86,8 @@ Notes
 ## Admin & Security
 - `ARW_ADMIN_TOKEN`: required token for admin endpoints; when set, also required for `/events` and sensitive `/state/*` endpoints. If no token is configured, set `ARW_DEBUG=1` for local access—otherwise admin routes return `401`.
 - `ARW_ADMIN_TOKEN_SHA256`: hex‑encoded SHA‑256 of the admin token. Prefer this in environments where passing plaintext envs is undesirable. When both are set, either value is accepted.
+  - Generate hashes locally with `arw-cli admin token hash --token 'plain-secret'` (omit `--token` to read `ARW_ADMIN_TOKEN`, or add `--stdin` to supply the secret via standard input). Append `--env` or `--export-shell` when you want ready-to-paste `ARW_ADMIN_TOKEN_SHA256=…` entries.
+  - Generate fresh tokens with `arw-cli admin token generate --length 32` (defaults shown). Use `--format base64` for unpadded base64 output, `--uppercase` for capitalised hex, and `--env`/`--export-shell` when you want ready-to-paste `ARW_ADMIN_TOKEN` assignments. Add `--hash`, `--hash-env`, or `--hash-export-shell` to emit the matching `ARW_ADMIN_TOKEN_SHA256` line alongside the token.
  - `ARW_TOOLS_CACHE_TTL_SECS`: Action Cache TTL (seconds; default 600).
  - `ARW_TOOLS_CACHE_CAP`: Action Cache max entries (default 2048).
  - `ARW_ROUTE_STATS_COALESCE_MS`: coalesce window for route stats read‑model patches (default 250ms; min 10ms).

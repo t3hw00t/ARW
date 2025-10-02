@@ -3,11 +3,15 @@ use arw_core::{gating, gating_keys, hello_core, introspect_tools, load_effective
 use base64::Engine;
 use chrono::{DateTime, Local, TimeZone, Utc};
 use clap::CommandFactory;
-use clap::{Args, Parser, Subcommand};
+use clap::{Args, Parser, Subcommand, ValueEnum};
+use rand::RngCore;
 use reqwest::blocking::Client;
+use serde::Deserialize;
 use serde_json::{json, Value as JsonValue};
+use sha2::Digest;
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::fmt::Write as _;
+use std::io::Read as _;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use tracing_subscriber::{fmt, EnvFilter};
@@ -24,8 +28,18 @@ struct Cli {
 enum Commands {
     /// Print effective runtime/cache/logs paths (JSON)
     Paths(PathsArgs),
-    /// Print tool list (JSON)
-    Tools(ToolsArgs),
+    /// Tool helpers (list, cache stats)
+    Tools {
+        #[command(flatten)]
+        list: ToolsListArgs,
+        #[command(subcommand)]
+        cmd: Option<ToolsSubcommand>,
+    },
+    /// Admin helpers
+    Admin {
+        #[command(subcommand)]
+        cmd: AdminCmd,
+    },
     /// Gating helpers
     Gate {
         #[command(subcommand)]
@@ -112,11 +126,135 @@ struct PathsArgs {
     pretty: bool,
 }
 
-#[derive(Args)]
-struct ToolsArgs {
+#[derive(Args, Default, Clone, Copy)]
+struct ToolsListArgs {
     /// Pretty-print JSON
     #[arg(long)]
     pretty: bool,
+}
+
+#[derive(Subcommand)]
+enum ToolsSubcommand {
+    /// Print tool list (JSON)
+    List(ToolsListArgs),
+    /// Fetch tool cache statistics from the server
+    Cache(ToolsCacheArgs),
+}
+
+#[derive(Args, Clone)]
+struct ToolsCacheArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds
+    #[arg(long, default_value_t = 10)]
+    timeout: u64,
+    /// Emit raw JSON instead of a human summary
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (only with --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+}
+
+#[derive(Subcommand)]
+enum AdminCmd {
+    /// Admin token helpers
+    Token {
+        #[command(subcommand)]
+        cmd: AdminTokenCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum AdminTokenCmd {
+    /// Hash an admin token for ARW_ADMIN_TOKEN_SHA256
+    Hash(AdminTokenHashArgs),
+    /// Generate a random admin token
+    Generate(AdminTokenGenerateArgs),
+}
+
+#[derive(Args, Clone)]
+struct AdminTokenHashArgs {
+    /// Plain admin token; omit to read from environment
+    #[arg(long)]
+    token: Option<String>,
+    /// Read token from stdin (conflicts with --token)
+    #[arg(long, conflicts_with = "token")]
+    stdin: bool,
+    /// Environment variable to read when --token is absent
+    #[arg(long = "read-env", default_value = "ARW_ADMIN_TOKEN")]
+    read_env: String,
+    /// Print as ARW_ADMIN_TOKEN_SHA256=<hash>
+    #[arg(long, conflicts_with = "export-shell")]
+    env: bool,
+    /// Print as export ARW_ADMIN_TOKEN_SHA256=<hash>
+    #[arg(long = "export-shell", conflicts_with = "env")]
+    export_shell: bool,
+}
+
+#[derive(Copy, Clone, Debug, ValueEnum)]
+enum TokenFormat {
+    Hex,
+    Base64,
+}
+
+#[derive(Args, Clone)]
+struct AdminTokenGenerateArgs {
+    /// Number of random bytes to generate (default: 32)
+    #[arg(long, default_value_t = 32)]
+    length: usize,
+    /// Output format
+    #[arg(long, value_enum, default_value_t = TokenFormat::Hex)]
+    format: TokenFormat,
+    /// Upper-case hex output (ignored for base64)
+    #[arg(long)]
+    uppercase: bool,
+    /// Print as export ARW_ADMIN_TOKEN=<token>
+    #[arg(long = "export-shell", conflicts_with = "env")]
+    export_shell: bool,
+    /// Print as ARW_ADMIN_TOKEN=<token>
+    #[arg(long, conflicts_with = "export-shell")]
+    env: bool,
+    /// Also print SHA-256 hash (raw)
+    #[arg(long, conflicts_with_all = ["hash_env", "hash_export_shell"])]
+    hash: bool,
+    /// Print hash as ARW_ADMIN_TOKEN_SHA256=<hash>
+    #[arg(long = "hash-env", conflicts_with = "hash_export_shell")]
+    hash_env: bool,
+    /// Print hash as export ARW_ADMIN_TOKEN_SHA256=<hash>
+    #[arg(long = "hash-export-shell")]
+    hash_export_shell: bool,
+}
+
+#[derive(Debug, Deserialize)]
+struct ToolCacheSnapshot {
+    hit: u64,
+    miss: u64,
+    coalesced: u64,
+    errors: u64,
+    bypass: u64,
+    capacity: u64,
+    ttl_secs: u64,
+    entries: u64,
+    latency_saved_ms_total: u64,
+    latency_saved_samples: u64,
+    avg_latency_saved_ms: f64,
+    payload_bytes_saved_total: u64,
+    payload_saved_samples: u64,
+    avg_payload_bytes_saved: f64,
+    avg_hit_age_secs: f64,
+    hit_age_samples: u64,
+    last_hit_age_secs: Option<u64>,
+    max_hit_age_secs: Option<u64>,
+    stampede_suppression_rate: f64,
+    last_latency_saved_ms: Option<u64>,
+    last_payload_bytes: Option<u64>,
+    #[serde(flatten)]
+    _extra: serde_json::Map<String, JsonValue>,
 }
 
 #[derive(Args)]
@@ -490,6 +628,21 @@ struct ScanStats {
     skipped_other: usize,
 }
 
+fn print_tools_list(pretty: bool) {
+    let list = introspect_tools();
+    if pretty {
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&list).unwrap_or_else(|_| "[]".to_string())
+        );
+    } else {
+        match serde_json::to_string(&list) {
+            Ok(s) => println!("{}", s),
+            Err(_) => println!("[]"),
+        }
+    }
+}
+
 fn main() {
     let _ = fmt()
         .with_env_filter(EnvFilter::from_default_env())
@@ -508,20 +661,32 @@ fn main() {
                 println!("{}", v);
             }
         }
-        Some(Commands::Tools(args)) => {
-            let list = introspect_tools();
-            if args.pretty {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&list).unwrap_or_else(|_| "[]".to_string())
-                );
-            } else {
-                match serde_json::to_string(&list) {
-                    Ok(s) => println!("{}", s),
-                    Err(_) => println!("[]"),
+        Some(Commands::Tools { list, cmd }) => match cmd {
+            Some(ToolsSubcommand::Cache(args)) => {
+                if let Err(e) = cmd_tools_cache(&args) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
                 }
             }
-        }
+            Some(ToolsSubcommand::List(args)) => print_tools_list(args.pretty),
+            None => print_tools_list(list.pretty),
+        },
+        Some(Commands::Admin { cmd }) => match cmd {
+            AdminCmd::Token { cmd } => match cmd {
+                AdminTokenCmd::Hash(args) => {
+                    if let Err(e) = cmd_admin_token_hash(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                AdminTokenCmd::Generate(args) => {
+                    if let Err(e) = cmd_admin_token_generate(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+            },
+        },
         Some(Commands::Gate { cmd }) => match cmd {
             GateCmd::Keys(args) => {
                 if args.json {
@@ -724,6 +889,129 @@ fn main() {
             println!("{}", load_effective_paths());
         }
     }
+}
+
+fn cmd_tools_cache(args: &ToolsCacheArgs) -> Result<()> {
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let token = resolve_admin_token(&args.admin_token);
+    let base = args.base.trim_end_matches('/');
+    let url = format!("{}/admin/tools/cache_stats", base);
+    let resp = with_admin_headers(client.get(&url), token.as_deref())
+        .send()
+        .with_context(|| format!("requesting {}", url))?;
+    let status = resp.status();
+    let text = resp.text().context("reading cache stats response")?;
+
+    if status == reqwest::StatusCode::UNAUTHORIZED {
+        return Err(anyhow::anyhow!(
+            "unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN"
+        ));
+    }
+    if !status.is_success() {
+        let trimmed = text.trim();
+        if trimmed.is_empty() {
+            return Err(anyhow::anyhow!("cache stats request failed: {}", status));
+        }
+        return Err(anyhow::anyhow!(
+            "cache stats request failed: {} {}",
+            status,
+            trimmed
+        ));
+    }
+
+    let raw: JsonValue = serde_json::from_str(&text).context("parsing cache stats JSON")?;
+    let snapshot: ToolCacheSnapshot =
+        serde_json::from_value(raw.clone()).context("deserializing cache stats snapshot")?;
+
+    if args.json {
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&raw).unwrap_or_else(|_| raw.to_string())
+            );
+        } else {
+            println!("{}", raw);
+        }
+        return Ok(());
+    }
+
+    println!("{}", render_tool_cache_summary(&snapshot, base));
+    Ok(())
+}
+
+fn cmd_admin_token_hash(args: &AdminTokenHashArgs) -> Result<()> {
+    let token = if let Some(token) = &args.token {
+        if token.is_empty() {
+            anyhow::bail!("--token cannot be empty");
+        }
+        token.clone()
+    } else if args.stdin {
+        let mut buf = String::new();
+        std::io::stdin()
+            .read_to_string(&mut buf)
+            .context("reading token from stdin")?;
+        let trimmed = buf.trim_end_matches(|c| matches!(c, '\n' | '\r'));
+        if trimmed.is_empty() {
+            anyhow::bail!("stdin provided no token bytes");
+        }
+        trimmed.to_string()
+    } else {
+        let var = args.read_env.as_str();
+        match std::env::var(var) {
+            Ok(value) if !value.is_empty() => value,
+            Ok(_) => anyhow::bail!("{} is set but empty", var),
+            Err(_) => anyhow::bail!("provide --token or set {}", var),
+        }
+    };
+
+    let digest = hash_admin_token(&token);
+    if args.export_shell {
+        println!("export ARW_ADMIN_TOKEN_SHA256={}", digest);
+    } else if args.env {
+        println!("ARW_ADMIN_TOKEN_SHA256={}", digest);
+    } else {
+        println!("{}", digest);
+    }
+
+    Ok(())
+}
+
+fn cmd_admin_token_generate(args: &AdminTokenGenerateArgs) -> Result<()> {
+    if args.length == 0 {
+        anyhow::bail!("--length must be greater than zero");
+    }
+    let mut bytes = vec![0u8; args.length];
+    let mut rng = rand::rng();
+    rng.fill_bytes(&mut bytes);
+
+    let token = match args.format {
+        TokenFormat::Hex => encode_hex(&bytes, args.uppercase),
+        TokenFormat::Base64 => base64::engine::general_purpose::STANDARD_NO_PAD.encode(&bytes),
+    };
+
+    if args.export_shell {
+        println!("export ARW_ADMIN_TOKEN={}", token);
+    } else if args.env {
+        println!("ARW_ADMIN_TOKEN={}", token);
+    } else {
+        println!("{}", token);
+    }
+
+    if args.hash || args.hash_env || args.hash_export_shell {
+        let digest = hash_admin_token(&token);
+        if args.hash_export_shell {
+            println!("export ARW_ADMIN_TOKEN_SHA256={}", digest);
+        } else if args.hash_env {
+            println!("ARW_ADMIN_TOKEN_SHA256={}", digest);
+        } else {
+            println!("{}", digest);
+        }
+    }
+
+    Ok(())
 }
 
 fn cmd_backfill_ocr(args: &BackfillOcrArgs) -> Result<()> {
@@ -2336,6 +2624,82 @@ fn render_runtime_matrix_summary(matrix: &JsonValue) -> String {
     lines.join("\n")
 }
 
+fn render_tool_cache_summary(stats: &ToolCacheSnapshot, base: &str) -> String {
+    let mut buf = String::new();
+    let _ = writeln!(buf, "Tool cache @ {}", base);
+    if stats.capacity == 0 {
+        let _ = writeln!(
+            buf,
+            "- status: disabled | capacity 0 | ttl {}s | entries {}",
+            stats.ttl_secs, stats.entries
+        );
+    } else {
+        let _ = writeln!(
+            buf,
+            "- status: enabled | capacity {} | ttl {}s | entries {}",
+            stats.capacity, stats.ttl_secs, stats.entries
+        );
+    }
+
+    let mut outcomes = format!(
+        "- outcomes: hit {} | miss {} | coalesced {} | bypass {} | errors {}",
+        stats.hit, stats.miss, stats.coalesced, stats.bypass, stats.errors
+    );
+    let total = stats.hit + stats.miss;
+    if total > 0 {
+        let hit_rate = stats.hit as f64 / total as f64 * 100.0;
+        let suppression = stats.stampede_suppression_rate * 100.0;
+        outcomes.push_str(&format!(
+            " (hit {:.1}%, suppression {:.1}%)",
+            hit_rate, suppression
+        ));
+    }
+    let _ = writeln!(buf, "{}", outcomes);
+
+    if stats.latency_saved_samples > 0 {
+        let mut line = format!(
+            "- latency saved: avg {:.1} ms (samples {}, total {})",
+            stats.avg_latency_saved_ms,
+            stats.latency_saved_samples,
+            format_duration_ms(stats.latency_saved_ms_total)
+        );
+        if let Some(last) = stats.last_latency_saved_ms {
+            line.push_str(&format!(", last {} ms", last));
+        }
+        let _ = writeln!(buf, "{}", line);
+    }
+
+    if stats.payload_saved_samples > 0 {
+        let mut line = format!(
+            "- payload saved: avg {} (samples {}, total {})",
+            format_bytes_f64(stats.avg_payload_bytes_saved),
+            stats.payload_saved_samples,
+            format_bytes(stats.payload_bytes_saved_total)
+        );
+        if let Some(last) = stats.last_payload_bytes {
+            line.push_str(&format!(", last {}", format_bytes(last)));
+        }
+        let _ = writeln!(buf, "{}", line);
+    }
+
+    if stats.hit_age_samples > 0 {
+        let mut line = format!(
+            "- hit age: avg {} (samples {})",
+            format_seconds_f64(stats.avg_hit_age_secs),
+            stats.hit_age_samples
+        );
+        if let Some(last) = stats.last_hit_age_secs {
+            line.push_str(&format!(", last {}", format_seconds(last)));
+        }
+        if let Some(max) = stats.max_hit_age_secs {
+            line.push_str(&format!(", max {}", format_seconds(max)));
+        }
+        let _ = writeln!(buf, "{}", line);
+    }
+
+    buf.trim_end().to_string()
+}
+
 fn render_runtime_summary(snapshot: &JsonValue) -> String {
     let mut lines: Vec<String> = Vec::new();
     let updated = snapshot
@@ -2573,6 +2937,107 @@ fn with_admin_headers(
         req = req.bearer_auth(tok);
     }
     req
+}
+
+fn encode_hex(bytes: &[u8], uppercase: bool) -> String {
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        if uppercase {
+            let _ = write!(out, "{:02X}", byte);
+        } else {
+            let _ = write!(out, "{:02x}", byte);
+        }
+    }
+    out
+}
+
+fn hash_admin_token(token: &str) -> String {
+    encode_hex(&sha2::Sha256::digest(token.as_bytes()), false)
+}
+
+fn format_bytes(bytes: u64) -> String {
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    let mut value = bytes as f64;
+    let mut unit_index = 0;
+    while value >= 1024.0 && unit_index < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit_index += 1;
+    }
+    if unit_index == 0 {
+        format!("{} {}", bytes, UNITS[unit_index])
+    } else {
+        format!("{:.1} {}", value, UNITS[unit_index])
+    }
+}
+
+fn format_bytes_f64(bytes: f64) -> String {
+    if bytes <= 0.0 {
+        return "0 B".to_string();
+    }
+    const UNITS: [&str; 5] = ["B", "KB", "MB", "GB", "TB"];
+    let mut value = bytes;
+    let mut unit_index = 0;
+    while value >= 1024.0 && unit_index < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit_index += 1;
+    }
+    if unit_index == 0 {
+        format!("{:.0} {}", value.round(), UNITS[unit_index])
+    } else {
+        format!("{:.1} {}", value, UNITS[unit_index])
+    }
+}
+
+fn format_duration_ms(ms: u64) -> String {
+    if ms < 1_000 {
+        return format!("{} ms", ms);
+    }
+    if ms < 60_000 {
+        return format!("{:.1} s", ms as f64 / 1_000.0);
+    }
+    let total_secs = ms / 1_000;
+    if total_secs < 3_600 {
+        let minutes = total_secs / 60;
+        let seconds = total_secs % 60;
+        return format!("{}m{:02}s", minutes, seconds);
+    }
+    let hours = total_secs / 3_600;
+    let minutes = (total_secs % 3_600) / 60;
+    let seconds = total_secs % 60;
+    format!("{}h{:02}m{:02}s", hours, minutes, seconds)
+}
+
+fn format_seconds(secs: u64) -> String {
+    if secs < 60 {
+        format!("{} s", secs)
+    } else if secs < 3_600 {
+        let minutes = secs / 60;
+        let seconds = secs % 60;
+        format!("{}m{:02}s", minutes, seconds)
+    } else {
+        let hours = secs / 3_600;
+        let minutes = (secs % 3_600) / 60;
+        let seconds = secs % 60;
+        format!("{}h{:02}m{:02}s", hours, minutes, seconds)
+    }
+}
+
+fn format_seconds_f64(secs: f64) -> String {
+    if secs < 1.0 {
+        return format!("{:.0} ms", secs * 1_000.0);
+    }
+    if secs < 60.0 {
+        return format!("{:.1} s", secs);
+    }
+    let total_secs = secs.floor() as u64;
+    let remainder = secs - total_secs as f64;
+    let base = format_seconds(total_secs);
+    if remainder >= 0.5 {
+        // include ~0.5s remainder to avoid discarding observable fractional seconds
+        format!("{} (~{:.1}s)", base, secs)
+    } else {
+        base
+    }
 }
 
 fn parse_reset_utc(raw: &str) -> Option<DateTime<Utc>> {
@@ -3074,5 +3539,54 @@ mod tests {
         let summary = render_context_telemetry_summary(&snapshot, 1_700_000_000_000);
         assert!(summary.contains("Generated"));
         assert!(summary.contains("no context telemetry"));
+    }
+
+    #[test]
+    fn hash_admin_token_matches_sha256() {
+        assert_eq!(
+            hash_admin_token("secret"),
+            "2bb80d537b1da3e38bd30361aa855686bde0eacd7162fef6a25fe97bf527a25b"
+        );
+    }
+
+    #[test]
+    fn encode_hex_respects_case() {
+        let bytes = [0xde, 0xad, 0xbe, 0xef];
+        assert_eq!(encode_hex(&bytes, false), "deadbeef");
+        assert_eq!(encode_hex(&bytes, true), "DEADBEEF");
+    }
+
+    #[test]
+    fn tool_cache_summary_includes_key_metrics() {
+        let snapshot = ToolCacheSnapshot {
+            hit: 8,
+            miss: 2,
+            coalesced: 3,
+            errors: 1,
+            bypass: 4,
+            capacity: 128,
+            ttl_secs: 600,
+            entries: 42,
+            latency_saved_ms_total: 12_500,
+            latency_saved_samples: 5,
+            avg_latency_saved_ms: 250.0,
+            payload_bytes_saved_total: 512_000,
+            payload_saved_samples: 5,
+            avg_payload_bytes_saved: 102_400.0,
+            avg_hit_age_secs: 18.5,
+            hit_age_samples: 3,
+            last_hit_age_secs: Some(12),
+            max_hit_age_secs: Some(45),
+            stampede_suppression_rate: 0.4,
+            last_latency_saved_ms: Some(200),
+            last_payload_bytes: Some(204_800),
+            _extra: serde_json::Map::new(),
+        };
+        let summary = render_tool_cache_summary(&snapshot, "http://127.0.0.1:8091");
+        assert!(summary.contains("Tool cache"));
+        assert!(summary.contains("hit 8 | miss 2"));
+        assert!(summary.contains("avg 250.0 ms"));
+        assert!(summary.contains("avg 100.0 KB"));
+        assert!(summary.contains("max 45 s"));
     }
 }

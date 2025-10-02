@@ -12,6 +12,8 @@ ARW ships with conservative defaults and clear toggles to harden deployments wit
 - Admin endpoints (`/admin/*`) and admin UI assets (`/admin/ui/*` and `/admin/ui/assets/*`) require an admin token by default.
 - Debug mode (`ARW_DEBUG=1`) is loopback‑only: admin access is granted from `127.0.0.1/::1` without a token; remote callers are denied unless a valid token is supplied.
 - Tokens can be set as `ARW_ADMIN_TOKEN` or `ARW_ADMIN_TOKEN_SHA256` (hex). The latter avoids keeping plain tokens in env.
+  - Use `arw-cli admin token hash --token 'plain-secret'` to print the SHA‑256 value (omit `--token` to read `ARW_ADMIN_TOKEN`, or add `--stdin` to pipe secrets without touching the shell history). Add `--env` or `--export-shell` for ready-to-paste snippets.
+  - Generate new random tokens with `arw-cli admin token generate --length 32 --format hex` (switch to `--format base64` as needed). The command can emit ready-to-export shell lines via `--env`/`--export-shell`, and `--hash-env`/`--hash-export-shell` prints the matching `ARW_ADMIN_TOKEN_SHA256` value so secrets and hashes stay in sync.
 - Rate limits are enforced for admin auth attempts; tune with `ARW_ADMIN_RATE_LIMIT` and `ARW_ADMIN_RATE_WINDOW_SECS`.
 
 ## Content Security Policy (CSP)

@@ -51,7 +51,7 @@ This document outlines a multi‑layer caching strategy for ARW, blending resear
 
 - Report hit ratio (by layer), P95/P99 latency saved, bytes saved (post‑compression), stampede suppression rate, semantic false‑hit rate, and recompute budget.
 - In ARW:
-  - Tool Action Cache: `/admin/tools/cache_stats`, `tool.cache` events, and `/metrics` `arw_tools_cache_*`.
+  - Tool Action Cache: `/admin/tools/cache_stats`, `tool.cache` events, `/metrics` `arw_tools_cache_*`, and `arw-cli tools cache` for terminal summaries (use `--json` when you need the raw payload).
   - Models metrics: `/state/models_metrics` and `/metrics` `arw_models_download_*`.
   - Route stats: `/state/route_stats` and overlays in `/admin/debug` (p95/ewma/hits/errors).
 
