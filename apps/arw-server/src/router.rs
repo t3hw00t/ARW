@@ -144,8 +144,8 @@ pub(crate) mod paths {
     pub const ADMIN_EVENTS_JOURNAL: &str = "/admin/events/journal";
     pub const METRICS: &str = "/metrics";
     pub const ACTIONS: &str = "/actions";
-    pub const ACTIONS_ID: &str = "/actions/:id";
-    pub const ACTIONS_ID_STATE: &str = "/actions/:id/state";
+    pub const ACTIONS_ID: &str = "/actions/{id}";
+    pub const ACTIONS_ID_STATE: &str = "/actions/{id}/state";
     pub const STATE_EPISODES: &str = "/state/episodes";
     pub const STATE_ROUTE_STATS: &str = "/state/route_stats";
     pub const STATE_ACTIONS: &str = "/state/actions";
@@ -158,7 +158,7 @@ pub(crate) mod paths {
     pub const STATE_RUNTIME_SUPERVISOR: &str = "/state/runtime_supervisor";
     pub const STATE_TASKS: &str = "/state/tasks";
     pub const STATE_SELF: &str = "/state/self";
-    pub const STATE_SELF_AGENT: &str = "/state/self/:agent";
+    pub const STATE_SELF_AGENT: &str = "/state/self/{agent}";
     pub const STATE_EXPERIMENTS: &str = "/state/experiments";
     pub const LEASES: &str = "/leases";
     pub const STATE_LEASES: &str = "/state/leases";
@@ -182,27 +182,27 @@ pub(crate) mod paths {
     pub const STATE_SERVICE_STATUS: &str = "/state/service_status";
     pub const STATE_GUARDRAILS_METRICS: &str = "/state/guardrails_metrics";
     pub const STATE_AUTONOMY_LANES: &str = "/state/autonomy/lanes";
-    pub const STATE_AUTONOMY_LANE: &str = "/state/autonomy/lanes/:lane";
+    pub const STATE_AUTONOMY_LANE: &str = "/state/autonomy/lanes/{lane}";
     pub const STATE_CLUSTER: &str = "/state/cluster";
     pub const STATE_WORLD: &str = "/state/world";
     pub const STATE_WORLD_SELECT: &str = "/state/world/select";
     pub const STATE_PROJECTS: &str = "/state/projects";
-    pub const STATE_PROJECTS_TREE: &str = "/state/projects/:proj/tree";
-    pub const STATE_PROJECTS_NOTES: &str = "/state/projects/:proj/notes";
-    pub const STATE_PROJECTS_FILE: &str = "/state/projects/:proj/file";
+    pub const STATE_PROJECTS_TREE: &str = "/state/projects/{proj}/tree";
+    pub const STATE_PROJECTS_NOTES: &str = "/state/projects/{proj}/notes";
+    pub const STATE_PROJECTS_FILE: &str = "/state/projects/{proj}/file";
     pub const STATE_MODELS_HASHES: &str = "/state/models_hashes";
     pub const STATE_MEMORY: &str = "/state/memory";
     pub const PROJECTS: &str = "/projects";
-    pub const PROJECTS_NOTES: &str = "/projects/:proj/notes";
-    pub const PROJECTS_FILE: &str = "/projects/:proj/file";
-    pub const PROJECTS_IMPORT: &str = "/projects/:proj/import";
-    pub const PROJECTS_SNAPSHOT: &str = "/projects/:proj/snapshot";
-    pub const PROJECTS_SNAPSHOTS: &str = "/projects/:proj/snapshots";
-    pub const PROJECTS_SNAPSHOT_RESTORE: &str = "/projects/:proj/snapshots/:snapshot/restore";
+    pub const PROJECTS_NOTES: &str = "/projects/{proj}/notes";
+    pub const PROJECTS_FILE: &str = "/projects/{proj}/file";
+    pub const PROJECTS_IMPORT: &str = "/projects/{proj}/import";
+    pub const PROJECTS_SNAPSHOT: &str = "/projects/{proj}/snapshot";
+    pub const PROJECTS_SNAPSHOTS: &str = "/projects/{proj}/snapshots";
+    pub const PROJECTS_SNAPSHOT_RESTORE: &str = "/projects/{proj}/snapshots/{snapshot}/restore";
     pub const SPEC_OPENAPI: &str = "/spec/openapi.yaml";
     pub const SPEC_ASYNCAPI: &str = "/spec/asyncapi.yaml";
     pub const SPEC_MCP: &str = "/spec/mcp-tools.json";
-    pub const SPEC_SCHEMA: &str = "/spec/schemas/:file";
+    pub const SPEC_SCHEMA: &str = "/spec/schemas/{file}";
     pub const SPEC_INDEX: &str = "/spec/index.json";
     pub const SPEC_HEALTH: &str = "/spec/health";
     pub const ADMIN_DEBUG: &str = "/admin/debug";
@@ -218,13 +218,13 @@ pub(crate) mod paths {
     pub const ADMIN_MODELS_DOWNLOAD: &str = "/admin/models/download";
     pub const ADMIN_MODELS_DOWNLOAD_CANCEL: &str = "/admin/models/download/cancel";
     pub const ADMIN_MODELS_CAS_GC: &str = "/admin/models/cas_gc";
-    pub const ADMIN_MODELS_BY_HASH: &str = "/admin/models/by-hash/:sha256";
+    pub const ADMIN_MODELS_BY_HASH: &str = "/admin/models/by-hash/{sha256}";
     pub const ADMIN_MODELS_JOBS: &str = "/admin/models/jobs";
-    pub const ADMIN_AUTONOMY_LANE_PAUSE: &str = "/admin/autonomy/:lane/pause";
-    pub const ADMIN_AUTONOMY_LANE_STOP: &str = "/admin/autonomy/:lane/stop";
-    pub const ADMIN_AUTONOMY_LANE_RESUME: &str = "/admin/autonomy/:lane/resume";
-    pub const ADMIN_AUTONOMY_LANE_JOBS: &str = "/admin/autonomy/:lane/jobs";
-    pub const ADMIN_AUTONOMY_LANE_BUDGETS: &str = "/admin/autonomy/:lane/budgets";
+    pub const ADMIN_AUTONOMY_LANE_PAUSE: &str = "/admin/autonomy/{lane}/pause";
+    pub const ADMIN_AUTONOMY_LANE_STOP: &str = "/admin/autonomy/{lane}/stop";
+    pub const ADMIN_AUTONOMY_LANE_RESUME: &str = "/admin/autonomy/{lane}/resume";
+    pub const ADMIN_AUTONOMY_LANE_JOBS: &str = "/admin/autonomy/{lane}/jobs";
+    pub const ADMIN_AUTONOMY_LANE_BUDGETS: &str = "/admin/autonomy/{lane}/budgets";
     pub const ADMIN_TOOLS: &str = "/admin/tools";
     pub const ADMIN_TOOLS_RUN: &str = "/admin/tools/run";
     pub const ADMIN_TOOLS_CACHE_STATS: &str = "/admin/tools/cache_stats";
@@ -287,10 +287,10 @@ pub(crate) mod paths {
     pub const ADMIN_GOLDENS_LIST: &str = "/admin/goldens/list";
     pub const ADMIN_GOLDENS_ADD: &str = "/admin/goldens/add";
     pub const ADMIN_GOLDENS_RUN: &str = "/admin/goldens/run";
-    pub const RESEARCH_WATCHER_APPROVE: &str = "/research_watcher/:id/approve";
-    pub const RESEARCH_WATCHER_ARCHIVE: &str = "/research_watcher/:id/archive";
-    pub const STAGING_ACTION_APPROVE: &str = "/staging/actions/:id/approve";
-    pub const STAGING_ACTION_DENY: &str = "/staging/actions/:id/deny";
+    pub const RESEARCH_WATCHER_APPROVE: &str = "/research_watcher/{id}/approve";
+    pub const RESEARCH_WATCHER_ARCHIVE: &str = "/research_watcher/{id}/archive";
+    pub const STAGING_ACTION_APPROVE: &str = "/staging/actions/{id}/approve";
+    pub const STAGING_ACTION_DENY: &str = "/staging/actions/{id}/deny";
     pub const ADMIN_CHAT: &str = "/admin/chat";
     pub const ADMIN_CHAT_SEND: &str = "/admin/chat/send";
     pub const ADMIN_CHAT_CLEAR: &str = "/admin/chat/clear";
@@ -336,402 +336,14 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         api::metrics::metrics_prometheus,
         Some(Stability::Stable),
     );
-    builder.route_get(paths::ADMIN_DEBUG, api::ui::debug_ui, Some(Stability::Beta));
-    builder.route_get(
-        paths::ADMIN_UI_MODELS,
-        api::ui::models_ui,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_UI_AGENTS,
-        api::ui::agents_ui,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_UI_PROJECTS,
-        api::ui::projects_ui,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_UI_FLOWS,
-        api::ui::flows_ui,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_UI_TOKENS,
-        api::ui::ui_tokens_css,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_UI_KIT,
-        api::ui::ui_kit_css,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_UI_PAGES,
-        api::ui::ui_pages_css,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_UI_MODELS_JS,
-        api::ui::ui_models_js,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_UI_AGENTS_JS,
-        api::ui::ui_agents_js,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_UI_PROJECTS_JS,
-        api::ui::ui_projects_js,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_UI_DEBUG_JS,
-        api::ui::ui_debug_js,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_UI_DEBUG_CORE_JS,
-        api::ui::ui_debug_core_js,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_MODELS_SUMMARY,
-        api::models::models_summary,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_MODELS,
-        api::models::models_list,
-        Some(Stability::Beta),
-    );
-    builder.route_post(
-        paths::ADMIN_MODELS_REFRESH,
-        api::models::models_refresh,
-        Some(Stability::Beta),
-    );
-    builder.route_post(
-        paths::ADMIN_MODELS_SAVE,
-        api::models::models_save,
-        Some(Stability::Beta),
-    );
-    builder.route_post(
-        paths::ADMIN_MODELS_LOAD,
-        api::models::models_load,
-        Some(Stability::Beta),
-    );
-    builder.route_post(
-        paths::ADMIN_MODELS_ADD,
-        api::models::models_add,
-        Some(Stability::Beta),
-    );
-    builder.route_post(
-        paths::ADMIN_MODELS_REMOVE,
-        api::models::models_remove,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_MODELS_DEFAULT,
-        api::models::models_default_get,
-        Some(Stability::Beta),
-    );
-    builder.route_post(
-        paths::ADMIN_MODELS_DEFAULT,
-        api::models::models_default_set,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_MODELS_CONCURRENCY,
-        api::models::models_concurrency_get,
-        Some(Stability::Beta),
-    );
-    builder.route_post(
-        paths::ADMIN_MODELS_CONCURRENCY,
-        api::models::models_concurrency_set,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_MODELS_JOBS,
-        api::models::models_jobs,
-        Some(Stability::Beta),
-    );
-    builder.route_post(
-        paths::ADMIN_AUTONOMY_LANE_PAUSE,
-        api::autonomy::autonomy_pause,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_AUTONOMY_LANE_STOP,
-        api::autonomy::autonomy_stop,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_AUTONOMY_LANE_RESUME,
-        api::autonomy::autonomy_resume,
-        Some(Stability::Experimental),
-    );
-    builder.route_delete(
-        paths::ADMIN_AUTONOMY_LANE_JOBS,
-        api::autonomy::autonomy_jobs_clear,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_AUTONOMY_LANE_BUDGETS,
-        api::autonomy::autonomy_budgets_update,
-        Some(Stability::Experimental),
-    );
+    register_admin_ui_routes(&mut builder);
+    register_admin_ops_routes(&mut builder);
     builder.route_get(
         paths::STATE_MODELS_HASHES,
         api::models::state_models_hashes,
         Some(Stability::Beta),
     );
-    builder.route_get(
-        paths::ADMIN_TOOLS,
-        api::tools::tools_list,
-        Some(Stability::Beta),
-    );
-    builder.route_post(
-        paths::ADMIN_TOOLS_RUN,
-        api::tools::tools_run,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_TOOLS_CACHE_STATS,
-        api::tools::tools_cache_stats,
-        Some(Stability::Beta),
-    );
-    builder.route_get(
-        paths::ADMIN_MEMORY_QUARANTINE,
-        api::review::memory_quarantine_get,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_MEMORY_QUARANTINE,
-        api::review::memory_quarantine_queue,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_MEMORY_QUARANTINE_ADMIT,
-        api::review::memory_quarantine_admit,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_WORLD_DIFFS,
-        api::review::world_diffs_get,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_WORLD_DIFFS_QUEUE,
-        api::review::world_diffs_queue,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_WORLD_DIFFS_DECISION,
-        api::review::world_diffs_decision,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_GOVERNOR_PROFILE,
-        api::governor::governor_profile_get,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_GOVERNOR_PROFILE,
-        api::governor::governor_profile_set,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_GOVERNOR_HINTS,
-        api::governor::governor_hints_get,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_GOVERNOR_HINTS,
-        api::governor::governor_hints_set,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_FEEDBACK_STATE,
-        api::feedback::feedback_state,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_FEEDBACK_SIGNAL,
-        api::feedback::feedback_signal,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_FEEDBACK_ANALYZE,
-        api::feedback::feedback_analyze,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_FEEDBACK_APPLY,
-        api::feedback::feedback_apply,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_FEEDBACK_AUTO,
-        api::feedback::feedback_auto,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_FEEDBACK_RESET,
-        api::feedback::feedback_reset,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_DISTILL,
-        api::distill::distill_run,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_FEEDBACK_SUGGESTIONS,
-        api::feedback::feedback_suggestions,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_FEEDBACK_UPDATES,
-        api::feedback::feedback_updates,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_FEEDBACK_POLICY,
-        api::feedback::feedback_policy,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_FEEDBACK_VERSIONS,
-        api::feedback::feedback_versions,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_FEEDBACK_ROLLBACK,
-        api::feedback::feedback_rollback,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_EXPERIMENTS_DEFINE,
-        api::experiments::experiments_define,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_EXPERIMENTS_RUN,
-        api::experiments::experiments_run,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_EXPERIMENTS_ACTIVATE,
-        api::experiments::experiments_activate,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_EXPERIMENTS_LIST,
-        api::experiments::experiments_list,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_EXPERIMENTS_SCOREBOARD,
-        api::experiments::experiments_scoreboard,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_EXPERIMENTS_WINNERS,
-        api::experiments::experiments_winners,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_EXPERIMENTS_START,
-        api::experiments::experiments_start,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_EXPERIMENTS_STOP,
-        api::experiments::experiments_stop,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_EXPERIMENTS_ASSIGN,
-        api::experiments::experiments_assign,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_GOLDENS_LIST,
-        api::goldens::goldens_list,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_GOLDENS_ADD,
-        api::goldens::goldens_add,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_GOLDENS_RUN,
-        api::goldens::goldens_run,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_HIERARCHY_STATE,
-        api::hierarchy::hierarchy_state,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_HIERARCHY_ROLE,
-        api::hierarchy::hierarchy_role_set,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_HIERARCHY_HELLO,
-        api::hierarchy::hierarchy_hello,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_HIERARCHY_OFFER,
-        api::hierarchy::hierarchy_offer,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_HIERARCHY_ACCEPT,
-        api::hierarchy::hierarchy_accept,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_PROBE,
-        api::probe::probe_effective_paths,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_PROBE_HW,
-        api::probe::probe_hw,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_PROBE_METRICS,
-        api::probe::probe_metrics,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_MODELS_DOWNLOAD,
-        api::models::models_download,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_MODELS_DOWNLOAD_CANCEL,
-        api::models::models_download_cancel,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_MODELS_CAS_GC,
-        api::models::models_cas_gc,
-        Some(Stability::Experimental),
-    );
-    builder.route_get(
-        paths::ADMIN_MODELS_BY_HASH,
-        api::models::models_blob_by_hash,
-        Some(Stability::Experimental),
-    );
+    register_admin_management_routes(&mut builder);
     builder.route_get(
         paths::STATE_EPISODES,
         api::state::state_episodes,
@@ -1012,16 +624,7 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         api::spec::catalog_health,
         Some(Stability::Stable),
     );
-    builder.route_get(
-        paths::ADMIN_RPU_TRUST,
-        api::rpu::rpu_trust_get,
-        Some(Stability::Experimental),
-    );
-    builder.route_post(
-        paths::ADMIN_RPU_RELOAD,
-        api::rpu::rpu_reload_post,
-        Some(Stability::Experimental),
-    );
+    register_admin_rpu_routes(&mut builder);
     builder.route_get("/logic-units", api::logic_units::logic_units_list, None);
     builder.route_get(
         "/state/logic_units",
@@ -1052,7 +655,7 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         None,
     );
     builder.route_get(
-        "/state/config/snapshots/:id",
+        "/state/config/snapshots/{id}",
         api::config::state_config_snapshot_get,
         None,
     );
@@ -1084,16 +687,7 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         api::state::state_self_get,
         Some(Stability::Beta),
     );
-    builder.route_post(
-        paths::ADMIN_SELF_MODEL_PROPOSE,
-        api::self_model::self_model_propose,
-        Some(Stability::Beta),
-    );
-    builder.route_post(
-        paths::ADMIN_SELF_MODEL_APPLY,
-        api::self_model::self_model_apply,
-        Some(Stability::Beta),
-    );
+    register_admin_self_model_routes(&mut builder);
     builder.route_post("/context/assemble", api::context::context_assemble, None);
     builder.route_post("/context/rehydrate", api::context::context_rehydrate, None);
     builder.route_get("/state/connectors", api::connectors::state_connectors, None);
@@ -1117,16 +711,7 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         api::memory::state_memory_recent,
         None,
     );
-    builder.route_get(
-        paths::ADMIN_MEMORY,
-        api::memory::admin_memory_list,
-        Some(Stability::Beta),
-    );
-    builder.route_post(
-        paths::ADMIN_MEMORY_APPLY,
-        api::memory::admin_memory_apply,
-        Some(Stability::Beta),
-    );
+    register_admin_memory_routes(&mut builder);
     builder.route_get(
         "/orchestrator/mini_agents",
         api::orchestrator::orchestrator_mini_agents,
@@ -1138,7 +723,7 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         None,
     );
     builder.route_post(
-        "/orchestrator/runtimes/:id/restore",
+        "/orchestrator/runtimes/{id}/restore",
         api::orchestrator::orchestrator_runtime_restore,
         None,
     );
@@ -1167,6 +752,450 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         api::staging::staging_action_deny,
         Some(Stability::Experimental),
     );
+    register_admin_chat_routes(&mut builder);
+    builder.build()
+}
+
+fn register_admin_ui_routes(builder: &mut RouterBuilder) {
+    builder.route_get(paths::ADMIN_DEBUG, api::ui::debug_ui, Some(Stability::Beta));
+    builder.route_get(
+        paths::ADMIN_UI_MODELS,
+        api::ui::models_ui,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_AGENTS,
+        api::ui::agents_ui,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_PROJECTS,
+        api::ui::projects_ui,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_FLOWS,
+        api::ui::flows_ui,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_TOKENS,
+        api::ui::ui_tokens_css,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_KIT,
+        api::ui::ui_kit_css,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_PAGES,
+        api::ui::ui_pages_css,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_MODELS_JS,
+        api::ui::ui_models_js,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_AGENTS_JS,
+        api::ui::ui_agents_js,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_PROJECTS_JS,
+        api::ui::ui_projects_js,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_DEBUG_JS,
+        api::ui::ui_debug_js,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_UI_DEBUG_CORE_JS,
+        api::ui::ui_debug_core_js,
+        Some(Stability::Beta),
+    );
+}
+
+fn register_admin_ops_routes(builder: &mut RouterBuilder) {
+    builder.route_get(
+        paths::ADMIN_MODELS_SUMMARY,
+        api::models::models_summary,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_MODELS,
+        api::models::models_list,
+        Some(Stability::Beta),
+    );
+    builder.route_post(
+        paths::ADMIN_MODELS_REFRESH,
+        api::models::models_refresh,
+        Some(Stability::Beta),
+    );
+    builder.route_post(
+        paths::ADMIN_MODELS_SAVE,
+        api::models::models_save,
+        Some(Stability::Beta),
+    );
+    builder.route_post(
+        paths::ADMIN_MODELS_LOAD,
+        api::models::models_load,
+        Some(Stability::Beta),
+    );
+    builder.route_post(
+        paths::ADMIN_MODELS_ADD,
+        api::models::models_add,
+        Some(Stability::Beta),
+    );
+    builder.route_post(
+        paths::ADMIN_MODELS_REMOVE,
+        api::models::models_remove,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_MODELS_DEFAULT,
+        api::models::models_default_get,
+        Some(Stability::Beta),
+    );
+    builder.route_post(
+        paths::ADMIN_MODELS_DEFAULT,
+        api::models::models_default_set,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_MODELS_CONCURRENCY,
+        api::models::models_concurrency_get,
+        Some(Stability::Beta),
+    );
+    builder.route_post(
+        paths::ADMIN_MODELS_CONCURRENCY,
+        api::models::models_concurrency_set,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_MODELS_JOBS,
+        api::models::models_jobs,
+        Some(Stability::Beta),
+    );
+    builder.route_post(
+        paths::ADMIN_AUTONOMY_LANE_PAUSE,
+        api::autonomy::autonomy_pause,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_AUTONOMY_LANE_STOP,
+        api::autonomy::autonomy_stop,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_AUTONOMY_LANE_RESUME,
+        api::autonomy::autonomy_resume,
+        Some(Stability::Experimental),
+    );
+    builder.route_delete(
+        paths::ADMIN_AUTONOMY_LANE_JOBS,
+        api::autonomy::autonomy_jobs_clear,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_AUTONOMY_LANE_BUDGETS,
+        api::autonomy::autonomy_budgets_update,
+        Some(Stability::Experimental),
+    );
+}
+
+fn register_admin_management_routes(builder: &mut RouterBuilder) {
+    builder.route_get(
+        paths::ADMIN_TOOLS,
+        api::tools::tools_list,
+        Some(Stability::Beta),
+    );
+    builder.route_post(
+        paths::ADMIN_TOOLS_RUN,
+        api::tools::tools_run,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_TOOLS_CACHE_STATS,
+        api::tools::tools_cache_stats,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::ADMIN_MEMORY_QUARANTINE,
+        api::review::memory_quarantine_get,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_MEMORY_QUARANTINE,
+        api::review::memory_quarantine_queue,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_MEMORY_QUARANTINE_ADMIT,
+        api::review::memory_quarantine_admit,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_WORLD_DIFFS,
+        api::review::world_diffs_get,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_WORLD_DIFFS_QUEUE,
+        api::review::world_diffs_queue,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_WORLD_DIFFS_DECISION,
+        api::review::world_diffs_decision,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_GOVERNOR_PROFILE,
+        api::governor::governor_profile_get,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_GOVERNOR_PROFILE,
+        api::governor::governor_profile_set,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_GOVERNOR_HINTS,
+        api::governor::governor_hints_get,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_GOVERNOR_HINTS,
+        api::governor::governor_hints_set,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_FEEDBACK_STATE,
+        api::feedback::feedback_state,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_FEEDBACK_SIGNAL,
+        api::feedback::feedback_signal,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_FEEDBACK_ANALYZE,
+        api::feedback::feedback_analyze,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_FEEDBACK_APPLY,
+        api::feedback::feedback_apply,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_FEEDBACK_AUTO,
+        api::feedback::feedback_auto,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_FEEDBACK_RESET,
+        api::feedback::feedback_reset,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_DISTILL,
+        api::distill::distill_run,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_FEEDBACK_SUGGESTIONS,
+        api::feedback::feedback_suggestions,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_FEEDBACK_UPDATES,
+        api::feedback::feedback_updates,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_FEEDBACK_POLICY,
+        api::feedback::feedback_policy,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_FEEDBACK_VERSIONS,
+        api::feedback::feedback_versions,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_FEEDBACK_ROLLBACK,
+        api::feedback::feedback_rollback,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_EXPERIMENTS_DEFINE,
+        api::experiments::experiments_define,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_EXPERIMENTS_RUN,
+        api::experiments::experiments_run,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_EXPERIMENTS_ACTIVATE,
+        api::experiments::experiments_activate,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_EXPERIMENTS_LIST,
+        api::experiments::experiments_list,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_EXPERIMENTS_SCOREBOARD,
+        api::experiments::experiments_scoreboard,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_EXPERIMENTS_WINNERS,
+        api::experiments::experiments_winners,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_EXPERIMENTS_START,
+        api::experiments::experiments_start,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_EXPERIMENTS_STOP,
+        api::experiments::experiments_stop,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_EXPERIMENTS_ASSIGN,
+        api::experiments::experiments_assign,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_GOLDENS_LIST,
+        api::goldens::goldens_list,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_GOLDENS_ADD,
+        api::goldens::goldens_add,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_GOLDENS_RUN,
+        api::goldens::goldens_run,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_HIERARCHY_STATE,
+        api::hierarchy::hierarchy_state,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_HIERARCHY_ROLE,
+        api::hierarchy::hierarchy_role_set,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_HIERARCHY_HELLO,
+        api::hierarchy::hierarchy_hello,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_HIERARCHY_OFFER,
+        api::hierarchy::hierarchy_offer,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_HIERARCHY_ACCEPT,
+        api::hierarchy::hierarchy_accept,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_PROBE,
+        api::probe::probe_effective_paths,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_PROBE_HW,
+        api::probe::probe_hw,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_PROBE_METRICS,
+        api::probe::probe_metrics,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_MODELS_DOWNLOAD,
+        api::models::models_download,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_MODELS_DOWNLOAD_CANCEL,
+        api::models::models_download_cancel,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_MODELS_CAS_GC,
+        api::models::models_cas_gc,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::ADMIN_MODELS_BY_HASH,
+        api::models::models_blob_by_hash,
+        Some(Stability::Experimental),
+    );
+}
+
+fn register_admin_rpu_routes(builder: &mut RouterBuilder) {
+    builder.route_get(
+        paths::ADMIN_RPU_TRUST,
+        api::rpu::rpu_trust_get,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_RPU_RELOAD,
+        api::rpu::rpu_reload_post,
+        Some(Stability::Experimental),
+    );
+}
+
+fn register_admin_self_model_routes(builder: &mut RouterBuilder) {
+    builder.route_post(
+        paths::ADMIN_SELF_MODEL_PROPOSE,
+        api::self_model::self_model_propose,
+        Some(Stability::Beta),
+    );
+    builder.route_post(
+        paths::ADMIN_SELF_MODEL_APPLY,
+        api::self_model::self_model_apply,
+        Some(Stability::Beta),
+    );
+}
+
+fn register_admin_memory_routes(builder: &mut RouterBuilder) {
+    builder.route_get(
+        paths::ADMIN_MEMORY,
+        api::memory::admin_memory_list,
+        Some(Stability::Beta),
+    );
+    builder.route_post(
+        paths::ADMIN_MEMORY_APPLY,
+        api::memory::admin_memory_apply,
+        Some(Stability::Beta),
+    );
+}
+
+fn register_admin_chat_routes(builder: &mut RouterBuilder) {
     builder.route_get(
         paths::ADMIN_CHAT,
         api::chat::chat_history,
@@ -1187,5 +1216,4 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
         api::chat::chat_status,
         Some(Stability::Beta),
     );
-    builder.build()
 }

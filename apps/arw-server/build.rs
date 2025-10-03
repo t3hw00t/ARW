@@ -4,8 +4,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     println!("cargo:rerun-if-changed=proto/arw.proto");
-    tonic_build::configure()
+    tonic_prost_build::configure()
         .build_server(true)
-        .compile(&["proto/arw.proto"], &["proto"])?;
+        .compile_protos(&["proto/arw.proto"], &["proto"])?;
     Ok(())
 }

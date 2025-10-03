@@ -73,9 +73,9 @@ impl PoolShared {
             let available = state.conns.len() as f64;
             let total = state.created as f64;
             let in_use = total - available;
-            metrics::gauge!("arw_kernel_pool_available", available);
-            metrics::gauge!("arw_kernel_pool_total", total);
-            metrics::gauge!("arw_kernel_pool_in_use", in_use);
+            metrics::gauge!("arw_kernel_pool_available").set(available);
+            metrics::gauge!("arw_kernel_pool_total").set(total);
+            metrics::gauge!("arw_kernel_pool_in_use").set(in_use);
         }
         #[cfg(not(feature = "metrics"))]
         let _ = state;
@@ -92,8 +92,8 @@ impl PoolShared {
         }
         #[cfg(feature = "metrics")]
         {
-            metrics::counter!("arw_kernel_pool_wait_total", 1);
-            metrics::histogram!("arw_kernel_pool_wait_ms", waited.as_secs_f64() * 1000.0);
+            metrics::counter!("arw_kernel_pool_wait_total").increment(1);
+            metrics::histogram!("arw_kernel_pool_wait_ms").record(waited.as_secs_f64() * 1000.0);
         }
     }
 
@@ -393,12 +393,12 @@ impl Kernel {
                 match Kernel::checkout_connection(&db_path, &pragmas, &pool) {
                     Ok(conn) => {
                         #[cfg(feature = "metrics")]
-                        metrics::counter!("arw_kernel_checkpoint_runs", 1);
+                        metrics::counter!("arw_kernel_checkpoint_runs").increment(1);
                         let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
                     }
                     Err(_) => {
                         #[cfg(feature = "metrics")]
-                        metrics::counter!("arw_kernel_checkpoint_failures", 1);
+                        metrics::counter!("arw_kernel_checkpoint_failures").increment(1);
                     }
                 }
             })
@@ -446,7 +446,7 @@ impl Kernel {
                     let new_target = (target + 1).min(pool.max_ceiling);
                     pool.target_size.store(new_target, Ordering::Relaxed);
                     #[cfg(feature = "metrics")]
-                    metrics::counter!("arw_kernel_pool_autotune_grow", 1);
+                    metrics::counter!("arw_kernel_pool_autotune_grow").increment(1);
                     continue;
                 }
                 if avg_wait <= wait_threshold_ms * 0.25 {
@@ -463,7 +463,7 @@ impl Kernel {
                             pool.target_size.store(new_target, Ordering::Relaxed);
                             pool.shrink_to(new_target);
                             #[cfg(feature = "metrics")]
-                            metrics::counter!("arw_kernel_pool_autotune_shrink", 1);
+                            metrics::counter!("arw_kernel_pool_autotune_shrink").increment(1);
                         }
                     }
                 }

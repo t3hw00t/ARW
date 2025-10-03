@@ -416,7 +416,7 @@ where
         return value;
     }
 
-    ::metrics::counter!(METRIC_READ_MODEL_COALESCED_WAITERS, 1);
+    ::metrics::counter!(METRIC_READ_MODEL_COALESCED_WAITERS).increment(1);
     guard.wait().await;
     if let Some(value) = cached_read_model(id) {
         return value;

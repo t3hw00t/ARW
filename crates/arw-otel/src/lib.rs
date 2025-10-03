@@ -12,6 +12,9 @@ use tracing_subscriber::{
 static ACCESS_GUARD: OnceCell<tracing_appender::non_blocking::WorkerGuard> = OnceCell::new();
 #[cfg(feature = "otlp")]
 static OTEL_PROVIDER: OnceCell<opentelemetry_sdk::trace::SdkTracerProvider> = OnceCell::new();
+#[cfg(feature = "otlp")]
+static OTEL_METRICS_PROVIDER: OnceCell<opentelemetry_sdk::metrics::SdkMeterProvider> =
+    OnceCell::new();
 
 pub fn init() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
@@ -81,13 +84,17 @@ fn init_with_otlp(filter: EnvFilter) -> Result<(), Box<dyn std::error::Error + S
         std::env::var("ARW_OTEL_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:4317".to_string());
 
     const OTEL_TRACES_HEADERS_ENV: &str = "OTEL_EXPORTER_OTLP_TRACES_HEADERS";
+    const OTEL_METRICS_HEADERS_ENV: &str = "OTEL_EXPORTER_OTLP_METRICS_HEADERS";
 
     if let Ok(raw_headers) = std::env::var("ARW_OTEL_HEADERS") {
         if std::env::var(OTEL_EXPORTER_OTLP_HEADERS).is_err() {
             std::env::set_var(OTEL_EXPORTER_OTLP_HEADERS, &raw_headers);
         }
         if std::env::var(OTEL_TRACES_HEADERS_ENV).is_err() {
-            std::env::set_var(OTEL_TRACES_HEADERS_ENV, raw_headers);
+            std::env::set_var(OTEL_TRACES_HEADERS_ENV, raw_headers.clone());
+        }
+        if std::env::var(OTEL_METRICS_HEADERS_ENV).is_err() {
+            std::env::set_var(OTEL_METRICS_HEADERS_ENV, raw_headers);
         }
     }
 
@@ -118,9 +125,60 @@ fn init_with_otlp(filter: EnvFilter) -> Result<(), Box<dyn std::error::Error + S
         ])
         .build();
 
+    #[cfg(feature = "otlp")]
+    if std::env::var("ARW_OTEL_METRICS").as_deref() == Ok("1") {
+        use metrics_exporter_opentelemetry::Recorder as MetricsRecorder;
+        use opentelemetry_otlp::MetricExporterBuilder;
+        use opentelemetry_sdk::metrics::Temporality;
+
+        let mut metrics_exporter_builder = MetricExporterBuilder::new()
+            .with_tonic()
+            .with_endpoint(endpoint.clone());
+        if let Some(timeout_ms) = std::env::var("ARW_OTEL_TIMEOUT_MS")
+            .ok()
+            .and_then(|v| v.parse::<u64>().ok())
+        {
+            metrics_exporter_builder =
+                metrics_exporter_builder.with_timeout(Duration::from_millis(timeout_ms));
+        }
+
+        match metrics_exporter_builder
+            .with_temporality(Temporality::Cumulative)
+            .build()
+        {
+            Ok(exporter) => match MetricsRecorder::builder("arw-server")
+                .with_instrumentation_scope(|scope| scope.with_version(env!("CARGO_PKG_VERSION")))
+                .with_meter_provider(|builder| {
+                    builder
+                        .with_resource(resource.clone())
+                        .with_periodic_exporter(exporter)
+                })
+                .install()
+            {
+                Ok((provider, _)) => {
+                    opentelemetry::global::set_meter_provider(provider.clone());
+                    let _ = OTEL_METRICS_PROVIDER.set(provider);
+                    tracing::info!(endpoint, "OTLP metrics exporter initialised");
+                }
+                Err(err) => {
+                    tracing::warn!(
+                        %err,
+                        "failed to initialise OTLP metrics exporter; continuing without metrics pipeline"
+                    );
+                }
+            },
+            Err(err) => {
+                tracing::warn!(
+                    %err,
+                    "failed to build OTLP metrics exporter; continuing without metrics pipeline"
+                );
+            }
+        }
+    }
+
     let tracer_provider = SdkTracerProvider::builder()
         .with_batch_exporter(exporter)
-        .with_resource(resource)
+        .with_resource(resource.clone())
         .build();
 
     let _ = OTEL_PROVIDER.set(tracer_provider.clone());
@@ -176,6 +234,11 @@ pub fn shutdown() {
         if let Some(provider) = OTEL_PROVIDER.get() {
             if let Err(err) = provider.shutdown() {
                 tracing::warn!(%err, "failed to shut down OTLP tracer provider cleanly");
+            }
+        }
+        if let Some(provider) = OTEL_METRICS_PROVIDER.get() {
+            if let Err(err) = provider.shutdown() {
+                tracing::warn!(%err, "failed to shut down OTLP metrics provider cleanly");
             }
         }
     }

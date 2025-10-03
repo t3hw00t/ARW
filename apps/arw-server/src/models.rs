@@ -902,8 +902,8 @@ impl ModelStore {
         if let Some(existing) = guard.as_ref() {
             return existing.clone();
         }
-        metrics::counter!(METRIC_MANIFEST_INDEX_REBUILDS, 1);
-        metrics::gauge!(GAUGE_MANIFEST_INDEX_ENTRIES, entries as f64);
+        metrics::counter!(METRIC_MANIFEST_INDEX_REBUILDS).increment(1);
+        metrics::gauge!(GAUGE_MANIFEST_INDEX_ENTRIES).set(entries as f64);
         debug!(entries, "manifest hash index rebuilt");
         *guard = Some(built.clone());
         built

@@ -280,16 +280,16 @@ async fn run_context_iteration(
             let needs_more_label = if verdict.needs_more { "true" } else { "false" };
             histogram!(
                 "arw_context_iteration_duration_ms",
-                duration_ms,
                 "outcome" => "success",
                 "needs_more" => needs_more_label,
-            );
+            )
+            .record(duration_ms);
             counter!(
                 "arw_context_iteration_total",
-                1,
                 "outcome" => "success",
                 "needs_more" => needs_more_label,
-            );
+            )
+            .increment(1);
             bus.publish(
                 topics::TOPIC_WORKING_SET_ITERATION_SUMMARY,
                 &summary_payload,
@@ -313,22 +313,22 @@ async fn run_context_iteration(
             );
             histogram!(
                 "arw_context_recall_risk_score",
-                recall_event.score,
                 "level" => recall_event.level,
                 "needs_more" => needs_more_label,
-            );
+            )
+            .record(recall_event.score);
             counter!(
                 "arw_context_recall_risk_total",
-                1,
                 "level" => recall_event.level,
                 "needs_more" => needs_more_label,
-            );
+            )
+            .increment(1);
             if recall_event.at_risk {
                 counter!(
                     "arw_context_recall_risk_flagged_total",
-                    1,
                     "level" => recall_event.level,
-                );
+                )
+                .increment(1);
             }
             bus.publish(topics::TOPIC_CONTEXT_RECALL_RISK, &recall_event.payload);
             IterationOutcome::Success(Box::new(IterationSuccess {
@@ -350,10 +350,10 @@ async fn run_context_iteration(
             );
             histogram!(
                 "arw_context_iteration_duration_ms",
-                duration_ms,
                 "outcome" => "error",
-            );
-            counter!("arw_context_iteration_total", 1, "outcome" => "error");
+            )
+            .record(duration_ms);
+            counter!("arw_context_iteration_total", "outcome" => "error").increment(1);
             bus.publish(topics::TOPIC_WORKING_SET_ERROR, &error_payload);
             IterationOutcome::Error(Box::new(IterationError {
                 payload: error_payload,
@@ -372,10 +372,10 @@ async fn run_context_iteration(
             );
             histogram!(
                 "arw_context_iteration_duration_ms",
-                duration_ms,
                 "outcome" => "join_error",
-            );
-            counter!("arw_context_iteration_total", 1, "outcome" => "join_error");
+            )
+            .record(duration_ms);
+            counter!("arw_context_iteration_total", "outcome" => "join_error").increment(1);
             bus.publish(topics::TOPIC_WORKING_SET_ERROR, &error_payload);
             IterationOutcome::Error(Box::new(IterationError {
                 payload: error_payload,
@@ -752,9 +752,9 @@ fn build_context_coverage_payload(
         if let Some(slot) = reason.strip_prefix("slot_underfilled:") {
             counter!(
                 "arw_context_slot_underfilled_total",
-                1,
                 "slot" => slot.to_string(),
-            );
+            )
+            .increment(1);
         }
     }
     for (slot, budget) in summary.slot_budgets.iter() {
@@ -771,9 +771,9 @@ fn build_context_coverage_payload(
         let ratio = (have as f64 / denom).clamp(0.0, 1.0);
         gauge!(
             "arw_context_slot_fill_ratio",
-            ratio,
             "slot" => slot.clone(),
-        );
+        )
+        .set(ratio);
     }
 
     let mut payload = Map::new();
@@ -855,14 +855,14 @@ fn build_context_recall_risk_payload(
         slot_gap = slot_gap.max(gap);
         gauge!(
             "arw_context_slot_gap_latest",
-            gap,
             "slot" => slot.clone(),
-        );
+        )
+        .set(gap);
         histogram!(
             "arw_context_slot_gap",
-            gap,
             "slot" => slot.clone(),
-        );
+        )
+        .record(gap);
         slot_breakdown.insert(slot.clone(), json_number(gap));
     }
     if slot_breakdown.is_empty() {
@@ -1273,7 +1273,7 @@ pub mod harness {
                         let duration_ms = if let (Some(cfg), Some(r_ref)) = (mc, rng.as_mut()) {
                             if let Some(span) = cfg.jitter_ms {
                                 let rng_inner = &mut **r_ref;
-                                let delta: f64 = rng_inner.gen_range(-span..=span);
+                                let delta: f64 = rng_inner.random_range(-span..=span);
                                 (base_duration + delta).max(1.0)
                             } else {
                                 base_duration
@@ -1320,7 +1320,7 @@ pub mod harness {
                         let duration_ms = if let (Some(cfg), Some(r_ref)) = (mc, rng.as_mut()) {
                             if let Some(span) = cfg.jitter_ms {
                                 let rng_inner = &mut **r_ref;
-                                let delta: f64 = rng_inner.gen_range(-span..=span);
+                                let delta: f64 = rng_inner.random_range(-span..=span);
                                 (base_duration + delta).max(1.0)
                             } else {
                                 base_duration

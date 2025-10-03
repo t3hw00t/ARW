@@ -302,7 +302,11 @@ fn wlr_screenshot(
         width,
         height,
     };
-    let rgba_image = wayshot_connection.screenshot(capture_region, false)?;
+    let wayshot_image = wayshot_connection.screenshot(capture_region, false)?;
+    let (width, height) = wayshot_image.dimensions();
+    let raw = wayshot_image.into_raw();
+    let rgba_image = RgbaImage::from_raw(width, height, raw)
+        .ok_or_else(|| anyhow!("failed to reconstruct screenshot buffer"))?;
 
     Ok(rgba_image)
 }

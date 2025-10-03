@@ -30,9 +30,9 @@ fn publish_cache_hit(
     elapsed_ms: u64,
     latency_saved_ms: Option<u64>,
 ) -> Value {
-    metrics::counter!(METRIC_CACHE_HIT, 1);
+    metrics::counter!(METRIC_CACHE_HIT).increment(1);
     if outcome == "coalesced" {
-        metrics::counter!(METRIC_CACHE_COALESCED, 1);
+        metrics::counter!(METRIC_CACHE_COALESCED).increment(1);
     }
 
     let mut cache_evt = json!({
@@ -91,7 +91,7 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
             }
 
             cache.record_coalesced_wait();
-            metrics::counter!(METRIC_CACHE_COALESCED_WAITERS, 1);
+            metrics::counter!(METRIC_CACHE_COALESCED_WAITERS).increment(1);
             guard.wait().await;
 
             if let Some(hit) = cache.lookup(key).await {
@@ -123,7 +123,7 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
                 payload_bytes,
                 miss_elapsed_ms,
             }) => {
-                metrics::counter!(METRIC_CACHE_MISS, 1);
+                metrics::counter!(METRIC_CACHE_MISS).increment(1);
                 let mut cache_evt = json!({
                     "tool": id,
                     "outcome": "miss",
@@ -144,7 +144,7 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
                 payload_bytes,
                 miss_elapsed_ms,
             }) => {
-                metrics::counter!(METRIC_CACHE_ERROR, 1);
+                metrics::counter!(METRIC_CACHE_ERROR).increment(1);
                 let mut cache_evt = json!({
                     "tool": id,
                     "outcome": "error",
@@ -160,7 +160,7 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
                 bus.publish(topics::TOPIC_TOOL_CACHE, &cache_evt);
             }
             None => {
-                metrics::counter!(METRIC_CACHE_ERROR, 1);
+                metrics::counter!(METRIC_CACHE_ERROR).increment(1);
                 let mut cache_evt = json!({
                     "tool": id,
                     "outcome": "error",
@@ -175,7 +175,7 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
         }
     } else if cache.enabled() {
         cache.record_bypass();
-        metrics::counter!(METRIC_CACHE_BYPASS, 1);
+        metrics::counter!(METRIC_CACHE_BYPASS).increment(1);
         let mut cache_evt = json!({
             "tool": id,
             "outcome": "not_cacheable",

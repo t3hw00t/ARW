@@ -359,7 +359,7 @@ impl<'a> WorkingSetBuilder<'a> {
                 "scorer": scorer.name(),
             }),
         );
-        counter!("arw_context_scorer_used_total", 1, "scorer" => scorer.name());
+        counter!("arw_context_scorer_used_total", "scorer" => scorer.name()).increment(1);
 
         let total_start = Instant::now();
         let mut lanes: Vec<Option<String>> = if spec.lanes.is_empty() {
@@ -400,9 +400,9 @@ impl<'a> WorkingSetBuilder<'a> {
                     );
                     counter!(
                         "arw_context_seed_candidates_total",
-                        1,
                         "lane" => lane_for_event.unwrap_or_else(|| "unknown".into())
-                    );
+                    )
+                    .increment(1);
                     seeds_raw.push(payload);
                     seed_infos.push(seed);
                     insert_candidate(&mut candidates, candidate);
@@ -412,9 +412,9 @@ impl<'a> WorkingSetBuilder<'a> {
         let retrieve_elapsed = retrieve_start.elapsed();
         histogram!(
             "arw_context_phase_duration_ms",
-            retrieve_elapsed.as_secs_f64() * 1000.0,
             "phase" => "retrieve"
-        );
+        )
+        .record(retrieve_elapsed.as_secs_f64() * 1000.0);
 
         let mut expand_query_elapsed = Duration::from_millis(0);
         if spec.expand_query {
@@ -429,7 +429,7 @@ impl<'a> WorkingSetBuilder<'a> {
             )?;
             expand_query_elapsed = expand_start.elapsed();
             if added > 0 {
-                counter!("arw_context_query_expansion_total", added as u64);
+                counter!("arw_context_query_expansion_total").increment(added as u64);
             }
         }
 
@@ -464,9 +464,9 @@ impl<'a> WorkingSetBuilder<'a> {
                                 );
                                 counter!(
                                     "arw_context_link_expansion_total",
-                                    1,
                                     "lane" => lane_for_event.unwrap_or_else(|| "unknown".into())
-                                );
+                                )
+                                .increment(1);
                                 expanded_raw.push(payload);
                                 insert_candidate(&mut candidates, candidate);
                             }
@@ -478,9 +478,9 @@ impl<'a> WorkingSetBuilder<'a> {
         let expand_elapsed = expand_start.elapsed();
         histogram!(
             "arw_context_phase_duration_ms",
-            expand_elapsed.as_secs_f64() * 1000.0,
             "phase" => "link_expand"
-        );
+        )
+        .record(expand_elapsed.as_secs_f64() * 1000.0);
 
         let mut all_candidates: Vec<Candidate> = candidates.into_values().collect();
         all_candidates.sort_by(|a, b| b.cscore.partial_cmp(&a.cscore).unwrap_or(Ordering::Equal));
@@ -493,9 +493,9 @@ impl<'a> WorkingSetBuilder<'a> {
         let select_elapsed = select_start.elapsed();
         histogram!(
             "arw_context_phase_duration_ms",
-            select_elapsed.as_secs_f64() * 1000.0,
             "phase" => "select"
-        );
+        )
+        .record(select_elapsed.as_secs_f64() * 1000.0);
 
         let items: Vec<Value> = selected.iter().map(|c| c.value.clone()).collect();
         let summary = WorkingSetSummary::from_selection(
@@ -511,9 +511,9 @@ impl<'a> WorkingSetBuilder<'a> {
         let total_elapsed = total_start.elapsed();
         histogram!(
             "arw_context_phase_duration_ms",
-            total_elapsed.as_secs_f64() * 1000.0,
             "phase" => "total"
-        );
+        )
+        .record(total_elapsed.as_secs_f64() * 1000.0);
 
         let diagnostics = build_diagnostics(
             &spec,
@@ -671,9 +671,9 @@ impl<'a> WorkingSetBuilder<'a> {
                     );
                     counter!(
                         "arw_context_query_expansion_candidates_total",
-                        1,
                         "lane" => lane_for_event.unwrap_or_else(|| "unknown".into())
-                    );
+                    )
+                    .increment(1);
                     expanded_raw.push(payload);
                     insert_candidate(candidates, candidate);
                     added += 1;
@@ -823,7 +823,7 @@ fn select_candidates<O: WorkingSetObserver>(
         }
         let lane_key = cand.lane.clone().unwrap_or_else(|| "unknown".to_string());
         *lane_counts.entry(lane_key.clone()).or_insert(0) += 1;
-        counter!("arw_context_selected_total", 1, "lane" => lane_key);
+        counter!("arw_context_selected_total", "lane" => lane_key).increment(1);
         observer.emit(
             STREAM_EVENT_SELECTED,
             json!({

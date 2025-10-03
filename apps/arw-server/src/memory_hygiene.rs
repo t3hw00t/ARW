@@ -114,11 +114,11 @@ async fn sweep_once(state: &AppState) -> Result<()> {
         .filter(|c| matches!(c.reason, MemoryGcReason::TtlExpired { .. }))
         .count();
     if expired_count > 0 {
-        counter!(METRIC_EXPIRED, expired_count as u64);
+        counter!(METRIC_EXPIRED).increment(expired_count as u64);
     }
     let evicted_count = reasons.len() - expired_count;
     if evicted_count > 0 {
-        counter!(METRIC_EVICTED, evicted_count as u64);
+        counter!(METRIC_EVICTED).increment(evicted_count as u64);
     }
 
     tracing::debug!(
