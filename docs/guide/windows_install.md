@@ -51,12 +51,13 @@ Launcher details
 - Autostart: toggle launcher autostart at login from the UI.
 
 Installer status
-- MSI for Rust binaries is configured via cargo‑dist and built in CI.
-- Launcher MSIs: CI builds Windows MSIs for x64 (primary) and ARM64 (best‑effort). Stable filenames on Releases:
+- MSI for Rust binaries is configured via cargo-dist and built in CI.
+- Launcher MSIs: CI builds Windows MSIs for x64 (primary) and ARM64 (best-effort). Stable filenames on Releases:
   - `arw-launcher-x64.msi`
   - `arw-launcher-arm64.msi` (when built)
   Each MSI includes `arw-server.exe` and `arw-cli.exe` so the launcher can start the service out-of-the-box.
-- Signing: Code signing is supported in CI when a certificate is provided via secrets; unsigned packages still work but may show SmartScreen prompts.
+- Current release status (2025-10-03): the latest tagged release (`ts-client-v0.2.1`) publishes portable `.zip` bundles only while the Windows installer gate is being tightened. Generate an installer locally with `cargo dist build --target x86_64-pc-windows-msvc --installer --no-confirm` (or the ARM64 target) and run `scripts/windows-advanced-gate.ps1` to validate until signed MSIs return to the release page.
+- Signing: Code signing is supported in CI when a certificate is provided via secrets; unsigned packages still work but may show SmartScreen prompts. Always record the SHA-256 hash before distribution, for example: `Get-FileHash (Resolve-Path target\dist\*.msi) -Algorithm SHA256`.
 
 Winget (optional)
 - See developer guide for winget manifests: [developer/winget.md](../developer/winget.md).

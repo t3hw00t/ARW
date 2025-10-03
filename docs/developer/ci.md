@@ -10,6 +10,7 @@ Type: Reference
 ## Continuous Integration
 - Build and test on Linux and Windows for every push and PR.
 - Lint and format checks keep changes tidy.
+- `link-check.yml` runs lychee against `README.md` and `docs/**` using `.lychee.toml` (browser user agent + curated allowlist) so broken documentation links fail fast.
 
 ### Interfaces workflow (APIs, events, tools)
 - Lint: Spectral on `spec/openapi.yaml` and `spec/asyncapi.yaml` using `quality/openapi-spectral.yaml`.
@@ -27,9 +28,9 @@ Type: Reference
 
 ### Windows Launcher Bundles
 - Workflow: `.github/workflows/tauri-windows.yml` builds launcher MSIs via a two‑arch matrix (x64 primary; ARM64 best‑effort) and packages them with `arw-server`/`arw-cli` for out-of-the-box service control.
-- MSI content: includes `arw-server.exe` and `arw-cli.exe` so service autostart works out‑of‑the‑box.
+- MSI content: includes `arw-server.exe` and `arw-cli.exe` so service autostart works out‑of-the-box.
 - Optional code signing: enable by adding `WINDOWS_CERT_PFX` (base64 PFX) and `WINDOWS_CERT_PASSWORD` secrets; artifacts are signed with `signtool`.
-- Release: on tagged pushes (`v*.*.*`), x64 MSI always publishes; ARM64 MSI publishes when the toolchain supports cross‑bundling.
+- Release: on tagged pushes (`v*.*.*`), `dist.yml` collects the cargo-dist output. Publishes are gated by `windows-advanced-gate.yml`; if the gate fails, MSIs stay internal and only the portable `.zip` bundles land on the release page.
 - Smoke test: x64 only — installs the MSI on the runner, verifies files, launches briefly, polls `/healthz`, then uninstalls (non‑blocking).
 
 ## Docs Site
