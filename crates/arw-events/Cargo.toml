@@ -18,7 +18,7 @@ default = []
 nats = ["dep:async-nats"]
 
 [dependencies.async-nats]
-version = "0.42"
+version = "0.44"
 optional = true
 default-features = false
 features = ["ring"]
