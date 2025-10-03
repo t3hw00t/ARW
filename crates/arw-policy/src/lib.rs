@@ -366,9 +366,9 @@ impl CedarEngine {
             .map_err(|err| anyhow!("failed to construct cedar context: {err}"))?;
 
         let request = cedar_policy::Request::new(
-            Some(principal_uid),
-            Some(action_uid),
-            Some(resource_uid),
+            principal_uid,
+            action_uid,
+            resource_uid,
             context,
             self.schema.as_ref(),
         )
