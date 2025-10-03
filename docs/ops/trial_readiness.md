@@ -63,7 +63,7 @@ Until those are done we keep trials in guided mode.
 - Memory fidelity: selector, compression, hygiene, context telemetry, Training Park dials.
 - Approvals + sharing: staging queue, approvals lane, connections drawer, feedback readiness.
 - Safety bundle: GTK/GLib upgrade, egress firewall presets, capsule guard, Prometheus tiles, red-team rehearsal.
-- Automation helpers: `just triad-smoke`, `just context-ci`, `just trials-preflight`, `just trials-guardrails`, `scripts/trials_preflight.sh`, `scripts/trials_guardrails.sh`, [Trial Runbook](trial_runbook.md), `ops/access_matrix.yaml`, [`docs/ops/trials/`](trials/README.md).
+- Automation helpers: `arw-cli smoke triad`, `arw-cli smoke context`, `just triad-smoke`, `just context-ci`, `just trials-preflight`, `just trials-guardrails`, `scripts/smoke_triad.(ps1|sh)`, `scripts/smoke_context.(ps1|sh)`, `scripts/trials_preflight.ps1`/`scripts/trials_preflight.sh`, `scripts/trials_guardrails.sh`, [Trial Runbook](trial_runbook.md), `ops/access_matrix.yaml`, [`docs/ops/trials/`](trials/README.md).
 - Visual kit: home tabs, approvals lane, and dashboard mocks (task `trial-visual-kit`).
 - Autonomy prep: tasks added (`trial-g0`–`trial-g3`, `trial-autonomy-governor`, `autonomy-lane-spec`, `autonomy-rollback-playbook`).
 

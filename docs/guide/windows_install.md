@@ -69,3 +69,5 @@ Troubleshooting
 - Health: `http://127.0.0.1:8091/healthz`
 - Logs: `.arw\logs\arw-server.out.log`
 - Interactive start menu: `scripts\interactive-start-windows.ps1`
+- Quick smoke checks: `arw-cli smoke triad` (action/state/events) and `arw-cli smoke context`
+- Need different ports or want to keep the temp directory for debugging? Run `arw-cli smoke --help` to see all flags, or use the wrapper scripts under `scripts\smoke_*.ps1`.

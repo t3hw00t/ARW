@@ -159,42 +159,104 @@ fn capture_output(mut cmd: Command, label: &str) -> Result<String, String> {
 }
 
 fn run_trials_preflight_script(root: &Path, script: &Path) -> Result<String, String> {
-    let mut errors = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
 
-    let mut direct = Command::new(script);
-    direct.current_dir(root);
-    match capture_output(direct, &script.display().to_string()) {
-        Ok(out) => return Ok(out),
-        Err(err) => errors.push(err),
+    let script_label = script.display().to_string();
+
+    let mut try_command = |cmd: Command, label: String| -> Option<String> {
+        let mut command = cmd;
+        command.current_dir(root);
+        match capture_output(command, &label) {
+            Ok(out) => Some(out),
+            Err(err) => {
+                errors.push(format!("{label}: {err}"));
+                None
+            }
+        }
+    };
+
+    if let Some(out) = try_command(Command::new(script), script_label.clone()) {
+        return Ok(out);
     }
 
-    let mut bash_cmd = Command::new("bash");
-    bash_cmd.arg(script);
-    bash_cmd.current_dir(root);
-    match capture_output(bash_cmd, "bash trials_preflight.sh") {
-        Ok(out) => return Ok(out),
-        Err(err) => errors.push(err),
+    let ext = script
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_ascii_lowercase());
+
+    if ext.as_deref() == Some("ps1") {
+        let make_ps_command = |shell: &str| {
+            let mut cmd = Command::new(shell);
+            cmd.arg("-NoLogo")
+                .arg("-NoProfile")
+                .arg("-ExecutionPolicy")
+                .arg("Bypass")
+                .arg("-File")
+                .arg(script);
+            cmd
+        };
+
+        let mut shells: Vec<&str> = Vec::new();
+        if cfg!(windows) {
+            shells.extend(["powershell.exe", "pwsh.exe", "powershell", "pwsh"]);
+        } else {
+            shells.extend(["pwsh", "pwsh.exe"]);
+        }
+
+        for shell in shells {
+            if let Some(out) = try_command(
+                make_ps_command(shell),
+                format!("{} {}", shell, script.display()),
+            ) {
+                return Ok(out);
+            }
+        }
+    } else {
+        if let Some(out) = try_command(
+            {
+                let mut cmd = Command::new("bash");
+                cmd.arg(script);
+                cmd
+            },
+            format!("bash {}", script.display()),
+        ) {
+            return Ok(out);
+        }
+
+        if let Some(out) = try_command(
+            {
+                let mut cmd = Command::new("sh");
+                cmd.arg(script);
+                cmd
+            },
+            format!("sh {}", script.display()),
+        ) {
+            return Ok(out);
+        }
     }
 
-    let mut sh_cmd = Command::new("sh");
-    sh_cmd.arg(script);
-    sh_cmd.current_dir(root);
-    match capture_output(sh_cmd, "sh trials_preflight.sh") {
-        Ok(out) => return Ok(out),
-        Err(err) => errors.push(err),
+    if errors.is_empty() {
+        Err("trial preflight helper unavailable".into())
+    } else {
+        Err(errors.join("; "))
     }
-
-    Err(errors.join("; "))
 }
 
 fn run_trials_preflight_sync() -> Result<String, String> {
     let mut errors = Vec::new();
     for root in candidate_trial_roots() {
-        let script = root.join("scripts").join("trials_preflight.sh");
-        if script.exists() {
-            match run_trials_preflight_script(&root, &script) {
-                Ok(out) => return Ok(out),
-                Err(err) => errors.push(format!("{}: {}", script.display(), err)),
+        let mut scripts = Vec::new();
+        if cfg!(windows) {
+            scripts.push(root.join("scripts").join("trials_preflight.ps1"));
+        }
+        scripts.push(root.join("scripts").join("trials_preflight.sh"));
+
+        for script in scripts {
+            if script.exists() {
+                match run_trials_preflight_script(&root, &script) {
+                    Ok(out) => return Ok(out),
+                    Err(err) => errors.push(format!("{}: {}", script.display(), err)),
+                }
             }
         }
 

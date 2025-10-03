@@ -29,6 +29,56 @@ if (-not (Get-Command cargo -ErrorAction SilentlyContinue)) {
   Pause 'Press Enter after installing Rust (or Ctrl+C to abort)'
 }
 
+$rustc = Get-Command rustc -ErrorAction SilentlyContinue
+if ($rustc) {
+  try {
+    $info = & $rustc.Source --version
+    if ($LASTEXITCODE -eq 0 -and $info -match 'rustc\s+([0-9]+\.[0-9]+\.[0-9]+)') {
+      $parsed = [version]$Matches[1]
+      if ($parsed -lt [version]'1.90.0') {
+        Warn "Rust 1.90.0 or newer required (detected $($Matches[1])). Run `rustup update 1.90.0`."
+      } else {
+        Info "rustc $($Matches[1])"
+      }
+    }
+  } catch {
+    Warn "Unable to query rustc version: $($_.Exception.Message)"
+  }
+} else {
+  Warn 'Rust `rustc` not found on PATH.'
+}
+
+$cl = Get-Command cl.exe -ErrorAction SilentlyContinue
+if ($cl) {
+  Info "MSVC Build Tools detected: $($cl.Source)"
+} else {
+  $vsInstall = $null
+  $vswherePath = $null
+  $vswhereBase = [Environment]::GetEnvironmentVariable('ProgramFiles(x86)')
+  if (-not $vswhereBase) { $vswhereBase = [Environment]::GetEnvironmentVariable('ProgramFiles') }
+  if ($vswhereBase) {
+    $vswherePath = Join-Path $vswhereBase 'Microsoft Visual Studio\\Installer\\vswhere.exe'
+  }
+  if ($vswherePath -and (Test-Path $vswherePath)) {
+    try {
+      $vsInstall = & $vswherePath -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath 2>$null
+      if ($LASTEXITCODE -ne 0) { $vsInstall = $null }
+    } catch {}
+  }
+  if ($vsInstall) {
+    Warn "Microsoft C++ Build Tools detected at $vsInstall, but developer command environment is not active (cl.exe missing from PATH)."
+    Write-Host 'Open a "x64 Native Tools Command Prompt for VS 2022" or run:' -ForegroundColor Yellow
+    Write-Host "  `"$vsInstall\VC\Auxiliary\Build\vcvars64.bat`"" -ForegroundColor Yellow
+    Write-Host 'Then re-run setup in the same shell so native builds succeed.' -ForegroundColor Yellow
+  } else {
+    Warn 'Microsoft C++ Build Tools (cl.exe) not found. Required for crates with native code (e.g., ring).'
+    Write-Host 'Install Build Tools (per-user) via winget:' -ForegroundColor Yellow
+    Write-Host '  winget install --id Microsoft.VisualStudio.2022.BuildTools --source winget' -ForegroundColor Yellow
+    Write-Host 'When prompted, select the "Desktop development with C++" workload (MSVC, SDK, CMake).' -ForegroundColor Yellow
+    Pause 'Press Enter after installing Build Tools (or Ctrl+C to abort)'
+  }
+}
+
 $py = Get-Command python -ErrorAction SilentlyContinue
 if (-not $py) { $py = Get-Command python3 -ErrorAction SilentlyContinue }
 if (-not $py) {
@@ -79,7 +129,43 @@ try {
 
 if ($RunTests) {
   Title 'Run tests (workspace)'
-  & cargo nextest run --workspace --locked
+  $nextest = Get-Command cargo-nextest -ErrorAction SilentlyContinue
+  $useCargoTest = $false
+  if (-not $nextest) {
+    $cargoCmd = Get-Command cargo -ErrorAction SilentlyContinue
+    if ($cargoCmd) {
+      $install = $Yes
+      if (-not $Yes) {
+        $resp = Read-Host 'cargo-nextest not found. Install now? (Y/n)'
+        $install = -not ($resp -match '^[nN]')
+      }
+      if ($install) {
+        Info 'Installing cargo-nextest (cargo install --locked cargo-nextest)'
+        & $cargoCmd.Source install --locked cargo-nextest
+        if ($LASTEXITCODE -ne 0) {
+          Warn 'cargo-nextest install failed; falling back to cargo test.'
+          $useCargoTest = $true
+        } else {
+          $nextest = Get-Command cargo-nextest -ErrorAction SilentlyContinue
+        }
+      } else {
+        Warn 'Skipping cargo-nextest install; falling back to cargo test.'
+        $useCargoTest = $true
+      }
+    } else {
+      Warn 'cargo-nextest not found and cargo unavailable; falling back to cargo test.'
+      $useCargoTest = $true
+    }
+  }
+  if (-not $useCargoTest -and -not $nextest) {
+    Warn 'cargo-nextest unavailable after install attempt; using cargo test.'
+    $useCargoTest = $true
+  }
+  if ($useCargoTest) {
+    & cargo test --workspace --locked
+  } else {
+    & $nextest.Source run --workspace --locked
+  }
 }
 
 Title 'Generate workspace status page'

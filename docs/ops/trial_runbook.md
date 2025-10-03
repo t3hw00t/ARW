@@ -39,7 +39,7 @@ This runbook keeps our two-person trial routine lightweight. Use it with the Tri
 2. If the run was under Autonomy Lane, jump to the [Autonomy rollback playbook](trials/autonomy_rollback_playbook.md) after pausing.
 3. Reapply the guardrail preset (`just trials-guardrails preset=trial --dry_run=false`) when the stop is real; keep `--dry-run` for rehearsals so we can preview without touching the config file.
 4. Capture the time and what people saw in the incident log.
-5. Run `just triad-smoke` to confirm the core service.
+5. Run `arw-cli smoke triad` (or `just triad-smoke`) to confirm the core service. Use `arw-cli smoke --help` if you need to tweak ports or keep the temp directory for forensic logs.
 6. DM each other with the incident note so we decide fast.
 7. Decide whether to resume, retry, or end the session.
 

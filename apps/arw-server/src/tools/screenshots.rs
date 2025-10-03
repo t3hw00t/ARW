@@ -105,10 +105,7 @@ fn capture_blocking(input: &Value) -> Result<Value, ToolError> {
                 let mut bytes: Vec<u8> = Vec::new();
                 let dynimg = DynamicImage::ImageRgba8(resized);
                 dynimg
-                    .write_to(
-                        &mut std::io::Cursor::new(&mut bytes),
-                        ImageFormat::Png,
-                    )
+                    .write_to(&mut std::io::Cursor::new(&mut bytes), ImageFormat::Png)
                     .map_err(|e| ToolError::Runtime(e.to_string()))?;
                 preview_b64 = Some(format!(
                     "data:image/png;base64,{}",
@@ -223,10 +220,7 @@ fn annotate_blocking(input: &Value) -> Result<Value, ToolError> {
             let mut bytes: Vec<u8> = Vec::new();
             let dynimg = DynamicImage::ImageRgba8(resized);
             dynimg
-                .write_to(
-                    &mut std::io::Cursor::new(&mut bytes),
-                    ImageFormat::Png,
-                )
+                .write_to(&mut std::io::Cursor::new(&mut bytes), ImageFormat::Png)
                 .map_err(|e| ToolError::Runtime(e.to_string()))?;
             preview_b64 = Some(format!(
                 "data:image/png;base64,{}",

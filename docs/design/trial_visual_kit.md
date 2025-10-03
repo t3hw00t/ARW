@@ -50,7 +50,7 @@ This brief keeps UI, docs, and training materials aligned while we polish the tr
 ## Implementation Notes
 
 - The launcher Trial Control Center lives in `apps/arw-launcher/src-tauri/ui/trial.html` with companion CSS/JS. It renders the tabs, status tray, tiles, focus card, and preflight button described above.
-- Preflight automation attempts to run `scripts/trials_preflight.sh` (or `just trials-preflight`) locally and falls back to copying the CLI command if the helper is unavailable.
+- Preflight automation attempts to run `scripts/trials_preflight.ps1` on Windows or `scripts/trials_preflight.sh` elsewhere (falling back to `just trials-preflight`). When helper scripts are missing it falls back to `arw-cli smoke triad` / `arw-cli smoke context` so we always exercise the same action/state/context checks.
 - Docs and ops runbooks link to the launcher window so rehearsals start from a single surface.
 
 ### Icon references
