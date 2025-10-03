@@ -36,10 +36,10 @@ wit-bindgen = { version = "0.46.0", optional = true }
 [features]
 default = []
 wasm = ["wasmtime", "wit-bindgen"]
-arrow-bench = ["dep:arrow2"]
+arrow-bench = ["dep:arrow"]
 nats = ["dep:async-nats"]
 
-[dependencies.arrow2]
+[dependencies.arrow]
 workspace = true
 optional = true
 

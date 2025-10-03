@@ -1,13 +1,9 @@
-use arrow2::{
-    array::Array,
-    chunk::Chunk,
-    datatypes::Schema,
-    io::json::read::{
-        deserialize_records, infer_records_schema,
-        json_deserializer::{parse, Value},
-    },
-};
+use arrow::array::RecordBatch;
+use arrow::json::reader::{infer_json_schema_from_iterator, ReaderBuilder};
+use serde_json::Value;
+
 use serde::Deserialize;
+use std::sync::Arc;
 
 /// Simple record used for benchmarking ingestion paths.
 #[derive(Deserialize)]
@@ -21,11 +17,21 @@ pub fn parse_with_serde(data: &str) -> Vec<Record> {
     serde_json::from_str(data).unwrap()
 }
 
-/// Ingest JSON array using arrow2.
-pub fn parse_with_arrow(data: &str) -> Chunk<Box<dyn Array>> {
-    let value: Value = parse(data.as_bytes()).unwrap();
-    let schema: Schema = infer_records_schema(&value).unwrap();
-    deserialize_records(&value, &schema).unwrap()
+/// Ingest JSON array using the Apache Arrow reference implementation.
+pub fn parse_with_arrow(data: &str) -> RecordBatch {
+    let records: Vec<Value> = serde_json::from_str(data).expect("valid JSON array");
+    let schema =
+        infer_json_schema_from_iterator(records.iter().map(Ok)).expect("infer Arrow schema");
+    let mut decoder = ReaderBuilder::new(Arc::new(schema))
+        .build_decoder()
+        .expect("build Arrow JSON decoder");
+    decoder
+        .serialize(records.as_slice())
+        .expect("serialize records into Arrow columns");
+    decoder
+        .flush()
+        .expect("flush buffered records")
+        .expect("non-empty record batch")
 }
 
 /// Generate `n` JSON records as an array string.

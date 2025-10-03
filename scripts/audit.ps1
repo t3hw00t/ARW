@@ -50,8 +50,6 @@ function Run-CargoAudit {
         }
       }
       if (-not $glibOk) { $args += @('--ignore','RUSTSEC-2024-0429') }
-      # Bench-only arrow2 pulls lexical-core 0.8.x (RUSTSEC-2023-0086) and arrow2 OOB (RUSTSEC-2025-0038). Ignore if arrow2 present.
-      if (Select-String -Path $lock -Pattern '^name\s*=\s*"arrow2"' -Quiet) { $args += @('--ignore','RUSTSEC-2023-0086','--ignore','RUSTSEC-2025-0038') }
     }
   } catch { }
   Push-Location $Root; try { & cargo audit @args } catch {} finally { Pop-Location }
@@ -121,7 +119,6 @@ if ($Strict) {
           }
         }
         if (-not $glibOk) { $args += @('--ignore','RUSTSEC-2024-0429') }
-        if (Select-String -Path $lock -Pattern '^name\s*=\s*"arrow2"' -Quiet) { $args += @('--ignore','RUSTSEC-2023-0086','--ignore','RUSTSEC-2025-0038') }
       }
     } catch {}
     Push-Location $Root; try { & cargo audit @args } catch { $rc = 1 } finally { Pop-Location }

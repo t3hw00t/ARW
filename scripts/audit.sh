@@ -77,9 +77,6 @@ run_cargo_audit() {
   local args=()
   # Temporary ignore for glib<0.20 (RUSTSEC-2024-0429) — removed automatically when resolved
   if ! glib_version_ge_020; then args+=(--ignore RUSTSEC-2024-0429); fi
-  # Bench-only arrow2 pulls lexical-core 0.8.x (RUSTSEC-2023-0086) and arrow2 OOB (RUSTSEC-2025-0038).
-  # Ignore if arrow2 present in lock.
-  if rg -q "^name = \"arrow2\"$" "$ROOT/Cargo.lock"; then args+=(--ignore RUSTSEC-2023-0086 --ignore RUSTSEC-2025-0038); fi
   (cd "$ROOT" && cargo audit "${args[@]}" || true)
 }
 
@@ -170,7 +167,6 @@ if [[ $STRICT -eq 1 ]]; then
   if [[ $RUN_AUDIT -eq 1 ]]; then
     audit_args=()
     $(! glib_version_ge_020) && audit_args+=(--ignore RUSTSEC-2024-0429)
-    if rg -q "^name = \"arrow2\"$" "$ROOT/Cargo.lock"; then audit_args+=(--ignore RUSTSEC-2023-0086 --ignore RUSTSEC-2025-0038); fi
     (cd "$ROOT" && cargo audit "${audit_args[@]}") || strict_rc=1
   fi
   if [[ $RUN_DENY -eq 1 ]]; then (cd "$ROOT" && cargo deny check advisories bans sources licenses) || strict_rc=1; fi
