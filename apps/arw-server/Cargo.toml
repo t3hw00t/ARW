@@ -89,7 +89,7 @@ grpc = ["dep:tonic", "dep:prost", "dep:prost-types", "dep:tonic-prost"]
 context_harness = []
 
 [target.'cfg(target_os = "windows")'.dependencies]
-windows = { version = "0.61", features = ["Win32_Graphics_DXCore","Win32_Graphics_Dxgi"] }
+windows = { version = "0.62", features = ["Win32_Graphics_DXCore","Win32_Graphics_Dxgi"] }
 
 [build-dependencies]
 tonic-prost-build = "0.14"
