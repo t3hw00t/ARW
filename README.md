@@ -37,7 +37,7 @@ General direction: a unified object graph + a single live event stream (SSE). Ev
 | Remote collaborator packs | Preview (opt-in) | Federation, pooled compute, and Guardrail Gateway stay disabled until you enable them. |
 | Future packs | Roadmap | Voice & vision studio, Asimov Capsule Guard extensions, automated federation policies. |
 
-> **Staying minimal:** Start with the [Core kernel defaults](#kernel-defaults-core) and stay entirely local. Anything tagged as an [Opt-in pack](#opt-in-pack-tier), a [Remote collaborator pack](#remote-collaborator-pack-tier), or a [Future pack](#future-pack-tier) is optional and stays disabled until you flip it on.
+> **Staying minimal:** Start with the [Core kernel defaults](#kernel-defaults-core) and stay entirely local. Anything tagged as an [Opt-in pack](#opt-in-packs), a [Remote collaborator pack](#remote-collaborator-packs), or a [Future pack](#future-packs-roadmap) is optional and stays disabled until you flip it on.
 
 ## Platform Support
 
@@ -46,10 +46,10 @@ General direction: a unified object graph + a single live event stream (SSE). Ev
 
 ## Feature Tiers
 
-- <a id="core-kernel-tier"></a>**Core kernel** – local-first foundations that run in every install. [Details](#kernel-defaults-core).
-- <a id="opt-in-pack-tier"></a>**Opt-in packs** – automation and analysis boosts you turn on when you want more throughput without leaving your machine. [Highlights](#opt-in-packs).
-- <a id="remote-collaborator-pack-tier"></a>**Remote collaborator packs** – sharing, federation, and pooled compute that only activate when you invite others. [Details](#remote-collaborator-packs).
-- <a id="future-pack-tier"></a>**Future packs** – in-flight packs and experiments we’re hardening. [Details](#future-packs-roadmap).
+- **Core kernel** – local-first foundations that run in every install. [Details](#kernel-defaults-core).
+- **Opt-in packs** – automation and analysis boosts you turn on when you want more throughput without leaving your machine. [Highlights](#opt-in-packs).
+- **Remote collaborator packs** – sharing, federation, and pooled compute that only activate when you invite others. [Details](#remote-collaborator-packs).
+- **Future packs** – in-flight packs and experiments we’re hardening. [Details](#future-packs-roadmap).
 
 ## Kernel defaults (Core)
 
@@ -87,7 +87,6 @@ These ship with `arw-server` out of the box and keep working even when you stay 
 - Watch sites or docs for changes and get short, actionable updates after you enable the connectors or watcher packs you trust.
 - **Preview** Prepare for voice, vision, and pointer helpers: consent-first audio/video capture, narration, and high-trust automation are under active development. Track the [Multi-Modal Runtime Plan](docs/architecture/multimodal_runtime_plan.md) for progress.
 
-<a id="opt-in-collaboration-extensions"></a>
 ### Remote collaborator packs
 
 These unlock when you choose to collaborate or federate resources. Remote compute, co‑drive, and the [Guardrail Gateway](docs/architecture/egress_firewall.md) run as opt-in previews while we finish the shared sidecar and cluster matrix.
@@ -131,7 +130,7 @@ The details that make ARW practical in real workflows.
 - Live events (SSE): one stream drives UIs and tools. See [Architecture → Events Vocabulary](docs/architecture/events_vocabulary.md) and [Architecture → SSE Patch Contract](docs/architecture/sse_patch_contract.md).
 - Managed runtime supervisor (in progress): `arw-server` seeds the runtime registry and health stream; today you can point ARW at external llama.cpp hosts, while automated downloads and adapters for ONNX Runtime/vLLM remain on the roadmap. See [Managed llama.cpp runtime](docs/architecture/managed_llamacpp_runtime.md) and [Managed runtime supervisor](docs/architecture/managed_runtime_supervisor.md).
 - Debug UI: inspect episodes, state snapshots, and traces. See [Troubleshooting guide](docs/guide/troubleshooting.md).
-- Recipes + Schemas: installable strategy packs with JSON Schemas. See [Recipes guide](docs/guide/recipes.md) and https://github.com/t3hw00t/ARW/tree/main/spec/schemas.
+- Recipes + Schemas: installable strategy packs with JSON Schemas. See [Recipes guide](docs/guide/recipes.md) and the [spec schemas directory](https://github.com/t3hw00t/ARW/tree/main/spec/schemas).
 - Observability: tracing/logging/metrics and journal. See [Observability architecture](docs/architecture/observability_otel.md). CI enforces interactive performance budgets; see [Interactive bench guide](docs/guide/interactive_bench.md).
 - Performance guardrails: dedupe work via the Action Cache + singleflight, serve digest‑addressed blobs with strong validators, stream read‑model deltas, and reuse llama.cpp prompts. See [Roadmap → Performance Guardrails](docs/ROADMAP.md#performance-guardrails), [Architecture → Performance Guardrails](docs/architecture/performance.md), and [Caching layers](docs/architecture/caching_layers.md).
 
@@ -167,6 +166,8 @@ curl -sS -X POST http://127.0.0.1:8091/actions \
   -H 'content-type: application/json' \
   -d '{"kind":"demo.echo","input":{"msg":"hi"}}'
 ```
+
+These localhost endpoints assume a healthy `arw-server` bound to port `8091`.
 
 Docker (amd64/arm64) — unified server
 ```bash
@@ -207,7 +208,7 @@ scripts/audit.ps1 -Interactive
 ## Download
 
 - Windows installer status (x64/ARM64) and manual build steps: [docs/guide/windows_install.md#installer-status](docs/guide/windows_install.md#installer-status)
-- Release archives and checksums: https://github.com/t3hw00t/ARW/releases
+- Release archives and checksums: [GitHub Releases](https://github.com/t3hw00t/ARW/releases)
 
 _Note_: MSI bundles (when published) ship the launcher alongside `arw-server`. Run the unified server directly (`scripts/start.ps1 -ServiceOnly` or `scripts/start.sh --service-only`) for headless installs; the debug panels are served by `arw-server` when `ARW_DEBUG=1`.
 
@@ -286,6 +287,8 @@ curl -sS http://127.0.0.1:8091/healthz
 
 Pull from GHCR (on releases): `ghcr.io/t3hw00t/arw-server:latest`. See the Docker guide for compose and hardening.
 
+If you run the container on another host, change the healthcheck URL so it points at that machine instead of `127.0.0.1`.
+
 ## Event Topics (Canonical)
 
 > Topics are authored in `crates/arw-topics`; `arw-server` emits the same dot.case events consumed by all surfaces.
@@ -347,7 +350,7 @@ Universal sidecar (always on)
 - [Clustering blueprint](docs/architecture/cluster_federation.md)
 
 Commons Kit (what we ship on top)
-- One‑click “agent recipes”: manifest bundles of prompts + tools + guardrails + minimal UI. Install by dropping a folder into `${ARW_STATE_DIR:-state}/recipes/` (created on first run) and launching. See [Recipes guide](docs/guide/recipes.md) and schema under https://github.com/t3hw00t/ARW/blob/main/spec/schemas/recipe_manifest.json.
+- One‑click “agent recipes”: manifest bundles of prompts + tools + guardrails + minimal UI. Install by dropping a folder into `${ARW_STATE_DIR:-state}/recipes/` (created on first run) and launching. See [Recipes guide](docs/guide/recipes.md) and the [recipe manifest schema](https://github.com/t3hw00t/ARW/blob/main/spec/schemas/recipe_manifest.json).
 - Form‑first tools: ARW tool JSON Schemas render parameter forms automatically; validate before dispatch.
 - Sensible trust boundaries: default‑deny for file write, shell, and network; per‑recipe ask/allow/never with audit events visible in the sidecar.
 
@@ -363,7 +366,7 @@ If you use an AI pair‑programmer, start here:
 - Ensure your Rust toolchain is 1.90+ (`rustup update` keeps you on the latest stable)
 - We iterate on the latest stable Rust; expect sharp edges and flag risky features behind toggles when contributing
 - Fast loop: `just dev` (runs `arw-server` with `ARW_DEBUG=1`)
-- Docs locally: `just docs-serve` → http://127.0.0.1:8000
+- Docs locally: `just docs-serve` → open at `localhost:8000`
 - Workspace cleanup: `just clean` (append `--venv` to drop the local virtualenv)
 - More: [Developer index](docs/developer/index.md)
 

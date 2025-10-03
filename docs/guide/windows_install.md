@@ -8,17 +8,19 @@ Type: How‑to
 
 This guide covers running ARW on Windows with the desktop launcher and the headless service. It also notes the current installer status and the path to a signed MSI.
 
-Requirements
+## Requirements
+
 - Windows 10/11 (Desktop Experience). Standard user OK (no admin required).
-- Rust 1.90+ toolchain (for developer builds): https://rustup.rs
-- Visual Studio Build Tools 2022 with the "Desktop development with C++" workload (for the MSVC linker used by the Rust toolchain): https://aka.ms/vs/17/release/vs_BuildTools.exe
+- Rust 1.90+ toolchain (for developer builds): [rustup](https://rustup.rs)
+- Visual Studio Build Tools 2022 with the "Desktop development with C++" workload (for the MSVC linker used by the Rust toolchain): [vs_BuildTools.exe](https://aka.ms/vs/17/release/vs_BuildTools.exe)
 - WebView2 Runtime for the Tauri‑based launcher:
   - Windows 11: in‑box
   - Windows 10/Server: install Evergreen Runtime (see below)
 
 > The project follows the latest stable Rust release. Run `rustup update` before major pulls to keep scripts and builds aligned.
 
-Quickstart (developer path)
+## Quickstart (developer path)
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\setup.ps1
 powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHealth
@@ -30,13 +32,15 @@ powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -WaitHea
 - Service console: starts minimized by default to dodge antivirus heuristics; use `-HideWindow` to keep it fully hidden like
   previous versions.
 
-Install WebView2 (if needed)
+## Install WebView2 (if needed)
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\webview2.ps1
 ```
 Select “Install Evergreen Runtime”. This is required for the launcher on Windows 10/Server.
 
-Portable bundle (no Rust required)
+## Portable bundle (no Rust required)
+
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts\package.ps1
 powershell -ExecutionPolicy Bypass -File scripts\start.ps1 -ServiceOnly -UseDist -WaitHealth
@@ -45,12 +49,14 @@ This creates `dist/arw-<version>-windows-<arch>.zip` with:
 - `bin/` — `arw-server.exe`, `arw-cli.exe`, optional `arw-launcher.exe`
 - `docs/` and configs
 
-Launcher details
+## Launcher details
+
 - Tray menu: Start/Stop Service, Debug UI (Browser/Window), Windows (Events, Logs, Models, Connections).
 - Health: status in tray tooltip with optional desktop notifications.
 - Autostart: toggle launcher autostart at login from the UI.
 
-Installer status
+## Installer status
+
 - MSI for Rust binaries is configured via cargo-dist and built in CI.
 - Launcher MSIs: CI builds Windows MSIs for x64 (primary) and ARM64 (best-effort). Stable filenames on Releases:
   - `arw-launcher-x64.msi`
@@ -59,15 +65,18 @@ Installer status
 - Current release status (2025-10-03): the latest tagged release (`ts-client-v0.2.1`) publishes portable `.zip` bundles only while the Windows installer gate is being tightened. Generate an installer locally with `cargo dist build --target x86_64-pc-windows-msvc --installer --no-confirm` (or the ARM64 target) and run `scripts/windows-advanced-gate.ps1` to validate until signed MSIs return to the release page.
 - Signing: Code signing is supported in CI when a certificate is provided via secrets; unsigned packages still work but may show SmartScreen prompts. Always record the SHA-256 hash before distribution, for example: `Get-FileHash (Resolve-Path target\dist\*.msi) -Algorithm SHA256`.
 
-Winget (optional)
+## Winget (optional)
+
 - See developer guide for winget manifests: [developer/winget.md](../developer/winget.md).
 
-Uninstall
+## Uninstall
+
 - Portable: delete the `dist/arw-*` folder.
 - Developer build: remove `target/` outputs; no registry/service entries are created.
 
-Troubleshooting
-- Health: `http://127.0.0.1:8091/healthz`
+## Troubleshooting
+
+- Health: [Local health check](http://127.0.0.1:8091/healthz) (run `curl` while the service is up)
 - Logs: `.arw\logs\arw-server.out.log`
 - Interactive start menu: `scripts\interactive-start-windows.ps1`
 - Quick smoke checks: `arw-cli smoke triad` (action/state/events) and `arw-cli smoke context`
