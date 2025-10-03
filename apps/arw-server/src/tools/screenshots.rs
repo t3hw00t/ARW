@@ -4,7 +4,7 @@ use ::screenshots as capture_backend;
 use base64::engine::general_purpose::STANDARD as BASE64_STANDARD;
 use base64::Engine;
 use chrono::{Datelike, Utc};
-use image::{self, imageops, DynamicImage, ImageOutputFormat, RgbaImage};
+use image::{self, imageops, DynamicImage, ImageFormat, RgbaImage};
 use serde_json::{json, Value as JsonValue};
 use std::fs::{self, File};
 use std::io::Write;
@@ -107,7 +107,7 @@ fn capture_blocking(input: &Value) -> Result<Value, ToolError> {
                 dynimg
                     .write_to(
                         &mut std::io::Cursor::new(&mut bytes),
-                        ImageOutputFormat::Png,
+                        ImageFormat::Png,
                     )
                     .map_err(|e| ToolError::Runtime(e.to_string()))?;
                 preview_b64 = Some(format!(
@@ -225,7 +225,7 @@ fn annotate_blocking(input: &Value) -> Result<Value, ToolError> {
             dynimg
                 .write_to(
                     &mut std::io::Cursor::new(&mut bytes),
-                    ImageOutputFormat::Png,
+                    ImageFormat::Png,
                 )
                 .map_err(|e| ToolError::Runtime(e.to_string()))?;
             preview_b64 = Some(format!(

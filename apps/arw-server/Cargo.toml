@@ -66,6 +66,7 @@ wgpu = { version = "0.19", optional = true }
 tonic = { version = "0.14", optional = true, features = ["transport"] }
 prost = { version = "0.14", optional = true }
 prost-types = { version = "0.14", optional = true }
+tonic-prost = { version = "0.14", optional = true }
 
 [dev-dependencies]
 async-trait = "0.1"
@@ -84,7 +85,7 @@ gpu_wgpu = ["dep:wgpu"]
 npu_dxcore = []
 ocr_tesseract = ["dep:leptess"]
 docgen = []
-grpc = ["dep:tonic", "dep:prost", "dep:prost-types"]
+grpc = ["dep:tonic", "dep:prost", "dep:prost-types", "dep:tonic-prost"]
 context_harness = []
 
 [target.'cfg(target_os = "windows")'.dependencies]
