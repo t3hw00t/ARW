@@ -1,5 +1,5 @@
 use axum::extract::ConnectInfo;
-use axum::http::{header, HeaderName, HeaderValue, Request};
+use axum::http::{header, HeaderMap, HeaderName, HeaderValue, Request};
 use axum::middleware::Next;
 use axum::response::Response;
 use base64::Engine;
@@ -10,8 +10,52 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+#[derive(Clone, Debug, Default)]
+pub struct ClientAddrs {
+    remote: Option<String>,
+    forwarded: Option<String>,
+    forwarded_trusted: bool,
+}
+
+impl ClientAddrs {
+    fn new(remote: Option<String>, forwarded: Option<String>) -> Self {
+        let forwarded_trusted = forwarded.is_some() && trust_forward_headers();
+        Self {
+            remote,
+            forwarded,
+            forwarded_trusted,
+        }
+    }
+
+    pub fn remote(&self) -> Option<&str> {
+        self.remote.as_deref()
+    }
+
+    pub fn forwarded(&self) -> Option<&str> {
+        self.forwarded.as_deref()
+    }
+
+    pub fn forwarded_trusted(&self) -> bool {
+        self.forwarded_trusted
+    }
+
+    pub fn remote_is_loopback(&self) -> bool {
+        self.remote
+            .as_deref()
+            .map(|ip| is_loopback_ip(ip))
+            .unwrap_or(false)
+    }
+
+    pub fn forwarded_is_loopback(&self) -> bool {
+        self.forwarded
+            .as_deref()
+            .map(|ip| is_loopback_ip(ip))
+            .unwrap_or(false)
+    }
+}
+
 tokio::task_local! {
-    static CLIENT_ADDR: Option<String>;
+    static CLIENT_ADDR: ClientAddrs;
 }
 
 fn csp_auto_enabled() -> bool {
@@ -77,48 +121,95 @@ fn csp_value_for(path: &str) -> Option<String> {
 }
 
 pub async fn client_addr_mw(req: Request<axum::body::Body>, next: Next) -> Response {
-    let ip = extract_client_addr(&req);
+    let addrs = collect_client_addrs(&req);
     CLIENT_ADDR
-        .scope(ip, async move { next.run(req).await })
+        .scope(addrs, async move { next.run(req).await })
         .await
 }
 
-pub fn client_addr() -> Option<String> {
-    CLIENT_ADDR.try_with(|opt| opt.clone()).ok().flatten()
+pub fn client_addrs() -> ClientAddrs {
+    CLIENT_ADDR
+        .try_with(|info| info.clone())
+        .unwrap_or_default()
 }
 
-fn extract_client_addr<B>(req: &Request<B>) -> Option<String> {
-    let forwarded = req
-        .headers()
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|raw| {
-            raw.split(',').find_map(|part| {
-                let trimmed = part.trim();
-                if trimmed.is_empty() {
-                    None
-                } else {
-                    Some(trimmed.to_string())
-                }
-            })
-        });
-    if forwarded.is_some() {
-        return forwarded;
-    }
-
-    if let Some(real) = req
-        .headers()
-        .get("x-real-ip")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.trim().to_string())
-        .filter(|s| !s.is_empty())
-    {
-        return Some(real);
-    }
-
-    req.extensions()
+fn collect_client_addrs<B>(req: &Request<B>) -> ClientAddrs {
+    let headers = req.headers();
+    let forwarded = forwarded_ip(headers);
+    let remote = req
+        .extensions()
         .get::<ConnectInfo<SocketAddr>>()
-        .map(|ci| ci.0.to_string())
+        .map(|ci| ci.0.ip().to_string());
+
+    ClientAddrs::new(remote, forwarded)
+}
+
+fn forwarded_ip(headers: &HeaderMap) -> Option<String> {
+    if let Some(xff) = headers.get("x-forwarded-for").and_then(|h| h.to_str().ok()) {
+        for part in xff.split(',') {
+            let trimmed = part.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            if let Some(valid) = parse_ip(trimmed) {
+                return Some(valid);
+            }
+        }
+    }
+    if let Some(forwarded) = headers.get("forwarded").and_then(|h| h.to_str().ok()) {
+        for segment in forwarded.split(';').flat_map(|s| s.split(',')) {
+            let segment = segment.trim();
+            if let Some(raw) = segment.strip_prefix("for=") {
+                let candidate = raw.trim_matches('"');
+                if let Some(valid) = parse_ip(candidate) {
+                    return Some(valid);
+                }
+            }
+        }
+    }
+    if let Some(real) = headers.get("x-real-ip").and_then(|h| h.to_str().ok()) {
+        if let Some(valid) = parse_ip(real.trim()) {
+            return Some(valid);
+        }
+    }
+    None
+}
+
+fn parse_ip(raw: &str) -> Option<String> {
+    if raw.is_empty() {
+        return None;
+    }
+
+    let candidate = raw.trim_matches('[').trim_matches(']');
+
+    if let Ok(addr) = candidate.parse::<std::net::IpAddr>() {
+        return Some(addr.to_string());
+    }
+
+    if let Some((host, _port)) = candidate.rsplit_once(':') {
+        if let Ok(addr) = host.parse::<std::net::IpAddr>() {
+            return Some(addr.to_string());
+        }
+    }
+
+    None
+}
+
+fn is_loopback_ip(addr: &str) -> bool {
+    if let Ok(ip) = addr.parse::<std::net::IpAddr>() {
+        return ip.is_loopback() || ip.is_unspecified();
+    }
+    matches!(
+        addr.trim().to_ascii_lowercase().as_str(),
+        "localhost" | "::1" | "[::1]" | "127.0.0.1"
+    )
+}
+
+fn trust_forward_headers() -> bool {
+    std::env::var("ARW_TRUST_FORWARD_HEADERS")
+        .ok()
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false)
 }
 
 pub async fn headers_mw(req: Request<axum::body::Body>, next: Next) -> Response {
@@ -197,35 +288,44 @@ fn rate_limit_config() -> RateLimitConfig {
 static ADMIN_RATE_LIMITER: Lazy<Mutex<HashMap<String, VecDeque<Instant>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
-pub(crate) fn admin_rate_limit_allow(fingerprint: &str, ip: Option<&str>) -> bool {
+pub(crate) fn admin_rate_limit_allow(fingerprint: &str, addrs: &ClientAddrs) -> bool {
+    let _ = fingerprint; // fingerprint remains available for future telemetry.
     let cfg = rate_limit_config();
     if cfg.max == 0 {
         return true;
     }
-    let key = format!("{}@{}", fingerprint, ip.unwrap_or("unknown"));
+
+    let mut keys = vec!["global".to_string()];
+    if let Some(remote) = addrs.remote() {
+        keys.push(format!("ip:{}", remote));
+    } else {
+        keys.push("ip:unknown".to_string());
+    }
+    if addrs.forwarded_trusted() {
+        if let Some(fwd) = addrs.forwarded() {
+            keys.push(format!("ip:{}", fwd));
+        }
+    }
+    keys.sort();
+    keys.dedup();
+
     let now = Instant::now();
     let mut map = ADMIN_RATE_LIMITER
         .lock()
         .expect("admin rate limiter mutex poisoned");
-    let mut remove_key = false;
-    let allowed = {
+
+    for key in &keys {
         let entry = map.entry(key.clone()).or_default();
         entry.retain(|ts| now.saturating_duration_since(*ts) <= cfg.window);
-        if entry.is_empty() {
-            remove_key = true;
-        }
         if entry.len() >= cfg.max {
-            false
-        } else {
-            entry.push_back(now);
-            remove_key = false;
-            true
+            return false;
         }
-    };
-    if remove_key {
-        map.remove(&key);
     }
-    allowed
+
+    for key in keys {
+        map.entry(key).or_default().push_back(now);
+    }
+    true
 }
 
 #[cfg(test)]
@@ -237,6 +337,8 @@ pub(crate) fn reset_admin_rate_limiter_for_tests() {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+
     #[test]
     fn csp_relaxed_default_for_html() {
         let mut env = crate::test_support::env::guard();
@@ -269,5 +371,38 @@ mod tests {
         assert!(v.contains("script-src 'self' 'unsafe-inline'"));
         env.remove("ARW_CSP_PRESET");
         env.remove("ARW_DEBUG");
+    }
+
+    #[test]
+    fn rate_limiter_blocks_by_remote_ip_even_with_unique_fingerprints() {
+        reset_admin_rate_limiter_for_tests();
+        let mut env = crate::test_support::env::guard();
+        env.set("ARW_ADMIN_RATE_LIMIT", "2");
+        env.set("ARW_ADMIN_RATE_WINDOW_SECS", "60");
+        env.remove("ARW_TRUST_FORWARD_HEADERS");
+
+        let addrs = ClientAddrs::new(Some("203.0.113.10".into()), None);
+        assert!(admin_rate_limit_allow("fp-1", &addrs));
+        assert!(admin_rate_limit_allow("fp-2", &addrs));
+        assert!(!admin_rate_limit_allow("fp-3", &addrs));
+
+        reset_admin_rate_limiter_for_tests();
+    }
+
+    #[test]
+    fn rate_limiter_uses_trusted_forwarded_ip() {
+        reset_admin_rate_limiter_for_tests();
+        let mut env = crate::test_support::env::guard();
+        env.set("ARW_ADMIN_RATE_LIMIT", "1");
+        env.set("ARW_ADMIN_RATE_WINDOW_SECS", "60");
+        env.set("ARW_TRUST_FORWARD_HEADERS", "1");
+
+        // Actual socket appears loopback, but trusted forwarding reveals the real remote IP.
+        let addrs = ClientAddrs::new(Some("127.0.0.1".into()), Some("198.51.100.3".into()));
+        assert!(admin_rate_limit_allow("fp-a", &addrs));
+        assert!(!admin_rate_limit_allow("fp-b", &addrs));
+
+        env.remove("ARW_TRUST_FORWARD_HEADERS");
+        reset_admin_rate_limiter_for_tests();
     }
 }

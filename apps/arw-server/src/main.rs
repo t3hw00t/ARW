@@ -666,8 +666,10 @@ mod http_tests {
 
     #[tokio::test]
     async fn admin_debug_denies_remote_even_in_debug_mode() {
+        use axum::extract::ConnectInfo;
         use axum::http::{Request, StatusCode};
         use axum::{routing::get, Router};
+        use std::net::SocketAddr;
         use tower::util::ServiceExt;
 
         // Build a minimal router with client-addr middleware so admin_ok sees the caller IP.
@@ -678,12 +680,14 @@ mod http_tests {
         // Enable debug but simulate a remote caller via X-Forwarded-For.
         let mut env = crate::test_support::env::guard();
         env.set("ARW_DEBUG", "1");
-        let req = Request::builder()
+        let mut req = Request::builder()
             .method("GET")
             .uri(paths::ADMIN_DEBUG)
             .header("x-forwarded-for", "8.8.8.8")
             .body(Body::empty())
             .expect("request");
+        req.extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([203, 0, 113, 10], 4242))));
         let resp = app.clone().oneshot(req).await.expect("response");
         // Expect Unauthorized without an admin token when not loopback.
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
@@ -694,8 +698,10 @@ mod http_tests {
 
     #[tokio::test]
     async fn admin_debug_allows_loopback_in_debug_mode() {
+        use axum::extract::ConnectInfo;
         use axum::http::{Request, StatusCode};
         use axum::{routing::get, Router};
+        use std::net::SocketAddr;
         use tower::util::ServiceExt;
 
         let app = Router::new()
@@ -704,21 +710,58 @@ mod http_tests {
 
         let mut env = crate::test_support::env::guard();
         env.set("ARW_DEBUG", "1");
-        let req = Request::builder()
+        let mut req = Request::builder()
             .method("GET")
             .uri(paths::ADMIN_DEBUG)
             .header("x-forwarded-for", "127.0.0.1")
             .body(Body::empty())
             .expect("request");
+        req.extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 9000))));
         let resp = app.clone().oneshot(req).await.expect("response");
         assert_eq!(resp.status(), StatusCode::OK);
         env.remove("ARW_DEBUG");
     }
 
     #[tokio::test]
-    async fn admin_ui_assets_require_auth() {
+    async fn admin_debug_denies_forwarded_remote_when_trusted() {
+        use axum::extract::ConnectInfo;
         use axum::http::{Request, StatusCode};
         use axum::{routing::get, Router};
+        use std::net::SocketAddr;
+        use tower::util::ServiceExt;
+
+        let app = Router::new()
+            .route(paths::ADMIN_DEBUG, get(crate::api::ui::debug_ui))
+            .layer(axum::middleware::from_fn(crate::security::client_addr_mw));
+
+        let mut env = crate::test_support::env::guard();
+        env.set("ARW_DEBUG", "1");
+        env.set("ARW_TRUST_FORWARD_HEADERS", "1");
+
+        let mut req = Request::builder()
+            .method("GET")
+            .uri(paths::ADMIN_DEBUG)
+            .header("x-forwarded-for", "198.51.100.25")
+            .body(Body::empty())
+            .expect("request");
+        // Actual socket is loopback (typical reverse proxy scenario), but forwarded header carries remote IP.
+        req.extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 7000))));
+
+        let resp = app.clone().oneshot(req).await.expect("response");
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
+
+        env.remove("ARW_TRUST_FORWARD_HEADERS");
+        env.remove("ARW_DEBUG");
+    }
+
+    #[tokio::test]
+    async fn admin_ui_assets_require_auth() {
+        use axum::extract::ConnectInfo;
+        use axum::http::{Request, StatusCode};
+        use axum::{routing::get, Router};
+        use std::net::SocketAddr;
         use tower::util::ServiceExt;
 
         let app = Router::new()
@@ -730,12 +773,14 @@ mod http_tests {
 
         let mut env = crate::test_support::env::guard();
         env.set("ARW_DEBUG", "0");
-        let req = Request::builder()
+        let mut req = Request::builder()
             .method("GET")
             .uri("/admin/ui/assets/models.js")
             .header("x-forwarded-for", "127.0.0.1")
             .body(Body::empty())
             .expect("request");
+        req.extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 9100))));
         let resp = app.clone().oneshot(req).await.expect("response");
         assert_eq!(resp.status(), StatusCode::UNAUTHORIZED);
         env.remove("ARW_DEBUG");
@@ -756,40 +801,33 @@ fn env_truthy(key: &str) -> bool {
 }
 
 pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
+    let addrs = crate::security::client_addrs();
     // Debug mode opens admin surfaces for local development convenience,
     // but only for local callers. In unit tests or routers without the
     // client-addr middleware, we may not have an address; allow in that
     // case to preserve test ergonomics.
     if env_truthy("ARW_DEBUG") {
-        let client = crate::security::client_addr();
-        tracing::trace!(target: "arw::security", client = ?client, "admin_ok debug gate");
-        // Helper: check if a string is a loopback IP (with or without port)
-        fn is_loopback(s: &str) -> bool {
-            // Try SocketAddr first (ip:port)
-            if let Ok(sa) = s.parse::<std::net::SocketAddr>() {
-                if sa.ip().is_loopback() || sa.ip().is_unspecified() {
+        tracing::trace!(
+            target: "arw::security",
+            remote = addrs.remote(),
+            forwarded = addrs.forwarded(),
+            forwarded_trusted = addrs.forwarded_trusted(),
+            "admin_ok debug gate"
+        );
+        if addrs.remote().is_none() {
+            // Middleware not installed (tests or minimal routers). Allow.
+            return true;
+        }
+        if addrs.remote_is_loopback() {
+            if !addrs.forwarded_trusted() {
+                if !addrs.forwarded().is_some() || addrs.forwarded_is_loopback() {
                     return true;
                 }
-                return false;
-            }
-            // Try plain IpAddr
-            if let Ok(ip) = s.parse::<std::net::IpAddr>() {
-                return ip.is_loopback() || ip.is_unspecified();
-            }
-            // Fallback for common hostnames
-            let low = s.trim().to_ascii_lowercase();
-            matches!(low.as_str(), "localhost" | "::1" | "[::1]" | "127.0.0.1")
-        }
-        match client {
-            Some(ref addr) if is_loopback(addr) => return true,
-            None => {
-                // Middleware not installed (tests or minimal routers). Allow.
+            } else if addrs.forwarded_is_loopback() {
                 return true;
             }
-            Some(_) => {
-                // Debug is on but caller not local; fall through to token checks.
-            }
         }
+        // Debug mode is on but the request appears to originate from a remote caller.
     }
 
     // When ARW_ADMIN_TOKEN or ARW_ADMIN_TOKEN_SHA256 is set, require it in Authorization: Bearer or X-ARW-Admin
@@ -823,11 +861,11 @@ pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
         hasher.update(ptok.as_bytes());
         hex::encode(hasher.finalize())
     };
-    let client_addr = crate::security::client_addr();
-    if !crate::security::admin_rate_limit_allow(&fingerprint, client_addr.as_deref()) {
+    if !crate::security::admin_rate_limit_allow(&fingerprint, &addrs) {
         warn!(
             target: "arw::security",
-            client_addr = client_addr.as_deref().unwrap_or("unknown"),
+            remote = addrs.remote().unwrap_or("unknown"),
+            forwarded = addrs.forwarded().unwrap_or("none"),
             "admin auth rate limit exceeded"
         );
         return false;
