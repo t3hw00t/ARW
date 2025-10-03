@@ -1,4 +1,6 @@
 use once_cell::sync::OnceCell;
+#[cfg(feature = "otlp")]
+use opentelemetry::trace::TracerProvider as _;
 use tracing_subscriber::filter::Targets;
 use tracing_subscriber::{
     fmt,
@@ -8,6 +10,8 @@ use tracing_subscriber::{
 };
 
 static ACCESS_GUARD: OnceCell<tracing_appender::non_blocking::WorkerGuard> = OnceCell::new();
+#[cfg(feature = "otlp")]
+static OTEL_PROVIDER: OnceCell<opentelemetry_sdk::trace::SdkTracerProvider> = OnceCell::new();
 
 pub fn init() {
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
@@ -66,57 +70,62 @@ fn install_console(filter: EnvFilter) {
 
 #[cfg(feature = "otlp")]
 fn init_with_otlp(filter: EnvFilter) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    use opentelemetry::sdk::{propagation::TraceContextPropagator, trace, Resource};
     use opentelemetry::{global, KeyValue};
-    use opentelemetry_otlp::WithExportConfig;
-    use std::collections::HashMap;
+    use opentelemetry_otlp::{WithExportConfig, OTEL_EXPORTER_OTLP_HEADERS};
+    use opentelemetry_sdk::{
+        propagation::TraceContextPropagator, trace::SdkTracerProvider, Resource,
+    };
     use std::time::Duration;
 
     let endpoint =
         std::env::var("ARW_OTEL_ENDPOINT").unwrap_or_else(|_| "http://127.0.0.1:4317".to_string());
-    let mut exporter = opentelemetry_otlp::new_exporter()
-        .tonic()
-        .with_endpoint(endpoint.clone());
+
+    const OTEL_TRACES_HEADERS_ENV: &str = "OTEL_EXPORTER_OTLP_TRACES_HEADERS";
 
     if let Ok(raw_headers) = std::env::var("ARW_OTEL_HEADERS") {
-        let mut headers = HashMap::new();
-        for pair in raw_headers.split(',') {
-            if let Some((k, v)) = pair.split_once('=') {
-                let key = k.trim();
-                if key.is_empty() {
-                    continue;
-                }
-                headers.insert(key.to_string(), v.trim().to_string());
-            }
+        if std::env::var(OTEL_EXPORTER_OTLP_HEADERS).is_err() {
+            std::env::set_var(OTEL_EXPORTER_OTLP_HEADERS, &raw_headers);
         }
-        if !headers.is_empty() {
-            exporter = exporter.with_headers(headers);
+        if std::env::var(OTEL_TRACES_HEADERS_ENV).is_err() {
+            std::env::set_var(OTEL_TRACES_HEADERS_ENV, raw_headers);
         }
     }
 
-    if let Ok(timeout_ms) = std::env::var("ARW_OTEL_TIMEOUT_MS")
+    let mut exporter_builder = opentelemetry_otlp::SpanExporter::builder()
+        .with_tonic()
+        .with_endpoint(endpoint.clone());
+
+    if let Some(timeout_ms) = std::env::var("ARW_OTEL_TIMEOUT_MS")
         .ok()
         .and_then(|v| v.parse::<u64>().ok())
     {
-        exporter = exporter.with_timeout(Duration::from_millis(timeout_ms));
+        exporter_builder = exporter_builder.with_timeout(Duration::from_millis(timeout_ms));
     }
+
+    let exporter = exporter_builder.build()?;
 
     let service_name =
         std::env::var("ARW_OTEL_SERVICE_NAME").unwrap_or_else(|_| "arw-server".to_string());
-    let resource = Resource::new(vec![
-        KeyValue::new("service.name", service_name),
-        KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
-        KeyValue::new(
-            "service.instance.id",
-            std::env::var("ARW_NODE_ID").unwrap_or_else(|_| format!("pid-{}", std::process::id())),
-        ),
-    ]);
+    let resource = Resource::builder_empty()
+        .with_attributes([
+            KeyValue::new("service.name", service_name),
+            KeyValue::new("service.version", env!("CARGO_PKG_VERSION")),
+            KeyValue::new(
+                "service.instance.id",
+                std::env::var("ARW_NODE_ID")
+                    .unwrap_or_else(|_| format!("pid-{}", std::process::id())),
+            ),
+        ])
+        .build();
 
-    let tracer = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(exporter)
-        .with_trace_config(trace::Config::default().with_resource(resource))
-        .install_batch(opentelemetry::runtime::Tokio)?;
+    let tracer_provider = SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
+        .with_resource(resource)
+        .build();
+
+    let _ = OTEL_PROVIDER.set(tracer_provider.clone());
+    global::set_tracer_provider(tracer_provider.clone());
+    let tracer = tracer_provider.tracer("arw-server");
 
     global::set_text_map_propagator(TraceContextPropagator::new());
 
@@ -164,6 +173,10 @@ fn init_with_otlp(filter: EnvFilter) -> Result<(), Box<dyn std::error::Error + S
 pub fn shutdown() {
     #[cfg(feature = "otlp")]
     {
-        opentelemetry::global::shutdown_tracer_provider();
+        if let Some(provider) = OTEL_PROVIDER.get() {
+            if let Err(err) = provider.shutdown() {
+                tracing::warn!(%err, "failed to shut down OTLP tracer provider cleanly");
+            }
+        }
     }
 }

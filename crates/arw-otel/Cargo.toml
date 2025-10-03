@@ -6,7 +6,12 @@ license.workspace = true
 
 [features]
 default = []
-otlp = ["dep:opentelemetry","dep:opentelemetry-otlp","dep:tracing-opentelemetry"]
+otlp = [
+    "dep:opentelemetry",
+    "dep:opentelemetry-otlp",
+    "dep:opentelemetry_sdk",
+    "dep:tracing-opentelemetry",
+]
 
 [dependencies]
 tracing = { workspace = true }
@@ -15,14 +20,21 @@ tracing-appender = "0.2"
 once_cell = { workspace = true }
 
 [dependencies.opentelemetry]
-version = "0.22"
+version = "0.30"
 optional = true
+default-features = false
 features = ["trace"]
+
+[dependencies.opentelemetry_sdk]
+version = "0.30"
+optional = true
+features = ["trace", "rt-tokio"]
 
 [dependencies.opentelemetry-otlp]
 version = "0.30"
 optional = true
-features = ["trace", "tonic"]
+default-features = false
+features = ["trace", "grpc-tonic"]
 
 [dependencies.tracing-opentelemetry]
 version = "0.31"

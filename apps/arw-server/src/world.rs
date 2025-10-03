@@ -4,10 +4,14 @@ use chrono::{SecondsFormat, Utc};
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Map, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{
+    atomic::{AtomicU64, Ordering},
+    Arc,
+};
 use tokio::sync::RwLock;
+use tracing::{error, warn};
 
 use crate::{tasks::TaskHandle, util, AppState};
 
@@ -128,20 +132,27 @@ fn ensure_graph<'a>(ws: &'a mut WorldStore, proj: Option<&str>) -> &'a mut Belie
 }
 
 fn upsert_node<'a>(g: &'a mut BeliefGraph, id: &'a str, kind: NodeKind) -> &'a mut Node {
-    if !g.nodes.contains_key(id) {
-        g.nodes.insert(
-            id.to_string(),
-            Node {
-                id: id.to_string(),
-                kind,
-                props: Map::new(),
-                confidence: None,
-                last_observed: None,
-                provenance: Vec::new(),
-            },
-        );
+    match g.nodes.entry(id.to_string()) {
+        Entry::Occupied(entry) => {
+            if entry.get().kind != kind {
+                warn!(
+                    node_id = %id,
+                    old_kind = ?entry.get().kind,
+                    new_kind = ?kind,
+                    "node kind changed; retaining existing kind"
+                );
+            }
+            entry.into_mut()
+        }
+        Entry::Vacant(entry) => entry.insert(Node {
+            id: id.to_string(),
+            kind,
+            props: Map::new(),
+            confidence: None,
+            last_observed: None,
+            provenance: Vec::new(),
+        }),
     }
-    g.nodes.get_mut(id).unwrap()
 }
 
 pub(crate) async fn load_persisted() {
@@ -274,15 +285,34 @@ async fn persist_world(ws: &WorldStore) {
         "default": &ws.default_graph,
         "projects": &ws.proj_graphs,
     });
+    let payload_bytes = match serde_json::to_vec_pretty(&payload) {
+        Ok(bytes) => Arc::<[u8]>::from(bytes),
+        Err(err) => {
+            error!(%err, "failed to serialise world snapshot");
+            return;
+        }
+    };
+
     let main_path = world_path();
     if let Some(parent) = main_path.parent() {
-        let _ = tokio::fs::create_dir_all(parent).await;
+        if let Err(err) = tokio::fs::create_dir_all(parent).await {
+            warn!(path = %parent.display(), %err, "failed to ensure world directory");
+            return;
+        }
     }
-    let _ = tokio::fs::write(&main_path, serde_json::to_vec_pretty(&payload).unwrap()).await;
+    if let Err(err) = tokio::fs::write(&main_path, payload_bytes.clone()).await {
+        warn!(path = %main_path.display(), %err, "failed to persist world snapshot");
+    }
+
     let versions = world_versions_dir();
-    let _ = tokio::fs::create_dir_all(&versions).await;
+    if let Err(err) = tokio::fs::create_dir_all(&versions).await {
+        warn!(path = %versions.display(), %err, "failed to ensure world versions directory");
+        return;
+    }
     let version_path = versions.join(format!("world.v{}.json", ver().load(Ordering::Relaxed)));
-    let _ = tokio::fs::write(&version_path, serde_json::to_vec_pretty(&payload).unwrap()).await;
+    if let Err(err) = tokio::fs::write(&version_path, payload_bytes).await {
+        warn!(path = %version_path.display(), %err, "failed to persist world snapshot version");
+    }
     prune_versions(&versions).await;
 }
 

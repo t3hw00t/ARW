@@ -95,7 +95,7 @@ impl ArwService for ArwGrpcService {
             input: input_json,
             idem_key,
         };
-        match api::actions::submit_action(&self.state, action_req).await {
+        match actions::submit_action(&self.state, action_req).await {
             Ok(outcome) => Ok(Response::new(SubmitActionResponse {
                 id: outcome.id,
                 staged: outcome.staged,
@@ -222,6 +222,7 @@ impl ArwService for ArwGrpcService {
     }
 }
 
+#[allow(clippy::result_large_err)] // tonic::Status exceeds clippy's size hint but is part of the public API
 fn action_row_to_proto(row: ActionRow) -> Result<GrpcAction, Status> {
     Ok(GrpcAction {
         id: row.id,
@@ -237,6 +238,7 @@ fn action_row_to_proto(row: ActionRow) -> Result<GrpcAction, Status> {
     })
 }
 
+#[allow(clippy::result_large_err)] // tonic::Status exceeds clippy's size hint but is part of the public API
 fn event_row_to_proto(row: EventRow) -> Result<EventEnvelope, Status> {
     Ok(EventEnvelope {
         time: row.time,
@@ -253,7 +255,7 @@ async fn envelope_to_proto(
 ) -> Result<EventEnvelope, Status> {
     let payload = Some(json_to_prost(&env.payload)?);
     let policy_json = env
-        .policy()
+        .policy
         .as_ref()
         .map(|p| serde_json::to_value(p).map_err(|e| Status::internal(e.to_string())));
     let policy = match policy_json {
@@ -292,6 +294,7 @@ async fn compute_event_id(
     cached.unwrap_or_else(|| hex::encode(digest))
 }
 
+#[allow(clippy::result_large_err)] // tonic::Status exceeds clippy's size hint but is part of the public API
 fn json_to_prost(value: &serde_json::Value) -> Result<Value, Status> {
     Ok(match value {
         serde_json::Value::Null => null_value(),
@@ -357,8 +360,8 @@ fn null_value() -> Value {
 mod tests {
     use super::*;
     use crate::{
-        capsule_guard, cluster, experiments, feedback, governor, metrics, models,
-        test_support::env, tool_cache, worker,
+        autonomy, capsule_guard, cluster, experiments, feedback, governor, metrics, models, policy,
+        queue, test_support::env, tool_cache, worker,
     };
     use arw_events::Bus;
     use arw_policy::PolicyEngine;
@@ -375,42 +378,45 @@ mod tests {
         env_guard.set("ARW_STATE_DIR", dir.display().to_string());
         let bus = Bus::new_with_replay(64, 64);
         let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
-        let policy = PolicyEngine::load_from_env();
-        let policy_arc = Arc::new(tokio::sync::Mutex::new(policy));
+        let policy_engine = PolicyEngine::load_from_env();
+        let policy_shared = Arc::new(tokio::sync::Mutex::new(policy_engine));
+        let policy_handle = policy::PolicyHandle::from_shared(policy_shared, bus.clone());
         let host: Arc<dyn ToolHost> = Arc::new(arw_wasi::NoopHost);
+        let metrics = Arc::new(metrics::Metrics::default());
+        let queue_signals = Arc::new(queue::QueueSignals::default());
+
         let models_store = Arc::new(models::ModelStore::new(bus.clone(), Some(kernel.clone())));
         models_store.bootstrap().await;
         let tool_cache = Arc::new(tool_cache::ToolCache::new());
         let governor_state = governor::GovernorState::new().await;
-        let metrics = Arc::new(metrics::Metrics::default());
+        let autonomy_state = autonomy::AutonomyRegistry::new(bus.clone(), metrics.clone()).await;
         let cluster_state = cluster::ClusterRegistry::new(bus.clone());
         let feedback_hub =
             feedback::FeedbackHub::new(bus.clone(), metrics.clone(), governor_state.clone()).await;
         let experiments_state =
             experiments::Experiments::new(bus.clone(), governor_state.clone()).await;
         let capsules_store = Arc::new(capsule_guard::CapsuleStore::new());
-        AppState {
-            bus,
-            kernel,
-            policy: policy_arc,
-            host,
-            config_state: Arc::new(tokio::sync::Mutex::new(json!({}))),
-            config_history: Arc::new(tokio::sync::Mutex::new(Vec::new())),
-            sse_id_map: Arc::new(tokio::sync::Mutex::new(
-                crate::sse_cache::SseIdCache::with_capacity(64),
-            )),
-            endpoints: Arc::new(Vec::new()),
-            endpoints_meta: Arc::new(Vec::new()),
-            metrics,
-            kernel_enabled: true,
-            models: models_store,
-            tool_cache,
-            governor: governor_state,
-            feedback: feedback_hub,
-            cluster: cluster_state,
-            experiments: experiments_state,
-            capsules: capsules_store,
-        }
+        let sse_cache = Arc::new(tokio::sync::Mutex::new(
+            crate::sse_cache::SseIdCache::with_capacity(64),
+        ));
+
+        AppState::builder(bus, kernel, policy_handle, host, true)
+            .with_config_state(Arc::new(tokio::sync::Mutex::new(json!({}))))
+            .with_config_history(Arc::new(tokio::sync::Mutex::new(Vec::new())))
+            .with_sse_cache(sse_cache)
+            .with_sse_capacity(64)
+            .with_metrics(metrics)
+            .with_queue_signals(queue_signals)
+            .with_models(models_store)
+            .with_tool_cache(tool_cache)
+            .with_governor(governor_state)
+            .with_autonomy(autonomy_state)
+            .with_feedback(feedback_hub)
+            .with_cluster(cluster_state)
+            .with_experiments(experiments_state)
+            .with_capsules(capsules_store)
+            .build()
+            .await
     }
 
     #[tokio::test]

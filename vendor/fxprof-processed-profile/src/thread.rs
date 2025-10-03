@@ -22,6 +22,7 @@ use crate::{MarkerTiming, ProfilerMarker, Timestamp};
 #[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct ProcessHandle(pub(crate) usize);
 
+#[allow(dead_code)]
 #[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq, Hash)]
 pub struct CounterHandle(pub(crate) usize);
 

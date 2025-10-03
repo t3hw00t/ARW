@@ -446,10 +446,7 @@ fn ocr_image_text(_path: &str, _lang: &str) -> Result<OcrResult, ToolError> {
 
 #[cfg(feature = "ocr_tesseract")]
 fn parse_tsv_blocks(tsv: &str) -> Vec<OcrBlock> {
-    tsv.lines()
-        .skip(1)
-        .filter_map(|line| parse_tsv_line(line))
-        .collect()
+    tsv.lines().skip(1).filter_map(parse_tsv_line).collect()
 }
 
 #[cfg(feature = "ocr_tesseract")]

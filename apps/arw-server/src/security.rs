@@ -84,7 +84,7 @@ pub async fn client_addr_mw(req: Request<axum::body::Body>, next: Next) -> Respo
 }
 
 pub fn client_addr() -> Option<String> {
-    CLIENT_ADDR.try_with(|opt| opt.clone()).unwrap_or(None)
+    CLIENT_ADDR.try_with(|opt| opt.clone()).ok().flatten()
 }
 
 fn extract_client_addr<B>(req: &Request<B>) -> Option<String> {
@@ -126,14 +126,18 @@ pub async fn headers_mw(req: Request<axum::body::Body>, next: Next) -> Response 
     let mut res = next.run(req).await;
     // Basic security headers (idempotent)
     let h = res.headers_mut();
-    let add_hdr = |h: &mut axum::http::HeaderMap, name: &str, val: &str| {
-        let name = HeaderName::from_bytes(name.as_bytes()).unwrap();
-        if !h.contains_key(&name) {
-            if let Ok(v) = HeaderValue::from_str(val) {
-                h.insert(name, v);
+    let add_hdr =
+        |h: &mut axum::http::HeaderMap, name: &str, val: &str| match HeaderName::from_bytes(
+            name.as_bytes(),
+        ) {
+            Ok(name) if !h.contains_key(&name) => {
+                if let Ok(v) = HeaderValue::from_str(val) {
+                    h.insert(name, v);
+                }
             }
-        }
-    };
+            Err(err) => tracing::warn!(header = %name, %err, "invalid security header name"),
+            _ => {}
+        };
     add_hdr(h, "x-content-type-options", "nosniff");
     add_hdr(h, "x-frame-options", "DENY");
     let refpol = std::env::var("ARW_REFERRER_POLICY").unwrap_or_else(|_| "no-referrer".into());

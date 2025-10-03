@@ -82,13 +82,13 @@ async fn main() -> anyhow::Result<()> {
             }
         });
         // Wait for Ctrl+C to allow graceful shutdown
-        let _ = tokio::signal::ctrl_c().await;
-        return Ok(());
+        tokio::signal::ctrl_c().await?;
+        Ok(())
     }
 
     #[cfg(not(feature = "nats"))]
     {
         eprintln!("arw-connector built without 'nats' feature; rebuild with features to connect to a broker");
+        Ok(())
     }
-    Ok(())
 }

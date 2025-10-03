@@ -250,14 +250,12 @@ fn export_gating_schemas() -> Result<(), std::io::Error> {
     std::fs::create_dir_all(dir)?;
     let contract_schema = schema_for!(arw_core::gating::ContractCfg);
     let capsule_schema = schema_for!(arw_protocol::GatingCapsule);
-    std::fs::write(
-        dir.join("gating_contract.json"),
-        serde_json::to_string_pretty(&contract_schema).unwrap(),
-    )?;
-    std::fs::write(
-        dir.join("gating_capsule.json"),
-        serde_json::to_string_pretty(&capsule_schema).unwrap(),
-    )
+    let contract_bytes =
+        serde_json::to_vec_pretty(&contract_schema).map_err(std::io::Error::other)?;
+    let capsule_bytes =
+        serde_json::to_vec_pretty(&capsule_schema).map_err(std::io::Error::other)?;
+    std::fs::write(dir.join("gating_contract.json"), contract_bytes)?;
+    std::fs::write(dir.join("gating_capsule.json"), capsule_bytes)
 }
 
 fn export_gating_keys() -> Result<(), std::io::Error> {
@@ -275,10 +273,8 @@ fn export_gating_keys() -> Result<(), std::io::Error> {
 
     let json_path = keys_path.with_extension("json");
     let json_payload = arw_core::gating_keys::render_json(Some(&generated_at));
-    std::fs::write(
-        json_path,
-        serde_json::to_string_pretty(&json_payload).unwrap_or_else(|_| "{}".into()),
-    )
+    let json_bytes = serde_json::to_vec_pretty(&json_payload).map_err(std::io::Error::other)?;
+    std::fs::write(json_path, json_bytes)
 }
 
 fn spawn_bus_forwarders(

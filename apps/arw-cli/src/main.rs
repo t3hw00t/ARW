@@ -729,17 +729,17 @@ fn main() {
             GateCmd::Config { cmd } => match cmd {
                 GateConfigCmd::Schema(args) => {
                     let schema = gating::gating_config_schema_json();
-                    if args.pretty {
-                        println!(
-                            "{}",
-                            serde_json::to_string_pretty(&schema)
-                                .unwrap_or_else(|_| "{}".to_string())
-                        );
+                    let rendered = if args.pretty {
+                        serde_json::to_string_pretty(&schema)
                     } else {
-                        println!(
-                            "{}",
-                            serde_json::to_string(&schema).unwrap_or_else(|_| "{}".to_string())
-                        );
+                        serde_json::to_string(&schema)
+                    };
+                    match rendered {
+                        Ok(doc) => println!("{}", doc),
+                        Err(err) => {
+                            eprintln!("failed to render gating config schema: {err}");
+                            println!("{{}}");
+                        }
                     }
                 }
                 GateConfigCmd::Doc(_) => {
@@ -750,10 +750,10 @@ fn main() {
         },
         Some(Commands::Capsule { cmd }) => match cmd {
             CapCmd::Template(args) => {
-                let now = std::time::SystemTime::now()
+                let duration = std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
-                    .as_millis() as u64;
+                    .unwrap_or(Duration::ZERO);
+                let now = (duration.as_millis()).min(u128::from(u64::MAX)) as u64;
                 let tpl = serde_json::json!({
                   "id":"example",
                   "version":"1",
@@ -766,14 +766,21 @@ fn main() {
                     {"id":"block-tools","patterns":["tools:*"],"valid_from_ms":0}
                   ]
                 });
-                if args.compact {
-                    println!("{}", serde_json::to_string(&tpl).unwrap());
+                let serialized = if args.compact {
+                    serde_json::to_string(&tpl).map_err(|e| {
+                        anyhow::anyhow!("failed to render capsule template JSON (compact): {e}")
+                    })
                 } else {
                     // default pretty unless explicitly compact
-                    if args.pretty || !args.compact {
-                        println!("{}", serde_json::to_string_pretty(&tpl).unwrap());
-                    } else {
-                        println!("{}", serde_json::to_string(&tpl).unwrap());
+                    serde_json::to_string_pretty(&tpl).map_err(|e| {
+                        anyhow::anyhow!("failed to render capsule template JSON (pretty): {e}")
+                    })
+                };
+                match serialized {
+                    Ok(output) => println!("{}", output),
+                    Err(err) => {
+                        eprintln!("{}", err);
+                        std::process::exit(1);
                     }
                 }
             }
@@ -1394,14 +1401,12 @@ fn render_context_telemetry_summary(snapshot: &JsonValue, now_ms: u64) -> String
         let _ = writeln!(out, "Generated: unknown");
     }
 
-    let context = snapshot.get("context").and_then(JsonValue::as_object);
-    if context.is_none() {
+    let Some(context) = snapshot.get("context").and_then(JsonValue::as_object) else {
         out.push('\n');
         let _ = writeln!(out, "Coverage:");
         let _ = writeln!(out, "  (no context telemetry)");
         return out;
-    }
-    let context = context.unwrap();
+    };
 
     out.push('\n');
     summarize_coverage_section(&mut out, context.get("coverage"));
@@ -3327,10 +3332,9 @@ fn cmd_ping(args: &PingArgs) -> Result<()> {
         .clone()
         .or_else(|| std::env::var("ARW_ADMIN_TOKEN").ok());
     if let Some(t) = tok.as_deref() {
-        headers.insert(
-            reqwest::header::AUTHORIZATION,
-            reqwest::header::HeaderValue::from_str(&format!("Bearer {}", t)).unwrap(),
-        );
+        let auth_value = reqwest::header::HeaderValue::from_str(&format!("Bearer {}", t))
+            .context("invalid bearer token for Authorization header")?;
+        headers.insert(reqwest::header::AUTHORIZATION, auth_value);
     }
     let h = client
         .get(format!("{}/healthz", base))
@@ -3420,7 +3424,7 @@ mod tests {
     #[test]
     fn collect_screenshot_targets_skips_sidecars_and_respects_limit() -> Result<()> {
         const EXT: &[&str] = &["png", "jpg", "jpeg", "webp", "bmp"];
-        let tmp = TempDir::new().unwrap();
+        let tmp = TempDir::new()?;
         let root = tmp.path().join("2025/09/30");
         fs::create_dir_all(&root)?;
 

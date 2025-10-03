@@ -57,6 +57,7 @@ toml = { workspace = true }
 regex = { workspace = true }
 walkdir = "2"
 pathdiff = "0.2"
+rand = "0.8"
 screenshots = { version = "0.8", optional = true }
 image = { version = "0.24", default-features = false, features = ["png","jpeg"], optional = true }
 leptess = { version = "0.14", optional = true }
@@ -74,7 +75,6 @@ tempfile = "3"
 parking_lot = "0.12"
 proptest = "1"
 loom = { version = "0.7", default-features = false, features = ["futures"] }
-rand = "0.8"
 
 [features]
 default = []
