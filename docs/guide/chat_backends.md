@@ -37,13 +37,26 @@ The service will POST to `ARW_LLAMA_URL/completion` with prompt caching enabled 
 ```
 
 Tip: run llama.cpp with a persistent prompt cache file (e.g., `--prompt-cache llama.prompt.bin`) to reuse KV across sessions.
-When you drive llama via `scripts/runtime_llama_smoke.sh MODE=real` the helper now appends
-`--prompt-cache` automatically. Set `LLAMA_PROMPT_CACHE_PATH=/path/to/cache.bin` before
-launching to reuse the same cache across runs (or keep the default temp file if you only
-need an ephemeral smoke test). The smoke helper also enforces a wall-clock limit
-(`RUNTIME_SMOKE_TIMEOUT_SECS`, defaulting to the shared `SMOKE_TIMEOUT_SECS` or 600) so
-stalled runs terminate instead of hang. Set the timeout knobs to `0` if you want an
-unbounded session during manual investigation.
+When you drive llama via `just runtime-smoke-cpu` (or `MODE=cpu scripts/runtime_llama_smoke.sh`)
+the helper appends `--prompt-cache` automatically. Set
+`LLAMA_PROMPT_CACHE_PATH=/path/to/cache.bin` before launching to reuse the same cache across
+runs (or keep the default temp file if you only need an ephemeral smoke test). The smoke
+helper also enforces a wall-clock limit (`RUNTIME_SMOKE_TIMEOUT_SECS`, defaulting to the shared
+`SMOKE_TIMEOUT_SECS` or 600) so stalled runs terminate instead of hang. Set the timeout knobs
+to `0` if you want an unbounded session during manual investigation.
+
+GPU mode — `just runtime-smoke-gpu` or `MODE=gpu scripts/runtime_llama_smoke.sh` — appends a
+small `--gpu-layers` hint (override via `LLAMA_GPU_LAYERS`) when you don’t provide your own
+`LLAMA_SERVER_ARGS`. Set `LLAMA_GPU_LOG_PATTERN` to the regex that proves GPU execution
+(defaults to a broad CUDA/Metal/Vulkan/DirectML/HIP catch-all) and flip `LLAMA_GPU_ENFORCE=1`
+to make the smoke test fail if the pattern is missing. For CPU runs that must stay offloaded
+from accelerators, set `LLAMA_FORCE_CPU_LAYERS=1` so the helper adds `--gpu-layers 0` when the
+launch arguments omit it.
+
+When running inside a sandbox that blocks loopback sockets entirely, export
+`ARW_SMOKE_USE_SYNTHETIC=1` to skip the runtime exercise (the script exits successfully after
+logging that the smoke was bypassed). Without the override, the helper automatically detects
+the restriction, prints a warning, and reports a skipped run.
 
 Optional tuning knobs (forwarded verbatim when set):
 

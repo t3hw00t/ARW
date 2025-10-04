@@ -138,6 +138,12 @@ triad-smoke:
 runtime-smoke:
   bash scripts/runtime_llama_smoke.sh
 
+runtime-smoke-cpu:
+  MODE=cpu bash scripts/runtime_llama_smoke.sh
+
+runtime-smoke-gpu:
+  MODE=gpu bash scripts/runtime_llama_smoke.sh
+
 context-ci:
   bash scripts/context_ci.sh
 
