@@ -317,7 +317,7 @@ Notes
 - `GET /actions/:id` → `{ id, kind, state, input, created, updated }`
 - `POST /actions/:id/state` → `{ ok: true }` (and event `actions.*`)
 - `GET /events` → SSE (live bus; DB dual‑write)
-- `GET /state/episodes` → `{ items: [{ id, events, items, count, errors, start, end, last, duration_ms, first_kind, last_kind, projects?, actors?, kinds? }] }` (filters via `?limit=`, `?project=`, `?errors_only=`, `?kind_prefix=`, `?since=`)
+- `GET /state/episodes` → `{ items: [{ id, events, items, count, errors, start, end, last, duration_ms, first_kind, last_kind, projects?, actors?, kinds? }] }` (filters via `?limit=`, `?project=` for slug/prefix, `?errors_only=`, `?kind_prefix=`, `?since=`)
 - `GET /state/episode/{id}/snapshot` → `{ version, episode: { ... } }` (optional `?limit=` to cap event count)
 - `GET /state/route_stats` → `{ bus: {…}, events: { start, total, kinds }, routes: { by_path: { "/path": { hits, errors, ewma_ms, p95_ms, max_ms } } } }`
 - `GET /state/actions` → `{ items: [{ id, kind, state, created, updated }] }`

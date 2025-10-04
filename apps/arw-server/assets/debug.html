@@ -375,11 +375,31 @@
     <div class="card" data-collapsed="1">
       <h3>Episodes <a href="#" class="help" data-doc="events" data-tip="Stitched by corr_id from live events." title="Episodes docs">?</a></h3>
       <div class="row">
-        <button onclick="episodesRefresh()">Refresh</button>
+        <button type="button" onclick="episodesRefresh()">Refresh</button>
         <label><input type="checkbox" id="epLive"> live</label>
+        <label><input type="checkbox" id="epDetails"> details</label>
         <label><input type="checkbox" id="epErrOnly"> errors only</label>
+        <label class="key">limit</label>
+        <input id="epLimit" class="u-w-70" type="number" min="1" max="1000" value="100">
+        <button type="button" class="ghost" id="epFiltersReset" title="Clear filters and restore defaults">Reset</button>
+      </div>
+      <div class="row">
+        <input id="epProject" class="u-w-180" placeholder="project (prefix ok)">
+        <input id="epKind" class="u-w-180" placeholder="kind prefix (e.g. chat.)">
+        <label class="key">since</label>
+        <input id="epSince" class="u-w-220" type="datetime-local">
+        <select id="epSincePreset" class="u-w-160" title="Quick ranges">
+          <option value="custom">custom</option>
+          <option value="15m">last 15 min</option>
+          <option value="1h">last 1 h</option>
+          <option value="6h">last 6 h</option>
+          <option value="24h">last 24 h</option>
+        </select>
+      </div>
+      <div class="row">
         <input id="epFilter" class="u-flex-1 u-min-200" placeholder="filter id/kind/substr">
       </div>
+      <div class="row" id="epSummary" role="status" aria-live="polite"></div>
       <div id="epList" class="u-box u-scroll-36vh"></div>
     </div>
     <div class="card" data-collapsed="1">
@@ -2612,7 +2632,7 @@ Shortcuts.register('Enter', 'Palette: run', ()=> palette.run(), { when: paletteV
 // helper to copy stats
 async function copyStatsNow(){ try{ const r=await fetch(base + '/state/route_stats'); const t=await r.text(); await navigator.clipboard.writeText(t); showToast('Stats copied'); }catch{ showToast('Stats copy failed'); } }
 </script>
-<div id="toast" class="toast"></div>
+<div id="toast" class="toast" role="status" aria-live="polite"></div>
 <script>
 function showToast(msg){ const t=document.getElementById('toast'); if(!t) return; t.textContent=msg; t.style.display='block'; clearTimeout(window.__toastTimer); window.__toastTimer = setTimeout(()=>{ t.style.display='none'; }, 2500); }
 const __statePathOverrides = {
@@ -2742,52 +2762,419 @@ async function contextAssemble(){
   } catch(e){ showToast('assemble failed'); }
 }
 // Episodes UI
+const EP_FILTER_STORAGE_KEY = 'dbg_ep_filters';
+const EP_SINCE_PRESETS = {
+  '15m': 15 * 60 * 1000,
+  '1h': 60 * 60 * 1000,
+  '6h': 6 * 60 * 60 * 1000,
+  '24h': 24 * 60 * 60 * 1000,
+};
+const __episodeOpen = Object.create(null);
+let __episodeData = null;
+let __episodeFilterState = null;
+let __episodeEtag = null;
+let __episodeFetchAbort = null;
 let __epTimer = null;
-function episodesRender(j){ try{
-  const el = document.getElementById('epList'); if(!el) return;
-  const items = (j && j.items) || [];
-  const errOnly = !!document.getElementById('epErrOnly')?.checked;
-  const filt = (document.getElementById('epFilter')?.value||'').toLowerCase();
-  const matches = (ep)=>{
-    if (errOnly && !(ep.errors>0)) return false;
-    if (!filt) return true;
-    const id = (ep.id||'').toLowerCase();
-    if (id.includes(filt)) return true;
-    const arr = ep.items||[];
-    for (let i=0;i<arr.length;i++){ const k = (arr[i].kind||'').toLowerCase(); if(k.includes(filt)) return true; try{ const p = JSON.stringify(arr[i].payload||{}).toLowerCase(); if(p.includes(filt)) return true; }catch{} }
-    return false;
-  };
-  const list = items.filter(matches);
-  if(list.length === 0){ el.innerHTML = '<div class="evt">(no episodes)</div>'; return; }
-  const html = list.slice().reverse().map((ep,idx)=>{
-    const count = (ep.items||[]).length;
-    const last = ep.last || '';
-    const dur = ep.duration_ms!=null ? ` · ${ep.duration_ms} ms` : '';
-    const errs = ep.errors||0;
-    const badge = errs>0 ? `<span class="badge bad u-ml-6"><span class="dot"></span> ${errs} err</span>` : `<span class="badge ok u-ml-6"><span class="dot"></span> OK</span>`;
-    const eid = `epd-${(ep.id||String(idx)).replace(/[^a-zA-Z0-9_-]/g,'_')}`;
-    const head = `<div class="u-flex-between u-weight-600"><span>${ep.id} <span class="dim"> · ${count} events${dur} · ${last}</span>${badge}</span><button class="iconbtn" onclick="const d=document.getElementById('${eid}'); d.style.display = (d.style.display==='none'||!d.style.display)?'block':'none';">Details</button></div>`;
-    const bodyAll = (ep.items||[]).map(ev=>{
-      const k = ev.kind || '';
-      const t = ev.time || '';
-      const p = ev.payload ? JSON.stringify(ev.payload) : '{}';
-      // Inline apply button when suggestion id present
-      let applyBtn = '';
-      try{ const sid = ev?.payload?.suggestion?.id; if (sid){ applyBtn = ` <button class="iconbtn" onclick="epApply('${sid}')">Apply</button>`; } }catch{}
-      return `<div class="evt">[${t}] ${k}: ${p}${applyBtn}</div>`;
+
+function episodeFormatDateInput(iso){
+  try{
+    if(!iso) return '';
+    const dt = new Date(iso);
+    if(Number.isNaN(dt.getTime())) return '';
+    const pad = (n)=> String(n).padStart(2,'0');
+    return `${dt.getFullYear()}-${pad(dt.getMonth()+1)}-${pad(dt.getDate())}T${pad(dt.getHours())}:${pad(dt.getMinutes())}`;
+  }catch{ return ''; }
+}
+
+function episodeClearOpenState(){ Object.keys(__episodeOpen).forEach(k => delete __episodeOpen[k]); }
+
+function saveEpisodeFiltersState(state){
+  try { localStorage.setItem(EP_FILTER_STORAGE_KEY, JSON.stringify(state||{})); }catch{}
+}
+
+function loadEpisodeFiltersState(){
+  try{
+    const raw = localStorage.getItem(EP_FILTER_STORAGE_KEY);
+    if(!raw) return {};
+    const parsed = JSON.parse(raw);
+    if(parsed && typeof parsed === 'object') return parsed;
+    return {};
+  }catch{ return {}; }
+}
+
+function setEpisodesLoading(isLoading){
+  const list = document.getElementById('epList');
+  if(list){
+    if(isLoading){
+      list.setAttribute('aria-busy', 'true');
+    } else {
+      list.removeAttribute('aria-busy');
+    }
+  }
+  const summaryEl = document.getElementById('epSummary');
+  if(summaryEl && isLoading){
+    const hasCached = __episodeData && Array.isArray(__episodeData.items) && __episodeData.items.length > 0;
+    if(!hasCached){
+      summaryEl.style.display = 'flex';
+      summaryEl.innerHTML = '<span class="dim">Loading episodes...</span>';
+    }
+  }
+}
+
+function presetToIso(preset){
+  const ms = EP_SINCE_PRESETS[preset];
+  if(!ms) return '';
+  const dt = new Date(Date.now() - ms);
+  return dt.toISOString();
+}
+
+function applySincePreset(preset){
+  const input = document.getElementById('epSince');
+  const select = document.getElementById('epSincePreset');
+  if(!select) return;
+  if(preset && select.value !== preset){
+    select.value = preset;
+  }
+  if(preset && preset !== 'custom'){
+    const iso = presetToIso(preset);
+    if(iso){
+      if(input){ input.value = episodeFormatDateInput(iso); }
+      if(__episodeFilterState){ __episodeFilterState.sincePreset = preset; }
+    }
+  }
+}
+
+function collectEpisodeFilters(){
+  const project = (document.getElementById('epProject')?.value || '').trim();
+  const kind = (document.getElementById('epKind')?.value || '').trim();
+  const select = document.getElementById('epSincePreset');
+  const rawPreset = select ? (select.value || 'custom') : 'custom';
+  const presetVal = isValidSincePreset(rawPreset) ? rawPreset : 'custom';
+  const rawSince = document.getElementById('epSince')?.value || '';
+  let sinceIso = '';
+  if(presetVal && presetVal !== 'custom'){
+    sinceIso = presetToIso(presetVal);
+    if(sinceIso){
+      const input = document.getElementById('epSince');
+      if(input){ input.value = episodeFormatDateInput(sinceIso); }
+    }
+  } else if(rawSince){
+    const dt = new Date(rawSince);
+    if(!Number.isNaN(dt.getTime())) sinceIso = dt.toISOString();
+  }
+  const limitEl = document.getElementById('epLimit');
+  let limit = '';
+  if(limitEl){
+    const parsed = parseInt(limitEl.value, 10);
+    if(!Number.isNaN(parsed) && parsed > 0) limit = Math.min(parsed, 1000);
+  }
+  const errorsOnly = !!document.getElementById('epErrOnly')?.checked;
+  const details = !!document.getElementById('epDetails')?.checked;
+  const filter = (document.getElementById('epFilter')?.value || '').trim();
+  return { project, kind, sinceIso, limit, errorsOnly, details, filter, sincePreset: presetVal };
+}
+
+function applyEpisodeFiltersState(state){
+  if(!state) return;
+  const projectEl = document.getElementById('epProject'); if(projectEl && typeof state.project === 'string') projectEl.value = state.project;
+  const kindEl = document.getElementById('epKind'); if(kindEl && typeof state.kind === 'string') kindEl.value = state.kind;
+  const sinceEl = document.getElementById('epSince'); if(sinceEl){ sinceEl.value = episodeFormatDateInput(state.sinceIso || ''); }
+  const limitEl = document.getElementById('epLimit'); if(limitEl){
+    if(state.limit) limitEl.value = state.limit;
+    else if(!limitEl.value) limitEl.value = '100';
+  }
+  const errEl = document.getElementById('epErrOnly'); if(errEl) errEl.checked = !!state.errorsOnly;
+  const detEl = document.getElementById('epDetails'); if(detEl) detEl.checked = !!state.details;
+  const filtEl = document.getElementById('epFilter'); if(filtEl && typeof state.filter === 'string') filtEl.value = state.filter;
+  const presetEl = document.getElementById('epSincePreset');
+  if(presetEl){
+    const preset = state.sincePreset || 'custom';
+    presetEl.value = isValidSincePreset(preset) ? preset : 'custom';
+    if(presetEl.value !== 'custom'){
+      applySincePreset(presetEl.value);
+    }
+  }
+}
+
+function isValidSincePreset(val){
+  if(val === 'custom') return true;
+  return Object.prototype.hasOwnProperty.call(EP_SINCE_PRESETS, val);
+}
+
+function buildEpisodeQuery(filters){
+  const params = new URLSearchParams();
+  if(filters.project) params.set('project', filters.project);
+  if(filters.kind) params.set('kind_prefix', filters.kind);
+  if(filters.errorsOnly) params.set('errors_only', 'true');
+  if(filters.limit) params.set('limit', String(filters.limit));
+  if(filters.sinceIso) params.set('since', filters.sinceIso);
+  return params;
+}
+
+function toggleEpisodeDetails(eid){
+  try{
+    const el = document.getElementById(eid);
+    if(!el) return;
+    const open = !el.classList.contains('u-hidden');
+    if(open){ el.classList.add('u-hidden'); __episodeOpen[eid] = false; }
+    else { el.classList.remove('u-hidden'); __episodeOpen[eid] = true; }
+    const btn = document.querySelector(`button[data-ep-toggle="${eid}"]`);
+    if(btn){
+      btn.textContent = __episodeOpen[eid] ? 'Hide' : 'Details';
+      btn.setAttribute('aria-expanded', __episodeOpen[eid] ? 'true' : 'false');
+    }
+  }catch{}
+}
+
+function episodesRender(data){
+  try{
+    if(data) __episodeData = data;
+    const el = document.getElementById('epList'); if(!el) return;
+    const source = data || __episodeData || {};
+    const items = (source && source.items) || [];
+    const filters = __episodeFilterState || collectEpisodeFilters();
+    const errOnly = !!(filters && filters.errorsOnly);
+    const filt = ((filters && filters.filter) || '').toLowerCase();
+    const detailsOn = !!(filters && filters.details);
+    const summaryEl = document.getElementById('epSummary');
+    const matches = (ep)=>{
+      if(errOnly && !(ep.errors>0)) return false;
+      if(!filt) return true;
+      const id = (ep.id||'').toLowerCase();
+      if(id.includes(filt)) return true;
+      const arr = ep.items||[];
+      for(let i=0;i<arr.length;i++){
+        const k = (arr[i].kind||'').toLowerCase();
+        if(k.includes(filt)) return true;
+        try{
+          const p = JSON.stringify(arr[i].payload||{}).toLowerCase();
+          if(p.includes(filt)) return true;
+        }catch{}
+      }
+      return false;
+    };
+    const list = items.filter(matches);
+    const totalEpisodes = items.length;
+    const renderedEpisodes = list.length;
+    const episodesWithErrors = list.reduce((acc, ep) => acc + ((Number(ep.errors) || 0) > 0 ? 1 : 0), 0);
+    const hasQueryFilters = !!(
+      (filters && filters.project) ||
+      (filters && filters.kind) ||
+      (filters && filters.sinceIso) ||
+      (filters && filters.errorsOnly) ||
+      (filters && filters.filter)
+    );
+
+    if(summaryEl){
+      summaryEl.style.display = 'flex';
+      if(totalEpisodes === 0){
+        summaryEl.innerHTML = '<span class="dim">No episodes recorded yet.</span>';
+      } else {
+        const parts = [];
+        const showingLabel = renderedEpisodes !== totalEpisodes
+          ? `<span class="dim">of ${totalEpisodes}</span>`
+          : '<span class="dim">total</span>';
+        parts.push(`<span class="key">showing</span> <code>${renderedEpisodes}</code> ${showingLabel}`);
+        const errPct = renderedEpisodes > 0 ? Math.round((episodesWithErrors / renderedEpisodes) * 100) : 0;
+        parts.push(`<span class="key">error episodes</span> <code>${episodesWithErrors}</code>${renderedEpisodes ? ` <span class="dim">(${errPct}% of view)</span>` : ''}`);
+        if(filters && filters.project){
+          parts.push(`<span class="key">project</span> <code>${filters.project}</code>`);
+        }
+        if(filters && filters.kind){
+          parts.push(`<span class="key">kind</span> <code>${filters.kind}</code>`);
+        }
+        if(filters && filters.sinceIso){
+          try{
+            const sinceReadable = new Date(filters.sinceIso).toLocaleString();
+            parts.push(`<span class="key">since</span> <code>${sinceReadable}</code>`);
+          }catch{}
+        }
+        if(renderedEpisodes === 0 && hasQueryFilters){
+          parts.unshift('<span class="dim">No episodes match current filters.</span>');
+        }
+        summaryEl.innerHTML = parts.join(' · ');
+      }
+    }
+
+    if(list.length === 0){
+      el.innerHTML = '<div class="evt">(no episodes)</div>';
+      setEpisodesLoading(false);
+      return;
+    }
+    const html = list.slice().reverse().map((ep,idx)=>{
+      const count = (ep.items||[]).length;
+      const last = ep.last || '';
+      const dur = ep.duration_ms!=null ? ` · ${ep.duration_ms} ms` : '';
+      const errs = ep.errors||0;
+      const badge = errs>0 ? `<span class="badge bad u-ml-6"><span class="dot"></span> ${errs} err</span>` : `<span class="badge ok u-ml-6"><span class="dot"></span> OK</span>`;
+      const eid = `epd-${(ep.id||String(idx)).replace(/[^a-zA-Z0-9_-]/g,'_')}`;
+      const isOpen = detailsOn || __episodeOpen[eid];
+      if(detailsOn) __episodeOpen[eid] = true;
+      const btnLabel = isOpen ? 'Hide' : 'Details';
+      const bodyAll = (ep.items||[]).map(ev=>{
+        const k = ev.kind || '';
+        const t = ev.time || '';
+        const p = ev.payload ? JSON.stringify(ev.payload) : '{}';
+        let applyBtn = '';
+        try{ const sid = ev?.payload?.suggestion?.id; if(sid){ applyBtn = ` <button class="iconbtn" onclick="epApply('${sid}')">Apply</button>`; } }catch{}
+        return `<div class="evt">[${t}] ${k}: ${p}${applyBtn}</div>`;
+      }).join('');
+      return `<div class="u-box dashed u-radius-8 u-my-6">`+
+        `<div class="u-flex-between u-weight-600"><span>${ep.id} <span class="dim"> · ${count} events${dur} · ${last}</span>${badge}</span>`+
+        `<button class="iconbtn" data-ep-toggle="${eid}" onclick="toggleEpisodeDetails('${eid}')" aria-expanded="${isOpen ? 'true' : 'false'}" aria-controls="${eid}">${btnLabel}</button></div>`+
+        `<div id="${eid}" class="${isOpen ? '' : 'u-hidden'}">${bodyAll}</div>`+
+      `</div>`;
     }).join('');
-    return `<div class="u-box dashed u-radius-8 u-my-6">${head}<div id="${eid}" class="u-hidden">${bodyAll}</div></div>`;
-  }).join('');
-  el.innerHTML = html;
-}catch{}}
-async function episodesRefresh(){ try{ const r=await fetch(base + '/state/episodes'); const j=await r.json(); episodesRender(j); }catch(e){ showToast('episodes fetch failed'); } }
+    el.innerHTML = html;
+  }catch{}
+  setEpisodesLoading(false);
+}
+
+async function episodesRefresh(opts){
+  const skipSave = !!(opts && opts.save === false);
+  const filters = collectEpisodeFilters();
+  __episodeFilterState = filters;
+  if(!skipSave) saveEpisodeFiltersState(filters);
+  const params = buildEpisodeQuery(filters);
+  const headers = {};
+  if(__adminHeader) headers['X-ARW-Admin'] = __adminHeader;
+  const limitVal = Number(filters.limit || 0);
+  const condOk = !filters.project && !filters.kind && !filters.sinceIso && !filters.errorsOnly && (!limitVal || limitVal === 100);
+  if(condOk){
+    if(__episodeEtag) headers['If-None-Match'] = __episodeEtag;
+  } else {
+    __episodeEtag = null;
+  }
+  let url = base + '/state/episodes';
+  const qs = params.toString();
+  if(qs) url += '?' + qs;
+  setEpisodesLoading(true);
+  if(__episodeFetchAbort){
+    try{ __episodeFetchAbort.abort(); }catch{}
+  }
+  const controller = new AbortController();
+  __episodeFetchAbort = controller;
+  let resp;
+  try{
+    resp = await fetch(url, { headers, signal: controller.signal });
+  }catch(e){
+    if(e && e.name === 'AbortError'){ setEpisodesLoading(false); return; }
+    showToast('episodes fetch failed');
+    setEpisodesLoading(false);
+    return;
+  } finally {
+    if(__episodeFetchAbort === controller){
+      __episodeFetchAbort = null;
+    }
+  }
+  if(resp.status === 403){
+    showToast('episodes fetch forbidden — admin required');
+    setEpisodesLoading(false);
+    return;
+  }
+  if(resp.status === 401){
+    showToast('episodes fetch unauthorized');
+    setEpisodesLoading(false);
+    return;
+  }
+  if(resp.status === 304){
+    setEpisodesLoading(false);
+    episodesRender();
+    return;
+  }
+  if(!resp.ok){
+    showToast('episodes fetch failed');
+    setEpisodesLoading(false);
+    return;
+  }
+  try{
+    const j = await resp.json();
+    __episodeData = j;
+    __episodeEtag = condOk ? (resp.headers.get('ETag') || resp.headers.get('Etag') || null) : null;
+    episodesRender(j);
+  }catch{
+    showToast('episodes parse failed');
+    setEpisodesLoading(false);
+  }
+}
+
+function clearEpisodeFilters(){
+  const ids = ['epProject','epKind','epFilter','epSince'];
+  ids.forEach(id => { const el = document.getElementById(id); if(el) el.value=''; });
+  const limitEl = document.getElementById('epLimit'); if(limitEl) limitEl.value = '100';
+  const errEl = document.getElementById('epErrOnly'); if(errEl) errEl.checked = false;
+  const detEl = document.getElementById('epDetails'); if(detEl) detEl.checked = false;
+  const presetEl = document.getElementById('epSincePreset'); if(presetEl) presetEl.value = 'custom';
+  episodeClearOpenState();
+  __episodeFilterState = collectEpisodeFilters();
+  saveEpisodeFiltersState(__episodeFilterState);
+  episodesRefresh();
+}
+
 document.addEventListener('DOMContentLoaded', ()=>{
-  const cb = document.getElementById('epLive'); if(!cb) return;
-  const tick = async ()=>{ await episodesRefresh(); };
-  cb.addEventListener('change', ()=>{
-    if(cb.checked){ tick(); __epTimer = setInterval(tick, 3000); }
-    else { if(__epTimer) { clearInterval(__epTimer); __epTimer=null; } }
+  const saved = loadEpisodeFiltersState();
+  if(saved && Object.keys(saved).length){
+    __episodeFilterState = saved;
+    applyEpisodeFiltersState(saved);
+  }
+  const cb = document.getElementById('epLive');
+  if(cb){
+    const tick = async ()=>{ await episodesRefresh({ save: false }); };
+    cb.addEventListener('change', ()=>{
+      if(cb.checked){ tick(); __epTimer = setInterval(tick, 3000); }
+      else if(__epTimer){ clearInterval(__epTimer); __epTimer = null; }
+    });
+  }
+  const filterInput = document.getElementById('epFilter');
+  if(filterInput){
+    let timer = null;
+    filterInput.addEventListener('input', ()=>{
+      if(__episodeFilterState){ __episodeFilterState.filter = (filterInput.value||'').trim(); saveEpisodeFiltersState(__episodeFilterState); }
+      clearTimeout(timer);
+      timer = setTimeout(()=> episodesRender(), 120);
+    });
+  }
+  const projectEl = document.getElementById('epProject');
+  projectEl?.addEventListener('change', ()=>{ episodesRefresh(); });
+  const kindEl = document.getElementById('epKind');
+  kindEl?.addEventListener('change', ()=>{ episodesRefresh(); });
+  const sinceEl = document.getElementById('epSince');
+  sinceEl?.addEventListener('change', ()=>{ episodesRefresh(); });
+  const limitEl = document.getElementById('epLimit');
+  limitEl?.addEventListener('change', ()=>{ episodesRefresh(); });
+  const errEl = document.getElementById('epErrOnly');
+  errEl?.addEventListener('change', ()=>{ episodesRefresh(); });
+  const detEl = document.getElementById('epDetails');
+  detEl?.addEventListener('change', ()=>{
+    if(__episodeFilterState){ __episodeFilterState.details = !!detEl.checked; saveEpisodeFiltersState(__episodeFilterState); }
+    if(!detEl.checked) episodeClearOpenState();
+    episodesRender();
   });
+  const presetEl = document.getElementById('epSincePreset');
+  if(presetEl){
+    presetEl.addEventListener('change', ()=>{
+      const val = presetEl.value || 'custom';
+      if(__episodeFilterState){ __episodeFilterState.sincePreset = val; saveEpisodeFiltersState(__episodeFilterState); }
+      if(val !== 'custom'){
+        applySincePreset(val);
+        episodesRefresh();
+      } else {
+        episodesRefresh();
+      }
+    });
+  }
+  const sinceInput = document.getElementById('epSince');
+  if(sinceInput){
+    sinceInput.addEventListener('input', ()=>{
+      const sel = document.getElementById('epSincePreset');
+      if(sel && sel.value !== 'custom') sel.value = 'custom';
+      if(__episodeFilterState){ __episodeFilterState.sincePreset = 'custom'; saveEpisodeFiltersState(__episodeFilterState); }
+    });
+  }
+  const resetBtn = document.getElementById('epFiltersReset');
+  resetBtn?.addEventListener('click', (ev)=>{ ev.preventDefault(); clearEpisodeFilters(); });
+  __episodeEtag = null;
+  episodesRefresh({ save: false });
 });
 // ---- Self‑Model panel ----
 async function selfRefreshList(){

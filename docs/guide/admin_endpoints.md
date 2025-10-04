@@ -169,7 +169,7 @@ The triad groups operations by intent:
 
 - **Actions & activity**
   - `GET /state/actions` — recent actions (capped by `limit`, default 200).
-- `GET /state/episodes` — roll up recent events by correlation id for quick timeline inspection. Each entry includes `items` (per-event payloads with an `error` flag), `count`, `errors`, `start`/`end`/`last` timestamps, the computed `duration_ms`, plus `first_kind`/`last_kind` hints and any observed `projects`/`actors`. Use the optional query parameters to focus the timeline (`?limit=200`, `?project=my-proj`, `?errors_only=true`, `?kind_prefix=tasks.` or `?since=2025-10-05T12:00:00Z`).
+- `GET /state/episodes` — roll up recent events by correlation id for quick timeline inspection. Each entry includes `items` (per-event payloads with an `error` flag), `count`, `errors`, `start`/`end`/`last` timestamps, the computed `duration_ms`, plus `first_kind`/`last_kind` hints and any observed `projects`/`actors`. Use the optional query parameters to focus the timeline (`?limit=200`, `?project=proj-slug` — prefixes allowed, `?errors_only=true`, `?kind_prefix=tasks.` or `?since=2025-10-05T12:00:00Z`).
 - `GET /state/episode/{id}/snapshot` — fetch a single episode snapshot (same structure as the rollups) with optional `?limit=2000` to bound the event list. Ideal for deep dives triggered from tooling.
   - `GET /state/route_stats` — per-route counters plus bus metrics.
   - `GET /state/contributions` — last 200 contribution entries.

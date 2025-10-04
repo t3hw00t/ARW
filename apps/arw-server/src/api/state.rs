@@ -105,7 +105,13 @@ pub(crate) struct EpisodeRollup {
 
 impl EpisodeRollup {
     fn matches_project(&self, project: &str) -> bool {
-        self.projects.iter().any(|p| p == project)
+        let needle = project.trim();
+        if needle.is_empty() {
+            return false;
+        }
+        self.projects
+            .iter()
+            .any(|p| p == needle || p.starts_with(needle))
     }
 
     fn matches_kind_prefix(&self, prefix: &str) -> bool {
@@ -2038,6 +2044,93 @@ mod tests {
         assert_eq!(items.len(), 1);
         assert_eq!(items[0]["id"].as_str(), Some(corr_demo));
         assert_eq!(items[0]["errors"].as_u64(), Some(1));
+    }
+
+    #[tokio::test]
+    async fn state_episodes_accepts_project_prefix() {
+        let temp = tempdir().expect("tempdir");
+        let mut env_guard = crate::test_support::env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
+
+        let corr_demo = "run-demo";
+        let corr_other = "run-other";
+
+        let t0 = Utc::now();
+        let events = [
+            arw_events::Envelope {
+                time: t0.to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "tasks.started".to_string(),
+                payload: json!({"corr_id": corr_demo, "proj": "demo"}),
+                policy: None,
+                ce: None,
+            },
+            arw_events::Envelope {
+                time: t0
+                    .checked_add_signed(chrono::Duration::milliseconds(5))
+                    .unwrap()
+                    .to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "tasks.completed".to_string(),
+                payload: json!({"corr_id": corr_demo, "proj": "demo"}),
+                policy: None,
+                ce: None,
+            },
+            arw_events::Envelope {
+                time: t0
+                    .checked_add_signed(chrono::Duration::milliseconds(10))
+                    .unwrap()
+                    .to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "tasks.started".to_string(),
+                payload: json!({"corr_id": corr_other, "proj": "other"}),
+                policy: None,
+                ce: None,
+            },
+        ];
+
+        for env in events {
+            state
+                .kernel()
+                .append_event_async(&env)
+                .await
+                .expect("append event");
+        }
+
+        let query = EpisodesQuery {
+            limit: Some(10),
+            project: Some("de".to_string()),
+            errors_only: None,
+            kind_prefix: None,
+            since: None,
+        };
+
+        let response = state_episodes(HeaderMap::new(), Query(query), State(state.clone()))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let (_, body) = response.into_parts();
+        let bytes = to_bytes(body, usize::MAX).await.expect("body");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+        let items = value["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["id"].as_str(), Some(corr_demo));
+
+        // Exact slug still works when trimming whitespace
+        let query_exact = EpisodesQuery {
+            limit: Some(10),
+            project: Some(" demo ".to_string()),
+            errors_only: None,
+            kind_prefix: None,
+            since: None,
+        };
+        let response_exact = state_episodes(HeaderMap::new(), Query(query_exact), State(state))
+            .await
+            .into_response();
+        assert_eq!(response_exact.status(), StatusCode::OK);
+        let (_, body) = response_exact.into_parts();
+        let bytes = to_bytes(body, usize::MAX).await.expect("body");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+        let items = value["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["id"].as_str(), Some(corr_demo));
     }
 
     #[tokio::test]
