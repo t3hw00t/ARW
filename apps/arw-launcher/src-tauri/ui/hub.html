@@ -49,12 +49,14 @@
               <div id="crumbs" class="row" style="flex-wrap:wrap"></div>
             </div>
             <div id="projTree" class="card" role="tree" aria-label="Project files" aria-multiselectable="false" style="background:#fff; max-height:260px; overflow:auto"></div>
+            <div id="treeMeta" class="tree-meta" role="status" aria-live="polite" style="display:none"></div>
             <div class="dim" style="margin-top:6px">Hint: Click folders to navigate; click files to preview or copy.</div>
           </section>
           <section class="card" id="notes" role="region" aria-labelledby="notesTitle">
             <h3 id="notesTitle">Notes</h3>
             <div class="row"><span class="key">project</span> <code id="curProj">–</code></div>
             <textarea id="notesArea" style="width:100%; min-height:160px" placeholder="Project notes..."></textarea>
+            <div id="notesMeta" class="notes-meta" role="status" aria-live="polite" style="display:none"></div>
             <div class="row"><button id="btnSaveNotes" class="primary">Save Notes</button> <button id="btnReloadNotes" class="ghost">Reload</button> <label class="key"><input type="checkbox" id="notesAutosave" checked aria-label="Enable notes autosave"> autosave</label> <span id="notesStat" role="status" aria-live="polite" class="dim"></span></div>
           </section>
           <section class="card" id="agents" role="region" aria-labelledby="agentsTitle">

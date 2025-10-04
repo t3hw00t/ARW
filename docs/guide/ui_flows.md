@@ -6,7 +6,7 @@ title: UI Flows (ASCII)
 
 Flowcharts for the main user interfaces. Complements UI Architecture and Workflow Views.
 
-Updated: 2025-09-22
+Updated: 2025-10-02
 Type: How‑to
 
 ## Navigation Overview
@@ -60,7 +60,7 @@ Start → Launcher → Project Hub
   |                |        |
   |                |        +--> Run Routines / Tasks (from Hub)
   |                |
-  |                +--> Files/Notes (browse, edit, upload, open in editor)
+  |                +--> Files/Notes (tree digest/truncation badges, notes metadata, browse, edit, upload, open in editor)
   |
   +--> Command Palette → global search & actions (e.g., set editor, open runtime matrix)
 ```
@@ -72,9 +72,9 @@ Enable admin → Start server → Open /admin/ui/projects
   |
   +--> Create project  → folder + NOTES.md
   |
-  +--> Browse tree     → breadcrumbs, filter, open (OS/editor)
+  +--> Browse tree     → breadcrumbs, filter, digest/truncation badges, open (OS/editor)
   |
-  +--> Edit notes      → autosave option, inline Saved indicator
+  +--> Edit notes      → autosave option, inline Saved indicator, metadata (bytes, hash, modified, truncation hint)
   |
   +--> Upload files    → drag & drop (size‑guarded)
 

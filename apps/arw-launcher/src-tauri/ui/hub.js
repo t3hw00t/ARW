@@ -259,6 +259,47 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (n >= 1000) return `${(n/1000).toFixed(1)} s`;
     return `${n} ms`;
   }
+  function formatBytes(bytes){
+    const n = Number(bytes);
+    if (!Number.isFinite(n) || n < 0) return '';
+    if (n === 0) return '0 B';
+    const units = ['B','KiB','MiB','GiB','TiB'];
+    let value = n;
+    let unit = 0;
+    while (value >= 1024 && unit < units.length - 1){
+      value /= 1024;
+      unit += 1;
+    }
+    const rounded = unit === 0 || value >= 10 ? Math.round(value) : Math.round(value * 10) / 10;
+    const str = unit === 0 || value >= 10 ? String(rounded) : rounded.toFixed(1);
+    return `${str} ${units[unit]}`;
+  }
+  function formatRelativeIso(iso){
+    if (!iso) return '';
+    try{
+      const dt = new Date(iso);
+      if (Number.isNaN(dt.getTime())) return '';
+      const diffMs = Date.now() - dt.getTime();
+      const absSec = Math.round(Math.abs(diffMs) / 1000);
+      const units = [
+        { limit: 60, div: 1, label: 's' },
+        { limit: 3600, div: 60, label: 'm' },
+        { limit: 86400, div: 3600, label: 'h' },
+        { limit: 2592000, div: 86400, label: 'd' },
+        { limit: 31536000, div: 2592000, label: 'mo' },
+      ];
+      for (const unit of units){
+        if (absSec < unit.limit){
+          const value = Math.max(1, Math.floor(absSec / unit.div));
+          return diffMs >= 0 ? `${value}${unit.label} ago` : `in ${value}${unit.label}`;
+        }
+      }
+      const years = Math.max(1, Math.floor(absSec / 31536000));
+      return diffMs >= 0 ? `${years}y ago` : `in ${years}y`;
+    }catch{
+      return '';
+    }
+  }
   function renderRuns(){
     if (!elRunsTbl) return;
     const q = (elRunFilter?.value||'').toLowerCase();
@@ -388,6 +429,115 @@ document.addEventListener('DOMContentLoaded', async () => {
     fileCache.set(key, { data, t: now });
     return data;
   }
+  function clearNotesMeta(){
+    if (!elNotesMeta) return;
+    elNotesMeta.textContent = '';
+    elNotesMeta.style.display = 'none';
+    elNotesMeta.classList.remove('warn');
+    elNotesMeta.removeAttribute('title');
+  }
+  function renderNotesMeta(info){
+    if (!elNotesMeta) return;
+    const notes = info && info.notes && typeof info.notes === 'object' ? info.notes : null;
+    if (!notes){
+      clearNotesMeta();
+      return;
+    }
+    const parts = [];
+    const details = [];
+    if (notes.modified){
+      const rel = formatRelativeIso(notes.modified);
+      if (rel) parts.push(`modified ${rel}`);
+      details.push(`modified ${notes.modified}`);
+    }
+    if (Number.isFinite(Number(notes.bytes))){
+      const bytes = Number(notes.bytes);
+      parts.push(formatBytes(bytes));
+      details.push(`${bytes} bytes`);
+    }
+    if (notes.sha256){
+      const sha = String(notes.sha256);
+      parts.push(`sha ${sha.slice(0, 12)}`);
+      details.push(`sha ${sha}`);
+    }
+    const truncated = notes.truncated === true;
+    if (truncated){
+      parts.push('preview truncated for UI');
+      details.push('preview truncated in launcher (full file on disk)');
+    }
+    if (!parts.length){
+      clearNotesMeta();
+      return;
+    }
+    elNotesMeta.textContent = parts.join(' · ');
+    elNotesMeta.style.display = '';
+    if (details.length) {
+      elNotesMeta.title = details.join(' · ');
+    } else {
+      elNotesMeta.removeAttribute('title');
+    }
+    elNotesMeta.classList.toggle('warn', truncated);
+  }
+  function clearTreeMeta(){
+    if (!elTreeMeta) return;
+    elTreeMeta.textContent = '';
+    elTreeMeta.style.display = 'none';
+    elTreeMeta.classList.remove('warn');
+    elTreeMeta.removeAttribute('title');
+  }
+  function renderTreeMeta(info){
+    if (!elTreeMeta) return;
+    const tree = info && info.tree && typeof info.tree === 'object' ? info.tree : null;
+    if (!tree){
+      clearTreeMeta();
+      return;
+    }
+    const parts = [];
+    const details = [];
+    if (typeof tree.digest === 'string' && tree.digest){
+      parts.push(`digest ${tree.digest.slice(0, 12)}`);
+      details.push(`digest ${tree.digest}`);
+    }
+    const truncated = tree.truncated && typeof tree.truncated === 'object' && !Array.isArray(tree.truncated)
+      ? tree.truncated
+      : null;
+    let warn = false;
+    if (truncated){
+      const key = currentPath || '';
+      const currentVal = Number(truncated[key]);
+      if (Number.isFinite(currentVal) && currentVal > 0){
+        warn = true;
+        const label = currentVal === 1 ? 'entry' : 'entries';
+        parts.push(`+${currentVal} hidden ${label} here`);
+        details.push(`${currentVal} entries trimmed in this folder`);
+      }
+      const others = Object.entries(truncated)
+        .filter(([k, v]) => (k || '') !== key && Number(v) > 0);
+      if (others.length){
+        warn = true;
+        const summary = others
+          .slice(0, 2)
+          .map(([k, v]) => `${k || 'root'} (+${v})`)
+          .join(', ');
+        const extra = others.length > 2 ? '…' : '';
+        parts.push(`others truncated: ${summary}${extra}`);
+        const detailItems = others.map(([k, v]) => `${k || 'root'} (+${v})`);
+        details.push(`other folders trimmed: ${detailItems.join(', ')}`);
+      }
+    }
+    if (!parts.length){
+      clearTreeMeta();
+      return;
+    }
+    elTreeMeta.textContent = parts.join(' · ');
+    elTreeMeta.style.display = '';
+    if (details.length) {
+      elTreeMeta.title = details.join(' · ');
+    } else {
+      elTreeMeta.removeAttribute('title');
+    }
+    elTreeMeta.classList.toggle('warn', warn);
+  }
   // Nested tree cache and expansion state
   const treeCache = new Map(); // path -> items
   let expanded = new Set(); // rel paths that are expanded (persisted)
@@ -397,10 +547,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elProjTree = document.getElementById('projTree');
   const elProjStat = document.getElementById('projStat');
   const elNotes = document.getElementById('notesArea');
+  const elNotesMeta = document.getElementById('notesMeta');
   const elCurProj = document.getElementById('curProj');
   const elNotesAutosave = document.getElementById('notesAutosave');
   const elProjPrefsBadge = document.getElementById('projPrefsBadge');
   const elFileFilter = document.getElementById('fileFilter');
+  const elTreeMeta = document.getElementById('treeMeta');
   let currentPath = '';
   const pathStack = [];
   function setStat(txt){ if (elProjStat) { elProjStat.textContent = txt||''; if (txt) setTimeout(()=>{ if (elProjStat.textContent===txt) elProjStat.textContent=''; }, 1500); } }
@@ -443,6 +595,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       elProjSel.value = targetProj || '';
     }
     if (!targetProj || !projectsIndex.has(targetProj)) {
+      clearNotesMeta();
+      clearTreeMeta();
       return;
     }
     await loadNotes(true);
@@ -451,6 +605,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   async function setProj(name){
     curProj = name||null;
     if (elCurProj) elCurProj.textContent = curProj||'–';
+    if (curProj) {
+      const info = projectsIndex.get(curProj);
+      renderNotesMeta(info);
+      renderTreeMeta(info);
+    } else {
+      clearNotesMeta();
+      clearTreeMeta();
+    }
     try { const hub = await ARW.getPrefs('ui:hub')||{}; hub.lastProject = curProj; await ARW.setPrefs('ui:hub', hub); } catch {}
     try { projPrefs = await ARW.getPrefs('ui:proj:'+curProj) || {}; } catch { projPrefs = {}; }
     try { const arr = Array.isArray(projPrefs.expanded)? projPrefs.expanded : []; expanded = new Set(arr.map(String)); } catch { expanded = new Set(); }
@@ -480,23 +642,38 @@ document.addEventListener('DOMContentLoaded', async () => {
     }catch(e){ console.error(e); ARW.toast('Create failed'); }
   }
   async function loadNotes(skipFetch=false){
-    if (!curProj || !elNotes) return;
+    if (!curProj || !elNotes){
+      clearNotesMeta();
+      return;
+    }
     const info = projectsIndex.get(curProj);
     const content = info?.notes?.content;
     if (typeof content === 'string') {
       elNotes.value = content;
+      renderNotesMeta(info);
       return;
     }
     const shouldSkip = skipFetch === true;
-    if (shouldSkip) return;
+    if (shouldSkip) {
+      renderNotesMeta(info);
+      return;
+    }
     try{
       const t = await fetchText(`/state/projects/${encodeURIComponent(curProj)}/notes`);
       elNotes.value = t;
-    }catch(e){ console.error(e); elNotes.value=''; }
+      renderNotesMeta(info);
+    }catch(e){
+      console.error(e);
+      elNotes.value='';
+      renderNotesMeta(info);
+    }
   }
   async function saveNotes(quiet=false){ if (!curProj||!elNotes) return; try{ const t = elNotes.value||''; await fetchRaw(`/projects/${encodeURIComponent(curProj)}/notes`, { method:'PUT', headers:{'Content-Type':'text/plain'}, body: t + '\n' }); const ns=document.getElementById('notesStat'); if (ns){ ns.textContent='Saved'; setTimeout(()=>{ if (ns.textContent==='Saved') ns.textContent=''; }, 1200); } if (!quiet) { /* optional toast removed for quieter UX */ } }catch(e){ console.error(e); const ns=document.getElementById('notesStat'); if (ns){ ns.textContent='Error'; setTimeout(()=>{ if (ns.textContent==='Error') ns.textContent=''; }, 1500); } }
   async function loadTree(rel){
-    if (!curProj||!elProjTree) return;
+    if (!curProj||!elProjTree){
+      clearTreeMeta();
+      return;
+    }
     const next = String(rel||'');
     if (next !== currentPath && currentPath !== '') { pathStack.push(currentPath); }
     currentPath = next;
@@ -515,10 +692,16 @@ document.addEventListener('DOMContentLoaded', async () => {
       try{
         const j = await fetchJson(`/state/projects/${encodeURIComponent(curProj)}/tree?path=${encodeURIComponent(currentPath)}`).catch(()=>({items:[]}));
         treeCache.set(String(currentPath||''), j.items||[]);
-      }catch(e){ console.error(e); elProjTree.textContent = 'Error'; return; }
+      }catch(e){
+        console.error(e);
+        elProjTree.textContent = 'Error';
+        renderTreeMeta(info);
+        return;
+      }
     }
     await expandOnSearch((elFileFilter?.value||'').trim());
     renderTree(treeCache.get(String(currentPath||''))||[]);
+    renderTreeMeta(info);
   }
   async function ensureChildren(path){
     const key = String(path||'');
