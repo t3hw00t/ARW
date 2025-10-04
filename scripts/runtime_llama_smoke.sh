@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(cd -- "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+PROJECT_ROOT=$(cd -- "$SCRIPT_DIR/.." && pwd)
+source "$SCRIPT_DIR/lib/smoke_timeout.sh"
+smoke_timeout::init "runtime-smoke" 600 "RUNTIME_SMOKE_TIMEOUT_SECS"
+
 # Runtime smoke test for the managed runtime pipeline.
 # Default MODE=stub spins up a tiny Python HTTP server that mimics llama.cpp's `/completion`
 # endpoint so CI can exercise `chat.respond` without model weights. Use MODE=real with
@@ -8,7 +13,6 @@ set -euo pipefail
 # to target an actual llama.cpp server binary instead.
 
 MODE=${MODE:-stub}
-PROJECT_ROOT=$(cd -- "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 TMP_DIR=$(mktemp -d -t arw-runtime-smoke.XXXX)
 SERVER_LOG="$TMP_DIR/arw-server.log"
 BACKEND_LOG="$TMP_DIR/llama.log"
@@ -17,9 +21,11 @@ BACKEND_REQ="$TMP_DIR/llama-request.json"
 BACKEND_PORT=""
 BACKEND_PID=""
 SERVER_PID=""
+PROMPT_CACHE_PATH_DEFAULT="$TMP_DIR/llama.prompt.bin"
 
 cleanup() {
-  local status=$1
+  local status=$?
+  status=$(smoke_timeout::cleanup "$status")
   if [[ -n "$SERVER_PID" ]]; then
     kill "$SERVER_PID" 2>/dev/null || true
     wait "$SERVER_PID" 2>/dev/null || true
@@ -37,8 +43,9 @@ cleanup() {
     fi
   fi
   rm -rf "$TMP_DIR"
+  return "$status"
 }
-trap 'cleanup $?' EXIT
+trap cleanup EXIT
 
 pick_port() {
   python3 - <<'PY'
@@ -127,12 +134,26 @@ start_real_backend() {
   : "${LLAMA_MODEL_PATH:?set LLAMA_MODEL_PATH when MODE=real}" >&2
   BACKEND_PORT=${LLAMA_SERVER_PORT:-$(pick_port)}
   local cmd=("$LLAMA_SERVER_BIN")
+  local prompt_cache_path="${LLAMA_PROMPT_CACHE_PATH:-$PROMPT_CACHE_PATH_DEFAULT}"
+  if [[ -n "$prompt_cache_path" ]]; then
+    mkdir -p "$(dirname "$prompt_cache_path")"
+  fi
   if [[ -n "${LLAMA_SERVER_ARGS:-}" ]]; then
     # shellcheck disable=SC2206
     local extra=( ${LLAMA_SERVER_ARGS} )
     cmd+=("${extra[@]}")
+    if [[ -n "$prompt_cache_path" ]]; then
+      local args_join=" ${extra[*]} "
+      if [[ "$args_join" != *" --prompt-cache "* && "$args_join" != *"--prompt-cache="* ]]; then
+        cmd+=(--prompt-cache "$prompt_cache_path")
+        echo "[runtime-smoke] appended --prompt-cache ${prompt_cache_path} to LLAMA_SERVER_ARGS" >&2
+      fi
+    fi
   else
     cmd+=(-m "$LLAMA_MODEL_PATH" --host 127.0.0.1 --port "$BACKEND_PORT" --log-disable)
+    if [[ -n "$prompt_cache_path" ]]; then
+      cmd+=(--prompt-cache "$prompt_cache_path")
+    fi
   fi
   echo "[runtime-smoke] launching llama backend: ${cmd[*]}" >&2
   (cd "$PROJECT_ROOT" && "${cmd[@]}" >"$BACKEND_LOG" 2>&1 &)

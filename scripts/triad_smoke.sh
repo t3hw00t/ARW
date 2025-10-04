@@ -1,7 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT_DIR=$(cd "$SCRIPT_DIR/.." && pwd)
+source "$SCRIPT_DIR/lib/smoke_timeout.sh"
+smoke_timeout::init "triad-smoke" 600 "TRIAD_SMOKE_TIMEOUT_SECS"
+
 PORT="${ARW_TRIAD_SMOKE_PORT:-18181}"
 STATE_DIR="$(mktemp -d)"
 LOG_FILE="$(mktemp)"
@@ -10,12 +14,13 @@ ADMIN_TOKEN="${ARW_TRIAD_SMOKE_ADMIN_TOKEN:-triad-smoke-token}"
 
 cleanup() {
   local status=$?
+  status=$(smoke_timeout::cleanup "$status")
   if [[ -n "${SERVER_PID:-}" ]]; then
     kill "${SERVER_PID}" >/dev/null 2>&1 || true
     wait "${SERVER_PID}" 2>/dev/null || true
   fi
   rm -rf "${STATE_DIR}" "${LOG_FILE}" 2>/dev/null || true
-  return $status
+  return "$status"
 }
 trap cleanup EXIT
 

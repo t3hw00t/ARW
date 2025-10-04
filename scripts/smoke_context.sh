@@ -1,12 +1,34 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+ROOT_DIR=$(cd "${SCRIPT_DIR}/.." && pwd)
+source "$SCRIPT_DIR/lib/smoke_timeout.sh"
+smoke_timeout::init "smoke-context" 600 "SMOKE_CONTEXT_TIMEOUT_SECS"
+
+cleanup() {
+  local status=$?
+  status=$(smoke_timeout::cleanup "$status")
+  return "$status"
+}
+trap cleanup EXIT
+
+run_command() {
+  "$@" &
+  local child=$!
+  smoke_timeout::register_child "$child"
+  set +e
+  wait "$child"
+  local status=$?
+  set -e
+  smoke_timeout::unregister_child "$child"
+  return "$status"
+}
 
 run_cli() {
   if command -v arw-cli >/dev/null 2>&1; then
-    exec arw-cli smoke context "$@"
+    run_command arw-cli smoke context "$@"
+    return
   fi
 
   local exe="arw-cli"
@@ -15,13 +37,18 @@ run_cli() {
     "$ROOT_DIR/target/release/$exe" \
     "$ROOT_DIR/target/debug/$exe"; do
     if [[ -x "$candidate" ]]; then
-      exec "$candidate" smoke context "$@"
+      run_command "$candidate" smoke context "$@"
+      return
     fi
   done
 
   if command -v cargo >/dev/null 2>&1; then
+    local prev_dir=$PWD
     cd "$ROOT_DIR"
-    exec cargo run --quiet --release -p arw-cli -- smoke context "$@"
+    run_command cargo run --quiet --release -p arw-cli -- smoke context "$@"
+    local status=$?
+    cd "$prev_dir"
+    return "$status"
   fi
 
   echo "error: unable to locate arw-cli binary; install it or run cargo build -p arw-cli" >&2

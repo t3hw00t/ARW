@@ -1,6 +1,36 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/lib/smoke_timeout.sh"
+smoke_timeout::init "sse-tail" 600 "SSE_TAIL_TIMEOUT_SECS"
+
+cleanup() {
+  local status=$?
+  status=$(smoke_timeout::cleanup "$status")
+  return "$status"
+}
+trap cleanup EXIT
+
+run_stream() {
+  (
+    curl -N -sS "${AUTH[@]}" "$URL" \
+      | awk -v store="$STORE" '
+          /^id:/ { sub(/^id: */,"",$0); print > store; next }
+          /^data:/ { sub(/^data: */,"",$0); print $0; next }
+        ' \
+      | jq -rc '{id:.payload.id//empty, kind:.kind, payload:.payload}'
+  ) &
+  local child=$!
+  smoke_timeout::register_child "$child"
+  set +e
+  wait "$child"
+  local status=$?
+  set -e
+  smoke_timeout::unregister_child "$child"
+  return "$status"
+}
+
 # Simple SSE tail helper using curl + jq
 #
 # Usage:
@@ -47,10 +77,4 @@ URL="$BASE/events${QS:+?$QS}"
 AUTH=()
 if [[ -n "$TOKEN" ]]; then AUTH=(-H "Authorization: Bearer $TOKEN"); fi
 
-curl -N -sS "${AUTH[@]}" "$URL" \
-  | awk -v store="$STORE" '
-      /^id:/ { sub(/^id: */,"",$0); print > store; next }
-      /^data:/ { sub(/^data: */,"",$0); print $0; next }
-    ' \
-  | jq -rc '{id:.payload.id//empty, kind:.kind, payload:.payload}'
-
+run_stream

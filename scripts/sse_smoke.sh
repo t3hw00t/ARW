@@ -1,6 +1,29 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+source "$SCRIPT_DIR/lib/smoke_timeout.sh"
+smoke_timeout::init "sse-smoke" 600 "SSE_SMOKE_TIMEOUT_SECS"
+
+cleanup() {
+  local status=$?
+  status=$(smoke_timeout::cleanup "$status")
+  return "$status"
+}
+trap cleanup EXIT
+
+run_command() {
+  "$@" &
+  local child=$!
+  smoke_timeout::register_child "$child"
+  set +e
+  wait "$child"
+  local status=$?
+  set -e
+  smoke_timeout::unregister_child "$child"
+  return "$status"
+}
+
 # Simple SSE smoke test for unified server.
 # Usage: ARW_ADMIN_TOKEN=... ./scripts/sse_smoke.sh [BASE]
 
@@ -12,5 +35,4 @@ if [[ -n "${ARW_ADMIN_TOKEN:-}" ]]; then
 fi
 
 echo "Connecting to $BASE/events (prefix=egress., replay=5)" >&2
-exec curl -N -sS "${BASE}/events?prefix=egress.&replay=5" "${hdr_auth[@]}"
-
+run_command curl -N -sS "${BASE}/events?prefix=egress.&replay=5" "${hdr_auth[@]}"

@@ -79,5 +79,5 @@ This creates `dist/arw-<version>-windows-<arch>.zip` with:
 - Health: [Local health check](http://127.0.0.1:8091/healthz) (run `curl` while the service is up)
 - Logs: `.arw\logs\arw-server.out.log`
 - Interactive start menu: `scripts\interactive-start-windows.ps1`
-- Quick smoke checks: `arw-cli smoke triad` (action/state/events) and `arw-cli smoke context`
+- Quick smoke checks: `arw-cli smoke triad` (action/state/events) and `arw-cli smoke context` (wrappers respect `SMOKE_TRIAD_TIMEOUT_SECS` / `SMOKE_CONTEXT_TIMEOUT_SECS`; both fall back to `SMOKE_TIMEOUT_SECS`, default 600 — set to `0` to stream indefinitely when debugging)
 - Need different ports or want to keep the temp directory for debugging? Run `arw-cli smoke --help` to see all flags, or use the wrapper scripts under `scripts\smoke_*.ps1`.

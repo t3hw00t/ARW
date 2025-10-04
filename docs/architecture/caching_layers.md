@@ -42,7 +42,10 @@ This document outlines a multi‑layer caching strategy for ARW, blending resear
 
 ## What’s implemented in ARW today
 
-- llama.cpp client requests include `cache_prompt: true` enabling KV reuse.
+- llama.cpp client requests include `cache_prompt: true` enabling KV reuse, and the
+  runtime smoke helper (`scripts/runtime_llama_smoke.sh`) now launches the server with a
+  persistent `--prompt-cache` path by default (override with
+  `LLAMA_PROMPT_CACHE_PATH`).
 - Tool Action Cache with Moka front + disk CAS back; RFC‑8785‑like canonicalization, singleflight coalescing, counters (`arw_tools_cache_hits`, `arw_tools_cache_miss`, `arw_tools_cache_coalesced`, `arw_tools_cache_coalesced_waiters`, `arw_tools_cache_error`, `arw_tools_cache_bypass`), Prometheus metrics, and admin stats.
 - CAS blob serving with validators and 304 handling.
 - Read‑models and deltas: models metrics and route stats publish RFC‑6902 patches with coalescing; UI panels consume them live.

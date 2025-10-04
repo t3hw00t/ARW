@@ -20,7 +20,7 @@ ARW seeds a runtime matrix read-model from `runtime.health` events. Today it mer
 - CLI shortcuts: `arw-cli runtime status` prints the same snapshot (or `--json` for raw), and `arw-cli runtime restore --id <runtime>` triggers supervised restores while echoing the remaining budget or budget exhaustion.
   - Text mode now reports the active `ttl_seconds` so operators know when the matrix snapshot should be considered stale.
   - JSON mode emits `{ "supervisor": ..., "matrix": ... }` so scripts can consume both views (including `ttl_seconds`) in one call.
-- Smoke check: `just runtime-smoke` launches a stub llama endpoint, points the server at it, and verifies `chat.respond` flows end-to-end without needing model weights (extend with MODE=real once hardware-backed smoke rigs land).
+- Smoke check: `just runtime-smoke` launches a stub llama endpoint, points the server at it, and verifies `chat.respond` flows end-to-end without needing model weights (extend with MODE=real once hardware-backed smoke rigs land). The helper exits automatically after `RUNTIME_SMOKE_TIMEOUT_SECS` seconds (defaults to the shared `SMOKE_TIMEOUT_SECS`, falling back to 600). Set either knob to `0` to disable the guard during manual debugging.
   - To exercise a real llama.cpp build: `MODE=real LLAMA_SERVER_BIN=/path/to/server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`. Optionally pass `LLAMA_SERVER_ARGS="--your --flags"` or `LLAMA_SERVER_PORT=XXXX` to match your deployment.
 
 ## Roadmap

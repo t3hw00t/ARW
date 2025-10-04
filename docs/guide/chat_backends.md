@@ -37,6 +37,13 @@ The service will POST to `ARW_LLAMA_URL/completion` with prompt caching enabled 
 ```
 
 Tip: run llama.cpp with a persistent prompt cache file (e.g., `--prompt-cache llama.prompt.bin`) to reuse KV across sessions.
+When you drive llama via `scripts/runtime_llama_smoke.sh MODE=real` the helper now appends
+`--prompt-cache` automatically. Set `LLAMA_PROMPT_CACHE_PATH=/path/to/cache.bin` before
+launching to reuse the same cache across runs (or keep the default temp file if you only
+need an ephemeral smoke test). The smoke helper also enforces a wall-clock limit
+(`RUNTIME_SMOKE_TIMEOUT_SECS`, defaulting to the shared `SMOKE_TIMEOUT_SECS` or 600) so
+stalled runs terminate instead of hang. Set the timeout knobs to `0` if you want an
+unbounded session during manual investigation.
 
 Optional tuning knobs (forwarded verbatim when set):
 

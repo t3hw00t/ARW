@@ -47,4 +47,4 @@ CLI
   - Tail events with resume and filters:
     - `BASE=http://127.0.0.1:8091 ARW_ADMIN_TOKEN=$ARW_ADMIN_TOKEN arw-events --prefix service.,state.read.model.patch --replay 25`
   - Stores `Last-Event-ID` between runs when `--store <file>` is provided (defaults to `.arw/last-event-id`).
-  - For a curl+jq alternative, see `scripts/sse_tail.sh`.
+  - For a curl+jq alternative, see `scripts/sse_tail.sh` (honors `SSE_TAIL_TIMEOUT_SECS` / `SMOKE_TIMEOUT_SECS`; set to `0` to keep the stream open indefinitely).

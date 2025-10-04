@@ -18,7 +18,8 @@ Runbook
 - Update settings: `POST /egress/settings` (admin header required)
 - Preview egress: `POST /egress/preview` with `{ url, method? }`
 - Stream events: `GET /events?prefix=egress.`
-- SSE smoke test: `ARW_ADMIN_TOKEN=... ./scripts/sse_smoke.sh`
+- SSE smoke test: `ARW_ADMIN_TOKEN=... ./scripts/sse_smoke.sh` (respects `SSE_SMOKE_TIMEOUT_SECS` or the shared `SMOKE_TIMEOUT_SECS`; set to `0` for long-lived tails)
+- Smoke helpers share the timeout harness in `scripts/lib/smoke_timeout.sh`; tweak the guard there when adjusting defaults across shells.
 
 New/Changed Endpoints
 - `POST /actions` (idempotent; emits `actions.submitted`)

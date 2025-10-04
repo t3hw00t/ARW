@@ -19,7 +19,7 @@ Microsummary: Public endpoints, admin surfaces, specs, and eventing. Stable/expe
   - Usage:
     - `BASE=http://127.0.0.1:8091 ARW_ADMIN_TOKEN=$ARW_ADMIN_TOKEN arw-events --prefix service.,state.read.model.patch --replay 25`
   - Stores `Last-Event-ID` when `--store` is provided (default `.arw/last-event-id`).
-  - Shell alternative: `scripts/sse_tail.sh` (uses curl + jq).
+  - Shell alternative: `scripts/sse_tail.sh` (uses curl + jq, respects `SSE_TAIL_TIMEOUT_SECS`/`SMOKE_TIMEOUT_SECS`; set to `0` for long tails).
 
 ## Endpoint overview
 
