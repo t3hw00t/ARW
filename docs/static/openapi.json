@@ -15,8 +15,8 @@
         "tags": [
           "Meta"
         ],
-        "summary": "Inspect service metadata",
-        "description": "Return version, build information, endpoint counts, and the enumerated public/admin routes announced by the server.",
+        "summary": "Service metadata and endpoints index.",
+        "description": "Service metadata, endpoints index, and performance preset.",
         "operationId": "about_doc",
         "responses": {
           "200": {
@@ -60,8 +60,7 @@
             }
           }
         },
-        "description": "Retrieve the active admin chat transcript, including message history and tool metadata.",
-        "summary": "Fetch chat transcript"
+        "description": "Chat: GET /admin/chat."
       }
     },
     "/admin/chat/clear": {
@@ -90,8 +89,7 @@
             }
           }
         },
-        "description": "Wipe the stored admin chat transcript and reset associated tool context for a fresh session.",
-        "summary": "Clear chat transcript"
+        "description": "Chat: POST /admin/chat/clear."
       }
     },
     "/admin/chat/send": {
@@ -132,8 +130,7 @@
             }
           }
         },
-        "description": "Submit a message to the admin chat lane and receive the synthesized assistant response.",
-        "summary": "Send chat message"
+        "description": "Chat: POST /admin/chat/send."
       }
     },
     "/admin/chat/status": {
@@ -175,8 +172,7 @@
             }
           }
         },
-        "description": "Report chat lane health, including the most recent latency probe; optionally trigger a new probe.",
-        "summary": "Query chat status"
+        "description": "Chat: GET /admin/chat/status."
       }
     },
     "/admin/distill": {
@@ -184,7 +180,7 @@
         "tags": [
           "Distill"
         ],
-        "summary": "Run distillation pass",
+        "summary": "Trigger a manual distillation pass.",
         "operationId": "distill_run_doc",
         "responses": {
           "200": {
@@ -206,7 +202,7 @@
             }
           }
         },
-        "description": "Trigger the manual distillation pipeline to snapshot playbooks, refresh beliefs, and regenerate derived notebooks."
+        "description": "Trigger a manual distillation pass."
       }
     },
     "/admin/events/journal": {
@@ -313,8 +309,7 @@
             "description": "Unknown experiment"
           }
         },
-        "description": "Mark a variant as the active choice for the experiment and persist the rollout decision.",
-        "summary": "Activate experiment variant"
+        "description": "Experiments: POST /admin/experiments/activate."
       }
     },
     "/admin/experiments/assign": {
@@ -346,8 +341,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Record or override an experiment assignment for a participant or agent and broadcast the decision.",
-        "summary": "Assign experiment variant"
+        "description": "Experiments: POST /admin/experiments/assign."
       }
     },
     "/admin/experiments/define": {
@@ -379,8 +373,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Create or update an experiment definition with the supplied variants and configuration payload.",
-        "summary": "Define experiment"
+        "description": "Experiments: POST /admin/experiments/define."
       }
     },
     "/admin/experiments/list": {
@@ -404,8 +397,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return all experiment definitions currently registered with their variant metadata.",
-        "summary": "List experiments"
+        "description": "Experiments: GET /admin/experiments/list."
       }
     },
     "/admin/experiments/run": {
@@ -439,8 +431,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Execute the requested experiment variants against the chosen golden project and return the evaluation outcome.",
-        "summary": "Run experiment on goldens"
+        "description": "Experiments: POST /admin/experiments/run."
       }
     },
     "/admin/experiments/scoreboard": {
@@ -464,8 +455,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Provide aggregated performance metrics for each experiment variant to compare recent runs.",
-        "summary": "Fetch experiment scoreboard"
+        "description": "Experiments: GET /admin/experiments/scoreboard."
       }
     },
     "/admin/experiments/start": {
@@ -497,8 +487,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Publish a start event for a new experiment with optional assignment, budget, and variant hints.",
-        "summary": "Start experiment run"
+        "description": "Experiments: POST /admin/experiments/start."
       }
     },
     "/admin/experiments/stop": {
@@ -530,8 +519,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Halt an experiment run by emitting a stop event for the provided experiment identifier.",
-        "summary": "Stop experiment"
+        "description": "Experiments: POST /admin/experiments/stop."
       }
     },
     "/admin/experiments/winners": {
@@ -555,8 +543,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return the top-performing variants for experiments based on the latest evaluation data.",
-        "summary": "List experiment winners"
+        "description": "Experiments: GET /admin/experiments/winners."
       }
     },
     "/admin/feedback/analyze": {
@@ -580,8 +567,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Trigger an immediate feedback analysis pass to refresh suggestions from the latest signals.",
-        "summary": "Recompute feedback suggestions"
+        "description": "Feedback: POST /admin/feedback/analyze."
       }
     },
     "/admin/feedback/apply": {
@@ -622,8 +608,7 @@
             "description": "Unknown suggestion"
           }
         },
-        "description": "Apply the identified suggestion and let the engine reconcile policy and audit outcomes.",
-        "summary": "Apply feedback suggestion"
+        "description": "Feedback: POST /admin/feedback/apply."
       }
     },
     "/admin/feedback/auto": {
@@ -655,8 +640,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Enable or disable automatic application of approved feedback suggestions.",
-        "summary": "Toggle automatic feedback application"
+        "description": "Feedback: POST /admin/feedback/auto."
       }
     },
     "/admin/feedback/policy": {
@@ -678,8 +662,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return the effective feedback application policy after merging defaults and overrides.",
-        "summary": "Fetch feedback policy"
+        "description": "Feedback: GET /admin/feedback/policy."
       }
     },
     "/admin/feedback/reset": {
@@ -701,8 +684,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Clear feedback signals, suggestions, and cached state for a cold start.",
-        "summary": "Reset feedback engine"
+        "description": "Feedback: POST /admin/feedback/reset."
       }
     },
     "/admin/feedback/rollback": {
@@ -739,8 +721,7 @@
             "description": "Snapshot not found"
           }
         },
-        "description": "Restore feedback state to the requested snapshot version and return the resulting suggestion set.",
-        "summary": "Roll back feedback snapshot"
+        "description": "Feedback: POST /admin/feedback/rollback."
       }
     },
     "/admin/feedback/signal": {
@@ -774,8 +755,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Submit a feedback signal with confidence and severity so it influences subsequent analysis.",
-        "summary": "Record feedback signal"
+        "description": "Feedback: POST /admin/feedback/signal."
       }
     },
     "/admin/feedback/state": {
@@ -799,8 +779,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return the current feedback engine snapshot, including signals, suggestions, and configuration.",
-        "summary": "Inspect feedback state"
+        "description": "Feedback: GET /admin/feedback/state."
       }
     },
     "/admin/feedback/suggestions": {
@@ -822,8 +801,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return the current queue of actionable feedback suggestions with their metadata.",
-        "summary": "List feedback suggestions"
+        "description": "Feedback: GET /admin/feedback/suggestions."
       }
     },
     "/admin/feedback/updates": {
@@ -860,8 +838,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Retrieve feedback suggestions updated since a provided version cursor, enabling incremental refresh.",
-        "summary": "Fetch feedback updates"
+        "description": "Feedback: GET /admin/feedback/updates."
       }
     },
     "/admin/feedback/versions": {
@@ -883,8 +860,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Enumerate available feedback snapshots that can be inspected or rolled back to.",
-        "summary": "List feedback snapshots"
+        "description": "Feedback: GET /admin/feedback/versions."
       }
     },
     "/admin/goldens/add": {
@@ -919,8 +895,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Append a golden item to the specified project collection and persist the updated set.",
-        "summary": "Add golden record"
+        "description": "Experiments: POST /admin/goldens/add."
       }
     },
     "/admin/goldens/list": {
@@ -954,8 +929,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return the golden dataset for the requested project, including individual test cases.",
-        "summary": "List golden records"
+        "description": "Experiments: GET /admin/goldens/list."
       }
     },
     "/admin/goldens/run": {
@@ -989,8 +963,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Run the supplied golden dataset against the current chat runtime and report evaluation metrics.",
-        "summary": "Evaluate golden set"
+        "description": "Experiments: POST /admin/goldens/run."
       }
     },
     "/admin/governor/hints": {
@@ -1014,8 +987,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return the currently effective governor hints that shape scheduling and retrieval behaviour.",
-        "summary": "Inspect governor hints"
+        "description": "Introspect: GET /admin/governor/hints."
       },
       "post": {
         "tags": [
@@ -1045,8 +1017,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Apply new governor hints to adjust scheduling, retrieval, and context construction parameters.",
-        "summary": "Update governor hints"
+        "description": "Introspect: POST /admin/governor/hints."
       }
     },
     "/admin/governor/profile": {
@@ -1070,8 +1041,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return the active governor profile name configured for the node.",
-        "summary": "Get governor profile"
+        "description": "Introspect: GET /admin/governor/profile."
       },
       "post": {
         "tags": [
@@ -1101,8 +1071,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Switch the governor to the requested profile and broadcast the change.",
-        "summary": "Set governor profile"
+        "description": "Introspect: POST /admin/governor/profile."
       }
     },
     "/admin/hierarchy/accept": {
@@ -1134,8 +1103,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Accept a hierarchy offer message to finalize a connection with the given participant.",
-        "summary": "Accept hierarchy offer"
+        "description": "Hierarchy: POST /admin/hierarchy/accept."
       }
     },
     "/admin/hierarchy/hello": {
@@ -1167,8 +1135,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Emit the initial hello message in the hierarchy handshake with another participant.",
-        "summary": "Send hierarchy hello"
+        "description": "Hierarchy: POST /admin/hierarchy/hello."
       }
     },
     "/admin/hierarchy/offer": {
@@ -1200,8 +1167,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Publish a hierarchy offer to negotiate roles and capabilities with a peer.",
-        "summary": "Offer hierarchy connection"
+        "description": "Hierarchy: POST /admin/hierarchy/offer."
       }
     },
     "/admin/hierarchy/role": {
@@ -1233,8 +1199,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Update hierarchy role assignments for a participant and persist the change.",
-        "summary": "Set hierarchy roles"
+        "description": "Hierarchy: POST /admin/hierarchy/role."
       }
     },
     "/admin/hierarchy/state": {
@@ -1256,8 +1221,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return the current hierarchy session map, including offers, participants, and active roles.",
-        "summary": "Inspect hierarchy state"
+        "description": "Hierarchy: GET /admin/hierarchy/state."
       }
     },
     "/admin/memory": {
@@ -1265,7 +1229,7 @@
         "tags": [
           "Admin/Memory"
         ],
-        "summary": "List recent memory records",
+        "summary": "List recent memory items (admin helper).",
         "operationId": "admin_memory_list_doc",
         "parameters": [
           {
@@ -1316,7 +1280,7 @@
             }
           }
         },
-        "description": "Return the latest memory items for inspection; supports lane and limit filters for debugging."
+        "description": "List recent memory items (admin helper)."
       }
     },
     "/admin/memory/apply": {
@@ -1324,7 +1288,7 @@
         "tags": [
           "Admin/Memory"
         ],
-        "summary": "Upsert memory record",
+        "summary": "Insert a memory item (admin helper).",
         "operationId": "admin_memory_apply_doc",
         "requestBody": {
           "content": {
@@ -1366,7 +1330,7 @@
             }
           }
         },
-        "description": "Insert or update a memory item via the admin helper and emit the associated memory events for auditing."
+        "description": "Insert a memory item (admin helper)."
       }
     },
     "/admin/memory/quarantine": {
@@ -1388,8 +1352,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return entries awaiting review in the memory quarantine queue.",
-        "summary": "List quarantined memories"
+        "description": "Review: GET /admin/memory/quarantine."
       },
       "post": {
         "tags": [
@@ -1422,8 +1385,7 @@
             "description": "Storage error"
           }
         },
-        "description": "Enqueue a memory item for quarantine review and emit the appropriate audit event.",
-        "summary": "Queue memory for review"
+        "description": "Review: POST /admin/memory/quarantine."
       }
     },
     "/admin/memory/quarantine/admit": {
@@ -1458,8 +1420,7 @@
             "description": "Storage error"
           }
         },
-        "description": "Remove a memory from quarantine, optionally admitting or rejecting it, and report the outcome.",
-        "summary": "Admit quarantined memory"
+        "description": "Review: POST /admin/memory/quarantine/admit."
       }
     },
     "/admin/models": {
@@ -1484,8 +1445,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return the configured model entries including provider metadata.",
-        "summary": "List models"
+        "description": "Models: GET /admin/models."
       }
     },
     "/admin/models/add": {
@@ -1517,8 +1477,7 @@
             "description": "Invalid input"
           }
         },
-        "description": "Register a model entry with optional provider, path, and status metadata.",
-        "summary": "Add model entry"
+        "description": "Models: POST /admin/models/add."
       }
     },
     "/admin/models/by-hash/{sha256}": {
@@ -1576,8 +1535,7 @@
             }
           }
         },
-        "description": "Stream a CAS-stored model blob by SHA-256 with caching headers and partial range support.",
-        "summary": "Download model blob"
+        "description": "Models: GET /admin/models/by-hash/{sha256}."
       }
     },
     "/admin/models/cas_gc": {
@@ -1609,8 +1567,7 @@
             "description": "CAS GC unavailable"
           }
         },
-        "description": "Execute a content-addressed store cleanup pass and report removed blobs.",
-        "summary": "Run CAS garbage collection"
+        "description": "Models: POST /admin/models/cas_gc."
       }
     },
     "/admin/models/concurrency": {
@@ -1631,8 +1588,7 @@
             }
           }
         },
-        "description": "Return the current model concurrency settings and snapshot telemetry.",
-        "summary": "Inspect model concurrency"
+        "description": "Models: GET /admin/models/concurrency."
       },
       "post": {
         "tags": [
@@ -1661,8 +1617,7 @@
             }
           }
         },
-        "description": "Apply new concurrency limits or blocking behaviour for model execution.",
-        "summary": "Update model concurrency"
+        "description": "Models: POST /admin/models/concurrency."
       }
     },
     "/admin/models/default": {
@@ -1681,8 +1636,7 @@
             }
           }
         },
-        "description": "Return the identifier of the default model selection.",
-        "summary": "Get default model"
+        "description": "Models: GET /admin/models/default."
       },
       "post": {
         "tags": [
@@ -1712,8 +1666,7 @@
             "description": "Unknown model"
           }
         },
-        "description": "Select the default model to be used for future requests.",
-        "summary": "Set default model"
+        "description": "Models: POST /admin/models/default."
       }
     },
     "/admin/models/download": {
@@ -1745,8 +1698,7 @@
             "description": "Download unavailable"
           }
         },
-        "description": "Request download or import of a model artifact and enqueue the job if supported.",
-        "summary": "Start model download"
+        "description": "Models: POST /admin/models/download."
       }
     },
     "/admin/models/download/cancel": {
@@ -1778,8 +1730,7 @@
             "description": "Cancel unavailable"
           }
         },
-        "description": "Cancel an in-flight model download job when the backend supports it.",
-        "summary": "Cancel model download"
+        "description": "Models: POST /admin/models/download/cancel."
       }
     },
     "/admin/models/jobs": {
@@ -1798,8 +1749,7 @@
             }
           }
         },
-        "description": "Return the current queue of model download and load jobs with their statuses.",
-        "summary": "Inspect model jobs"
+        "description": "Models: GET /admin/models/jobs."
       }
     },
     "/admin/models/load": {
@@ -1824,8 +1774,7 @@
             "description": "Missing models.json"
           }
         },
-        "description": "Load model entries from the persisted manifest on disk.",
-        "summary": "Load model manifest"
+        "description": "Models: POST /admin/models/load."
       }
     },
     "/admin/models/refresh": {
@@ -1847,8 +1796,7 @@
             }
           }
         },
-        "description": "Refresh the live model list from runtime state and return the updated entries.",
-        "summary": "Refresh models list"
+        "description": "Models: POST /admin/models/refresh."
       }
     },
     "/admin/models/remove": {
@@ -1877,8 +1825,7 @@
             }
           }
         },
-        "description": "Remove a model entry by identifier and report whether it existed.",
-        "summary": "Remove model entry"
+        "description": "Models: POST /admin/models/remove."
       }
     },
     "/admin/models/save": {
@@ -1897,8 +1844,7 @@
             }
           }
         },
-        "description": "Persist the current model registry to the on-disk manifest.",
-        "summary": "Save model manifest"
+        "description": "Models: POST /admin/models/save."
       }
     },
     "/admin/models/summary": {
@@ -1920,8 +1866,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return aggregate statistics about installed models, storage usage, and capabilities.",
-        "summary": "Summarize model catalog"
+        "description": "Models: GET /admin/models/summary."
       }
     },
     "/admin/probe": {
@@ -1929,7 +1874,7 @@
         "tags": [
           "Admin/Introspect"
         ],
-        "summary": "Inspect effective paths",
+        "summary": "Effective path probe (successor to `/admin/probe`).",
         "operationId": "probe_effective_paths_doc",
         "responses": {
           "200": {
@@ -1944,7 +1889,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return the resolved state, cache, and config directories plus runtime metadata so operators can confirm filesystem layout."
+        "description": "Effective path probe (successor to `/admin/probe`)."
       }
     },
     "/admin/probe/hw": {
@@ -1952,7 +1897,7 @@
         "tags": [
           "Admin/Introspect"
         ],
-        "summary": "Probe runtime hardware",
+        "summary": "Hardware/software probe (`/admin/probe/hw`).",
         "operationId": "probe_hw_doc",
         "responses": {
           "200": {
@@ -1967,7 +1912,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Report detected hardware and OS capabilities—including CPU, GPU, and accelerators—to confirm what the node can access."
+        "description": "Hardware/software probe (`/admin/probe/hw`)."
       }
     },
     "/admin/probe/metrics": {
@@ -1975,7 +1920,7 @@
         "tags": [
           "Admin/Introspect"
         ],
-        "summary": "Probe metrics snapshot",
+        "summary": "Metrics snapshot probe (`/admin/probe/metrics`).",
         "operationId": "probe_metrics_doc",
         "responses": {
           "200": {
@@ -1990,7 +1935,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return the current metrics summary (Prometheus-style counters and histograms) for quick diagnostics."
+        "description": "Metrics snapshot probe (`/admin/probe/metrics`)."
       }
     },
     "/admin/self_model/apply": {
@@ -2043,8 +1988,7 @@
             }
           }
         },
-        "description": "Apply a previously proposed self-model change and notify subscribers.",
-        "summary": "Apply self-model proposal"
+        "description": "SelfModel: POST /admin/self_model/apply."
       }
     },
     "/admin/self_model/propose": {
@@ -2089,8 +2033,7 @@
             }
           }
         },
-        "description": "Submit a self-model patch proposal for an agent and emit the proposal event.",
-        "summary": "Propose self-model update"
+        "description": "SelfModel: POST /admin/self_model/propose."
       }
     },
     "/admin/tools": {
@@ -2112,8 +2055,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return the catalog of available tools with stability and capability metadata.",
-        "summary": "List registered tools"
+        "description": "Tools: GET /admin/tools."
       }
     },
     "/admin/tools/cache_stats": {
@@ -2135,8 +2077,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return cache utilisation metrics for the shared tool cache.",
-        "summary": "Inspect tool cache statistics"
+        "description": "Tools: GET /admin/tools/cache_stats."
       }
     },
     "/admin/tools/run": {
@@ -2180,8 +2121,7 @@
             "description": "Tool runtime error"
           }
         },
-        "description": "Execute a registered tool with the provided input payload and return its output.",
-        "summary": "Run tool"
+        "description": "Tools: POST /admin/tools/run."
       }
     },
     "/admin/world_diffs": {
@@ -2203,8 +2143,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return the queue of pending world diffs awaiting review.",
-        "summary": "List world diffs"
+        "description": "Review: GET /admin/world_diffs."
       }
     },
     "/admin/world_diffs/decision": {
@@ -2242,8 +2181,7 @@
             "description": "Storage error"
           }
         },
-        "description": "Accept or reject a queued world diff and persist the decision outcome.",
-        "summary": "Record world diff decision"
+        "description": "Review: POST /admin/world_diffs/decision."
       }
     },
     "/admin/world_diffs/queue": {
@@ -2278,8 +2216,7 @@
             "description": "Storage error"
           }
         },
-        "description": "Enqueue a world diff for review with the supplied metadata.",
-        "summary": "Queue world diff"
+        "description": "Review: POST /admin/world_diffs/queue."
       }
     },
     "/events": {
@@ -2287,8 +2224,8 @@
         "tags": [
           "Events"
         ],
-        "summary": "Stream event feed",
-        "description": "Open the Server-Sent Events stream of normalized envelopes; supports prefix filtering and Last-Event-ID replay.",
+        "summary": "Server‑Sent Events stream of envelopes.",
+        "description": "Server‑Sent Events stream of envelopes; supports replay and prefix filters.",
         "operationId": "events_sse_doc",
         "parameters": [
           {
@@ -2368,8 +2305,8 @@
         "tags": [
           "Meta"
         ],
-        "summary": "Readiness probe",
-        "description": "Return a simple readiness payload (`{\"ok\": true}`) suitable for health checks and load balancers.",
+        "summary": "Health probe.",
+        "description": "Service readiness probe.",
         "operationId": "healthz_doc",
         "responses": {
           "200": {
@@ -2403,8 +2340,7 @@
             }
           }
         },
-        "description": "Serve Prometheus-formatted metrics for the unified server, including tool cache counters.",
-        "summary": "Export Prometheus metrics"
+        "description": "Public: GET /metrics."
       }
     },
     "/orchestrator/mini_agents": {
@@ -2412,7 +2348,7 @@
         "tags": [
           "Orchestrator"
         ],
-        "summary": "List mini-agent templates",
+        "summary": "List available mini-agents (placeholder).",
         "operationId": "orchestrator_mini_agents_doc",
         "responses": {
           "200": {
@@ -2434,7 +2370,7 @@
             }
           }
         },
-        "description": "Return placeholder metadata about available mini-agents while the orchestrator capability is incubating."
+        "description": "List available mini-agents (placeholder)."
       }
     },
     "/orchestrator/mini_agents/start_training": {
@@ -2442,7 +2378,7 @@
         "tags": [
           "Orchestrator"
         ],
-        "summary": "Start mini-agent training",
+        "summary": "Start a training job that results in a suggested Logic Unit (admin).",
         "operationId": "orchestrator_start_training_doc",
         "requestBody": {
           "content": {
@@ -2484,7 +2420,7 @@
             }
           }
         },
-        "description": "Kick off a training job that will propose a Logic Unit configuration once complete; returns an async job handle when accepted."
+        "description": "Start a training job that results in a suggested Logic Unit (admin)."
       }
     },
     "/projects": {
@@ -2522,8 +2458,7 @@
             "description": "Error"
           }
         },
-        "description": "Create a new project directory, seed default notes, and emit the creation event.",
-        "summary": "Create project"
+        "description": "Projects: POST /projects."
       }
     },
     "/projects/{proj}/file": {
@@ -2584,8 +2519,7 @@
             "description": "Error"
           }
         },
-        "description": "Create or replace a project file at the given path, enforcing optimistic concurrency and quotas.",
-        "summary": "Write project file"
+        "description": "Projects: PUT /projects/{proj}/file."
       },
       "patch": {
         "tags": [
@@ -2644,8 +2578,7 @@
             "description": "Error"
           }
         },
-        "description": "Apply a JSON patch or diff patch to an existing project file while checking version guards.",
-        "summary": "Patch project file"
+        "description": "Projects: PATCH /projects/{proj}/file."
       }
     },
     "/projects/{proj}/import": {
@@ -2697,8 +2630,7 @@
             "description": "Error"
           }
         },
-        "description": "Copy or move a file from the staging area into the project workspace and emit audit events.",
-        "summary": "Import project asset"
+        "description": "Projects: POST /projects/{proj}/import."
       }
     },
     "/projects/{proj}/notes": {
@@ -2749,8 +2681,7 @@
             "description": "Error"
           }
         },
-        "description": "Replace the project notes document and return metadata for the updated file.",
-        "summary": "Save project notes"
+        "description": "Projects: PUT /projects/{proj}/notes."
       }
     },
     "/research_watcher/{id}/approve": {
@@ -2799,8 +2730,7 @@
             "description": "Error"
           }
         },
-        "description": "Mark a research watcher entry as approved, optionally attaching an operator note.",
-        "summary": "Approve research watcher item"
+        "description": "Research: POST /research_watcher/{id}/approve."
       }
     },
     "/research_watcher/{id}/archive": {
@@ -2849,8 +2779,7 @@
             "description": "Error"
           }
         },
-        "description": "Archive a research watcher entry to remove it from the active queue while preserving audit history.",
-        "summary": "Archive research watcher item"
+        "description": "Research: POST /research_watcher/{id}/archive."
       }
     },
     "/spec/health": {
@@ -2858,7 +2787,7 @@
         "tags": [
           "Specs"
         ],
-        "summary": "Inspect spec artifacts",
+        "summary": "Health summary for spec artifacts (presence/size).",
         "operationId": "spec_health_doc",
         "responses": {
           "200": {
@@ -2870,7 +2799,7 @@
             }
           }
         },
-        "description": "Report presence, size, and checksum information for bundled OpenAPI, AsyncAPI, and schema artifacts."
+        "description": "Health summary for spec artifacts (presence/size)."
       }
     },
     "/staging/actions/{id}/approve": {
@@ -2919,8 +2848,7 @@
             "description": "Error"
           }
         },
-        "description": "Approve a staged action so it can execute and emit the resulting workflow job.",
-        "summary": "Approve staging action"
+        "description": "Staging: POST /staging/actions/{id}/approve."
       }
     },
     "/staging/actions/{id}/deny": {
@@ -2969,8 +2897,7 @@
             "description": "Error"
           }
         },
-        "description": "Deny a staged action with an optional reason, preventing it from executing.",
-        "summary": "Deny staging action"
+        "description": "Staging: POST /staging/actions/{id}/deny."
       }
     },
     "/state/actions": {
@@ -2978,8 +2905,8 @@
         "tags": [
           "State"
         ],
-        "summary": "List recent actions",
-        "description": "Return the rolling window of actions emitted by the kernel, ordered from newest to oldest.",
+        "summary": "Recent actions list.",
+        "description": "Recent actions list (most recent first).",
         "operationId": "state_actions_doc",
         "parameters": [
           {
@@ -3057,8 +2984,8 @@
         "tags": [
           "State"
         ],
-        "summary": "Inspect belief store",
-        "description": "Return the current belief entries derived from events so clients can reason over world facts.",
+        "summary": "Current beliefs snapshot derived from events.",
+        "description": "Current beliefs snapshot derived from events.",
         "operationId": "state_beliefs_doc",
         "responses": {
           "200": {
@@ -3085,8 +3012,8 @@
         "tags": [
           "State"
         ],
-        "summary": "Inspect cluster nodes",
-        "description": "Return the snapshot of known cluster nodes, their roles, and health metadata.",
+        "summary": "Cluster nodes snapshot.",
+        "description": "Cluster nodes snapshot (admin-only).",
         "operationId": "state_cluster_doc",
         "responses": {
           "200": {
@@ -3113,7 +3040,7 @@
         "tags": [
           "State"
         ],
-        "summary": "List experiment events",
+        "summary": "Experiment events snapshot (public read-model).",
         "operationId": "state_experiments_doc",
         "responses": {
           "200": {
@@ -3125,7 +3052,7 @@
             }
           }
         },
-        "description": "Expose the experiment read-model summarizing variants, assignments, and recent outcomes."
+        "description": "Experiment events snapshot (public read-model)."
       }
     },
     "/state/guardrails_metrics": {
@@ -3133,7 +3060,7 @@
         "tags": [
           "State"
         ],
-        "summary": "Inspect guardrail metrics",
+        "summary": "Guardrails circuit-breaker metrics snapshot.",
         "operationId": "state_guardrails_metrics_doc",
         "responses": {
           "200": {
@@ -3153,7 +3080,7 @@
             }
           }
         },
-        "description": "Return guardrail circuit-breaker counters and latency measurements for monitoring automation health."
+        "description": "Guardrails circuit-breaker metrics snapshot."
       }
     },
     "/state/intents": {
@@ -3161,8 +3088,8 @@
         "tags": [
           "State"
         ],
-        "summary": "List recent intents",
-        "description": "Return the rolling window of intent events emitted by the kernel.",
+        "summary": "Recent intents stream (rolling window) with a monotonic version counter.",
+        "description": "Recent intents stream (rolling window) with a monotonic version counter.",
         "operationId": "state_intents_doc",
         "responses": {
           "200": {
@@ -3189,8 +3116,8 @@
         "tags": [
           "State"
         ],
-        "summary": "Inspect model catalog",
-        "description": "Return the derived model catalog with provider metadata, install status, and version details.",
+        "summary": "Model catalog read-model.",
+        "description": "Model catalog read-model.",
         "operationId": "state_models_doc",
         "responses": {
           "200": {
@@ -3282,8 +3209,7 @@
             }
           }
         },
-        "description": "Return a paginated view of installed model blobs with filters for provider, size, and hash.",
-        "summary": "List installed model hashes"
+        "description": "State: GET /state/models_hashes."
       }
     },
     "/state/models_metrics": {
@@ -3291,7 +3217,7 @@
         "tags": [
           "State"
         ],
-        "description": "Return model runtime metrics, including cache hits and latency data, for observability dashboards.",
+        "description": "Models metrics snapshot.",
         "operationId": "state_models_metrics_doc",
         "responses": {
           "200": {
@@ -3312,8 +3238,7 @@
               }
             }
           }
-        },
-        "summary": "Inspect model metrics"
+        }
       }
     },
     "/state/observations": {
@@ -3388,7 +3313,7 @@
         "tags": [
           "Orchestrator"
         ],
-        "summary": "List orchestrator jobs",
+        "summary": "Orchestrator jobs snapshot.",
         "operationId": "state_orchestrator_jobs_doc",
         "parameters": [
           {
@@ -3421,7 +3346,7 @@
             }
           }
         },
-        "description": "Return the current orchestrator job queue including statuses, runners, and progress metadata."
+        "description": "Orchestrator jobs snapshot."
       }
     },
     "/state/projects": {
@@ -3440,8 +3365,7 @@
             }
           }
         },
-        "description": "Return the cached project snapshot with file tree, notes, and metadata for quick reads.",
-        "summary": "Snapshot project catalog"
+        "description": "Projects: GET /state/projects."
       }
     },
     "/state/projects/{proj}/file": {
@@ -3489,8 +3413,7 @@
             "description": "Not found"
           }
         },
-        "description": "Return the latest stored contents for a project file identified by project and relative path.",
-        "summary": "Fetch project file snapshot"
+        "description": "Projects: GET /state/projects/{proj}/file."
       }
     },
     "/state/projects/{proj}/notes": {
@@ -3528,8 +3451,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return the current project notes document with metadata such as checksum and size.",
-        "summary": "Fetch project notes"
+        "description": "Projects: GET /state/projects/{proj}/notes."
       }
     },
     "/state/projects/{proj}/tree": {
@@ -3577,8 +3499,7 @@
             "description": "Not found"
           }
         },
-        "description": "Return a directory listing for a project path to help clients explore workspace structure.",
-        "summary": "Browse project tree"
+        "description": "Projects: GET /state/projects/{proj}/tree."
       }
     },
     "/state/research_watcher": {
@@ -3586,7 +3507,7 @@
         "tags": [
           "State"
         ],
-        "summary": "Inspect research watcher",
+        "summary": "Research watcher queue snapshot.",
         "operationId": "state_research_watcher_doc",
         "parameters": [
           {
@@ -3630,7 +3551,7 @@
             }
           }
         },
-        "description": "Return the research watcher queue snapshot with pending items, statuses, and telemetry."
+        "description": "Research watcher queue snapshot."
       }
     },
     "/state/route_stats": {
@@ -3638,7 +3559,7 @@
         "tags": [
           "State"
         ],
-        "summary": "Inspect route metrics",
+        "summary": "Bus and per-route counters snapshot.",
         "operationId": "state_route_stats_doc",
         "responses": {
           "200": {
@@ -3650,7 +3571,7 @@
             }
           }
         },
-        "description": "Return per-route counters, durations, and cache statistics aggregated by the server."
+        "description": "Bus and per-route counters snapshot."
       }
     },
     "/state/runtime_matrix": {
@@ -3658,7 +3579,7 @@
         "tags": [
           "State"
         ],
-        "summary": "Inspect runtime matrix",
+        "summary": "Runtime matrix snapshot.",
         "operationId": "state_runtime_matrix_doc",
         "responses": {
           "200": {
@@ -3680,7 +3601,7 @@
             }
           }
         },
-        "description": "Return the runtime matrix covering available runtimes, capabilities, and health signals."
+        "description": "Runtime matrix snapshot."
       }
     },
     "/state/staging/actions": {
@@ -3688,7 +3609,7 @@
         "tags": [
           "State"
         ],
-        "summary": "Inspect staging actions",
+        "summary": "Staging queue snapshot.",
         "operationId": "state_staging_actions_doc",
         "parameters": [
           {
@@ -3732,7 +3653,7 @@
             }
           }
         },
-        "description": "Return staged actions awaiting review or execution in the staging queue."
+        "description": "Staging queue snapshot."
       }
     },
     "/state/tasks": {
@@ -3740,7 +3661,7 @@
         "tags": [
           "State"
         ],
-        "summary": "Inspect background tasks",
+        "summary": "Background tasks status snapshot.",
         "operationId": "state_tasks_doc",
         "responses": {
           "200": {
@@ -3752,7 +3673,7 @@
             }
           }
         },
-        "description": "Return the background task registry with progress, retry counts, and assigned workers."
+        "description": "Background tasks status snapshot."
       }
     },
     "/state/training/telemetry": {
@@ -3760,7 +3681,7 @@
         "tags": [
           "State"
         ],
-        "summary": "Inspect training telemetry",
+        "summary": "Training telemetry snapshot.",
         "operationId": "state_training_telemetry_doc",
         "responses": {
           "200": {
@@ -3775,7 +3696,7 @@
             "description": "Unauthorized"
           }
         },
-        "description": "Return aggregated Training Park telemetry, including success ratios, recall, and coverage metrics."
+        "description": "Training telemetry snapshot."
       }
     },
     "/state/world": {
@@ -3783,8 +3704,8 @@
         "tags": [
           "State"
         ],
-        "summary": "Inspect world model",
-        "description": "Return the active world graph snapshot with claims, provenance metadata, and belief relationships.",
+        "summary": "Project world model snapshot (belief graph view).",
+        "description": "Project world model snapshot (belief graph view).",
         "operationId": "state_world_doc",
         "parameters": [
           {
@@ -3822,8 +3743,8 @@
         "tags": [
           "State"
         ],
-        "summary": "Select world claims",
-        "description": "Evaluate a query against the world graph and return the top-k claims that match the provided filters.",
+        "summary": "Select top-k claims for a query.",
+        "description": "Select top-k claims for a query.",
         "operationId": "state_world_select_doc",
         "parameters": [
           {

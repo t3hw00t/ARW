@@ -267,7 +267,7 @@
       ],
       "interfaces": {
         "http": [
-          "POST /patch/dry-run",
+          "POST /patch/apply (dry_run=true)",
           "POST /patch/apply",
           "POST /patch/revert"
         ],

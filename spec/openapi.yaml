@@ -182,7 +182,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-      description: 'Events: GET /admin/events/journal.'
+      description: Retrieve the latest persisted event entries with optional prefix
+        filters for focused inspection.
+      summary: Tail event journal
   /admin/experiments/activate:
     post:
       tags:
@@ -2207,8 +2209,9 @@ paths:
     get:
       tags:
       - State
-      summary: Recent observations from the event bus.
-      description: Recent observations from the event bus.
+      summary: List recent observations
+      description: Return the rolling window of observation events captured from the
+        live event bus.
       operationId: state_observations_doc
       parameters:
       - name: limit

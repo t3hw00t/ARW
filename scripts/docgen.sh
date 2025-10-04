@@ -18,6 +18,9 @@ python3 scripts/gen_feature_matrix.py
 python3 scripts/gen_feature_catalog.py
 python3 scripts/gen_system_components.py
 
+info "Regenerating event topics reference"
+python3 scripts/gen_topics_doc.py
+
 info "Collecting cargo metadata"
 json=$(cargo metadata --no-deps --locked --format-version 1)
 

@@ -984,7 +984,7 @@
       "owner": "platform",
       "tier": "Remote collaborator pack",
       "deps": [
-        "project_hub_primitives",
+        "project_hub",
         "event_spine"
       ],
       "description": "Pause/resume lanes, flush queues, capture snapshots, and manage budgets for trusted autonomy runs.",

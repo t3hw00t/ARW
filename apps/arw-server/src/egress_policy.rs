@@ -88,7 +88,7 @@ fn is_predefined_multi_label(second: &str, tld: &str) -> bool {
 
 thread_local! {
     static ENV_MULTI_LABEL_SUFFIXES: RefCell<(Option<String>, Vec<Vec<String>>)> =
-        RefCell::new((None, Vec::new()));
+        const { RefCell::new((None, Vec::new())) };
 }
 
 static CONFIG_MULTI_LABEL_SUFFIXES: OnceLock<Mutex<Vec<Vec<String>>>> = OnceLock::new();
@@ -396,7 +396,7 @@ pub(crate) fn config_multi_label_suffixes(cfg: &Value) -> Vec<Vec<String>> {
             }
         }
         Some(Value::String(s)) => {
-            if let Some(parts) = parse_multi_label_suffix(&s) {
+            if let Some(parts) = parse_multi_label_suffix(s) {
                 out.push(parts);
             }
         }

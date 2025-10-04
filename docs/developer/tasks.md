@@ -4,7 +4,7 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-10-01 19:24 UTC
+Updated: 2025-10-04 15:22 UTC
 
 
 ## To Do
@@ -15,11 +15,11 @@ Updated: 2025-10-01 19:24 UTC
 
 ## Done
 - [trial-autonomy-governor] Autonomy governor & kill switch — done (updated: 2025-10-02 14:45:00 UTC)
-    - 2025-10-02 14:45:00 UTC: Wired broadcast interrupts for pause/flush, auto-aborted running tasks, introduced `/admin/autonomy/{lane}/stop`, and refreshed launcher controls + runbook for the kill switch flow.
-- [trial-g2] Gate G2: Calm approvals — done (updated: 2025-09-30 15:20:00 UTC)
-    - 2025-09-30 15:20:00 UTC: Published approvals lane operator guide with illustrated layout, linked from mkdocs nav and runbook; connections drawer instructions included.
+    - 2025-10-02 14:45:00 UTC: Broadcast kill signals pause/flush, preempt running tasks, added /admin/autonomy/{lane}/stop endpoint + launcher stop control, updated docs/runbook.
 - [trial-g3] Gate G3: Trial operations — done (updated: 2025-10-01 19:24:42 UTC)
-    - 2025-10-01 19:24:42 UTC: Trial Control Center exposes guardrail preset status and stand-up workflow; added `scripts/trials_guardrails.sh`, new trial guardrail preset, and refreshed runbook/readiness docs for the dashboard bundle and rollback drills.
+    - 2025-10-01 19:24:42 UTC: Trial Control Center surfaces guardrail presets and workflows; scripts/trials_guardrails.sh + docs cover dashboard bundle, rollback drill, and stand-up template.
+- [trial-g2] Gate G2: Calm approvals — done (updated: 2025-09-30 15:20:00 UTC)
+    - 2025-09-30 15:20:00 UTC: Documented launcher approvals lane and connections drawer with illustrated operator guide; mkdocs navigation and ops runbook linked.
 - [trial-g1] Gate G1: Reliable memory — done (updated: 2025-09-30 12:23:46 UTC)
     - 2025-09-30 11:24:44 UTC: Trial Control Center focus card shows recent memory with freshness stamp and sources link; context telemetry meta surfaces updated and recall scores; memory recent API now returns a generated timestamp.
   - 2025-09-30 12:05:19 UTC: Memory endpoints and SSE snapshots now include generated_ms fields with tests and docs; launcher focus card consumes the numeric timestamp for accessible freshness messaging.
@@ -215,3 +215,4 @@ Updated: 2025-10-01 19:24 UTC
 - [t-250909170247-6008] Start service and verify /about — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-6435] Configure Dependabot — done (updated: 2025-09-09 15:02:47 UTC)
 - [t-250909170247-9910] Integrate tasks tracker with docs — done (updated: 2025-09-09 15:02:47 UTC)
+

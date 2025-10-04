@@ -2176,7 +2176,7 @@ fn stream_observations_once(
         .context("building SSE client")?;
 
     let mut req = client
-        .get(&format!("{}/events", base))
+        .get(format!("{}/events", base))
         .query(&[("prefix", "state.read.model.patch"), ("replay", "0")])
         .header(ACCEPT, "text/event-stream");
     if let Some(id) = last_event_id {
@@ -2506,7 +2506,7 @@ fn stream_actions_once(
         .context("building SSE client")?;
 
     let mut req = client
-        .get(&format!("{}/events", base))
+        .get(format!("{}/events", base))
         .query(&[("prefix", "state.read.model.patch"), ("replay", "0")])
         .header(ACCEPT, "text/event-stream");
     if let Some(id) = last_event_id {

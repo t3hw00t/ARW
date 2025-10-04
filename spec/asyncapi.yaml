@@ -124,6 +124,16 @@ channels:
         payload:
           type: object
           additionalProperties: true
+  'autonomy.budget.updated':
+    subscribe:
+      operationId: autonomy_budget_updated_event
+      summary: "autonomy.budget.updated event"
+      description: "Event published on 'autonomy.budget.updated' channel."
+      message:
+        name: 'autonomy.budget.updated'
+        payload:
+          type: object
+          additionalProperties: true
   'autonomy.interrupt':
     subscribe:
       operationId: autonomy_interrupt_event
@@ -181,6 +191,16 @@ channels:
       description: "Event published on 'beliefs.updated' channel."
       message:
         name: 'beliefs.updated'
+        payload:
+          type: object
+          additionalProperties: true
+  'cache.policy.reloaded':
+    subscribe:
+      operationId: cache_policy_reloaded_event
+      summary: "cache.policy.reloaded event"
+      description: "Event published on 'cache.policy.reloaded' channel."
+      message:
+        name: 'cache.policy.reloaded'
         payload:
           type: object
           additionalProperties: true
@@ -251,6 +271,16 @@ channels:
       description: "Event published on 'config.patch.applied' channel."
       message:
         name: 'config.patch.applied'
+        payload:
+          type: object
+          additionalProperties: true
+  'config.reloaded':
+    subscribe:
+      operationId: config_reloaded_event
+      summary: "config.reloaded event"
+      description: "Event published on 'config.reloaded' channel."
+      message:
+        name: 'config.reloaded'
         payload:
           type: object
           additionalProperties: true
@@ -804,6 +834,26 @@ channels:
         payload:
           type: object
           additionalProperties: true
+  'policy.gating.reloaded':
+    subscribe:
+      operationId: policy_gating_reloaded_event
+      summary: "policy.gating.reloaded event"
+      description: "Event published on 'policy.gating.reloaded' channel."
+      message:
+        name: 'policy.gating.reloaded'
+        payload:
+          type: object
+          additionalProperties: true
+  'policy.guardrails.applied':
+    subscribe:
+      operationId: policy_guardrails_applied_event
+      summary: "policy.guardrails.applied event"
+      description: "Event published on 'policy.guardrails.applied' channel."
+      message:
+        name: 'policy.guardrails.applied'
+        payload:
+          type: object
+          additionalProperties: true
   'policy.reloaded':
     subscribe:
       operationId: policy_reloaded_event
@@ -864,6 +914,26 @@ channels:
         payload:
           type: object
           additionalProperties: true
+  'projects.snapshot.created':
+    subscribe:
+      operationId: projects_snapshot_created_event
+      summary: "projects.snapshot.created event"
+      description: "Event published on 'projects.snapshot.created' channel."
+      message:
+        name: 'projects.snapshot.created'
+        payload:
+          type: object
+          additionalProperties: true
+  'projects.snapshot.restored':
+    subscribe:
+      operationId: projects_snapshot_restored_event
+      summary: "projects.snapshot.restored event"
+      description: "Event published on 'projects.snapshot.restored' channel."
+      message:
+        name: 'projects.snapshot.restored'
+        payload:
+          type: object
+          additionalProperties: true
   'research.watcher.updated':
     subscribe:
       operationId: research_watcher_updated_event
@@ -921,6 +991,26 @@ channels:
       description: "Event published on 'runtime.health' channel."
       message:
         name: 'runtime.health'
+        payload:
+          type: object
+          additionalProperties: true
+  'runtime.restore.completed':
+    subscribe:
+      operationId: runtime_restore_completed_event
+      summary: "runtime.restore.completed event"
+      description: "Event published on 'runtime.restore.completed' channel."
+      message:
+        name: 'runtime.restore.completed'
+        payload:
+          type: object
+          additionalProperties: true
+  'runtime.restore.requested':
+    subscribe:
+      operationId: runtime_restore_requested_event
+      summary: "runtime.restore.requested event"
+      description: "Event published on 'runtime.restore.requested' channel."
+      message:
+        name: 'runtime.restore.requested'
         payload:
           type: object
           additionalProperties: true
@@ -1221,6 +1311,16 @@ channels:
       description: "Event published on 'world.diff.rejected' channel."
       message:
         name: 'world.diff.rejected'
+        payload:
+          type: object
+          additionalProperties: true
+  'world.telemetry':
+    subscribe:
+      operationId: world_telemetry_event
+      summary: "world.telemetry event"
+      description: "Event published on 'world.telemetry' channel."
+      message:
+        name: 'world.telemetry'
         payload:
           type: object
           additionalProperties: true

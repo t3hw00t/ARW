@@ -3,724 +3,1431 @@ title: Interface Release Notes
 ---
 
 # Interface Release Notes
-Updated: 2025-09-30
+Updated: 2025-10-02
 Type: Reference
 
 Base: `origin/main`
 
 ## OpenAPI (REST)
 
-### New Endpoints: None
------------------------
-
-### Deleted Endpoints: None
----------------------------
-
-### Modified Endpoints: 108
----------------------------
-GET /about
-- Summary changed from 'Inspect service metadata' to 'Service metadata and endpoints index.'
-- Description changed from 'Return version, build information, endpoint counts, and the enumerated public/admin routes announced by the server.' to 'Service metadata, endpoints index, and performance preset.'
-
-GET /admin/chat
-- Summary changed from 'Fetch chat transcript' to ''
-- Description changed from 'Retrieve the active admin chat transcript, including message history and tool metadata.' to 'Chat: GET /admin/chat.'
-
-POST /admin/chat/clear
-- Summary changed from 'Clear chat transcript' to ''
-- Description changed from 'Wipe the stored admin chat transcript and reset associated tool context for a fresh session.' to 'Chat: POST /admin/chat/clear.'
-
-POST /admin/chat/send
-- Summary changed from 'Send chat message' to ''
-- Description changed from 'Submit a message to the admin chat lane and receive the synthesized assistant response.' to 'Chat: POST /admin/chat/send.'
-
-GET /admin/chat/status
-- Summary changed from 'Query chat status' to ''
-- Description changed from 'Report chat lane health, including the most recent latency probe; optionally trigger a new probe.' to 'Chat: GET /admin/chat/status.'
-
-POST /admin/distill
-- Summary changed from 'Run distillation pass' to 'Trigger a manual distillation pass.'
-- Description changed from 'Trigger the manual distillation pipeline to snapshot playbooks, refresh beliefs, and regenerate derived notebooks.' to 'Trigger a manual distillation pass.'
-
-POST /admin/experiments/activate
-- Summary changed from 'Activate experiment variant' to ''
-- Description changed from 'Mark a variant as the active choice for the experiment and persist the rollout decision.' to 'Experiments: POST /admin/experiments/activate.'
-
-POST /admin/experiments/assign
-- Summary changed from 'Assign experiment variant' to ''
-- Description changed from 'Record or override an experiment assignment for a participant or agent and broadcast the decision.' to 'Experiments: POST /admin/experiments/assign.'
-
-POST /admin/experiments/define
-- Summary changed from 'Define experiment' to ''
-- Description changed from 'Create or update an experiment definition with the supplied variants and configuration payload.' to 'Experiments: POST /admin/experiments/define.'
-
-GET /admin/experiments/list
-- Summary changed from 'List experiments' to ''
-- Description changed from 'Return all experiment definitions currently registered with their variant metadata.' to 'Experiments: GET /admin/experiments/list.'
-
-POST /admin/experiments/run
-- Summary changed from 'Run experiment on goldens' to ''
-- Description changed from 'Execute the requested experiment variants against the chosen golden project and return the evaluation outcome.' to 'Experiments: POST /admin/experiments/run.'
-
-GET /admin/experiments/scoreboard
-- Summary changed from 'Fetch experiment scoreboard' to ''
-- Description changed from 'Provide aggregated performance metrics for each experiment variant to compare recent runs.' to 'Experiments: GET /admin/experiments/scoreboard.'
-
-POST /admin/experiments/start
-- Summary changed from 'Start experiment run' to ''
-- Description changed from 'Publish a start event for a new experiment with optional assignment, budget, and variant hints.' to 'Experiments: POST /admin/experiments/start.'
-
-POST /admin/experiments/stop
-- Summary changed from 'Stop experiment' to ''
-- Description changed from 'Halt an experiment run by emitting a stop event for the provided experiment identifier.' to 'Experiments: POST /admin/experiments/stop.'
-
-GET /admin/experiments/winners
-- Summary changed from 'List experiment winners' to ''
-- Description changed from 'Return the top-performing variants for experiments based on the latest evaluation data.' to 'Experiments: GET /admin/experiments/winners.'
-
-POST /admin/feedback/analyze
-- Summary changed from 'Recompute feedback suggestions' to ''
-- Description changed from 'Trigger an immediate feedback analysis pass to refresh suggestions from the latest signals.' to 'Feedback: POST /admin/feedback/analyze.'
-
-POST /admin/feedback/apply
-- Summary changed from 'Apply feedback suggestion' to ''
-- Description changed from 'Apply the identified suggestion and let the engine reconcile policy and audit outcomes.' to 'Feedback: POST /admin/feedback/apply.'
-
-POST /admin/feedback/auto
-- Summary changed from 'Toggle automatic feedback application' to ''
-- Description changed from 'Enable or disable automatic application of approved feedback suggestions.' to 'Feedback: POST /admin/feedback/auto.'
-
-GET /admin/feedback/policy
-- Summary changed from 'Fetch feedback policy' to ''
-- Description changed from 'Return the effective feedback application policy after merging defaults and overrides.' to 'Feedback: GET /admin/feedback/policy.'
-
-POST /admin/feedback/reset
-- Summary changed from 'Reset feedback engine' to ''
-- Description changed from 'Clear feedback signals, suggestions, and cached state for a cold start.' to 'Feedback: POST /admin/feedback/reset.'
-
-POST /admin/feedback/rollback
-- Summary changed from 'Roll back feedback snapshot' to ''
-- Description changed from 'Restore feedback state to the requested snapshot version and return the resulting suggestion set.' to 'Feedback: POST /admin/feedback/rollback.'
-
-POST /admin/feedback/signal
-- Summary changed from 'Record feedback signal' to ''
-- Description changed from 'Submit a feedback signal with confidence and severity so it influences subsequent analysis.' to 'Feedback: POST /admin/feedback/signal.'
-
-GET /admin/feedback/state
-- Summary changed from 'Inspect feedback state' to ''
-- Description changed from 'Return the current feedback engine snapshot, including signals, suggestions, and configuration.' to 'Feedback: GET /admin/feedback/state.'
-
-GET /admin/feedback/suggestions
-- Summary changed from 'List feedback suggestions' to ''
-- Description changed from 'Return the current queue of actionable feedback suggestions with their metadata.' to 'Feedback: GET /admin/feedback/suggestions.'
-
-GET /admin/feedback/updates
-- Summary changed from 'Fetch feedback updates' to ''
-- Description changed from 'Retrieve feedback suggestions updated since a provided version cursor, enabling incremental refresh.' to 'Feedback: GET /admin/feedback/updates.'
-
-GET /admin/feedback/versions
-- Summary changed from 'List feedback snapshots' to ''
-- Description changed from 'Enumerate available feedback snapshots that can be inspected or rolled back to.' to 'Feedback: GET /admin/feedback/versions.'
-
-POST /admin/goldens/add
-- Summary changed from 'Add golden record' to ''
-- Description changed from 'Append a golden item to the specified project collection and persist the updated set.' to 'Experiments: POST /admin/goldens/add.'
-
-GET /admin/goldens/list
-- Summary changed from 'List golden records' to ''
-- Description changed from 'Return the golden dataset for the requested project, including individual test cases.' to 'Experiments: GET /admin/goldens/list.'
-
-POST /admin/goldens/run
-- Summary changed from 'Evaluate golden set' to ''
-- Description changed from 'Run the supplied golden dataset against the current chat runtime and report evaluation metrics.' to 'Experiments: POST /admin/goldens/run.'
-
-GET /admin/governor/hints
-- Summary changed from 'Inspect governor hints' to ''
-- Description changed from 'Return the currently effective governor hints that shape scheduling and retrieval behaviour.' to 'Introspect: GET /admin/governor/hints.'
-
-POST /admin/governor/hints
-- Summary changed from 'Update governor hints' to ''
-- Description changed from 'Apply new governor hints to adjust scheduling, retrieval, and context construction parameters.' to 'Introspect: POST /admin/governor/hints.'
-
-GET /admin/governor/profile
-- Summary changed from 'Get governor profile' to ''
-- Description changed from 'Return the active governor profile name configured for the node.' to 'Introspect: GET /admin/governor/profile.'
-
-POST /admin/governor/profile
-- Summary changed from 'Set governor profile' to ''
-- Description changed from 'Switch the governor to the requested profile and broadcast the change.' to 'Introspect: POST /admin/governor/profile.'
-
-POST /admin/hierarchy/accept
-- Summary changed from 'Accept hierarchy offer' to ''
-- Description changed from 'Accept a hierarchy offer message to finalize a connection with the given participant.' to 'Hierarchy: POST /admin/hierarchy/accept.'
-
-POST /admin/hierarchy/hello
-- Summary changed from 'Send hierarchy hello' to ''
-- Description changed from 'Emit the initial hello message in the hierarchy handshake with another participant.' to 'Hierarchy: POST /admin/hierarchy/hello.'
-
-POST /admin/hierarchy/offer
-- Summary changed from 'Offer hierarchy connection' to ''
-- Description changed from 'Publish a hierarchy offer to negotiate roles and capabilities with a peer.' to 'Hierarchy: POST /admin/hierarchy/offer.'
-
-POST /admin/hierarchy/role
-- Summary changed from 'Set hierarchy roles' to ''
-- Description changed from 'Update hierarchy role assignments for a participant and persist the change.' to 'Hierarchy: POST /admin/hierarchy/role.'
-
-GET /admin/hierarchy/state
-- Summary changed from 'Inspect hierarchy state' to ''
-- Description changed from 'Return the current hierarchy session map, including offers, participants, and active roles.' to 'Hierarchy: GET /admin/hierarchy/state.'
-
-GET /admin/memory
-- Summary changed from 'List recent memory records' to 'List recent memory items (admin helper).'
-- Description changed from 'Return the latest memory items for inspection; supports lane and limit filters for debugging.' to 'List recent memory items (admin helper).'
-
-POST /admin/memory/apply
-- Summary changed from 'Upsert memory record' to 'Insert a memory item (admin helper).'
-- Description changed from 'Insert or update a memory item via the admin helper and emit the associated memory events for auditing.' to 'Insert a memory item (admin helper).'
-
-GET /admin/memory/quarantine
-- Summary changed from 'List quarantined memories' to ''
-- Description changed from 'Return entries awaiting review in the memory quarantine queue.' to 'Review: GET /admin/memory/quarantine.'
-
-POST /admin/memory/quarantine
-- Summary changed from 'Queue memory for review' to ''
-- Description changed from 'Enqueue a memory item for quarantine review and emit the appropriate audit event.' to 'Review: POST /admin/memory/quarantine.'
-
-POST /admin/memory/quarantine/admit
-- Summary changed from 'Admit quarantined memory' to ''
-- Description changed from 'Remove a memory from quarantine, optionally admitting or rejecting it, and report the outcome.' to 'Review: POST /admin/memory/quarantine/admit.'
-
-GET /admin/models
-- Summary changed from 'List models' to ''
-- Description changed from 'Return the configured model entries including provider metadata.' to 'Models: GET /admin/models.'
-
-POST /admin/models/add
-- Summary changed from 'Add model entry' to ''
-- Description changed from 'Register a model entry with optional provider, path, and status metadata.' to 'Models: POST /admin/models/add.'
-
-GET /admin/models/by-hash/{sha256}
-- Summary changed from 'Download model blob' to ''
-- Description changed from 'Stream a CAS-stored model blob by SHA-256 with caching headers and partial range support.' to 'Models: GET /admin/models/by-hash/{sha256}.'
-
-POST /admin/models/cas_gc
-- Summary changed from 'Run CAS garbage collection' to ''
-- Description changed from 'Execute a content-addressed store cleanup pass and report removed blobs.' to 'Models: POST /admin/models/cas_gc.'
-
-GET /admin/models/concurrency
-- Summary changed from 'Inspect model concurrency' to ''
-- Description changed from 'Return the current model concurrency settings and snapshot telemetry.' to 'Models: GET /admin/models/concurrency.'
-
-POST /admin/models/concurrency
-- Summary changed from 'Update model concurrency' to ''
-- Description changed from 'Apply new concurrency limits or blocking behaviour for model execution.' to 'Models: POST /admin/models/concurrency.'
-
-GET /admin/models/default
-- Summary changed from 'Get default model' to ''
-- Description changed from 'Return the identifier of the default model selection.' to 'Models: GET /admin/models/default.'
-
-POST /admin/models/default
-- Summary changed from 'Set default model' to ''
-- Description changed from 'Select the default model to be used for future requests.' to 'Models: POST /admin/models/default.'
-
-POST /admin/models/download
-- Summary changed from 'Start model download' to ''
-- Description changed from 'Request download or import of a model artifact and enqueue the job if supported.' to 'Models: POST /admin/models/download.'
-
-POST /admin/models/download/cancel
-- Summary changed from 'Cancel model download' to ''
-- Description changed from 'Cancel an in-flight model download job when the backend supports it.' to 'Models: POST /admin/models/download/cancel.'
-
-GET /admin/models/jobs
-- Summary changed from 'Inspect model jobs' to ''
-- Description changed from 'Return the current queue of model download and load jobs with their statuses.' to 'Models: GET /admin/models/jobs.'
-
-POST /admin/models/load
-- Summary changed from 'Load model manifest' to ''
-- Description changed from 'Load model entries from the persisted manifest on disk.' to 'Models: POST /admin/models/load.'
-
-POST /admin/models/refresh
-- Summary changed from 'Refresh models list' to ''
-- Description changed from 'Refresh the live model list from runtime state and return the updated entries.' to 'Models: POST /admin/models/refresh.'
-
-POST /admin/models/remove
-- Summary changed from 'Remove model entry' to ''
-- Description changed from 'Remove a model entry by identifier and report whether it existed.' to 'Models: POST /admin/models/remove.'
-
-POST /admin/models/save
-- Summary changed from 'Save model manifest' to ''
-- Description changed from 'Persist the current model registry to the on-disk manifest.' to 'Models: POST /admin/models/save.'
-
-GET /admin/models/summary
-- Summary changed from 'Summarize model catalog' to ''
-- Description changed from 'Return aggregate statistics about installed models, storage usage, and capabilities.' to 'Models: GET /admin/models/summary.'
-
-GET /admin/probe
-- Summary changed from 'Inspect effective paths' to 'Effective path probe (successor to `/admin/probe`).'
-- Description changed from 'Return the resolved state, cache, and config directories plus runtime metadata so operators can confirm filesystem layout.' to 'Effective path probe (successor to `/admin/probe`).'
-
-GET /admin/probe/hw
-- Summary changed from 'Probe runtime hardware' to 'Hardware/software probe (`/admin/probe/hw`).'
-- Description changed from 'Report detected hardware and OS capabilities—including CPU, GPU, and accelerators—to confirm what the node can access.' to 'Hardware/software probe (`/admin/probe/hw`).'
-
-GET /admin/probe/metrics
-- Summary changed from 'Probe metrics snapshot' to 'Metrics snapshot probe (`/admin/probe/metrics`).'
-- Description changed from 'Return the current metrics summary (Prometheus-style counters and histograms) for quick diagnostics.' to 'Metrics snapshot probe (`/admin/probe/metrics`).'
-
-POST /admin/self_model/apply
-- Summary changed from 'Apply self-model proposal' to ''
-- Description changed from 'Apply a previously proposed self-model change and notify subscribers.' to 'SelfModel: POST /admin/self_model/apply.'
-
-POST /admin/self_model/propose
-- Summary changed from 'Propose self-model update' to ''
-- Description changed from 'Submit a self-model patch proposal for an agent and emit the proposal event.' to 'SelfModel: POST /admin/self_model/propose.'
-
-GET /admin/tools
-- Summary changed from 'List registered tools' to ''
-- Description changed from 'Return the catalog of available tools with stability and capability metadata.' to 'Tools: GET /admin/tools.'
-
-GET /admin/tools/cache_stats
-- Summary changed from 'Inspect tool cache statistics' to ''
-- Description changed from 'Return cache utilisation metrics for the shared tool cache.' to 'Tools: GET /admin/tools/cache_stats.'
-
-POST /admin/tools/run
-- Summary changed from 'Run tool' to ''
-- Description changed from 'Execute a registered tool with the provided input payload and return its output.' to 'Tools: POST /admin/tools/run.'
-
-GET /admin/world_diffs
-- Summary changed from 'List world diffs' to ''
-- Description changed from 'Return the queue of pending world diffs awaiting review.' to 'Review: GET /admin/world_diffs.'
-
-POST /admin/world_diffs/decision
-- Summary changed from 'Record world diff decision' to ''
-- Description changed from 'Accept or reject a queued world diff and persist the decision outcome.' to 'Review: POST /admin/world_diffs/decision.'
-
-POST /admin/world_diffs/queue
-- Summary changed from 'Queue world diff' to ''
-- Description changed from 'Enqueue a world diff for review with the supplied metadata.' to 'Review: POST /admin/world_diffs/queue.'
-
-GET /events
-- Summary changed from 'Stream event feed' to 'Server‑Sent Events stream of envelopes.'
-- Description changed from 'Open the Server-Sent Events stream of normalized envelopes; supports prefix filtering and Last-Event-ID replay.' to 'Server‑Sent Events stream of envelopes; supports replay and prefix filters.'
-
-GET /healthz
-- Summary changed from 'Readiness probe' to 'Health probe.'
-- Description changed from 'Return a simple readiness payload (`{"ok": true}`) suitable for health checks and load balancers.' to 'Service readiness probe.'
-
-GET /metrics
-- Summary changed from 'Export Prometheus metrics' to ''
-- Description changed from 'Serve Prometheus-formatted metrics for the unified server, including tool cache counters.' to 'Public: GET /metrics.'
-
-GET /orchestrator/mini_agents
-- Summary changed from 'List mini-agent templates' to 'List available mini-agents (placeholder).'
-- Description changed from 'Return placeholder metadata about available mini-agents while the orchestrator capability is incubating.' to 'List available mini-agents (placeholder).'
-
-POST /orchestrator/mini_agents/start_training
-- Summary changed from 'Start mini-agent training' to 'Start a training job that results in a suggested Logic Unit (admin).'
-- Description changed from 'Kick off a training job that will propose a Logic Unit configuration once complete; returns an async job handle when accepted.' to 'Start a training job that results in a suggested Logic Unit (admin).'
-
-POST /projects
-- Summary changed from 'Create project' to ''
-- Description changed from 'Create a new project directory, seed default notes, and emit the creation event.' to 'Projects: POST /projects.'
-
-PATCH /projects/{proj}/file
-- Summary changed from 'Patch project file' to ''
-- Description changed from 'Apply a JSON patch or diff patch to an existing project file while checking version guards.' to 'Projects: PATCH /projects/{proj}/file.'
-
-PUT /projects/{proj}/file
-- Summary changed from 'Write project file' to ''
-- Description changed from 'Create or replace a project file at the given path, enforcing optimistic concurrency and quotas.' to 'Projects: PUT /projects/{proj}/file.'
-
-POST /projects/{proj}/import
-- Summary changed from 'Import project asset' to ''
-- Description changed from 'Copy or move a file from the staging area into the project workspace and emit audit events.' to 'Projects: POST /projects/{proj}/import.'
-
-PUT /projects/{proj}/notes
-- Summary changed from 'Save project notes' to ''
-- Description changed from 'Replace the project notes document and return metadata for the updated file.' to 'Projects: PUT /projects/{proj}/notes.'
-
-POST /research_watcher/{id}/approve
-- Summary changed from 'Approve research watcher item' to ''
-- Description changed from 'Mark a research watcher entry as approved, optionally attaching an operator note.' to 'Research: POST /research_watcher/{id}/approve.'
-
-POST /research_watcher/{id}/archive
-- Summary changed from 'Archive research watcher item' to ''
-- Description changed from 'Archive a research watcher entry to remove it from the active queue while preserving audit history.' to 'Research: POST /research_watcher/{id}/archive.'
-
-GET /spec/health
-- Summary changed from 'Inspect spec artifacts' to 'Health summary for spec artifacts (presence/size).'
-- Description changed from 'Report presence, size, and checksum information for bundled OpenAPI, AsyncAPI, and schema artifacts.' to 'Health summary for spec artifacts (presence/size).'
-
-POST /staging/actions/{id}/approve
-- Summary changed from 'Approve staging action' to ''
-- Description changed from 'Approve a staged action so it can execute and emit the resulting workflow job.' to 'Staging: POST /staging/actions/{id}/approve.'
-
-POST /staging/actions/{id}/deny
-- Summary changed from 'Deny staging action' to ''
-- Description changed from 'Deny a staged action with an optional reason, preventing it from executing.' to 'Staging: POST /staging/actions/{id}/deny.'
-
-GET /state/actions
-- Summary changed from 'List recent actions' to 'Recent actions list.'
-- Description changed from 'Return the rolling window of actions emitted by the kernel, ordered from newest to oldest.' to 'Recent actions list (most recent first).'
-- Response now includes `version` (monotonic counter) aligned with the state observer so clients can detect updates without refetching entire histories.
-- Response now sets `ETag: "state-actions-v<version>"` so caches and polling clients can reuse conditional requests.
-- Response now sets `Cache-Control: private, max-age=2` for short-lived conditional polling.
-- Query parameters added: `state`, `kind_prefix`, and `updated_since`, alongside the existing `limit`, enabling filtered action snapshots without client-side scanning.
-
-GET /state/contributions
-- Response now sets `version`, `ETag: "state-contributions-v<version>"`, and `Cache-Control: private, max-age=2` for conditional polling.
-
-GET /state/episodes
-- Response now sets `version`, `ETag: "state-episodes-v<version>"`, and `Cache-Control: private, max-age=2` for conditional polling.
-
-GET /state/beliefs
-- Summary changed from 'Inspect belief store' to 'Current beliefs snapshot derived from events.'
-- Description changed from 'Return the current belief entries derived from events so clients can reason over world facts.' to 'Current beliefs snapshot derived from events.'
-- Response now sets `version`, `ETag: "state-beliefs-v<version>"`, and `Cache-Control: private, max-age=2` for lightweight conditional polling.
-
-GET /state/cluster
-- Summary changed from 'Inspect cluster nodes' to 'Cluster nodes snapshot.'
-- Description changed from 'Return the snapshot of known cluster nodes, their roles, and health metadata.' to 'Cluster nodes snapshot (admin-only).'
-- Response now includes `generated` (RFC3339) and `generated_ms` (epoch milliseconds) so clients can surface the snapshot age without relying on local clocks.
-
-GET /state/experiments
-- Summary changed from 'List experiment events' to 'Experiment events snapshot (public read-model).'
-- Description changed from 'Expose the experiment read-model summarizing variants, assignments, and recent outcomes.' to 'Experiment events snapshot (public read-model).'
-- Response now sets `version`, `ETag: "state-experiments-v<version>"`, and `Cache-Control: private, max-age=2` for conditional polling.
-
-GET /state/guardrails_metrics
-- Summary changed from 'Inspect guardrail metrics' to 'Guardrails circuit-breaker metrics snapshot.'
-- Description changed from 'Return guardrail circuit-breaker counters and latency measurements for monitoring automation health.' to 'Guardrails circuit-breaker metrics snapshot.'
-
-GET /state/intents
-- Summary changed from 'List recent intents' to 'Recent intents stream (rolling window).'
-- Description changed from 'Return the rolling window of intent events emitted by the kernel.' to 'Recent intents stream (rolling window).'
-- Response now includes `version` (monotonic counter) so clients can detect refreshes and wire delta polling.
-- Response now sets `ETag: "state-intents-v<version>"` to support If-None-Match polling loops.
-- Response now sets `Cache-Control: private, max-age=2` for short-lived conditional polling.
-
-GET /state/models
-- Summary changed from 'Inspect model catalog' to 'Model catalog read-model.'
-- Description changed from 'Return the derived model catalog with provider metadata, install status, and version details.' to 'Model catalog read-model.'
-
-GET /state/models_hashes
-- Summary changed from 'List installed model hashes' to ''
-- Description changed from 'Return a paginated view of installed model blobs with filters for provider, size, and hash.' to 'State: GET /state/models_hashes.'
-
-GET /state/models_metrics
-- Summary changed from 'Inspect model metrics' to ''
-- Description changed from 'Return model runtime metrics, including cache hits and latency data, for observability dashboards.' to 'Models metrics snapshot.'
-
-GET /state/observations
-- Summary changed from 'List recent observations' to 'Recent observations from the event bus.'
-- Description changed from 'Return the rolling window of observation events captured from the live event bus.' to 'Recent observations from the event bus.'
-- Response now sets `version`, `ETag: "state-observations-v<version>"`, and `Cache-Control: private, max-age=2` to support conditional polling.
-- Query parameters added: `limit` (most recent N items), `kind_prefix` (match event kind prefix), and `since` (RFC3339, include only envelopes emitted after the timestamp) for lightweight filtering. `arw-cli events observations` now also supports `--since-relative <window>` to derive the timestamp client-side (e.g., last 15 minutes).
-
-GET /state/orchestrator/jobs
-- Summary changed from 'List orchestrator jobs' to 'Orchestrator jobs snapshot.'
-- Description changed from 'Return the current orchestrator job queue including statuses, runners, and progress metadata.' to 'Orchestrator jobs snapshot.'
-
-GET /state/projects
-- Summary changed from 'Snapshot project catalog' to ''
-- Description changed from 'Return the cached project snapshot with file tree, notes, and metadata for quick reads.' to 'Projects: GET /state/projects.'
-
-GET /state/projects/{proj}/file
-- Summary changed from 'Fetch project file snapshot' to ''
-- Description changed from 'Return the latest stored contents for a project file identified by project and relative path.' to 'Projects: GET /state/projects/{proj}/file.'
-
-GET /state/projects/{proj}/notes
-- Summary changed from 'Fetch project notes' to ''
-- Description changed from 'Return the current project notes document with metadata such as checksum and size.' to 'Projects: GET /state/projects/{proj}/notes.'
-
-GET /state/projects/{proj}/tree
-- Summary changed from 'Browse project tree' to ''
-- Description changed from 'Return a directory listing for a project path to help clients explore workspace structure.' to 'Projects: GET /state/projects/{proj}/tree.'
-
-GET /state/research_watcher
-- Summary changed from 'Inspect research watcher' to 'Research watcher queue snapshot.'
-- Description changed from 'Return the research watcher queue snapshot with pending items, statuses, and telemetry.' to 'Research watcher queue snapshot.'
-
-GET /state/route_stats
-- Summary changed from 'Inspect route metrics' to 'Bus and per-route counters snapshot.'
-- Description changed from 'Return per-route counters, durations, and cache statistics aggregated by the server.' to 'Bus and per-route counters snapshot.'
-- Response now sets `version`, `ETag: "state-route-stats-v<version>"`, and `Cache-Control: private, max-age=2` for conditional polling.
-
-GET /state/runtime_matrix
-- Summary changed from 'Inspect runtime matrix' to 'Runtime matrix snapshot.'
-- Description changed from 'Return the runtime matrix covering available runtimes, capabilities, and health signals.' to 'Runtime matrix snapshot.'
-- Response now includes `ttl_seconds` to mirror `ARW_RUNTIME_MATRIX_TTL_SEC` and help clients decide when to refresh the snapshot proactively.
-
-GET /state/staging/actions
-- Summary changed from 'Inspect staging actions' to 'Staging queue snapshot.'
-- Description changed from 'Return staged actions awaiting review or execution in the staging queue.' to 'Staging queue snapshot.'
-- Response now includes `generated` (RFC3339) and `generated_ms` (epoch milliseconds) timestamps for stable freshness indicators across clients.
-
-GET /state/tasks
-- Summary changed from 'Inspect background tasks' to 'Background tasks status snapshot.'
-- Description changed from 'Return the background task registry with progress, retry counts, and assigned workers.' to 'Background tasks status snapshot.'
-- Response now sets `version`, `ETag: "state-tasks-v<version>"`, and `Cache-Control: private, max-age=2` for conditional polling.
-
-GET /state/training/telemetry
-- Summary changed from 'Inspect training telemetry' to 'Training telemetry snapshot.'
-- Description changed from 'Return aggregated Training Park telemetry, including success ratios, recall, and coverage metrics.' to 'Training telemetry snapshot.'
-
-GET /state/world
-- Summary changed from 'Inspect world model' to 'Project world model snapshot (belief graph view).'
-- Description changed from 'Return the active world graph snapshot with claims, provenance metadata, and belief relationships.' to 'Project world model snapshot (belief graph view).'
-- Response now sets `version`, `ETag: "state-world-v<version>"`, and `Cache-Control: private, max-age=2` for conditional polling.
-
-GET /state/egress
-- Response now sets `version`, `ETag: "state-egress-v<version>"`, and `Cache-Control: private, max-age=2` for conditional polling.
-
-GET /state/world/select
-- Summary changed from 'Select world claims' to 'Select top-k claims for a query.'
-- Description changed from 'Evaluate a query against the world graph and return the top-k claims that match the provided filters.' to 'Select top-k claims for a query.'
+```diff
+--- openapi.base.yaml
++++ openapi.head.yaml
+@@ -11,9 +11,8 @@
+     get:
+       tags:
+       - Meta
+-      summary: Inspect service metadata
+-      description: Return version, build information, endpoint counts, and the enumerated
+-        public/admin routes announced by the server.
++      summary: Service metadata and endpoints index.
++      description: Service metadata, endpoints index, and performance preset.
+       operationId: about_doc
+       responses:
+         '200':
+@@ -40,9 +39,7 @@
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/ProblemDetails'
+-      description: Retrieve the active admin chat transcript, including message history
+-        and tool metadata.
+-      summary: Fetch chat transcript
++      description: 'Chat: GET /admin/chat.'
+   /admin/chat/clear:
+     post:
+       tags:
+@@ -60,9 +57,7 @@
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/ProblemDetails'
+-      description: Wipe the stored admin chat transcript and reset associated tool
+-        context for a fresh session.
+-      summary: Clear chat transcript
++      description: 'Chat: POST /admin/chat/clear.'
+   /admin/chat/send:
+     post:
+       tags:
+@@ -87,9 +82,7 @@
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/ProblemDetails'
+-      description: Submit a message to the admin chat lane and receive the synthesized
+-        assistant response.
+-      summary: Send chat message
++      description: 'Chat: POST /admin/chat/send.'
+   /admin/chat/status:
+     get:
+       tags:
+@@ -115,14 +108,12 @@
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/ProblemDetails'
+-      description: Report chat lane health, including the most recent latency probe;
+-        optionally trigger a new probe.
+-      summary: Query chat status
++      description: 'Chat: GET /admin/chat/status.'
+   /admin/distill:
+     post:
+       tags:
+       - Distill
+-      summary: Run distillation pass
++      summary: Trigger a manual distillation pass.
+       operationId: distill_run_doc
+       responses:
+         '200':
+@@ -136,8 +127,7 @@
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/ProblemDetails'
+-      description: Trigger the manual distillation pipeline to snapshot playbooks,
+-        refresh beliefs, and regenerate derived notebooks.
++      description: Trigger a manual distillation pass.
+   /admin/events/journal:
+     get:
+       tags:
+@@ -204,9 +194,7 @@
+           description: Unauthorized
+         '404':
+           description: Unknown experiment
+-      description: Mark a variant as the active choice for the experiment and persist
+-        the rollout decision.
+-      summary: Activate experiment variant
++      description: 'Experiments: POST /admin/experiments/activate.'
+   /admin/experiments/assign:
+     post:
+       tags:
+@@ -226,9 +214,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Record or override an experiment assignment for a participant or
+-        agent and broadcast the decision.
+-      summary: Assign experiment variant
++      description: 'Experiments: POST /admin/experiments/assign.'
+   /admin/experiments/define:
+     post:
+       tags:
+@@ -248,9 +234,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Create or update an experiment definition with the supplied variants
+-        and configuration payload.
+-      summary: Define experiment
++      description: 'Experiments: POST /admin/experiments/define.'
+   /admin/experiments/list:
+     get:
+       tags:
+@@ -265,9 +249,7 @@
+                 $ref: '#/components/schemas/ExperimentsListResponse'
+         '401':
+           description: Unauthorized
+-      description: Return all experiment definitions currently registered with their
+-        variant metadata.
+-      summary: List experiments
++      description: 'Experiments: GET /admin/experiments/list.'
+   /admin/experiments/run:
+     post:
+       tags:
+@@ -288,9 +270,7 @@
+                 $ref: '#/components/schemas/RunOutcome'
+         '401':
+           description: Unauthorized
+-      description: Execute the requested experiment variants against the chosen golden
+-        project and return the evaluation outcome.
+-      summary: Run experiment on goldens
++      description: 'Experiments: POST /admin/experiments/run.'
+   /admin/experiments/scoreboard:
+     get:
+       tags:
+@@ -305,9 +285,7 @@
+                 $ref: '#/components/schemas/ExperimentsScoreboardResponse'
+         '401':
+           description: Unauthorized
+-      description: Provide aggregated performance metrics for each experiment variant
+-        to compare recent runs.
+-      summary: Fetch experiment scoreboard
++      description: 'Experiments: GET /admin/experiments/scoreboard.'
+   /admin/experiments/start:
+     post:
+       tags:
+@@ -327,9 +305,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Publish a start event for a new experiment with optional assignment,
+-        budget, and variant hints.
+-      summary: Start experiment run
++      description: 'Experiments: POST /admin/experiments/start.'
+   /admin/experiments/stop:
+     post:
+       tags:
+@@ -349,9 +325,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Halt an experiment run by emitting a stop event for the provided
+-        experiment identifier.
+-      summary: Stop experiment
++      description: 'Experiments: POST /admin/experiments/stop.'
+   /admin/experiments/winners:
+     get:
+       tags:
+@@ -366,9 +340,7 @@
+                 $ref: '#/components/schemas/ExperimentsWinnersResponse'
+         '401':
+           description: Unauthorized
+-      description: Return the top-performing variants for experiments based on the
+-        latest evaluation data.
+-      summary: List experiment winners
++      description: 'Experiments: GET /admin/experiments/winners.'
+   /admin/feedback/analyze:
+     post:
+       tags:
+@@ -383,9 +355,7 @@
+                 $ref: '#/components/schemas/FeedbackState'
+         '401':
+           description: Unauthorized
+-      description: Trigger an immediate feedback analysis pass to refresh suggestions
+-        from the latest signals.
+-      summary: Recompute feedback suggestions
++      description: 'Feedback: POST /admin/feedback/analyze.'
+   /admin/feedback/apply:
+     post:
+       tags:
+@@ -411,9 +381,7 @@
+           description: Policy denied
+         '404':
+           description: Unknown suggestion
+-      description: Apply the identified suggestion and let the engine reconcile policy
+-        and audit outcomes.
+-      summary: Apply feedback suggestion
++      description: 'Feedback: POST /admin/feedback/apply.'
+   /admin/feedback/auto:
+     post:
+       tags:
+@@ -433,8 +401,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Enable or disable automatic application of approved feedback suggestions.
+-      summary: Toggle automatic feedback application
++      description: 'Feedback: POST /admin/feedback/auto.'
+   /admin/feedback/policy:
+     get:
+       tags:
+@@ -448,9 +415,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Return the effective feedback application policy after merging
+-        defaults and overrides.
+-      summary: Fetch feedback policy
++      description: 'Feedback: GET /admin/feedback/policy.'
+   /admin/feedback/reset:
+     post:
+       tags:
+@@ -464,9 +429,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Clear feedback signals, suggestions, and cached state for a cold
+-        start.
+-      summary: Reset feedback engine
++      description: 'Feedback: POST /admin/feedback/reset.'
+   /admin/feedback/rollback:
+     post:
+       tags:
+@@ -490,9 +453,7 @@
+           description: Unauthorized
+         '404':
+           description: Snapshot not found
+-      description: Restore feedback state to the requested snapshot version and return
+-        the resulting suggestion set.
+-      summary: Roll back feedback snapshot
++      description: 'Feedback: POST /admin/feedback/rollback.'
+   /admin/feedback/signal:
+     post:
+       tags:
+@@ -513,9 +474,7 @@
+                 $ref: '#/components/schemas/FeedbackState'
+         '401':
+           description: Unauthorized
+-      description: Submit a feedback signal with confidence and severity so it influences
+-        subsequent analysis.
+-      summary: Record feedback signal
++      description: 'Feedback: POST /admin/feedback/signal.'
+   /admin/feedback/state:
+     get:
+       tags:
+@@ -530,9 +489,7 @@
+                 $ref: '#/components/schemas/FeedbackState'
+         '401':
+           description: Unauthorized
+-      description: Return the current feedback engine snapshot, including signals,
+-        suggestions, and configuration.
+-      summary: Inspect feedback state
++      description: 'Feedback: GET /admin/feedback/state.'
+   /admin/feedback/suggestions:
+     get:
+       tags:
+@@ -546,9 +503,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Return the current queue of actionable feedback suggestions with
+-        their metadata.
+-      summary: List feedback suggestions
++      description: 'Feedback: GET /admin/feedback/suggestions.'
+   /admin/feedback/updates:
+     get:
+       tags:
+@@ -572,9 +527,7 @@
+           description: No changes since provided version
+         '401':
+           description: Unauthorized
+-      description: Retrieve feedback suggestions updated since a provided version
+-        cursor, enabling incremental refresh.
+-      summary: Fetch feedback updates
++      description: 'Feedback: GET /admin/feedback/updates.'
+   /admin/feedback/versions:
+     get:
+       tags:
+@@ -588,9 +541,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Enumerate available feedback snapshots that can be inspected or
+-        rolled back to.
+-      summary: List feedback snapshots
++      description: 'Feedback: GET /admin/feedback/versions.'
+   /admin/goldens/add:
+     post:
+       tags:
+@@ -612,9 +563,7 @@
+           description: Persist failed
+         '401':
+           description: Unauthorized
+-      description: Append a golden item to the specified project collection and persist
+-        the updated set.
+-      summary: Add golden record
++      description: 'Experiments: POST /admin/goldens/add.'
+   /admin/goldens/list:
+     get:
+       tags:
+@@ -635,9 +584,7 @@
+                 $ref: '#/components/schemas/GoldensListResponse'
+         '401':
+           description: Unauthorized
+-      description: Return the golden dataset for the requested project, including
+-        individual test cases.
+-      summary: List golden records
++      description: 'Experiments: GET /admin/goldens/list.'
+   /admin/goldens/run:
+     post:
+       tags:
+@@ -658,9 +605,7 @@
+                 $ref: '#/components/schemas/EvalSummary'
+         '401':
+           description: Unauthorized
+-      description: Run the supplied golden dataset against the current chat runtime
+-        and report evaluation metrics.
+-      summary: Evaluate golden set
++      description: 'Experiments: POST /admin/goldens/run.'
+   /admin/governor/hints:
+     get:
+       tags:
+@@ -675,9 +620,7 @@
+                 $ref: '#/components/schemas/Hints'
+         '401':
+           description: Unauthorized
+-      description: Return the currently effective governor hints that shape scheduling
+-        and retrieval behaviour.
+-      summary: Inspect governor hints
++      description: 'Introspect: GET /admin/governor/hints.'
+     post:
+       tags:
+       - Admin/Introspect
+@@ -696,9 +639,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Apply new governor hints to adjust scheduling, retrieval, and context
+-        construction parameters.
+-      summary: Update governor hints
++      description: 'Introspect: POST /admin/governor/hints.'
+   /admin/governor/profile:
+     get:
+       tags:
+@@ -713,8 +654,7 @@
+                 $ref: '#/components/schemas/GovernorProfileResponse'
+         '401':
+           description: Unauthorized
+-      description: Return the active governor profile name configured for the node.
+-      summary: Get governor profile
++      description: 'Introspect: GET /admin/governor/profile.'
+     post:
+       tags:
+       - Admin/Introspect
+@@ -733,9 +673,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Switch the governor to the requested profile and broadcast the
+-        change.
+-      summary: Set governor profile
++      description: 'Introspect: POST /admin/governor/profile.'
+   /admin/hierarchy/accept:
+     post:
+       tags:
+@@ -755,9 +693,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Accept a hierarchy offer message to finalize a connection with
+-        the given participant.
+-      summary: Accept hierarchy offer
++      description: 'Hierarchy: POST /admin/hierarchy/accept.'
+   /admin/hierarchy/hello:
+     post:
+       tags:
+@@ -777,9 +713,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Emit the initial hello message in the hierarchy handshake with
+-        another participant.
+-      summary: Send hierarchy hello
++      description: 'Hierarchy: POST /admin/hierarchy/hello.'
+   /admin/hierarchy/offer:
+     post:
+       tags:
+@@ -799,9 +733,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Publish a hierarchy offer to negotiate roles and capabilities with
+-        a peer.
+-      summary: Offer hierarchy connection
++      description: 'Hierarchy: POST /admin/hierarchy/offer.'
+   /admin/hierarchy/role:
+     post:
+       tags:
+@@ -821,9 +753,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Update hierarchy role assignments for a participant and persist
+-        the change.
+-      summary: Set hierarchy roles
++      description: 'Hierarchy: POST /admin/hierarchy/role.'
+   /admin/hierarchy/state:
+     get:
+       tags:
+@@ -837,14 +767,12 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Return the current hierarchy session map, including offers, participants,
+-        and active roles.
+-      summary: Inspect hierarchy state
++      description: 'Hierarchy: GET /admin/hierarchy/state.'
+   /admin/memory:
+     get:
+       tags:
+       - Admin/Memory
+-      summary: List recent memory records
++      summary: List recent memory items (admin helper).
+       operationId: admin_memory_list_doc
+       parameters:
+       - name: lane
+@@ -876,13 +804,12 @@
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/ProblemDetails'
+-      description: Return the latest memory items for inspection; supports lane and
+-        limit filters for debugging.
++      description: List recent memory items (admin helper).
+   /admin/memory/apply:
+     post:
+       tags:
+       - Admin/Memory
+-      summary: Upsert memory record
++      summary: Insert a memory item (admin helper).
+       operationId: admin_memory_apply_doc
+       requestBody:
+         content:
+@@ -908,8 +835,7 @@
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/ProblemDetails'
+-      description: Insert or update a memory item via the admin helper and emit the
+-        associated memory events for auditing.
++      description: Insert a memory item (admin helper).
+   /admin/memory/quarantine:
+     get:
+       tags:
+@@ -923,8 +849,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Return entries awaiting review in the memory quarantine queue.
+-      summary: List quarantined memories
++      description: 'Review: GET /admin/memory/quarantine.'
+     post:
+       tags:
+       - Review
+@@ -945,9 +870,7 @@
+           description: Unauthorized
+         '500':
+           description: Storage error
+-      description: Enqueue a memory item for quarantine review and emit the appropriate
+-        audit event.
+-      summary: Queue memory for review
++      description: 'Review: POST /admin/memory/quarantine.'
+   /admin/memory/quarantine/admit:
+     post:
+       tags:
+@@ -969,9 +892,7 @@
+           description: Unauthorized
+         '500':
+           description: Storage error
+-      description: Remove a memory from quarantine, optionally admitting or rejecting
+-        it, and report the outcome.
+-      summary: Admit quarantined memory
++      description: 'Review: POST /admin/memory/quarantine/admit.'
+   /admin/models:
+     get:
+       tags:
+@@ -987,8 +908,7 @@
+                 items: {}
+         '401':
+           description: Unauthorized
+-      description: Return the configured model entries including provider metadata.
+-      summary: List models
++      description: 'Models: GET /admin/models.'
+   /admin/models/add:
+     post:
+       tags:
+@@ -1008,9 +928,7 @@
+               schema: {}
+         '400':
+           description: Invalid input
+-      description: Register a model entry with optional provider, path, and status
+-        metadata.
+-      summary: Add model entry
++      description: 'Models: POST /admin/models/add.'
+   /admin/models/by-hash/{sha256}:
+     get:
+       tags:
+@@ -1047,9 +965,7 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Stream a CAS-stored model blob by SHA-256 with caching headers
+-        and partial range support.
+-      summary: Download model blob
++      description: 'Models: GET /admin/models/by-hash/{sha256}.'
+   /admin/models/cas_gc:
+     post:
+       tags:
+@@ -1069,9 +985,7 @@
+               schema: {}
+         '501':
+           description: CAS GC unavailable
+-      description: Execute a content-addressed store cleanup pass and report removed
+-        blobs.
+-      summary: Run CAS garbage collection
++      description: 'Models: POST /admin/models/cas_gc.'
+   /admin/models/concurrency:
+     get:
+       tags:
+@@ -1084,8 +998,7 @@
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/ModelsConcurrencySnapshot'
+-      description: Return the current model concurrency settings and snapshot telemetry.
+-      summary: Inspect model concurrency
++      description: 'Models: GET /admin/models/concurrency.'
+     post:
+       tags:
+       - Models
+@@ -1103,8 +1016,7 @@
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/ModelsConcurrencySnapshot'
+-      description: Apply new concurrency limits or blocking behaviour for model execution.
+-      summary: Update model concurrency
++      description: 'Models: POST /admin/models/concurrency.'
+   /admin/models/default:
+     get:
+       tags:
+@@ -1116,8 +1028,7 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Return the identifier of the default model selection.
+-      summary: Get default model
++      description: 'Models: GET /admin/models/default.'
+     post:
+       tags:
+       - Models
+@@ -1136,8 +1047,7 @@
+               schema: {}
+         '400':
+           description: Unknown model
+-      description: Select the default model to be used for future requests.
+-      summary: Set default model
++      description: 'Models: POST /admin/models/default.'
+   /admin/models/download:
+     post:
+       tags:
+@@ -1157,9 +1067,7 @@
+               schema: {}
+         '501':
+           description: Download unavailable
+-      description: Request download or import of a model artifact and enqueue the
+-        job if supported.
+-      summary: Start model download
++      description: 'Models: POST /admin/models/download.'
+   /admin/models/download/cancel:
+     post:
+       tags:
+@@ -1179,9 +1087,7 @@
+               schema: {}
+         '501':
+           description: Cancel unavailable
+-      description: Cancel an in-flight model download job when the backend supports
+-        it.
+-      summary: Cancel model download
++      description: 'Models: POST /admin/models/download/cancel.'
+   /admin/models/jobs:
+     get:
+       tags:
+@@ -1193,9 +1099,7 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Return the current queue of model download and load jobs with their
+-        statuses.
+-      summary: Inspect model jobs
++      description: 'Models: GET /admin/models/jobs.'
+   /admin/models/load:
+     post:
+       tags:
+@@ -1211,8 +1115,7 @@
+                 items: {}
+         '404':
+           description: Missing models.json
+-      description: Load model entries from the persisted manifest on disk.
+-      summary: Load model manifest
++      description: 'Models: POST /admin/models/load.'
+   /admin/models/refresh:
+     post:
+       tags:
+@@ -1226,9 +1129,7 @@
+               schema:
+                 type: array
+                 items: {}
+-      description: Refresh the live model list from runtime state and return the updated
+-        entries.
+-      summary: Refresh models list
++      description: 'Models: POST /admin/models/refresh.'
+   /admin/models/remove:
+     post:
+       tags:
+@@ -1246,8 +1147,7 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Remove a model entry by identifier and report whether it existed.
+-      summary: Remove model entry
++      description: 'Models: POST /admin/models/remove.'
+   /admin/models/save:
+     post:
+       tags:
+@@ -1259,8 +1159,7 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Persist the current model registry to the on-disk manifest.
+-      summary: Save model manifest
++      description: 'Models: POST /admin/models/save.'
+   /admin/models/summary:
+     get:
+       tags:
+@@ -1274,14 +1173,12 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Return aggregate statistics about installed models, storage usage,
+-        and capabilities.
+-      summary: Summarize model catalog
++      description: 'Models: GET /admin/models/summary.'
+   /admin/probe:
+     get:
+       tags:
+       - Admin/Introspect
+-      summary: Inspect effective paths
++      summary: Effective path probe (successor to `/admin/probe`).
+       operationId: probe_effective_paths_doc
+       responses:
+         '200':
+@@ -1291,13 +1188,12 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Return the resolved state, cache, and config directories plus runtime
+-        metadata so operators can confirm filesystem layout.
++      description: Effective path probe (successor to `/admin/probe`).
+   /admin/probe/hw:
+     get:
+       tags:
+       - Admin/Introspect
+-      summary: Probe runtime hardware
++      summary: Hardware/software probe (`/admin/probe/hw`).
+       operationId: probe_hw_doc
+       responses:
+         '200':
+@@ -1307,13 +1203,12 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: "Report detected hardware and OS capabilities\u2014including CPU,\
+-        \ GPU, and accelerators\u2014to confirm what the node can access."
++      description: Hardware/software probe (`/admin/probe/hw`).
+   /admin/probe/metrics:
+     get:
+       tags:
+       - Admin/Introspect
+-      summary: Probe metrics snapshot
++      summary: Metrics snapshot probe (`/admin/probe/metrics`).
+       operationId: probe_metrics_doc
+       responses:
+         '200':
+@@ -1323,8 +1218,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Return the current metrics summary (Prometheus-style counters and
+-        histograms) for quick diagnostics.
++      description: Metrics snapshot probe (`/admin/probe/metrics`).
+   /admin/self_model/apply:
+     post:
+       tags:
+@@ -1357,8 +1251,7 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Apply a previously proposed self-model change and notify subscribers.
+-      summary: Apply self-model proposal
++      description: 'SelfModel: POST /admin/self_model/apply.'
+   /admin/self_model/propose:
+     post:
+       tags:
+@@ -1386,9 +1279,7 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Submit a self-model patch proposal for an agent and emit the proposal
+-        event.
+-      summary: Propose self-model update
++      description: 'SelfModel: POST /admin/self_model/propose.'
+   /admin/tools:
+     get:
+       tags:
+@@ -1402,9 +1293,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Return the catalog of available tools with stability and capability
+-        metadata.
+-      summary: List registered tools
++      description: 'Tools: GET /admin/tools.'
+   /admin/tools/cache_stats:
+     get:
+       tags:
+@@ -1418,8 +1307,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Return cache utilisation metrics for the shared tool cache.
+-      summary: Inspect tool cache statistics
++      description: 'Tools: GET /admin/tools/cache_stats.'
+   /admin/tools/run:
+     post:
+       tags:
+@@ -1447,9 +1335,7 @@
+           description: Unknown tool
+         '500':
+           description: Tool runtime error
+-      description: Execute a registered tool with the provided input payload and return
+-        its output.
+-      summary: Run tool
++      description: 'Tools: POST /admin/tools/run.'
+   /admin/world_diffs:
+     get:
+       tags:
+@@ -1463,8 +1349,7 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Return the queue of pending world diffs awaiting review.
+-      summary: List world diffs
++      description: 'Review: GET /admin/world_diffs.'
+   /admin/world_diffs/decision:
+     post:
+       tags:
+@@ -1488,8 +1373,7 @@
+           description: Diff not found
+         '500':
+           description: Storage error
+-      description: Accept or reject a queued world diff and persist the decision outcome.
+-      summary: Record world diff decision
++      description: 'Review: POST /admin/world_diffs/decision.'
+   /admin/world_diffs/queue:
+     post:
+       tags:
+@@ -1511,15 +1395,14 @@
+           description: Unauthorized
+         '500':
+           description: Storage error
+-      description: Enqueue a world diff for review with the supplied metadata.
+-      summary: Queue world diff
++      description: 'Review: POST /admin/world_diffs/queue.'
+   /events:
+     get:
+       tags:
+       - Events
+-      summary: Stream event feed
+-      description: Open the Server-Sent Events stream of normalized envelopes; supports
+-        prefix filtering and Last-Event-ID replay.
++      summary: "Server\u2011Sent Events stream of envelopes."
++      description: "Server\u2011Sent Events stream of envelopes; supports replay and\
++        \ prefix filters."
+       operationId: events_sse_doc
+       parameters:
+       - name: after
+@@ -1571,9 +1454,8 @@
+     get:
+       tags:
+       - Meta
+-      summary: Readiness probe
+-      description: 'Return a simple readiness payload (`{"ok": true}`) suitable for
+-        health checks and load balancers.'
++      summary: Health probe.
++      description: Service readiness probe.
+       operationId: healthz_doc
+       responses:
+         '200':
+@@ -1594,14 +1476,12 @@
+             text/plain:
+               schema:
+                 type: string
+-      description: Serve Prometheus-formatted metrics for the unified server, including
+-        tool cache counters.
+-      summary: Export Prometheus metrics
++      description: 'Public: GET /metrics.'
+   /orchestrator/mini_agents:
+     get:
+       tags:
+       - Orchestrator
+-      summary: List mini-agent templates
++      summary: List available mini-agents (placeholder).
+       operationId: orchestrator_mini_agents_doc
+       responses:
+         '200':
+@@ -1615,13 +1495,12 @@
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/ProblemDetails'
+-      description: Return placeholder metadata about available mini-agents while the
+-        orchestrator capability is incubating.
++      description: List available mini-agents (placeholder).
+   /orchestrator/mini_agents/start_training:
+     post:
+       tags:
+       - Orchestrator
+-      summary: Start mini-agent training
++      summary: Start a training job that results in a suggested Logic Unit (admin).
+       operationId: orchestrator_start_training_doc
+       requestBody:
+         content:
+@@ -1647,8 +1526,7 @@
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/ProblemDetails'
+-      description: Kick off a training job that will propose a Logic Unit configuration
+-        once complete; returns an async job handle when accepted.
++      description: Start a training job that results in a suggested Logic Unit (admin).
+   /projects:
+     post:
+       tags:
+@@ -1672,9 +1550,7 @@
+           description: Unauthorized
+         '500':
+           description: Error
+-      description: Create a new project directory, seed default notes, and emit the
+-        creation event.
+-      summary: Create project
++      description: 'Projects: POST /projects.'
+   /projects/{proj}/file:
+     put:
+       tags:
+@@ -1713,9 +1589,7 @@
+           description: Conflict
+         '500':
+           description: Error
+-      description: Create or replace a project file at the given path, enforcing optimistic
+-        concurrency and quotas.
+-      summary: Write project file
++      description: 'Projects: PUT /projects/{proj}/file.'
+     patch:
+       tags:
+       - Projects
+@@ -1753,9 +1627,7 @@
+           description: Conflict
+         '500':
+           description: Error
+-      description: Apply a JSON patch or diff patch to an existing project file while
+-        checking version guards.
+-      summary: Patch project file
++      description: 'Projects: PATCH /projects/{proj}/file.'
+   /projects/{proj}/import:
+     post:
+       tags:
+@@ -1788,9 +1660,7 @@
+           description: Forbidden
+         '500':
+           description: Error
+-      description: Copy or move a file from the staging area into the project workspace
+-        and emit audit events.
+-      summary: Import project asset
++      description: 'Projects: POST /projects/{proj}/import.'
+   /projects/{proj}/notes:
+     put:
+       tags:
+@@ -1822,9 +1692,7 @@
+           description: Unauthorized
+         '500':
+           description: Error
+-      description: Replace the project notes document and return metadata for the
+-        updated file.
+-      summary: Save project notes
++      description: 'Projects: PUT /projects/{proj}/notes.'
+   /research_watcher/{id}/approve:
+     post:
+       tags:
+@@ -1855,9 +1723,7 @@
+           description: Not found
+         '500':
+           description: Error
+-      description: Mark a research watcher entry as approved, optionally attaching
+-        an operator note.
+-      summary: Approve research watcher item
++      description: 'Research: POST /research_watcher/{id}/approve.'
+   /research_watcher/{id}/archive:
+     post:
+       tags:
+@@ -1888,14 +1754,12 @@
+           description: Not found
+         '500':
+           description: Error
+-      description: Archive a research watcher entry to remove it from the active queue
+-        while preserving audit history.
+-      summary: Archive research watcher item
++      description: 'Research: POST /research_watcher/{id}/archive.'
+   /spec/health:
+     get:
+       tags:
+       - Specs
+-      summary: Inspect spec artifacts
++      summary: Health summary for spec artifacts (presence/size).
+       operationId: spec_health_doc
+       responses:
+         '200':
+@@ -1903,8 +1767,7 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Report presence, size, and checksum information for bundled OpenAPI,
+-        AsyncAPI, and schema artifacts.
++      description: Health summary for spec artifacts (presence/size).
+   /staging/actions/{id}/approve:
+     post:
+       tags:
+@@ -1935,9 +1798,7 @@
+           description: Not found
+         '500':
+           description: Error
+-      description: Approve a staged action so it can execute and emit the resulting
+-        workflow job.
+-      summary: Approve staging action
++      description: 'Staging: POST /staging/actions/{id}/approve.'
+   /staging/actions/{id}/deny:
+     post:
+       tags:
+@@ -1968,16 +1829,13 @@
+           description: Not found
+         '500':
+           description: Error
+-      description: Deny a staged action with an optional reason, preventing it from
+-        executing.
+-      summary: Deny staging action
++      description: 'Staging: POST /staging/actions/{id}/deny.'
+   /state/actions:
+     get:
+       tags:
+       - State
+-      summary: List recent actions
+-      description: Return the rolling window of actions emitted by the kernel, ordered
+-        from newest to oldest.
++      summary: Recent actions list.
++      description: Recent actions list (most recent first).
+       operationId: state_actions_doc
+       parameters:
+       - name: limit
+@@ -2029,9 +1887,8 @@
+     get:
+       tags:
+       - State
+-      summary: Inspect belief store
+-      description: Return the current belief entries derived from events so clients
+-        can reason over world facts.
++      summary: Current beliefs snapshot derived from events.
++      description: Current beliefs snapshot derived from events.
+       operationId: state_beliefs_doc
+       responses:
+         '200':
+@@ -2048,9 +1905,8 @@
+     get:
+       tags:
+       - State
+-      summary: Inspect cluster nodes
+-      description: Return the snapshot of known cluster nodes, their roles, and health
+-        metadata.
++      summary: Cluster nodes snapshot.
++      description: Cluster nodes snapshot (admin-only).
+       operationId: state_cluster_doc
+       responses:
+         '200':
+@@ -2067,7 +1923,7 @@
+     get:
+       tags:
+       - State
+-      summary: List experiment events
++      summary: Experiment events snapshot (public read-model).
+       operationId: state_experiments_doc
+       responses:
+         '200':
+@@ -2075,13 +1931,12 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Expose the experiment read-model summarizing variants, assignments,
+-        and recent outcomes.
++      description: Experiment events snapshot (public read-model).
+   /state/guardrails_metrics:
+     get:
+       tags:
+       - State
+-      summary: Inspect guardrail metrics
++      summary: Guardrails circuit-breaker metrics snapshot.
+       operationId: state_guardrails_metrics_doc
+       responses:
+         '200':
+@@ -2094,14 +1949,14 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Return guardrail circuit-breaker counters and latency measurements
+-        for monitoring automation health.
++      description: Guardrails circuit-breaker metrics snapshot.
+   /state/intents:
+     get:
+       tags:
+       - State
+-      summary: List recent intents
+-      description: Return the rolling window of intent events emitted by the kernel.
++      summary: Recent intents stream (rolling window) with a monotonic version counter.
++      description: Recent intents stream (rolling window) with a monotonic version
++        counter.
+       operationId: state_intents_doc
+       responses:
+         '200':
+@@ -2118,9 +1973,8 @@
+     get:
+       tags:
+       - State
+-      summary: Inspect model catalog
+-      description: Return the derived model catalog with provider metadata, install
+-        status, and version details.
++      summary: Model catalog read-model.
++      description: Model catalog read-model.
+       operationId: state_models_doc
+       responses:
+         '200':
+@@ -2180,15 +2034,12 @@
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/HashPage'
+-      description: Return a paginated view of installed model blobs with filters for
+-        provider, size, and hash.
+-      summary: List installed model hashes
++      description: 'State: GET /state/models_hashes.'
+   /state/models_metrics:
+     get:
+       tags:
+       - State
+-      description: Return model runtime metrics, including cache hits and latency
+-        data, for observability dashboards.
++      description: Models metrics snapshot.
+       operationId: state_models_metrics_doc
+       responses:
+         '200':
+@@ -2202,7 +2053,6 @@
+           content:
+             application/json:
+               schema: {}
+-      summary: Inspect model metrics
+   /state/observations:
+     get:
+       tags:
+@@ -2252,7 +2102,7 @@
+     get:
+       tags:
+       - Orchestrator
+-      summary: List orchestrator jobs
++      summary: Orchestrator jobs snapshot.
+       operationId: state_orchestrator_jobs_doc
+       parameters:
+       - name: limit
+@@ -2273,8 +2123,7 @@
+             application/json:
+               schema:
+                 $ref: '#/components/schemas/ProblemDetails'
+-      description: Return the current orchestrator job queue including statuses, runners,
+-        and progress metadata.
++      description: Orchestrator jobs snapshot.
+   /state/projects:
+     get:
+       tags:
+@@ -2286,9 +2135,7 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Return the cached project snapshot with file tree, notes, and metadata
+-        for quick reads.
+-      summary: Snapshot project catalog
++      description: 'Projects: GET /state/projects.'
+   /state/projects/{proj}/file:
+     get:
+       tags:
+@@ -2319,9 +2166,7 @@
+           description: Unauthorized
+         '404':
+           description: Not found
+-      description: Return the latest stored contents for a project file identified
+-        by project and relative path.
+-      summary: Fetch project file snapshot
++      description: 'Projects: GET /state/projects/{proj}/file.'
+   /state/projects/{proj}/notes:
+     get:
+       tags:
+@@ -2345,9 +2190,7 @@
+           description: Invalid request
+         '401':
+           description: Unauthorized
+-      description: Return the current project notes document with metadata such as
+-        checksum and size.
+-      summary: Fetch project notes
++      description: 'Projects: GET /state/projects/{proj}/notes.'
+   /state/projects/{proj}/tree:
+     get:
+       tags:
+@@ -2378,14 +2221,12 @@
+           description: Unauthorized
+         '404':
+           description: Not found
+-      description: Return a directory listing for a project path to help clients explore
+-        workspace structure.
+-      summary: Browse project tree
++      description: 'Projects: GET /state/projects/{proj}/tree.'
+   /state/research_watcher:
+     get:
+       tags:
+       - State
+-      summary: Inspect research watcher
++      summary: Research watcher queue snapshot.
+       operationId: state_research_watcher_doc
+       parameters:
+       - name: status
+@@ -2414,13 +2255,12 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Return the research watcher queue snapshot with pending items,
+-        statuses, and telemetry.
++      description: Research watcher queue snapshot.
+   /state/route_stats:
+     get:
+       tags:
+       - State
+-      summary: Inspect route metrics
++      summary: Bus and per-route counters snapshot.
+       operationId: state_route_stats_doc
+       responses:
+         '200':
+@@ -2428,13 +2268,12 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Return per-route counters, durations, and cache statistics aggregated
+-        by the server.
++      description: Bus and per-route counters snapshot.
+   /state/runtime_matrix:
+     get:
+       tags:
+       - State
+-      summary: Inspect runtime matrix
++      summary: Runtime matrix snapshot.
+       operationId: state_runtime_matrix_doc
+       responses:
+         '200':
+@@ -2448,13 +2287,12 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Return the runtime matrix covering available runtimes, capabilities,
+-        and health signals.
++      description: Runtime matrix snapshot.
+   /state/staging/actions:
+     get:
+       tags:
+       - State
+-      summary: Inspect staging actions
++      summary: Staging queue snapshot.
+       operationId: state_staging_actions_doc
+       parameters:
+       - name: status
+@@ -2483,13 +2321,12 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Return staged actions awaiting review or execution in the staging
+-        queue.
++      description: Staging queue snapshot.
+   /state/tasks:
+     get:
+       tags:
+       - State
+-      summary: Inspect background tasks
++      summary: Background tasks status snapshot.
+       operationId: state_tasks_doc
+       responses:
+         '200':
+@@ -2497,13 +2334,12 @@
+           content:
+             application/json:
+               schema: {}
+-      description: Return the background task registry with progress, retry counts,
+-        and assigned workers.
++      description: Background tasks status snapshot.
+   /state/training/telemetry:
+     get:
+       tags:
+       - State
+-      summary: Inspect training telemetry
++      summary: Training telemetry snapshot.
+       operationId: state_training_telemetry_doc
+       responses:
+         '200':
+@@ -2513,15 +2349,13 @@
+               schema: {}
+         '401':
+           description: Unauthorized
+-      description: Return aggregated Training Park telemetry, including success ratios,
+-        recall, and coverage metrics.
++      description: Training telemetry snapshot.
+   /state/world:
+     get:
+       tags:
+       - State
+-      summary: Inspect world model
+-      description: Return the active world graph snapshot with claims, provenance
+-        metadata, and belief relationships.
++      summary: Project world model snapshot (belief graph view).
++      description: Project world model snapshot (belief graph view).
+       operationId: state_world_doc
+       parameters:
+       - name: proj
+@@ -2545,9 +2379,8 @@
+     get:
+       tags:
+       - State
+-      summary: Select world claims
+-      description: Evaluate a query against the world graph and return the top-k claims
+-        that match the provided filters.
++      summary: Select top-k claims for a query.
++      description: Select top-k claims for a query.
+       operationId: state_world_select_doc
+       parameters:
+       - name: proj
+```
 
 ## AsyncAPI (Events)
 
 ```diff
 --- asyncapi.base.yaml
 +++ asyncapi.head.yaml
-@@ -94,6 +94,86 @@
+@@ -124,6 +124,16 @@
          payload:
            type: object
            additionalProperties: true
-+  'autonomy.alert':
++  'autonomy.budget.updated':
 +    subscribe:
-+      operationId: autonomy_alert_event
-+      summary: "autonomy.alert event"
-+      description: "Event published on 'autonomy.alert' channel."
++      operationId: autonomy_budget_updated_event
++      summary: "autonomy.budget.updated event"
++      description: "Event published on 'autonomy.budget.updated' channel."
 +      message:
-+        name: 'autonomy.alert'
++        name: 'autonomy.budget.updated'
 +        payload:
 +          type: object
 +          additionalProperties: true
-+  'autonomy.budget.close_to_limit':
-+    subscribe:
-+      operationId: autonomy_budget_close_to_limit_event
-+      summary: "autonomy.budget.close_to_limit event"
-+      description: "Event published on 'autonomy.budget.close_to_limit' channel."
-+      message:
-+        name: 'autonomy.budget.close_to_limit'
-+        payload:
-+          type: object
-+          additionalProperties: true
-+  'autonomy.budget.exhausted':
-+    subscribe:
-+      operationId: autonomy_budget_exhausted_event
-+      summary: "autonomy.budget.exhausted event"
-+      description: "Event published on 'autonomy.budget.exhausted' channel."
-+      message:
-+        name: 'autonomy.budget.exhausted'
-+        payload:
-+          type: object
-+          additionalProperties: true
-+  'autonomy.interrupt':
-+    subscribe:
-+      operationId: autonomy_interrupt_event
-+      summary: "autonomy.interrupt event"
-+      description: "Event published on 'autonomy.interrupt' channel."
-+      message:
-+        name: 'autonomy.interrupt'
-+        payload:
-+          type: object
-+          additionalProperties: true
-+  'autonomy.run.paused':
-+    subscribe:
-+      operationId: autonomy_run_paused_event
-+      summary: "autonomy.run.paused event"
-+      description: "Event published on 'autonomy.run.paused' channel."
-+      message:
-+        name: 'autonomy.run.paused'
-+        payload:
-+          type: object
-+          additionalProperties: true
-+  'autonomy.run.resumed':
-+    subscribe:
-+      operationId: autonomy_run_resumed_event
-+      summary: "autonomy.run.resumed event"
-+      description: "Event published on 'autonomy.run.resumed' channel."
-+      message:
-+        name: 'autonomy.run.resumed'
-+        payload:
-+          type: object
-+          additionalProperties: true
-+  'autonomy.run.started':
-+    subscribe:
-+      operationId: autonomy_run_started_event
-+      summary: "autonomy.run.started event"
-+      description: "Event published on 'autonomy.run.started' channel."
-+      message:
-+        name: 'autonomy.run.started'
-+        payload:
-+          type: object
-+          additionalProperties: true
-+  'autonomy.run.stopped':
-+    subscribe:
-+      operationId: autonomy_run_stopped_event
-+      summary: "autonomy.run.stopped event"
-+      description: "Event published on 'autonomy.run.stopped' channel."
-+      message:
-+        name: 'autonomy.run.stopped'
-+        payload:
-+          type: object
-+          additionalProperties: true
-   'beliefs.updated':
+   'autonomy.interrupt':
      subscribe:
-       operationId: beliefs_updated_event
-@@ -630,7 +710,10 @@
-       summary: "models.download.progress event"
-       description: "Event published on 'models.download.progress' channel."
-       message:
--        $ref: '#/components/messages/models.download.progress'
-+        name: 'models.download.progress'
-+        payload:
-+          type: object
-+          additionalProperties: true
-   'models.manifest.written':
-     subscribe:
-       operationId: models_manifest_written_event
-@@ -861,6 +944,16 @@
+       operationId: autonomy_interrupt_event
+@@ -184,6 +194,16 @@
          payload:
            type: object
            additionalProperties: true
-+  'screenshots.ocr.completed':
++  'cache.policy.reloaded':
 +    subscribe:
-+      operationId: screenshots_ocr_completed_event
-+      summary: "screenshots.ocr.completed event"
-+      description: "Event published on 'screenshots.ocr.completed' channel."
++      operationId: cache_policy_reloaded_event
++      summary: "cache.policy.reloaded event"
++      description: "Event published on 'cache.policy.reloaded' channel."
 +      message:
-+        name: 'screenshots.ocr.completed'
++        name: 'cache.policy.reloaded'
 +        payload:
 +          type: object
 +          additionalProperties: true
-   'self.model.proposed':
+   'catalog.updated':
      subscribe:
-       operationId: self_model_proposed_event
-@@ -1141,125 +1234,3 @@
+       operationId: catalog_updated_event
+@@ -254,6 +274,16 @@
          payload:
            type: object
            additionalProperties: true
--components:
--  messages:
--    'models.download.progress':
--      name: 'models.download.progress'
--      title: "Models download progress"
--      summary: "Download lifecycle progress, errors, and budget hints."
--      contentType: application/json
--      correlationId:
--        description: "Correlation id shared across previews, progress, and ledger entries (when present)."
--        location: "$message.payload#/corr_id"
--      payload:
--        type: object
--        required:
--          - id
--        additionalProperties: true
--        properties:
--          id:
--            type: string
--            description: "Download identifier (model id or follower target)."
--          status:
--            type: string
--            description: "Lifecycle phase for this download entry."
--            enum:
--              - started
--              - preflight
--              - downloading
--              - resumed
--              - degraded
--              - complete
--              - error
--              - canceled
--              - no-active-job
--              - coalesced
--          code:
--            type: string
--            description: "Stable machine-readable code describing the current status."
--            enum:
--              - hash-guard
--              - skipped
--              - resumed
--              - http
--              - request-timeout
--              - resume-http-status
--              - resume-content-range
--              - idle-timeout
--              - io
--              - sha256_mismatch
--              - quota_exceeded
--              - disk_insufficient
--              - size_limit
--              - soft-budget
--              - hard-budget
--          error_code:
--            type: string
--            description: "When status is error, mirrors the failure code for quick filtering."
--          corr_id:
--            type: string
--            description: "Correlation id shared across previews, progress, and ledger entries."
--          downloaded:
--            type: integer
--            format: int64
--            description: "Bytes persisted so far for this download attempt."
--          bytes:
--            type: integer
--            format: int64
--            description: "Alias for downloaded bytes retained for backwards compatibility."
--          total:
--            type: integer
--            format: int64
--            description: "Total expected bytes when advertised by the source."
--          percent:
--            type: number
--            format: double
--            minimum: 0
--            maximum: 100
--            description: "Percent complete when total is known."
--          url:
--            type: string
--            description: "Source URL (redacted to drop secrets for logs/previews)."
--          mode:
--            type: string
--            description: "Preflight/coalescing mode indicator (e.g., ok, skip, coalesced)."
--          primary:
--            type: string
--            description: "Primary download id when this entry was coalesced behind it."
--          content_length:
--            type: integer
--            format: int64
--            description: "Content length advertised during preflight."
--          etag:
--            type: string
--            description: "Source ETag observed during preflight (if provided)."
--          last_modified:
--            type: string
--            description: "Last-Modified header captured during preflight."
--          reason:
--            type: string
--            description: "Reason string for skipped preflight validations."
--          offset:
--            type: integer
--            format: int64
--            description: "Resume offset applied when a partial download continued."
--          sha256:
--            type: string
--            description: "Computed SHA-256 digest once the download completes."
--          cached:
--            type: boolean
--            description: "Whether the completed download reused an existing CAS entry."
--          source:
--            type: string
--            description: "Source indicator for coalesced completions (e.g., coalesced)."
--          error:
--            type: string
--            description: "Human-readable error message when status is error."
--          budget:
--            type: object
--            description: "Soft/hard budget snapshot with elapsed timings."
--            additionalProperties: true
--          disk:
--            type: object
--            description: "Disk utilization snapshot ({reserve, available, need})."
--            additionalProperties: true
++  'config.reloaded':
++    subscribe:
++      operationId: config_reloaded_event
++      summary: "config.reloaded event"
++      description: "Event published on 'config.reloaded' channel."
++      message:
++        name: 'config.reloaded'
++        payload:
++          type: object
++          additionalProperties: true
+   'connectors.registered':
+     subscribe:
+       operationId: connectors_registered_event
+@@ -804,6 +834,26 @@
+         payload:
+           type: object
+           additionalProperties: true
++  'policy.gating.reloaded':
++    subscribe:
++      operationId: policy_gating_reloaded_event
++      summary: "policy.gating.reloaded event"
++      description: "Event published on 'policy.gating.reloaded' channel."
++      message:
++        name: 'policy.gating.reloaded'
++        payload:
++          type: object
++          additionalProperties: true
++  'policy.guardrails.applied':
++    subscribe:
++      operationId: policy_guardrails_applied_event
++      summary: "policy.guardrails.applied event"
++      description: "Event published on 'policy.guardrails.applied' channel."
++      message:
++        name: 'policy.guardrails.applied'
++        payload:
++          type: object
++          additionalProperties: true
+   'policy.reloaded':
+     subscribe:
+       operationId: policy_reloaded_event
+@@ -864,6 +914,26 @@
+         payload:
+           type: object
+           additionalProperties: true
++  'projects.snapshot.created':
++    subscribe:
++      operationId: projects_snapshot_created_event
++      summary: "projects.snapshot.created event"
++      description: "Event published on 'projects.snapshot.created' channel."
++      message:
++        name: 'projects.snapshot.created'
++        payload:
++          type: object
++          additionalProperties: true
++  'projects.snapshot.restored':
++    subscribe:
++      operationId: projects_snapshot_restored_event
++      summary: "projects.snapshot.restored event"
++      description: "Event published on 'projects.snapshot.restored' channel."
++      message:
++        name: 'projects.snapshot.restored'
++        payload:
++          type: object
++          additionalProperties: true
+   'research.watcher.updated':
+     subscribe:
+       operationId: research_watcher_updated_event
+@@ -924,6 +994,26 @@
+         payload:
+           type: object
+           additionalProperties: true
++  'runtime.restore.completed':
++    subscribe:
++      operationId: runtime_restore_completed_event
++      summary: "runtime.restore.completed event"
++      description: "Event published on 'runtime.restore.completed' channel."
++      message:
++        name: 'runtime.restore.completed'
++        payload:
++          type: object
++          additionalProperties: true
++  'runtime.restore.requested':
++    subscribe:
++      operationId: runtime_restore_requested_event
++      summary: "runtime.restore.requested event"
++      description: "Event published on 'runtime.restore.requested' channel."
++      message:
++        name: 'runtime.restore.requested'
++        payload:
++          type: object
++          additionalProperties: true
+   'runtime.state.changed':
+     subscribe:
+       operationId: runtime_state_changed_event
+@@ -1224,6 +1314,16 @@
+         payload:
+           type: object
+           additionalProperties: true
++  'world.telemetry':
++    subscribe:
++      operationId: world_telemetry_event
++      summary: "world.telemetry event"
++      description: "Event published on 'world.telemetry' channel."
++      message:
++        name: 'world.telemetry'
++        payload:
++          type: object
++          additionalProperties: true
+   'world.updated':
+     subscribe:
+       operationId: world_updated_event
 ```
+

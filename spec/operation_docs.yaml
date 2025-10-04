@@ -23,6 +23,10 @@
   get:
     summary: Query chat status
     description: Report chat lane health, including the most recent latency probe; optionally trigger a new probe.
+/admin/events/journal:
+  get:
+    summary: Tail event journal
+    description: Retrieve the latest persisted event entries with optional prefix filters for focused inspection.
 /admin/experiments/define:
   post:
     summary: Define experiment

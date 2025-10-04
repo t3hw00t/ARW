@@ -324,6 +324,7 @@ verify:
   cargo test --workspace --locked
   node apps/arw-launcher/src-tauri/ui/read_store.test.js
   python3 scripts/check_operation_docs_sync.py
+  python3 scripts/gen_topics_doc.py --check
   python3 scripts/lint_event_names.py
   bash scripts/docs_check.sh
 

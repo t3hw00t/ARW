@@ -438,7 +438,7 @@ fn read_journal_tail(
 mod tests {
     use super::*;
     use crate::{read_models, test_support::env, AppState};
-    use arw_topics::TOPIC_READMODEL_PATCH;
+    use arw_topics::{TOPIC_READMODEL_PATCH, TOPIC_SERVICE_STOP, TOPIC_SERVICE_TEST};
     use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode};
     use hex;
     use http_body_util::BodyExt;
@@ -959,8 +959,8 @@ mod tests {
         let state = build_state(temp.path(), &mut ctx.env).await;
 
         let bus = state.bus();
-        bus.publish("test.event", &json!({"msg": "first"}));
-        bus.publish("test.other", &json!({"msg": "second"}));
+        bus.publish(TOPIC_SERVICE_TEST, &json!({"msg": "first"}));
+        bus.publish(TOPIC_SERVICE_STOP, &json!({"msg": "second"}));
 
         tokio::time::sleep(Duration::from_millis(100)).await;
 
@@ -985,7 +985,7 @@ mod tests {
         let body_json: Value = serde_json::from_slice(&body_bytes).expect("json body");
         let entries = body_json["entries"].as_array().expect("entries array");
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0]["kind"].as_str(), Some("test.other"));
+        assert_eq!(entries[0]["kind"].as_str(), Some(TOPIC_SERVICE_STOP));
         assert!(body_json["total_matched"].as_u64().unwrap_or(0) >= 2);
         assert!(body_json["truncated"].as_bool().unwrap_or(false));
 
@@ -993,7 +993,7 @@ mod tests {
             State(state),
             Query(EventsJournalQuery {
                 limit: Some(5),
-                prefix: Some("test.event".into()),
+                prefix: Some(TOPIC_SERVICE_TEST.to_string()),
             }),
             HeaderMap::new(),
         )
@@ -1009,7 +1009,7 @@ mod tests {
         let body_json: Value = serde_json::from_slice(&bytes).expect("json body");
         let entries = body_json["entries"].as_array().expect("entries array");
         assert_eq!(entries.len(), 1);
-        assert_eq!(entries[0]["kind"].as_str(), Some("test.event"));
+        assert_eq!(entries[0]["kind"].as_str(), Some(TOPIC_SERVICE_TEST));
         assert_eq!(body_json["prefixes"].as_array().map(|a| a.len()), Some(1));
         assert!(body_json["total_matched"].as_u64().unwrap_or(0) >= 1);
         assert!(!body_json["truncated"].as_bool().unwrap());

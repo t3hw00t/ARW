@@ -48,7 +48,14 @@
           "id": "permissioning",
           "name": "Permissioning",
           "promise": "Grant capabilities with leases, previews, and clear denials before anything leaves.",
-          "features": ["policy_leases", "identity_tenancy", "egress_sentinel", "guardrail_gateway", "asimov_capsule_guard"]
+          "features": [
+            "policy_leases",
+            "identity_tenancy",
+            "egress_sentinel",
+            "guardrail_gateway",
+            "asimov_capsule_guard",
+            "autonomy_lane_controls"
+          ]
         },
         {
           "id": "govern_configuration",
