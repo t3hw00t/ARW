@@ -279,23 +279,34 @@ static ADMIN_RATE_LIMITER: Lazy<Mutex<HashMap<String, VecDeque<Instant>>>> =
     Lazy::new(|| Mutex::new(HashMap::new()));
 
 pub(crate) fn admin_rate_limit_allow(fingerprint: &str, addrs: &ClientAddrs) -> bool {
-    let _ = fingerprint; // fingerprint remains available for future telemetry.
     let cfg = rate_limit_config();
     if cfg.max == 0 {
         return true;
     }
 
-    let mut keys = vec!["global".to_string()];
-    if let Some(remote) = addrs.remote() {
-        keys.push(format!("ip:{}", remote));
-    } else {
-        keys.push("ip:unknown".to_string());
-    }
+    let mut keys = Vec::with_capacity(6);
+    keys.push("global".to_string());
+
+    let remote_ip = addrs
+        .remote()
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| "unknown".into());
+    keys.push(format!("ip:{}", remote_ip));
+
     if addrs.forwarded_trusted() {
         if let Some(fwd) = addrs.forwarded() {
             keys.push(format!("ip:{}", fwd));
+            if !fingerprint.is_empty() {
+                keys.push(format!("token_ip:{}@{}", fingerprint, fwd));
+            }
         }
     }
+
+    if !fingerprint.is_empty() {
+        keys.push(format!("token:{}", fingerprint));
+        keys.push(format!("token_ip:{}@{}", fingerprint, remote_ip));
+    }
+
     keys.sort();
     keys.dedup();
 

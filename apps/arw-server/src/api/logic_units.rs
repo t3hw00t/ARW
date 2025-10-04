@@ -11,7 +11,7 @@ use crate::api::config::{
     dot_to_pointer, ensure_path, get_by_dot, infer_schema_for_target, merge_values,
     validate_patch_value,
 };
-use crate::AppState;
+use crate::{capsule_guard, AppState};
 use arw_topics as topics;
 
 /// Catalog installed logic units.
@@ -103,6 +103,7 @@ pub async fn logic_units_install(
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
+    capsule_guard::refresh_capsules(&state).await;
     let id = manifest
         .get("id")
         .and_then(|v| v.as_str())
@@ -147,6 +148,7 @@ pub async fn logic_units_apply(
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
+    capsule_guard::refresh_capsules(&state).await;
     if let Err(errs) = validate_patch_value(&body) {
         return (
             axum::http::StatusCode::BAD_REQUEST,
@@ -364,6 +366,7 @@ pub async fn logic_units_revert(
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
+    capsule_guard::refresh_capsules(&state).await;
     let snap = body
         .get("snapshot_id")
         .and_then(|v| v.as_str())

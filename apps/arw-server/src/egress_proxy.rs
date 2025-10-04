@@ -1,6 +1,6 @@
 use crate::egress_log::{self, EgressRecord};
 use crate::egress_policy::{capability_candidates, lease_grant, reason_code, DenyReason};
-use crate::{egress_policy, http_timeout, util::effective_posture, AppState};
+use crate::{capsule_guard, egress_policy, http_timeout, util::effective_posture, AppState};
 use axum::body::Body;
 use bytes::Bytes;
 use futures_util::{Stream, StreamExt};
@@ -162,6 +162,7 @@ async fn proxy_handler(
     client: reqwest::Client,
     req: Request<IncomingBody>,
 ) -> Result<Response<ProxyBody>, Infallible> {
+    capsule_guard::refresh_capsules(&state).await;
     if req.method() == Method::CONNECT {
         return Ok(handle_connect(state, req).await);
     }
