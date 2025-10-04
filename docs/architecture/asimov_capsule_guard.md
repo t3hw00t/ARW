@@ -40,8 +40,8 @@ The remaining gap is operational coverage: workers and higher-level runners stil
 
 ### Phase 2 — Capsule Propagation Hooks
 1. ✅ Cache the last verified capsule per session (admin token, project) and replay it automatically before `tools_exec::run`, orchestrator task dispatch, and policy evaluation entry points.
-2. ⏭ (Backlog) Teach the egress proxy to request a capsule refresh before allowing external connections, ensuring the guard is in place for network operations.
-3. ⏭ (Backlog) Update Logic Unit / Recipe runners to request capsule refresh when executing automation bundles so packaged strategies inherit the guard.
+2. ✅ Teach the egress proxy to request a capsule refresh before allowing external connections, ensuring the guard is in place for network operations. Regression tests cover the egress policy pathway.
+3. ✅ Update Logic Unit / Recipe runners to request capsule refresh when executing automation bundles so packaged strategies inherit the guard. Installer flow now refreshes capsules and ships with coverage.
 
 ### Phase 3 — UX & Operational Controls
 1. ⏭ (Backlog) Add UI toggles to treat capsules as posture presets (e.g., "Strict Egress"), showing TTL countdowns and renewal status.

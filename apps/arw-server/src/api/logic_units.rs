@@ -407,3 +407,89 @@ pub async fn logic_units_revert(
             .into_response()
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support;
+    use crate::test_support::env as test_env;
+    use arw_policy::PolicyEngine;
+    use arw_protocol::GatingCapsule;
+    use arw_wasi::NoopHost;
+    use axum::http::{HeaderMap, HeaderValue};
+    use serde_json::json;
+    use std::path::Path;
+    use std::sync::Arc;
+    use std::time::{SystemTime, UNIX_EPOCH};
+    use tempfile::tempdir;
+    use tokio::sync::Mutex;
+
+    async fn build_state(dir: &Path, env_guard: &mut test_env::EnvGuard) -> AppState {
+        env_guard.set("ARW_DEBUG", "1");
+        env_guard.set("ARW_ADMIN_TOKEN", "local");
+        crate::util::reset_state_dir_for_tests();
+        env_guard.set("ARW_STATE_DIR", dir.display().to_string());
+        let bus = arw_events::Bus::new_with_replay(64, 64);
+        let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
+        let policy = PolicyEngine::load_from_env();
+        let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(NoopHost);
+        AppState::builder(bus, kernel, policy_handle, host, true)
+            .with_config_state(Arc::new(Mutex::new(json!({"mode": "test"}))))
+            .with_config_history(Arc::new(Mutex::new(Vec::new())))
+            .with_sse_capacity(64)
+            .build()
+            .await
+    }
+
+    fn capsule_with_hops(id: &str, ttl: u32) -> GatingCapsule {
+        GatingCapsule {
+            id: id.to_string(),
+            version: "1".into(),
+            issued_at_ms: 0,
+            issuer: Some("issuer".into()),
+            hop_ttl: Some(ttl),
+            propagate: None,
+            denies: vec![],
+            contracts: vec![],
+            lease_duration_ms: Some(60_000),
+            renew_within_ms: Some(10_000),
+            signature: Some("sig".into()),
+        }
+    }
+
+    fn now_ms() -> u64 {
+        SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64
+    }
+
+    #[tokio::test]
+    async fn install_refreshes_capsules() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let capsule = capsule_with_hops("logic-refresh", 3);
+        state.capsules().adopt(&capsule, now_ms()).await;
+
+        let before = state.capsules().snapshot().await;
+        let items = before["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["remaining_hops"].as_u64(), Some(2));
+
+        let mut headers = HeaderMap::new();
+        headers.insert("X-ARW-Admin", HeaderValue::from_static("local"));
+        let manifest = json!({"name": "demo"});
+        let response = logic_units_install(State(state.clone()), headers, Json(manifest))
+            .await
+            .into_response();
+        assert_eq!(response.status(), axum::http::StatusCode::CREATED);
+
+        let after = state.capsules().snapshot().await;
+        let items = after["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["remaining_hops"].as_u64(), Some(1));
+    }
+}
