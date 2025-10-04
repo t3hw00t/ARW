@@ -5,7 +5,8 @@ use sha2::{Digest, Sha256};
 use std::collections::{BTreeMap, HashMap};
 use std::future::Future;
 use std::path::{Path, PathBuf};
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 use tokio::{fs as afs, time};
 use walkdir::WalkDir;
@@ -33,7 +34,8 @@ struct NotesSnapshot {
 }
 
 use crate::singleflight::Singleflight;
-use crate::{metrics, project_snapshots, tasks::TaskHandle, training, AppState};
+use crate::{metrics, project_snapshots, state_observer, tasks::TaskHandle, training, AppState};
+use arw_kernel::ActionListOptions;
 use arw_topics as topics;
 
 pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
@@ -243,6 +245,120 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
                 return None;
             }
             Some(leases_snapshot(&st).await)
+        },
+    ));
+
+    let observations_last = Arc::new(AtomicU64::new(u64::MAX));
+    handles.push(spawn_read_model(
+        &state,
+        "observations",
+        Duration::from_millis(1500),
+        {
+            let last = observations_last.clone();
+            move |_st| {
+                let last = last.clone();
+                async move {
+                    let current = state_observer::observations_version_value();
+                    if last.load(Ordering::Relaxed) == current {
+                        return None;
+                    }
+                    let (version, items) =
+                        state_observer::observations_snapshot(None, None, None).await;
+                    last.store(version, Ordering::Relaxed);
+                    Some(json!({
+                        "version": version,
+                        "items": items,
+                    }))
+                }
+            }
+        },
+    ));
+
+    let beliefs_last = Arc::new(AtomicU64::new(u64::MAX));
+    handles.push(spawn_read_model(
+        &state,
+        "beliefs",
+        Duration::from_millis(1500),
+        {
+            let last = beliefs_last.clone();
+            move |_st| {
+                let last = last.clone();
+                async move {
+                    let current = state_observer::beliefs_version_value();
+                    if last.load(Ordering::Relaxed) == current {
+                        return None;
+                    }
+                    let (version, items) = state_observer::beliefs_snapshot().await;
+                    last.store(version, Ordering::Relaxed);
+                    Some(json!({
+                        "version": version,
+                        "items": items,
+                    }))
+                }
+            }
+        },
+    ));
+
+    let intents_last = Arc::new(AtomicU64::new(u64::MAX));
+    handles.push(spawn_read_model(
+        &state,
+        "intents",
+        Duration::from_millis(1500),
+        {
+            let last = intents_last.clone();
+            move |_st| {
+                let last = last.clone();
+                async move {
+                    let current = state_observer::intents_version_value();
+                    if last.load(Ordering::Relaxed) == current {
+                        return None;
+                    }
+                    let (version, items) = state_observer::intents_snapshot().await;
+                    last.store(version, Ordering::Relaxed);
+                    Some(json!({
+                        "version": version,
+                        "items": items,
+                    }))
+                }
+            }
+        },
+    ));
+
+    let actions_last = Arc::new(AtomicU64::new(u64::MAX));
+    handles.push(spawn_read_model(
+        &state,
+        "actions",
+        Duration::from_millis(2000),
+        {
+            let last = actions_last.clone();
+            move |st| {
+                let last = last.clone();
+                async move {
+                    if !st.kernel_enabled() {
+                        return None;
+                    }
+                    let current = state_observer::actions_version_value();
+                    if last.load(Ordering::Relaxed) == current {
+                        return None;
+                    }
+                    let mut options = ActionListOptions::new(200);
+                    options.limit = options.clamped_limit();
+                    let items = st
+                        .kernel()
+                        .list_actions_async(options)
+                        .await
+                        .unwrap_or_default();
+                    let items: Vec<Value> = items
+                        .into_iter()
+                        .map(crate::api::actions::sanitize_action_record)
+                        .collect();
+                    last.store(current, Ordering::Relaxed);
+                    Some(json!({
+                        "version": current,
+                        "items": items,
+                    }))
+                }
+            }
         },
     ));
 
@@ -1421,6 +1537,7 @@ mod tests {
     use arw_events::Envelope;
     use arw_policy::PolicyEngine;
     use arw_topics as topics;
+    use chrono::{SecondsFormat, Utc};
     use json_patch::Patch;
     use serde_json::Value;
     use std::sync::atomic::{AtomicUsize, Ordering};
@@ -1510,6 +1627,337 @@ mod tests {
             .with_sse_capacity(16)
             .build()
             .await
+    }
+
+    #[tokio::test]
+    async fn observations_read_model_publishes_patches() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        remove_cached_read_model_for_test("observations");
+        crate::state_observer::reset_for_tests().await;
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let bus = state.bus();
+        let mut rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_READMODEL_PATCH.to_string()], Some(8));
+
+        let handle = spawn_read_model(
+            &state,
+            "observations",
+            Duration::from_millis(50),
+            |_st| async move {
+                let (version, items) =
+                    state_observer::observations_snapshot(None, None, None).await;
+                Some(json!({
+                    "version": version,
+                    "items": items,
+                }))
+            },
+        );
+
+        let mut doc = json!({});
+
+        let initial_env: Envelope = timeout(Duration::from_millis(200), rx.recv())
+            .await
+            .expect("initial patch timeout")
+            .expect("initial patch env");
+        assert_eq!(initial_env.kind, topics::TOPIC_READMODEL_PATCH);
+        assert_eq!(initial_env.payload["id"].as_str(), Some("observations"));
+        let initial_patch: Patch = serde_json::from_value(
+            initial_env
+                .payload
+                .get("patch")
+                .cloned()
+                .expect("initial patch array"),
+        )
+        .expect("initial patch decode");
+        json_patch::patch(&mut doc, &initial_patch).expect("apply initial patch");
+
+        let env = Envelope {
+            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: "observations.test".to_string(),
+            payload: json!({"msg": "hello"}),
+            policy: None,
+            ce: None,
+        };
+        crate::state_observer::ingest_for_tests(&env).await;
+
+        let update_env: Envelope = timeout(Duration::from_millis(400), rx.recv())
+            .await
+            .expect("update patch timeout")
+            .expect("update patch env");
+        assert_eq!(update_env.kind, topics::TOPIC_READMODEL_PATCH);
+        assert_eq!(update_env.payload["id"].as_str(), Some("observations"));
+        let update_patch: Patch = serde_json::from_value(
+            update_env
+                .payload
+                .get("patch")
+                .cloned()
+                .expect("update patch array"),
+        )
+        .expect("update patch decode");
+        json_patch::patch(&mut doc, &update_patch).expect("apply update patch");
+
+        let items = doc["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        let first = &items[0];
+        assert_eq!(first["kind"].as_str(), Some("observations.test"));
+        assert_eq!(first["payload"]["msg"].as_str(), Some("hello"));
+        assert!(doc["version"].as_u64().unwrap_or_default() >= 1);
+
+        let (_name, _started, task) = handle.into_inner();
+        task.abort();
+        let _ = task.await;
+    }
+
+    #[tokio::test]
+    async fn beliefs_read_model_publishes_patches() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        remove_cached_read_model_for_test("beliefs");
+        crate::state_observer::reset_for_tests().await;
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let bus = state.bus();
+        let mut rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_READMODEL_PATCH.to_string()], Some(8));
+
+        let handle = spawn_read_model(
+            &state,
+            "beliefs",
+            Duration::from_millis(50),
+            |_st| async move {
+                let (version, items) = state_observer::beliefs_snapshot().await;
+                Some(json!({
+                    "version": version,
+                    "items": items,
+                }))
+            },
+        );
+
+        let mut doc = json!({});
+
+        let initial_env: Envelope = timeout(Duration::from_millis(200), rx.recv())
+            .await
+            .expect("initial patch timeout")
+            .expect("initial patch env");
+        assert_eq!(initial_env.payload["id"].as_str(), Some("beliefs"));
+        let initial_patch: Patch = serde_json::from_value(
+            initial_env
+                .payload
+                .get("patch")
+                .cloned()
+                .expect("initial patch array"),
+        )
+        .expect("initial patch decode");
+        json_patch::patch(&mut doc, &initial_patch).expect("apply initial patch");
+
+        let env = Envelope {
+            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: "feedback.suggested".to_string(),
+            payload: json!({
+                "suggestions": [
+                    json!({
+                        "title": "Focus log hygiene",
+                        "body": "Rotate debug logs before exporting to support.",
+                    })
+                ]
+            }),
+            policy: None,
+            ce: None,
+        };
+        crate::state_observer::ingest_for_tests(&env).await;
+
+        let update_env: Envelope = timeout(Duration::from_millis(400), rx.recv())
+            .await
+            .expect("update patch timeout")
+            .expect("update patch env");
+        assert_eq!(update_env.payload["id"].as_str(), Some("beliefs"));
+        let update_patch: Patch = serde_json::from_value(
+            update_env
+                .payload
+                .get("patch")
+                .cloned()
+                .expect("update patch array"),
+        )
+        .expect("update patch decode");
+        json_patch::patch(&mut doc, &update_patch).expect("apply update patch");
+
+        let items = doc["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["title"].as_str(), Some("Focus log hygiene"));
+
+        let (_name, _started, task) = handle.into_inner();
+        task.abort();
+        let _ = task.await;
+    }
+
+    #[tokio::test]
+    async fn intents_read_model_publishes_patches() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        remove_cached_read_model_for_test("intents");
+        crate::state_observer::reset_for_tests().await;
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let bus = state.bus();
+        let mut rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_READMODEL_PATCH.to_string()], Some(8));
+
+        let handle = spawn_read_model(
+            &state,
+            "intents",
+            Duration::from_millis(50),
+            |_st| async move {
+                let (version, items) = state_observer::intents_snapshot().await;
+                Some(json!({
+                    "version": version,
+                    "items": items,
+                }))
+            },
+        );
+
+        let mut doc = json!({});
+
+        let initial_env: Envelope = timeout(Duration::from_millis(200), rx.recv())
+            .await
+            .expect("initial patch timeout")
+            .expect("initial patch env");
+        assert_eq!(initial_env.payload["id"].as_str(), Some("intents"));
+        let initial_patch: Patch = serde_json::from_value(
+            initial_env
+                .payload
+                .get("patch")
+                .cloned()
+                .expect("initial patch array"),
+        )
+        .expect("initial patch decode");
+        json_patch::patch(&mut doc, &initial_patch).expect("apply initial patch");
+
+        let env = Envelope {
+            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: "intents.proposed".to_string(),
+            payload: json!({
+                "corr_id": "intent-123",
+                "goal": "Summarize recent crash logs",
+            }),
+            policy: None,
+            ce: None,
+        };
+        crate::state_observer::ingest_for_tests(&env).await;
+
+        let update_env: Envelope = timeout(Duration::from_millis(400), rx.recv())
+            .await
+            .expect("update patch timeout")
+            .expect("update patch env");
+        assert_eq!(update_env.payload["id"].as_str(), Some("intents"));
+        let update_patch: Patch = serde_json::from_value(
+            update_env
+                .payload
+                .get("patch")
+                .cloned()
+                .expect("update patch array"),
+        )
+        .expect("update patch decode");
+        json_patch::patch(&mut doc, &update_patch).expect("apply update patch");
+
+        let items = doc["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["payload"]["corr_id"].as_str(), Some("intent-123"));
+
+        let (_name, _started, task) = handle.into_inner();
+        task.abort();
+        let _ = task.await;
+    }
+
+    #[tokio::test]
+    async fn actions_read_model_publishes_patches() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        remove_cached_read_model_for_test("actions");
+        crate::state_observer::reset_for_tests().await;
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let bus = state.bus();
+        let mut rx =
+            bus.subscribe_filtered(vec![topics::TOPIC_READMODEL_PATCH.to_string()], Some(8));
+
+        let handle = spawn_read_model(
+            &state,
+            "actions",
+            Duration::from_millis(50),
+            |st| async move {
+                if !st.kernel_enabled() {
+                    return None;
+                }
+                let version = state_observer::actions_version_value();
+                let mut options = ActionListOptions::new(200);
+                options.limit = options.clamped_limit();
+                let items = st
+                    .kernel()
+                    .list_actions_async(options)
+                    .await
+                    .unwrap_or_default();
+                let items: Vec<Value> = items
+                    .into_iter()
+                    .map(crate::api::actions::sanitize_action_record)
+                    .collect();
+                Some(json!({
+                    "version": version,
+                    "items": items,
+                }))
+            },
+        );
+
+        let action_id = uuid::Uuid::new_v4().to_string();
+        state
+            .kernel()
+            .insert_action_async(
+                &action_id,
+                "net.http.get",
+                &json!({"url": "https://example.com"}),
+                None,
+                None,
+                "completed",
+            )
+            .await
+            .expect("insert action");
+
+        let env = Envelope {
+            time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: "actions.completed".to_string(),
+            payload: json!({"id": action_id}),
+            policy: None,
+            ce: None,
+        };
+        crate::state_observer::ingest_for_tests(&env).await;
+
+        let mut doc = json!({});
+
+        let patch_env: Envelope = timeout(Duration::from_millis(400), rx.recv())
+            .await
+            .expect("patch timeout")
+            .expect("patch env");
+        assert_eq!(patch_env.payload["id"].as_str(), Some("actions"));
+        let patch: Patch = serde_json::from_value(
+            patch_env
+                .payload
+                .get("patch")
+                .cloned()
+                .expect("patch array"),
+        )
+        .expect("patch decode");
+        json_patch::patch(&mut doc, &patch).expect("apply patch");
+
+        let items = doc["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["id"].as_str(), Some(action_id.as_str()));
+        assert_eq!(items[0]["kind"].as_str(), Some("net.http.get"));
+        assert!(items[0].get("output").is_some());
+
+        let (_name, _started, task) = handle.into_inner();
+        task.abort();
+        let _ = task.await;
     }
 
     #[tokio::test]

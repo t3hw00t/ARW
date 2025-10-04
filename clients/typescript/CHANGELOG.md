@@ -1,5 +1,7 @@
 ## 0.2.4 - 2025-09-30
 
+- Added `client.state.watchObservations/Beliefs/Intents/Actions` helpers that hydrate via SSE read-model patches (with automatic initial snapshots) so UIs can drop polling without custom plumbing.
+- Added `state.beliefs()` / `state.intents()` snapshots and expanded `state.observations()` to accept `since` filters for parity with the CLI.
 - Added `inactivityTimeoutMs` (Node fallback) to force reconnects when streams go silent, preventing ghost connections and aiding long-lived operators; CLI and examples expose the knob via `--idle`, `--structured`, `--out`, `--out-format`, `--out-max-bytes`, `--out-keep`, `--out-compress`, and sample settings.
 - Browser `EventSource` path now shares lifecycle hooks while remaining non-destructive on idle (documented as Node-only enforcement) to avoid accidental hard closes.
 - Docs/examples refreshed to demonstrate idle guards alongside existing reconnect tuning options.

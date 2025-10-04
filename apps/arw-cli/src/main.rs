@@ -4,6 +4,7 @@ use base64::Engine;
 use chrono::{DateTime, Local, TimeZone, Utc};
 use clap::CommandFactory;
 use clap::{Args, Parser, Subcommand, ValueEnum};
+use json_patch::{patch as apply_json_patch, Patch as JsonPatch};
 use rand::RngCore;
 use reqwest::{blocking::Client, header::ACCEPT, StatusCode};
 use serde::Deserialize;
@@ -13,9 +14,10 @@ use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::env;
 use std::fmt::Write as _;
 use std::fs::OpenOptions;
-use std::io::{BufRead, BufReader, Read as _};
+use std::io::{self, BufRead, BufReader, Read as _, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
+use std::thread;
 use std::time::{Duration, Instant};
 use tempfile::TempDir;
 use tracing_subscriber::{fmt, EnvFilter};
@@ -562,6 +564,9 @@ struct StateActionsArgs {
     /// Width for the rendered kind column in text output (ignored in JSON mode)
     #[arg(long, default_value_t = 36)]
     kind_width: usize,
+    /// Stream live updates via state.read.model.patch SSE
+    #[arg(long, conflicts_with = "json")]
+    watch: bool,
 }
 
 #[derive(Args)]
@@ -599,6 +604,9 @@ struct EventsObservationsArgs {
     /// Include policy metadata if present on events
     #[arg(long)]
     show_policy: bool,
+    /// Stream live updates via state.read.model.patch SSE
+    #[arg(long, conflicts_with = "json")]
+    watch: bool,
 }
 
 #[derive(Args)]
@@ -1841,181 +1849,189 @@ fn clean_text(value: &str) -> String {
 }
 
 fn cmd_state_actions(args: &StateActionsArgs) -> Result<()> {
+    if args.watch && args.json {
+        anyhow::bail!("--watch cannot be combined with --json output");
+    }
+
     let token = resolve_admin_token(&args.admin_token);
     let client = Client::builder()
         .timeout(Duration::from_secs(args.timeout))
         .build()
         .context("building HTTP client")?;
     let base = args.base.trim_end_matches('/');
-    let url = format!("{}/state/actions", base);
 
-    let mut params: Vec<(String, String)> = Vec::new();
-    if let Some(limit) = args.limit {
-        let clamped = limit.clamp(1, 2000);
-        params.push(("limit".into(), clamped.to_string()));
-    }
-    if let Some(state) = args
-        .state
-        .as_ref()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-    {
-        params.push(("state".into(), state.to_string()));
-    }
-    if let Some(prefix) = args
-        .kind_prefix
-        .as_ref()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-    {
-        params.push(("kind_prefix".into(), prefix.to_string()));
-    }
-    if let Some(since) = args
-        .updated_since
-        .as_ref()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-    {
-        params.push(("updated_since".into(), since.to_string()));
-    }
+    let filters = ActionFilters::from_args(args)?;
 
-    let mut req = client.get(&url);
-    if !params.is_empty() {
-        req = req.query(&params);
-    }
-    req = with_admin_headers(req, token.as_deref());
-
-    let resp = req.send().with_context(|| format!("requesting {}", url))?;
-    let status = resp.status();
-    let body: JsonValue = resp.json().context("parsing actions response")?;
-    if status == reqwest::StatusCode::UNAUTHORIZED {
-        anyhow::bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
-    }
-    if !status.is_success() {
-        anyhow::bail!("server returned {}: {}", status, body);
-    }
+    let mut full_snapshot = fetch_full_actions(&client, base, token.as_deref())?;
+    let view = build_filtered_actions_view(&full_snapshot, &filters)?;
 
     if args.json {
         if args.pretty {
             println!(
                 "{}",
-                serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string())
+                serde_json::to_string_pretty(&view).unwrap_or_else(|_| view.to_string())
             );
         } else {
-            println!("{}", body);
+            println!("{}", view);
         }
         return Ok(());
     }
 
-    let version = body.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
-    let items = body
-        .get("items")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
+    render_actions_text(&view, args, None)?;
 
-    println!(
-        "Actions snapshot ({} items, version {})",
-        items.len(),
-        version
-    );
-    if items.is_empty() {
-        println!("(no actions matched the filters)");
-        return Ok(());
-    }
-
-    let kind_width = args.kind_width.max(8);
-    println!(
-        "{:<28} {:<10} {:<width$} Id",
-        "Updated",
-        "State",
-        "Kind",
-        width = kind_width
-    );
-
-    for item in items {
-        let updated_raw = item.get("updated").and_then(|v| v.as_str()).unwrap_or("");
-        let updated_display = if updated_raw.is_empty() {
-            "-".to_string()
-        } else {
-            format_observation_timestamp(updated_raw)
-        };
-        let state_display = item
-            .get("state")
-            .and_then(|v| v.as_str())
-            .unwrap_or("-")
-            .to_string();
-        let kind_display = item
-            .get("kind")
-            .and_then(|v| v.as_str())
-            .map(|k| ellipsize_str(k, kind_width))
-            .unwrap_or_else(|| "-".to_string());
-        let id_display = item.get("id").and_then(|v| v.as_str()).unwrap_or("-");
-
-        println!(
-            "{:<28} {:<10} {:<width$} {}",
-            updated_display,
-            state_display,
-            kind_display,
-            id_display,
-            width = kind_width
-        );
+    if args.watch {
+        eprintln!("watching actions; press Ctrl-C to exit");
+        watch_actions(base, token.as_deref(), &filters, args, &mut full_snapshot)?;
     }
 
     Ok(())
 }
 
 fn cmd_events_observations(args: &EventsObservationsArgs) -> Result<()> {
+    if args.watch && args.json {
+        anyhow::bail!("--watch cannot be combined with --json output");
+    }
+
     let token = resolve_admin_token(&args.admin_token);
     let client = Client::builder()
         .timeout(Duration::from_secs(args.timeout))
         .build()
         .context("building HTTP client")?;
     let base = args.base.trim_end_matches('/');
-    let url = format!("{}/state/observations", base);
-    let mut req = client.get(&url);
-    let mut params: Vec<(String, String)> = Vec::new();
-    if let Some(limit) = args.limit {
-        params.push(("limit".into(), limit.to_string()));
-    }
-    if let Some(prefix) = args
-        .kind_prefix
-        .as_ref()
-        .map(|s| s.trim())
-        .filter(|s| !s.is_empty())
-    {
-        params.push(("kind_prefix".into(), prefix.to_string()));
-    }
+
     let since_resolution = resolve_since_param(args)?;
-    if let Some(ref since_value) = since_resolution.query {
-        params.push(("since".into(), since_value.clone()));
-    }
-    if !params.is_empty() {
-        req = req.query(&params);
-    }
-    req = with_admin_headers(req, token.as_deref());
-    let resp = req.send().with_context(|| format!("requesting {}", url))?;
-    let status = resp.status();
-    let body: JsonValue = resp.json().context("parsing observations response")?;
-    if status == reqwest::StatusCode::UNAUTHORIZED {
-        anyhow::bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
-    }
-    if !status.is_success() {
-        anyhow::bail!("server returned {}: {}", status, body);
-    }
+    let filters = ObservationFilters::from_args(args, &since_resolution)?;
+
+    let mut full_snapshot = fetch_full_observations(&client, base, token.as_deref())?;
+    let view = build_filtered_observations_view(&full_snapshot, &filters)?;
 
     if args.json {
         if args.pretty {
             println!(
                 "{}",
-                serde_json::to_string_pretty(&body).unwrap_or_else(|_| body.to_string())
+                serde_json::to_string_pretty(&view).unwrap_or_else(|_| view.to_string())
             );
         } else {
-            println!("{}", body);
+            println!("{}", view);
         }
         return Ok(());
     }
 
+    render_observations_text(&view, args, &since_resolution, None)?;
+
+    if args.watch {
+        eprintln!("watching observations; press Ctrl-C to exit");
+        watch_observations(
+            base,
+            token.as_deref(),
+            &filters,
+            args,
+            &since_resolution,
+            &mut full_snapshot,
+        )?;
+    }
+
+    Ok(())
+}
+
+#[derive(Clone)]
+struct ObservationFilters {
+    limit: Option<usize>,
+    kind_prefix: Option<String>,
+    since_cutoff: Option<DateTime<Utc>>,
+}
+
+impl ObservationFilters {
+    fn from_args(args: &EventsObservationsArgs, since: &SinceResolution) -> Result<Self> {
+        let kind_prefix = args
+            .kind_prefix
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let since_cutoff = match since.query {
+            Some(ref iso) => {
+                let parsed = DateTime::parse_from_rfc3339(iso)
+                    .with_context(|| format!("failed to parse since='{}'", iso))?;
+                Some(parsed.with_timezone(&Utc))
+            }
+            None => None,
+        };
+        Ok(Self {
+            limit: args.limit,
+            kind_prefix,
+            since_cutoff,
+        })
+    }
+}
+
+fn fetch_full_observations(client: &Client, base: &str, token: Option<&str>) -> Result<JsonValue> {
+    let url = format!("{}/state/observations", base);
+    let mut req = client.get(&url);
+    req = with_admin_headers(req, token);
+    let resp = req.send().with_context(|| format!("requesting {}", url))?;
+    let status = resp.status();
+    let body: JsonValue = resp.json().context("parsing observations response")?;
+    if status == StatusCode::UNAUTHORIZED {
+        anyhow::bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !status.is_success() {
+        anyhow::bail!("server returned {}: {}", status, body);
+    }
+    Ok(body)
+}
+
+fn build_filtered_observations_view(
+    snapshot: &JsonValue,
+    filters: &ObservationFilters,
+) -> Result<JsonValue> {
+    let version = snapshot
+        .get("version")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let items = snapshot
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut selected: Vec<JsonValue> = Vec::new();
+    for item in items.iter().rev() {
+        if let Some(prefix) = filters.kind_prefix.as_deref() {
+            let kind = item.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+            if !kind.starts_with(prefix) {
+                continue;
+            }
+        }
+        if let Some(cutoff) = filters.since_cutoff {
+            if let Some(time_raw) = item.get("time").and_then(|v| v.as_str()) {
+                if let Ok(ts) = DateTime::parse_from_rfc3339(time_raw) {
+                    if ts.with_timezone(&Utc) <= cutoff {
+                        continue;
+                    }
+                }
+            }
+        }
+        selected.push(item.clone());
+        if let Some(limit) = filters.limit {
+            if selected.len() >= limit {
+                break;
+            }
+        }
+    }
+    selected.reverse();
+
+    Ok(json!({
+        "version": version,
+        "items": selected,
+    }))
+}
+
+fn render_observations_text(
+    body: &JsonValue,
+    args: &EventsObservationsArgs,
+    since_resolution: &SinceResolution,
+    update_note: Option<&str>,
+) -> Result<()> {
     let version = body.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
     let items = body
         .get("items")
@@ -2023,27 +2039,41 @@ fn cmd_events_observations(args: &EventsObservationsArgs) -> Result<()> {
         .cloned()
         .unwrap_or_default();
 
-    println!(
-        "Observations snapshot ({} items, version {})",
-        items.len(),
-        version
-    );
-    let mut filters: Vec<String> = Vec::new();
-    if let Some(ref prefix) = args.kind_prefix {
-        if !prefix.trim().is_empty() {
-            filters.push(format!("prefix={}", prefix.trim()));
+    if let Some(note) = update_note {
+        println!();
+        println!(
+            "[{}] Observations update ({} items, version {})",
+            note,
+            items.len(),
+            version
+        );
+    } else {
+        println!(
+            "Observations snapshot ({} items, version {})",
+            items.len(),
+            version
+        );
+        let mut filters: Vec<String> = Vec::new();
+        if let Some(ref prefix) = args.kind_prefix {
+            if !prefix.trim().is_empty() {
+                filters.push(format!("prefix={}", prefix.trim()));
+            }
+        }
+        if let Some(ref label) = since_resolution.relative_display {
+            filters.push(label.clone());
+        }
+        if let Some(ref label) = since_resolution.display {
+            filters.push(label.clone());
+        }
+        if !filters.is_empty() {
+            println!("Filters: {}", filters.join(", "));
         }
     }
-    if let Some(ref label) = since_resolution.relative_display {
-        filters.push(label.clone());
-    }
-    if let Some(ref label) = since_resolution.display {
-        filters.push(label.clone());
-    }
-    if !filters.is_empty() {
-        println!("Filters: {}", filters.join(", "));
-    }
+
     if items.is_empty() {
+        if update_note.is_some() {
+            println!("(no observations matched filters)");
+        }
         return Ok(());
     }
 
@@ -2092,6 +2122,488 @@ fn cmd_events_observations(args: &EventsObservationsArgs) -> Result<()> {
         );
     }
 
+    io::stdout().flush().ok();
+    Ok(())
+}
+
+fn watch_observations(
+    base: &str,
+    token: Option<&str>,
+    filters: &ObservationFilters,
+    args: &EventsObservationsArgs,
+    since_resolution: &SinceResolution,
+    snapshot: &mut JsonValue,
+) -> Result<()> {
+    let mut last_event_id: Option<String> = None;
+    let mut backoff_secs = 1u64;
+    loop {
+        match stream_observations_once(
+            base,
+            token,
+            last_event_id.as_deref(),
+            snapshot,
+            filters,
+            args,
+            since_resolution,
+        ) {
+            Ok(next_id) => {
+                if let Some(id) = next_id {
+                    last_event_id = Some(id);
+                }
+                backoff_secs = 1;
+            }
+            Err(err) => {
+                eprintln!("watch error: {err:?}");
+                backoff_secs = (backoff_secs * 2).min(30);
+            }
+        }
+        thread::sleep(Duration::from_secs(backoff_secs));
+    }
+}
+
+fn stream_observations_once(
+    base: &str,
+    token: Option<&str>,
+    last_event_id: Option<&str>,
+    snapshot: &mut JsonValue,
+    filters: &ObservationFilters,
+    args: &EventsObservationsArgs,
+    since_resolution: &SinceResolution,
+) -> Result<Option<String>> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(None)
+        .build()
+        .context("building SSE client")?;
+
+    let mut req = client
+        .get(&format!("{}/events", base))
+        .query(&[("prefix", "state.read.model.patch"), ("replay", "0")])
+        .header(ACCEPT, "text/event-stream");
+    if let Some(id) = last_event_id {
+        req = req.header("Last-Event-ID", id);
+    }
+    req = with_admin_headers(req, token);
+
+    let resp = req.send().context("connecting to /events stream")?;
+    let status = resp.status();
+    if status == StatusCode::UNAUTHORIZED {
+        anyhow::bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !status.is_success() {
+        anyhow::bail!("events stream failed with status {}", status);
+    }
+
+    let mut reader = BufReader::new(resp);
+    let mut line = String::new();
+    let mut event_name = String::new();
+    let mut data_buf = String::new();
+    let mut event_id_line: Option<String> = None;
+    let mut latest_id = last_event_id.map(|s| s.to_string());
+
+    loop {
+        line.clear();
+        let read = reader.read_line(&mut line)?;
+        if read == 0 {
+            return Ok(latest_id);
+        }
+        if line.ends_with('\n') {
+            line.pop();
+            if line.ends_with('\r') {
+                line.pop();
+            }
+        }
+        if line.is_empty() {
+            if event_name == "state.read.model.patch" && !data_buf.is_empty() {
+                if let Err(err) =
+                    handle_observations_patch(&data_buf, snapshot, filters, args, since_resolution)
+                {
+                    eprintln!("failed to process patch: {err:?}");
+                } else if let Some(id_val) = event_id_line.as_ref() {
+                    latest_id = Some(id_val.clone());
+                }
+            }
+            event_name.clear();
+            data_buf.clear();
+            event_id_line = None;
+            continue;
+        }
+        if line.starts_with(':') {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("event:") {
+            event_name = rest.trim().to_string();
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("data:") {
+            if !data_buf.is_empty() {
+                data_buf.push('\n');
+            }
+            data_buf.push_str(rest.trim_start());
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("id:") {
+            event_id_line = Some(rest.trim().to_string());
+            continue;
+        }
+    }
+}
+
+fn handle_observations_patch(
+    data: &str,
+    snapshot: &mut JsonValue,
+    filters: &ObservationFilters,
+    args: &EventsObservationsArgs,
+    since_resolution: &SinceResolution,
+) -> Result<()> {
+    let env: JsonValue = serde_json::from_str(data).context("decoding SSE payload")?;
+    let payload = env.get("payload").cloned().unwrap_or(env.clone());
+    let rm = payload.get("payload").cloned().unwrap_or(payload.clone());
+    let read_model_id = rm
+        .get("id")
+        .or_else(|| rm.get("read_model"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if read_model_id != "observations" {
+        return Ok(());
+    }
+    let patch_value = match rm.get("patch") {
+        Some(v) if v.is_array() => v.clone(),
+        _ => return Ok(()),
+    };
+    let patch: JsonPatch =
+        serde_json::from_value(patch_value).context("decoding JSON Patch for observations")?;
+    apply_json_patch(snapshot, &patch).context("applying observations patch")?;
+    let view = build_filtered_observations_view(snapshot, filters)?;
+    let version = view.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
+    let note = format!("{} (version {})", Local::now().format("%H:%M:%S"), version);
+    render_observations_text(&view, args, since_resolution, Some(&note))?;
+    Ok(())
+}
+
+#[derive(Clone)]
+struct ActionFilters {
+    limit: Option<usize>,
+    state: Option<String>,
+    kind_prefix: Option<String>,
+    updated_since: Option<DateTime<Utc>>,
+}
+
+impl ActionFilters {
+    fn from_args(args: &StateActionsArgs) -> Result<Self> {
+        let state = args
+            .state
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let kind_prefix = args
+            .kind_prefix
+            .as_ref()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+        let updated_since = if let Some(ref raw) = args.updated_since {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                anyhow::bail!("--updated-since cannot be empty");
+            }
+            let parsed = DateTime::parse_from_rfc3339(trimmed)
+                .with_context(|| format!("failed to parse updated_since='{}'", trimmed))?;
+            Some(parsed.with_timezone(&Utc))
+        } else {
+            None
+        };
+        Ok(Self {
+            limit: args.limit.map(|v| v.clamp(1, 2000)),
+            state,
+            kind_prefix,
+            updated_since,
+        })
+    }
+}
+
+fn fetch_full_actions(client: &Client, base: &str, token: Option<&str>) -> Result<JsonValue> {
+    let url = format!("{}/state/actions", base);
+    let mut req = client.get(&url);
+    req = with_admin_headers(req, token);
+    let resp = req.send().with_context(|| format!("requesting {}", url))?;
+    let status = resp.status();
+    let body: JsonValue = resp.json().context("parsing actions response")?;
+    if status == StatusCode::UNAUTHORIZED {
+        anyhow::bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !status.is_success() {
+        anyhow::bail!("server returned {}: {}", status, body);
+    }
+    Ok(body)
+}
+
+fn build_filtered_actions_view(snapshot: &JsonValue, filters: &ActionFilters) -> Result<JsonValue> {
+    let version = snapshot
+        .get("version")
+        .and_then(|v| v.as_u64())
+        .unwrap_or(0);
+    let items = snapshot
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    let mut selected: Vec<JsonValue> = Vec::new();
+    for item in items.iter() {
+        if let Some(state) = filters.state.as_deref() {
+            let current_state = item.get("state").and_then(|v| v.as_str()).unwrap_or("");
+            if !current_state.eq_ignore_ascii_case(state) {
+                continue;
+            }
+        }
+        if let Some(prefix) = filters.kind_prefix.as_deref() {
+            let kind = item.get("kind").and_then(|v| v.as_str()).unwrap_or("");
+            if !kind.starts_with(prefix) {
+                continue;
+            }
+        }
+        if let Some(cutoff) = filters.updated_since {
+            if let Some(updated_raw) = item.get("updated").and_then(|v| v.as_str()) {
+                if let Ok(ts) = DateTime::parse_from_rfc3339(updated_raw) {
+                    if ts.with_timezone(&Utc) <= cutoff {
+                        continue;
+                    }
+                }
+            }
+        }
+        selected.push(item.clone());
+        if let Some(limit) = filters.limit {
+            if selected.len() >= limit {
+                break;
+            }
+        }
+    }
+
+    Ok(json!({
+        "version": version,
+        "items": selected,
+    }))
+}
+
+fn render_actions_text(
+    body: &JsonValue,
+    args: &StateActionsArgs,
+    update_note: Option<&str>,
+) -> Result<()> {
+    let version = body.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
+    let items = body
+        .get("items")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+
+    if let Some(note) = update_note {
+        println!();
+        println!(
+            "[{}] Actions update ({} items, version {})",
+            note,
+            items.len(),
+            version
+        );
+    } else {
+        println!(
+            "Actions snapshot ({} items, version {})",
+            items.len(),
+            version
+        );
+    }
+
+    if items.is_empty() {
+        println!("(no actions matched the filters)");
+        return Ok(());
+    }
+
+    let kind_width = args.kind_width.max(8);
+    println!(
+        "{:<28} {:<10} {:<width$} Id",
+        "Updated",
+        "State",
+        "Kind",
+        width = kind_width
+    );
+
+    for item in items {
+        let updated_raw = item.get("updated").and_then(|v| v.as_str()).unwrap_or("");
+        let updated_display = if updated_raw.is_empty() {
+            "-".to_string()
+        } else {
+            format_observation_timestamp(updated_raw)
+        };
+        let state_display = item
+            .get("state")
+            .and_then(|v| v.as_str())
+            .unwrap_or("-")
+            .to_string();
+        let kind_display = item
+            .get("kind")
+            .and_then(|v| v.as_str())
+            .map(|k| ellipsize_str(k, kind_width))
+            .unwrap_or_else(|| "-".to_string());
+        let id_display = item.get("id").and_then(|v| v.as_str()).unwrap_or("-");
+
+        println!(
+            "{:<28} {:<10} {:<width$} {}",
+            updated_display,
+            state_display,
+            kind_display,
+            id_display,
+            width = kind_width
+        );
+    }
+
+    io::stdout().flush().ok();
+    Ok(())
+}
+
+fn watch_actions(
+    base: &str,
+    token: Option<&str>,
+    filters: &ActionFilters,
+    args: &StateActionsArgs,
+    snapshot: &mut JsonValue,
+) -> Result<()> {
+    let mut last_event_id: Option<String> = None;
+    let mut backoff_secs = 1u64;
+    loop {
+        match stream_actions_once(
+            base,
+            token,
+            last_event_id.as_deref(),
+            snapshot,
+            filters,
+            args,
+        ) {
+            Ok(next_id) => {
+                if let Some(id) = next_id {
+                    last_event_id = Some(id);
+                }
+                backoff_secs = 1;
+            }
+            Err(err) => {
+                eprintln!("watch error: {err:?}");
+                backoff_secs = (backoff_secs * 2).min(30);
+            }
+        }
+        thread::sleep(Duration::from_secs(backoff_secs));
+    }
+}
+
+fn stream_actions_once(
+    base: &str,
+    token: Option<&str>,
+    last_event_id: Option<&str>,
+    snapshot: &mut JsonValue,
+    filters: &ActionFilters,
+    args: &StateActionsArgs,
+) -> Result<Option<String>> {
+    let client = reqwest::blocking::Client::builder()
+        .timeout(None)
+        .build()
+        .context("building SSE client")?;
+
+    let mut req = client
+        .get(&format!("{}/events", base))
+        .query(&[("prefix", "state.read.model.patch"), ("replay", "0")])
+        .header(ACCEPT, "text/event-stream");
+    if let Some(id) = last_event_id {
+        req = req.header("Last-Event-ID", id);
+    }
+    req = with_admin_headers(req, token);
+
+    let resp = req.send().context("connecting to /events stream")?;
+    let status = resp.status();
+    if status == StatusCode::UNAUTHORIZED {
+        anyhow::bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !status.is_success() {
+        anyhow::bail!("events stream failed with status {}", status);
+    }
+
+    let mut reader = BufReader::new(resp);
+    let mut line = String::new();
+    let mut event_name = String::new();
+    let mut data_buf = String::new();
+    let mut event_id_line: Option<String> = None;
+    let mut latest_id = last_event_id.map(|s| s.to_string());
+
+    loop {
+        line.clear();
+        let read = reader.read_line(&mut line)?;
+        if read == 0 {
+            return Ok(latest_id);
+        }
+        if line.ends_with('\n') {
+            line.pop();
+            if line.ends_with('\r') {
+                line.pop();
+            }
+        }
+        if line.is_empty() {
+            if event_name == "state.read.model.patch" && !data_buf.is_empty() {
+                if let Err(err) = handle_actions_patch(&data_buf, snapshot, filters, args) {
+                    eprintln!("failed to process patch: {err:?}");
+                } else if let Some(id_val) = event_id_line.as_ref() {
+                    latest_id = Some(id_val.clone());
+                }
+            }
+            event_name.clear();
+            data_buf.clear();
+            event_id_line = None;
+            continue;
+        }
+        if line.starts_with(':') {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("event:") {
+            event_name = rest.trim().to_string();
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("data:") {
+            if !data_buf.is_empty() {
+                data_buf.push('\n');
+            }
+            data_buf.push_str(rest.trim_start());
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix("id:") {
+            event_id_line = Some(rest.trim().to_string());
+            continue;
+        }
+    }
+}
+
+fn handle_actions_patch(
+    data: &str,
+    snapshot: &mut JsonValue,
+    filters: &ActionFilters,
+    args: &StateActionsArgs,
+) -> Result<()> {
+    let env: JsonValue = serde_json::from_str(data).context("decoding SSE payload")?;
+    let payload = env.get("payload").cloned().unwrap_or(env.clone());
+    let rm = payload.get("payload").cloned().unwrap_or(payload.clone());
+    let read_model_id = rm
+        .get("id")
+        .or_else(|| rm.get("read_model"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("");
+    if read_model_id != "actions" {
+        return Ok(());
+    }
+    let patch_value = match rm.get("patch") {
+        Some(v) if v.is_array() => v.clone(),
+        _ => return Ok(()),
+    };
+    let patch: JsonPatch =
+        serde_json::from_value(patch_value).context("decoding JSON Patch for actions")?;
+    apply_json_patch(snapshot, &patch).context("applying actions patch")?;
+    let view = build_filtered_actions_view(snapshot, filters)?;
+    let version = view.get("version").and_then(|v| v.as_u64()).unwrap_or(0);
+    let note = format!("{} (version {})", Local::now().format("%H:%M:%S"), version);
+    render_actions_text(&view, args, Some(&note))?;
     Ok(())
 }
 

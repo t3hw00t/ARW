@@ -6,3 +6,4 @@
 # everyone who runs the test benefits from these saved cases.
 cc 036fe010e4452e4c6faedafa05aeed43d8f722a23fc7bdbea3af39256ab46acb # shrinks to ref token = "¡"
 cc 7c7bf610be4ea681ddcfb706b03e0d17b540fb704769af67b0edbcbd9ea58ca1 # shrinks to ref token = "__rK..l.3H~_eR_z~~-_K-~PTc2_.C__..Gk9M93_z~p8L8g~mG.h-_nwUO1J."
+cc 90f88b875d85406bd0e94a94b6ae738a191f7180151a9cc61bf74de72488f149 # shrinks to ref token = "_"

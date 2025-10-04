@@ -116,7 +116,7 @@ Notes
 - Inspect recent entries via `GET /admin/events/journal?limit=200` (requires admin auth). Use `prefix=kind.` CSV filters to scope to specific event families.
 - CLI mirror: `arw-cli events journal --limit 200 --prefix memory.` prints a summary without crafting curl calls (`--json` yields raw response; add `--follow --interval 3` to poll continuously; `--after 2025-10-02T17:15:00Z` skips older entries on the first fetch).
 - Observations snapshot: `arw-cli events observations --limit 50 --kind-prefix service. --since-relative 15m` mirrors `/state/observations` so you can audit recent envelopes without downloading the full window (`--json` emits the raw read-model; set `--payload-width 0` to hide payload columns in shared terminals, and `--since` or `--since-relative` skips older entries during long investigations).
-- Actions snapshot: `arw-cli state actions --state completed --kind-prefix chat.` mirrors `/state/actions` with optional `--limit` and `--updated-since` filters, helping operators inspect recent work without paging through raw JSON.
+- Actions snapshot: `arw-cli state actions --state completed --kind-prefix chat.` mirrors `/state/actions` with optional `--limit`, `--updated-since`, and `--watch` flags—pass `--watch` to stay attached to the live `state.read.model.patch` stream instead of polling.
 - `ARW_REHYDRATE_FILE_HEAD_KB`: max head bytes when rehydrating local files via `/context/rehydrate` (default `64`).
 
 ## Observability & Logs

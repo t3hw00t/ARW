@@ -206,8 +206,8 @@ Compatibility & Hardware
 - [Kernel] GPU probe fallback via wgpu: enumerate adapters across backends — done
 
 State Read‑Models & Episodes
-- [Kernel] Observations read‑model + GET /state/observations [t-250912001055-0044]
-- [Kernel] Beliefs/Intents/Actions stores + endpoints [t-250912001100-3438]
+- [Kernel] Observations read-model + GET /state/observations [t-250912001055-0044] — done (SSE read-model patches + admin endpoint)
+- [Kernel] Beliefs/Intents/Actions stores + endpoints [t-250912001100-3438] — done (SSE read-model patches + admin endpoints)
 - [Kernel] Episodes + Debug UI reactive views (truth window) [t-250912001105-7850]
 - [Kernel] Debug UI: Episodes filters + details toggle [t-250912024838-4137]
 

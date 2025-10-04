@@ -899,8 +899,8 @@ pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
 
 // Shared test guard to serialize env/rate-limiter tests across the binary.
 #[cfg(test)]
-pub(crate) static ADMIN_ENV_GUARD: once_cell::sync::Lazy<std::sync::Mutex<()>> =
-    once_cell::sync::Lazy::new(|| std::sync::Mutex::new(()));
+pub(crate) static ADMIN_ENV_GUARD: once_cell::sync::Lazy<parking_lot::Mutex<()>> =
+    once_cell::sync::Lazy::new(|| parking_lot::Mutex::new(()));
 
 #[cfg(test)]
 mod tests {
@@ -920,7 +920,7 @@ mod tests {
 
     #[test]
     fn admin_ok_rate_limits_plain_token() {
-        let _lock = super::ADMIN_ENV_GUARD.lock().unwrap();
+        let _lock = super::ADMIN_ENV_GUARD.lock();
         crate::security::reset_admin_rate_limiter_for_tests();
         let mut env = crate::test_support::env::guard();
         env.set("ARW_DEBUG", "0");
@@ -939,7 +939,7 @@ mod tests {
 
     #[test]
     fn admin_ok_rate_limits_hashed_token() {
-        let _lock = super::ADMIN_ENV_GUARD.lock().unwrap();
+        let _lock = super::ADMIN_ENV_GUARD.lock();
         crate::security::reset_admin_rate_limiter_for_tests();
         let mut env = crate::test_support::env::guard();
         env.set("ARW_DEBUG", "0");
@@ -981,7 +981,7 @@ mod prop_tests {
     proptest! {
         #[test]
         fn hashed_token_allows_once_denies_second(ref token in proptest::string::string_regex("[-._~A-Za-z0-9]{1,64}").unwrap()) {
-            let _lock = super::ADMIN_ENV_GUARD.lock().unwrap();
+            let _lock = super::ADMIN_ENV_GUARD.lock();
             crate::security::reset_admin_rate_limiter_for_tests();
             let mut env = crate::test_support::env::guard();
             env.set("ARW_DEBUG", "0");

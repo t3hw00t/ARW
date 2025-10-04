@@ -15,6 +15,7 @@ base64 = { workspace = true }
 ed25519-dalek = { version = "2", default-features = false, features = ["std"] }
 rand = "0.9"
 rand_core = "0.9"
+json-patch = "3"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
 clap_mangen = "0.2"

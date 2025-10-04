@@ -63,6 +63,8 @@ export interface StateObservationsOptions {
   limit?: number;
   /** Filter to event kinds with this prefix, e.g. `actions.` or `service.`. */
   kindPrefix?: string;
+  /** Only include observations newer than this RFC3339 timestamp. */
+  since?: string;
 }
 
 export interface StateActionsOptions {
@@ -97,6 +99,11 @@ export interface ReadModelSubscription {
   onUpdate(handler: (snapshot: Json) => void): () => void;
   lastEventId(): string | undefined;
 }
+
+export type WatchObservationsOptions = StateObservationsOptions & SubscribeReadModelOptions;
+export type WatchBeliefsOptions = SubscribeReadModelOptions;
+export type WatchIntentsOptions = SubscribeReadModelOptions;
+export type WatchActionsOptions = StateActionsOptions & SubscribeReadModelOptions;
 
 export interface StreamOptions extends EventsOptions {
   signal?: AbortSignal;
@@ -1062,10 +1069,23 @@ export class ArwClient {
       if (options.kindPrefix) {
         params.set('kind_prefix', options.kindPrefix);
       }
+      if (options.since) {
+        params.set('since', options.since);
+      }
       const query = params.toString();
       const url = `${this.base}/state/observations${query ? `?${query}` : ''}`;
       const r = await fetch(url, { headers: this.headers() });
       if (!r.ok) throw new Error(`observations fetch failed: ${r.status}`);
+      return r.json();
+    },
+    beliefs: async (): Promise<Json> => {
+      const r = await fetch(`${this.base}/state/beliefs`, { headers: this.headers() });
+      if (!r.ok) throw new Error(`beliefs fetch failed: ${r.status}`);
+      return r.json();
+    },
+    intents: async (): Promise<Json> => {
+      const r = await fetch(`${this.base}/state/intents`, { headers: this.headers() });
+      if (!r.ok) throw new Error(`intents fetch failed: ${r.status}`);
       return r.json();
     },
     actions: async (options: StateActionsOptions = {}): Promise<Json> => {
@@ -1090,6 +1110,42 @@ export class ArwClient {
       const r = await fetch(url, { headers: this.headers() });
       if (!r.ok) throw new Error(`actions fetch failed: ${r.status}`);
       return r.json();
+    },
+    watchObservations: (options: WatchObservationsOptions = {}): ReadModelSubscription => {
+      const { limit, kindPrefix, since, loadInitial, ...rest } = options;
+      const loader =
+        loadInitial ?? (() => this.state.observations({ limit, kindPrefix, since }));
+      return this.events.subscribeReadModel('observations', {
+        ...rest,
+        loadInitial: loader,
+      });
+    },
+    watchBeliefs: (options: WatchBeliefsOptions = {}): ReadModelSubscription => {
+      const { loadInitial, ...rest } = options;
+      const loader = loadInitial ?? (() => this.state.beliefs());
+      return this.events.subscribeReadModel('beliefs', {
+        ...rest,
+        loadInitial: loader,
+      });
+    },
+    watchIntents: (options: WatchIntentsOptions = {}): ReadModelSubscription => {
+      const { loadInitial, ...rest } = options;
+      const loader = loadInitial ?? (() => this.state.intents());
+      return this.events.subscribeReadModel('intents', {
+        ...rest,
+        loadInitial: loader,
+      });
+    },
+    watchActions: (options: WatchActionsOptions = {}): ReadModelSubscription => {
+      const { limit, state, kindPrefix, updatedSince, loadInitial, ...rest } = options;
+      const loader =
+        loadInitial ?? (() =>
+          this.state.actions({ limit, state, kindPrefix, updatedSince })
+        );
+      return this.events.subscribeReadModel('actions', {
+        ...rest,
+        loadInitial: loader,
+      });
     },
   };
 

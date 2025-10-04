@@ -51,6 +51,10 @@ fn observations_version() -> &'static AtomicU64 {
     VERSION.get_or_init(|| AtomicU64::new(0))
 }
 
+pub(crate) fn observations_version_value() -> u64 {
+    observations_version().load(Ordering::Relaxed)
+}
+
 fn beliefs_store() -> &'static RwLock<Vec<Value>> {
     static BELIEFS: OnceCell<RwLock<Vec<Value>>> = OnceCell::new();
     BELIEFS.get_or_init(|| RwLock::new(Vec::new()))
@@ -61,6 +65,10 @@ fn beliefs_version() -> &'static AtomicU64 {
     VERSION.get_or_init(|| AtomicU64::new(0))
 }
 
+pub(crate) fn beliefs_version_value() -> u64 {
+    beliefs_version().load(Ordering::Relaxed)
+}
+
 fn intents_store() -> &'static RwLock<VecDeque<Timed<Value>>> {
     static INTENTS: OnceCell<RwLock<VecDeque<Timed<Value>>>> = OnceCell::new();
     INTENTS.get_or_init(|| RwLock::new(VecDeque::with_capacity(INTENTS_CAP)))
@@ -69,6 +77,10 @@ fn intents_store() -> &'static RwLock<VecDeque<Timed<Value>>> {
 fn intents_version() -> &'static AtomicU64 {
     static VERSION: OnceCell<AtomicU64> = OnceCell::new();
     VERSION.get_or_init(|| AtomicU64::new(0))
+}
+
+pub(crate) fn intents_version_value() -> u64 {
+    intents_version().load(Ordering::Relaxed)
 }
 
 fn actions_store() -> &'static RwLock<VecDeque<Timed<Value>>> {

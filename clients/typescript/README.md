@@ -5,8 +5,9 @@ This is a lightweight, hand‑written client for `arw-server` focusing on the co
 - `POST /actions` → submit an action
 - `GET /actions/:id` → poll action state
 - `GET /events` (SSE) → subscribe to events (browser and Node supported)
-- `GET /state/observations` → admin snapshot with optional `limit` / `kind_prefix` filters
-- `GET /state/actions` → admin snapshot with optional `limit` / `state` / `kind_prefix` / `updated_since`
+- `GET /state/observations` → admin snapshot with optional `limit` / `kind_prefix` / `since`
+- `GET /state/beliefs`, `GET /state/intents`, `GET /state/actions`
+- `client.state.watch*` helpers (Observations/Beliefs/Intents/Actions) hydrate via SSE read-model patches with automatic JSON Patch application
 - `GET /about` and `GET /healthz`
 
 It does not rely on a generator and has no runtime dependencies beyond the standard browser/Node `fetch` and `EventSource` APIs.
@@ -36,6 +37,18 @@ const es2 = client.events.subscribe({ lastEventId: '12345' });
 // Snapshot latest observations (admin token required)
 const observations = await client.state.observations({ limit: 50, kindPrefix: 'service.' });
 console.log('service observations', observations.items?.length ?? 0);
+
+// Live observations feed (applies JSON Patch deltas under the hood)
+const obsSub = client.state.watchObservations({
+  limit: 200,
+  kindPrefix: 'service.',
+  onUpdate: (snapshot) => {
+    console.log('live version', snapshot?.version);
+  },
+});
+
+// Later, tear down
+obsSub.close();
 
 // Filter action history (admin token required)
 const recentActions = await client.state.actions({ state: 'completed', kindPrefix: 'chat.' });
