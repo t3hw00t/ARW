@@ -1729,9 +1729,13 @@ impl Kernel {
         let mut rows = stmt.query([limit])?;
         let mut out = Vec::new();
         while let Some(r) = rows.next()? {
+            let status_raw: String = r.get::<_, String>(1)?;
+            let (status_slug, status_label) = Self::normalize_orchestrator_status(&status_raw);
             out.push(serde_json::json!({
                 "id": r.get::<_, String>(0)?,
-                "status": r.get::<_, String>(1)?,
+                "status": status_raw,
+                "status_slug": status_slug,
+                "status_label": status_label,
                 "goal": r.get::<_, Option<String>>(2)?,
                 "progress": r.get::<_, Option<f64>>(3)?,
                 "created": r.get::<_, String>(4)?,
@@ -1739,6 +1743,29 @@ impl Kernel {
             }));
         }
         Ok(out)
+    }
+
+    fn normalize_orchestrator_status(value: &str) -> (&'static str, &'static str) {
+        let normalized = value.trim().to_ascii_lowercase();
+        match normalized.as_str() {
+            "queued" | "pending" | "waiting" => ("queued", "Queued"),
+            "running" | "in_progress" | "in-progress" | "started" | "active" => {
+                ("running", "Running")
+            }
+            "completed" | "complete" | "finished" | "done" | "success" | "succeeded" => {
+                ("completed", "Completed")
+            }
+            "failed" | "error" | "errored" | "fail" | "failure" => ("failed", "Failed"),
+            "cancelled" | "canceled" | "aborted" | "stopped" => ("cancelled", "Cancelled"),
+            "unknown" | "" => ("unknown", "Unknown"),
+            other if other.starts_with("run") => ("running", "Running"),
+            other if other.starts_with("queue") => ("queued", "Queued"),
+            other if other.starts_with("wait") => ("queued", "Queued"),
+            other if other.starts_with("fail") => ("failed", "Failed"),
+            other if other.starts_with("cancel") => ("cancelled", "Cancelled"),
+            other if other.starts_with("complete") => ("completed", "Completed"),
+            _ => ("unknown", "Unknown"),
+        }
     }
 
     // ---------- Logic Units ----------
@@ -2387,6 +2414,25 @@ mod tests {
     use chrono::{SecondsFormat, Utc};
     use serde_json::json;
     use tempfile::TempDir;
+
+    #[test]
+    fn orchestrator_status_normalization() {
+        let cases = vec![
+            ("queued", ("queued", "Queued")),
+            ("Pending", ("queued", "Queued")),
+            ("running", ("running", "Running")),
+            ("IN_PROGRESS", ("running", "Running")),
+            ("completed", ("completed", "Completed")),
+            ("DONE", ("completed", "Completed")),
+            ("failed", ("failed", "Failed")),
+            ("ERROR", ("failed", "Failed")),
+            ("canceled", ("cancelled", "Cancelled")),
+            ("", ("unknown", "Unknown")),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(Kernel::normalize_orchestrator_status(input), expected);
+        }
+    }
 
     #[tokio::test]
     async fn research_watcher_upsert_and_status() {

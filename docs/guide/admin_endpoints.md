@@ -188,7 +188,7 @@ The triad groups operations by intent:
 - **Logic units & orchestrator**
   - `GET /logic-units` — installed logic units (read-only catalog).
   - `GET /state/logic_units` — read-model summary of logic unit jobs/status.
-  - `GET /state/orchestrator/jobs` — orchestrator jobs snapshot for mini agents.
+- `GET /state/orchestrator/jobs` — orchestrator jobs snapshot for mini agents (each entry now includes `status_slug` + `status_label` so dashboards can share the canonical vocabulary).
 - **Connectors**
   - `GET /state/connectors` — connector manifests with secrets scrubbed.
 - **Memory & context**

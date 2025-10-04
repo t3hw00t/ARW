@@ -234,6 +234,28 @@ function formatRelativeTraining(ms) {
   return `${Math.round(years)} yr ${sign}`;
 }
 
+function jobStatusMeta(job) {
+  const raw = job && (job.status_slug || job.status || job.state || 'unknown');
+  const slug = (() => {
+    if (typeof raw !== 'string') return 'unknown';
+    const trimmed = raw.trim().toLowerCase();
+    return trimmed || 'unknown';
+  })();
+  const label = (() => {
+    if (typeof job?.status_label === 'string' && job.status_label.trim()) {
+      return job.status_label.trim();
+    }
+    if (slug === 'unknown') {
+      return typeof raw === 'string' && raw.trim() ? raw.trim() : 'Unknown';
+    }
+    return slug
+      .split('_')
+      .map((part) => (part ? part[0].toUpperCase() + part.slice(1) : ''))
+      .join(' ') || 'Unknown';
+  })();
+  return { slug, label };
+}
+
 function formatRelativeAbsTraining(ms) {
   if (!Number.isFinite(ms)) return new Date().toLocaleString();
   const date = new Date(ms);
@@ -531,18 +553,18 @@ function renderJobs(items) {
       return false;
     }
     if (jobStatusFilter === 'all') return true;
-    const status = (job.status || job.state || '').toLowerCase();
+    const { slug } = jobStatusMeta(job);
     if (jobStatusFilter === 'running') {
-      return status === 'running' || status === 'in_progress';
+      return slug === 'running';
     }
     if (jobStatusFilter === 'completed') {
-      return status === 'complete' || status === 'completed' || status === 'finished';
+      return slug === 'completed';
     }
     if (jobStatusFilter === 'queued') {
-      return status === 'queued' || status === 'pending';
+      return slug === 'queued';
     }
     if (jobStatusFilter === 'failed') {
-      return status === 'failed' || status === 'error';
+      return slug === 'failed';
     }
     return true;
   });
@@ -563,12 +585,23 @@ function renderJobs(items) {
   filtered.forEach((job) => {
     const tr = document.createElement('tr');
     const progress = typeof job.progress === 'number' ? formatPercent(job.progress, 0) : '—';
-    const status = job.status || job.state || 'unknown';
-    const statusClass = status && status.toLowerCase().includes('fail')
+    const statusMeta = jobStatusMeta(job);
+    const statusSlug = statusMeta.slug;
+    const statusLabel = statusMeta.label;
+    const safeLabel = escapeText(statusLabel);
+    const safeSlug = escapeText(statusSlug);
+    const statusDisplay = statusSlug === 'unknown'
+      ? safeLabel
+      : `${safeLabel} (${safeSlug})`;
+    const statusClass = statusSlug === 'failed'
       ? 'bad'
-      : status && status.toLowerCase().includes('run')
+      : statusSlug === 'running'
         ? 'accent'
-        : '';
+        : statusSlug === 'cancelled'
+          ? 'dim'
+          : statusSlug === 'completed'
+            ? 'ok'
+            : '';
     const updated = job.updated_at || job.updated || job.finished_at || job.created_at || job.created || '';
     let updatedLabel = '—';
     if (updated) {
@@ -579,7 +612,7 @@ function renderJobs(items) {
     }
     tr.innerHTML = `
       <td class="mono">${escapeText(job.id || '')}</td>
-      <td class="${statusClass}">${escapeText(status)}</td>
+      <td class="${statusClass}">${statusDisplay}</td>
       <td>${progress}</td>
       <td>${escapeText(job.goal || '')}</td>
       <td class="mono">${updatedLabel}</td>
@@ -630,7 +663,13 @@ function renderJobs(items) {
     createdItem.textContent = `Created: ${escapeText(job.created_at || job.created || '—')}`;
     metaList.appendChild(createdItem);
     const stateItem = document.createElement('li');
-    stateItem.textContent = `State: ${escapeText(job.state || 'n/a')}`;
+    const detailMeta = jobStatusMeta(job);
+    const detailLabel = escapeText(detailMeta.label || job.state || job.status || 'n/a');
+    const detailSlug = escapeText(detailMeta.slug);
+    const detailText = detailMeta.slug === 'unknown'
+      ? detailLabel
+      : `${detailLabel} (${detailSlug})`;
+    stateItem.textContent = `State: ${detailText}`;
     metaList.appendChild(stateItem);
     const progressItem = document.createElement('li');
     progressItem.textContent = `Progress: ${progress}`;

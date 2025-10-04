@@ -63,8 +63,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       const descriptor = entry?.descriptor || {};
       const status = entry?.status || {};
       const name = descriptor.name || descriptor.id || 'runtime';
-      const state = String(status.state || 'unknown').toLowerCase();
-      const severity = String(status.severity || 'info').toLowerCase();
+      const stateInfo = ARW.runtime.state(status.state);
+      const severityInfo = ARW.runtime.severity(status.severity);
+      const state = stateInfo.slug;
+      const severity = severityInfo.slug;
       if (state === 'ready') readyCount += 1;
       if (state === 'error' || severity === 'error' || state === 'offline') {
         err = true;
@@ -84,7 +86,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
         if (remaining === 0) warn = true;
       }
-      let detail = `${name}: ${status.summary || state}`;
+      const summary = status.summary || stateInfo.label;
+      let detail = `${name}: ${summary} (${stateInfo.label} / ${state})`;
       if (budget && typeof budget === 'object') {
         const used = Number(budget.used ?? NaN);
         const max = Number(budget.max_restarts ?? NaN);

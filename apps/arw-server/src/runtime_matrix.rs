@@ -556,25 +556,11 @@ fn optional_accelerator_map(
 }
 
 fn runtime_state_slug(state: &RuntimeState) -> &'static str {
-    match state {
-        RuntimeState::Ready => "ready",
-        RuntimeState::Starting => "starting",
-        RuntimeState::Degraded => "degraded",
-        RuntimeState::Offline => "offline",
-        RuntimeState::Error => "error",
-        RuntimeState::Unknown => "unknown",
-    }
+    state.as_str()
 }
 
 fn runtime_state_label(state: &RuntimeState) -> &'static str {
-    match state {
-        RuntimeState::Ready => "Ready",
-        RuntimeState::Starting => "Starting",
-        RuntimeState::Degraded => "Degraded",
-        RuntimeState::Offline => "Offline",
-        RuntimeState::Error => "Error",
-        RuntimeState::Unknown => "Unknown",
-    }
+    state.display_label()
 }
 
 fn runtime_state_weight(state: &RuntimeState) -> u8 {
@@ -589,11 +575,7 @@ fn runtime_state_weight(state: &RuntimeState) -> u8 {
 }
 
 fn runtime_severity_slug(severity: &RuntimeSeverity) -> &'static str {
-    match severity {
-        RuntimeSeverity::Info => "info",
-        RuntimeSeverity::Warn => "warn",
-        RuntimeSeverity::Error => "error",
-    }
+    severity.as_str()
 }
 
 fn runtime_severity_weight(severity: &RuntimeSeverity) -> u8 {
@@ -721,7 +703,7 @@ mod tests {
         descriptor.name = name.map(|s| s.to_string());
         let mut status = RuntimeStatus::new(id.to_string(), state);
         status.summary = summary.to_string();
-        status.severity = severity;
+        status.set_severity(severity);
         status.detail = detail.iter().map(|s| s.to_string()).collect();
         RuntimeRecord { descriptor, status }
     }

@@ -39,7 +39,7 @@ Complexity Collapse (Cross-cutting)
 
 Managed Runtime Supervisor (Priority One)
 - [Kernel] Runtime Matrix Phase 1: land health reasons, restart budgets, and accessible status strings; add CPU/GPU smoke tests exercising llama.cpp integration — in_progress (health strings + restart budgets landed; stubbed llama smoke via `just runtime-smoke`; GPU-backed runs still outstanding).
-- [Kernel] Supervisor Core Phase 2: finalize `RuntimeRegistry` adapter trait, lease-gated start/stop APIs, structured logs, and policy simulator coverage — plan.
+- [Kernel] Supervisor Core Phase 2: finalize `RuntimeRegistry` adapter trait, lease-gated start/stop APIs, structured logs, and policy simulator coverage — plan (structured log stream with heartbeat dedupe, plus `state_label`/`severity_label` exposed to clients, landed).
 - [Pack: Collaboration][Kernel] Launcher runtime panels: expose profiles, consent cues, and start/stop controls with keyboard parity; publish operator runbook excerpt in Launcher help cards — plan.
 - [Kernel] Supply-chain readiness for bundled runtimes: sign binary manifests, document update cadence, and ship rollback checklist — plan.
 

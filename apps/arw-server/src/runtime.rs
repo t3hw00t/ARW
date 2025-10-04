@@ -15,7 +15,7 @@ use chrono::{DateTime, Duration as ChronoDuration, SecondsFormat, Utc};
 use serde_json::{json, Value};
 use tokio::fs as afs;
 use tokio::sync::{Mutex as TokioMutex, RwLock};
-use tracing::warn;
+use tracing::{info, warn};
 
 use crate::read_models;
 use crate::tasks::TaskHandle;
@@ -196,14 +196,23 @@ impl RuntimeRegistry {
         }
         let now = Utc::now();
         status.updated_at = now;
+        status.refresh_labels();
         let mut guard = self.state.write().await;
         let history = guard.restart_attempts.entry(status.id.clone()).or_default();
         let _pruned = history.prune(now, self.restart_config.window());
         let budget_snapshot = history.snapshot(&self.restart_config);
         status.restart_budget = Some(budget_snapshot.clone());
+        let previous = guard.statuses.get(&status.id).cloned();
+        let payload_changed = previous
+            .as_ref()
+            .map(|prev| !prev.same_payload(&status))
+            .unwrap_or(true);
         guard.statuses.insert(status.id.clone(), status.clone());
         guard.updated_at = now;
         drop(guard);
+        if payload_changed {
+            log_status_update(&status);
+        }
         let mut payload = serde_json::json!({
             "id": status.id,
             "state": status.state,
@@ -213,6 +222,12 @@ impl RuntimeRegistry {
             "updated": status.updated_at.to_rfc3339(),
         });
         if let Value::Object(ref mut map) = payload {
+            if let Some(label) = &status.state_label {
+                map.insert("state_label".to_string(), Value::String(label.clone()));
+            }
+            if let Some(label) = &status.severity_label {
+                map.insert("severity_label".to_string(), Value::String(label.clone()));
+            }
             if let Ok(value) = serde_json::to_value(&budget_snapshot) {
                 map.insert("restart_budget".to_string(), value);
             }
@@ -224,7 +239,7 @@ impl RuntimeRegistry {
     #[allow(dead_code)]
     pub async fn set_offline(&self, id: &str, reason: impl Into<String>) {
         let mut status = RuntimeStatus::new(id.to_string(), RuntimeState::Offline);
-        status.severity = RuntimeSeverity::Warn;
+        status.set_severity(RuntimeSeverity::Warn);
         status.summary = "Runtime marked offline".to_string();
         status.detail.push(reason.into());
         self.apply_status(status).await;
@@ -350,6 +365,13 @@ impl RuntimeRegistry {
         preset: Option<String>,
     ) -> Result<RuntimeRestartBudget, RestartDenied> {
         self.ensure_descriptor(id).await;
+        info!(
+            target = "arw::runtime",
+            runtime = %id,
+            restart = restart,
+            preset = preset.as_deref().unwrap_or(""),
+            "runtime restore request received"
+        );
         let mut detail_entries = Vec::new();
         if let Some(ref preset_name) = preset {
             if !preset_name.trim().is_empty() {
@@ -371,10 +393,21 @@ impl RuntimeRegistry {
                     "Adjust ARW_RUNTIME_RESTART_MAX or ARW_RUNTIME_RESTART_WINDOW_SEC to change the budget."
                         .to_string(),
                 );
+                warn!(
+                    target = "arw::runtime",
+                    runtime = %id,
+                    restart = restart,
+                    preset = preset.as_deref().unwrap_or(""),
+                    restart_remaining = budget.remaining,
+                    restart_used = budget.used,
+                    restart_max = budget.max_restarts,
+                    restart_window_seconds = budget.window_seconds,
+                    "runtime restore denied: restart budget exhausted"
+                );
                 let mut denied = RuntimeStatus::new(id.to_string(), RuntimeState::Error)
                     .with_summary("Restart budget exhausted")
                     .touch();
-                denied.severity = RuntimeSeverity::Error;
+                denied.set_severity(RuntimeSeverity::Error);
                 denied.detail = denied_details;
                 self.apply_status(denied).await;
                 return Err(RestartDenied { budget });
@@ -391,6 +424,17 @@ impl RuntimeRegistry {
             .touch();
         status.detail.extend(detail_entries.clone());
         self.apply_status(status).await;
+        info!(
+            target = "arw::runtime",
+            runtime = %id,
+            restart = restart,
+            preset = preset.as_deref().unwrap_or(""),
+            restart_remaining = budget_snapshot.remaining,
+            restart_used = budget_snapshot.used,
+            restart_max = budget_snapshot.max_restarts,
+            restart_window_seconds = budget_snapshot.window_seconds,
+            "runtime restore queued"
+        );
 
         self.bus.publish(
             TOPIC_RUNTIME_RESTORE_REQUESTED,
@@ -413,6 +457,20 @@ impl RuntimeRegistry {
             let budget_hint = registry.current_budget(&runtime_id).await;
             ready.detail.push(format_budget_hint(&budget_hint));
             registry.apply_status(ready).await;
+            let reset_hint = budget_hint
+                .reset_at
+                .as_ref()
+                .map(|ts| ts.to_rfc3339_opts(SecondsFormat::Secs, true));
+            info!(
+                target = "arw::runtime",
+                runtime = %runtime_id,
+                restart_remaining = budget_hint.remaining,
+                restart_used = budget_hint.used,
+                restart_max = budget_hint.max_restarts,
+                restart_window_seconds = budget_hint.window_seconds,
+                restart_reset_at = reset_hint.as_deref().unwrap_or("n/a"),
+                "runtime restore completed"
+            );
             bus.publish(
                 TOPIC_RUNTIME_RESTORE_COMPLETED,
                 &json!({"runtime": runtime_id}),
@@ -453,9 +511,9 @@ impl RuntimeRegistry {
             guard
                 .desired
                 .insert(record.descriptor.id.clone(), record.descriptor);
-            guard
-                .statuses
-                .insert(record.status.id.clone(), record.status);
+            let mut status = record.status;
+            status.refresh_labels();
+            guard.statuses.insert(status.id.clone(), status);
         }
         guard.updated_at = snapshot.updated_at;
         Ok(())
@@ -537,6 +595,52 @@ fn format_budget_hint(budget: &RuntimeRestartBudget) -> String {
         )
     } else {
         base
+    }
+}
+
+fn log_status_update(status: &RuntimeStatus) {
+    let detail_count = status
+        .detail
+        .iter()
+        .filter(|entry| !entry.trim().is_empty())
+        .count();
+    let detail_preview = status
+        .detail
+        .iter()
+        .find(|entry| !entry.trim().is_empty())
+        .map(|entry| entry.as_str())
+        .unwrap_or("");
+    if let Some(budget) = status.restart_budget.as_ref() {
+        let reset_hint = budget
+            .reset_at
+            .as_ref()
+            .map(|ts| ts.to_rfc3339_opts(SecondsFormat::Secs, true));
+        info!(
+            target = "arw::runtime",
+            runtime = %status.id,
+            state = status.state.as_str(),
+            severity = status.severity.as_str(),
+            summary = %status.summary,
+            detail_count,
+            detail_preview = %detail_preview,
+            restart_used = budget.used,
+            restart_remaining = budget.remaining,
+            restart_max = budget.max_restarts,
+            restart_window_seconds = budget.window_seconds,
+            restart_reset_at = reset_hint.as_deref().unwrap_or("n/a"),
+            "runtime status updated"
+        );
+    } else {
+        info!(
+            target = "arw::runtime",
+            runtime = %status.id,
+            state = status.state.as_str(),
+            severity = status.severity.as_str(),
+            summary = %status.summary,
+            detail_count,
+            detail_preview = %detail_preview,
+            "runtime status updated"
+        );
     }
 }
 

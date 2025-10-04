@@ -34,7 +34,7 @@ Promote the runtime manager from proposal to a first-class kernel capability. Th
 2. **Supervisor Daemon (launcher)** – cross-platform controller that installs binaries, supervises processes, and streams telemetry back to the server over gRPC/WebSocket. Respects Guardrail Gateway network posture.
 3. **Adapter Contract** – shared trait for llama.cpp, ONNX Runtime, vLLM, Whisper, llava, etc. Each adapter declares capabilities (modalities, accelerator requirements, context limits) and boot steps. Reuse contract sketch from the llama.cpp blueprint.
 4. **Profiles & Scheduling** – declarative profiles stored in `configs/runtime/profiles/*.toml`. Profiles map to accelerator strategies and prompt-cache options. Orchestrator jobs request profiles; supervisor resolves to available runtimes or queues fallbacks.
-5. **Observability** – extend Snappy metrics (`runtime.*` family), add `/metrics` counters for restarts, warmups, and accelerator usage, and stream structured supervisor logs into the unified journal (`runtime.supervisor.log`).
+5. **Observability** – extend Snappy metrics (`runtime.*` family), add `/metrics` counters for restarts, warmups, and accelerator usage, and stream structured supervisor logs into the unified journal (`runtime.supervisor.log`). RuntimeRegistry now emits `arw::runtime` structured logs whenever payloads change or restore jobs run, including restart budget hints for operators while deduplicating identical heartbeats. SSE/read-model payloads expose both canonical slugs (`state`, `severity`) and their human labels (`state_label`, `severity_label`) so launchers and CLIs do not need to re-map enums locally.
 
 ## Stability & Test Strategy
 

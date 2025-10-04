@@ -25,10 +25,45 @@
   } catch {}
 })();
 
+const RUNTIME_STATE_DEFS = [
+  { slug: 'ready', label: 'Ready', synonyms: ['ready', 'ok'] },
+  { slug: 'starting', label: 'Starting', synonyms: ['starting', 'start'] },
+  { slug: 'degraded', label: 'Degraded', synonyms: ['degraded'] },
+  { slug: 'offline', label: 'Offline', synonyms: ['offline', 'disabled'] },
+  { slug: 'error', label: 'Error', synonyms: ['error', 'failed'] },
+  { slug: 'unknown', label: 'Unknown', synonyms: ['unknown'] },
+];
+
+const RUNTIME_SEVERITY_DEFS = [
+  { slug: 'info', label: 'Info', synonyms: ['info'] },
+  { slug: 'warn', label: 'Warn', synonyms: ['warn', 'warning'] },
+  { slug: 'error', label: 'Error', synonyms: ['error'] },
+];
+
+function normalizeEnum(defs, value, fallbackSlug) {
+  const raw = String(value ?? '').trim().toLowerCase();
+  if (!raw) {
+    return defs.find((def) => def.slug === fallbackSlug) || defs[0];
+  }
+  const match = defs.find((def) => def.slug === raw || def.synonyms.includes(raw));
+  if (match) return match;
+  return defs.find((def) => def.slug === fallbackSlug) || defs[0];
+}
+
 window.ARW = {
   _prefsCache: new Map(),
   _prefsTimers: new Map(),
   _ocrCache: new Map(),
+  runtime: {
+    state(value) {
+      const def = normalizeEnum(RUNTIME_STATE_DEFS, value, 'unknown');
+      return { slug: def.slug, label: def.label };
+    },
+    severity(value) {
+      const def = normalizeEnum(RUNTIME_SEVERITY_DEFS, value, 'info');
+      return { slug: def.slug, label: def.label };
+    },
+  },
   util: {
     pageId(){
       try{

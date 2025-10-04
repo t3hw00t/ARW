@@ -436,6 +436,9 @@ fn sanitize_capsule(raw: &Value) -> Value {
     if let Some(status) = raw.get("status") {
         obj.insert("status".into(), status.clone());
     }
+    if let Some(status_slug) = raw.get("status") {
+        obj.insert("status_slug".into(), status_slug.clone());
+    }
     if let Some(status_label) = raw.get("status_label") {
         obj.insert("status_label".into(), status_label.clone());
     }

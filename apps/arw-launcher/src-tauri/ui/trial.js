@@ -542,13 +542,23 @@
     let level = 'ok';
     let summary = 'All systems nominal';
 
-    const healthStatus = String(lastHealth.status || lastHealth.state || '').toLowerCase();
+    const healthState = ARW.runtime.state(lastHealth.status || lastHealth.state);
+    const healthStatus = healthState.slug;
     if (safe) {
       level = 'bad';
       summary = 'Safe mode engaged';
     } else if (healthStatus && healthStatus !== 'ok' && healthStatus !== 'healthy') {
-      level = healthStatus === 'degraded' ? 'warn' : 'bad';
-      summary = `Health ${healthStatus}`;
+      if (healthStatus === 'degraded') {
+        level = 'warn';
+      } else if (healthStatus === 'ready') {
+        level = 'ok';
+      } else if (healthStatus === 'unknown') {
+        level = 'warn';
+      } else {
+        level = 'bad';
+      }
+      const label = healthState.label || healthStatus;
+      summary = `Health ${label}`;
     }
 
     const crashTime = parseTimestamp(lastCrash.time_ms || lastCrash.ts_ms || lastCrash.time);

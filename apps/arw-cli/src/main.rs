@@ -1,5 +1,6 @@
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use arw_core::{gating, gating_keys, hello_core, introspect_tools, load_effective_paths};
+use arw_runtime::{RuntimeSeverity, RuntimeState};
 use base64::Engine;
 use chrono::{DateTime, Local, TimeZone, Utc};
 use clap::CommandFactory;
@@ -3152,10 +3153,15 @@ fn render_runtime_matrix_summary(matrix: &JsonValue) -> String {
             .get("label")
             .and_then(|v| v.as_str())
             .unwrap_or("Unknown");
-        let severity = status
+        let severity_slug = status
             .get("severity")
             .and_then(|v| v.as_str())
             .unwrap_or("info");
+        let severity = RuntimeSeverity::from_slug(severity_slug);
+        let severity_label = status
+            .get("severity_label")
+            .and_then(|v| v.as_str())
+            .unwrap_or(severity.display_label());
         let aria_hint = status
             .get("aria_hint")
             .and_then(|v| v.as_str())
@@ -3195,8 +3201,8 @@ fn render_runtime_matrix_summary(matrix: &JsonValue) -> String {
             format!(" — {}", detail)
         };
         lines.push(format!(
-            "- {}: {} (severity {}) — runtimes total {}{}{}",
-            node, label, severity, total, states_fragment, detail_fragment
+            "- {}: {} (severity {} / {}) — runtimes total {}{}{}",
+            node, label, severity_label, severity_slug, total, states_fragment, detail_fragment
         ));
     }
 
@@ -3328,24 +3334,35 @@ fn render_runtime_summary(snapshot: &JsonValue) -> String {
             .get("adapter")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
-        let state = status
+        let state_slug = status
             .get("state")
             .and_then(|v| v.as_str())
-            .unwrap_or("unknown")
-            .to_lowercase();
-        let severity = status
+            .unwrap_or("unknown");
+        let state = RuntimeState::from_slug(state_slug);
+        let state_label = status
+            .get("state_label")
+            .and_then(|v| v.as_str())
+            .unwrap_or(state.display_label());
+        let severity_slug = status
             .get("severity")
             .and_then(|v| v.as_str())
-            .unwrap_or("info")
-            .to_lowercase();
+            .unwrap_or("info");
+        let severity = RuntimeSeverity::from_slug(severity_slug);
+        let severity_label = status
+            .get("severity_label")
+            .and_then(|v| v.as_str())
+            .unwrap_or(severity.display_label());
         let summary = status
             .get("summary")
             .and_then(|v| v.as_str())
             .unwrap_or("(no summary)");
-        if state == "ready" {
+        if state == RuntimeState::Ready {
             ready += 1;
         }
-        if state == "error" || severity == "error" || state == "offline" {
+        if state == RuntimeState::Error
+            || severity == RuntimeSeverity::Error
+            || state == RuntimeState::Offline
+        {
             exhausted = true;
         }
         let mut detail_lines: Vec<String> = Vec::new();
@@ -3388,8 +3405,8 @@ fn render_runtime_summary(snapshot: &JsonValue) -> String {
         }
 
         let line = format!(
-            "- {} ({}) [{}] — {} ({})",
-            name, adapter, id, summary, state
+            "- {} ({}) [{}] — {} ({} / {}) · severity {} ({})",
+            name, adapter, id, summary, state_label, state_slug, severity_label, severity_slug
         );
         lines.push(line);
         if let Some(bl) = budget_line {
