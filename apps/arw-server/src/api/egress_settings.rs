@@ -18,6 +18,7 @@ pub(crate) struct EgressSettings {
     pub proxy_enable: bool,
     pub proxy_port: u16,
     pub ledger_enable: bool,
+    pub multi_label_suffixes: Vec<String>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -36,6 +37,8 @@ pub(crate) struct EgressSettingsPatch {
     pub proxy_port: Option<u16>,
     #[serde(default)]
     pub ledger_enable: Option<bool>,
+    #[serde(default)]
+    pub multi_label_suffixes: Option<Vec<String>>,
 }
 
 fn bool_flag(value: bool) -> &'static str {
@@ -54,6 +57,17 @@ pub(crate) async fn current_settings(state: &AppState) -> EgressSettings {
     allowlist.extend(egress_policy::env_allowlist());
     allowlist.sort();
     allowlist.dedup();
+    let mut suffixes: Vec<String> = egress_policy::config_multi_label_suffixes(&cfg)
+        .into_iter()
+        .map(|parts| parts.join("."))
+        .collect();
+    suffixes.extend(
+        egress_policy::env_multi_label_suffixes()
+            .into_iter()
+            .map(|parts| parts.join(".")),
+    );
+    suffixes.sort();
+    suffixes.dedup();
     EgressSettings {
         posture,
         allowlist,
@@ -65,6 +79,7 @@ pub(crate) async fn current_settings(state: &AppState) -> EgressSettings {
             .and_then(|s| s.parse().ok())
             .unwrap_or(9080),
         ledger_enable: policy.ledger_enabled,
+        multi_label_suffixes: suffixes,
     }
 }
 
@@ -198,6 +213,36 @@ pub async fn egress_settings_update(
             .collect();
         std::env::set_var("ARW_NET_ALLOWLIST", entries.join(","));
         egress["allowlist"] = json!(entries);
+    }
+
+    if let Some(suffixes) = patch.multi_label_suffixes.as_ref() {
+        let mut normalized: Vec<String> = Vec::new();
+        let mut parsed_parts: Vec<Vec<String>> = Vec::new();
+        let mut invalid: Vec<String> = Vec::new();
+        for entry in suffixes {
+            if let Some(parts) = egress_policy::parse_multi_label_suffix(entry) {
+                let joined = parts.join(".");
+                normalized.push(joined);
+                parsed_parts.push(parts);
+            } else {
+                invalid.push(entry.clone());
+            }
+        }
+        if !invalid.is_empty() {
+            return (
+                axum::http::StatusCode::BAD_REQUEST,
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "Bad Request",
+                    "status": 400,
+                    "detail": "invalid multi_label_suffixes entries",
+                    "invalid": invalid
+                })),
+            )
+                .into_response();
+        }
+        egress["multi_label_suffixes"] = json!(normalized);
+        egress_policy::set_configured_multi_label_suffixes(parsed_parts);
     }
 
     if let Some(port) = patch.proxy_port {

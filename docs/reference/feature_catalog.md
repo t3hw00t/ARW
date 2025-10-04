@@ -147,7 +147,8 @@ _Grant capabilities with leases, previews, and clear denials before anything lea
   Preview-first egress guard with allowlists, IP/DNS defenses, ledger logging, and runtime posture controls.
   _Routes_: `POST /egress/preview`, `POST /egress/settings`, `GET /state/egress`, `GET /state/egress/settings`
   _Signals_: `egress.ledger.appended`, `egress.settings.updated`
-  _Env_: `ARW_NET_POSTURE`, `ARW_SECURITY_POSTURE`, `ARW_NET_ALLOWLIST`, `ARW_EGRESS_BLOCK_IP_LITERALS`, `ARW_DNS_GUARD_ENABLE`, `ARW_EGRESS_PROXY_ENABLE`, `ARW_EGRESS_PROXY_PORT`, `ARW_EGRESS_LEDGER_ENABLE`
+  _Env_: `ARW_NET_POSTURE`, `ARW_SECURITY_POSTURE`, `ARW_NET_ALLOWLIST`, `ARW_EGRESS_BLOCK_IP_LITERALS`, `ARW_DNS_GUARD_ENABLE`, `ARW_EGRESS_PROXY_ENABLE`, `ARW_EGRESS_PROXY_PORT`, `ARW_EGRESS_LEDGER_ENABLE`, `ARW_EGRESS_MULTI_LABEL_SUFFIXES`
+  _Config_: `[egress].multi_label_suffixes`
   _Source_: [apps/arw-server/src/api/egress.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/egress.rs), [apps/arw-server/src/api/egress_settings.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/egress_settings.rs), [apps/arw-server/src/egress_proxy.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/egress_proxy.rs)
   _References_: [architecture/egress_firewall.md](../architecture/egress_firewall.md), [guide/network_posture.md](../guide/network_posture.md)
 
@@ -238,7 +239,7 @@ _Bring new skills online through declarative packs, WASI tools, and memory layer
 - **WASI Tool Host** · runtime / dev / core / alpha
   Embeddable WASI host with http.fetch, connector token injection, and policy-aware allowlists for future plugins.
   _Signals_: `egress.ledger.appended`
-  _Env_: `ARW_HTTP_TIMEOUT_SECS`, `ARW_EGRESS_PROXY_ENABLE`, `ARW_EGRESS_PROXY_PORT`, `ARW_NET_ALLOWLIST`, `ARW_EGRESS_BLOCK_IP_LITERALS`, `ARW_DNS_GUARD_ENABLE`, `ARW_STATE_DIR`
+  _Env_: `ARW_HTTP_TIMEOUT_SECS`, `ARW_EGRESS_PROXY_ENABLE`, `ARW_EGRESS_PROXY_PORT`, `ARW_NET_ALLOWLIST`, `ARW_EGRESS_BLOCK_IP_LITERALS`, `ARW_DNS_GUARD_ENABLE`, `ARW_EGRESS_MULTI_LABEL_SUFFIXES`, `ARW_STATE_DIR`
   _Source_: [crates/arw-wasi/src/lib.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-wasi/src/lib.rs), [apps/arw-server/src/main.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/main.rs)
 
 - **Logic Units Library** · backend / admin / core / beta

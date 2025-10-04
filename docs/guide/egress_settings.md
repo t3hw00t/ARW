@@ -30,13 +30,15 @@ curl -s http://127.0.0.1:8091/state/egress/settings | jq
 #     "dns_guard_enable": true,
 #     "proxy_enable": true,
 #     "proxy_port": 9080,
-#     "ledger_enable": true
+#     "ledger_enable": true,
+#     "multi_label_suffixes": ["internal.test","gov.bc.ca"]
 #   },
 #   "recommended": {
 #     "block_ip_literals": true,
 #     "dns_guard_enable": true,
 #     "proxy_enable": true,
-#     "ledger_enable": true
+#     "ledger_enable": true,
+#     "multi_label_suffixes": []
 #   },
 #   "capsules": {
 #     "active": 1,
@@ -49,7 +51,7 @@ curl -s http://127.0.0.1:8091/state/egress/settings | jq
 #   }
 # }
 
-# Enable proxy + ledger + DNS guard, allow only GitHub API, persist
+# Enable proxy + ledger + DNS guard, allow only GitHub API, add internal suffixes, persist
 curl -s -X POST http://127.0.0.1:8091/egress/settings \
   -H 'content-type: application/json' \
   -H "X-ARW-Admin: $ARW_ADMIN_TOKEN" \
@@ -60,7 +62,8 @@ curl -s -X POST http://127.0.0.1:8091/egress/settings \
         "dns_guard_enable": true,
         "proxy_enable": true,
         "proxy_port": 9080,
-        "ledger_enable": true
+        "ledger_enable": true,
+        "multi_label_suffixes": ["internal.test","gov.bc.ca"]
       }' | jq
 
 # Preview a request before running tools
@@ -71,6 +74,7 @@ curl -s -X POST http://127.0.0.1:8091/egress/preview \
 
 Notes
 - Settings persist in the server config snapshot under `egress`; use the Config Plane or `/patch/*` to manage snapshots.
+- `multi_label_suffixes` entries should be effective TLDs (e.g., `internal.test` or `gov.bc.ca`). The runtime automatically prepends the registrant label when collapsing hostnames.
 - When `proxy_enable=1`, built‑in `http.fetch` routes via `127.0.0.1:proxy_port` automatically.
 - Add correlation headers (`X-ARW-Corr`, `X-ARW-Project`) to proxy requests to tag ledger rows and events.
 - Changing `posture` without specifying booleans adopts the `recommended` defaults (block IP literals, DNS guard, proxy, and ledger) so posture/ledger stay aligned. Provide explicit values in the patch body to override.

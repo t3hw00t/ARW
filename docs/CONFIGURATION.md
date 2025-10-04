@@ -249,7 +249,17 @@ These options control the policy‑backed egress gateway; some are implemented a
 - `ARW_EGRESS_BLOCK_IP_LITERALS`: `1` to disallow IP‑literal hosts (require named hosts) for built‑in effectors. (implemented for `http.fetch`)
 - `ARW_DNS_GUARD_ENABLE`: `1` to guard DNS egress (default: `1`): proxy blocks DoH/DoT (`dns.google`, `cloudflare-dns.com`, port `853`), `/dns-query` paths, and `application/dns-message` payloads. Headless tools route via the proxy when enabled.
 - `ARW_DISABLE_HTTP3`: `1` to disable HTTP/3 for headless scrapers, ensuring proxy enforcement.
-- `ARW_EGRESS_LEDGER_ENABLE`: `1` to append entries to the egress ledger (opt‑in). (implemented)
+- `ARW_EGRESS_LEDGER_ENABLE`: `1` to append entries to the egress ledger (opt-in). (implemented)
+- `ARW_EGRESS_MULTI_LABEL_SUFFIXES`: comma-separated additional multi-label suffixes (for example `internal.test,gov.bc.ca`) to treat as registrable domains when deriving capability/allowlist checks.
+
+Config file example:
+
+```toml
+[egress]
+multi_label_suffixes = ["internal.test", "gov.bc.ca"]
+```
+
+Each entry should be the registrable suffix (effective TLD) you want treated as a unit; the runtime automatically prepends the immediate owner label when collapsing hostnames.
 
 _Deprecated:_ `ARW_EGRESS_LEDGER` previously pointed to an external JSONL path; ledger entries now live in the kernel and the variable is ignored.
 

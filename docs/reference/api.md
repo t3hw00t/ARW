@@ -188,8 +188,8 @@ Sample response (defaults)
 
 Egress
 - `GET /state/egress` — recent egress ledger rows `{ id, time, decision, reason?, dest_host?, dest_port?, protocol?, bytes_in?, bytes_out?, corr_id?, proj?, posture }`
-- `GET /state/egress/settings` — effective egress posture and toggles
-- `POST /egress/settings` — update toggles and persist to config (admin-gated)
+- `GET /state/egress/settings` — effective egress posture, allowlist, multi-label suffixes, and toggles
+- `POST /egress/settings` — update toggles, allowlist, or multi-label suffixes and persist to config (admin-gated)
 - `POST /egress/preview` — dry-run URL+method against policy, allowlist, and guards `{ allow, reason?, host, port, protocol }`
 
 Example — `GET /state/egress`

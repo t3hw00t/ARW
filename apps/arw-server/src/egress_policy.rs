@@ -1,4 +1,8 @@
 use serde_json::{json, Value};
+use std::{
+    cell::RefCell,
+    sync::{Mutex, OnceLock},
+};
 
 use crate::{capsule_guard, AppState};
 
@@ -18,26 +22,151 @@ fn domain_suffix(host: &str) -> Option<String> {
         return None;
     }
 
-    // Minimal multi-label PSL coverage to avoid regressing popular ccTLDs without
-    // introducing a heavy dependency. This can be expanded if additional cases
-    // surface.
-    const MULTI_LABEL_SUFFIXES: &[&str] = &[
-        "co.uk", "org.uk", "gov.uk", "ac.uk", "sch.uk", "ltd.uk", "plc.uk", "me.uk", "co.jp",
-        "or.jp", "ne.jp", "ac.jp", "ad.jp", "ed.jp", "go.jp", "gr.jp", "lg.jp", "co.nz", "org.nz",
-        "govt.nz", "ac.nz", "geek.nz", "com.au", "net.au", "org.au", "edu.au", "gov.au",
-        "csiro.au", "com.br", "com.cn",
-    ];
-
-    let last = parts.last().unwrap();
+    let last = parts.last().copied().unwrap();
     let penultimate = parts[parts.len() - 2];
     let candidate = format!("{penultimate}.{last}");
 
-    if MULTI_LABEL_SUFFIXES.contains(&candidate.as_str()) && parts.len() >= 3 {
+    for suffix in combined_multi_label_suffixes().iter() {
+        let len = suffix.len();
+        if parts.len() < len {
+            continue;
+        }
+        let start = parts.len() - len;
+        if parts[start..]
+            .iter()
+            .zip(suffix.iter())
+            .all(|(host_part, cfg_part)| host_part == cfg_part)
+        {
+            let joined = suffix.join(".");
+            if start == 0 {
+                return Some(joined);
+            }
+            let owner = parts[start - 1];
+            return Some(format!("{owner}.{joined}"));
+        }
+    }
+
+    if is_predefined_multi_label(penultimate, last) && parts.len() >= 3 {
         let registrable = format!("{}.{}", parts[parts.len() - 3], candidate);
         return Some(registrable);
     }
 
     Some(candidate)
+}
+
+fn is_predefined_multi_label(second: &str, tld: &str) -> bool {
+    match tld {
+        "uk" => matches!(
+            second,
+            "co" | "org" | "gov" | "ac" | "sch" | "ltd" | "plc" | "me"
+        ),
+        "jp" => matches!(
+            second,
+            "co" | "or" | "ne" | "ac" | "ad" | "ed" | "go" | "gr" | "lg"
+        ),
+        "nz" => matches!(second, "co" | "org" | "govt" | "ac" | "geek"),
+        "au" => matches!(second, "com" | "net" | "org" | "edu" | "gov" | "csiro"),
+        "br" => matches!(second, "com" | "gov" | "edu" | "org" | "net"),
+        "cn" => matches!(second, "com" | "net" | "org" | "gov" | "edu" | "ac" | "mil"),
+        "in" => matches!(second, "co" | "org" | "ac" | "gov" | "net" | "res"),
+        "id" => matches!(second, "co" | "or" | "ac" | "go" | "net" | "web" | "my"),
+        "sg" => matches!(second, "com" | "net" | "org" | "gov" | "edu" | "per"),
+        "hk" => matches!(second, "com" | "net" | "org" | "gov" | "edu" | "idv"),
+        "kr" => matches!(second, "co" | "or" | "ne" | "go" | "re" | "pe"),
+        "tw" => matches!(second, "com" | "net" | "org" | "gov" | "edu" | "idv"),
+        "mx" => matches!(second, "com" | "org" | "gob" | "edu" | "net"),
+        "ar" => matches!(second, "com" | "gob" | "edu" | "org" | "net"),
+        "cl" => matches!(second, "com" | "gob" | "edu" | "org" | "net"),
+        "pe" => matches!(second, "com" | "gob" | "edu" | "org" | "net"),
+        "ph" => matches!(second, "com" | "gov" | "edu" | "org" | "net"),
+        "th" => matches!(second, "com" | "go" | "ac" | "net" | "or" | "in"),
+        "sa" => matches!(second, "com" | "gov" | "edu" | "med" | "net" | "org"),
+        "za" => matches!(second, "co" | "gov" | "ac" | "org" | "net" | "law" | "mil"),
+        _ => false,
+    }
+}
+
+thread_local! {
+    static ENV_MULTI_LABEL_SUFFIXES: RefCell<(Option<String>, Vec<Vec<String>>)> =
+        RefCell::new((None, Vec::new()));
+}
+
+static CONFIG_MULTI_LABEL_SUFFIXES: OnceLock<Mutex<Vec<Vec<String>>>> = OnceLock::new();
+
+pub(crate) fn parse_multi_label_suffix(entry: &str) -> Option<Vec<String>> {
+    let trimmed = entry.trim().trim_start_matches('.');
+    if trimmed.is_empty() || !trimmed.contains('.') {
+        return None;
+    }
+    let parts = trimmed
+        .split('.')
+        .filter_map(|segment| {
+            let seg = segment.trim();
+            if seg.is_empty() {
+                None
+            } else {
+                Some(seg.to_ascii_lowercase())
+            }
+        })
+        .collect::<Vec<_>>();
+    if parts.len() < 2 {
+        return None;
+    }
+    Some(parts)
+}
+
+pub(crate) fn env_multi_label_suffixes() -> Vec<Vec<String>> {
+    ENV_MULTI_LABEL_SUFFIXES.with(|cache| {
+        let mut cache = cache.borrow_mut();
+        let raw = std::env::var("ARW_EGRESS_MULTI_LABEL_SUFFIXES").unwrap_or_default();
+        if cache.0.as_deref() != Some(&raw) {
+            let parsed = raw
+                .split(',')
+                .filter_map(parse_multi_label_suffix)
+                .collect::<Vec<_>>();
+            cache.0 = Some(raw);
+            cache.1 = parsed;
+        }
+        cache.1.clone()
+    })
+}
+
+fn configured_multi_label_suffixes() -> Vec<Vec<String>> {
+    if let Some(lock) = CONFIG_MULTI_LABEL_SUFFIXES.get() {
+        let guard = match lock.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        (*guard).clone()
+    } else {
+        Vec::new()
+    }
+}
+
+fn combined_multi_label_suffixes() -> Vec<Vec<String>> {
+    let mut combined = configured_multi_label_suffixes();
+    combined.extend(env_multi_label_suffixes());
+    combined
+}
+
+pub(crate) fn set_configured_multi_label_suffixes(entries: Vec<Vec<String>>) {
+    let lock = CONFIG_MULTI_LABEL_SUFFIXES.get_or_init(|| Mutex::new(Vec::new()));
+    let mut guard = match lock.lock() {
+        Ok(guard) => guard,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+    *guard = entries;
+}
+
+#[cfg(test)]
+fn reset_configured_multi_label_suffixes() {
+    if let Some(lock) = CONFIG_MULTI_LABEL_SUFFIXES.get() {
+        let mut guard = match lock.lock() {
+            Ok(guard) => guard,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        guard.clear();
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -251,6 +380,31 @@ pub(crate) fn config_allowlist(cfg: &Value) -> Vec<String> {
         .unwrap_or_default()
 }
 
+pub(crate) fn config_multi_label_suffixes(cfg: &Value) -> Vec<Vec<String>> {
+    let mut out = Vec::new();
+    let source = cfg
+        .get("egress")
+        .and_then(|v| v.get("multi_label_suffixes"));
+    match source {
+        Some(Value::Array(items)) => {
+            for item in items {
+                if let Some(s) = item.as_str() {
+                    if let Some(parts) = parse_multi_label_suffix(s) {
+                        out.push(parts);
+                    }
+                }
+            }
+        }
+        Some(Value::String(s)) => {
+            if let Some(parts) = parse_multi_label_suffix(&s) {
+                out.push(parts);
+            }
+        }
+        _ => {}
+    }
+    out
+}
+
 fn env_posture() -> Option<String> {
     std::env::var("ARW_NET_POSTURE")
         .ok()
@@ -302,6 +456,7 @@ fn merge_allowlists(base: Vec<String>, extra: Vec<String>) -> Vec<AllowRule> {
 pub async fn resolve_policy(state: &AppState) -> ResolvedPolicy {
     capsule_guard::refresh_capsules(state).await;
     let cfg = state.config_state().lock().await.clone();
+    set_configured_multi_label_suffixes(config_multi_label_suffixes(&cfg));
     let posture_str = env_posture()
         .or_else(|| config_posture(&cfg))
         .unwrap_or_else(|| "standard".into());
@@ -511,6 +666,75 @@ mod tests {
             domain_suffix("bar.example.com.au"),
             Some("example.com.au".to_string())
         );
+    }
+
+    #[test]
+    fn domain_suffix_handles_extended_multi_label_suffixes() {
+        assert_eq!(
+            domain_suffix("service.example.co.in"),
+            Some("example.co.in".to_string())
+        );
+        assert_eq!(
+            domain_suffix("api.example.com.sg"),
+            Some("example.com.sg".to_string())
+        );
+        assert_eq!(
+            domain_suffix("chat.example.co.kr"),
+            Some("example.co.kr".to_string())
+        );
+    }
+
+    #[test]
+    fn domain_suffix_respects_env_extensions() {
+        const KEY: &str = "ARW_EGRESS_MULTI_LABEL_SUFFIXES";
+        let original = std::env::var(KEY).ok();
+
+        reset_configured_multi_label_suffixes();
+        std::env::set_var(KEY, "internal.test,gov.bc.ca");
+        let env_suffixes = env_multi_label_suffixes();
+        assert!(env_suffixes
+            .iter()
+            .any(|suffix| suffix == &["internal".to_string(), "test".to_string()]));
+        assert_eq!(
+            domain_suffix("service.example.internal.test"),
+            Some("example.internal.test".to_string())
+        );
+        assert_eq!(
+            domain_suffix("node.team.internal.test"),
+            Some("team.internal.test".to_string())
+        );
+        assert_eq!(
+            domain_suffix("app.utilities.gov.bc.ca"),
+            Some("utilities.gov.bc.ca".to_string())
+        );
+
+        match original {
+            Some(val) => std::env::set_var(KEY, val),
+            None => std::env::remove_var(KEY),
+        }
+        reset_configured_multi_label_suffixes();
+        let _ = domain_suffix("example.com");
+    }
+
+    #[test]
+    fn domain_suffix_respects_config_extensions() {
+        const KEY: &str = "ARW_EGRESS_MULTI_LABEL_SUFFIXES";
+        let original = std::env::var(KEY).ok();
+        std::env::remove_var(KEY);
+
+        reset_configured_multi_label_suffixes();
+        set_configured_multi_label_suffixes(vec![vec!["gov".into(), "bc".into(), "ca".into()]]);
+        assert_eq!(
+            domain_suffix("app.utilities.gov.bc.ca"),
+            Some("utilities.gov.bc.ca".to_string())
+        );
+        reset_configured_multi_label_suffixes();
+
+        match original {
+            Some(val) => std::env::set_var(KEY, val),
+            None => std::env::remove_var(KEY),
+        }
+        let _ = domain_suffix("example.com");
     }
 
     #[test]

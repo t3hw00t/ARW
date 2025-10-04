@@ -409,6 +409,9 @@ Ingress/egress policy gating with previews and append-only egress ledger. Full p
 - Env:
   - `ARW_EGRESS_LEDGER_ENABLE`
   - `ARW_NET_POSTURE`
+  - `ARW_EGRESS_MULTI_LABEL_SUFFIXES`
+- Config:
+  - `[egress].multi_label_suffixes`
 
 ## Asimov Capsule Guard
 

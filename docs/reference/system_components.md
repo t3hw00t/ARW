@@ -415,6 +415,10 @@ Loopback proxy, DNS guard, filesystem scoping, and leased sensor access enforce 
   - `ARW_EGRESS_PROXY_ENABLE`
   - `ARW_EGRESS_PROXY_PORT`
   - `ARW_EGRESS_LEDGER_ENABLE`
+  - `ARW_EGRESS_MULTI_LABEL_SUFFIXES`
+- Config:
+  - `[egress].multi_label_suffixes`
+  - `[egress].multi_label_suffixes` (config override)
 - Topics:
   - `egress.ledger.appended`
   - `egress.settings.updated`

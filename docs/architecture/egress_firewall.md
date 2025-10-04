@@ -83,6 +83,16 @@ These flags control posture and gateway behavior. Some are implemented (noted), 
 - _Deprecated:_ `ARW_EGRESS_LEDGER` previously pointed at an external JSONL path. The unified server now stores ledger entries in the kernel; leave this unset.
 - `ARW_DISABLE_HTTP3`: `1` for headless scrapers to force H1/H2 via proxy
 - `ARW_EGRESS_LEDGER_ENABLE`: `1` to append entries to the egress ledger (implemented)
+- `ARW_EGRESS_MULTI_LABEL_SUFFIXES`: comma-separated overrides for additional multi-label suffixes (e.g., `internal.test,gov.bc.ca`) so capability derivation treats those registrable domains like built-in ccTLD presets.
+
+TOML config example:
+
+```toml
+[egress]
+multi_label_suffixes = ["internal.test", "gov.bc.ca"]
+```
+
+Treat each value as the effective TLD; the runtime prepends the immediate owner label when computing registrable domains for capability checks.
 
 See also: Guide → Network Posture, Policy, Security Hardening, Clustering.
 

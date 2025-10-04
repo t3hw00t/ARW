@@ -11,7 +11,12 @@
     "dns_guard_enable": { "type": "boolean" },
     "proxy_enable": { "type": "boolean" },
     "proxy_port": { "type": "integer", "minimum": 1, "maximum": 65535 },
-    "ledger_enable": { "type": "boolean" }
+    "ledger_enable": { "type": "boolean" },
+    "multi_label_suffixes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 3 },
+      "description": "Additional multi-label suffixes (effective TLDs) treated as registrable domains when applying posture/leases."
+    }
   },
   "additionalProperties": false,
   "examples": [
@@ -22,8 +27,8 @@
       "dns_guard_enable": true,
       "proxy_enable": true,
       "proxy_port": 9080,
-      "ledger_enable": true
+      "ledger_enable": true,
+      "multi_label_suffixes": ["internal.test","gov.bc.ca"]
     }
   ]
 }
-
