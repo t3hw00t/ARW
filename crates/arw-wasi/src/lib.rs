@@ -1,14 +1,12 @@
 use anyhow::Result;
+use arw_core::util::parse_bool_flag;
 use async_trait::async_trait;
 use base64::Engine; // for base64 encode
 use serde_json::Value;
 
 fn env_flag(key: &str, default: bool) -> bool {
     match std::env::var(key) {
-        Ok(value) => matches!(
-            value.trim().to_ascii_lowercase().as_str(),
-            "1" | "true" | "on"
-        ),
+        Ok(value) => parse_bool_flag(&value).unwrap_or(default),
         Err(_) => default,
     }
 }
@@ -63,7 +61,7 @@ impl LocalHost {
             .and_then(|s| s.parse().ok())
             .unwrap_or(20);
         let mut cb = reqwest::Client::builder().timeout(std::time::Duration::from_secs(timeout_s));
-        if std::env::var("ARW_EGRESS_PROXY_ENABLE").ok().as_deref() == Some("1") {
+        if env_flag("ARW_EGRESS_PROXY_ENABLE", false) {
             let port: u16 = std::env::var("ARW_EGRESS_PROXY_PORT")
                 .ok()
                 .and_then(|s| s.parse().ok())

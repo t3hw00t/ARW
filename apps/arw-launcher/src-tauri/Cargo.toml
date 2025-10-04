@@ -14,6 +14,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 tauri = { version = "2.8.5", default-features = false, features = ["wry", "tray-icon"] }
 arw-tauri = { path = "../../../crates/arw-tauri", version = "0.1.4" }
+arw-core = { path = "../../../crates/arw-core", version = "0.1.4" }
 tauri-plugin-single-instance = "2.3.4"
 tauri-plugin-window-state = "2.4.0"
 tauri-plugin-autostart = "2.5.0"

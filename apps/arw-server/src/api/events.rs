@@ -183,9 +183,7 @@ pub async fn events_sse(
     let mode = std::env::var("ARW_EVENTS_SSE_MODE")
         .ok()
         .unwrap_or_else(|| "envelope".into());
-    let decorate = std::env::var("ARW_EVENTS_SSE_DECORATE")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false);
+    let decorate = crate::util::env_bool("ARW_EVENTS_SSE_DECORATE").unwrap_or(false);
     let stream_request_id = request_id.clone();
     let stream = tokio_stream::wrappers::ReceiverStream::new(rx).map(move |(env, sid)| {
         let mut ev = SseEvent::default().event(env.kind.clone());

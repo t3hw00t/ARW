@@ -820,7 +820,7 @@ pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
         }
         if addrs.remote_is_loopback() {
             if !addrs.forwarded_trusted() {
-                if !addrs.forwarded().is_some() || addrs.forwarded_is_loopback() {
+                if addrs.forwarded().is_none() || addrs.forwarded_is_loopback() {
                     return true;
                 }
             } else if addrs.forwarded_is_loopback() {

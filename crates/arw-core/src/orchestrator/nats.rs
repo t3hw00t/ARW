@@ -38,7 +38,7 @@ impl NatsQueue {
 async fn connect_with_env(url: &str) -> Result<Client> {
     // Optional TLS upgrade
     let mut u = url.to_string();
-    if std::env::var("ARW_NATS_TLS").ok().as_deref() == Some("1") {
+    if crate::util::env_bool("ARW_NATS_TLS").unwrap_or(false) {
         u = u.replacen("nats://", "tls://", 1);
         u = u.replacen("ws://", "wss://", 1);
     }

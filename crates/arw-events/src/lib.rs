@@ -401,7 +401,7 @@ pub async fn attach_nats_outgoing(bus: &Bus, url: &str, node_id: &str) {
     // Connect once and spawn a relay: local bus -> NATS subjects (arw.events.node.<node_id>.<kind>)
     // Build URL with optional TLS/user:pass based on environment
     let mut u = url.to_string();
-    if std::env::var("ARW_NATS_TLS").ok().as_deref() == Some("1") {
+    if env_bool("ARW_NATS_TLS").unwrap_or(false) {
         u = u.replacen("nats://", "tls://", 1);
         u = u.replacen("ws://", "wss://", 1);
     }
@@ -476,7 +476,7 @@ pub async fn attach_nats_incoming(bus: &Bus, url: &str, self_node_id: &str) {
     let self_node = self_node_id.to_string();
     // Build URL with optional TLS/user:pass based on environment
     let mut u = url.to_string();
-    if std::env::var("ARW_NATS_TLS").ok().as_deref() == Some("1") {
+    if env_bool("ARW_NATS_TLS").unwrap_or(false) {
         u = u.replacen("nats://", "tls://", 1);
         u = u.replacen("ws://", "wss://", 1);
     }
@@ -531,6 +531,23 @@ pub async fn attach_nats_incoming(bus: &Bus, url: &str, self_node_id: &str) {
 
 #[cfg(not(feature = "nats"))]
 pub async fn attach_nats_incoming(_bus: &Bus, _url: &str, _self_node_id: &str) {}
+
+#[cfg(feature = "nats")]
+fn parse_bool_flag(raw: &str) -> Option<bool> {
+    let normalized = raw.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "1" | "true" | "yes" | "on" => Some(true),
+        "0" | "false" | "no" | "off" => Some(false),
+        _ => None,
+    }
+}
+
+#[cfg(feature = "nats")]
+fn env_bool(key: &str) -> Option<bool> {
+    std::env::var(key)
+        .ok()
+        .and_then(|raw| parse_bool_flag(&raw))
+}
 
 #[cfg(feature = "nats")]
 fn local_capsule_allows(cap: &arw_protocol::GatingCapsule) -> bool {

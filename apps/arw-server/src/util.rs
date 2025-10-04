@@ -1,4 +1,5 @@
 use anyhow::{anyhow, Result};
+pub use arw_core::util::{env_bool, parse_bool_flag};
 use once_cell::sync::{Lazy, OnceCell};
 #[cfg(test)]
 use parking_lot::{ReentrantMutex, ReentrantMutexGuard};
@@ -109,5 +110,31 @@ pub fn attach_memory_ptr(value: &mut Value) {
     }
     if let Some(id) = obj.get("id").and_then(|v| v.as_str()) {
         obj.insert("ptr".into(), json!({"kind": "memory", "id": id}));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_bool_flag_recognizes_common_values() {
+        assert_eq!(parse_bool_flag("true"), Some(true));
+        assert_eq!(parse_bool_flag("YES"), Some(true));
+        assert_eq!(parse_bool_flag("0"), Some(false));
+        assert_eq!(parse_bool_flag("off"), Some(false));
+        assert_eq!(parse_bool_flag("maybe"), None);
+        assert_eq!(parse_bool_flag(""), None);
+    }
+
+    #[test]
+    fn env_bool_uses_parse_and_restores_state() {
+        let mut guard = crate::test_support::env::guard();
+        guard.set("ARW_BOOL_TEST", "on");
+        assert_eq!(env_bool("ARW_BOOL_TEST"), Some(true));
+        guard.set("ARW_BOOL_TEST", "No");
+        assert_eq!(env_bool("ARW_BOOL_TEST"), Some(false));
+        guard.remove("ARW_BOOL_TEST");
+        assert_eq!(env_bool("ARW_BOOL_TEST"), None);
     }
 }

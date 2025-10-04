@@ -1,3 +1,4 @@
+use arw_core::util::env_bool;
 use arw_tauri::{plugin as arw_plugin, ServiceState};
 use tauri::Manager;
 
@@ -209,10 +210,7 @@ fn main() {
                 create_tray(app.handle())?;
             }
             // Auto-start service if ARW_AUTOSTART=1 or prefs say so
-            let auto_env = std::env::var("ARW_AUTOSTART")
-                .ok()
-                .map(|v| v == "1")
-                .unwrap_or(false);
+            let auto_env = env_bool("ARW_AUTOSTART").unwrap_or(false);
             let prefs = arw_tauri::load_prefs(Some("launcher"));
             let auto_pref = prefs
                 .get("autostart")

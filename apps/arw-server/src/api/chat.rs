@@ -115,7 +115,7 @@ pub async fn chat_status(
     }
     let probe = params
         .get("probe")
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .and_then(|v| crate::util::parse_bool_flag(v))
         .unwrap_or(false);
     let status = state.chat().status(probe).await;
     Json(ChatStatusResp {

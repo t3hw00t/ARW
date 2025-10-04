@@ -252,8 +252,7 @@ async fn maybe_log_egress(
     meta: Option<&Value>,
 ) -> anyhow::Result<i64> {
     let mut row_id: i64 = 0;
-    if std::env::var("ARW_EGRESS_LEDGER_ENABLE").ok().as_deref() == Some("1")
-        && state.kernel_enabled()
+    if crate::util::env_bool("ARW_EGRESS_LEDGER_ENABLE").unwrap_or(false) && state.kernel_enabled()
     {
         if let Some(kernel) = state.kernel_if_enabled() {
             row_id = kernel

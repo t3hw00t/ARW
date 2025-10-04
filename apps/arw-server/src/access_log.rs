@@ -20,17 +20,17 @@ struct Cfg {
 }
 
 static CFG: Lazy<Cfg> = Lazy::new(|| Cfg {
-    enabled: std::env::var("ARW_ACCESS_LOG").ok().as_deref() == Some("1"),
+    enabled: crate::util::env_bool("ARW_ACCESS_LOG").unwrap_or(false),
     sample_n: std::env::var("ARW_ACCESS_SAMPLE_N")
         .ok()
         .and_then(|s| s.parse().ok())
         .unwrap_or(1)
         .max(1),
-    ua: std::env::var("ARW_ACCESS_UA").ok().as_deref() == Some("1"),
-    ua_hash: std::env::var("ARW_ACCESS_UA_HASH").ok().as_deref() == Some("1"),
-    referer: std::env::var("ARW_ACCESS_REF").ok().as_deref() == Some("1"),
-    ref_strip_qs: std::env::var("ARW_ACCESS_REF_STRIP_QS").ok().as_deref() == Some("1"),
-    trust_forward: std::env::var("ARW_TRUST_FORWARD_HEADERS").ok().as_deref() == Some("1"),
+    ua: crate::util::env_bool("ARW_ACCESS_UA").unwrap_or(false),
+    ua_hash: crate::util::env_bool("ARW_ACCESS_UA_HASH").unwrap_or(false),
+    referer: crate::util::env_bool("ARW_ACCESS_REF").unwrap_or(false),
+    ref_strip_qs: crate::util::env_bool("ARW_ACCESS_REF_STRIP_QS").unwrap_or(false),
+    trust_forward: crate::util::env_bool("ARW_TRUST_FORWARD_HEADERS").unwrap_or(false),
 });
 
 static COUNTER: AtomicU64 = AtomicU64::new(0);

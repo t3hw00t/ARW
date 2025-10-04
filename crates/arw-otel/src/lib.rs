@@ -1,3 +1,4 @@
+use arw_core::util::env_bool;
 use once_cell::sync::OnceCell;
 #[cfg(feature = "otlp")]
 use opentelemetry::trace::TracerProvider as _;
@@ -21,7 +22,7 @@ pub fn init() {
 
     #[cfg(feature = "otlp")]
     {
-        if std::env::var("ARW_OTEL").as_deref() == Ok("1") {
+        if env_bool("ARW_OTEL").unwrap_or(false) {
             match init_with_otlp(filter.clone()) {
                 Ok(()) => return,
                 Err(err) => {
@@ -40,7 +41,7 @@ pub fn init() {
 fn install_console(filter: EnvFilter) {
     let fmt_layer = fmt::layer();
     let registry = tracing_subscriber::registry().with(fmt_layer.with_filter(filter));
-    if std::env::var("ARW_ACCESS_LOG_ROLL").ok().as_deref() == Some("1") {
+    if env_bool("ARW_ACCESS_LOG_ROLL").unwrap_or(false) {
         let dir = std::env::var("ARW_ACCESS_LOG_DIR")
             .ok()
             .or_else(|| std::env::var("ARW_LOGS_DIR").ok())
@@ -126,7 +127,7 @@ fn init_with_otlp(filter: EnvFilter) -> Result<(), Box<dyn std::error::Error + S
         .build();
 
     #[cfg(feature = "otlp")]
-    if std::env::var("ARW_OTEL_METRICS").as_deref() == Ok("1") {
+    if env_bool("ARW_OTEL_METRICS").unwrap_or(false) {
         use metrics_exporter_opentelemetry::Recorder as MetricsRecorder;
         use opentelemetry_otlp::MetricExporterBuilder;
         use opentelemetry_sdk::metrics::Temporality;
@@ -193,7 +194,7 @@ fn init_with_otlp(filter: EnvFilter) -> Result<(), Box<dyn std::error::Error + S
         .with(fmt_layer.with_filter(filter.clone()))
         .with(otel_layer);
 
-    if std::env::var("ARW_ACCESS_LOG_ROLL").ok().as_deref() == Some("1") {
+    if env_bool("ARW_ACCESS_LOG_ROLL").unwrap_or(false) {
         let dir = std::env::var("ARW_ACCESS_LOG_DIR")
             .ok()
             .or_else(|| std::env::var("ARW_LOGS_DIR").ok())

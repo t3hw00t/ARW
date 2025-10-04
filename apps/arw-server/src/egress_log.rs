@@ -53,10 +53,7 @@ pub async fn record(
 }
 
 fn ledger_enabled() -> bool {
-    matches!(
-        std::env::var("ARW_EGRESS_LEDGER_ENABLE").ok().as_deref(),
-        Some("1")
-    )
+    crate::util::env_bool("ARW_EGRESS_LEDGER_ENABLE").unwrap_or(false)
 }
 
 async fn append(

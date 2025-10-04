@@ -15,3 +15,4 @@ base64 = { workspace = true }
 tokio = { workspace = true }
 sha2 = "0.10"
 async-trait = "0.1"
+arw-core = { path = "../arw-core", version = "0.1.4" }

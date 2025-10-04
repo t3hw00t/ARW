@@ -3495,9 +3495,10 @@ fn cmd_smoke_context(args: &SmokeContextArgs) -> Result<()> {
         .clone()
         .unwrap_or_else(|| "context-ci-token".to_string());
     let token_sha = format!("{:x}", sha2::Sha256::digest(admin_token.as_bytes()));
-    let mut extra_env = Vec::new();
-    extra_env.push(("ARW_ADMIN_TOKEN_SHA256".to_string(), token_sha));
-    extra_env.push(("ARW_CONTEXT_CI_TOKEN".to_string(), admin_token.clone()));
+    let extra_env = vec![
+        ("ARW_ADMIN_TOKEN_SHA256".to_string(), token_sha),
+        ("ARW_CONTEXT_CI_TOKEN".to_string(), admin_token.clone()),
+    ];
 
     let server_bin = ensure_server_binary(args.common.server_bin.as_deref())?;
     let mut server = spawn_server(&server_bin, port, Some(&admin_token), extra_env)?;
@@ -3654,13 +3655,10 @@ fn wait_for_health(
     let deadline = Instant::now() + timeout;
     let url = format!("{}/healthz", base);
     while Instant::now() < deadline {
-        match client.get(&url).send() {
-            Ok(resp) => {
-                if resp.status().is_success() {
-                    return Ok(());
-                }
+        if let Ok(resp) = client.get(&url).send() {
+            if resp.status().is_success() {
+                return Ok(());
             }
-            Err(_) => {}
         }
 
         if let Some(status) = child.try_wait().context("check server health status")? {

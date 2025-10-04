@@ -469,6 +469,7 @@ name = "arw-launcher"
 version = "0.1.4"
 dependencies = [
  "anyhow",
+ "arw-core",
  "arw-tauri",
  "png 0.18.0",
  "serde",
@@ -510,6 +511,7 @@ dependencies = [
 name = "arw-otel"
 version = "0.1.4"
 dependencies = [
+ "arw-core",
  "metrics-exporter-opentelemetry",
  "once_cell",
  "opentelemetry",
@@ -655,6 +657,7 @@ name = "arw-wasi"
 version = "0.1.4"
 dependencies = [
  "anyhow",
+ "arw-core",
  "async-trait",
  "base64 0.22.1",
  "reqwest 0.12.23",

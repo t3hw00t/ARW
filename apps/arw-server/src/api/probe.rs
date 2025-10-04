@@ -630,7 +630,7 @@ fn probe_disks_windows() -> Vec<Value> {
 #[cfg(target_os = "linux")]
 async fn probe_gpu_metrics_best_effort_async() -> Vec<Value> {
     let mut base = probe_gpu_metrics_best_effort();
-    if std::env::var("ARW_ROCM_SMI").ok().as_deref() == Some("1") {
+    if crate::util::env_bool("ARW_ROCM_SMI").unwrap_or(false) {
         if let Some(extra) = rocm_smi_json().await {
             if let Some(obj) = extra.as_object() {
                 for (k, v) in obj.iter() {
@@ -914,7 +914,7 @@ fn probe_npus_best_effort() -> Vec<Value> {
 fn probe_npus_best_effort() -> Vec<Value> {
     #[cfg(all(target_os = "windows", feature = "npu_dxcore"))]
     {
-        if std::env::var("ARW_DXCORE_NPU").ok().as_deref() == Some("1") {
+        if crate::util::env_bool("ARW_DXCORE_NPU").unwrap_or(false) {
             return win_npu_dxcore::probe();
         }
     }

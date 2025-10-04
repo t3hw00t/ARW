@@ -1,3 +1,4 @@
+use crate::util::env_bool;
 use axum::extract::ConnectInfo;
 use axum::http::{header, HeaderMap, HeaderName, HeaderValue, Request};
 use axum::middleware::Next;
@@ -40,16 +41,13 @@ impl ClientAddrs {
     }
 
     pub fn remote_is_loopback(&self) -> bool {
-        self.remote
-            .as_deref()
-            .map(|ip| is_loopback_ip(ip))
-            .unwrap_or(false)
+        self.remote.as_deref().map(is_loopback_ip).unwrap_or(false)
     }
 
     pub fn forwarded_is_loopback(&self) -> bool {
         self.forwarded
             .as_deref()
-            .map(|ip| is_loopback_ip(ip))
+            .map(is_loopback_ip)
             .unwrap_or(false)
     }
 }
@@ -59,10 +57,7 @@ tokio::task_local! {
 }
 
 fn csp_auto_enabled() -> bool {
-    std::env::var("ARW_CSP_AUTO")
-        .ok()
-        .map(|v| v != "0" && !v.eq_ignore_ascii_case("off"))
-        .unwrap_or(true)
+    env_bool("ARW_CSP_AUTO").unwrap_or(true)
 }
 
 fn csp_value_for(path: &str) -> Option<String> {
@@ -80,9 +75,7 @@ fn csp_value_for(path: &str) -> Option<String> {
     // development panels that rely on inline handlers and scripts.
     let is_debug_ui = std::env::var("ARW_DEBUG").ok().is_some_and(|v| v != "0")
         && (path.starts_with("/admin/debug") || path.starts_with("/admin/ui"));
-    let debug_csp_strict = std::env::var("ARW_DEBUG_CSP_STRICT")
-        .ok()
-        .is_some_and(|v| v != "0");
+    let debug_csp_strict = env_bool("ARW_DEBUG_CSP_STRICT").unwrap_or(false);
     if preset.eq_ignore_ascii_case("strict") && (!is_debug_ui || debug_csp_strict) {
         // Generate a per-response nonce for script/style sources.
         static CTR: AtomicU64 = AtomicU64::new(1);
@@ -206,10 +199,7 @@ fn is_loopback_ip(addr: &str) -> bool {
 }
 
 fn trust_forward_headers() -> bool {
-    std::env::var("ARW_TRUST_FORWARD_HEADERS")
-        .ok()
-        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
-        .unwrap_or(false)
+    env_bool("ARW_TRUST_FORWARD_HEADERS").unwrap_or(false)
 }
 
 pub async fn headers_mw(req: Request<axum::body::Body>, next: Next) -> Response {
@@ -238,7 +228,7 @@ pub async fn headers_mw(req: Request<axum::body::Body>, next: Next) -> Response 
         "permissions-policy",
         "geolocation=(), microphone=(), camera=()",
     );
-    if std::env::var("ARW_HSTS").ok().as_deref() == Some("1") {
+    if env_bool("ARW_HSTS").unwrap_or(false) {
         add_hdr(
             h,
             "strict-transport-security",
@@ -338,6 +328,19 @@ pub(crate) fn reset_admin_rate_limiter_for_tests() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn env_bool_supports_standard_truthy_values() {
+        let mut env = crate::test_support::env::guard();
+        env.set("ARW_BOOL_TEST", "YES");
+        assert_eq!(env_bool("ARW_BOOL_TEST"), Some(true));
+        env.set("ARW_BOOL_TEST", "off");
+        assert_eq!(env_bool("ARW_BOOL_TEST"), Some(false));
+        env.set("ARW_BOOL_TEST", "2");
+        assert_eq!(env_bool("ARW_BOOL_TEST"), None);
+        env.remove("ARW_BOOL_TEST");
+        assert_eq!(env_bool("ARW_BOOL_TEST"), None);
+    }
 
     #[test]
     fn csp_relaxed_default_for_html() {
