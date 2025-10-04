@@ -19,6 +19,16 @@
       .metric-label { font-weight: 600; margin-right: 6px; }
       #contextTelemetryBody { display: grid; gap: var(--sp4); }
       .metric-inline { margin: 0; }
+      .metric-meter { margin: 0 0 var(--sp2); }
+      .metric-meter:last-child { margin-bottom: 0; }
+      .metric-meter .bar { margin: 2px 0 0; height: 12px; }
+      .ratio-bar { position: relative; }
+      .ratio-bar>i { transition: width 0.25s ease; }
+      .ratio-bar.ok>i { background: var(--status-ok); }
+      .ratio-bar.warn>i { background: var(--status-warn); }
+      .ratio-bar.bad>i { background: var(--status-bad); }
+      .ratio-bar.empty>i { background: rgba(148,163,184,0.45); }
+      .ratio-bar.empty { opacity: 0.7; }
       .jobs-table tr.focused-row { outline: 2px solid rgba(var(--brand-copper-rgb), 0.6); outline-offset: 1px; background: rgba(27,179,163,0.08); }
       .jobs-table tr:focus { outline: none; }
     </style>
@@ -71,7 +81,12 @@
               <div class="metric-block" aria-live="polite">
                 <h4>Coverage</h4>
                 <span id="coverageNeedsMore" class="metric-pill">—</span>
-                <p class="metric-inline"><span class="metric-label">Needs more ratio:</span><span id="coverageRatio">—</span></p>
+                <p class="metric-inline"><span class="metric-label" id="coverageRatioLabel">Needs more ratio:</span><span id="coverageRatio">—</span></p>
+                <div class="metric-meter">
+                  <div id="coverageRatioBar" class="bar ratio-bar empty" role="meter" aria-labelledby="coverageRatioLabel" aria-describedby="coverageRatio" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-valuetext="No data">
+                    <i></i>
+                  </div>
+                </div>
                 <div>
                   <strong>Top reasons</strong>
                   <ul id="coverageReasons" class="metric-list"></ul>
@@ -83,8 +98,18 @@
               </div>
               <div class="metric-block" aria-live="polite">
                 <h4>Recall risk</h4>
-                <p class="metric-inline"><span class="metric-label">Average score:</span><span id="recallAvgScore">—</span></p>
-                <p class="metric-inline"><span class="metric-label">At-risk ratio:</span><span id="recallAtRisk">—</span></p>
+                <p class="metric-inline"><span class="metric-label" id="recallAvgScoreLabel">Average risk score:</span><span id="recallAvgScore">—</span></p>
+                <div class="metric-meter">
+                  <div id="recallAvgScoreBar" class="bar ratio-bar empty" role="meter" aria-labelledby="recallAvgScoreLabel" aria-describedby="recallAvgScore" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-valuetext="No data">
+                    <i></i>
+                  </div>
+                </div>
+                <p class="metric-inline"><span class="metric-label" id="recallAtRiskLabel">At-risk ratio:</span><span id="recallAtRisk">—</span></p>
+                <div class="metric-meter">
+                  <div id="recallAtRiskBar" class="bar ratio-bar empty" role="meter" aria-labelledby="recallAtRiskLabel" aria-describedby="recallAtRisk" aria-valuemin="0" aria-valuemax="1" aria-valuenow="0" aria-valuetext="No data">
+                    <i></i>
+                  </div>
+                </div>
                 <div>
                   <strong>Top slot gaps</strong>
                   <ul id="recallTopSlots" class="metric-list"></ul>

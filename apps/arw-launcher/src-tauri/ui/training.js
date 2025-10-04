@@ -15,6 +15,7 @@ let logicUnitHistoryRaw = [];
 let lastFetchedHistorySignature = '';
 let historyHydrated = false;
 let pendingHistoryFetch = null;
+let telemetryEventTimer = null;
 
 const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 
@@ -29,6 +30,24 @@ function scheduleTelemetryRefresh(delay = TELEMETRY_POLL_MS) {
   clearTelemetryTimer();
   telemetryTimer = setTimeout(() => {
     refreshTelemetry().catch(() => {});
+  }, delay);
+}
+
+function queueTelemetryRefresh(options = {}) {
+  const delay = Number.isFinite(options.delay) ? Math.max(0, options.delay) : 400;
+  const quiet = options.quiet !== undefined ? Boolean(options.quiet) : true;
+  if (document?.hidden) {
+    scheduleTelemetryRefresh(delay || 500);
+    return;
+  }
+  if (telemetryEventTimer) {
+    clearTimeout(telemetryEventTimer);
+    telemetryEventTimer = null;
+  }
+  clearTelemetryTimer();
+  telemetryEventTimer = setTimeout(() => {
+    telemetryEventTimer = null;
+    refreshTelemetry({ quiet }).catch(() => {});
   }, delay);
 }
 
@@ -269,6 +288,51 @@ function renderList(targetId, items, formatter, emptyText) {
   }
 }
 
+function updateRatioBar(id, value, options = {}) {
+  const node = document.getElementById(id);
+  if (!node) return;
+  const fill = node.querySelector('i');
+  const {
+    preferLow = false,
+    warn = preferLow ? 0.25 : 0.65,
+    bad = preferLow ? 0.45 : 0.4,
+    formatText,
+  } = options;
+
+  node.classList.remove('ok', 'warn', 'bad', 'empty');
+
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : null;
+  if (numeric == null) {
+    if (fill) fill.style.width = '0%';
+    node.classList.add('empty');
+    node.setAttribute('aria-valuenow', '0');
+    node.setAttribute('aria-valuetext', 'No data');
+    node.title = 'No data';
+    return;
+  }
+
+  const clamped = Math.min(1, Math.max(0, numeric));
+  const percent = Math.round(clamped * 100);
+  if (fill) fill.style.width = `${percent}%`;
+  node.setAttribute('aria-valuenow', clamped.toFixed(2));
+  const text = typeof formatText === 'function'
+    ? formatText(clamped, percent)
+    : `${percent}%`;
+  node.setAttribute('aria-valuetext', text);
+  node.title = text;
+
+  let state = 'ok';
+  if (preferLow) {
+    if (clamped >= bad) state = 'bad';
+    else if (clamped >= warn) state = 'warn';
+  } else {
+    if (clamped <= bad) state = 'bad';
+    else if (clamped <= warn) state = 'warn';
+  }
+
+  node.classList.add(state);
+}
+
 function renderTelemetry(data) {
   lastTelemetry = data;
   let updatedMs = Number(data?.generated_ms ?? data?.generatedMs);
@@ -294,9 +358,16 @@ function renderTelemetry(data) {
     coverageBadge.className = `metric-pill ${coverageNeedsMore ? 'bad' : 'ok'}`;
     coverageBadge.textContent = coverageNeedsMore ? 'Needs more coverage' : 'Coverage satisfied';
   }
-  const ratio = typeof coverage.needs_more_ratio === 'number' ? coverage.needs_more_ratio : null;
+  const coverageRatioRaw = coverage.needs_more_ratio;
+  const coverageRatio = Number.isFinite(coverageRatioRaw) ? coverageRatioRaw : null;
   const ratioEl = document.getElementById('coverageRatio');
-  if (ratioEl) ratioEl.textContent = ratio == null ? '—' : formatPercent(ratio, 0);
+  if (ratioEl) ratioEl.textContent = coverageRatio == null ? '—' : formatPercent(coverageRatio, 0);
+  updateRatioBar('coverageRatioBar', coverageRatio, {
+    preferLow: true,
+    warn: 0.2,
+    bad: 0.4,
+    formatText: (_value, pct) => `${pct}% of assemblies needing more coverage`,
+  });
 
   const reasons = Array.isArray(latestCoverage.reasons) ? latestCoverage.reasons : [];
   renderList('coverageReasons', reasons, (reason) => {
@@ -321,12 +392,26 @@ function renderTelemetry(data) {
     'No slot gaps observed'
   );
 
-  const avgScore = recall.avg_score;
+  const avgScoreRaw = recall.avg_score;
+  const avgScore = Number.isFinite(avgScoreRaw) ? avgScoreRaw : null;
   const avgScoreEl = document.getElementById('recallAvgScore');
   if (avgScoreEl) avgScoreEl.textContent = avgScore == null ? '—' : formatPercent(avgScore, 0);
-  const atRiskRatio = recall.at_risk_ratio;
+  updateRatioBar('recallAvgScoreBar', avgScore, {
+    preferLow: true,
+    warn: 0.45,
+    bad: 0.7,
+    formatText: (_value, pct) => `Risk score ${pct}%`,
+  });
+  const atRiskRatioRaw = recall.at_risk_ratio;
+  const atRiskRatio = Number.isFinite(atRiskRatioRaw) ? atRiskRatioRaw : null;
   const atRiskEl = document.getElementById('recallAtRisk');
   if (atRiskEl) atRiskEl.textContent = atRiskRatio == null ? '—' : formatPercent(atRiskRatio, 0);
+  updateRatioBar('recallAtRiskBar', atRiskRatio, {
+    preferLow: true,
+    warn: 0.2,
+    bad: 0.4,
+    formatText: (_value, pct) => `${pct}% of assemblies flagged at risk`,
+  });
 
   const recallSlots = Array.isArray(recall.top_slots) ? recall.top_slots : [];
   renderList(
@@ -964,10 +1049,15 @@ function adoptServerHistory(entries, options = {}) {
 }
 
 async function refreshTelemetry(options = {}) {
+  if (telemetryEventTimer) {
+    clearTimeout(telemetryEventTimer);
+    telemetryEventTimer = null;
+  }
   const manual = Boolean(options.manual);
+  const quiet = Boolean(options.quiet);
   const base = telemetryBase || getCurrentBase();
   telemetryBase = base;
-  if (!manual) {
+  if (!manual && !quiet) {
     setTelemetryStatus('Loading…');
   }
   try {
@@ -1096,7 +1186,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
   const logicUnitSub = ARW.sse.subscribe(logicUnitEvents, () => {
     refreshJobs().catch(() => {});
-    refreshTelemetry().catch(() => {});
+    queueTelemetryRefresh({ delay: 250, quiet: true });
+  });
+
+  const contextEvents = (kind) => kind === 'context.coverage' || kind === 'context.recall.risk';
+  const contextSub = ARW.sse.subscribe(contextEvents, () => {
+    queueTelemetryRefresh({ delay: 200, quiet: true });
   });
 
   const diversitySlider = document.getElementById('diversitySlider');
@@ -1270,6 +1365,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   refreshJobs().catch(() => {});
   window.addEventListener('beforeunload', () => {
     ARW.sse.unsubscribe(logicUnitSub);
+    ARW.sse.unsubscribe(contextSub);
   });
   window.addEventListener('arw:base-override-changed', () => {
     applyBaseChange().catch(() => {});
