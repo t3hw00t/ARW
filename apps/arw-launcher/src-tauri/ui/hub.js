@@ -16,8 +16,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     return lanes;
   };
   let base = ARW.base(port);
+  let curProj = null;
   const defaultLanes = ensureLane(['timeline','context','policy','metrics','models','activity'], 'approvals', { after: 'timeline' });
-  let sc = ARW.sidecar.mount('sidecar', defaultLanes, { base });
+  let sc = ARW.sidecar.mount('sidecar', defaultLanes, { base, getProject: () => curProj });
   const elRuntimeBadge = document.getElementById('runtimeBadge');
 
   function setRuntimeBadge(text, level = 'neutral', hint = '') {
@@ -166,7 +167,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       sc?.dispose?.();
     } catch {}
-    sc = ARW.sidecar.mount('sidecar', defaultLanes, { base });
+    sc = ARW.sidecar.mount('sidecar', defaultLanes, { base, getProject: () => curProj });
     ARW.sse.connect(base, { replay: 25 });
     await Promise.allSettled([
       refreshEpisodesSnapshot(),
@@ -414,7 +415,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   }, runsTick);
   ARW.sse.subscribe((kind) => kind === 'runtime.state.changed' || kind === 'runtime.restore.completed', scheduleRuntimeRefresh);
   // ---------- Projects: list/create/tree/notes ----------
-  let curProj = null;
   // Simple file metadata cache to avoid repeated GETs (5s TTL)
   const fileCache = new Map(); // rel -> { data, t }
   const fileTTL = 5000;
@@ -621,6 +621,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     const hasEditor = !!(projPrefs && projPrefs.editorCmd);
     if (elProjPrefsBadge) elProjPrefsBadge.style.display = hasEditor? 'inline-flex':'none';
     treeCache.clear();
+    if (sc && typeof sc.refresh === 'function') {
+      sc.refresh({ immediate: true, reason: 'project-change' });
+    }
     // restore last folder if present
     if (curProj){
       loadNotes();
@@ -1300,7 +1303,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (Array.isArray(tpl.lanes) && tpl.lanes.length){
         try{ sc?.dispose?.(); }catch{}
         const lanes = ensureLane(tpl.lanes, 'approvals', { after: 'timeline' });
-        sc = ARW.sidecar.mount('sidecar', lanes, { base });
+        sc = ARW.sidecar.mount('sidecar', lanes, { base, getProject: () => curProj });
       }
       ARW.toast('Layout applied');
     }catch(e){ console.error(e); ARW.toast('Apply failed'); }

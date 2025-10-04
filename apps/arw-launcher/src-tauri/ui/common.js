@@ -1779,24 +1779,421 @@ window.ARW = {
         rPolicy(); policyTimer = setInterval(rPolicy, 5000);
       }
       // Context lane: fetch top claims (world.select)
-      const rContext = async () => {
-        const el = sections.find(([n])=>n==='context')?.[1]; if (!el || !opts.base) return;
-        try {
-          const j = await ARW.http.json(opts.base, '/state/world/select?k=8');
-          const items = j?.items || j?.data?.items || [];
-          el.innerHTML = '';
-          const ul = document.createElement('ul'); ul.style.paddingLeft='16px'; ul.style.margin='0';
-          for (const it of items) {
-            const li = document.createElement('li');
-            const name = it?.props?.name || it?.id || '';
-            li.textContent = `${name}`.slice(0,160);
-            ul.appendChild(li);
-          }
-          el.appendChild(ul);
-          if (items.length===0) el.innerHTML = '<div class="dim">No beliefs</div>';
-        } catch {}
+      let contextTimer = null;
+      let contextAbort = null;
+      const contextCache = new Map();
+      let contextLastProject = null;
+      const pointerKeyCandidates = ['ptr','pointer','stable_ptr','stablePointer'];
+      const textFields = ['summary','text','description','body','content'];
+      const isPointerLike = (value) => {
+        if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+        const kind = String(value.kind || '').trim();
+        if (!kind) return false;
+        if (value.id || value.path || value.sha || value.url || value.pointer || value.offset != null) return true;
+        return false;
       };
-      if (opts.base) rContext();
+      const pointerKey = (ptr) => {
+        try {
+          const sorted = Object.keys(ptr || {})
+            .sort()
+            .map((k) => [k, ptr[k]])
+            .reduce((acc, [k, v]) => {
+              acc[k] = v;
+              return acc;
+            }, {});
+          return JSON.stringify(sorted);
+        } catch {
+          return null;
+        }
+      };
+      const pointerSupportsRehydrate = (ptr) => {
+        const kind = String(ptr?.kind || '').toLowerCase();
+        return kind === 'memory' || kind === 'file';
+      };
+      const contextFormatRelative = (iso) => {
+        if (!iso) return '';
+        try {
+          const dt = new Date(iso);
+          if (Number.isNaN(dt.getTime())) return '';
+          const diffMs = Date.now() - dt.getTime();
+          const absSec = Math.round(Math.abs(diffMs) / 1000);
+          const units = [
+            { limit: 60, div: 1, label: 's' },
+            { limit: 3600, div: 60, label: 'm' },
+            { limit: 86400, div: 3600, label: 'h' },
+            { limit: 2592000, div: 86400, label: 'd' },
+            { limit: 31536000, div: 2592000, label: 'mo' },
+          ];
+          for (const unit of units) {
+            if (absSec < unit.limit) {
+              const value = Math.max(1, Math.floor(absSec / unit.div));
+              return diffMs >= 0 ? `${value}${unit.label} ago` : `in ${value}${unit.label}`;
+            }
+          }
+          const years = Math.max(1, Math.floor(absSec / 31536000));
+          return diffMs >= 0 ? `${years}y ago` : `in ${years}y`;
+        } catch {
+          return '';
+        }
+      };
+      const extractPointer = (value) => {
+        if (isPointerLike(value)) return value;
+        if (!value || typeof value !== 'object') return null;
+        for (const key of pointerKeyCandidates) {
+          const candidate = value[key];
+          if (isPointerLike(candidate)) return candidate;
+        }
+        if (value.artifact) {
+          const nested = extractPointer(value.artifact);
+          if (nested) return nested;
+        }
+        if (value.memory) {
+          const nested = extractPointer(value.memory);
+          if (nested) return nested;
+        }
+        if (value.context && typeof value.context === 'object') {
+          for (const key of pointerKeyCandidates) {
+            const nested = value.context[key];
+            if (isPointerLike(nested)) return nested;
+          }
+        }
+        return null;
+      };
+      const collectPointers = (item) => {
+        const pointers = [];
+        const seen = new Set();
+        const pushPtr = (ptr, label, detail) => {
+          if (!isPointerLike(ptr)) return;
+          const key = pointerKey(ptr);
+          if (!key || seen.has(key)) return;
+          seen.add(key);
+          pointers.push({ ptr, label, detail });
+        };
+        pushPtr(item?.ptr, 'Pointer', null);
+        if (item?.props && typeof item.props === 'object') {
+          pushPtr(item.props.ptr, 'Props pointer', null);
+          pushPtr(item.props.pointer, 'Props pointer', null);
+        }
+        const provenance = Array.isArray(item?.provenance) ? item.provenance : [];
+        provenance.forEach((entry, idx) => {
+          const base = entry?.kind ? `Provenance · ${entry.kind}` : 'Provenance';
+          const observed = entry?.observed_at || entry?.observedAt || null;
+          const sources = Array.isArray(entry?.sources) ? entry.sources : [];
+          if (!sources.length) {
+            const ptr = extractPointer(entry);
+            if (ptr) pushPtr(ptr, base, observed);
+            return;
+          }
+          sources.forEach((src, sIdx) => {
+            const ptr = extractPointer(src);
+            if (!ptr) return;
+            const hint = src?.label || src?.kind || src?.lane || `source ${sIdx + 1}`;
+            pushPtr(ptr, `${base} · ${hint}`, observed);
+          });
+        });
+        return pointers;
+      };
+      const renderContextMessage = (el, text, tone = 'info') => {
+        if (!el) return;
+        const span = document.createElement('div');
+        span.className = 'context-msg';
+        if (tone === 'warn') span.classList.add('warn');
+        span.textContent = text;
+        el.innerHTML = '';
+        el.appendChild(span);
+      };
+      const trimText = (text, cap = 2000) => {
+        if (typeof text !== 'string') return '';
+        if (text.length <= cap) return text;
+        return `${text.slice(0, cap - 1)}…`;
+      };
+      const resolveTitle = (item) => {
+        const props = item?.props || {};
+        const candidates = [props.title, props.name, props.heading, props.summary, props.text, item?.id];
+        const found = candidates.find((val) => typeof val === 'string' && val.trim());
+        return (found || 'Untitled').toString().slice(0, 160);
+      };
+      const resolveExcerpt = (item) => {
+        const props = item?.props || {};
+        for (const field of textFields) {
+          const raw = props[field];
+          if (typeof raw === 'string' && raw.trim()) {
+            return trimText(raw.trim(), 360);
+          }
+        }
+        return '';
+      };
+      const renderPointerBlock = (ptrData, card) => {
+        const block = document.createElement('div');
+        block.className = 'context-pointer-block';
+        const row = document.createElement('div');
+        row.className = 'context-pointer';
+        const label = document.createElement('span');
+        label.className = 'context-pointer-label';
+        label.textContent = ptrData.label || `Pointer (${ptrData.ptr.kind || 'unknown'})`;
+        if (ptrData.detail) label.title = ptrData.detail;
+        row.appendChild(label);
+        const btns = document.createElement('div');
+        btns.className = 'context-pointer-buttons';
+        const copyBtn = document.createElement('button');
+        copyBtn.type = 'button';
+        copyBtn.className = 'ghost btn-small';
+        copyBtn.textContent = 'Copy pointer';
+        copyBtn.addEventListener('click', () => {
+          try {
+            ARW.copy(JSON.stringify(ptrData.ptr, null, 2));
+          } catch {
+            ARW.toast('Copy failed');
+          }
+        });
+        btns.appendChild(copyBtn);
+        const preview = document.createElement('div');
+        preview.className = 'context-pointer-preview';
+        preview.hidden = true;
+        const supportsRehydrate = pointerSupportsRehydrate(ptrData.ptr);
+        if (supportsRehydrate && opts.base) {
+          const reBtn = document.createElement('button');
+          reBtn.type = 'button';
+          reBtn.className = 'btn-small';
+          reBtn.textContent = 'Rehydrate';
+          reBtn.addEventListener('click', async () => {
+            if (!opts.base) {
+              ARW.toast('Start the server first');
+              return;
+            }
+            reBtn.disabled = true;
+            reBtn.textContent = 'Loading…';
+            preview.hidden = false;
+            preview.innerHTML = '<div class="dim">Fetching…</div>';
+            try {
+              const key = pointerKey(ptrData.ptr);
+              if (key && contextCache.has(key)) {
+                renderRehydrateResult(preview, contextCache.get(key));
+              } else {
+                const body = JSON.stringify({ ptr: ptrData.ptr });
+                const resp = await ARW.http.fetch(opts.base, '/context/rehydrate', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body,
+                });
+                if (!resp.ok) {
+                  throw new Error(`HTTP ${resp.status}`);
+                }
+                const data = await resp.json();
+                if (key) contextCache.set(key, data);
+                renderRehydrateResult(preview, data);
+              }
+            } catch (err) {
+              preview.innerHTML = `<div class="context-preview-meta">${err?.message || 'Rehydrate failed'}</div>`;
+            } finally {
+              reBtn.disabled = false;
+              reBtn.textContent = 'Rehydrate';
+            }
+          });
+          btns.appendChild(reBtn);
+        }
+        row.appendChild(btns);
+        block.appendChild(row);
+        block.appendChild(preview);
+        card.appendChild(block);
+      };
+      const renderRehydrateResult = (previewNode, data) => {
+        if (!previewNode) return;
+        const renderHeader = (text) => {
+          const meta = document.createElement('div');
+          meta.className = 'context-preview-meta';
+          meta.textContent = text;
+          previewNode.appendChild(meta);
+        };
+        previewNode.innerHTML = '';
+        if (data?.file) {
+          const info = data.file;
+          renderHeader(`File · ${info.path || ''} (${info.head_bytes ?? '0'} bytes)`);
+          const tools = document.createElement('div');
+          tools.className = 'row';
+          const copyBtn = document.createElement('button');
+          copyBtn.type = 'button';
+          copyBtn.className = 'ghost btn-small';
+          copyBtn.textContent = 'Copy content';
+          copyBtn.addEventListener('click', () => {
+            try { ARW.copy(data.content || ''); } catch {}
+          });
+          tools.appendChild(copyBtn);
+          previewNode.appendChild(tools);
+          const pre = document.createElement('pre');
+          pre.textContent = trimText(data.content || '', 4000);
+          previewNode.appendChild(pre);
+        } else if (data?.memory) {
+          const record = data.memory;
+          const lane = record.lane || record.kind || 'memory';
+          renderHeader(`Memory · ${lane}${record.id ? ` · ${record.id}` : ''}`);
+          const tools = document.createElement('div');
+          tools.className = 'row';
+          const copyBtn = document.createElement('button');
+          copyBtn.type = 'button';
+          copyBtn.className = 'ghost btn-small';
+          copyBtn.textContent = 'Copy JSON';
+          copyBtn.addEventListener('click', () => {
+            try { ARW.copy(JSON.stringify(record, null, 2)); } catch {}
+          });
+          tools.appendChild(copyBtn);
+          previewNode.appendChild(tools);
+          const value = record.value || record.body || record.text || record.content || record.data;
+          const pre = document.createElement('pre');
+          if (typeof value === 'string') {
+            pre.textContent = trimText(value, 4000);
+          } else {
+            try {
+              pre.textContent = trimText(JSON.stringify(value ?? record, null, 2), 4000);
+            } catch {
+              pre.textContent = '[unserializable]';
+            }
+          }
+          previewNode.appendChild(pre);
+        } else {
+          renderHeader('No preview available');
+          const pre = document.createElement('pre');
+          try {
+            pre.textContent = trimText(JSON.stringify(data ?? {}, null, 2), 4000);
+          } catch {
+            pre.textContent = '[unserializable]';
+          }
+          previewNode.appendChild(pre);
+        }
+      };
+      const renderContextItems = (items) => {
+        const el = sections.find(([n])=>n==='context')?.[1];
+        if (!el) return;
+        el.innerHTML = '';
+        if (!items.length) {
+          renderContextMessage(el, 'No beliefs yet', 'info');
+          return;
+        }
+        for (const item of items) {
+          const card = document.createElement('article');
+          card.className = 'context-item';
+          const head = document.createElement('div');
+          head.className = 'context-head';
+          const title = document.createElement('div');
+          title.className = 'context-title';
+          title.textContent = resolveTitle(item);
+          head.appendChild(title);
+          const badges = document.createElement('div');
+          badges.className = 'context-badges';
+          const confidence = Number(item?.confidence ?? item?.props?.confidence);
+          if (Number.isFinite(confidence)) {
+            const badge = document.createElement('span');
+            badge.className = 'badge';
+            badge.textContent = `Conf ${(confidence * 100).toFixed(0)}%`;
+            badges.appendChild(badge);
+          }
+          const last = item?.last || item?.props?.last || item?.props?.updated;
+          if (last) {
+            const badge = document.createElement('span');
+            badge.className = 'badge';
+            badge.textContent = contextFormatRelative(last) || 'Observed';
+            badge.title = new Date(last).toLocaleString();
+            badges.appendChild(badge);
+          }
+          if (badges.childElementCount) head.appendChild(badges);
+          card.appendChild(head);
+          const excerpt = resolveExcerpt(item);
+          if (excerpt) {
+            const para = document.createElement('div');
+            para.className = 'context-excerpt';
+            para.textContent = excerpt;
+            card.appendChild(para);
+          }
+          const trace = item?.trace;
+          if (trace && typeof trace === 'object') {
+            const parts = [];
+            if (Number.isFinite(trace.hits_id)) parts.push(`id hits ${trace.hits_id}`);
+            if (Number.isFinite(trace.hits_props)) parts.push(`props hits ${trace.hits_props}`);
+            if (Number.isFinite(trace.conf)) parts.push(`conf ${trace.conf.toFixed(2)}`);
+            if (Number.isFinite(trace.recency)) parts.push(`recency ${trace.recency.toFixed(2)}`);
+            if (parts.length) {
+              const meta = document.createElement('div');
+              meta.className = 'context-trace';
+              meta.textContent = parts.join(' · ');
+              card.appendChild(meta);
+            }
+          }
+          const pointers = collectPointers(item);
+          if (pointers.length) {
+            pointers.forEach((ptr) => renderPointerBlock(ptr, card));
+          }
+          const more = document.createElement('details');
+          more.className = 'context-more';
+          const summary = document.createElement('summary');
+          summary.textContent = 'Inspect raw';
+          more.appendChild(summary);
+          const pre = document.createElement('pre');
+          try {
+            pre.textContent = trimText(JSON.stringify(item, null, 2), 4000);
+          } catch {
+            pre.textContent = '[unserializable]';
+          }
+          more.appendChild(pre);
+          card.appendChild(more);
+          el.appendChild(card);
+        }
+      };
+      const refreshContext = async (force = false, reason = '') => {
+        const el = sections.find(([n])=>n==='context')?.[1];
+        if (!el) return;
+        const project = typeof opts.getProject === 'function' ? opts.getProject() : null;
+        const base = opts.base;
+        if (!base) {
+          renderContextMessage(el, 'Connect to the server to inspect context', 'warn');
+          contextLastProject = project || null;
+          return;
+        }
+        if (contextAbort) {
+          contextAbort.abort();
+          contextAbort = null;
+        }
+        contextAbort = new AbortController();
+        const params = new URLSearchParams();
+        params.set('k', '12');
+        if (project) params.set('proj', project);
+        try {
+          if (force || contextLastProject !== project) {
+            renderContextMessage(el, project ? `Loading context for ${project}…` : 'Loading context…', 'info');
+          }
+          const path = `/state/world/select?${params.toString()}`;
+          const j = await ARW.http.json(base, path, { signal: contextAbort.signal });
+          const items = j?.items || j?.data?.items || [];
+          contextLastProject = project || null;
+          renderContextItems(items);
+        } catch (err) {
+          if (err?.name === 'AbortError') return;
+          const msg = err?.message || 'Context unavailable';
+          renderContextMessage(el, msg, 'warn');
+        } finally {
+          contextAbort = null;
+        }
+      };
+      const scheduleContextRefresh = (immediate = false, reason = '') => {
+        if (contextTimer) {
+          clearInterval(contextTimer);
+          contextTimer = null;
+        }
+        if (!opts.base) {
+          refreshContext(true, reason);
+          return;
+        }
+        if (immediate) {
+          refreshContext(true, reason);
+        }
+        contextTimer = setInterval(() => {
+          refreshContext(false, 'interval');
+        }, 15000);
+      };
+      if (opts.base) {
+        scheduleContextRefresh(true, 'initial');
+      } else {
+        refreshContext(true, 'initial');
+      }
       // client-side trend store for p95 sparkline
       ARW.metricsTrend = ARW.metricsTrend || { _m: new Map(), push(route,p){ const a=this._m.get(route)||[]; a.push(Number(p)||0); if(a.length>32)a.shift(); this._m.set(route,a); }, get(route){ return this._m.get(route)||[] } };
       function sparkline(vals){ const v=(vals||[]).slice(-32); if(!v.length) return ''; const w=90,h=18,max=Math.max(1,...v); const pts=v.map((x,i)=>{const xx=Math.round(i*(w-2)/Math.max(1,v.length-1))+1; const yy=h-1-Math.round((x/max)*(h-2)); return `${xx},${yy}`;}).join(' '); return `<svg class="spark" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg"><polyline fill="none" stroke="#1bb3a3" stroke-width="1.5" points="${pts}"/></svg>`; }
@@ -1923,12 +2320,25 @@ window.ARW = {
           if (approvalsSub) ARW.read.unsubscribe(approvalsSub);
           ARW.sse.unsubscribe(idActivity);
           if (policyTimer) clearInterval(policyTimer);
+          if (contextTimer) {
+            clearInterval(contextTimer);
+            contextTimer = null;
+          }
+          if (contextAbort) {
+            contextAbort.abort();
+            contextAbort = null;
+          }
+          contextCache.clear();
           if (approvalsState.shortcutHandler) {
             window.removeEventListener('keydown', approvalsState.shortcutHandler);
             approvalsState.shortcutHandler = null;
           }
           approvalsState.shortcutMap = {};
           node.innerHTML = '';
+        },
+        refresh(optsRefresh = {}) {
+          const immediate = !!optsRefresh.immediate;
+          scheduleContextRefresh(immediate, optsRefresh.reason || 'manual');
         },
       };
     }
