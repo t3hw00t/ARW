@@ -150,7 +150,7 @@ Security & Admin
   - [Kernel] [t-250916130003-asg03] Auto-replay verified capsules before actions/tools/egress/policy evaluation — done for actions/tools; extend to proxy + Logic Unit runners (backlog)
   - [Kernel] [t-250916130004-asg04] Admin UX + CLI for capsule presets, rotation, and audit trails — backlog (ties into Phase 3 UX controls)
 Caching & Performance (High Priority)
-- [Kernel] [t-250913001000-1001] Llama.cpp prompt cache: set `cache_prompt: true` in requests; doc server `--prompt-cache` for persistence — in progress
+- [Kernel] [t-250913001000-1001] Llama.cpp prompt cache: set `cache_prompt: true` in requests; doc server `--prompt-cache` for persistence — done (requests enforce the flag, smoke helper appends `--prompt-cache`, and tests cover the payload shape)
 - [Kernel] [t-250913001003-1002] CAS HTTP caching: add `ETag`, `Last-Modified`, long‑lived `Cache-Control`, and 304 handling to `/admin/models/by-hash/{sha256}` — done
 - [Kernel] [t-250913001006-1003] Action Cache (MVP): wrap `tools_exec::run` with deterministic key (tool id, version, canonical JSON, env signature stub) and CAS’d outputs; Moka front with TTL; `tool.cache` events — in progress (CLI introspection available via `arw-cli tools cache`).
 - [Kernel] [t-250913001009-1004] Singleflight: coalesce identical in-flight tool runs and expensive read-model recomputes — done (shared guard now covers tool cache + read-model snapshots)

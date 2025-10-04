@@ -12,6 +12,8 @@ use crate::{
     AppState,
 };
 
+use reqwest::header::CONTENT_TYPE;
+
 const HISTORY_LIMIT: usize = 48;
 const TOOL_HISTORY_LIMIT: usize = 12;
 
@@ -466,8 +468,22 @@ async fn llama_chat(
     }
 
     let client = crate::http_client::client().clone();
+    let payload = match serde_json::to_vec(&body) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            return Err(ToolError::Runtime(format!(
+                "failed to encode llama payload: {}",
+                err
+            )))
+        }
+    };
+    let payload_len = payload.len() as i64;
+    let request = client
+        .post(&url)
+        .header(CONTENT_TYPE, "application/json")
+        .body(payload);
 
-    match client.post(&url).json(&body).send().await {
+    match request.send().await {
         Ok(resp) => {
             let status = resp.status();
             match resp.bytes().await {
@@ -482,7 +498,15 @@ async fn llama_chat(
                                     .map(|s| s.to_string())
                             })
                             .unwrap_or_else(|| synth_reply(&input.prompt));
-                        record_egress(state, &url, "allow", None, Some(bytes_len)).await;
+                        record_egress(
+                            state,
+                            &url,
+                            "allow",
+                            None,
+                            Some(payload_len),
+                            Some(bytes_len),
+                        )
+                        .await;
                         if reply.trim().is_empty() {
                             return Ok(Some(ChatEngineResult {
                                 backend: ChatBackend::Synthetic,
@@ -494,19 +518,42 @@ async fn llama_chat(
                             text: reply,
                         }))
                     } else {
-                        record_egress(state, &url, "deny", Some(status.as_str()), Some(bytes_len))
-                            .await;
+                        record_egress(
+                            state,
+                            &url,
+                            "deny",
+                            Some(status.as_str()),
+                            Some(payload_len),
+                            Some(bytes_len),
+                        )
+                        .await;
                         Ok(None)
                     }
                 }
                 Err(err) => {
-                    record_egress(state, &url, "deny", Some("read_error"), None).await;
+                    record_egress(
+                        state,
+                        &url,
+                        "deny",
+                        Some("read_error"),
+                        Some(payload_len),
+                        None,
+                    )
+                    .await;
                     Err(ToolError::Runtime(err.to_string()))
                 }
             }
         }
         Err(err) => {
-            record_egress(state, &url, "deny", Some("network"), None).await;
+            record_egress(
+                state,
+                &url,
+                "deny",
+                Some("network"),
+                Some(payload_len),
+                None,
+            )
+            .await;
             Err(ToolError::Runtime(err.to_string()))
         }
     }
@@ -569,8 +616,21 @@ async fn openai_chat(
     }
 
     let client = crate::http_client::client().clone();
-
-    let request = client.post(&api_url).bearer_auth(&key).json(&body);
+    let payload = match serde_json::to_vec(&body) {
+        Ok(bytes) => bytes,
+        Err(err) => {
+            return Err(ToolError::Runtime(format!(
+                "failed to encode OpenAI payload: {}",
+                err
+            )))
+        }
+    };
+    let payload_len = payload.len() as i64;
+    let request = client
+        .post(&api_url)
+        .bearer_auth(&key)
+        .header(CONTENT_TYPE, "application/json")
+        .body(payload);
     match request.send().await {
         Ok(resp) => {
             let status = resp.status();
@@ -593,7 +653,15 @@ async fn openai_chat(
                                     .map(|s| s.to_string())
                             })
                             .unwrap_or_else(|| synth_reply(&input.prompt));
-                        record_egress(state, &api_url, "allow", None, Some(bytes_len)).await;
+                        record_egress(
+                            state,
+                            &api_url,
+                            "allow",
+                            None,
+                            Some(payload_len),
+                            Some(bytes_len),
+                        )
+                        .await;
                         if reply.trim().is_empty() {
                             return Ok(Some(ChatEngineResult {
                                 backend: ChatBackend::Synthetic,
@@ -610,6 +678,7 @@ async fn openai_chat(
                             &api_url,
                             "deny",
                             Some(status.as_str()),
+                            Some(payload_len),
                             Some(bytes_len),
                         )
                         .await;
@@ -617,13 +686,29 @@ async fn openai_chat(
                     }
                 }
                 Err(err) => {
-                    record_egress(state, &api_url, "deny", Some("read_error"), None).await;
+                    record_egress(
+                        state,
+                        &api_url,
+                        "deny",
+                        Some("read_error"),
+                        Some(payload_len),
+                        None,
+                    )
+                    .await;
                     Err(ToolError::Runtime(err.to_string()))
                 }
             }
         }
         Err(err) => {
-            record_egress(state, &api_url, "deny", Some("network"), None).await;
+            record_egress(
+                state,
+                &api_url,
+                "deny",
+                Some("network"),
+                Some(payload_len),
+                None,
+            )
+            .await;
             Err(ToolError::Runtime(err.to_string()))
         }
     }
@@ -634,6 +719,7 @@ async fn record_egress(
     url: &str,
     decision: &'static str,
     reason: Option<&str>,
+    bytes_out: Option<i64>,
     bytes_in: Option<i64>,
 ) {
     let parsed = match Url::parse(url) {
@@ -652,7 +738,7 @@ async fn record_egress(
         dest_port: port,
         protocol: Some(protocol_owned.as_str()),
         bytes_in,
-        bytes_out: None,
+        bytes_out,
         corr_id: Some(corr_id_owned.as_str()),
         project: None,
         meta: None,
@@ -674,8 +760,13 @@ mod tests {
     use super::*;
     use crate::{test_support::env, AppState};
     use arw_policy::PolicyEngine;
-    use serde_json::json;
-    use std::sync::Arc;
+    use arw_topics as topics;
+    use axum::{routing::post, Json, Router};
+    use serde_json::{json, Value};
+    use std::{future::IntoFuture, sync::Arc};
+    use tokio::net::TcpListener;
+    use tokio::sync::Mutex as AsyncMutex;
+    use tokio::time::{sleep, Duration};
 
     #[test]
     fn env_helpers_clamp_and_filter_values() {
@@ -784,5 +875,97 @@ mod tests {
         assert_eq!(outcome.history[1].role, "assistant");
         assert!(outcome.history[1].content.contains("hello"));
         assert_eq!(outcome.backend, "synthetic");
+    }
+
+    #[tokio::test]
+    async fn llama_chat_enables_prompt_cache() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+
+        let captured: Arc<AsyncMutex<Option<Value>>> = Arc::new(AsyncMutex::new(None));
+        let captured_inner = captured.clone();
+        let app = Router::new().route(
+            "/completion",
+            post(move |Json(payload): Json<Value>| {
+                let captured = captured_inner.clone();
+                async move {
+                    {
+                        let mut guard = captured.lock().await;
+                        *guard = Some(payload);
+                    }
+                    Json(json!({ "content": "ok" }))
+                }
+            }),
+        );
+
+        let listener = TcpListener::bind("127.0.0.1:0")
+            .await
+            .expect("bind llama stub");
+        let addr = listener.local_addr().expect("stub addr");
+        let server_future = axum::serve(listener, app.into_make_service());
+        let server_handle = tokio::spawn(async move {
+            let _ = server_future.into_future().await;
+        });
+
+        ctx.env.set("ARW_LLAMA_URL", format!("http://{}", addr));
+        let state = build_state(temp.path(), &mut ctx.env).await;
+        let bus = state.bus();
+        let mut events = bus.subscribe();
+
+        let output = run_chat_tool(&state, json!({"prompt": "hello"}))
+            .await
+            .expect("chat output");
+        assert_eq!(output["backend"].as_str(), Some("llama"));
+
+        let payload = tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                if let Some(value) = {
+                    let guard = captured.lock().await;
+                    guard.clone()
+                } {
+                    break value;
+                }
+                sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("captured payload");
+
+        assert_eq!(payload.get("cache_prompt"), Some(&Value::Bool(true)));
+
+        let ledger_event = tokio::time::timeout(Duration::from_secs(1), async {
+            loop {
+                match events.recv().await {
+                    Ok(env) => {
+                        if env.kind == topics::TOPIC_EGRESS_LEDGER_APPENDED {
+                            break env;
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => continue,
+                    Err(err) => panic!("event receiver closed: {err}"),
+                }
+            }
+        })
+        .await
+        .expect("egress ledger event");
+
+        let payload = ledger_event.payload;
+        let bytes_out = payload
+            .get("bytes_out")
+            .and_then(|v| v.as_i64())
+            .expect("bytes_out present");
+        assert!(
+            bytes_out > 0,
+            "expected positive bytes_out, got {bytes_out}"
+        );
+
+        let bytes_in = payload
+            .get("bytes_in")
+            .and_then(|v| v.as_i64())
+            .expect("bytes_in present");
+        assert!(bytes_in > 0, "expected positive bytes_in, got {bytes_in}");
+
+        server_handle.abort();
+        let _ = server_handle.await;
     }
 }
