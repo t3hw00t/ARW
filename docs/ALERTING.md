@@ -43,6 +43,7 @@ Panels to consider:
 - Stat panel for `arw_safe_mode_active` (with threshold > 0 highlighting).
 - Single stat for minutes since last crash: `(time() * 1000 - arw_last_crash_ms) / 60000`.
 - Table for route latency: `arw_route_p95_ms` by `path`.
+- Histogram panel for route latency percentiles via PromQL `histogram_quantile(0.95, sum by (path, le)(rate(arw_route_latency_seconds_bucket[5m])))` so you can alert on the true p95 alongside the rolling window value.
 
 ## Service Health Read-Model (JSON)
 

@@ -197,7 +197,7 @@ Remote Access & TLS
 
 Observability & Eventing
 - [Kernel] Event journal: reader endpoint (tail N) and topic‑filtered consumers across workers/connectors — done (GET /admin/events/journal with prefix filters; connectors consume via subscribe_filtered; `arw-cli events journal --follow` tails from the CLI)
-- [Kernel] Metrics registry with histograms; wire to /metrics [t-250911230320-8615]
+- [Kernel] Metrics registry with histograms; wire to /metrics [t-250911230320-8615] — done (route latency histograms exported via `arw_route_latency_seconds_*`; monitoring docs updated)
 - [Kernel] Docs: surface route metrics/events in docs and status page — done
 - [Pack: Collaboration] RPU trust: watcher + endpoints + `rpu.trust.changed` event + Prometheus gauges — done
 - [Kernel] Event reader QA: test `Last-Event-ID` resume, ensure Spectral/OpenAPI coverage, and capture doc updates in developer guide — done (tests/spec/docs refreshed in this change)
@@ -208,7 +208,7 @@ Compatibility & Hardware
 State Read‑Models & Episodes
 - [Kernel] Observations read-model + GET /state/observations [t-250912001055-0044] — done (SSE read-model patches + admin endpoint)
 - [Kernel] Beliefs/Intents/Actions stores + endpoints [t-250912001100-3438] — done (SSE read-model patches + admin endpoints)
-- [Kernel] Episodes + Debug UI reactive views (truth window) [t-250912001105-7850]
+- [Kernel] Episodes + Debug UI reactive views (truth window) [t-250912001105-7850] — done (server now emits duration/error metadata + UI hydrates directly from episode rollups)
 - [Kernel] Debug UI: Episodes filters + details toggle [t-250912024838-4137]
 
 Hierarchy & Governor Services

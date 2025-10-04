@@ -1,11 +1,11 @@
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::IntoResponse;
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     Json,
 };
 use serde_json::{json, Value};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     metrics,
@@ -63,45 +63,271 @@ pub struct RuntimeMatrixResponse {
     pub ttl_seconds: u64,
 }
 
-pub(crate) async fn build_episode_rollups(state: &AppState, limit: usize) -> (Vec<Value>, u64) {
+#[derive(Debug, Default, Deserialize, IntoParams)]
+#[serde(default)]
+pub struct EpisodesQuery {
+    /// Maximum number of episodes to return (1-1000, default 1000).
+    pub limit: Option<usize>,
+    /// Filter to episodes that include the specified project id.
+    pub project: Option<String>,
+    /// Return only episodes that contain error events.
+    pub errors_only: Option<bool>,
+    /// Keep episodes whose kinds start with this prefix (e.g. `tasks.`).
+    pub kind_prefix: Option<String>,
+    /// Only include episodes whose last event timestamp is at or after this RFC3339 time.
+    pub since: Option<String>,
+}
+
+#[derive(Debug, Default, Deserialize, IntoParams)]
+#[serde(default)]
+pub struct EpisodeSnapshotQuery {
+    /// Maximum number of events to include in the snapshot (1-2000, default 1000).
+    pub limit: Option<usize>,
+}
+
+#[derive(Clone)]
+pub(crate) struct EpisodeRollup {
+    id: String,
+    start: Option<String>,
+    end: Option<String>,
+    last: Option<String>,
+    duration_ms: Option<u64>,
+    first_kind: Option<String>,
+    last_kind: Option<String>,
+    count: u64,
+    errors: u64,
+    projects: Vec<String>,
+    actors: Vec<String>,
+    kinds: Vec<String>,
+    events: Vec<Value>,
+    last_dt: Option<DateTime<Utc>>,
+}
+
+impl EpisodeRollup {
+    fn matches_project(&self, project: &str) -> bool {
+        self.projects.iter().any(|p| p == project)
+    }
+
+    fn matches_kind_prefix(&self, prefix: &str) -> bool {
+        self.kinds.iter().any(|k| k.starts_with(prefix))
+    }
+
+    fn matches_since(&self, since: DateTime<Utc>) -> bool {
+        match self.last_dt {
+            Some(last) => last >= since,
+            None => false,
+        }
+    }
+
+    pub(crate) fn into_value(self) -> Value {
+        let mut episode = serde_json::Map::new();
+        episode.insert("id".to_string(), Value::String(self.id));
+        if let Some(start) = self.start {
+            episode.insert("start".to_string(), Value::String(start));
+        }
+        if let Some(end) = self.end {
+            episode.insert("end".to_string(), Value::String(end));
+        }
+        if let Some(last) = self.last {
+            episode.insert("last".to_string(), Value::String(last));
+        }
+        if let Some(dur) = self.duration_ms {
+            episode.insert("duration_ms".to_string(), json!(dur));
+        }
+        episode.insert("count".to_string(), json!(self.count));
+        episode.insert("errors".to_string(), json!(self.errors));
+        if let Some(first) = self.first_kind {
+            episode.insert("first_kind".to_string(), json!(first));
+        }
+        if let Some(last_kind) = self.last_kind {
+            episode.insert("last_kind".to_string(), json!(last_kind));
+        }
+        if !self.projects.is_empty() {
+            episode.insert(
+                "projects".to_string(),
+                Value::Array(self.projects.into_iter().map(Value::String).collect()),
+            );
+        }
+        if !self.actors.is_empty() {
+            episode.insert(
+                "actors".to_string(),
+                Value::Array(self.actors.into_iter().map(Value::String).collect()),
+            );
+        }
+        if !self.kinds.is_empty() {
+            episode.insert(
+                "kinds".to_string(),
+                Value::Array(self.kinds.into_iter().map(Value::String).collect()),
+            );
+        }
+        episode.insert("events".to_string(), Value::Array(self.events.clone()));
+        episode.insert("items".to_string(), Value::Array(self.events));
+        Value::Object(episode)
+    }
+}
+
+fn parse_utc(ts: &str) -> Option<DateTime<Utc>> {
+    DateTime::parse_from_rfc3339(ts)
+        .map(|dt| dt.with_timezone(&Utc))
+        .ok()
+}
+
+fn event_is_error(kind: &str, payload: &Value) -> bool {
+    let lowered = kind.to_ascii_lowercase();
+    if lowered.contains(".error")
+        || lowered.contains(".failed")
+        || lowered.contains(".denied")
+        || lowered.contains(".panic")
+    {
+        return true;
+    }
+    let status = payload
+        .get("status")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_ascii_lowercase());
+    if matches!(
+        status.as_deref(),
+        Some("error" | "failed" | "denied" | "panic")
+    ) {
+        return true;
+    }
+    if payload
+        .get("level")
+        .and_then(|v| v.as_str())
+        .map(|s| s.eq_ignore_ascii_case("error"))
+        .unwrap_or(false)
+    {
+        return true;
+    }
+    if payload.get("ok").and_then(|v| v.as_bool()) == Some(false) {
+        return true;
+    }
+    payload.get("error").is_some() || payload.get("err").is_some()
+}
+
+fn episode_from_events(corr_id: String, evs: Vec<arw_kernel::EventRow>) -> Option<EpisodeRollup> {
+    if evs.is_empty() {
+        return None;
+    }
+    let mut events_json: Vec<Value> = Vec::with_capacity(evs.len());
+    let mut start_iso: Option<String> = None;
+    let mut end_iso: Option<String> = None;
+    let mut start_dt: Option<DateTime<Utc>> = None;
+    let mut end_dt: Option<DateTime<Utc>> = None;
+    let mut errors_count: u64 = 0;
+    let mut projects: BTreeSet<String> = BTreeSet::new();
+    let mut actors: BTreeSet<String> = BTreeSet::new();
+    let mut kinds: BTreeSet<String> = BTreeSet::new();
+    let mut first_kind: Option<String> = None;
+    let mut last_kind: Option<String> = None;
+    for event in evs {
+        if start_iso.is_none() {
+            start_iso = Some(event.time.clone());
+            start_dt = parse_utc(&event.time);
+            first_kind = Some(event.kind.clone());
+        }
+        end_iso = Some(event.time.clone());
+        end_dt = parse_utc(&event.time);
+        last_kind = Some(event.kind.clone());
+        kinds.insert(event.kind.clone());
+        if let Some(proj) = event.proj.as_ref() {
+            if !proj.is_empty() {
+                projects.insert(proj.clone());
+            }
+        } else if let Some(proj) = event
+            .payload
+            .get("proj")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
+            projects.insert(proj.to_string());
+        }
+        if let Some(actor) = event.actor.as_ref() {
+            if !actor.is_empty() {
+                actors.insert(actor.clone());
+            }
+        } else if let Some(actor) = event
+            .payload
+            .get("actor")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
+            actors.insert(actor.to_string());
+        }
+        let is_error = event_is_error(&event.kind, &event.payload);
+        if is_error {
+            errors_count = errors_count.saturating_add(1);
+        }
+        let mut obj = serde_json::Map::new();
+        obj.insert("id".to_string(), json!(event.id));
+        obj.insert("time".to_string(), json!(event.time));
+        obj.insert("kind".to_string(), json!(event.kind));
+        if let Some(actor) = event.actor {
+            obj.insert("actor".to_string(), json!(actor));
+        }
+        if let Some(proj) = event.proj {
+            obj.insert("proj".to_string(), json!(proj));
+        }
+        obj.insert("payload".to_string(), event.payload);
+        if is_error {
+            obj.insert("error".to_string(), Value::Bool(true));
+        }
+        events_json.push(Value::Object(obj));
+    }
+
+    let event_count = events_json.len();
+    let last_dt = end_dt;
+    let duration_ms = match (start_dt.as_ref(), last_dt.as_ref()) {
+        (Some(start), Some(end)) if end.timestamp_millis() >= start.timestamp_millis() => {
+            Some((end.timestamp_millis() - start.timestamp_millis()) as u64)
+        }
+        _ => None,
+    };
+
+    Some(EpisodeRollup {
+        id: corr_id,
+        start: start_iso,
+        end: end_iso.clone(),
+        last: end_iso,
+        duration_ms,
+        first_kind,
+        last_kind,
+        count: event_count as u64,
+        errors: errors_count,
+        projects: projects.into_iter().collect(),
+        actors: actors.into_iter().collect(),
+        kinds: kinds.into_iter().collect(),
+        events: events_json,
+        last_dt,
+    })
+}
+
+pub(crate) async fn build_episode_rollups(
+    state: &AppState,
+    limit: usize,
+) -> (Vec<EpisodeRollup>, u64) {
     let rows = state
         .kernel()
         .recent_events_async(limit as i64, None)
         .await
         .unwrap_or_default();
-    let mut by_corr: BTreeMap<String, Vec<Value>> = BTreeMap::new();
+    let mut by_corr: BTreeMap<String, Vec<arw_kernel::EventRow>> = BTreeMap::new();
     let mut max_id: u64 = 0;
     for r in rows {
-        let corr_id = r.corr_id.unwrap_or_default();
+        let corr_id = r.corr_id.clone().unwrap_or_default();
         if corr_id.is_empty() {
             continue;
         }
         if r.id > 0 {
             max_id = max_id.max(r.id as u64);
         }
-        by_corr.entry(corr_id).or_default().push(json!({
-            "id": r.id,
-            "time": r.time,
-            "kind": r.kind,
-            "payload": r.payload,
-        }));
+        by_corr.entry(corr_id).or_default().push(r);
     }
-    let mut items: Vec<Value> = Vec::new();
+    let mut items: Vec<EpisodeRollup> = Vec::new();
     for (cid, evs) in by_corr.into_iter() {
-        let start = evs
-            .first()
-            .and_then(|e| e.get("time").cloned())
-            .unwrap_or(Value::Null);
-        let end = evs
-            .last()
-            .and_then(|e| e.get("time").cloned())
-            .unwrap_or(Value::Null);
-        items.push(json!({
-            "id": cid,
-            "events": evs,
-            "start": start,
-            "end": end,
-        }));
+        if let Some(episode) = episode_from_events(cid, evs) {
+            items.push(episode);
+        }
     }
     (items, max_id)
 }
@@ -111,13 +337,16 @@ pub(crate) async fn build_episode_rollups(state: &AppState, limit: usize) -> (Ve
     get,
     path = "/state/episodes",
     tag = "State",
+    params(EpisodesQuery),
     responses(
         (status = 200, description = "Episode rollups", body = serde_json::Value),
+        (status = 400, description = "Invalid query parameter", body = serde_json::Value),
         (status = 501, description = "Kernel disabled", body = serde_json::Value)
     )
 )]
 pub async fn state_episodes(
     headers: HeaderMap,
+    Query(query): Query<EpisodesQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
     if !crate::admin_ok(&headers) {
@@ -130,7 +359,54 @@ pub async fn state_episodes(
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
-    let (items, version) = build_episode_rollups(&state, 1000).await;
+    let since_dt = if let Some(ref since_raw) = query.since {
+        match parse_utc(since_raw) {
+            Some(dt) => Some(dt),
+            None => {
+                return (
+                    StatusCode::BAD_REQUEST,
+                    Json(json!({
+                        "type": "about:blank",
+                        "title": "Invalid query parameter",
+                        "detail": "since must be a valid RFC3339 timestamp",
+                        "status": 400,
+                    })),
+                )
+                    .into_response();
+            }
+        }
+    } else {
+        None
+    };
+
+    let (mut episodes, version) = build_episode_rollups(&state, 1000).await;
+
+    if let Some(project) = query.project.as_ref() {
+        episodes.retain(|ep| ep.matches_project(project));
+    }
+    if query.errors_only.unwrap_or(false) {
+        episodes.retain(|ep| ep.errors > 0);
+    }
+    if let Some(prefix) = query.kind_prefix.as_ref() {
+        episodes.retain(|ep| ep.matches_kind_prefix(prefix));
+    }
+    if let Some(since) = since_dt {
+        episodes.retain(|ep| ep.matches_since(since));
+    }
+
+    episodes.sort_by(|a, b| {
+        b.last_dt
+            .cmp(&a.last_dt)
+            .then_with(|| b.count.cmp(&a.count))
+            .then_with(|| a.id.cmp(&b.id))
+    });
+
+    let limit = query.limit.unwrap_or(1000).clamp(1, 1000);
+    if episodes.len() > limit {
+        episodes.truncate(limit);
+    }
+
+    let items: Vec<Value> = episodes.into_iter().map(|ep| ep.into_value()).collect();
     if let Some(resp) =
         crate::api::http_utils::state_version_not_modified(&headers, "episodes", version)
     {
@@ -140,6 +416,98 @@ pub async fn state_episodes(
     crate::api::http_utils::apply_state_version_headers(
         response.headers_mut(),
         "episodes",
+        version,
+    );
+    response
+}
+
+/// Episode snapshot for a specific correlation id.
+#[utoipa::path(
+    get,
+    path = "/state/episode/{id}/snapshot",
+    tag = "State",
+    params(
+        ("id" = String, Path, description = "Correlation id of the episode"),
+        EpisodeSnapshotQuery
+    ),
+    responses(
+        (status = 200, description = "Episode snapshot", body = serde_json::Value),
+        (status = 400, description = "Invalid query parameter", body = serde_json::Value),
+        (status = 401, description = "Unauthorized"),
+        (status = 404, description = "Episode not found"),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
+pub async fn state_episode_snapshot(
+    headers: HeaderMap,
+    Path(id): Path<String>,
+    Query(query): Query<EpisodeSnapshotQuery>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if !crate::admin_ok(&headers) {
+        return (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
+        )
+            .into_response();
+    }
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
+
+    let limit = query.limit.unwrap_or(1000).clamp(1, 2000) as i64;
+    let events = match state
+        .kernel()
+        .events_by_corr_id_async(&id, Some(limit))
+        .await
+    {
+        Ok(evs) => evs,
+        Err(err) => {
+            tracing::warn!(target: "arw::state", corr_id = %id, error = ?err, "failed to load episode snapshot");
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "Failed to load episode",
+                    "status": 500,
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    if events.is_empty() {
+        return (
+            StatusCode::NOT_FOUND,
+            Json(json!({
+                "type": "about:blank",
+                "title": "Episode not found",
+                "status": 404,
+            })),
+        )
+            .into_response();
+    }
+
+    let version = events
+        .iter()
+        .map(|ev| ev.id.max(0) as u64)
+        .max()
+        .unwrap_or(0);
+    if let Some(resp) = crate::api::http_utils::state_version_not_modified(
+        &headers,
+        &format!("episode-snapshot-{id}"),
+        version,
+    ) {
+        return resp;
+    }
+
+    let episode = episode_from_events(id.clone(), events)
+        .map(|ep| ep.into_value())
+        .unwrap_or_else(|| json!({ "id": id.clone(), "events": [], "items": [] }));
+    let mut response = Json(json!({ "version": version, "episode": episode })).into_response();
+    crate::api::http_utils::apply_state_version_headers(
+        response.headers_mut(),
+        &format!("episode-snapshot-{id}"),
         version,
     );
     response
@@ -1478,14 +1846,22 @@ mod tests {
         let env1 = arw_events::Envelope {
             time: t1.to_rfc3339_opts(SecondsFormat::Millis, true),
             kind: "tasks.started".to_string(),
-            payload: json!({"corr_id": corr, "step": "start"}),
+            payload: json!({"corr_id": corr, "step": "start", "proj": "demo"}),
             policy: None,
             ce: None,
         };
         let env2 = arw_events::Envelope {
             time: t2.to_rfc3339_opts(SecondsFormat::Millis, true),
             kind: "tasks.completed".to_string(),
-            payload: json!({"corr_id": corr, "step": "end"}),
+            payload: json!({"corr_id": corr, "step": "end", "proj": "demo"}),
+            policy: None,
+            ce: None,
+        };
+        let t3 = t2 + chrono::Duration::milliseconds(10);
+        let env3 = arw_events::Envelope {
+            time: t3.to_rfc3339_opts(SecondsFormat::Millis, true),
+            kind: "tasks.failed".to_string(),
+            payload: json!({"corr_id": corr, "step": "error", "status": "failed", "proj": "demo"}),
             policy: None,
             ce: None,
         };
@@ -1500,10 +1876,19 @@ mod tests {
             .append_event_async(&env2)
             .await
             .expect("append end event");
-
-        let response = state_episodes(HeaderMap::new(), State(state.clone()))
+        state
+            .kernel()
+            .append_event_async(&env3)
             .await
-            .into_response();
+            .expect("append error event");
+
+        let response = state_episodes(
+            HeaderMap::new(),
+            Query(EpisodesQuery::default()),
+            State(state.clone()),
+        )
+        .await
+        .into_response();
         let (parts, body) = response.into_parts();
         assert_eq!(parts.status, StatusCode::OK);
         let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
@@ -1514,17 +1899,29 @@ mod tests {
         let item = &items[0];
         assert_eq!(item["id"].as_str(), Some(corr));
         let events = item["events"].as_array().expect("events array");
-        assert_eq!(events.len(), 2);
+        assert_eq!(events.len(), 3);
         let seq_set: std::collections::HashSet<_> = events
             .iter()
             .map(|ev| ev["payload"]["step"].as_str().unwrap_or(""))
             .collect();
         assert!(seq_set.contains("start"));
         assert!(seq_set.contains("end"));
+        assert!(seq_set.contains("error"));
         let start = item["start"].as_str().expect("start time");
         let end = item["end"].as_str().expect("end time");
         assert!(start == env1.time || start == env2.time);
-        assert!(end == env1.time || end == env2.time);
+        assert!(end == env2.time || end == env3.time);
+        assert_eq!(item["count"].as_u64(), Some(3));
+        assert_eq!(item["errors"].as_u64(), Some(1));
+        assert_eq!(item["last_kind"].as_str(), Some("tasks.failed"));
+        assert_eq!(item["duration_ms"].as_u64(), Some(35));
+        assert!(item["projects"]
+            .as_array()
+            .map(|arr| arr.contains(&json!("demo")))
+            .unwrap_or(false));
+        let items_arr = item["items"].as_array().expect("items array");
+        assert_eq!(items_arr.len(), 3);
+        assert_eq!(items_arr[2]["error"].as_bool(), Some(true));
     }
 
     #[tokio::test]
@@ -1547,9 +1944,13 @@ mod tests {
             .await
             .expect("append event");
 
-        let first = state_episodes(HeaderMap::new(), State(state.clone()))
-            .await
-            .into_response();
+        let first = state_episodes(
+            HeaderMap::new(),
+            Query(EpisodesQuery::default()),
+            State(state.clone()),
+        )
+        .await
+        .into_response();
         let etag = first
             .headers()
             .get(header::ETAG)
@@ -1558,8 +1959,170 @@ mod tests {
 
         let mut headers = HeaderMap::new();
         headers.insert(header::IF_NONE_MATCH, etag);
-        let response = state_episodes(headers, State(state)).await.into_response();
+        let response = state_episodes(headers, Query(EpisodesQuery::default()), State(state))
+            .await
+            .into_response();
         assert_eq!(response.status(), StatusCode::NOT_MODIFIED);
+    }
+
+    #[tokio::test]
+    async fn state_episodes_supports_filters() {
+        let temp = tempdir().expect("tempdir");
+        let mut env_guard = crate::test_support::env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
+
+        let t0 = Utc::now();
+        let corr_demo = "run-demo";
+        let corr_other = "run-other";
+
+        let events = vec![
+            arw_events::Envelope {
+                time: t0.to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "tasks.started".to_string(),
+                payload: json!({"corr_id": corr_demo, "step": "start", "proj": "demo"}),
+                policy: None,
+                ce: None,
+            },
+            arw_events::Envelope {
+                time: (t0 + chrono::Duration::milliseconds(5))
+                    .to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "tasks.failed".to_string(),
+                payload: json!({"corr_id": corr_demo, "step": "error", "proj": "demo"}),
+                policy: None,
+                ce: None,
+            },
+            arw_events::Envelope {
+                time: (t0 + chrono::Duration::milliseconds(10))
+                    .to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "tasks.started".to_string(),
+                payload: json!({"corr_id": corr_other, "step": "start", "proj": "other"}),
+                policy: None,
+                ce: None,
+            },
+            arw_events::Envelope {
+                time: (t0 + chrono::Duration::milliseconds(15))
+                    .to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "tasks.completed".to_string(),
+                payload: json!({"corr_id": corr_other, "step": "end", "proj": "other"}),
+                policy: None,
+                ce: None,
+            },
+        ];
+
+        for env in events {
+            state
+                .kernel()
+                .append_event_async(&env)
+                .await
+                .expect("append event");
+        }
+
+        let since =
+            (t0 + chrono::Duration::milliseconds(1)).to_rfc3339_opts(SecondsFormat::Millis, true);
+        let query = EpisodesQuery {
+            limit: Some(5),
+            project: Some("demo".to_string()),
+            errors_only: Some(true),
+            kind_prefix: Some("tasks.".to_string()),
+            since: Some(since),
+        };
+
+        let response = state_episodes(HeaderMap::new(), Query(query), State(state))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let (_, body) = response.into_parts();
+        let bytes = to_bytes(body, usize::MAX).await.expect("body");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+        let items = value["items"].as_array().expect("items array");
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0]["id"].as_str(), Some(corr_demo));
+        assert_eq!(items[0]["errors"].as_u64(), Some(1));
+    }
+
+    #[tokio::test]
+    async fn state_episode_snapshot_returns_episode() {
+        let temp = tempdir().expect("tempdir");
+        let mut env_guard = crate::test_support::env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
+
+        let corr = "snapshot-1";
+        let envs = [
+            arw_events::Envelope {
+                time: Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "tasks.started".to_string(),
+                payload: json!({"corr_id": corr, "step": "start"}),
+                policy: None,
+                ce: None,
+            },
+            arw_events::Envelope {
+                time: (Utc::now() + chrono::Duration::milliseconds(10))
+                    .to_rfc3339_opts(SecondsFormat::Millis, true),
+                kind: "tasks.completed".to_string(),
+                payload: json!({"corr_id": corr, "step": "end"}),
+                policy: None,
+                ce: None,
+            },
+        ];
+
+        for env in envs.iter() {
+            state
+                .kernel()
+                .append_event_async(env)
+                .await
+                .expect("append event");
+        }
+
+        let response = state_episode_snapshot(
+            HeaderMap::new(),
+            Path(corr.to_string()),
+            Query(EpisodeSnapshotQuery::default()),
+            State(state.clone()),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+        let (parts, body) = response.into_parts();
+        assert!(parts.headers.get(header::ETAG).is_some());
+        let bytes = to_bytes(body, usize::MAX).await.expect("body");
+        let value: Value = serde_json::from_slice(&bytes).expect("json");
+        assert_eq!(value["version"].as_u64().unwrap_or_default(), 2);
+        assert_eq!(value["episode"]["id"].as_str(), Some(corr));
+        assert_eq!(
+            value["episode"]["events"].as_array().map(|a| a.len()),
+            Some(2)
+        );
+
+        // Not modified path
+        let etag = parts.headers.get(header::ETAG).cloned().unwrap();
+        let mut headers = HeaderMap::new();
+        headers.insert(header::IF_NONE_MATCH, etag);
+        let not_modified = state_episode_snapshot(
+            headers,
+            Path(corr.to_string()),
+            Query(EpisodeSnapshotQuery::default()),
+            State(state.clone()),
+        )
+        .await
+        .into_response();
+        assert_eq!(not_modified.status(), StatusCode::NOT_MODIFIED);
+    }
+
+    #[tokio::test]
+    async fn state_episode_snapshot_missing_returns_404() {
+        let temp = tempdir().expect("tempdir");
+        let mut env_guard = crate::test_support::env::guard();
+        let state = build_state(temp.path(), &mut env_guard).await;
+
+        let response = state_episode_snapshot(
+            HeaderMap::new(),
+            Path("unknown".to_string()),
+            Query(EpisodeSnapshotQuery::default()),
+            State(state),
+        )
+        .await
+        .into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
 }
 

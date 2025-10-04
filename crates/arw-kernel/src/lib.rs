@@ -752,6 +752,44 @@ impl Kernel {
         Ok(out)
     }
 
+    pub fn events_by_corr_id(&self, corr_id: &str, limit: Option<i64>) -> Result<Vec<EventRow>> {
+        let conn = self.conn()?;
+        let mut stmt_limit;
+        let mut stmt_all;
+        let mut rows = if let Some(limit) = limit {
+            stmt_limit = conn.prepare(
+                "SELECT id,time,kind,actor,proj,corr_id,payload FROM events WHERE corr_id = ? ORDER BY id ASC LIMIT ?",
+            )?;
+            stmt_limit.query(params![corr_id, limit])?
+        } else {
+            stmt_all = conn.prepare(
+                "SELECT id,time,kind,actor,proj,corr_id,payload FROM events WHERE corr_id = ? ORDER BY id ASC",
+            )?;
+            stmt_all.query(params![corr_id])?
+        };
+        let mut out = Vec::new();
+        while let Some(row) = rows.next()? {
+            let id: i64 = row.get(0)?;
+            let time: String = row.get(1)?;
+            let kind: String = row.get(2)?;
+            let actor: Option<String> = row.get(3)?;
+            let proj: Option<String> = row.get(4)?;
+            let corr_id: Option<String> = row.get(5)?;
+            let payload_s: String = row.get(6)?;
+            let payload = serde_json::from_str(&payload_s).unwrap_or(serde_json::json!({}));
+            out.push(EventRow {
+                id,
+                time,
+                kind,
+                actor,
+                proj,
+                corr_id,
+                payload,
+            });
+        }
+        Ok(out)
+    }
+
     pub async fn cas_put(
         bytes: &[u8],
         mime: Option<&str>,
@@ -2139,6 +2177,18 @@ impl Kernel {
     ) -> Result<Vec<EventRow>> {
         let k = self.clone();
         tokio::task::spawn_blocking(move || k.recent_events(limit, after_id))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn events_by_corr_id_async(
+        &self,
+        corr_id: &str,
+        limit: Option<i64>,
+    ) -> Result<Vec<EventRow>> {
+        let k = self.clone();
+        let cid = corr_id.to_string();
+        tokio::task::spawn_blocking(move || k.events_by_corr_id(&cid, limit))
             .await
             .map_err(|e| anyhow!("join error: {}", e))?
     }

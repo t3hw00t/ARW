@@ -33,7 +33,7 @@ The unified server now ships the triad API backed by the kernel. The [Restructur
 - `GET /events` — Server-Sent Events with optional `after`/`Last-Event-ID` resume, `replay=N` journal tailing, and `prefix` filters. The handler deduplicates recent envelopes via a digest cache and streams the bus while the kernel keeps the durable ledger.
 
 ### State views (`apps/arw-server/src/api/state.rs`)
-- `GET /state/episodes` — groups the latest 1000 events by `corr_id` to surface episode timelines (start/end markers plus per-event payloads).
+- `GET /state/episodes` — groups the latest 1000 events by `corr_id`, returning per-episode metadata (start/end/last timestamps, duration, counts, error tally, first/last kinds, participating projects/actors) alongside the event payloads. Each event entry carries an `error` flag so clients can highlight failure steps without re-parsing payloads. The handler accepts `limit`, `project`, `errors_only`, `kind_prefix`, and `since` query parameters for focused timelines, while `GET /state/episode/{id}/snapshot` exposes a detailed view for a single correlation id.
 - `GET /state/route_stats` — merges bus counters with the metrics snapshot to report publish/delivery counts and per-route histograms.
 - `GET /state/actions` — paginated listing of persisted actions (default 200, configurable via `limit` query parameter).
 - `GET /state/contributions` — returns the append-only contribution ledger (latest 200 entries by default).

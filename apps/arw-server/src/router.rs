@@ -147,6 +147,7 @@ pub(crate) mod paths {
     pub const ACTIONS_ID: &str = "/actions/{id}";
     pub const ACTIONS_ID_STATE: &str = "/actions/{id}/state";
     pub const STATE_EPISODES: &str = "/state/episodes";
+    pub const STATE_EPISODE_SNAPSHOT: &str = "/state/episode/{id}/snapshot";
     pub const STATE_ROUTE_STATS: &str = "/state/route_stats";
     pub const STATE_ACTIONS: &str = "/state/actions";
     pub const STATE_CONTRIBS: &str = "/state/contributions";
@@ -347,6 +348,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
     builder.route_get(
         paths::STATE_EPISODES,
         api::state::state_episodes,
+        Some(Stability::Beta),
+    );
+    builder.route_get(
+        paths::STATE_EPISODE_SNAPSHOT,
+        api::state::state_episode_snapshot,
         Some(Stability::Beta),
     );
     builder.route_get(

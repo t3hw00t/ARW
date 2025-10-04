@@ -99,12 +99,50 @@ fn render_prometheus(
     );
     out.push_str("# HELP arw_route_max_ms Max latency (ms)\n# TYPE arw_route_max_ms gauge\n");
     for (path, stat) in summary.routes.by_path.iter() {
-        let labels = [("path", path.clone())];
-        write_metric_line(&mut out, "arw_route_hits_total", &labels, stat.hits);
-        write_metric_line(&mut out, "arw_route_errors_total", &labels, stat.errors);
-        write_metric_line(&mut out, "arw_route_ewma_ms", &labels, stat.ewma_ms);
-        write_metric_line(&mut out, "arw_route_p95_ms", &labels, stat.p95_ms);
-        write_metric_line(&mut out, "arw_route_max_ms", &labels, stat.max_ms);
+        let base_labels = vec![("path", path.clone())];
+        write_metric_line(&mut out, "arw_route_hits_total", &base_labels, stat.hits);
+        write_metric_line(
+            &mut out,
+            "arw_route_errors_total",
+            &base_labels,
+            stat.errors,
+        );
+        write_metric_line(&mut out, "arw_route_ewma_ms", &base_labels, stat.ewma_ms);
+        write_metric_line(&mut out, "arw_route_p95_ms", &base_labels, stat.p95_ms);
+        write_metric_line(&mut out, "arw_route_max_ms", &base_labels, stat.max_ms);
+    }
+    out.push_str(
+        "# HELP arw_route_latency_seconds HTTP route latency histogram (seconds)\\n# TYPE arw_route_latency_seconds histogram\\n",
+    );
+    for (path, stat) in summary.routes.by_path.iter() {
+        if let Some(hist) = &stat.latency_histogram {
+            let base_labels = vec![("path", path.clone())];
+            for bucket in &hist.buckets {
+                let le_value = match bucket.le_ms {
+                    Some(ms) => format!("{:.3}", ms / 1000.0),
+                    None => "+Inf".to_string(),
+                };
+                let bucket_labels = vec![("path", path.clone()), ("le", le_value)];
+                write_metric_line(
+                    &mut out,
+                    "arw_route_latency_seconds_bucket",
+                    &bucket_labels,
+                    bucket.count,
+                );
+            }
+            write_metric_line(
+                &mut out,
+                "arw_route_latency_seconds_sum",
+                &base_labels,
+                hist.sum_ms / 1000.0,
+            );
+            write_metric_line(
+                &mut out,
+                "arw_route_latency_seconds_count",
+                &base_labels,
+                hist.count,
+            );
+        }
     }
 
     out.push_str("# HELP arw_task_inflight Current background task inflight count\n# TYPE arw_task_inflight gauge\n");
@@ -303,3 +341,63 @@ pub async fn metrics_prometheus(State(state): State<AppState>) -> Response {
 }
 
 // legacy metrics_overview removed; use /state/route_stats instead
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty_cache_stats() -> ToolCacheStats {
+        ToolCacheStats {
+            hit: 0,
+            miss: 0,
+            coalesced: 0,
+            errors: 0,
+            bypass: 0,
+            capacity: 0,
+            ttl_secs: 0,
+            entries: 0,
+            latency_saved_ms_total: 0,
+            latency_saved_samples: 0,
+            avg_latency_saved_ms: 0.0,
+            payload_bytes_saved_total: 0,
+            payload_saved_samples: 0,
+            avg_payload_bytes_saved: 0.0,
+            avg_hit_age_secs: 0.0,
+            hit_age_samples: 0,
+            last_hit_age_secs: None,
+            max_hit_age_secs: None,
+            stampede_suppression_rate: 0.0,
+            last_latency_saved_ms: None,
+            last_payload_bytes: None,
+        }
+    }
+
+    #[test]
+    fn prometheus_export_includes_histogram() {
+        let metrics = crate::metrics::Metrics::new();
+        metrics.record_route("/demo", 200, 8);
+        metrics.record_route("/demo", 200, 42);
+        metrics.record_route("/demo", 200, 1200);
+
+        let summary = metrics.snapshot();
+        let bus = arw_events::BusStats {
+            published: 0,
+            delivered: 0,
+            lagged: 0,
+            no_receivers: 0,
+            receivers: 0,
+        };
+        let cache = empty_cache_stats();
+        let rendered = render_prometheus(&summary, &bus, &cache);
+
+        assert!(
+            rendered.contains("arw_route_latency_seconds_bucket{path=\"/demo\",le=\"0.010\"} 1")
+        );
+        assert!(
+            rendered.contains("arw_route_latency_seconds_bucket{path=\"/demo\",le=\"0.050\"} 2")
+        );
+        assert!(rendered.contains("arw_route_latency_seconds_bucket{path=\"/demo\",le=\"+Inf\"} 3"));
+        assert!(rendered.contains("arw_route_latency_seconds_sum{path=\"/demo\"} 1.25"));
+        assert!(rendered.contains("arw_route_latency_seconds_count{path=\"/demo\"} 3"));
+    }
+}

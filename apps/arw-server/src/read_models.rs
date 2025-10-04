@@ -97,6 +97,7 @@ pub(crate) fn start_read_models(state: AppState) -> Vec<TaskHandle> {
                 return None;
             }
             let (items, version) = crate::api::state::build_episode_rollups(&st, 1000).await;
+            let items: Vec<Value> = items.into_iter().map(|ep| ep.into_value()).collect();
             Some(json!({ "version": version, "items": items }))
         },
     ));

@@ -218,22 +218,47 @@ document.addEventListener('DOMContentLoaded', async () => {
     return false;
   }
   function hydrateEpisode(ep){
-    const events = normArr(ep?.events);
+    const serverItems = normArr(ep?.items);
+    const eventsRaw = normArr(ep?.events);
+    const events = serverItems.length ? serverItems : eventsRaw;
     const startTs = ep?.start || events[0]?.time || null;
     const endTs = ep?.end || events[events.length - 1]?.time || null;
     const startMs = parseMillis(startTs);
     const endMs = parseMillis(endTs);
-    const duration = startMs != null && endMs != null && endMs >= startMs ? Math.round(endMs - startMs) : null;
-    const errors = events.reduce((acc, ev) => acc + (isErrorEvent(ev) ? 1 : 0), 0);
+    const durationServer = Number(ep?.duration_ms ?? ep?.durationMs);
+    const durationComputed =
+      startMs != null && endMs != null && endMs >= startMs ? Math.round(endMs - startMs) : null;
+    const duration = Number.isFinite(durationServer) ? durationServer : durationComputed;
+    const errorsServer = Number(ep?.errors ?? ep?.error_count ?? ep?.errorCount);
+    const errorsComputed = events.reduce((acc, ev) => {
+      const flagged = ev?.error === true || isErrorEvent(ev);
+      return acc + (flagged ? 1 : 0);
+    }, 0);
+    const errors = Number.isFinite(errorsServer) ? errorsServer : errorsComputed;
+    const countServer = Number(ep?.count);
+    const count = Number.isFinite(countServer) ? countServer : events.length;
+    const lastTs = ep?.last || endTs || '';
+    const firstKind = ep?.first_kind || ep?.firstKind || events[0]?.kind || '';
+    const lastKind = ep?.last_kind || ep?.lastKind || events[events.length - 1]?.kind || '';
+    const projects = Array.isArray(ep?.projects) ? ep.projects : [];
+    const actors = Array.isArray(ep?.actors) ? ep.actors : [];
+    const kinds = Array.isArray(ep?.kinds)
+      ? ep.kinds
+      : Array.from(new Set(events.map((ev) => ev?.kind).filter(Boolean)));
     return {
       ...(ep && typeof ep === 'object' ? ep : {}),
       id: ep?.id || '',
       start: startTs,
       end: endTs,
-      duration_ms: duration,
-      last: endTs || '',
-      count: events.length,
+      duration_ms: duration != null ? duration : null,
+      last: lastTs,
+      count,
       errors,
+      first_kind: firstKind,
+      last_kind: lastKind,
+      projects,
+      actors,
+      kinds,
       items: events,
       events,
     };
@@ -332,7 +357,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     try{
       if (runsAbort) { try{ runsAbort.abort(); }catch{} }
       runsAbort = new AbortController();
-      await fetchReadModel('episodes', '/state/episodes', {
+      const params = new URLSearchParams();
+      params.set('limit', '200');
+      if (curProj) params.set('project', curProj);
+      if (elRunErrOnly && elRunErrOnly.checked) params.set('errors_only', 'true');
+      const path = params.toString() ? `/state/episodes?${params.toString()}` : '/state/episodes';
+      await fetchReadModel('episodes', path, {
         signal: runsAbort.signal,
         transform(raw){
           const isObj = raw && typeof raw === 'object' && !Array.isArray(raw);
@@ -359,7 +389,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
       const resp = await fetchRaw(`/state/episode/${encodeURIComponent(id)}/snapshot`, { signal: snapAbort.signal });
         if (resp.ok) {
-          snap = await resp.json();
+          const payload = await resp.json();
+          if (payload && typeof payload === 'object') {
+            snap = payload.episode || payload;
+          }
         }
       } catch (err) {
         if (!(err && err.name === 'AbortError')) console.warn('snapshot fetch failed', err);
@@ -385,7 +418,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   document.getElementById('btnRunsRefresh')?.addEventListener('click', ()=>{ refreshEpisodesSnapshot(); });
   // Do not persist filters; just render on change
   elRunFilter?.addEventListener('input', ()=>{ renderRuns(); });
-  elRunErrOnly?.addEventListener('change', ()=>{ renderRuns(); });
+  elRunErrOnly?.addEventListener('change', ()=>{ refreshEpisodesSnapshot(); });
   document.getElementById('btnRunCopy')?.addEventListener('click', ()=>{ if (runSnapshot) ARW.copy(JSON.stringify(runSnapshot, null, 2)); });
   document.getElementById('btnRunPinA')?.addEventListener('click', ()=>{ if (runSnapshot){ const ta=document.getElementById('cmpA'); if (ta){ ta.value = JSON.stringify(runSnapshot, null, 2); updateCompareLink('text'); } } });
   document.getElementById('btnRunPinB')?.addEventListener('click', ()=>{ if (runSnapshot){ const tb=document.getElementById('cmpB'); if (tb){ tb.value = JSON.stringify(runSnapshot, null, 2); updateCompareLink('text'); } } });
@@ -633,6 +666,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       try{ const lp = projPrefs && projPrefs.lastPath ? String(projPrefs.lastPath) : ''; currentPath=''; pathStack.length=0; loadTree(lp); }
       catch{ loadTree(''); }
     }
+    refreshEpisodesSnapshot();
   }
   async function refreshProjectsSnapshot(){
     try{

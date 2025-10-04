@@ -36,7 +36,8 @@ Microsummary: Public endpoints, admin surfaces, specs, and eventing. Stable/expe
 | GET | `/state/actions` | Recent actions (supports `?limit=`). | beta |
 | GET | `/state/experiments` | Recent experiment events snapshot. | beta |
 | GET | `/state/contributions` | Kernel contributions list (latest 200). | beta |
-| GET | `/state/episodes` | Episode rollups grouped by `corr_id`. | beta |
+| GET | `/state/episodes` | Episode rollups grouped by `corr_id` (duration/errors/kinds metadata + per-event payloads). Supports `?limit=`, `?project=`, `?errors_only=`, `?kind_prefix=`, and `?since=` filters. | beta |
+| GET | `/state/episode/{id}/snapshot` | Snapshot for a single episode with optional `?limit=` to cap events. | beta |
 | GET | `/state/route_stats` | Bus throughput plus per-route counters. | beta |
 | POST | `/leases` | Allocate a capability lease; body supplies `capability`, `scope?`, `ttl_secs?`, `budget?`. | experimental |
 | GET | `/state/leases` | Snapshot of active leases. | experimental |

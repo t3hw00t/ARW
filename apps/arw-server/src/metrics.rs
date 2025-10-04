@@ -66,11 +66,26 @@ pub struct RouteSummary {
     pub ewma_ms: f64,
     pub p95_ms: u64,
     pub max_ms: u64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latency_histogram: Option<RouteHistogram>,
 }
 
 #[derive(Clone, Serialize, Default)]
 pub struct RoutesSummary {
     pub by_path: BTreeMap<String, RouteSummary>,
+}
+
+#[derive(Clone, Serialize, Default)]
+pub struct RouteHistogram {
+    pub sum_ms: f64,
+    pub count: u64,
+    pub buckets: Vec<RouteHistogramBucket>,
+}
+
+#[derive(Clone, Serialize)]
+pub struct RouteHistogramBucket {
+    pub le_ms: Option<f64>,
+    pub count: u64,
 }
 
 #[derive(Clone, Serialize, Default)]
@@ -108,6 +123,7 @@ struct RouteStat {
     max_ms: u64,
     sample: VecDeque<u64>,
     hist: Vec<u64>,
+    total_ms: u128,
 }
 
 impl RouteStat {
@@ -120,6 +136,7 @@ impl RouteStat {
             max_ms: 0,
             sample: VecDeque::with_capacity(SAMPLE_WINDOW),
             hist: vec![0; hist_size],
+            total_ms: 0,
         }
     }
 
@@ -142,6 +159,7 @@ impl RouteStat {
         if let Some(bin) = self.hist.get_mut(bucket) {
             *bin = bin.saturating_add(1);
         }
+        self.total_ms = self.total_ms.saturating_add(ms as u128);
         if !self.sample.is_empty() {
             let mut tmp: Vec<u64> = self.sample.iter().copied().collect();
             tmp.sort_unstable();
@@ -151,13 +169,37 @@ impl RouteStat {
         }
     }
 
-    fn summary(&self) -> RouteSummary {
+    fn summary(&self, bounds_ms: &[u64]) -> RouteSummary {
+        let histogram = if self.hits == 0 {
+            None
+        } else {
+            let mut cumulative = 0u64;
+            let mut buckets = Vec::with_capacity(self.hist.len());
+            for (idx, count) in self.hist.iter().enumerate() {
+                cumulative = cumulative.saturating_add(*count);
+                let le_ms = if idx < bounds_ms.len() {
+                    Some(bounds_ms[idx] as f64)
+                } else {
+                    None
+                };
+                buckets.push(RouteHistogramBucket {
+                    le_ms,
+                    count: cumulative,
+                });
+            }
+            Some(RouteHistogram {
+                sum_ms: self.total_ms as f64,
+                count: self.hits,
+                buckets,
+            })
+        };
         RouteSummary {
             hits: self.hits,
             errors: self.errors,
             ewma_ms: (self.ewma_ms * 10.0).round() / 10.0,
             p95_ms: self.p95_ms,
             max_ms: self.max_ms,
+            latency_histogram: histogram,
         }
     }
 }
@@ -341,7 +383,7 @@ impl Metrics {
             .map(|stats| {
                 let mut out = BTreeMap::new();
                 for (path, stat) in stats.by_path.iter() {
-                    out.insert(path.clone(), stat.summary());
+                    out.insert(path.clone(), stat.summary(&self.hist_buckets));
                 }
                 RoutesSummary { by_path: out }
             })
@@ -513,4 +555,56 @@ pub async fn track_http(
         }
     }
     res
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn route_summary_carries_histogram() {
+        let metrics = Metrics::new();
+        metrics.record_route("/foo", 200, 8);
+        metrics.record_route("/foo", 200, 42);
+        metrics.record_route("/foo", 200, 1200);
+
+        let summary = metrics.snapshot();
+        let route = summary
+            .routes
+            .by_path
+            .get("/foo")
+            .expect("missing route summary");
+
+        let histogram = route
+            .latency_histogram
+            .as_ref()
+            .expect("expected histogram data");
+        assert_eq!(histogram.count, 3);
+        assert!((histogram.sum_ms - 1250.0).abs() < 1e-6);
+
+        let bucket_10 = histogram
+            .buckets
+            .iter()
+            .find(|bucket| bucket.le_ms == Some(10.0))
+            .expect("bucket <=10ms");
+        assert_eq!(bucket_10.count, 1);
+
+        let bucket_50 = histogram
+            .buckets
+            .iter()
+            .find(|bucket| bucket.le_ms == Some(50.0))
+            .expect("bucket <=50ms");
+        assert_eq!(bucket_50.count, 2);
+
+        let bucket_2000 = histogram
+            .buckets
+            .iter()
+            .find(|bucket| bucket.le_ms == Some(2000.0))
+            .expect("bucket <=2000ms");
+        assert_eq!(bucket_2000.count, 3);
+
+        let last_bucket = histogram.buckets.last().expect("expected terminal bucket");
+        assert!(last_bucket.le_ms.is_none());
+        assert_eq!(last_bucket.count, 3);
+    }
 }
