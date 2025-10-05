@@ -273,6 +273,7 @@ mod tests {
             vec![
                 ("ephemeral".to_string(), 256),
                 ("episodic".to_string(), 2048),
+                ("episodic_summary".to_string(), 1024),
                 ("semantic".to_string(), 8192),
                 ("custom".to_string(), 300),
             ]
@@ -284,6 +285,7 @@ mod tests {
             vec![
                 ("ephemeral".to_string(), 256),
                 ("episodic".to_string(), 1024),
+                ("episodic_summary".to_string(), 1024),
                 ("semantic".to_string(), 4096),
                 ("profile".to_string(), 512),
             ]

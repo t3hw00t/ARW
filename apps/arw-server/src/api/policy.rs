@@ -10,7 +10,7 @@ use tokio::fs as afs;
 use utoipa::ToSchema;
 
 use crate::config;
-use crate::{capsule_guard, tools::guardrails, AppState};
+use crate::{capsule_guard, request_ctx, tools::guardrails, AppState};
 use arw_policy::{AbacRequest, Entity};
 use arw_topics as topics;
 use tracing::{info, warn};
@@ -131,6 +131,10 @@ pub struct GuardrailApplyResponse {
     pub path: String,
     pub digest: String,
     pub dry_run: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub corr_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub request_id: Option<String>,
 }
 
 #[utoipa::path(
@@ -188,6 +192,8 @@ pub async fn policy_guardrails_apply(
         .unwrap_or_else(|| crate::util::state_dir().join("configs").join("gating.toml"));
     let dest_display = dest.display().to_string();
 
+    let corr = request_ctx::current();
+
     if !req.dry_run {
         if let Some(parent) = dest.parent() {
             if let Err(err) = afs::create_dir_all(parent).await {
@@ -206,14 +212,24 @@ pub async fn policy_guardrails_apply(
             );
         }
         arw_core::gating::reload_from_config(&dest_display);
-        state.bus().publish(
-            topics::TOPIC_POLICY_GUARDRAILS_APPLIED,
-            &json!({
-                "preset": preset,
-                "path": dest_display,
-                "digest": digest,
-            }),
-        );
+
+        let mut event = json!({
+            "preset": preset,
+            "path": dest_display,
+            "digest": digest,
+        });
+        if let Some(ref corr) = corr {
+            if let Some(obj) = event.as_object_mut() {
+                obj.entry("corr_id".to_string())
+                    .or_insert_with(|| Value::String(corr.corr_id().to_string()));
+                obj.entry("request_id".to_string())
+                    .or_insert_with(|| Value::String(corr.request_id().to_string()));
+            }
+        }
+
+        state
+            .bus()
+            .publish(topics::TOPIC_POLICY_GUARDRAILS_APPLIED, &event);
         if let Err(err) = guardrails::record_applied(preset, &digest, &dest_display).await {
             warn!(%preset, %dest_display, error = %err, "failed to persist guardrail metadata");
         }
@@ -225,6 +241,8 @@ pub async fn policy_guardrails_apply(
         path: dest_display,
         digest,
         dry_run: req.dry_run,
+        corr_id: corr.as_ref().map(|c| c.corr_id().to_string()),
+        request_id: corr.as_ref().map(|c| c.request_id().to_string()),
     })
     .into_response()
 }
@@ -363,5 +381,116 @@ async fn write_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
             }
             result
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_support::{self, env as test_env};
+    use arw_events::Bus;
+    use arw_policy::PolicyEngine;
+    use arw_topics::TOPIC_POLICY_GUARDRAILS_APPLIED;
+    use arw_wasi::NoopHost;
+    use axum::body::{to_bytes, Body};
+    use axum::extract::connect_info::ConnectInfo;
+    use axum::http::{Request, StatusCode};
+    use axum::{middleware, routing::post, Router};
+    use std::net::SocketAddr;
+    use std::sync::Arc;
+    use tempfile::tempdir;
+    use tokio::sync::Mutex;
+    use tokio::time::{timeout, Duration};
+    use tower::ServiceExt;
+
+    async fn build_state(dir: &Path, env_guard: &mut test_env::EnvGuard) -> AppState {
+        test_support::init_tracing();
+        env_guard.set("ARW_STATE_DIR", dir.display().to_string());
+        env_guard.set("ARW_DEBUG", "0");
+
+        let bus = Bus::new_with_replay(64, 64);
+        let kernel = arw_kernel::Kernel::open(dir).expect("init kernel for tests");
+        let policy = PolicyEngine::load_from_env();
+        let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(NoopHost);
+
+        AppState::builder(bus, kernel, policy_handle, host, true)
+            .with_config_state(Arc::new(Mutex::new(json!({ "mode": "test" }))))
+            .with_config_history(Arc::new(Mutex::new(Vec::new())))
+            .with_sse_capacity(64)
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    async fn guardrail_apply_event_carries_correlation_metadata() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret-token");
+        ctx.env
+            .set("ARW_CONFIG_DIR", temp.path().display().to_string());
+        crate::tools::guardrails::reset_last_applied_for_tests();
+
+        let preset_dir = temp.path().join("configs").join("guardrails");
+        std::fs::create_dir_all(&preset_dir).expect("preset dir");
+        std::fs::write(preset_dir.join("demo.toml"), b"# guardrail preset\n")
+            .expect("write preset");
+
+        let state = build_state(temp.path(), &mut ctx.env).await;
+        let bus = state.bus();
+        let mut rx = bus.subscribe_filtered(
+            vec![TOPIC_POLICY_GUARDRAILS_APPLIED.to_string()],
+            Some(4),
+        );
+
+        let app = Router::new()
+            .route(
+                "/policy/guardrails/apply",
+                post(policy_guardrails_apply),
+            )
+            .with_state(state)
+            .layer(middleware::from_fn(crate::security::client_addr_mw))
+            .layer(middleware::from_fn(crate::request_ctx::correlation_mw));
+
+        let body = Body::from(r#"{"preset":"demo","dry_run":false}"#);
+        let mut request = Request::builder()
+            .method("POST")
+            .uri("/policy/guardrails/apply")
+            .header("content-type", "application/json")
+            .header("x-arw-admin", "secret-token")
+            .header("x-request-id", "req-guardrails")
+            .header("x-arw-corr", "corr-guardrails")
+            .body(body)
+            .expect("request");
+        request.extensions_mut().insert(ConnectInfo(SocketAddr::from( (
+            [127, 0, 0, 1],
+            9999,
+        ))));
+
+        let response = app
+            .oneshot(request)
+            .await
+            .expect("response from router");
+        assert_eq!(response.status(), StatusCode::OK);
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("response bytes");
+        let value: Value = serde_json::from_slice(&bytes).expect("response json");
+        assert_eq!(value.get("preset").and_then(Value::as_str), Some("demo"));
+        assert_eq!(value.get("corr_id").and_then(Value::as_str), Some("corr-guardrails"));
+        assert_eq!(
+            value.get("request_id").and_then(Value::as_str),
+            Some("req-guardrails")
+        );
+
+        let event = timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("event available")
+            .expect("bus open");
+        assert_eq!(event.kind, TOPIC_POLICY_GUARDRAILS_APPLIED);
+        assert_eq!(event.payload["preset"].as_str(), Some("demo"));
+        assert_eq!(event.payload["corr_id"].as_str(), Some("corr-guardrails"));
+        assert_eq!(event.payload["request_id"].as_str(), Some("req-guardrails"));
+        assert_eq!(event.payload["digest"].as_str(), value["digest"].as_str());
     }
 }
