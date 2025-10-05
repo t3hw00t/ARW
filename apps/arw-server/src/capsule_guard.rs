@@ -1,5 +1,4 @@
-use std::collections::hash_map::Entry;
-use std::collections::HashMap;
+use std::collections::{hash_map::Entry, HashMap, HashSet};
 use std::sync::Arc;
 
 use axum::body::Body;
@@ -22,7 +21,7 @@ use arw_protocol::GatingCapsule;
 use crate::{read_models, tasks::TaskHandle, AppState};
 use arw_topics::{
     TOPIC_POLICY_CAPSULE_APPLIED, TOPIC_POLICY_CAPSULE_EXPIRED, TOPIC_POLICY_CAPSULE_FAILED,
-    TOPIC_POLICY_DECISION,
+    TOPIC_POLICY_CAPSULE_TEARDOWN, TOPIC_POLICY_DECISION,
 };
 
 pub const CAPSULE_EXPIRING_SOON_WINDOW_MS: u64 = 60_000;
@@ -75,6 +74,31 @@ struct CapsuleStatusInfo {
     renew_window_start_ms: Option<u64>,
     renew_window_started: bool,
     expired_since_ms: Option<u64>,
+}
+
+pub struct CapsuleTeardownOutcome {
+    pub removed: Vec<Value>,
+    pub not_found: Vec<String>,
+    pub remaining: usize,
+    pub dry_run: bool,
+    pub reason: Option<String>,
+}
+
+pub struct CapsuleTeardownSpec<'a> {
+    pub selection: CapsuleTeardownSelection<'a>,
+    pub reason: Option<&'a str>,
+    pub dry_run: bool,
+}
+
+pub enum CapsuleTeardownSelection<'a> {
+    All,
+    Ids(&'a [String]),
+}
+
+pub(crate) struct CapsuleStoreTeardown {
+    removed: Vec<CapsuleSnapshot>,
+    not_found: Vec<String>,
+    remaining: usize,
 }
 
 impl CapsuleSnapshot {
@@ -287,6 +311,51 @@ impl CapsuleStore {
         })
     }
 
+    pub(crate) async fn teardown(
+        &self,
+        selection: &CapsuleTeardownSelection<'_>,
+        dry_run: bool,
+    ) -> CapsuleStoreTeardown {
+        let mut guard = self.inner.lock().await;
+        let mut removed: Vec<CapsuleSnapshot> = Vec::new();
+        let mut not_found: Vec<String> = Vec::new();
+
+        match selection {
+            CapsuleTeardownSelection::All => {
+                removed.extend(guard.values().map(|entry| entry.snapshot.clone()));
+                if !dry_run {
+                    guard.clear();
+                }
+            }
+            CapsuleTeardownSelection::Ids(ids) => {
+                let mut seen: HashSet<&str> = HashSet::new();
+                for id in ids.iter() {
+                    if !seen.insert(id.as_str()) {
+                        continue;
+                    }
+                    if dry_run {
+                        match guard.get(id.as_str()) {
+                            Some(entry) => removed.push(entry.snapshot.clone()),
+                            None => not_found.push(id.clone()),
+                        }
+                    } else {
+                        match guard.remove(id.as_str()) {
+                            Some(entry) => removed.push(entry.snapshot),
+                            None => not_found.push(id.clone()),
+                        }
+                    }
+                }
+            }
+        }
+
+        let remaining = guard.len();
+        CapsuleStoreTeardown {
+            removed,
+            not_found,
+            remaining,
+        }
+    }
+
     pub async fn replay_all(&self) -> ReplayOutcome {
         let now = now_ms();
         let mut guard = self.inner.lock().await;
@@ -459,6 +528,52 @@ pub async fn refresh_capsules(state: &AppState) -> ReplayOutcome {
         read_models::publish_read_model_patch(&state.bus(), "policy_capsules", &snapshot);
     }
     replay
+}
+
+pub async fn emergency_teardown(
+    state: &AppState,
+    spec: &CapsuleTeardownSpec<'_>,
+) -> CapsuleTeardownOutcome {
+    let store = state.capsules();
+    let CapsuleStoreTeardown {
+        removed: removed_snapshots,
+        not_found,
+        remaining,
+    } = store.teardown(&spec.selection, spec.dry_run).await;
+
+    let now = now_ms();
+    let reason = spec
+        .reason
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    let removed_values: Vec<Value> = removed_snapshots
+        .iter()
+        .map(|snapshot| snapshot.to_json(now))
+        .collect();
+
+    if !spec.dry_run && !removed_values.is_empty() {
+        for value in removed_values.iter() {
+            let mut event = value.clone();
+            if let Some(map) = event.as_object_mut() {
+                map.insert("removed_ms".into(), Value::Number(now.into()));
+                if let Some(reason_text) = reason.as_ref() {
+                    map.insert("removed_reason".into(), Value::String(reason_text.clone()));
+                }
+            }
+            state.bus().publish(TOPIC_POLICY_CAPSULE_TEARDOWN, &event);
+        }
+        let snapshot = store.snapshot().await;
+        read_models::publish_read_model_patch(&state.bus(), "policy_capsules", &snapshot);
+    }
+
+    CapsuleTeardownOutcome {
+        removed: removed_values,
+        not_found,
+        remaining,
+        dry_run: spec.dry_run,
+        reason,
+    }
 }
 
 fn refresh_max_wait_ms() -> u64 {
@@ -1144,6 +1259,90 @@ mod tests {
         let items = snapshot["items"].as_array().expect("items array");
         assert_eq!(items.len(), 1);
         assert_eq!(items[0]["remaining_hops"].as_u64(), Some(1));
+    }
+
+    #[tokio::test]
+    async fn emergency_teardown_removes_capsules_and_publishes_events() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let bus = state.bus();
+        let mut rx = bus.subscribe_filtered(
+            vec![
+                TOPIC_POLICY_CAPSULE_TEARDOWN.to_string(),
+                TOPIC_READMODEL_PATCH.to_string(),
+            ],
+            Some(8),
+        );
+
+        let capsule = sample_capsule("teardown-test");
+        state.capsules().adopt(&capsule, now_ms()).await;
+
+        let ids = vec![String::from("teardown-test")];
+        let spec = CapsuleTeardownSpec {
+            selection: CapsuleTeardownSelection::Ids(&ids),
+            reason: Some(" manual cleanup "),
+            dry_run: false,
+        };
+        let outcome = emergency_teardown(&state, &spec).await;
+        assert_eq!(outcome.removed.len(), 1);
+        assert_eq!(outcome.not_found.len(), 0);
+        assert_eq!(outcome.remaining, 0);
+        assert_eq!(outcome.reason.as_deref(), Some("manual cleanup"));
+
+        let teardown_evt = timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("teardown event available")
+            .expect("bus open");
+        assert_eq!(teardown_evt.kind, TOPIC_POLICY_CAPSULE_TEARDOWN);
+        assert_eq!(teardown_evt.payload["id"].as_str(), Some("teardown-test"));
+        assert_eq!(
+            teardown_evt.payload["removed_reason"].as_str(),
+            Some("manual cleanup")
+        );
+
+        let patch_evt = timeout(Duration::from_secs(1), rx.recv())
+            .await
+            .expect("patch event available")
+            .expect("bus open");
+        assert_eq!(patch_evt.kind, TOPIC_READMODEL_PATCH);
+        assert_eq!(patch_evt.payload["id"].as_str(), Some("policy_capsules"));
+
+        let snapshot = state.capsules().snapshot().await;
+        assert_eq!(snapshot["count"].as_u64(), Some(0));
+    }
+
+    #[tokio::test]
+    async fn emergency_teardown_dry_run_has_no_side_effects() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let bus = state.bus();
+        let mut rx =
+            bus.subscribe_filtered(vec![TOPIC_POLICY_CAPSULE_TEARDOWN.to_string()], Some(4));
+
+        let capsule = sample_capsule("dry-run-test");
+        state.capsules().adopt(&capsule, now_ms()).await;
+
+        let spec = CapsuleTeardownSpec {
+            selection: CapsuleTeardownSelection::All,
+            reason: Some("preview"),
+            dry_run: true,
+        };
+        let outcome = emergency_teardown(&state, &spec).await;
+        assert!(outcome.dry_run);
+        assert_eq!(outcome.removed.len(), 1);
+        assert_eq!(outcome.remaining, 1);
+
+        let snapshot = state.capsules().snapshot().await;
+        assert_eq!(snapshot["count"].as_u64(), Some(1));
+
+        // Expect no teardown events during dry-run
+        assert!(timeout(Duration::from_millis(150), rx.recv())
+            .await
+            .is_err());
     }
 
     #[tokio::test]

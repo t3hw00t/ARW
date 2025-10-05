@@ -293,6 +293,7 @@ Layered principals align policies, storage, and audit scopes to User, Project, a
   - `policy.decision`
   - `policy.capsule.applied`
   - `policy.capsule.failed`
+  - `policy.capsule.teardown`
 - Env:
   - `ARW_SECURITY_POSTURE`
 - References:

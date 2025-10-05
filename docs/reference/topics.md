@@ -165,6 +165,7 @@ Related docs:
 | `policy.capsule.applied` | `TOPIC_POLICY_CAPSULE_APPLIED` |
 | `policy.capsule.failed` | `TOPIC_POLICY_CAPSULE_FAILED` |
 | `policy.capsule.expired` | `TOPIC_POLICY_CAPSULE_EXPIRED` |
+| `policy.capsule.teardown` | `TOPIC_POLICY_CAPSULE_TEARDOWN` |
 | `policy.guardrails.applied` | `TOPIC_POLICY_GUARDRAILS_APPLIED` |
 | `leases.created` | `TOPIC_LEASES_CREATED` |
 

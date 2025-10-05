@@ -8,7 +8,7 @@ use clap::{Args, Parser, Subcommand, ValueEnum};
 use json_patch::{patch as apply_json_patch, Patch as JsonPatch};
 use rand::RngCore;
 use reqwest::{blocking::Client, header::ACCEPT, StatusCode};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value as JsonValue};
 use sha2::Digest;
 use std::collections::{BTreeMap, HashSet, VecDeque};
@@ -171,6 +171,8 @@ enum CapCmd {
     VerifyEd25519(VerifyArgs),
     /// Fetch active policy capsules from the server
     Status(CapsuleStatusArgs),
+    /// Emergency teardown for active policy capsules
+    Teardown(CapsuleTeardownArgs),
 }
 
 #[derive(Args)]
@@ -401,6 +403,60 @@ struct CapsuleStatusArgs {
     /// Number of capsules to display (text mode only)
     #[arg(long, default_value_t = 5)]
     limit: usize,
+}
+
+#[derive(Args, Clone)]
+struct CapsuleTeardownArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Capsule ID to remove (repeat for multiple). Use --all to remove every capsule.
+    #[arg(long, value_name = "ID")]
+    id: Vec<String>,
+    /// Remove every capsule regardless of ID
+    #[arg(long)]
+    all: bool,
+    /// Optional operator reason recorded with events
+    #[arg(long)]
+    reason: Option<String>,
+    /// Preview without removing capsules
+    #[arg(long)]
+    dry_run: bool,
+    /// Timeout seconds
+    #[arg(long, default_value_t = 10)]
+    timeout: u64,
+    /// Emit raw JSON instead of text
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+}
+
+#[derive(Serialize)]
+struct CapsuleTeardownPayload {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    ids: Vec<String>,
+    all: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
+    dry_run: bool,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct CapsuleTeardownResponseDto {
+    ok: bool,
+    #[serde(default)]
+    removed: Vec<JsonValue>,
+    #[serde(default)]
+    not_found: Vec<String>,
+    remaining: usize,
+    dry_run: bool,
+    #[serde(default)]
+    reason: Option<String>,
 }
 
 #[derive(Args)]
@@ -913,6 +969,12 @@ fn main() {
             }
             CapCmd::Status(args) => {
                 if let Err(e) = cmd_capsule_status(&args) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
+            }
+            CapCmd::Teardown(args) => {
+                if let Err(e) = cmd_capsule_teardown(&args) {
                     eprintln!("{}", e);
                     std::process::exit(1);
                 }
@@ -4141,6 +4203,132 @@ fn cmd_capsule_status(args: &CapsuleStatusArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn cmd_capsule_teardown(args: &CapsuleTeardownArgs) -> Result<()> {
+    if !args.all && args.id.is_empty() {
+        bail!("provide --all or at least one --id");
+    }
+
+    let mut seen = HashSet::new();
+    let mut ids: Vec<String> = Vec::new();
+    for raw in &args.id {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if seen.insert(trimmed.to_string()) {
+            ids.push(trimmed.to_string());
+        }
+    }
+    if !args.all && ids.is_empty() {
+        bail!("all provided --id values were blank; specify --all or valid ids");
+    }
+
+    let reason = args
+        .reason
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+
+    let payload = CapsuleTeardownPayload {
+        ids,
+        all: args.all,
+        reason,
+        dry_run: args.dry_run,
+    };
+
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let token = resolve_admin_token(&args.admin_token);
+    let base = args.base.trim_end_matches('/');
+    let url = format!("{}/admin/policy/capsules/teardown", base);
+    let resp = with_admin_headers(client.post(&url).json(&payload), token.as_deref())
+        .send()
+        .with_context(|| format!("requesting {}", url))?;
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let text = resp.text().unwrap_or_default();
+        bail!("server returned {}: {}", status, text.trim());
+    }
+
+    let response: CapsuleTeardownResponseDto =
+        resp.json().context("parsing capsule teardown response")?;
+
+    if args.json {
+        let value = serde_json::to_value(&response)?;
+        if args.pretty {
+            println!("{}", serde_json::to_string_pretty(&value)?);
+        } else {
+            println!("{}", serde_json::to_string(&value)?);
+        }
+        return Ok(());
+    }
+
+    if response.dry_run {
+        println!("Dry-run preview — no capsules removed.");
+    } else {
+        println!("Emergency teardown completed.");
+    }
+    if let Some(reason) = response.reason.as_ref() {
+        println!("Reason: {}", reason);
+    }
+    println!("Remaining active capsules: {}", response.remaining);
+
+    if !response.removed.is_empty() {
+        let noun = if response.dry_run {
+            "Would remove"
+        } else {
+            "Removed"
+        };
+        println!("{} capsules ({}):", noun, response.removed.len());
+        for entry in &response.removed {
+            println!("  - {}", summarize_teardown_capsule(entry));
+        }
+    } else if !response.dry_run {
+        println!("Removed capsules: none");
+    }
+
+    if !response.not_found.is_empty() {
+        println!(
+            "Not found ({}): {}",
+            response.not_found.len(),
+            response.not_found.join(", ")
+        );
+    }
+
+    Ok(())
+}
+
+fn summarize_teardown_capsule(value: &JsonValue) -> String {
+    let id = value
+        .get("id")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("capsule");
+    let version = value
+        .get("version")
+        .and_then(JsonValue::as_str)
+        .unwrap_or("?");
+    let status = value
+        .get("status_label")
+        .and_then(JsonValue::as_str)
+        .or_else(|| value.get("status").and_then(JsonValue::as_str))
+        .unwrap_or("status unknown");
+    let lease = value
+        .get("lease_until")
+        .and_then(JsonValue::as_str)
+        .map(|s| format!("lease until {}", s))
+        .or_else(|| {
+            value
+                .get("lease_until_ms")
+                .and_then(JsonValue::as_u64)
+                .map(|ms| format!("lease ms {}", ms))
+        })
+        .unwrap_or_else(|| "no lease".to_string());
+    format!("{} v{} :: {} ({})", id, version, status, lease)
 }
 
 fn format_status_label(raw: &str) -> String {

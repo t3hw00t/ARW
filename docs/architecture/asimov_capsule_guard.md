@@ -18,6 +18,7 @@ The Asimov Capsule Guard turns the "mind virus" idea into an enforceable feature
 - ✅ `gating::adopt_capsule` keeps capsule denies and contracts in a runtime lease layer instead of the immutable hierarchy list, so guardrails expire or renew without a restart.【F:crates/arw-core/src/gating.rs†L248-L353】
 - ✅ The Regulatory Provenance Unit returns a lease outcome and the middleware emits `policy.capsule.applied` and `policy.capsule.expired`; the capsules read model now patches only when the underlying state changes (new capsule, hop countdown, or expiry) to avoid noisy updates.【F:crates/arw-core/src/rpu.rs†L205-L220】【F:apps/arw-server/src/capsule_guard.rs†L257-L279】
 - ✅ Operators can run `arw-cli capsule status` to fetch `/state/policy/capsules` with renewal windows, accessibility hints, and expiry countdowns for quick audits.
+- ✅ Emergency teardown hooks live at `/admin/policy/capsules/teardown` and in `arw-cli capsule teardown`, publishing `policy.capsule.teardown` events for audits before patching the read-model.
 - ⚠️ Capsule propagation still needs tighter integration with downstream executors (connectors, logic units) so every tool hop refreshes leases automatically.
 
 The remaining gap is operational coverage: workers and higher-level runners still require passive refresh hooks so a capsule keeps renewing even when no HTTP request crosses the middleware.
@@ -45,7 +46,7 @@ The remaining gap is operational coverage: workers and higher-level runners stil
 
 ### Phase 3 — UX & Operational Controls
 1. ⏭ (Backlog) Add UI toggles to treat capsules as posture presets (e.g., "Strict Egress"), showing TTL countdowns and renewal status.
-2. ⏭ (Backlog) Provide CLI/admin endpoints to mint, inspect, and revoke capsules—including emergency teardown hooks for misconfigurations.
+2. ✅ Provide CLI/admin endpoints to mint, inspect, and revoke capsules—including emergency teardown hooks for misconfigurations (`/admin/policy/capsules/teardown`, `arw-cli capsule teardown`).
 3. ⏭ (Backlog) Document deployment patterns: seeding base capsules via `configs/gating.toml` or env vars, layering runtime capsules for incidents, and rolling keys via the trust store.
 
 ## Dependencies & Interactions

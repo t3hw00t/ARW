@@ -138,7 +138,7 @@ _Grant capabilities with leases, previews, and clear denials before anything lea
 - **Identity & Tenancy** · workspace / operators / governance / beta
   Layered principals align policies, storage, and audit scopes to User, Project, and AgentInstance boundaries.
   _Routes_: `GET /state/policy`
-  _Signals_: `policy.decision`, `policy.capsule.applied`, `policy.capsule.failed`
+_Signals_: `policy.decision`, `policy.capsule.applied`, `policy.capsule.failed`, `policy.capsule.teardown`
   _Env_: `ARW_SECURITY_POSTURE`
   _Source_: [apps/arw-server/src/capsule_guard.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/capsule_guard.rs), [crates/arw-core/src/gating.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/src/gating.rs)
   _References_: [architecture/identity_tenancy.md](../architecture/identity_tenancy.md), [guide/policy_permissions.md](../guide/policy_permissions.md), [architecture/capability_consent_ledger.md](../architecture/capability_consent_ledger.md)

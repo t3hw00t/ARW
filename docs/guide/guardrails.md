@@ -57,3 +57,4 @@ curl -sS localhost:8091/admin/tools/run \
 
 - The tool participates in the Action Cache, so identical inputs with the same policy signature are cached.
 - Use policy capsules/gating to control where and when guardrails are applied in your flows.
+- For emergency rollbacks, use `arw-cli capsule teardown` (or POST `/admin/policy/capsules/teardown`) to revoke one or all capsules; add `--dry-run` first to preview.

@@ -113,6 +113,7 @@ pub const TOPIC_POLICY_RELOADED: &str = "policy.reloaded";
 pub const TOPIC_POLICY_CAPSULE_APPLIED: &str = "policy.capsule.applied";
 pub const TOPIC_POLICY_CAPSULE_FAILED: &str = "policy.capsule.failed";
 pub const TOPIC_POLICY_CAPSULE_EXPIRED: &str = "policy.capsule.expired";
+pub const TOPIC_POLICY_CAPSULE_TEARDOWN: &str = "policy.capsule.teardown";
 pub const TOPIC_POLICY_GUARDRAILS_APPLIED: &str = "policy.guardrails.applied";
 pub const TOPIC_LEASES_CREATED: &str = "leases.created";
 

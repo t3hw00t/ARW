@@ -60,6 +60,13 @@ Policy Capsules
   - Save signature to file: `... --out signature.txt`
 - Verify a signature
   - `arw-cli capsule verify-ed25519 <pk_b64> <capsule.json> <sig_b64>` — prints `ok` if valid (capsule’s `signature` field is ignored for verification)
+- Inspect active capsules
+  - `arw-cli capsule status --limit 10`
+  - JSON mode: `arw-cli capsule status --json --pretty`
+- Emergency teardown (admin)
+  - Preview: `arw-cli capsule teardown --id capsule-http --dry-run`
+  - Remove all: `arw-cli capsule teardown --all --reason "reset misconfigured policy"`
+  - Combine with `--json` to capture audit log entries.
 
 Shell Completions
 - Generate completions for your shell and either print to stdout or write to a directory:

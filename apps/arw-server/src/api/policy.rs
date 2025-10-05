@@ -4,15 +4,16 @@ use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use sha2::{Digest, Sha256};
+use std::collections::HashSet;
 use std::path::Path;
 use tokio::fs as afs;
 use utoipa::ToSchema;
 
 use crate::config;
-use crate::{tools::guardrails, AppState};
+use crate::{capsule_guard, tools::guardrails, AppState};
 use arw_policy::{AbacRequest, Entity};
 use arw_topics as topics;
-use tracing::warn;
+use tracing::{info, warn};
 
 /// Current ABAC policy snapshot.
 #[utoipa::path(
@@ -224,6 +225,118 @@ pub async fn policy_guardrails_apply(
         path: dest_display,
         digest,
         dry_run: req.dry_run,
+    })
+    .into_response()
+}
+
+#[derive(Deserialize, ToSchema)]
+pub struct CapsuleTeardownRequest {
+    #[serde(default)]
+    pub ids: Vec<String>,
+    #[serde(default)]
+    pub all: bool,
+    #[serde(default)]
+    pub reason: Option<String>,
+    #[serde(default)]
+    pub dry_run: bool,
+}
+
+#[derive(Serialize, ToSchema)]
+pub struct CapsuleTeardownResponse {
+    pub ok: bool,
+    pub removed: Vec<Value>,
+    pub not_found: Vec<String>,
+    pub remaining: usize,
+    pub dry_run: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+}
+
+/// Emergency teardown for active policy capsules.
+#[utoipa::path(
+    post,
+    path = "/admin/policy/capsules/teardown",
+    tag = "Policy",
+    request_body = CapsuleTeardownRequest,
+    responses(
+        (status = 200, description = "Teardown result", body = CapsuleTeardownResponse),
+        (status = 400, description = "Invalid request", body = arw_protocol::ProblemDetails),
+        (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails)
+    )
+)]
+pub async fn policy_capsules_teardown(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<CapsuleTeardownRequest>,
+) -> impl IntoResponse {
+    if let Err(resp) = crate::responses::require_admin(&headers) {
+        return *resp;
+    }
+
+    let mut ids_clean: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    for raw in req.ids {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if seen.insert(trimmed.to_string()) {
+            ids_clean.push(trimmed.to_string());
+        }
+    }
+
+    let selection = if req.all {
+        capsule_guard::CapsuleTeardownSelection::All
+    } else {
+        if ids_clean.is_empty() {
+            return crate::responses::problem_response(
+                axum::http::StatusCode::BAD_REQUEST,
+                "Bad Request",
+                Some("provide `all`: true or at least one capsule id"),
+            );
+        }
+        capsule_guard::CapsuleTeardownSelection::Ids(&ids_clean)
+    };
+
+    let spec = capsule_guard::CapsuleTeardownSpec {
+        selection,
+        reason: req.reason.as_deref(),
+        dry_run: req.dry_run,
+    };
+
+    let capsule_guard::CapsuleTeardownOutcome {
+        removed,
+        not_found,
+        remaining,
+        dry_run,
+        reason,
+    } = capsule_guard::emergency_teardown(&state, &spec).await;
+
+    if dry_run {
+        info!(
+            target: "arw::policy",
+            planned = removed.len(),
+            missing = not_found.len(),
+            reason = reason.as_deref().unwrap_or(""),
+            "policy capsule teardown dry-run"
+        );
+    } else {
+        warn!(
+            target: "arw::policy",
+            removed = removed.len(),
+            missing = not_found.len(),
+            reason = reason.as_deref().unwrap_or(""),
+            "policy capsule emergency teardown executed"
+        );
+    }
+
+    Json(CapsuleTeardownResponse {
+        ok: true,
+        removed,
+        not_found,
+        remaining,
+        dry_run,
+        reason,
     })
     .into_response()
 }

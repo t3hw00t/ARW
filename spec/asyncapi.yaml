@@ -824,6 +824,16 @@ channels:
         payload:
           type: object
           additionalProperties: true
+  'policy.capsule.teardown':
+    subscribe:
+      operationId: policy_capsule_teardown_event
+      summary: "policy.capsule.teardown event"
+      description: "Event published on 'policy.capsule.teardown' channel."
+      message:
+        name: 'policy.capsule.teardown'
+        payload:
+          type: object
+          additionalProperties: true
   'policy.decision':
     subscribe:
       operationId: policy_decision_event

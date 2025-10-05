@@ -82,6 +82,7 @@ Event model
   - `screenshots.captured` includes `{ path, width, height, preview_b64? }` for Activity lane/Gallery thumbnails.
   - `egress.ledger.appended` includes `{ id?, decision, reason?, dest_host?, dest_port?, protocol?, bytes_in?, bytes_out?, corr_id?, proj?, posture }`.
  - RPU trust change: `rpu.trust.changed` (payload includes `{count, path?, ts_ms}`)
+  - Capsule lifecycle: `policy.capsule.applied`, `policy.capsule.expired`, `policy.capsule.failed`, and `policy.capsule.teardown` (includes `{id, version, issuer?, removed_ms?, removed_reason?}`).
 
 Note: event kinds are normalized. Legacy `Models.*` forms have been removed.
 - See Explanations → Events Vocabulary for the canonical list. For source‑of‑truth topic names used by the service, see `crates/arw-topics/src/lib.rs`.

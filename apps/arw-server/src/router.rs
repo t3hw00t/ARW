@@ -172,6 +172,7 @@ pub(crate) mod paths {
     pub const POLICY_RELOAD: &str = "/policy/reload";
     pub const POLICY_SIMULATE: &str = "/policy/simulate";
     pub const POLICY_GUARDRAILS_APPLY: &str = "/policy/guardrails/apply";
+    pub const ADMIN_POLICY_CAPSULES_TEARDOWN: &str = "/admin/policy/capsules/teardown";
     pub const STATE_MODELS: &str = "/state/models";
     pub const STATE_MODELS_METRICS: &str = "/state/models_metrics";
     pub const STATE_OBSERVATIONS: &str = "/state/observations";
@@ -1038,6 +1039,11 @@ fn register_admin_management_routes(builder: &mut RouterBuilder) {
     builder.route_post(
         paths::ADMIN_FEEDBACK_ROLLBACK,
         api::feedback::feedback_rollback,
+        Some(Stability::Experimental),
+    );
+    builder.route_post(
+        paths::ADMIN_POLICY_CAPSULES_TEARDOWN,
+        api::policy::policy_capsules_teardown,
         Some(Stability::Experimental),
     );
     builder.route_post(
