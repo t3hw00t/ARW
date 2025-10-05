@@ -656,9 +656,11 @@ window.ARW = {
     _lastId: null,
     _connected: false,
     _status: 'idle',
+    _statusChangedAt: null,
     _last: null,
     _lastRaw: null,
     _lastKind: null,
+    _lastEventAt: null,
     _base: null,
     _opts: null,
     _mode: 'eventsource',
@@ -666,10 +668,12 @@ window.ARW = {
     _retryTimer: null,
     _closing: false,
     _abortController: null,
+    _maxRetryMs: 5000,
     _updateStatus(status, extra){
       this._status = status;
+      this._statusChangedAt = Date.now();
       try{ if (document && document.body) document.body.setAttribute('data-sse-status', status); }catch{}
-      const payload = { status, ...(extra||{}) };
+      const payload = { status, changedAt: this._statusChangedAt, ...(extra||{}) };
       this._emit('*status*', payload);
     },
     _url(baseUrl, opts, afterId){
@@ -694,6 +698,8 @@ window.ARW = {
       const baseChanged = typeof prevBase === 'string' && prevBase !== baseUrl;
       this._base = baseUrl;
       this._opts = { ...(opts || {}) };
+      const maxRetry = Number(this._opts.maxRetryMs);
+      this._maxRetryMs = Number.isFinite(maxRetry) && maxRetry > 0 ? maxRetry : 5000;
       if (baseChanged) {
         this._lastId = null;
       }
@@ -729,12 +735,14 @@ window.ARW = {
       };
       es.onerror = () => {
         this._connected = false;
-        const ms = Math.min(this._retryMs, 5000);
+        const cap = this._maxRetryMs;
+        const ms = Math.min(this._retryMs, cap);
         const closing = this._closing;
         this._emit('*error*', {});
         this._updateStatus(closing ? 'closed' : 'error', closing ? {} : { retryIn: ms });
         if (!closing) {
           this._scheduleReconnect(ms);
+          this._retryMs = Math.min(ms * 2, cap);
         }
       };
       es.onmessage = (ev) => {
@@ -820,6 +828,7 @@ window.ARW = {
       let dataLines = [];
       let eventName = null;
       let lastId = null;
+      let retryMs = null;
       for (const rawLine of lines) {
         const line = rawLine.trimEnd();
         if (!line || line.startsWith(':')) continue;
@@ -829,10 +838,20 @@ window.ARW = {
           eventName = line.slice(6).trimStart();
         } else if (line.startsWith('id:')) {
           lastId = line.slice(3).trimStart();
+        } else if (line.startsWith('retry:')) {
+          const parsed = Number(line.slice(6).trim());
+          if (Number.isFinite(parsed) && parsed >= 0) {
+            retryMs = parsed;
+          }
         }
       }
       if (lastId) {
         this._lastId = lastId;
+      }
+      if (retryMs != null) {
+        const cap = this._maxRetryMs;
+        const clamped = Math.max(250, Math.min(retryMs, cap));
+        this._retryMs = clamped;
       }
       const payloadRaw = dataLines.join('\n');
       if (!payloadRaw) return;
@@ -843,19 +862,22 @@ window.ARW = {
       this._last = data;
       this._lastRaw = payloadRaw;
       this._lastKind = kind;
+      this._lastEventAt = Date.now();
       this._emit(kind, data);
     },
     _handleFetchError(err){
       console.warn('SSE fetch error', err?.message || err);
       this._connected = false;
-      const ms = Math.min(this._retryMs, 5000);
+      const cap = this._maxRetryMs;
+      const ms = Math.min(this._retryMs, cap);
       const closing = this._closing;
       this._emit('*error*', { error: err });
       this._updateStatus(closing ? 'closed' : 'error', closing ? {} : { retryIn: ms });
       this._abortController = null;
       if (!closing) {
         this._scheduleReconnect(ms);
-        this._retryMs = Math.min(ms * 2, 5000);
+        const next = Math.min(ms * 2, cap);
+        this._retryMs = Math.max(this._retryMs, next);
       }
     },
     _scheduleReconnect(ms){
@@ -882,26 +904,107 @@ window.ARW = {
       const node = typeof target === 'string' ? document.getElementById(target) : target;
       if (!node) return { dispose(){} };
       const self = this;
-      try{ if (!node.dataset.indicator) node.dataset.indicator = 'sse'; }catch{}
-      const labels = Object.assign({ open:'on', connecting:'connecting', idle:'off', error:'retrying', closed:'off' }, opts.labels || {});
+      try{
+        if (!node.dataset.indicator) node.dataset.indicator = 'sse';
+        node.classList.add('badge');
+        node.classList.add('sse-badge');
+        if (typeof node.getAttribute !== 'function' || node.getAttribute('role') == null) {
+          node.setAttribute('role', 'status');
+        }
+        if (typeof node.getAttribute !== 'function' || node.getAttribute('aria-live') == null) {
+          node.setAttribute('aria-live', 'polite');
+        }
+      }catch{}
+      const labels = Object.assign({
+        open: 'Connected',
+        stale: 'Connected',
+        connecting: 'Connecting…',
+        idle: 'Idle',
+        error: 'Retrying…',
+        closed: 'Offline',
+      }, opts.labels || {});
       const prefix = opts.prefix === undefined ? (node.dataset.ssePrefix ?? 'SSE') : opts.prefix;
       const renderOpt = typeof opts.render === 'function' ? opts.render : null;
-      const render = (status, info) => {
-        try{ node.dataset.state = status; }catch{}
-        if (renderOpt) { renderOpt(node, status, info, { labels, prefix }); return; }
-        const label = labels[status] ?? labels.default ?? status;
-        if (prefix) node.textContent = `${prefix}: ${label}`;
-        else node.textContent = label;
+      const formatMs = (ms) => {
+        if (!Number.isFinite(ms) || ms <= 0) return '';
+        if (ms < 1000) return `${Math.round(ms)}ms`;
+        if (ms < 2000) return `${(ms / 1000).toFixed(2)}s`;
+        if (ms < 5000) return `${(ms / 1000).toFixed(1)}s`;
+        if (ms < 60000) return `${Math.round(ms / 1000)}s`;
+        const mins = Math.round(ms / 60000);
+        return `${mins}m`;
       };
-      const subId = this.subscribe('*status*', ({ env }) => render(env?.status || 'idle', env));
-      render(this.status(), { status: this.status() });
-      return { dispose(){ self.unsubscribe(subId); } };
+      const relativeTime = (timestamp) => {
+        if (!Number.isFinite(timestamp)) return '';
+        const diff = Date.now() - timestamp;
+        if (diff < 0) return '';
+        if (diff < 2000) return 'active now';
+        if (diff < 60000) return `${Math.round(diff / 1000)}s ago`;
+        if (diff < 3600000) return `${Math.round(diff / 60000)}m ago`;
+        return `${Math.round(diff / 3600000)}h ago`;
+      };
+      const staleMsRaw = Number(opts.staleMs);
+      const staleMs = Number.isFinite(staleMsRaw) && staleMsRaw > 0 ? staleMsRaw : 20000;
+      const render = (status, info = {}) => {
+        const now = Date.now();
+        const last = self.lastEventAt();
+        const age = Number.isFinite(last) ? now - last : null;
+        const isStale = status === 'open' && staleMs && Number.isFinite(age) && age >= staleMs;
+        const badgeState = isStale ? 'stale' : status;
+        try{ node.dataset.state = badgeState; }catch{}
+        if (renderOpt) { renderOpt(node, status, info, { labels, prefix, stale: isStale, age }); return; }
+        const labelKey = (badgeState in labels) ? badgeState : status;
+        const label = labels[labelKey] ?? labels.default ?? badgeState;
+        const parts = [];
+        if (prefix) parts.push(`${prefix}: ${label}`);
+        else parts.push(label);
+        let detail = '';
+        if ((status === 'error' || status === 'connecting') && Number.isFinite(info.retryIn)) {
+          detail = `retry in ${formatMs(info.retryIn)}`;
+        } else if (status === 'open') {
+          const rel = relativeTime(last);
+          if (rel) detail = `last event ${rel}`;
+        } else if (status === 'idle' && info.changedAt) {
+          const rel = relativeTime(info.changedAt);
+          if (rel) detail = `since ${rel}`;
+        }
+        if (isStale) {
+          detail = detail ? `${detail} (stale)` : 'stale';
+        }
+        if (detail) parts.push(`· ${detail}`);
+        const text = parts.join(' ');
+        node.textContent = text;
+        node.title = text;
+        try { node.setAttribute('aria-label', text); } catch {}
+      };
+      const refreshMsRaw = Number(opts.refreshMs);
+      const refreshMs = Number.isFinite(refreshMsRaw) && refreshMsRaw >= 500 ? refreshMsRaw : 5000;
+      let lastStatus = this.status();
+      let lastEnv = { status: lastStatus, changedAt: this._statusChangedAt };
+      const tick = () => {
+        render(lastStatus, lastEnv || {});
+      };
+      const subId = this.subscribe('*status*', ({ env }) => {
+        lastStatus = env?.status || 'idle';
+        lastEnv = env || {};
+        tick();
+      });
+      tick();
+      const timer = setInterval(() => {
+        try { tick(); } catch {}
+      }, refreshMs);
+      return { dispose(){
+        try { clearInterval(timer); } catch {}
+        self.unsubscribe(subId);
+      } };
     },
     status(){
       try{ if (document && document.body) document.body.setAttribute('data-sse-status', this._status); }catch{}
       return this._status;
     },
-    last(){ return { kind: this._lastKind, data: this._last, raw: this._lastRaw }; },
+    last(){ return { kind: this._lastKind, data: this._last, raw: this._lastRaw, at: this._lastEventAt }; },
+    lastEventAt(){ return this._lastEventAt; },
+    statusChangedAt(){ return this._statusChangedAt; },
     subscribe(filter, cb) {
       const id = this._nextId++;
       this._subs.set(id, { filter, cb });

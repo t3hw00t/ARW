@@ -101,3 +101,4 @@ Tips
 - Stitch episodes using `corr_id` on each event.
 - Use `?prefix=` to scope dashboards without client-side filtering cost.
 - For production, proxy and secure `/events` endpoints behind admin access; do not expose publicly.
+- Launcher windows surface the SSE badge state and reuse the last journal id (`after`) on reconnect; the client now honours server `retry:` hints, flags stale streams, and falls back to a fetch/stream reader when EventSource is unavailable.

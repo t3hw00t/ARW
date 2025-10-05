@@ -296,6 +296,37 @@ async function run() {
 
   console.log('ARW.connections helpers tests passed');
 
+  // SSE indicator badge behavior
+  const badgeNode = makeNode('span');
+  const indicatorHandle = windowObj.ARW.sse.indicator(badgeNode, { prefix: 'SSE', refreshMs: 600, staleMs: 500 });
+  assert.ok(badgeNode.classList.contains('sse-badge'), 'indicator should add badge styling');
+  assert.strictEqual(badgeNode.getAttribute('role'), 'status');
+  assert.strictEqual(badgeNode.getAttribute('aria-live'), 'polite');
+
+  const subsList = Array.from(windowObj.ARW.sse._subs.values());
+  const statusSub = subsList[subsList.length - 1];
+  assert.ok(statusSub && typeof statusSub.cb === 'function', 'indicator subscription missing');
+
+  const originalLastEventAt = windowObj.ARW.sse.lastEventAt;
+  let lastEventAgoMs = 0;
+  windowObj.ARW.sse.lastEventAt = () => Date.now() - lastEventAgoMs;
+
+  statusSub.cb({ kind: '*status*', env: { status: 'connecting', retryIn: 1500, changedAt: Date.now() - 500 } });
+  assert.ok(badgeNode.textContent.includes('retry in 1.5'), 'connecting label should include retry window');
+  assert.strictEqual(badgeNode.getAttribute('aria-label'), badgeNode.textContent, 'aria-label should mirror text');
+
+  lastEventAgoMs = 0;
+  const nowOpen = Date.now();
+  statusSub.cb({ kind: '*status*', env: { status: 'open', changedAt: nowOpen } });
+  assert.ok(/last event/.test(badgeNode.textContent), 'open label should include last event timing');
+
+  lastEventAgoMs = 3000;
+  await new Promise((resolve) => setTimeout(resolve, 700));
+  assert.ok(/3s ago|last event 3/.test(badgeNode.textContent), 'refresh timer should update relative time');
+  assert.strictEqual(badgeNode.dataset.state, 'stale', 'badge should mark stale state');
+  indicatorHandle.dispose();
+  windowObj.ARW.sse.lastEventAt = originalLastEventAt;
+
   // downloadPercent helper
   assert.strictEqual(ARW.util.downloadPercent({ percent: '42.5' }), 42.5);
   assert.strictEqual(ARW.util.downloadPercent({ percent: '85%' }), 85);
