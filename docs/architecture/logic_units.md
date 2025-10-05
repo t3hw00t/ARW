@@ -3,7 +3,7 @@ title: Logic Units
 ---
 
 # Logic Units
-Updated: 2025-09-16
+Updated: 2025-10-04
 Type: Explanation
 
 Logic Units are installable, versioned strategy packs that change how an agent behaves without rewriting the app. Prefer config‑only units; code is optional and sandboxed.
@@ -29,6 +29,7 @@ Object Graph placement
 
 Events (vocabulary)
 - `logic.unit.suggested`, `logic.unit.installed`, `logic.unit.applied`, `logic.unit.reverted`, `logic.unit.promoted`.
+  - Suggestions emitted by the orchestrator now include `hints.training` (mode/preset/diversity/recency/compression) and the logic unit patch already targets `governor.hints`, so applying the suggestion immediately aligns the runtime with the observed training run.
 
 Good defaults to ship
 - Metacognition: enable confidence estimates and simple calibration.

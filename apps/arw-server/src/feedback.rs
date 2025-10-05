@@ -538,6 +538,7 @@ impl FeedbackHub {
                         None,
                         None,
                         None,
+                        Some("feedback"),
                     )
                     .await;
             }
@@ -611,6 +612,7 @@ impl FeedbackHub {
                             .get("joiner")
                             .and_then(|v| v.as_str())
                             .map(|s| s.to_string()),
+                        Some("feedback"),
                     )
                     .await;
             }

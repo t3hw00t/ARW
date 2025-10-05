@@ -1762,23 +1762,34 @@ impl Kernel {
     pub fn list_orchestrator_jobs(&self, limit: i64) -> Result<Vec<serde_json::Value>> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
-            "SELECT id,status,goal,progress,created,updated FROM orchestrator_jobs ORDER BY updated DESC LIMIT ?",
+            "SELECT id,status,goal,data,progress,created,updated FROM orchestrator_jobs ORDER BY updated DESC LIMIT ?",
         )?;
         let mut rows = stmt.query([limit])?;
         let mut out = Vec::new();
         while let Some(r) = rows.next()? {
             let status_raw: String = r.get::<_, String>(1)?;
             let (status_slug, status_label) = Self::normalize_orchestrator_status(&status_raw);
-            out.push(serde_json::json!({
+            let mut payload = serde_json::json!({
                 "id": r.get::<_, String>(0)?,
                 "status": status_raw,
                 "status_slug": status_slug,
                 "status_label": status_label,
                 "goal": r.get::<_, Option<String>>(2)?,
-                "progress": r.get::<_, Option<f64>>(3)?,
-                "created": r.get::<_, String>(4)?,
-                "updated": r.get::<_, String>(5)?,
-            }));
+                "progress": r.get::<_, Option<f64>>(4)?,
+                "created": r.get::<_, String>(5)?,
+                "updated": r.get::<_, String>(6)?,
+            });
+            let data_raw: Option<String> = r.get(3)?;
+            if let Some(data_raw) = data_raw {
+                if let Ok(val) = serde_json::from_str::<serde_json::Value>(&data_raw) {
+                    if !val.is_null() {
+                        if let serde_json::Value::Object(ref mut map) = payload {
+                            map.insert("data".into(), val);
+                        }
+                    }
+                }
+            }
+            out.push(payload);
         }
         Ok(out)
     }
@@ -2553,6 +2564,44 @@ mod tests {
             .await
             .expect("update missing");
         assert!(!changed);
+    }
+
+    #[tokio::test]
+    async fn orchestrator_jobs_surface_data_payload() {
+        let dir = TempDir::new().expect("temp dir");
+        let kernel = Kernel::open(dir.path()).expect("kernel open");
+
+        let data = json!({
+            "preset": "balanced",
+            "diversity": 0.5,
+            "recency": 0.35,
+            "compression": 0.4,
+        });
+        let job_id = kernel
+            .insert_orchestrator_job_async("test goal", Some(&data))
+            .await
+            .expect("insert orchestrator job");
+
+        let jobs = kernel
+            .list_orchestrator_jobs_async(5)
+            .await
+            .expect("list orchestrator jobs");
+        assert!(!jobs.is_empty(), "expected at least one job");
+
+        let job = jobs
+            .into_iter()
+            .find(|job| job["id"] == job_id)
+            .expect("job present");
+        assert_eq!(job["goal"], json!("test goal"));
+        assert_eq!(job["status_slug"], json!("queued"));
+        assert_eq!(job["status_label"], json!("Queued"));
+        assert_eq!(job["progress"], json!(0.0));
+
+        let data_field = job.get("data").cloned().expect("data field surfaced");
+        assert_eq!(data_field["preset"], json!("balanced"));
+        assert_eq!(data_field["diversity"], json!(0.5));
+        assert_eq!(data_field["recency"], json!(0.35));
+        assert_eq!(data_field["compression"], json!(0.4));
     }
 
     #[tokio::test]

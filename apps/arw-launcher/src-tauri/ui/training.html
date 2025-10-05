@@ -31,6 +31,7 @@
       .ratio-bar.empty { opacity: 0.7; }
       .jobs-table tr.focused-row { outline: 2px solid rgba(var(--brand-copper-rgb), 0.6); outline-offset: 1px; background: rgba(27,179,163,0.08); }
       .jobs-table tr:focus { outline: none; }
+      .jobs-table .hint { display: block; margin-top: 2px; font-size: 0.85rem; color: var(--color-muted); }
     </style>
     <script src="common.js" defer></script>
     <script src="training.js" defer></script>
@@ -66,9 +67,21 @@
               <span id="diversityValue" class="mono">0.50</span>
             </div>
             <div class="row">
+              <label for="recencySlider">Recency</label>
+              <input id="recencySlider" type="range" min="0" max="1" step="0.05" value="0.50" aria-describedby="recencyValue" />
+              <span id="recencyValue" class="mono">0.50</span>
+            </div>
+            <div class="row">
               <label for="compressionSlider">Compression</label>
               <input id="compressionSlider" type="range" min="0" max="1" step="0.1" value="0.50" aria-describedby="compressionValue" />
               <span id="compressionValue" class="mono">0.50</span>
+            </div>
+            <div class="metric-block" id="governorHistoryBlock">
+              <h4>Recent governor profiles</h4>
+              <ul id="governorHistoryList" class="metric-list"></ul>
+              <div class="row">
+                <button id="clearGovernorHistory" class="ghost" type="button">Clear history</button>
+              </div>
             </div>
           </section>
           <section class="card" role="region" aria-labelledby="contextTitle">

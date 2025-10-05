@@ -2255,7 +2255,7 @@ paths:
     get:
       tags:
       - Orchestrator
-      summary: List orchestrator jobs
+      summary: Orchestrator jobs snapshot
       operationId: state_orchestrator_jobs_doc
       parameters:
       - name: limit
@@ -2276,8 +2276,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProblemDetails'
-      description: Return the current orchestrator job queue including statuses, runners,
-        and progress metadata.
+      description: Return the current orchestrator job queue with statuses, progress,
+        and the submitted training hints (preset/diversity/recency/compression) for
+        each run.
   /state/projects:
     get:
       tags:

@@ -16,6 +16,9 @@ let lastFetchedHistorySignature = '';
 let historyHydrated = false;
 let pendingHistoryFetch = null;
 let telemetryEventTimer = null;
+const GOVERNOR_HISTORY_LIMIT = 6;
+let governorHistory = [];
+let lastGovernorToast = { key: null, time: 0 };
 
 const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 
@@ -115,14 +118,15 @@ async function fetchOrchestratorJobs(baseUrl) {
   return payload && typeof payload === 'object' ? payload.items || [] : [];
 }
 
-async function startTrainingJob(baseUrl, preset, diversity, compression) {
+async function startTrainingJob(baseUrl, preset, diversity, recency, compression) {
   const token = await ARW.connections.tokenFor(baseUrl);
-  const goal = `Training preset=${preset} diversity=${diversity.toFixed(2)} compression=${compression.toFixed(2)}`;
+  const goal = `Training preset=${preset} diversity=${diversity.toFixed(2)} recency=${recency.toFixed(2)} compression=${compression.toFixed(2)}`;
   const body = {
     goal,
     data: {
       preset,
       diversity,
+      recency,
       compression,
     },
   };
@@ -282,6 +286,250 @@ function formatStatusLabel(status) {
     unbounded: 'No lease',
   };
   return map[status] || status.replace(/_/g, ' ');
+}
+
+function normaliseHintNumber(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Math.min(Math.max(value, 0), 1);
+  }
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number.parseFloat(value.trim());
+    if (Number.isFinite(parsed)) {
+      return Math.min(Math.max(parsed, 0), 1);
+    }
+  }
+  return null;
+}
+
+function extractTrainingHints(job) {
+  if (!job || typeof job !== 'object') return null;
+  const raw = job.data;
+  if (!raw || typeof raw !== 'object') return null;
+  const source = raw.training && typeof raw.training === 'object' ? raw.training : raw;
+  if (!source || typeof source !== 'object') return null;
+  const presetRaw = typeof source.preset === 'string' ? source.preset.trim() : '';
+  const preset = presetRaw ? presetRaw : null;
+  const diversity = normaliseHintNumber(source.diversity);
+  const recency = normaliseHintNumber(source.recency);
+  const compression = normaliseHintNumber(source.compression);
+  const modeRaw = typeof source.mode === 'string' ? source.mode.trim() : '';
+  const mode = modeRaw ? modeRaw : null;
+  if (!preset && diversity == null && recency == null && compression == null && !mode) return null;
+  return { preset, diversity, recency, compression, mode };
+}
+
+function formatTrainingHintsSummary(job) {
+  const hints = extractTrainingHints(job);
+  if (!hints) return null;
+  return {
+    text: formatGovernorHints(hints),
+    hints,
+  };
+}
+
+function normalizeGovernorHints(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const source = raw;
+  const normalizeNumber = (value) => {
+    if (typeof value === 'number' && Number.isFinite(value)) {
+      return Math.min(Math.max(value, 0), 1);
+    }
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (trimmed) {
+        const parsed = Number.parseFloat(trimmed);
+        if (Number.isFinite(parsed)) {
+          return Math.min(Math.max(parsed, 0), 1);
+        }
+      }
+    }
+    return null;
+  };
+  const pickNumber = (...keys) => {
+    for (const key of keys) {
+      if (key in source) {
+        const normalized = normalizeNumber(source[key]);
+        if (normalized != null) return normalized;
+      }
+    }
+    return null;
+  };
+  const presetRaw = typeof source.preset === 'string' ? source.preset.trim() : '';
+  const modeRaw = typeof source.mode === 'string' ? source.mode.trim().toLowerCase() : '';
+  const normalized = {
+    mode: modeRaw || null,
+    preset: presetRaw || null,
+    diversity: pickNumber('diversity', 'retrieval_div'),
+    recency: pickNumber('recency', 'mmr_lambda'),
+    compression: pickNumber('compression', 'compression_aggr'),
+  };
+  if (
+    !normalized.mode &&
+    !normalized.preset &&
+    normalized.diversity == null &&
+    normalized.recency == null &&
+    normalized.compression == null
+  ) {
+    return null;
+  }
+  return normalized;
+}
+
+function governorHistoryKey(hints) {
+  const keyObj = {
+    mode: hints.mode || null,
+    diversity: Number.isFinite(hints.diversity) ? Number(hints.diversity.toFixed(4)) : null,
+    recency: Number.isFinite(hints.recency) ? Number(hints.recency.toFixed(4)) : null,
+    compression: Number.isFinite(hints.compression) ? Number(hints.compression.toFixed(4)) : null,
+  };
+  return JSON.stringify(keyObj);
+}
+
+function formatGovernorHints(hints) {
+  if (!hints || typeof hints !== 'object') return '';
+  const parts = [];
+  if (hints.mode) {
+    const label = hints.mode.charAt(0).toUpperCase() + hints.mode.slice(1);
+    parts.push(`Mode ${label}`);
+  }
+  if (hints.preset) parts.push(`Preset ${hints.preset}`);
+  if (Number.isFinite(hints.diversity)) parts.push(`Diversity ${formatPercent(hints.diversity, 0)}`);
+  if (Number.isFinite(hints.recency)) parts.push(`Recency ${formatPercent(hints.recency, 0)}`);
+  if (Number.isFinite(hints.compression)) parts.push(`Compression ${formatPercent(hints.compression, 0)}`);
+  return parts.join(' · ');
+}
+
+function recordGovernorProfile(rawHints, options = {}) {
+  const normalized = normalizeGovernorHints(rawHints);
+  if (!normalized) return null;
+  const key = governorHistoryKey(normalized);
+  let finalHints = normalized;
+  let finalSummary = formatGovernorHints(normalized);
+  const existingIndex = governorHistory.findIndex((entry) => entry.key === key);
+  if (existingIndex !== -1) {
+    const existing = governorHistory.splice(existingIndex, 1)[0];
+    const mergedHints = { ...existing.hints };
+    if (normalized.mode) mergedHints.mode = normalized.mode;
+    if (normalized.preset) mergedHints.preset = normalized.preset;
+    if (normalized.diversity != null) mergedHints.diversity = normalized.diversity;
+    if (normalized.recency != null) mergedHints.recency = normalized.recency;
+    if (normalized.compression != null) mergedHints.compression = normalized.compression;
+    const mergedSummary = formatGovernorHints(mergedHints);
+    governorHistory.unshift({ key, hints: mergedHints, summary: mergedSummary });
+    finalHints = mergedHints;
+    finalSummary = mergedSummary;
+  } else {
+    const summaryText = formatGovernorHints(normalized);
+    governorHistory.unshift({ key, hints: normalized, summary: summaryText });
+    if (governorHistory.length > GOVERNOR_HISTORY_LIMIT) {
+      governorHistory.length = GOVERNOR_HISTORY_LIMIT;
+    }
+    finalSummary = summaryText;
+    finalHints = normalized;
+  }
+  persistDismissed();
+  renderGovernorHistory();
+  return { key, summary: finalSummary, hints: finalHints };
+}
+
+function renderGovernorHistory() {
+  const list = document.getElementById('governorHistoryList');
+  const clearBtn = document.getElementById('clearGovernorHistory');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!governorHistory.length) {
+    const li = document.createElement('li');
+    li.className = 'dim';
+    li.textContent = 'No profiles yet.';
+    list.appendChild(li);
+    if (clearBtn) clearBtn.disabled = true;
+    return;
+  }
+  if (clearBtn) clearBtn.disabled = false;
+  governorHistory.forEach((entry) => {
+    const li = document.createElement('li');
+    const btn = document.createElement('button');
+    btn.className = 'ghost';
+    btn.type = 'button';
+    btn.textContent = entry.summary || 'Governor profile';
+    btn.addEventListener('click', async () => {
+      btn.disabled = true;
+      try {
+        const base = telemetryBase || getCurrentBase();
+        await applyTrainingHints(base, entry.hints, { source: 'history' });
+      } catch (err) {
+        const message = err && err.message ? err.message : 'Apply failed';
+        ARW.toast(message);
+      } finally {
+        btn.disabled = false;
+      }
+    });
+    li.appendChild(btn);
+    list.appendChild(li);
+  });
+}
+
+function friendlyHintSource(source) {
+  switch ((source || '').toLowerCase()) {
+    case 'orchestrator':
+      return 'training run';
+    case 'admin':
+      return 'admin';
+    case 'feedback':
+      return 'feedback';
+    case 'history':
+      return 'history';
+    case 'manual':
+      return 'launcher';
+    default:
+      return source || '';
+  }
+}
+
+function maybeToastGovernorSummary(summary, key, options = {}) {
+  const now = Date.now();
+  if (key && lastGovernorToast.key === key && now - lastGovernorToast.time < 1200) {
+    return;
+  }
+  const sourceLabel = friendlyHintSource(options.source);
+  const prefix = sourceLabel ? `Governor hints (${sourceLabel})` : 'Governor hints';
+  const message = summary ? `${prefix}: ${summary}` : `${prefix} applied`;
+  ARW.toast(message);
+  if (key) {
+    lastGovernorToast = { key, time: now };
+  }
+}
+
+function clearGovernorHistory() {
+  governorHistory = [];
+  persistDismissed();
+  renderGovernorHistory();
+  ARW.toast('Governor history cleared');
+}
+
+async function applyTrainingHints(baseUrl, hints, { source = 'manual', silent = false } = {}) {
+  const normalized = normalizeGovernorHints(hints);
+  if (!normalized) throw new Error('No training hints available');
+  const body = {};
+  if (normalized.mode) body.mode = normalized.mode.toLowerCase();
+  if (normalized.diversity != null) body.retrieval_div = normalized.diversity;
+  if (normalized.recency != null) body.mmr_lambda = normalized.recency;
+  if (normalized.compression != null) body.compression_aggr = normalized.compression;
+  if (Object.keys(body).length === 0) throw new Error('Training hints missing governor parameters');
+  const token = await ARW.connections.tokenFor(baseUrl);
+  await ARW.invoke('admin_post_json_base', {
+    base: baseUrl,
+    path: 'governor/hints',
+    body,
+    token,
+  });
+  const recorded = recordGovernorProfile(normalized, { silent: true });
+  const summary = recorded?.summary || formatGovernorHints(normalized);
+  const key = recorded?.key || governorHistoryKey(normalized);
+  if (!silent) {
+    maybeToastGovernorSummary(summary, key, { source });
+  }
+  return { summary, key };
 }
 
 function renderList(targetId, items, formatter, emptyText) {
@@ -602,6 +850,7 @@ function renderJobs(items) {
           : statusSlug === 'completed'
             ? 'ok'
             : '';
+    const trainingSummary = formatTrainingHintsSummary(job);
     const updated = job.updated_at || job.updated || job.finished_at || job.created_at || job.created || '';
     let updatedLabel = '—';
     if (updated) {
@@ -610,11 +859,15 @@ function renderJobs(items) {
         ? escapeText(String(updated))
         : parsed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     }
+    const goalText = escapeText(job.goal || '');
+    const goalCell = trainingSummary && trainingSummary.text
+      ? `${goalText}<span class="hint">${escapeText(trainingSummary.text)}</span>`
+      : goalText;
     tr.innerHTML = `
       <td class="mono">${escapeText(job.id || '')}</td>
       <td class="${statusClass}">${statusDisplay}</td>
       <td>${progress}</td>
-      <td>${escapeText(job.goal || '')}</td>
+      <td>${goalCell}</td>
       <td class="mono">${updatedLabel}</td>
     `;
     tr.dataset.jobId = job.id || '';
@@ -674,6 +927,11 @@ function renderJobs(items) {
     const progressItem = document.createElement('li');
     progressItem.textContent = `Progress: ${progress}`;
     metaList.appendChild(progressItem);
+    if (trainingSummary && trainingSummary.text) {
+      const hintsItem = document.createElement('li');
+      hintsItem.textContent = `Training hints: ${trainingSummary.text}`;
+      metaList.appendChild(hintsItem);
+    }
     details.appendChild(metaList);
 
       const logicUnit = resolveLogicUnit(job);
@@ -689,6 +947,12 @@ function renderJobs(items) {
         kindLine.className = 'metric-inline';
         kindLine.textContent = `Kind: ${logicUnit.kind}`;
         luBlock.appendChild(kindLine);
+      }
+      if (trainingSummary && trainingSummary.text) {
+        const hintLine = document.createElement('p');
+        hintLine.className = 'metric-inline dim';
+        hintLine.textContent = `Training hints: ${trainingSummary.text}`;
+        luBlock.appendChild(hintLine);
       }
       const actions = document.createElement('div');
       actions.className = 'row';
@@ -743,6 +1007,31 @@ function renderJobs(items) {
       actions.appendChild(dismissBtn);
       luBlock.appendChild(actions);
       details.appendChild(luBlock);
+    }
+
+    if (trainingSummary && trainingSummary.hints) {
+      const hintsBlock = document.createElement('div');
+      hintsBlock.className = 'metric-block';
+      const hintsHeader = document.createElement('p');
+      hintsHeader.className = 'metric-inline';
+      hintsHeader.textContent = 'Governor hints';
+      hintsBlock.appendChild(hintsHeader);
+      const reapplyBtn = document.createElement('button');
+      reapplyBtn.className = 'ghost';
+      reapplyBtn.textContent = 'Apply hints to governor';
+      reapplyBtn.addEventListener('click', async () => {
+        reapplyBtn.disabled = true;
+        try {
+          await applyTrainingHints(telemetryBase || getCurrentBase(), trainingSummary.hints, { source: 'manual' });
+        } catch (err) {
+          const msg = err && err.message ? err.message : 'Hints apply failed';
+          ARW.toast(msg);
+        } finally {
+          reapplyBtn.disabled = false;
+        }
+      });
+      hintsBlock.appendChild(reapplyBtn);
+      details.appendChild(hintsBlock);
     }
 
     if (job.data) {
@@ -888,6 +1177,7 @@ function persistDismissed() {
     const prefs = { ...(ARW._prefsCache.get('launcher') || {}) };
     prefs.dismissedJobs = ids;
     prefs.logicUnitHistory = logicUnitHistory;
+    prefs.governorHistory = governorHistory.map((entry) => entry.hints);
     ARW.setPrefs('launcher', prefs);
   } catch {}
 }
@@ -926,7 +1216,17 @@ async function loadDismissedPrefs() {
       lastFetchedHistorySignature = signatureFromEntries(logicUnitHistoryRaw);
       renderHistory();
     }
+    const savedGovernor = Array.isArray(prefs.governorHistory) ? prefs.governorHistory : [];
+    governorHistory = savedGovernor
+      .map((item) => normalizeGovernorHints(item))
+      .filter(Boolean)
+      .map((hints) => ({
+        key: governorHistoryKey(hints),
+        hints,
+        summary: formatGovernorHints(hints),
+      }));
   } catch {}
+  renderGovernorHistory();
 }
 
 function findJobElement(jobId) {
@@ -990,6 +1290,7 @@ function persistHistory() {
   try {
     const prefs = { ...(ARW._prefsCache.get('launcher') || {}) };
     prefs.logicUnitHistory = logicUnitHistory;
+    prefs.governorHistory = governorHistory.map((entry) => entry.hints);
     ARW.setPrefs('launcher', prefs);
   } catch {}
 }
@@ -1233,8 +1534,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     queueTelemetryRefresh({ delay: 200, quiet: true });
   });
 
+  const governorHintSub = ARW.sse.subscribe('actions.hint.applied', ({ env }) => {
+    const payload = env?.payload || env;
+    if (!payload || payload.action !== 'governor.hints') return;
+    const params = payload.params && typeof payload.params === 'object' ? payload.params : null;
+    if (!params) return;
+    const normalized = normalizeGovernorHints(params);
+    if (!normalized) return;
+    const recorded = recordGovernorProfile(normalized, { silent: true });
+    const summary = recorded?.summary || formatGovernorHints(normalized);
+    const key = recorded?.key || governorHistoryKey(normalized);
+    maybeToastGovernorSummary(summary, key, { source: payload.source || 'server' });
+  });
+
   const diversitySlider = document.getElementById('diversitySlider');
   const diversityValue = document.getElementById('diversityValue');
+  const recencySlider = document.getElementById('recencySlider');
+  const recencyValue = document.getElementById('recencyValue');
   const compressionSlider = document.getElementById('compressionSlider');
   const compressionValue = document.getElementById('compressionValue');
   const presetSelect = document.getElementById('presetSelect');
@@ -1243,6 +1559,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const statusFilterSelect = document.getElementById('jobStatusFilter');
   const resetDismissedButton = document.getElementById('resetDismissedJobs');
   const exportButton = document.getElementById('exportHistory');
+  const clearGovernorHistoryButton = document.getElementById('clearGovernorHistory');
 
   loadDismissedPrefs();
 
@@ -1250,11 +1567,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!slider || !label) return;
     const value = Number.parseFloat(slider.value || '0');
     label.textContent = value.toFixed(2);
+    slider.setAttribute('aria-valuenow', value.toFixed(2));
+    const percent = Math.round(value * 100);
+    slider.setAttribute('aria-valuetext', `${percent}%`);
   };
 
   if (diversitySlider && diversityValue) {
     diversitySlider.addEventListener('input', () => updateSliderLabel(diversitySlider, diversityValue));
     updateSliderLabel(diversitySlider, diversityValue);
+  }
+  if (recencySlider && recencyValue) {
+    recencySlider.addEventListener('input', () => updateSliderLabel(recencySlider, recencyValue));
+    updateSliderLabel(recencySlider, recencyValue);
   }
   if (compressionSlider && compressionValue) {
     compressionSlider.addEventListener('input', () => updateSliderLabel(compressionSlider, compressionValue));
@@ -1325,6 +1649,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
   }
 
+  if (clearGovernorHistoryButton) {
+    clearGovernorHistoryButton.addEventListener('click', () => {
+      clearGovernorHistory();
+    });
+  }
+
   window.addEventListener('keydown', async (event) => {
     if (!event.shiftKey) return;
     const key = event.key.toLowerCase();
@@ -1373,9 +1703,10 @@ document.addEventListener('DOMContentLoaded', async () => {
       try {
         const preset = presetSelect ? String(presetSelect.value || 'balanced') : 'balanced';
         const diversity = diversitySlider ? parseFloat(diversitySlider.value || '0') : 0;
+        const recency = recencySlider ? parseFloat(recencySlider.value || '0') : 0;
         const compression = compressionSlider ? parseFloat(compressionSlider.value || '0') : 0;
         setJobsStatus('Submitting job…');
-        await startTrainingJob(telemetryBase || getCurrentBase(), preset, diversity, compression);
+        await startTrainingJob(telemetryBase || getCurrentBase(), preset, diversity, recency, compression);
         ARW.toast('Training job submitted');
         refreshJobs().catch(() => {});
       } catch (err) {
@@ -1405,6 +1736,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('beforeunload', () => {
     ARW.sse.unsubscribe(logicUnitSub);
     ARW.sse.unsubscribe(contextSub);
+    ARW.sse.unsubscribe(governorHintSub);
   });
   window.addEventListener('arw:base-override-changed', () => {
     applyBaseChange().catch(() => {});

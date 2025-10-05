@@ -3,7 +3,7 @@ title: Training Park
 ---
 
 # Training Park
-Updated: 2025-09-28
+Updated: 2025-10-04
 Type: How‑to
 
 Status: **Telemetry and launcher controls are live; richer charts are still in flight.** `arw-server` now exposes `/state/training/telemetry` plus `training_metrics` and `context_metrics` read-models, and the launcher streams live metrics, job actions, and logic-unit history while we finish the advanced visualization pass.
@@ -15,8 +15,8 @@ The goal remains: a third primary perspective for tuning instincts, memory, and 
 - Shared right-sidecar lanes (Timeline, Context, Policy, Metrics, Models) via the general SSE connection.
 - `GET /state/training/telemetry` snapshot with route stats, tool success rate, cache/gov/capsule health, and bus metrics, plus `state.read.model.patch` ids `training_metrics` and `context_metrics` for live updates. The context portion now includes aggregate slot-gap analytics (`coverage.top_slots`, `recall_risk.top_slots`) so you can spot recurring under-filled slots without diffing raw events.
 - Prometheus metrics (`arw_context_slot_gap`, `arw_context_slot_gap_latest`, `arw_context_slot_fill_ratio`, `arw_context_slot_underfilled_total`) persist slot-gap trends beyond the in-memory replay window so dashboards can chart regressions over longer horizons.
-- Launcher controls submit training runs through `/orchestrator/mini_agents/start_training`, sending preset/diversity/compression hints and streaming job progress back into the results panel.
-- Job table filters allow you to focus on running/completed/failed runs, while inline details expand to show payloads captured in `/state/orchestrator/jobs`. The kernel now emits canonical `status_slug` + `status_label` fields in that snapshot so launchers, CLIs, and scripts share the same vocabulary without bespoke mappings. Capsule telemetry mirrors this convention (`sample[].status_slug` + `sample[].status_label`) so countdown cards can reuse the same labels without local lookup tables.
+- Launcher controls submit training runs through `/orchestrator/mini_agents/start_training`, sending preset/diversity/recency/compression hints and streaming job progress back into the results panel.
+- Job table filters allow you to focus on running/completed/failed runs, while inline details expand to show payloads captured in `/state/orchestrator/jobs`. Each entry now echoes the submitted training hints (mode/preset/diversity/recency/compression) directly beneath the goal and repeats them in the details drawer alongside the canonical `status_slug` + `status_label` fields so launchers, CLIs, and scripts stay aligned without bespoke mappings. The orchestrator normalises and applies the same bundle to `governor.hints` as soon as the run starts, the details drawer includes an “Apply hints to governor” button for follow-up runs, and suggested Logic Units arrive with the ready-to-reapply patch for later promotion. The controls card keeps a short history of recent governor profiles so you can replay or clear them without rerunning training. Capsule telemetry mirrors this convention (`sample[].status_slug` + `sample[].status_label`) so countdown cards reuse the same labels without local lookup tables.
 - Each job exposes the suggested logic unit (if any) with buttons to dry-run patches, apply them, or hide the job locally once handled.
 - Keyboard support: use ↑/↓ to move between jobs, `Shift+A` to apply, `Shift+D` to dry-run, and press Enter to toggle details. A “Recent logic unit actions” panel records the last 10 actions inline while `/state/training/actions` streams the longer history for export/download.
 - Underlying metrics piggyback on the same collectors powering `/state/route_stats`, so telemetry remains consistent with other dashboards.

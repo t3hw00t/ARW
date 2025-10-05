@@ -313,6 +313,7 @@ impl Experiments {
                 cfg.context_header.clone(),
                 cfg.context_footer.clone(),
                 cfg.joiner.clone(),
+                Some("experiment"),
             )
             .await;
         let mut payload = json!({

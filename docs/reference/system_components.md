@@ -90,6 +90,7 @@ Manages mini-agent training episodes, evaluates them via the triad, and promotes
   - [architecture/agent_orchestrator.md](../architecture/agent_orchestrator.md)
 - Notes:
   - Training stays lease-gated and reproducible via corr_id snapshots with budget tracking.
+  - `/state/orchestrator/jobs` now surfaces the submitted training hints (mode/preset/diversity/recency/compression) so launchers and dashboards can render controls without rehydrating raw events, and the orchestrator applies the same hints to `governor.hints` immediately so runtime behaviour matches the recorded job.
   - Future phases add curriculum learning, self-play, and confidence-aware routing.
 
 ### AppSec Harness

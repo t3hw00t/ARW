@@ -65,9 +65,138 @@ pub async fn orchestrator_start_training(
         return crate::responses::kernel_disabled();
     }
     let goal = req.goal.clone();
+    let data = req.data.clone();
+
+    let parse_hint_number = |value: Option<&serde_json::Value>| -> Option<f64> {
+        value.and_then(|v| match v {
+            serde_json::Value::Number(num) => num.as_f64(),
+            serde_json::Value::String(s) => s.trim().parse::<f64>().ok(),
+            _ => None,
+        })
+    };
+
+    let preset_to_mode = |preset: &str| -> Option<&'static str> {
+        match preset.to_ascii_lowercase().as_str() {
+            "performance" => Some("deep"),
+            "balanced" => Some("balanced"),
+            "power-saver" | "power_saver" => Some("quick"),
+            "quick" => Some("quick"),
+            "deep" => Some("deep"),
+            "verified" => Some("verified"),
+            _ => None,
+        }
+    };
+
+    let mut training_meta_map = serde_json::Map::new();
+    training_meta_map.insert("goal".into(), serde_json::Value::String(goal.clone()));
+    let mut job_data_map = serde_json::Map::new();
+    if let Some(ref raw) = data {
+        job_data_map.insert("submitted".into(), raw.clone());
+    }
+
+    let (preset_value, diversity_hint, recency_hint, compression_hint, mode_hint) = data
+        .as_ref()
+        .and_then(|value| value.as_object())
+        .map(|raw| {
+            let training_source = raw
+                .get("training")
+                .and_then(|v| v.as_object())
+                .unwrap_or(raw);
+            let preset = training_source
+                .get("preset")
+                .and_then(|v| v.as_str())
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string());
+            let diversity =
+                parse_hint_number(training_source.get("diversity")).map(|v| v.clamp(0.0, 1.0));
+            let recency =
+                parse_hint_number(training_source.get("recency")).map(|v| v.clamp(0.0, 1.0));
+            let compression =
+                parse_hint_number(training_source.get("compression")).map(|v| v.clamp(0.0, 1.0));
+            let mode = preset
+                .as_deref()
+                .and_then(preset_to_mode)
+                .map(|m| m.to_string());
+            (preset, diversity, recency, compression, mode)
+        })
+        .unwrap_or((None, None, None, None, None));
+
+    if let Some(ref preset) = preset_value {
+        job_data_map.insert("preset".into(), serde_json::Value::String(preset.clone()));
+        training_meta_map.insert("preset".into(), serde_json::Value::String(preset.clone()));
+    }
+    if let Some(div) = diversity_hint {
+        if let Some(num) = serde_json::Number::from_f64(div) {
+            job_data_map.insert("diversity".into(), serde_json::Value::Number(num.clone()));
+            training_meta_map.insert("diversity".into(), serde_json::Value::Number(num));
+        }
+    }
+    if let Some(rec) = recency_hint {
+        if let Some(num) = serde_json::Number::from_f64(rec) {
+            job_data_map.insert("recency".into(), serde_json::Value::Number(num.clone()));
+            training_meta_map.insert("recency".into(), serde_json::Value::Number(num));
+        }
+    }
+    if let Some(comp) = compression_hint {
+        if let Some(num) = serde_json::Number::from_f64(comp) {
+            job_data_map.insert("compression".into(), serde_json::Value::Number(num.clone()));
+            training_meta_map.insert("compression".into(), serde_json::Value::Number(num));
+        }
+    }
+    if let Some(ref mode) = mode_hint {
+        job_data_map.insert("mode".into(), serde_json::Value::String(mode.clone()));
+        training_meta_map.insert("mode".into(), serde_json::Value::String(mode.clone()));
+    }
+    if !training_meta_map.is_empty() {
+        job_data_map.insert(
+            "training".into(),
+            serde_json::Value::Object(training_meta_map.clone()),
+        );
+    }
+
+    let job_data_value = if job_data_map.is_empty() {
+        None
+    } else {
+        Some(serde_json::Value::Object(job_data_map.clone()))
+    };
+
+    let bus = state.bus();
+    if mode_hint.is_some()
+        || diversity_hint.is_some()
+        || recency_hint.is_some()
+        || compression_hint.is_some()
+    {
+        state
+            .governor()
+            .apply_hints(
+                &bus,
+                None,
+                None,
+                None,
+                mode_hint.clone(),
+                None,
+                None,
+                diversity_hint,
+                recency_hint,
+                compression_hint,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                None,
+                Some("orchestrator"),
+            )
+            .await;
+    }
+
     let id = match state
         .kernel()
-        .insert_orchestrator_job_async(req.goal.as_str(), req.data.as_ref())
+        .insert_orchestrator_job_async(req.goal.as_str(), job_data_value.as_ref())
         .await
     {
         Ok(id) => id,
@@ -79,13 +208,19 @@ pub async fn orchestrator_start_training(
         )
             .into_response(),
     };
-    state.bus().publish(
-        topics::TOPIC_ORCHESTRATOR_JOB_CREATED,
-        &json!({"id": id, "goal": goal}),
-    );
+    let mut created_payload = json!({"id": id, "goal": goal});
+    if let Some(data_value) = job_data_value.clone() {
+        if let serde_json::Value::Object(ref mut map) = created_payload {
+            map.insert("data".into(), data_value);
+        }
+    }
+    state
+        .bus()
+        .publish(topics::TOPIC_ORCHESTRATOR_JOB_CREATED, &created_payload);
     let state2 = state.clone();
     let id_clone = id.clone();
     let goal_clone = goal.clone();
+    let training_meta_for_hints = training_meta_map.clone();
     tokio::spawn(async move {
         let steps = 5;
         for i in 1..=steps {
@@ -112,21 +247,50 @@ pub async fn orchestrator_start_training(
         );
         // Suggest a Logic Unit manifest as an output of the training
         let lu_id = format!("lu-{}", id_clone);
+        let mut hints_map = serde_json::Map::new();
+        if let Some(mode) = mode_hint.clone() {
+            hints_map.insert("mode".into(), serde_json::Value::String(mode));
+        }
+        if let Some(div) = diversity_hint {
+            if let Some(num) = serde_json::Number::from_f64(div) {
+                hints_map.insert("retrieval_div".into(), serde_json::Value::Number(num));
+            }
+        }
+        if let Some(rec) = recency_hint {
+            if let Some(num) = serde_json::Number::from_f64(rec) {
+                hints_map.insert("mmr_lambda".into(), serde_json::Value::Number(num));
+            }
+        }
+        if let Some(comp) = compression_hint {
+            if let Some(num) = serde_json::Number::from_f64(comp) {
+                hints_map.insert("compression_aggr".into(), serde_json::Value::Number(num));
+            }
+        }
+        if !training_meta_for_hints.is_empty() {
+            hints_map.insert(
+                "training".into(),
+                serde_json::Value::Object(training_meta_for_hints.clone()),
+            );
+        }
+        let hints_value = serde_json::Value::Object(hints_map.clone());
         let manifest = json!({
             "id": lu_id,
             "kind": "config-only",
             "patches": [
-                {"target": "governor.hints", "op": "merge", "value": {"goal": goal_clone}}
+                {"target": "governor.hints", "op": "merge", "value": hints_value.clone()}
             ]
         });
         let _ = state2
             .kernel()
             .insert_logic_unit_async(lu_id.clone(), manifest.clone(), "suggested".to_string())
             .await;
-        state2.bus().publish(
-            topics::TOPIC_LOGICUNIT_SUGGESTED,
-            &json!({"id": lu_id, "job_id": id_clone}),
-        );
+        let mut suggested_payload = json!({"id": lu_id, "job_id": id_clone});
+        if let serde_json::Value::Object(ref mut map) = suggested_payload {
+            map.insert("hints".into(), hints_value);
+        }
+        state2
+            .bus()
+            .publish(topics::TOPIC_LOGICUNIT_SUGGESTED, &suggested_payload);
     });
     (
         axum::http::StatusCode::ACCEPTED,

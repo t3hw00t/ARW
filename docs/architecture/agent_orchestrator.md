@@ -3,7 +3,7 @@ title: Agent Orchestrator
 ---
 
 # Agent Orchestrator
-Updated: 2025-09-15
+Updated: 2025-10-04
 Type: Explanation
 
 Purpose
@@ -22,7 +22,7 @@ Architecture
 Endpoints (initial stubs)
 - `GET /orchestrator/mini_agents` → `{ items: [...] }`
 - `POST /orchestrator/mini_agents/start_training` → `{ job_id }` (admin‑gated; 501 until runner lands)
-- `GET /state/orchestrator/jobs` → `{ items: [...] }`
+- `GET /state/orchestrator/jobs` → `{ items: [...] }` (includes submitted training hints per job, which are also applied to `governor.hints` when the run starts)
 
 Roadmap
 - Phase 1: integrate with Evaluation Harness; record results; output Logic Unit patches.
@@ -30,4 +30,3 @@ Roadmap
 - Phase 3: promotion policy and confidence‑aware routing across agent teams.
 
 See also: Logic Units, Evaluation Harness, Memory Abstraction Layer, Policy & Leases.
-

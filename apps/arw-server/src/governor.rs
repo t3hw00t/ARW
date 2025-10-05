@@ -137,68 +137,92 @@ impl GovernorState {
         context_header: Option<String>,
         context_footer: Option<String>,
         joiner: Option<String>,
+        source: Option<&str>,
     ) {
+        let mut applied_map = serde_json::Map::new();
         {
             let mut guard = self.hints.write().await;
-            if max_concurrency.is_some() {
-                guard.max_concurrency = max_concurrency;
+            if let Some(value) = max_concurrency {
+                guard.max_concurrency = Some(value);
+                applied_map.insert("max_concurrency".into(), serde_json::json!(value));
             }
-            if event_buffer.is_some() {
-                guard.event_buffer = event_buffer;
+            if let Some(value) = event_buffer {
+                guard.event_buffer = Some(value);
+                applied_map.insert("event_buffer".into(), serde_json::json!(value));
             }
-            if http_timeout_secs.is_some() {
-                guard.http_timeout_secs = http_timeout_secs;
+            if let Some(value) = http_timeout_secs {
+                guard.http_timeout_secs = Some(value);
+                applied_map.insert("http_timeout_secs".into(), serde_json::json!(value));
             }
-            if mode.is_some() {
-                guard.mode = mode.clone();
+            if let Some(ref value) = mode {
+                guard.mode = Some(value.clone());
+                applied_map.insert("mode".into(), serde_json::json!(value));
             }
-            if slo_ms.is_some() {
-                guard.slo_ms = slo_ms;
+            if let Some(value) = slo_ms {
+                guard.slo_ms = Some(value);
+                applied_map.insert("slo_ms".into(), serde_json::json!(value));
             }
-            if retrieval_k.is_some() {
-                guard.retrieval_k = retrieval_k;
+            if let Some(value) = retrieval_k {
+                guard.retrieval_k = Some(value);
+                applied_map.insert("retrieval_k".into(), serde_json::json!(value));
             }
-            if retrieval_div.is_some() {
-                guard.retrieval_div = retrieval_div;
+            if let Some(value) = retrieval_div {
+                guard.retrieval_div = Some(value);
+                applied_map.insert("retrieval_div".into(), serde_json::json!(value));
             }
-            if mmr_lambda.is_some() {
-                guard.mmr_lambda = mmr_lambda;
+            if let Some(value) = mmr_lambda {
+                guard.mmr_lambda = Some(value);
+                applied_map.insert("mmr_lambda".into(), serde_json::json!(value));
             }
-            if compression_aggr.is_some() {
-                guard.compression_aggr = compression_aggr;
+            if let Some(value) = compression_aggr {
+                guard.compression_aggr = Some(value);
+                applied_map.insert("compression_aggr".into(), serde_json::json!(value));
             }
-            if vote_k.is_some() {
-                guard.vote_k = vote_k;
+            if let Some(value) = vote_k {
+                guard.vote_k = Some(value);
+                applied_map.insert("vote_k".into(), serde_json::json!(value));
             }
-            if context_budget_tokens.is_some() {
-                guard.context_budget_tokens = context_budget_tokens;
+            if let Some(value) = context_budget_tokens {
+                guard.context_budget_tokens = Some(value);
+                applied_map.insert("context_budget_tokens".into(), serde_json::json!(value));
             }
-            if context_item_budget_tokens.is_some() {
-                guard.context_item_budget_tokens = context_item_budget_tokens;
+            if let Some(value) = context_item_budget_tokens {
+                guard.context_item_budget_tokens = Some(value);
+                applied_map.insert(
+                    "context_item_budget_tokens".into(),
+                    serde_json::json!(value),
+                );
             }
-            if context_format.is_some() {
-                guard.context_format = context_format.clone();
+            if let Some(ref value) = context_format {
+                guard.context_format = Some(value.clone());
+                applied_map.insert("context_format".into(), serde_json::json!(value));
             }
-            if include_provenance.is_some() {
-                guard.include_provenance = include_provenance;
+            if let Some(value) = include_provenance {
+                guard.include_provenance = Some(value);
+                applied_map.insert("include_provenance".into(), serde_json::json!(value));
             }
-            if context_item_template.is_some() {
-                guard.context_item_template = context_item_template.clone();
+            if let Some(ref value) = context_item_template {
+                guard.context_item_template = Some(value.clone());
+                applied_map.insert("context_item_template".into(), serde_json::json!(value));
             }
-            if context_header.is_some() {
-                guard.context_header = context_header.clone();
+            if let Some(ref value) = context_header {
+                guard.context_header = Some(value.clone());
+                applied_map.insert("context_header".into(), serde_json::json!(value));
             }
-            if context_footer.is_some() {
-                guard.context_footer = context_footer.clone();
+            if let Some(ref value) = context_footer {
+                guard.context_footer = Some(value.clone());
+                applied_map.insert("context_footer".into(), serde_json::json!(value));
             }
-            if joiner.is_some() {
-                guard.joiner = joiner.clone();
+            if let Some(ref value) = joiner {
+                guard.joiner = Some(value.clone());
+                applied_map.insert("joiner".into(), serde_json::json!(value));
             }
         }
 
         if let Some(secs) = http_timeout_secs.or_else(|| slo_ms.map(|ms| ms.div_ceil(1000).max(1)))
         {
             http_timeout::set_secs(secs);
+            applied_map.insert("http_timeout_secs".into(), serde_json::json!(secs));
             let mut payload = json!({
                 "action": "hint",
                 "params": {"http_timeout_secs": secs, "source": "slo|mode"},
@@ -208,10 +232,25 @@ impl GovernorState {
             bus.publish(topics::TOPIC_ACTIONS_HINT_APPLIED, &payload);
         }
 
-        if let Some(m) = mode {
+        if let Some(m) = mode.clone() {
             let mut payload = json!({"action": "mode", "mode": m});
             crate::responses::attach_corr(&mut payload);
             bus.publish(topics::TOPIC_GOVERNOR_CHANGED, &payload);
+        }
+
+        if !applied_map.is_empty() {
+            let mut payload = json!({
+                "action": "governor.hints",
+                "params": serde_json::Value::Object(applied_map),
+                "ok": true
+            });
+            if let Some(src) = source {
+                if let Some(obj) = payload.as_object_mut() {
+                    obj.insert("source".into(), serde_json::json!(src));
+                }
+            }
+            crate::responses::attach_corr(&mut payload);
+            bus.publish(topics::TOPIC_ACTIONS_HINT_APPLIED, &payload);
         }
 
         self.persist().await;

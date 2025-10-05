@@ -1098,7 +1098,7 @@ Base: `origin/main`
        tags:
        - Orchestrator
 -      summary: List orchestrator jobs
-+      summary: Orchestrator jobs snapshot.
+++      summary: Orchestrator jobs snapshot (returns submitted training hints).
        operationId: state_orchestrator_jobs_doc
        parameters:
        - name: limit
@@ -1108,7 +1108,7 @@ Base: `origin/main`
                  $ref: '#/components/schemas/ProblemDetails'
 -      description: Return the current orchestrator job queue including statuses, runners,
 -        and progress metadata.
-+      description: Orchestrator jobs snapshot.
+++      description: Orchestrator jobs snapshot including submitted training hints (preset/diversity/recency/compression).
    /state/projects:
      get:
        tags:
@@ -1430,4 +1430,3 @@ Base: `origin/main`
      subscribe:
        operationId: world_updated_event
 ```
-

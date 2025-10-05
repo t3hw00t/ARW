@@ -424,8 +424,8 @@
 
 /state/orchestrator/jobs:
   get:
-    summary: List orchestrator jobs
-    description: Return the current orchestrator job queue including statuses, runners, and progress metadata.
+    summary: Orchestrator jobs snapshot
+    description: Return the current orchestrator job queue with statuses, progress, and the submitted training hints (preset/diversity/recency/compression) for each run.
 
 /state/research_watcher:
   get:

@@ -167,6 +167,7 @@ pub async fn governor_hints_set(
             req.context_header,
             req.context_footer,
             req.joiner,
+            Some("admin"),
         )
         .await;
     Json(json!({"ok": true})).into_response()
