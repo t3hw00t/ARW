@@ -29,8 +29,10 @@ ARW ships with conservative defaults and clear toggles to harden deployments wit
 
 ## TLS and Reverse Proxy
 
-- Prefer a TLS‑terminating reverse proxy (Caddy/NGINX) with HSTS in production.
-- Ensure `ARW_TRUST_FORWARD_HEADERS=1` when trusting proxy headers like `X‑Forwarded‑For`.
+- Prefer a TLS-terminating reverse proxy (Caddy/NGINX) with HSTS in production.
+- Use the [Dev TLS Profiles](dev_tls.md) helper when you need localhost HTTPS with mkcert/self-signed assets.
+- Generate and manage reverse-proxy configs via the `just proxy-caddy-*` / `just proxy-nginx-*` helpers (wrapping `scripts/reverse_proxy.sh`) to stay consistent with documented headers.
+- Ensure `ARW_TRUST_FORWARD_HEADERS=1` when trusting proxy headers like `X-Forwarded-For`.
 
 ## Helm
 

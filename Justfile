@@ -197,6 +197,65 @@ dev-server-preset preset='balanced' port='8091':
 docs-serve addr="127.0.0.1:8000":
   mkdocs serve -a {{addr}}
 
+# TLS
+tls-dev *hosts:
+  bash scripts/dev_tls_profile.sh {{hosts}}
+
+proxy-caddy-generate host='localhost' backend='' email='' tls_module='' config_name='':
+  bash -ceu '
+  host="$1"; backend="$2"; email="$3"; tls_module="$4"; cfg="$5";
+  args=(caddy generate --host "$host");
+  if [[ -n "$backend" ]]; then args+=(--backend "$backend"); fi
+  if [[ -n "$email" ]]; then args+=(--email "$email"); fi
+  if [[ -n "$tls_module" ]]; then args+=(--tls-module "$tls_module"); fi
+  if [[ -n "$cfg" ]]; then args+=(--config-name "$cfg"); fi
+  exec bash scripts/reverse_proxy.sh "${args[@]}"
+  ' _ {{host}} {{backend}} {{email}} {{tls_module}} {{config_name}}
+
+proxy-caddy-start host='localhost' config_name='':
+  bash -ceu '
+  host="$1"; cfg="$2"; args=(caddy start);
+  args+=(--host "$host");
+  if [[ -n "$cfg" ]]; then args+=(--config-name "$cfg"); fi
+  exec bash scripts/reverse_proxy.sh "${args[@]}"
+  ' _ {{host}} {{config_name}}
+
+proxy-caddy-stop host='localhost' config_name='':
+  bash -ceu '
+  host="$1"; cfg="$2"; args=(caddy stop);
+  args+=(--host "$host");
+  if [[ -n "$cfg" ]]; then args+=(--config-name "$cfg"); fi
+  exec bash scripts/reverse_proxy.sh "${args[@]}"
+  ' _ {{host}} {{config_name}}
+
+proxy-nginx-generate host backend='' cert key config_name='':
+  bash -ceu '
+  host="$1"; backend="$2"; cert="$3"; key="$4"; cfg="$5";
+  [[ -n "$host" ]] || { echo "host is required" >&2; exit 1; };
+  [[ -n "$cert" ]] || { echo "cert is required" >&2; exit 1; };
+  [[ -n "$key" ]] || { echo "key is required" >&2; exit 1; };
+  args=(nginx generate --host "$host" --cert "$cert" --key "$key");
+  if [[ -n "$backend" ]]; then args+=(--backend "$backend"); fi
+  if [[ -n "$cfg" ]]; then args+=(--config-name "$cfg"); fi
+  exec bash scripts/reverse_proxy.sh "${args[@]}"
+  ' _ {{host}} {{backend}} {{cert}} {{key}} {{config_name}}
+
+proxy-nginx-start host='localhost' config_name='':
+  bash -ceu '
+  host="$1"; cfg="$2"; args=(nginx start);
+  args+=(--host "$host");
+  if [[ -n "$cfg" ]]; then args+=(--config-name "$cfg"); fi
+  exec bash scripts/reverse_proxy.sh "${args[@]}"
+  ' _ {{host}} {{config_name}}
+
+proxy-nginx-stop host='localhost' config_name='':
+  bash -ceu '
+  host="$1"; cfg="$2"; args=(nginx stop);
+  args+=(--host "$host");
+  if [[ -n "$cfg" ]]; then args+=(--config-name "$cfg"); fi
+  exec bash scripts/reverse_proxy.sh "${args[@]}"
+  ' _ {{host}} {{config_name}}
+
 # Generate Feature Matrix (docs/reference/feature_matrix.md)
 features-gen:
   python3 scripts/gen_feature_matrix.py

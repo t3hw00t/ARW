@@ -1,0 +1,8 @@
+# Generated TLS assets and proxy configs
+*.crt
+*.key
+*.pem
+caddy/
+nginx/
+Caddyfile.*
+*.csr
