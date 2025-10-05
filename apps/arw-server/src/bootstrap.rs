@@ -130,6 +130,9 @@ pub(crate) fn attach_stateful_layers(
         let state = capsule_state.clone();
         async move { capsule_guard::capsule_mw(state, req, next).await }
     }));
+    let router = router.layer(axum::middleware::from_fn(
+        crate::request_ctx::correlation_mw,
+    ));
     let metrics_layer = metrics.clone();
     let router = router.layer(axum::middleware::from_fn(move |req, next| {
         let metrics = metrics_layer.clone();

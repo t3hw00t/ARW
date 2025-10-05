@@ -10,7 +10,7 @@ use base64::engine::general_purpose::STANDARD as BASE64_STD;
 use base64::Engine as _;
 use chrono::{SecondsFormat, TimeZone, Utc};
 use serde::Serialize;
-use serde_json::{json, Value};
+use serde_json::{json, Map, Value};
 use sha2::{Digest, Sha256};
 use std::convert::TryFrom;
 use tokio::{sync::Mutex, time::Duration};
@@ -18,7 +18,9 @@ use tokio::{sync::Mutex, time::Duration};
 use arw_core::gating::CapsuleLeaseState;
 use arw_protocol::GatingCapsule;
 
-use crate::{read_models, tasks::TaskHandle, AppState};
+use crate::{
+    read_models, request_ctx, request_ctx::RequestCorrelation, tasks::TaskHandle, AppState,
+};
 use arw_topics::{
     TOPIC_POLICY_CAPSULE_APPLIED, TOPIC_POLICY_CAPSULE_EXPIRED, TOPIC_POLICY_CAPSULE_FAILED,
     TOPIC_POLICY_CAPSULE_TEARDOWN, TOPIC_POLICY_DECISION,
@@ -657,13 +659,18 @@ pub fn start_refresh_task(state: AppState) -> TaskHandle {
 }
 
 pub async fn capsule_mw(state: AppState, req: Request<Body>, next: Next) -> Response {
-    match apply_capsule(&state, req.headers()).await {
+    let corr = request_ctx::context(&req);
+    match apply_capsule(&state, req.headers(), corr.as_ref()).await {
         Ok(_) => next.run(req).await,
         Err(resp) => resp,
     }
 }
 
-async fn apply_capsule(state: &AppState, headers: &HeaderMap) -> Result<(), Response> {
+async fn apply_capsule(
+    state: &AppState,
+    headers: &HeaderMap,
+    corr: Option<&RequestCorrelation>,
+) -> Result<(), Response> {
     let raw = match extract_header(headers) {
         CapsuleHeader::None => return Ok(()),
         CapsuleHeader::Current(v) => v,
@@ -675,7 +682,7 @@ async fn apply_capsule(state: &AppState, headers: &HeaderMap) -> Result<(), Resp
             } else {
                 tracing::warn!(target: "arw::policy", "legacy capsule header rejected (unparseable id)");
             }
-            publish_failure(state, capsule_id.as_deref(), LEGACY_HEADER_DETAIL).await;
+            publish_failure(state, capsule_id.as_deref(), LEGACY_HEADER_DETAIL, corr).await;
             return Err(error_response(
                 StatusCode::GONE,
                 "capsule_header_legacy",
@@ -691,12 +698,12 @@ async fn apply_capsule(state: &AppState, headers: &HeaderMap) -> Result<(), Resp
                 "invalid_capsule",
                 kind.as_message(),
             );
-            publish_failure(state, None, kind.as_message()).await;
+            publish_failure(state, None, kind.as_message(), corr).await;
             return Err(resp);
         }
     };
     if !arw_core::rpu::verify_capsule(&capsule) {
-        publish_failure(state, Some(&capsule.id), "verification failed").await;
+        publish_failure(state, Some(&capsule.id), "verification failed", corr).await;
         return Err(error_response(
             StatusCode::FORBIDDEN,
             "capsule_verification_failed",
@@ -706,20 +713,61 @@ async fn apply_capsule(state: &AppState, headers: &HeaderMap) -> Result<(), Resp
     let now = now_ms();
     let outcome = state.capsules().adopt(&capsule, now).await;
     if outcome.notify {
-        state.bus().publish(
-            TOPIC_POLICY_CAPSULE_APPLIED,
-            &json!({
-                "id": outcome.snapshot.id,
-                "version": outcome.snapshot.version,
-                "issuer": outcome.snapshot.issuer,
-                "applied_ms": outcome.snapshot.applied_ms,
-                "hop_ttl": outcome.snapshot.hop_ttl,
-                "denies": outcome.snapshot.denies,
-                "contracts": outcome.snapshot.contracts,
-                "lease_until_ms": outcome.snapshot.lease_until_ms,
-                "renew_within_ms": outcome.snapshot.renew_within_ms,
-            }),
+        let mut event = Map::with_capacity(9);
+        event.insert("id".into(), Value::String(outcome.snapshot.id.clone()));
+        event.insert(
+            "version".into(),
+            Value::String(outcome.snapshot.version.clone()),
         );
+        event.insert(
+            "issuer".into(),
+            outcome
+                .snapshot
+                .issuer
+                .as_ref()
+                .map(|issuer| Value::String(issuer.clone()))
+                .unwrap_or(Value::Null),
+        );
+        event.insert(
+            "applied_ms".into(),
+            Value::Number(outcome.snapshot.applied_ms.into()),
+        );
+        event.insert(
+            "hop_ttl".into(),
+            outcome
+                .snapshot
+                .hop_ttl
+                .map(|ttl| Value::Number((ttl as u64).into()))
+                .unwrap_or(Value::Null),
+        );
+        event.insert(
+            "denies".into(),
+            Value::Number((outcome.snapshot.denies as u64).into()),
+        );
+        event.insert(
+            "contracts".into(),
+            Value::Number((outcome.snapshot.contracts as u64).into()),
+        );
+        event.insert(
+            "lease_until_ms".into(),
+            outcome
+                .snapshot
+                .lease_until_ms
+                .map(|v| Value::Number(v.into()))
+                .unwrap_or(Value::Null),
+        );
+        event.insert(
+            "renew_within_ms".into(),
+            outcome
+                .snapshot
+                .renew_within_ms
+                .map(|v| Value::Number(v.into()))
+                .unwrap_or(Value::Null),
+        );
+        add_corr_fields(&mut event, corr);
+        state
+            .bus()
+            .publish(TOPIC_POLICY_CAPSULE_APPLIED, &Value::Object(event));
         let snapshot = state.capsules().snapshot().await;
         read_models::publish_read_model_patch(&state.bus(), "policy_capsules", &snapshot);
     }
@@ -795,22 +843,53 @@ fn error_response(status: StatusCode, code: &str, detail: &str) -> Response {
         .into_response()
 }
 
-async fn publish_failure(state: &AppState, capsule_id: Option<&str>, detail: &str) {
-    state.bus().publish(
-        TOPIC_POLICY_CAPSULE_FAILED,
-        &json!({
-            "id": capsule_id,
-            "detail": detail,
-        }),
+fn add_corr_fields(target: &mut Map<String, Value>, corr: Option<&RequestCorrelation>) {
+    if let Some(meta) = corr {
+        if !target.contains_key("corr_id") {
+            target.insert("corr_id".into(), Value::String(meta.corr_id().to_string()));
+        }
+        if !target.contains_key("request_id") {
+            target.insert(
+                "request_id".into(),
+                Value::String(meta.request_id().to_string()),
+            );
+        }
+    }
+}
+
+async fn publish_failure(
+    state: &AppState,
+    capsule_id: Option<&str>,
+    detail: &str,
+    corr: Option<&RequestCorrelation>,
+) {
+    let mut failure = Map::with_capacity(2);
+    failure.insert(
+        "id".into(),
+        capsule_id
+            .map(|id| Value::String(id.to_string()))
+            .unwrap_or(Value::Null),
     );
-    state.bus().publish(
-        TOPIC_POLICY_DECISION,
-        &json!({
-            "action": "policy.capsule",
-            "allow": false,
-            "explain": {"detail": detail, "capsule_id": capsule_id},
-        }),
-    );
+    failure.insert("detail".into(), Value::String(detail.to_string()));
+    add_corr_fields(&mut failure, corr);
+    state
+        .bus()
+        .publish(TOPIC_POLICY_CAPSULE_FAILED, &Value::Object(failure));
+
+    let mut explain = Map::new();
+    explain.insert("detail".into(), Value::String(detail.to_string()));
+    if let Some(id) = capsule_id {
+        explain.insert("capsule_id".into(), Value::String(id.to_string()));
+    }
+
+    let mut decision = Map::with_capacity(3);
+    decision.insert("action".into(), Value::String("policy.capsule".into()));
+    decision.insert("allow".into(), Value::Bool(false));
+    decision.insert("explain".into(), Value::Object(explain));
+    add_corr_fields(&mut decision, corr);
+    state
+        .bus()
+        .publish(TOPIC_POLICY_DECISION, &Value::Object(decision));
 }
 
 fn now_ms() -> u64 {
@@ -1015,6 +1094,7 @@ fn format_relative_past(ms: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::request_ctx::{CorrelationSource, RequestCorrelation};
     use crate::test_support::env as test_env;
     use arw_policy::PolicyEngine;
     use arw_topics::{TOPIC_POLICY_CAPSULE_FAILED, TOPIC_POLICY_DECISION, TOPIC_READMODEL_PATCH};
@@ -1409,6 +1489,54 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn publish_failure_attaches_corr_metadata() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        let state = build_state(temp.path(), &mut ctx.env).await;
+        let bus = state.bus();
+        let mut rx = bus.subscribe_filtered(
+            vec![
+                TOPIC_POLICY_CAPSULE_FAILED.to_string(),
+                TOPIC_POLICY_DECISION.to_string(),
+            ],
+            Some(8),
+        );
+
+        let corr = RequestCorrelation::new("req-123", "corr-456", CorrelationSource::Provided);
+        publish_failure(&state, Some("caps-demo"), "invalid", Some(&corr)).await;
+        assert_eq!(corr.source(), CorrelationSource::Provided);
+
+        let mut events = std::collections::HashMap::new();
+        for _ in 0..2 {
+            let env = timeout(Duration::from_secs(1), rx.recv())
+                .await
+                .expect("bus event")
+                .expect("bus open");
+            events.insert(env.kind.clone(), env.payload);
+        }
+
+        let failure = events
+            .remove(TOPIC_POLICY_CAPSULE_FAILED)
+            .expect("failure event");
+        assert_eq!(failure["id"].as_str(), Some("caps-demo"));
+        assert_eq!(failure["detail"].as_str(), Some("invalid"));
+        assert_eq!(failure["corr_id"].as_str(), Some("corr-456"));
+        assert_eq!(failure["request_id"].as_str(), Some("req-123"));
+
+        let decision = events
+            .remove(TOPIC_POLICY_DECISION)
+            .expect("policy decision event");
+        assert_eq!(decision["action"].as_str(), Some("policy.capsule"));
+        assert_eq!(decision["allow"].as_bool(), Some(false));
+        assert_eq!(decision["corr_id"].as_str(), Some("corr-456"));
+        assert_eq!(decision["request_id"].as_str(), Some("req-123"));
+        assert_eq!(
+            decision["explain"]["capsule_id"].as_str(),
+            Some("caps-demo"),
+        );
+    }
+
+    #[tokio::test]
     async fn next_refresh_delay_honours_renew_window() {
         let store = CapsuleStore::new();
         let now = now_ms();
@@ -1459,7 +1587,7 @@ mod tests {
             HeaderValue::from_str(&raw).unwrap(),
         );
 
-        let result = apply_capsule(&state, &headers).await;
+        let result = apply_capsule(&state, &headers, None).await;
         let response = result.expect_err("legacy header should be rejected");
         assert_eq!(response.status(), StatusCode::GONE);
 

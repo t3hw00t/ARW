@@ -63,6 +63,7 @@ mod working_set;
 mod world;
 
 mod logic_units_builtin;
+mod request_ctx;
 mod router;
 
 pub(crate) use app_state::AppState;
@@ -224,6 +225,7 @@ mod http_tests {
                 let st = capsule_state.clone();
                 async move { capsule_guard::capsule_mw(st, req, next).await }
             }))
+            .layer(middleware::from_fn(crate::request_ctx::correlation_mw))
             .with_state(state)
     }
 
@@ -540,6 +542,7 @@ mod http_tests {
         let capsule = signed_capsule(&signing, issuer, "capsule-http");
         let capsule_json = serde_json::to_string(&capsule).expect("capsule json");
 
+        let corr_id = "corr-test-123";
         let response = router
             .clone()
             .oneshot(
@@ -547,12 +550,30 @@ mod http_tests {
                     .method("GET")
                     .uri("/admin/ping")
                     .header("X-ARW-Capsule", capsule_json)
+                    .header("X-ARW-Corr", corr_id)
                     .body(Body::empty())
                     .expect("capsule request"),
             )
             .await
             .expect("capsule response");
         assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(
+            response
+                .headers()
+                .get(axum::http::header::HeaderName::from_static("x-arw-corr"))
+                .and_then(|v| v.to_str().ok()),
+            Some(corr_id)
+        );
+        let req_id_header = axum::http::header::HeaderName::from_static("x-request-id");
+        let req_id_val = response
+            .headers()
+            .get(&req_id_header)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or_default();
+        assert!(
+            !req_id_val.is_empty(),
+            "response should include x-request-id"
+        );
 
         let mut events: HashMap<String, serde_json::Value> = HashMap::new();
         while events.len() < 2 {
@@ -568,6 +589,12 @@ mod http_tests {
             .expect("applied event");
         assert_eq!(applied["id"].as_str(), Some("capsule-http"));
         assert_eq!(applied["issuer"].as_str(), Some(issuer));
+        assert_eq!(applied["corr_id"].as_str(), Some(corr_id));
+        let applied_request_id = applied["request_id"].as_str().unwrap_or_default();
+        assert!(
+            !applied_request_id.is_empty(),
+            "policy.capsule.applied event should carry request_id"
+        );
 
         let patch = events
             .remove(TOPIC_READMODEL_PATCH)
