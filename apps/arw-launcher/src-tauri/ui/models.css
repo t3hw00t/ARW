@@ -25,7 +25,10 @@ th, td { border-bottom: 1px solid #eee; padding: 6px 8px; text-align: left; }
 }
 .status-badge.ok { border-color: var(--status-ok); color: var(--status-ok); }
 .status-badge.warn { border-color: var(--status-warn); color: var(--status-warn); }
-.status-badge.accent { border-color: var(--color-accent-teal); color: var(--color-accent-teal); }
+.status-badge.accent {
+  border-color: var(--color-accent-teal-strong);
+  color: var(--color-accent-teal-strong);
+}
 .status-badge.bad { border-color: var(--status-bad); color: var(--status-bad); }
 .status-dot {
   width: 0.55rem;
@@ -62,7 +65,7 @@ button:hover { background: #f0f0f0; }
   border-radius: 999px;
 }
 .models-cell button.pill:focus {
-  outline: 2px solid var(--color-accent-teal);
+  outline: 2px solid var(--color-accent-teal-strong);
   outline-offset: 1px;
 }
 .models-cell .models-copy {

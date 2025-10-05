@@ -2,6 +2,8 @@
   --brand-copper-rgb: 184,115,51;
   --color-accent-teal: #1bb3a3;
   --color-accent-teal-light: #63d3c9;
+  --color-accent-teal-strong: #0f766e;
+  --color-accent-teal-strong-rgb: 15,118,110;
   --color-brand-copper: #b87333;
   --color-brand-copper-dark: #915a29;
   --color-ink: #111827;
@@ -19,10 +21,15 @@
   --sp4: 16px;
   --sp5: 24px;
   --status-accent: #1bb3a3;
-  --status-bad: #dc2626;
+  --status-accent-rgb: 27,179,163;
+  --status-bad: #a91d1d;
+  --status-bad-rgb: 169,29,29;
   --status-info: #2563eb;
+  --status-info-rgb: 37,99,235;
   --status-ok: #15803d;
+  --status-ok-rgb: 21,128,61;
   --status-warn: #b45309;
+  --status-warn-rgb: 180,83,9;
   --surface: #ffffff;
   --surface-muted: #fafaf9;
 }
@@ -33,6 +40,18 @@
     --surface-muted: #0b0d11;
     --color-ink: #e5e7eb;
     --color-line: #1f232a;
+    --color-accent-teal-strong: #2dd4bf;
+    --color-accent-teal-strong-rgb: 45,212,191;
+    --status-ok: #34d399;
+    --status-ok-rgb: 52,211,153;
+    --status-warn: #fbbf24;
+    --status-warn-rgb: 251,191,36;
+    --status-bad: #fca5a5;
+    --status-bad-rgb: 252,165,165;
+    --status-info: #60a5fa;
+    --status-info-rgb: 96,165,250;
+    --status-accent: #2dd4bf;
+    --status-accent-rgb: 45,212,191;
   }
 }
 

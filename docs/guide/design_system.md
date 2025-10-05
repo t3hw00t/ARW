@@ -15,10 +15,11 @@ Type: How‑to
 - UI kit primitives live at [assets/design/ui-kit.css](https://github.com/t3hw00t/ARW/blob/main/assets/design/ui-kit.css); run `just tokens-sync` to update `apps/arw-launcher/src-tauri/ui/ui-kit.css` and `apps/arw-server/assets/ui/ui-kit.css`.
 - Prefer token variables over hex.
 - Colors
-  - Primary (Copper): `var(--color-brand-copper)` (dark: `var(--color-brand-copper-dark)`, light: `#dca777`)
-  - Accent (Teal): `var(--color-accent-teal)`, light `var(--color-accent-teal-light)`
+- Primary (Copper): `var(--color-brand-copper)` (dark: `var(--color-brand-copper-dark)`, light: `#dca777`)
+- Accent (Teal): `var(--color-accent-teal)` for fills, light `var(--color-accent-teal-light)` for gradients, and `var(--color-accent-teal-strong)` for text (≥4.9:1 on light surfaces, tuned per scheme); RGB helper `var(--color-accent-teal-strong-rgb)`
   - Ink/Muted/Line: `var(--color-ink)`, `var(--color-muted)`, `var(--color-line)`
-  - Status: ok `var(--status-ok)` · warn `var(--status-warn)` · bad `var(--status-bad)` · info `var(--status-info)` (all tuned for ≥4.8:1 on light surfaces)
+  - Status: ok `var(--status-ok)` · warn `var(--status-warn)` · bad `var(--status-bad)` · info `var(--status-info)` (light surfaces stay ≥4.5:1); dark surfaces swap to `var(--status-*-dark)` and keep ≥5:1
+  - Derived RGB helpers: `var(--status-ok-rgb)`, `var(--status-warn-rgb)`, `var(--status-bad-rgb)`, `var(--status-info-rgb)`, `var(--status-accent-rgb)`
 
 - Radii
   - Panels: `10px` · Buttons: `8px` · Badges: `999px`
@@ -49,6 +50,10 @@ Type: How‑to
 ## Topic markers
 
 Use the trio badge to show “expansive / complex / complicated” at a glance. Always rendered as three gradient segments; tune each segment’s strength (0..1) with CSS variables and mirror values in `data-*` for readable labels.
+
+- Expansive uses `var(--color-accent-teal-strong)` → `var(--color-accent-teal-light)`
+- Complex uses `var(--color-brand-copper-dark)` → `var(--color-brand-copper)`
+- Complicated blends copper to the strong accent for contrast on both themes
 
 ```
 ## Title of Section

@@ -5,7 +5,9 @@
       "copper": { "$type": "color", "$value": "#b87333" },
       "copper_dark": { "$type": "color", "$value": "#915a29" },
       "teal": { "$type": "color", "$value": "#1bb3a3" },
-      "teal_light": { "$type": "color", "$value": "#63d3c9" }
+      "teal_light": { "$type": "color", "$value": "#63d3c9" },
+      "teal_strong": { "$type": "color", "$value": "#0f766e" },
+      "teal_strong_dark": { "$type": "color", "$value": "#2dd4bf" }
     },
     "neutrals": {
       "ink": { "$type": "color", "$value": "#111827" },
@@ -20,10 +22,15 @@
     },
     "status": {
       "ok": { "$type": "color", "$value": "#15803d" },
+      "ok_dark": { "$type": "color", "$value": "#34d399" },
       "warn": { "$type": "color", "$value": "#b45309" },
-      "bad": { "$type": "color", "$value": "#dc2626" },
+      "warn_dark": { "$type": "color", "$value": "#fbbf24" },
+      "bad": { "$type": "color", "$value": "#a91d1d" },
+      "bad_dark": { "$type": "color", "$value": "#fca5a5" },
       "info": { "$type": "color", "$value": "#2563eb" },
-      "accent": { "$type": "color", "$value": "#1bb3a3" }
+      "info_dark": { "$type": "color", "$value": "#60a5fa" },
+      "accent": { "$type": "color", "$value": "#1bb3a3" },
+      "accent_dark": { "$type": "color", "$value": "#2dd4bf" }
     }
   },
   "spacing": {

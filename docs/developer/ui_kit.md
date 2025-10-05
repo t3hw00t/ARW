@@ -36,10 +36,10 @@ See also: developer/design_theme.md
 - Source of truth: `assets/design/tokens.css` (synced to `apps/arw-launcher/src-tauri/ui/tokens.css` and `apps/arw-server/assets/ui/tokens.css`)
 - UI kit primitives: `assets/design/ui-kit.css` (synced to `apps/arw-launcher/src-tauri/ui/ui-kit.css` and `apps/arw-server/assets/ui/ui-kit.css`)
 - Use tokens instead of hex colors. Key variables:
-  - Brand: `--color-brand-copper`, `--color-brand-copper-dark`, `--color-accent-teal`, `--color-accent-teal-light`
+  - Brand: `--color-brand-copper`, `--color-brand-copper-dark`, `--color-accent-teal`, `--color-accent-teal-light`, `--color-accent-teal-strong` (RGB helper `--color-accent-teal-strong-rgb`)
   - Neutrals: `--color-ink`, `--color-muted`, `--color-line`
   - Surfaces: `--surface`, `--surface-muted`
-  - Status: `--status-ok`, `--status-warn`, `--status-bad`, `--status-info`
+  - Status: `--status-ok`, `--status-warn`, `--status-bad`, `--status-info` (dark mode swaps to `--status-*-dark`; RGB helpers via `--status-*-rgb`)
   - Rhythm: `--sp2/3/4/5`; Radii: `--radius-2/3/4`; Shadows: `--shadow-1/2/3`
 
 ## Accessibility
@@ -65,4 +65,3 @@ See also: developer/design_theme.md
   <div class="toast-wrap"><div class="toast">Models updated</div></div>
   </div>
 ```
-

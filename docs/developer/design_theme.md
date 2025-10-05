@@ -35,19 +35,19 @@ See also: [Style & Harmony](style.md), [UX Invariants](../architecture/ux_invari
 - Apps usage: prefer CSS variables with the same names. If bundling constraints exist, copy the token block verbatim to app CSS.
 
 Key CSS variables
-- Brand: `--color-brand-copper`, `--color-brand-copper-dark`, `--color-accent-teal`, `--color-accent-teal-light`.
+- Brand: `--color-brand-copper`, `--color-brand-copper-dark`, `--color-accent-teal`, `--color-accent-teal-light`, `--color-accent-teal-strong` (+ `--color-accent-teal-strong-rgb`).
 - Surfaces/Neutrals: `--surface`, `--surface-muted`, `--color-ink`, `--color-muted`, `--color-line`.
-- Status: `--status-ok`, `--status-warn`, `--status-bad`, `--status-info`, `--status-accent`.
+- Status: `--status-ok`, `--status-warn`, `--status-bad`, `--status-info`, `--status-accent` (+ matching `--status-*-rgb` helpers and dark overrides `--status-*-dark`).
 - Rhythm: `--sp2`, `--sp3`, `--sp4`, `--sp5`; Radii: `--radius-2/3/4`; Shadows: `--shadow-1/2/3`.
 - Dark mode: honors `prefers-color-scheme`; tokens swap neutrals/surfaces only — keep accents stable.
 
 ## Colors
 
 - Brand primary: Copper `#b87333` (dark `#915a29`).
-- Accent: Teal `#1bb3a3` (light `#63d3c9`).
+- Accent: Teal `#1bb3a3` (light `#63d3c9`, strong text tone `#0f766e` light / `#2dd4bf` dark).
 - Neutrals: Ink `#111827`, Muted `#6b7280`, Line `#e5e7eb`.
 - Surfaces: Page `#ffffff`, Muted `#fafaf9` (dark: `#0f1115`, `#0b0d11`).
-- Status: ok `#15803d`, warn `#b45309`, bad `#dc2626`, info `#2563eb`.
+- Status: ok `#15803d`, warn `#b45309`, bad `#a91d1d`, info `#2563eb`; dark overrides `#34d399` / `#fbbf24` / `#fca5a5` / `#60a5fa`; RGB tuples exposed via `--status-*-rgb` for overlays.
 
 Usage
 - Primary CTAs use Copper; secondary actions default; low‑emphasis use Ghost.
@@ -83,7 +83,7 @@ Usage
 
 ## Accessibility
 
-- Contrast: meet WCAG AA for text and controls; mind Copper on dark surfaces (use light variant when needed). Status colors (#15803d/#b45309/#dc2626/#2563eb) all clear 4.8:1 on light surfaces.
+- Contrast: meet WCAG AA for text and controls; Copper needs the lighter variant on very dark surfaces. Status colors (#15803d / #b45309 / #a91d1d / #2563eb) clear ≥4.5:1 on light surfaces, while dark-mode overrides (#34d399 / #fbbf24 / #fca5a5 / #60a5fa) stay ≥5:1 against dark neutrals.
 - Focus: strong visible outline on interactive elements; use `:focus-visible`.
 - Keyboard: palette is Cmd/Ctrl‑K; Escape closes overlays; Tab order is logical.
 - Color alone: never the only signal; combine with icons/text.

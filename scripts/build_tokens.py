@@ -37,6 +37,12 @@ def main():
     if 'copper_dark' in brand: css_vars['--color-brand-copper-dark'] = brand['copper_dark']['$value']
     if 'teal' in brand: css_vars['--color-accent-teal'] = brand['teal']['$value']
     if 'teal_light' in brand: css_vars['--color-accent-teal-light'] = brand['teal_light']['$value']
+    if 'teal_strong' in brand:
+        css_vars['--color-accent-teal-strong'] = brand['teal_strong']['$value']
+        r, g, b = hex_to_rgb_tuple(brand['teal_strong']['$value'])
+        css_vars['--color-accent-teal-strong-rgb'] = f'{r},{g},{b}'
+
+    teal_strong_dark = brand.get('teal_strong_dark', {}).get('$value')
     # Neutrals & surfaces
     if 'ink' in neutrals: css_vars['--color-ink'] = neutrals['ink']['$value']
     if 'muted' in neutrals: css_vars['--color-muted'] = neutrals['muted']['$value']
@@ -46,7 +52,23 @@ def main():
     if 'surface_muted' in surfaces:
         css_vars['--surface-muted'] = surfaces['surface_muted']['$value']
     # Status
-    for k, v in status.items(): css_vars[f'--status-{k}'] = v['$value']
+    status_dark_overrides = {}
+    for k, v in status.items():
+        if k.endswith('_dark'):
+            status_dark_overrides[k[:-5]] = v['$value']
+        else:
+            css_vars[f'--status-{k}'] = v['$value']
+
+    # Derived RGB tuples for status colors
+    status_rgb_vars = {}
+    for var_name, value in list(css_vars.items()):
+        if not var_name.startswith('--status-') or var_name.endswith('-rgb'):
+            continue
+        base = var_name[len('--status-'):]
+        r, g, b = hex_to_rgb_tuple(value)
+        rgb_name = f'--status-{base}-rgb'
+        css_vars[rgb_name] = f'{r},{g},{b}'
+        status_rgb_vars[base] = css_vars[rgb_name]
 
     # Spacing
     for k, v in (data.get('spacing', {})).items(): css_vars[f'--sp{re.sub(r"^sp?", "", k)}' if k.startswith('sp') else f'--sp{k}'] = v['$value']
@@ -70,6 +92,14 @@ def main():
         '--color-ink': '#e5e7eb',
         '--color-line': '#1f232a',
     }
+    if teal_strong_dark:
+        dark_overrides['--color-accent-teal-strong'] = teal_strong_dark
+        r, g, b = hex_to_rgb_tuple(teal_strong_dark)
+        dark_overrides['--color-accent-teal-strong-rgb'] = f'{r},{g},{b}'
+    for base, override_value in status_dark_overrides.items():
+        dark_overrides[f'--status-{base}'] = override_value
+        r, g, b = hex_to_rgb_tuple(override_value)
+        dark_overrides[f'--status-{base}-rgb'] = f'{r},{g},{b}'
 
     # Write CSS
     lines = [":root{\n"]
@@ -99,6 +129,12 @@ def main():
         'copper_dark': css_vars.get('--color-brand-copper-dark', ''),
         'teal': css_vars.get('--color-accent-teal', ''),
         'teal_light': css_vars.get('--color-accent-teal-light', ''),
+        'teal_strong': css_vars.get('--color-accent-teal-strong', ''),
+        'teal_strong_dark': teal_strong_dark or '',
+    }
+    json_out['brand_rgb'] = {
+        'teal_strong': css_vars.get('--color-accent-teal-strong-rgb', ''),
+        'teal_strong_dark': dark_overrides.get('--color-accent-teal-strong-rgb', ''),
     }
     json_out['neutrals'] = {
         'ink': css_vars.get('--color-ink', ''),
@@ -116,7 +152,17 @@ def main():
         'warn': css_vars.get('--status-warn', ''),
         'bad': css_vars.get('--status-bad', ''),
         'info': css_vars.get('--status-info', ''),
-        'accent': css_vars.get('--color-accent-teal', ''),
+        'accent': css_vars.get('--status-accent', ''),
+    }
+    json_out['status_dark'] = {
+        base: status_dark_overrides.get(base, '') for base in ['ok', 'warn', 'bad', 'info', 'accent']
+    }
+    json_out['status_rgb'] = {
+        'ok': status_rgb_vars.get('ok', ''),
+        'warn': status_rgb_vars.get('warn', ''),
+        'bad': status_rgb_vars.get('bad', ''),
+        'info': status_rgb_vars.get('info', ''),
+        'accent': status_rgb_vars.get('accent', ''),
     }
     json_out['spacing'] = { 'sp2': 8, 'sp3': 12, 'sp4': 16, 'sp5': 24 }
     json_out['radii'] = { 'r2': 6, 'r3': 8, 'r4': 12 }

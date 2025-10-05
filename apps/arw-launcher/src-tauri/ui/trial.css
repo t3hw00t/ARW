@@ -54,9 +54,9 @@ body[data-page="trial"] .wrap{
   font-weight: 500;
 }
 
-.status-pill.ok{ border-color: rgba(var(--status-ok-rgb, 34,197,94),0.35); color: var(--status-ok); }
-.status-pill.warn{ border-color: rgba(var(--status-warn-rgb, 234,179,8),0.45); color: var(--status-warn); }
-.status-pill.bad{ border-color: rgba(var(--status-bad-rgb, 220,38,38),0.45); color: var(--status-bad); }
+.status-pill.ok{ border-color: rgba(var(--status-ok-rgb),0.35); color: var(--status-ok); }
+.status-pill.warn{ border-color: rgba(var(--status-warn-rgb),0.45); color: var(--status-warn); }
+.status-pill.bad{ border-color: rgba(var(--status-bad-rgb),0.45); color: var(--status-bad); }
 
 .hero{
   display: flex;
@@ -91,8 +91,8 @@ body[data-page="trial"] .wrap{
   margin-top: var(--sp2);
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(var(--status-bad-rgb, 220,38,38),0.35);
-  background: rgba(220,38,38,0.08);
+  border: 1px solid rgba(var(--status-bad-rgb),0.35);
+  background: rgba(var(--status-bad-rgb),0.08);
   color: var(--status-bad);
 }
 
@@ -309,8 +309,8 @@ body[data-page="trial"] .wrap{
 .approvals-notice{
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(var(--status-bad-rgb, 220,38,38),0.35);
-  background: rgba(220,38,38,0.08);
+  border: 1px solid rgba(var(--status-bad-rgb),0.35);
+  background: rgba(var(--status-bad-rgb),0.08);
   color: var(--status-bad);
 }
 
@@ -451,8 +451,8 @@ body[data-page="trial"] .wrap{
 .connections-notice{
   padding: 10px 12px;
   border-radius: 10px;
-  border: 1px solid rgba(var(--status-bad-rgb, 220,38,38),0.35);
-  background: rgba(220,38,38,0.08);
+  border: 1px solid rgba(var(--status-bad-rgb),0.35);
+  background: rgba(var(--status-bad-rgb),0.08);
   color: var(--status-bad);
 }
 
@@ -475,9 +475,9 @@ body[data-page="trial"] .wrap{
   gap: var(--sp1);
 }
 
-.connection-card.ok{ border-color: rgba(var(--status-ok-rgb, 34,197,94),0.4); }
-.connection-card.warn{ border-color: rgba(var(--status-warn-rgb, 234,179,8),0.4); }
-.connection-card.bad{ border-color: rgba(var(--status-bad-rgb, 220,38,38),0.4); }
+.connection-card.ok{ border-color: rgba(var(--status-ok-rgb),0.4); }
+.connection-card.warn{ border-color: rgba(var(--status-warn-rgb),0.4); }
+.connection-card.bad{ border-color: rgba(var(--status-bad-rgb),0.4); }
 
 .connection-card h3{
   margin: 0;
@@ -597,7 +597,7 @@ body[data-page="trial"] .wrap{
 
 button.danger{
   background: linear-gradient(180deg,#fee2e2,#fecaca);
-  border: 1px solid rgba(220,38,38,0.45);
+  border: 1px solid rgba(var(--status-bad-rgb),0.45);
   color: #7f1d1d;
 }
 

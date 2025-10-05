@@ -56,7 +56,10 @@ th{ color:#555; font-weight:600 }
 .badge{ display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border:1px solid var(--color-line); border-radius:999px; font-size:12px; background:#fff; box-shadow:0 1px 0 rgba(255,255,255,0.9) inset }
 .badge.warn{ border-color: var(--status-warn); color: var(--status-warn) }
 .badge.base-badge{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:12px; }
-.badge.base-badge[data-override="true"]{ border-color: var(--color-accent-teal); color: var(--color-accent-teal); }
+.badge.base-badge[data-override="true"]{
+  border-color: var(--color-accent-teal-strong);
+  color: var(--color-accent-teal-strong);
+}
 .dot{ width:8px; height:8px; border-radius:999px; background:#aaa; display:inline-block }
 .dot.ok{ background: var(--status-ok) }
 .dot.bad{ background: var(--status-bad) }
@@ -82,7 +85,7 @@ input:focus, select:focus, textarea:focus{ outline: none; border-color: var(--co
 .ico.warn{ color: var(--status-warn) }
 .ico.bad{ color: var(--status-bad) }
 .ico.info{ color: var(--color-muted) }
-.ico.accent{ color: var(--color-accent-teal) }
+.ico.accent{ color: var(--color-accent-teal-strong) }
 
 /* Better keyboard focus */
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible{ outline: 2px solid rgba(var(--brand-copper-rgb), 0.55); outline-offset: 2px }
@@ -151,7 +154,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .arw-sidecar .approval-filter{ margin:4px 0; align-items:center; gap:6px }
 .arw-sidecar .approval-filter input{ flex:1; min-width:0 }
 .arw-sidecar .approval-filter-chips{ margin-bottom:6px; gap:6px }
-.arw-sidecar .approval-filter-chips button.active{ border-color: var(--color-accent-teal); color: var(--color-accent-teal); box-shadow: inset 0 1px 0 rgba(255,255,255,0.6) }
+.arw-sidecar .approval-filter-chips button.active{
+  border-color: var(--color-accent-teal-strong);
+  color: var(--color-accent-teal-strong);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.6);
+}
 .arw-sidecar .approval-filter-chips button[data-shortcut]::after{ content:"Alt+" attr(data-shortcut); font-size:11px; color:var(--color-muted); margin-left:6px }
 .arw-sidecar .approval-stale{ margin:4px 0; align-items:center; gap:6px }
 .arw-sidecar .approval-stale select{ flex:0 0 auto }
