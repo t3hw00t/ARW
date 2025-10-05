@@ -554,8 +554,15 @@ struct StateActionsArgs {
     #[arg(long)]
     kind_prefix: Option<String>,
     /// Only include actions updated at or after this RFC3339 timestamp
-    #[arg(long)]
+    #[arg(long, conflicts_with = "updated_relative")]
     updated_since: Option<String>,
+    /// Relative lookback for action updates (e.g., 30m, 4h) converted to RFC3339
+    #[arg(
+        long = "updated-relative",
+        value_name = "WINDOW",
+        conflicts_with = "updated_since"
+    )]
+    updated_relative: Option<String>,
     /// Emit raw JSON instead of formatted text
     #[arg(long)]
     json: bool,
@@ -645,6 +652,16 @@ struct EventsJournalArgs {
     /// Skip entries at or before this RFC3339 timestamp on the first fetch
     #[arg(long = "after")]
     after_cursor: Option<String>,
+    /// Skip entries older than this relative window on the first fetch (e.g. 15m, 2h30m)
+    #[arg(
+        long = "after-relative",
+        value_name = "WINDOW",
+        conflicts_with = "after_cursor"
+    )]
+    after_relative: Option<String>,
+    /// Maximum characters to display for payload/policy lines (0 hides them)
+    #[arg(long, default_value_t = 160)]
+    payload_width: usize,
 }
 
 #[derive(Args)]
@@ -2055,16 +2072,22 @@ fn render_observations_text(
             version
         );
         let mut filters: Vec<String> = Vec::new();
-        if let Some(ref prefix) = args.kind_prefix {
-            if !prefix.trim().is_empty() {
-                filters.push(format!("prefix={}", prefix.trim()));
+        push_filter_str(&mut filters, "prefix=", args.kind_prefix.as_deref());
+        push_filter_usize(&mut filters, "limit=", args.limit);
+        if let Some(ref label) = since_resolution.relative_display {
+            if !label.is_empty() {
+                filters.push(label.clone());
             }
         }
-        if let Some(ref label) = since_resolution.relative_display {
-            filters.push(label.clone());
-        }
         if let Some(ref label) = since_resolution.display {
-            filters.push(label.clone());
+            if !label.is_empty() {
+                filters.push(label.clone());
+            }
+        }
+        if args.payload_width == 0 {
+            filters.push("payload hidden".to_string());
+        } else if args.payload_width != 120 {
+            filters.push(format!("payload_width={}", args.payload_width));
         }
         if !filters.is_empty() {
             println!("Filters: {}", filters.join(", "));
@@ -2078,12 +2101,21 @@ fn render_observations_text(
         return Ok(());
     }
 
+    println!("{:<28} {:<10} {:<36} Payload", "Time", "Age", "Kind");
+
+    let now_utc = Utc::now();
+
     for item in items {
         let time_raw = item.get("time").and_then(|v| v.as_str()).unwrap_or("");
         let when = if time_raw.is_empty() {
             "-".to_string()
         } else {
             format_observation_timestamp(time_raw)
+        };
+        let age_display = if time_raw.is_empty() {
+            "-".to_string()
+        } else {
+            format_elapsed_since_with_now(time_raw, now_utc).unwrap_or_else(|| "-".to_string())
         };
         let kind = item.get("kind").and_then(|v| v.as_str()).unwrap_or("-");
         let kind_display = ellipsize_str(kind, 36);
@@ -2118,8 +2150,8 @@ fn render_observations_text(
         };
 
         println!(
-            "{:<28} {:<36} {}{}",
-            when, kind_display, payload_display, extra_str
+            "{:<28} {:<10} {:<36} {}{}",
+            when, age_display, kind_display, payload_display, extra_str
         );
     }
 
@@ -2301,17 +2333,7 @@ impl ActionFilters {
             .as_ref()
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
-        let updated_since = if let Some(ref raw) = args.updated_since {
-            let trimmed = raw.trim();
-            if trimmed.is_empty() {
-                anyhow::bail!("--updated-since cannot be empty");
-            }
-            let parsed = DateTime::parse_from_rfc3339(trimmed)
-                .with_context(|| format!("failed to parse updated_since='{}'", trimmed))?;
-            Some(parsed.with_timezone(&Utc))
-        } else {
-            None
-        };
+        let updated_since = resolve_updated_since(args)?;
         Ok(Self {
             limit: args.limit.map(|v| v.clamp(1, 2000)),
             state,
@@ -2411,6 +2433,19 @@ fn render_actions_text(
             items.len(),
             version
         );
+        let mut filters: Vec<String> = Vec::new();
+        push_filter_str(&mut filters, "state=", args.state.as_deref());
+        push_filter_str(&mut filters, "kind_prefix=", args.kind_prefix.as_deref());
+        push_filter_usize(&mut filters, "limit=", args.limit);
+        push_filter_str(
+            &mut filters,
+            "updated_relative=",
+            args.updated_relative.as_deref(),
+        );
+        push_filter_str(&mut filters, "updated>", args.updated_since.as_deref());
+        if !filters.is_empty() {
+            println!("Filters: {}", filters.join(", "));
+        }
     }
 
     if items.is_empty() {
@@ -2420,12 +2455,15 @@ fn render_actions_text(
 
     let kind_width = args.kind_width.max(8);
     println!(
-        "{:<28} {:<10} {:<width$} Id",
+        "{:<28} {:<10} {:<10} {:<width$} Id",
         "Updated",
+        "Age",
         "State",
         "Kind",
         width = kind_width
     );
+
+    let now_utc = Utc::now();
 
     for item in items {
         let updated_raw = item.get("updated").and_then(|v| v.as_str()).unwrap_or("");
@@ -2433,6 +2471,11 @@ fn render_actions_text(
             "-".to_string()
         } else {
             format_observation_timestamp(updated_raw)
+        };
+        let age_display = if updated_raw.is_empty() {
+            "-".to_string()
+        } else {
+            format_elapsed_since_with_now(updated_raw, now_utc).unwrap_or_else(|| "-".to_string())
         };
         let state_display = item
             .get("state")
@@ -2447,8 +2490,9 @@ fn render_actions_text(
         let id_display = item.get("id").and_then(|v| v.as_str()).unwrap_or("-");
 
         println!(
-            "{:<28} {:<10} {:<width$} {}",
+            "{:<28} {:<10} {:<10} {:<width$} {}",
             updated_display,
+            age_display,
             state_display,
             kind_display,
             id_display,
@@ -2694,6 +2738,81 @@ fn parse_relative_duration(input: &str) -> Result<chrono::Duration> {
     Ok(chrono::Duration::seconds(total_seconds))
 }
 
+fn resolve_after_timestamp(
+    args: &EventsJournalArgs,
+) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
+    resolve_after_timestamp_with_now(
+        args.after_cursor.as_deref(),
+        args.after_relative.as_deref(),
+        chrono::Utc::now(),
+    )
+}
+
+fn resolve_after_timestamp_with_now(
+    absolute: Option<&str>,
+    relative: Option<&str>,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
+    if let Some(raw) = relative {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            anyhow::bail!("--after-relative requires a value such as 15m or 2h");
+        }
+        let duration = parse_relative_duration(trimmed)?;
+        return Ok(Some(now - duration));
+    }
+
+    if let Some(cursor) = absolute {
+        let trimmed = cursor.trim();
+        if trimmed.is_empty() {
+            anyhow::bail!("--after cannot be empty");
+        }
+        return match chrono::DateTime::parse_from_rfc3339(trimmed) {
+            Ok(dt) => Ok(Some(dt.with_timezone(&chrono::Utc))),
+            Err(_) => {
+                anyhow::bail!("--after must be an RFC3339 timestamp (e.g. 2025-10-02T17:15:00Z)")
+            }
+        };
+    }
+
+    Ok(None)
+}
+
+fn resolve_updated_since(args: &StateActionsArgs) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
+    resolve_updated_since_with_now(
+        args.updated_since.as_deref(),
+        args.updated_relative.as_deref(),
+        chrono::Utc::now(),
+    )
+}
+
+fn resolve_updated_since_with_now(
+    absolute: Option<&str>,
+    relative: Option<&str>,
+    now: chrono::DateTime<chrono::Utc>,
+) -> Result<Option<chrono::DateTime<chrono::Utc>>> {
+    if let Some(raw) = relative {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            anyhow::bail!("--updated-relative requires a value such as 15m or 2h");
+        }
+        let duration = parse_relative_duration(trimmed)?;
+        return Ok(Some(now - duration));
+    }
+
+    if let Some(raw) = absolute {
+        let trimmed = raw.trim();
+        if trimmed.is_empty() {
+            anyhow::bail!("--updated-since cannot be empty");
+        }
+        let parsed = chrono::DateTime::parse_from_rfc3339(trimmed)
+            .with_context(|| format!("failed to parse updated_since='{}'", trimmed))?;
+        return Ok(Some(parsed.with_timezone(&chrono::Utc)));
+    }
+
+    Ok(None)
+}
+
 fn cmd_events_journal(args: &EventsJournalArgs) -> Result<()> {
     let token = resolve_admin_token(&args.admin_token);
     let client = Client::builder()
@@ -2702,16 +2821,7 @@ fn cmd_events_journal(args: &EventsJournalArgs) -> Result<()> {
         .context("building HTTP client")?;
     let base = args.base.trim_end_matches('/');
 
-    let after_time = if let Some(ref cursor) = args.after_cursor {
-        match chrono::DateTime::parse_from_rfc3339(cursor) {
-            Ok(dt) => Some(dt.with_timezone(&chrono::Utc)),
-            Err(_) => {
-                anyhow::bail!("--after must be an RFC3339 timestamp (e.g. 2025-10-02T17:15:00Z)");
-            }
-        }
-    } else {
-        None
-    };
+    let after_time = resolve_after_timestamp(args)?;
 
     let mut body = fetch_journal_snapshot(
         &client,
@@ -2733,6 +2843,38 @@ fn cmd_events_journal(args: &EventsJournalArgs) -> Result<()> {
         return Ok(());
     }
 
+    let mut filter_summaries: Vec<String> = Vec::new();
+    push_filter_str(&mut filter_summaries, "prefix=", args.prefix.as_deref());
+    push_filter_str(
+        &mut filter_summaries,
+        "after_relative=",
+        args.after_relative.as_deref(),
+    );
+    push_filter_str(
+        &mut filter_summaries,
+        "after>",
+        args.after_cursor.as_deref(),
+    );
+    if args.limit != 200 {
+        filter_summaries.push(format!("limit={}", args.limit));
+    }
+    if args.payload_width == 0 {
+        filter_summaries.push("payload hidden".to_string());
+    } else if args.payload_width != 160 {
+        filter_summaries.push(format!("payload_width={}", args.payload_width));
+    }
+    if args.after_relative.is_some() {
+        if let Some(ref cursor) = after_time {
+            filter_summaries.push(format!(
+                "after>= {}",
+                cursor.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)
+            ));
+        }
+    }
+    if !filter_summaries.is_empty() {
+        println!("Filters: {}", filter_summaries.join(", "));
+    }
+
     let mut first_pass = true;
     let mut state = if args.follow {
         Some(JournalPrintState::new(args.limit.max(512)))
@@ -2751,6 +2893,7 @@ fn cmd_events_journal(args: &EventsJournalArgs) -> Result<()> {
             args.show_sources,
             first_pass,
             apply_after,
+            args.payload_width,
             state.as_mut(),
         );
         if !args.follow {
@@ -2808,6 +2951,7 @@ fn render_journal_text(
     show_sources: bool,
     first_pass: bool,
     after: Option<&chrono::DateTime<chrono::Utc>>,
+    payload_width: usize,
     mut state: Option<&mut JournalPrintState>,
 ) -> usize {
     let limit = body
@@ -2904,27 +3048,40 @@ fn render_journal_text(
     }
 
     let mut new_count = 0usize;
+    let now_utc = chrono::Utc::now();
     for (entry, key) in printable {
-        let time = entry.get("time").and_then(|v| v.as_str()).unwrap_or("-");
+        let time_raw = entry.get("time").and_then(|v| v.as_str());
         let kind = entry
             .get("kind")
             .and_then(|v| v.as_str())
             .unwrap_or("unknown");
-        let payload = entry.get("payload").cloned().unwrap_or(JsonValue::Null);
-        let payload_str = serde_json::to_string(&payload).unwrap_or_else(|_| "null".into());
-        let preview = truncate_payload(&payload_str, 160);
-        println!("[{}] {}", time, kind);
-        println!("  payload: {}", preview);
-        if let Some(policy) = entry.get("policy") {
-            if !policy.is_null() {
-                let policy_str = serde_json::to_string(policy).unwrap_or_else(|_| "{}".into());
-                println!("  policy: {}", truncate_payload(&policy_str, 120));
+        let (time_display, age_display) = if let Some(raw) = time_raw {
+            let display = format_observation_timestamp(raw);
+            let age =
+                format_elapsed_since_with_now(raw, now_utc).unwrap_or_else(|| "-".to_string());
+            (display, age)
+        } else {
+            ("-".to_string(), "-".to_string())
+        };
+        println!("[{} | {}] {}", time_display, age_display, kind);
+        if payload_width > 0 {
+            let payload = entry.get("payload").cloned().unwrap_or(JsonValue::Null);
+            let payload_str = serde_json::to_string(&payload).unwrap_or_else(|_| "null".into());
+            println!(
+                "  payload: {}",
+                truncate_payload(&payload_str, payload_width)
+            );
+            if let Some(policy) = entry.get("policy") {
+                if !policy.is_null() {
+                    let policy_str = serde_json::to_string(policy).unwrap_or_else(|_| "{}".into());
+                    println!("  policy: {}", truncate_payload(&policy_str, payload_width));
+                }
             }
-        }
-        if let Some(ce) = entry.get("ce") {
-            if !ce.is_null() {
-                let ce_str = serde_json::to_string(ce).unwrap_or_else(|_| "{}".into());
-                println!("  ce: {}", truncate_payload(&ce_str, 120));
+            if let Some(ce) = entry.get("ce") {
+                if !ce.is_null() {
+                    let ce_str = serde_json::to_string(ce).unwrap_or_else(|_| "{}".into());
+                    println!("  ce: {}", truncate_payload(&ce_str, payload_width));
+                }
             }
         }
         if let Some(st) = state.as_mut() {
@@ -3482,6 +3639,43 @@ fn format_observation_timestamp(raw: &str) -> String {
     }
 }
 
+fn format_elapsed_since_with_now(raw: &str, now: chrono::DateTime<chrono::Utc>) -> Option<String> {
+    let parsed = chrono::DateTime::parse_from_rfc3339(raw).ok()?;
+    let delta = now - parsed.with_timezone(&Utc);
+    let seconds = delta.num_seconds().max(0);
+    Some(format_compact_duration(seconds))
+}
+
+fn format_compact_duration(total_seconds: i64) -> String {
+    let seconds = total_seconds.max(0);
+    let days = seconds / 86_400;
+    let hours = (seconds % 86_400) / 3_600;
+    let minutes = (seconds % 3_600) / 60;
+    let secs = seconds % 60;
+
+    if days > 0 {
+        if hours > 0 {
+            format!("{}d{:02}h", days, hours)
+        } else {
+            format!("{}d", days)
+        }
+    } else if hours > 0 {
+        if minutes > 0 {
+            format!("{}h{:02}m", hours, minutes)
+        } else {
+            format!("{}h", hours)
+        }
+    } else if minutes > 0 {
+        if secs > 0 {
+            format!("{}m{:02}s", minutes, secs)
+        } else {
+            format!("{}m", minutes)
+        }
+    } else {
+        format!("{}s", secs)
+    }
+}
+
 fn format_payload_snippet(value: &JsonValue, width: usize) -> String {
     if width == 0 {
         return "-".to_string();
@@ -3516,6 +3710,21 @@ fn ellipsize_str(input: &str, max_chars: usize) -> String {
         }
     }
     collected.iter().collect()
+}
+
+fn push_filter_str(filters: &mut Vec<String>, label: &str, value: Option<&str>) {
+    if let Some(raw) = value {
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() {
+            filters.push(format!("{label}{trimmed}"));
+        }
+    }
+}
+
+fn push_filter_usize(filters: &mut Vec<String>, label: &str, value: Option<usize>) {
+    if let Some(v) = value {
+        filters.push(format!("{label}{v}"));
+    }
 }
 
 fn resolve_admin_token(opt: &Option<String>) -> Option<String> {
@@ -4556,6 +4765,128 @@ mod tests {
         assert!(parse_relative_duration("abc").is_err());
         assert!(parse_relative_duration("15").is_err());
         assert!(parse_relative_duration("0s").is_err());
+    }
+
+    #[test]
+    fn resolve_after_timestamp_handles_relative_window() {
+        let now = chrono::Utc
+            .with_ymd_and_hms(2025, 10, 2, 12, 0, 0)
+            .single()
+            .expect("construct chrono datetime");
+        let resolved = resolve_after_timestamp_with_now(None, Some("15m"), now)
+            .expect("relative after timestamp")
+            .expect("timestamp");
+        assert_eq!(resolved, now - chrono::Duration::minutes(15));
+    }
+
+    #[test]
+    fn resolve_after_timestamp_handles_absolute_cursor() {
+        let now = chrono::Utc
+            .with_ymd_and_hms(2025, 10, 2, 12, 0, 0)
+            .single()
+            .expect("construct chrono datetime");
+        let target = "2025-10-02T11:59:00Z";
+        let resolved = resolve_after_timestamp_with_now(Some(target), None, now)
+            .expect("absolute after timestamp")
+            .expect("timestamp");
+        let expected = chrono::Utc
+            .with_ymd_and_hms(2025, 10, 2, 11, 59, 0)
+            .single()
+            .expect("construct expected timestamp");
+        assert_eq!(resolved, expected);
+    }
+
+    #[test]
+    fn resolve_after_timestamp_rejects_empty_inputs() {
+        let now = chrono::Utc
+            .with_ymd_and_hms(2025, 10, 2, 12, 0, 0)
+            .single()
+            .expect("construct chrono datetime");
+        assert!(resolve_after_timestamp_with_now(Some("  \t"), None, now).is_err());
+        assert!(resolve_after_timestamp_with_now(None, Some(""), now).is_err());
+    }
+
+    #[test]
+    fn resolve_updated_since_handles_relative_window() {
+        let now = chrono::Utc
+            .with_ymd_and_hms(2025, 10, 2, 12, 0, 0)
+            .single()
+            .expect("construct chrono datetime");
+        let resolved = resolve_updated_since_with_now(None, Some("45m"), now)
+            .expect("relative updated timestamp")
+            .expect("timestamp");
+        assert_eq!(resolved, now - chrono::Duration::minutes(45));
+    }
+
+    #[test]
+    fn resolve_updated_since_handles_absolute_cursor() {
+        let now = chrono::Utc
+            .with_ymd_and_hms(2025, 10, 2, 12, 0, 0)
+            .single()
+            .expect("construct chrono datetime");
+        let target = "2025-10-02T11:30:00Z";
+        let resolved = resolve_updated_since_with_now(Some(target), None, now)
+            .expect("absolute updated timestamp")
+            .expect("timestamp");
+        let expected = chrono::Utc
+            .with_ymd_and_hms(2025, 10, 2, 11, 30, 0)
+            .single()
+            .expect("construct expected timestamp");
+        assert_eq!(resolved, expected);
+    }
+
+    #[test]
+    fn resolve_updated_since_rejects_empty_inputs() {
+        let now = chrono::Utc
+            .with_ymd_and_hms(2025, 10, 2, 12, 0, 0)
+            .single()
+            .expect("construct chrono datetime");
+        assert!(resolve_updated_since_with_now(Some("   "), None, now).is_err());
+        assert!(resolve_updated_since_with_now(None, Some(""), now).is_err());
+    }
+
+    #[test]
+    fn format_compact_duration_handles_units() {
+        assert_eq!(format_compact_duration(42), "42s");
+        assert_eq!(format_compact_duration(125), "2m05s");
+        assert_eq!(format_compact_duration(3600), "1h");
+        assert_eq!(format_compact_duration(3700), "1h01m");
+        assert_eq!(format_compact_duration(86_400), "1d");
+        assert_eq!(format_compact_duration(86_400 + 7_200), "1d02h");
+    }
+
+    #[test]
+    fn format_elapsed_since_with_now_clamps_future() {
+        let now = chrono::Utc
+            .with_ymd_and_hms(2025, 10, 2, 12, 0, 0)
+            .single()
+            .expect("construct chrono datetime");
+        let future = "2025-10-02T12:05:00Z";
+        let formatted = format_elapsed_since_with_now(future, now).expect("formatted");
+        assert_eq!(formatted, "0s");
+    }
+
+    #[test]
+    fn push_filter_str_trims_and_skips_empty() {
+        let mut filters = Vec::new();
+        push_filter_str(&mut filters, "state=", Some(" queued "));
+        assert_eq!(filters, vec!["state=queued".to_string()]);
+
+        push_filter_str(&mut filters, "state=", Some("   "));
+        assert_eq!(filters, vec!["state=queued".to_string()]);
+
+        push_filter_str(&mut filters, "state=", None);
+        assert_eq!(filters, vec!["state=queued".to_string()]);
+    }
+
+    #[test]
+    fn push_filter_usize_records_values() {
+        let mut filters = Vec::new();
+        push_filter_usize(&mut filters, "limit=", Some(25));
+        assert_eq!(filters, vec!["limit=25".to_string()]);
+
+        push_filter_usize(&mut filters, "limit=", None);
+        assert_eq!(filters, vec!["limit=25".to_string()]);
     }
 
     #[test]
