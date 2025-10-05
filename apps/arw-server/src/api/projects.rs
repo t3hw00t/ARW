@@ -1263,8 +1263,29 @@ mod tests {
         body::to_bytes,
         http::{HeaderMap, HeaderValue, StatusCode},
     };
+    use base64::Engine;
     use serde_json::Value;
+    use std::sync::Arc;
     use tempfile::tempdir;
+
+    use crate::{policy::PolicyHandle, AppState};
+    use arw_events::Bus;
+    use arw_kernel::Kernel;
+    use arw_policy::PolicyEngine;
+    use arw_wasi::{NoopHost, ToolHost};
+
+    async fn build_state(path: &std::path::Path) -> AppState {
+        let bus = Bus::new_with_replay(8, 8);
+        let kernel = Kernel::open(path).expect("init kernel");
+        let policy = PolicyEngine::load_from_env();
+        let policy_handle = PolicyHandle::new(policy, bus.clone());
+        let host: Arc<dyn ToolHost> = Arc::new(NoopHost);
+
+        AppState::builder(bus, kernel, policy_handle, host, true)
+            .with_sse_capacity(16)
+            .build()
+            .await
+    }
 
     #[tokio::test]
     async fn state_projects_snapshot_includes_notes_and_tree() {
@@ -1371,5 +1392,97 @@ mod tests {
             assert!(validate_rel_path("C:secret.txt").is_none());
             assert!(validate_rel_path(r"\\server\share\data.txt").is_none());
         }
+    }
+
+    #[tokio::test]
+    async fn projects_file_set_accepts_content_b64_payloads() {
+        let temp = tempdir().expect("tempdir");
+        let ctx = crate::test_support::begin_state_env(temp.path());
+        let mut env_guard = ctx.env;
+        let state_dir = temp.path().display().to_string();
+        let projects_root = temp.path().join("projects");
+        std::fs::create_dir_all(&projects_root).expect("create projects dir");
+
+        env_guard.set("ARW_STATE_DIR", &state_dir);
+        env_guard.set("ARW_PROJECTS_DIR", projects_root.display().to_string());
+        env_guard.set("ARW_ADMIN_TOKEN", "secret");
+
+        let state = build_state(temp.path()).await;
+
+        let mut headers = HeaderMap::new();
+        headers.insert("X-ARW-Admin", HeaderValue::from_static("secret"));
+
+        let bytes = [0x41u8, 0x00, 0x7F, 0x80];
+        let encoded = base64::engine::general_purpose::STANDARD.encode(bytes);
+        let response = projects_file_set(
+            headers,
+            State(state.clone()),
+            Query(ProjectFileQuery {
+                proj: "alpha".to_string(),
+                path: "bin.dat".to_string(),
+            }),
+            Json(ProjectFileWrite {
+                content: None,
+                content_b64: Some(encoded),
+                prev_sha256: None,
+            }),
+        )
+        .await
+        .into_response();
+
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::OK);
+        let body_bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let value: Value = serde_json::from_slice(&body_bytes).expect("json");
+        assert_eq!(value["ok"].as_bool(), Some(true));
+
+        let written = afs::read(projects_root.join("alpha/bin.dat"))
+            .await
+            .expect("read written file");
+        assert_eq!(written, bytes);
+    }
+
+    #[tokio::test]
+    async fn projects_file_set_rejects_invalid_base64_payloads() {
+        let temp = tempdir().expect("tempdir");
+        let ctx = crate::test_support::begin_state_env(temp.path());
+        let mut env_guard = ctx.env;
+        let state_dir = temp.path().display().to_string();
+        let projects_root = temp.path().join("projects");
+        std::fs::create_dir_all(&projects_root).expect("create projects dir");
+
+        env_guard.set("ARW_STATE_DIR", &state_dir);
+        env_guard.set("ARW_PROJECTS_DIR", projects_root.display().to_string());
+        env_guard.set("ARW_ADMIN_TOKEN", "secret");
+
+        let state = build_state(temp.path()).await;
+
+        let mut headers = HeaderMap::new();
+        headers.insert("X-ARW-Admin", HeaderValue::from_static("secret"));
+
+        let response = projects_file_set(
+            headers,
+            State(state.clone()),
+            Query(ProjectFileQuery {
+                proj: "alpha".to_string(),
+                path: "bin.dat".to_string(),
+            }),
+            Json(ProjectFileWrite {
+                content: None,
+                content_b64: Some("%%%".to_string()),
+                prev_sha256: None,
+            }),
+        )
+        .await
+        .into_response();
+
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::BAD_REQUEST);
+        let body_bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let value: Value = serde_json::from_slice(&body_bytes).expect("json");
+        assert_eq!(value["detail"].as_str(), Some("invalid base64"));
+        assert!(afs::metadata(projects_root.join("alpha/bin.dat"))
+            .await
+            .is_err());
     }
 }

@@ -6,7 +6,7 @@ title: Workflow Views & Sidecar
 
 ARW ships focused, modular workflow views — Project Hub, Chat, and Training Park — with a universal right‑sidecar that shows the same live state everywhere.
 
-Updated: 2025-09-22
+Updated: 2025-10-02
 Type: How‑to
 
 Key ideas
@@ -22,8 +22,10 @@ Windows
 Training Park runs as a preview: telemetry feeds and launcher controls are live, and we are finishing richer visualizations and automation passes. See `guide/training_park.md` for the current status.
 
 Compare
-- Hub: Compare panel for Text/JSON (pretty + Only changes + Wrap + Copy), Image slider, and CSV/Table diff (key‑based, Only changes, Copy summary, Export CSV). CSV export supports two modes: wide (after values only) and two‑row (chg‑before/chg‑after rows).
-- Hub → Runs: View a run snapshot, then use the Artifacts table to Pin A/B any output/payload to the Compare panel. Deep‑link compare state with URL hash (cmpA/cmpB).
+- Hub: Compare panel for Text/JSON (pretty + Only changes + Wrap + Copy), Image slider, and CSV/Table diff (key-based, Only changes, Copy summary, Export CSV). CSV export supports two modes: wide (after values only) and two-row (chg-before/chg-after rows).
+- Hub → Runs: View a run snapshot, then use the Artifacts table to Pin A/B any output/payload to the Compare panel. Deep-link compare state with URL hash (cmpA/cmpB).
+- Hub → Runs filters: Narrow the episodes table by actor, event kind, or free-text search across ids, projects, actors, and kinds. Use the Details toggle (keyboard accessible) to inspect start/end times, participants, and first/last events without leaving the table.
+- Hub → Runs actions: View and Pin buttons expose descriptive ARIA labels so screen reader users hear the run or artifact context when navigating the table.
 - Chat: Pin any message to A/B and run the same Text/JSON diff below; after image capture, consistent toolbar (Annotate, Copy MD, Save to project).
 - Activity lane listens for `screenshots.captured`; thumbnails expose annotate/blur, copy Markdown, save-to-project, and open actions for recent captures.
 

@@ -192,9 +192,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elRunsStat = document.getElementById('runsStat');
   const elRunFilter = document.getElementById('runFilter');
   const elRunErrOnly = document.getElementById('runErrOnly');
+  const elRunActor = document.getElementById('runActorFilter');
+  const elRunKind = document.getElementById('runKindFilter');
   const elRunSnap = document.getElementById('runSnap');
   const elRunSnapMeta = document.getElementById('runSnapMeta');
   const elArtifactsTbl = document.getElementById('artifactsTbl');
+  const btnRunCopy = document.getElementById('btnRunCopy');
+  const btnRunPinA = document.getElementById('btnRunPinA');
+  const btnRunPinB = document.getElementById('btnRunPinB');
+  const runDetailsOpen = new Set();
   function setRunsStat(txt, sticky=false){
     if (!elRunsStat) return;
     elRunsStat.textContent = txt || '';
@@ -329,26 +335,183 @@ document.addEventListener('DOMContentLoaded', async () => {
       return '';
     }
   }
+  function formatIsoWithRelative(iso){
+    if (!iso) return '–';
+    const rel = formatRelativeIso(iso);
+    return rel ? `${iso} (${rel})` : iso;
+  }
+  function summarizeList(values, fallback = '–'){
+    const seen = Array.from(new Set((values || []).filter(Boolean)));
+    return seen.length ? seen.join(', ') : fallback;
+  }
+  function buildRunDetails(run){
+    const details = document.createElement('details');
+    details.className = 'run-details';
+    if (run && runDetailsOpen.has(run.id)) {
+      details.open = true;
+    }
+    details.addEventListener('toggle', () => {
+      if (!run || !run.id) return;
+      if (details.open) {
+        runDetailsOpen.add(run.id);
+      } else {
+        runDetailsOpen.delete(run.id);
+      }
+    });
+
+    const summary = document.createElement('summary');
+    summary.textContent = 'Details';
+    if (run?.id) {
+      const sr = document.createElement('span');
+      sr.className = 'sr-only';
+      sr.textContent = ` for run ${run.id}`;
+      summary.appendChild(sr);
+      summary.setAttribute('aria-label', `Toggle details for run ${run.id}`);
+    }
+    details.appendChild(summary);
+
+    const list = document.createElement('ul');
+    list.className = 'run-meta';
+
+    const addItem = (label, value) => {
+      if (!label) return;
+      const text = value ? String(value) : null;
+      if (!text || !text.trim()) return;
+      const li = document.createElement('li');
+      const spanLabel = document.createElement('span');
+      spanLabel.className = 'run-meta-label';
+      spanLabel.textContent = label;
+      const spanValue = document.createElement('span');
+      spanValue.className = 'run-meta-value';
+      spanValue.textContent = text;
+      li.appendChild(spanLabel);
+      li.appendChild(spanValue);
+      list.appendChild(li);
+    };
+
+    addItem('Start', formatIsoWithRelative(run?.start));
+    addItem('Last', formatIsoWithRelative(run?.last));
+    if (run?.duration_ms != null) {
+      addItem('Duration', formatDuration(run.duration_ms));
+    }
+    addItem('Projects', summarizeList(run?.projects));
+    addItem('Actors', summarizeList(run?.actors));
+    addItem('Kinds', summarizeList(run?.kinds));
+    if (run?.first_kind || run?.last_kind) {
+      const first = run?.first_kind ? String(run.first_kind) : '–';
+      const last = run?.last_kind ? String(run.last_kind) : '–';
+      addItem('First → Last', `${first} → ${last}`);
+    }
+
+    if (!list.childElementCount) {
+      const li = document.createElement('li');
+      li.className = 'run-meta-empty';
+      li.textContent = 'No additional details available.';
+      list.appendChild(li);
+    }
+
+    details.appendChild(list);
+    return details;
+  }
+  function updateRunFilterOptions(){
+    const actorPrev = elRunActor ? elRunActor.value : '';
+    const kindPrev = elRunKind ? elRunKind.value : '';
+    if (elRunActor){
+      const actors = new Set();
+      for (const run of runsCache){
+        for (const actor of run.actors || []){
+          if (actor) actors.add(actor);
+        }
+      }
+      const sorted = Array.from(actors).sort((a, b) => a.localeCompare(b));
+      elRunActor.innerHTML = '';
+      const defaultOpt = document.createElement('option');
+      defaultOpt.value = '';
+      defaultOpt.textContent = 'all actors';
+      elRunActor.appendChild(defaultOpt);
+      for (const actor of sorted){
+        const opt = document.createElement('option');
+        opt.value = actor;
+        opt.textContent = actor;
+        elRunActor.appendChild(opt);
+      }
+      if (actorPrev && sorted.includes(actorPrev)) {
+        elRunActor.value = actorPrev;
+      }
+    }
+    if (elRunKind){
+      const kinds = new Set();
+      for (const run of runsCache){
+        for (const kind of run.kinds || []){
+          if (kind) kinds.add(kind);
+        }
+      }
+      const sortedKinds = Array.from(kinds).sort((a, b) => a.localeCompare(b));
+      elRunKind.innerHTML = '';
+      const defaultOpt = document.createElement('option');
+      defaultOpt.value = '';
+      defaultOpt.textContent = 'all kinds';
+      elRunKind.appendChild(defaultOpt);
+      for (const kind of sortedKinds){
+        const opt = document.createElement('option');
+        opt.value = kind;
+        opt.textContent = kind;
+        elRunKind.appendChild(opt);
+      }
+      if (kindPrev && sortedKinds.includes(kindPrev)) {
+        elRunKind.value = kindPrev;
+      }
+    }
+  }
   function renderRuns(){
     if (!elRunsTbl) return;
     const q = (elRunFilter?.value||'').toLowerCase();
     const errOnly = !!(elRunErrOnly && elRunErrOnly.checked);
+    const actorFilter = (elRunActor?.value || '').toLowerCase();
+    const kindFilter = (elRunKind?.value || '').toLowerCase();
     const rows = runsCache.filter(r => {
       if (errOnly && (r.errors|0) === 0) return false;
+      if (actorFilter){
+        const actors = (r.actors || []).map(a => String(a||'').toLowerCase());
+        if (!actors.includes(actorFilter)) return false;
+      }
+      if (kindFilter){
+        const kinds = (r.kinds || []).map(k => String(k||'').toLowerCase());
+        if (!kinds.includes(kindFilter)) return false;
+      }
       if (!q) return true;
-      return String(r.id||'').toLowerCase().includes(q);
+      const haystackParts = [];
+      haystackParts.push(String(r.id||''));
+      if (Array.isArray(r.projects)) haystackParts.push(r.projects.join(' '));
+      if (Array.isArray(r.actors)) haystackParts.push(r.actors.join(' '));
+      if (Array.isArray(r.kinds)) haystackParts.push(r.kinds.join(' '));
+      if (r.first_kind) haystackParts.push(String(r.first_kind));
+      if (r.last_kind) haystackParts.push(String(r.last_kind));
+      const haystack = haystackParts.join(' ').toLowerCase();
+      if (!haystack.trim()) return false;
+      return haystack.includes(q);
     });
     elRunsTbl.innerHTML='';
     for (const r of rows){
       const tr = document.createElement('tr');
+      if (r.id) tr.dataset.runId = r.id;
       const id = document.createElement('td'); id.className='mono'; id.textContent = r.id||'';
       const count = document.createElement('td'); count.textContent = r.count||0;
       const dur = document.createElement('td'); dur.textContent = formatDuration(r.duration_ms);
       const err = document.createElement('td'); const errVal = r.errors|0; err.textContent = errVal; if (errVal>0) err.className='bad';
+      const info = document.createElement('td');
+      info.appendChild(buildRunDetails(r));
       const act = document.createElement('td');
-      const view = document.createElement('button'); view.className='ghost'; view.textContent='View'; view.title='View snapshot'; view.addEventListener('click', ()=> viewRun(r.id));
+      const view = document.createElement('button');
+      view.className='ghost';
+      view.textContent='View';
+      view.title='View snapshot';
+      if (r.id) {
+        view.setAttribute('aria-label', `View snapshot for run ${r.id}`);
+      }
+      view.addEventListener('click', ()=> viewRun(r.id));
       act.appendChild(view);
-      tr.appendChild(id); tr.appendChild(count); tr.appendChild(dur); tr.appendChild(err); tr.appendChild(act);
+      tr.appendChild(id); tr.appendChild(count); tr.appendChild(dur); tr.appendChild(err); tr.appendChild(info); tr.appendChild(act);
       elRunsTbl.appendChild(tr);
     }
   }
@@ -412,22 +575,31 @@ document.addEventListener('DOMContentLoaded', async () => {
       runSnapshot = snap;
       if (elRunSnap) elRunSnap.textContent = snap ? JSON.stringify(snap, null, 2) : '';
       if (elRunSnapMeta) elRunSnapMeta.textContent = snap ? 'episode: ' + id : '';
+      updateRunActionLabels(runSnapshot?.id || '');
       renderArtifacts();
-    }catch(e){ console.error(e); runSnapshot=null; if (elRunSnap) elRunSnap.textContent=''; if (elRunSnapMeta) elRunSnapMeta.textContent=''; renderArtifacts(); }
+    }catch(e){ console.error(e); runSnapshot=null; if (elRunSnap) elRunSnap.textContent=''; if (elRunSnapMeta) elRunSnapMeta.textContent=''; updateRunActionLabels(''); renderArtifacts(); }
   }
   document.getElementById('btnRunsRefresh')?.addEventListener('click', ()=>{ refreshEpisodesSnapshot(); });
   // Do not persist filters; just render on change
   elRunFilter?.addEventListener('input', ()=>{ renderRuns(); });
+  elRunActor?.addEventListener('change', ()=>{ renderRuns(); });
+  elRunKind?.addEventListener('change', ()=>{ renderRuns(); });
   elRunErrOnly?.addEventListener('change', ()=>{ refreshEpisodesSnapshot(); });
-  document.getElementById('btnRunCopy')?.addEventListener('click', ()=>{ if (runSnapshot) ARW.copy(JSON.stringify(runSnapshot, null, 2)); });
-  document.getElementById('btnRunPinA')?.addEventListener('click', ()=>{ if (runSnapshot){ const ta=document.getElementById('cmpA'); if (ta){ ta.value = JSON.stringify(runSnapshot, null, 2); updateCompareLink('text'); } } });
-  document.getElementById('btnRunPinB')?.addEventListener('click', ()=>{ if (runSnapshot){ const tb=document.getElementById('cmpB'); if (tb){ tb.value = JSON.stringify(runSnapshot, null, 2); updateCompareLink('text'); } } });
+  btnRunCopy?.addEventListener('click', ()=>{ if (runSnapshot) ARW.copy(JSON.stringify(runSnapshot, null, 2)); });
+  btnRunPinA?.addEventListener('click', ()=>{ if (runSnapshot){ const ta=document.getElementById('cmpA'); if (ta){ ta.value = JSON.stringify(runSnapshot, null, 2); updateCompareLink('text'); } } });
+  btnRunPinB?.addEventListener('click', ()=>{ if (runSnapshot){ const tb=document.getElementById('cmpB'); if (tb){ tb.value = JSON.stringify(runSnapshot, null, 2); updateCompareLink('text'); } } });
   const applyEpisodesModel = (model) => {
     if (!model) return;
     episodesPrimed = true;
     const items = Array.isArray(model.items) ? model.items : [];
     runsCache = items.map(hydrateEpisode);
+    for (const id of Array.from(runDetailsOpen)) {
+      if (!runsCache.some(run => run.id === id)) {
+        runDetailsOpen.delete(id);
+      }
+    }
     setRunsStat(`Episodes: ${runsCache.length}`, true);
+    updateRunFilterOptions();
     renderRuns();
   };
   const idEpisodesRead = ARW.read.subscribe('episodes', applyEpisodesModel);
@@ -1451,16 +1623,50 @@ document.addEventListener('DOMContentLoaded', async () => {
   function renderArtifacts(){
     if (!elArtifactsTbl) return;
     elArtifactsTbl.innerHTML='';
+    const activeRunId = runSnapshot?.id || '';
     const arts = collectArtifactsFromSnapshot(runSnapshot).slice(0, 50);
     for (const a of arts){
       const tr = document.createElement('tr');
       const tdK = document.createElement('td'); tdK.className='mono'; tdK.textContent = a.kind || '';
       const tdS = document.createElement('td'); tdS.className='mono'; tdS.textContent = a.summary || '';
+      if (a.summary) tdS.title = a.summary;
       const tdA = document.createElement('td');
-      const pa = document.createElement('button'); pa.className='ghost'; pa.textContent='Pin A'; pa.addEventListener('click', ()=>{ const ta=document.getElementById('cmpA'); if (ta){ ta.value = a.text||''; updateCompareLink('text'); } });
-      const pb = document.createElement('button'); pb.className='ghost'; pb.textContent='Pin B'; pb.addEventListener('click', ()=>{ const tb=document.getElementById('cmpB'); if (tb){ tb.value = a.text||''; updateCompareLink('text'); } });
+      const pa = document.createElement('button');
+      pa.className='ghost';
+      pa.textContent='Pin A';
+      pa.title='Pin to compare slot A';
+      const labelA = activeRunId
+        ? (a.summary ? `Pin artifact ${a.summary} from run ${activeRunId} to compare slot A` : `Pin artifact from run ${activeRunId} to compare slot A`)
+        : (a.summary ? `Pin artifact ${a.summary} to compare slot A` : 'Pin artifact to compare slot A');
+      pa.setAttribute('aria-label', labelA);
+      pa.addEventListener('click', ()=>{ const ta=document.getElementById('cmpA'); if (ta){ ta.value = a.text||''; updateCompareLink('text'); } });
+      const pb = document.createElement('button');
+      pb.className='ghost';
+      pb.textContent='Pin B';
+      pb.title='Pin to compare slot B';
+      const labelB = activeRunId
+        ? (a.summary ? `Pin artifact ${a.summary} from run ${activeRunId} to compare slot B` : `Pin artifact from run ${activeRunId} to compare slot B`)
+        : (a.summary ? `Pin artifact ${a.summary} to compare slot B` : 'Pin artifact to compare slot B');
+      pb.setAttribute('aria-label', labelB);
+      pb.addEventListener('click', ()=>{ const tb=document.getElementById('cmpB'); if (tb){ tb.value = a.text||''; updateCompareLink('text'); } });
       tdA.appendChild(pa); tdA.appendChild(pb);
       tr.appendChild(tdK); tr.appendChild(tdS); tr.appendChild(tdA);
       elArtifactsTbl.appendChild(tr);
     }
   }
+  function updateRunActionLabels(runId){
+    const suffix = runId ? ` for run ${runId}` : '';
+    if (btnRunCopy){
+      btnRunCopy.setAttribute('aria-label', `Copy snapshot${suffix}`);
+      btnRunCopy.title = btnRunCopy.title || 'Copy snapshot';
+    }
+    if (btnRunPinA){
+      btnRunPinA.setAttribute('aria-label', `Pin snapshot${suffix} to compare slot A`);
+      btnRunPinA.title = btnRunPinA.title || 'Pin snapshot to compare slot A';
+    }
+    if (btnRunPinB){
+      btnRunPinB.setAttribute('aria-label', `Pin snapshot${suffix} to compare slot B`);
+      btnRunPinB.title = btnRunPinB.title || 'Pin snapshot to compare slot B';
+    }
+  }
+  updateRunActionLabels('');

@@ -78,14 +78,24 @@
           <section class="card" id="runs" role="region" aria-labelledby="runsTitle">
             <h3 id="runsTitle">Runs</h3>
             <div class="row">
-              <input id="runFilter" placeholder="filter by id" style="min-width:200px">
+              <input id="runFilter" placeholder="filter runs…" aria-label="Filter runs by id, actor, kind, or project" style="min-width:200px">
+              <label class="key">Actor
+                <select id="runActorFilter" aria-label="Filter runs by actor">
+                  <option value="">all actors</option>
+                </select>
+              </label>
+              <label class="key">Kind
+                <select id="runKindFilter" aria-label="Filter runs by event kind">
+                  <option value="">all kinds</option>
+                </select>
+              </label>
               <label class="key"><input id="runErrOnly" type="checkbox"> errors only</label>
               <button id="btnRunsRefresh" class="ghost">Refresh</button>
               <span class="dim" id="runsStat"></span>
             </div>
             <div style="overflow:auto; max-height:220px">
               <table aria-label="Recent episodes">
-                <thead><tr><th>id</th><th>count</th><th>ms</th><th>errors</th><th>actions</th></tr></thead>
+                <thead><tr><th>id</th><th>count</th><th>ms</th><th>errors</th><th>info</th><th>actions</th></tr></thead>
                 <tbody id="runsTbl"></tbody>
               </table>
             </div>

@@ -79,7 +79,7 @@ UI Coherence
 - [Pack: Collaboration] Route SLO selector UI: adjustable p95 threshold in Logs/Events — done
 - [Pack: Collaboration] Export CSV: route/kind tables — done; table diff export — done (two‑row or wide)
 - [Pack: Collaboration] Next: labels/arrows in annotator; redaction presets (regex+OCR); append Markdown to NOTES.md; Pin‑to‑compare from Runs; retention/tagging for gallery; guided countdown for capture.
- - [Pack: Collaboration] Next: keyboard shortcuts (global) cheatsheet and discoverability; ARIA polish for Agents/Runs actions; skip‑links across pages; unit tests for /projects/file content_b64 path; virtualize large trees.
+- [Pack: Collaboration] Next: keyboard shortcuts (global) cheatsheet and discoverability; skip-links across pages; virtualize large trees. (ARIA polish for Agents/Runs actions and `/projects/file` content_b64 unit tests landed.)
 - [Pack: Collaboration] [t-250918120301-hitl01] Human-in-the-loop staging queue in `arw-server` with `/state/staging/actions` read-model and leases — done (shipped kernel + API; follow-up UX tracked separately)
 - [Pack: Collaboration] [t-250918120305-hitl02] Sidecar approvals UI: replace placeholder copy with live staging actions + evidence preview — done (sidecar lane shows staging queue, evidence viewer, approve/deny buttons, persisted filters/sort, stale-mode triage chips with shortcuts, copyable summaries)
 - [Pack: Collaboration] Feedback loop readiness: validate Heuristic Feedback Engine shadow runs, log deltas, and document sidecar approvals before enabling auto-apply — todo
