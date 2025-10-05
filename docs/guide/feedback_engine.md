@@ -12,13 +12,13 @@ Type: How‑to
 
 ## Goals
 - Extremely light: constant memory, O(1) updates per event, periodic evaluation off the hot path.
-- Near‑live: publishes `feedback.suggested` every ~250–500 ms when changes occur; UIs update via SSE.
+- Near‑live: publishes `feedback.suggested` every ~250–500 ms when changes occur; deltas stream via `feedback.delta` so reviewers can see what changed between versions.
 - Safe by default: suggestions only; applies are policy‑gated and rate‑limited.
 
 ## Runtime
 - Engine cadence: `ARW_FEEDBACK_TICK_MS` (ms) or `tick_ms` in [`configs/feedback.toml`](https://github.com/t3hw00t/ARW/blob/main/configs/feedback.toml) (default 500).
 - Suggestions include `id`, `action` (`hint`, `mem_limit`, `profile`), `params`, `rationale`, and `confidence`.
-- Live view: SSE `/events` with `feedback.suggested`, or `GET /admin/feedback/suggestions`.
+- Live view: SSE `/events` with `feedback.suggested` and `feedback.delta`, or `GET /admin/feedback/suggestions` / `GET /admin/feedback/state` (which now includes a capped `delta_log`).
 
 ## Policy (Guardrails)
 - Caps and bounds are merged from [`configs/feedback.toml`](https://github.com/t3hw00t/ARW/blob/main/configs/feedback.toml) and env vars:
@@ -39,7 +39,7 @@ Type: How‑to
 ```
 
 ## APIs
-- `GET /admin/feedback/state` → feedback state (signals, suggestions, auto_apply)
+- `GET /admin/feedback/state` → feedback state (signals, suggestions, auto_apply, delta log)
 - `POST /admin/feedback/signal` → record a signal `{ kind, target, confidence, severity, note }`
 - `POST /admin/feedback/analyze` → recompute suggestions immediately
 - `POST /admin/feedback/apply` → `{ ok }` (policy‑gated; emits intents/events)
@@ -59,6 +59,12 @@ Type: How‑to
 ## UI (Debug)
 - Near‑live list with confidence badges and Apply buttons.
 - Policy bounds/caps displayed inline; toasts on success/failure.
+- Delta drawer (or CLI) shows `feedback.delta` entries (added / removed / changed suggestions) so operators can audit shadow runs before enabling auto-apply.
+
+## Reviewing deltas (shadow mode)
+- Tail `feedback.delta` via `arw-cli events tail --kind feedback.delta` (or your SSE client) during rehearsal; each payload includes `added`, `removed`, and `changed` arrays with summaries.
+- `GET /admin/feedback/state` → `delta_log` retains the last 50 deltas so operators can cross-check after the fact. `arw-cli feedback state --json | jq '.delta_log[0]'` prints the most recent entry.
+- Before flipping on auto-apply, confirm the last delta matches the sidecar approvals decisions and capture a quick note in the trial daily log.
 
 ## Notes
 - Keep `ARW_DEBUG=1` for local development; secure admin endpoints with `ARW_ADMIN_TOKEN` otherwise.

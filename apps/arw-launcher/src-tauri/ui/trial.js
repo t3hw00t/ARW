@@ -3,7 +3,7 @@
   const STATUS_LABELS = { ok: 'All good', warn: 'Check soon', bad: 'Action needed', unknown: 'Unknown' };
   const AUTONOMY_OPERATOR_KEY = 'arw:trial:autonomy-operator';
   const APPROVAL_REVIEWER_KEY = 'arw:trial:approvals-reviewer';
-  const AUTO_REFRESH_INTERVALS = Object.freeze({ approvals: 25000, connections: 35000, autonomy: 45000 });
+  const AUTO_REFRESH_INTERVALS = Object.freeze({ approvals: 25000, feedback: 30000, connections: 35000, autonomy: 45000 });
   const AUTONOMY_INTERRUPT_KEYS = Object.freeze(['pause', 'stop_flush_all', 'stop_flush_inflight', 'stop_flush_queued']);
   const AUTONOMY_INTERRUPT_LABELS = Object.freeze({
     pause: 'Pause',
@@ -13,9 +13,11 @@
   });
 
   let approvalsTimer = null;
+  let feedbackTimer = null;
   let connectionsTimer = null;
   let autonomyTimer = null;
   let approvalsInflight = false;
+  let feedbackInflight = false;
   let connectionsInflight = false;
   let autonomyInflight = false;
   let visibilityHandlerAttached = false;
@@ -34,6 +36,14 @@
       generatedMs: null,
       reviewer: null,
       loading: true,
+      error: null,
+    },
+    feedback: {
+      loading: true,
+      delta: [],
+      updatedMs: null,
+      autoApply: false,
+      lastVersion: null,
       error: null,
     },
     safety: { level: 'unknown', summary: 'Loading...', meta: [], lastApplied: null, metrics: null },
@@ -137,6 +147,12 @@
     const approvalsOpenDebug = document.getElementById('btn-approvals-open-debug');
     if (approvalsOpenDebug) approvalsOpenDebug.addEventListener('click', openApprovalsInDebug);
 
+    const feedbackRefresh = document.getElementById('btn-feedback-refresh');
+    if (feedbackRefresh) feedbackRefresh.addEventListener('click', () => refreshFeedbackDelta(false));
+
+    const feedbackOpen = document.getElementById('btn-feedback-open-debug');
+    if (feedbackOpen) feedbackOpen.addEventListener('click', openFeedbackInDebug);
+
     const autoPauseBtn = document.getElementById('btn-autonomy-pause');
     if (autoPauseBtn) autoPauseBtn.addEventListener('click', pauseAutonomy);
 
@@ -237,6 +253,15 @@
     STATE.approvals.generatedMs = null;
     STATE.approvals.error = null;
     renderApprovalsLane();
+    STATE.feedback = {
+      loading: true,
+      delta: [],
+      updatedMs: null,
+      autoApply: false,
+      lastVersion: null,
+      error: null,
+    };
+    renderFeedbackDelta();
     STATE.connections.loading = true;
     STATE.connections.nodes = [];
     STATE.connections.summary = 'Loading connections…';
@@ -267,6 +292,7 @@
       updateApprovals(payload.stagingPending, payload.stagingRecent);
       updateSafety(payload.serviceStatus, payload.guardrails);
       updateAutonomy(payload.autonomy);
+      updateFeedback(payload.feedbackState);
       updateConnections(payload.cluster);
       updateFocus(payload.memoryRecent);
       updateLists(payload.routeStats);
@@ -310,6 +336,7 @@
       stagingRecent,
       autonomy,
       cluster,
+      feedbackState,
     ] = await Promise.all([
       safeJson('/state/service_status'),
       safeJson('/state/route_stats'),
@@ -320,6 +347,7 @@
       safeJson('/state/staging/actions?limit=30'),
       safeJson('/state/autonomy/lanes'),
       safeJson('/state/cluster'),
+      safeJson('/admin/feedback/state'),
     ]);
 
     return {
@@ -332,6 +360,7 @@
       stagingRecent,
       autonomy,
       cluster,
+      feedbackState,
       errors,
       unauthorized,
     };
@@ -342,6 +371,9 @@
     const approvalsLoop = () => {
       if (!document.hidden) refreshApprovalsLane(true);
     };
+    const feedbackLoop = () => {
+      if (!document.hidden) refreshFeedbackDelta(true);
+    };
     const connectionsLoop = () => {
       if (!document.hidden) refreshConnectionsSnapshot({ auto: true });
     };
@@ -350,6 +382,9 @@
     };
     if (AUTO_REFRESH_INTERVALS.approvals > 0) {
       approvalsTimer = setInterval(approvalsLoop, AUTO_REFRESH_INTERVALS.approvals);
+    }
+    if (AUTO_REFRESH_INTERVALS.feedback > 0) {
+      feedbackTimer = setInterval(feedbackLoop, AUTO_REFRESH_INTERVALS.feedback);
     }
     if (AUTO_REFRESH_INTERVALS.connections > 0) {
       connectionsTimer = setInterval(connectionsLoop, AUTO_REFRESH_INTERVALS.connections);
@@ -361,6 +396,7 @@
       document.addEventListener('visibilitychange', () => {
         if (!document.hidden) {
           approvalsLoop();
+          feedbackLoop();
           connectionsLoop();
           autonomyLoop();
         }
@@ -374,6 +410,10 @@
       clearInterval(approvalsTimer);
       approvalsTimer = null;
     }
+    if (feedbackTimer) {
+      clearInterval(feedbackTimer);
+      feedbackTimer = null;
+    }
     if (connectionsTimer) {
       clearInterval(connectionsTimer);
       connectionsTimer = null;
@@ -384,7 +424,7 @@
     }
   }
 
-  async function refreshApprovalsLane(auto = false){
+async function refreshApprovalsLane(auto = false){
     if (approvalsInflight || (auto && STATE.approvals.loading)) return;
     if (!STATE.base) {
       try {
@@ -408,6 +448,62 @@
       console.error('Approvals auto-refresh failed', err);
     } finally {
       approvalsInflight = false;
+    }
+  }
+
+  async function refreshFeedbackDelta(auto = false){
+    if (feedbackInflight || (auto && STATE.feedback.loading)) return;
+    if (!STATE.base) {
+      try {
+        const port = ARW.getPortFromInput('port');
+        STATE.base = ARW.base(port);
+      } catch {}
+    }
+    if (!STATE.base) {
+      if (!auto) ARW.toast('Start the server first');
+      return;
+    }
+
+    if (!auto) {
+      STATE.feedback.loading = true;
+      renderFeedbackDelta();
+    }
+
+    feedbackInflight = true;
+    try {
+      const { data, error, unauthorized } = await safeJsonWithErrors(STATE.base, '/admin/feedback/state');
+      if (unauthorized) STATE.unauthorized = true;
+      STATE.feedback.loading = false;
+      if (data && typeof data === 'object') {
+        STATE.feedback.autoApply = !!data.auto_apply;
+        const rawLog = Array.isArray(data.delta_log) ? data.delta_log : [];
+        STATE.feedback.delta = rawLog
+          .slice()
+          .sort((a, b) => (Number(b?.version ?? 0) || 0) - (Number(a?.version ?? 0) || 0));
+        const latest = STATE.feedback.delta[0];
+        STATE.feedback.lastVersion = latest && typeof latest.version !== 'undefined' ? latest.version : null;
+        STATE.feedback.updatedMs = latest ? parseTimestamp(latest.generated || latest.time || latest.ts_ms) : null;
+        STATE.feedback.error = null;
+      } else {
+        STATE.feedback.delta = [];
+        STATE.feedback.lastVersion = null;
+        STATE.feedback.updatedMs = null;
+        if (data && typeof data === 'object' && 'auto_apply' in data) {
+          STATE.feedback.autoApply = !!data.auto_apply;
+        }
+        STATE.feedback.error = error || STATE.feedback.error;
+      }
+      renderFeedbackDelta();
+      if (auto && error) {
+        console.debug('Feedback delta auto-refresh warning', error);
+      }
+    } catch (err) {
+      console.error('Feedback delta refresh failed', err);
+      STATE.feedback.loading = false;
+      STATE.feedback.error = err?.message || 'Failed to refresh feedback delta log';
+      renderFeedbackDelta();
+    } finally {
+      feedbackInflight = false;
     }
   }
 
@@ -1565,10 +1661,293 @@
     el.title = `Snapshot captured ${formatRelativeAbs(ms)}`;
   }
 
-  function renderLists(){
+function renderLists(){
     setList('list-overview', STATE.overview);
     setList('list-workflows', STATE.workflows);
     setList('list-safeguards', STATE.safeguards);
+  }
+
+  function updateFeedback(feedbackState){
+    STATE.feedback.loading = false;
+    const errorEntry = Array.isArray(STATE.errors)
+      ? STATE.errors.find(msg => typeof msg === 'string' && msg.startsWith('/admin/feedback/state'))
+      : null;
+    STATE.feedback.error = errorEntry ? errorEntry.split(': ').slice(1).join(': ').trim() : null;
+    if (feedbackState && typeof feedbackState === 'object') {
+      STATE.feedback.autoApply = !!feedbackState.auto_apply;
+      const rawLog = Array.isArray(feedbackState.delta_log) ? feedbackState.delta_log : [];
+      STATE.feedback.delta = rawLog
+        .slice()
+        .sort((a, b) => (Number(b?.version ?? 0) || 0) - (Number(a?.version ?? 0) || 0));
+      const latest = STATE.feedback.delta[0];
+      STATE.feedback.lastVersion = latest && typeof latest.version !== 'undefined' ? latest.version : null;
+      STATE.feedback.updatedMs = latest ? parseTimestamp(latest.generated || latest.time || latest.ts_ms) : null;
+    } else {
+      STATE.feedback.delta = [];
+      if (feedbackState && typeof feedbackState === 'object' && 'auto_apply' in feedbackState) {
+        STATE.feedback.autoApply = !!feedbackState.auto_apply;
+      }
+      STATE.feedback.lastVersion = null;
+      STATE.feedback.updatedMs = null;
+    }
+    renderFeedbackDelta();
+  }
+
+  function renderFeedbackDelta(){
+    const summaryEl = document.getElementById('feedbackDeltaSummary');
+    const autoBadgeEl = document.getElementById('feedbackDeltaAutoBadge');
+    const noticeEl = document.getElementById('feedbackDeltaNotice');
+    const listEl = document.getElementById('feedbackDeltaList');
+    const emptyEl = document.getElementById('feedbackDeltaEmpty');
+    const refreshBtn = document.getElementById('btn-feedback-refresh');
+    const openBtn = document.getElementById('btn-feedback-open-debug');
+
+    if (refreshBtn) {
+      refreshBtn.disabled = !STATE.base;
+    }
+
+    if (openBtn) {
+      const disabled = !STATE.base || STATE.unauthorized;
+      openBtn.disabled = disabled;
+      openBtn.setAttribute('aria-disabled', disabled ? 'true' : 'false');
+      openBtn.title = disabled
+        ? 'Authorize with an admin token to open the feedback panel'
+        : 'Open feedback panel in debug view';
+    }
+
+    if (autoBadgeEl) {
+      autoBadgeEl.textContent = STATE.feedback.autoApply ? 'Auto-apply on' : 'Auto-apply off';
+      autoBadgeEl.classList.toggle('on', STATE.feedback.autoApply);
+      autoBadgeEl.classList.toggle('off', !STATE.feedback.autoApply);
+    }
+
+    if (summaryEl) {
+      let summaryText;
+      if (STATE.feedback.loading) {
+        summaryText = 'Loading feedback delta log…';
+      } else if (STATE.unauthorized) {
+        summaryText = 'Authorize to view feedback delta log.';
+      } else if (STATE.feedback.delta.length) {
+        const latest = STATE.feedback.delta[0];
+        const added = (latest.added || []).length;
+        const removed = (latest.removed || []).length;
+        const changed = (latest.changed || []).length;
+        const parts = [];
+        const version = typeof latest.version !== 'undefined' ? `v${latest.version}` : null;
+        if (version) parts.push(version);
+        const counts = [];
+        if (added) counts.push(`+${added}`);
+        if (removed) counts.push(`-${removed}`);
+        if (changed) counts.push(`±${changed}`);
+        if (counts.length) parts.push(counts.join(' / '));
+        if (STATE.feedback.updatedMs) parts.push(`updated ${formatRelativeWithAbs(STATE.feedback.updatedMs)}`);
+        summaryText = parts.join(' • ');
+      } else if (STATE.feedback.error) {
+        summaryText = 'Feedback delta log unavailable.';
+      } else {
+        summaryText = 'No feedback deltas captured yet.';
+      }
+      summaryEl.textContent = summaryText;
+      summaryEl.title = STATE.feedback.updatedMs ? formatRelativeAbs(STATE.feedback.updatedMs) : '';
+    }
+
+    if (noticeEl) {
+      if (STATE.feedback.error && !STATE.unauthorized) {
+        noticeEl.textContent = STATE.feedback.error;
+        noticeEl.classList.remove('hidden');
+      } else {
+        noticeEl.textContent = '';
+        noticeEl.classList.add('hidden');
+      }
+    }
+
+    if (!listEl || !emptyEl) return;
+
+    if (STATE.feedback.loading) {
+      listEl.innerHTML = '';
+      emptyEl.textContent = 'Loading feedback delta log…';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    if (STATE.unauthorized) {
+      listEl.innerHTML = '';
+      emptyEl.textContent = 'Authorize with an admin token to view feedback deltas.';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    if (STATE.feedback.error) {
+      listEl.innerHTML = '';
+      emptyEl.textContent = STATE.feedback.error;
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    const deltas = STATE.feedback.delta;
+    if (!deltas.length) {
+      listEl.innerHTML = '';
+      emptyEl.textContent = STATE.feedback.autoApply
+        ? 'Auto-apply is enabled; no new deltas yet.'
+        : 'No feedback deltas captured yet.';
+      emptyEl.classList.remove('hidden');
+      return;
+    }
+
+    emptyEl.classList.add('hidden');
+    listEl.innerHTML = '';
+    deltas.slice(0, 5).forEach(entry => {
+      const node = buildFeedbackDeltaItem(entry);
+      if (node) listEl.appendChild(node);
+    });
+  }
+
+  function buildFeedbackDeltaItem(entry){
+    if (!entry || typeof entry !== 'object') return null;
+    const li = document.createElement('li');
+    li.className = 'feedback-delta-item';
+
+    const header = document.createElement('div');
+    header.className = 'feedback-delta-header';
+
+    const title = document.createElement('h3');
+    title.className = 'feedback-delta-title';
+    title.textContent = typeof entry.version !== 'undefined' ? `Version ${entry.version}` : 'Version —';
+    header.appendChild(title);
+
+    const generatedMs = parseTimestamp(entry.generated || entry.time || entry.generated_ms || entry.ts_ms);
+    if (generatedMs) {
+      const time = document.createElement('span');
+      time.className = 'feedback-delta-time dim';
+      time.textContent = formatRelativeWithAbs(generatedMs);
+      time.title = formatRelativeAbs(generatedMs);
+      header.appendChild(time);
+    }
+
+    const counts = document.createElement('div');
+    counts.className = 'feedback-delta-counts';
+    const added = Array.isArray(entry.added) ? entry.added.length : 0;
+    const removed = Array.isArray(entry.removed) ? entry.removed.length : 0;
+    const changed = Array.isArray(entry.changed) ? entry.changed.length : 0;
+    if (added) counts.appendChild(buildDeltaCountPill(`+${added}`, 'added'));
+    if (removed) counts.appendChild(buildDeltaCountPill(`-${removed}`, 'removed'));
+    if (changed) counts.appendChild(buildDeltaCountPill(`±${changed}`, 'changed'));
+    if (counts.childElementCount > 0) header.appendChild(counts);
+
+    li.appendChild(header);
+
+    if (added) {
+      li.appendChild(buildDeltaGroup('Added', entry.added, 'added', formatSuggestionSummary));
+    }
+    if (removed) {
+      li.appendChild(buildDeltaGroup('Removed', entry.removed, 'removed', formatSuggestionSummary));
+    }
+    if (changed) {
+      li.appendChild(buildDeltaGroup('Changed', entry.changed, 'changed', summarizeChange));
+    }
+
+    return li;
+  }
+
+  function buildDeltaCountPill(text, variant){
+    const span = document.createElement('span');
+    span.className = `feedback-delta-pill ${variant}`;
+    span.textContent = text;
+    return span;
+  }
+
+  function buildDeltaGroup(label, items, variant, formatter){
+    const block = document.createElement('div');
+    block.className = `feedback-delta-group ${variant}`;
+
+    const heading = document.createElement('h4');
+    heading.textContent = `${label} (${items.length})`;
+    block.appendChild(heading);
+
+    const list = document.createElement('ul');
+    list.className = 'feedback-delta-sublist';
+    items.slice(0, 3).forEach(item => {
+      const li = document.createElement('li');
+      li.textContent = formatter(item);
+      list.appendChild(li);
+    });
+    if (items.length > 3) {
+      const more = document.createElement('li');
+      more.className = 'dim';
+      more.textContent = `+${items.length - 3} more…`;
+      list.appendChild(more);
+    }
+    block.appendChild(list);
+    return block;
+  }
+
+  function formatSuggestionSummary(summary){
+    if (!summary || typeof summary !== 'object') return 'Suggestion';
+    const id = summary.id || 'suggestion';
+    const action = summary.action || 'action';
+    const conf = typeof summary.confidence === 'number' && Number.isFinite(summary.confidence)
+      ? ` (confidence ${formatConfidence(summary.confidence)})`
+      : '';
+    return `${id} · ${action}${conf}`;
+  }
+
+  function summarizeChange(change){
+    if (!change || typeof change !== 'object') return 'Suggestion updated';
+    const lines = [];
+    const before = change.before || {};
+    const after = change.after || {};
+    const beforeParams = (before && typeof before === 'object' ? before.params : null) || {};
+    const afterParams = (after && typeof after === 'object' ? after.params : null) || {};
+    const keys = new Set([
+      ...Object.keys(beforeParams),
+      ...Object.keys(afterParams),
+    ]);
+    keys.forEach(key => {
+      const beforeVal = formatParam(beforeParams[key]);
+      const afterVal = formatParam(afterParams[key]);
+      if (beforeVal !== afterVal) {
+        lines.push(`${key}: ${beforeVal} → ${afterVal}`);
+      }
+    });
+    const beforeConf = formatConfidence(before.confidence);
+    const afterConf = formatConfidence(after.confidence);
+    if (beforeConf !== afterConf) {
+      lines.push(`confidence: ${beforeConf} → ${afterConf}`);
+    }
+    const beforeRat = (before && before.rationale) || null;
+    const afterRat = (after && after.rationale) || null;
+    if (beforeRat !== afterRat) {
+      lines.push('rationale updated');
+    }
+    const summary = formatSuggestionSummary(after);
+    if (!lines.length) return summary;
+    return `${summary} — ${lines.slice(0, 2).join('; ')}`;
+  }
+
+  function formatConfidence(value){
+    if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+    return value.toFixed(2);
+  }
+
+  function formatParam(value){
+    if (value == null) return '—';
+    if (typeof value === 'number') {
+      if (!Number.isFinite(value)) return '—';
+      return value % 1 === 0 ? value.toString() : value.toFixed(2);
+    }
+    if (typeof value === 'boolean') {
+      return value ? 'true' : 'false';
+    }
+    if (typeof value === 'string') {
+      return value.length > 40 ? `${value.slice(0, 37)}…` : value;
+    }
+    try {
+      const json = JSON.stringify(value);
+      if (!json) return '—';
+      return json.length > 40 ? `${json.slice(0, 37)}…` : json;
+    } catch {
+      return '—';
+    }
   }
 
   function renderApprovalsLane(){
@@ -2177,6 +2556,23 @@
     } catch (err) {
       console.error('Open approvals queue failed', err);
       ARW.toast('Unable to open approvals queue');
+    }
+  }
+
+  async function openFeedbackInDebug(){
+    if (!STATE.base) {
+      ARW.toast('Start the server first');
+      return;
+    }
+    if (STATE.unauthorized) {
+      ARW.toast('Authorize with an admin token to open the feedback panel');
+      return;
+    }
+    try {
+      await ARW.invoke('open_url', { url: `${STATE.base}/admin/debug#feedback` });
+    } catch (err) {
+      console.error('Open feedback panel failed', err);
+      ARW.toast('Unable to open feedback panel');
     }
   }
 

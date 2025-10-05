@@ -174,6 +174,8 @@ async fn reload_runtime_config(state: &AppState, path: &Path, digest: &str) -> R
         }
     }
 
+    crate::config::apply_env_overrides_from(&value);
+
     state.bus().publish(
         topics::TOPIC_CONFIG_RELOADED,
         &json!({

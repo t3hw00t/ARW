@@ -27,6 +27,7 @@ This runbook keeps our two-person trial routine lightweight. Use it with the Tri
 
 - Keep helpers in Guided mode unless we both agree to flip on Autonomy Lane. If one of us is unsure, stay guided.
 - Clear approvals after each major step (target: no cards waiting before we leave the session). The lane highlights who requested each action and how long it has been waiting, and the summary shows when the queue was last synced with the server.
+- Keep an eye on the feedback delta log (`arw-cli events tail --kind feedback.delta` or `/admin/feedback` → `delta_log`) so we can spot surprise suggestions before they reach auto-apply. Note anything odd in the daily log.
 - If an alert appears (“Needs a teammate’s OK”), capture a quick note in the incident log and mention it in chat. Use the drawer to see who is connected before approving anything sensitive.
 - Drop observations straight into the shared feedback doc; no extra survey needed while it’s just us.
 

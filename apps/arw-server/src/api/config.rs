@@ -332,6 +332,7 @@ pub async fn patch_apply(
             let mut cur = cfg_state.lock().await;
             *cur = cfg.clone();
         }
+        crate::config::apply_env_overrides_from(&cfg);
         let mut event_payload = json!({"ops": req.patches.len(), "snapshot_id": snapshot_id});
         if !safety_issues.is_empty() {
             event_payload["safety_issues"] = Value::Array(safety_issues.clone());

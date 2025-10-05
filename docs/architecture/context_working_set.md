@@ -63,7 +63,7 @@ How this maps into ARW surfaces
 - Context Recipes: formalize the pipeline (layers → retrieval → budgeter → compression). See [Context Recipes](../guide/context_recipes.md).
 - Training Park: dials for diversity, recency, compression aggressiveness; meters for recall risk and coverage.
 - Project Hub: What’s in context now panel + pointers to the artifacts used.
-- Logic Unit: ship a Never‑Out‑Of‑Context unit with sane defaults for budgets, compression cadence, and rehydrate rules. See [Logic Units](logic_units.md).
+- Logic Unit: Never-Out-Of-Context defaults ship as a built-in config-only unit so budgets, slot caps, diversity knobs, and rehydrate rules are seeded on boot. See [Logic Units](logic_units.md).
 - World Model: use the Project Map belief graph for anchored facts and open‑questions; serve top‑K beliefs into assembly.
 
 Why this works

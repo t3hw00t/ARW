@@ -54,6 +54,7 @@ Presets seed defaults for hot-path tunables if you haven’t set them explicitly
 - `ARW_CONTEXT_EXPAND_QUERY_TOP_K`: number of top seeds considered when synthesizing the expansion embedding.
 - `ARW_CONTEXT_SCORER`: working-set scorer (`mmrd`, `confidence`, or custom implementations).
 - `ARW_CONTEXT_STREAM_DEFAULT`: enable SSE streaming by default for `/context/assemble` (`0|1`).
+- `ARW_CONTEXT_SLOT_BUDGETS`: optional slot caps for the working set; accepts JSON (`{"instructions":2}`) or comma pairs (`instructions=2,plan=3`).
 - `ARW_RESEARCH_WATCHER_SEED`: optional path to a JSON file containing seed suggestions for the Research Watcher (`[{ "source_id": ..., "title": ... }]`).
 - `ARW_RESEARCH_WATCHER_FEEDS`: comma-separated list of HTTP(S) endpoints returning Research Watcher items in JSON (`{ "items": [...] }` or `[ ... ]`).
 - `ARW_RESEARCH_WATCHER_INTERVAL_SECS`: poll interval for Research Watcher feeds (default `900`, minimum `300`).
@@ -316,6 +317,7 @@ When the budget is exhausted, `/state/runtime_matrix` and `runtime.state.changed
 - `ARW_CONTEXT_EXPAND_QUERY_TOP_K`: seeds considered when generating the expansion embedding.
 - `ARW_CONTEXT_SCORER`: working-set scorer strategy.
 - `ARW_CONTEXT_STREAM_DEFAULT`: default SSE streaming behaviour for `/context/assemble`.
+- `ARW_CONTEXT_SLOT_BUDGETS`: default slot caps applied when callers omit `slot_budgets`; accepts JSON (`{"instructions":2}`) or comma pairs (`instructions=2,plan=3`).
 - `ARW_CONTEXT_COVERAGE_MAX_ITERS`: upper bound on CRAG refinement passes before returning results.
 - `ARW_REHYDRATE_FILE_HEAD_KB`: head bytes returned for file rehydrate (default `64`).
 

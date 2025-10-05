@@ -10,6 +10,7 @@ A firstâ€‘class surface to install, try, apply, and govern Logic Units (configâ€
 
 Tabs
 - Installed: units available for binding to agent slots.
+- Installed now includes the built-in Never-Out-Of-Context defaults seeded at boot so every project starts with sane context budgets.
 - Experimental: approved trials with guardrails.
 - Suggested: drafts from the Research Watcher or curators.
 - Archived: retired units with provenance.

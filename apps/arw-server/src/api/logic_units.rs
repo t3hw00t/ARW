@@ -284,6 +284,7 @@ pub async fn logic_units_apply(
             let mut cur = cfg_state.lock().await;
             *cur = cfg.clone();
         }
+        crate::config::apply_env_overrides_from(&cfg);
         if !id.is_empty() {
             let snapshot_items: Vec<Value> = state
                 .kernel()
@@ -389,6 +390,7 @@ pub async fn logic_units_revert(
             let mut cur = cfg_state.lock().await;
             *cur = cfg.clone();
         }
+        crate::config::apply_env_overrides_from(&cfg);
         hist.push((new_id.clone(), cfg.clone()));
         state.bus().publish(
             topics::TOPIC_LOGICUNIT_REVERTED,

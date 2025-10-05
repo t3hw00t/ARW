@@ -195,6 +195,23 @@
           </div>
         </section>
 
+        <section class="card feedback-delta" aria-label="Feedback delta log">
+          <header class="feedback-header">
+            <div class="feedback-title">
+              <h2>Feedback delta log</h2>
+              <p class="dim" id="feedbackDeltaSummary" role="status" aria-live="polite"></p>
+            </div>
+            <div class="feedback-actions">
+              <span id="feedbackDeltaAutoBadge" class="pill pill-small off">Auto-apply off</span>
+              <button id="btn-feedback-refresh" class="ghost" type="button">Refresh</button>
+              <button id="btn-feedback-open-debug" class="ghost" type="button">Open feedback</button>
+            </div>
+          </header>
+          <div id="feedbackDeltaNotice" class="feedback-notice hidden" role="alert"></div>
+          <ul id="feedbackDeltaList" class="feedback-delta-list" role="list"></ul>
+          <div id="feedbackDeltaEmpty" class="feedback-empty dim hidden"></div>
+        </section>
+
         <section class="card tabs" aria-label="Expanded details">
           <div class="tab-buttons" role="tablist">
             <button id="tabbtn-overview" class="active" role="tab" aria-selected="true" aria-controls="tab-overview">Overview</button>

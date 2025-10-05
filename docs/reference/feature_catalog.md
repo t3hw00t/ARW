@@ -112,7 +112,7 @@ _Capture feedback and experiments so better instincts become reusable defaults._
 - **Feedback Loop** · backend / admin / helpers / complete
   Near-live suggestions and policy with persisted state, supporting guidance to improve runs.
   _Routes_: `GET /admin/feedback/suggestions`, `GET /admin/feedback/updates`, `GET /admin/feedback/policy`
-  _Signals_: `feedback.suggested`, `feedback.applied`
+  _Signals_: `feedback.suggested`, `feedback.delta`, `feedback.applied`
   _Source_: [apps/arw-server/src/feedback.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/feedback.rs), [apps/arw-server/src/api/feedback.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/api/feedback.rs)
 
 - **Experiment Deck** · backend / admin / core / complete

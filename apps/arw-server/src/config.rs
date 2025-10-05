@@ -4,7 +4,7 @@ use std::{
     path::{Path, PathBuf},
     sync::Mutex,
 };
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use arw_core::cache_policy::{AssignmentReason, CachePolicyOutcome};
 
@@ -218,6 +218,105 @@ fn emit_cache_policy_logs(path: &Path, source: &'static str, outcome: CachePolic
 
     for warning in outcome.warnings {
         warn!(path = %path.display(), source, warning = %warning, "cache policy manifest warning");
+    }
+}
+
+const ENV_OVERRIDE_KEYS: &[&str] = &[
+    "ARW_CONTEXT_K",
+    "ARW_CONTEXT_EXPAND_PER_SEED",
+    "ARW_CONTEXT_DIVERSITY_LAMBDA",
+    "ARW_CONTEXT_MIN_SCORE",
+    "ARW_CONTEXT_LANES_DEFAULT",
+    "ARW_CONTEXT_LANE_BONUS",
+    "ARW_CONTEXT_EXPAND_QUERY",
+    "ARW_CONTEXT_EXPAND_QUERY_TOP_K",
+    "ARW_CONTEXT_SCORER",
+    "ARW_CONTEXT_STREAM_DEFAULT",
+    "ARW_CONTEXT_COVERAGE_MAX_ITERS",
+    "ARW_REHYDRATE_FILE_HEAD_KB",
+    "ARW_CONTEXT_SLOT_BUDGETS",
+];
+
+pub fn apply_env_overrides_from(value: &Value) -> Vec<(String, String)> {
+    let mut applied = Vec::new();
+    let env = value
+        .get("env")
+        .and_then(Value::as_object)
+        .cloned()
+        .unwrap_or_default();
+    for (key, raw) in env.iter() {
+        if !ENV_OVERRIDE_KEYS.contains(&key.as_str()) {
+            continue;
+        }
+        if let Some(resolved) = value_to_env_string(raw) {
+            if std::env::var(key).ok().as_deref() == Some(&resolved) {
+                continue;
+            }
+            debug!(target: "config", key, value = %resolved, "applying env override");
+            std::env::set_var(key, &resolved);
+            applied.push((key.clone(), resolved));
+        }
+    }
+    applied
+}
+
+fn value_to_env_string(value: &Value) -> Option<String> {
+    match value {
+        Value::Null => None,
+        Value::String(s) => Some(s.clone()),
+        Value::Number(n) => Some(n.to_string()),
+        Value::Bool(b) => Some(if *b { "1" } else { "0" }.to_string()),
+        other => {
+            let rendered = other.to_string();
+            if rendered.is_empty() || rendered == "{}" {
+                None
+            } else {
+                Some(rendered)
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod env_override_tests {
+    use super::*;
+
+    #[test]
+    fn env_overrides_apply_allowed_keys() {
+        let mut guard = crate::test_support::env::guard();
+        guard.apply(ENV_OVERRIDE_KEYS.iter().map(|&key| (key, None)));
+        let cfg = serde_json::json!({
+            "env": {
+                "ARW_CONTEXT_K": 22,
+                "ARW_CONTEXT_EXPAND_QUERY": true,
+                "IGNORED_KEY": 1,
+                "ARW_CONTEXT_SLOT_BUDGETS": {"instructions": 2, "plan": 3}
+            }
+        });
+        let applied = apply_env_overrides_from(&cfg);
+        assert!(applied
+            .iter()
+            .any(|(k, v)| k == "ARW_CONTEXT_K" && v == "22"));
+        assert_eq!(std::env::var("ARW_CONTEXT_EXPAND_QUERY").unwrap(), "1");
+        assert_eq!(
+            std::env::var("ARW_CONTEXT_SLOT_BUDGETS").unwrap(),
+            "{\"instructions\":2,\"plan\":3}"
+        );
+        assert!(!applied.iter().any(|(k, _)| k == "IGNORED_KEY"));
+    }
+
+    #[test]
+    fn env_override_skip_null() {
+        let mut guard = crate::test_support::env::guard();
+        guard.remove("ARW_CONTEXT_MIN_SCORE");
+        let cfg = serde_json::json!({
+            "env": {
+                "ARW_CONTEXT_MIN_SCORE": serde_json::Value::Null
+            }
+        });
+        let applied = apply_env_overrides_from(&cfg);
+        assert!(applied.is_empty());
+        assert!(std::env::var("ARW_CONTEXT_MIN_SCORE").is_err());
     }
 }
 

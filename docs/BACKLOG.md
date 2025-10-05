@@ -47,7 +47,7 @@ Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143009-0003] Retrieval: add MMR-style selector across vector/graph mounts and world beliefs — done (world belief snapshots now flow through the mmrd selector alongside hybrid memory lanes)
 - [Pack: Research] [t-250912143013-0004] Compression cascade: summarize episodes (extract→abstract→outline) into mounts with provenance — todo
 - [Pack: Research] [t-250912143017-0005] Failure detectors: emit `context.recall.risk` and `context.coverage` with meters in UI — in_progress (recall risk events + telemetry landed; UI meters pending)
-- [Pack: Research] [t-250912143025-0007] Logic Unit: ship config‑only Never‑Out‑Of‑Context defaults (budgets, diversity, rehydrate rules) — todo
+- [Pack: Research] [t-250912143025-0007] Logic Unit: ship config-only Never-Out-Of-Context defaults (budgets, diversity, rehydrate rules) — done (builtin manifest seeds env + slot budgets)
 - [Pack: Research] [t-250912143029-0008] UI: Project Hub panel “What’s in context now” with artifact pointers and rehydrate actions — todo
 - [Pack: Research] [t-250912143033-0009] Training Park: dials for diversity/recency/compression; recall‑risk and coverage meters — todo
 - [Pack: Research] [t-250918120201-tp01] Training telemetry read-models in `arw-server` (context/memory/tool success stats) powering Training Park — doing (baseline snapshot live; expanding coverage)
@@ -82,7 +82,7 @@ UI Coherence
 - [Pack: Collaboration] Next: keyboard shortcuts (global) cheatsheet and discoverability; skip-links across pages; virtualize large trees. (ARIA polish for Agents/Runs actions and `/projects/file` content_b64 unit tests landed.)
 - [Pack: Collaboration] [t-250918120301-hitl01] Human-in-the-loop staging queue in `arw-server` with `/state/staging/actions` read-model and leases — done (shipped kernel + API; follow-up UX tracked separately)
 - [Pack: Collaboration] [t-250918120305-hitl02] Sidecar approvals UI: replace placeholder copy with live staging actions + evidence preview — done (sidecar lane shows staging queue, evidence viewer, approve/deny buttons, persisted filters/sort, stale-mode triage chips with shortcuts, copyable summaries)
-- [Pack: Collaboration] Feedback loop readiness: validate Heuristic Feedback Engine shadow runs, log deltas, and document sidecar approvals before enabling auto-apply — todo
+- [Pack: Collaboration] Feedback loop readiness: validate Heuristic Feedback Engine shadow runs, log deltas, and document sidecar approvals before enabling auto-apply — done (delta log + approvals doc landed)
 - [Pack: Collaboration] Project Hub SSE bridge: consume `state.read.model.patch` (Event Spine) for notes/files/live context in the SPA swap — doing (metadata feed wired)
 
 Experience Outcomes

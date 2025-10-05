@@ -44,6 +44,7 @@ pub const TOPIC_BELIEFS_UPDATED: &str = "beliefs.updated";
 // Feedback engine
 pub const TOPIC_FEEDBACK_SUGGESTED: &str = "feedback.suggested";
 pub const TOPIC_FEEDBACK_UPDATED: &str = "feedback.updated";
+pub const TOPIC_FEEDBACK_DELTA: &str = "feedback.delta";
 
 // Projects
 pub const TOPIC_PROJECTS_CREATED: &str = "projects.created";

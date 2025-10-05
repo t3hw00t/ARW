@@ -75,6 +75,7 @@ Related docs:
 |-------|----------|
 | `feedback.suggested` | `TOPIC_FEEDBACK_SUGGESTED` |
 | `feedback.updated` | `TOPIC_FEEDBACK_UPDATED` |
+| `feedback.delta` | `TOPIC_FEEDBACK_DELTA` |
 
 ## Projects
 

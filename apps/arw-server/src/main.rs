@@ -62,6 +62,7 @@ mod worker;
 mod working_set;
 mod world;
 
+mod logic_units_builtin;
 mod router;
 
 pub(crate) use app_state::AppState;

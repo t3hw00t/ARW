@@ -111,6 +111,9 @@ impl WorkingSetSpec {
 
     fn normalize_slot_budgets(&mut self) {
         if self.slot_budgets.is_empty() {
+            self.slot_budgets = default_slot_budgets();
+        }
+        if self.slot_budgets.is_empty() {
             return;
         }
         let mut normalized = BTreeMap::new();
@@ -1583,6 +1586,7 @@ const CONTEXT_ENV_KEYS: &[&str] = &[
     "ARW_CONTEXT_LANES_DEFAULT",
     "ARW_CONTEXT_MIN_SCORE",
     "ARW_CONTEXT_SCORER",
+    "ARW_CONTEXT_SLOT_BUDGETS",
     "ARW_CONTEXT_STREAM_DEFAULT",
 ];
 
@@ -1675,6 +1679,60 @@ pub fn default_max_iterations() -> usize {
 
 pub fn default_streaming_enabled() -> bool {
     env_flag("ARW_CONTEXT_STREAM_DEFAULT").unwrap_or(false)
+}
+
+pub fn default_slot_budgets() -> BTreeMap<String, usize> {
+    let mut budgets = BTreeMap::new();
+    let raw = match std::env::var("ARW_CONTEXT_SLOT_BUDGETS") {
+        Ok(raw) => raw,
+        Err(_) => return budgets,
+    };
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return budgets;
+    }
+    if trimmed.starts_with('{') {
+        if let Ok(Value::Object(map)) = serde_json::from_str::<Value>(trimmed) {
+            for (slot, value) in map.into_iter() {
+                if let Some(parsed) = parse_slot_budget_value(value) {
+                    let key = normalize_slot_key(&slot);
+                    if !key.is_empty() {
+                        budgets.insert(key, parsed);
+                    }
+                }
+            }
+        }
+        return budgets;
+    }
+    for part in trimmed.split(',') {
+        let mut iter = part.splitn(2, '=');
+        let key = iter.next().unwrap_or("").trim();
+        let value = iter.next().unwrap_or("").trim();
+        if key.is_empty() || value.is_empty() {
+            continue;
+        }
+        if let Ok(parsed) = value.parse::<usize>() {
+            let key = normalize_slot_key(key);
+            if !key.is_empty() {
+                budgets.insert(key, parsed);
+            }
+        }
+    }
+    budgets
+}
+
+fn parse_slot_budget_value(value: Value) -> Option<usize> {
+    match value {
+        Value::Number(num) => num.as_u64().map(|v| v as usize),
+        Value::String(s) => s.trim().parse::<usize>().ok(),
+        Value::Bool(b) => Some(if b { 1 } else { 0 }),
+        Value::Null => None,
+        Value::Array(_) | Value::Object(_) => None,
+    }
+}
+
+fn normalize_slot_key(input: &str) -> String {
+    input.trim().to_ascii_lowercase()
 }
 
 #[cfg(test)]
@@ -1772,6 +1830,34 @@ mod tests {
         assert_eq!(spec.expand_query_top_k, 32);
         assert_eq!(spec.slot_budgets.get("evidence"), Some(&256));
         assert!(!spec.slot_budgets.contains_key(""));
+    }
+
+    #[test]
+    fn slot_budgets_seeded_from_json_env() {
+        let mut guard = context_env_guard();
+        guard.set(
+            "ARW_CONTEXT_SLOT_BUDGETS",
+            "{\"instructions\":2,\"plan\":3,\"evidence\":8}",
+        );
+        let mut spec = base_spec();
+        spec.normalize();
+        assert_eq!(spec.slot_budgets.get("instructions"), Some(&2));
+        assert_eq!(spec.slot_budgets.get("plan"), Some(&3));
+        assert_eq!(spec.slot_budgets.get("evidence"), Some(&8));
+    }
+
+    #[test]
+    fn slot_budgets_parse_pair_list() {
+        let mut guard = context_env_guard();
+        guard.set(
+            "ARW_CONTEXT_SLOT_BUDGETS",
+            "instructions=4,evidence=10, policy = 2",
+        );
+        let mut spec = base_spec();
+        spec.normalize();
+        assert_eq!(spec.slot_budgets.get("instructions"), Some(&4));
+        assert_eq!(spec.slot_budgets.get("evidence"), Some(&10));
+        assert_eq!(spec.slot_budgets.get("policy"), Some(&2));
     }
 
     #[test]

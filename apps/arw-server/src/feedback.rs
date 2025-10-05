@@ -1,15 +1,17 @@
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 
 use arw_events::{Bus, Envelope};
 use arw_topics as topics;
+use metrics::counter;
 use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tokio::fs as afs;
 use tokio::sync::RwLock;
+use tracing::{info, warn};
 use utoipa::ToSchema;
 
 use crate::{governor::GovernorState, metrics::Metrics, responses, util};
@@ -45,7 +47,45 @@ pub struct FeedbackState {
     pub signals: Vec<FeedbackSignal>,
     #[serde(default)]
     pub suggestions: Vec<Suggestion>,
+    #[serde(default)]
+    pub delta_log: Vec<FeedbackDelta>,
 }
+
+#[derive(Clone, Default, Serialize, Deserialize, ToSchema)]
+pub struct FeedbackDelta {
+    #[serde(default)]
+    pub version: u64,
+    #[serde(default)]
+    pub generated: String,
+    #[serde(default)]
+    pub added: Vec<FeedbackSummary>,
+    #[serde(default)]
+    pub removed: Vec<FeedbackSummary>,
+    #[serde(default)]
+    pub changed: Vec<FeedbackChange>,
+}
+
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
+pub struct FeedbackSummary {
+    pub id: String,
+    pub action: String,
+    #[serde(default)]
+    pub params: Value,
+    #[serde(default)]
+    pub rationale: Option<String>,
+    #[serde(default)]
+    pub confidence: Option<f64>,
+}
+
+#[derive(Clone, Serialize, Deserialize, ToSchema)]
+pub struct FeedbackChange {
+    pub id: String,
+    pub action: String,
+    pub before: FeedbackSummary,
+    pub after: FeedbackSummary,
+}
+
+const FEEDBACK_DELTA_LIMIT: usize = 50;
 
 #[derive(Debug)]
 pub enum FeedbackError {
@@ -152,6 +192,7 @@ impl FeedbackHub {
             let mut guard = self.state.write().await;
             guard.signals.clear();
             guard.suggestions.clear();
+            guard.delta_log.clear();
         }
         self.persist_state().await;
         self.state.read().await.clone()
@@ -233,7 +274,7 @@ impl FeedbackHub {
             *guard = list.clone();
         }
         self.engine_version.store(version, Ordering::Relaxed);
-        self.update_state_suggestions(&list).await;
+        self.update_state_suggestions(&list, None).await;
         self.persist_state().await;
         self.publish_suggestions(version, &list).await;
         Some((version, list))
@@ -269,22 +310,28 @@ impl FeedbackHub {
     async fn refresh_suggestions(&self) -> Option<(u64, Vec<Value>)> {
         let features = self.collect_features().await;
         let new_list = arw_heuristics::evaluate(&features);
-        let mut changed = false;
-        {
-            let current = self.engine_snapshot.read().await;
-            if *current != new_list {
-                changed = true;
-            }
-        }
-        if !changed {
-            self.update_state_suggestions(&new_list).await;
+        let current_snapshot = { self.engine_snapshot.read().await.clone() };
+
+        if current_snapshot == new_list {
+            self.update_state_suggestions(&new_list, None).await;
             return None;
         }
+
+        let mut delta = compute_feedback_delta(&current_snapshot, &new_list);
+
         {
             let mut guard = self.engine_snapshot.write().await;
             *guard = new_list.clone();
         }
+
         let version = self.engine_version.fetch_add(1, Ordering::Relaxed) + 1;
+        let generated = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+
+        if let Some(ref mut d) = delta {
+            d.version = version;
+            d.generated = generated.clone();
+        }
+
         let _ = persist_engine(
             &self.engine_path,
             &self.engine_backup_path,
@@ -293,19 +340,50 @@ impl FeedbackHub {
             &new_list,
         )
         .await;
-        self.update_state_suggestions(&new_list).await;
+
+        self.update_state_suggestions(&new_list, delta.as_ref())
+            .await;
         self.persist_state().await;
         self.publish_suggestions(version, &new_list).await;
+
+        if let Some(ref delta) = delta {
+            self.publish_delta(delta).await;
+            info!(
+                target: "feedback",
+                version = delta.version,
+                added = delta.added.len(),
+                removed = delta.removed.len(),
+                changed = delta.changed.len(),
+                "feedback shadow delta recorded"
+            );
+            if !delta.added.is_empty() {
+                counter!("arw_feedback_delta_total", "kind" => "added")
+                    .increment(delta.added.len() as u64);
+            }
+            if !delta.removed.is_empty() {
+                counter!("arw_feedback_delta_total", "kind" => "removed")
+                    .increment(delta.removed.len() as u64);
+            }
+            if !delta.changed.is_empty() {
+                counter!("arw_feedback_delta_total", "kind" => "changed")
+                    .increment(delta.changed.len() as u64);
+            }
+        }
+
         Some((version, new_list))
     }
 
-    async fn update_state_suggestions(&self, list: &[Value]) {
+    async fn update_state_suggestions(&self, list: &[Value], delta: Option<&FeedbackDelta>) {
         let suggestions = list
             .iter()
             .filter_map(json_to_suggestion)
             .collect::<Vec<Suggestion>>();
         let mut guard = self.state.write().await;
         guard.suggestions = suggestions;
+        if let Some(delta) = delta {
+            guard.delta_log.push(delta.clone());
+            trim_delta_log(&mut guard.delta_log);
+        }
     }
 
     async fn persist_state(&self) {
@@ -360,7 +438,7 @@ impl FeedbackHub {
                     *guard = list.clone();
                 }
                 self.engine_version.store(version, Ordering::Relaxed);
-                self.update_state_suggestions(&list).await;
+                self.update_state_suggestions(&list, None).await;
                 self.persist_state().await;
                 if !self.engine_loaded.swap(true, Ordering::Relaxed) {
                     self.publish_suggestions(version, &list).await;
@@ -378,6 +456,18 @@ impl FeedbackHub {
             let mut intent = json!({"status": "proposed", "suggestion": item});
             responses::attach_corr(&mut intent);
             self.bus.publish(topics::TOPIC_INTENTS_PROPOSED, &intent);
+        }
+    }
+
+    async fn publish_delta(&self, delta: &FeedbackDelta) {
+        match serde_json::to_value(delta) {
+            Ok(mut payload) => {
+                responses::attach_corr(&mut payload);
+                self.bus.publish(topics::TOPIC_FEEDBACK_DELTA, &payload);
+            }
+            Err(err) => {
+                warn!(target: "feedback", error = %err, "failed to serialize feedback delta");
+            }
         }
     }
 
@@ -591,11 +681,14 @@ impl FeedbackHub {
 
 async fn load_state(path: &PathBuf) -> FeedbackState {
     if let Ok(bytes) = afs::read(path).await {
-        if let Ok(state) = serde_json::from_slice::<FeedbackState>(&bytes) {
+        if let Ok(mut state) = serde_json::from_slice::<FeedbackState>(&bytes) {
+            normalize_feedback_state(&mut state);
             return state;
         }
     }
-    FeedbackState::default()
+    let mut state = FeedbackState::default();
+    normalize_feedback_state(&mut state);
+    state
 }
 
 fn json_to_suggestion(value: &Value) -> Option<Suggestion> {
@@ -618,6 +711,142 @@ fn json_to_suggestion(value: &Value) -> Option<Suggestion> {
         rationale,
         confidence,
     })
+}
+
+fn normalize_feedback_state(state: &mut FeedbackState) {
+    trim_delta_log(&mut state.delta_log);
+}
+
+fn trim_delta_log(log: &mut Vec<FeedbackDelta>) {
+    if log.len() > FEEDBACK_DELTA_LIMIT {
+        let excess = log.len() - FEEDBACK_DELTA_LIMIT;
+        log.drain(0..excess);
+    }
+}
+
+fn compute_feedback_delta(old_list: &[Value], new_list: &[Value]) -> Option<FeedbackDelta> {
+    let mut old_map: HashMap<String, (Value, FeedbackSummary)> = HashMap::new();
+    for value in old_list {
+        if let Some(summary) = suggestion_summary(value) {
+            old_map.insert(summary.id.clone(), (value.clone(), summary));
+        }
+    }
+
+    let mut new_map: HashMap<String, (Value, FeedbackSummary)> = HashMap::new();
+    for value in new_list {
+        if let Some(summary) = suggestion_summary(value) {
+            new_map.insert(summary.id.clone(), (value.clone(), summary));
+        }
+    }
+
+    let mut delta = FeedbackDelta::default();
+
+    for (id, (new_value, new_summary)) in new_map.iter() {
+        match old_map.remove(id) {
+            Some((old_value, old_summary)) => {
+                if old_value != *new_value {
+                    delta.changed.push(FeedbackChange {
+                        id: id.clone(),
+                        action: new_summary.action.clone(),
+                        before: old_summary,
+                        after: new_summary.clone(),
+                    });
+                }
+            }
+            None => delta.added.push(new_summary.clone()),
+        }
+    }
+
+    for (_, (_, old_summary)) in old_map.into_iter() {
+        delta.removed.push(old_summary);
+    }
+
+    if delta.added.is_empty() && delta.removed.is_empty() && delta.changed.is_empty() {
+        None
+    } else {
+        delta.added.sort_by(|a, b| a.id.cmp(&b.id));
+        delta.removed.sort_by(|a, b| a.id.cmp(&b.id));
+        delta.changed.sort_by(|a, b| a.id.cmp(&b.id));
+        Some(delta)
+    }
+}
+
+fn suggestion_summary(value: &Value) -> Option<FeedbackSummary> {
+    let id = value.get("id").and_then(|v| v.as_str())?.to_string();
+    let action = value.get("action").and_then(|v| v.as_str())?.to_string();
+    let params = value.get("params").cloned().unwrap_or_else(|| json!({}));
+    let rationale = value
+        .get("rationale")
+        .and_then(|v| v.as_str())
+        .map(|s| s.to_string());
+    let confidence = value.get("confidence").and_then(|v| v.as_f64());
+
+    Some(FeedbackSummary {
+        id,
+        action,
+        params,
+        rationale,
+        confidence,
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{json, Value};
+
+    #[test]
+    fn compute_delta_detects_added_removed_changed() {
+        let old_list = vec![
+            json!({"id": "hint-http", "action": "hint", "params": {"http_timeout_secs": 30}}),
+            json!({"id": "mem-limit", "action": "mem_limit", "params": {"limit": 200}}),
+        ];
+        let new_list = vec![
+            json!({"id": "hint-http", "action": "hint", "params": {"http_timeout_secs": 45}}),
+            json!({"id": "governor-hints", "action": "governor.hints", "params": {"max_concurrency": 4}}),
+        ];
+
+        let delta = compute_feedback_delta(&old_list, &new_list).expect("delta");
+        assert_eq!(delta.added.len(), 1);
+        assert_eq!(delta.added[0].id, "governor-hints");
+        assert_eq!(delta.removed.len(), 1);
+        assert_eq!(delta.removed[0].id, "mem-limit");
+        assert_eq!(delta.changed.len(), 1);
+        assert_eq!(delta.changed[0].id, "hint-http");
+        assert_eq!(
+            delta.changed[0]
+                .before
+                .params
+                .get("http_timeout_secs")
+                .and_then(Value::as_u64),
+            Some(30)
+        );
+        assert_eq!(
+            delta.changed[0]
+                .after
+                .params
+                .get("http_timeout_secs")
+                .and_then(Value::as_u64),
+            Some(45)
+        );
+    }
+
+    #[test]
+    fn normalize_limits_delta_log() {
+        let mut state = FeedbackState::default();
+        state.delta_log = (0..(FEEDBACK_DELTA_LIMIT + 5))
+            .map(|i| FeedbackDelta {
+                version: i as u64,
+                generated: String::new(),
+                added: Vec::new(),
+                removed: Vec::new(),
+                changed: Vec::new(),
+            })
+            .collect();
+        normalize_feedback_state(&mut state);
+        assert_eq!(state.delta_log.len(), FEEDBACK_DELTA_LIMIT);
+        assert_eq!(state.delta_log.first().unwrap().version as usize, 5);
+    }
 }
 
 pub(crate) async fn save_bytes_atomic(path: &Path, bytes: &[u8]) -> std::io::Result<()> {

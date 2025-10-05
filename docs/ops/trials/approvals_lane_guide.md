@@ -31,14 +31,20 @@ This guide shows how to clear Gate G2 (“Calm approvals”) during trial rehear
 - Use it to double-check that follow-up happened after the decision (for example, copy/pasting an email draft).
 - Entries include who approved/held the action and link back to the staging record inside the launcher.
 
-## 4. Connections drawer (who is online?)
+## 4. Verify feedback deltas
+
+- Open the **Feedback** tile in the Trial Control Center or run `arw-cli feedback state --json | jq '.delta_log[0]'` to review the most recent `feedback.delta` entry.
+- Each delta summarises what changed between heuristic runs (added / removed / changed suggestions). Call out surprises in the shared log before we consider enabling auto-apply.
+- Need to watch live? Tail `arw-cli events tail --kind feedback.delta` so the approvals team sees shadow suggestions as they update.
+
+## 5. Connections drawer (who is online?)
 
 - Press **Connections** in the Trial Control header or hit `C` when the page is focused.
 - The drawer lists remote nodes, health, and capability hints so you know which teammate or helper is connected.
 - A background refresh runs every ~35 seconds; the summary line shows the last server timestamp. Use **Refresh** if you need an immediate update (for example, right after inviting someone).
 - Close with `Esc` or the **Close** button—the launcher restores the previous focus so keyboard flow stays smooth.
 
-## 5. Troubleshooting signals
+## 6. Troubleshooting signals
 
 | Signal | What it means | Operator move |
 | --- | --- | --- |
@@ -47,7 +53,7 @@ This guide shows how to clear Gate G2 (“Calm approvals”) during trial rehear
 | Tile stuck on “Approvals queue unavailable” | `/state/staging/actions` errored | Check server logs (`just logs-tail`) and fall back to `/admin/debug` if needed. |
 | Recent decisions empty | Nobody has approved/held recently | Mention in stand-up; verify helpers are staging actions. |
 
-## 6. Daily rhythm checklist
+## 7. Daily rhythm checklist
 
 - ☐ Before rehearsal: reviewer badge set, queue empty, connections drawer lists only the two operators.
 - ☐ Mid-session: queue ≤ 3, oldest approval < 15 minutes, annotate incidents in the shared log.

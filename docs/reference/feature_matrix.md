@@ -274,6 +274,7 @@ Near-live suggestions and policy with persisted state, supporting guidance to im
   - `GET /admin/feedback/policy`
 - Events:
   - `feedback.suggested`
+  - `feedback.delta`
   - `feedback.applied`
 
 ## Identity & Tenancy

@@ -1,0 +1,61 @@
+{
+  "id": "never-out-of-context",
+  "name": "Never-Out-Of-Context Defaults",
+  "version": "0.1.0",
+  "category": "memory",
+  "slots": ["memory"],
+  "authors": ["ARW Core"],
+  "license": "MIT OR Apache-2.0",
+  "provenance": "docs/architecture/context_working_set.md",
+  "compat": {
+    "requires_models": [],
+    "min_context": null,
+    "conflicts_with": []
+  },
+  "permissions": {},
+  "parameters": {
+    "notes": "Seeds balanced Never-Out-Of-Context defaults; copy and edit to customize budgets or diversity knobs."
+  },
+  "patches": [
+    {
+      "target": "env",
+      "op": "merge",
+      "value": {
+        "ARW_CONTEXT_K": 20,
+        "ARW_CONTEXT_EXPAND_PER_SEED": 3,
+        "ARW_CONTEXT_DIVERSITY_LAMBDA": 0.74,
+        "ARW_CONTEXT_MIN_SCORE": 0.08,
+        "ARW_CONTEXT_LANES_DEFAULT": "semantic,procedural,episodic",
+        "ARW_CONTEXT_LANE_BONUS": 0.08,
+        "ARW_CONTEXT_EXPAND_QUERY": true,
+        "ARW_CONTEXT_EXPAND_QUERY_TOP_K": 5,
+        "ARW_CONTEXT_SCORER": "mmrd",
+        "ARW_CONTEXT_STREAM_DEFAULT": true,
+        "ARW_CONTEXT_COVERAGE_MAX_ITERS": 3,
+        "ARW_REHYDRATE_FILE_HEAD_KB": 96,
+        "ARW_CONTEXT_SLOT_BUDGETS": {
+          "instructions": 2,
+          "plan": 3,
+          "policy": 2,
+          "safety": 2,
+          "notes": 3,
+          "memory": 3,
+          "evidence": 8
+        }
+      }
+    }
+  ],
+  "metrics": {
+    "expected_effect": "Keeps the working set balanced: reserved instructions/policy slots, higher diversity floor, and a cautious rehydrate cap to stay within window budgets.",
+    "counters": []
+  },
+  "ui": {
+    "explainer": "Applies the Never-Out-Of-Context defaults so every context run enforces slot budgets, MMR diversity, streaming coverage retries, and safe rehydrate limits.",
+    "controls": ["slot-budgets", "coverage-loops", "expand-query"]
+  },
+  "tests": {
+    "golden": [],
+    "eval_recipe": null
+  },
+  "kind": "config"
+}

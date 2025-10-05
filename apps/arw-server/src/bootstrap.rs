@@ -104,6 +104,10 @@ pub(crate) async fn build() -> BootstrapOutput {
         .build()
         .await;
 
+    let initial_env_cfg = state.config_state().lock().await.clone();
+    config::apply_env_overrides_from(&initial_env_cfg);
+    crate::logic_units_builtin::seed(&state).await;
+
     background_tasks.merge(initialise_state(&state, kernel_enabled).await);
     background_tasks.extend(config_watcher::start(state.clone()));
 
