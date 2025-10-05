@@ -106,7 +106,7 @@ Design System & Tokens
 - [Pack: Collaboration] [t-250914231225-dsg06] Docs overrides: dedupe variables; rely on tokens only — done
 - [Pack: Collaboration] [t-250914231240-dsg09] CI: add tokens sync check step (uses `just tokens-check`) — done
 - [Pack: Collaboration] [t-250914231230-dsg07] Extract `ui-kit.css` primitives (buttons/inputs/badges) for launcher pages — done
-- [Pack: Collaboration] [t-250914231235-dsg08] Contrast audit (WCAG AA) sweep; adjust any low‑contrast cases — todo
+- [Pack: Collaboration] [t-250914231235-dsg08] Contrast audit (WCAG AA) sweep; adjust any low‑contrast cases — done (muted + status-accent tokens tuned for AA across light/dark; manuals/images synced)
 - [Pack: Collaboration] [t-250914231245-dsg10] Add W3C tokens pipeline (Style Dictionary) to emit platform targets — plan
 - [Pack: Collaboration] [t-250914231250-dsg11] Add prefers-contrast / forced-colors styles for key components — done (launcher + shared UI kit high-contrast styles)
  - [Pack: Collaboration] [t-250914231255-dsg12] Tailwind tokens export (JSON) for downstream configs — done

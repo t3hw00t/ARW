@@ -8,7 +8,7 @@
   --color-brand-copper-dark: #915a29;
   --color-ink: #111827;
   --color-line: #e5e7eb;
-  --color-muted: #6b7280;
+  --color-muted: #4b5563;
   --noise: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='table' tableValues='0 0.035'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
   --radius-2: 6px;
   --radius-3: 8px;
@@ -20,8 +20,8 @@
   --sp3: 12px;
   --sp4: 16px;
   --sp5: 24px;
-  --status-accent: #1bb3a3;
-  --status-accent-rgb: 27,179,163;
+  --status-accent: #0f766e;
+  --status-accent-rgb: 15,118,110;
   --status-bad: #a91d1d;
   --status-bad-rgb: 169,29,29;
   --status-info: #2563eb;
@@ -40,6 +40,7 @@
     --surface-muted: #0b0d11;
     --color-ink: #e5e7eb;
     --color-line: #1f232a;
+    --color-muted: #94a3b8;
     --color-accent-teal-strong: #2dd4bf;
     --color-accent-teal-strong-rgb: 45,212,191;
     --status-ok: #34d399;

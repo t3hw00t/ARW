@@ -11,7 +11,8 @@
     },
     "neutrals": {
       "ink": { "$type": "color", "$value": "#111827" },
-      "muted": { "$type": "color", "$value": "#6b7280" },
+      "muted": { "$type": "color", "$value": "#4b5563" },
+      "muted_dark": { "$type": "color", "$value": "#94a3b8" },
       "line": { "$type": "color", "$value": "#e5e7eb" }
     },
     "surfaces": {
@@ -29,7 +30,7 @@
       "bad_dark": { "$type": "color", "$value": "#fca5a5" },
       "info": { "$type": "color", "$value": "#2563eb" },
       "info_dark": { "$type": "color", "$value": "#60a5fa" },
-      "accent": { "$type": "color", "$value": "#1bb3a3" },
+      "accent": { "$type": "color", "$value": "#0f766e" },
       "accent_dark": { "$type": "color", "$value": "#2dd4bf" }
     }
   },

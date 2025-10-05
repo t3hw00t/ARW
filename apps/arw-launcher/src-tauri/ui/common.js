@@ -2231,7 +2231,7 @@ window.ARW = {
       }
       // client-side trend store for p95 sparkline
       ARW.metricsTrend = ARW.metricsTrend || { _m: new Map(), push(route,p){ const a=this._m.get(route)||[]; a.push(Number(p)||0); if(a.length>32)a.shift(); this._m.set(route,a); }, get(route){ return this._m.get(route)||[] } };
-      function sparkline(vals){ const v=(vals||[]).slice(-32); if(!v.length) return ''; const w=90,h=18,max=Math.max(1,...v); const pts=v.map((x,i)=>{const xx=Math.round(i*(w-2)/Math.max(1,v.length-1))+1; const yy=h-1-Math.round((x/max)*(h-2)); return `${xx},${yy}`;}).join(' '); return `<svg class="spark" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg"><polyline fill="none" stroke="#1bb3a3" stroke-width="1.5" points="${pts}"/></svg>`; }
+      function sparkline(vals){ const v=(vals||[]).slice(-32); if(!v.length) return ''; const w=90,h=18,max=Math.max(1,...v); const pts=v.map((x,i)=>{const xx=Math.round(i*(w-2)/Math.max(1,v.length-1))+1; const yy=h-1-Math.round((x/max)*(h-2)); return `${xx},${yy}`;}).join(' '); return `<svg class="spark" viewBox="0 0 ${w} ${h}" xmlns="http://www.w3.org/2000/svg"><polyline fill="none" stroke="var(--status-accent)" stroke-width="1.5" points="${pts}"/></svg>`; }
       const rMetrics = async () => {
         const el = sections.find(([n])=>n==='metrics')?.[1]; if (!el) return;
         const model = ARW.read.get('route_stats') || {};
@@ -2470,14 +2470,22 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
   _items: [],
   _actions: [],
   _active: -1,
+  _prevFocus: null,
+  _render: null,
+  _optionSeq: 0,
+  _trap: null,
   mount(opts={}){
     if (this._wrap) return; // singleton
     const wrap = document.createElement('div'); wrap.className='palette-wrap';
+    wrap.style.display = 'none';
+    wrap.setAttribute('aria-hidden','true');
     const pal = document.createElement('div'); pal.className='palette'; pal.setAttribute('role','dialog'); pal.setAttribute('aria-modal','true'); pal.setAttribute('aria-label','Command palette'); wrap.appendChild(pal);
     const header = document.createElement('header');
-    const inp = document.createElement('input'); inp.placeholder = 'Search commands…'; inp.setAttribute('aria-label','Search commands'); header.appendChild(inp);
+    const inp = document.createElement('input'); inp.placeholder = 'Search commands…'; inp.setAttribute('aria-label','Search commands'); inp.setAttribute('role','combobox'); header.appendChild(inp);
     pal.appendChild(header);
-    const ul = document.createElement('ul'); ul.setAttribute('role','listbox'); pal.appendChild(ul);
+    const ul = document.createElement('ul'); ul.setAttribute('role','listbox'); const listId = 'arw-palette-listbox'; ul.id = listId; pal.appendChild(ul);
+    inp.setAttribute('aria-controls', listId);
+    inp.setAttribute('aria-expanded', 'false');
     document.body.appendChild(wrap);
     this._wrap = wrap; this._input = inp; this._list = ul;
     const base = opts.base;
@@ -2550,19 +2558,48 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
         }
       },
     ];
+    const trapFocus = (event)=>{
+      if (event.key !== 'Tab' || !this._wrap || this._wrap.style.display !== 'grid') return;
+      if (!pal.contains(event.target)) return;
+      const focusables = Array.from(pal.querySelectorAll('input, button, [tabindex]:not([tabindex="-1"])')).filter(el => !el.hasAttribute('disabled'));
+      if (!focusables.length) {
+        event.preventDefault();
+        return;
+      }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (event.shiftKey) {
+        if (document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else {
+        if (document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+    };
+    wrap.addEventListener('keydown', trapFocus);
+    this._trap = trapFocus;
     const render = (q='')=>{
       ul.innerHTML=''; this._items = [];
       const qq = q.toLowerCase();
       for (const a of this._actions) {
         if (!qq || a.label.toLowerCase().includes(qq) || a.id.includes(qq)) {
-          const li = document.createElement('li'); li.dataset.id = a.id; li.setAttribute('role','option'); li.setAttribute('aria-selected','false');
+          const li = document.createElement('li'); li.dataset.id = a.id; li.setAttribute('role','option'); li.setAttribute('aria-selected','false'); li.tabIndex = -1;
+          const optId = `palette-opt-${++this._optionSeq}`;
+          li.id = optId;
           li.innerHTML = `<span>${a.label}</span><span class="hint">${a.hint}</span>`;
           li.addEventListener('click', ()=>{ this.hide(); try{ a.run(); }catch{} });
           ul.appendChild(li); this._items.push(li);
         }
       }
-      this._active = this._items.length ? 0 : -1; this._highlight();
+      this._active = this._items.length ? 0 : -1;
+      this._input.setAttribute('aria-expanded', this._items.length ? 'true' : 'false');
+      this._highlight();
     };
+    this._render = render;
     inp.addEventListener('input', ()=> render(inp.value));
     inp.addEventListener('keydown', (e)=>{
       if (e.key==='ArrowDown'){ this._move(1); e.preventDefault(); }
@@ -2578,9 +2615,47 @@ window.ARW.sse.subscribe('state.read.model.patch', ({ env }) => {
     render('');
   },
   _move(dir){ if (!this._items.length) return; this._active = (this._active + dir + this._items.length) % this._items.length; this._highlight(); },
-  _highlight(){ this._items.forEach((el,i)=> { const on = i===this._active; el.classList.toggle('active', on); el.setAttribute('aria-selected', on? 'true':'false'); }); },
-  show(){ if (!this._wrap) return; this._wrap.style.display='grid'; this._input.value=''; this._input.focus({ preventScroll: true }); },
-  hide(){ if (!this._wrap) return; this._wrap.style.display='none'; },
+  _highlight(){
+    let activeId = '';
+    this._items.forEach((el,i)=> {
+      const on = i===this._active;
+      el.classList.toggle('active', on);
+      el.setAttribute('aria-selected', on? 'true':'false');
+      if (on && el.id) activeId = el.id;
+    });
+    if (this._list) {
+      if (activeId) this._list.setAttribute('aria-activedescendant', activeId);
+      else this._list.removeAttribute('aria-activedescendant');
+    }
+  },
+  show(){
+    if (!this._wrap) return;
+    const activeEl = document.activeElement;
+    this._prevFocus = activeEl && typeof activeEl.focus === 'function' ? activeEl : null;
+    if (this._render) this._render('');
+    this._wrap.style.display='grid';
+    this._wrap.removeAttribute('aria-hidden');
+    if (this._input){
+      this._input.value='';
+      this._input.focus({ preventScroll: true });
+    }
+  },
+  hide(){
+    if (!this._wrap) return;
+    this._wrap.style.display='none';
+    this._wrap.setAttribute('aria-hidden','true');
+    if (this._input){
+      this._input.setAttribute('aria-expanded','false');
+      this._input.blur();
+    }
+    if (this._list) this._list.removeAttribute('aria-activedescendant');
+    const prev = this._prevFocus;
+    this._prevFocus = null;
+    if (prev && document.contains(prev)){
+      try{ prev.focus({ preventScroll: true }); }
+      catch{ try{ prev.focus(); }catch{} }
+    }
+  },
   toggle(){ if (!this._wrap) return; const shown = this._wrap.style.display==='grid'; if (shown) this.hide(); else this.show(); }
 };
 
@@ -2722,7 +2797,11 @@ window.ARW.annot = {
 
 // Keyboard Shortcuts overlay (global)
 window.ARW.shortcuts = {
-  _wrap: null, _panel: null, _list: null,
+  _wrap: null,
+  _panel: null,
+  _list: null,
+  _prevFocus: null,
+  _trap: null,
   _mkRow(k,d){ const tr=document.createElement('tr'); tr.innerHTML=`<td class="mono">${k}</td><td>${d}</td>`; return tr; },
   _content(page){
     const base = [ ['Ctrl/Cmd+K','Command palette'], ['?','Shortcuts help'] ];
@@ -2737,10 +2816,87 @@ window.ARW.shortcuts = {
     };
     return base.concat(map[page]||[]);
   },
-  mount(){ if (this._wrap) return; const w=document.createElement('div'); w.className='gallery-wrap'; const p=document.createElement('div'); p.className='gallery'; p.setAttribute('role','dialog'); p.setAttribute('aria-modal','true'); p.setAttribute('aria-label','Keyboard shortcuts'); const h=document.createElement('header'); const t=document.createElement('strong'); t.textContent='Keyboard Shortcuts'; const x=document.createElement('button'); x.className='ghost'; x.textContent='Close'; x.addEventListener('click', ()=> this.hide()); h.appendChild(t); h.appendChild(x); const m=document.createElement('main'); const tbl=document.createElement('table'); tbl.className='cmp-table'; const tb=document.createElement('tbody'); tbl.appendChild(tb); m.appendChild(tbl); p.appendChild(h); p.appendChild(m); w.appendChild(p); document.body.appendChild(w); this._wrap=w; this._panel=p; this._list=tb; },
-  mount(){ if (this._wrap) return; const w=document.createElement('div'); w.className='gallery-wrap'; const p=document.createElement('div'); p.className='gallery'; p.setAttribute('role','dialog'); p.setAttribute('aria-modal','true'); p.setAttribute('aria-label','Keyboard shortcuts'); const h=document.createElement('header'); const t=document.createElement('strong'); t.textContent='Keyboard Shortcuts'; const x=document.createElement('button'); x.className='ghost'; x.textContent='Close'; x.addEventListener('click', ()=> this.hide()); h.appendChild(t); h.appendChild(x); const m=document.createElement('main'); const tbl=document.createElement('table'); tbl.className='cmp-table'; const tb=document.createElement('tbody'); tbl.appendChild(tb); m.appendChild(tbl); p.appendChild(h); p.appendChild(m); w.appendChild(p); document.body.appendChild(w); this._wrap=w; this._panel=p; this._list=tb; w.addEventListener('click', (e)=>{ if (e.target===w) this.hide(); }); },
-  show(){ this.mount(); const tb=this._list; if (!tb) return; tb.innerHTML=''; const page = ARW.util.pageId(); const rows=this._content(page); rows.forEach(([k,d])=> tb.appendChild(this._mkRow(k,d))); this._wrap.style.display='grid'; try{ this._panel.querySelector('header button')?.focus({ preventScroll:true }); }catch{} },
-  hide(){ if (this._wrap) this._wrap.style.display='none'; },
+  mount(){
+    if (this._wrap) return;
+    const w=document.createElement('div');
+    w.className='gallery-wrap';
+    w.style.display='none';
+    w.setAttribute('aria-hidden','true');
+    const p=document.createElement('div');
+    p.className='gallery';
+    p.setAttribute('role','dialog');
+    p.setAttribute('aria-modal','true');
+    const h=document.createElement('header');
+    const t=document.createElement('strong');
+    t.textContent='Keyboard Shortcuts';
+    const titleId='shortcutsTitle';
+    t.id = titleId;
+    p.setAttribute('aria-labelledby', titleId);
+    const x=document.createElement('button');
+    x.className='ghost';
+    x.textContent='Close';
+    x.addEventListener('click', ()=> this.hide());
+    h.appendChild(t);
+    h.appendChild(x);
+    const m=document.createElement('main');
+    const tbl=document.createElement('table');
+    tbl.className='cmp-table';
+    const tb=document.createElement('tbody');
+    tbl.appendChild(tb);
+    m.appendChild(tbl);
+    p.appendChild(h);
+    p.appendChild(m);
+    w.appendChild(p);
+    document.body.appendChild(w);
+    w.addEventListener('click', (e)=>{ if (e.target===w) this.hide(); });
+    const trap = (event)=>{
+      if (event.key !== 'Tab' || w.style.display === 'none') return;
+      if (!p.contains(event.target)) return;
+      const focusables = Array.from(p.querySelectorAll('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'))
+        .filter(el => !el.hasAttribute('disabled'));
+      if (!focusables.length) { event.preventDefault(); return; }
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (event.shiftKey){
+        if (document.activeElement === first){ event.preventDefault(); last.focus(); }
+      } else if (document.activeElement === last){ event.preventDefault(); first.focus(); }
+    };
+    w.addEventListener('keydown', trap);
+    this._wrap=w;
+    this._panel=p;
+    this._list=tb;
+    this._trap = trap;
+  },
+  _render(){
+    const tb=this._list;
+    if (!tb) return;
+    tb.innerHTML='';
+    const page = ARW.util.pageId();
+    const rows=this._content(page);
+    rows.forEach(([k,d])=> tb.appendChild(this._mkRow(k,d)));
+  },
+  show(){
+    this.mount();
+    if (!this._wrap) return;
+    const activeEl = document.activeElement;
+    this._prevFocus = activeEl && typeof activeEl.focus === 'function' ? activeEl : null;
+    this._render();
+    this._wrap.style.display='grid';
+    this._wrap.removeAttribute('aria-hidden');
+    try{ this._panel.querySelector('header button')?.focus({ preventScroll:true }); }
+    catch{}
+  },
+  hide(){
+    if (!this._wrap) return;
+    this._wrap.style.display='none';
+    this._wrap.setAttribute('aria-hidden','true');
+    const prev = this._prevFocus;
+    this._prevFocus = null;
+    if (prev && document.contains(prev)){
+      try{ prev.focus({ preventScroll:true }); }
+      catch{ try{ prev.focus(); }catch{} }
+    }
+  },
   toggle(){ if (!this._wrap || this._wrap.style.display==='none') this.show(); else this.hide(); }
 };
 

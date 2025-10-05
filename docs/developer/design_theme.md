@@ -45,7 +45,7 @@ Key CSS variables
 
 - Brand primary: Copper `#b87333` (dark `#915a29`).
 - Accent: Teal `#1bb3a3` (light `#63d3c9`, strong text tone `#0f766e` light / `#2dd4bf` dark).
-- Neutrals: Ink `#111827`, Muted `#6b7280`, Line `#e5e7eb`.
+- Neutrals: Ink `#111827`, Muted `#4b5563` (dark `#94a3b8`), Line `#e5e7eb`.
 - Surfaces: Page `#ffffff`, Muted `#fafaf9` (dark: `#0f1115`, `#0b0d11`).
 - Status: ok `#15803d`, warn `#b45309`, bad `#a91d1d`, info `#2563eb`; dark overrides `#34d399` / `#fbbf24` / `#fca5a5` / `#60a5fa`; RGB tuples exposed via `--status-*-rgb` for overlays.
 

@@ -9,7 +9,7 @@
       .bar{fill:#111827}
       .muted{fill:#9ca3af}
       .text{font: 13px sans-serif; fill:#111827}
-      .small{font: 11px sans-serif; fill:#6b7280}
+      .small{font: 11px sans-serif; fill:#4b5563}
     </style>
   </defs>
   <rect x="0" y="0" width="860" height="520" class="bg"/>
@@ -37,4 +37,3 @@
   <rect x="224" y="336" width="600" height="140" fill="#f9fafb"/>
   <text x="230" y="356" class="small">{ id, budget, disk, … }</text>
 </svg>
-

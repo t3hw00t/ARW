@@ -44,9 +44,22 @@ def main():
 
     teal_strong_dark = brand.get('teal_strong_dark', {}).get('$value')
     # Neutrals & surfaces
-    if 'ink' in neutrals: css_vars['--color-ink'] = neutrals['ink']['$value']
-    if 'muted' in neutrals: css_vars['--color-muted'] = neutrals['muted']['$value']
-    if 'line' in neutrals: css_vars['--color-line'] = neutrals['line']['$value']
+    neutrals_dark_overrides = {}
+    for key, spec in neutrals.items():
+        if not isinstance(spec, dict):
+            continue
+        value = spec.get('$value')
+        if value is None:
+            continue
+        if key.endswith('_dark'):
+            neutrals_dark_overrides[key[:-5]] = value
+            continue
+        if key == 'ink':
+            css_vars['--color-ink'] = value
+        elif key == 'muted':
+            css_vars['--color-muted'] = value
+        elif key == 'line':
+            css_vars['--color-line'] = value
     if 'surface' in surfaces:
         css_vars['--surface'] = surfaces['surface']['$value']
     if 'surface_muted' in surfaces:
@@ -92,6 +105,8 @@ def main():
         '--color-ink': '#e5e7eb',
         '--color-line': '#1f232a',
     }
+    for base, override_value in neutrals_dark_overrides.items():
+        dark_overrides[f'--color-{base}'] = override_value
     if teal_strong_dark:
         dark_overrides['--color-accent-teal-strong'] = teal_strong_dark
         r, g, b = hex_to_rgb_tuple(teal_strong_dark)
