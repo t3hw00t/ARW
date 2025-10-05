@@ -42,7 +42,7 @@ lint-events:
 
 # Test
 test:
-  cargo test --workspace --locked
+  cargo test --workspace --locked -- --test-threads=1
 
 # Run only the server crate tests serially to avoid test lock contention.
 # Useful when arw-server tests appear to "hang" due to global state guards.
@@ -142,7 +142,10 @@ runtime-smoke-cpu:
   MODE=cpu bash scripts/runtime_llama_smoke.sh
 
 runtime-smoke-gpu:
-  MODE=gpu bash scripts/runtime_llama_smoke.sh
+  LLAMA_GPU_REQUIRE_REAL=1 MODE=gpu bash scripts/runtime_llama_smoke.sh
+
+runtime-smoke-gpu-sim:
+  LLAMA_GPU_SIMULATE=1 MODE=gpu bash scripts/runtime_llama_smoke.sh
 
 context-ci:
   bash scripts/context_ci.sh

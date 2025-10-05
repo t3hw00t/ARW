@@ -45,15 +45,16 @@ helper also enforces a wall-clock limit (`RUNTIME_SMOKE_TIMEOUT_SECS`, defaultin
 `SMOKE_TIMEOUT_SECS` or 600) so stalled runs terminate instead of hang. Set the timeout knobs
 to `0` if you want an unbounded session during manual investigation.
 
-GPU mode — `just runtime-smoke-gpu` or `MODE=gpu scripts/runtime_llama_smoke.sh` — appends a
-small `--gpu-layers` hint (override via `LLAMA_GPU_LAYERS`) when you don’t provide your own
+GPU mode — `just runtime-smoke-gpu` (hard-requires real accelerators via
+`LLAMA_GPU_REQUIRE_REAL=1`) or `MODE=gpu scripts/runtime_llama_smoke.sh` — appends a small
+`--gpu-layers` hint (override via `LLAMA_GPU_LAYERS`) when you don’t provide your own
 `LLAMA_SERVER_ARGS`. Set `LLAMA_GPU_LOG_PATTERN` to the regex that proves GPU execution
 (defaults to a broad CUDA/Metal/Vulkan/DirectML/HIP catch-all) and flip `LLAMA_GPU_ENFORCE=1`
 to make the smoke test fail if the pattern is missing. When you want to exercise the GPU lane
-without real accelerators, set (or let the helper auto-enable) `LLAMA_GPU_SIMULATE=1`; the
-helper keeps the stub backend but injects the marker expected by the log verifier so CI can
-cover the GPU path. Export `LLAMA_GPU_REQUIRE_REAL=1` if you would rather fail in that
-situation instead of simulating. For CPU runs
+without real accelerators, run `just runtime-smoke-gpu-sim` (or set/allow
+`LLAMA_GPU_SIMULATE=1`); the helper keeps the stub backend but injects the marker expected by
+the log verifier so CI can cover the GPU path. Export `LLAMA_GPU_REQUIRE_REAL=1` if you invoke
+the script manually and would rather fail than simulate. For CPU runs
 that must stay offloaded
 from accelerators, set `LLAMA_FORCE_CPU_LAYERS=1` so the helper adds `--gpu-layers 0` when the
 launch arguments omit it.
