@@ -82,6 +82,14 @@ Notes:
 
 - Honor `prefers-color-scheme: dark` with the same hierarchy and accents; keep shadows subtle.
 
+## Accessibility
+
+- Minimum contrast: keep interactive text ≥4.5:1 against the background; status badges get dual encoding (colour + icon).
+- Motion & flicker: avoid flashing elements; respect `prefers-reduced-motion` by disabling non-essential animations.
+- Hit targets: primary buttons and critical toggles should provide ≥44×44 px hit areas; list items use at least 36 px height.
+- Keyboard: every interactive element must be reachable via tab order; focus outlines should use the accent teal variant.
+- Labels: pair icons with text or aria-labels; keep status announcements readable by screen readers.
+
 ## Examples
 
 - Header badges showing SSE, Admin, Chat, Models, Memory, Governor.

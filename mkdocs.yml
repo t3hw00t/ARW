@@ -157,6 +157,10 @@ nav:
       - Telemetry & Privacy: reference/telemetry_privacy.md
       - Trust Boundaries: reference/trust_boundaries.md
       - Glossary: GLOSSARY.md
+  - Design:
+      - Overview: design/index.md
+      - Autonomy Recovery Follow-ups: design/autonomy_recovery_followups.md
+      - Trial Visual Kit: design/trial_visual_kit.md
   - Explanations:
       - Unified Object Graph: architecture/object_graph.md
       - Events Vocabulary: architecture/events_vocabulary.md
@@ -207,7 +211,6 @@ nav:
       - Build Efficiency: developer/build_efficiency.md
       - Docs Style (Diátaxis): developer/docs_style.md
       - Design Theme: developer/design_theme.md
-      - Trial Visual Kit: design/trial_visual_kit.md
       - Standards: developer/standards.md
       - UI Kit (Launcher): developer/ui_kit.md
       - ADRs:

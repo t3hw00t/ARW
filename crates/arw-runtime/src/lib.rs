@@ -506,7 +506,7 @@ mod tests {
         base.refresh_labels();
 
         let mut same = base.clone();
-        same.updated_at = same.updated_at + ChronoDuration::seconds(30);
+        same.updated_at += ChronoDuration::seconds(30);
         assert!(base.same_payload(&same));
 
         let mut different = same.clone();
