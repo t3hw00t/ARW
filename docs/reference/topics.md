@@ -3,7 +3,7 @@ title: Event Topics (Canonical)
 ---
 
 # Event Topics (Canonical)
-Updated: 2025-10-05
+Updated: 2025-10-06
 Type: Reference
 
 Source of truth for event kinds published by the service. Generated from
@@ -131,8 +131,6 @@ Related docs:
 | `actions.failed` | `TOPIC_ACTIONS_FAILED` |
 | `actions.updated` | `TOPIC_ACTIONS_UPDATED` |
 
-Payload notes: `actions.hint.applied` publishes `action="governor.hints"` with normalized parameters (`mode`, `retrieval_div`, `mmr_lambda`, `compression_aggr`, ...) whenever governor hints change, so UIs can surface real-time toasts or persist a profile history without re-fetching state.
-
 ## Autonomy
 
 | Topic | Constant |
@@ -186,8 +184,6 @@ Payload notes: `actions.hint.applied` publishes `action="governor.hints"` with n
 | `orchestrator.job.created` | `TOPIC_ORCHESTRATOR_JOB_CREATED` |
 | `orchestrator.job.progress` | `TOPIC_ORCHESTRATOR_JOB_PROGRESS` |
 | `orchestrator.job.completed` | `TOPIC_ORCHESTRATOR_JOB_COMPLETED` |
-
-Payload notes: `orchestrator.job.created` now includes a `data` object mirroring the submitted training hints (preset/diversity/recency/compression). `logic.unit.suggested` carries the same hints under `hints.training` so downstream consumers can render or diff adjustments without re-fetching `/state/orchestrator/jobs`.
 
 ## World model
 

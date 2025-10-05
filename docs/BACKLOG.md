@@ -229,7 +229,7 @@ Specs & Docs
 - [Kernel] AsyncAPI: include `rpu.trust.changed` channel — done
 - [Kernel] Event normalization rollout
   - [Kernel] [t-250913213500-ev01] Add dual-mode warning logs when ARW_EVENTS_KIND_MODE=dual to surface remaining legacy consumers — removed (modes dropped)
-  - [Kernel] [t-250913213501-ev02] Update all docs/screenshots/snippets to normalized kinds (models.download.progress, …) — in progress
+  - [Kernel] [t-250913213501-ev02] Update all docs/screenshots/snippets to normalized kinds (models.download.progress, …) — done (docs/assets updated; docs-check now guards against legacy `Models.*` mentions)
   - [Kernel] Gallery guide and screenshots guide updates — done
 - [Kernel] [t-250913213502-ev03] Add envelope schema `ApiEnvelope<T>` in OpenAPI and adopt in responses (opt-in) — done (global middleware + schema; toggle via `ARW_API_ENVELOPE`)
   - [Kernel] [t-250913213503-ev04] Add short descriptions to any endpoints with Spectral hints (e.g., /state/models) — done

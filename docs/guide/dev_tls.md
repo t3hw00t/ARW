@@ -3,7 +3,7 @@ title: Dev TLS Profiles
 ---
 
 # Dev TLS Profiles
-Updated: 2025-09-29
+Updated: 2025-10-05
 
 Local TLS makes it easier to test secure transports and proxy headers without waiting for a public certificate. The `dev_tls_profile.sh` helper plants mkcert certificates when available and falls back to self-signed assets so every environment can exercise HTTPS.
 
@@ -28,7 +28,7 @@ The helper writes assets to `configs/reverse_proxy/caddy/`:
 - `*.crt` / `*.key`: certificate and private key (ignored by git).
 - `Caddyfile.<host>`: reverse proxy snippet pointing to `127.0.0.1:${ARW_DEV_TLS_BACKEND_PORT:-8091}`.
 
-## mkcert vs self-signed
+## Mkcert vs Self-Signed
 
 - When `mkcert` is present, the script installs the local trust store (unless `ARW_DEV_TLS_SKIP_TRUST_INSTALL=1`) and issues certificates for every host argument.
 - Without mkcert, it generates a self-signed RSA certificate via `openssl` with Subject Alternative Names for all hostnames/IPs.

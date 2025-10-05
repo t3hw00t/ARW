@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2025-10-04 15:22 UTC",
+  "updated": "2025-10-05 23:12 UTC",
   "tasks": [
     {
       "id": "t-phase-a-01",
@@ -1385,6 +1385,20 @@
       ],
       "updated": "2025-09-28 17:30:00 UTC",
       "done_at": "2025-09-28 17:30:00 UTC"
+    },
+    {
+      "id": "t-250913213501-ev02",
+      "title": "Event docs normalization",
+      "desc": "Sweep documentation for dot.case event names and enforce docs_check guard for legacy Models.* mentions.",
+      "status": "done",
+      "notes": [
+        {
+          "time": "2025-10-05 23:02:12 UTC",
+          "text": "Swept docs/snippets to dot.case event names and extended docs_check to fail when legacy \"Models.*\" strings appear outside release notes."
+        }
+      ],
+      "updated": "2025-10-05 23:02:12 UTC",
+      "done_at": "2025-10-05 23:02:12 UTC"
     }
   ]
 }

@@ -4,7 +4,7 @@ title: Tasks Status
 
 # Tasks Status
 
-Updated: 2025-10-04 15:22 UTC
+Updated: 2025-10-05 23:12 UTC
 
 
 ## To Do
@@ -14,6 +14,8 @@ Updated: 2025-10-04 15:22 UTC
 ## Paused
 
 ## Done
+- [t-250913213501-ev02] Event docs normalization — done (updated: 2025-10-05 23:02:12 UTC)
+    - 2025-10-05 23:02:12 UTC: Swept docs/snippets to dot.case event names and extended docs_check to fail when legacy "Models.*" strings appear outside release notes.
 - [trial-autonomy-governor] Autonomy governor & kill switch — done (updated: 2025-10-02 14:45:00 UTC)
     - 2025-10-02 14:45:00 UTC: Broadcast kill signals pause/flush, preempt running tasks, added /admin/autonomy/{lane}/stop endpoint + launcher stop control, updated docs/runbook.
 - [trial-g3] Gate G3: Trial operations — done (updated: 2025-10-01 19:24:42 UTC)

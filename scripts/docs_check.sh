@@ -187,6 +187,49 @@ if [[ "${legacy_capsule:-0}" -gt 0 ]]; then
   errors=$((errors+legacy_capsule))
 fi
 
+info "Ensuring docs avoid legacy Models.* event names"
+legacy_models_output=$(python3 - <<'PY' "$docs_dir"
+import sys
+import pathlib
+import re
+
+docs_dir = pathlib.Path(sys.argv[1])
+pattern = re.compile(r"Models\.(?!\*)")
+allowed = {pathlib.Path("release_notes.md")}
+errors = 0
+
+for path in sorted(docs_dir.rglob('*.md')):
+    rel = path.relative_to(docs_dir)
+    if rel in allowed:
+        continue
+    try:
+        text = path.read_text(encoding='utf-8')
+    except Exception as exc:
+        print(f"[warn] {rel}: unable to read file ({exc})")
+        continue
+    matches = []
+    for idx, line in enumerate(text.splitlines(), 1):
+        if pattern.search(line):
+            matches.append((idx, line.strip()))
+    if matches:
+        errors += len(matches)
+        print(f"[error] {rel}: legacy Models.* event reference detected:")
+        for idx, line in matches[:10]:
+            print(f"  line {idx}: {line}")
+        if len(matches) > 10:
+            remaining = len(matches) - 10
+            print(f"  … {remaining} more occurrences")
+
+if errors:
+    print(f"__DOCS_CHECK_MODELS_LEGACY__={errors}")
+PY
+)
+printf "%s" "$legacy_models_output"
+legacy_models=$(printf "%s" "$legacy_models_output" | grep -oE '__DOCS_CHECK_MODELS_LEGACY__=[0-9]+' | cut -d= -f2 || echo 0)
+if [[ "${legacy_models:-0}" -gt 0 ]]; then
+  errors=$((errors+legacy_models))
+fi
+
 # Link check for relative .md references
 info "Checking relative links to .md files"
 python3 - << 'PY' "$docs_dir"

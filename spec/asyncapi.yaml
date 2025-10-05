@@ -314,6 +314,16 @@ channels:
         payload:
           type: object
           additionalProperties: true
+  'context.cascade.updated':
+    subscribe:
+      operationId: context_cascade_updated_event
+      summary: "context.cascade.updated event"
+      description: "Event published on 'context.cascade.updated' channel."
+      message:
+        name: 'context.cascade.updated'
+        payload:
+          type: object
+          additionalProperties: true
   'context.coverage':
     subscribe:
       operationId: context_coverage_event
@@ -331,16 +341,6 @@ channels:
       description: "Event published on 'context.recall.risk' channel."
       message:
         name: 'context.recall.risk'
-        payload:
-          type: object
-          additionalProperties: true
-  'context.cascade.updated':
-    subscribe:
-      operationId: context_cascade_updated_event
-      summary: "context.cascade.updated event"
-      description: "Episode cascade summaries emitted by the context cascade service."
-      message:
-        name: 'context.cascade.updated'
         payload:
           type: object
           additionalProperties: true
@@ -451,6 +451,16 @@ channels:
       description: "Event published on 'feedback.applied' channel."
       message:
         name: 'feedback.applied'
+        payload:
+          type: object
+          additionalProperties: true
+  'feedback.delta':
+    subscribe:
+      operationId: feedback_delta_event
+      summary: "feedback.delta event"
+      description: "Event published on 'feedback.delta' channel."
+      message:
+        name: 'feedback.delta'
         payload:
           type: object
           additionalProperties: true
