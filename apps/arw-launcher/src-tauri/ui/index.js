@@ -126,7 +126,10 @@ function miniDownloads() {
       render(el, 'bad', `${id} ${code}`);
       return;
     }
-    const progress = payload.progress != null ? `${payload.progress}%` : (payload.status || '…');
+    const progressNum = ARW.util.downloadPercent(payload);
+    const progress = Number.isFinite(progressNum)
+      ? `${Math.round(progressNum)}%`
+      : (payload.status || '…');
     let tail = '';
     const now = Date.now();
     const downloaded = Number(payload.downloaded || 0);

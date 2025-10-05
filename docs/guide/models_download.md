@@ -87,7 +87,8 @@ Schema notes:
 - Always includes `id`.
 - `status` is one of `started`, `queued`, `admitted`, `downloading`, `resumed`, `degraded`, `complete`, `canceled`, `cancel-requested`, `no-active-job`, or `error`.
 - `code` provides a machine hint on progress/failure (e.g., `resumed`, `soft-budget`, `idle-timeout`, `sha256_mismatch`, `http`, `io`, `size_limit`, `quota_exceeded`, `disk_insufficient`).
-- `bytes`/`downloaded` report cumulative bytes fetched; `total` and `percent` are present when the server provided `Content-Length`.
+- `bytes`/`downloaded` report cumulative bytes fetched; `total` and `percent` are present when the server provided `Content-Length` (`percent` is in the 0–100 range).
+- `disk` surfaces download-time storage telemetry when `ARW_DL_PROGRESS_INCLUDE_DISK=1`: `{ available, reserve, need? }` (bytes). Use it to detect low space before replays retry.
 - Completion events include `sha256`, `bytes`, `downloaded`, `cached`, and `total`.
 - Every payload includes `corr_id`; use it to join egress ledger entries and `/events` flows.
 ```

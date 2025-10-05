@@ -117,6 +117,26 @@ window.ARW = {
         const p = (window.location.pathname||'').split('/').pop() || 'index.html';
         return p.replace(/\.html?$/i,'') || 'index';
       }catch{ return 'index' }
+    },
+    downloadPercent(payload){
+      if (!payload || typeof payload !== 'object') return null;
+      const clamp = (value) => Math.max(0, Math.min(100, value));
+      const candidates = [payload.progress, payload.percent];
+      for (const candidate of candidates) {
+        if (candidate == null) continue;
+        const raw = typeof candidate === 'string' ? candidate.replace(/%$/, '') : candidate;
+        const num = Number(raw);
+        if (Number.isFinite(num)) {
+          return clamp(num);
+        }
+      }
+      const downloaded = Number(payload.downloaded);
+      const total = Number(payload.total);
+      if (Number.isFinite(downloaded) && Number.isFinite(total) && total > 0) {
+        const pct = (downloaded / total) * 100;
+        if (Number.isFinite(pct)) return clamp(pct);
+      }
+      return null;
     }
   },
   validateProjectName(name) {

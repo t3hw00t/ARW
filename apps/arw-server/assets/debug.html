@@ -771,7 +771,11 @@ function updateDlEntry(obj){
   // Merge fields
   if(obj.status) e.status = obj.status;
   if(obj.code != null) e.code = obj.code;
-  if(obj.progress != null) e.progress = obj.progress;
+  const progressRaw = (obj.progress != null) ? obj.progress : obj.percent;
+  if(progressRaw != null){
+    const num = Number(progressRaw);
+    if(!Number.isNaN(num)) e.progress = num;
+  }
   if(obj.downloaded != null) e.downloaded = obj.downloaded;
   if(obj.total != null) e.total = obj.total;
   if(obj.disk != null) e.disk = obj.disk;
@@ -799,18 +803,40 @@ function renderDownloads(){
   ids.sort();
   ids.forEach(id => {
     const d = downloads[id] || {};
-    const pct = (typeof d.progress === 'number') ? Math.max(0, Math.min(100, d.progress)) : null;
+    let pct = null;
+    if (typeof d.progress === 'number' && Number.isFinite(d.progress)) {
+      pct = d.progress;
+    } else if (typeof d.progress === 'string') {
+      const parsed = Number(d.progress);
+      if (!Number.isNaN(parsed)) pct = parsed;
+    }
+    if (pct == null && typeof d.downloaded === 'number' && typeof d.total === 'number' && d.total > 0) {
+      pct = (d.downloaded / d.total) * 100;
+    }
+    if (pct != null) {
+      pct = Math.max(0, Math.min(100, pct));
+    }
     const downloaded = d.downloaded || 0; const total = d.total || 0;
     const spd = d.speed_bps ? (d.speed_bps / (1024*1024)) : null;
     const etaMs = (pct!=null && pct>0 && pct<100 && spd>0 && total>0) ? Math.round(((total - downloaded) / (spd*1024*1024)) * 1000) : null;
     const status = d.error ? 'error' : (d.status || '');
     const code = d.code; const note = d.error || codeExplain(code, d);
-    const disk = d.disk; const diskTxt = (disk && typeof disk.available==='number') ? ` · disk ${bytesHuman(disk.available)} free` : '';
+    const disk = d.disk;
+    let diskTxt = '';
+    if (disk) {
+      const availTxt = bytesHuman(typeof disk.available === 'number' ? disk.available : null);
+      const reserveTxt = disk.reserve != null ? bytesHuman(disk.reserve) : null;
+      const needTxt = disk.need != null ? bytesHuman(disk.need) : null;
+      const chunks = [`disk ${availTxt} free`];
+      if (disk.reserve != null) chunks.push(`reserve ${reserveTxt}`);
+      if (disk.need != null) chunks.push(`need ${needTxt}`);
+      diskTxt = ' · ' + chunks.join(' · ');
+    }
     const cancelBtn = (!d.finished) ? `<button class="ghost" onclick="modelsCancelId('${id.replace(/'/g,"%27")}')">Cancel</button>` : '';
     const prog = pct!=null ? Math.max(0, Math.min(100, pct)) : 0;
     const pbar = `<div class="pbar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(prog)}"><div class="pfill" style="--progress:${prog}%"></div></div>`;
     const metaL = (total>0) ? `${bytesHuman(downloaded)} / ${bytesHuman(total)}` : `${bytesHuman(downloaded)} / ?`;
-    const metaR = `${(spd!=null? spd.toFixed(2)+' MB/s' : '–')} · ETA ${etaMs!=null? msHuman(etaMs): '–'}`;
+    const metaR = `${(spd!=null? spd.toFixed(2)+' MiB/s' : '–')} · ETA ${etaMs!=null? msHuman(etaMs): '–'}`;
     lines.push(`<div class="dlrow">
       <div class="dlid" title="model id">${id}</div>
       <div class="dlstat">${status}${code? ' ('+code+')':''}</div>
@@ -930,7 +956,9 @@ function pushEvt(kind, data){
       const obj = JSON.parse(data||'{}');
       const ico = iconsFor(kind, obj);
       const id = obj.id || '';
-      const base = (obj.progress!=null && obj.total) ? `${obj.progress}%` : (obj.status || '');
+      const pctRaw = obj.progress != null ? obj.progress : obj.percent;
+      const pctNum = Number(pctRaw);
+      const base = Number.isFinite(pctNum) ? `${pctNum.toFixed(1)}%` : (obj.status || '');
       const code = obj.code ? ` <span class="key">(${obj.code})</span>` : '';
       div.innerHTML = `[${new Date().toLocaleTimeString()}] ${kind}: ` + (ico? `<span class="icons">${ico}</span>` : '') + `${id} ${base}` + code;
     }catch{ div.textContent = `[${new Date().toLocaleTimeString()}] ${kind}: ${data}`; }
@@ -970,8 +998,11 @@ es.addEventListener('models.download.progress', (e)=>{
     if (obj.status === 'admitted'){ b.className='badge ok'; b.innerHTML = '<span class="dot"></span> Models: admitted'; return; }
     if (obj.status === 'degraded'){ b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: degraded'; return; }
     if (obj.status === 'already-in-progress'){ b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: duplicate'; return; }
-    const pct = (obj.progress!=null)? obj.progress : null;
-    if (pct!=null){ b.className='badge ok'; b.innerHTML = '<span class="dot"></span> Models: ' + pct + '%'; }
+    const badgePctRaw = (obj.progress!=null)? obj.progress : obj.percent;
+    const badgePctNum = Number(badgePctRaw);
+    if (Number.isFinite(badgePctNum)){
+      b.className='badge ok'; b.innerHTML = '<span class="dot"></span> Models: ' + Math.round(badgePctNum) + '%'; return;
+    }
     else { b.className='badge warn'; b.innerHTML = '<span class="dot"></span> Models: active'; }
   }catch{}
 });
@@ -988,7 +1019,7 @@ es.addEventListener('state.read.model.patch', (e)=>{
   }catch{}
 });
 // Start event + model changes
-// Start event removed; rely on DownloadProgress with status='started'
+// Start event removed; rely on models.download.progress with status='started'
 es.addEventListener('models.changed', (e)=>{ pushEvt('models.changed', e.data); try{ updateModelsCount(); const j=JSON.parse(e.data||'{}'); if(j && j.op==='downloaded' && j.id){ updateDlEntry({ id:j.id, status:'complete'}); } modelsMaybeShowHint(true); }catch{} });
 // Pre‑offload preview (egress)
 es.addEventListener('egress.preview', (e)=>{

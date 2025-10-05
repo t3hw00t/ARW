@@ -6,37 +6,130 @@ const path = require('path');
 const vm = require('vm');
 const assert = require('assert');
 
-function makeNode() {
+function makeNode(tag = 'div') {
   const node = {
+    tagName: String(tag || 'div').toUpperCase(),
+    id: '',
     style: {},
     className: '',
-    innerHTML: '',
-    textContent: '',
-    value: '',
     dataset: {},
+    attributes: Object.create(null),
     children: [],
+    parentNode: null,
+    value: '',
     classList: {
-      add() {},
-      remove() {},
-      toggle() {},
-      contains() { return false; }
+      add(cls) {
+        if (!cls) return;
+        const parts = new Set(String(node.className || '').split(/\s+/).filter(Boolean));
+        parts.add(cls);
+        node.className = Array.from(parts).join(' ');
+      },
+      remove(cls) {
+        if (!cls) return;
+        const parts = new Set(String(node.className || '').split(/\s+/).filter(Boolean));
+        parts.delete(cls);
+        node.className = Array.from(parts).join(' ');
+      },
+      toggle(cls, force) {
+        if (force === undefined) {
+          this.contains(cls) ? this.remove(cls) : this.add(cls);
+        } else if (force) {
+          this.add(cls);
+        } else {
+          this.remove(cls);
+        }
+      },
+      contains(cls) {
+        const parts = new Set(String(node.className || '').split(/\s+/).filter(Boolean));
+        return parts.has(cls);
+      }
     },
-    appendChild(child) { this.children.push(child); return child; },
-    prepend(child) { this.children.unshift(child); return child; },
-    removeChild(child) { this.children = this.children.filter((c) => c !== child); },
+    appendChild(child) {
+      if (!child) return child;
+      child.parentNode = node;
+      node.children.push(child);
+      return child;
+    },
+    prepend(child) {
+      if (!child) return child;
+      child.parentNode = node;
+      node.children.unshift(child);
+      return child;
+    },
+    removeChild(child) {
+      node.children = node.children.filter((c) => c !== child);
+      if (child) child.parentNode = null;
+    },
     insertAdjacentHTML() {},
-    setAttribute() {},
-    getAttribute() { return null; },
+    setAttribute(name, value) {
+      const val = String(value ?? '');
+      node.attributes[name] = val;
+      if (name === 'id') node.id = val;
+      if (name.startsWith('data-')) {
+        const key = name.slice(5).replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+        node.dataset[key] = val;
+      }
+    },
+    getAttribute(name) {
+      return Object.prototype.hasOwnProperty.call(node.attributes, name)
+        ? node.attributes[name]
+        : null;
+    },
     addEventListener() {},
     removeEventListener() {},
-    querySelector() { return makeNode(); },
-    querySelectorAll() { return []; },
-    cloneNode() { return makeNode(); },
+    querySelector(selector) {
+      return node.querySelectorAll(selector)[0] || null;
+    },
+    querySelectorAll(selector) {
+      if (!selector) return [];
+      const matches = [];
+      const check = (candidate) => {
+        if (!candidate || typeof candidate.getAttribute !== 'function') return false;
+        if (selector === '[data-bar]') return candidate.getAttribute('data-bar') !== null;
+        if (selector === '[data-text]') return candidate.getAttribute('data-text') !== null;
+        const rowMatch = selector.match(/^\[data-row="(.+)"\]$/);
+        if (rowMatch) return candidate.getAttribute('data-row') === rowMatch[1];
+        return false;
+      };
+      const walk = (current) => {
+        if (check(current)) matches.push(current);
+        for (const child of current.children || []) walk(child);
+      };
+      walk(node);
+      return matches;
+    },
+    cloneNode() { return makeNode(tag); },
     focus() {},
     blur() {},
     submit() {},
     click() {},
   };
+  Object.defineProperty(node, 'innerHTML', {
+    get() { return node._innerHTML || ''; },
+    set(value) {
+      node._innerHTML = String(value ?? '');
+      node.children = [];
+      if (node._innerHTML.includes('data-bar')) {
+        const label = makeNode('div');
+        label.className = 'mono';
+        node.appendChild(label);
+        const barWrap = makeNode('div');
+        barWrap.className = 'bar';
+        const fill = makeNode('i');
+        fill.setAttribute('data-bar', '');
+        barWrap.appendChild(fill);
+        node.appendChild(barWrap);
+        const meta = makeNode('div');
+        meta.className = 'mono dim';
+        meta.setAttribute('data-text', '');
+        node.appendChild(meta);
+      }
+    },
+  });
+  Object.defineProperty(node, 'textContent', {
+    get() { return node._textContent || ''; },
+    set(value) { node._textContent = String(value ?? ''); },
+  });
   return node;
 }
 
@@ -202,6 +295,66 @@ async function run() {
   assert.strictEqual(token, null);
 
   console.log('ARW.connections helpers tests passed');
+
+  // downloadPercent helper
+  assert.strictEqual(ARW.util.downloadPercent({ percent: '42.5' }), 42.5);
+  assert.strictEqual(ARW.util.downloadPercent({ percent: '85%' }), 85);
+  assert.strictEqual(ARW.util.downloadPercent({ progress: -12 }), 0);
+  assert.strictEqual(ARW.util.downloadPercent({ progress: 120 }), 100);
+  assert.strictEqual(ARW.util.downloadPercent({ downloaded: 50, total: 200 }), 25);
+  assert.strictEqual(ARW.util.downloadPercent({}), null);
+
+  // miniDownloads renders using normalized percent / fallback math
+  const originalGetElementById = documentNode.getElementById;
+  const originalCreateElement = documentNode.createElement;
+  const nodeMap = new Map();
+  const registerNode = (id, node) => { node.id = id; nodeMap.set(id, node); return node; };
+  documentNode.getElementById = (id) => {
+    if (!nodeMap.has(id)) {
+      nodeMap.set(id, makeNode());
+      nodeMap.get(id).id = id;
+    }
+    return nodeMap.get(id);
+  };
+  documentNode.createElement = (tag) => makeNode(tag);
+
+  const dlRoot = registerNode('dlmini', makeNode('div'));
+  const dlProg = registerNode('dlprog', makeNode('pre'));
+  registerNode('dlbars', makeNode('div'));
+  registerNode('disk', makeNode('div'));
+
+  const indexCode = fs.readFileSync(path.join(__dirname, 'index.js'), 'utf8');
+  vm.runInContext(indexCode, windowObj, { filename: 'index.js' });
+  assert.strictEqual(typeof windowObj.miniDownloads, 'function', 'miniDownloads missing');
+
+  const initialSubs = windowObj.ARW.sse._subs.size;
+  windowObj.miniDownloads();
+  assert.strictEqual(windowObj.ARW.sse._subs.size, initialSubs + 1, 'miniDownloads did not subscribe to SSE');
+
+  const subs = Array.from(windowObj.ARW.sse._subs.values());
+  const handler = subs[subs.length - 1].cb;
+  assert.strictEqual(typeof handler, 'function', 'SSE handler missing');
+
+  const originalNow = Date.now;
+  Date.now = () => 1_000;
+
+  handler({ kind: 'models.download.progress', env: { payload: { id: 'model-1', percent: 42.4, downloaded: 0 } } });
+  const badgeOne = dlRoot.children[0];
+  const labelOne = badgeOne?.children?.[1];
+  assert.ok(labelOne, 'mini download badge missing');
+  assert.strictEqual(labelOne.textContent, ' model-1 42%');
+
+  handler({ kind: 'models.download.progress', env: { payload: { id: 'model-2', downloaded: 25, total: 100 } } });
+  const badgeTwo = dlRoot.children[1];
+  const labelTwo = badgeTwo?.children?.[1];
+  assert.ok(labelTwo, 'second mini download badge missing');
+  assert.strictEqual(labelTwo.textContent, ' model-2 25%');
+
+  Date.now = originalNow;
+  documentNode.getElementById = originalGetElementById;
+  documentNode.createElement = originalCreateElement;
+
+  console.log('Launcher mini download normalization tests passed');
 }
 
 run().catch((err) => {

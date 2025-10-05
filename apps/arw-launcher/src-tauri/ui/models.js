@@ -453,11 +453,13 @@ function startModelsSse() {
           const row = ensureBar(id);
           const bar = row.querySelector('[data-bar]');
           const txt = row.querySelector('[data-text]');
-          const pct = pl.progress || 0;
-          if (bar) bar.style.width = (pct || 0) + '%';
-          const dled = pl.downloaded || 0;
+          const pct = ARW.util.downloadPercent(pl);
+          if (bar) bar.style.width = ((pct != null ? pct : 0)) + '%';
+          const dled = Number(pl.downloaded || 0);
           const dledTxt = bytesHuman(dled);
-          const tot = pl.total ? bytesHuman(pl.total) : null;
+          const totalBytes = Number(pl.total);
+          const hasTotal = Number.isFinite(totalBytes) && totalBytes > 0;
+          const tot = hasTotal ? bytesHuman(totalBytes) : null;
           const now = Date.now();
           let tail = '';
           try {
@@ -470,8 +472,8 @@ function startModelsSse() {
               const mpers = rate / (1024 * 1024);
               if (mpers > 0.01) {
                 tail += ` · speed: ${mpers.toFixed(2)} MiB/s`;
-                if (pl.total && dled < pl.total) {
-                  const rem = pl.total - dled;
+                if (hasTotal && dled < totalBytes) {
+                  const rem = totalBytes - dled;
                   const etaSec = Math.max(0, Math.floor(rem / Math.max(1, rate)));
                   const mm = Math.floor(etaSec / 60).toString().padStart(2, '0');
                   const ss = (etaSec % 60).toString().padStart(2, '0');
@@ -488,13 +490,32 @@ function startModelsSse() {
             const remS = typeof rem === 'number' ? (rem / 1000).toFixed(1) : '∞';
             tail += ` · budget: ${spentS}s/${remS}s`;
           }
-          const baseTxt = pl.total ? `${dledTxt}/${tot} (${pct}%)` : (pl.status || '');
-          const disk = pl.disk ? ` · Disk: ${bytesHuman(pl.disk.available)} free / ${bytesHuman(pl.disk.total)} total` : '';
+          const pctText = Number.isFinite(pct) ? pct.toFixed(1) : '…';
+          const baseTxt = hasTotal ? `${dledTxt}/${tot} (${pctText}%)` : (pl.status || '');
+          const diskInfo = (() => {
+            if (!pl.disk) return '';
+            const free = bytesHuman(pl.disk.available);
+            const parts = [`Disk: ${free} free`];
+            if (pl.disk.reserve != null) {
+              parts.push(`reserve ${bytesHuman(pl.disk.reserve)}`);
+            }
+            const needTxt = pl.disk.need != null ? bytesHuman(pl.disk.need) : null;
+            if (needTxt) parts.push(`need ${needTxt}`);
+            return ` · ${parts.join(' · ')}`;
+          })();
           const iconHtml = iconsFor(pl.status, pl.code);
-          if (txt) txt.innerHTML = (iconHtml ? `<span class="icons">${iconHtml}</span>` : '') + baseTxt + tail + disk;
+          if (txt) txt.innerHTML = (iconHtml ? `<span class="icons">${iconHtml}</span>` : '') + baseTxt + tail + diskInfo;
           if (pl.disk) {
             const el = document.getElementById('disk');
-            if (el) el.textContent = `Disk: ${bytesHuman(pl.disk.available)} free / ${bytesHuman(pl.disk.total)} total`;
+            if (el) {
+              const parts = [`free ${bytesHuman(pl.disk.available)}`];
+              if (pl.disk.reserve != null) {
+                parts.push(`reserve ${bytesHuman(pl.disk.reserve)}`);
+              }
+              const needTxt = pl.disk.need != null ? bytesHuman(pl.disk.need) : null;
+              if (needTxt) parts.push(`need ${needTxt}`);
+              el.textContent = `Disk: ${parts.join(' · ')}`;
+            }
           }
           if (pl.status === 'complete') {
             setTimeout(async () => {
