@@ -197,7 +197,7 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
     let policy = egress_policy::resolve_policy(&state).await;
     let posture_decision = egress_policy::evaluate(&policy, Some(&host), Some(port), "https");
     let caps = capability_candidates(Some(&host), Some(port), "https");
-    let mut lease = lease_grant(&state, &caps).await;
+    let mut lease = None;
 
     let mut base_meta = serde_json::Map::new();
     base_meta.insert(
@@ -211,6 +211,19 @@ async fn handle_connect(state: AppState, req: Request<IncomingBody>) -> Response
     base_meta.insert("policy_proxy_enabled".into(), json!(policy.proxy_enabled));
     if let Some(reason) = posture_decision.reason {
         base_meta.insert("policy_reason".into(), json!(reason_code(reason)));
+    }
+    if let Some(scope) = posture_decision.scope.as_ref() {
+        base_meta.insert("policy_scope".into(), json!(scope));
+        base_meta.insert("allowed_via".into(), json!("scope"));
+        if let Some(scope_caps) = scope.lease_capabilities.as_ref() {
+            base_meta.insert("scope_lease_caps".into(), json!(scope_caps));
+            if lease.is_none() {
+                lease = lease_grant(&state, scope_caps).await;
+            }
+        }
+    }
+    if lease.is_none() {
+        lease = lease_grant(&state, &caps).await;
     }
     if let Some(ref lease_val) = lease {
         base_meta.insert("lease".into(), lease_val.clone());

@@ -366,7 +366,9 @@ mod tests {
             .subscribe_filtered(vec![topics::TOPIC_TOOL_CACHE.into()], Some(16));
 
         let input = json!({"value": 42});
-        let first = run_tool(&state, "demo.echo", input.clone()).await.expect("first run");
+        let first = run_tool(&state, "demo.echo", input.clone())
+            .await
+            .expect("first run");
         assert_eq!(first["echo"], json!(input));
 
         let env1 = tokio::time::timeout(Duration::from_millis(250), cache_rx.recv())
@@ -376,7 +378,9 @@ mod tests {
         assert_eq!(env1.kind, topics::TOPIC_TOOL_CACHE);
         assert_eq!(env1.payload["outcome"], json!("miss"));
 
-        let second = run_tool(&state, "demo.echo", input.clone()).await.expect("second run");
+        let second = run_tool(&state, "demo.echo", input.clone())
+            .await
+            .expect("second run");
         assert_eq!(second, first);
 
         let env2 = tokio::time::timeout(Duration::from_millis(250), cache_rx.recv())

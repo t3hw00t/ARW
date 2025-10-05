@@ -114,6 +114,16 @@ fn publish(
         record.meta.cloned().unwrap_or(serde_json::Value::Null),
     );
     payload.insert("posture".into(), serde_json::json!(posture));
+    if let Some(meta) = record.meta {
+        if let Some(obj) = meta.as_object() {
+            if let Some(via) = obj.get("allowed_via").and_then(|v| v.as_str()) {
+                payload.insert("allowed_via".into(), serde_json::json!(via));
+            }
+            if let Some(scope) = obj.get("policy_scope") {
+                payload.insert("policy_scope".into(), scope.clone());
+            }
+        }
+    }
     bus.publish(
         arw_topics::TOPIC_EGRESS_LEDGER_APPENDED,
         &serde_json::Value::Object(payload),

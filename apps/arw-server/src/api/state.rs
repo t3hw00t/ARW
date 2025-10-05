@@ -1119,11 +1119,30 @@ pub async fn state_egress(
     if !state.kernel_enabled() {
         return crate::responses::kernel_disabled();
     }
-    let items = state
+    let mut items = state
         .kernel()
         .list_egress_async(limit.clamp(1, 2000))
         .await
         .unwrap_or_default();
+    for entry in &mut items {
+        if let Some(obj) = entry.as_object_mut() {
+            if let Some(meta_map) = obj.get("meta").and_then(|meta| meta.as_object()).cloned() {
+                if !obj.contains_key("allowed_via") {
+                    if let Some(via) = meta_map.get("allowed_via").and_then(|v| v.as_str()) {
+                        obj.insert(
+                            "allowed_via".into(),
+                            serde_json::Value::String(via.to_string()),
+                        );
+                    }
+                }
+                if !obj.contains_key("policy_scope") {
+                    if let Some(scope) = meta_map.get("policy_scope") {
+                        obj.insert("policy_scope".into(), scope.clone());
+                    }
+                }
+            }
+        }
+    }
     let count = items.len();
     let version = numeric_version_from_field(&items, "id");
     if let Some(resp) =

@@ -57,6 +57,7 @@ fs2 = "0.4"
 sysinfo = "0.30"
 os_info = "3"
 base64 = "0.22"
+ipnet = "2"
 
 [profile.dev]
 opt-level = 1

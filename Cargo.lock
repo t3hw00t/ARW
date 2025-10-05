@@ -589,6 +589,7 @@ dependencies = [
  "hyper-util",
  "image 0.25.8",
  "inventory",
+ "ipnet",
  "json-patch",
  "jsonschema",
  "leptess",

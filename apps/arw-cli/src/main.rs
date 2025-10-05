@@ -223,6 +223,32 @@ enum AdminCmd {
         #[command(subcommand)]
         cmd: AdminTokenCmd,
     },
+    /// Egress helper commands
+    Egress {
+        #[command(subcommand)]
+        cmd: AdminEgressCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum AdminEgressCmd {
+    /// Show configured egress scopes from /state/egress/settings
+    Scopes(AdminEgressScopesArgs),
+    /// Manage individual egress scopes
+    Scope {
+        #[command(subcommand)]
+        cmd: AdminEgressScopeCmd,
+    },
+}
+
+#[derive(Subcommand)]
+enum AdminEgressScopeCmd {
+    /// Create a new scope or fail if the id already exists
+    Add(AdminEgressScopeAddArgs),
+    /// Update an existing scope by id
+    Update(AdminEgressScopeUpdateArgs),
+    /// Remove a scope by id
+    Remove(AdminEgressScopeRemoveArgs),
 }
 
 #[derive(Subcommand)]
@@ -317,6 +343,124 @@ struct AdminTokenPersistArgs {
     /// Print the SHA-256 hash to stdout (computed automatically)
     #[arg(long = "print-hash")]
     print_hash: bool,
+}
+
+#[derive(Args, Clone)]
+struct AdminEgressScopesArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds when calling the API
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+    /// Emit raw JSON
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+}
+
+#[derive(Args, Clone)]
+struct AdminEgressScopeBaseArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds when calling the API
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+}
+
+#[derive(Args, Clone)]
+struct AdminEgressScopeAddArgs {
+    #[command(flatten)]
+    base: AdminEgressScopeBaseArgs,
+    /// Scope identifier (unique)
+    #[arg(long)]
+    id: String,
+    /// Optional description
+    #[arg(long)]
+    description: Option<String>,
+    /// Domains/hosts allowed by this scope (repeatable)
+    #[arg(long = "host", value_name = "HOST", num_args = 1..)]
+    hosts: Vec<String>,
+    /// CIDR ranges allowed by this scope (repeatable)
+    #[arg(long = "cidr", value_name = "CIDR", num_args = 1..)]
+    cidrs: Vec<String>,
+    /// Allowed ports (repeatable)
+    #[arg(long = "port", value_name = "PORT", value_parser = clap::value_parser!(u16), num_args = 1..)]
+    ports: Vec<u16>,
+    /// Allowed protocols (http|https|tcp)
+    #[arg(long = "protocol", value_name = "PROTOCOL", num_args = 1..)]
+    protocols: Vec<String>,
+    /// Capabilities to mint when scope grants access (repeatable)
+    #[arg(long = "lease-cap", value_name = "CAP", num_args = 1..)]
+    lease_capabilities: Vec<String>,
+    /// Expiry timestamp (RFC3339)
+    #[arg(long = "expires-at")]
+    expires_at: Option<String>,
+}
+
+#[derive(Args, Clone)]
+struct AdminEgressScopeUpdateArgs {
+    #[command(flatten)]
+    base: AdminEgressScopeBaseArgs,
+    /// Scope identifier to update
+    #[arg(long)]
+    id: String,
+    /// Optional description
+    #[arg(long)]
+    description: Option<String>,
+    /// Replace hosts list (repeatable)
+    #[arg(long = "host", value_name = "HOST", num_args = 1..)]
+    hosts: Vec<String>,
+    /// Clear hosts entirely
+    #[arg(long)]
+    clear_hosts: bool,
+    /// Replace CIDR list (repeatable)
+    #[arg(long = "cidr", value_name = "CIDR", num_args = 1..)]
+    cidrs: Vec<String>,
+    /// Clear CIDRs entirely
+    #[arg(long)]
+    clear_cidrs: bool,
+    /// Replace ports list (repeatable)
+    #[arg(long = "port", value_name = "PORT", value_parser = clap::value_parser!(u16), num_args = 1..)]
+    ports: Vec<u16>,
+    /// Clear ports entirely
+    #[arg(long)]
+    clear_ports: bool,
+    /// Replace protocols list (repeatable)
+    #[arg(long = "protocol", value_name = "PROTOCOL", num_args = 1..)]
+    protocols: Vec<String>,
+    /// Clear protocols entirely
+    #[arg(long)]
+    clear_protocols: bool,
+    /// Replace lease capability list (repeatable)
+    #[arg(long = "lease-cap", value_name = "CAP", num_args = 1..)]
+    lease_capabilities: Vec<String>,
+    /// Clear lease capabilities entirely
+    #[arg(long)]
+    clear_lease_caps: bool,
+    /// Update expiry timestamp (use empty string to clear)
+    #[arg(long = "expires-at")]
+    expires_at: Option<String>,
+    /// Remove expiry timestamp
+    #[arg(long)]
+    clear_expires: bool,
+}
+
+#[derive(Args, Clone)]
+struct AdminEgressScopeRemoveArgs {
+    #[command(flatten)]
+    base: AdminEgressScopeBaseArgs,
+    /// Scope identifier to remove
+    id: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -869,6 +1013,34 @@ fn main() {
                     }
                 }
             },
+            AdminCmd::Egress { cmd } => match cmd {
+                AdminEgressCmd::Scopes(args) => {
+                    if let Err(e) = cmd_admin_egress_scopes(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                AdminEgressCmd::Scope { cmd } => match cmd {
+                    AdminEgressScopeCmd::Add(args) => {
+                        if let Err(e) = cmd_admin_egress_scope_add(&args) {
+                            eprintln!("{}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                    AdminEgressScopeCmd::Update(args) => {
+                        if let Err(e) = cmd_admin_egress_scope_update(&args) {
+                            eprintln!("{}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                    AdminEgressScopeCmd::Remove(args) => {
+                        if let Err(e) = cmd_admin_egress_scope_remove(&args) {
+                            eprintln!("{}", e);
+                            std::process::exit(1);
+                        }
+                    }
+                },
+            },
         },
         Some(Commands::Gate { cmd }) => match cmd {
             GateCmd::Keys(args) => {
@@ -1267,6 +1439,220 @@ fn cmd_admin_token_persist(args: &AdminTokenPersistArgs) -> Result<()> {
     }
     println!("{}", message);
 
+    Ok(())
+}
+
+fn cmd_admin_egress_scopes(args: &AdminEgressScopesArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.trim_end_matches('/');
+
+    let snapshot = fetch_egress_settings(&client, base, token.as_deref())?;
+    if args.json {
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&snapshot).unwrap_or_else(|_| snapshot.to_string())
+            );
+        } else {
+            println!("{}", snapshot);
+        }
+        return Ok(());
+    }
+
+    render_egress_scopes_text(&snapshot)?;
+    Ok(())
+}
+
+fn cmd_admin_egress_scope_add(args: &AdminEgressScopeAddArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base.trim_end_matches('/');
+
+    let snapshot = fetch_egress_settings(&client, base, token.as_deref())?;
+    let mut scopes = extract_scopes(&snapshot)?;
+    let scope_id = args.id.trim();
+    ensure!(!scope_id.is_empty(), "--id cannot be empty");
+    if scopes
+        .iter()
+        .any(|scope| scope.get("id").and_then(|v| v.as_str()).unwrap_or("") == scope_id)
+    {
+        bail!("scope '{}' already exists", scope_id);
+    }
+
+    let hosts = sanitize_hosts(&args.hosts);
+    let cidrs = sanitize_list(&args.cidrs);
+    if hosts.is_empty() && cidrs.is_empty() {
+        bail!("provide at least one --host or --cidr");
+    }
+    let ports = sanitize_ports(&args.ports);
+    let protocols = normalize_protocols(&args.protocols)?;
+    let lease_caps = sanitize_list(&args.lease_capabilities);
+
+    let mut scope = serde_json::Map::new();
+    scope.insert("id".into(), json!(scope_id));
+    if let Some(desc) = args
+        .description
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        scope.insert("description".into(), json!(desc));
+    }
+    scope.insert("hosts".into(), json!(hosts));
+    scope.insert("cidrs".into(), json!(cidrs));
+    if !ports.is_empty() {
+        scope.insert("ports".into(), json!(ports));
+    }
+    if !protocols.is_empty() {
+        scope.insert("protocols".into(), json!(protocols));
+    }
+    if !lease_caps.is_empty() {
+        scope.insert("lease_capabilities".into(), json!(lease_caps));
+    }
+    if let Some(expires) = args
+        .expires_at
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+    {
+        scope.insert("expires_at".into(), json!(expires));
+    }
+
+    scopes.push(JsonValue::Object(scope));
+    let payload = json!({"scopes": scopes});
+    let updated = post_egress_settings(&client, base, token.as_deref(), &payload)?;
+    println!("Scope '{}' created.", scope_id);
+    render_egress_scopes_text(&updated)?;
+    Ok(())
+}
+
+fn cmd_admin_egress_scope_update(args: &AdminEgressScopeUpdateArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base.trim_end_matches('/');
+
+    let snapshot = fetch_egress_settings(&client, base, token.as_deref())?;
+    let mut scopes = extract_scopes(&snapshot)?;
+    let scope_id = args.id.trim();
+    ensure!(!scope_id.is_empty(), "--id cannot be empty");
+    let position = scopes
+        .iter()
+        .position(|scope| scope.get("id").and_then(|v| v.as_str()).unwrap_or("") == scope_id)
+        .ok_or_else(|| anyhow!("scope '{}' not found", scope_id))?;
+
+    let mut scope_obj = scopes[position]
+        .as_object()
+        .cloned()
+        .ok_or_else(|| anyhow!("invalid scope payload"))?;
+
+    if let Some(desc) = args.description.as_ref().map(|s| s.trim()) {
+        if desc.is_empty() {
+            scope_obj.remove("description");
+        } else {
+            scope_obj.insert("description".into(), json!(desc));
+        }
+    }
+
+    if args.clear_hosts {
+        scope_obj.insert("hosts".into(), json!([]));
+    } else if !args.hosts.is_empty() {
+        scope_obj.insert("hosts".into(), json!(sanitize_hosts(&args.hosts)));
+    }
+
+    if args.clear_cidrs {
+        scope_obj.insert("cidrs".into(), json!([]));
+    } else if !args.cidrs.is_empty() {
+        scope_obj.insert("cidrs".into(), json!(sanitize_list(&args.cidrs)));
+    }
+
+    if args.clear_ports {
+        scope_obj.remove("ports");
+    } else if !args.ports.is_empty() {
+        scope_obj.insert("ports".into(), json!(sanitize_ports(&args.ports)));
+    }
+
+    if args.clear_protocols {
+        scope_obj.remove("protocols");
+    } else if !args.protocols.is_empty() {
+        scope_obj.insert(
+            "protocols".into(),
+            json!(normalize_protocols(&args.protocols)?),
+        );
+    }
+
+    if args.clear_lease_caps {
+        scope_obj.remove("lease_capabilities");
+    } else if !args.lease_capabilities.is_empty() {
+        scope_obj.insert(
+            "lease_capabilities".into(),
+            json!(sanitize_list(&args.lease_capabilities)),
+        );
+    }
+
+    if args.clear_expires {
+        scope_obj.remove("expires_at");
+    } else if let Some(expires) = args.expires_at.as_ref() {
+        let trimmed = expires.trim();
+        if trimmed.is_empty() {
+            scope_obj.remove("expires_at");
+        } else {
+            scope_obj.insert("expires_at".into(), json!(trimmed));
+        }
+    }
+
+    let hosts = scope_obj
+        .get("hosts")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    let cidrs = scope_obj
+        .get("cidrs")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if hosts.is_empty() && cidrs.is_empty() {
+        bail!("scope '{}' must have at least one host or cidr", scope_id);
+    }
+
+    scopes[position] = JsonValue::Object(scope_obj);
+    let payload = json!({"scopes": scopes});
+    let updated = post_egress_settings(&client, base, token.as_deref(), &payload)?;
+    println!("Scope '{}' updated.", scope_id);
+    render_egress_scopes_text(&updated)?;
+    Ok(())
+}
+
+fn cmd_admin_egress_scope_remove(args: &AdminEgressScopeRemoveArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.base.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.base.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.base.trim_end_matches('/');
+
+    let snapshot = fetch_egress_settings(&client, base, token.as_deref())?;
+    let mut scopes = extract_scopes(&snapshot)?;
+    let scope_id = args.id.trim();
+    let orig_len = scopes.len();
+    scopes.retain(|scope| scope.get("id").and_then(|v| v.as_str()).unwrap_or("") != scope_id);
+    if scopes.len() == orig_len {
+        bail!("scope '{}' not found", scope_id);
+    }
+
+    let payload = json!({"scopes": scopes});
+    let updated = post_egress_settings(&client, base, token.as_deref(), &payload)?;
+    println!("Scope '{}' removed.", scope_id);
+    render_egress_scopes_text(&updated)?;
     Ok(())
 }
 
@@ -2362,6 +2748,249 @@ fn fetch_full_observations(client: &Client, base: &str, token: Option<&str>) -> 
         anyhow::bail!("server returned {}: {}", status, body);
     }
     Ok(body)
+}
+
+fn fetch_egress_settings(client: &Client, base: &str, token: Option<&str>) -> Result<JsonValue> {
+    let url = format!("{}/state/egress/settings", base);
+    let mut req = client.get(&url);
+    req = with_admin_headers(req, token);
+    let resp = req.send().with_context(|| format!("requesting {}", url))?;
+    let status = resp.status();
+    let body: JsonValue = resp.json().context("parsing egress settings response")?;
+    if status == StatusCode::UNAUTHORIZED {
+        anyhow::bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !status.is_success() {
+        anyhow::bail!("server returned {}: {}", status, body);
+    }
+    Ok(body)
+}
+
+fn render_egress_scopes_text(snapshot: &JsonValue) -> Result<()> {
+    let egress = snapshot
+        .get("egress")
+        .and_then(|v| v.as_object())
+        .ok_or_else(|| anyhow!("response missing 'egress' object"))?;
+
+    let bool_field =
+        |key: &str| -> bool { egress.get(key).and_then(|v| v.as_bool()).unwrap_or(false) };
+    let posture = egress
+        .get("posture")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown");
+    println!("Posture: {}", posture);
+    println!(
+        "Ledger: {} | Proxy: {} | DNS guard: {} | Block IP literals: {}",
+        if bool_field("ledger_enable") {
+            "enabled"
+        } else {
+            "disabled"
+        },
+        if bool_field("proxy_enable") {
+            "enabled"
+        } else {
+            "disabled"
+        },
+        if bool_field("dns_guard_enable") {
+            "enabled"
+        } else {
+            "disabled"
+        },
+        if bool_field("block_ip_literals") {
+            "on"
+        } else {
+            "off"
+        }
+    );
+
+    let scopes = egress
+        .get("scopes")
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    if scopes.is_empty() {
+        println!("\nNo scopes configured.");
+        return Ok(());
+    }
+
+    println!("\nScopes ({}):", scopes.len());
+    for scope in scopes {
+        let id = scope
+            .get("id")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let description = scope
+            .get("description")
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        let label = if !id.is_empty() {
+            id.clone()
+        } else if !description.is_empty() {
+            description.clone()
+        } else {
+            "(unnamed)".to_string()
+        };
+        let expired = scope
+            .get("expired")
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false);
+        let status = if expired { "expired" } else { "active" };
+        println!("- {} [{}]", label, status);
+        if !description.is_empty() && description != label {
+            println!("    Description: {}", description);
+        }
+        let hosts = scope
+            .get("hosts")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if !hosts.is_empty() {
+            println!("    Hosts: {}", hosts.join(", "));
+        }
+        let cidrs = scope
+            .get("cidrs")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if !cidrs.is_empty() {
+            println!("    CIDRs: {}", cidrs.join(", "));
+        }
+        let ports = scope
+            .get("ports")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_u64())
+                    .map(|p| p.to_string())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if !ports.is_empty() {
+            println!("    Ports: {}", ports.join(", "));
+        }
+        let protocols = scope
+            .get("protocols")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if !protocols.is_empty() {
+            println!("    Protocols: {}", protocols.join(", "));
+        }
+        let lease_caps = scope
+            .get("lease_capabilities")
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| v.as_str())
+                    .map(|s| s.to_string())
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_default();
+        if !lease_caps.is_empty() {
+            println!("    Lease capabilities: {}", lease_caps.join(", "));
+        }
+        if let Some(expires_at) = scope
+            .get("expires_at")
+            .and_then(|v| v.as_str())
+            .filter(|s| !s.is_empty())
+        {
+            println!("    Expires at: {}", expires_at);
+        }
+    }
+
+    Ok(())
+}
+
+fn post_egress_settings(
+    client: &Client,
+    base: &str,
+    token: Option<&str>,
+    payload: &JsonValue,
+) -> Result<JsonValue> {
+    let url = format!("{}/egress/settings", base);
+    let mut req = client.post(&url).json(payload);
+    req = with_admin_headers(req, token);
+    let resp = req.send().with_context(|| format!("posting {}", url))?;
+    let status = resp.status();
+    let body: JsonValue = resp
+        .json()
+        .context("parsing egress settings update response")?;
+    if status == StatusCode::UNAUTHORIZED {
+        anyhow::bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
+    }
+    if !status.is_success() {
+        anyhow::bail!("server returned {}: {}", status, body);
+    }
+    Ok(body)
+}
+
+fn extract_scopes(snapshot: &JsonValue) -> Result<Vec<JsonValue>> {
+    let scopes = snapshot
+        .get("egress")
+        .and_then(|v| v.get("scopes"))
+        .and_then(|v| v.as_array())
+        .cloned()
+        .unwrap_or_default();
+    Ok(scopes)
+}
+
+fn sanitize_hosts(list: &[String]) -> Vec<String> {
+    list.iter()
+        .map(|s| s.trim().trim_end_matches('.').to_ascii_lowercase())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+fn sanitize_list(list: &[String]) -> Vec<String> {
+    list.iter()
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
+}
+
+fn sanitize_ports(list: &[u16]) -> Vec<u16> {
+    let mut ports: Vec<u16> = list.iter().copied().collect();
+    ports.sort_unstable();
+    ports.dedup();
+    ports
+}
+
+fn normalize_protocols(list: &[String]) -> Result<Vec<String>> {
+    let mut out = Vec::new();
+    for item in list {
+        let lower = item.trim().to_ascii_lowercase();
+        if lower.is_empty() {
+            continue;
+        }
+        match lower.as_str() {
+            "http" | "https" | "tcp" => {
+                if !out.contains(&lower) {
+                    out.push(lower);
+                }
+            }
+            other => bail!("invalid protocol '{}'; use http, https, or tcp", other),
+        }
+    }
+    Ok(out)
 }
 
 fn build_filtered_observations_view(

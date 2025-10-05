@@ -55,6 +55,7 @@ os_info = { workspace = true }
 fs2 = { workspace = true }
 toml = { workspace = true }
 regex = { workspace = true }
+ipnet = { workspace = true }
 walkdir = "2"
 pathdiff = "0.2"
 rand = "0.9"

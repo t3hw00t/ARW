@@ -58,7 +58,7 @@ pub async fn egress_preview(
     let policy = egress_policy::resolve_policy(&state).await;
     let posture_decision = egress_policy::evaluate(&policy, host.as_deref(), port, &scheme);
     let capability_candidates = capability_candidates(host.as_deref(), port, &scheme);
-    let mut lease = lease_grant(&state, &capability_candidates).await;
+    let mut lease = None;
 
     let mut meta = serde_json::Map::new();
     meta.insert("capabilities".into(), json!(capability_candidates));
@@ -66,6 +66,19 @@ pub async fn egress_preview(
     meta.insert("policy_allow".into(), json!(posture_decision.allow));
     if let Some(reason) = posture_decision.reason {
         meta.insert("policy_reason".into(), json!(reason_code(reason)));
+    }
+    if let Some(scope) = posture_decision.scope.as_ref() {
+        meta.insert("policy_scope".into(), json!(scope));
+        meta.insert("allowed_via".into(), json!("scope"));
+        if let Some(scope_caps) = scope.lease_capabilities.as_ref() {
+            meta.insert("scope_lease_caps".into(), json!(scope_caps));
+            if lease.is_none() {
+                lease = lease_grant(&state, scope_caps).await;
+            }
+        }
+    }
+    if lease.is_none() {
+        lease = lease_grant(&state, &capability_candidates).await;
     }
     if let Some(ref lease_val) = lease {
         meta.insert("lease".into(), lease_val.clone());

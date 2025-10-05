@@ -298,6 +298,7 @@ button.btn-small.ghost{ border-color:#d5dbe4 }
 .controls .spacer{ flex:1 }
 .pill{ display:inline-flex; gap:6px; align-items:center; padding:4px 8px; border:1px solid var(--color-line); border-radius:999px; background: linear-gradient(180deg,#ffffff,#f6f7f9); font-size:12px }
 .pill .tag{ font-weight:600; color:#374151 }
+.scope-tag{ display:inline-flex; align-items:center; border:1px solid var(--color-accent-teal); color:var(--color-accent-teal); border-radius:999px; padding:2px 8px; font-size:11px }
 
 @media (prefers-contrast: more){
   html, body{ background: #ffffff !important; color: var(--color-ink) }

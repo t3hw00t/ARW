@@ -25,6 +25,15 @@
   } catch {}
 })();
 
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 const RUNTIME_STATE_DEFS = [
   { slug: 'ready', label: 'Ready', synonyms: ['ready', 'ok'] },
   { slug: 'starting', label: 'Starting', synonyms: ['starting', 'start'] },
@@ -1868,10 +1877,21 @@ window.ARW = {
           if (!Array.isArray(leases) || leases.length===0) { el.innerHTML = '<div class="dim">No active leases</div>'; return; }
           for (const l of leases) {
             const p = document.createElement('div'); p.className='pill';
-            const scope = (l.scope||l.key||'').toString();
-            const ttl = (l.ttl_ms||l.ttl||'');
-            const who = (l.principal||'');
-            p.innerHTML = `<span class="tag">${scope}</span><span class="dim">${ttl} ms</span><span class="dim">${who}</span>`;
+            const capability = String(l.capability || l.cap || l.scope || l.key || '').trim();
+            const ttlMs = Number(l.ttl_ms ?? l.ttl ?? 0);
+            const ttlText = Number.isFinite(ttlMs) && ttlMs > 0 ? `${ttlMs} ms` : '—';
+            const who = String(l.principal || l.subject || l.owner || '').trim();
+            const scopeIndex = window.__scopeCapabilityIndex;
+            const scopeMatch = capability && scopeIndex && scopeIndex.get(capability);
+
+            const parts = [];
+            parts.push(`<span class="tag">${escapeHtml(capability || 'unknown')}</span>`);
+            if (scopeMatch) {
+              parts.push(`<span class="scope-tag">scope:${escapeHtml(scopeMatch.label)}</span>`);
+            }
+            parts.push(`<span class="dim">${escapeHtml(ttlText)}</span>`);
+            if (who) parts.push(`<span class="dim">${escapeHtml(who)}</span>`);
+            p.innerHTML = parts.join(' ');
             el.appendChild(p);
           }
         } catch {}

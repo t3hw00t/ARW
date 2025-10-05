@@ -1,8 +1,9 @@
 use axum::http::HeaderMap;
 use axum::response::IntoResponse;
 use axum::{extract::State, Json};
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{json, Map, Value as JsonValue};
 use utoipa::ToSchema;
 
 use crate::{egress_policy, egress_proxy, AppState};
@@ -19,6 +20,8 @@ pub(crate) struct EgressSettings {
     pub proxy_port: u16,
     pub ledger_enable: bool,
     pub multi_label_suffixes: Vec<String>,
+    #[serde(default)]
+    pub scopes: Vec<NetworkScopeView>,
 }
 
 #[derive(Deserialize, ToSchema)]
@@ -39,6 +42,48 @@ pub(crate) struct EgressSettingsPatch {
     pub ledger_enable: Option<bool>,
     #[serde(default)]
     pub multi_label_suffixes: Option<Vec<String>>,
+    #[serde(default)]
+    pub scopes: Option<Vec<NetworkScopePatch>>,
+}
+
+#[derive(Serialize, ToSchema, Clone, Debug, Default)]
+pub(crate) struct NetworkScopeView {
+    pub id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub hosts: Vec<String>,
+    #[serde(default)]
+    pub cidrs: Vec<String>,
+    #[serde(default)]
+    pub ports: Vec<u16>,
+    #[serde(default)]
+    pub protocols: Vec<String>,
+    #[serde(default)]
+    pub lease_capabilities: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<String>,
+    pub expired: bool,
+}
+
+#[derive(Deserialize, ToSchema, Clone, Debug, Default)]
+pub(crate) struct NetworkScopePatch {
+    #[serde(default)]
+    pub id: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub hosts: Vec<String>,
+    #[serde(default)]
+    pub cidrs: Vec<String>,
+    #[serde(default)]
+    pub ports: Vec<u16>,
+    #[serde(default)]
+    pub protocols: Vec<String>,
+    #[serde(default)]
+    pub lease_capabilities: Vec<String>,
+    #[serde(default)]
+    pub expires_at: Option<String>,
 }
 
 fn bool_flag(value: bool) -> &'static str {
@@ -47,6 +92,66 @@ fn bool_flag(value: bool) -> &'static str {
     } else {
         "0"
     }
+}
+
+fn scope_configs_to_view(scopes: &[egress_policy::ScopeConfig]) -> Vec<NetworkScopeView> {
+    let now = Utc::now();
+    scopes
+        .iter()
+        .map(|scope| NetworkScopeView {
+            id: scope.id.clone(),
+            description: scope.description.clone(),
+            hosts: scope.hosts.clone(),
+            cidrs: scope.cidrs.clone(),
+            ports: scope.ports.clone(),
+            protocols: scope.protocols.clone(),
+            lease_capabilities: scope.lease_capabilities.clone(),
+            expires_at: scope.expires_at.clone(),
+            expired: scope
+                .expires_at_ts
+                .as_ref()
+                .map(|ts| ts.clone() <= now)
+                .unwrap_or(false),
+        })
+        .collect()
+}
+
+fn scope_config_to_json(scope: &egress_policy::ScopeConfig) -> JsonValue {
+    let mut map = Map::new();
+    if let Some(id) = scope.id.as_ref() {
+        if !id.is_empty() {
+            map.insert("id".into(), json!(id));
+        }
+    }
+    if let Some(desc) = scope.description.as_ref() {
+        if !desc.is_empty() {
+            map.insert("description".into(), json!(desc));
+        }
+    }
+    if !scope.hosts.is_empty() {
+        map.insert("hosts".into(), json!(scope.hosts.clone()));
+    }
+    if !scope.cidrs.is_empty() {
+        map.insert("cidrs".into(), json!(scope.cidrs.clone()));
+    }
+    if !scope.ports.is_empty() {
+        map.insert("ports".into(), json!(scope.ports.clone()));
+    }
+    if !scope.protocols.is_empty() {
+        map.insert("protocols".into(), json!(scope.protocols.clone()));
+    }
+    if !scope.lease_capabilities.is_empty() {
+        map.insert(
+            "lease_capabilities".into(),
+            json!(scope.lease_capabilities.clone()),
+        );
+    }
+    if let Some(expires) = scope.expires_at.as_ref() {
+        if !expires.is_empty() {
+            map.insert("expires_at".into(), json!(expires));
+        }
+    }
+    JsonValue::Object(map)
 }
 
 pub(crate) async fn current_settings(state: &AppState) -> EgressSettings {
@@ -68,6 +173,7 @@ pub(crate) async fn current_settings(state: &AppState) -> EgressSettings {
     );
     suffixes.sort();
     suffixes.dedup();
+    let scope_configs = egress_policy::config_scopes(&cfg);
     EgressSettings {
         posture,
         allowlist,
@@ -80,6 +186,7 @@ pub(crate) async fn current_settings(state: &AppState) -> EgressSettings {
             .unwrap_or(9080),
         ledger_enable: policy.ledger_enabled,
         multi_label_suffixes: suffixes,
+        scopes: scope_configs_to_view(&scope_configs),
     }
 }
 
@@ -243,6 +350,104 @@ pub async fn egress_settings_update(
         }
         egress["multi_label_suffixes"] = json!(normalized);
         egress_policy::set_configured_multi_label_suffixes(parsed_parts);
+    }
+
+    if let Some(scopes_patch) = patch.scopes.as_ref() {
+        let mut raw_scopes: Vec<JsonValue> = Vec::new();
+        for scope in scopes_patch {
+            let mut map = Map::new();
+            if let Some(id) = scope.id.as_ref().and_then(|s| {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            }) {
+                map.insert("id".into(), json!(id));
+            }
+            if let Some(desc) = scope.description.as_ref().and_then(|s| {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            }) {
+                map.insert("description".into(), json!(desc));
+            }
+            let hosts: Vec<String> = scope
+                .hosts
+                .iter()
+                .map(|h| h.trim().to_string())
+                .filter(|h| !h.is_empty())
+                .collect();
+            if !hosts.is_empty() {
+                map.insert("hosts".into(), json!(hosts));
+            }
+            let cidrs: Vec<String> = scope
+                .cidrs
+                .iter()
+                .map(|c| c.trim().to_string())
+                .filter(|c| !c.is_empty())
+                .collect();
+            if !cidrs.is_empty() {
+                map.insert("cidrs".into(), json!(cidrs));
+            }
+            let mut ports: Vec<u16> = scope
+                .ports
+                .iter()
+                .copied()
+                .filter(|p| (1..=65535).contains(p))
+                .collect();
+            ports.sort_unstable();
+            ports.dedup();
+            if !ports.is_empty() {
+                map.insert("ports".into(), json!(ports));
+            }
+            let mut protocols: Vec<String> = scope
+                .protocols
+                .iter()
+                .map(|p| p.trim().to_ascii_lowercase())
+                .filter(|p| !p.is_empty())
+                .collect();
+            protocols.sort();
+            protocols.dedup();
+            if !protocols.is_empty() {
+                map.insert("protocols".into(), json!(protocols));
+            }
+            let mut lease_caps: Vec<String> = scope
+                .lease_capabilities
+                .iter()
+                .map(|c| c.trim().to_string())
+                .filter(|c| !c.is_empty())
+                .collect();
+            lease_caps.sort();
+            lease_caps.dedup();
+            if !lease_caps.is_empty() {
+                map.insert("lease_capabilities".into(), json!(lease_caps));
+            }
+            if let Some(raw) = scope.expires_at.as_ref().and_then(|s| {
+                let trimmed = s.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed.to_string())
+                }
+            }) {
+                map.insert("expires_at".into(), json!(raw));
+            }
+            raw_scopes.push(JsonValue::Object(map));
+        }
+
+        let sanitized_configs = egress_policy::config_scopes(&json!({
+            "egress": {
+                "scopes": raw_scopes,
+            }
+        }));
+        let sanitized_values: Vec<JsonValue> =
+            sanitized_configs.iter().map(scope_config_to_json).collect();
+        egress["scopes"] = JsonValue::Array(sanitized_values);
     }
 
     if let Some(port) = patch.proxy_port {

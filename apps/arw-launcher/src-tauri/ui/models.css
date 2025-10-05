@@ -93,3 +93,93 @@ button:hover { background: #f0f0f0; }
 #durl{ width: 380px }
 #dsha{ width: 260px }
 #caturl{ width: 420px }
+
+.scope-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.scope-table th, .scope-table td {
+  border-bottom: 1px solid #eee;
+  padding: 6px 8px;
+  vertical-align: top;
+}
+.scope-label {
+  font-weight: 600;
+}
+.scope-status.active {
+  color: var(--status-ok);
+}
+.scope-status.expired {
+  color: var(--status-bad);
+}
+.scope-expiry {
+  font-size: 0.75rem;
+}
+.scope-controls {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin: 4px 0 8px;
+}
+.scope-controls .pill {
+  border-radius: 999px;
+  padding: 6px 12px;
+}
+.scope-form {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid var(--color-line);
+  border-radius: 8px;
+  background: var(--surface-muted, #f4f4f5);
+  font-size: 0.85rem;
+}
+.scope-form.hidden {
+  display: none;
+}
+.scope-form form {
+  display: grid;
+  gap: 8px;
+}
+.scope-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.scope-form input,
+.scope-form textarea,
+.scope-form select {
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  font-family: inherit;
+  font-size: 0.9rem;
+}
+.scope-form textarea {
+  min-height: 60px;
+  resize: vertical;
+}
+.scope-form .actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.scope-form .actions .primary {
+  background: var(--color-accent-teal);
+  color: #fff;
+  border-color: var(--color-accent-teal);
+}
+.scope-form .actions button:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+.scope-tag {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--color-accent-teal);
+  color: var(--color-accent-teal);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 0.7rem;
+  margin-left: 6px;
+}

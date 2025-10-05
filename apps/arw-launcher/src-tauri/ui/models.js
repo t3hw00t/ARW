@@ -4,6 +4,9 @@ const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: '
 
 let modelsSseSub = null;
 let modelsSseIndicator = null;
+let currentEgressSettings = null;
+let currentEgressScopes = [];
+let scopeCapabilityIndex = new Map();
 
 function ensureSseIndicator() {
   const wrap = document.getElementById('statusBadges');
@@ -245,10 +248,97 @@ async function fetchAdminJson(path){
   return await resp.json();
 }
 
+async function postAdminJson(path, body){
+  const clean = String(path || '').replace(/^\/+/, '');
+  try{
+    if (REMOTE_BASE){
+      const token = await ARW.connections.tokenFor(REMOTE_BASE);
+      return await ARW.invoke('admin_post_json_base', {
+        base: REMOTE_BASE,
+        path: clean,
+        body: body || {},
+        token,
+      });
+    }
+  }catch(e){ console.error(e); throw e; }
+  const headers = { 'content-type': 'application/json' };
+  try{
+    const tok = document.getElementById('admintok')?.value?.trim();
+    if (tok){
+      headers['X-ARW-Admin'] = tok;
+      headers['Authorization'] = `Bearer ${tok}`;
+    }
+  }catch{}
+  const meta = updateBaseMeta();
+  const baseUrl = meta.base;
+  const resp = await ARW.http.fetch(baseUrl, `/${clean}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body || {}),
+  });
+  if (!resp.ok){
+    const text = await resp.text().catch(()=> '');
+    throw new Error(`HTTP ${resp.status}${text ? `: ${text}` : ''}`);
+  }
+  return await resp.json();
+}
+
 function shortSha(value){
   const s = String(value||'');
   if (s.length <= 12) return s || '—';
   return `${s.slice(0,6)}…${s.slice(-4)}`;
+}
+
+function parseListInput(value){
+  return String(value || '')
+    .split(/[,\n]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function parsePortsInput(value){
+  const ports = parseListInput(value)
+    .map((p) => Number(p))
+    .filter((p) => Number.isInteger(p) && p >= 1 && p <= 65535);
+  const dedup = Array.from(new Set(ports));
+  return dedup;
+}
+
+function normalizeProtocols(list){
+  const allowed = new Set();
+  list.forEach((item) => {
+    const lower = String(item).trim().toLowerCase();
+    if (!lower) return;
+    if (!['http', 'https', 'tcp'].includes(lower)) {
+      throw new Error(`Unsupported protocol '${lower}' (use http, https, or tcp)`);
+    }
+    allowed.add(lower);
+  });
+  return Array.from(allowed);
+}
+
+function scopeLabel(scope){
+  const id = typeof scope.id === 'string' ? scope.id.trim() : '';
+  const desc = typeof scope.description === 'string' ? scope.description.trim() : '';
+  return id || desc || '(unnamed)';
+}
+
+function normalizeHosts(list){
+  const out = [];
+  list.forEach((raw) => {
+    if (!raw) return;
+    let value = String(raw).trim();
+    if (!value) return;
+    const wildcard = value.startsWith('*.');
+    let body = wildcard ? value.slice(2) : value;
+    body = body.replace(/\.+$/, '').toLowerCase();
+    if (!body) return;
+    const normalized = wildcard ? `*.${body}` : body;
+    if (!out.includes(normalized)) {
+      out.push(normalized);
+    }
+  });
+  return out;
 }
 
 async function loadPrefs() {
@@ -379,6 +469,7 @@ async function refresh() {
     fragModels.appendChild(tr);
   });
   tb.appendChild(fragModels);
+  loadEgressScopes().catch(err => console.error(err));
 }
 
 async function add() {
@@ -990,6 +1081,326 @@ function clearLedgerPreview(){
   delete pre.dataset.corrId;
 }
 
+function normalizeLedgerMeta(meta){
+  if (!meta) return null;
+  if (typeof meta === 'string'){
+    try{
+      const parsed = JSON.parse(meta);
+      return (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) ? parsed : null;
+    }catch(_){
+      return null;
+    }
+  }
+  if (typeof meta === 'object' && !Array.isArray(meta)){
+    return meta;
+  }
+  return null;
+}
+
+function updateEgressScopes(egress){
+  const container = document.getElementById('egress-scopes');
+  const summary = document.getElementById('egress-scopes-summary');
+  currentEgressSettings = egress || null;
+  if (summary) {
+    if (!egress) {
+      summary.textContent = '';
+    } else {
+      const bits = [];
+      bits.push(`Posture: ${egress.posture || 'unknown'}`);
+      bits.push(`Proxy: ${egress.proxy_enable ? 'enabled' : 'disabled'}`);
+      bits.push(`DNS guard: ${egress.dns_guard_enable ? 'enabled' : 'disabled'}`);
+      bits.push(`Ledger: ${egress.ledger_enable ? 'enabled' : 'disabled'}`);
+      bits.push(`Block IP literals: ${egress.block_ip_literals ? 'on' : 'off'}`);
+      summary.textContent = bits.join(' · ');
+    }
+  }
+  if (!container) return;
+  if (!egress) {
+    container.textContent = 'Scopes unavailable.';
+    currentEgressScopes = [];
+    scopeCapabilityIndex = new Map();
+    window.__scopeCapabilityIndex = scopeCapabilityIndex;
+    return;
+  }
+
+  const scopes = Array.isArray(egress.scopes) ? egress.scopes.map((s) => ({ ...s })) : [];
+  currentEgressScopes = scopes.map((s) => JSON.parse(JSON.stringify(s)));
+  scopeCapabilityIndex = new Map();
+  currentEgressScopes.forEach((scope) => {
+    const label = scopeLabel(scope);
+    const caps = Array.isArray(scope.lease_capabilities) ? scope.lease_capabilities : [];
+    caps.forEach((cap) => {
+      if (!scopeCapabilityIndex.has(cap)) {
+        scopeCapabilityIndex.set(cap, { label, id: scope.id || '', description: scope.description || '' });
+      }
+    });
+  });
+  window.__scopeCapabilityIndex = scopeCapabilityIndex;
+
+  if (!scopes.length) {
+    container.textContent = 'No scopes configured.';
+    return;
+  }
+
+  const table = document.createElement('table');
+  table.className = 'scope-table';
+  table.innerHTML = `
+    <thead>
+      <tr>
+        <th>Scope</th>
+        <th>Hosts / CIDRs</th>
+        <th>Ports</th>
+        <th>Protocols</th>
+        <th>Lease Caps</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  `;
+  const tbody = table.querySelector('tbody');
+
+  scopes.forEach((scope) => {
+    const tr = document.createElement('tr');
+    const hosts = Array.isArray(scope.hosts) && scope.hosts.length ? scope.hosts.join(', ') : '';
+    const cidrs = Array.isArray(scope.cidrs) && scope.cidrs.length ? scope.cidrs.join(', ') : '';
+    const ports = Array.isArray(scope.ports) && scope.ports.length ? scope.ports.join(', ') : '—';
+    const protocols = Array.isArray(scope.protocols) && scope.protocols.length ? scope.protocols.join(', ') : '—';
+    const leaseCaps = Array.isArray(scope.lease_capabilities) && scope.lease_capabilities.length ? scope.lease_capabilities.join(', ') : '—';
+    const expires = typeof scope.expires_at === 'string' && scope.expires_at ? scope.expires_at : '';
+    const expired = !!scope.expired;
+    const statusText = expired ? 'Expired' : 'Active';
+    const label = scopeLabel(scope);
+
+    const hostsLines = [];
+    if (hosts) hostsLines.push(escapeHtml(hosts));
+    if (cidrs) hostsLines.push(`<div class="dim">CIDRs: ${escapeHtml(cidrs)}</div>`);
+    if (!hostsLines.length) hostsLines.push('—');
+
+    const description = typeof scope.description === 'string' ? scope.description.trim() : '';
+
+    tr.innerHTML = `
+      <td>
+        <div class="scope-label mono">${escapeHtml(label)}</div>
+        ${description && description !== label ? `<div class="dim">${escapeHtml(description)}</div>` : ''}
+        ${expires ? `<div class="scope-expiry dim">Expires ${escapeHtml(expires)}</div>` : ''}
+      </td>
+      <td>${hostsLines.join('')}</td>
+      <td>${escapeHtml(ports)}</td>
+      <td>${escapeHtml(protocols)}</td>
+      <td>${escapeHtml(leaseCaps)}</td>
+      <td><span class="scope-status ${expired ? 'expired' : 'active'}">${statusText}</span></td>
+      <td class="scope-actions"></td>
+    `;
+
+    const actionsCell = tr.querySelector('.scope-actions');
+    const editBtn = document.createElement('button');
+    editBtn.textContent = 'Edit';
+    editBtn.className = 'pill';
+    editBtn.addEventListener('click', () => openScopeForm('edit', JSON.parse(JSON.stringify(scope))));
+
+    const removeBtn = document.createElement('button');
+    removeBtn.textContent = 'Remove';
+    removeBtn.className = 'pill';
+    removeBtn.addEventListener('click', () => removeScope(scope.id || ''));
+
+    actionsCell.appendChild(editBtn);
+    actionsCell.appendChild(removeBtn);
+    tbody.appendChild(tr);
+  });
+
+  container.innerHTML = '';
+  container.appendChild(table);
+}
+
+function closeScopeForm(){
+  const wrap = document.getElementById('scope-form');
+  if (!wrap) return;
+  wrap.classList.add('hidden');
+  wrap.innerHTML = '';
+  delete wrap.dataset.mode;
+  delete wrap.dataset.scopeId;
+}
+
+function setScopeFormError(message){
+  const wrap = document.getElementById('scope-form');
+  if (!wrap) return;
+  const errorEl = wrap.querySelector('.form-error');
+  if (errorEl) errorEl.textContent = message || '';
+}
+
+function openScopeForm(mode, scope){
+  const wrap = document.getElementById('scope-form');
+  if (!wrap) return;
+  const isEdit = mode === 'edit';
+  const data = scope || {};
+  const id = isEdit ? (data.id || '') : '';
+  const desc = data.description || '';
+  const hosts = Array.isArray(data.hosts) ? data.hosts.join(', ') : '';
+  const cidrs = Array.isArray(data.cidrs) ? data.cidrs.join(', ') : '';
+  const ports = Array.isArray(data.ports) ? data.ports.join(', ') : '';
+  const protocols = Array.isArray(data.protocols) ? data.protocols.join(', ') : '';
+  const leaseCaps = Array.isArray(data.lease_capabilities) ? data.lease_capabilities.join(', ') : '';
+  const expires = typeof data.expires_at === 'string' ? data.expires_at : '';
+
+  wrap.dataset.mode = mode;
+  wrap.dataset.scopeId = id;
+  const heading = isEdit ? `Edit Scope (${escapeHtml(scopeLabel(data))})` : 'Add Scope';
+
+  wrap.innerHTML = `
+    <form>
+      <div class="form-title"><strong>${heading}</strong></div>
+      <label>Scope ID
+        <input name="id" type="text" value="${escapeAttr(id)}" ${isEdit ? 'readonly' : ''} required>
+      </label>
+      <label>Description
+        <input name="description" type="text" value="${escapeAttr(desc)}" placeholder="Optional">
+      </label>
+      <label>Hosts (comma separated)
+        <textarea name="hosts" placeholder="example.com, api.example.com">${escapeAttr(hosts)}</textarea>
+      </label>
+      <label>CIDRs (comma separated)
+        <textarea name="cidrs" placeholder="10.0.0.0/24">${escapeAttr(cidrs)}</textarea>
+      </label>
+      <label>Ports (comma separated)
+        <input name="ports" type="text" value="${escapeAttr(ports)}" placeholder="443, 8443">
+      </label>
+      <label>Protocols (http, https, tcp)
+        <input name="protocols" type="text" value="${escapeAttr(protocols)}" placeholder="https">
+      </label>
+      <label>Lease capabilities (comma separated)
+        <input name="lease_caps" type="text" value="${escapeAttr(leaseCaps)}" placeholder="net:https">
+      </label>
+      <label>Expires at (RFC3339)
+        <input name="expires_at" type="text" value="${escapeAttr(expires)}" placeholder="2025-12-01T00:00:00Z">
+      </label>
+      <div class="form-error dim" role="alert"></div>
+      <div class="actions">
+        <button type="button" data-action="cancel" class="pill">Cancel</button>
+        <button type="submit" class="pill primary">${isEdit ? 'Save Changes' : 'Create Scope'}</button>
+      </div>
+    </form>
+  `;
+
+  wrap.classList.remove('hidden');
+  const form = wrap.querySelector('form');
+  form.addEventListener('submit', handleScopeFormSubmit);
+  wrap.querySelector('[data-action="cancel"]').addEventListener('click', (event) => {
+    event.preventDefault();
+    closeScopeForm();
+  });
+}
+
+async function handleScopeFormSubmit(event){
+  event.preventDefault();
+  const form = event.currentTarget;
+  const wrap = document.getElementById('scope-form');
+  if (!wrap) return;
+  const mode = wrap.dataset.mode || 'add';
+  const scopeId = wrap.dataset.scopeId || '';
+
+  const submitBtn = form.querySelector('button[type="submit"]');
+  const originalLabel = submitBtn.textContent;
+  submitBtn.disabled = true;
+  submitBtn.textContent = 'Saving…';
+  setScopeFormError('');
+
+  try {
+    const idInput = form.querySelector('input[name="id"]');
+    const id = idInput.value.trim();
+    if (!id) throw new Error('Scope id is required');
+
+    const hosts = normalizeHosts(parseListInput(form.querySelector('textarea[name="hosts"]').value));
+    const cidrs = Array.from(new Set(parseListInput(form.querySelector('textarea[name="cidrs"]').value)));
+    if (hosts.length === 0 && cidrs.length === 0) {
+      throw new Error('Provide at least one host or CIDR');
+    }
+    const ports = parsePortsInput(form.querySelector('input[name="ports"]').value);
+    const protocols = normalizeProtocols(parseListInput(form.querySelector('input[name="protocols"]').value));
+    const leaseCaps = Array.from(new Set(parseListInput(form.querySelector('input[name="lease_caps"]').value)));
+    const description = form.querySelector('input[name="description"]').value.trim();
+    const expires = form.querySelector('input[name="expires_at"]').value.trim();
+
+    const scopeObj = {
+      id,
+      hosts,
+      cidrs,
+    };
+    if (description) scopeObj.description = description;
+    if (ports.length) scopeObj.ports = ports;
+    if (protocols.length) scopeObj.protocols = protocols;
+    if (leaseCaps.length) scopeObj.lease_capabilities = leaseCaps;
+    if (expires) scopeObj.expires_at = expires;
+
+    const scopes = currentEgressScopes.map((s) => JSON.parse(JSON.stringify(s)));
+    if (mode === 'edit') {
+      const index = scopes.findIndex((s) => (s.id || '') === scopeId);
+      if (index === -1) throw new Error(`Scope '${scopeId}' not found`);
+      scopes[index] = scopeObj;
+      await saveScopes(scopes, `Scope '${scopeId}' updated.`);
+    } else {
+      if (scopes.some((s) => (s.id || '') === id)) {
+        throw new Error(`Scope '${id}' already exists`);
+      }
+      scopes.push(scopeObj);
+      await saveScopes(scopes, `Scope '${id}' created.`);
+    }
+    closeScopeForm();
+  } catch (err) {
+    console.error(err);
+    setScopeFormError(err?.message || 'Unable to save scope');
+    submitBtn.disabled = false;
+    submitBtn.textContent = originalLabel;
+    return;
+  }
+}
+
+async function saveScopes(scopes, successMessage){
+  try {
+    const updated = await postAdminJson('egress/settings', { scopes });
+    const payload = updated?.egress ? updated.egress : updated?.data?.egress;
+    if (payload) {
+      updateEgressScopes(payload);
+      ARW.toast(successMessage || 'Scopes updated.');
+    }
+  } catch (err) {
+    console.error(err);
+    ARW.toast(err?.message || 'Failed to update scopes');
+    throw err;
+  }
+}
+
+async function removeScope(id){
+  const target = String(id || '').trim();
+  if (!target) return;
+  const label = scopeLabel(currentEgressScopes.find((s) => (s.id || '') === target) || { id: target });
+  const confirmed = window.confirm(`Remove scope '${label}'?`);
+  if (!confirmed) return;
+  const scopes = currentEgressScopes
+    .filter((s) => (s.id || '') !== target)
+    .map((s) => JSON.parse(JSON.stringify(s)));
+  try {
+    await saveScopes(scopes, `Scope '${label}' removed.`);
+  } catch (_) {
+    // Error already surfaced via toast
+  }
+}
+
+async function loadEgressScopes() {
+  try{
+    const data = await fetchAdminJson('state/egress/settings');
+    if (data && data.egress) {
+      updateEgressScopes(data.egress);
+    } else {
+      updateEgressScopes(null);
+    }
+  }catch(err){
+    console.error(err);
+    const container = document.getElementById('egress-scopes');
+    if (container) container.textContent = 'Unable to load scopes.';
+  }
+}
+
 function describeLedgerEntry(entry){
   if (!entry || typeof entry !== 'object') return '';
   const ts = entry.timestamp || entry.created_at || entry.time || '';
@@ -997,12 +1408,32 @@ function describeLedgerEntry(entry){
   const host = entry.host || entry.url || entry.target || '';
   const code = entry.reason || entry.code || entry.status || '';
   const bytes = typeof entry.bytes === 'number' ? entry.bytes : (typeof entry.total_bytes === 'number' ? entry.total_bytes : null);
+  const meta = normalizeLedgerMeta(entry.meta);
+  const allowedVia = entry.allowed_via || (meta && typeof meta.allowed_via === 'string' ? meta.allowed_via : null);
+  const scopeMeta = meta && typeof meta.policy_scope === 'object' && meta.policy_scope !== null ? meta.policy_scope : null;
+  const leaseCaps = Array.isArray((scopeMeta && scopeMeta.lease_capabilities) || meta?.scope_lease_caps)
+    ? ((scopeMeta && scopeMeta.lease_capabilities) || meta.scope_lease_caps)
+    : null;
   const parts = [];
   parts.push(ts ? `[${ts}]` : '[—]');
   parts.push(String(decision));
   if (code) parts.push(`(${code})`);
   if (host) parts.push(host);
   if (bytes != null) parts.push(`${bytesHuman(bytes)}`);
+  if (allowedVia) parts.push(`via:${allowedVia}`);
+  if (scopeMeta){
+    const idLabel = typeof scopeMeta.id === 'string' ? scopeMeta.id.trim() : '';
+    const descLabel = typeof scopeMeta.description === 'string' ? scopeMeta.description.trim() : '';
+    const scopeLabel = idLabel || descLabel || 'scope';
+    let scopeText = `scope:${scopeLabel}`;
+    if (typeof scopeMeta.expires_at === 'string' && scopeMeta.expires_at){
+      scopeText += `→${scopeMeta.expires_at}`;
+    }
+    parts.push(scopeText);
+  }
+  if (leaseCaps && leaseCaps.length){
+    parts.push(`lease:${leaseCaps.join('|')}`);
+  }
   return parts.join(' ');
 }
 
@@ -1015,6 +1446,9 @@ async function previewLedger(corrId, opts = {}){
     pre.dataset.locked = 'true';
     if (!opts.silent) pre.textContent = corr ? `Loading ledger entries for ${corr}…` : 'Loading recent ledger entries…';
     const data = await fetchAdminJson('state/egress?limit=200');
+    if (data && data.settings && data.settings.egress){
+      updateEgressScopes(data.settings.egress);
+    }
     const items = Array.isArray(data.items) ? data.items : [];
     const filtered = corr ? items.filter(it => String(it.corr_id||'') === corr) : items;
     if (!filtered.length){
@@ -1040,4 +1474,7 @@ async function previewLedger(corrId, opts = {}){
 document.addEventListener('DOMContentLoaded', ()=>{
   const auto = document.getElementById('jobs-auto');
   if (auto) auto.addEventListener('change', (e)=> setJobsAuto(!!e.target.checked));
+  const addScopeBtn = document.getElementById('btn-scope-add');
+  if (addScopeBtn) addScopeBtn.addEventListener('click', () => openScopeForm('add'));
+  loadEgressScopes().catch(err => console.error(err));
 });
