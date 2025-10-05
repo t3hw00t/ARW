@@ -619,12 +619,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       refreshRuntimeMatrix(),
       refreshContextSnapshot(),
       refreshContextCascade({ quiet: true }),
+      refreshContextMetrics(),
     ]);
   };
   ARW.sse.indicator('sseStat', { prefix: 'SSE' });
   ARW.sse.connect(base, { replay: 25 });
   await refreshRuntimeSupervisor();
   await refreshRuntimeMatrix();
+  await refreshContextMetrics();
   if (elRuntimeRefreshBtn) {
     elRuntimeRefreshBtn.addEventListener('click', async () => {
       try {
@@ -687,6 +689,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   const elContextPreview = document.getElementById('contextPreview');
   const elContextSummary = document.getElementById('contextSummary');
   const elContextMeta = document.getElementById('contextMeta');
+  const elContextMetricsWrap = document.getElementById('contextMetrics');
+  const elContextMetricsUpdated = document.getElementById('contextMetricsUpdated');
+  const elContextCoverageStatus = document.getElementById('contextCoverageStatus');
+  const elContextCoverageRatio = document.getElementById('contextCoverageRatio');
+  const elContextCoverageReasons = document.getElementById('contextCoverageReasons');
+  const elContextRecallAvg = document.getElementById('contextRecallAvg');
+  const elContextRecallAtRisk = document.getElementById('contextRecallAtRisk');
+  const elContextRecallTop = document.getElementById('contextRecallTop');
   const elContextItems = document.getElementById('contextItems');
   const elContextCascade = document.getElementById('contextCascade');
   const elContextStat = document.getElementById('contextStat');
@@ -700,6 +710,226 @@ document.addEventListener('DOMContentLoaded', async () => {
   let contextModel = null;
   let contextAbort = null;
   let contextPrimed = false;
+  let contextMetricsModel = null;
+  let contextMetricsAbort = null;
+  function formatPercent(value, digits = 0) {
+    if (typeof value !== 'number' || !Number.isFinite(value)) return '—';
+    return `${(value * 100).toFixed(digits)}%`;
+  }
+  function formatSlotLabel(value) {
+    if (typeof value !== 'string') return 'unknown';
+    const trimmed = value.trim();
+    if (!trimmed) return 'unknown';
+    const replaced = trimmed.replace(/[_-]/g, ' ').replace(/\s+/g, ' ').trim();
+    return replaced || trimmed;
+  }
+  function renderMetricList(target, items, formatter, emptyLabel) {
+    const node = typeof target === 'string' ? document.getElementById(target) : target;
+    if (!node) return;
+    node.innerHTML = '';
+    const collection = Array.isArray(items) ? items : [];
+    let appended = 0;
+    for (const entry of collection) {
+      const text = formatter ? formatter(entry) : entry;
+      if (!text) continue;
+      const li = document.createElement('li');
+      li.textContent = text;
+      node.appendChild(li);
+      appended += 1;
+    }
+    if (!appended && emptyLabel) {
+      const li = document.createElement('li');
+      li.className = 'dim';
+      li.textContent = emptyLabel;
+      node.appendChild(li);
+    }
+  }
+  function normalizeProject(value) {
+    return typeof value === 'string' && value.trim() ? value.trim().toLowerCase() : null;
+  }
+  function filterByProject(records, project) {
+    const list = Array.isArray(records) ? records : [];
+    const normalized = normalizeProject(project);
+    if (!normalized) return list;
+    const filtered = list.filter((entry) => normalizeProject(entry && entry.project) === normalized);
+    return filtered.length ? filtered : list;
+  }
+  function selectLatest(records, fallback) {
+    if (Array.isArray(records) && records.length) return records[0];
+    if (fallback && typeof fallback === 'object') return fallback;
+    return null;
+  }
+  function deriveSlotStats(records) {
+    const list = Array.isArray(records) ? records : [];
+    const store = new Map();
+    for (const entry of list) {
+      const slots = entry && entry.components && entry.components.slots;
+      if (!slots || typeof slots !== 'object') continue;
+      for (const [slot, raw] of Object.entries(slots)) {
+        const gap = Number(raw);
+        if (!Number.isFinite(gap)) continue;
+        const key = typeof slot === 'string' ? slot : '';
+        let stats = store.get(key);
+        if (!stats) {
+          stats = { sum: 0, count: 0, max: 0 };
+          store.set(key, stats);
+        }
+        stats.sum += gap;
+        stats.count += 1;
+        if (gap > stats.max) stats.max = gap;
+      }
+    }
+    const entries = Array.from(store.entries())
+      .filter(([, stats]) => stats.count > 0)
+      .map(([slot, stats]) => ({
+        slot,
+        avg_gap: stats.sum / stats.count,
+        max_gap: stats.max,
+        samples: stats.count,
+      }));
+    entries.sort((a, b) => {
+      const diff = (b.avg_gap ?? 0) - (a.avg_gap ?? 0);
+      if (Math.abs(diff) > 1e-6) return diff;
+      return (a.slot || '').localeCompare(b.slot || '');
+    });
+    return entries.slice(0, 5);
+  }
+  function applyContextMetrics(model) {
+    if (model && typeof model === 'object') {
+      contextMetricsModel = model;
+    }
+    const metrics = contextMetricsModel || {};
+    if (!elContextMetricsWrap) return;
+
+    const coverage = metrics.coverage || {};
+    const recall = metrics.recall_risk || {};
+    const projectKey = normalizeProject(curProj);
+
+    const coverageRecent = filterByProject(coverage.recent, projectKey);
+    const recallRecent = filterByProject(recall.recent, projectKey);
+
+    const coverageLatest = selectLatest(coverageRecent, coverage.latest);
+    const recallLatest = selectLatest(recallRecent, recall.latest);
+
+    const coverageRatio = (() => {
+      if (coverageRecent.length) {
+        const flagged = coverageRecent.filter((entry) => entry && entry.needs_more === true).length;
+        return coverageRecent.length ? flagged / coverageRecent.length : null;
+      }
+      return typeof coverage.needs_more_ratio === 'number' ? coverage.needs_more_ratio : null;
+    })();
+
+    const coverageStatus = coverageLatest && coverageLatest.needs_more === true;
+    if (elContextCoverageStatus) {
+      const cls = coverageStatus ? 'metric-pill bad' : 'metric-pill ok';
+      elContextCoverageStatus.className = coverageLatest ? cls : 'metric-pill';
+      elContextCoverageStatus.textContent = coverageLatest
+        ? (coverageStatus ? 'Needs more coverage' : 'Coverage satisfied')
+        : 'Awaiting signal';
+    }
+    if (elContextCoverageRatio) {
+      elContextCoverageRatio.textContent = coverageRatio == null ? '—' : formatPercent(coverageRatio, 0);
+    }
+    ARW.ui.updateRatioBar('contextCoverageRatioBar', coverageRatio, {
+      preferLow: true,
+      warn: 0.2,
+      bad: 0.4,
+      formatText: (_v, pct) => `${pct}% of assemblies needing more coverage`,
+    });
+    const coverageReasons = Array.isArray(coverageLatest?.reasons) ? coverageLatest.reasons.slice(0, 5) : [];
+    renderMetricList(
+      elContextCoverageReasons,
+      coverageReasons,
+      (reason) => {
+        if (!reason) return null;
+        if (typeof reason === 'string' && reason.startsWith('slot_underfilled:')) {
+          const slot = reason.split(':')[1] || '';
+          return `Slot underfilled — ${formatSlotLabel(slot)}`;
+        }
+        return String(reason);
+      },
+      'No recent coverage gaps'
+    );
+
+    const recallAvgScore = (() => {
+      if (recallRecent.length) {
+        let sum = 0;
+        let count = 0;
+        for (const entry of recallRecent) {
+          const score = Number(entry && entry.score);
+          if (Number.isFinite(score)) {
+            sum += score;
+            count += 1;
+          }
+        }
+        return count ? sum / count : null;
+      }
+      return typeof recall.avg_score === 'number' ? recall.avg_score : null;
+    })();
+    const recallAtRiskRatio = (() => {
+      if (recallRecent.length) {
+        const flagged = recallRecent.filter((entry) => entry && entry.at_risk === true).length;
+        return recallRecent.length ? flagged / recallRecent.length : null;
+      }
+      return typeof recall.at_risk_ratio === 'number' ? recall.at_risk_ratio : null;
+    })();
+
+    if (elContextRecallAvg) {
+      elContextRecallAvg.textContent = recallAvgScore == null ? '—' : formatPercent(recallAvgScore, 0);
+    }
+    ARW.ui.updateRatioBar('contextRecallAvgBar', recallAvgScore, {
+      preferLow: true,
+      warn: 0.45,
+      bad: 0.7,
+      formatText: (_v, pct) => `Risk score ${pct}%`,
+    });
+    if (elContextRecallAtRisk) {
+      elContextRecallAtRisk.textContent = recallAtRiskRatio == null ? '—' : formatPercent(recallAtRiskRatio, 0);
+    }
+    ARW.ui.updateRatioBar('contextRecallAtRiskBar', recallAtRiskRatio, {
+      preferLow: true,
+      warn: 0.2,
+      bad: 0.4,
+      formatText: (_v, pct) => `${pct}% of assemblies flagged at risk`,
+    });
+
+    const slotStats = deriveSlotStats(recallRecent);
+    const slotItems = slotStats.length ? slotStats : (Array.isArray(recall.top_slots) ? recall.top_slots : []);
+    renderMetricList(
+      elContextRecallTop,
+      slotItems,
+      (item) => {
+        if (!item || typeof item !== 'object') return null;
+        const slotName = formatSlotLabel(item.slot || item.reason || '');
+        const avg = typeof item.avg_gap === 'number' ? formatPercent(item.avg_gap, 0) : null;
+        const max = typeof item.max_gap === 'number' ? formatPercent(item.max_gap, 0) : null;
+        const samples = Number(item.samples ?? item.count ?? 0);
+        const pieces = [slotName];
+        if (avg) pieces.push(`avg gap ${avg}`);
+        if (max) pieces.push(`max ${max}`);
+        if (Number.isFinite(samples) && samples > 0) {
+          pieces.push(`${samples} sample${samples === 1 ? '' : 's'}`);
+        }
+        return pieces.join(' · ');
+      },
+      'No slot gaps recorded'
+    );
+
+    if (elContextMetricsUpdated) {
+      const iso = coverageLatest?.time || recallLatest?.time || coverage.latest?.time || recall.latest?.time || null;
+      const project = coverageLatest?.project || recallLatest?.project || (curProj || null);
+      if (iso) {
+        const rel = formatRelativeIso(iso) || iso;
+        elContextMetricsUpdated.textContent = project
+          ? `Metrics updated ${rel} · project ${project}`
+          : `Metrics updated ${rel}`;
+      } else {
+        elContextMetricsUpdated.textContent = project
+          ? `Metrics scope: project ${project}`
+          : 'Metrics awaiting context activity';
+      }
+    }
+  }
   let cascadeAbort = null;
   let cascadeItems = [];
   if (elContextIncludeSources) {
@@ -1547,6 +1777,25 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (cascadeAbort === controller) cascadeAbort = null;
     }
   }
+  async function refreshContextMetrics() {
+    if (!elContextMetricsWrap) return;
+    if (contextMetricsAbort) {
+      try { contextMetricsAbort.abort(); } catch {}
+    }
+    const controller = new AbortController();
+    contextMetricsAbort = controller;
+    try {
+      await fetchReadModel('context_metrics', '/state/context_metrics', { signal: controller.signal });
+    } catch (err) {
+      if (!(err && err.name === 'AbortError')) {
+        console.warn('context metrics fetch failed', err);
+      }
+    } finally {
+      if (contextMetricsAbort === controller) {
+        contextMetricsAbort = null;
+      }
+    }
+  }
   async function refreshContextSnapshot() {
     if (!curProj) {
       clearContextPanel('Select a project to assemble context.');
@@ -1586,6 +1835,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         : json;
       if (body && typeof body === 'object') {
         renderContext(body);
+        try { await refreshContextMetrics(); } catch {}
         setContextStat('Context assembled', false);
         return body;
       }
@@ -1789,6 +2039,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const idEpisodesRead = ARW.read.subscribe('episodes', applyEpisodesModel);
   const idRuntimeRead = ARW.read.subscribe('runtime_supervisor', renderRuntimeSupervisor);
   const idRuntimeMatrixRead = ARW.read.subscribe('runtime_matrix', renderRuntimeMatrix);
+  const idContextMetricsRead = ARW.read.subscribe('context_metrics', applyContextMetrics);
   await refreshEpisodesSnapshot();
   // Throttle SSE-driven refresh on episode-related activity
   let _lastRunsAt = 0;
@@ -2053,6 +2304,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (sc && typeof sc.refresh === 'function') {
       sc.refresh({ immediate: true, reason: 'project-change' });
     }
+    applyContextMetrics();
     // restore last folder if present
     if (curProj){
       loadNotes();
@@ -2821,6 +3073,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     try { ARW.read.unsubscribe(idProjectsRead); } catch {}
     try { ARW.read.unsubscribe(idRuntimeRead); } catch {}
     try { ARW.read.unsubscribe(idRuntimeMatrixRead); } catch {}
+    try { ARW.read.unsubscribe(idContextMetricsRead); } catch {}
   });
 
   // ---------- Artifacts rendering from run snapshot ----------

@@ -659,51 +659,6 @@ async function refreshCascadeSummaries(options = {}) {
   }
 }
 
-function updateRatioBar(id, value, options = {}) {
-  const node = document.getElementById(id);
-  if (!node) return;
-  const fill = node.querySelector('i');
-  const {
-    preferLow = false,
-    warn = preferLow ? 0.25 : 0.65,
-    bad = preferLow ? 0.45 : 0.4,
-    formatText,
-  } = options;
-
-  node.classList.remove('ok', 'warn', 'bad', 'empty');
-
-  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : null;
-  if (numeric == null) {
-    if (fill) fill.style.width = '0%';
-    node.classList.add('empty');
-    node.setAttribute('aria-valuenow', '0');
-    node.setAttribute('aria-valuetext', 'No data');
-    node.title = 'No data';
-    return;
-  }
-
-  const clamped = Math.min(1, Math.max(0, numeric));
-  const percent = Math.round(clamped * 100);
-  if (fill) fill.style.width = `${percent}%`;
-  node.setAttribute('aria-valuenow', clamped.toFixed(2));
-  const text = typeof formatText === 'function'
-    ? formatText(clamped, percent)
-    : `${percent}%`;
-  node.setAttribute('aria-valuetext', text);
-  node.title = text;
-
-  let state = 'ok';
-  if (preferLow) {
-    if (clamped >= bad) state = 'bad';
-    else if (clamped >= warn) state = 'warn';
-  } else {
-    if (clamped <= bad) state = 'bad';
-    else if (clamped <= warn) state = 'warn';
-  }
-
-  node.classList.add(state);
-}
-
 function renderTelemetry(data) {
   lastTelemetry = data;
   let updatedMs = Number(data?.generated_ms ?? data?.generatedMs);
@@ -733,7 +688,7 @@ function renderTelemetry(data) {
   const coverageRatio = Number.isFinite(coverageRatioRaw) ? coverageRatioRaw : null;
   const ratioEl = document.getElementById('coverageRatio');
   if (ratioEl) ratioEl.textContent = coverageRatio == null ? '—' : formatPercent(coverageRatio, 0);
-  updateRatioBar('coverageRatioBar', coverageRatio, {
+  ARW.ui.updateRatioBar('coverageRatioBar', coverageRatio, {
     preferLow: true,
     warn: 0.2,
     bad: 0.4,
@@ -767,7 +722,7 @@ function renderTelemetry(data) {
   const avgScore = Number.isFinite(avgScoreRaw) ? avgScoreRaw : null;
   const avgScoreEl = document.getElementById('recallAvgScore');
   if (avgScoreEl) avgScoreEl.textContent = avgScore == null ? '—' : formatPercent(avgScore, 0);
-  updateRatioBar('recallAvgScoreBar', avgScore, {
+  ARW.ui.updateRatioBar('recallAvgScoreBar', avgScore, {
     preferLow: true,
     warn: 0.45,
     bad: 0.7,
@@ -777,7 +732,7 @@ function renderTelemetry(data) {
   const atRiskRatio = Number.isFinite(atRiskRatioRaw) ? atRiskRatioRaw : null;
   const atRiskEl = document.getElementById('recallAtRisk');
   if (atRiskEl) atRiskEl.textContent = atRiskRatio == null ? '—' : formatPercent(atRiskRatio, 0);
-  updateRatioBar('recallAtRiskBar', atRiskRatio, {
+  ARW.ui.updateRatioBar('recallAtRiskBar', atRiskRatio, {
     preferLow: true,
     warn: 0.2,
     bad: 0.4,

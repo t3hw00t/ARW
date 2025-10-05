@@ -46,7 +46,7 @@ Managed Runtime Supervisor (Priority One)
 Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143009-0003] Retrieval: add MMR-style selector across vector/graph mounts and world beliefs — done (world belief snapshots now flow through the mmrd selector alongside hybrid memory lanes)
 - [Pack: Research] [t-250912143013-0004] Compression cascade: summarize episodes (extract→abstract→outline) into mounts with provenance — done (context cascade service now emits episodic summaries in the `episodic_summary` lane)
-- [Pack: Research] [t-250912143017-0005] Failure detectors: emit `context.recall.risk` and `context.coverage` with meters in UI — in_progress (recall risk events + telemetry landed; UI meters pending)
+- [Pack: Research] [t-250912143017-0005] Failure detectors: emit `context.recall.risk` and `context.coverage` with meters in UI — done (Project Hub now surfaces coverage/recall meters from the context metrics read-model)
 - [Pack: Research] [t-250912143025-0007] Logic Unit: ship config-only Never-Out-Of-Context defaults (budgets, diversity, rehydrate rules) — done (builtin manifest seeds env + slot budgets)
 - [Pack: Research] [t-250912143029-0008] UI: Project Hub panel “What’s in context now” with artifact pointers and rehydrate actions — done (Launcher Hub now surfaces assembled context with rehydrate tools)
 - [Pack: Research] [t-250912143033-0009] Training Park: dials for diversity/recency/compression; recall‑risk and coverage meters — done (launcher now ships a recency dial and live coverage/recall meters wired to `context_metrics`)
@@ -107,12 +107,12 @@ Design System & Tokens
 - [Pack: Collaboration] [t-250914231240-dsg09] CI: add tokens sync check step (uses `just tokens-check`) — done
 - [Pack: Collaboration] [t-250914231230-dsg07] Extract `ui-kit.css` primitives (buttons/inputs/badges) for launcher pages — done
 - [Pack: Collaboration] [t-250914231235-dsg08] Contrast audit (WCAG AA) sweep; adjust any low‑contrast cases — done (muted + status-accent tokens tuned for AA across light/dark; manuals/images synced)
-- [Pack: Collaboration] [t-250914231245-dsg10] Add W3C tokens pipeline (Style Dictionary) to emit platform targets — plan
+- [Pack: Collaboration] [t-250914231245-dsg10] Add W3C tokens pipeline (Style Dictionary) to emit platform targets — done (Style Dictionary config + `just tokens-sd` build CSS/JSON/Swift/Android outputs)
 - [Pack: Collaboration] [t-250914231250-dsg11] Add prefers-contrast / forced-colors styles for key components — done (launcher + shared UI kit high-contrast styles)
  - [Pack: Collaboration] [t-250914231255-dsg12] Tailwind tokens export (JSON) for downstream configs — done
 
 Standards & Docs
-- [Kernel] [t-250914231255-std01] Add ADR framework and seed first ADRs (tokens SSoT, event naming) — plan
+- [Kernel] [t-250914231255-std01] Add ADR framework and seed first ADRs (tokens SSoT, event naming) — done (docs/adr index plus ADR 0001/0002 cover tokens SSoT + dot.case events with mkdocs navigation)
  - [Kernel] [t-250914231300-std02] Optional docs a11y check in CI (axe) — done
 
 Recipes MVP
@@ -141,7 +141,7 @@ Last‑mile Structures
 
 Security & Admin
 - [Kernel] Admin auth hardening — hashed tokens + per‑token/IP sliding rate‑limit [t-250911230312-0863]
-- [Kernel] Per‑route gating layers; slim global admin middleware [t-250911230252-9858]
+- [Kernel] Per‑route gating layers; slim global admin middleware [t-250911230252-9858] — done (all admin routes enforce `#[arw_gate]`; global middleware trimmed after hashed-token + per-token/IP throttling rollout)
 - [Kernel] Supply‑chain: upgrade GTK/GLib stack to >=0.20 (via wry/gtk/tao/tauri) to resolve RUSTSEC-2024-0429; remove temporary ignore in `deny.toml` and audit script guard once lockfile carries `glib >= 0.20.0`.
 
 - [Kernel] Asimov Capsule Guard (alpha)
@@ -209,10 +209,10 @@ State Read‑Models & Episodes
 - [Kernel] Observations read-model + GET /state/observations [t-250912001055-0044] — done (SSE read-model patches + admin endpoint)
 - [Kernel] Beliefs/Intents/Actions stores + endpoints [t-250912001100-3438] — done (SSE read-model patches + admin endpoints)
 - [Kernel] Episodes + Debug UI reactive views (truth window) [t-250912001105-7850] — done (server now emits duration/error metadata + UI hydrates directly from episode rollups)
-- [Kernel] Debug UI: Episodes filters + details toggle [t-250912024838-4137]
+- [Kernel] Debug UI: Episodes filters + details toggle [t-250912024838-4137] — done (errors-only + substring filters with persistent details toggle in the Episodes panel)
 
 Hierarchy & Governor Services
-- [Kernel] Encapsulate hierarchy (hello/offer/accept/state/role_set) and governor (profile/hints) into typed services; endpoints prefer services; publish corr_id events; persist orchestration [t-250912024843-7597]
+- [Kernel] Encapsulate hierarchy (hello/offer/accept/state/role_set) and governor (profile/hints) into typed services; endpoints prefer services; publish corr_id events; persist orchestration [t-250912024843-7597] — done (hierarchy/governor services live in AppState, emitting corr_id events with persisted state)
 
 CLI & Introspection
 - [Kernel] Migrate arw-cli to clap (derive, help, completions, JSON flag) [t-250911230329-4722] — done
@@ -220,11 +220,11 @@ CLI & Introspection
   - [Kernel] /about merges public endpoints (runtime recorder) and admin endpoints (macro registry); entries are `METHOD path`; deduped and sorted.
 
 Queues, NATS & Orchestration
-- [Kernel] Orchestrator: lease handling, nack(retry_after_ms), group max in‑flight + tests [t-250911230308-0779]
-- [Kernel] NATS: TLS/auth config and reconnect/backoff tuning; docs and examples [t-250911230316-4765]
+- [Kernel] Orchestrator: lease handling, nack(retry_after_ms), group max in‑flight + tests [t-250911230308-0779] — done (LocalQueue now honors ARW_ORCH_LEASE_MS, ARW_ORCH_NACK_DELAY_MS, and ARW_ORCH_MAX_INFLIGHT with coverage)
+- [Kernel] NATS: TLS/auth config and reconnect/backoff tuning; docs and examples [t-250911230316-4765] — done (env toggles provide TLS/user/pass, queues honor reconnect backoff, docs capture the flow)
 
 Specs & Docs
-- [Kernel] Generate AsyncAPI + MCP artifacts and serve under /spec/* [t-250909224102-9629]
+- [Kernel] Generate AsyncAPI + MCP artifacts and serve under /spec/* [t-250909224102-9629] — done (unified /spec/* endpoints ship asyncapi.yaml + mcp-tools.json with docgen wiring)
 - [Kernel] Docgen: gating keys listing + config schema and examples — done (CLI docgen + gating_config reference)
 - [Kernel] AsyncAPI: include `rpu.trust.changed` channel — done
 - [Kernel] Event normalization rollout
@@ -264,12 +264,12 @@ OpenAPI/Examples
 - [Kernel] [t-250913213508-api02] Document public /state/models envelope explicitly or add note about envelope omission in examples — done (docs/API_AND_SCHEMA.md)
 
 Feedback Engine (Near‑Live)
-- [Pack: Collaboration] Engine crate and integration: actor with O(1) stats, deltas via bus, snapshot+persistence [t-250909224102-8952]
-- [Pack: Collaboration] UI: near-live feedback in /admin/debug showing deltas with rationale/confidence [t-250909224103-0211]
-- [Pack: Collaboration] Policy hook: shadow → policy‑gated auto‑apply with bounds/rate‑limits [t-250909224103-5251]
+- [Pack: Collaboration] Engine crate and integration: actor with O(1) stats, deltas via bus, snapshot+persistence [t-250909224102-8952] — done (arw-heuristics crate drives feedback engine with evaluate() + bus deltas while preserving snapshots)
+- [Pack: Collaboration] UI: near-live feedback in /admin/debug showing deltas with rationale/confidence [t-250909224103-0211] — done (Debug UI renders live feedback.suggested entries with rationale/confidence and auto-apply controls)
+- [Pack: Collaboration] Policy hook: shadow → policy‑gated auto‑apply with bounds/rate‑limits [t-250909224103-5251] — done (auto-apply toggle now gates policy-approved suggestions with bounds + rate limits)
 
 Testing
-- [Kernel] End‑to‑end coverage for endpoints & gating; fixtures; CI integration [t-250911230325-2116]
+- [Kernel] End‑to‑end coverage for endpoints & gating; fixtures; CI integration [t-250911230325-2116] — done (E2E tests cover gated memory/feedback flows and spec drift expectations)
 - [Kernel] [t-250914210200-test01] Scoped state dir for tests (`test_support::scoped_state_dir`) to isolate `ARW_STATE_DIR` — done
 - [Kernel] [t-250914210204-test02] Migrate env‑derived `state_dir` lookups to a process‑lifetime cache (OnceCell) with a test‑only reset hook to avoid flakiness — done (scoped cache + guard landed)
 - [Kernel] [t-250914210208-test03] Concurrency controls: add tests for `block=false` shrink path and pending_shrink reporting — done (apps/arw-server/src/models.rs)
@@ -289,7 +289,7 @@ Stabilization & Contracts
 Platform & Policy
 - [Kernel] WASI plugin sandbox: capability‑based tool permissions (ties to Policy)
 - [Kernel] Policy engine integration (Cedar bindings); per‑tool permission manifests
-- [Pack: Collaboration] RPU: trust‑store watch + stronger verification; introspection endpoint [t-250911230333-9794]
+- [Pack: Collaboration] RPU: trust‑store watch + stronger verification; introspection endpoint [t-250911230333-9794] — done (server watches `ARW_TRUST_CAPSULES`, exposes /admin/rpu/{trust,reload}, and emits `rpu.trust.changed`)
 
 Models & Orchestration
 - [Kernel] Model orchestration adapters (llama.cpp, ONNX Runtime) with pooling and profiles

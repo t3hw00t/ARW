@@ -64,6 +64,52 @@ window.ARW = {
       return { slug: def.slug, label: def.label };
     },
   },
+  ui: {
+    updateRatioBar(target, value, options = {}) {
+      const node = typeof target === 'string' ? document.getElementById(target) : target;
+      if (!node) return;
+      const fill = node.querySelector('i');
+      const {
+        preferLow = false,
+        warn = preferLow ? 0.25 : 0.65,
+        bad = preferLow ? 0.45 : 0.4,
+        formatText,
+      } = options;
+
+      node.classList.remove('ok', 'warn', 'bad', 'empty');
+
+      const numeric = typeof value === 'number' && Number.isFinite(value) ? value : null;
+      if (numeric == null) {
+        if (fill) fill.style.width = '0%';
+        node.classList.add('empty');
+        node.setAttribute('aria-valuenow', '0');
+        node.setAttribute('aria-valuetext', 'No data');
+        node.title = 'No data';
+        return;
+      }
+
+      const clamped = Math.min(1, Math.max(0, numeric));
+      const percent = Math.round(clamped * 100);
+      if (fill) fill.style.width = `${percent}%`;
+      node.setAttribute('aria-valuenow', clamped.toFixed(2));
+      const text = typeof formatText === 'function'
+        ? formatText(clamped, percent)
+        : `${percent}%`;
+      node.setAttribute('aria-valuetext', text);
+      node.title = text;
+
+      let state = 'ok';
+      if (preferLow) {
+        if (clamped >= bad) state = 'bad';
+        else if (clamped >= warn) state = 'warn';
+      } else {
+        if (clamped <= bad) state = 'bad';
+        else if (clamped <= warn) state = 'warn';
+      }
+
+      node.classList.add(state);
+    },
+  },
   util: {
     pageId(){
       try{
