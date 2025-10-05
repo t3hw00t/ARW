@@ -8,6 +8,7 @@ use uuid::Uuid;
 const HEADER_CORR: &str = "x-arw-corr";
 const HEADER_ALT_CORR: &str = "x-correlation-id";
 const HEADER_REQUEST_ID: &str = "x-request-id";
+const HEADER_CORR_SOURCE: &str = "x-arw-corr-source";
 const MAX_ID_LEN: usize = 128;
 
 task_local! {
@@ -19,6 +20,16 @@ pub enum CorrelationSource {
     Provided,
     RequestId,
     Generated,
+}
+
+impl CorrelationSource {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            CorrelationSource::Provided => "provided",
+            CorrelationSource::RequestId => "request_id",
+            CorrelationSource::Generated => "generated",
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -106,13 +117,15 @@ pub async fn correlation_mw(mut req: Request<Body>, next: Next) -> Response {
         }
     }
 
-    let correlation = RequestCorrelation {
-        request_id,
-        corr_id,
-        source,
-    };
+    let correlation = RequestCorrelation::new(request_id, corr_id, source);
 
     req.extensions_mut().insert(correlation.clone());
+    let corr_source_header = HeaderName::from_static(HEADER_CORR_SOURCE);
+    if req.headers().get(&corr_source_header).is_none() {
+        if let Ok(value) = HeaderValue::from_str(correlation.source().as_str()) {
+            req.headers_mut().insert(corr_source_header.clone(), value);
+        }
+    }
     REQ_CORR
         .scope(correlation.clone(), async move {
             let mut res = next.run(req).await;
@@ -124,6 +137,11 @@ pub async fn correlation_mw(mut req: Request<Body>, next: Next) -> Response {
             if res.headers().get(&corr_header).is_none() {
                 if let Ok(value) = HeaderValue::from_str(correlation.corr_id()) {
                     res.headers_mut().insert(corr_header.clone(), value);
+                }
+            }
+            if res.headers().get(&corr_source_header).is_none() {
+                if let Ok(value) = HeaderValue::from_str(correlation.source().as_str()) {
+                    res.headers_mut().insert(corr_source_header.clone(), value);
                 }
             }
             res
@@ -186,6 +204,7 @@ mod tests {
                     let ctx = current().expect("context available");
                     assert_eq!(ctx.corr_id(), "test-corr");
                     assert_eq!(ctx.request_id(), "req-xyz");
+                    assert_eq!(ctx.source(), CorrelationSource::Provided);
                     axum::response::Response::new(Body::empty())
                 }),
             )
@@ -209,6 +228,13 @@ mod tests {
                 .get("x-arw-corr")
                 .and_then(|v| v.to_str().ok()),
             Some("test-corr"),
+        );
+        assert_eq!(
+            response
+                .headers()
+                .get("x-arw-corr-source")
+                .and_then(|v| v.to_str().ok()),
+            Some("provided"),
         );
         let req_id = response
             .headers()

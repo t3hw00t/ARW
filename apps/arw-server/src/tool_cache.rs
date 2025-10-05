@@ -519,7 +519,7 @@ impl ToolCache {
                     digest: None,
                     payload_bytes: 0,
                     miss_elapsed_ms,
-                    reason: StoreError::SerializeFailed,
+                    reason: StoreError::Serialize,
                 };
             }
         };
@@ -558,7 +558,7 @@ impl ToolCache {
                             digest: Some(digest),
                             payload_bytes,
                             miss_elapsed_ms,
-                            reason: StoreError::CreateDirFailed,
+                            reason: StoreError::CreateDir,
                         };
                     }
                 }
@@ -573,7 +573,7 @@ impl ToolCache {
                         digest: Some(digest),
                         payload_bytes,
                         miss_elapsed_ms,
-                        reason: StoreError::WriteFailed,
+                        reason: StoreError::Write,
                     };
                 }
             }
@@ -733,17 +733,17 @@ impl StoreSkipReason {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum StoreError {
-    SerializeFailed,
-    CreateDirFailed,
-    WriteFailed,
+    Serialize,
+    CreateDir,
+    Write,
 }
 
 impl StoreError {
     pub(crate) fn as_str(&self) -> &'static str {
         match self {
-            StoreError::SerializeFailed => "serialize_failed",
-            StoreError::CreateDirFailed => "create_dir_failed",
-            StoreError::WriteFailed => "store_failed",
+            StoreError::Serialize => "serialize_failed",
+            StoreError::CreateDir => "create_dir_failed",
+            StoreError::Write => "store_failed",
         }
     }
 }

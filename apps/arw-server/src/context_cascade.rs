@@ -700,7 +700,7 @@ fn event_snippet(event: &Value) -> String {
     event
         .get("kind")
         .and_then(|v| v.as_str())
-        .map(|kind| short_kind(kind))
+        .map(short_kind)
         .unwrap_or_else(|| "event".to_string())
 }
 
@@ -724,7 +724,7 @@ fn top_kinds(kinds: &[String], limit: usize) -> Vec<String> {
         *entry += 1;
     }
     let mut pairs: Vec<(&str, usize)> = counts.into_iter().collect();
-    pairs.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    pairs.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(b.0)));
     pairs
         .into_iter()
         .take(limit)

@@ -835,16 +835,18 @@ mod tests {
 
     #[test]
     fn normalize_limits_delta_log() {
-        let mut state = FeedbackState::default();
-        state.delta_log = (0..(FEEDBACK_DELTA_LIMIT + 5))
-            .map(|i| FeedbackDelta {
-                version: i as u64,
-                generated: String::new(),
-                added: Vec::new(),
-                removed: Vec::new(),
-                changed: Vec::new(),
-            })
-            .collect();
+        let mut state = FeedbackState {
+            delta_log: (0..(FEEDBACK_DELTA_LIMIT + 5))
+                .map(|i| FeedbackDelta {
+                    version: i as u64,
+                    generated: String::new(),
+                    added: Vec::new(),
+                    removed: Vec::new(),
+                    changed: Vec::new(),
+                })
+                .collect(),
+            ..Default::default()
+        };
         normalize_feedback_state(&mut state);
         assert_eq!(state.delta_log.len(), FEEDBACK_DELTA_LIMIT);
         assert_eq!(state.delta_log.first().unwrap().version as usize, 5);

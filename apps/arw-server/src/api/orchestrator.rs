@@ -219,7 +219,6 @@ pub async fn orchestrator_start_training(
         .publish(topics::TOPIC_ORCHESTRATOR_JOB_CREATED, &created_payload);
     let state2 = state.clone();
     let id_clone = id.clone();
-    let goal_clone = goal.clone();
     let training_meta_for_hints = training_meta_map.clone();
     tokio::spawn(async move {
         let steps = 5;
