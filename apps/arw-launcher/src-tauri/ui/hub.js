@@ -1,3 +1,21 @@
+const RUNTIME_ACCEL_LABELS = {
+  cpu: 'CPU',
+  gpu_cuda: 'GPU (CUDA)',
+  gpu_rocm: 'GPU (ROCm)',
+  gpu_metal: 'GPU (Metal)',
+  gpu_vulkan: 'GPU (Vulkan)',
+  npu_directml: 'NPU (DirectML)',
+  npu_coreml: 'NPU (CoreML)',
+  npu_other: 'NPU',
+  other: 'Other',
+};
+
+const RUNTIME_MODALITY_LABELS = {
+  audio: 'Audio',
+  text: 'Text',
+  vision: 'Vision',
+};
+
 const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -20,6 +38,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   const defaultLanes = ensureLane(['timeline','context','policy','metrics','models','activity'], 'approvals', { after: 'timeline' });
   let sc = ARW.sidecar.mount('sidecar', defaultLanes, { base, getProject: () => curProj });
   const elRuntimeBadge = document.getElementById('runtimeBadge');
+  const elRuntimeTable = document.getElementById('runtimeTbl');
+  const elRuntimeEmpty = document.getElementById('runtimeEmpty');
+  const elRuntimeRefreshBtn = document.getElementById('runtimeRefresh');
+  const elRuntimeCopyBtn = document.getElementById('runtimeCopyAll');
+  const elRuntimeAuto = document.getElementById('runtimeAuto');
+  const elRuntimeStat = document.getElementById('runtimeStat');
+  const elRuntimeMatrix = document.getElementById('runtimeMatrix');
+  const runtimePending = new Set();
 
   function setRuntimeBadge(text, level = 'neutral', hint = '') {
     if (!elRuntimeBadge) return;
@@ -28,6 +54,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     elRuntimeBadge.textContent = text;
     elRuntimeBadge.title = hint || text;
     elRuntimeBadge.setAttribute('aria-label', hint ? `${text}. ${hint}` : text);
+  }
+
+  function setRuntimeStat(text, sticky = false) {
+    if (!elRuntimeStat) return;
+    elRuntimeStat.textContent = text || '';
+    if (!text || sticky) return;
+    setTimeout(() => {
+      if (elRuntimeStat.textContent === text) {
+        elRuntimeStat.textContent = '';
+      }
+    }, 2000);
   }
 
   setRuntimeBadge('Runtime: loading…');
@@ -46,9 +83,14 @@ document.addEventListener('DOMContentLoaded', async () => {
   let runtimeModel = null;
   function renderRuntimeSupervisor(model) {
     runtimeModel = model || runtimeModel;
-    if (!elRuntimeBadge) return;
     const snapshot = runtimeModel;
     const runtimes = Array.isArray(snapshot?.runtimes) ? snapshot.runtimes : [];
+    if (elRuntimeTable) {
+      renderRuntimeTable(runtimes);
+    } else if (elRuntimeEmpty) {
+      elRuntimeEmpty.style.display = runtimes.length ? 'none' : '';
+    }
+    if (!elRuntimeBadge) return;
     if (!runtimes.length) {
       setRuntimeBadge('Runtime: none', 'neutral', 'No managed runtimes registered');
       return;
@@ -119,6 +161,366 @@ document.addEventListener('DOMContentLoaded', async () => {
     setRuntimeBadge(`Runtime: ${badgeParts.join(' · ')}`, level, title);
   }
 
+  let runtimeMatrixModel = null;
+  function renderRuntimeMatrix(model) {
+    runtimeMatrixModel = model || runtimeMatrixModel;
+    if (!elRuntimeMatrix) return;
+    const items = runtimeMatrixModel && runtimeMatrixModel.items ? runtimeMatrixModel.items : {};
+    const keys = Object.keys(items || {});
+    if (!keys.length) {
+      elRuntimeMatrix.innerHTML = '<div class="dim">No matrix data reported.</div>';
+      return;
+    }
+    const cards = document.createElement('div');
+    cards.className = 'matrix-grid';
+    for (const key of keys.sort()) {
+      const entry = items[key];
+      if (!entry || typeof entry !== 'object') continue;
+      const card = document.createElement('div');
+      card.className = 'matrix-card';
+      const status = entry.status || {};
+      const severity = String(status.severity || '').toLowerCase();
+      if (severity === 'error') card.classList.add('bad');
+      else if (severity === 'warn') card.classList.add('warn');
+
+      const title = document.createElement('div');
+      title.className = 'matrix-title';
+      const heading = document.createElement('span');
+      heading.textContent = entry.target || key;
+      const statusLabel = document.createElement('span');
+      statusLabel.className = 'dim';
+      statusLabel.textContent = status.label || status.severity_label || status.severity || 'unknown';
+      title.appendChild(heading);
+      title.appendChild(statusLabel);
+      card.appendChild(title);
+
+      const meta = document.createElement('div');
+      meta.className = 'matrix-meta';
+      const detailLines = Array.isArray(status.detail) ? status.detail.filter(Boolean) : [];
+      if (detailLines.length) {
+        const detail = document.createElement('div');
+        detail.textContent = detailLines[0];
+        meta.appendChild(detail);
+      }
+      if (entry.runtime && entry.runtime.restart_pressure && entry.runtime.restart_pressure.length) {
+        const pressure = document.createElement('div');
+        pressure.textContent = entry.runtime.restart_pressure.join('; ');
+        meta.appendChild(pressure);
+      }
+      const updated = entry.generated || entry.runtime?.updated;
+      if (updated) {
+        const ts = document.createElement('div');
+        ts.textContent = `updated ${formatRelativeIso(updated) || updated}`;
+        ts.title = updated;
+        meta.appendChild(ts);
+      }
+      if (entry.http) {
+        const http = entry.http;
+        const parts = [];
+        if (Number.isFinite(http.avg_ewma_ms)) parts.push(`ewma ${Math.round(http.avg_ewma_ms)} ms`);
+        if (Number.isFinite(http.error_rate)) parts.push(`errors ${(http.error_rate * 100).toFixed(1)}%`);
+        if (http.slow_routes && http.slow_routes.length) parts.push(`slow ${http.slow_routes.slice(0,2).join(', ')}`);
+        if (parts.length) {
+          const httpDiv = document.createElement('div');
+          httpDiv.textContent = parts.join(' · ');
+          meta.appendChild(httpDiv);
+        }
+      }
+      if (entry.bus) {
+        const bus = document.createElement('div');
+        bus.textContent = `bus published ${entry.bus.published}, lagged ${entry.bus.lagged}`;
+        meta.appendChild(bus);
+      }
+      if (entry.events) {
+        const events = document.createElement('div');
+        events.textContent = `events ${entry.events.total} kinds ${entry.events.kinds}`;
+        meta.appendChild(events);
+      }
+      if (entry.kernel && entry.kernel.enabled === false) {
+        const kernel = document.createElement('div');
+        kernel.textContent = 'Kernel disabled';
+        meta.appendChild(kernel);
+      }
+      if (entry.runtime && entry.runtime.severity) {
+        const severityMap = entry.runtime.severity;
+        const render = Object.entries(severityMap)
+          .map(([sev, val]) => `${sev}: ${val}`)
+          .join(', ');
+        if (render) {
+          const sevEl = document.createElement('div');
+          sevEl.textContent = `runtime ${render}`;
+          meta.appendChild(sevEl);
+        }
+      }
+      if (meta.children.length) {
+        card.appendChild(meta);
+      }
+      cards.appendChild(card);
+    }
+    elRuntimeMatrix.innerHTML = '';
+    elRuntimeMatrix.appendChild(cards);
+  }
+
+  function runtimeAcceleratorLabel(slug) {
+    if (!slug) return '';
+    const key = String(slug || '').toLowerCase();
+    return RUNTIME_ACCEL_LABELS[key] || String(slug);
+  }
+
+  function runtimeModalitiesLabel(modalities) {
+    if (!Array.isArray(modalities) || modalities.length === 0) return '';
+    return modalities
+      .map((mode) => {
+        const key = String(mode || '').toLowerCase();
+        return RUNTIME_MODALITY_LABELS[key] || String(mode || '');
+      })
+      .filter(Boolean)
+      .join(', ');
+  }
+
+  function renderRuntimeTable(runtimes) {
+    if (!elRuntimeTable) return;
+    elRuntimeTable.innerHTML = '';
+    if (!Array.isArray(runtimes) || runtimes.length === 0) {
+      if (elRuntimeEmpty) {
+        elRuntimeEmpty.style.display = '';
+      }
+      return;
+    }
+    if (elRuntimeEmpty) {
+      elRuntimeEmpty.style.display = 'none';
+    }
+    for (const entry of runtimes) {
+      const descriptor = entry?.descriptor || {};
+      const status = entry?.status || {};
+      const runtimeId = descriptor.id || status.id;
+      if (!runtimeId) continue;
+      const tr = document.createElement('tr');
+      if (runtimePending.has(runtimeId)) {
+        tr.setAttribute('data-runtime-pending', 'true');
+      }
+
+      const nameCell = document.createElement('td');
+      const nameLabel = document.createElement('strong');
+      nameLabel.textContent = descriptor.name || runtimeId;
+      nameCell.appendChild(nameLabel);
+      const idEl = document.createElement('div');
+      idEl.className = 'dim mono';
+      idEl.textContent = runtimeId;
+      nameCell.appendChild(idEl);
+      if (status.summary) {
+        const summary = document.createElement('div');
+        summary.className = 'dim';
+        summary.textContent = status.summary;
+        nameCell.appendChild(summary);
+      }
+      const detailLines = Array.isArray(status.detail)
+        ? status.detail.filter((line) => typeof line === 'string' && line.trim())
+        : [];
+      if (detailLines.length) {
+        const detailsEl = document.createElement('details');
+        detailsEl.className = 'runtime-detail';
+        const summaryEl = document.createElement('summary');
+        summaryEl.textContent = 'Details';
+        detailsEl.appendChild(summaryEl);
+        const list = document.createElement('ul');
+        for (const line of detailLines) {
+          const li = document.createElement('li');
+          li.textContent = line;
+          list.appendChild(li);
+        }
+        detailsEl.appendChild(list);
+        nameCell.appendChild(detailsEl);
+      }
+      tr.appendChild(nameCell);
+
+      const statusCell = document.createElement('td');
+      const stateInfo = ARW.runtime.state(status.state);
+      const severityInfo = ARW.runtime.severity(status.severity);
+      statusCell.textContent = `${stateInfo.label} · ${severityInfo.label}`;
+      if (
+        severityInfo.slug === 'error' ||
+        stateInfo.slug === 'error' ||
+        stateInfo.slug === 'offline'
+      ) {
+        statusCell.classList.add('bad');
+      } else if (severityInfo.slug === 'warn' || stateInfo.slug === 'degraded') {
+        statusCell.classList.add('dim');
+      }
+      tr.appendChild(statusCell);
+
+      const profileCell = document.createElement('td');
+      const profileParts = [];
+      if (descriptor.profile) profileParts.push(descriptor.profile);
+      if (descriptor.adapter) profileParts.push(descriptor.adapter);
+      const modalitiesLabel = runtimeModalitiesLabel(descriptor.modalities);
+      if (modalitiesLabel) profileParts.push(modalitiesLabel);
+      const accel = runtimeAcceleratorLabel(descriptor.accelerator);
+      if (accel) profileParts.push(accel);
+      profileCell.textContent = profileParts.length ? profileParts.join(' · ') : '–';
+      tr.appendChild(profileCell);
+
+      const budgetCell = document.createElement('td');
+      let budgetRemaining = null;
+      if (status.restart_budget && typeof status.restart_budget === 'object') {
+        const budget = status.restart_budget;
+        const remaining = Number(budget.remaining ?? NaN);
+        const max = Number(budget.max_restarts ?? NaN);
+        const used = Number(budget.used ?? NaN);
+        const windowSeconds = Number(budget.window_seconds ?? NaN);
+        budgetRemaining = Number.isFinite(remaining) ? remaining : null;
+        if (Number.isFinite(remaining) && Number.isFinite(max)) {
+          budgetCell.textContent = `${remaining}/${max} left`;
+        } else {
+          budgetCell.textContent = '—';
+        }
+        const hints = [];
+        if (Number.isFinite(used) && Number.isFinite(max)) {
+          hints.push(`used ${used} of ${max}`);
+        }
+        if (Number.isFinite(windowSeconds)) {
+          hints.push(`window ${windowSeconds}s`);
+        }
+        if (budget.reset_at) {
+          const rel = formatRelativeIso(budget.reset_at);
+          hints.push(rel ? `resets ${rel}` : `resets ${budget.reset_at}`);
+        }
+        if (hints.length) {
+          budgetCell.title = hints.join(' · ');
+        }
+      } else {
+        budgetCell.textContent = '—';
+      }
+      tr.appendChild(budgetCell);
+
+      const updatedCell = document.createElement('td');
+      const updatedAt = status.updated_at;
+      updatedCell.textContent = formatIsoWithRelative(updatedAt);
+      if (updatedAt) {
+        updatedCell.title = updatedAt;
+      }
+      tr.appendChild(updatedCell);
+
+      const actionsCell = document.createElement('td');
+      const restartBtn = document.createElement('button');
+      restartBtn.className = 'ghost btn-small';
+      const isPending = runtimePending.has(runtimeId);
+      if (isPending) {
+        restartBtn.textContent = 'Requesting…';
+        restartBtn.disabled = true;
+        restartBtn.title = 'Restart request in flight';
+      } else {
+        restartBtn.textContent = 'Restart';
+      }
+      let disableReason = '';
+      if (budgetRemaining != null && budgetRemaining <= 0) {
+        restartBtn.disabled = true;
+        disableReason = 'Restart budget exhausted';
+      }
+      if (!isPending) {
+        if (disableReason) {
+          restartBtn.title = disableReason;
+        } else {
+          restartBtn.title = `Request restart for ${descriptor.name || runtimeId}`;
+        }
+      }
+      restartBtn.addEventListener('click', () => handleRuntimeRestart(entry));
+      actionsCell.appendChild(restartBtn);
+      tr.appendChild(actionsCell);
+
+      elRuntimeTable.appendChild(tr);
+    }
+  }
+
+  const runtimePresetCache = new Map();
+
+  async function handleRuntimeRestart(entry) {
+    const descriptor = entry?.descriptor || {};
+    const status = entry?.status || {};
+    const runtimeId = descriptor.id || status.id;
+    if (!runtimeId) {
+      return;
+    }
+    const name = descriptor.name || runtimeId;
+    try {
+      const budget = status.restart_budget || {};
+      const remaining = Number(budget.remaining ?? NaN);
+      const max = Number(budget.max_restarts ?? NaN);
+      const resetHint = budget.reset_at ? formatRelativeIso(budget.reset_at) : '';
+      const summary = status.summary || ARW.runtime.state(status.state).label;
+      const budgetLine = Number.isFinite(remaining) && Number.isFinite(max)
+        ? `${remaining}/${max} restarts left${resetHint ? ` (resets ${resetHint})` : ''}`
+        : 'Restart budget not reported';
+      const defaultPreset = runtimePresetCache.get(runtimeId) || descriptor.profile || '';
+      let presetValue = runtimePresetCache.get(runtimeId);
+      const presetPrompt = window.prompt(
+        `Optional preset label for ${name} (leave blank to reuse current behavior):`,
+        defaultPreset || ''
+      );
+      if (presetPrompt === null) return;
+      const trimmedPreset = String(presetPrompt || '').trim();
+      if (trimmedPreset) {
+        presetValue = trimmedPreset;
+        runtimePresetCache.set(runtimeId, trimmedPreset);
+      } else {
+        presetValue = '';
+      }
+      const presetLine = presetValue ? `Preset: ${presetValue}\n` : '';
+      const confirmMsg = `Request a restart for ${name}?\n\n${summary}\n${budgetLine}.\n${presetLine}`.trim();
+      if (!window.confirm(confirmMsg)) return;
+
+      runtimePending.add(runtimeId);
+      renderRuntimeSupervisor();
+
+      const resp = await ARW.http.fetch(base, `/orchestrator/runtimes/${encodeURIComponent(runtimeId)}/restore`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(
+          presetValue
+            ? { restart: true, preset: presetValue }
+            : { restart: true }
+        ),
+      });
+
+      if (resp.status === 429) {
+        const denied = await resp.json().catch(() => ({}));
+        const deniedBudget = denied?.restart_budget || {};
+        const rem = Number(deniedBudget.remaining ?? NaN);
+        const maxRestarts = Number(deniedBudget.max_restarts ?? NaN);
+        const reason = denied?.reason || 'Restart budget exhausted';
+        const note = Number.isFinite(rem) && Number.isFinite(maxRestarts)
+          ? `${reason} (${rem}/${maxRestarts} remaining)`
+          : reason;
+        setRuntimeStat(`${name}: ${note}`, true);
+        ARW.toast('Restart denied');
+        return;
+      }
+
+      if (!resp.ok) {
+        throw new Error(`restart failed (${resp.status})`);
+      }
+
+      const accepted = await resp.json().catch(() => ({}));
+      const acceptedBudget = accepted?.restart_budget || {};
+      const rem = Number(acceptedBudget.remaining ?? NaN);
+      const maxRestarts = Number(acceptedBudget.max_restarts ?? NaN);
+      const note = Number.isFinite(rem) && Number.isFinite(maxRestarts)
+        ? `${rem}/${maxRestarts} remaining`
+        : 'requested';
+      const presetNote = presetValue ? ` preset ${presetValue}` : '';
+      setRuntimeStat(`${name}: restart ${note}${presetNote}`, true);
+      ARW.toast('Restart requested');
+      scheduleRuntimeRefresh(true);
+    } catch (err) {
+      console.error(err);
+      setRuntimeStat(`${name}: restart failed`, true);
+      ARW.toast('Restart failed');
+    } finally {
+      runtimePending.delete(runtimeId);
+      renderRuntimeSupervisor();
+    }
+  }
+
   let runtimeAbort = null;
   async function refreshRuntimeSupervisor() {
     try {
@@ -147,8 +549,40 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  let runtimeMatrixAbort = null;
+  async function refreshRuntimeMatrix() {
+    if (!elRuntimeMatrix) return;
+    let controller = null;
+    try {
+      if (runtimeMatrixAbort) {
+        try { runtimeMatrixAbort.abort(); } catch {}
+      }
+      controller = new AbortController();
+      runtimeMatrixAbort = controller;
+      await fetchReadModel('runtime_matrix', '/state/runtime_matrix', {
+        signal: controller.signal,
+        transform(raw) {
+          if (raw && typeof raw === 'object') {
+            const items = raw.items && typeof raw.items === 'object' ? raw.items : {};
+            return { items };
+          }
+          return { items: {} };
+        },
+      });
+    } catch (err) {
+      if (!(err && err.name === 'AbortError')) {
+        console.warn('runtime matrix fetch failed', err);
+      }
+    } finally {
+      if (runtimeMatrixAbort === controller) {
+        runtimeMatrixAbort = null;
+      }
+    }
+  }
+
   let runtimeRefreshScheduled = false;
-  function scheduleRuntimeRefresh() {
+  function scheduleRuntimeRefresh(force = false) {
+    if (!force && elRuntimeAuto && !elRuntimeAuto.checked) return;
     if (runtimeRefreshScheduled) return;
     runtimeRefreshScheduled = true;
     setTimeout(() => {
@@ -176,11 +610,53 @@ document.addEventListener('DOMContentLoaded', async () => {
       refreshEpisodesSnapshot(),
       refreshProjectsSnapshot(),
       refreshRuntimeSupervisor(),
+      refreshRuntimeMatrix(),
     ]);
   };
   ARW.sse.indicator('sseStat', { prefix: 'SSE' });
   ARW.sse.connect(base, { replay: 25 });
   await refreshRuntimeSupervisor();
+  await refreshRuntimeMatrix();
+  if (elRuntimeRefreshBtn) {
+    elRuntimeRefreshBtn.addEventListener('click', async () => {
+      try {
+        setRuntimeStat('Refreshing…');
+        await refreshRuntimeSupervisor();
+        setRuntimeStat('Snapshot updated', true);
+      } catch {
+        setRuntimeStat('Refresh failed', true);
+      }
+    });
+  }
+  if (elRuntimeCopyBtn) {
+    elRuntimeCopyBtn.addEventListener('click', async () => {
+      if (!runtimeModel || !Array.isArray(runtimeModel.runtimes)) {
+        setRuntimeStat('No snapshot yet', true);
+        return;
+      }
+      try {
+        const payload = {
+          copied_at: new Date().toISOString(),
+          runtimes: runtimeModel.runtimes,
+          matrix: runtimeMatrixModel?.items || {},
+        };
+        await ARW.copy(JSON.stringify(payload, null, 2));
+      } catch (err) {
+        console.error(err);
+        ARW.toast('Copy failed');
+      }
+    });
+  }
+  if (elRuntimeAuto) {
+    elRuntimeAuto.addEventListener('change', () => {
+      if (elRuntimeAuto.checked) {
+        scheduleRuntimeRefresh(true);
+        setRuntimeStat('Auto refresh on', true);
+      } else {
+        setRuntimeStat('Auto refresh paused', true);
+      }
+    });
+  }
   // ---------- Runs: episodes list + snapshot ----------
   let runsCache = [];
   let episodesPrimed = false;
@@ -604,6 +1080,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   };
   const idEpisodesRead = ARW.read.subscribe('episodes', applyEpisodesModel);
   const idRuntimeRead = ARW.read.subscribe('runtime_supervisor', renderRuntimeSupervisor);
+  const idRuntimeMatrixRead = ARW.read.subscribe('runtime_matrix', renderRuntimeMatrix);
   await refreshEpisodesSnapshot();
   // Throttle SSE-driven refresh on episode-related activity
   let _lastRunsAt = 0;
@@ -621,7 +1098,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       return !!p.corr_id || /^intents\.|^actions\.|^feedback\./.test(k||'');
     }catch{ return false }
   }, runsTick);
-  ARW.sse.subscribe((kind) => kind === 'runtime.state.changed' || kind === 'runtime.restore.completed', scheduleRuntimeRefresh);
+  ARW.sse.subscribe(
+    (kind) => kind === 'runtime.state.changed' || kind === 'runtime.restore.completed',
+    () => scheduleRuntimeRefresh()
+  );
+  ARW.sse.subscribe(
+    (kind) => kind === 'runtime.health',
+    () => refreshRuntimeMatrix()
+  );
   // ---------- Projects: list/create/tree/notes ----------
   // Simple file metadata cache to avoid repeated GETs (5s TTL)
   const fileCache = new Map(); // rel -> { data, t }
@@ -1594,6 +2078,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('beforeunload', () => {
     try { ARW.read.unsubscribe(idEpisodesRead); } catch {}
     try { ARW.read.unsubscribe(idProjectsRead); } catch {}
+    try { ARW.read.unsubscribe(idRuntimeRead); } catch {}
+    try { ARW.read.unsubscribe(idRuntimeMatrixRead); } catch {}
   });
 
   // ---------- Artifacts rendering from run snapshot ----------

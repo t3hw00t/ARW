@@ -75,6 +75,38 @@
             </div>
             <pre id="agentState" class="mono" style="max-height:200px; overflow:auto">{}</pre>
           </section>
+          <section class="card" id="runtime" role="region" aria-labelledby="runtimeTitle">
+            <h3 id="runtimeTitle">Runtimes <span class="dim" style="font-weight:400">(Managed)</span></h3>
+            <div class="row" role="toolbar" aria-label="Runtime controls">
+              <button id="runtimeRefresh" class="ghost">Refresh</button>
+              <label class="key"><input type="checkbox" id="runtimeAuto" checked> auto refresh</label>
+              <button id="runtimeCopyAll" class="ghost">Copy snapshot</button>
+              <a href="https://github.com/t3hw00t/ARW/blob/main/docs/guide/runtime_matrix.md" target="_blank" rel="noopener noreferrer" class="ghost" role="button">Runbook</a>
+              <span id="runtimeStat" class="dim" role="status" aria-live="polite" style="margin-left:auto"></span>
+            </div>
+            <details id="runtimeRunbook" class="runtime-runbook">
+              <summary>Operator guidance</summary>
+              <p>
+                Restart requests instruct the managed runtime supervisor to rebuild or restart the selected
+                backend. Each restart consumes from the configured budget window. Confirm the runtime is idle and
+                the adapter is ready before requesting a restore. See the full runbook for escalation steps and
+                presets.
+              </p>
+            </details>
+            <div style="overflow:auto; max-height:220px">
+              <table aria-label="Managed runtimes" data-runtime-table>
+                <thead>
+                  <tr><th scope="col">Runtime</th><th scope="col">Status</th><th scope="col">Profile</th><th scope="col">Budget</th><th scope="col">Updated</th><th scope="col">Actions</th></tr>
+                </thead>
+                <tbody id="runtimeTbl"></tbody>
+              </table>
+            </div>
+            <div id="runtimeEmpty" class="dim" role="status" aria-live="polite">No managed runtimes registered.</div>
+            <div class="runtime-matrix" role="region" aria-live="polite" aria-labelledby="runtimeMatrixTitle">
+              <h4 id="runtimeMatrixTitle">Node Status</h4>
+              <div id="runtimeMatrix"></div>
+            </div>
+          </section>
           <section class="card" id="runs" role="region" aria-labelledby="runsTitle">
             <h3 id="runsTitle">Runs</h3>
             <div class="row">

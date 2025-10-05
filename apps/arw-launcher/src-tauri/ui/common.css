@@ -63,6 +63,25 @@ th{ color:#555; font-weight:600 }
 .dot{ width:8px; height:8px; border-radius:999px; background:#aaa; display:inline-block }
 .dot.ok{ background: var(--status-ok) }
 .dot.bad{ background: var(--status-bad) }
+.runtime-runbook{ margin:6px 0 12px; font-size:13px; color: var(--color-muted) }
+.runtime-runbook summary{ font-weight:600; cursor:pointer; color: var(--color-ink) }
+.runtime-runbook[open] summary{ margin-bottom:4px }
+.runtime-runbook p{ margin:0; font-size:13px; line-height:1.45; color: inherit }
+.runtime-detail{ margin-top:6px }
+.runtime-detail summary{ cursor:pointer; font-size:12px; color: var(--color-muted); font-weight:600 }
+.runtime-detail ul{ margin:4px 0 0; padding-left:18px; font-size:12px; color: var(--color-muted) }
+.runtime-detail li{ margin-bottom:2px }
+table[data-runtime-table] tr[data-runtime-pending="true"]{ background: rgba(15,23,42,0.04); }
+table[data-runtime-table] tr[data-runtime-pending="true"] button{ cursor:wait }
+.runtime-matrix{ margin-top:16px; border-top:1px solid var(--color-line); padding-top:12px; display:grid; gap:12px }
+.runtime-matrix h4{ margin:0; font-size:14px; font-weight:600; color: var(--color-ink) }
+.runtime-matrix .matrix-grid{ display:grid; gap:10px; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+.runtime-matrix .matrix-card{ border:1px solid var(--color-line); border-radius:10px; padding:10px; background:linear-gradient(180deg,#ffffff,#f7f7f9); box-shadow: var(--shadow-1); }
+.runtime-matrix .matrix-card.bad{ border-color: var(--status-bad); }
+.runtime-matrix .matrix-card.warn{ border-color: var(--status-warn); }
+.runtime-matrix .matrix-title{ display:flex; justify-content:space-between; align-items:center; gap:8px; font-weight:600; font-size:13px }
+.runtime-matrix .matrix-meta{ margin-top:6px; font-size:12px; color: var(--color-muted); display:grid; gap:4px }
+.runtime-matrix .matrix-meta code{ font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size:11px }
 
 .notes-meta{ margin-top:6px; font-size:12px; display:flex; flex-wrap:wrap; gap:12px; color:var(--color-muted) }
 .notes-meta.warn{ color: var(--status-warn) }
