@@ -93,6 +93,13 @@ thread_local! {
 
 static CONFIG_MULTI_LABEL_SUFFIXES: OnceLock<Mutex<Vec<Vec<String>>>> = OnceLock::new();
 
+#[cfg(test)]
+fn reset_env_multi_label_suffix_cache() {
+    ENV_MULTI_LABEL_SUFFIXES.with(|cache| {
+        *cache.borrow_mut() = (None, Vec::new());
+    });
+}
+
 pub(crate) fn parse_multi_label_suffix(entry: &str) -> Option<Vec<String>> {
     let trimmed = entry.trim().trim_start_matches('.');
     if trimmed.is_empty() || !trimmed.contains('.') {
@@ -698,10 +705,11 @@ mod tests {
     #[test]
     fn domain_suffix_respects_env_extensions() {
         const KEY: &str = "ARW_EGRESS_MULTI_LABEL_SUFFIXES";
-        let original = std::env::var(KEY).ok();
+        let mut env = test_env::guard();
 
         reset_configured_multi_label_suffixes();
-        std::env::set_var(KEY, "internal.test,gov.bc.ca");
+        reset_env_multi_label_suffix_cache();
+        env.set(KEY, "internal.test,gov.bc.ca");
         let env_suffixes = env_multi_label_suffixes();
         assert!(env_suffixes
             .iter()
@@ -719,32 +727,26 @@ mod tests {
             Some("utilities.gov.bc.ca".to_string())
         );
 
-        match original {
-            Some(val) => std::env::set_var(KEY, val),
-            None => std::env::remove_var(KEY),
-        }
         reset_configured_multi_label_suffixes();
+        reset_env_multi_label_suffix_cache();
         let _ = domain_suffix("example.com");
     }
 
     #[test]
     fn domain_suffix_respects_config_extensions() {
         const KEY: &str = "ARW_EGRESS_MULTI_LABEL_SUFFIXES";
-        let original = std::env::var(KEY).ok();
-        std::env::remove_var(KEY);
+        let mut env = test_env::guard();
+        env.remove(KEY);
 
         reset_configured_multi_label_suffixes();
+        reset_env_multi_label_suffix_cache();
         set_configured_multi_label_suffixes(vec![vec!["gov".into(), "bc".into(), "ca".into()]]);
         assert_eq!(
             domain_suffix("app.utilities.gov.bc.ca"),
             Some("utilities.gov.bc.ca".to_string())
         );
         reset_configured_multi_label_suffixes();
-
-        match original {
-            Some(val) => std::env::set_var(KEY, val),
-            None => std::env::remove_var(KEY),
-        }
+        reset_env_multi_label_suffix_cache();
         let _ = domain_suffix("example.com");
     }
 

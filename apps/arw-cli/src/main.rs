@@ -293,9 +293,11 @@ struct ToolCacheSnapshot {
     coalesced: u64,
     errors: u64,
     bypass: u64,
+    payload_too_large: u64,
     capacity: u64,
     ttl_secs: u64,
     entries: u64,
+    max_payload_bytes: Option<u64>,
     latency_saved_ms_total: u64,
     latency_saved_samples: u64,
     avg_latency_saved_ms: f64,
@@ -3548,24 +3550,35 @@ fn render_runtime_matrix_summary(matrix: &JsonValue) -> String {
 fn render_tool_cache_summary(stats: &ToolCacheSnapshot, base: &str) -> String {
     let mut buf = String::new();
     let _ = writeln!(buf, "Tool cache @ {}", base);
+    let limit_fragment = match stats.max_payload_bytes {
+        Some(limit) => format!("limit {}", format_bytes(limit)),
+        None => "limit off".to_string(),
+    };
     if stats.capacity == 0 {
         let _ = writeln!(
             buf,
-            "- status: disabled | capacity 0 | ttl {}s | entries {}",
-            stats.ttl_secs, stats.entries
+            "- status: disabled | capacity 0 | ttl {}s | entries {} | {}",
+            stats.ttl_secs, stats.entries, limit_fragment
         );
     } else {
         let _ = writeln!(
             buf,
-            "- status: enabled | capacity {} | ttl {}s | entries {}",
-            stats.capacity, stats.ttl_secs, stats.entries
+            "- status: enabled | capacity {} | ttl {}s | entries {} | {}",
+            stats.capacity, stats.ttl_secs, stats.entries, limit_fragment
         );
     }
 
-    let mut outcomes = format!(
-        "- outcomes: hit {} | miss {} | coalesced {} | bypass {} | errors {}",
-        stats.hit, stats.miss, stats.coalesced, stats.bypass, stats.errors
-    );
+    let mut outcome_parts = vec![
+        format!("hit {}", stats.hit),
+        format!("miss {}", stats.miss),
+        format!("coalesced {}", stats.coalesced),
+        format!("bypass {}", stats.bypass),
+        format!("errors {}", stats.errors),
+    ];
+    if stats.payload_too_large > 0 {
+        outcome_parts.push(format!("payload>limit {}", stats.payload_too_large));
+    }
+    let mut outcomes = format!("- outcomes: {}", outcome_parts.join(" | "));
     let total = stats.hit + stats.miss;
     if total > 0 {
         let hit_rate = stats.hit as f64 / total as f64 * 100.0;
@@ -5396,9 +5409,11 @@ mod tests {
             coalesced: 3,
             errors: 1,
             bypass: 4,
+            payload_too_large: 2,
             capacity: 128,
             ttl_secs: 600,
             entries: 42,
+            max_payload_bytes: Some(1_048_576),
             latency_saved_ms_total: 12_500,
             latency_saved_samples: 5,
             avg_latency_saved_ms: 250.0,
@@ -5420,5 +5435,7 @@ mod tests {
         assert!(summary.contains("avg 250.0 ms"));
         assert!(summary.contains("avg 100.0 KB"));
         assert!(summary.contains("max 45 s"));
+        assert!(summary.contains("limit 1.0 MB"));
+        assert!(summary.contains("payload>limit 2"));
     }
 }

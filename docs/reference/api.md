@@ -116,7 +116,7 @@ Goldens & Experiments (admin token required)
 Tool Forge & Guardrails (admin token required)
 - `GET /admin/tools` — enumerate registered tools with metadata from `arw_core::introspect_tools()`.
 - `POST /admin/tools/run` — invoke a tool (e.g., `ui.screenshot.capture`, `guardrails.check`); honors ingress/egress gates.
-- `GET /admin/tools/cache_stats` — action cache counters (hit/miss/coalesced/errors/bypass plus capacity/ttl/entries).
+- `GET /admin/tools/cache_stats` — action cache counters (hit/miss/coalesced/errors/bypass/payload_too_large plus capacity/ttl/limit/entries).
 - `GET /state/guardrails_metrics` — guardrails circuit-breaker and retry counters for observability.
 
 Semantics

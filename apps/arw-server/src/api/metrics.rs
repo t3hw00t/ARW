@@ -204,8 +204,23 @@ fn render_prometheus(
     write_metric_line(&mut out, "arw_tool_cache_errors_total", &[], cache.errors);
     out.push_str("# HELP arw_tool_cache_bypass_total Tool cache bypasses\n# TYPE arw_tool_cache_bypass_total counter\n");
     write_metric_line(&mut out, "arw_tool_cache_bypass_total", &[], cache.bypass);
+    out.push_str("# HELP arw_tool_cache_payload_too_large_total Tool cache skips due to payload size\n# TYPE arw_tool_cache_payload_too_large_total counter\n");
+    write_metric_line(
+        &mut out,
+        "arw_tool_cache_payload_too_large_total",
+        &[],
+        cache.payload_too_large,
+    );
     out.push_str("# HELP arw_tool_cache_entries Tool cache entry count\n# TYPE arw_tool_cache_entries gauge\n");
     write_metric_line(&mut out, "arw_tool_cache_entries", &[], cache.entries);
+    out.push_str("# HELP arw_tool_cache_max_payload_bytes Configured per-entry payload limit (0 when disabled)\n# TYPE arw_tool_cache_max_payload_bytes gauge\n");
+    let limit_bytes = cache.max_payload_bytes.unwrap_or(0);
+    write_metric_line(
+        &mut out,
+        "arw_tool_cache_max_payload_bytes",
+        &[],
+        limit_bytes,
+    );
     out.push_str("# HELP arw_tool_cache_latency_saved_ms_total Latency saved via cache (ms)\n# TYPE arw_tool_cache_latency_saved_ms_total counter\n");
     write_metric_line(
         &mut out,
@@ -353,9 +368,11 @@ mod tests {
             coalesced: 0,
             errors: 0,
             bypass: 0,
+            payload_too_large: 0,
             capacity: 0,
             ttl_secs: 0,
             entries: 0,
+            max_payload_bytes: None,
             latency_saved_ms_total: 0,
             latency_saved_samples: 0,
             avg_latency_saved_ms: 0.0,

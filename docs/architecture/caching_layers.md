@@ -48,7 +48,7 @@ This document outlines a multi‑layer caching strategy for ARW, blending resear
   `LLAMA_PROMPT_CACHE_PATH`). CPU runs can enforce `--gpu-layers 0` via
   `LLAMA_FORCE_CPU_LAYERS=1`, while GPU runs auto-append a small `--gpu-layers` hint when
   you do not supply one (override with `LLAMA_GPU_LAYERS` or pass the flag explicitly).
-- Tool Action Cache with Moka front + disk CAS back; RFC‑8785‑like canonicalization, singleflight coalescing, counters (`arw_tools_cache_hits`, `arw_tools_cache_miss`, `arw_tools_cache_coalesced`, `arw_tools_cache_coalesced_waiters`, `arw_tools_cache_error`, `arw_tools_cache_bypass`), Prometheus metrics, and admin stats.
+- Tool Action Cache with Moka front + disk CAS back; RFC‑8785‑like canonicalization, singleflight coalescing, counters (`arw_tools_cache_hits`, `arw_tools_cache_miss`, `arw_tools_cache_coalesced`, `arw_tools_cache_coalesced_waiters`, `arw_tools_cache_error`, `arw_tools_cache_bypass`), Prometheus metrics, and admin stats. Per-entry payloads over `ARW_TOOLS_CACHE_MAX_PAYLOAD_BYTES` (default 4 MiB, accepts `kb`/`mb`/`gb` suffixes) are skipped with a `payload_too_large` reason so oversized outputs don’t evict faster hits.
 - CAS blob serving with validators and 304 handling.
 - Read‑models and deltas: models metrics and route stats publish RFC‑6902 patches with coalescing; UI panels consume them live.
 

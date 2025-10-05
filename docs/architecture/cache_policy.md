@@ -90,9 +90,9 @@ When a variable is already set in the environment or process supervisor, the loa
   - Key: `sha256(tool_id@version + canonical JSON input)`.
   - Store: CAS under `{state_dir}/tools/by-digest/`.
   - In-memory: Moka W-TinyLFU front.
-  - Env: `ARW_TOOLS_CACHE_TTL_SECS`, `ARW_TOOLS_CACHE_CAP`, `ARW_TOOLS_CACHE_ALLOW`, `ARW_TOOLS_CACHE_DENY` (configure via the manifest).
-  - Admin: `GET /admin/tools/cache_stats` (fields include hit, miss, coalesced waiters, bypass, capacity, TTL, entries).
-  - Events/metrics: `tool.cache` events (outcomes include `hit`, `miss`, `coalesced`, `not_cacheable`, `error`), `/metrics` counters such as `arw_tools_cache_hits`, `arw_tools_cache_miss`, `arw_tools_cache_coalesced`, `arw_tools_cache_coalesced_waiters`, `arw_tools_cache_error`, and `arw_tools_cache_bypass`.
+  - Env: `ARW_TOOLS_CACHE_TTL_SECS`, `ARW_TOOLS_CACHE_CAP`, `ARW_TOOLS_CACHE_MAX_PAYLOAD_BYTES`, `ARW_TOOLS_CACHE_ALLOW`, `ARW_TOOLS_CACHE_DENY` (configure via the manifest). Payload limits accept suffixes (`kb`, `mb`, `gb`) or `off/0` to disable.
+  - Admin: `GET /admin/tools/cache_stats` (fields include hit, miss, coalesced waiters, bypass, payload_too_large, capacity, TTL, per-entry limit, entries).
+  - Events/metrics: `tool.cache` events (outcomes include `hit`, `miss`, `coalesced`, `not_cacheable`, `error`; reasons now include `payload_too_large` when the per-entry cap skips storage) and `/metrics` counters such as `arw_tools_cache_hits`, `arw_tools_cache_miss`, `arw_tools_cache_coalesced`, `arw_tools_cache_coalesced_waiters`, `arw_tools_cache_error`, `arw_tools_cache_bypass`. The admin snapshot also reports `payload_too_large` totals so operators can see how often oversized responses were skipped.
   - Stampede control: identical in-flight tool calls coalesce behind a singleflight guard; followers block until the leader stores or fails, then reuse the cached result.
 
 - LLM KV/prefix cache:

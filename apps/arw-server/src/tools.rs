@@ -5,7 +5,7 @@ use arw_wasi::ToolHost;
 use serde_json::{json, Value};
 
 use crate::singleflight::FlightGuard;
-use crate::tool_cache::{StoreOutcome, ToolCacheHit};
+use crate::tool_cache::{StoreOutcome, StoreSkipReason, ToolCacheHit};
 use crate::{capsule_guard, AppState};
 
 pub(crate) mod guardrails;
@@ -117,12 +117,11 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
 
     if let Some(ref key) = cache_key {
         match cache.store(key, &output, elapsed_ms).await {
-            Some(StoreOutcome {
+            StoreOutcome::Cached {
                 digest,
-                cached: true,
                 payload_bytes,
                 miss_elapsed_ms,
-            }) => {
+            } => {
                 metrics::counter!(METRIC_CACHE_MISS).increment(1);
                 let mut cache_evt = json!({
                     "tool": id,
@@ -138,28 +137,36 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
                 ensure_corr(&mut cache_evt);
                 bus.publish(topics::TOPIC_TOOL_CACHE, &cache_evt);
             }
-            Some(StoreOutcome {
-                digest,
-                cached: false,
+            StoreOutcome::Skipped {
+                reason,
                 payload_bytes,
                 miss_elapsed_ms,
-            }) => {
-                metrics::counter!(METRIC_CACHE_ERROR).increment(1);
+            } => {
+                metrics::counter!(METRIC_CACHE_BYPASS).increment(1);
                 let mut cache_evt = json!({
                     "tool": id,
-                    "outcome": "error",
+                    "outcome": "not_cacheable",
                     "elapsed_ms": elapsed_ms,
                     "key": key,
-                    "digest": digest,
                     "cached": false,
-                    "reason": "store_failed",
+                    "reason": reason.as_str(),
                     "payload_bytes": payload_bytes,
                     "miss_elapsed_ms": miss_elapsed_ms,
                 });
+                if matches!(reason, StoreSkipReason::PayloadTooLarge) {
+                    if let Some(limit) = cache.max_payload_bytes() {
+                        cache_evt["limit_bytes"] = json!(limit);
+                    }
+                }
                 ensure_corr(&mut cache_evt);
                 bus.publish(topics::TOPIC_TOOL_CACHE, &cache_evt);
             }
-            None => {
+            StoreOutcome::Failed {
+                digest,
+                payload_bytes,
+                miss_elapsed_ms,
+                reason,
+            } => {
                 metrics::counter!(METRIC_CACHE_ERROR).increment(1);
                 let mut cache_evt = json!({
                     "tool": id,
@@ -167,8 +174,13 @@ pub async fn run_tool(state: &AppState, id: &str, input: Value) -> Result<Value,
                     "elapsed_ms": elapsed_ms,
                     "key": key,
                     "cached": false,
-                    "reason": "serialize_failed",
+                    "reason": reason.as_str(),
+                    "payload_bytes": payload_bytes,
+                    "miss_elapsed_ms": miss_elapsed_ms,
                 });
+                if let Some(digest) = digest {
+                    cache_evt["digest"] = json!(digest);
+                }
                 ensure_corr(&mut cache_evt);
                 bus.publish(topics::TOPIC_TOOL_CACHE, &cache_evt);
             }

@@ -55,6 +55,79 @@ fn cache_ttl() -> Duration {
     Duration::from_secs(secs.max(1))
 }
 
+const DEFAULT_MAX_PAYLOAD_BYTES: u64 = 4 * 1024 * 1024; // 4 MiB
+
+fn parse_payload_limit(raw: &str) -> Result<Option<u64>, ()> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(Some(DEFAULT_MAX_PAYLOAD_BYTES));
+    }
+
+    let lowered = trimmed.to_ascii_lowercase();
+    if matches!(lowered.as_str(), "off" | "disable" | "disabled" | "none") {
+        return Ok(None);
+    }
+
+    let mut split = 0usize;
+    let mut has_digit = false;
+    for (idx, ch) in trimmed.char_indices() {
+        if ch.is_ascii_digit() || ch == '_' {
+            has_digit = has_digit || ch.is_ascii_digit();
+            split = idx + ch.len_utf8();
+            continue;
+        }
+        split = idx;
+        break;
+    }
+
+    if !has_digit {
+        return Err(());
+    }
+
+    let (number_part, rest) = trimmed.split_at(split);
+    let digits: String = number_part.chars().filter(|c| *c != '_').collect();
+    if digits.is_empty() {
+        return Err(());
+    }
+
+    let base = digits.parse::<u64>().map_err(|_| ())?;
+    if base == 0 {
+        return Ok(None);
+    }
+
+    let suffix = rest.trim().to_ascii_lowercase();
+    let multiplier: u64 = match suffix.as_str() {
+        "" | "b" | "byte" | "bytes" => 1,
+        "k" | "kb" | "kib" => 1024,
+        "m" | "mb" | "mib" => 1024u64.pow(2),
+        "g" | "gb" | "gib" => 1024u64.pow(3),
+        "t" | "tb" | "tib" => 1024u64.pow(4),
+        _ => return Err(()),
+    };
+
+    match base.checked_mul(multiplier) {
+        Some(bytes) if bytes > 0 => Ok(Some(bytes)),
+        _ => Err(()),
+    }
+}
+
+fn cache_max_payload_bytes() -> Option<u64> {
+    match std::env::var("ARW_TOOLS_CACHE_MAX_PAYLOAD_BYTES") {
+        Ok(raw) => match parse_payload_limit(&raw) {
+            Ok(limit) => limit,
+            Err(_) => {
+                tracing::warn!(
+                    "invalid ARW_TOOLS_CACHE_MAX_PAYLOAD_BYTES '{}'; using default {}",
+                    raw,
+                    DEFAULT_MAX_PAYLOAD_BYTES
+                );
+                Some(DEFAULT_MAX_PAYLOAD_BYTES)
+            }
+        },
+        Err(_) => Some(DEFAULT_MAX_PAYLOAD_BYTES),
+    }
+}
+
 fn canonicalize_json(value: &Value) -> Value {
     match value {
         Value::Object(map) => {
@@ -143,6 +216,7 @@ pub struct ToolCache {
     deny_list: HashSet<String>,
     capacity: u64,
     ttl: Duration,
+    max_payload_bytes: Option<u64>,
     stats: CacheCounters,
     flights: Singleflight,
     entry_metrics: Mutex<HashMap<String, EntryMetrics>>,
@@ -152,6 +226,7 @@ impl ToolCache {
     pub fn new() -> Self {
         let capacity = cache_capacity();
         let ttl = cache_ttl();
+        let max_payload_bytes = cache_max_payload_bytes();
         let allow_list = parse_env_set("ARW_TOOLS_CACHE_ALLOW");
         let mut deny_list = parse_env_set("ARW_TOOLS_CACHE_DENY").unwrap_or_default();
         for entry in DEFAULT_DENY_LIST.iter() {
@@ -174,6 +249,7 @@ impl ToolCache {
             deny_list,
             capacity,
             ttl,
+            max_payload_bytes,
             stats: CacheCounters::new(),
             flights: Singleflight::default(),
             entry_metrics: Mutex::new(HashMap::new()),
@@ -190,6 +266,7 @@ impl ToolCache {
         let coalesced = self.stats.coalesced.load(Ordering::Relaxed);
         let errors = self.stats.errors.load(Ordering::Relaxed);
         let bypass = self.stats.bypass.load(Ordering::Relaxed);
+        let payload_too_large = self.stats.payload_too_large.load(Ordering::Relaxed);
         let entries = self.cache.as_ref().map(|c| c.entry_count()).unwrap_or(0);
 
         let latency_saved_ms_total = self.stats.latency_saved_ms.load(Ordering::Relaxed);
@@ -248,9 +325,11 @@ impl ToolCache {
             coalesced,
             errors,
             bypass,
+            payload_too_large,
             capacity: self.capacity,
             ttl_secs: self.ttl.as_secs(),
             entries,
+            max_payload_bytes: self.max_payload_bytes,
             latency_saved_ms_total,
             latency_saved_samples,
             avg_latency_saved_ms,
@@ -366,13 +445,39 @@ impl ToolCache {
         }
     }
 
-    pub async fn store(
-        &self,
-        key: &str,
-        value: &Value,
-        miss_elapsed_ms: u64,
-    ) -> Option<StoreOutcome> {
-        let bytes = serde_json::to_vec(value).ok()?;
+    pub async fn store(&self, key: &str, value: &Value, miss_elapsed_ms: u64) -> StoreOutcome {
+        let bytes = match serde_json::to_vec(value) {
+            Ok(bytes) => bytes,
+            Err(err) => {
+                tracing::warn!("tool_cache::store failed to serialize value: {}", err);
+                self.stats.errors.fetch_add(1, Ordering::Relaxed);
+                return StoreOutcome::Failed {
+                    digest: None,
+                    payload_bytes: 0,
+                    miss_elapsed_ms,
+                    reason: StoreError::SerializeFailed,
+                };
+            }
+        };
+
+        let payload_bytes = bytes.len() as u64;
+        if let Some(limit) = self.max_payload_bytes {
+            if payload_bytes > limit {
+                tracing::debug!(
+                    "tool_cache::store skipping key {} (payload {} exceeds limit {})",
+                    key,
+                    payload_bytes,
+                    limit
+                );
+                self.record_payload_too_large();
+                return StoreOutcome::Skipped {
+                    reason: StoreSkipReason::PayloadTooLarge,
+                    payload_bytes,
+                    miss_elapsed_ms,
+                };
+            }
+        }
+
         let digest = compute_digest(&bytes);
         if let Some(cache) = &self.cache {
             let path = self.cas_path(&digest);
@@ -385,12 +490,12 @@ impl ToolCache {
                             err
                         );
                         self.stats.errors.fetch_add(1, Ordering::Relaxed);
-                        return Some(StoreOutcome {
-                            digest,
-                            cached: false,
-                            payload_bytes: bytes.len() as u64,
+                        return StoreOutcome::Failed {
+                            digest: Some(digest),
+                            payload_bytes,
                             miss_elapsed_ms,
-                        });
+                            reason: StoreError::CreateDirFailed,
+                        };
                     }
                 }
                 if let Err(err) = fs::write(&path, &bytes).await {
@@ -400,35 +505,40 @@ impl ToolCache {
                         err
                     );
                     self.stats.errors.fetch_add(1, Ordering::Relaxed);
-                    return Some(StoreOutcome {
-                        digest,
-                        cached: false,
-                        payload_bytes: bytes.len() as u64,
+                    return StoreOutcome::Failed {
+                        digest: Some(digest),
+                        payload_bytes,
                         miss_elapsed_ms,
-                    });
+                        reason: StoreError::WriteFailed,
+                    };
                 }
             }
             cache.insert(key.to_string(), digest.clone()).await;
-            self.update_entry_metrics(key, bytes.len() as u64, miss_elapsed_ms);
+            self.update_entry_metrics(key, payload_bytes, miss_elapsed_ms);
             self.stats.miss.fetch_add(1, Ordering::Relaxed);
-            Some(StoreOutcome {
+            StoreOutcome::Cached {
                 digest,
-                cached: true,
-                payload_bytes: bytes.len() as u64,
+                payload_bytes,
                 miss_elapsed_ms,
-            })
+            }
         } else {
-            Some(StoreOutcome {
-                digest,
-                cached: false,
-                payload_bytes: bytes.len() as u64,
+            tracing::debug!("tool_cache::store invoked while cache disabled; skipping");
+            self.record_bypass();
+            StoreOutcome::Skipped {
+                reason: StoreSkipReason::CacheDisabled,
+                payload_bytes,
                 miss_elapsed_ms,
-            })
+            }
         }
     }
 
     pub fn record_bypass(&self) {
         self.stats.bypass.fetch_add(1, Ordering::Relaxed);
+    }
+
+    pub fn record_payload_too_large(&self) {
+        self.stats.payload_too_large.fetch_add(1, Ordering::Relaxed);
+        self.record_bypass();
     }
 
     pub(crate) fn record_hit_metrics(
@@ -486,6 +596,10 @@ impl ToolCache {
     pub(crate) fn record_coalesced_wait(&self) {
         self.stats.coalesced.fetch_add(1, Ordering::Relaxed);
     }
+
+    pub fn max_payload_bytes(&self) -> Option<u64> {
+        self.max_payload_bytes
+    }
 }
 pub struct ToolCacheHit {
     pub value: Value,
@@ -494,11 +608,56 @@ pub struct ToolCacheHit {
     pub payload_bytes: Option<u64>,
 }
 
-pub struct StoreOutcome {
-    pub digest: String,
-    pub cached: bool,
-    pub payload_bytes: u64,
-    pub miss_elapsed_ms: u64,
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StoreOutcome {
+    Cached {
+        digest: String,
+        payload_bytes: u64,
+        miss_elapsed_ms: u64,
+    },
+    Skipped {
+        reason: StoreSkipReason,
+        payload_bytes: u64,
+        miss_elapsed_ms: u64,
+    },
+    Failed {
+        digest: Option<String>,
+        payload_bytes: u64,
+        miss_elapsed_ms: u64,
+        reason: StoreError,
+    },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StoreSkipReason {
+    PayloadTooLarge,
+    CacheDisabled,
+}
+
+impl StoreSkipReason {
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            StoreSkipReason::PayloadTooLarge => "payload_too_large",
+            StoreSkipReason::CacheDisabled => "cache_disabled",
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StoreError {
+    SerializeFailed,
+    CreateDirFailed,
+    WriteFailed,
+}
+
+impl StoreError {
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            StoreError::SerializeFailed => "serialize_failed",
+            StoreError::CreateDirFailed => "create_dir_failed",
+            StoreError::WriteFailed => "store_failed",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -508,9 +667,11 @@ pub struct ToolCacheStats {
     pub coalesced: u64,
     pub errors: u64,
     pub bypass: u64,
+    pub payload_too_large: u64,
     pub capacity: u64,
     pub ttl_secs: u64,
     pub entries: u64,
+    pub max_payload_bytes: Option<u64>,
     pub latency_saved_ms_total: u64,
     pub latency_saved_samples: u64,
     pub avg_latency_saved_ms: f64,
@@ -532,6 +693,7 @@ struct CacheCounters {
     coalesced: AtomicU64,
     errors: AtomicU64,
     bypass: AtomicU64,
+    payload_too_large: AtomicU64,
     latency_saved_ms: AtomicU64,
     latency_saved_samples: AtomicU64,
     last_latency_saved_ms: AtomicU64,
@@ -552,6 +714,7 @@ impl CacheCounters {
             coalesced: AtomicU64::new(0),
             errors: AtomicU64::new(0),
             bypass: AtomicU64::new(0),
+            payload_too_large: AtomicU64::new(0),
             latency_saved_ms: AtomicU64::new(0),
             latency_saved_samples: AtomicU64::new(0),
             last_latency_saved_ms: AtomicU64::new(0),
@@ -583,20 +746,25 @@ mod tests {
         let payload = json!({"hello": "world"});
         let key = cache.action_key("demo.echo", &payload);
         assert!(cache.lookup(&key).await.is_none());
-        let outcome = cache
-            .store(&key, &payload, 42)
-            .await
-            .expect("store outcome");
-        assert!(outcome.cached);
-        assert_eq!(
-            outcome.payload_bytes,
-            serde_json::to_vec(&payload).unwrap().len() as u64
-        );
-        assert_eq!(outcome.miss_elapsed_ms, 42);
+        let (digest, payload_bytes) = match cache.store(&key, &payload, 42).await {
+            StoreOutcome::Cached {
+                digest,
+                payload_bytes,
+                miss_elapsed_ms,
+            } => {
+                assert_eq!(
+                    payload_bytes,
+                    serde_json::to_vec(&payload).unwrap().len() as u64
+                );
+                assert_eq!(miss_elapsed_ms, 42);
+                (digest, payload_bytes)
+            }
+            other => panic!("unexpected store outcome: {:?}", other),
+        };
         let hit = cache.lookup(&key).await.expect("cache hit");
         assert_eq!(hit.value, payload);
-        assert_eq!(hit.digest, outcome.digest);
-        assert_eq!(hit.payload_bytes, Some(outcome.payload_bytes));
+        assert_eq!(hit.digest, digest);
+        assert_eq!(hit.payload_bytes, Some(payload_bytes));
         assert!(cache.cas_path(&hit.digest).exists());
         let saved = cache
             .record_hit_metrics(&key, &hit, 10)
@@ -622,5 +790,65 @@ mod tests {
         assert!(cache.is_cacheable("demo.echo"));
         assert!(!cache.is_cacheable("guardrails.check"));
         // ctx holds state/env guards until end of scope
+    }
+
+    #[tokio::test]
+    async fn store_skips_payloads_over_limit() {
+        let tmp = tempdir().unwrap();
+        let mut ctx = crate::test_support::begin_state_env(tmp.path());
+        ctx.env.set("ARW_TOOLS_CACHE_CAP", "16");
+        ctx.env.set("ARW_TOOLS_CACHE_TTL_SECS", "60");
+        ctx.env.set("ARW_TOOLS_CACHE_MAX_PAYLOAD_BYTES", "64");
+        let cache = ToolCache::new();
+        assert!(cache.enabled());
+        let payload = json!({ "blob": "a".repeat(256) });
+        let key = cache.action_key("demo.echo", &payload);
+        match cache.store(&key, &payload, 99).await {
+            StoreOutcome::Skipped {
+                reason: StoreSkipReason::PayloadTooLarge,
+                payload_bytes,
+                ..
+            } => {
+                assert!(payload_bytes > 64);
+            }
+            other => panic!("expected payload-too-large skip, got {:?}", other),
+        }
+        assert!(cache.lookup(&key).await.is_none());
+        let stats = cache.stats();
+        assert_eq!(stats.payload_too_large, 1);
+        assert_eq!(stats.bypass, 1);
+        assert_eq!(stats.entries, 0);
+    }
+
+    #[tokio::test]
+    async fn payload_limit_parses_units_and_disables() {
+        let tmp = tempdir().unwrap();
+        let mut ctx = crate::test_support::begin_state_env(tmp.path());
+        ctx.env.set("ARW_TOOLS_CACHE_CAP", "16");
+        ctx.env.set("ARW_TOOLS_CACHE_TTL_SECS", "60");
+
+        ctx.env.set("ARW_TOOLS_CACHE_MAX_PAYLOAD_BYTES", "512kb");
+        let cache_kb = ToolCache::new();
+        assert_eq!(cache_kb.stats().max_payload_bytes, Some(512 * 1024));
+
+        ctx.env.set("ARW_TOOLS_CACHE_MAX_PAYLOAD_BYTES", "off");
+        let cache_off = ToolCache::new();
+        assert_eq!(cache_off.stats().max_payload_bytes, None);
+
+        ctx.env
+            .set("ARW_TOOLS_CACHE_MAX_PAYLOAD_BYTES", "junk-value");
+        let cache_default = ToolCache::new();
+        assert_eq!(
+            cache_default.stats().max_payload_bytes,
+            Some(DEFAULT_MAX_PAYLOAD_BYTES)
+        );
+
+        ctx.env.set("ARW_TOOLS_CACHE_MAX_PAYLOAD_BYTES", "2MB");
+        let cache_mb = ToolCache::new();
+        assert_eq!(cache_mb.stats().max_payload_bytes, Some(2 * 1024 * 1024));
+
+        ctx.env.set("ARW_TOOLS_CACHE_MAX_PAYLOAD_BYTES", "0");
+        let cache_zero = ToolCache::new();
+        assert_eq!(cache_zero.stats().max_payload_bytes, None);
     }
 }
