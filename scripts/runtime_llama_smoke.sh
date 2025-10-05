@@ -431,6 +431,87 @@ PY
   fi
 }
 
+runtime_matrix_probe() {
+  local base="http://127.0.0.1:${ARW_PORT}"
+  local matrix_json="$TMP_DIR/runtime-matrix.json"
+
+  if ! curl -fsS "$base/state/runtime_matrix" \
+    -H "X-ARW-Admin: ${ARW_ADMIN_TOKEN}" \
+    -H "Authorization: Bearer ${ARW_ADMIN_TOKEN}" \
+    -H "Accept: application/json" \
+    -o "$matrix_json"; then
+    echo "[runtime-smoke] failed to fetch runtime matrix" >&2
+    exit 1
+  fi
+
+  local summary
+  if ! summary=$(python3 - "$matrix_json" <<'PY'
+import json
+import sys
+
+path = sys.argv[1]
+try:
+    with open(path, 'r', encoding='utf-8') as fh:
+        data = json.load(fh)
+except (OSError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"runtime matrix payload invalid: {exc}")
+
+if not isinstance(data, dict):
+    raise SystemExit('runtime matrix payload missing top-level object')
+
+items = data.get('items')
+if not isinstance(items, dict) or not items:
+    raise SystemExit('runtime matrix payload missing items')
+
+key, entry = next(iter(items.items()))
+
+status = entry.get('status') or {}
+label = status.get('label')
+aria = status.get('aria_hint')
+detail = status.get('detail')
+severity = status.get('severity')
+severity_label = status.get('severity_label')
+
+if not isinstance(label, str) or not label.strip():
+    raise SystemExit('runtime matrix status label missing')
+
+if not isinstance(aria, str) or 'Runtime status' not in aria or not aria.strip():
+    raise SystemExit('runtime matrix aria hint missing expected phrasing')
+
+if not isinstance(detail, list) or not detail:
+    raise SystemExit('runtime matrix detail missing')
+
+if any((not isinstance(item, str) or not item.strip()) for item in detail):
+    raise SystemExit('runtime matrix detail contains blank entries')
+
+if not isinstance(severity, str) or not severity.strip():
+    raise SystemExit('runtime matrix severity missing')
+
+if not isinstance(severity_label, str) or not severity_label.strip():
+    raise SystemExit('runtime matrix severity_label missing')
+
+runtime = entry.get('runtime') or {}
+if not runtime.get('updated'):
+    raise SystemExit('runtime matrix runtime summary missing updated timestamp')
+
+ttl_seconds = data.get('ttl_seconds')
+if not isinstance(ttl_seconds, int) or ttl_seconds <= 0:
+    raise SystemExit('runtime matrix ttl_seconds invalid')
+
+code = status.get('code') or ''
+print(f"{key}\t{label}\t{code}\t{severity}\t{severity_label}")
+PY
+  ); then
+    echo "[runtime-smoke] runtime matrix validation failed" >&2
+    exit 1
+  fi
+
+  local key label code severity severity_label
+  IFS=$'\t' read -r key label code severity severity_label <<<"$summary"
+
+  echo "[runtime-smoke] runtime matrix entry ${key}: ${label} (code=${code}, severity=${severity}, severity_label=${severity_label})"
+}
+
 verify_llama_accel() {
   local accel="$1"
   [[ "$accel" == "gpu" ]] || return 0
@@ -471,6 +552,7 @@ verify_llama_accel() {
 start_backend
 start_server
 chat_probe
+runtime_matrix_probe
 
 if [[ "${LLAMA_ACCEL:-}" = "gpu" ]]; then
   verify_llama_accel "$LLAMA_ACCEL"

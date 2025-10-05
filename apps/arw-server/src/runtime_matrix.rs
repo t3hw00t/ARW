@@ -49,6 +49,7 @@ pub struct RuntimeMatrixEntry {
 pub struct RuntimeMatrixStatus {
     pub code: String,
     pub severity: String,
+    pub severity_label: String,
     pub label: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub detail: Vec<String>,
@@ -454,18 +455,10 @@ async fn build_local_health_payload(state: &AppState) -> Option<RuntimeMatrixEnt
         reasons.push(summary.clone());
     }
 
-    if reasons.is_empty() {
-        reasons.push("Running within expected ranges".to_string());
-    }
-
-    let primary_reason = reasons.first().cloned().unwrap_or_default();
-    let status_label = match status_code.as_str() {
-        "offline" => "Offline - Kernel disabled".to_string(),
-        "error" => format!("Error - {}", primary_reason),
-        "degraded" => format!("Degraded - {}", primary_reason),
-        _ => "Ready - Runtime telemetry nominal".to_string(),
-    };
-    let aria_hint = format!("Runtime status {}. {}", status_label, reasons.join("; "));
+    let (reasons, status_label, aria_hint) = finalize_status_strings(&status_code, reasons);
+    let severity_label = RuntimeSeverity::from_slug(&severity)
+        .display_label()
+        .to_string();
 
     let runtime_summary = RuntimeMatrixRuntimeSummary {
         total: runtime_snapshot.runtimes.len() as u64,
@@ -484,6 +477,7 @@ async fn build_local_health_payload(state: &AppState) -> Option<RuntimeMatrixEnt
         status: RuntimeMatrixStatus {
             code: status_code,
             severity,
+            severity_label,
             label: status_label,
             detail: reasons,
             aria_hint,
@@ -515,6 +509,25 @@ async fn build_local_health_payload(state: &AppState) -> Option<RuntimeMatrixEnt
     };
 
     Some(entry)
+}
+
+fn finalize_status_strings(
+    status_code: &str,
+    mut reasons: Vec<String>,
+) -> (Vec<String>, String, String) {
+    if reasons.is_empty() {
+        reasons.push("Running within expected ranges".to_string());
+    }
+
+    let primary_reason = reasons.first().cloned().unwrap_or_default();
+    let status_label = match status_code {
+        "offline" => "Offline - Kernel disabled".to_string(),
+        "error" => format!("Error - {}", primary_reason),
+        "degraded" => format!("Degraded - {}", primary_reason),
+        _ => "Ready - Runtime telemetry nominal".to_string(),
+    };
+    let aria_hint = format!("Runtime status {}. {}", status_label, reasons.join("; "));
+    (reasons, status_label, aria_hint)
 }
 
 fn optional_map(map: BTreeMap<String, u64>) -> Option<BTreeMap<String, u64>> {
@@ -816,5 +829,31 @@ mod tests {
             runtime_accelerator_label(&RuntimeAccelerator::NpuCoreml),
             "NPU (CoreML)"
         );
+    }
+
+    #[test]
+    fn finalize_status_strings_injects_default_reason() {
+        let (reasons, label, aria) = finalize_status_strings("ok", Vec::new());
+        assert_eq!(reasons, vec!["Running within expected ranges".to_string()]);
+        assert_eq!(label, "Ready - Runtime telemetry nominal");
+        assert!(aria.contains("Runtime status Ready - Runtime telemetry nominal"));
+    }
+
+    #[test]
+    fn finalize_status_strings_formats_degraded_reason() {
+        let (reasons, label, aria) =
+            finalize_status_strings("degraded", vec!["Bus lag observed".to_string()]);
+        assert_eq!(reasons, vec!["Bus lag observed".to_string()]);
+        assert_eq!(label, "Degraded - Bus lag observed");
+        assert!(aria.ends_with("Bus lag observed"));
+    }
+
+    #[test]
+    fn finalize_status_strings_handles_error() {
+        let (_reasons, label, aria) =
+            finalize_status_strings("error", vec!["Runtime issues: Foo".to_string()]);
+        assert_eq!(label, "Error - Runtime issues: Foo");
+        assert!(aria.contains("Runtime status Error - Runtime issues: Foo"));
+        assert!(aria.contains("Runtime issues: Foo"));
     }
 }
