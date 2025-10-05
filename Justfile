@@ -156,13 +156,8 @@ trials-preflight:
 trials-guardrails preset='trial' dry_run='false' base='http://127.0.0.1:8091' token='':
 	bash -ceu 'preset="$1"; dry="$2"; base="$3"; token="$4"; args=( --preset "$preset" --base "$base" ); if [ "$dry" = "true" ]; then args+=( --dry-run ); fi; if [ -n "$token" ]; then args+=( --token "$token" ); fi; exec bash scripts/trials_guardrails.sh "${args[@]}"' _ {{preset}} {{dry_run}} {{base}} {{token}}
 
-context-watch base='http://127.0.0.1:8091' output_root='docs/ops/trials/logs' *extra:
-	bash -ceu '
-	root="$1"; base="$2"; shift 2;
-	args=("--output-root" "$root" "--base" "$base");
-	for arg in "$@"; do args+=("$arg"); done;
-	exec bash scripts/context_watch.sh "${args[@]}"
-	' _ {{output_root}} {{base}} {{extra}}
+context-watch *extra:
+	bash scripts/context_watch.sh {{extra}}
 
 autonomy-rollback *params:
   bash scripts/autonomy_rollback.sh {{params}}

@@ -7,7 +7,7 @@ Updated: 2025-10-02
 - Observer: 
 - Day/time: 
 - Dashboard snapshot filename (`docs/ops/trials/screenshots/`): 
-- Context log (if using `arw-cli context telemetry --output` or `just context-watch`): 
+- Context log (if using `arw-cli context telemetry --output` or `just context-watch`; override defaults via `ARW_CONTEXT_WATCH_BASE` / `ARW_CONTEXT_WATCH_OUTPUT_ROOT` / `ARW_CONTEXT_WATCH_SESSION`—see `ops/context_watch.env.example`—or pass `--date YYYY-MM-DD` / `--session <slug>` when backfilling): 
 
 ## Dashboard tiles (copy values)
 - Systems: 

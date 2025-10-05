@@ -9,9 +9,14 @@ Type: Checklist (quick reference)
 
 This runbook keeps our two-person trial routine lightweight. Use it with the Trial Readiness Plan, facilitator checklist, and quickstart note so we stay in sync without extra meetings.
 
+## One-Time Setup
+
+- Install the CLI once so logging helpers are available in every shell: `cargo install --path apps/arw-cli` (adds `arw-cli` to `~/.cargo/bin`).
+- Optionally source `ops/context_watch.env.example` (or copy its exports into your shell profile) so `just context-watch` always targets the right base URL and log directory.
+
 ## Before the day starts
 
-- Open the launcher Trial Control Center window (`Launcher → Trial Control`) and confirm Systems, Memory, Approvals, and Safety read “All good.” Record the numbers—including the Memory tile’s coverage gap and recall risk percentages—in a fresh copy of `docs/ops/trials/daily_log_template.md`. If you want an automated log, run `arw-cli context telemetry --watch --output docs/ops/trials/logs/context.log` during the session (stop with Ctrl+C when you’re done) or launch `just context-watch` to create per-day logs automatically.
+- Open the launcher Trial Control Center window (`Launcher → Trial Control`) and confirm Systems, Memory, Approvals, and Safety read “All good.” Record the numbers—including the Memory tile’s coverage gap and recall risk percentages—in a fresh copy of `docs/ops/trials/daily_log_template.md`. If you want an automated log, run `arw-cli context telemetry --watch --output docs/ops/trials/logs/context.log` during the session (stop with Ctrl+C when you’re done) or launch `just context-watch` to create per-day logs automatically. Adjust defaults with `ARW_CONTEXT_WATCH_BASE` / `ARW_CONTEXT_WATCH_OUTPUT_ROOT` / `ARW_CONTEXT_WATCH_SESSION` when you point at remote hubs or alternate log folders, and use `just context-watch -- --date YYYY-MM-DD --session <slug>` if you need to recreate or split logs for earlier sessions.
 - Run `just trials-preflight` (or click the preflight button in the Trial Control Center; it runs the helper and copies the CLI command if automation fails).
 - Apply the trial guardrail preset with `just trials-guardrails preset=trial` (or `./scripts/trials_guardrails.sh --preset trial`). Check the Safety tile for the preset name and a fresh “applied …” timestamp before moving on.
 - In the Trial Control Center, open the **Approvals lane** (see the [approvals guide](trials/approvals_lane_guide.md)), confirm your reviewer label with the **Set reviewer** button, and clear or assign any waiting items before we begin.
