@@ -435,6 +435,47 @@ mod tests {
         assert_eq!(env.payload["output"]["guard"], expected_guard);
         assert!(env.payload["output"]["guard"]["lease"].get("id").is_none());
     }
+
+    #[tokio::test]
+    async fn actions_submit_respects_queue_limit() {
+        let temp = tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_ACTIONS_QUEUE_MAX", "1");
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        // Seed one queued action to hit the limit.
+        state
+            .kernel()
+            .insert_action_async(
+                "queued-action",
+                "demo.action",
+                &json!({"demo": true}),
+                None,
+                None,
+                "queued",
+            )
+            .await
+            .expect("seed queued action");
+
+        let response = actions_submit(
+            State(state),
+            Json(ActionReq {
+                kind: "demo.action".into(),
+                input: json!({}),
+                idem_key: None,
+            }),
+        )
+        .await;
+
+        let (parts, body) = response.into_response().into_parts();
+        assert_eq!(parts.status, StatusCode::TOO_MANY_REQUESTS);
+        let bytes = to_bytes(body, usize::MAX).await.expect("body bytes");
+        let value: Value = serde_json::from_slice(&bytes).expect("json body");
+        assert_eq!(value["status"].as_u64(), Some(429));
+        assert_eq!(value["detail"].as_str(), Some("queue is full"));
+        assert_eq!(value["limit"].as_u64(), Some(1));
+        assert_eq!(value["queued"].as_u64(), Some(1));
+    }
 }
 
 /// Get action details by id.

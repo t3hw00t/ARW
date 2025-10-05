@@ -188,3 +188,126 @@ pub async fn tools_cache_stats(
     let stats = state.tool_cache().stats();
     Json(cache_stats_snapshot(&stats)).into_response()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use arw_core::gating;
+    use arw_policy::PolicyEngine;
+    use axum::body::to_bytes;
+    use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
+    use axum::extract::State;
+    use serde_json::json;
+    use std::path::Path;
+    use std::sync::Arc;
+    use tempfile::tempdir;
+
+    struct GatingReset {
+        path: String,
+    }
+
+    impl GatingReset {
+        fn new<P: Into<String>>(path: P) -> Self {
+            let path = path.into();
+            gating::reload_from_config(&path);
+            Self { path }
+        }
+    }
+
+    impl Drop for GatingReset {
+        fn drop(&mut self) {
+            gating::reload_from_config(&self.path);
+        }
+    }
+
+    async fn build_state(
+        path: &Path,
+        env_guard: &mut crate::test_support::env::EnvGuard,
+    ) -> AppState {
+        crate::util::reset_state_dir_for_tests();
+        env_guard.set("ARW_STATE_DIR", path.display().to_string());
+        env_guard.remove("ARW_DEBUG");
+        let bus = arw_events::Bus::new_with_replay(16, 16);
+        let kernel = arw_kernel::Kernel::open(path).expect("init kernel");
+        let policy = PolicyEngine::load_from_env();
+        let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
+        let host: Arc<dyn arw_wasi::ToolHost> = Arc::new(arw_wasi::NoopHost);
+        AppState::builder(bus, kernel, policy_handle, host, true)
+            .with_sse_capacity(16)
+            .build()
+            .await
+    }
+
+    #[tokio::test]
+    async fn tools_run_denies_when_ocr_capability_missing() {
+        let temp = tempdir().expect("tempdir");
+        let gating_path = temp.path().join("gating.toml");
+        let _reset = GatingReset::new(gating_path.to_string_lossy().to_string());
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret-token");
+        gating::deny_user(vec!["io:ocr".to_string()]);
+
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer secret-token"),
+        );
+        let request = ToolRunRequest {
+            id: "ui.screenshot.ocr".to_string(),
+            input: json!({"path": "/tmp/example.png"}),
+        };
+
+        let response = tools_run(headers, State(state), Json(request))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::FORBIDDEN);
+        let bytes =
+            to_bytes(body, usize::MAX).await.expect("forbidden response body");
+        let value: serde_json::Value =
+            serde_json::from_slice(&bytes).expect("forbidden body json");
+        assert_eq!(value["status"].as_u64(), Some(403));
+        let detail = value["detail"].as_str().unwrap_or_default();
+        assert!(detail.contains("io:ocr"), "detail missing io:ocr: {detail}");
+    }
+
+    #[tokio::test]
+    async fn tools_run_reports_not_found_for_missing_ocr_tool() {
+        let temp = tempdir().expect("tempdir");
+        let gating_path = temp.path().join("gating.toml");
+        let _reset = GatingReset::new(gating_path.to_string_lossy().to_string());
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_ADMIN_TOKEN", "secret-token");
+
+        let state = build_state(temp.path(), &mut ctx.env).await;
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            header::AUTHORIZATION,
+            HeaderValue::from_static("Bearer secret-token"),
+        );
+        let request = ToolRunRequest {
+            id: "ui.screenshot.ocr".to_string(),
+            input: json!({"path": "/tmp/example.png"}),
+        };
+
+        let response = tools_run(headers, State(state), Json(request))
+            .await
+            .into_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+        let (parts, body) = response.into_parts();
+        assert_eq!(parts.status, StatusCode::NOT_FOUND);
+        let bytes = to_bytes(body, usize::MAX).await.expect("not found body");
+        let value: serde_json::Value =
+            serde_json::from_slice(&bytes).expect("not found body json");
+        assert_eq!(value["status"].as_u64(), Some(404));
+        let detail = value["detail"].as_str().unwrap_or_default();
+        assert!(
+            detail.contains("ui.screenshot.ocr"),
+            "detail missing tool id: {detail}"
+        );
+    }
+}
