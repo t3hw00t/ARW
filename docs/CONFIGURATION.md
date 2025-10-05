@@ -113,8 +113,6 @@ Notes
 - `ARW_DOCS_URL`: URL to your hosted docs for UI links. Appears in `GET /about` as `docs_url` so clients can discover your manual.
 - Debug UI is accessible at `/admin/debug` when enabled (`ARW_DEBUG=1`).
 - `ARW_EVENTS_SSE_MODE`: format for SSE `data` payloads. `envelope` (default) emits the ARW envelope `{ time, kind, payload, ce }`. `ce-structured` emits CloudEvents 1.0 structured JSON with `data` holding the payload.
-- `ARW_EVENTS_JOURNAL`: optional path to a JSONL events journal for local replay/inspection.
-- `ARW_EVENTS_JOURNAL_MAX_MB`: rotate/journal size cap in MiB (default `20`).
 - Inspect recent entries via `GET /admin/events/journal?limit=200` (requires admin auth). Use `prefix=kind.` CSV filters to scope to specific event families.
 - CLI mirror: `arw-cli events journal --limit 200 --prefix memory.` prints a summary without crafting curl calls (`--json` yields raw response; add `--follow --interval 3` to poll continuously; `--after 2025-10-02T17:15:00Z` or `--after-relative 15m` skips older entries on the first fetch; set `--payload-width 0` to hide payloads in shared terminals). Text mode lists an Age column beside each timestamp for quick scanning.
 - Observations snapshot: `arw-cli events observations --limit 50 --kind-prefix service. --since-relative 15m` mirrors `/state/observations` so you can audit recent envelopes without downloading the full window. Text output now includes an Age column for quick triage (`--json` emits the raw read-model; set `--payload-width 0` to hide payload columns in shared terminals, and `--since` or `--since-relative` skips older entries during long investigations).

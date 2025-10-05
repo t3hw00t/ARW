@@ -343,6 +343,55 @@ mod tests {
         assert_eq!(stats.coalesced, 1);
     }
 
+    #[tokio::test]
+    async fn action_cache_hits_on_second_run() {
+        let temp = tempfile::tempdir().expect("tempdir");
+        let mut ctx = crate::test_support::begin_state_env(temp.path());
+        ctx.env.set("ARW_TOOLS_CACHE_CAP", "8");
+        ctx.env.set("ARW_TOOLS_CACHE_TTL_SECS", "60");
+
+        let bus = arw_events::Bus::new_with_replay(16, 16);
+        let kernel = arw_kernel::Kernel::open(temp.path()).expect("init kernel");
+        let policy = PolicyEngine::load_from_env();
+        let policy_handle = crate::policy::PolicyHandle::new(policy, bus.clone());
+        let host: Arc<dyn ToolHost> = Arc::new(arw_wasi::NoopHost);
+
+        let state = AppState::builder(bus.clone(), kernel, policy_handle, host, true)
+            .with_sse_capacity(16)
+            .build()
+            .await;
+
+        let mut cache_rx = state
+            .bus()
+            .subscribe_filtered(vec![topics::TOPIC_TOOL_CACHE.into()], Some(16));
+
+        let input = json!({"value": 42});
+        let first = run_tool(&state, "demo.echo", input.clone()).await.expect("first run");
+        assert_eq!(first["echo"], json!(input));
+
+        let env1 = tokio::time::timeout(Duration::from_millis(250), cache_rx.recv())
+            .await
+            .expect("cache event (miss)")
+            .expect("broadcast env");
+        assert_eq!(env1.kind, topics::TOPIC_TOOL_CACHE);
+        assert_eq!(env1.payload["outcome"], json!("miss"));
+
+        let second = run_tool(&state, "demo.echo", input.clone()).await.expect("second run");
+        assert_eq!(second, first);
+
+        let env2 = tokio::time::timeout(Duration::from_millis(250), cache_rx.recv())
+            .await
+            .expect("cache event (hit)")
+            .expect("broadcast env");
+        assert_eq!(env2.kind, topics::TOPIC_TOOL_CACHE);
+        assert_eq!(env2.payload["outcome"], json!("hit"));
+        assert_eq!(env2.payload["cached"], json!(true));
+
+        let stats = state.tool_cache().stats();
+        assert_eq!(stats.miss, 1);
+        assert_eq!(stats.hit, 1);
+    }
+
     #[cfg(not(feature = "tool_screenshots"))]
     #[tokio::test]
     async fn screenshot_tools_return_unsupported_without_feature() {

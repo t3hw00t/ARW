@@ -7,7 +7,6 @@ use axum::{
 };
 use chrono::SecondsFormat;
 use serde::{Deserialize, Serialize};
-use tokio::task::spawn_blocking;
 use tokio_stream::StreamExt as _;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -285,13 +284,13 @@ pub async fn events_journal(
     if !crate::admin_ok(&headers) {
         return crate::responses::unauthorized(None);
     }
-    let Some(journal_path) = state.bus().journal_path() else {
+    if !state.kernel_enabled() {
         return crate::responses::problem_response(
             StatusCode::NOT_FOUND,
-            "Journal Disabled",
-            Some("Set ARW_EVENTS_JOURNAL to enable event journaling."),
+            "Kernel Disabled",
+            Some("Event journaling requires the kernel; ensure ARW_KERNEL_ENABLE=1."),
         );
-    };
+    }
     let limit = query.limit.unwrap_or(200).min(1000);
     let prefixes: Vec<String> = query
         .prefix
@@ -304,12 +303,25 @@ pub async fn events_journal(
                 .collect()
         })
         .unwrap_or_default();
-    let prefixes_clone = prefixes.clone();
-    let journal_result =
-        spawn_blocking(move || read_journal_tail(journal_path, limit, prefixes_clone)).await;
-    match journal_result {
-        Ok(Ok(result)) => {
-            let truncated = result.total_matched > result.entries.len();
+    match state
+        .kernel()
+        .tail_events_async(limit as i64, prefixes.clone())
+        .await
+    {
+        Ok((rows, total)) => {
+            let entries: Vec<arw_events::Envelope> = rows
+                .into_iter()
+                .map(|r| arw_events::Envelope {
+                    time: r.time,
+                    kind: r.kind,
+                    payload: r.payload,
+                    policy: None,
+                    ce: None,
+                })
+                .collect();
+            let total_i64 = total.max(0);
+            let total_usize = total_i64 as usize;
+            let truncated = total_i64 > entries.len() as i64;
             let response = EventsJournalResponse {
                 prefixes: if prefixes.is_empty() {
                     None
@@ -317,121 +329,20 @@ pub async fn events_journal(
                     Some(prefixes)
                 },
                 limit,
-                total_matched: result.total_matched,
+                total_matched: total_usize,
                 truncated,
-                skipped_lines: result.skipped_lines,
-                source_files: result.source_files,
-                entries: result.entries,
+                skipped_lines: 0,
+                source_files: vec!["sqlite:events".to_string()],
+                entries,
             };
             (StatusCode::OK, Json(response)).into_response()
         }
-        Ok(Err(err)) => crate::responses::problem_response(
+        Err(err) => crate::responses::problem_response(
             StatusCode::INTERNAL_SERVER_ERROR,
             "Journal Read Failed",
-            Some(&err),
-        ),
-        Err(join_err) => crate::responses::problem_response(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "Journal Read Failed",
-            Some(&format!("blocking task panicked: {}", join_err)),
+            Some(&err.to_string()),
         ),
     }
-}
-
-struct JournalTail {
-    entries: Vec<arw_events::Envelope>,
-    source_files: Vec<String>,
-    total_matched: usize,
-    skipped_lines: usize,
-}
-
-fn read_journal_tail(
-    path: std::path::PathBuf,
-    limit: usize,
-    prefixes: Vec<String>,
-) -> Result<JournalTail, String> {
-    use std::collections::VecDeque;
-    use std::fs::File;
-    use std::io::{BufRead, BufReader};
-
-    let mut ordered_paths: Vec<std::path::PathBuf> = Vec::with_capacity(4);
-    for idx in (1..=3).rev() {
-        let candidate = path.with_extension(format!("log.{}", idx));
-        if candidate.exists() {
-            ordered_paths.push(candidate);
-        }
-    }
-    if path.exists() {
-        ordered_paths.push(path.clone());
-    }
-    if ordered_paths.is_empty() {
-        return Ok(JournalTail {
-            entries: Vec::new(),
-            source_files: Vec::new(),
-            total_matched: 0,
-            skipped_lines: 0,
-        });
-    }
-    let source_files: Vec<String> = ordered_paths
-        .iter()
-        .map(|p| p.display().to_string())
-        .collect();
-    if limit == 0 {
-        return Ok(JournalTail {
-            entries: Vec::new(),
-            source_files,
-            total_matched: 0,
-            skipped_lines: 0,
-        });
-    }
-    let mut buffer = VecDeque::with_capacity(limit);
-    let mut matched = 0usize;
-    let mut skipped = 0usize;
-    for path in &ordered_paths {
-        let file = match File::open(path) {
-            Ok(f) => f,
-            Err(err) => {
-                skipped += 1;
-                tracing::debug!("events_journal: failed to open {:?}: {}", path, err);
-                continue;
-            }
-        };
-        let reader = BufReader::new(file);
-        for line in reader.lines() {
-            let line = match line {
-                Ok(l) => l,
-                Err(_) => {
-                    skipped += 1;
-                    continue;
-                }
-            };
-            if line.trim().is_empty() {
-                continue;
-            }
-            let env: arw_events::Envelope = match serde_json::from_str(&line) {
-                Ok(env) => env,
-                Err(_) => {
-                    skipped += 1;
-                    continue;
-                }
-            };
-            if !prefixes.is_empty() && !prefixes.iter().any(|p| env.kind.starts_with(p)) {
-                continue;
-            }
-            matched += 1;
-            if buffer.len() == limit {
-                buffer.pop_front();
-            }
-            buffer.push_back(env);
-        }
-    }
-
-    Ok(JournalTail {
-        entries: buffer.into_iter().collect(),
-        source_files,
-        total_matched: matched,
-        skipped_lines: skipped,
-    })
 }
 
 #[cfg(test)]
@@ -951,62 +862,112 @@ mod tests {
     async fn events_journal_tails_recent_entries() {
         let temp = tempdir().expect("tempdir");
         let mut ctx = crate::test_support::begin_state_env(temp.path());
-        let journal_path = temp.path().join("events.jsonl");
         ctx.env.set("ARW_DEBUG", "1");
-        ctx.env
-            .set("ARW_EVENTS_JOURNAL", journal_path.display().to_string());
 
         let state = build_state(temp.path(), &mut ctx.env).await;
 
-        let bus = state.bus();
-        bus.publish(TOPIC_SERVICE_TEST, &json!({"msg": "first"}));
-        bus.publish(TOPIC_SERVICE_STOP, &json!({"msg": "second"}));
-
-        tokio::time::sleep(Duration::from_millis(100)).await;
-
-        let response = events_journal(
-            State(state.clone()),
-            Query(EventsJournalQuery {
-                limit: Some(1),
-                prefix: None,
-            }),
-            HeaderMap::new(),
-        )
-        .await
-        .into_response();
-        assert_eq!(response.status(), StatusCode::OK);
-
-        let body_bytes = response
-            .into_body()
-            .collect()
+        let env_test = arw_events::Envelope {
+            time: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            kind: TOPIC_SERVICE_TEST.into(),
+            payload: json!({"msg": "first"}),
+            policy: None,
+            ce: None,
+        };
+        state
+            .kernel()
+            .append_event_async(&env_test)
             .await
-            .expect("collect body")
-            .to_bytes();
-        let body_json: Value = serde_json::from_slice(&body_bytes).expect("json body");
+            .expect("append test event");
+
+        let env_stop = arw_events::Envelope {
+            time: chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+            kind: TOPIC_SERVICE_STOP.into(),
+            payload: json!({"msg": "second"}),
+            policy: None,
+            ce: None,
+        };
+        state
+            .kernel()
+            .append_event_async(&env_stop)
+            .await
+            .expect("append stop event");
+        let body_json = {
+            let mut attempt = 0;
+            loop {
+                let response = events_journal(
+                    State(state.clone()),
+                    Query(EventsJournalQuery {
+                        limit: Some(1),
+                        prefix: None,
+                    }),
+                    HeaderMap::new(),
+                )
+                .await
+                .into_response();
+                assert_eq!(response.status(), StatusCode::OK);
+
+                let body_bytes = response
+                    .into_body()
+                    .collect()
+                    .await
+                    .expect("collect body")
+                    .to_bytes();
+                let body_json: Value = serde_json::from_slice(&body_bytes).expect("json body");
+                let has_entries = body_json["entries"]
+                    .as_array()
+                    .map(|a| !a.is_empty())
+                    .unwrap_or(false);
+                if has_entries || attempt >= 9 {
+                    break body_json;
+                }
+                attempt += 1;
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        };
         let entries = body_json["entries"].as_array().expect("entries array");
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0]["kind"].as_str(), Some(TOPIC_SERVICE_STOP));
         assert!(body_json["total_matched"].as_u64().unwrap_or(0) >= 2);
         assert!(body_json["truncated"].as_bool().unwrap_or(false));
+        assert_eq!(body_json["skipped_lines"].as_u64(), Some(0));
+        assert_eq!(
+            body_json["source_files"].as_array().map(|a| a.len()),
+            Some(1)
+        );
+        assert_eq!(body_json["source_files"][0].as_str(), Some("sqlite:events"));
 
-        let response_prefix = events_journal(
-            State(state),
-            Query(EventsJournalQuery {
-                limit: Some(5),
-                prefix: Some(TOPIC_SERVICE_TEST.to_string()),
-            }),
-            HeaderMap::new(),
-        )
-        .await
-        .into_response();
-        assert_eq!(response_prefix.status(), StatusCode::OK);
-        let bytes = response_prefix
-            .into_body()
-            .collect()
-            .await
-            .expect("collect body")
-            .to_bytes();
-        let body_json: Value = serde_json::from_slice(&bytes).expect("json body");
+        let body_json = {
+            let mut attempt = 0;
+            loop {
+                let response = events_journal(
+                    State(state.clone()),
+                    Query(EventsJournalQuery {
+                        limit: Some(5),
+                        prefix: Some(TOPIC_SERVICE_TEST.to_string()),
+                    }),
+                    HeaderMap::new(),
+                )
+                .await
+                .into_response();
+                assert_eq!(response.status(), StatusCode::OK);
+                let body_bytes = response
+                    .into_body()
+                    .collect()
+                    .await
+                    .expect("collect body")
+                    .to_bytes();
+                let body_json: Value = serde_json::from_slice(&body_bytes).expect("json body");
+                let has_entries = body_json["entries"]
+                    .as_array()
+                    .map(|a| !a.is_empty())
+                    .unwrap_or(false);
+                if has_entries || attempt >= 9 {
+                    break body_json;
+                }
+                attempt += 1;
+                tokio::time::sleep(Duration::from_millis(50)).await;
+            }
+        };
         let entries = body_json["entries"].as_array().expect("entries array");
         assert_eq!(entries.len(), 1);
         assert_eq!(entries[0]["kind"].as_str(), Some(TOPIC_SERVICE_TEST));
@@ -1014,7 +975,6 @@ mod tests {
         assert!(body_json["total_matched"].as_u64().unwrap_or(0) >= 1);
         assert!(!body_json["truncated"].as_bool().unwrap());
 
-        ctx.env.remove("ARW_EVENTS_JOURNAL");
         ctx.env.remove("ARW_DEBUG");
     }
 }

@@ -1,7 +1,7 @@
 use anyhow::{anyhow, Result};
 use arw_memory_core::{MemoryInsertArgs, MemoryInsertOwned, MemoryStore};
 use chrono::{DateTime, Utc};
-use rusqlite::{params, types::Value, Connection, OptionalExtension};
+use rusqlite::{params, params_from_iter, types::Value, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::ops::{Deref, DerefMut};
 use std::path::{Path, PathBuf};
@@ -690,6 +690,26 @@ impl Kernel {
         }
     }
 
+    fn map_event_row(row: &rusqlite::Row) -> rusqlite::Result<EventRow> {
+        let id: i64 = row.get(0)?;
+        let time: String = row.get(1)?;
+        let kind: String = row.get(2)?;
+        let actor: Option<String> = row.get(3)?;
+        let proj: Option<String> = row.get(4)?;
+        let corr_id: Option<String> = row.get(5)?;
+        let payload_s: String = row.get(6)?;
+        let payload = serde_json::from_str(&payload_s).unwrap_or_else(|_| serde_json::json!({}));
+        Ok(EventRow {
+            id,
+            time,
+            kind,
+            actor,
+            proj,
+            corr_id,
+            payload,
+        })
+    }
+
     pub fn append_event(&self, env: &arw_events::Envelope) -> Result<i64> {
         let conn = self.conn()?;
         let mut stmt = conn.prepare(
@@ -727,23 +747,7 @@ impl Kernel {
         };
         let mut out = Vec::new();
         while let Some(row) = rows.next()? {
-            let id: i64 = row.get(0)?;
-            let time: String = row.get(1)?;
-            let kind: String = row.get(2)?;
-            let actor: Option<String> = row.get(3)?;
-            let proj: Option<String> = row.get(4)?;
-            let corr_id: Option<String> = row.get(5)?;
-            let payload_s: String = row.get(6)?;
-            let payload = serde_json::from_str(&payload_s).unwrap_or(serde_json::json!({}));
-            out.push(EventRow {
-                id,
-                time,
-                kind,
-                actor,
-                proj,
-                corr_id,
-                payload,
-            });
+            out.push(Self::map_event_row(&row)?);
         }
         // Ensure ascending order for replay
         if after_id.is_none() {
@@ -769,25 +773,62 @@ impl Kernel {
         };
         let mut out = Vec::new();
         while let Some(row) = rows.next()? {
-            let id: i64 = row.get(0)?;
-            let time: String = row.get(1)?;
-            let kind: String = row.get(2)?;
-            let actor: Option<String> = row.get(3)?;
-            let proj: Option<String> = row.get(4)?;
-            let corr_id: Option<String> = row.get(5)?;
-            let payload_s: String = row.get(6)?;
-            let payload = serde_json::from_str(&payload_s).unwrap_or(serde_json::json!({}));
-            out.push(EventRow {
-                id,
-                time,
-                kind,
-                actor,
-                proj,
-                corr_id,
-                payload,
-            });
+            out.push(Self::map_event_row(&row)?);
         }
         Ok(out)
+    }
+
+    pub fn tail_events(&self, limit: i64, prefixes: &[String]) -> Result<(Vec<EventRow>, i64)> {
+        let conn = self.conn()?;
+        let sanitized: Vec<String> = prefixes
+            .iter()
+            .map(|p| p.trim().to_string())
+            .filter(|p| !p.is_empty())
+            .collect();
+        let conditions: Vec<String> = (0..sanitized.len())
+            .map(|_| "kind LIKE ?".to_string())
+            .collect();
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" OR "))
+        };
+        let like_params: Vec<Value> = sanitized
+            .iter()
+            .map(|p| Value::from(format!("{}%", p)))
+            .collect();
+        let count_sql = if where_clause.is_empty() {
+            "SELECT COUNT(*) FROM events".to_string()
+        } else {
+            format!("SELECT COUNT(*) FROM events {}", where_clause)
+        };
+        let total: i64 =
+            conn.query_row(&count_sql, params_from_iter(like_params.iter()), |row| {
+                row.get(0)
+            })?;
+        if limit <= 0 {
+            return Ok((Vec::new(), total));
+        }
+        let mut query_params = like_params.clone();
+        query_params.push(Value::from(limit));
+        let select_sql = if where_clause.is_empty() {
+            "SELECT id,time,kind,actor,proj,corr_id,payload FROM events \
+             ORDER BY id DESC LIMIT ?"
+                .to_string()
+        } else {
+            format!(
+                "SELECT id,time,kind,actor,proj,corr_id,payload FROM events {} ORDER BY id DESC LIMIT ?",
+                where_clause
+            )
+        };
+        let mut stmt = conn.prepare(&select_sql)?;
+        let mut rows = stmt.query(params_from_iter(query_params.iter()))?;
+        let mut out_desc = Vec::new();
+        while let Some(row) = rows.next()? {
+            out_desc.push(Self::map_event_row(&row)?);
+        }
+        out_desc.reverse();
+        Ok((out_desc, total))
     }
 
     pub async fn cas_put(
@@ -2200,6 +2241,17 @@ impl Kernel {
         let k = self.clone();
         let cid = corr_id.to_string();
         tokio::task::spawn_blocking(move || k.events_by_corr_id(&cid, limit))
+            .await
+            .map_err(|e| anyhow!("join error: {}", e))?
+    }
+
+    pub async fn tail_events_async(
+        &self,
+        limit: i64,
+        prefixes: Vec<String>,
+    ) -> Result<(Vec<EventRow>, i64)> {
+        let k = self.clone();
+        tokio::task::spawn_blocking(move || k.tail_events(limit, &prefixes))
             .await
             .map_err(|e| anyhow!("join error: {}", e))?
     }

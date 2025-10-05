@@ -155,7 +155,7 @@ The stack scales by refusing to recompute or resend the same work twice and by b
 - [Kernel] Dev environment: Nix devshell, VS Code devcontainer.
 - [Kernel] Repo hygiene: Dependabot for Cargo and Actions; .gitattributes for line endings.
 - [Kernel] Persistence hardening: atomic JSON/bytes writes with per-path async locks; best-effort cross-process advisory locks; audit log rotation.
-- [Kernel] Event bus upgrades: counters (published/delivered/lagged/no_receivers), configurable capacity/replay, lag surfaced as `bus.gap`, subscribe-filtered API, SSE replay and prefix filters, optional persistent JSONL journal with rotation, Prometheus `/metrics`.
+- [Kernel] Event bus upgrades: counters (published/delivered/lagged/no_receivers), configurable capacity/replay, lag surfaced as `bus.gap`, subscribe-filtered API, SSE replay and prefix filters, kernel-backed journal tail (`/admin/events/journal`), Prometheus `/metrics`.
 - [Kernel] Episodes & State: live read-models under `/state/*` (observations, beliefs, world, intents, actions, episodes) with corr_id stitching, duration and error rollups; Episodes panel with filters and details in Debug UI. The `world` view is a scoped belief graph (Project Map) built from the event stream with a selector endpoint for top-K beliefs.
 - [Kernel] Resources pattern: unified AppState with typed `Resources`; moved Governor/Hierarchy/Memory/Models logic behind services; endpoints prefer services while preserving behavior.
 - [Kernel] Tests + Lint: fixed flaky gating contract tests (serialized shared state); workspace clippy clean with `-D warnings`.

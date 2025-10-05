@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::VecDeque;
-use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use tokio::sync::broadcast;
@@ -76,8 +75,6 @@ pub struct LocalBus {
     counters: Arc<Counters>,
     replay: Arc<Mutex<VecDeque<Envelope>>>,
     replay_cap: usize,
-    journal: Option<PathBuf>,
-    journal_lock: Arc<Mutex<()>>,
 }
 
 impl LocalBus {
@@ -158,8 +155,6 @@ impl LocalBus {
                 self.counters.no_receivers.fetch_add(1, Ordering::Relaxed);
             }
         }
-        // Optional journal
-        self.maybe_journal_env(&env);
         // Push to replay buffer
         let mut rb = self.replay.lock().unwrap();
         if rb.len() == self.replay_cap {
@@ -172,14 +167,11 @@ impl LocalBus {
     }
     pub fn new_with_replay(capacity: usize, replay_cap: usize) -> Self {
         let (tx, _rx) = broadcast::channel(capacity);
-        let journal = std::env::var("ARW_EVENTS_JOURNAL").ok().map(PathBuf::from);
         Self {
             tx,
             counters: Arc::new(Counters::default()),
             replay: Arc::new(Mutex::new(VecDeque::with_capacity(replay_cap))),
             replay_cap,
-            journal,
-            journal_lock: Arc::new(Mutex::new(())),
         }
     }
     pub fn stats(&self) -> BusStats {
@@ -205,9 +197,6 @@ impl LocalBus {
         let len = rb.len();
         let take = n.min(len);
         rb.iter().skip(len.saturating_sub(take)).cloned().collect()
-    }
-    pub fn journal_path(&self) -> Option<PathBuf> {
-        self.journal.clone()
     }
 }
 
@@ -285,56 +274,6 @@ impl EventBus for LocalBus {
         rx
     }
 }
-
-impl LocalBus {
-    fn maybe_journal_env(&self, env: &Envelope) {
-        let path = match &self.journal {
-            Some(p) => p.clone(),
-            None => return,
-        };
-        let lk = self.journal_lock.clone();
-        let line = match serde_json::to_string(env) {
-            Ok(mut s) => {
-                s.push('\n');
-                s
-            }
-            Err(_) => return,
-        };
-        tokio::task::spawn_blocking(move || {
-            let _g = lk.lock().unwrap();
-            let max_mb: u64 = std::env::var("ARW_EVENTS_JOURNAL_MAX_MB")
-                .ok()
-                .and_then(|s| s.parse().ok())
-                .unwrap_or(20);
-            let max_bytes = max_mb.saturating_mul(1024 * 1024);
-            if let Ok(md) = std::fs::metadata(&path) {
-                if md.len() >= max_bytes {
-                    let p1 = path.with_extension("log.1");
-                    let p2 = path.with_extension("log.2");
-                    let p3 = path.with_extension("log.3");
-                    let _ = std::fs::remove_file(&p3);
-                    if p2.exists() {
-                        let _ = std::fs::rename(&p2, &p3);
-                    }
-                    if p1.exists() {
-                        let _ = std::fs::rename(&p1, &p2);
-                    }
-                    if path.exists() {
-                        let _ = std::fs::rename(&path, &p1);
-                    }
-                }
-            }
-            if let Ok(mut f) = std::fs::OpenOptions::new()
-                .create(true)
-                .append(true)
-                .open(&path)
-            {
-                use std::io::Write as _;
-                let _ = f.write_all(line.as_bytes());
-            }
-        });
-    }
-}
 /// Backward compatible façade that current apps use.
 #[derive(Clone)]
 pub struct Bus {
@@ -387,9 +326,6 @@ impl Bus {
         capacity: Option<usize>,
     ) -> broadcast::Receiver<Envelope> {
         self.inner.subscribe_filtered(prefixes, capacity)
-    }
-    pub fn journal_path(&self) -> Option<PathBuf> {
-        self.inner.journal_path()
     }
 }
 

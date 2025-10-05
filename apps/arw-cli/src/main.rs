@@ -3303,7 +3303,7 @@ fn fetch_journal_snapshot(
         anyhow::bail!("unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN");
     }
     if status == reqwest::StatusCode::NOT_FOUND {
-        anyhow::bail!("journal disabled: set ARW_EVENTS_JOURNAL on the server and restart");
+        anyhow::bail!("journal disabled: ensure the server runs with ARW_KERNEL_ENABLE=1");
     }
     let body: JsonValue = resp.json().context("parsing journal response")?;
     if !status.is_success() {
