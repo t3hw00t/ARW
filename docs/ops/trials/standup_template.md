@@ -1,12 +1,12 @@
 # Trial Stand-up Template
 
-Updated: 2025-10-01
+Updated: 2025-10-02
 
 Use this outline for our quick daily sync (5–10 minutes). We can keep it in a shared note instead of slides while it’s just us.
 
 1. **Dashboard glance (1 min)**
    - Systems tile
-   - Memory tile
+   - Memory tile (coverage + recall meters)
    - Approvals tile (count + oldest age)
    - Safety tile (preset + applied timestamp)
 

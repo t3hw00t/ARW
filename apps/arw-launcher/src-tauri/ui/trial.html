@@ -107,6 +107,44 @@
               <h3>Memory</h3>
               <span class="pill" id="tile-memory-pill">-</span>
             </header>
+            <div class="meter-stack" aria-hidden="false">
+              <div class="meter-block">
+                <div class="meter-label">
+                  <span id="memoryCoverageLabel">Coverage gaps</span>
+                  <span id="memoryCoverageValue" class="mono">—</span>
+                </div>
+                <div
+                  id="memoryCoverageBar"
+                  class="meter-bar empty"
+                  role="meter"
+                  aria-labelledby="memoryCoverageLabel"
+                  aria-valuemin="0"
+                  aria-valuemax="1"
+                  aria-valuenow="0"
+                  aria-valuetext="No data"
+                >
+                  <i></i>
+                </div>
+              </div>
+              <div class="meter-block">
+                <div class="meter-label">
+                  <span id="memoryRecallLabel">Recall risk</span>
+                  <span id="memoryRecallValue" class="mono">—</span>
+                </div>
+                <div
+                  id="memoryRecallBar"
+                  class="meter-bar empty"
+                  role="meter"
+                  aria-labelledby="memoryRecallLabel"
+                  aria-valuemin="0"
+                  aria-valuemax="1"
+                  aria-valuenow="0"
+                  aria-valuetext="No data"
+                >
+                  <i></i>
+                </div>
+              </div>
+            </div>
             <p class="tile-body" id="tile-memory-body">Loading...</p>
             <dl class="tile-meta" id="tile-memory-meta"></dl>
           </article>

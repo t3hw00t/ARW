@@ -626,18 +626,23 @@
     const coverageSummary = summaryFromPayload(coverageLatest.summary);
     const recallSummary = summaryFromPayload(recallLatest.summary);
 
-    const needsMore = Number(coverage.needs_more_ratio ?? coverage.needsMoreRatio ?? 0);
-    const riskRatio = Number(recall.at_risk_ratio ?? recall.atRiskRatio ?? 0);
-    const avgScore = Number(recall.avg_score ?? recall.avgScore ?? NaN);
-    const latestScore = Number(recallLatest.score ?? NaN);
+    const needsMore = asFiniteNumber(coverage.needs_more_ratio ?? coverage.needsMoreRatio);
+    const riskRatio = asFiniteNumber(recall.at_risk_ratio ?? recall.atRiskRatio);
+    const avgScore = asFiniteNumber(recall.avg_score ?? recall.avgScore);
+    const latestScore = asFiniteNumber(recallLatest.score);
     const latestLevel = typeof recallLatest.level === 'string' ? recallLatest.level : '';
 
     let level = 'ok';
     let summary = 'Context coverage steady';
-    if (needsMore > 0.25 || riskRatio > 0.25) {
+    const needsMoreBad = Number.isFinite(needsMore) && needsMore > 0.25;
+    const needsMoreWarn = Number.isFinite(needsMore) && needsMore > 0.0;
+    const riskBad = Number.isFinite(riskRatio) && riskRatio > 0.25;
+    const riskWarn = Number.isFinite(riskRatio) && riskRatio > 0.0;
+
+    if (needsMoreBad || riskBad) {
       level = 'bad';
       summary = 'Context underfilled';
-    } else if (needsMore > 0 || riskRatio > 0) {
+    } else if (needsMoreWarn || riskWarn) {
       level = 'warn';
       summary = 'Context needs widening';
     } else if (coverageSummary) {
@@ -650,8 +655,8 @@
     if (Number.isFinite(generatedMs)) {
       meta.push(['Telemetry updated', `${formatRelative(generatedMs)} (${formatRelativeAbs(generatedMs)})`]);
     }
-    if (Number.isFinite(needsMore)) meta.push(['Needs more ratio', (needsMore * 100).toFixed(0) + '%']);
-    if (Number.isFinite(riskRatio)) meta.push(['Recall risk', (riskRatio * 100).toFixed(0) + '%']);
+    if (Number.isFinite(needsMore)) meta.push(['Needs more ratio', percentLabel(needsMore)]);
+    if (Number.isFinite(riskRatio)) meta.push(['Recall risk', percentLabel(riskRatio)]);
     if (Number.isFinite(avgScore)) meta.push(['Avg recall score', avgScore.toFixed(2)]);
     if (Number.isFinite(latestScore)) meta.push(['Latest recall score', latestScore.toFixed(2)]);
     if (latestLevel) meta.push(['Latest recall level', latestLevel]);
@@ -667,6 +672,34 @@
     }
     if (recallSummary && summary !== recallSummary) {
       meta.push(['Recall summary', recallSummary]);
+    }
+
+    const coverageTopSlots = Array.isArray(coverage.top_slots) ? coverage.top_slots : [];
+    if (coverageTopSlots.length) {
+      const highlight = coverageTopSlots
+        .slice(0, 2)
+        .map((item) => {
+          const slotLabel = formatSlotName(item?.slot);
+          const gaps = formatCountLabel(item?.count, 'gap');
+          return `${slotLabel} · ${gaps}`;
+        })
+        .join(' • ');
+      if (highlight) meta.push(['Coverage slots', highlight]);
+    }
+
+    const recallTopSlots = Array.isArray(recall.top_slots) ? recall.top_slots : [];
+    if (recallTopSlots.length) {
+      const highlight = recallTopSlots
+        .slice(0, 2)
+        .map((item) => {
+          const slotLabel = formatSlotName(item?.slot);
+          const avg = percentLabel(item?.avg_gap);
+          const max = percentLabel(item?.max_gap);
+          const samples = formatCountLabel(item?.samples, 'sample');
+          return `${slotLabel} · avg ${avg} · max ${max} · ${samples}`;
+        })
+        .join(' • ');
+      if (highlight) meta.push(['Recall slots', highlight]);
     }
 
     const capsules = telemetry?.capsules || {};
@@ -687,6 +720,24 @@
     }
     setStatus('memory', level, summary);
     setTile('memory', STATE.memory);
+
+    const coverageValue = document.getElementById('memoryCoverageValue');
+    if (coverageValue) coverageValue.textContent = percentLabel(needsMore);
+    updateMeter('memoryCoverageBar', needsMore, {
+      preferLow: true,
+      warn: 0.2,
+      bad: 0.4,
+      formatText: (_value, pct) => `${pct}% needing more coverage`,
+    });
+
+    const recallValue = document.getElementById('memoryRecallValue');
+    if (recallValue) recallValue.textContent = percentLabel(riskRatio);
+    updateMeter('memoryRecallBar', riskRatio, {
+      preferLow: true,
+      warn: 0.2,
+      bad: 0.4,
+      formatText: (_value, pct) => `${pct}% flagged at risk`,
+    });
   }
 
   function updateApprovals(pendingPayload, recentPayload, opts = {}){
@@ -1986,6 +2037,49 @@
     }
   }
 
+  function updateMeter(id, value, options = {}){
+    const node = document.getElementById(id);
+    if (!node) return;
+    let fill = node.querySelector('i');
+    if (!fill) {
+      fill = document.createElement('i');
+      node.appendChild(fill);
+    }
+    const preferLow = options.preferLow === true;
+    const warn = typeof options.warn === 'number' ? options.warn : (preferLow ? 0.25 : 0.65);
+    const bad = typeof options.bad === 'number' ? options.bad : (preferLow ? 0.5 : 0.4);
+    const formatText = typeof options.formatText === 'function' ? options.formatText : null;
+
+    node.classList.remove('ok','warn','bad','empty');
+
+    if (!Number.isFinite(value)) {
+      fill.style.width = '0%';
+      node.classList.add('empty');
+      node.setAttribute('aria-valuenow', '0');
+      node.setAttribute('aria-valuetext', 'No data');
+      node.title = 'No data';
+      return;
+    }
+
+    const clamped = Math.min(1, Math.max(0, value));
+    const percent = Math.round(clamped * 100);
+    fill.style.width = `${percent}%`;
+    node.setAttribute('aria-valuenow', clamped.toFixed(2));
+    const label = formatText ? formatText(clamped, percent) : `${percent}%`;
+    node.setAttribute('aria-valuetext', label);
+    node.title = label;
+
+    let state = 'ok';
+    if (preferLow) {
+      if (clamped >= bad) state = 'bad';
+      else if (clamped >= warn) state = 'warn';
+    } else {
+      if (clamped <= bad) state = 'bad';
+      else if (clamped <= warn) state = 'warn';
+    }
+    node.classList.add(state);
+  }
+
   function errorsForPath(path, opts){
     const source = Array.isArray(opts?.errors) ? opts.errors : (STATE.errors || []);
     return source.filter(line => line && line.includes(path));
@@ -2028,6 +2122,29 @@
       if (typeof payload.summary === 'string' && payload.summary.trim()) return payload.summary.trim();
     }
     return '';
+  }
+
+  function percentLabel(value, digits = 0){
+    if (!Number.isFinite(value)) return '—';
+    const clamped = Math.min(1, Math.max(0, value));
+    return `${(clamped * 100).toFixed(digits)}%`;
+  }
+
+  function asFiniteNumber(value){
+    const num = Number(value);
+    return Number.isFinite(num) ? num : NaN;
+  }
+
+  function formatSlotName(slot){
+    if (!slot) return '—';
+    const text = String(slot).replace(/[_-]/g, ' ').trim();
+    return text || '—';
+  }
+
+  function formatCountLabel(count, singular){
+    const value = Number(count) || 0;
+    if (value === 1) return `1 ${singular}`;
+    return `${value} ${singular}s`;
   }
 
   function showNotice(text){

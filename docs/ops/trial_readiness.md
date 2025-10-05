@@ -4,7 +4,7 @@ title: Trial Readiness Plan
 
 # Trial Readiness Plan
 
-Updated: 2025-10-01
+Updated: 2025-10-02
 Type: Playbook (quick guide)
 
 Use this short guide to decide when Agent Hub feels good enough for **the two of us** to run a focused trial. Keep [the facilitator checklist](trial_facilitator_checklist.md) and [onboarding note](trials/onboarding_email_template.md) nearby—the scope stays intentionally small so we can iterate quickly before inviting anyone else.
@@ -35,6 +35,7 @@ When this loop feels smooth we can think about inviting more teammates.
 
 - One landing page with **Overview / Workflows / Safeguards** tabs; use the same names in training decks (see `docs/design/trial_visual_kit.md` for the mock + implementation guidance).
 - The "What's in focus" card now includes a See sources button that opens `/admin/debug#memory` so we can jump from summary to evidence quickly, and it shows both relative and absolute freshness for accessibility.
+- The Memory tile includes two meters—coverage gaps and recall risk—so we can tell at a glance whether the context assembly loop is keeping up. Record those percentages in the daily log whenever we take a snapshot (or run `arw-cli context telemetry --watch --output docs/ops/trials/logs/context.log` / `just context-watch` to stream + log them automatically).
 - “What’s in focus” appears in the Overview tab, the approvals card, and the Training Park so nobody wonders where facts came from. If the launcher preview isn’t available, surface the same facts through the Project Hub Activity panel.
 - Alerts say things like “Needs a teammate’s OK” instead of protocol names, and every action in the queue pairs with a suggested decision.
 - The Trial Control Center header now includes a **Connections** button—click it to open a lightweight drawer that lists who is online before you approve or hand off work.

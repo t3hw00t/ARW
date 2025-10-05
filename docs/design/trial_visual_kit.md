@@ -4,7 +4,7 @@ title: Trial Visual Kit
 
 # Trial Visual Kit
 
-Updated: 2025-09-26
+Updated: 2025-10-02
 Type: Design brief
 
 This brief keeps UI, docs, and training materials aligned while we polish the trial experience.
@@ -25,7 +25,7 @@ This brief keeps UI, docs, and training materials aligned while we polish the tr
 
 ## Trial Control Center
 
-- **Tiles**: four equal cards (Systems, Memory, Approvals, Safety) with icon, headline metric, and single-line status.
+- **Tiles**: four equal cards (Systems, Memory, Approvals, Safety) with icon, headline metric, and single-line status. The Memory tile stacks two inline meters (“Coverage gaps” and “Recall risk”) so drift is visible without opening the tab details.
 - **Pause/rollback**: two buttons beneath the tiles—Pause helpers (primary) and Roll back to last snapshot (secondary).
 - **Autonomy placeholder**: faded card that says “Autonomy Lane (coming soon)” with link to charter.
 

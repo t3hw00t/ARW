@@ -4,14 +4,14 @@ title: Trial Runbook
 
 # Trial Runbook
 
-Updated: 2025-10-01
+Updated: 2025-10-02
 Type: Checklist (quick reference)
 
 This runbook keeps our two-person trial routine lightweight. Use it with the Trial Readiness Plan, facilitator checklist, and quickstart note so we stay in sync without extra meetings.
 
 ## Before the day starts
 
-- Open the launcher Trial Control Center window (`Launcher → Trial Control`) and confirm Systems, Memory, Approvals, and Safety read “All good.” Record the numbers in a fresh copy of `docs/ops/trials/daily_log_template.md`.
+- Open the launcher Trial Control Center window (`Launcher → Trial Control`) and confirm Systems, Memory, Approvals, and Safety read “All good.” Record the numbers—including the Memory tile’s coverage gap and recall risk percentages—in a fresh copy of `docs/ops/trials/daily_log_template.md`. If you want an automated log, run `arw-cli context telemetry --watch --output docs/ops/trials/logs/context.log` during the session (stop with Ctrl+C when you’re done) or launch `just context-watch` to create per-day logs automatically.
 - Run `just trials-preflight` (or click the preflight button in the Trial Control Center; it runs the helper and copies the CLI command if automation fails).
 - Apply the trial guardrail preset with `just trials-guardrails preset=trial` (or `./scripts/trials_guardrails.sh --preset trial`). Check the Safety tile for the preset name and a fresh “applied …” timestamp before moving on.
 - In the Trial Control Center, open the **Approvals lane** (see the [approvals guide](trials/approvals_lane_guide.md)), confirm your reviewer label with the **Set reviewer** button, and clear or assign any waiting items before we begin.

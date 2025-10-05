@@ -31,7 +31,7 @@ The goal remains: a third primary perspective for tuning instincts, memory, and 
 ## Inspect Telemetry
 
 - Poll `GET /state/training/telemetry` for a JSON snapshot or stream the `state.read.model.patch` feeds `training_metrics` and `context_metrics` for live updates.
-- Prefer `arw-cli context telemetry --base http://127.0.0.1:8091` (add `--json --pretty` for raw output) when you want a quick terminal summary of coverage/recall gaps, cache counters, and working-set scope without copying URLs.
+- Prefer `arw-cli context telemetry --base http://127.0.0.1:8091 --watch` to stream quick terminal summaries of coverage/recall gaps, cache counters, and working-set scope without copying URLs (drop `--watch` for a single snapshot, append `--json --pretty` for raw output). Add `--output logs/trial-context.log` (or another path) to append each snapshot to a file for daily logs. Shortcut: `just context-watch` writes to `docs/ops/trials/logs/<DATE>/context.log` and keeps running until you press Ctrl+C.
 - For cache instrumentation, run `arw-cli tools cache --base http://127.0.0.1:8091` to print hit/miss, stampede suppression, and latency/payload savings (append `--json` for raw stats that scripts can consume).
 - Key indicators: route latencies (`/context/assemble`, `/actions`), action success rate, bus health, cache stampede suppression, governor profile/hints, capsule lease expirations, and feedback cues—all emitted from the same telemetry endpoint powering the launcher view.
 - Context telemetry now streams `context.recall.risk` (score, level, component gaps) alongside the coverage verdicts so dashboards can surface why recall dipped without diffing raw events.

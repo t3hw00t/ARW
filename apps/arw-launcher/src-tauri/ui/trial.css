@@ -185,6 +185,60 @@ body[data-page="trial"] .wrap{
   font-size: 12px;
 }
 
+.meter-stack{
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: var(--sp2) 0 var(--sp3);
+}
+
+.meter-block{
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meter-label{
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  color: var(--color-muted);
+}
+
+.meter-label .mono{
+  font-variant-numeric: tabular-nums;
+}
+
+.meter-bar{
+  position: relative;
+  height: 12px;
+  border-radius: 999px;
+  background: rgba(148, 163, 184, 0.25);
+  overflow: hidden;
+  transition: background 0.3s ease;
+}
+
+.meter-bar > i{
+  display: block;
+  height: 100%;
+  width: 0%;
+  background: var(--status-ok);
+  transition: width 0.3s ease, background 0.3s ease;
+}
+
+.meter-bar.warn > i{
+  background: var(--status-warn);
+}
+
+.meter-bar.bad > i{
+  background: var(--status-bad);
+}
+
+.meter-bar.empty > i{
+  background: rgba(148, 163, 184, 0.45);
+}
+
 .tile-body{
   margin: var(--sp2) 0;
   min-height: 38px;

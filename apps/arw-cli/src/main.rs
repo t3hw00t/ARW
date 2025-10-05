@@ -14,7 +14,7 @@ use sha2::Digest;
 use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::env;
 use std::fmt::Write as _;
-use std::fs::OpenOptions;
+use std::fs::{create_dir_all, OpenOptions};
 use std::io::{self, BufRead, BufReader, Read as _, Write};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, Stdio};
@@ -531,6 +531,15 @@ struct ContextTelemetryArgs {
     /// Pretty-print JSON output (requires --json)
     #[arg(long, requires = "json")]
     pretty: bool,
+    /// Poll continuously and print summaries on interval
+    #[arg(long, conflicts_with = "json")]
+    watch: bool,
+    /// Seconds between polls when --watch is enabled
+    #[arg(long, default_value_t = 15, requires = "watch")]
+    interval: u64,
+    /// Append output to this file (creates directories as needed)
+    #[arg(long, value_name = "PATH")]
+    output: Option<PathBuf>,
 }
 
 #[derive(Args)]
@@ -1401,20 +1410,17 @@ fn cmd_runtime_restore(args: &RuntimeRestoreArgs) -> Result<()> {
 }
 
 fn cmd_context_telemetry(args: &ContextTelemetryArgs) -> Result<()> {
+    if args.watch {
+        eprintln!("watching context telemetry; press Ctrl-C to exit");
+        return watch_context_telemetry(args);
+    }
     let token = resolve_admin_token(&args.admin_token);
     let client = Client::builder()
         .timeout(Duration::from_secs(args.timeout))
         .build()
         .context("building HTTP client")?;
     let base = args.base.trim_end_matches('/');
-    let url = format!("{}/state/training/telemetry", base);
-    let mut req = client.get(&url);
-    req = with_admin_headers(req, token.as_deref());
-    let resp = req
-        .send()
-        .context("requesting training telemetry snapshot")?;
-    let status = resp.status();
-    let body: JsonValue = resp.json().context("parsing training telemetry response")?;
+    let (status, body) = request_context_telemetry(&client, base, token.as_deref())?;
     if status == reqwest::StatusCode::UNAUTHORIZED {
         anyhow::bail!(
             "unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN to access telemetry"
@@ -1425,6 +1431,9 @@ fn cmd_context_telemetry(args: &ContextTelemetryArgs) -> Result<()> {
     }
 
     if args.json {
+        if let Some(path) = args.output.as_ref() {
+            append_context_json(path, &body, args.pretty)?;
+        }
         if args.pretty {
             println!(
                 "{}",
@@ -1440,6 +1449,114 @@ fn cmd_context_telemetry(args: &ContextTelemetryArgs) -> Result<()> {
     let now_ms = if now_ms < 0 { 0 } else { now_ms as u64 };
     let summary = render_context_telemetry_summary(&body, now_ms);
     println!("{}", summary.trim_end());
+    if let Some(path) = args.output.as_ref() {
+        let stamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        append_context_summary(path, Some(stamp.as_str()), &summary)?;
+    }
+    Ok(())
+}
+
+fn request_context_telemetry(
+    client: &Client,
+    base: &str,
+    token: Option<&str>,
+) -> Result<(StatusCode, JsonValue)> {
+    let url = format!("{}/state/training/telemetry", base);
+    let mut req = client.get(&url);
+    req = with_admin_headers(req, token);
+    let resp = req
+        .send()
+        .with_context(|| format!("requesting training telemetry snapshot from {}", url))?;
+    let status = resp.status();
+    let body: JsonValue = resp.json().context("parsing training telemetry response")?;
+    Ok((status, body))
+}
+
+fn watch_context_telemetry(args: &ContextTelemetryArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.trim_end_matches('/');
+    let base_interval = args.interval.max(1);
+    let max_backoff = base_interval.max(60);
+    let mut sleep_secs = base_interval;
+
+    loop {
+        match request_context_telemetry(&client, base, token.as_deref()) {
+            Ok((status, body)) => {
+                if status == StatusCode::UNAUTHORIZED {
+                    anyhow::bail!(
+                        "unauthorized: provide --admin-token or set ARW_ADMIN_TOKEN to access telemetry"
+                    );
+                }
+                if !status.is_success() {
+                    eprintln!("[context watch] request failed: {} {}", status, body);
+                    sleep_secs = sleep_secs.saturating_mul(2).min(max_backoff);
+                } else {
+                    let now_ms = chrono::Utc::now().timestamp_millis();
+                    let now_ms = if now_ms < 0 { 0 } else { now_ms as u64 };
+                    let summary = render_context_telemetry_summary(&body, now_ms);
+                    let stamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+                    println!("=== {} ===", stamp);
+                    println!("{}", summary.trim_end());
+                    println!();
+                    io::stdout().flush().ok();
+                    if let Some(path) = args.output.as_ref() {
+                        append_context_summary(path, Some(stamp.as_str()), &summary)?;
+                    }
+                    sleep_secs = base_interval;
+                }
+            }
+            Err(err) => {
+                eprintln!("[context watch] error: {err:?}");
+                sleep_secs = sleep_secs.saturating_mul(2).min(max_backoff);
+            }
+        }
+
+        thread::sleep(Duration::from_secs(sleep_secs));
+    }
+}
+
+fn append_context_summary(path: &Path, stamp: Option<&str>, summary: &str) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            create_dir_all(parent)
+                .with_context(|| format!("creating output directory {}", parent.display()))?;
+        }
+    }
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .with_context(|| format!("opening output file {}", path.display()))?;
+    if let Some(stamp_value) = stamp {
+        writeln!(file, "=== {} ===", stamp_value)?;
+    }
+    writeln!(file, "{}", summary.trim_end())?;
+    writeln!(file)?;
+    Ok(())
+}
+
+fn append_context_json(path: &Path, body: &JsonValue, pretty: bool) -> Result<()> {
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            create_dir_all(parent)
+                .with_context(|| format!("creating output directory {}", parent.display()))?;
+        }
+    }
+    let mut file = OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .with_context(|| format!("opening output file {}", path.display()))?;
+    let text = if pretty {
+        serde_json::to_string_pretty(body)?
+    } else {
+        body.to_string()
+    };
+    writeln!(file, "{}", text)?;
     Ok(())
 }
 
@@ -5035,6 +5152,37 @@ mod tests {
         let summary = render_context_telemetry_summary(&snapshot, 1_700_000_000_000);
         assert!(summary.contains("Generated"));
         assert!(summary.contains("no context telemetry"));
+    }
+
+    #[test]
+    fn append_context_summary_creates_dirs_and_appends() {
+        let dir = TempDir::new().expect("tempdir");
+        let log_path = dir.path().join("logs/2025-10-02/context.log");
+
+        append_context_summary(&log_path, Some("2025-10-02 12:00:00"), "First run").unwrap();
+        append_context_summary(&log_path, None, "Second run").unwrap();
+
+        let contents = fs::read_to_string(&log_path).expect("read log");
+        assert_eq!(
+            contents,
+            "=== 2025-10-02 12:00:00 ===\nFirst run\n\nSecond run\n\n"
+        );
+    }
+
+    #[test]
+    fn append_context_json_respects_pretty_flag() {
+        let dir = TempDir::new().expect("tempdir");
+        let log_path = dir.path().join("logs/context.jsonl");
+        let payload = json!({"hello": "world"});
+
+        append_context_json(&log_path, &payload, false).unwrap();
+        append_context_json(&log_path, &payload, true).unwrap();
+
+        let contents = fs::read_to_string(&log_path).expect("read log");
+        let mut lines = contents.lines();
+        assert_eq!(lines.next().unwrap().trim(), "{\"hello\":\"world\"}");
+        let pretty_block = lines.collect::<Vec<_>>().join("\n");
+        assert!(pretty_block.contains("\"hello\": \"world\""));
     }
 
     #[test]

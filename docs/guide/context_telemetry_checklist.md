@@ -22,6 +22,7 @@ Use this checklist whenever you touch the context assembly loop, coverage heuris
     context_loop::tests::coverage_payload_captures_slot_budgets_and_metadata
   ```
   These tests fail if slot budgets, counts, or the component breakdown ever drop from the event payloads.
+- **Live watch** — Keep `arw-cli context telemetry --watch --base http://127.0.0.1:8091` running in a terminal while iterating. The CLI prints the same coverage/recall rollups the launcher uses, so you can see slot-gap regressions or telemetry failures as soon as they land. Use `--output logs/context_watch.log` (or another path) to append each snapshot for later review, or run `just context-watch` to drop them under `docs/ops/trials/logs/<DATE>/` automatically.
 
 - **Assemble with slot budgets** — Start `arw-server` (`bash scripts/start.sh --service-only --wait-health`) and run a request that exercises slot-aware retrieval:
   ```bash
