@@ -66,6 +66,45 @@ Type: How‑to
 - `GET /admin/feedback/state` → `delta_log` retains the last 50 deltas so operators can cross-check after the fact. `arw-cli feedback state --json | jq '.delta_log[0]'` prints the most recent entry.
 - Before flipping on auto-apply, confirm the last delta matches the sidecar approvals decisions and capture a quick note in the trial daily log.
 
+Example `delta_log` entry:
+```json
+{
+  "version": 12,
+  "generated": "2025-10-03T11:22:33.456Z",
+  "added": [
+    {
+      "id": "hint-http-timeout",
+      "action": "hint",
+      "params": { "route": "POST /actions" },
+      "rationale": "Latency spike above 1.5s",
+      "confidence": 0.82
+    }
+  ],
+  "removed": [],
+  "changed": [
+    {
+      "id": "mem-ring",
+      "action": "mem_limit",
+      "before": {
+        "id": "mem-ring",
+        "action": "mem_limit",
+        "params": { "mb": 512 },
+        "rationale": null,
+        "confidence": 0.64
+      },
+      "after": {
+        "id": "mem-ring",
+        "action": "mem_limit",
+        "params": { "mb": 640 },
+        "rationale": "Sustained spillover observed",
+        "confidence": 0.7
+      }
+    }
+  ]
+}
+```
+`changed` entries capture both the prior and updated suggestion payloads so reviewers can audit how the engine evolved a recommendation without relying on external state.
+
 ## Notes
 - Keep `ARW_DEBUG=1` for local development; secure admin endpoints with `ARW_ADMIN_TOKEN` otherwise.
 - For heavy loads, the engine drops/samples events rather than blocking; consumers can resync via `GET /admin/feedback/suggestions`.

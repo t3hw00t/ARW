@@ -24,6 +24,32 @@ ARW seeds a runtime matrix read-model from `runtime.health` events. Today it mer
   - The smoke now also fetches `/state/runtime_matrix` and asserts every snapshot carries the accessible status strings (`label`, `detail`, `aria_hint`, `severity_label`) plus a fresh `runtime.updated` timestamp and positive `ttl_seconds`, catching regressions in the matrix feed before they escape CI.
   - To exercise a real llama.cpp build: `MODE=real LLAMA_SERVER_BIN=/path/to/server LLAMA_MODEL_PATH=/path/to/model.gguf just runtime-smoke`. Optionally pass `LLAMA_SERVER_ARGS="--your --flags"` or `LLAMA_SERVER_PORT=XXXX` to match your deployment.
 
+### Example payload
+```json
+{
+  "items": {
+    "local": {
+      "status": {
+        "code": "ok",
+        "severity": "info",
+        "severity_label": "Info",
+        "label": "Ready - Runtime telemetry nominal",
+        "detail": [
+          "Running within expected ranges"
+        ],
+        "aria_hint": "Runtime status Ready - Runtime telemetry nominal. Running within expected ranges"
+      },
+      "runtime": {
+        "total": 1,
+        "updated": "2025-10-04T12:34:56.789Z"
+      }
+    }
+  },
+  "ttl_seconds": 60
+}
+```
+The accessible `severity_label` travels alongside the slug (`severity`) so launchers and assistive technologies can narrate the status without maintaining their own enum mapping.
+
 ## Roadmap
 - Grid of Models × Hardware × Sandboxes with live health/throughput and load per cell.
 - Pin preferred combos per agent/project and fall back automatically under policy control.
