@@ -7,6 +7,7 @@ use std::cmp::Ordering;
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::time::Duration;
 use std::time::Instant;
+use tokio::runtime::Handle;
 
 use arw_topics as topics;
 
@@ -16,6 +17,9 @@ pub const STREAM_EVENT_EXPANDED: &str = topics::TOPIC_WORKING_SET_EXPANDED;
 pub const STREAM_EVENT_QUERY_EXPANDED: &str = topics::TOPIC_WORKING_SET_EXPAND_QUERY;
 pub const STREAM_EVENT_SELECTED: &str = topics::TOPIC_WORKING_SET_SELECTED;
 pub const STREAM_EVENT_COMPLETED: &str = topics::TOPIC_WORKING_SET_COMPLETED;
+
+const METRIC_WORLD_CANDIDATES: &str = "arw_context_world_candidates_total";
+const DEFAULT_WORLD_LANE: &str = "world";
 
 #[derive(Clone, Debug)]
 pub struct WorkingSetSpec {
@@ -337,14 +341,31 @@ pub fn assemble_with_observer<O: WorkingSetObserver>(
     builder.build(observer)
 }
 
+fn load_world_beliefs_blocking() -> Vec<Value> {
+    if let Ok(handle) = Handle::try_current() {
+        handle.block_on(async {
+            let (_, items) = crate::state_observer::beliefs_snapshot().await;
+            items
+        })
+    } else {
+        Vec::new()
+    }
+}
+
 struct WorkingSetBuilder<'a> {
     state: &'a AppState,
     spec: WorkingSetSpec,
+    world_beliefs: Vec<Value>,
 }
 
 impl<'a> WorkingSetBuilder<'a> {
     fn new(state: &'a AppState, spec: WorkingSetSpec) -> Self {
-        Self { state, spec }
+        let world_beliefs = load_world_beliefs_blocking();
+        Self {
+            state,
+            spec,
+            world_beliefs,
+        }
     }
 
     fn build<O: WorkingSetObserver>(&mut self, observer: &mut O) -> Result<WorkingSet> {
@@ -482,6 +503,8 @@ impl<'a> WorkingSetBuilder<'a> {
         )
         .record(expand_elapsed.as_secs_f64() * 1000.0);
 
+        self.ingest_world_beliefs(&spec, &mut candidates, &mut expanded_raw, observer);
+
         let mut all_candidates: Vec<Candidate> = candidates.into_values().collect();
         all_candidates.sort_by(|a, b| b.cscore.partial_cmp(&a.cscore).unwrap_or(Ordering::Equal));
         let has_above = all_candidates.iter().any(|c| c.cscore >= spec.min_score);
@@ -550,6 +573,32 @@ impl<'a> WorkingSetBuilder<'a> {
             diagnostics,
             summary,
         })
+    }
+
+    fn ingest_world_beliefs<O: WorkingSetObserver>(
+        &self,
+        spec: &WorkingSetSpec,
+        candidates: &mut HashMap<String, Candidate>,
+        expanded_raw: &mut Vec<Value>,
+        observer: &mut O,
+    ) {
+        for belief in &self.world_beliefs {
+            if let Some(candidate) = build_world_candidate(belief, spec.project.as_deref()) {
+                let payload = candidate.value.clone();
+                let lane_for_event = candidate.lane.clone();
+                observer.emit(
+                    STREAM_EVENT_EXPANDED,
+                    json!({
+                        "item": payload.clone(),
+                        "lane": lane_for_event.clone(),
+                        "source": "world",
+                    }),
+                );
+                counter!(METRIC_WORLD_CANDIDATES).increment(1);
+                expanded_raw.push(payload);
+                insert_candidate(candidates, candidate);
+            }
+        }
     }
 
     fn pseudo_relevance_expand<O: WorkingSetObserver>(
@@ -998,6 +1047,115 @@ fn build_expansion_candidate(
         obj.insert("cscore".into(), json!(cscore));
     }
     Some(Candidate::from_value(id, lane, record, cscore))
+}
+
+fn build_world_candidate(belief: &Value, project: Option<&str>) -> Option<Candidate> {
+    let raw_id = belief.get("id").and_then(|v| v.as_str())?.trim();
+    if raw_id.is_empty() {
+        return None;
+    }
+    let id = format!("world:{}", raw_id);
+    let lane = belief
+        .get("lane")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| DEFAULT_WORLD_LANE.to_string());
+    let updated = belief
+        .get("ts")
+        .and_then(|v| v.as_str())
+        .or_else(|| belief.get("updated").and_then(|v| v.as_str()));
+
+    let mut base = belief
+        .get("confidence")
+        .and_then(|v| v.as_f64())
+        .unwrap_or(0.45) as f32;
+    if let Some(score) = belief.get("score").and_then(|v| v.as_f64()) {
+        base = base.max(score as f32);
+    }
+    if let Some(weight) = belief.get("weight").and_then(|v| v.as_f64()) {
+        base = base.max(weight as f32);
+    }
+    let severity_component = belief
+        .get("severity")
+        .and_then(|v| v.as_f64())
+        .map(|s| (s / 5.0) as f32)
+        .unwrap_or(0.0);
+    let recency = recency_score(updated);
+    let mut cscore = (0.6 * base + 0.25 * recency + 0.15 * severity_component).clamp(0.0, 1.0);
+    if cscore < 0.05 {
+        cscore = 0.05;
+    }
+
+    let mut map = Map::new();
+    map.insert("id".into(), json!(id.clone()));
+    map.insert("lane".into(), json!(lane.clone()));
+    if let Some(kind) = belief.get("kind").and_then(|v| v.as_str()) {
+        map.insert("kind".into(), json!(kind));
+    } else if let Some(action) = belief.get("action").and_then(|v| v.as_str()) {
+        map.insert("kind".into(), json!(action));
+    } else {
+        map.insert("kind".into(), json!("belief"));
+    }
+    if let Some(ts) = updated {
+        map.insert("updated".into(), json!(ts));
+    }
+    if let Some(project_val) = belief.get("project").and_then(|v| v.as_str()).or(project) {
+        map.insert("project".into(), json!(project_val));
+    }
+    if let Some(slot) = belief
+        .get("slot")
+        .and_then(|v| v.as_str())
+        .or_else(|| belief.get("action").and_then(|v| v.as_str()))
+    {
+        map.insert("slot".into(), json!(slot));
+    }
+
+    let mut tag_components: Vec<String> = Vec::new();
+    if let Some(kind) = belief.get("kind").and_then(|v| v.as_str()) {
+        tag_components.push(kind.to_ascii_lowercase());
+    }
+    if let Some(action) = belief.get("action").and_then(|v| v.as_str()) {
+        tag_components.push(format!("action:{}", action.to_ascii_lowercase()));
+    }
+    if let Some(source) = belief.get("source").and_then(|v| v.as_str()) {
+        tag_components.push(format!("source:{}", source.to_ascii_lowercase()));
+    }
+    if !tag_components.is_empty() {
+        map.insert("tags".into(), Value::String(tag_components.join(",")));
+    }
+
+    let mut value_payload = Map::new();
+    value_payload.insert("source".into(), json!("world"));
+    if let Some(rationale) = belief.get("rationale") {
+        value_payload.insert("rationale".into(), rationale.clone());
+    }
+    value_payload.insert("record".into(), belief.clone());
+    map.insert("value".into(), Value::Object(value_payload));
+
+    let mut value = Value::Object(map);
+    let affinity = project.map(|p| project_affinity(&value, p)).unwrap_or(1.0);
+    cscore = (cscore * affinity).clamp(0.0, 1.0);
+
+    if let Some(obj) = value.as_object_mut() {
+        obj.insert("source".into(), json!("world"));
+        obj.insert("cscore".into(), json!(cscore));
+        obj.insert(
+            "explain".into(),
+            json!({
+                "kind": "world",
+                "components": {
+                    "base": base,
+                    "recency": recency,
+                    "severity": severity_component,
+                    "project_affinity": affinity,
+                },
+                "cscore": cscore,
+            }),
+        );
+    }
+
+    Some(Candidate::from_value(id, Some(lane), value, cscore))
 }
 
 fn build_query_expansion_candidate(
@@ -1523,6 +1681,7 @@ pub fn default_streaming_enabled() -> bool {
 mod tests {
     use super::*;
     use crate::test_support::env as test_env;
+    use chrono::{SecondsFormat, Utc};
     use serde_json::json;
 
     fn context_env_guard() -> test_env::EnvGuard {
@@ -1667,6 +1826,32 @@ mod tests {
         env_guard.set("ARW_CONTEXT_STREAM_DEFAULT", "1");
 
         assert!(default_streaming_enabled());
+    }
+
+    #[test]
+    fn build_world_candidate_wraps_belief() {
+        let _env_guard = context_env_guard();
+        let ts = Utc::now().to_rfc3339_opts(SecondsFormat::Millis, true);
+        let belief = json!({
+            "id": "hint-http-timeout",
+            "action": "hint",
+            "confidence": 0.72,
+            "severity": 4,
+            "ts": ts,
+            "rationale": "raise timeout",
+        });
+        let candidate = build_world_candidate(&belief, Some("demo"));
+        let candidate = candidate.expect("world candidate");
+        assert!(candidate.id.starts_with("world:"));
+        assert_eq!(candidate.lane.as_deref(), Some("world"));
+        assert!(candidate.cscore <= 1.0 && candidate.cscore >= 0.05);
+        let stored_id = candidate
+            .value
+            .get("value")
+            .and_then(|v| v.get("record"))
+            .and_then(|v| v.get("id"))
+            .and_then(|v| v.as_str());
+        assert_eq!(stored_id, Some("hint-http-timeout"));
     }
 
     #[test]

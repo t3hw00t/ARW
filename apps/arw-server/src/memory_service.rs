@@ -317,7 +317,12 @@ pub async fn pack_memory(state: &AppState, input: MemoryPackInput) -> Result<Mem
     };
     spec.normalize();
 
-    let working = working_set::assemble(state, &spec)?;
+    let state_clone = state.clone();
+    let spec_for_block = spec.clone();
+    let working =
+        tokio::task::spawn_blocking(move || working_set::assemble(&state_clone, &spec_for_block))
+            .await
+            .context("pack_memory assemble join failed")??;
     let spec_snapshot = spec.snapshot();
 
     let mut items = working.items;

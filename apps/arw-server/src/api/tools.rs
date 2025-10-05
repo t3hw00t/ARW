@@ -195,8 +195,8 @@ mod tests {
     use arw_core::gating;
     use arw_policy::PolicyEngine;
     use axum::body::to_bytes;
-    use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
     use axum::extract::State;
+    use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
     use serde_json::json;
     use std::path::Path;
     use std::sync::Arc;
@@ -265,10 +265,10 @@ mod tests {
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
         let (parts, body) = response.into_parts();
         assert_eq!(parts.status, StatusCode::FORBIDDEN);
-        let bytes =
-            to_bytes(body, usize::MAX).await.expect("forbidden response body");
-        let value: serde_json::Value =
-            serde_json::from_slice(&bytes).expect("forbidden body json");
+        let bytes = to_bytes(body, usize::MAX)
+            .await
+            .expect("forbidden response body");
+        let value: serde_json::Value = serde_json::from_slice(&bytes).expect("forbidden body json");
         assert_eq!(value["status"].as_u64(), Some(403));
         let detail = value["detail"].as_str().unwrap_or_default();
         assert!(detail.contains("io:ocr"), "detail missing io:ocr: {detail}");
@@ -301,8 +301,7 @@ mod tests {
         let (parts, body) = response.into_parts();
         assert_eq!(parts.status, StatusCode::NOT_FOUND);
         let bytes = to_bytes(body, usize::MAX).await.expect("not found body");
-        let value: serde_json::Value =
-            serde_json::from_slice(&bytes).expect("not found body json");
+        let value: serde_json::Value = serde_json::from_slice(&bytes).expect("not found body json");
         assert_eq!(value["status"].as_u64(), Some(404));
         let detail = value["detail"].as_str().unwrap_or_default();
         assert!(
