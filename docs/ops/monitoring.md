@@ -33,7 +33,7 @@ This note captures the minimal wiring needed to surface ARW metrics in Prometheu
    awk '/```yaml/{flag=1;next}/```/{flag=0}flag' docs/snippets/prometheus_alerting_rules.md > /etc/prometheus/rules/arw-alerting-rules.yaml
    ```
 
-   The alert rules include `ARWLegacyCapsuleHeadersSeen` so you will get early warning if any clients still hit compatibility headers while you plan the legacy turn-down.
+   The alert rules include `ARWLegacyCapsuleHeadersSeen` and `ARWContextCascadeStale` so you get early warning if legacy callers resurface or if the cascade worker stops processing fresh episodes.
 
 3. Reload Prometheus:
    ```bash

@@ -19,6 +19,11 @@ let telemetryEventTimer = null;
 const GOVERNOR_HISTORY_LIMIT = 6;
 let governorHistory = [];
 let lastGovernorToast = { key: null, time: 0 };
+let cascadeSummaries = [];
+let cascadeMeta = { generated_ms: null };
+let cascadeTargetProject = null;
+let cascadeHydrated = false;
+let cascadeFetchAbort = null;
 
 const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: 'baseBadge', label: 'Base' });
 
@@ -558,6 +563,102 @@ function renderList(targetId, items, formatter, emptyText) {
   }
 }
 
+function setCascadeStatus(text, level = 'info') {
+  const node = document.getElementById('cascadeStatus');
+  if (!node) return;
+  node.classList.remove('bad', 'dim', 'ok');
+  if (level === 'bad') node.classList.add('bad');
+  else if (level === 'ok') node.classList.add('ok');
+  else node.classList.add('dim');
+  node.textContent = text;
+}
+
+function renderCascadeSummariesList() {
+  const list = document.getElementById('cascadeSummaries');
+  if (!list) return;
+  list.innerHTML = '';
+  if (!Array.isArray(cascadeSummaries) || cascadeSummaries.length === 0) {
+    const li = document.createElement('li');
+    li.className = 'dim';
+    li.textContent = 'No cascade summaries yet';
+    list.appendChild(li);
+    return;
+  }
+  cascadeSummaries.slice(0, 20).forEach((record) => {
+    const value = record && typeof record === 'object' && record.value && typeof record.value === 'object'
+      ? record.value
+      : {};
+    const stats = value.stats && typeof value.stats === 'object' ? value.stats : {};
+    const episodeId = value.episode_id || record.key || 'episode';
+    const abstract = value.abstract && typeof value.abstract === 'object' ? value.abstract : {};
+    const outline = Array.isArray(value.outline) ? value.outline : [];
+    const events = Number(stats.events || 0);
+    const errors = Number(stats.errors || 0);
+    let summaryText = abstract.text || record.text || '';
+    if (!summaryText && outline.length) {
+      summaryText = outline.slice(0, 2).map((item) => String(item || '')).filter(Boolean).join(' | ');
+    }
+    if (!summaryText) summaryText = 'summary unavailable';
+    let label = `${episodeId}: ${summaryText}`;
+    if (events > 0) {
+      label += ` · ${events} event${events === 1 ? '' : 's'}`;
+    }
+    if (errors > 0) {
+      label += ` (${errors} error${errors === 1 ? '' : 's'})`;
+    }
+    const li = document.createElement('li');
+    li.textContent = label;
+    list.appendChild(li);
+  });
+}
+
+async function refreshCascadeSummaries(options = {}) {
+  const base = telemetryBase || getCurrentBase();
+  if (!base) return;
+  if (cascadeFetchAbort) {
+    try { cascadeFetchAbort.abort(); } catch {}
+  }
+  const controller = new AbortController();
+  cascadeFetchAbort = controller;
+  const project = options.project !== undefined ? options.project : cascadeTargetProject;
+  const quiet = Boolean(options.quiet);
+  if (!quiet) {
+    setCascadeStatus('Loading…');
+  }
+  try {
+    const params = new URLSearchParams();
+    params.set('limit', '40');
+    if (project) params.set('project', project);
+    const response = await ARW.http.json(base, `/state/context/cascade?${params.toString()}`, { signal: controller.signal });
+    cascadeSummaries = Array.isArray(response?.items) ? response.items : [];
+    cascadeMeta = {
+      generated_ms: Number.isFinite(Number(response?.generated_ms)) ? Number(response.generated_ms) : null,
+      generated: response?.generated || null,
+      project: project || null,
+    };
+    cascadeHydrated = true;
+    renderCascadeSummariesList();
+    if (cascadeMeta.generated_ms != null) {
+      const rel = formatRelativeTraining(cascadeMeta.generated_ms);
+      const abs = formatRelativeAbsTraining(cascadeMeta.generated_ms);
+      const scope = cascadeMeta.project ? ` · project ${cascadeMeta.project}` : '';
+      setCascadeStatus(`Updated ${rel} (${abs})${scope}`, 'ok');
+    } else {
+      const scope = cascadeMeta.project ? `project ${cascadeMeta.project}` : 'cascade';
+      setCascadeStatus(`Updated ${new Date().toLocaleTimeString()} · ${scope}`, 'ok');
+    }
+  } catch (err) {
+    if (err?.name === 'AbortError') return;
+    console.error('cascade summaries fetch failed', err);
+    if (!cascadeHydrated) {
+      renderCascadeSummariesList();
+    }
+    setCascadeStatus('Cascade refresh failed', 'bad');
+  } finally {
+    if (cascadeFetchAbort === controller) cascadeFetchAbort = null;
+  }
+}
+
 function updateRatioBar(id, value, options = {}) {
   const node = document.getElementById(id);
   if (!node) return;
@@ -733,6 +834,23 @@ function renderTelemetry(data) {
   const specEl = document.getElementById('contextSpecSummary');
   if (specEl) {
     specEl.textContent = parts.length ? parts.join(' · ') : '—';
+  }
+
+  let nextCascadeProject = null;
+  if (typeof spec.project === 'string' && spec.project.trim()) {
+    nextCascadeProject = spec.project.trim();
+  } else if (Array.isArray(workingSet.projects) && workingSet.projects.length) {
+    const first = workingSet.projects.find((proj) => typeof proj === 'string' && proj.trim());
+    if (first) nextCascadeProject = first.trim();
+  }
+  const prevProjectKey = cascadeTargetProject ? cascadeTargetProject.toLowerCase() : null;
+  const nextProjectKey = nextCascadeProject ? nextCascadeProject.toLowerCase() : null;
+  if (nextProjectKey !== prevProjectKey) {
+    cascadeTargetProject = nextCascadeProject || null;
+    cascadeHydrated = false;
+    refreshCascadeSummaries({ project: cascadeTargetProject, quiet: true });
+  } else if (!cascadeHydrated && !cascadeFetchAbort) {
+    refreshCascadeSummaries({ project: cascadeTargetProject, quiet: true });
   }
 
   const capsules = data && typeof data.capsules === 'object' ? data.capsules : {};
@@ -1507,10 +1625,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     try { trainingSidecar?.dispose?.(); } catch {}
     trainingSidecar = ARW.sidecar.mount('sidecar', ['timeline','approvals','context','policy','metrics','models'], { base: telemetryBase });
     ARW.sse.connect(telemetryBase, { replay: 5 });
-    await Promise.allSettled([refreshTelemetry(), refreshJobs()]);
+    await Promise.allSettled([
+      refreshTelemetry(),
+      refreshJobs(),
+      refreshCascadeSummaries({ project: cascadeTargetProject, quiet: true }),
+    ]);
   };
   ARW.sse.indicator('sseStat', { prefix: 'SSE' });
-  const sseFilters = ['state.', 'models.', 'logic.unit.', 'config.patch.'];
+  const sseFilters = ['state.', 'models.', 'logic.unit.', 'config.patch.', 'context.cascade.'];
   ARW.sse.connect(base, { replay: 10, prefix: sseFilters });
 
   const logicUnitEvents = ([kind, env]) => {
@@ -1533,6 +1655,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   const contextSub = ARW.sse.subscribe(contextEvents, () => {
     queueTelemetryRefresh({ delay: 200, quiet: true });
   });
+
+  const cascadeSub = ARW.sse.subscribe(
+    (kind) => kind === 'context.cascade.updated',
+    () => refreshCascadeSummaries({ quiet: true })
+  );
 
   const governorHintSub = ARW.sse.subscribe('actions.hint.applied', ({ env }) => {
     const payload = env?.payload || env;

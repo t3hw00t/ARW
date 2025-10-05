@@ -49,6 +49,18 @@ groups:
           description: |
             GPU memory usage is {{ $value | printf "%.1f" }}%% for 5 minutes.
 
+      # Cascade worker stale (no episodes processed for 15 minutes)
+      - alert: ARWContextCascadeStale
+        expr: arw_context_cascade_last_event_age_ms > 900000
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Context cascade stale (> 15m without processing episodes)"
+          description: |
+            Cascade last processed an episode {{ $value | printf "%.0f" }} ms ago. Inspect the
+            context.cascade task, recent episode volume, and logs on the ARW server.
+
 ```
 
 Tip: Pair alerts with routing labels/receivers (PagerDuty/Slack) in Alertmanager.

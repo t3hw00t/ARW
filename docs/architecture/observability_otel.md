@@ -10,7 +10,7 @@ Map the episode timeline to trace semantics and expose correlated metrics/logs.
 
 Signals
 - Traces: span per observation/intent/action/tool; corr_id as trace id.
-- Metrics: route histograms, tool/model/runtime counters, budgets.
+- Metrics: route histograms, tool/model/runtime counters, budgets, cascade freshness gauges (`arw_context_cascade_processed_last`, `arw_context_cascade_skipped_last`, `arw_context_cascade_last_event_id`, `arw_context_cascade_last_event_age_ms`).
 - Logs: structured events with trace/span ids.
 
 UI

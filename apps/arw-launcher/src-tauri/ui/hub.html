@@ -107,6 +107,32 @@
               <div id="runtimeMatrix"></div>
             </div>
           </section>
+          <section class="card" id="context" role="region" aria-labelledby="contextTitle">
+            <h3 id="contextTitle">What's in Context Now</h3>
+            <div class="row">
+              <button id="btnContextRefresh" class="ghost">Refresh</button>
+              <label class="key"><input id="contextIncludeSources" type="checkbox"> include seeds</label>
+              <span class="dim" id="contextStat" role="status" aria-live="polite"></span>
+            </div>
+            <div id="contextPreview" class="context-preview" role="status" aria-live="polite">Context preview will appear here after the next assembly.</div>
+            <div id="contextSummary" class="context-summary">Items 0 · Seeds 0 · Expanded 0</div>
+            <div id="contextMeta" class="context-meta">No context specification recorded yet.</div>
+            <div id="contextItems" class="context-items" role="list" aria-label="Assembled context items">
+              <div class="context-empty">No context assembled yet.</div>
+            </div>
+            <h4 id="contextCascadeTitle" style="margin-top:12px">Episode summaries</h4>
+            <div id="contextCascade" class="context-items" role="list" aria-labelledby="contextCascadeTitle">
+              <div class="context-empty">Select a project to view cascade summaries.</div>
+            </div>
+            <div id="contextRehydrateWrap" class="context-restore">
+              <div class="row">
+                <strong>Last Rehydrate</strong>
+                <button id="btnContextCopy" class="ghost" disabled>Copy result</button>
+                <span class="dim" id="contextRehydrateMeta"></span>
+              </div>
+              <pre id="contextRehydrateOut" class="cmp-code" aria-live="polite"></pre>
+            </div>
+          </section>
           <section class="card" id="runs" role="region" aria-labelledby="runsTitle">
             <h3 id="runsTitle">Runs</h3>
             <div class="row">

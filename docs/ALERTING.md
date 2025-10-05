@@ -11,6 +11,9 @@ The server exposes Prometheus metrics at `/metrics`. Stability-related metrics:
 - `arw_safe_mode_active` — 0/1 gauge indicating safe‑mode (recent crash) is active.
 - `arw_safe_mode_until_ms` — epoch milliseconds until safe‑mode ends (0 if inactive).
 - `arw_last_crash_ms` — epoch milliseconds of the last crash marker (0 if none).
+- `arw_context_cascade_last_event_age_ms` — milliseconds since the newest episode processed by the context cascade (watch for large gaps).
+- `arw_context_cascade_processed_last` / `arw_context_cascade_skipped_last` — number of episodes processed or skipped in the latest cascade sweep.
+- `arw_context_cascade_last_event_id` — last event id seen by the cascade (monotonic).
 
 Example Prometheus alerting rules (YAML):
 
@@ -35,6 +38,17 @@ groups:
     annotations:
       summary: "Recent ARW crash detected"
       description: "ARW observed a recent crash within the last 10 minutes."
+
+  - alert: ARWContextCascadeStale
+    expr: arw_context_cascade_last_event_age_ms > 900000
+    for: 15m
+    labels:
+      severity: warning
+    annotations:
+      summary: "Context cascade has not processed episodes in > 15 minutes"
+      description: |
+        The cascade last processed an episode {{ $value | printf "%.0f" }} ms ago. Investigate the
+        context.cascade task and recent episode volume.
 ```
 
 ## Dashboards (Grafana)

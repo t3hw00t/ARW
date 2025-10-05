@@ -203,6 +203,7 @@ Payload notes: `orchestrator.job.created` now includes a `data` object mirroring
 | `context.assembled` | `TOPIC_CONTEXT_ASSEMBLED` |
 | `context.coverage` | `TOPIC_CONTEXT_COVERAGE` |
 | `context.recall.risk` | `TOPIC_CONTEXT_RECALL_RISK` |
+| `context.cascade.updated` | `TOPIC_CONTEXT_CASCADE_UPDATED` |
 | `working_set.started` | `TOPIC_WORKING_SET_STARTED` |
 | `working_set.seed` | `TOPIC_WORKING_SET_SEED` |
 | `working_set.expanded` | `TOPIC_WORKING_SET_EXPANDED` |

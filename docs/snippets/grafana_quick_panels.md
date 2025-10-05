@@ -61,6 +61,32 @@ A minimal Grafana dashboard with quick panels: CPU avg %, Mem usage %, GPU mem u
       "targets": [ {"expr": "arw:gpu_mem_usage_percent OR (100 * sum(arw_gpu_adapter_memory_bytes{kind=\"used\"}) / sum(arw_gpu_adapter_memory_bytes{kind=\"total\"}))", "legendFormat": "gpu %"} ]
     },
     {
+      "type": "stat",
+      "title": "Cascade freshness (minutes)",
+      "gridPos": {"x": 12, "y": 5, "w": 6, "h": 5},
+      "fieldConfig": {
+        "defaults": {
+          "unit": "m",
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {"value": null, "color": "green"},
+              {"value": 10, "color": "orange"},
+              {"value": 20, "color": "red"}
+            ]
+          }
+        }
+      },
+      "datasource": {"type": "prometheus", "uid": "${DS_PROMETHEUS}"},
+      "targets": [
+        {
+          "expr": "arw_context_cascade_last_event_age_ms / 60000",
+          "legendFormat": "age"
+        }
+      ]
+    },
+    {
       "type": "timeseries",
       "title": "CPU % per core",
       "gridPos": {"x": 0, "y": 10, "w": 24, "h": 6},

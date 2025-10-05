@@ -157,6 +157,7 @@ pub(crate) mod paths {
     pub const STATE_TRAINING_ACTIONS: &str = "/state/training/actions";
     pub const STATE_RUNTIME_MATRIX: &str = "/state/runtime_matrix";
     pub const STATE_RUNTIME_SUPERVISOR: &str = "/state/runtime_supervisor";
+    pub const STATE_CONTEXT_CASCADE: &str = "/state/context/cascade";
     pub const STATE_TASKS: &str = "/state/tasks";
     pub const STATE_SELF: &str = "/state/self";
     pub const STATE_SELF_AGENT: &str = "/state/self/{agent}";
@@ -697,6 +698,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
     register_admin_self_model_routes(&mut builder);
     builder.route_post("/context/assemble", api::context::context_assemble, None);
     builder.route_post("/context/rehydrate", api::context::context_rehydrate, None);
+    builder.route_get(
+        paths::STATE_CONTEXT_CASCADE,
+        api::context::state_context_cascade,
+        Some(Stability::Experimental),
+    );
     builder.route_get("/state/connectors", api::connectors::state_connectors, None);
     builder.route_post(
         "/connectors/register",

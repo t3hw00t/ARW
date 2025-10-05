@@ -20,6 +20,12 @@ const updateBaseMeta = () => ARW.applyBaseMeta({ portInputId: 'port', badgeId: '
 
 document.addEventListener('DOMContentLoaded', async () => {
   await ARW.applyPortFromPrefs('port');
+  let hubPrefs = {};
+  try {
+    hubPrefs = (await ARW.getPrefs('ui:hub')) || {};
+  } catch {
+    hubPrefs = {};
+  }
   let meta = updateBaseMeta();
   let port = ARW.getPortFromInput('port') || meta.port || 8091;
   const ensureLane = (list, lane, opts = {}) => {
@@ -34,7 +40,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     return lanes;
   };
   let base = ARW.base(port);
-  let curProj = null;
+  let curProj = typeof hubPrefs.lastProject === 'string' ? hubPrefs.lastProject : null;
   const defaultLanes = ensureLane(['timeline','context','policy','metrics','models','activity'], 'approvals', { after: 'timeline' });
   let sc = ARW.sidecar.mount('sidecar', defaultLanes, { base, getProject: () => curProj });
   const elRuntimeBadge = document.getElementById('runtimeBadge');
@@ -611,6 +617,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       refreshProjectsSnapshot(),
       refreshRuntimeSupervisor(),
       refreshRuntimeMatrix(),
+      refreshContextSnapshot(),
+      refreshContextCascade({ quiet: true }),
     ]);
   };
   ARW.sse.indicator('sseStat', { prefix: 'SSE' });
@@ -676,6 +684,27 @@ document.addEventListener('DOMContentLoaded', async () => {
   const btnRunCopy = document.getElementById('btnRunCopy');
   const btnRunPinA = document.getElementById('btnRunPinA');
   const btnRunPinB = document.getElementById('btnRunPinB');
+  const elContextPreview = document.getElementById('contextPreview');
+  const elContextSummary = document.getElementById('contextSummary');
+  const elContextMeta = document.getElementById('contextMeta');
+  const elContextItems = document.getElementById('contextItems');
+  const elContextCascade = document.getElementById('contextCascade');
+  const elContextStat = document.getElementById('contextStat');
+  const elContextIncludeSources = document.getElementById('contextIncludeSources');
+  const btnContextRefresh = document.getElementById('btnContextRefresh');
+  const btnContextCopy = document.getElementById('btnContextCopy');
+  const elContextRehydrateMeta = document.getElementById('contextRehydrateMeta');
+  const elContextRehydrateOut = document.getElementById('contextRehydrateOut');
+  const elContextRehydrateWrap = document.getElementById('contextRehydrateWrap');
+  let contextLastResultText = '';
+  let contextModel = null;
+  let contextAbort = null;
+  let contextPrimed = false;
+  let cascadeAbort = null;
+  let cascadeItems = [];
+  if (elContextIncludeSources) {
+    elContextIncludeSources.checked = hubPrefs.contextIncludeSources === true;
+  }
   const runDetailsOpen = new Set();
   function setRunsStat(txt, sticky=false){
     if (!elRunsStat) return;
@@ -991,6 +1020,685 @@ document.addEventListener('DOMContentLoaded', async () => {
       elRunsTbl.appendChild(tr);
     }
   }
+  function setContextStat(text, sticky = false) {
+    if (!elContextStat) return;
+    elContextStat.textContent = text || '';
+    if (!text || sticky) return;
+    setTimeout(() => {
+      if (elContextStat.textContent === text) {
+        elContextStat.textContent = '';
+      }
+    }, 1500);
+  }
+  function truncateText(value, max = 320) {
+    const str = String(value ?? '');
+    if (str.length <= max) return str;
+    return `${str.slice(0, Math.max(0, max - 1))}…`;
+  }
+  function pickFirstString(obj, keys = []) {
+    if (!obj || typeof obj !== 'object') return null;
+    for (const key of keys) {
+      const value = obj[key];
+      if (typeof value === 'string' && value.trim()) {
+        return value.trim();
+      }
+    }
+    return null;
+  }
+  function contextLabel(item, index = 0) {
+    if (typeof item === 'string' && item.trim()) {
+      return truncateText(item.trim(), 80);
+    }
+    if (!item || typeof item !== 'object') {
+      return `Item ${index + 1}`;
+    }
+    const label =
+      pickFirstString(item, ['title', 'name', 'heading']) ||
+      pickFirstString(item, ['summary', 'text']) ||
+      (typeof item.id === 'string' && item.id.trim() ? item.id.trim() : '') ||
+      (typeof item.key === 'string' && item.key.trim() ? item.key.trim() : '');
+    if (label) return truncateText(label, 80);
+    if (typeof item.value === 'string' && item.value.trim()) {
+      return truncateText(item.value.trim(), 80);
+    }
+    return `Item ${index + 1}`;
+  }
+  function contextSnippet(item) {
+    if (!item) return '';
+    if (typeof item === 'string') {
+      return truncateText(item, 320);
+    }
+    if (typeof item === 'object') {
+      const primary =
+        pickFirstString(item, ['summary', 'text', 'content', 'preview', 'value', 'body']) ||
+        (typeof item.value === 'string' && item.value.trim() ? item.value.trim() : null);
+      if (primary) {
+        return truncateText(primary, 320);
+      }
+      if (item.value && typeof item.value === 'object') {
+        const nested = pickFirstString(item.value, ['summary', 'text', 'content', 'preview']);
+        if (nested) {
+          return truncateText(nested, 320);
+        }
+      }
+      try {
+        return truncateText(JSON.stringify(item, null, 2), 320);
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  }
+  function gatherContextTags(item) {
+    if (!item || typeof item !== 'object') return [];
+    const out = new Set();
+    const raw = item.tags ?? item.labels;
+    if (Array.isArray(raw)) {
+      for (const tag of raw) {
+        if (typeof tag === 'string' && tag.trim()) {
+          out.add(tag.trim());
+        }
+      }
+    } else if (typeof raw === 'string') {
+      for (const tag of raw.split(/[;,]/)) {
+        const trimmed = tag.trim();
+        if (trimmed) out.add(trimmed);
+      }
+    }
+    return Array.from(out).slice(0, 12);
+  }
+  function formatContextScore(value) {
+    const num = Number(value);
+    if (!Number.isFinite(num)) return null;
+    if (num >= 0 && num <= 1) return `${Math.round(num * 100)}%`;
+    if (num >= 1 && num <= 100) return `${Math.round(num)}%`;
+    return num.toFixed(2);
+  }
+  function extractContextPointer(obj) {
+    const seen = new Set();
+    const queue = [];
+    if (obj && typeof obj === 'object') queue.push(obj);
+    while (queue.length) {
+      const current = queue.shift();
+      if (!current || typeof current !== 'object') continue;
+      if (seen.has(current)) continue;
+      seen.add(current);
+      if (!Array.isArray(current)) {
+        const pointer = current.ptr || current.pointer;
+        if (pointer && typeof pointer === 'object' && !Array.isArray(pointer) && typeof pointer.kind === 'string') {
+          return pointer;
+        }
+      }
+      const values = Array.isArray(current) ? current : Object.values(current);
+      for (const value of values) {
+        if (value && typeof value === 'object' && !seen.has(value)) {
+          queue.push(value);
+        }
+      }
+    }
+    return null;
+  }
+  function pointerLabel(ptr) {
+    if (!ptr || typeof ptr !== 'object') return '';
+    const kind = String(ptr.kind || '').toLowerCase();
+    if (kind === 'memory') {
+      return ptr.id ? `memory:${ptr.id}` : 'memory pointer';
+    }
+    if (kind === 'file') {
+      return ptr.path ? `file:${ptr.path}` : 'file pointer';
+    }
+    if (ptr.uri) return ptr.uri;
+    return kind || 'pointer';
+  }
+  function pointerDetail(ptr) {
+    if (!ptr || typeof ptr !== 'object') return '';
+    if (typeof ptr.path === 'string' && ptr.path) return ptr.path;
+    if (typeof ptr.id === 'string' && ptr.id) return ptr.id;
+    if (typeof ptr.uri === 'string' && ptr.uri) return ptr.uri;
+    return '';
+  }
+  function clearContextPanel(message) {
+    const msg = message || 'No context assembled yet.';
+    contextModel = null;
+    contextPrimed = false;
+    if (elContextPreview) {
+      elContextPreview.textContent = msg;
+    }
+    if (elContextSummary) {
+      elContextSummary.textContent = 'Items 0 · Seeds 0 · Expanded 0';
+    }
+    if (elContextMeta) {
+      elContextMeta.textContent = 'No context specification recorded yet.';
+    }
+    if (elContextItems) {
+      elContextItems.innerHTML = '';
+      const empty = document.createElement('div');
+      empty.className = 'context-empty';
+      empty.textContent = msg;
+      elContextItems.appendChild(empty);
+    }
+    if (elContextRehydrateOut) {
+      elContextRehydrateOut.textContent = '';
+    }
+    if (elContextRehydrateMeta) {
+      elContextRehydrateMeta.textContent = '';
+    }
+    if (elContextRehydrateWrap) {
+      elContextRehydrateWrap.classList.remove('active');
+    }
+    if (btnContextCopy) {
+      btnContextCopy.disabled = true;
+    }
+    contextLastResultText = '';
+    clearCascadePanel();
+  }
+  function clearCascadePanel(message) {
+    cascadeItems = [];
+    if (!elContextCascade) return;
+    const text = message || 'Select a project to view cascade summaries.';
+    elContextCascade.innerHTML = '';
+    const empty = document.createElement('div');
+    empty.className = 'context-empty';
+    empty.textContent = text;
+    elContextCascade.appendChild(empty);
+  }
+  function buildContextItem(item, index) {
+    const wrap = document.createElement('div');
+    wrap.className = 'context-item';
+    wrap.setAttribute('role', 'listitem');
+
+    const header = document.createElement('div');
+    header.className = 'context-item-header';
+    const title = document.createElement('span');
+    title.textContent = contextLabel(item, index);
+    header.appendChild(title);
+
+    const lane = item && typeof item === 'object'
+      ? (item.slot || item.lane || item.kind || '')
+      : '';
+    if (lane) {
+      const laneSpan = document.createElement('span');
+      laneSpan.className = 'context-lane';
+      laneSpan.textContent = String(lane);
+      header.appendChild(laneSpan);
+    }
+
+    const scoreValue = item && typeof item === 'object'
+      ? (item.cscore ?? item.score ?? item.sim)
+      : null;
+    const scoreLabel = formatContextScore(scoreValue);
+    if (scoreLabel) {
+      const scoreSpan = document.createElement('span');
+      scoreSpan.className = 'context-item-score';
+      scoreSpan.textContent = `Score ${scoreLabel}`;
+      header.appendChild(scoreSpan);
+    }
+
+    const iteration = item && typeof item === 'object' ? item.iteration : null;
+    if (Number.isFinite(iteration)) {
+      const iterBadge = document.createElement('span');
+      iterBadge.className = 'badge';
+      iterBadge.textContent = `iter ${iteration}`;
+      header.appendChild(iterBadge);
+    }
+
+    wrap.appendChild(header);
+
+    const snippet = contextSnippet(item);
+    if (snippet) {
+      const body = document.createElement('div');
+      body.className = 'context-item-body';
+      body.textContent = snippet;
+      wrap.appendChild(body);
+    }
+
+    const tags = gatherContextTags(item);
+    if (tags.length) {
+      const tagRow = document.createElement('div');
+      tagRow.className = 'context-tags';
+      tagRow.textContent = tags.join(' · ');
+      wrap.appendChild(tagRow);
+    }
+
+    const pointer = extractContextPointer(item);
+    if (pointer) {
+      const pointerRow = document.createElement('div');
+      pointerRow.className = 'context-pointer';
+
+      const pointerInfo = document.createElement('span');
+      pointerInfo.className = 'mono';
+      const label = pointerLabel(pointer) || 'pointer';
+      pointerInfo.textContent = label;
+      pointerRow.appendChild(pointerInfo);
+
+      const detailText = pointerDetail(pointer);
+      if (detailText && detailText !== label) {
+        const detail = document.createElement('code');
+        detail.className = 'mono';
+        detail.textContent = truncateText(detailText, 160);
+        pointerRow.appendChild(detail);
+      }
+
+      const actions = document.createElement('div');
+      actions.className = 'context-actions';
+      const btn = document.createElement('button');
+      btn.className = 'ghost';
+      btn.textContent = 'Rehydrate';
+      btn.addEventListener('click', () => {
+        const payload = JSON.parse(JSON.stringify(pointer));
+        rehydratePointer(payload, label, btn);
+      });
+      actions.appendChild(btn);
+      pointerRow.appendChild(actions);
+      wrap.appendChild(pointerRow);
+    }
+
+    const stamp = item && typeof item === 'object'
+      ? (item.updated || item.last || item.modified || item.time)
+      : null;
+    if (stamp) {
+      const metaRow = document.createElement('div');
+      metaRow.className = 'context-meta';
+      const timeSpan = document.createElement('span');
+      timeSpan.textContent = `Updated ${formatIsoWithRelative(stamp)}`;
+      metaRow.appendChild(timeSpan);
+      wrap.appendChild(metaRow);
+    }
+
+    return wrap;
+  }
+  function renderContext(model) {
+    if (!model || typeof model !== 'object') {
+      clearContextPanel();
+      return;
+    }
+    contextModel = model;
+    contextPrimed = true;
+    const preview = typeof model.context_preview === 'string' && model.context_preview.trim()
+      ? model.context_preview.trim()
+      : 'Context preview not available.';
+    if (elContextPreview) {
+      elContextPreview.textContent = truncateText(preview, 1200);
+    }
+    const working = model.working_set && typeof model.working_set === 'object' ? model.working_set : {};
+    const counts = working.counts || {};
+    if (elContextSummary) {
+      const items = Number.isFinite(Number(counts.items)) ? Number(counts.items) : (Array.isArray(working.items) ? working.items.length : 0);
+      const seeds = Number.isFinite(Number(counts.seeds)) ? Number(counts.seeds) : 0;
+      const expanded = Number.isFinite(Number(counts.expanded)) ? Number(counts.expanded) : 0;
+      elContextSummary.textContent = `Items ${items} · Seeds ${seeds} · Expanded ${expanded}`;
+    }
+    if (elContextMeta) {
+      const spec =
+        (working.final_spec && typeof working.final_spec === 'object' && working.final_spec) ||
+        (model.final_spec && typeof model.final_spec === 'object' && model.final_spec) ||
+        (model.requested_spec && typeof model.requested_spec === 'object' && model.requested_spec) ||
+        null;
+      const metaParts = [];
+      if (spec) {
+        if (Array.isArray(spec.lanes) && spec.lanes.length) {
+          metaParts.push(`Lanes: ${spec.lanes.join(', ')}`);
+        }
+        if (spec.limit != null) metaParts.push(`Limit: ${spec.limit}`);
+        if (spec.project) metaParts.push(`Project: ${spec.project}`);
+        if (spec.expand_query) metaParts.push('Expand query');
+        if (spec.scorer) metaParts.push(`Scorer: ${spec.scorer}`);
+        if (spec.slot_budgets && typeof spec.slot_budgets === 'object') {
+          const entries = Object.entries(spec.slot_budgets).map(([slot, limit]) => `${slot}=${limit}`);
+          if (entries.length) metaParts.push(`Slot budgets: ${entries.join(', ')}`);
+        }
+      }
+      if (typeof model.query === 'string' && model.query.trim()) {
+        metaParts.push(`Query: ${truncateText(model.query.trim(), 160)}`);
+      }
+      elContextMeta.textContent = metaParts.length
+        ? metaParts.join(' · ')
+        : 'No context specification recorded yet.';
+    }
+    if (elContextItems) {
+      elContextItems.innerHTML = '';
+      const items = Array.isArray(working.items) ? working.items : [];
+      if (!items.length) {
+        const empty = document.createElement('div');
+        empty.className = 'context-empty';
+        empty.textContent = 'No context assembled yet.';
+        elContextItems.appendChild(empty);
+      } else {
+        const maxItems = 60;
+        items.slice(0, maxItems).forEach((entry, idx) => {
+          elContextItems.appendChild(buildContextItem(entry, idx));
+        });
+        if (items.length > maxItems) {
+          const more = document.createElement('div');
+          more.className = 'context-empty';
+          more.textContent = `Showing ${maxItems} of ${items.length} items. Adjust the spec to view more.`;
+          elContextItems.appendChild(more);
+        }
+      }
+    }
+    if (elContextRehydrateWrap) {
+      elContextRehydrateWrap.classList.remove('active');
+    }
+    if (elContextRehydrateOut) {
+      elContextRehydrateOut.textContent = '';
+    }
+    if (elContextRehydrateMeta) {
+      elContextRehydrateMeta.textContent = '';
+    }
+    if (btnContextCopy) {
+      btnContextCopy.disabled = true;
+    }
+    contextLastResultText = '';
+  }
+  function renderCascadeItems() {
+    if (!elContextCascade) return;
+    elContextCascade.innerHTML = '';
+    if (!cascadeItems.length) {
+      const empty = document.createElement('div');
+      empty.className = 'context-empty';
+      empty.textContent = 'No cascade summaries yet.';
+      elContextCascade.appendChild(empty);
+      return;
+    }
+    for (const record of cascadeItems) {
+      elContextCascade.appendChild(buildCascadeCard(record));
+    }
+  }
+  function buildCascadeCard(record) {
+    const card = document.createElement('div');
+    card.className = 'context-item';
+    card.setAttribute('role', 'listitem');
+    const value = record && typeof record === 'object' && record.value && typeof record.value === 'object' ? record.value : {};
+    const abstract = value.abstract && typeof value.abstract === 'object' ? value.abstract : {};
+    const stats = value.stats && typeof value.stats === 'object' ? value.stats : {};
+    const outline = Array.isArray(value.outline) ? value.outline : [];
+    const extract = Array.isArray(value.extract) ? value.extract : [];
+
+    const header = document.createElement('div');
+    header.className = 'context-item-header';
+    const title = document.createElement('span');
+    title.textContent = abstract.text || record.text || record.key || 'Summary';
+    header.appendChild(title);
+
+    const laneBadge = document.createElement('span');
+    laneBadge.className = 'context-lane';
+    laneBadge.textContent = 'episodic summary';
+    header.appendChild(laneBadge);
+
+    if (stats.events != null) {
+      const score = document.createElement('span');
+      score.className = 'context-item-score';
+      const eventsCount = Number(stats.events) || 0;
+      const errorsCount = Number(stats.errors) || 0;
+      let label = `${eventsCount} event${eventsCount === 1 ? '' : 's'}`;
+      if (errorsCount > 0) {
+        label += ` · ${errorsCount} error${errorsCount === 1 ? '' : 's'}`;
+      }
+      score.textContent = label;
+      header.appendChild(score);
+    }
+    card.appendChild(header);
+
+    if (abstract.text) {
+      const body = document.createElement('div');
+      body.className = 'context-item-body';
+      body.textContent = abstract.text;
+      card.appendChild(body);
+    }
+
+    if (outline.length) {
+      const outlineRow = document.createElement('div');
+      outlineRow.className = 'context-meta';
+      outlineRow.textContent = outline
+        .slice(0, 3)
+        .map((item) => String(item || ''))
+        .filter(Boolean)
+        .join(' | ');
+      if (outlineRow.textContent) {
+        card.appendChild(outlineRow);
+      }
+    }
+
+    if (extract.length) {
+      const list = document.createElement('ul');
+      list.className = 'context-tags';
+      extract.slice(0, 4).forEach((item) => {
+        const text = item && typeof item === 'object'
+          ? (item.summary || item.kind || '')
+          : item;
+        if (!text) return;
+        const li = document.createElement('li');
+        li.textContent = String(text);
+        list.appendChild(li);
+      });
+      if (list.childElementCount) {
+        card.appendChild(list);
+      }
+    }
+
+    const actions = document.createElement('div');
+    actions.className = 'context-pointer';
+
+    const episodeId = value.episode_id || (typeof record.key === 'string' ? record.key.replace(/^episode:/, '') : '');
+    if (episodeId) {
+      const btnEpisode = document.createElement('button');
+      btnEpisode.className = 'ghost';
+      btnEpisode.textContent = 'View episode';
+      btnEpisode.addEventListener('click', () => viewRun(episodeId));
+      actions.appendChild(btnEpisode);
+    }
+
+    const btnCopy = document.createElement('button');
+    btnCopy.className = 'ghost';
+    btnCopy.textContent = 'Copy summary';
+    btnCopy.addEventListener('click', () => {
+      try {
+        ARW.copy(JSON.stringify(record, null, 2));
+        setContextStat('Cascade summary copied', true);
+      } catch {}
+    });
+    actions.appendChild(btnCopy);
+
+    card.appendChild(actions);
+    return card;
+  }
+  async function refreshContextCascade(opts = {}) {
+    if (!elContextCascade) return;
+    if (!curProj) {
+      clearCascadePanel('Select a project to view cascade summaries.');
+      return;
+    }
+    if (cascadeAbort) {
+      try { cascadeAbort.abort(); } catch {}
+    }
+    const controller = new AbortController();
+    cascadeAbort = controller;
+    try {
+      const params = new URLSearchParams();
+      params.set('limit', '80');
+      if (curProj) params.set('project', curProj);
+      const response = await ARW.http.json(base, `/state/context/cascade?${params.toString()}`, { signal: controller.signal });
+      const items = Array.isArray(response?.items) ? response.items : [];
+      const currentProject = String(curProj || '').toLowerCase();
+      const filtered = items.filter((entry) => {
+        if (!currentProject) return true;
+        try {
+          const value = entry && typeof entry === 'object' && entry.value && typeof entry.value === 'object' ? entry.value : {};
+          const projects = Array.isArray(entry.projects)
+            ? entry.projects
+            : Array.isArray(value.projects)
+              ? value.projects
+              : [];
+          if (!projects.length) return entry.project_id && String(entry.project_id).toLowerCase() === currentProject;
+          return projects.some((p) => String(p || '').toLowerCase() === currentProject);
+        } catch {
+          return false;
+        }
+      });
+      cascadeItems = filtered.slice(0, 40);
+      renderCascadeItems();
+      if (!opts.quiet) setContextStat('Cascade refreshed', true);
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        console.error('context cascade fetch failed', err);
+        if (!cascadeItems.length) clearCascadePanel('Unable to load cascade summaries.');
+      }
+    } finally {
+      if (cascadeAbort === controller) cascadeAbort = null;
+    }
+  }
+  async function refreshContextSnapshot() {
+    if (!curProj) {
+      clearContextPanel('Select a project to assemble context.');
+      return null;
+    }
+    if (contextAbort) {
+      try { contextAbort.abort(); } catch {}
+    }
+    const controller = new AbortController();
+    contextAbort = controller;
+    const includeSources = !!(elContextIncludeSources && elContextIncludeSources.checked);
+    const payload = { proj: curProj };
+    if (includeSources) payload.include_sources = true;
+    setContextStat('Loading…');
+    try {
+      const resp = await fetchRaw('/context/assemble', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+        signal: controller.signal,
+      });
+      if (resp.status === 501) {
+        clearContextPanel('Context kernel disabled for this deployment.');
+        setContextStat('Kernel disabled', true);
+        return null;
+      }
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        console.warn('context assemble failed', resp.status, text);
+        setContextStat(`Context assemble failed (${resp.status})`, true);
+        if (!contextPrimed) clearContextPanel('Context assemble failed.');
+        return null;
+      }
+      const json = await resp.json().catch(() => null);
+      const body = json && typeof json === 'object' && json.data && typeof json.data === 'object'
+        ? json.data
+        : json;
+      if (body && typeof body === 'object') {
+        renderContext(body);
+        setContextStat('Context assembled', false);
+        return body;
+      }
+      setContextStat('Context response empty', true);
+      return null;
+    } catch (err) {
+      if (err?.name !== 'AbortError') {
+        console.error('context assemble error', err);
+        setContextStat('Context assemble failed', true);
+        if (!contextPrimed) clearContextPanel('Context assemble failed.');
+      }
+      return null;
+    } finally {
+      if (contextAbort === controller) {
+        contextAbort = null;
+      }
+    }
+  }
+  async function rehydratePointer(ptr, label, button) {
+    if (!ptr || typeof ptr !== 'object') return;
+    const btn = button || null;
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Rehydrating…';
+    }
+    setContextStat('Rehydrating…');
+    try {
+      const resp = await fetchRaw('/context/rehydrate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ptr }),
+      });
+      if (resp.status === 403) {
+        const text = await resp.text().catch(() => '');
+        setContextStat(text || 'Lease required to rehydrate context', true);
+        return;
+      }
+      if (!resp.ok) {
+        const text = await resp.text().catch(() => '');
+        console.warn('context rehydrate failed', resp.status, text);
+        setContextStat(`Rehydrate failed (${resp.status})`, true);
+        return;
+      }
+      const data = await resp.json().catch(() => null);
+      renderContextRehydrate(data, label, ptr);
+      setContextStat('Rehydrate complete', false);
+    } catch (err) {
+      console.error('context rehydrate error', err);
+      setContextStat('Rehydrate failed', true);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = 'Rehydrate';
+      }
+    }
+  }
+  function renderContextRehydrate(result, label, ptr) {
+    const bits = [];
+    if (label) bits.push(label);
+    if (ptr && typeof ptr === 'object') {
+      const detail = pointerDetail(ptr);
+      if (detail && detail !== label) bits.push(detail);
+    }
+    if (elContextRehydrateMeta) {
+      elContextRehydrateMeta.textContent = bits.join(' · ');
+    }
+    let output = '';
+    if (result && typeof result === 'object') {
+      if (typeof result.content === 'string' && result.content.trim()) {
+        output = result.content;
+      } else {
+        try { output = JSON.stringify(result, null, 2); }
+        catch { output = String(result); }
+      }
+    } else if (result != null) {
+      output = String(result);
+    }
+    if (elContextRehydrateOut) {
+      elContextRehydrateOut.textContent = output;
+    }
+    contextLastResultText = output;
+    if (btnContextCopy) {
+      btnContextCopy.disabled = !output;
+    }
+    if (elContextRehydrateWrap) {
+      if (output) elContextRehydrateWrap.classList.add('active');
+      else elContextRehydrateWrap.classList.remove('active');
+    }
+  }
+  clearContextPanel('Context preview will appear here after the next assembly.');
+  if (btnContextRefresh) {
+    btnContextRefresh.addEventListener('click', () => {
+      refreshContextSnapshot();
+      refreshContextCascade();
+    });
+  }
+  if (btnContextCopy) {
+    btnContextCopy.addEventListener('click', () => {
+      if (contextLastResultText) {
+        ARW.copy(contextLastResultText);
+        setContextStat('Copied rehydrate result', true);
+      } else {
+        setContextStat('Nothing to copy', true);
+      }
+    });
+  }
+  if (elContextIncludeSources) {
+    elContextIncludeSources.addEventListener('change', async () => {
+      hubPrefs.contextIncludeSources = !!elContextIncludeSources.checked;
+      try { await ARW.setPrefs('ui:hub', hubPrefs); } catch {}
+      refreshContextSnapshot();
+    });
+  }
   let runsAbort = null;
   async function refreshEpisodesSnapshot(){
     try{
@@ -1105,6 +1813,33 @@ document.addEventListener('DOMContentLoaded', async () => {
   ARW.sse.subscribe(
     (kind) => kind === 'runtime.health',
     () => refreshRuntimeMatrix()
+  );
+  ARW.sse.subscribe(
+    (kind) => kind === 'context.assembled',
+    ({ env }) => {
+      try {
+        const payload = env && typeof env.payload === 'object' ? env.payload : (env && typeof env === 'object' ? env : null);
+        if (!payload) return;
+        const project = typeof payload.project === 'string' ? payload.project : null;
+        if (!curProj) {
+          return;
+        }
+        if (project && project !== curProj) {
+          return;
+        }
+        if (!project && curProj) {
+          return;
+        }
+        renderContext(payload);
+        setContextStat('Context updated', false);
+      } catch (err) {
+        console.error('context assembled event handling failed', err);
+      }
+    }
+  );
+  ARW.sse.subscribe(
+    (kind) => kind === 'context.cascade.updated',
+    () => refreshContextCascade({ quiet: true })
   );
   // ---------- Projects: list/create/tree/notes ----------
   // Simple file metadata cache to avoid repeated GETs (5s TTL)
@@ -1304,8 +2039,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
       clearNotesMeta();
       clearTreeMeta();
+      clearContextPanel('Select a project to assemble context.');
     }
-    try { const hub = await ARW.getPrefs('ui:hub')||{}; hub.lastProject = curProj; await ARW.setPrefs('ui:hub', hub); } catch {}
+    hubPrefs.lastProject = curProj;
+    try { await ARW.setPrefs('ui:hub', hubPrefs); } catch {}
     try { projPrefs = await ARW.getPrefs('ui:proj:'+curProj) || {}; } catch { projPrefs = {}; }
     try { const arr = Array.isArray(projPrefs.expanded)? projPrefs.expanded : []; expanded = new Set(arr.map(String)); } catch { expanded = new Set(); }
     const as = (projPrefs && projPrefs.notesAutoSave !== false);
@@ -1321,8 +2058,12 @@ document.addEventListener('DOMContentLoaded', async () => {
       loadNotes();
       try{ const lp = projPrefs && projPrefs.lastPath ? String(projPrefs.lastPath) : ''; currentPath=''; pathStack.length=0; loadTree(lp); }
       catch{ loadTree(''); }
+      clearContextPanel('Loading context…');
+      clearCascadePanel('Loading cascade summaries…');
     }
     refreshEpisodesSnapshot();
+    refreshContextSnapshot();
+    refreshContextCascade({ quiet: true });
   }
   async function refreshProjectsSnapshot(){
     try{

@@ -211,7 +211,10 @@ fn event_is_error(kind: &str, payload: &Value) -> bool {
     payload.get("error").is_some() || payload.get("err").is_some()
 }
 
-fn episode_from_events(corr_id: String, evs: Vec<arw_kernel::EventRow>) -> Option<EpisodeRollup> {
+pub(crate) fn episode_from_events(
+    corr_id: String,
+    evs: Vec<arw_kernel::EventRow>,
+) -> Option<EpisodeRollup> {
     if evs.is_empty() {
         return None;
     }

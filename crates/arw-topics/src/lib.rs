@@ -135,6 +135,7 @@ pub const TOPIC_WORLD_TELEMETRY: &str = "world.telemetry";
 pub const TOPIC_CONTEXT_ASSEMBLED: &str = "context.assembled";
 pub const TOPIC_CONTEXT_COVERAGE: &str = "context.coverage";
 pub const TOPIC_CONTEXT_RECALL_RISK: &str = "context.recall.risk";
+pub const TOPIC_CONTEXT_CASCADE_UPDATED: &str = "context.cascade.updated";
 pub const TOPIC_WORKING_SET_STARTED: &str = "working_set.started";
 pub const TOPIC_WORKING_SET_SEED: &str = "working_set.seed";
 pub const TOPIC_WORKING_SET_EXPANDED: &str = "working_set.expanded";

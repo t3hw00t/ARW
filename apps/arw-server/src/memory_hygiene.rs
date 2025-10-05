@@ -20,6 +20,7 @@ const METRIC_EVICTED: &str = "arw_memory_gc_evicted_total";
 static DEFAULT_LANE_CAPS: &[(&str, usize)] = &[
     ("ephemeral", 256),
     ("episodic", 1024),
+    ("episodic_summary", 1024),
     ("semantic", 4096),
     ("profile", 512),
 ];

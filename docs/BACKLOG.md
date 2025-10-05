@@ -45,10 +45,10 @@ Managed Runtime Supervisor (Priority One)
 
 Never‑Out‑Of‑Context (High Priority)
 - [Pack: Research] [t-250912143009-0003] Retrieval: add MMR-style selector across vector/graph mounts and world beliefs — done (world belief snapshots now flow through the mmrd selector alongside hybrid memory lanes)
-- [Pack: Research] [t-250912143013-0004] Compression cascade: summarize episodes (extract→abstract→outline) into mounts with provenance — todo
+- [Pack: Research] [t-250912143013-0004] Compression cascade: summarize episodes (extract→abstract→outline) into mounts with provenance — done (context cascade service now emits episodic summaries in the `episodic_summary` lane)
 - [Pack: Research] [t-250912143017-0005] Failure detectors: emit `context.recall.risk` and `context.coverage` with meters in UI — in_progress (recall risk events + telemetry landed; UI meters pending)
 - [Pack: Research] [t-250912143025-0007] Logic Unit: ship config-only Never-Out-Of-Context defaults (budgets, diversity, rehydrate rules) — done (builtin manifest seeds env + slot budgets)
-- [Pack: Research] [t-250912143029-0008] UI: Project Hub panel “What’s in context now” with artifact pointers and rehydrate actions — todo
+- [Pack: Research] [t-250912143029-0008] UI: Project Hub panel “What’s in context now” with artifact pointers and rehydrate actions — done (Launcher Hub now surfaces assembled context with rehydrate tools)
 - [Pack: Research] [t-250912143033-0009] Training Park: dials for diversity/recency/compression; recall‑risk and coverage meters — done (launcher now ships a recency dial and live coverage/recall meters wired to `context_metrics`)
 - [Pack: Research] [t-250918120201-tp01] Training telemetry read-models in `arw-server` (context/memory/tool success stats) powering Training Park — doing (baseline snapshot live; expanding coverage)
 - [Pack: Research] [t-250918120205-tp02] Launcher Training Park window: replace stub UI with live metrics + control bindings — plan

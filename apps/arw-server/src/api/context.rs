@@ -1,7 +1,11 @@
+use axum::http::{HeaderMap, StatusCode};
 use axum::response::sse::{Event, Sse};
 use axum::response::IntoResponse;
-use axum::{extract::State, Json};
-use serde::Deserialize;
+use axum::{
+    extract::{Query, State},
+    Json,
+};
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::collections::BTreeMap;
 use std::convert::Infallible;
@@ -15,7 +19,7 @@ use crate::{
     context_loop::{
         drive_context_loop, ContextLoopResult, StreamIterationEmitter, SyncIterationCollector,
     },
-    coverage, util, working_set, AppState,
+    coverage, memory_service, util, working_set, AppState,
 };
 use arw_topics as topics;
 
@@ -680,5 +684,152 @@ pub async fn context_rehydrate(
             ),
         )
             .into_response(),
+    }
+}
+#[derive(Debug, Default, Deserialize, utoipa::IntoParams)]
+#[serde(default)]
+pub struct ContextCascadeQuery {
+    /// Optional project filter; matches exact `project_id` or any project listed on the summary.
+    pub project: Option<String>,
+    /// Maximum number of summaries to return (1-200, default 80).
+    pub limit: Option<usize>,
+}
+
+#[derive(Debug, Serialize, utoipa::ToSchema)]
+pub struct ContextCascadeResponse {
+    #[schema(value_type = Vec<serde_json::Value>)]
+    pub items: Vec<Value>,
+    pub generated: String,
+    pub generated_ms: i64,
+}
+
+fn now_timestamp_pair() -> (String, i64) {
+    let now = chrono::Utc::now();
+    (
+        now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
+        now.timestamp_millis(),
+    )
+}
+
+#[utoipa::path(
+    get,
+    path = "/state/context/cascade",
+    tag = "Context",
+    params(ContextCascadeQuery),
+    responses(
+        (status = 200, description = "Cascade summaries", body = ContextCascadeResponse),
+        (status = 401, description = "Unauthorized"),
+        (status = 501, description = "Kernel disabled", body = serde_json::Value)
+    )
+)]
+pub async fn state_context_cascade(
+    headers: HeaderMap,
+    Query(query): Query<ContextCascadeQuery>,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if !crate::admin_ok(&headers) {
+        return crate::responses::unauthorized(None);
+    }
+    if !state.kernel_enabled() {
+        return crate::responses::kernel_disabled();
+    }
+
+    let limit = query.limit.unwrap_or(80).clamp(1, 200) as i64;
+    let lane = Some("episodic_summary".to_string());
+    let mut items = match state.kernel().list_recent_memory_async(lane, limit).await {
+        Ok(items) => items,
+        Err(err) => {
+            return (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                Json(json!({
+                    "type": "about:blank",
+                    "title": "Error",
+                    "status": 500,
+                    "detail": err.to_string(),
+                })),
+            )
+                .into_response();
+        }
+    };
+
+    memory_service::attach_memory_ptrs(&mut items);
+
+    if let Some(project) = query
+        .project
+        .as_ref()
+        .map(|s| s.trim().to_ascii_lowercase())
+    {
+        if !project.is_empty() {
+            items.retain(|record| cascade_matches_project(record, &project));
+        }
+    }
+
+    let (generated, generated_ms) = now_timestamp_pair();
+    (
+        StatusCode::OK,
+        Json(ContextCascadeResponse {
+            items,
+            generated,
+            generated_ms,
+        }),
+    )
+        .into_response()
+}
+
+fn cascade_matches_project(record: &Value, needle: &str) -> bool {
+    let project_id = record
+        .get("project_id")
+        .and_then(Value::as_str)
+        .map(|s| s.to_ascii_lowercase());
+    if let Some(id) = project_id {
+        if id == needle {
+            return true;
+        }
+    }
+    // Check top-level projects array
+    if let Some(list) = record.get("projects").and_then(Value::as_array) {
+        if list.iter().any(|v| {
+            v.as_str()
+                .map(|s| s.eq_ignore_ascii_case(needle))
+                .unwrap_or(false)
+        }) {
+            return true;
+        }
+    }
+    // Check summary payload
+    record
+        .get("value")
+        .and_then(Value::as_object)
+        .and_then(|value| value.get("projects"))
+        .and_then(Value::as_array)
+        .map(|list| {
+            list.iter().any(|v| {
+                v.as_str()
+                    .map(|s| s.eq_ignore_ascii_case(needle))
+                    .unwrap_or(false)
+            })
+        })
+        .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn cascade_matches_project_checks_project_sources() {
+        let record = json!({
+            "project_id": "demo",
+            "value": {
+                "projects": ["demo"],
+            }
+        });
+        assert!(cascade_matches_project(&record, "demo"));
+        assert!(!cascade_matches_project(&record, "other"));
+
+        let value_only = json!({
+            "value": { "projects": ["Alpha"] }
+        });
+        assert!(cascade_matches_project(&value_only, "alpha"));
     }
 }

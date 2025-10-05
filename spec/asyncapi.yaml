@@ -334,6 +334,16 @@ channels:
         payload:
           type: object
           additionalProperties: true
+  'context.cascade.updated':
+    subscribe:
+      operationId: context_cascade_updated_event
+      summary: "context.cascade.updated event"
+      description: "Episode cascade summaries emitted by the context cascade service."
+      message:
+        name: 'context.cascade.updated'
+        payload:
+          type: object
+          additionalProperties: true
   'distill.completed':
     subscribe:
       operationId: distill_completed_event

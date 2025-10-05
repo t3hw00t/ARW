@@ -13,6 +13,7 @@ mod chat;
 mod cluster;
 pub mod config;
 mod config_watcher;
+mod context_cascade;
 mod context_loop;
 mod context_metrics;
 mod coverage;

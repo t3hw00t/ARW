@@ -36,6 +36,8 @@ Compression cascade (history never bloats)
 - Rolling window: keep the last N raw tokens; summarize older chunks into the cascade; drop raw once linked from a summary.
 - Entity rollups: merge repeated facts by entity with counters (mention frequency), recency, and confidence.
 
+_Implementation status:_ `arw-server` ships a `context.cascade` background task that tails new episodes, waits for a brief cooldown, and writes the extract/abstract/outline bundle into the `episodic_summary` memory lane. Each summary stores provenance (`sources.event_ids`) and the episode pointer so retrieval and rehydrate flows can jump back to the raw events. The launcher Training Park and Hub surfaces can now fetch these records without recomputing the cascade at render time.
+
 Never‑out‑of‑context controls
 - Information‑gain gate: only admit a chunk if it reduces predicted error for the current subgoal (proxy: novelty × source reliability × task match).
 - Diversity floor: keep a minimum fraction of context for other viewpoints to avoid tunnel vision.
