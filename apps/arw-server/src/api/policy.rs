@@ -438,16 +438,11 @@ mod tests {
 
         let state = build_state(temp.path(), &mut ctx.env).await;
         let bus = state.bus();
-        let mut rx = bus.subscribe_filtered(
-            vec![TOPIC_POLICY_GUARDRAILS_APPLIED.to_string()],
-            Some(4),
-        );
+        let mut rx =
+            bus.subscribe_filtered(vec![TOPIC_POLICY_GUARDRAILS_APPLIED.to_string()], Some(4));
 
         let app = Router::new()
-            .route(
-                "/policy/guardrails/apply",
-                post(policy_guardrails_apply),
-            )
+            .route("/policy/guardrails/apply", post(policy_guardrails_apply))
             .with_state(state)
             .layer(middleware::from_fn(crate::security::client_addr_mw))
             .layer(middleware::from_fn(crate::request_ctx::correlation_mw));
@@ -462,22 +457,21 @@ mod tests {
             .header("x-arw-corr", "corr-guardrails")
             .body(body)
             .expect("request");
-        request.extensions_mut().insert(ConnectInfo(SocketAddr::from( (
-            [127, 0, 0, 1],
-            9999,
-        ))));
+        request
+            .extensions_mut()
+            .insert(ConnectInfo(SocketAddr::from(([127, 0, 0, 1], 9999))));
 
-        let response = app
-            .oneshot(request)
-            .await
-            .expect("response from router");
+        let response = app.oneshot(request).await.expect("response from router");
         assert_eq!(response.status(), StatusCode::OK);
         let bytes = to_bytes(response.into_body(), usize::MAX)
             .await
             .expect("response bytes");
         let value: Value = serde_json::from_slice(&bytes).expect("response json");
         assert_eq!(value.get("preset").and_then(Value::as_str), Some("demo"));
-        assert_eq!(value.get("corr_id").and_then(Value::as_str), Some("corr-guardrails"));
+        assert_eq!(
+            value.get("corr_id").and_then(Value::as_str),
+            Some("corr-guardrails")
+        );
         assert_eq!(
             value.get("request_id").and_then(Value::as_str),
             Some("req-guardrails")

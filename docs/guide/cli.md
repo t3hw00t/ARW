@@ -26,6 +26,13 @@ Basics
   - `arw-cli tools` — list registered tools (id/version/caps)
   - `arw-cli tools --pretty` — pretty JSON
 
+Admin Tokens
+- Generate, hash, and persist `ARW_ADMIN_TOKEN` values without committing secrets:
+  - `arw-cli admin token generate --length 32 --hash-env` — print a random token (hex) plus its SHA-256 hash as `ARW_ADMIN_TOKEN_SHA256=…`
+  - `arw-cli admin token hash --read-env ARW_ADMIN_TOKEN` — hash an existing token from the environment (use `--stdin` to pipe secrets securely)
+  - `arw-cli admin token persist --path .env --hash` — write `ARW_ADMIN_TOKEN` (and the hash) into a local env file, creating parent directories with `0600` permissions; omit `--token` to generate a fresh secret, or reuse a value with `--token ...` / `--read-env VAR`
+  - Add `--print-token`/`--print-hash` when you need to surface the new values after persisting; defaults keep secrets in the file only.
+
 Screenshots
 - Backfill OCR sidecars for all captures (per language):
   - `arw-cli screenshots backfill-ocr --lang eng`

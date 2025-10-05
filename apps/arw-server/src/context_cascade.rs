@@ -163,11 +163,7 @@ async fn run_once(state: &AppState) -> Result<CascadeStats> {
             continue;
         };
 
-        if let Some(last_time) = events
-            .iter()
-            .rev()
-            .find_map(|ev| parse_time(&ev.time))
-        {
+        if let Some(last_time) = events.iter().rev().find_map(|ev| parse_time(&ev.time)) {
             latest_event_time = match latest_event_time {
                 Some(existing) if existing >= last_time => Some(existing),
                 _ => Some(last_time),

@@ -231,6 +231,8 @@ enum AdminTokenCmd {
     Hash(AdminTokenHashArgs),
     /// Generate a random admin token
     Generate(AdminTokenGenerateArgs),
+    /// Persist an admin token (and optional hash) to an env file
+    Persist(AdminTokenPersistArgs),
 }
 
 #[derive(Args, Clone)]
@@ -284,6 +286,37 @@ struct AdminTokenGenerateArgs {
     /// Print hash as export ARW_ADMIN_TOKEN_SHA256=<hash>
     #[arg(long = "hash-export-shell")]
     hash_export_shell: bool,
+}
+
+#[derive(Args, Clone)]
+struct AdminTokenPersistArgs {
+    /// Path to the env file that should hold the admin token (default: ./.env)
+    #[arg(long, default_value = ".env")]
+    path: PathBuf,
+    /// Reuse this token instead of generating a new one
+    #[arg(long, conflicts_with = "read_env")]
+    token: Option<String>,
+    /// Read token from an environment variable (conflicts with --token)
+    #[arg(long = "read-env", conflicts_with = "token")]
+    read_env: Option<String>,
+    /// Number of random bytes when generating a new token (default: 32)
+    #[arg(long, default_value_t = 32)]
+    length: usize,
+    /// Output format for generated tokens
+    #[arg(long, value_enum, default_value_t = TokenFormat::Hex)]
+    format: TokenFormat,
+    /// Upper-case hex output when format=hex
+    #[arg(long)]
+    uppercase: bool,
+    /// Also persist ARW_ADMIN_TOKEN_SHA256 alongside the token
+    #[arg(long)]
+    hash: bool,
+    /// Print the token to stdout after persisting
+    #[arg(long = "print-token")]
+    print_token: bool,
+    /// Print the SHA-256 hash to stdout (computed automatically)
+    #[arg(long = "print-hash")]
+    print_hash: bool,
 }
 
 #[derive(Debug, Deserialize)]
@@ -829,6 +862,12 @@ fn main() {
                         std::process::exit(1);
                     }
                 }
+                AdminTokenCmd::Persist(args) => {
+                    if let Err(e) = cmd_admin_token_persist(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
             },
         },
         Some(Commands::Gate { cmd }) => match cmd {
@@ -1183,6 +1222,152 @@ fn cmd_admin_token_generate(args: &AdminTokenGenerateArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn cmd_admin_token_persist(args: &AdminTokenPersistArgs) -> Result<()> {
+    let (token, generated) = resolve_or_generate_admin_token(args)?;
+    let hash_value = if args.hash || args.print_hash {
+        Some(hash_admin_token(&token))
+    } else {
+        None
+    };
+
+    let hash_for_file = if args.hash {
+        hash_value.as_deref()
+    } else {
+        None
+    };
+
+    let existed = persist_admin_token_file(&args.path, &token, hash_for_file)?;
+
+    if args.print_token {
+        println!("{}", token);
+    }
+    if args.print_hash {
+        if let Some(hash) = &hash_value {
+            println!("{}", hash);
+        }
+    }
+
+    let descriptor = if args.hash {
+        "ARW_ADMIN_TOKEN and ARW_ADMIN_TOKEN_SHA256"
+    } else {
+        "ARW_ADMIN_TOKEN"
+    };
+    let mut message = format!(
+        "{} {} in {}",
+        if existed { "Updated" } else { "Created" },
+        descriptor,
+        args.path.display()
+    );
+    if generated {
+        message.push_str(" (generated new token)");
+    } else if args.token.is_some() || args.read_env.is_some() {
+        message.push_str(" (reused provided token)");
+    }
+    println!("{}", message);
+
+    Ok(())
+}
+
+fn resolve_or_generate_admin_token(args: &AdminTokenPersistArgs) -> Result<(String, bool)> {
+    if let Some(token) = &args.token {
+        ensure!(!token.is_empty(), "--token cannot be empty");
+        return Ok((token.clone(), false));
+    }
+
+    if let Some(var) = &args.read_env {
+        match std::env::var(var) {
+            Ok(value) if !value.is_empty() => return Ok((value, false)),
+            Ok(_) => bail!("{} is set but empty", var),
+            Err(_) => bail!("environment variable {} is not set", var),
+        }
+    }
+
+    ensure!(args.length > 0, "--length must be greater than zero");
+    let mut bytes = vec![0u8; args.length];
+    let mut rng = rand::rng();
+    rng.fill_bytes(&mut bytes);
+
+    let token = match args.format {
+        TokenFormat::Hex => encode_hex(&bytes, args.uppercase),
+        TokenFormat::Base64 => base64::engine::general_purpose::STANDARD_NO_PAD.encode(&bytes),
+    };
+
+    Ok((token, true))
+}
+
+fn persist_admin_token_file(path: &Path, token: &str, hash: Option<&str>) -> Result<bool> {
+    ensure!(!token.is_empty(), "token cannot be empty");
+
+    if let Some(parent) = path.parent() {
+        if !parent.as_os_str().is_empty() {
+            create_dir_all(parent)
+                .with_context(|| format!("creating parent directory for {}", path.display()))?;
+        }
+    }
+
+    let existed = path.exists();
+    let existing = if existed {
+        std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?
+    } else {
+        String::new()
+    };
+
+    let mut lines: Vec<String> = existing.lines().map(|line| line.to_string()).collect();
+    lines.retain(|line| {
+        !is_assignment_for(line, "ARW_ADMIN_TOKEN")
+            && !is_assignment_for(line, "ARW_ADMIN_TOKEN_SHA256")
+    });
+
+    lines.push(format!("ARW_ADMIN_TOKEN={}", token));
+    if let Some(hash) = hash {
+        lines.push(format!("ARW_ADMIN_TOKEN_SHA256={}", hash));
+    }
+
+    let mut output = lines.join("\n");
+    if !output.ends_with('\n') {
+        output.push('\n');
+    }
+
+    std::fs::write(path, output).with_context(|| format!("writing {}", path.display()))?;
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        if let Err(err) = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600)) {
+            eprintln!(
+                "warning: failed to set 0600 permissions on {}: {}",
+                path.display(),
+                err
+            );
+        }
+    }
+
+    Ok(existed)
+}
+
+fn is_assignment_for(line: &str, key: &str) -> bool {
+    let trimmed = strip_assignment_prefix(line);
+    if let Some((lhs, _)) = trimmed.split_once('=') {
+        lhs.trim() == key
+    } else {
+        let mut parts = trimmed.split_whitespace();
+        match (parts.next(), parts.next()) {
+            (Some(lhs), Some(_)) => lhs.trim() == key,
+            _ => false,
+        }
+    }
+}
+
+fn strip_assignment_prefix(line: &str) -> &str {
+    let trimmed = line.trim_start();
+    for prefix in ["export ", "EXPORT ", "set ", "SET ", "setx ", "SETX "] {
+        if let Some(rest) = trimmed.strip_prefix(prefix) {
+            return rest;
+        }
+    }
+    trimmed
 }
 
 fn cmd_backfill_ocr(args: &BackfillOcrArgs) -> Result<()> {
@@ -5399,6 +5584,60 @@ mod tests {
         let bytes = [0xde, 0xad, 0xbe, 0xef];
         assert_eq!(encode_hex(&bytes, false), "deadbeef");
         assert_eq!(encode_hex(&bytes, true), "DEADBEEF");
+    }
+
+    #[test]
+    fn persist_admin_token_file_overwrites_existing_entries() {
+        let dir = TempDir::new().expect("tempdir");
+        let path = dir.path().join(".env");
+        fs::write(
+            &path,
+            "# sample env\nFOO=bar\nARW_ADMIN_TOKEN=old\nexport ARW_ADMIN_TOKEN_SHA256=oldhash\nBAR=baz\n",
+        )
+        .expect("seed env file");
+
+        let existed =
+            persist_admin_token_file(&path, "newtoken", Some("newhash")).expect("persist token");
+        assert!(existed);
+
+        let contents = fs::read_to_string(&path).expect("read env");
+        assert_eq!(
+            contents,
+            "# sample env\nFOO=bar\nBAR=baz\nARW_ADMIN_TOKEN=newtoken\nARW_ADMIN_TOKEN_SHA256=newhash\n"
+        );
+    }
+
+    #[test]
+    fn persist_admin_token_file_creates_when_missing() {
+        let dir = TempDir::new().expect("tempdir");
+        let path = dir.path().join("config/.env");
+
+        let existed = persist_admin_token_file(&path, "secret", None).expect("persist token");
+        assert!(!existed);
+
+        let contents = fs::read_to_string(&path).expect("read env");
+        assert_eq!(contents, "ARW_ADMIN_TOKEN=secret\n");
+    }
+
+    #[test]
+    fn is_assignment_for_handles_prefixes() {
+        assert!(is_assignment_for(
+            "export ARW_ADMIN_TOKEN=value",
+            "ARW_ADMIN_TOKEN"
+        ));
+        assert!(is_assignment_for(
+            " SET ARW_ADMIN_TOKEN = value ",
+            "ARW_ADMIN_TOKEN"
+        ));
+        assert!(is_assignment_for(
+            "setx ARW_ADMIN_TOKEN value",
+            "ARW_ADMIN_TOKEN"
+        ));
+        assert!(!is_assignment_for("export OTHER=value", "ARW_ADMIN_TOKEN"));
+        assert!(!is_assignment_for(
+            "ARW_ADMIN_TOKEN_SUFFIX=1",
+            "ARW_ADMIN_TOKEN"
+        ));
     }
 
     #[test]

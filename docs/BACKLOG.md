@@ -192,7 +192,7 @@ Remote Access & TLS
 - [Kernel] Dev TLS profiles (mkcert + self-signed) for localhost — done (scripts/dev_tls_profile.sh + docs/guide/dev_tls.md)
 - [Kernel] Caddy production profile with Let's Encrypt (HTTP-01/DNS-01) for public domains — done (scripts/reverse_proxy.sh + `just proxy-caddy-*` helpers, docs/guide/reverse_proxy.md)
 - [Kernel] Reverse-proxy templates (nginx/caddy) with quick run/stop helpers — done (scripts/reverse_proxy.sh + `just proxy-nginx-*` commands)
-- [Kernel] Secrets handling: persist admin tokens only to local env files; avoid committing to configs
+- [Kernel] Secrets handling: persist admin tokens only to local env files; avoid committing to configs — done (CLI `admin token persist` writes `.env` entries with 0600 perms; guide updated)
 - [Kernel] Setup wizards to pick domain/email, validate DNS, and dry‑run cert issuance
 
 Observability & Eventing
