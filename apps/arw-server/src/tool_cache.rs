@@ -5,9 +5,10 @@ use serde_json::json;
 use serde_json::{Map, Value};
 use sha2::{Digest, Sha256};
 use std::collections::{HashMap, HashSet};
+use std::io::ErrorKind;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 use tokio::fs;
 
@@ -219,7 +220,8 @@ pub struct ToolCache {
     max_payload_bytes: Option<u64>,
     stats: CacheCounters,
     flights: Singleflight,
-    entry_metrics: Mutex<HashMap<String, EntryMetrics>>,
+    entry_metrics: Arc<Mutex<HashMap<String, EntryMetrics>>>,
+    digest_ref_counts: Arc<Mutex<HashMap<String, u64>>>,
 }
 
 impl ToolCache {
@@ -232,19 +234,73 @@ impl ToolCache {
         for entry in DEFAULT_DENY_LIST.iter() {
             deny_list.insert((*entry).to_string());
         }
+        let cas_dir = util::state_dir().join("tools").join("by-digest");
+        let cas_dir_shared = Arc::new(cas_dir.clone());
+        let entry_metrics = Arc::new(Mutex::new(HashMap::new()));
+        let digest_ref_counts = Arc::new(Mutex::new(HashMap::new()));
         let cache = if capacity == 0 {
             None
         } else {
+            let eviction_metrics = Arc::clone(&entry_metrics);
+            let eviction_counts = Arc::clone(&digest_ref_counts);
+            let cas_dir_eviction = Arc::clone(&cas_dir_shared);
             Some(
                 Cache::builder()
                     .max_capacity(capacity)
                     .time_to_live(ttl)
+                    .async_eviction_listener(move |key: Arc<String>, digest: String, cause| {
+                        let metrics = Arc::clone(&eviction_metrics);
+                        let counts = Arc::clone(&eviction_counts);
+                        let cas_dir = Arc::clone(&cas_dir_eviction);
+                        Box::pin(async move {
+                            if let Ok(mut map) = metrics.lock() {
+                                map.remove(key.as_ref());
+                            }
+
+                            let mut remove_file = false;
+                            let mut refs_remaining = 0u64;
+                            if let Ok(mut counts) = counts.lock() {
+                                if let Some(count) = counts.get_mut(&digest) {
+                                    if *count > 0 {
+                                        *count -= 1;
+                                        refs_remaining = *count;
+                                        if *count == 0 {
+                                            counts.remove(&digest);
+                                            remove_file = true;
+                                        }
+                                    }
+                                } else {
+                                    tracing::trace!(digest = %digest, "tool_cache eviction missing digest ref");
+                                }
+                            }
+
+                            if remove_file {
+                                let path = cas_dir.join(format!("{}.json", digest));
+                                if let Err(err) = fs::remove_file(&path).await {
+                                    if err.kind() != ErrorKind::NotFound {
+                                        tracing::debug!(
+                                            "tool_cache::evict failed to remove {}: {}",
+                                            path.display(),
+                                            err
+                                        );
+                                    }
+                                }
+                            } else {
+                                tracing::trace!(
+                                    digest = %digest,
+                                    ?cause,
+                                    refs_remaining,
+                                    "tool_cache eviction retained digest"
+                                );
+                            }
+                        })
+                    })
                     .build(),
             )
         };
         Self {
             cache,
-            cas_dir: util::state_dir().join("tools").join("by-digest"),
+            cas_dir,
             allow_list,
             deny_list,
             capacity,
@@ -252,7 +308,8 @@ impl ToolCache {
             max_payload_bytes,
             stats: CacheCounters::new(),
             flights: Singleflight::default(),
-            entry_metrics: Mutex::new(HashMap::new()),
+            entry_metrics,
+            digest_ref_counts,
         }
     }
 
@@ -398,6 +455,13 @@ impl ToolCache {
         }
     }
 
+    fn increment_digest_ref(&self, digest: &str) {
+        if let Ok(mut counts) = self.digest_ref_counts.lock() {
+            let counter = counts.entry(digest.to_string()).or_insert(0);
+            *counter = counter.saturating_add(1);
+        }
+    }
+
     fn entry_metrics(&self, key: &str) -> Option<EntryMetrics> {
         self.entry_metrics
             .lock()
@@ -514,6 +578,7 @@ impl ToolCache {
                 }
             }
             cache.insert(key.to_string(), digest.clone()).await;
+            self.increment_digest_ref(&digest);
             self.update_entry_metrics(key, payload_bytes, miss_elapsed_ms);
             self.stats.miss.fetch_add(1, Ordering::Relaxed);
             StoreOutcome::Cached {
@@ -599,6 +664,29 @@ impl ToolCache {
 
     pub fn max_payload_bytes(&self) -> Option<u64> {
         self.max_payload_bytes
+    }
+
+    #[cfg(test)]
+    async fn run_pending_tasks(&self) {
+        if let Some(cache) = &self.cache {
+            cache.run_pending_tasks().await;
+        }
+    }
+
+    #[cfg(test)]
+    fn digest_ref_count(&self, digest: &str) -> u64 {
+        self.digest_ref_counts
+            .lock()
+            .ok()
+            .and_then(|map| map.get(digest).copied())
+            .unwrap_or(0)
+    }
+
+    #[cfg(test)]
+    async fn invalidate_key(&self, key: &str) {
+        if let Some(cache) = &self.cache {
+            cache.invalidate(key).await;
+        }
     }
 }
 pub struct ToolCacheHit {
@@ -818,6 +906,46 @@ mod tests {
         assert_eq!(stats.payload_too_large, 1);
         assert_eq!(stats.bypass, 1);
         assert_eq!(stats.entries, 0);
+    }
+
+    #[tokio::test]
+    async fn eviction_removes_cas_files() {
+        let tmp = tempdir().unwrap();
+        let mut ctx = crate::test_support::begin_state_env(tmp.path());
+        ctx.env.set("ARW_TOOLS_CACHE_CAP", "16");
+        ctx.env.set("ARW_TOOLS_CACHE_TTL_SECS", "60");
+        let cache = ToolCache::new();
+        assert!(cache.enabled());
+
+        let payload = json!({ "run": 1 });
+        let key = cache.action_key("demo.echo", &payload);
+        let digest = match cache.store(&key, &payload, 50).await {
+            StoreOutcome::Cached { digest, .. } => digest,
+            other => panic!("expected cached outcome, got {:?}", other),
+        };
+
+        let path = cache.cas_path(&digest);
+        assert!(path.exists(), "digest should be materialised");
+        assert_eq!(cache.digest_ref_count(&digest), 1);
+
+        cache.invalidate_key(&key).await;
+        cache.run_pending_tasks().await;
+
+        for _ in 0..10 {
+            if !path.exists() && cache.digest_ref_count(&digest) == 0 {
+                break;
+            }
+            cache.run_pending_tasks().await;
+            tokio::time::sleep(Duration::from_millis(20)).await;
+        }
+
+        assert!(
+            !path.exists(),
+            "invalidating digest {} should remove CAS file (ref_count={})",
+            digest,
+            cache.digest_ref_count(&digest)
+        );
+        assert_eq!(cache.digest_ref_count(&digest), 0);
     }
 
     #[tokio::test]
