@@ -269,7 +269,7 @@ pub async fn egress_settings_update(
     headers: HeaderMap,
     Json(patch): Json<EgressSettingsPatch>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),

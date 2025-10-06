@@ -17,7 +17,7 @@ pub async fn rpu_trust_get(
     State(_state): State<AppState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(serde_json::json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -46,7 +46,7 @@ pub async fn rpu_reload_post(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(serde_json::json!({"type":"about:blank","title":"Unauthorized","status":401})),

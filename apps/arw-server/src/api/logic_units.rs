@@ -97,7 +97,7 @@ pub async fn logic_units_install(
     headers: HeaderMap,
     Json(mut manifest): Json<Value>,
 ) -> impl IntoResponse {
-    if let Err(resp) = crate::responses::require_admin(&headers) {
+    if let Err(resp) = crate::responses::require_admin(&headers).await {
         return *resp;
     }
     if !state.kernel_enabled() {
@@ -142,7 +142,7 @@ pub async fn logic_units_apply(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
-    if let Err(resp) = crate::responses::require_admin(&headers) {
+    if let Err(resp) = crate::responses::require_admin(&headers).await {
         return *resp;
     }
     if !state.kernel_enabled() {
@@ -361,7 +361,7 @@ pub async fn logic_units_revert(
     headers: HeaderMap,
     Json(body): Json<Value>,
 ) -> axum::response::Response {
-    if let Err(resp) = crate::responses::require_admin(&headers) {
+    if let Err(resp) = crate::responses::require_admin(&headers).await {
         return *resp;
     }
     if !state.kernel_enabled() {

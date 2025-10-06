@@ -66,7 +66,7 @@ pub async fn feedback_state(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let snapshot = state.feedback().snapshot().await;
@@ -98,7 +98,7 @@ pub async fn feedback_signal(
     State(state): State<AppState>,
     Json(req): Json<FeedbackSignalRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let snapshot = state
@@ -121,7 +121,7 @@ pub async fn feedback_analyze(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let snapshot = state.feedback().analyze().await;
@@ -151,7 +151,7 @@ pub async fn feedback_apply(
     State(state): State<AppState>,
     Json(req): Json<FeedbackApplyRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     match state.feedback().apply(&req.id, "feedback.apply").await {
@@ -180,7 +180,7 @@ pub async fn feedback_auto(
     State(state): State<AppState>,
     Json(req): Json<FeedbackAutoRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let snapshot = state.feedback().set_auto_apply(req.enabled).await;
@@ -200,7 +200,7 @@ pub async fn feedback_reset(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     state.feedback().reset().await;
@@ -220,7 +220,7 @@ pub async fn feedback_suggestions(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let (version, list) = state.feedback().suggestions_snapshot().await;
@@ -250,7 +250,7 @@ pub async fn feedback_updates(
     State(state): State<AppState>,
     Query(q): Query<FeedbackUpdatesQuery>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let since = q.since.unwrap_or(0);
@@ -275,7 +275,7 @@ pub async fn feedback_policy(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     Json(state.feedback().effective_policy()).into_response()
@@ -294,7 +294,7 @@ pub async fn feedback_versions(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let versions = state.feedback().list_versions().await;
@@ -324,7 +324,7 @@ pub async fn feedback_rollback(
     State(state): State<AppState>,
     Query(q): Query<FeedbackRollbackQuery>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     match state.feedback().rollback(q.to).await {

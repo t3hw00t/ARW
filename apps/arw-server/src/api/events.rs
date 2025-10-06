@@ -40,7 +40,7 @@ pub async fn events_sse(
     Query(q): Query<std::collections::HashMap<String, String>>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return crate::responses::unauthorized(None);
     }
     if !state.kernel_enabled()
@@ -281,7 +281,7 @@ pub async fn events_journal(
     Query(query): Query<EventsJournalQuery>,
     headers: HeaderMap,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return crate::responses::unauthorized(None);
     }
     if !state.kernel_enabled() {

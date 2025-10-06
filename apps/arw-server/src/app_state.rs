@@ -7,8 +7,8 @@ use serde_json::json;
 use tokio::sync::Mutex;
 
 use crate::{
-    autonomy, capsule_guard, chat, cluster, experiments, feedback, governor, metrics, models,
-    policy, queue, runtime, runtime_supervisor, tool_cache, training,
+    autonomy, capsule_guard, chat, cluster, experiments, feedback, governor, identity, metrics,
+    models, policy, queue, runtime, runtime_supervisor, tool_cache, training,
 };
 
 type SharedConfigState = Arc<Mutex<serde_json::Value>>;
@@ -40,6 +40,7 @@ pub(crate) struct AppState {
     runtime: Arc<runtime::RuntimeRegistry>,
     runtime_supervisor: Arc<runtime_supervisor::RuntimeSupervisor>,
     logic_history: Arc<training::LogicUnitHistoryStore>,
+    identity: Arc<identity::IdentityRegistry>,
 }
 
 impl AppState {
@@ -69,6 +70,7 @@ impl AppState {
         runtime: Arc<runtime::RuntimeRegistry>,
         runtime_supervisor: Arc<runtime_supervisor::RuntimeSupervisor>,
         logic_history: Arc<training::LogicUnitHistoryStore>,
+        identity: Arc<identity::IdentityRegistry>,
     ) -> Self {
         Self {
             bus,
@@ -95,6 +97,7 @@ impl AppState {
             runtime,
             runtime_supervisor,
             logic_history,
+            identity,
         }
     }
 
@@ -195,6 +198,10 @@ impl AppState {
         self.logic_history.clone()
     }
 
+    pub fn identity(&self) -> Arc<identity::IdentityRegistry> {
+        self.identity.clone()
+    }
+
     pub fn config_state(&self) -> Arc<Mutex<serde_json::Value>> {
         self.config_state.clone()
     }
@@ -238,6 +245,7 @@ pub(crate) struct AppStateBuilder {
     runtime: Option<Arc<runtime::RuntimeRegistry>>,
     runtime_supervisor: Option<Arc<runtime_supervisor::RuntimeSupervisor>>,
     logic_history: Option<Arc<training::LogicUnitHistoryStore>>,
+    identity: Option<Arc<identity::IdentityRegistry>>,
 }
 
 impl AppState {
@@ -274,6 +282,7 @@ impl AppState {
             runtime: None,
             runtime_supervisor: None,
             logic_history: None,
+            identity: None,
         }
     }
 }
@@ -392,6 +401,11 @@ impl AppStateBuilder {
         self
     }
 
+    pub(crate) fn with_identity(mut self, identity: Arc<identity::IdentityRegistry>) -> Self {
+        self.identity = Some(identity);
+        self
+    }
+
     pub(crate) async fn build(self) -> AppState {
         let config_state = self
             .config_state
@@ -491,6 +505,10 @@ impl AppStateBuilder {
                 .join("logic_history.json");
             Arc::new(training::LogicUnitHistoryStore::new(path, 100))
         });
+        let identity_registry = match self.identity {
+            Some(registry) => registry,
+            None => identity::IdentityRegistry::new(self.bus.clone()).await,
+        };
 
         AppState::new(
             self.bus,
@@ -517,6 +535,7 @@ impl AppStateBuilder {
             runtime_registry,
             runtime_supervisor,
             logic_history_store,
+            identity_registry,
         )
     }
 }

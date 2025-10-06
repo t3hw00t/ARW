@@ -170,6 +170,7 @@ pub(crate) mod paths {
     pub const EGRESS_PREVIEW: &str = "/egress/preview";
     pub const STATE_POLICY: &str = "/state/policy";
     pub const STATE_POLICY_CAPSULES: &str = "/state/policy/capsules";
+    pub const STATE_IDENTITY: &str = "/state/identity";
     pub const POLICY_RELOAD: &str = "/policy/reload";
     pub const POLICY_SIMULATE: &str = "/policy/simulate";
     pub const POLICY_GUARDRAILS_APPLY: &str = "/policy/guardrails/apply";
@@ -560,6 +561,11 @@ pub(crate) fn build_router() -> (Router<AppState>, Vec<String>, Vec<Value>) {
     builder.route_get(
         paths::STATE_POLICY,
         api::policy::state_policy,
+        Some(Stability::Experimental),
+    );
+    builder.route_get(
+        paths::STATE_IDENTITY,
+        api::state::state_identity,
         Some(Stability::Experimental),
     );
     builder.route_get(

@@ -38,7 +38,7 @@ pub async fn governor_profile_get(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let profile = state.governor().profile().await;
@@ -60,7 +60,7 @@ pub async fn governor_profile_set(
     State(state): State<AppState>,
     Json(req): Json<GovernorProfileRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     state.governor().set_profile(&state.bus(), req.name).await;
@@ -120,7 +120,7 @@ pub async fn governor_hints_get(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     Json(state.governor().hints().await).into_response()
@@ -141,7 +141,7 @@ pub async fn governor_hints_set(
     State(state): State<AppState>,
     Json(req): Json<GovernorHintsRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let bus = state.bus();

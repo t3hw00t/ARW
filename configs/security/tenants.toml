@@ -1,0 +1,27 @@
+# Identity registry; copy to ARW_STATE_DIR/security/tenants.toml and reference via
+# ARW_TENANTS_FILE=/path/to/tenants.toml to override.
+#
+# IMPORTANT: Store only SHA256 fingerprints for tokens. Use
+#   printf 'token' | sha256sum
+# to generate the digest and paste the first 64 characters below.
+#
+# version is reserved for future migrations.
+version = 1
+
+[[principals]]
+id = "local-admin"
+display_name = "Local Admin"
+roles = ["admin"]
+scopes = ["*"]
+token_sha256 = [
+  "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
+]
+
+# [[principals]]
+# id = "build-bot"
+# display_name = "CI Build Bot"
+# roles = ["bot", "admin"]
+# scopes = ["projects.read", "runs.trigger"]
+# token_sha256 = [
+#   "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+# ]

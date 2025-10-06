@@ -52,7 +52,7 @@ pub async fn hierarchy_state(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let st = hier::get_state();
@@ -82,7 +82,7 @@ pub async fn hierarchy_role_set(
     State(state): State<AppState>,
     Json(req): Json<RoleRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let role = match req.role.as_str() {
@@ -117,7 +117,7 @@ pub async fn hierarchy_hello(
     State(state): State<AppState>,
     Json(req): Json<CoreHello>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     hier::configure_self(req.id.clone(), req.scope_tags.clone());
@@ -143,7 +143,7 @@ pub async fn hierarchy_offer(
     State(state): State<AppState>,
     Json(req): Json<CoreOffer>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let self_id = hier::get_state().self_node.id;
@@ -171,7 +171,7 @@ pub async fn hierarchy_accept(
     State(state): State<AppState>,
     Json(req): Json<CoreAccept>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let self_id = hier::get_state().self_node.id;

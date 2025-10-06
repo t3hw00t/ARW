@@ -28,7 +28,7 @@ fn common_headers() -> [(axum::http::HeaderName, &'static str); 3] {
 
 #[arw_admin(method = "GET", path = "/admin/debug", summary = "Debug dashboard")]
 pub(crate) async fn debug_ui(headers: HeaderMap) -> impl IntoResponse {
-    if let Err(r) = crate::responses::require_admin(&headers) {
+    if let Err(r) = crate::responses::require_admin(&headers).await {
         return *r;
     }
     (common_headers(), Html(DEBUG_HTML)).into_response()
@@ -36,7 +36,7 @@ pub(crate) async fn debug_ui(headers: HeaderMap) -> impl IntoResponse {
 
 #[arw_admin(method = "GET", path = "/admin/ui/models", summary = "Models UI")]
 pub(crate) async fn models_ui(headers: HeaderMap) -> impl IntoResponse {
-    if let Err(r) = crate::responses::require_admin(&headers) {
+    if let Err(r) = crate::responses::require_admin(&headers).await {
         return *r;
     }
     (common_headers(), Html(MODELS_HTML)).into_response()
@@ -44,7 +44,7 @@ pub(crate) async fn models_ui(headers: HeaderMap) -> impl IntoResponse {
 
 #[arw_admin(method = "GET", path = "/admin/ui/agents", summary = "Agents UI")]
 pub(crate) async fn agents_ui(headers: HeaderMap) -> impl IntoResponse {
-    if let Err(r) = crate::responses::require_admin(&headers) {
+    if let Err(r) = crate::responses::require_admin(&headers).await {
         return *r;
     }
     (common_headers(), Html(AGENTS_HTML)).into_response()
@@ -52,7 +52,7 @@ pub(crate) async fn agents_ui(headers: HeaderMap) -> impl IntoResponse {
 
 #[arw_admin(method = "GET", path = "/admin/ui/projects", summary = "Projects UI")]
 pub(crate) async fn projects_ui(headers: HeaderMap) -> impl IntoResponse {
-    if let Err(r) = crate::responses::require_admin(&headers) {
+    if let Err(r) = crate::responses::require_admin(&headers).await {
         return *r;
     }
     (common_headers(), Html(PROJECTS_HTML)).into_response()
@@ -64,7 +64,7 @@ pub(crate) async fn projects_ui(headers: HeaderMap) -> impl IntoResponse {
     summary = "Flows UI (Logic Units)"
 )]
 pub(crate) async fn flows_ui(headers: HeaderMap) -> impl IntoResponse {
-    if let Err(r) = crate::responses::require_admin(&headers) {
+    if let Err(r) = crate::responses::require_admin(&headers).await {
         return *r;
     }
     (common_headers(), Html(FLOWS_HTML)).into_response()
@@ -76,7 +76,7 @@ pub(crate) async fn flows_ui(headers: HeaderMap) -> impl IntoResponse {
     summary = "UI tokens (CSS)"
 )]
 pub(crate) async fn ui_tokens_css(headers: HeaderMap) -> impl IntoResponse {
-    if let Err(r) = crate::responses::require_admin(&headers) {
+    if let Err(r) = crate::responses::require_admin(&headers).await {
         return *r;
     }
     (
@@ -97,7 +97,7 @@ pub(crate) async fn ui_tokens_css(headers: HeaderMap) -> impl IntoResponse {
     summary = "UI kit (CSS)"
 )]
 pub(crate) async fn ui_kit_css(headers: HeaderMap) -> impl IntoResponse {
-    if let Err(r) = crate::responses::require_admin(&headers) {
+    if let Err(r) = crate::responses::require_admin(&headers).await {
         return *r;
     }
     (
@@ -118,7 +118,7 @@ pub(crate) async fn ui_kit_css(headers: HeaderMap) -> impl IntoResponse {
     summary = "Shared page styles (CSS)"
 )]
 pub(crate) async fn ui_pages_css(headers: HeaderMap) -> impl IntoResponse {
-    if let Err(r) = crate::responses::require_admin(&headers) {
+    if let Err(r) = crate::responses::require_admin(&headers).await {
         return *r;
     }
     (
@@ -139,7 +139,7 @@ pub(crate) async fn ui_pages_css(headers: HeaderMap) -> impl IntoResponse {
     summary = "Models page script"
 )]
 pub(crate) async fn ui_models_js(headers: HeaderMap) -> impl IntoResponse {
-    if let Err(r) = crate::responses::require_admin(&headers) {
+    if let Err(r) = crate::responses::require_admin(&headers).await {
         return *r;
     }
     (
@@ -160,7 +160,7 @@ pub(crate) async fn ui_models_js(headers: HeaderMap) -> impl IntoResponse {
     summary = "Agents page script"
 )]
 pub(crate) async fn ui_agents_js(headers: HeaderMap) -> impl IntoResponse {
-    if let Err(r) = crate::responses::require_admin(&headers) {
+    if let Err(r) = crate::responses::require_admin(&headers).await {
         return *r;
     }
     (
@@ -181,7 +181,7 @@ pub(crate) async fn ui_agents_js(headers: HeaderMap) -> impl IntoResponse {
     summary = "Projects page script"
 )]
 pub(crate) async fn ui_projects_js(headers: HeaderMap) -> impl IntoResponse {
-    if let Err(r) = crate::responses::require_admin(&headers) {
+    if let Err(r) = crate::responses::require_admin(&headers).await {
         return *r;
     }
     (
@@ -202,7 +202,7 @@ pub(crate) async fn ui_projects_js(headers: HeaderMap) -> impl IntoResponse {
     summary = "Debug page script"
 )]
 pub(crate) async fn ui_debug_js(headers: HeaderMap) -> impl IntoResponse {
-    if let Err(r) = crate::responses::require_admin(&headers) {
+    if let Err(r) = crate::responses::require_admin(&headers).await {
         return *r;
     }
     (
@@ -223,7 +223,7 @@ pub(crate) async fn ui_debug_js(headers: HeaderMap) -> impl IntoResponse {
     summary = "Debug core page script"
 )]
 pub(crate) async fn ui_debug_core_js(headers: HeaderMap) -> impl IntoResponse {
-    if let Err(r) = crate::responses::require_admin(&headers) {
+    if let Err(r) = crate::responses::require_admin(&headers).await {
         return *r;
     }
     (

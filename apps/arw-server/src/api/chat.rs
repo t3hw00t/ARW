@@ -17,7 +17,7 @@ use crate::{chat, AppState};
     )
 )]
 pub async fn chat_history(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
-    if let Err(resp) = crate::responses::require_admin(&headers) {
+    if let Err(resp) = crate::responses::require_admin(&headers).await {
         return *resp;
     }
     let history = state.chat().history().await;
@@ -53,7 +53,7 @@ pub async fn chat_send(
     State(state): State<AppState>,
     Json(req): Json<ChatSendReq>,
 ) -> impl IntoResponse {
-    if let Err(resp) = crate::responses::require_admin(&headers) {
+    if let Err(resp) = crate::responses::require_admin(&headers).await {
         return *resp;
     }
     let options = chat::ChatSendOptions {
@@ -88,7 +88,7 @@ pub struct ChatSendResp {
     )
 )]
 pub async fn chat_clear(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
-    if let Err(resp) = crate::responses::require_admin(&headers) {
+    if let Err(resp) = crate::responses::require_admin(&headers).await {
         return *resp;
     }
     state.chat().clear().await;
@@ -110,7 +110,7 @@ pub async fn chat_status(
     State(state): State<AppState>,
     axum::extract::Query(params): axum::extract::Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    if let Err(resp) = crate::responses::require_admin(&headers) {
+    if let Err(resp) = crate::responses::require_admin(&headers).await {
         return *resp;
     }
     let probe = params

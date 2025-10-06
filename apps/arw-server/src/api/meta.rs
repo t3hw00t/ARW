@@ -119,7 +119,7 @@ pub async fn about(State(state): State<crate::AppState>) -> impl IntoResponse {
     responses((status = 200, description = "Exiting soon", body = serde_json::Value), (status = 401))
 )]
 pub async fn shutdown(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),

@@ -48,7 +48,7 @@ pub async fn staging_action_approve(
     Path(id): Path<String>,
     Json(body): Json<StagingDecision>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -96,7 +96,7 @@ pub async fn staging_action_deny(
     Path(id): Path<String>,
     Json(body): Json<StagingDecision>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),

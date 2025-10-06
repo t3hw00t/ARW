@@ -35,7 +35,7 @@ pub async fn research_watcher_approve(
     Path(id): Path<String>,
     Json(body): Json<WatcherDecision>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -85,7 +85,7 @@ pub async fn research_watcher_archive(
     Path(id): Path<String>,
     Json(body): Json<WatcherDecision>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),

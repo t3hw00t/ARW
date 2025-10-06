@@ -199,7 +199,7 @@ pub async fn patch_apply(
     headers: HeaderMap,
     Json(req): Json<ApplyReq>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -383,7 +383,7 @@ pub async fn patch_revert(
     headers: HeaderMap,
     Json(req): Json<RevertReq>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),

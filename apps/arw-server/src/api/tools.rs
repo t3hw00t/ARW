@@ -45,7 +45,7 @@ fn gating_detail(key: &str, fallback: &str) -> String {
     )
 )]
 pub async fn tools_list(headers: HeaderMap) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let mut items = Vec::new();
@@ -87,7 +87,7 @@ pub async fn tools_run(
     State(state): State<AppState>,
     Json(req): Json<ToolRunRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
 
@@ -182,7 +182,7 @@ pub async fn tools_cache_stats(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let stats = state.tool_cache().stats();

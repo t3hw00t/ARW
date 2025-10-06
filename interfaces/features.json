@@ -577,6 +577,10 @@
         {
           "method": "GET",
           "path": "/state/policy"
+        },
+        {
+          "method": "GET",
+          "path": "/state/identity"
         }
       ],
       "read_models": [],
@@ -586,7 +590,8 @@
         "policy.capsule.failed"
       ],
       "env": [
-        "ARW_SECURITY_POSTURE"
+        "ARW_SECURITY_POSTURE",
+        "ARW_TENANTS_FILE"
       ],
       "docs": [
         {

@@ -40,7 +40,7 @@ pub async fn projects_create(
     State(state): State<AppState>,
     Json(req): Json<ProjectCreateRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let Some(safe) = sanitize_project_name(&req.name) else {
@@ -91,7 +91,7 @@ pub async fn projects_tree(
     headers: HeaderMap,
     Query(q): Query<ProjectsTreeQuery>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let Some(proj_name) = q.proj.as_deref() else {
@@ -348,7 +348,7 @@ pub async fn projects_notes_get(
     headers: HeaderMap,
     Query(q): Query<ProjectNotesQuery>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     match load_project_notes(&q.proj).await {
@@ -377,7 +377,7 @@ pub async fn projects_notes_set(
     Query(q): Query<ProjectNotesQuery>,
     Json(body): Json<ProjectNotesWrite>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let ProjectNotesWrite {
@@ -429,7 +429,7 @@ pub async fn projects_file_get(
     headers: HeaderMap,
     Query(q): Query<ProjectFileQuery>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let Some(root) = project_root(&q.proj) else {
@@ -490,7 +490,7 @@ pub async fn projects_file_set(
     Query(q): Query<ProjectFileQuery>,
     Json(body): Json<ProjectFileWrite>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let Some(root) = project_root(&q.proj) else {
@@ -619,7 +619,7 @@ pub async fn projects_import(
     State(state): State<AppState>,
     Json(req): Json<ProjectImportRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let Some(root) = project_root(&req.proj) else {
@@ -686,7 +686,7 @@ pub async fn projects_import(
     responses((status = 200, description = "Projects list", body = serde_json::Value))
 )]
 pub async fn state_projects_list(headers: HeaderMap) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let snapshot = read_models::projects_snapshot().await;
@@ -920,7 +920,7 @@ pub async fn projects_snapshot_create(
     State(state): State<AppState>,
     Path(proj): Path<String>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let Some(safe) = sanitize_project_name(&proj) else {
@@ -1004,7 +1004,7 @@ pub async fn projects_snapshot_restore(
     State(state): State<AppState>,
     Path((proj, snapshot_id)): Path<(String, String)>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let Some(safe) = sanitize_project_name(&proj) else {
@@ -1087,7 +1087,7 @@ pub async fn projects_snapshots_list(
     Query(q): Query<std::collections::HashMap<String, String>>,
     Path(proj): Path<String>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let Some(safe) = sanitize_project_name(&proj) else {

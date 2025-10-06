@@ -40,7 +40,7 @@ pub async fn policy_reload(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> impl axum::response::IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -155,7 +155,7 @@ pub async fn policy_guardrails_apply(
     headers: HeaderMap,
     Json(req): Json<GuardrailApplyRequest>,
 ) -> impl IntoResponse {
-    if let Err(resp) = crate::responses::require_admin(&headers) {
+    if let Err(resp) = crate::responses::require_admin(&headers).await {
         return *resp;
     }
 
@@ -287,7 +287,7 @@ pub async fn policy_capsules_teardown(
     headers: HeaderMap,
     Json(req): Json<CapsuleTeardownRequest>,
 ) -> impl IntoResponse {
-    if let Err(resp) = crate::responses::require_admin(&headers) {
+    if let Err(resp) = crate::responses::require_admin(&headers).await {
         return *resp;
     }
 

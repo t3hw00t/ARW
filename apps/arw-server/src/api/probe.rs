@@ -87,7 +87,7 @@ pub async fn probe_effective_paths(
     headers: HeaderMap,
     State(_state): State<AppState>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let ep = arw_core::load_effective_paths();
@@ -105,7 +105,7 @@ pub async fn probe_effective_paths(
     )
 )]
 pub async fn probe_hw(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
 
@@ -224,7 +224,7 @@ pub async fn probe_hw(headers: HeaderMap, State(state): State<AppState>) -> impl
     )
 )]
 pub async fn probe_metrics(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let out = collect_metrics_snapshot().await;

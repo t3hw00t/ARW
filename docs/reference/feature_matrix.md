@@ -287,18 +287,23 @@ Layered principals align policies, storage, and audit scopes to User, Project, a
 - Single Sources of Truth:
   - [apps/arw-server/src/capsule_guard.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/capsule_guard.rs)
   - [crates/arw-core/src/gating.rs](https://github.com/t3hw00t/ARW/blob/main/crates/arw-core/src/gating.rs)
+  - [apps/arw-server/src/identity.rs](https://github.com/t3hw00t/ARW/blob/main/apps/arw-server/src/identity.rs)
 - HTTP:
   - `GET /state/policy`
+  - `GET /state/identity`
 - Events:
   - `policy.decision`
   - `policy.capsule.applied`
   - `policy.capsule.failed`
+  - `identity.registry.reloaded`
 - Env:
   - `ARW_SECURITY_POSTURE`
+  - `ARW_TENANTS_FILE`
 - References:
   - [architecture/identity_tenancy.md](../architecture/identity_tenancy.md)
   - [guide/policy_permissions.md](../guide/policy_permissions.md)
   - [architecture/capability_consent_ledger.md](../architecture/capability_consent_ledger.md)
+  - [configs/security/tenants.toml](../../configs/security/tenants.toml)
 
 ## Federated Clustering
 

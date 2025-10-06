@@ -53,7 +53,7 @@ pub async fn experiments_define(
     State(state): State<AppState>,
     Json(req): Json<ExperimentDefineRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let exp = experiments::Experiment {
@@ -89,7 +89,7 @@ pub async fn experiments_run(
     State(state): State<AppState>,
     Json(req): Json<ExperimentRunRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let outcome = state
@@ -126,7 +126,7 @@ pub async fn experiments_activate(
     State(state): State<AppState>,
     Json(req): Json<ExperimentActivateRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     match state.experiments().activate(&req.id, &req.variant).await {
@@ -152,7 +152,7 @@ pub async fn experiments_list(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let items = state.experiments().list().await;
@@ -172,7 +172,7 @@ pub async fn experiments_scoreboard(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let items = state.experiments().list_scoreboard().await;
@@ -192,7 +192,7 @@ pub async fn experiments_winners(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let items = state.experiments().list_winners().await;
@@ -225,7 +225,7 @@ pub async fn experiments_start(
     State(state): State<AppState>,
     Json(req): Json<ExperimentStartRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let id = state
@@ -255,7 +255,7 @@ pub async fn experiments_stop(
     State(state): State<AppState>,
     Json(req): Json<ExperimentStopRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     state.experiments().publish_stop(req.id).await;
@@ -285,7 +285,7 @@ pub async fn experiments_assign(
     State(state): State<AppState>,
     Json(req): Json<ExperimentAssignRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     state

@@ -1,5 +1,8 @@
 use anyhow::{anyhow, bail, ensure, Context, Result};
-use arw_core::{gating, gating_keys, hello_core, introspect_tools, load_effective_paths};
+use arw_core::{
+    effective_paths, gating, gating_keys, hello_core, introspect_tools, load_effective_paths,
+    resolve_config_path,
+};
 use arw_runtime::{RuntimeSeverity, RuntimeState};
 use base64::Engine;
 use chrono::{DateTime, Local, TimeZone, Utc};
@@ -234,6 +237,11 @@ enum AdminCmd {
         #[command(subcommand)]
         cmd: AdminReviewCmd,
     },
+    /// Identity registry helpers
+    Identity {
+        #[command(subcommand)]
+        cmd: AdminIdentityCmd,
+    },
 }
 
 #[derive(Subcommand)]
@@ -349,6 +357,137 @@ struct AdminTokenPersistArgs {
     /// Print the SHA-256 hash to stdout (computed automatically)
     #[arg(long = "print-hash")]
     print_hash: bool,
+}
+
+#[derive(Args, Clone)]
+struct AdminIdentityCommonArgs {
+    /// Tenants manifest path; defaults to ARW_TENANTS_FILE or configs/security/tenants.toml
+    #[arg(long, value_name = "PATH")]
+    tenants_file: Option<PathBuf>,
+}
+
+#[derive(Args, Clone)]
+struct AdminIdentityAddArgs {
+    #[command(flatten)]
+    common: AdminIdentityCommonArgs,
+    /// Principal identifier (letters, numbers, '-', '_', '.', '@')
+    #[arg(long)]
+    id: String,
+    /// Optional display name
+    #[arg(long)]
+    display_name: Option<String>,
+    /// Assign role (repeatable)
+    #[arg(long = "role", value_name = "ROLE")]
+    roles: Vec<String>,
+    /// Assign scope (repeatable)
+    #[arg(long = "scope", value_name = "SCOPE")]
+    scopes: Vec<String>,
+    /// Plain token to hash and store (repeatable)
+    #[arg(long = "token", value_name = "TOKEN")]
+    tokens: Vec<String>,
+    /// Pre-hashed token (SHA-256 hex, repeatable)
+    #[arg(long = "token-sha256", value_name = "HASH")]
+    token_sha256: Vec<String>,
+    /// Disable the principal
+    #[arg(long, conflicts_with = "enable")]
+    disable: bool,
+    /// Ensure principal is enabled
+    #[arg(long, conflicts_with = "disable")]
+    enable: bool,
+    /// Fail if principal already exists
+    #[arg(long)]
+    fail_if_exists: bool,
+    /// Merge roles/scopes/tokens instead of replacing when the principal exists
+    #[arg(long)]
+    merge: bool,
+}
+
+#[derive(Args, Clone)]
+struct AdminIdentityRemoveArgs {
+    #[command(flatten)]
+    common: AdminIdentityCommonArgs,
+    /// Principal identifier to remove
+    #[arg(long)]
+    id: String,
+    /// Succeed without error when the principal does not exist
+    #[arg(long)]
+    ignore_missing: bool,
+}
+
+#[derive(Args, Clone)]
+struct AdminIdentityEnableArgs {
+    #[command(flatten)]
+    common: AdminIdentityCommonArgs,
+    /// Principal identifier to enable
+    #[arg(long)]
+    id: String,
+}
+
+#[derive(Args, Clone)]
+struct AdminIdentityDisableArgs {
+    #[command(flatten)]
+    common: AdminIdentityCommonArgs,
+    /// Principal identifier to disable
+    #[arg(long)]
+    id: String,
+}
+
+#[derive(Args, Clone)]
+struct AdminIdentityRotateArgs {
+    #[command(flatten)]
+    common: AdminIdentityCommonArgs,
+    /// Principal identifier to rotate tokens for
+    #[arg(long)]
+    id: String,
+    /// Provide a precomputed token instead of generating one
+    #[arg(long)]
+    token: Option<String>,
+    /// Number of random bytes when generating a token
+    #[arg(long, default_value_t = 32)]
+    length: usize,
+    /// Output format for generated tokens
+    #[arg(long, value_enum, default_value_t = TokenFormat::Hex)]
+    format: TokenFormat,
+    /// Upper-case hex output when format=hex
+    #[arg(long)]
+    uppercase: bool,
+    /// Keep existing token hashes and append the new one
+    #[arg(long)]
+    append: bool,
+    /// Suppress printing the new token to stdout
+    #[arg(long)]
+    quiet: bool,
+    /// Also print the SHA-256 hash
+    #[arg(long)]
+    print_hash: bool,
+}
+
+#[derive(Args, Clone)]
+struct AdminIdentityShowArgs {
+    #[command(flatten)]
+    common: AdminIdentityCommonArgs,
+    /// Emit JSON instead of an aligned table
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output
+    #[arg(long, requires = "json")]
+    pretty: bool,
+}
+
+#[derive(Subcommand)]
+enum AdminIdentityCmd {
+    /// Create or update a principal in the tenants manifest
+    Add(AdminIdentityAddArgs),
+    /// Remove a principal from the tenants manifest
+    Remove(AdminIdentityRemoveArgs),
+    /// Enable a principal
+    Enable(AdminIdentityEnableArgs),
+    /// Disable a principal
+    Disable(AdminIdentityDisableArgs),
+    /// Rotate or append a token for a principal
+    Rotate(AdminIdentityRotateArgs),
+    /// Show the tenants manifest content
+    Show(AdminIdentityShowArgs),
 }
 
 #[derive(Args, Clone)]
@@ -858,6 +997,8 @@ enum RuntimeCmd {
 enum StateCmd {
     /// Snapshot filtered actions via /state/actions
     Actions(StateActionsArgs),
+    /// Inspect identity registry via /state/identity
+    Identity(StateIdentityArgs),
 }
 
 #[derive(Subcommand)]
@@ -1016,6 +1157,79 @@ struct StateActionsArgs {
     /// Stream live updates via state.read.model.patch SSE
     #[arg(long, conflicts_with = "json")]
     watch: bool,
+}
+
+#[derive(Args)]
+struct StateIdentityArgs {
+    /// Base URL of the service (e.g., http://127.0.0.1:8091)
+    #[arg(long, default_value = "http://127.0.0.1:8091")]
+    base: String,
+    /// Admin token; falls back to ARW_ADMIN_TOKEN env
+    #[arg(long)]
+    admin_token: Option<String>,
+    /// Timeout seconds
+    #[arg(long, default_value_t = 5)]
+    timeout: u64,
+    /// Emit raw JSON instead of formatted text
+    #[arg(long)]
+    json: bool,
+    /// Pretty-print JSON output (requires --json)
+    #[arg(long, requires = "json")]
+    pretty: bool,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliIdentitySnapshot {
+    #[serde(default)]
+    loaded_ms: Option<u64>,
+    #[serde(default)]
+    source_path: Option<String>,
+    #[serde(default)]
+    version: Option<u32>,
+    #[serde(default)]
+    principals: Vec<CliIdentityPrincipal>,
+    #[serde(default, rename = "env_principals")]
+    env: Vec<CliIdentityPrincipal>,
+    #[serde(default)]
+    diagnostics: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliIdentityPrincipal {
+    id: String,
+    #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
+    roles: Vec<String>,
+    #[serde(default)]
+    scopes: Vec<String>,
+    #[serde(default)]
+    tokens: Option<usize>,
+    #[serde(default)]
+    notes: Option<String>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+struct CliTenantsFile {
+    #[serde(default)]
+    version: Option<u32>,
+    #[serde(default)]
+    principals: Vec<CliTenantPrincipal>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct CliTenantPrincipal {
+    id: String,
+    #[serde(default)]
+    display_name: Option<String>,
+    #[serde(default)]
+    roles: Vec<String>,
+    #[serde(default)]
+    scopes: Vec<String>,
+    #[serde(default, rename = "token_sha256")]
+    token_sha256: Vec<String>,
+    #[serde(default)]
+    disabled: bool,
 }
 
 #[derive(Args)]
@@ -1260,6 +1474,44 @@ fn main() {
                     }
                 },
             },
+            AdminCmd::Identity { cmd } => match cmd {
+                AdminIdentityCmd::Add(args) => {
+                    if let Err(e) = cmd_admin_identity_add(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                AdminIdentityCmd::Remove(args) => {
+                    if let Err(e) = cmd_admin_identity_remove(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                AdminIdentityCmd::Enable(args) => {
+                    if let Err(e) = cmd_admin_identity_enable(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                AdminIdentityCmd::Disable(args) => {
+                    if let Err(e) = cmd_admin_identity_disable(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                AdminIdentityCmd::Rotate(args) => {
+                    if let Err(e) = cmd_admin_identity_rotate(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+                AdminIdentityCmd::Show(args) => {
+                    if let Err(e) = cmd_admin_identity_show(&args) {
+                        eprintln!("{}", e);
+                        std::process::exit(1);
+                    }
+                }
+            },
         },
         Some(Commands::Gate { cmd }) => match cmd {
             GateCmd::Keys(args) => {
@@ -1461,6 +1713,12 @@ fn main() {
                     std::process::exit(1);
                 }
             }
+            StateCmd::Identity(args) => {
+                if let Err(e) = cmd_state_identity(&args) {
+                    eprintln!("{}", e);
+                    std::process::exit(1);
+                }
+            }
         },
         Some(Commands::Context { cmd }) => match cmd {
             ContextCmd::Telemetry(args) => {
@@ -1580,17 +1838,29 @@ fn cmd_admin_token_hash(args: &AdminTokenHashArgs) -> Result<()> {
     Ok(())
 }
 
-fn cmd_admin_token_generate(args: &AdminTokenGenerateArgs) -> Result<()> {
-    if args.length == 0 {
+fn generate_admin_token_string(
+    length: usize,
+    format: TokenFormat,
+    uppercase: bool,
+) -> Result<String> {
+    if length == 0 {
         anyhow::bail!("--length must be greater than zero");
     }
-    let mut bytes = vec![0u8; args.length];
+    let mut bytes = vec![0u8; length];
     let mut rng = rand::rng();
     rng.fill_bytes(&mut bytes);
-
-    let token = match args.format {
-        TokenFormat::Hex => encode_hex(&bytes, args.uppercase),
+    let token = match format {
+        TokenFormat::Hex => encode_hex(&bytes, uppercase),
         TokenFormat::Base64 => base64::engine::general_purpose::STANDARD_NO_PAD.encode(&bytes),
+    };
+    Ok(token)
+}
+
+fn cmd_admin_token_generate(args: &AdminTokenGenerateArgs) -> Result<()> {
+    let token = if args.length == 0 {
+        anyhow::bail!("--length must be greater than zero");
+    } else {
+        generate_admin_token_string(args.length, args.format, args.uppercase)?
     };
 
     if args.export_shell {
@@ -1658,6 +1928,264 @@ fn cmd_admin_token_persist(args: &AdminTokenPersistArgs) -> Result<()> {
     }
     println!("{}", message);
 
+    Ok(())
+}
+
+fn cmd_admin_identity_add(args: &AdminIdentityAddArgs) -> Result<()> {
+    let path = resolve_tenants_path(&args.common.tenants_file)?;
+    let mut file = load_tenants_file(&path)?;
+
+    let id = sanitize_identity_id(&args.id)
+        .ok_or_else(|| anyhow!("invalid principal id `{}`", args.id))?;
+    let display_name = args
+        .display_name
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    let roles_input = normalize_labels(&args.roles);
+    let scopes_input = normalize_labels(&args.scopes);
+
+    let mut token_hashes: Vec<String> = Vec::new();
+    for token in &args.tokens {
+        let trimmed = token.trim();
+        ensure!(!trimmed.is_empty(), "--token values cannot be empty");
+        token_hashes.push(hash_admin_token(trimmed));
+    }
+    for hash in &args.token_sha256 {
+        let trimmed = hash.trim();
+        ensure!(
+            is_valid_sha256(trimmed),
+            "token-sha256 value `{}` must be a 64-character hex digest",
+            hash
+        );
+        token_hashes.push(trimmed.to_ascii_lowercase());
+    }
+    dedup_sorted(&mut token_hashes);
+
+    let disable_override = if args.disable {
+        Some(true)
+    } else if args.enable {
+        Some(false)
+    } else {
+        None
+    };
+
+    if let Some(existing) = file.principals.iter_mut().find(|p| p.id == id) {
+        if args.fail_if_exists {
+            bail!("principal `{}` already exists in {}", id, path.display());
+        }
+        if let Some(name) = display_name.as_ref() {
+            existing.display_name = Some(name.clone());
+        }
+        if !roles_input.is_empty() {
+            if args.merge {
+                existing.roles.extend(roles_input.clone());
+                dedup_sorted(&mut existing.roles);
+            } else {
+                existing.roles = roles_input.clone();
+            }
+        }
+        if !scopes_input.is_empty() {
+            if args.merge {
+                existing.scopes.extend(scopes_input.clone());
+                dedup_sorted(&mut existing.scopes);
+            } else {
+                existing.scopes = scopes_input.clone();
+            }
+        }
+        if !token_hashes.is_empty() {
+            if args.merge {
+                existing.token_sha256.extend(token_hashes.clone());
+                dedup_sorted(&mut existing.token_sha256);
+            } else {
+                existing.token_sha256 = token_hashes.clone();
+            }
+        } else if existing.token_sha256.is_empty() {
+            bail!(
+                "principal `{}` has no tokens; provide --token or --token-sha256",
+                id
+            );
+        }
+        if let Some(flag) = disable_override {
+            existing.disabled = flag;
+        }
+        save_tenants_file(&path, &mut file)?;
+        println!("principal `{}` updated in {}", id, path.display());
+        return Ok(());
+    }
+
+    ensure!(
+        !token_hashes.is_empty(),
+        "provide at least one --token or --token-sha256 when creating a principal"
+    );
+
+    let mut principal = CliTenantPrincipal {
+        id: id.clone(),
+        display_name: display_name.clone(),
+        roles: roles_input.clone(),
+        scopes: scopes_input.clone(),
+        token_sha256: token_hashes.clone(),
+        disabled: disable_override.unwrap_or(false),
+    };
+    dedup_sorted(&mut principal.roles);
+    dedup_sorted(&mut principal.scopes);
+    dedup_sorted(&mut principal.token_sha256);
+
+    file.principals.push(principal);
+    save_tenants_file(&path, &mut file)?;
+    println!("principal `{}` added to {}", id, path.display());
+    Ok(())
+}
+
+fn cmd_admin_identity_remove(args: &AdminIdentityRemoveArgs) -> Result<()> {
+    let path = resolve_tenants_path(&args.common.tenants_file)?;
+    let mut file = load_tenants_file(&path)?;
+    let id = sanitize_identity_id(&args.id)
+        .ok_or_else(|| anyhow!("invalid principal id `{}`", args.id))?;
+
+    let initial_len = file.principals.len();
+    file.principals.retain(|p| p.id != id);
+    if file.principals.len() == initial_len {
+        if args.ignore_missing {
+            println!(
+                "principal `{}` not present in {}; nothing to do",
+                id,
+                path.display()
+            );
+            return Ok(());
+        }
+        bail!("principal `{}` not found in {}", id, path.display());
+    }
+
+    save_tenants_file(&path, &mut file)?;
+    println!("principal `{}` removed from {}", id, path.display());
+    Ok(())
+}
+
+fn cmd_admin_identity_enable(args: &AdminIdentityEnableArgs) -> Result<()> {
+    let path = resolve_tenants_path(&args.common.tenants_file)?;
+    let mut file = load_tenants_file(&path)?;
+    let id = sanitize_identity_id(&args.id)
+        .ok_or_else(|| anyhow!("invalid principal id `{}`", args.id))?;
+    let principal = file
+        .principals
+        .iter_mut()
+        .find(|p| p.id == id)
+        .ok_or_else(|| anyhow!("principal `{}` not found in {}", id, path.display()))?;
+    if principal.disabled {
+        principal.disabled = false;
+        save_tenants_file(&path, &mut file)?;
+        println!("principal `{}` enabled in {}", id, path.display());
+    } else {
+        println!("principal `{}` already enabled in {}", id, path.display());
+    }
+    Ok(())
+}
+
+fn cmd_admin_identity_disable(args: &AdminIdentityDisableArgs) -> Result<()> {
+    let path = resolve_tenants_path(&args.common.tenants_file)?;
+    let mut file = load_tenants_file(&path)?;
+    let id = sanitize_identity_id(&args.id)
+        .ok_or_else(|| anyhow!("invalid principal id `{}`", args.id))?;
+    let principal = file
+        .principals
+        .iter_mut()
+        .find(|p| p.id == id)
+        .ok_or_else(|| anyhow!("principal `{}` not found in {}", id, path.display()))?;
+    if !principal.disabled {
+        principal.disabled = true;
+        save_tenants_file(&path, &mut file)?;
+        println!("principal `{}` disabled in {}", id, path.display());
+    } else {
+        println!("principal `{}` already disabled in {}", id, path.display());
+    }
+    Ok(())
+}
+
+fn cmd_admin_identity_rotate(args: &AdminIdentityRotateArgs) -> Result<()> {
+    let path = resolve_tenants_path(&args.common.tenants_file)?;
+    let mut file = load_tenants_file(&path)?;
+    let id = sanitize_identity_id(&args.id)
+        .ok_or_else(|| anyhow!("invalid principal id `{}`", args.id))?;
+    let principal = file
+        .principals
+        .iter_mut()
+        .find(|p| p.id == id)
+        .ok_or_else(|| anyhow!("principal `{}` not found in {}", id, path.display()))?;
+
+    let token = if let Some(raw) = &args.token {
+        let trimmed = raw.trim();
+        ensure!(!trimmed.is_empty(), "--token cannot be empty");
+        trimmed.to_string()
+    } else {
+        generate_admin_token_string(args.length, args.format, args.uppercase)?
+    };
+    let digest = hash_admin_token(&token);
+
+    if args.append {
+        principal.token_sha256.push(digest.clone());
+    } else {
+        principal.token_sha256.clear();
+        principal.token_sha256.push(digest.clone());
+    }
+    dedup_sorted(&mut principal.token_sha256);
+
+    save_tenants_file(&path, &mut file)?;
+
+    if !args.quiet {
+        println!("token: {}", token);
+    }
+    if args.print_hash {
+        println!("sha256: {}", digest);
+    }
+    println!("principal `{}` updated in {}", id, path.display());
+    Ok(())
+}
+
+fn cmd_admin_identity_show(args: &AdminIdentityShowArgs) -> Result<()> {
+    let path = resolve_tenants_path(&args.common.tenants_file)?;
+    let file = load_tenants_file(&path)?;
+
+    if args.json {
+        let value = serde_json::to_value(&file).context("serializing tenants manifest")?;
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&value).unwrap_or_else(|_| value.to_string())
+            );
+        } else {
+            println!("{}", value);
+        }
+        return Ok(());
+    }
+
+    let principals: Vec<CliIdentityPrincipal> = file
+        .principals
+        .iter()
+        .map(|p| CliIdentityPrincipal {
+            id: p.id.clone(),
+            display_name: p.display_name.clone(),
+            roles: p.roles.clone(),
+            scopes: p.scopes.clone(),
+            tokens: Some(p.token_sha256.len()),
+            notes: if p.disabled {
+                Some("disabled".into())
+            } else {
+                None
+            },
+        })
+        .collect();
+
+    let snapshot = CliIdentitySnapshot {
+        loaded_ms: None,
+        source_path: Some(path.to_string_lossy().to_string()),
+        version: file.version,
+        principals,
+        env: Vec::new(),
+        diagnostics: Vec::new(),
+    };
+    render_identity_snapshot(&snapshot);
     Ok(())
 }
 
@@ -3341,6 +3869,245 @@ fn cmd_state_actions(args: &StateActionsArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+fn cmd_state_identity(args: &StateIdentityArgs) -> Result<()> {
+    let token = resolve_admin_token(&args.admin_token);
+    let client = Client::builder()
+        .timeout(Duration::from_secs(args.timeout))
+        .build()
+        .context("building HTTP client")?;
+    let base = args.base.trim_end_matches('/');
+    let url = format!("{}/state/identity", base);
+    let response = with_admin_headers(
+        client.get(&url).header(ACCEPT, "application/json"),
+        token.as_deref(),
+    )
+    .send()
+    .with_context(|| format!("requesting identity snapshot from {}", url))?;
+
+    let status = response.status();
+    if status == StatusCode::UNAUTHORIZED {
+        bail!(
+            "request to {} returned 401 Unauthorized; supply an admin token via --admin-token or ARW_ADMIN_TOKEN",
+            url
+        );
+    }
+    if !status.is_success() {
+        let body = response
+            .text()
+            .unwrap_or_else(|_| "<unable to read body>".into());
+        bail!("request to {} failed ({}): {}", url, status, body);
+    }
+
+    let raw: serde_json::Value = response
+        .json()
+        .context("parsing identity snapshot JSON payload")?;
+
+    if args.json {
+        if args.pretty {
+            println!(
+                "{}",
+                serde_json::to_string_pretty(&raw).unwrap_or_else(|_| raw.to_string())
+            );
+        } else {
+            println!("{}", raw);
+        }
+        return Ok(());
+    }
+
+    let snapshot: CliIdentitySnapshot =
+        serde_json::from_value(raw).context("materialising identity snapshot structure")?;
+    render_identity_snapshot(&snapshot);
+    Ok(())
+}
+
+fn render_identity_snapshot(snapshot: &CliIdentitySnapshot) {
+    println!("Identity registry snapshot");
+    let loaded = snapshot
+        .loaded_ms
+        .map(format_local_timestamp)
+        .unwrap_or_else(|| "—".to_string());
+    let source = snapshot
+        .source_path
+        .as_deref()
+        .filter(|s| !s.is_empty())
+        .unwrap_or("—");
+    let version = snapshot
+        .version
+        .map(|v| v.to_string())
+        .unwrap_or_else(|| "—".into());
+
+    println!("  Loaded : {}", loaded);
+    println!("  Source : {}", source);
+    println!("  Version: {}", version);
+    println!(
+        "  Principals: {} (file) · {} (env)",
+        snapshot.principals.len(),
+        snapshot.env.len()
+    );
+
+    if !snapshot.diagnostics.is_empty() {
+        println!("\nDiagnostics:");
+        for diag in &snapshot.diagnostics {
+            println!("  - {}", diag);
+        }
+    }
+
+    let mut entries: Vec<(&str, &CliIdentityPrincipal)> = Vec::new();
+    for principal in &snapshot.principals {
+        entries.push(("file", principal));
+    }
+    for principal in &snapshot.env {
+        entries.push(("env", principal));
+    }
+
+    if entries.is_empty() {
+        println!("\n(no principals loaded)");
+        return;
+    }
+
+    entries.sort_by(|a, b| a.1.id.cmp(&b.1.id));
+
+    println!(
+        "\n{:<4} {:<24} {:<18} {:<28} {:<8} {}",
+        "Src", "ID", "Roles", "Scopes", "Tokens", "Name / Notes"
+    );
+    for (source, principal) in entries {
+        let id_display = ellipsize_str(&principal.id, 24);
+        let roles_display = if principal.roles.is_empty() {
+            "—".to_string()
+        } else {
+            ellipsize_str(&principal.roles.join(", "), 18)
+        };
+        let scopes_display = if principal.scopes.is_empty() {
+            "—".to_string()
+        } else {
+            ellipsize_str(&principal.scopes.join(", "), 28)
+        };
+        let tokens_display = principal
+            .tokens
+            .filter(|count| *count > 0)
+            .map(|count| count.to_string())
+            .unwrap_or_else(|| "—".into());
+        let name_notes = match (
+            principal
+                .display_name
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty()),
+            principal
+                .notes
+                .as_deref()
+                .map(str::trim)
+                .filter(|s| !s.is_empty()),
+        ) {
+            (Some(name), Some(note)) => format!("{} · {}", name, note),
+            (Some(name), None) => name.to_string(),
+            (None, Some(note)) => note.to_string(),
+            (None, None) => "—".into(),
+        };
+        println!(
+            "{:<4} {:<24} {:<18} {:<28} {:<8} {}",
+            source, id_display, roles_display, scopes_display, tokens_display, name_notes
+        );
+    }
+}
+
+fn resolve_tenants_path(specified: &Option<PathBuf>) -> Result<PathBuf> {
+    if let Some(path) = specified {
+        return Ok(path.clone());
+    }
+    if let Ok(env_path) = std::env::var("ARW_TENANTS_FILE") {
+        let trimmed = env_path.trim();
+        if !trimmed.is_empty() {
+            return Ok(PathBuf::from(trimmed));
+        }
+    }
+    if let Some(resolved) = resolve_config_path("configs/security/tenants.toml") {
+        return Ok(resolved);
+    }
+    let paths = effective_paths();
+    Ok(PathBuf::from(paths.state_dir).join("security/tenants.toml"))
+}
+
+fn load_tenants_file(path: &Path) -> Result<CliTenantsFile> {
+    match std::fs::read(path) {
+        Ok(bytes) if !bytes.is_empty() => {
+            let text = String::from_utf8(bytes)
+                .with_context(|| format!("decoding tenants manifest {}", path.display()))?;
+            let mut file: CliTenantsFile = toml::from_str(&text)
+                .with_context(|| format!("parsing tenants manifest {}", path.display()))?;
+            file.version.get_or_insert(1);
+            for principal in &mut file.principals {
+                dedup_sorted(&mut principal.roles);
+                dedup_sorted(&mut principal.scopes);
+                dedup_sorted(&mut principal.token_sha256);
+            }
+            file.principals.sort_by(|a, b| a.id.cmp(&b.id));
+            Ok(file)
+        }
+        Ok(_) => Ok(CliTenantsFile::default()),
+        Err(err) if err.kind() == io::ErrorKind::NotFound => Ok(CliTenantsFile::default()),
+        Err(err) => Err(err).with_context(|| format!("reading {}", path.display())),
+    }
+}
+
+fn save_tenants_file(path: &Path, file: &mut CliTenantsFile) -> Result<()> {
+    file.version.get_or_insert(1);
+    for principal in &mut file.principals {
+        dedup_sorted(&mut principal.roles);
+        dedup_sorted(&mut principal.scopes);
+        dedup_sorted(&mut principal.token_sha256);
+    }
+    file.principals.sort_by(|a, b| a.id.cmp(&b.id));
+
+    if let Some(parent) = path.parent() {
+        create_dir_all(parent).with_context(|| format!("creating {}", parent.display()))?;
+    }
+    let body = toml::to_string_pretty(file)
+        .with_context(|| format!("serializing tenants manifest {}", path.display()))?;
+    std::fs::write(path, body)
+        .with_context(|| format!("writing tenants manifest {}", path.display()))?;
+    Ok(())
+}
+
+fn sanitize_identity_id(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() || trimmed.len() > 120 {
+        return None;
+    }
+    if trimmed.starts_with('.') {
+        return None;
+    }
+    if trimmed
+        .chars()
+        .any(|ch| !(ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | '@')))
+    {
+        return None;
+    }
+    Some(trimmed.to_string())
+}
+
+fn normalize_labels(values: &[String]) -> Vec<String> {
+    let mut out: Vec<String> = values
+        .iter()
+        .map(|v| v.trim())
+        .filter(|v| !v.is_empty())
+        .map(|v| v.to_string())
+        .collect();
+    dedup_sorted(&mut out);
+    out
+}
+
+fn is_valid_sha256(value: &str) -> bool {
+    let trimmed = value.trim();
+    trimmed.len() == 64 && trimmed.chars().all(|ch| ch.is_ascii_hexdigit())
+}
+
+fn dedup_sorted(values: &mut Vec<String>) {
+    values.sort();
+    values.dedup();
 }
 
 fn cmd_events_observations(args: &EventsObservationsArgs) -> Result<()> {

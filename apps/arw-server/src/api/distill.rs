@@ -15,7 +15,7 @@ use crate::AppState;
     )
 )]
 pub async fn distill_run(State(state): State<AppState>, headers: HeaderMap) -> impl IntoResponse {
-    if let Err(resp) = crate::responses::require_admin(&headers) {
+    if let Err(resp) = crate::responses::require_admin(&headers).await {
         return *resp;
     }
     let result = crate::distill::run_once(&state).await;

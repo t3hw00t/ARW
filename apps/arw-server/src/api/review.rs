@@ -62,7 +62,7 @@ struct MemoryQuarantineAdmitResponse {
     )
 )]
 pub async fn memory_quarantine_get(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     let items = review::memory_quarantine_list().await;
@@ -85,7 +85,7 @@ pub async fn memory_quarantine_queue(
     State(state): State<AppState>,
     Json(req): Json<review::MemoryQuarantineRequest>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     match review::memory_quarantine_queue(&state.bus(), req).await {
@@ -114,7 +114,7 @@ pub async fn memory_quarantine_admit(
     State(state): State<AppState>,
     Json(req): Json<review::MemoryQuarantineAdmit>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     match review::memory_quarantine_admit(&state.bus(), req).await {
@@ -135,7 +135,7 @@ pub async fn memory_quarantine_admit(
     )
 )]
 pub async fn world_diffs_get(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     let items = review::world_diffs_list().await;
@@ -158,7 +158,7 @@ pub async fn world_diffs_queue(
     State(state): State<AppState>,
     Json(req): Json<review::WorldDiffQueueRequest>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     match review::world_diffs_queue(&state.bus(), req).await {
@@ -184,7 +184,7 @@ pub async fn world_diffs_decision(
     State(state): State<AppState>,
     Json(req): Json<review::WorldDiffDecision>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     match review::world_diffs_decision(&state.bus(), req).await {

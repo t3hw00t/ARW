@@ -44,7 +44,7 @@ pub async fn models_summary(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     let summary = state.models().summary().await;
@@ -61,7 +61,7 @@ pub async fn models_summary(
     )
 )]
 pub async fn models_list(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     let items = state.models().list().await;
@@ -78,7 +78,7 @@ pub async fn models_refresh(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     let items = state.models().refresh().await;
@@ -92,7 +92,7 @@ pub async fn models_refresh(
     responses((status = 200, description = "Saved", body = serde_json::Value))
 )]
 pub async fn models_save(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     match state.models().save().await {
@@ -115,7 +115,7 @@ pub async fn models_save(headers: HeaderMap, State(state): State<AppState>) -> i
     )
 )]
 pub async fn models_load(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     match state.models().load().await {
@@ -152,7 +152,7 @@ pub async fn models_add(
     State(state): State<AppState>,
     Json(req): Json<ModelEntry>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     let mut obj = serde_json::Map::new();
@@ -196,7 +196,7 @@ pub async fn models_remove(
     State(state): State<AppState>,
     Json(req): Json<ModelId>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     let removed = state.models().remove_model(&req.id).await;
@@ -213,7 +213,7 @@ pub async fn models_default_get(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     let id = state.models().default_get().await;
@@ -235,7 +235,7 @@ pub async fn models_default_set(
     State(state): State<AppState>,
     Json(req): Json<ModelId>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     match state.models().default_set(req.id).await {
@@ -268,7 +268,7 @@ pub async fn models_concurrency_get(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     Json(state.models().concurrency_get().await).into_response()
@@ -286,7 +286,7 @@ pub async fn models_concurrency_set(
     State(state): State<AppState>,
     Json(req): Json<ConcurrencyUpdate>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     let value = state
@@ -303,7 +303,7 @@ pub async fn models_concurrency_set(
     responses((status = 200, description = "Jobs", body = serde_json::Value))
 )]
 pub async fn models_jobs(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     Json(state.models().jobs_snapshot().await).into_response()
@@ -324,7 +324,7 @@ pub async fn state_models_metrics(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     Json(state.models().metrics_value().await).into_response()
@@ -371,7 +371,7 @@ pub async fn state_models_hashes(
     State(state): State<AppState>,
     Query(q): Query<HashesQuery>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     let page = state
@@ -402,7 +402,7 @@ pub async fn models_download(
     State(state): State<AppState>,
     Json(req): Json<models::DownloadRequest>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     match state.models().start_download(req).await {
@@ -429,7 +429,7 @@ pub async fn models_download_cancel(
     State(state): State<AppState>,
     Json(req): Json<ModelId>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     match state.models().cancel_download(&req.id).await {
@@ -458,7 +458,7 @@ pub async fn models_cas_gc(
     State(state): State<AppState>,
     Json(req): Json<models::CasGcRequest>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     match state.models().cas_gc(req).await {
@@ -493,7 +493,7 @@ pub async fn models_blob_by_hash(
     State(state): State<AppState>,
     headers: HeaderMap,
 ) -> Response {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
 

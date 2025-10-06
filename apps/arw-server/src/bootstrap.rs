@@ -13,7 +13,8 @@ use utoipa::OpenApi;
 use crate::{
     access_log,
     app_state::AppState,
-    capsule_guard, config, config_watcher, egress_proxy, metrics, queue, read_models, responses,
+    capsule_guard, config, config_watcher, egress_proxy, identity, metrics, queue, read_models,
+    responses,
     router::build_router,
     security,
     sse_cache::SseIdCache,
@@ -80,6 +81,9 @@ pub(crate) async fn build() -> BootstrapOutput {
         }
     };
 
+    let identity_registry = identity::IdentityRegistry::new(bus.clone()).await;
+    identity::set_global_registry(identity_registry.clone());
+
     let (router, endpoints, endpoints_meta) = build_router();
 
     let config::InitialConfigState {
@@ -101,6 +105,7 @@ pub(crate) async fn build() -> BootstrapOutput {
         .with_queue_signals(queue_signals.clone())
         .with_endpoints(Arc::new(endpoints))
         .with_endpoints_meta(Arc::new(endpoints_meta))
+        .with_identity(identity_registry.clone())
         .build()
         .await;
 
@@ -125,6 +130,9 @@ pub(crate) async fn build() -> BootstrapOutput {
 
     background_tasks.merge(initialise_state(&state, kernel_enabled).await);
     background_tasks.extend(config_watcher::start(state.clone()));
+    if let Some(handle) = identity_registry.watch() {
+        background_tasks.push(handle);
+    }
 
     BootstrapOutput {
         router,

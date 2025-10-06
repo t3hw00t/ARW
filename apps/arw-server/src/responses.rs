@@ -62,8 +62,8 @@ pub fn attach_corr(payload: &mut Value) {
     }
 }
 
-pub fn require_admin(headers: &HeaderMap) -> Result<(), Box<axum::response::Response>> {
-    if crate::admin_ok(headers) {
+pub async fn require_admin(headers: &HeaderMap) -> Result<(), Box<axum::response::Response>> {
+    if crate::admin_ok(headers).await {
         Ok(())
     } else {
         Err(Box::new(unauthorized(None)))

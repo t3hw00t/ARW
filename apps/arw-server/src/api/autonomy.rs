@@ -71,7 +71,7 @@ pub async fn state_autonomy_lanes(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if let Err(resp) = responses::require_admin(&headers) {
+    if let Err(resp) = responses::require_admin(&headers).await {
         return *resp;
     }
     let counts = live_action_counts(&state).await;
@@ -105,7 +105,7 @@ pub async fn state_autonomy_lane(
     Path(lane_id): Path<String>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if let Err(resp) = responses::require_admin(&headers) {
+    if let Err(resp) = responses::require_admin(&headers).await {
         return *resp;
     }
     match state.autonomy().lane(&lane_id).await {
@@ -140,7 +140,7 @@ pub async fn autonomy_pause(
     State(state): State<AppState>,
     payload: Option<Json<AutonomyActionRequest>>,
 ) -> impl IntoResponse {
-    if let Err(resp) = responses::require_admin(&headers) {
+    if let Err(resp) = responses::require_admin(&headers).await {
         return *resp;
     }
     let body = payload.map(|wrapper| wrapper.0).unwrap_or_default();
@@ -172,7 +172,7 @@ pub async fn autonomy_stop(
     State(state): State<AppState>,
     payload: Option<Json<AutonomyActionRequest>>,
 ) -> impl IntoResponse {
-    if let Err(resp) = responses::require_admin(&headers) {
+    if let Err(resp) = responses::require_admin(&headers).await {
         return *resp;
     }
 
@@ -235,7 +235,7 @@ pub async fn autonomy_budgets_update(
     State(state): State<AppState>,
     Json(req): Json<AutonomyBudgetsRequest>,
 ) -> impl IntoResponse {
-    if let Err(resp) = responses::require_admin(&headers) {
+    if let Err(resp) = responses::require_admin(&headers).await {
         return *resp;
     }
 
@@ -392,7 +392,7 @@ pub async fn autonomy_resume(
     State(state): State<AppState>,
     payload: Option<Json<AutonomyActionRequest>>,
 ) -> impl IntoResponse {
-    if let Err(resp) = responses::require_admin(&headers) {
+    if let Err(resp) = responses::require_admin(&headers).await {
         return *resp;
     }
     let body = payload.map(|wrapper| wrapper.0).unwrap_or_default();
@@ -453,7 +453,7 @@ pub async fn autonomy_jobs_clear(
     Query(query): Query<AutonomyJobsQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if let Err(resp) = responses::require_admin(&headers) {
+    if let Err(resp) = responses::require_admin(&headers).await {
         return *resp;
     }
     let scope = match query.state.as_deref().map(|s| s.trim()) {

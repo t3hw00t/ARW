@@ -727,7 +727,7 @@ pub async fn state_context_cascade(
     Query(query): Query<ContextCascadeQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return crate::responses::unauthorized(None);
     }
     if !state.kernel_enabled() {

@@ -358,7 +358,7 @@ pub async fn state_episodes(
     Query(query): Query<EpisodesQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -453,7 +453,7 @@ pub async fn state_episode_snapshot(
     Query(query): Query<EpisodeSnapshotQuery>,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -588,7 +588,7 @@ pub async fn state_observations(
     headers: HeaderMap,
     Query(params): Query<StateObservationsQuery>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -648,7 +648,7 @@ pub async fn state_observations(
     )
 )]
 pub async fn state_beliefs(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -679,7 +679,7 @@ pub async fn state_beliefs(headers: HeaderMap) -> impl IntoResponse {
     )
 )]
 pub async fn state_intents(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -708,7 +708,7 @@ pub async fn state_intents(headers: HeaderMap) -> impl IntoResponse {
     )
 )]
 pub async fn state_crashlog(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -732,7 +732,7 @@ pub async fn state_crashlog(headers: HeaderMap) -> impl IntoResponse {
     )
 )]
 pub async fn state_screenshots(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -754,7 +754,7 @@ pub async fn state_screenshots(headers: HeaderMap) -> impl IntoResponse {
     )
 )]
 pub async fn state_service_health(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -777,7 +777,7 @@ pub async fn state_service_health(headers: HeaderMap) -> impl IntoResponse {
     )
 )]
 pub async fn state_service_status(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -820,7 +820,7 @@ pub async fn state_service_status(headers: HeaderMap) -> impl IntoResponse {
     )
 )]
 pub async fn state_guardrails_metrics(headers: HeaderMap) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -841,6 +841,28 @@ pub async fn state_policy_capsules(State(state): State<AppState>) -> impl IntoRe
     Json(state.capsules().snapshot().await)
 }
 
+/// Identity registry snapshot.
+#[utoipa::path(
+    get,
+    path = "/state/identity",
+    tag = "State",
+    operation_id = "state_identity",
+    responses(
+        (status = 200, description = "Identity registry snapshot", body = crate::identity::IdentitySnapshot),
+        (status = 401, description = "Unauthorized", body = arw_protocol::ProblemDetails)
+    )
+)]
+pub async fn state_identity(
+    headers: HeaderMap,
+    State(state): State<AppState>,
+) -> impl IntoResponse {
+    if !crate::admin_ok(&headers).await {
+        return crate::responses::unauthorized(None);
+    }
+    let snapshot = state.identity().snapshot().await;
+    Json(snapshot).into_response()
+}
+
 /// Cluster nodes snapshot.
 #[utoipa::path(
     get,
@@ -854,7 +876,7 @@ pub async fn state_policy_capsules(State(state): State<AppState>) -> impl IntoRe
     )
 )]
 pub async fn state_cluster(headers: HeaderMap, State(state): State<AppState>) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -898,7 +920,7 @@ pub struct WorldQuery {
     )
 )]
 pub async fn state_world(headers: HeaderMap, Query(q): Query<WorldQuery>) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -952,7 +974,7 @@ pub async fn state_world_select(
     headers: HeaderMap,
     Query(q): Query<WorldSelectQuery>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -980,7 +1002,7 @@ pub async fn state_contributions(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -1054,7 +1076,7 @@ pub async fn state_actions(
     State(state): State<AppState>,
     Query(params): Query<StateActionsQuery>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -1105,7 +1127,7 @@ pub async fn state_egress(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -2314,7 +2336,7 @@ pub async fn state_research_watcher(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -2362,7 +2384,7 @@ pub async fn state_staging_actions(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -2414,7 +2436,7 @@ pub async fn state_training_telemetry(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -2443,7 +2465,7 @@ pub async fn state_training_actions(
     State(state): State<AppState>,
     Query(q): Query<std::collections::HashMap<String, String>>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -2497,7 +2519,7 @@ pub async fn state_runtime_matrix(
     headers: HeaderMap,
     State(_state): State<AppState>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -2527,7 +2549,7 @@ pub async fn state_runtime_supervisor(
     headers: HeaderMap,
     State(state): State<AppState>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),

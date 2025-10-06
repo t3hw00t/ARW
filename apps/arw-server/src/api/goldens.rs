@@ -35,7 +35,7 @@ pub async fn goldens_list(
     State(_state): State<AppState>,
     axum::extract::Query(q): axum::extract::Query<GoldensListQuery>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let proj = q.proj.unwrap_or_else(|| "default".into());
@@ -74,7 +74,7 @@ pub async fn goldens_add(
     headers: HeaderMap,
     Json(req): Json<GoldensAddRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let mut set = goldens::load(&req.proj).await;
@@ -130,7 +130,7 @@ pub async fn goldens_run(
     State(state): State<AppState>,
     Json(req): Json<GoldensRunRequest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return unauthorized();
     }
     let opts = goldens::EvalOptions {

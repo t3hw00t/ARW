@@ -166,6 +166,18 @@ pub(crate) fn cache_policy_manifest_path() -> Option<PathBuf> {
     discovered_cache_policy_path().0
 }
 
+pub(crate) fn identity_config_path() -> Option<PathBuf> {
+    if let Ok(explicit) = std::env::var("ARW_TENANTS_FILE") {
+        if !explicit.trim().is_empty() {
+            let candidate = PathBuf::from(explicit.trim());
+            if candidate.exists() {
+                return Some(candidate);
+            }
+        }
+    }
+    arw_core::resolve_config_path("configs/security/tenants.toml")
+}
+
 fn discovered_cache_policy_path() -> (Option<PathBuf>, &'static str) {
     if let Ok(explicit) = std::env::var("ARW_CACHE_POLICY_FILE") {
         if !explicit.trim().is_empty() {

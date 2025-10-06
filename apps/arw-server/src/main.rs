@@ -31,6 +31,7 @@ mod grpc;
 mod guard_metadata;
 mod http_client;
 mod http_timeout;
+mod identity;
 mod memory_hygiene;
 mod memory_service;
 mod metrics;
@@ -830,7 +831,7 @@ fn env_truthy(key: &str) -> bool {
         .unwrap_or(false)
 }
 
-pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
+pub(crate) async fn admin_ok(headers: &HeaderMap) -> bool {
     let addrs = crate::security::client_addrs();
     // Debug mode opens admin surfaces for local development convenience,
     // but only for local callers. In unit tests or routers without the
@@ -860,37 +861,10 @@ pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
         // Debug mode is on but the request appears to originate from a remote caller.
     }
 
-    // When ARW_ADMIN_TOKEN or ARW_ADMIN_TOKEN_SHA256 is set, require it in Authorization: Bearer or X-ARW-Admin
-    let token_plain = std::env::var("ARW_ADMIN_TOKEN")
-        .ok()
-        .filter(|t| !t.is_empty());
-    let token_hash = std::env::var("ARW_ADMIN_TOKEN_SHA256")
-        .ok()
-        .filter(|t| !t.is_empty());
-    if token_plain.is_none() && token_hash.is_none() {
+    let Some(presented) = extract_admin_token(headers) else {
         return false;
-    }
-    // Extract presented token
-    let mut presented: Option<String> = None;
-    if let Some(hv) = headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok())
-    {
-        if let Some(bearer) = hv.strip_prefix("Bearer ") {
-            presented = Some(bearer.to_string());
-        }
-    }
-    if presented.is_none() {
-        if let Some(hv) = headers.get("X-ARW-Admin").and_then(|h| h.to_str().ok()) {
-            presented = Some(hv.to_string());
-        }
-    }
-    let Some(ptok) = presented else { return false };
-    let fingerprint = {
-        let mut hasher = sha2::Sha256::new();
-        hasher.update(ptok.as_bytes());
-        hex::encode(hasher.finalize())
     };
+    let fingerprint = sha256_hex(&presented);
     if !crate::security::admin_rate_limit_allow(&fingerprint, &addrs) {
         warn!(
             target: "arw::security",
@@ -900,37 +874,82 @@ pub(crate) fn admin_ok(headers: &HeaderMap) -> bool {
         );
         return false;
     }
-    // Constant-time eq helper
-    fn ct_eq(a: &[u8], b: &[u8]) -> bool {
-        if a.len() != b.len() {
+
+    if let Some(registry) = identity::global_registry() {
+        if let Some(principal) = registry.verify_token(&presented).await {
+            if principal.has_role("admin") || principal.has_role("root") {
+                return true;
+            }
+            warn!(
+                principal = %principal.id,
+                "principal authenticated but lacks admin/root role"
+            );
             return false;
         }
-        let mut diff: u8 = 0;
-        for i in 0..a.len() {
-            diff |= a[i] ^ b[i];
-        }
-        diff == 0
+        return false;
     }
-    if let Some(ref hpref) = token_hash {
-        let want = hpref.trim().to_ascii_lowercase();
-        if ct_eq(want.as_bytes(), fingerprint.as_bytes()) {
-            return true;
-        }
-        return token_plain
-            .as_ref()
-            .map(|p| ct_eq(p.as_bytes(), ptok.as_bytes()))
-            .unwrap_or(false);
-    }
-    if let Some(ref p) = token_plain {
-        return ct_eq(p.as_bytes(), ptok.as_bytes());
-    }
-    false
+
+    legacy_env_token_allows(&presented, &fingerprint)
 }
 
 // Shared test guard to serialize env/rate-limiter tests across the binary.
 #[cfg(test)]
 pub(crate) static ADMIN_ENV_GUARD: once_cell::sync::Lazy<parking_lot::Mutex<()>> =
     once_cell::sync::Lazy::new(|| parking_lot::Mutex::new(()));
+
+fn extract_admin_token(headers: &HeaderMap) -> Option<String> {
+    if let Some(auth) = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+    {
+        if let Some(bearer) = auth.strip_prefix("Bearer ") {
+            let trimmed = bearer.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    headers
+        .get("X-ARW-Admin")
+        .and_then(|h| h.to_str().ok())
+        .map(|raw| raw.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
+fn sha256_hex(value: &str) -> String {
+    let mut hasher = sha2::Sha256::new();
+    hasher.update(value.as_bytes());
+    hex::encode(hasher.finalize())
+}
+
+fn legacy_env_token_allows(presented: &str, fingerprint: &str) -> bool {
+    if let Ok(token) = std::env::var("ARW_ADMIN_TOKEN") {
+        let trimmed = token.trim();
+        if !trimmed.is_empty() && constant_time_eq(trimmed.as_bytes(), presented.as_bytes()) {
+            return true;
+        }
+    }
+    if let Ok(hash) = std::env::var("ARW_ADMIN_TOKEN_SHA256") {
+        let trimmed = hash.trim();
+        if trimmed.len() == fingerprint.len()
+            && constant_time_eq(trimmed.as_bytes(), fingerprint.as_bytes())
+        {
+            return true;
+        }
+    }
+    false
+}
+
+fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
+    if a.len() != b.len() {
+        return false;
+    }
+    let mut diff = 0u8;
+    for i in 0..a.len() {
+        diff |= a[i] ^ b[i];
+    }
+    diff == 0
+}
 
 #[cfg(test)]
 mod tests {
@@ -948,8 +967,8 @@ mod tests {
         headers
     }
 
-    #[test]
-    fn admin_ok_rate_limits_plain_token() {
+    #[tokio::test]
+    async fn admin_ok_rate_limits_plain_token() {
         let _lock = super::ADMIN_ENV_GUARD.lock();
         crate::security::reset_admin_rate_limiter_for_tests();
         let mut env = crate::test_support::env::guard();
@@ -960,15 +979,15 @@ mod tests {
         env.set("ARW_ADMIN_RATE_WINDOW_SECS", "3600");
 
         let headers = auth_headers("secret");
-        assert!(admin_ok(&headers));
-        assert!(admin_ok(&headers));
-        assert!(!admin_ok(&headers));
+        assert!(admin_ok(&headers).await);
+        assert!(admin_ok(&headers).await);
+        assert!(!admin_ok(&headers).await);
 
         crate::security::reset_admin_rate_limiter_for_tests();
     }
 
-    #[test]
-    fn admin_ok_rate_limits_hashed_token() {
+    #[tokio::test]
+    async fn admin_ok_rate_limits_hashed_token() {
         let _lock = super::ADMIN_ENV_GUARD.lock();
         crate::security::reset_admin_rate_limiter_for_tests();
         let mut env = crate::test_support::env::guard();
@@ -985,8 +1004,8 @@ mod tests {
         env.set("ARW_ADMIN_RATE_WINDOW_SECS", "300");
 
         let headers = auth_headers(plain);
-        assert!(admin_ok(&headers));
-        assert!(!admin_ok(&headers));
+        assert!(admin_ok(&headers).await);
+        assert!(!admin_ok(&headers).await);
 
         crate::security::reset_admin_rate_limiter_for_tests();
     }
@@ -997,6 +1016,7 @@ mod prop_tests {
     use super::*;
     use axum::http::{HeaderMap, HeaderValue};
     use proptest::prelude::*;
+    use tokio::runtime::Runtime;
 
     fn auth_headers(token: &str) -> HeaderMap {
         let mut headers = HeaderMap::new();
@@ -1025,8 +1045,9 @@ mod prop_tests {
             env.set("ARW_ADMIN_RATE_WINDOW_SECS", "60");
 
             let headers = auth_headers(token);
-            prop_assert!(admin_ok(&headers));
-            prop_assert!(!admin_ok(&headers));
+            let rt = Runtime::new().expect("runtime");
+            prop_assert!(rt.block_on(admin_ok(&headers)));
+            prop_assert!(!rt.block_on(admin_ok(&headers)));
 
             crate::security::reset_admin_rate_limiter_for_tests();
         }

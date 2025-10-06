@@ -105,6 +105,7 @@ pub const TOPIC_SERVICE_STOP: &str = "service.stop";
 pub const TOPIC_PROBE_HW: &str = "probe.hw";
 pub const TOPIC_PROBE_METRICS: &str = "probe.metrics";
 pub const TOPIC_CATALOG_UPDATED: &str = "catalog.updated";
+pub const TOPIC_IDENTITY_RELOADED: &str = "identity.registry.reloaded";
 pub const TOPIC_CONFIG_PATCH_APPLIED: &str = "config.patch.applied";
 pub const TOPIC_CONFIG_RELOADED: &str = "config.reloaded";
 pub const TOPIC_GATING_RELOADED: &str = "policy.gating.reloaded";

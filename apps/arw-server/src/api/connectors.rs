@@ -61,7 +61,7 @@ pub async fn connector_register(
     State(state): State<AppState>,
     Json(mut manifest): Json<ConnectorManifest>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),
@@ -126,7 +126,7 @@ pub async fn connector_token_set(
     State(state): State<AppState>,
     Json(req): Json<ConnectorTokenReq>,
 ) -> impl IntoResponse {
-    if !admin_ok(&headers) {
+    if !admin_ok(&headers).await {
         return (
             axum::http::StatusCode::UNAUTHORIZED,
             Json(json!({"type":"about:blank","title":"Unauthorized","status":401})),

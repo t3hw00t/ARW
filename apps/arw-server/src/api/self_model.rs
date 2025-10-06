@@ -53,7 +53,7 @@ pub async fn self_model_propose(
     State(state): State<AppState>,
     Json(req): Json<SelfModelProposeRequest>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     match crate::self_model::propose_update(&req.agent, req.patch, req.rationale.clone()).await {
@@ -106,7 +106,7 @@ pub async fn self_model_apply(
     State(state): State<AppState>,
     Json(req): Json<SelfModelApplyRequest>,
 ) -> impl IntoResponse {
-    if !crate::admin_ok(&headers) {
+    if !crate::admin_ok(&headers).await {
         return unauthorized();
     }
     match crate::self_model::apply_proposal(&req.proposal_id).await {
